@@ -203,6 +203,8 @@ function approvalsFake(options: {
   decision?: Record<string, unknown>;
   /** The verdict given on that decision, a `decision_verdicts` row; none by default. */
   verdict?: Record<string, unknown>;
+  /** The workspace's `shadow_modes` row while shadow mode is on; off by default. */
+  shadow?: Record<string, unknown>;
 } = {}) {
   const intents = options.intents ?? [];
   const eq = (request: RecordedRequest, column: string) => request.params.get(column)?.match(/^eq\.(.+)$/)?.[1];
@@ -290,6 +292,7 @@ function approvalsFake(options: {
       return { body: options.decision ? [options.decision] : [] };
     }
     if (request.path === "/rest/v1/decision_verdicts" && request.method === "GET") return { body: options.verdict ? [options.verdict] : [] };
+    if (request.path === "/rest/v1/shadow_modes" && request.method === "GET") return { body: options.shadow ? [options.shadow] : [] };
     if (request.path === "/rest/v1/rpc/sole_approver" && options.soleApprover) return options.soleApprover;
     if (request.path === "/rest/v1/approval_policies") return { body: options.twoApprovals ? [{ two_approvals_above: String(options.twoApprovals) }] : [] };
     if (request.path === "/rest/v1/payment_approvals" && request.method === "GET") return { body: options.approvals ?? [] };
@@ -2768,9 +2771,11 @@ describe("a payable held for a person's verdict (shadow mode S4)", () => {
     detail: { invoiceId: INVOICE_ID, execution: { resultingStatus: "held", heldBecause: "shadow_verdict" } },
   };
   const paid = () => payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 0 });
+  /** Shadow mode on since before the decision, so a verdict can be given on it. */
+  const on = { currency: "USD", started_at: "2026-10-07T07:00:00Z", started_by: ACTOR };
 
   it("is not paid by Approve and pay before anyone gives a verdict on it, and nothing is claimed", async () => {
-    const { fake, run } = approvalsFake({ decision: shadowHold });
+    const { fake, run } = approvalsFake({ decision: shadowHold, shadow: on });
 
     const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
     await expect(attempt).rejects.toMatchObject({
@@ -2779,10 +2784,16 @@ describe("a payable held for a person's verdict (shadow mode S4)", () => {
     });
     expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
     expect(payInvoiceMock).not.toHaveBeenCalled();
+    // The payable's newest decision by the agent, and the verdict on that very entry (review minor 6).
+    const decisionRead = fake.requests.find((r) => r.path === "/rest/v1/ledger_entries" && r.params.has("detail->>invoiceId"));
+    expect(decisionRead?.params.get("detail->>invoiceId")).toBe(`eq.${INVOICE_ID}`);
+    expect(decisionRead?.params.get("actor")).toBe("eq.agent");
+    expect(decisionRead?.params.get("order")).toBe("seq.desc");
+    expect(fake.requests.find((r) => r.path === "/rest/v1/decision_verdicts")?.params.get("entry_seq")).toBe("eq.41");
   });
 
   it("is not paid after someone disagreed with it", async () => {
-    const { run } = approvalsFake({ decision: shadowHold, verdict: { verdict: "disagree", reason: "Not our bill" } });
+    const { run } = approvalsFake({ decision: shadowHold, shadow: on, verdict: { verdict: "disagree", reason: "Not our bill" } });
 
     await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toMatchObject({
       code: "verdict_disagreed",
@@ -2793,10 +2804,37 @@ describe("a payable held for a person's verdict (shadow mode S4)", () => {
 
   it("is paid by Approve and pay once someone agreed with it, as when the person who agreed may not pay it", async () => {
     paid();
-    const { run } = approvalsFake({ decision: shadowHold, verdict: { verdict: "agree", reason: null } });
+    const { run } = approvalsFake({ decision: shadowHold, shadow: on, verdict: { verdict: "agree", reason: null } });
 
     await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).resolves.toMatchObject({ status: "paid" });
     expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("records a transfer that already left, even after someone disagreed: the money moved (review I2)", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "matched", txRef: "circle-tx-1", execution: null, note: "", operatingBalance: null });
+    const { fake, run } = approvalsFake({
+      decision: shadowHold,
+      shadow: on,
+      verdict: { verdict: "disagree", reason: "Not our bill" },
+      intents: [{ source_id: INVOICE_ID, status: "pending", provider_tx_id: "circle-tx-1", last_error: null }],
+    });
+
+    await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(1);
+    expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("is settled as any hold once shadow mode is off, or when it came before shadow mode started again (review C1)", async () => {
+    for (const shadow of [undefined, { ...on, started_at: "2026-10-07T09:00:00Z" }]) {
+      paid();
+      const { run } = approvalsFake({ decision: shadowHold, ...(shadow ? { shadow } : {}) });
+      await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).resolves.toMatchObject({ status: "paid" });
+      for (const settle of [rejectInvoice, returnInvoice]) {
+        const again = approvalsFake({ decision: shadowHold, ...(shadow ? { shadow } : {}) });
+        await again.run(() => settle({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+        expect(rpcBodies(again.fake.requests, "claim_invoice_decision")).toHaveLength(1);
+      }
+    }
   });
 
   it("is paid through the verdict agreeing with it, which is kept after the payment", async () => {
@@ -2809,7 +2847,7 @@ describe("a payable held for a person's verdict (shadow mode S4)", () => {
 
   it("is not rejected or returned before anyone gives a verdict on it", async () => {
     for (const settle of [rejectInvoice, returnInvoice]) {
-      const { fake, run } = approvalsFake({ decision: shadowHold });
+      const { fake, run } = approvalsFake({ decision: shadowHold, shadow: on });
       await expect(run(() => settle({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toMatchObject({ code: "verdict_needed" });
       expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
     }
@@ -2817,9 +2855,9 @@ describe("a payable held for a person's verdict (shadow mode S4)", () => {
 
   it("is rejected or returned through a verdict, or once one is given either way", async () => {
     const runs = [
-      { options: { decision: shadowHold }, forVerdict: true },
-      { options: { decision: shadowHold, verdict: { verdict: "disagree", reason: "Not our bill" } }, forVerdict: false },
-      { options: { decision: shadowHold, verdict: { verdict: "agree", reason: null } }, forVerdict: false },
+      { options: { decision: shadowHold, shadow: on }, forVerdict: true },
+      { options: { decision: shadowHold, shadow: on, verdict: { verdict: "disagree", reason: "Not our bill" } }, forVerdict: false },
+      { options: { decision: shadowHold, shadow: on, verdict: { verdict: "agree", reason: null } }, forVerdict: false },
     ];
     for (const settle of [rejectInvoice, returnInvoice]) {
       for (const { options, forVerdict } of runs) {
@@ -2832,7 +2870,7 @@ describe("a payable held for a person's verdict (shadow mode S4)", () => {
 
   it("leaves alone a payable whose newest decision was not held for a verdict", async () => {
     paid();
-    const { run } = approvalsFake({ decision: { ...shadowHold, detail: { invoiceId: INVOICE_ID, execution: { resultingStatus: "held" } } } });
+    const { run } = approvalsFake({ decision: { ...shadowHold, detail: { invoiceId: INVOICE_ID, execution: { resultingStatus: "held" } } }, shadow: on });
 
     await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).resolves.toMatchObject({ status: "paid" });
   });

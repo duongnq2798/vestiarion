@@ -36,7 +36,7 @@ When the agent decides to pay a bill now, nothing is sent: the payment is held f
 
 If you may not pay it yourself, for example because you entered the bill and another person can approve payments, the card offers **Agree** alone and says why. Your agreement is recorded, and another person pays it in Approvals.
 
-In Slack and Telegram, the agent's message about a payment held for your verdict says it waits for your verdict, and **Give your verdict** opens it here. Slack offers no buttons on it: until someone gives a verdict, nothing else settles it, and a payment someone disagreed with is never made.
+In Slack and Telegram, the agent's message about a payment held for your verdict says it waits for your verdict, and **Give your verdict** opens it here. Slack offers no buttons on it: until someone gives a verdict, nothing else settles it, and **Approve and pay** refuses a payment someone disagreed with, unless its transfer had already left: that is recorded.
 
 Every other decision, such as a payment scheduled for a later day or a bill held for a check, offers **Agree** and **Disagree** on its card in AP / AR. Its own actions stay where they are. When a scheduled payment's day comes, the agent decides again, and that payment is held for your verdict.
 
@@ -48,7 +48,7 @@ The console shows a **Shadow mode** section while shadow mode is on. It says how
 
 ## 6. Turn it off
 
-In **Settings**, choose **Turn off shadow mode** and confirm. The agent pays on its own again, within its limits. A payment waiting for a person to agree stays held until a person decides it.
+In **Settings**, choose **Turn off shadow mode** and confirm. The agent pays on its own again, within its limits. A payment waiting for a person to agree stays held until a person decides it. Decide it in Approvals with **Approve and pay**, **Reject** or **Return**, as any held payment: no verdict can be given on it once shadow mode is off.
 
 ## What the ledger records
 
