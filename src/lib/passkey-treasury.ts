@@ -330,7 +330,18 @@ export function passkeyTreasuryFailure(error: unknown, during: "create" | "open"
     return "The wallet could not carry out the setup with what it holds. Add a little more USDC, then try again. Nothing was sent.";
   }
   console.error("passkey treasury", during, message);
-  return "That did not work. Nothing was sent. Try again in a moment.";
+  const given = reasonGiven(error);
+  return `That did not work. Nothing was sent. Try again in a moment.${given ? ` The reason given: ${given}` : ""}`;
+}
+
+/**
+ * What a bundler or browser said, on one line (2026-10-07: a phone shows no console, and the first passkey setup's
+ * refusal could not be read): viem's details, else its short message, else the message.
+ */
+function reasonGiven(error: unknown): string {
+  const { details, shortMessage, message } = (error ?? {}) as { details?: unknown; shortMessage?: unknown; message?: unknown };
+  const said = [details, shortMessage, message].find((part): part is string => typeof part === "string" && part.trim() !== "") ?? "";
+  return said.split("\n")[0].trim().slice(0, 200);
 }
 
 /** What a recording action answers (`RecordActionResult`). */

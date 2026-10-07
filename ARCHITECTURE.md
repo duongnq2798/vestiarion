@@ -550,6 +550,10 @@ with no browser wallet:
     (`settlePasskeySetup`, `passkeyStepView`); a retry reuses the contract and never pays the agent's gas
     twice. A record call that fails after a send counts as not yet read (`pollRecord`), so the page never says
     nothing was sent once the passkey sent it.
+  - Every user operation is priced as Circle's bundler asks: `circle_getUserOperationGasPrice`, its medium tier, with
+    at least 1 gwei of priority (`circleUserOperationFees` in `src/lib/passkey-wallet-sdk.ts`). On 2026-10-07 Arc
+    mainnet's own priority fee was 4,049 wei, Circle's bundler asked at least 3 gwei, and it refused the first setup
+    priced the chain's way. A failure nothing else names shows the reason the bundler or browser gave.
 - **The recovery.** A recovery phrase made in the browser is registered as a recovery owner with
   Circle's `registerRecoveryAddress` (`treasury_recovery_registered`), or skipped knowingly
   (`treasury_recovery_skipped`). `goLive` refuses until one is recorded (`wallet_recovery_undecided`).
