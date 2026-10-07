@@ -421,7 +421,7 @@ describe("the /open page, second round (open redesign §10)", () => {
 describe("the /open page's network headings (brand marks M2)", () => {
   it("puts Arc's mark beside each network's name", async () => {
     const markup = await render();
-    for (const id of ["testnet", "mainnet"]) expect(markup).toMatch(new RegExp(`data-brand="arc"[^>]*>.*?</svg><h2 id="${id}"`));
+    for (const id of ["testnet", "mainnet"]) expect(markup).toMatch(new RegExp(`data-brand="arc"[^>]*/><h2 id="${id}"`));
   });
 });
 

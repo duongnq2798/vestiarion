@@ -123,7 +123,7 @@ export default function SlackPanel({
         id="slack-title"
         title={
           <span className="inline-flex items-center gap-2">
-            <BrandMark brand="slack" className="size-4 text-ink-2" />
+            <BrandMark brand="slack" />
             Slack
           </span>
         }

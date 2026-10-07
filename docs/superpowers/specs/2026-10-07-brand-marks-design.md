@@ -16,10 +16,14 @@ public pages is checkable, so a mark may only stand for an integration the code 
 - **M2 — in words, beside a name.** "Built on", "Payments through", "Works with", "SDK on"; never "partners", "trusted
   by", "powered by". A mark is decoration (`aria-hidden`) beside its written name, never instead of it. npm's mark spells
   its name, so there the written name is for screen readers only.
-- **M3 — one ink.** Each mark is drawn with `currentColor` from one inline path (`src/components/vx/BrandMarks.tsx`):
-  no brand colour, gradient or image, so it sits quietly in either theme. The shape is the owner's, unaltered. Arc's
-  symbol is traced (potrace) from the PNG logo Arc publishes, since no SVG was at hand; Slack's, Telegram's, npm's
-  and Circle's paths are their published SVGs'. An official SVG for Arc replaces the trace when it arrives.
+- **M3 — the owner's file, unaltered.** Each mark is its owner's published file, served byte for byte from
+  `public/brands/` in its own colours (`src/components/vx/BrandMarks.tsx`): no recolouring, cropping or redrawing, which
+  the owners' guidelines forbid (Slack allows only its colours, or black or white; Circle its colours or Licorice; Arc's
+  logo only unchanged). Arc's is its app icon, Circle's its colour symbol, Slack's its colour symbol (whose file keeps its
+  clear space, so it is drawn larger and pulled in rather than cut), Telegram's its symbol, npm's its wordmark. The tests
+  hold each file to its SHA-256. The site has no dark theme, so no mark needs a light variant.
+- **M3a — the trademark notice.** The strip ends with "npm is a registered trademark of npm, Inc.", as npm's policy asks,
+  and says the other marks are their owners' and not an endorsement.
 - **M4 — each with its evidence.** On the landing page every service links to what proves it: `/open` for Arc, the live
   provider's code for Circle, the guides for Slack and Telegram, the SDK page for npm.
 
@@ -32,10 +36,14 @@ public pages is checkable, so a mark may only stand for an integration the code 
 
 ## 4. Tests
 
-`tests/brand-marks.test.tsx`: one colour and hidden from assistive technology; exactly the five brands, no Gmail; no file
+`tests/brand-marks.test.tsx`: each the owner's file by its SHA-256, an empty alt and hidden from assistive technology,
+never filtered or recoloured; exactly the five brands, no Gmail; no file
 draws a mark without the brand's name; the landing strip's names, links, and wording. The Slack panel, Telegram card
 and `/open` tests check the mark beside each name.
 
 ## 5. Changes
 
 - **2026-10-07.** Circle's mark added, from the monochrome symbol Circle publishes; it was its name alone before.
+- **2026-10-07.** One-ink marks replaced by the owners' own files in their colours, after reading the owners'
+  guidelines: Slack forbids recolouring beyond black or white, Circle names its colours, and Arc's logo is used unchanged,
+  so the traced Arc symbol gave way to Arc's app icon. The npm trademark notice was added.
