@@ -98,6 +98,18 @@ describe("the decision trail", () => {
     expect(decided(true)).toContain("✓ First payment to this address, with two people behind it");
   });
 
+  it("says a first payment to a mirror address is to a wallet Vestiarion made, not one two people stand behind (shadow mode S7)", () => {
+    const notes = trailStep(
+      step(982, "02:42:00", "agent", "ap_pay", {
+        decisionMode: "deepseek",
+        decision: { action: "pay" },
+        observed: { riskLevel: "clear", amount: 0.3, newPayee: { addressBy: "mirror", confirmedBy: null, twoParties: true } },
+      })
+    )!.notes;
+    expect(notes).toContain("✓ First payment to this address, a mirror address Vestiarion made in shadow mode");
+    expect(notes.join(" ")).not.toContain("two people");
+  });
+
   it("says no purchase order was needed for a counterparty paid without them (three-way match design M4)", () => {
     const decided = (goodsReceived: boolean) =>
       trailStep(
