@@ -1627,3 +1627,20 @@ describe("the AP stage in shadow mode (shadow mode S2)", () => {
     expect(paid.chain.transfers.map((t) => t.amount)).toEqual([250]);
   });
 });
+
+describe("the AP stage in shadow mode, short of cash (shadow mode review M1)", () => {
+  const plain = { early_pay_discount_pct: null, discount_due_date: null };
+  it("keeps the hold for a person's verdict, not for want of cash, when the model pays what the wallet cannot cover", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    model(() => ({ action: "pay", reasoning: "Matched and within the limit; paying now.", confidence: 0.9 }));
+    const { fake, chain, stage } = apFake({ book: [payable({ amount: "300", ...plain })], shadow: "VND" });
+
+    await stage(100);
+
+    expect(chain.transfers).toEqual([]);
+    const [entry] = ledger(fake.requests);
+    const execution = (entry.p_detail as { execution: Record<string, unknown> }).execution;
+    expect(execution.heldBecause).toBe("shadow_verdict");
+    expect(execution).not.toHaveProperty("cashNeededUsdc");
+  });
+});

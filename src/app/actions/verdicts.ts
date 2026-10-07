@@ -27,6 +27,8 @@ const inputSchema = z.object({
   verdict: z.enum(["agree", "disagree"]),
   reason: z.string().max(2000).optional(),
   then: z.enum(["pay", "return", "reject"]).optional(),
+  /** The payee's address the card showed: a payment goes there or not at all, as Approve and pay's does (review C1). */
+  shownAddress: z.string().max(200).optional(),
 });
 
 export async function giveVerdictAction(orgSlug: string, input: unknown): Promise<VerdictActionResult> {
@@ -40,7 +42,7 @@ export async function giveVerdictAction(orgSlug: string, input: unknown): Promis
       const result = await giveVerdict(
         { actorId: auth.user.id, ...parsed.data },
         {
-          approve: (invoiceId) => approvePayable(actor, { invoiceId }),
+          approve: (invoiceId, shownAddress) => approvePayable(actor, { invoiceId, ...(shownAddress ? { shownAddress } : {}) }),
           reject: (invoiceId, reason) => rejectPayable(actor, { invoiceId, reason: reason ?? "" }),
           returnToAgent: (invoiceId) => returnPayable(actor, { invoiceId }),
         }
@@ -49,6 +51,7 @@ export async function giveVerdictAction(orgSlug: string, input: unknown): Promis
       if (result.already) {
         return { ok: true, message: `A verdict was given on this decision already: ${result.given.verdict === "agree" ? "agreed" : "disagreed"}.`, given: result.given };
       }
+      if (!result.recorded && result.after) return { ok: false, message: `Nothing was paid, and your verdict was not recorded: ${result.after.message}` };
       const said = result.given.verdict === "agree" ? "You agreed with the agent." : "You disagreed with the agent.";
       if (!result.after) return { ok: true, message: said, given: result.given };
       return { ok: result.after.ok, message: `${said} ${result.after.message}`, given: result.given };
