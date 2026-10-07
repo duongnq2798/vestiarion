@@ -16,17 +16,30 @@ export interface OrgMembership {
   role: OrgRole;
   /** The network it pays on (0075), chosen when it was created (mainnet go-live M2). */
   network: Network;
+  /**
+   * When a member last opened it (`orgs.last_active_at`, refreshed at most hourly by touchOrgActivity), so the
+   * workspaces page can lead with the one in use. Absent where a caller built a membership by hand.
+   */
+  lastActiveAt?: string;
 }
 
 type MembershipRow = {
   role: OrgRole;
-  orgs: { id: string; slug: string; name: string; mode: "sandbox" | "live"; network?: string | null };
+  orgs: { id: string; slug: string; name: string; mode: "sandbox" | "live"; network?: string | null; last_active_at?: string | null };
 };
 
-const SELECT = "role, orgs!inner(id, slug, name, mode, network)";
+const SELECT = "role, orgs!inner(id, slug, name, mode, network, last_active_at)";
 
 function toMembership(row: MembershipRow): OrgMembership {
-  return { orgId: row.orgs.id, slug: row.orgs.slug, name: row.orgs.name, mode: row.orgs.mode, role: row.role, network: networkOf(row.orgs.network) };
+  return {
+    orgId: row.orgs.id,
+    slug: row.orgs.slug,
+    name: row.orgs.name,
+    mode: row.orgs.mode,
+    role: row.role,
+    network: networkOf(row.orgs.network),
+    ...(row.orgs.last_active_at ? { lastActiveAt: row.orgs.last_active_at } : {}),
+  };
 }
 
 /**

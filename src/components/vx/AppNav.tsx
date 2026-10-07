@@ -148,7 +148,7 @@ export function WorkspaceSwitcher({ current, workspaces }: { current: WorkspaceS
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           {/* `?new` keeps /onboarding from sending a one-workspace person straight back here. */}
-          <Link href="/onboarding?new#create-workspace" className="text-agent [&>svg]:text-agent">
+          <Link href="/onboarding?create#create-workspace" className="text-agent [&>svg]:text-agent">
             <Plus aria-hidden />
             Create workspace
           </Link>
@@ -219,7 +219,7 @@ export function NavPanel({
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
-            <Link href="/onboarding?new#create-workspace">
+            <Link href="/onboarding?create#create-workspace">
               <Plus aria-hidden />
               Create workspace
             </Link>

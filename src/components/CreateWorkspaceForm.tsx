@@ -2,6 +2,7 @@
 
 import { Plus } from "lucide-react";
 import { createWorkspaceAction, type CreateWorkspaceResult } from "@/app/onboarding/actions";
+import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
@@ -14,30 +15,65 @@ const INITIAL: CreateWorkspaceResult = { ok: false, message: "" };
 
 const SANDBOX = "It starts as a sandbox: the money in it is simulated.";
 
-/** The two networks a workspace can be created on, Arc testnet first (mainnet go-live M2). */
+/** True of every workspace on creation, whichever network: a sandbox simulates, and Arc mainnet waits for go-live. */
+const NO_MONEY_MOVES = "Creating a workspace moves no money.";
+
+/**
+ * The two kinds of workspace, by what they are for and then the network they run on, the test one first and
+ * recommended (mainnet go-live M2; workspaces page design W4). The production one says what it is without naming the
+ * setup it needs: that comes when an owner takes it live.
+ */
 const NETWORKS = [
-  { value: "arc-testnet", label: "Arc testnet", description: SANDBOX },
-  { value: "arc-mainnet", label: "Arc mainnet", description: "Real USDC, from your own Circle account. Nothing moves until an owner takes it live." },
+  {
+    value: "arc-testnet",
+    label: (
+      <span className="inline-flex flex-wrap items-center gap-2">
+        Test workspace
+        <Badge tone="agent" size="sm">
+          Recommended
+        </Badge>
+      </span>
+    ),
+    description: `Arc testnet. ${SANDBOX} Try everything before going live.`,
+  },
+  {
+    value: "arc-mainnet",
+    label: (
+      <span className="inline-flex flex-wrap items-center gap-2">
+        Production workspace
+        <Badge tone="held" size="sm">
+          Real funds
+        </Badge>
+      </span>
+    ),
+    description: "Arc mainnet. Real USDC: nothing moves until an owner finishes setup and takes it live.",
+  },
 ] as const;
 
 /**
  * Success navigates to the new workspace, so the only message shown here is a refusal. With `mainnetOffered` (the
- * person is on the deployment's allowlist while Arc mainnet is on), it asks which network the workspace is on; the
- * action checks that again, whatever the form sends.
+ * person is on the deployment's allowlist while Arc mainnet is on), it asks which kind of workspace, so which network;
+ * the action checks that again, whatever the form sends.
  */
 export default function CreateWorkspaceForm({ mainnetOffered = false }: { mainnetOffered?: boolean }) {
   const { state, formProps } = useActionForm(createWorkspaceAction, INITIAL);
   return (
-    <Card asChild className="space-y-4 p-5 sm:p-6">
+    <Card asChild className="space-y-5 p-5 sm:p-6">
       <form {...formProps}>
         <Field id="workspace-name" label="Workspace name" description={mainnetOffered ? undefined : SANDBOX}>
-          <Input name="name" type="text" required maxLength={80} autoComplete="organization" />
+          <Input name="name" type="text" required maxLength={80} autoComplete="organization" placeholder="Acme Studio" />
         </Field>
         {mainnetOffered && <RadioGroup legend="Network" name="network" defaultValue="arc-testnet" options={NETWORKS} />}
-        <SubmitButton icon={<Plus />} pendingLabel="Creating…" className="w-full">
-          Create workspace
-        </SubmitButton>
-        <FormMessage tone="error">{state.ok ? null : state.message}</FormMessage>
+        <div className="space-y-2">
+          {/* Empty until a refusal, so it takes no room; the live region is still in the page for a screen reader. */}
+          <FormMessage tone="error" className="min-h-0">
+            {state.ok ? null : state.message}
+          </FormMessage>
+          <SubmitButton icon={<Plus />} pendingLabel="Creating…" className="w-full">
+            Create workspace
+          </SubmitButton>
+          <p className="text-center text-xs text-ink-3">{NO_MONEY_MOVES}</p>
+        </div>
       </form>
     </Card>
   );

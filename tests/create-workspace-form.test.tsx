@@ -18,7 +18,12 @@ describe("CreateWorkspaceForm", () => {
       { value: "arc-testnet", checked: true },
       { value: "arc-mainnet", checked: false },
     ]);
-    expect(text(markup)).toContain("Real USDC, from your own Circle account. Nothing moves until an owner takes it live.");
+    // What each is for first, then its network; the test one recommended, the production one marked as real funds
+    // (workspaces page W4), without asking for the setup going live needs.
+    expect(text(markup)).toMatch(/Test workspace Recommended Arc testnet\. It starts as a sandbox: the money in it is simulated\. Try everything before going live\./);
+    expect(text(markup)).toMatch(/Production workspace Real funds Arc mainnet\. Real USDC: nothing moves until an owner finishes setup and takes it live\./);
+    expect(text(markup)).not.toContain("Circle account");
+    expect(text(markup)).toContain("Creating a workspace moves no money.");
   });
 
   it("offers no network otherwise, as before", () => {
@@ -26,5 +31,6 @@ describe("CreateWorkspaceForm", () => {
     expect(markup).not.toContain('role="radio"');
     expect(text(markup)).not.toContain("Network");
     expect(text(markup)).toContain("It starts as a sandbox: the money in it is simulated.");
+    expect(text(markup)).toContain("Creating a workspace moves no money.");
   });
 });

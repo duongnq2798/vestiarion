@@ -100,7 +100,7 @@ export function CommandPaletteProvider({
           </CommandGroup>
           <CommandSeparator />
           <CommandGroup heading="Account">
-            <CommandItem value="create-workspace" keywords={["Create workspace", "new", "sandbox"]} onSelect={() => go("/onboarding?new#create-workspace")}>
+            <CommandItem value="create-workspace" keywords={["Create workspace", "new", "sandbox"]} onSelect={() => go("/onboarding?create#create-workspace")}>
               <Plus aria-hidden />
               Create workspace
             </CommandItem>
