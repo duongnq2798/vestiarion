@@ -1,9 +1,13 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@/app/actions/recurring", () => ({ createRecurringPayableAction: vi.fn(), stopRecurringPayableAction: vi.fn() }));
 import { readiness } from "@/components/CounterpartyRow";
 import { DecisionRows } from "@/components/vx/DecisionRows";
+import { payableSignals } from "@/components/vx/decision-signals";
+import { RecurringSummary } from "@/components/vx/RecurringSummary";
 import type { Decision } from "@/components/vx/types";
 
 /**
@@ -56,6 +60,25 @@ describe("DecisionRows", () => {
     expect(opened.indexOf("Pay now or close it")).toBeLessThan(opened.indexOf("Three-way match complete"));
   });
 
+  it("shows what the agent checked under the title, each marked passed, in the way, or noted, before the row opens", () => {
+    const signals = [
+      { label: "PO on file", state: "ok" as const },
+      { label: "Not received", state: "missing" as const },
+      { label: "Medium risk", state: "neutral" as const },
+    ];
+    const markup = renderToStaticMarkup(<DecisionRows orgSlug="testnet-2" items={[{ decision: DECISION, signals }]} />);
+    const summary = markup.slice(markup.indexOf("<summary"), markup.indexOf("</summary>"));
+    expect(summary).toContain('aria-label="What the agent checked"');
+    expect(text(summary)).toContain("PO on file , passed Not received , in the way Medium risk , noted");
+    expect(summary).toMatch(/text-proof[\s\S]*PO on file/);
+    expect(summary).toMatch(/text-held[\s\S]*Not received/);
+  });
+
+  it("opens a row from the start when asked, with its card in view", () => {
+    const markup = renderToStaticMarkup(<DecisionRows orgSlug="testnet-2" items={[{ decision: DECISION, open: true }]} />);
+    expect(markup).toMatch(/<details[^>]*\sopen/);
+  });
+
   it("marks a date past due", () => {
     const markup = renderToStaticMarkup(<DecisionRows orgSlug="testnet-2" items={[{ decision: DECISION, date: { label: "Overdue Sep 30, 2026", tone: "held" } }]} />);
     expect(markup).toMatch(/text-held[^"]*">Overdue Sep 30, 2026/);
@@ -73,13 +96,24 @@ describe("the AP / AR page", () => {
     expect(page).toMatch(/<IntakeFold label="New invoice"[^>]*defaultOpen=\{invoices\.length === 0\}>/);
   });
 
-  it("groups payables into Needs you, Upcoming, and Paid and closed, the latest ten of those until Show all", () => {
+  it("groups payables into Needs you, Upcoming, and Paid and closed, the latest five of those until Show all", () => {
     const payables = page.slice(page.indexOf('title="Payables"'), page.indexOf('title="Receivables"'));
     const order = ['title="Needs you"', 'title="Upcoming"', 'title="Paid and closed"'].map((title) => payables.indexOf(title));
     expect(order.every((at) => at >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
-    expect(page).toContain("const HISTORY_SHOWN = 10;");
+    expect(page).toContain("const HISTORY_SHOWN = 5;");
     expect(payables).toContain("settled.slice(0, HISTORY_SHOWN)");
+  });
+
+  it("opens the rows that need a person while there are few, and shows what the agent checked on what waits and what is coming", () => {
+    expect(page).toContain("const OPEN_WAITING_UP_TO = 3;");
+    expect(page).toContain("open: needsYou.length <= OPEN_WAITING_UP_TO, signals: payableSignals(decision)");
+    expect(page).toContain("row(decision, withVerdict(receiptFor), { signals: payableSignals(decision) })");
+  });
+
+  it("folds the recurring schedules to one line under the payables they create", () => {
+    expect(page.indexOf("<RecurringSummary")).toBeGreaterThan(page.indexOf('title="Payables"'));
+    expect(page.indexOf("<RecurringSummary")).toBeLessThan(page.indexOf('title="Receivables"'));
   });
 });
 
@@ -140,5 +174,73 @@ describe("the Counterparties page", () => {
     ]);
     expect(page).toContain("readiness(a).rank - readiness(b).rank || a.name.localeCompare(b.name)");
     expect(page).toContain("{ordered.map((counterparty) => (");
+  });
+});
+
+describe("what the agent checked on a payable", () => {
+  const evidence = (po: string, poState: "ok" | "missing" | "neutral", goods: boolean, risk: string, limit: string, limitState: "neutral" | "missing") => [
+    { label: "PO", value: po, state: poState },
+    { label: "Goods received", value: goods ? "yes" : "no", state: goods ? ("ok" as const) : ("missing" as const) },
+    { label: "Risk", value: risk, state: risk === "high" ? ("missing" as const) : ("neutral" as const) },
+    { label: "Limit", value: limit, state: limitState },
+    { label: "Due", value: "10/8/2026", state: "neutral" as const },
+  ];
+
+  it("reads the card's own evidence: the match, the screening and the limit", () => {
+    const signals = payableSignals({ ...DECISION, evidence: evidence("PO-1", "ok", true, "clear", "2.00 USDC", "neutral") });
+    expect(signals).toEqual([
+      { label: "PO on file", state: "ok" },
+      { label: "Goods received", state: "ok" },
+      { label: "Screened clear", state: "ok" },
+      { label: "Within its limit", state: "ok" },
+    ]);
+  });
+
+  it("names what stands in the way, and leaves out a limit that is not set", () => {
+    const signals = payableSignals({ ...DECISION, evidence: evidence("none", "missing", false, "unscreened", "none", "neutral") });
+    expect(signals).toEqual([
+      { label: "No PO", state: "missing" },
+      { label: "Not received", state: "missing" },
+      { label: "Not screened", state: "missing" },
+    ]);
+    expect(payableSignals({ ...DECISION, evidence: evidence("not needed", "neutral", true, "high", "1.00 USDC", "missing") })).toEqual([
+      { label: "No PO needed", state: "neutral" },
+      { label: "Goods received", state: "ok" },
+      { label: "High risk", state: "missing" },
+      { label: "Over its limit", state: "missing" },
+    ]);
+  });
+
+  it("says nothing for a receivable", () => {
+    expect(payableSignals({ ...DECISION, domain: "ar", evidence: evidence("PO-1", "ok", true, "clear", "2.00 USDC", "neutral") })).toEqual([]);
+  });
+});
+
+describe("the recurring schedules on AP / AR", () => {
+  const schedule = (id: string, name: string, nextDueOn: string | null, status: "active" | "stopped" | "ended", amount = 0.5) => ({
+    id,
+    counterpartyName: name,
+    amount,
+    currency: "USDC" as const,
+    memo: "Daily retainer",
+    cadence: "every day",
+    nextDueOn,
+    endsOn: null,
+    status,
+  });
+
+  it("folds them to one line: how many run, and the period that falls due next", () => {
+    const markup = renderToStaticMarkup(
+      <RecurringSummary
+        orgSlug="testnet-2"
+        canWrite={false}
+        schedules={[schedule("a", "Jiren", "2026-10-10", "active", 0.75), schedule("b", "Gozo", "2026-10-08", "active"), schedule("c", "Old Co", null, "stopped")]}
+      />
+    );
+    expect(markup).toMatch(/<details(?![^>]*\sopen)/);
+    const summary = text(markup.slice(markup.indexOf("<summary"), markup.indexOf("</summary>")));
+    expect(summary).toContain("Recurring payments 2 active · next: Gozo, Oct 8, 2026, 0.50 USDC");
+    // Each schedule is still listed once it is opened.
+    expect(text(markup.slice(markup.indexOf("</summary>")))).toContain("Old Co");
   });
 });

@@ -7,7 +7,7 @@ import AgentControls from "@/components/AgentControls";
 import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
 import InvoiceDocumentIntake from "@/components/intake/InvoiceDocumentIntake";
 import InvoiceIntake from "@/components/intake/InvoiceIntake";
-import RecurringPayableIntake, { RecurringPayablesList } from "@/components/intake/RecurringPayableIntake";
+import RecurringPayableIntake from "@/components/intake/RecurringPayableIntake";
 import { PayLinkControl } from "@/components/PayLinkControl";
 import { ReceiptControl } from "@/components/ReceiptControl";
 import VerdictControl from "@/components/VerdictControl";
@@ -19,6 +19,8 @@ import { IntakeFold } from "@/components/vx/IntakeFold";
 import { Money } from "@/components/vx/Primitives";
 import { StatTile } from "@/components/vx/StatTile";
 import { invoiceDecision } from "@/components/vx/map";
+import { payableSignals } from "@/components/vx/decision-signals";
+import { RecurringSummary } from "@/components/vx/RecurringSummary";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionHeader } from "@/components/ui/SectionHeader";
@@ -59,8 +61,10 @@ type InvoiceSearchParams = Promise<{
 const OPEN = new Set(["pending", "matched", "scheduled", "held", "flagged", "awaiting_info"]);
 /** Payables waiting for a person (Approvals). */
 const WAITING = new Set(["held", "flagged", "awaiting_info"]);
-/** Settled rows shown before "Show all". */
-const HISTORY_SHOWN = 10;
+/** Settled rows shown before "Show all": history, kept short so the work leads. */
+const HISTORY_SHOWN = 5;
+/** Rows waiting for a person open from the start, with their actions in view, while they are this few. */
+const OPEN_WAITING_UP_TO = 3;
 
 type InvoicePageProps = {
   params: Promise<{ slug: string }>;
@@ -198,10 +202,14 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
           verdict
         );
       };
-    const row = (decision: ReturnType<typeof invoiceDecision>, footerFor?: (decision: ReturnType<typeof invoiceDecision>) => React.ReactNode): DecisionRowItem => {
+    const row = (
+      decision: ReturnType<typeof invoiceDecision>,
+      footerFor?: (decision: ReturnType<typeof invoiceDecision>) => React.ReactNode,
+      extra: Pick<DecisionRowItem, "open" | "signals"> = {}
+    ): DecisionRowItem => {
       const invoice = invoicesById.get(decision.id) as InvoiceRow;
       const facts = waiting.get(decision.id);
-      return { decision, date: rowDate(invoice, today), footerAction: footerFor?.(decision), hint: facts ? waitingHint(facts.onFile, facts.added) : undefined };
+      return { decision, date: rowDate(invoice, today), footerAction: footerFor?.(decision), hint: facts ? waitingHint(facts.onFile, facts.added) : undefined, ...extra };
     };
     const statusOf = (decision: ReturnType<typeof invoiceDecision>) => invoicesById.get(decision.id)?.status ?? "";
     const byDue = (a: ReturnType<typeof invoiceDecision>, b: ReturnType<typeof invoiceDecision>) => dueOf(invoicesById.get(a.id)).localeCompare(dueOf(invoicesById.get(b.id)));
@@ -301,13 +309,6 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
           <Callout className="mb-8">Only an owner or admin of this workspace can add or import invoices.</Callout>
         )}
 
-        {schedules.length > 0 && (
-          <section className="mb-8">
-            <SectionHeader title="Recurring payments" meta="each period's invoice is created as it comes near, and decided like any other" />
-            <RecurringPayablesList schedules={schedules} orgSlug={slug} canWrite={canWrite} />
-          </section>
-        )}
-
         <div className="space-y-10">
           <section>
             <SectionHeader title="Payables" meta={`${payables.length} ${plural(payables.length, "invoice", "invoices")} · open one for the agent's reasoning`} />
@@ -326,13 +327,17 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
                         </Button>
                       }
                     />
-                    <DecisionRows orgSlug={slug} items={needsYou.map((decision) => row(decision, withVerdict(needsYouFor)))} />
+                    {/* The work first: while few wait, each is open on its card, with its reason and actions in view. */}
+                    <DecisionRows
+                      orgSlug={slug}
+                      items={needsYou.map((decision) => row(decision, withVerdict(needsYouFor), { open: needsYou.length <= OPEN_WAITING_UP_TO, signals: payableSignals(decision) }))}
+                    />
                   </>
                 )}
                 {upcoming.length > 0 && (
                   <>
                     <RowGroupHeading title="Upcoming" count={upcoming.length} />
-                    <DecisionRows orgSlug={slug} items={upcoming.map((decision) => row(decision, withVerdict(receiptFor)))} />
+                    <DecisionRows orgSlug={slug} items={upcoming.map((decision) => row(decision, withVerdict(receiptFor), { signals: payableSignals(decision) }))} />
                   </>
                 )}
                 {settled.length > 0 && (
@@ -356,6 +361,8 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
               </>
             )}
           </section>
+
+          {schedules.length > 0 && <RecurringSummary schedules={schedules} orgSlug={slug} canWrite={canWrite} />}
 
           <section>
             <SectionHeader title="Receivables" meta={`${receivables.length} ${plural(receivables.length, "invoice", "invoices")}`} />
