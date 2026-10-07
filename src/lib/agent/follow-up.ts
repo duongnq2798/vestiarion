@@ -112,6 +112,8 @@ export interface DecisionFacts {
   newPayeeHeld?: boolean;
   /** Held by code for two approvals (`workspace.two_approvals`): the USDC it was weighed at, and the figure then. Null otherwise. */
   heldForTwoApprovals?: { value: number; above: number } | null;
+  /** Held in shadow mode for a person to agree (`execution.heldBecause`, shadow mode S2): only a person ends it. */
+  heldForVerdict?: boolean;
 }
 
 export type FollowUpAction = "reopen" | "escalate" | "wait";
@@ -298,7 +300,9 @@ export function planFollowUp(
   const fx = atDecision.fxHold && invoice.fx ? fxChange(atDecision.fxHold, invoice.fx, invoice.paymentLimit) : null;
   if (fx) changes.push(fx.sentence);
 
-  if (changes.length > 0) {
+  // Held in shadow mode for a person to agree (shadow mode S2): nothing that changed reopens it, a person's verdict ends
+  // it. It is escalated as any held payable is, so the person hears of it.
+  if (changes.length > 0 && !atDecision.heldForVerdict) {
     return {
       ...base,
       action: "reopen",
@@ -393,6 +397,8 @@ export interface MilestoneDecisionFacts {
    * the releases before it in its cycle, and the reserve. Null otherwise (mainnet pre-flight).
    */
   heldForCash?: { needed: number; operating: number; reserve: number } | null;
+  /** Held in shadow mode for a person to agree (`execution.heldBecause`, shadow mode S2): only a person ends it. */
+  heldForVerdict?: boolean;
 }
 
 export interface MilestoneFollowUpPlan {
@@ -417,6 +423,8 @@ export function planMilestoneFollowUp(milestone: HeldMilestone, atDecision: Mile
       reason: "No recorded decision facts for this milestone, so it is returned to the decision loop rather than left held on an assumption.",
     };
   }
+  // Held in shadow mode for a person to agree (shadow mode S2): nothing that changed reopens it, a person ends it.
+  if (atDecision.heldForVerdict) return { action: "wait", changes: [], reason: "Held in shadow mode until a person agrees, whatever changed since." };
 
   const changes: string[] = [];
   if (milestone.riskLevel !== atDecision.riskLevel) {

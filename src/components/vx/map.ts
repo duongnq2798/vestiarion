@@ -3,7 +3,7 @@ import { invoiceDiscount } from "@/lib/agent/payment-timing";
 import { utcDay } from "@/lib/copy";
 import { explainMilestone, explainPayable, explainTreasury, presentReasoning } from "@/lib/reasoning-copy";
 import { recordedFacts } from "@/lib/added-details";
-import { heldForCash } from "@/lib/next-step";
+import { heldForCash, heldForVerdict } from "@/lib/next-step";
 import { invoiceTrail } from "@/lib/decision-trail";
 import type { LedgerEntry } from "@/lib/ledger";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow, TreasuryActionRow } from "@/lib/queries";
@@ -67,10 +67,13 @@ function stringValue(value: unknown): string | undefined {
 
 /**
  * The newest entry about the record that decided or recorded it: a receipt's entries are about sharing, not deciding
- * (receipts review #1), and a payment_stuck alert is about a payment already decided (stuck-transfer alert, final review M7).
+ * (receipts review #1), a payment_stuck alert is about a payment already decided (stuck-transfer alert, final review M7),
+ * and a person's verdict is about the decision, not one (shadow mode S3).
  */
 function matchingEntry(entries: LedgerEntry[], key: "invoiceId" | "milestoneId", id: string) {
-  return entries.find((entry) => entry.detail[key] === id && !entry.action.startsWith("receipt_") && entry.action !== "payment_stuck");
+  return entries.find(
+    (entry) => entry.detail[key] === id && !entry.action.startsWith("receipt_") && entry.action !== "payment_stuck" && entry.action !== "decision_verdict"
+  );
 }
 
 /**
@@ -317,6 +320,8 @@ function decideInvoice(
     ].filter((item): item is Evidence => item !== null),
     guardrail: guardrailBlocked ? invoiceGuardrail(invoice.amount, currency, usdcValue, limit, risk, rule, entry?.detail) : null,
     ...(invoice.status === "held" && heldForCash(entry?.detail) ? { heldForCash: true } : {}),
+    // Held in shadow mode for a person to agree, which no rule did (shadow mode S2).
+    ...(invoice.status === "held" && heldForVerdict(entry?.detail) ? { heldForVerdict: true } : {}),
     decisionMode: stringValue(entry?.detail.decisionMode),
     // A Gateway payout has no Arc transaction of its own: its hash is the mint, linked below on the payee's
     // chain. No mint is ever linked to Arc's explorer (Gateway review I4).

@@ -51,6 +51,8 @@ export interface Decision {
   trail?: TrailStep[];
   /** A payable held because the cash it needs was not there, no guardrail refusing it (reserve cash back R4). */
   heldForCash?: boolean;
+  /** A payment held in shadow mode for a person to agree, no rule refusing it (shadow mode S2). */
+  heldForVerdict?: boolean;
 }
 
 export interface Account {

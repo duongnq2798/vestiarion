@@ -586,3 +586,18 @@ describe("twoApprovalsHeldValue", () => {
     expect(twoApprovalsHeldValue({ detail: { guardrailRule: "workspace.two_approvals", observed: { amount: 300 } } })).toBeNull();
   });
 });
+
+describe("a payment held in shadow mode for a person to agree (shadow mode S2)", () => {
+  it("is never reopened, whatever changed since: only a person ends it", () => {
+    const held: DecisionFacts = { ...facts, heldForVerdict: true };
+    const changed = frozen({ status: "held", poReference: "PO-1042", goodsReceived: true, riskLevel: "high", paymentLimit: 50 });
+    expect(planFollowUp(changed, held, NOW, config).action).not.toBe("reopen");
+    expect(planFollowUp(changed, held, NOW, config).changes).toEqual([]);
+  });
+
+  it("leaves a milestone held in shadow mode held, whatever changed since", () => {
+    const atDecision: MilestoneDecisionFacts = { riskLevel: "clear", paymentLimit: 10, verificationSource: "PR #84", heldBecausePaused: false, heldForVerdict: true };
+    const changed: HeldMilestone = { id: "ms-1", title: "Launch", amount: 5, riskLevel: "high", paymentLimit: 2, verificationSource: "PR #85", cash: { operating: 1000, reserve: 0 } };
+    expect(planMilestoneFollowUp(changed, atDecision)).toMatchObject({ action: "wait", changes: [] });
+  });
+});

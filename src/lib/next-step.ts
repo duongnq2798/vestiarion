@@ -1,3 +1,5 @@
+import { HELD_FOR_VERDICT } from "./agent/shadow-hold";
+
 /**
  * What a person can do about a payable code stopped (agent activity spec R5): the rule, in words, and the page that
  * removes its cause. Approvals, where any of them can be paid or rejected, is offered beside it by the card. Pure.
@@ -24,6 +26,19 @@ export function heldForCash(detail: Record<string, unknown> | null | undefined):
   if (!detail || detail.guardrailBlocked === true) return false;
   const execution = detail.execution;
   return typeof execution === "object" && execution !== null && (execution as Record<string, unknown>).heldBecause === "cash_shortfall";
+}
+
+/**
+ * The next step's key for a payment held in shadow mode (docs/superpowers/specs/2026-10-07-shadow-mode-design.md S2): no
+ * rule refused it, the agent decided to pay it, and it waits for a person to agree.
+ */
+export const SHADOW_VERDICT = "workspace.shadow_verdict";
+
+/** Whether an AP decision held the payable in shadow mode: its `execution.heldBecause` (`HELD_FOR_VERDICT`). */
+export function heldForVerdict(detail: Record<string, unknown> | null | undefined): boolean {
+  if (!detail || detail.guardrailBlocked === true) return false;
+  const execution = detail.execution;
+  return typeof execution === "object" && execution !== null && (execution as Record<string, unknown>).heldBecause === HELD_FOR_VERDICT;
 }
 
 /**
@@ -94,6 +109,11 @@ export function ruleNextStep(rule: string | null | undefined, counterparty: { id
       return {
         sentence: "The spending-limit contract on Arc would refuse it. Raise the limit, or pay it in Approvals.",
         fix: { label: "Spending limit", path: "/console#agent-budget" },
+      };
+    case SHADOW_VERDICT:
+      return {
+        sentence: "Shadow mode: the agent decided to pay it, and pays nothing until a person agrees. Agree and pay it, or disagree, in Approvals.",
+        fix: null,
       };
     case CASH_SHORTFALL:
       return {
@@ -168,6 +188,8 @@ export function ruleInBrief(rule: string | null | undefined): string | null {
       return "it would be the first payment to an address only one person stands behind";
     case "workspace.two_approvals":
       return "payments above the workspace's figure need two people's approval";
+    case SHADOW_VERDICT:
+      return "shadow mode waits for a person to agree";
     case "workspace.outflow_budget":
       return "the agent's spending limit has no room today, and the agent pays it once there is";
     case "workspace.onchain_limit":

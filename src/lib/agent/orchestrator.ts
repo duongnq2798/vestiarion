@@ -20,6 +20,7 @@ import { CycleRunningError, hasRunningCycle } from "./cycle-running";
 import { decide, type DecideResult } from "./decide";
 import { budgetClause, enforceApGuardrails, onChainLimitHold } from "./guardrails";
 import { readTwoApprovalsAbove } from "../approval-policy";
+import { readShadowMode, type ShadowMode } from "../shadow-mode";
 import { choosePayoutRoute } from "../payout-route";
 import { needsTwoApprovals, TWO_APPROVALS_RULE } from "../two-approvals";
 import { approvedByTwo, usdcValueOfLatestDecision, type PaymentSource } from "./second-approval";
@@ -88,6 +89,7 @@ import {
 import { boundTreasuryDecision, keepPersonCashBack, planTreasury, sameTreasuryDecision, treasuryBounds, treasuryUserPrompt, type TreasuryDecision } from "./treasury";
 import { moveTreasuryIfNotPaused } from "./treasury-moves";
 import { bringCashForTodaysPayments, HELD_FOR_CASH, recentPersonCashBack, releaseCashShort } from "./liquidity";
+import { HELD_FOR_VERDICT, SHADOW_HELD_NOTE } from "./shadow-hold";
 import { transferUnknown } from "./approvals";
 import { plural, utcDay } from "../copy";
 import { REASONING_RULE, REASONING_SHAPE } from "../reasoning-copy";
@@ -420,6 +422,8 @@ export async function followUpHeldMilestones(orgDb: OrgDb, budget?: BudgetGate):
       heldForTwoApprovals: detail.guardrailRule === TWO_APPROVALS_RULE,
       // Held for want of cash: what it needed, and the cash it saw (mainnet pre-flight).
       heldForCash: execution?.heldBecause === HELD_FOR_CASH ? heldForCashFacts(execution) : null,
+      // Held in shadow mode for a person to agree: only a person ends it (shadow mode S2).
+      heldForVerdict: execution?.heldBecause === HELD_FOR_VERDICT,
     });
   }
   // What the limit leaves now, read only when a milestone waits on it.
@@ -1308,6 +1312,8 @@ async function decideApPayable(
     newPayee?: (counterparty: { id: string; address: string | null }) => ReturnType<typeof newPayeeCheck>;
     /** The figure above which a payment needs two people's approval, null when none is set (two approvals T3). */
     twoApprovalsAbove?: number | null;
+    /** The workspace's shadow mode, null when it is off (shadow mode S2): a payment then waits for a person to agree. */
+    shadow?: ShadowMode | null;
   }
 ): Promise<{ status: string; scheduledFor: string | null; operatingBalance: number | null; line: CycleLogLine }> {
   const { db, provider, operating, operatingBalance, history, metrics } = ctx;
@@ -1713,6 +1719,9 @@ async function decideApPayable(
   // the operating wallet and the reserve cover it (reserve cash back R4). USDC from the operating wallet only: the
   // reserve holds no EURC, and a Gateway payout is paid from the Gateway balance.
   const shortOfCash = !heldForBudget && !guardrail.blocked && timing.shortfall === true && currency === "USDC" && !viaGateway;
+  // Shadow mode (shadow mode S2): a payment that passed every check waits for a person to agree. Not a refusal by code,
+  // so it is no guardrail block and counts as none; the follow-up never reopens it, a person ends it.
+  const heldForVerdict = decision.action === "pay" && !guardrail.blocked && (ctx.shadow ?? null) !== null;
   metrics.recordDecisionMode(mode, agreedWithReference);
   let status = guardrail.status ?? STATUS_FOR_AP_ACTION[decision.action];
   let txRef: string | null = null;
@@ -1730,6 +1739,10 @@ async function decideApPayable(
     // code, not in the prompt.
     if (guardrail.blocked) {
       // Refused by enforceApGuardrails before the provider can be called.
+    } else if (heldForVerdict) {
+      // Held before the provider is called: nothing is sent until a person agrees.
+      status = "held";
+      reasoning += SHADOW_HELD_NOTE;
     } else {
       // A payment the guardrails let through while the wallet is short of EURC
       // is one funded by the swap the model chose (S5): it runs inside the
@@ -1930,6 +1943,8 @@ async function decideApPayable(
         ...heldBecausePausedDetail(heldBecausePaused),
         // The spending limit is why this held, which the follow-up stage reopens once it has room (R6).
         ...(heldForBudget ? { heldBecause: HELD_FOR_BUDGET } : {}),
+        // Shadow mode is why this held: a person's verdict ends it, never the follow-up (shadow mode S2).
+        ...(heldForVerdict ? { heldBecause: HELD_FOR_VERDICT } : {}),
         // Want of cash is why this held, which the follow-up reopens once it is there (reserve cash back R4): what it
         // needed, and the balances it saw, so only cash that moved since reopens it, never a redemption still failing.
         ...(shortOfCash && status === "held" && !heldBecausePaused
@@ -1992,6 +2007,8 @@ export interface ApStageInput {
   newPayee?: { load: (counterpartyIds: string[]) => Promise<NewPayeeFacts> };
   /** The figure above which a payment needs two people's approval (two approvals T3); read from the workspace when absent. */
   twoApprovalsAbove?: number | null;
+  /** The workspace's shadow mode (shadow mode S2); read from the workspace when absent. */
+  shadow?: ShadowMode | null;
 }
 
 /** At most this many EURC payables held for FX get a fresh quote in one cycle, the oldest decided first (FX re-evaluation F9). */
@@ -2131,6 +2148,8 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   const newPayeeFacts = input.newPayee && payables.length > 0 ? await input.newPayee.load([...new Set(payables.map((row) => row.counterparty_id))]) : null;
   // The figure above which a payment needs two people (two approvals T3): read once for the stage, when anything is decided.
   const twoApprovalsAbove = input.twoApprovalsAbove !== undefined ? input.twoApprovalsAbove : payables.length > 0 ? await readTwoApprovalsAbove(db) : null;
+  // Whether the workspace is in shadow mode (shadow mode S2): read once for the stage, when anything is decided.
+  const shadow = input.shadow !== undefined ? input.shadow : payables.length > 0 ? await readShadowMode(db) : null;
 
   // The whole payable book, settled rows included, because a duplicate is only
   // detectable against what came before it — and the invoice that matters most
@@ -2264,6 +2283,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
           ? newPayeeCheck({ address: counterparty.address, paidTo: newPayeeFacts.paidTo, entries: newPayeeFacts.entries.get(counterparty.id) ?? [] })
           : null,
       twoApprovalsAbove,
+      shadow,
     });
     if (decided.operatingBalance !== null) operatingBalance = decided.operatingBalance;
     record(invoice.id, decided.status, decided.scheduledFor);
@@ -3155,6 +3175,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           execution?.heldBecause === HELD_FOR_BUDGET ? num(entry.detail.usdcValue ?? observed.amount) : null,
         // Held for want of cash: what it needed, and the balances it saw (reserve cash back R4).
         heldForCash: execution?.heldBecause === HELD_FOR_CASH ? heldForCashFacts(execution) : null,
+        // Held in shadow mode for a person to agree: only a person ends it (shadow mode S2).
+        heldForVerdict: execution?.heldBecause === HELD_FOR_VERDICT,
         // Decided while the counterparty's new address waited for a person: once confirmed, it is decided again.
         addressUnconfirmed: observed.addressUnconfirmed === true,
         // Decided while the counterparty needed a purchase order: once paid without them, decided again (three-way
@@ -3405,6 +3427,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     provider.mode === "live" && milestones.length > 0 ? await loadNewPayeeFacts(db, [...new Set(milestones.map((m) => m.contractor_id))]) : null;
   // The figure above which a release needs two people (two approvals T3): read once for the stage, when anything is decided.
   const twoApprovalsAbove = milestones.length > 0 ? await readTwoApprovalsAbove(db) : null;
+  // Whether the workspace is in shadow mode (shadow mode S2): read once for the stage, when anything is decided.
+  const shadow = milestones.length > 0 ? await readShadowMode(db) : null;
   const firstReleaseTo = (contractor: { id: string; address: string | null }) => {
     const check = newPayeeFacts
       ? newPayeeCheck({ address: contractor.address, paidTo: newPayeeFacts.paidTo, entries: newPayeeFacts.entries.get(contractor.id) ?? [] })
@@ -3424,13 +3448,15 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     fromEscrow?: boolean;
     /** Held because the operating wallet lacked its cash: what it needed, and what the wallet had left for it (mainnet pre-flight). */
     heldForCash?: { needed: number; available: number } | null;
+    /** Held in shadow mode for a person to agree, having passed every check (shadow mode S2). */
+    heldForVerdict?: boolean;
   };
   // Releases that passed every check, sent once every milestone is decided (batch payouts §2).
   const planned: Decided[] = [];
 
   /** A milestone's decision and what came of it: its row, the metrics, its signed entry and its line. */
   const writeDecision = async (entry: Decided & { guardrailBlocked: boolean; guardrailRule: ContractorGuardrailRule | null; outcome: PayStepOutcome | null }) => {
-    const { milestone, amount, limit, guardrailBlocked, guardrailRule, outflowBudget, onChainLimit: onChainCheck, heldForCash, outcome } = entry;
+    const { milestone, amount, limit, guardrailBlocked, guardrailRule, outflowBudget, onChainLimit: onChainCheck, heldForCash, heldForVerdict, outcome } = entry;
     const { value: decision, mode, reference, agreedWithReference } = entry.decided;
     const contractor = milestone.counterparties;
     // What the operating wallet keeps for its own gas, which its balance leaves out: a cash hold names it (review R3).
@@ -3507,6 +3533,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           // Want of cash is why this held, which the follow-up stage reopens once cash comes in (mainnet pre-flight): what
           // it needed, and what the operating wallet had left for it after the releases before it, with the reserve.
           ...(heldForCash ? { heldBecause: HELD_FOR_CASH, cashNeededUsdc: heldForCash.needed, cashSeen: { operating: heldForCash.available, reserve: reserveBalance, ...(gasKeptUsdc > 0 ? { gasKeptUsdc } : {}) } } : {}),
+          // Shadow mode is why this held: a person ends it, never the follow-up (shadow mode S2).
+          ...(heldForVerdict ? { heldBecause: HELD_FOR_VERDICT } : {}),
           // Sent together with other milestones in one transaction: how many, under which key (batch payouts §5).
           ...(paymentExecution?.batch ? { batch: paymentExecution.batch } : {}),
         },
@@ -3519,7 +3547,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         ? `${contractor.name}: not paid, the agent was paused (${amount} USDC)`
         : heldForCash
           ? `${contractor.name}: "${milestone.title}" held, the operating wallet had ${heldForCash.available} USDC for its ${amount} USDC`
-          : `${contractor.name}: ${decision.action} "${milestone.title}"`,
+          : heldForVerdict
+            ? `${contractor.name}: "${milestone.title}" held for a person to agree, in shadow mode (${amount} USDC)`
+            : `${contractor.name}: ${decision.action} "${milestone.title}"`,
     });
   };
 
@@ -3629,6 +3659,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     let outflowBudget: BudgetRoom | null = null;
     let onChainCheck: OnChainLimitDecisionCheck | null = null;
     let heldForCash: { needed: number; available: number } | null = null;
+    let heldForVerdict = false;
 
     if (decision.action === "release") {
       // The first release to an address one party alone stands behind is code's to refuse (new payee check N3).
@@ -3669,6 +3700,10 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         guardrailBlocked = true;
         guardrailRule = onChainHold.rule;
         reasoning = onChainHold.reasoning;
+      } else if (shadow) {
+        // Shadow mode (shadow mode S2): it passed every check and waits for a person to agree, never planned or sent.
+        heldForVerdict = true;
+        reasoning += SHADOW_HELD_NOTE;
       } else if (operating) {
         // A release from the operating wallet needs its cash there, after the releases planned before it this cycle and
         // those still in flight (mainnet pre-flight): sent anyway, it would only fail at Circle or on chain. Short, it is
@@ -3699,6 +3734,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       guardrailBlocked,
       guardrailRule,
       heldForCash,
+      heldForVerdict,
       outcome: null,
     });
   }
