@@ -224,7 +224,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Choose where the treasury lives", PANEL],
     ["Your own wallet", WALLET_STEPS],
     ["Connect your wallet", WALLET_STEPS],
-    ["Your wallet is this workspace's treasury. Create the agent's wallet next.", WALLET_ACTIONS],
+    ["Your wallet is this workspace's treasury.", WALLET_ACTIONS],
+    ["The agent's wallet was not created yet; create it below.", WALLET_ACTIONS],
     ["Set up your wallet as the treasury", WALLET_STEPS],
     ["Create the agent's wallet", WALLET_STEPS, "Create the agent&apos;s wallet"],
     ["Daily figure (USDC)", WALLET_STEPS],
@@ -854,6 +855,7 @@ const GO_LIVE_ERRORS: Record<GoLiveErrorCode, true> = {
   go_live_network: true,
   external_wallet: true,
   wallet_treasury_unfinished: true,
+  wallet_recovery_undecided: true,
 };
 
 /** Copy for real users on Arc testnet names the network plainly; it never hedges it away. */

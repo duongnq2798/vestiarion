@@ -5,6 +5,11 @@ const { authorizeMock, lib } = vi.hoisted(() => ({
   lib: {
     proofMessage: vi.fn(),
     chooseWalletTreasury: vi.fn(),
+    choosePasskeyTreasury: vi.fn(),
+    preparePasskeySetup: vi.fn(),
+    recordPasskeySetup: vi.fn(),
+    recordRecovery: vi.fn(),
+    skipRecovery: vi.fn(),
     createAgentWallet: vi.fn(),
     prepareDeployment: vi.fn(),
     recordDeployment: vi.fn(),
@@ -21,7 +26,12 @@ vi.mock("@/lib/dal/scope", () => ({ inOrg: (_access: unknown, fn: () => Promise<
 vi.mock("@/lib/treasury/wallet-treasury", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/treasury/wallet-treasury")>()), ...lib }));
 
 import {
+  choosePasskeyTreasuryAction,
   chooseWalletTreasuryAction,
+  preparePasskeySetupAction,
+  recordPasskeySetupAction,
+  recordRecoveryAction,
+  skipRecoveryAction,
   createAgentWalletAction,
   prepareAgentGasAction,
   prepareApprovalAction,
@@ -92,6 +102,50 @@ describe("the wallet treasury's actions", () => {
     lib.recordApproval.mockRejectedValueOnce(new Error("rpc https://keyed.example/arc?key=SECRET timed out"));
     const failed = await recordApprovalAction("own-wallet-co", HASH);
     expect(failed).toEqual({ ok: false, message: "Something went wrong; try again.", state: null });
+  });
+
+  it("make the agent's wallet with either choice, and keep the choice when Circle cannot (passkey treasury K4)", async () => {
+    authorizeMock.mockResolvedValue(owner);
+    const person = { orgId: "org-1", actorId: "user-1", actorEmail: "owner@example.com" };
+    expect(await choosePasskeyTreasuryAction("own-wallet-co", "0xb0b0")).toEqual({ ok: true, message: "Your passkey wallet is this workspace's treasury." });
+    expect(lib.choosePasskeyTreasury).toHaveBeenCalledWith({ ...person, address: "0xb0b0" });
+    expect(lib.createAgentWallet).toHaveBeenCalledWith(person);
+
+    expect(await chooseWalletTreasuryAction("own-wallet-co", { address: "0xb0b0", message: "m", signature: "0x51" })).toEqual({
+      ok: true,
+      message: "Your wallet is this workspace's treasury.",
+    });
+    expect(lib.createAgentWallet).toHaveBeenCalledTimes(2);
+
+    lib.createAgentWallet.mockRejectedValueOnce(new WalletTreasuryError("agent_failed"));
+    expect(await choosePasskeyTreasuryAction("own-wallet-co", "0xb0b0")).toEqual({
+      ok: true,
+      message: "Your passkey wallet is this workspace's treasury. The agent's wallet was not created yet; create it below.",
+    });
+  });
+
+  it("pass the person and the workspace to the passkey route's steps", async () => {
+    authorizeMock.mockResolvedValue(owner);
+    const SETUP = { contract: "0xc0de", salt: "0x01", deployed: false, dailyUnits: "1", weeklyUnits: "2", capUnits: null, calls: [], chainId: 5042 };
+    lib.preparePasskeySetup.mockResolvedValue(SETUP);
+    lib.recordPasskeySetup.mockResolvedValue("verified");
+    lib.recordRecovery.mockResolvedValue("pending");
+
+    expect(await preparePasskeySetupAction("own-wallet-co", { dailyUsdc: 20, weeklyUsdc: null, capUsdc: null })).toEqual({ ok: true, message: "", setup: SETUP });
+    expect(lib.preparePasskeySetup).toHaveBeenCalledWith({ orgId: "org-1", dailyUsdc: 20, weeklyUsdc: null, capUsdc: null });
+    expect(await recordPasskeySetupAction("own-wallet-co", { txHash: HASH, contract: "0xc0de" })).toEqual({ ok: true, message: "", state: "verified" });
+    expect(lib.recordPasskeySetup).toHaveBeenCalledWith({ orgId: "org-1", actorId: "user-1", txHash: HASH, contract: "0xc0de" });
+    expect(await recordRecoveryAction("own-wallet-co", { recoveryAddress: "0xbe5c", txHash: HASH })).toEqual({ ok: true, message: "", state: "pending" });
+    expect(lib.recordRecovery).toHaveBeenCalledWith({ orgId: "org-1", actorId: "user-1", recoveryAddress: "0xbe5c", txHash: HASH });
+    expect(await skipRecoveryAction("own-wallet-co")).toEqual({ ok: true, message: "" });
+    expect(lib.skipRecovery).toHaveBeenCalledWith({ orgId: "org-1", actorId: "user-1" });
+
+    authorizeMock.mockResolvedValue({ ok: false, message: "Only an owner can do that." });
+    expect(await preparePasskeySetupAction("own-wallet-co", { dailyUsdc: null, weeklyUsdc: null, capUsdc: null })).toEqual({
+      ok: false,
+      message: "Only an owner can do that.",
+      setup: null,
+    });
   });
 
   it("say when a recording step could not read the chain, so the page asks again rather than give up", async () => {

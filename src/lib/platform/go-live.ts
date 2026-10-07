@@ -94,7 +94,8 @@ export type GoLiveErrorCode =
   | "mainnet_confirmation"
   | "go_live_network"
   | "external_wallet"
-  | "wallet_treasury_unfinished";
+  | "wallet_treasury_unfinished"
+  | "wallet_recovery_undecided";
 
 const MESSAGES: Record<GoLiveErrorCode, string> = {
   invalid: "Paste both the API key and the entity secret.",
@@ -120,6 +121,7 @@ const MESSAGES: Record<GoLiveErrorCode, string> = {
   go_live_network: "Going live does not run on this workspace's network yet.",
   external_wallet: "This workspace pays from its owner's own wallet; it takes no Circle account.",
   wallet_treasury_unfinished: "Finish setting up the wallet first: its contract must be approved and its agent must hold gas.",
+  wallet_recovery_undecided: "Save a recovery phrase for the passkey wallet, or skip it, first.",
 };
 
 /**
@@ -512,7 +514,10 @@ export async function goLive(input: {
     await withOrg(
       input.orgId,
       async () => {
-        if ((await walletTreasuryStatus(input.orgId, input.walletTreasury)).step !== "ready") throw new GoLiveError("wallet_treasury_unfinished");
+        const setupStep = (await walletTreasuryStatus(input.orgId, input.walletTreasury)).step;
+        // A passkey wallet decides its recovery before it goes live (passkey treasury K8).
+        if (setupStep === "recovery") throw new GoLiveError("wallet_recovery_undecided");
+        if (setupStep !== "ready") throw new GoLiveError("wallet_treasury_unfinished");
         const written = unwrap(
           await platformDb().from("orgs").update({ mode: "live" }).eq("id", input.orgId).eq("mode", "sandbox").eq("wallet_host", "external").select("id")
         ) as Array<{ id: string }>;
