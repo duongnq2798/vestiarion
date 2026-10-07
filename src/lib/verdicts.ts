@@ -115,23 +115,28 @@ async function verdictOn(entrySeq: number): Promise<GivenVerdict | null> {
 
 /**
  * Why Approve and pay, Reject or Return may not settle this payable outside a verdict (shadow mode S4), or null when
- * they may. A payable held for a person's verdict waits for one: nothing settles it before a verdict is given, and it is
- * paid only after an agreement. Once one is given, they settle it as any hold, as when the person who agreed may not pay
- * it and someone else does. A verdict settling it passes `forVerdict` to them instead of asking. `status` is the
- * payable's, when the caller has read it.
+ * they may. A payable held for a person's verdict waits for one while one can be given (shadow mode on, and the decision
+ * made since it started): nothing settles it before a verdict, and it is paid only after an agreement. Once one is
+ * given, they settle it as any hold, as when the person who agreed may not pay it and someone else does; and once none
+ * can be (shadow mode off, or turned on again since), it is a hold like any other (review C1). A transfer already sent
+ * is recorded after a disagreement too: the money moved (review I2). A verdict settling it passes `forVerdict` to them
+ * instead of asking. `status` is the payable's, and `transferSent` whether its transfer left or may have, when the
+ * caller has read them.
  */
 export async function verdictGate(
   invoiceId: string,
   decision: "approve" | "reject" | "return",
-  status?: string
+  facts: { status?: string; transferSent?: boolean } = {}
 ): Promise<"verdict_needed" | "verdict_disagreed" | null> {
-  const held = status ?? ((unwrap(await db().from("invoices").select("status").eq("id", invoiceId).maybeSingle()) as { status: string } | null)?.status ?? null);
+  const held = facts.status ?? ((unwrap(await db().from("invoices").select("status").eq("id", invoiceId).maybeSingle()) as { status: string } | null)?.status ?? null);
   if (held !== "held") return null;
   const newest = await newestDecision(invoiceId);
   if (!newest || !heldForVerdict(newest.detail)) return null;
+  const shadow = await readShadowMode(db());
+  if (!shadow || Date.parse(newest.ts) < Date.parse(shadow.startedAt)) return null;
   const given = await verdictOn(Number(newest.seq));
   if (!given) return "verdict_needed";
-  return decision === "approve" && given.verdict === "disagree" ? "verdict_disagreed" : null;
+  return decision === "approve" && given.verdict === "disagree" && !facts.transferSent ? "verdict_disagreed" : null;
 }
 
 export async function giveVerdict(
