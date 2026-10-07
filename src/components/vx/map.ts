@@ -246,6 +246,20 @@ export function invoiceDecision(
   return verdict ? { ...decision, verdict } : decision;
 }
 
+/** Where the rates for bills in another currency come from: ExchangeRate-API asks to be named and linked where they are shown. */
+const RATES_HOME = "https://www.exchangerate-api.com";
+
+const grouped = (value: number, digits: number) => value.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+
+/** The bill as it was written and the rate its USDC amount was worked out at, or null for an invoice written in USDC or EURC. */
+function billEvidence(invoice: InvoiceRow): Evidence | null {
+  const { original_currency: currency, original_amount: amount, fx_rate: rate, fx_source: source, fx_at: at } = invoice;
+  if (!currency || amount == null || rate == null || !source || !at) return null;
+  const written = `${grouped(amount, Number.isInteger(amount) ? 0 : 2)} ${currency}`;
+  if (currency === "USD") return { label: "Bill", value: `${written}, at 1 USD = 1 USDC`, state: "neutral" };
+  return { label: "Bill", value: `${written}, at ${grouped(rate, 2)} ${currency} to the US dollar (${source}, ${utcDay(at)})`, href: RATES_HOME, state: "neutral" };
+}
+
 function decideInvoice(
   invoice: InvoiceRow,
   counterparty: CounterpartyRow | undefined,
@@ -304,6 +318,8 @@ function decideInvoice(
         })
       ) || "The agent has not evaluated this invoice yet.",
     evidence: [
+      // A bill taken in the business's own currency (shadow mode S6): as written, and the rate it was paid at.
+      billEvidence(invoice),
       // A counterparty paid without purchase orders needs none (three-way match design M2).
       !invoice.po_reference && counterparty?.purchase_order_required === false
         ? { label: "PO", value: "not needed", state: "neutral" as const }

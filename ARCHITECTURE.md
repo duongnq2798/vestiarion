@@ -599,6 +599,10 @@ disagrees with every decision.
   the workspace's own Circle wallet set, keyed by the payee so a retry finds it, written only where the payee still has
   no address, and recorded as an address change `via: "mirror"`. The new payee check reads that as `MIRROR`: no
   outsider could have given it, so it stands as two parties behind its first payment.
+- **Bills in the business's own currency.** `usdRate` (`src/lib/fx/usd-rates.ts`) reads how many of a currency make
+  one dollar from ExchangeRate-API's open endpoint, at most once an hour, naming only the dollar. `shadowBill`
+  (`src/lib/shadow-bills.ts`) reads the amount as the bill writes it (`src/lib/bill-amount.ts`) and gives its USDC to
+  the cent, only in shadow mode; the invoice keeps the bill in `original_*` and its card shows it, linked to the source.
 - **What people see.** `verdictView` (`src/lib/verdict-view.ts`) gives each card the verdict on the agent's newest
   decision, given or to give, and `VerdictControl` offers it. The console's `ShadowModeSummary` shows how often people
   agreed (`readShadowSummary`).

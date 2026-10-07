@@ -18,7 +18,7 @@ vi.mock("@/components/ui/useActionForm", async (importOriginal) => {
   };
 });
 
-import InvoiceIntake, { amountNote } from "@/components/intake/InvoiceIntake";
+import InvoiceIntake, { amountNote, startingCurrency } from "@/components/intake/InvoiceIntake";
 
 const COUNTERPARTIES = [{ id: "0b6c1c9e-4a4f-4a7e-9b1e-00000000c0de", name: "Northstar Studio", role: "vendor" }];
 const DEADLINE_MISSING = "Enter the last day the discount applies, on or before the due date, or clear the discount.";
@@ -144,5 +144,31 @@ describe("the counterparty form's chain (CCTP payouts X1)", () => {
     expect(source).toContain('<Select name="chain" defaultValue={homeChain(network).id}>');
     expect(source).toContain("chainsOn(network).map");
     expect(readFileSync("src/app/o/[slug]/counterparties/page.tsx", "utf8")).toContain("<CounterpartyIntake orgSlug={slug} framed={false} network={network} />");
+  });
+});
+
+describe("InvoiceIntake in shadow mode (shadow mode S6)", () => {
+  const markup = renderToStaticMarkup(<InvoiceIntake orgSlug="acme" counterparties={COUNTERPARTIES} billCurrency="VND" />);
+
+  it("starts in the business's own currency, with an amount written as its bills write it", () => {
+    expect(markup).toMatch(/<select[^>]*name="currency"/);
+    // Radix's hidden select carries no option on the server, so the starting value is read where it is chosen.
+    expect(startingCurrency(undefined, "VND")).toBe("VND");
+    expect(startingCurrency(undefined, undefined)).toBe("USDC");
+    expect(startingCurrency({ currency: "VND" }, "VND")).toBe("VND");
+    expect(startingCurrency({ currency: "GBP" }, "VND")).toBeUndefined();
+    expect(input(markup, "amount")).toContain('placeholder="2.500.000"');
+  });
+
+  it("says a bill in it is paid in USDC at the day's rate, and whose rates they are", () => {
+    expect(markup).toContain("A bill in VND is paid in USDC at the day&#x27;s rate.");
+    expect(markup).toContain('href="https://www.exchangerate-api.com"');
+    expect(markup).toContain("Rates By Exchange Rate API");
+  });
+
+  it("keeps USDC first outside shadow mode", () => {
+    const plain = renderToStaticMarkup(<InvoiceIntake orgSlug="acme" counterparties={COUNTERPARTIES} />);
+    expect(plain).not.toContain("Rates By Exchange Rate API");
+    expect(input(plain, "amount")).toContain('placeholder="1250.00"');
   });
 });

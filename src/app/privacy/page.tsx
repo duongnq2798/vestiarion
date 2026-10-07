@@ -200,6 +200,10 @@ export default function PrivacyPage() {
             document itself is not kept, only its hash; the ledger keeps the sender&apos;s address with most of its name hidden.
           </li>
           <li>
+            <strong>ExchangeRate-API</strong> gives the day&apos;s rates against the US dollar, for a bill typed in another currency in shadow
+            mode. Vestiarion asks it only for the dollar&apos;s rates: it receives nothing about you, your workspace or your bills.
+          </li>
+          <li>
             <strong>OpenSanctions</strong>, when this deployment has it configured, receives the names and jurisdictions of a live workspace&apos;s
             counterparties to screen them. A sandbox, and any workspace on a deployment without it, checks names against a list built into the app and sends
             them nowhere.

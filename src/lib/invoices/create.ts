@@ -3,6 +3,7 @@ import { db, unwrap } from "../dal";
 import { dueDateIso, type invoiceInputSchema } from "../intake-validation";
 import type { DocumentProvenance } from "../invoice-document/provenance";
 import { appendLedgerEntry } from "../ledger";
+import type { OriginalBill } from "../shadow-bills";
 
 /** An invoice as the form's schema accepts it. */
 export type InvoiceInput = z.output<typeof invoiceInputSchema>;
@@ -28,8 +29,10 @@ export async function createInvoice(input: {
   linkId?: string;
   /** The inbox row it was read from, when it arrived by email (email invoices design E8). */
   inboxEmailId?: string;
+  /** The bill as written in the business's own currency, when it was converted to USDC in shadow mode (shadow mode S6). */
+  original?: OriginalBill;
 }): Promise<{ id: string; counterpartyName: string } | null> {
-  const { actorId, invoice, document, via, apiKeyId, linkId, inboxEmailId } = input;
+  const { actorId, invoice, document, via, apiKeyId, linkId, inboxEmailId, original } = input;
   const lookup = await db()
     .from("counterparties")
     .select("id, name")
@@ -54,6 +57,10 @@ export async function createInvoice(input: {
         early_pay_discount_pct: invoice.earlyPayDiscountPct,
         discount_due_date: invoice.discountDeadline ? dueDateIso(invoice.discountDeadline) : null,
         created_by: actorId,
+        // The bill's own figure beside the USDC it is paid in, all five or none (`invoices_original_complete`).
+        ...(original
+          ? { original_currency: original.currency, original_amount: original.amount, fx_rate: original.perUsd, fx_source: original.source, fx_at: original.at }
+          : {}),
       })
       .select("id")
       .single<{ id: string }>()
@@ -63,7 +70,7 @@ export async function createInvoice(input: {
     actor: "human",
     domain: invoice.direction === "payable" ? "ap" : "ar",
     action: "create_invoice",
-    summary: `Added ${invoice.direction} invoice for ${counterparty.name}: ${invoice.amount} ${invoice.currency}`,
+    summary: `Added ${invoice.direction} invoice for ${counterparty.name}: ${invoice.amount} ${invoice.currency}${original ? ` (${original.amount} ${original.currency})` : ""}`,
     detail: {
       by: actorId,
       invoiceId: row.id,
@@ -79,6 +86,7 @@ export async function createInvoice(input: {
       ...(apiKeyId ? { apiKeyId } : {}),
       ...(linkId ? { linkId } : {}),
       ...(inboxEmailId ? { inboxEmailId } : {}),
+      ...(original ? { bill: original } : {}),
     },
   });
   return { id: row.id, counterpartyName: counterparty.name };

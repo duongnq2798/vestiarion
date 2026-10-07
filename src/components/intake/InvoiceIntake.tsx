@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
+import { billAmount } from "@/lib/bill-amount";
 
 const INITIAL: IntakeActionResult = { ok: false, message: "" };
 
@@ -66,6 +67,16 @@ export interface InvoiceFormDocument {
  * inbox email, it finishes an invoice that arrived by email (reader follow-up F5): always a payable, posted with the
  * email, to the action that adds it from the inbox.
  */
+/**
+ * The currency the form starts in: typed in, USDC, or in shadow mode the business's own currency (shadow mode S6); read from
+ * a document, the one it names when the form takes it, or none for the member to choose.
+ */
+export function startingCurrency(initial: { currency?: string | null } | undefined, billCurrency: string | undefined): string | undefined {
+  if (!initial) return billCurrency ?? "USDC";
+  const named = initial.currency ?? undefined;
+  return named === "USDC" || named === "EURC" || (billCurrency !== undefined && named === billCurrency) ? named : undefined;
+}
+
 export default function InvoiceIntake({
   counterparties,
   orgSlug,
@@ -75,6 +86,7 @@ export default function InvoiceIntake({
   action = createInvoiceAction,
   onAdded,
   idPrefix = "invoice",
+  billCurrency,
 }: {
   counterparties: IntakeCounterparty[];
   orgSlug: string;
@@ -86,13 +98,15 @@ export default function InvoiceIntake({
   onAdded?: () => void;
   /** Distinct per form on a page, so each label names its own field (review I5). */
   idPrefix?: string;
+  /** The business's own currency, in shadow mode: a bill in it is paid in USDC at the day's rate (shadow mode S6). */
+  billCurrency?: string;
 }) {
   const { state, formProps } = useActionForm(action, INITIAL, { resetOnSuccess: true, toastOnSuccess: true, onSuccess: onAdded });
   const fromDocument = !!document || !!inboxEmailId;
   const none = counterparties.length === 0;
   const start = (value: string | null | undefined) => value ?? undefined;
   // Typed in, an invoice is in USDC unless changed. Read from a document that names no currency, the member chooses.
-  const currency = initial ? (initial.currency === "USDC" || initial.currency === "EURC" ? initial.currency : undefined) : "USDC";
+  const currency = startingCurrency(initial, billCurrency);
   const id = (field: string) => `${idPrefix}-${field}`;
   const fieldError = (field: keyof NonNullable<IntakeActionResult["fieldErrors"]>) => (state.ok ? undefined : state.fieldErrors?.[field]);
 
@@ -194,7 +208,7 @@ export default function InvoiceIntake({
             name="amount"
             required
             inputMode="decimal"
-            placeholder="1250.00"
+            placeholder={billCurrency && billAmount("2.500.000", billCurrency) !== null ? "2.500.000" : "1250.00"}
             defaultValue={start(initial?.amount)}
             onChange={(event) => setAmount(event.target.value)}
           />
@@ -202,7 +216,18 @@ export default function InvoiceIntake({
         <Field
           id={id("currency")}
           label="Currency"
-          description="A EURC payable is paid in EURC, and checked against the payment limit at its USDC value."
+          description={
+            billCurrency ? (
+              <>
+                A bill in {billCurrency} is paid in USDC at the day&apos;s rate.{" "}
+                <a href="https://www.exchangerate-api.com" className="underline underline-offset-2" target="_blank" rel="noreferrer">
+                  Rates By Exchange Rate API
+                </a>
+              </>
+            ) : (
+              "A EURC payable is paid in EURC, and checked against the payment limit at its USDC value."
+            )
+          }
           error={fieldError("currency")}
         >
           <Select name="currency" defaultValue={currency} required={currency === undefined}>
@@ -210,6 +235,7 @@ export default function InvoiceIntake({
               <SelectValue placeholder="Choose USDC or EURC" />
             </SelectTrigger>
             <SelectContent>
+              {billCurrency && <SelectItem value={billCurrency}>{billCurrency}</SelectItem>}
               <SelectItem value="USDC">USDC</SelectItem>
               <SelectItem value="EURC">EURC</SelectItem>
             </SelectContent>

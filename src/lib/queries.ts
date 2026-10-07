@@ -109,6 +109,15 @@ export interface InvoiceRow {
   paid_amount: number | null;
   /** USDC or EURC (0040); `listInvoices` always sets it. */
   currency?: "USDC" | "EURC";
+  /**
+   * A bill taken in the business's own currency in shadow mode (0084, shadow mode S6): as it was written, and the rate
+   * its USDC amount was worked out at. All set, or all null.
+   */
+  original_currency?: string | null;
+  original_amount?: number | null;
+  fx_rate?: number | null;
+  fx_source?: string | null;
+  fx_at?: string | null;
 }
 
 export async function listInvoices(): Promise<InvoiceRow[]> {
@@ -125,6 +134,8 @@ export async function listInvoices(): Promise<InvoiceRow[]> {
     counterparty_name: r.counterparties?.name ?? "unknown",
     paid_amount: r.paid_amount == null ? null : num(r.paid_amount),
     currency: r.currency === "EURC" ? "EURC" : "USDC",
+    original_amount: r.original_amount == null ? null : num(r.original_amount),
+    fx_rate: r.fx_rate == null ? null : num(r.fx_rate),
   }));
 }
 
