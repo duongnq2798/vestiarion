@@ -32,6 +32,7 @@ import {
 } from "@/lib/ledger";
 import { exportKeys } from "@/lib/ledger-export";
 import { stats } from "@/lib/queries";
+import { DocsLink } from "@/components/DocsLink";
 
 export const dynamic = "force-dynamic";
 
@@ -108,7 +109,10 @@ export default async function AuditPage({ params, searchParams }: AuditPageProps
             </dl>
             <div className="mt-4 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
               <VerifyLedgerBadge orgSlug={slug} />
-              <AuditExportMenu orgSlug={slug} />
+              <div className="flex items-center gap-3">
+                <DocsLink href="/docs/guides/audit-export" topic="exporting and checking the ledger" />
+                <AuditExportMenu orgSlug={slug} />
+              </div>
             </div>
           </section>
         </Card>

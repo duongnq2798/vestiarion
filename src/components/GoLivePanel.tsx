@@ -36,6 +36,7 @@ import PasskeyTreasurySteps from "@/components/treasury/PasskeyTreasurySteps";
 import TreasuryWalletControls from "@/components/treasury/TreasuryWalletControls";
 import { WalletTreasuryChoice } from "@/components/treasury/WalletTreasuryChoice";
 import WalletTreasurySteps, { WalletTreasurySummary } from "@/components/treasury/WalletTreasurySteps";
+import { DocsLink } from "@/components/DocsLink";
 
 /**
  * The Go live section of Settings (docs/superpowers/specs/2026-09-29-go-live-design.md §2).
@@ -618,7 +619,7 @@ export default function GoLivePanel({ orgSlug, status, canAdminister, sampleBala
 
   return (
     <section aria-labelledby="go-live-title">
-      <SectionHeader id="go-live-title" title="Go live" meta={<StatusLine status={status} />} />
+      <SectionHeader id="go-live-title" title="Go live" meta={<StatusLine status={status} />} action={<DocsLink href="/docs/guides/go-live" topic="going live" />} />
       <div className="space-y-4">
         {body}
         {canReplace && <ReplaceCredentials orgSlug={orgSlug} status={status} />}

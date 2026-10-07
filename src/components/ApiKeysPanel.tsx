@@ -1,8 +1,7 @@
 "use client";
 
 import { AnimatePresence, m } from "motion/react";
-import { Ban, BookOpen, KeyRound, Plus } from "lucide-react";
-import Link from "next/link";
+import { Ban, KeyRound, Plus } from "lucide-react";
 import { useState } from "react";
 import { createApiKeyAction, revokeApiKeyAction, type ApiKeyActionResult } from "@/app/actions/api-keys";
 import { Button } from "@/components/ui/Button";
@@ -22,6 +21,7 @@ import { MOTION } from "@/components/ui/tokens";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { ManageDisclosure } from "@/components/vx/ManageDisclosure";
 import type { ApiKeyRow } from "@/lib/platform/api-keys";
+import { DocsLink } from "@/components/DocsLink";
 
 const INITIAL: ApiKeyActionResult = { ok: false, message: "" };
 const EXIT = { duration: MOTION.duration.exit, ease: MOTION.ease.exit };
@@ -184,12 +184,7 @@ export default function ApiKeysPanel({ orgSlug, apiKeys, canManage }: { orgSlug:
           meta={revoked.length > 0 ? `${active.length} active, ${revoked.length} revoked` : `${active.length} in this workspace`}
           action={
             <div className="flex items-center gap-3">
-              <Button asChild variant="link">
-                <Link href="/docs/get-started/authentication" aria-label="Docs: API keys">
-                  <BookOpen aria-hidden />
-                  Docs
-                </Link>
-              </Button>
+              <DocsLink href="/docs/get-started/authentication" topic="API keys" />
               {canManage && <CreateKeyDialog orgSlug={orgSlug} />}
             </div>
           }

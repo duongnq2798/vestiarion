@@ -14,6 +14,7 @@ import { useActionForm } from "@/components/ui/useActionForm";
 import { Money } from "@/components/vx/Primitives";
 import { utcMinute } from "@/lib/copy";
 import type { UsycReserveStatus } from "@/lib/platform/usyc-reserve";
+import { DocsLink } from "@/components/DocsLink";
 
 const INITIAL: UsycReserveActionResult = { ok: false, message: "" };
 
@@ -32,7 +33,12 @@ export function UsycReservePanel({ orgSlug, status, canManage }: { orgSlug: stri
             id="usyc-reserve-title"
             title="USYC reserve"
             meta="idle cash earning in a tokenized money market fund"
-            action={status.liveAt ? <Badge tone="proof" dot>Live</Badge> : <Badge tone="simulated">Simulated</Badge>}
+            action={
+              <div className="flex items-center gap-3">
+                <DocsLink href="/docs/guides/go-live#earn-on-idle-cash-with-usyc" topic="the USYC reserve" />
+                {status.liveAt ? <Badge tone="proof" dot>Live</Badge> : <Badge tone="simulated">Simulated</Badge>}
+              </div>
+            }
           />
           {status.liveAt ? (
             <>

@@ -15,6 +15,7 @@ import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { BrandMark } from "@/components/vx/BrandMarks";
 import type { SlackPanelView } from "@/lib/slack/panel";
+import { DocsLink } from "@/components/DocsLink";
 
 const INITIAL: SlackActionResult = { ok: false, message: "" };
 
@@ -121,12 +122,15 @@ export default function SlackPanel({
     <section aria-labelledby="slack-title" id="slack">
       <SectionHeader
         id="slack-title"
+        // The logo has no text baseline: the title is a flex row, centred, so Docs sits level with it.
+        className="items-center"
         title={
-          <span className="inline-flex items-center gap-2">
+          <span className="flex items-center gap-2">
             <BrandMark brand="slack" />
             Slack
           </span>
         }
+        action={<DocsLink href="/docs/guides/slack" topic="Slack" />}
       />
       <Card className="space-y-4 p-5">
         {told && (
