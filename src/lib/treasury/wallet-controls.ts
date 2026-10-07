@@ -1,5 +1,6 @@
 import { encodeFunctionData, erc20Abi, maxUint256, type Hex } from "viem";
 import { setLimitsData } from "../spending-limit/deployment";
+import { figureUnits } from "../usdc-figure";
 
 /**
  * The calls a treasury's own wallet signs to change its contract's figures, or to stop and resume the agent's payments
@@ -25,21 +26,30 @@ export interface ControlCall {
   value: bigint;
 }
 
-/** A figure typed in USDC, in its 6-decimal units, rounded once as the server rounds them: 0 when empty, null when not a figure. */
-function units(typed: string): bigint | null {
-  const text = typed.trim();
-  if (text === "") return 0n;
-  const usdc = Number(text);
-  if (!Number.isFinite(usdc) || usdc < 0) return null;
-  return BigInt(Math.round(usdc * 1_000_000));
+/** What the contract holds now, as the panel read it: null where it holds no such figure. */
+export interface HeldFigures {
+  dailyUsdc: number | null;
+  weeklyUsdc: number | null;
+}
+
+/**
+ * One typed figure in units (review C1): read as every other figure is (`parseFigure`), so 0, a hex number or a 7th
+ * decimal is refused rather than sent as no figure. Empty keeps a figure the contract does not hold; a figure it holds
+ * is never removed from here, since 0 on chain means no figure at all.
+ */
+function typedUnits(typed: string, name: string, held: number | null): bigint {
+  const read = figureUnits(typed, name);
+  if (!read.ok) throw new WalletControlError(read.message);
+  if (read.units !== null) return read.units;
+  if (held !== null) throw new WalletControlError(`Enter a ${name} above 0 USDC. The contract holds one now, and this page does not remove it.`);
+  return 0n;
 }
 
 /** `setLimits(daily, weekly)` on the contract, which only its owner, the treasury wallet, may call. */
-export function figuresCall(input: { contract: Hex; daily: string; weekly: string }): ControlCall & { dailyUnits: bigint; weeklyUnits: bigint } {
-  const daily = units(input.daily);
-  const weekly = units(input.weekly);
-  const refused = daily === null || weekly === null || (daily === 0n && weekly === 0n) || (daily > 0n && weekly > 0n && weekly < daily);
-  if (refused) throw new WalletControlError(FIGURES_REFUSED);
+export function figuresCall(input: { contract: Hex; daily: string; weekly: string; holds: HeldFigures }): ControlCall & { dailyUnits: bigint; weeklyUnits: bigint } {
+  const daily = typedUnits(input.daily, "daily figure", input.holds.dailyUsdc);
+  const weekly = typedUnits(input.weekly, "7-day figure", input.holds.weeklyUsdc);
+  if ((daily === 0n && weekly === 0n) || (daily > 0n && weekly > 0n && weekly < daily)) throw new WalletControlError(FIGURES_REFUSED);
   return { to: input.contract, data: setLimitsData(daily, weekly), value: 0n, dailyUnits: daily, weeklyUnits: weekly };
 }
 
@@ -48,9 +58,10 @@ export function stopCall(input: { usdc: Hex; contract: Hex }): ControlCall {
   return { to: input.usdc, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [input.contract, 0n] }), value: 0n };
 }
 
-/** Resumes them: the contract may move the treasury's USDC again, without a cap or up to one. */
+/** Resumes them: the contract may move the treasury's USDC again, without a cap or up to one, read like a figure. */
 export function resumeCall(input: { usdc: Hex; contract: Hex; cap: string }): ControlCall {
-  const cap = input.cap.trim() === "" ? maxUint256 : units(input.cap);
-  if (cap === null || cap === 0n) throw new WalletControlError(CAP_REFUSED);
+  const read = figureUnits(input.cap, "cap");
+  if (!read.ok) throw new WalletControlError(CAP_REFUSED);
+  const cap = read.units ?? maxUint256;
   return { to: input.usdc, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [input.contract, cap] }), value: 0n };
 }

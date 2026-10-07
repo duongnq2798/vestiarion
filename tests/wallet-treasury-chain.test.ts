@@ -48,7 +48,7 @@ describe("treasuryChain", () => {
       return { result: params[0] === UNMINED ? null : receipt({ status: "0x1", from: WALLET.toLowerCase(), to: null, contractAddress: CONTRACT.toLowerCase() }) };
     });
     const chain = treasuryChain(ARC_MAINNET, { rpcUrl: "https://rpc.example", fetch: fetchFn });
-    expect(await chain.receipt(HASH)).toEqual({ status: "success", from: WALLET.toLowerCase(), to: null, contractAddress: CONTRACT.toLowerCase(), logs: [] });
+    expect(await chain.receipt(HASH)).toEqual({ status: "success", from: WALLET.toLowerCase(), to: null, contractAddress: CONTRACT.toLowerCase(), logs: [], blockNumber: 16n });
     expect(await chain.receipt(UNMINED)).toBeNull();
     expect(calls.every((entry) => new URL(entry.url).host === "rpc.example")).toBe(true);
   });
@@ -100,6 +100,21 @@ describe("treasuryChain", () => {
     expect(await chain.nativeBalance(WALLET)).toBe(500_000_000_000_000_000n);
     const tokens = calls.filter((entry) => entry.call.method === "eth_call").map((entry) => (entry.call.params[0] as { to: string }).to.toLowerCase());
     expect(tokens).toEqual([ARC_MAINNET.tokens.USDC.toLowerCase(), ARC_MAINNET.tokens.USDC.toLowerCase()]);
+  });
+
+  it("reads the head, and a contract or an allowance at a given block, so a check never reads a node behind a receipt (treasury wallet controls, review I3)", async () => {
+    const { fetchFn, calls } = fakeRpc(({ method }) => {
+      if (method === "eth_blockNumber") return { result: "0x3e8" };
+      if (method === "eth_call") return { result: encodeAbiParameters([{ type: "uint256" }], [7n]) };
+      return {};
+    });
+    const chain = treasuryChain(ARC_MAINNET, { rpcUrl: "https://rpc.example", fetch: fetchFn });
+    expect(await chain.blockNumber()).toBe(1000n);
+    await chain.read(CONTRACT, "0x12345678", 1000n);
+    expect(await chain.allowance(WALLET, CONTRACT, 1000n)).toBe(7n);
+    await chain.read(CONTRACT, "0x12345678");
+    const blocks = calls.filter((entry) => entry.call.method === "eth_call").map((entry) => entry.call.params[1]);
+    expect(blocks).toEqual(["0x3e8", "0x3e8", "latest"]);
   });
 
   it("throws on a read the contract reverts", async () => {

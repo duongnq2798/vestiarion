@@ -506,6 +506,7 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
     limitDailyUsdc: 50,
     limitWeeklyUsdc: 150,
     approval: null,
+    figuresRead: false,
     ...overrides,
   });
 
@@ -516,8 +517,25 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
         network: "arc-mainnet",
         host: "external",
         liveSince: "2026-10-07T08:30:37Z",
-        walletTreasury: setup({ step: "ready", contract: CONTRACT, dailyUsdc: 50, weeklyUsdc: 150, spendableUsdc: 4.33, agentGasUsdc: 0.5, signer: "passkey", approval: "unlimited", ...overrides }),
+        walletTreasury: setup({
+          step: "ready",
+          contract: CONTRACT,
+          dailyUsdc: 50,
+          weeklyUsdc: 150,
+          spendableUsdc: 4.33,
+          agentGasUsdc: 0.5,
+          signer: "passkey",
+          approval: "unlimited",
+          figuresRead: true,
+          ...overrides,
+        }),
       });
+
+    it("changes no figures it could not read, and says so (review C1)", () => {
+      const markup = panel(liveTreasury({ dailyUsdc: null, weeklyUsdc: null, figuresRead: false }));
+      expect(text(markup)).toContain("Arc mainnet did not answer for the contract's figures; reload this page to change them.");
+      expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>(?:(?!<\/button>).)*Change with your passkey/s);
+    });
 
     it("lets an owner change the contract's figures, from what it holds now, and stop the agent's payments", () => {
       const markup = panel(liveTreasury());

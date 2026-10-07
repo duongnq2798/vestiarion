@@ -133,6 +133,7 @@ const OWN_WALLET_DEPLOY: GoLiveStatus = {
     limitDailyUsdc: 50,
     limitWeeklyUsdc: 150,
     approval: null,
+    figuresRead: false,
   },
 };
 
@@ -149,6 +150,7 @@ const OWN_WALLET_READY: GoLiveStatus = {
     spendableUsdc: 250,
     agentGasUsdc: 0.5,
     approval: "unlimited",
+    figuresRead: true,
   },
 };
 
@@ -182,7 +184,7 @@ const PASSKEY_LIVE: GoLiveStatus = {
   ...PASSKEY_RECOVERY,
   step: "live",
   liveSince: "2026-10-07T08:30:37Z",
-  walletTreasury: { ...PASSKEY_RECOVERY.walletTreasury!, step: "ready", recovery: "registered", approval: "unlimited" },
+  walletTreasury: { ...PASSKEY_RECOVERY.walletTreasury!, step: "ready", recovery: "registered", approval: "unlimited", figuresRead: true },
 };
 
 /** Set up, with the agent's gas run short before going live: the passkey sends it more (the guide's "only when needed"). */

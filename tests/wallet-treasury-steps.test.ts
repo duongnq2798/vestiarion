@@ -260,7 +260,17 @@ describe("walletTreasuryStatus", () => {
       limitDailyUsdc: 50,
       limitWeeklyUsdc: 150,
       approval: "unlimited",
+      figuresRead: true,
     });
+  });
+
+  it("tells a contract that holds no daily figure from figures it could not read (review C1)", async () => {
+    const enforced = () => world({ ...chosen, contract: agentRow({ address: CONTRACT, approve_tx_hash: APPROVE_TX, enforced: true }) });
+    const read = (figures: { daily: bigint; weekly: bigint } | "unreadable") =>
+      database(enforced()).inScope(() => walletTreasuryStatus(ORG, { chain: chain({ usdc: 12_500_000n, allowance: 1n, gas: 500_000_000_000_000_000n, figures }) }));
+    expect(await read({ daily: 0n, weekly: 60_000_000n })).toMatchObject({ dailyUsdc: null, weeklyUsdc: 60, figuresRead: true });
+    expect(await read("unreadable")).toMatchObject({ dailyUsdc: null, weeklyUsdc: null, figuresRead: false });
+    expect((await database(world({ ...chosen, contract: agentRow() })).inScope(() => walletTreasuryStatus(ORG, { chain: chain() }))).figuresRead).toBe(false);
   });
 
   it("reads the contract's approval: unlimited, up to a cap, or stopped by the owner (treasury wallet controls C1)", async () => {
