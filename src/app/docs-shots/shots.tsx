@@ -132,6 +132,7 @@ const OWN_WALLET_DEPLOY: GoLiveStatus = {
     setupNeedsUsdc: 0,
     limitDailyUsdc: 50,
     limitWeeklyUsdc: 150,
+    approval: null,
   },
 };
 
@@ -147,6 +148,7 @@ const OWN_WALLET_READY: GoLiveStatus = {
     weeklyUsdc: 200,
     spendableUsdc: 250,
     agentGasUsdc: 0.5,
+    approval: "unlimited",
   },
 };
 

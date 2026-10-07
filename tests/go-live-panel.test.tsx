@@ -505,6 +505,7 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
     setupNeedsUsdc: 0,
     limitDailyUsdc: 50,
     limitWeeklyUsdc: 150,
+    approval: null,
     ...overrides,
   });
 

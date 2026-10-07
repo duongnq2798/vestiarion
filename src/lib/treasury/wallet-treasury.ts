@@ -65,6 +65,8 @@ export interface WalletTreasuryStatus {
   /** The workspace's agent spending limit, which a setup's figures start from (final review I4); null for one not set. */
   limitDailyUsdc: number | null;
   limitWeeklyUsdc: number | null;
+  /** What the contract may move of the wallet's USDC, once deployed: without a cap, up to one, or nothing since the owner stopped it (treasury wallet controls C1); null before, or when unread. */
+  approval: "unlimited" | "stopped" | number | null;
 }
 
 export type WalletTreasuryErrorCode =
@@ -257,6 +259,7 @@ export async function walletTreasuryStatus(orgId: string, deps: WalletTreasuryDe
       setupNeedsUsdc: 0,
       limitDailyUsdc: null,
       limitWeeklyUsdc: null,
+      approval: null,
     };
     if (external) {
       const limit = await readOutflowBudget(db());
@@ -282,6 +285,7 @@ export async function walletTreasuryStatus(orgId: string, deps: WalletTreasuryDe
     status.dailyUsdc = daily ? usdcOf(daily) : null;
     status.weeklyUsdc = weekly ? usdcOf(weekly) : null;
     status.spendableUsdc = balance === null || allowance === null ? null : usdcOf(balance < allowance ? balance : allowance);
+    status.approval = allowance === null ? null : allowance === 0n ? "stopped" : allowance >= UNLIMITED ? "unlimited" : Number(allowance) / 1_000_000;
     if (!row?.enforced) return { ...status, step: "approve" };
     if (network.gasReserveUsdc > 0 && (status.agentGasUsdc === null || status.agentGasUsdc < network.gasReserveUsdc)) return { ...status, step: "gas" };
     // A passkey treasury decides its recovery before it goes live (K8).
