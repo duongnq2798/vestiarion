@@ -36,7 +36,7 @@ import { spendingLimitStatus } from "@/lib/circle/spending-limit-setup";
 import { readServiceBudget } from "@/lib/service-budget";
 import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
-import { gettingStarted, ownPayableCount } from "@/lib/getting-started";
+import { gettingStarted, ownBillCount, ownPayableCount } from "@/lib/getting-started";
 import { listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { pauseStateOf } from "@/lib/platform/pause";
 import { cashOutlook } from "@/lib/cash-outlook";
@@ -224,7 +224,8 @@ export default async function DashboardPage({
     const role = access.membership.role;
     // Computed from the rows above, with no extra read (getting-started design G1, G2), until the first
     // payment on Arc testnet (first-payment design §2). Only people who can act on it see it: owners and
-    // admins add records, and an owner takes the workspace live.
+    // admins add records, and an owner takes the workspace live. In shadow mode it has steps of its own: suppliers, real
+    // bills and a first verdict, from the shadow mode and verdicts read above.
     const checklist = can(role, "records.write")
       ? gettingStarted({
           mode: access.membership.mode,
@@ -236,6 +237,9 @@ export default async function DashboardPage({
           network,
           walletHost,
           walletTreasuryAvailable: walletTreasuryAvailable(currentOrgConfig(), networkProfile(network)),
+          shadow: shadow
+            ? { currency: shadow.currency, verdictsGiven: (shadowSummary?.agreed ?? 0) + (shadowSummary?.disagreed ?? 0), billCount: ownBillCount(invoices, counterparties) }
+            : null,
         })
       : null;
     // Sample data (sample-data design §1): offered in an empty simulated sandbox, and called out while it is loaded.

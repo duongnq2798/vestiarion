@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gettingStarted, ownPayableCount, type GettingStartedInput } from "@/lib/getting-started";
+import { gettingStarted, ownBillCount, ownPayableCount, type GettingStartedInput } from "@/lib/getting-started";
 
 /**
  * The console's Get started checklist, computed from rows the console
@@ -247,5 +247,73 @@ describe("getting started with the owner's own wallet (wallet treasury W1, W12)"
     expect(fund?.body).toBe("Add USDC on Arc mainnet to your own wallet, the workspace's treasury. Settings reads what the agent can move from the chain.");
     const funded = gettingStarted(input({ network: "arc-mainnet", walletHost: "external", accounts: [{ ...owned, balance: 5 }] })).steps;
     expect(funded.find((step) => step.id === "fund")?.done).toBe(true);
+  });
+});
+
+describe("gettingStarted in shadow mode", () => {
+  const shadow = (over: Partial<NonNullable<GettingStartedInput["shadow"]>> = {}) => ({ currency: "USDC", verdictsGiven: 0, billCount: 0, ...over });
+  const LIVE_FUNDED = { mode: "live" as const, accounts: FUNDED };
+  const MIRRORED = { name: "Dien luc", role: "vendor", address: ADDRESS, address_changed_at: null, address_confirmed_at: null };
+
+  it("lists the steps of running beside how the business pays today, titled for shadow mode, with its guide", () => {
+    const result = gettingStarted(input({ shadow: shadow() }));
+    expect(result.title).toBe("Get started in shadow mode");
+    expect(result.guide).toBe("shadow-mode");
+    expect(result.steps.map((each) => each.title)).toEqual([
+      "Add a wallet",
+      "Fund it with USDC",
+      "Go live",
+      "Add your suppliers",
+      "Add your real bills",
+      "Give your first verdict",
+    ]);
+    expect(result.show).toBe(true);
+    expect(result.next).toBe("wallet");
+  });
+
+  it("ticks a supplier with a mirror address, a bill once any was added, paid or not, and the first verdict, then hides", () => {
+    expect(done(gettingStarted(input({ ...LIVE_FUNDED, counterparties: [MIRRORED], shadow: shadow() })))).toMatchObject({ suppliers: true, bills: false, verdict: false });
+    const billed = gettingStarted(input({ ...LIVE_FUNDED, counterparties: [MIRRORED], payableCount: 0, shadow: shadow({ billCount: 1 }) }));
+    expect(done(billed)).toMatchObject({ bills: true, verdict: false });
+    expect(billed.next).toBe("verdict");
+    expect(gettingStarted(input({ ...LIVE_FUNDED, counterparties: [MIRRORED], shadow: shadow({ billCount: 1, verdictsGiven: 1 }) })).show).toBe(false);
+  });
+
+  it("says how a supplier with no Arc address gets a mirror address, and one with no purchase orders is paid without them", () => {
+    const body = step(gettingStarted(input({ shadow: shadow() })), "suppliers").body;
+    expect(body).toContain("Give it a mirror address");
+    expect(body).toContain("Pay without purchase orders");
+    expect(step(gettingStarted(input({ shadow: shadow() })), "suppliers").path).toBe("/counterparties");
+  });
+
+  it("says bills are entered in USDC, or in the business's own currency at the day's rate", () => {
+    expect(step(gettingStarted(input({ shadow: shadow() })), "bills").body).toContain("in USDC, as on any invoice");
+    expect(step(gettingStarted(input({ shadow: shadow({ currency: "EUR" }) })), "bills").body).toContain("in EUR, as written on it");
+  });
+
+  it("sends the person to Approvals to give the verdict once a decision waits for one", () => {
+    const waiting = step(gettingStarted(input({ ...LIVE_FUNDED, counterparties: [MIRRORED], waitingCount: 1, shadow: shadow({ billCount: 1 }) })), "verdict");
+    expect(waiting.path).toBe("/approvals");
+    expect(waiting.body).toContain("Agree and pay");
+    expect(waiting.body).toContain("Disagree");
+  });
+
+  it("is the first-payment checklist outside shadow mode", () => {
+    const result = gettingStarted(input({ shadow: null }));
+    expect(result.title).toBeUndefined();
+    expect(result.guide).toBe("go-live");
+  });
+});
+
+describe("ownBillCount", () => {
+  it("counts every payable of a counterparty a person added, paid or not, and no receivable or sample bill", () => {
+    const counterparties = [{ id: "c1" }, { id: "c2", sample: true }];
+    const invoices = [
+      { counterparty_id: "c1", direction: "payable", status: "paid" },
+      { counterparty_id: "c1", direction: "payable", status: "held" },
+      { counterparty_id: "c1", direction: "receivable", status: "pending" },
+      { counterparty_id: "c2", direction: "payable", status: "pending" },
+    ];
+    expect(ownBillCount(invoices, counterparties)).toBe(2);
   });
 });

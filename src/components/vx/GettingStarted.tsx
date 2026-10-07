@@ -22,7 +22,7 @@ export function GettingStarted({ slug, checklist, isOwner }: { slug: string; che
     <section aria-labelledby="getting-started-title" className="mb-8">
       <SectionHeader
         id="getting-started-title"
-        title="Get started"
+        title={checklist.title ?? "Get started"}
         meta={`${doneCount} of ${checklist.steps.length} done`}
         action={
           <Button asChild size="sm" variant="ghost">
