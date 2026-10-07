@@ -21,6 +21,11 @@ vi.mock("@/app/actions/wallet-treasury", () => ({
   prepareApprovalAction: vi.fn(),
   recordApprovalAction: vi.fn(),
   prepareAgentGasAction: vi.fn(),
+  choosePasskeyTreasuryAction: vi.fn(),
+  preparePasskeySetupAction: vi.fn(),
+  recordPasskeySetupAction: vi.fn(),
+  recordRecoveryAction: vi.fn(),
+  skipRecoveryAction: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
@@ -546,6 +551,43 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
     const words = text(panel(status({ step: "wallets", network: "arc-mainnet", host: "external", walletTreasuryAvailable: true, walletTreasury: halfway })));
     expect(words).toContain("Step 2 of 3");
     expect(words).toContain("Connect your wallet");
+  });
+
+  describe("on the passkey route (passkey treasury K5, K6, K8)", () => {
+    const passkey = (overrides: Partial<NonNullable<GoLiveStatus["walletTreasury"]>>) =>
+      status({ step: "wallets", network: "arc-mainnet", host: "external", walletTreasury: setup({ signer: "passkey", setupNeedsUsdc: 0.55, ...overrides }) });
+
+    it("asks for USDC first, at the wallet's address, saying what setup needs", () => {
+      const words = text(panel(passkey({ step: "deploy", walletUsdc: 0.2 })));
+      expect(words).toContain("Step 2 of 3");
+      expect(words).toContain("Add USDC to your wallet");
+      expect(words).toContain(WALLET);
+      expect(words).toContain("Setup needs about 0.55 USDC: 0.50 for the agent's gas and about 0.05 for the network fee.");
+      expect(words).not.toContain("Set up with your passkey");
+    });
+
+    it("sets up with one confirmation once the USDC is there, saying what it does", () => {
+      const words = text(panel(passkey({ step: "deploy", walletUsdc: 12.5 })));
+      expect(words).toContain("Set up with one confirmation");
+      expect(words).toContain("deploys your contract");
+      expect(words).toContain("approves it to move your USDC");
+      expect(words).toContain("sends 0.50 USDC to the agent's wallet for its gas");
+      expect(words).toContain("Daily figure (USDC)");
+      expect(words).toContain("Cap (USDC)");
+      expect(words).toContain("Set up with your passkey");
+      expect(words).not.toContain("Deploy from your wallet");
+    });
+
+    it("asks for a recovery phrase after setup, and lets the owner skip it knowingly", () => {
+      const words = text(panel(passkey({ step: "recovery", contract: CONTRACT, walletUsdc: 12, agentGasUsdc: 0.5 })));
+      expect(words).toContain("Save a recovery phrase");
+      expect(words).toContain("Create a recovery phrase");
+      expect(words).toContain("Skip: I understand that losing this passkey loses this wallet");
+    });
+
+    it("offers the agent's wallet again where Circle could not make it with the choice", () => {
+      expect(text(panel(passkey({ step: "agent", agent: null })))).toContain("Create the agent's wallet");
+    });
   });
 
   it("keeps showing the wallet, its contract and its figures once live", () => {

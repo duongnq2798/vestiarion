@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { getAddress, parseEther, type Hex } from "viem";
 import { ARC_MAINNET } from "@/lib/network";
 import {
+  forgetCredential,
   forgetPendingSetup,
   keepCredential,
   keepPendingSetup,
@@ -116,6 +117,8 @@ describe("what the browser keeps for a workspace (K9, K10)", () => {
     expect(keptCredential(kept, "own-wallet-co")).toEqual(CREDENTIAL);
     expect(keptCredential(kept, "another-co")).toBeNull();
     expect(JSON.parse(kept.items.get("vestiarion.passkey-treasury.own-wallet-co") ?? "{}")).toEqual(CREDENTIAL);
+    forgetCredential(kept, "own-wallet-co");
+    expect(keptCredential(kept, "own-wallet-co")).toBeNull();
   });
 
   it("reads nothing malformed, and does without storage the browser refuses", () => {

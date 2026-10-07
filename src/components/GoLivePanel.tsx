@@ -32,6 +32,7 @@ import { FUNDING_WATCH_INTERVAL_MS, shouldReadBalanceAgain } from "@/lib/funding
 import { MAINNET_OFF } from "@/lib/mainnet";
 import { networkOf, networkProfile, type Network } from "@/lib/network";
 import type { GoLiveStatus } from "@/lib/platform/go-live";
+import PasskeyTreasurySteps from "@/components/treasury/PasskeyTreasurySteps";
 import WalletTreasurySteps, { WalletTreasuryChoice, WalletTreasurySummary } from "@/components/treasury/WalletTreasurySteps";
 
 /**
@@ -572,8 +573,13 @@ export default function GoLivePanel({ orgSlug, status, canAdminister, sampleBala
       </p>
     );
   } else if (status.host === "external" && status.walletTreasury && status.step === "wallets") {
-    // The owner's own wallet, set up step by step (wallet treasury W5-W10).
-    body = <WalletTreasurySteps orgSlug={orgSlug} status={status.walletTreasury} network={status.network ?? "arc-mainnet"} />;
+    // The owner's own wallet, set up step by step (wallet treasury W5-W10); a passkey wallet's own route (passkey treasury K5-K8).
+    body =
+      status.walletTreasury.signer === "passkey" && status.walletTreasury.step !== "wallet" ? (
+        <PasskeyTreasurySteps orgSlug={orgSlug} status={status.walletTreasury} network={status.network ?? "arc-mainnet"} />
+      ) : (
+        <WalletTreasurySteps orgSlug={orgSlug} status={status.walletTreasury} network={status.network ?? "arc-mainnet"} />
+      );
   } else if (status.step === "connect") {
     body = (
       <ConnectStep

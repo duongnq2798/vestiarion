@@ -54,7 +54,8 @@ const notConfirmed = (networkLabel: string) =>
 /** The figures a person typed: empty is "not set", anything else a number of USDC, or NaN the server refuses. */
 const figure = (value: string): number | null => (value.trim() === "" ? null : Number(value));
 
-function Address({ value, label }: { value: string; label: string }) {
+/** An address, with a button that copies it. */
+export function WalletAddress({ value, label }: { value: string; label: string }) {
   return (
     <div className="flex min-w-0 items-center gap-1">
       <code className="min-w-0 break-all font-mono text-xs text-ink-2">{value}</code>
@@ -165,11 +166,11 @@ const usdc = (value: number | null) => (value === null ? "not read" : `${value} 
 export function WalletTreasurySummary({ status, network }: { status: WalletTreasuryStatus; network: Network }) {
   const profile = networkProfile(network);
   const rows: Array<[string, ReactNode]> = [];
-  if (status.wallet) rows.push(["Your wallet", <Address key="wallet" value={status.wallet} label="Copy your wallet's address" />]);
+  if (status.wallet) rows.push(["Your wallet", <WalletAddress key="wallet" value={status.wallet} label="Copy your wallet's address" />]);
   if (status.wallet) rows.push(["USDC in it", usdc(status.walletUsdc)]);
-  if (status.agent) rows.push(["The agent's wallet", <Address key="agent" value={status.agent} label="Copy the agent's address" />]);
+  if (status.agent) rows.push(["The agent's wallet", <WalletAddress key="agent" value={status.agent} label="Copy the agent's address" />]);
   if (status.agent && profile.gasReserveUsdc > 0) rows.push(["The agent's gas", usdc(status.agentGasUsdc)]);
-  if (status.contract) rows.push(["Your contract", <Address key="contract" value={status.contract} label="Copy the contract's address" />]);
+  if (status.contract) rows.push(["Your contract", <WalletAddress key="contract" value={status.contract} label="Copy the contract's address" />]);
   if (status.contract) rows.push(["Its figures", `${status.dailyUsdc === null ? "no daily figure" : `${status.dailyUsdc} USDC a day`}, ${status.weeklyUsdc === null ? "no 7-day figure" : `${status.weeklyUsdc} USDC in 7 days`}`]);
   if (status.contract && status.step !== "approve") rows.push(["The agent can move", usdc(status.spendableUsdc)]);
   if (rows.length === 0) return null;

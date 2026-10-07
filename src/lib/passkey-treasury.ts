@@ -157,6 +157,11 @@ export function keepCredential(store: KeepingStore | null, orgSlug: string, cred
   if (kept) writeJson(store, credentialKey(orgSlug), kept);
 }
 
+/** Forgets the passkey kept for the workspace: one that owns another wallet, say (K9). */
+export function forgetCredential(store: KeepingStore | null, orgSlug: string): void {
+  remove(store, credentialKey(orgSlug));
+}
+
 /** A setup sent and not yet recorded (K10): its contract, and its transaction or, until that is known, its user operation. */
 export interface PendingSetup {
   contract: Hex;
