@@ -30,6 +30,22 @@ describe("membershipsOf", () => {
       ["acme-main", "arc-mainnet"],
       ["old", "arc-testnet"],
     ]);
-    expect(fake.requests[0].params.get("select")).toBe("role,orgs!inner(id,slug,name,mode,network)");
+    expect(fake.requests[0].params.get("select")).toBe("role,orgs!inner(id,slug,name,mode,network,last_active_at)");
+  });
+
+  it("reads when each workspace was last in use, and leaves it out where the row has none (workspaces page W2)", async () => {
+    const fake = fakeSupabase((request) =>
+      request.path === "/rest/v1/memberships"
+        ? {
+            body: [
+              { role: "owner", orgs: { id: "o-1", slug: "acme", name: "Acme", mode: "live", network: "arc-testnet", last_active_at: "2026-10-07T09:00:00+00:00" } },
+              { role: "owner", orgs: { id: "o-2", slug: "bare", name: "Bare", mode: "live", network: "arc-testnet" } },
+            ],
+          }
+        : { body: [] }
+    );
+    const memberships = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => membershipsOf("user-network-2"));
+    expect(memberships.map((membership) => membership.lastActiveAt)).toEqual(["2026-10-07T09:00:00+00:00", undefined]);
+    expect(memberships[1]).not.toHaveProperty("lastActiveAt");
   });
 });

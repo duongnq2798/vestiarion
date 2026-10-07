@@ -44,7 +44,7 @@ function Wordmark() {
 }
 
 /** The one column of a page outside a workspace that is a single column, the workspace chooser: its header lines up with it. */
-export const SITE_COLUMN = "max-w-md";
+export const SITE_COLUMN = "max-w-[34rem]";
 
 /**
  * `landing` adds the section links, sign-in and the console call to action; `children` fill the right side otherwise.
