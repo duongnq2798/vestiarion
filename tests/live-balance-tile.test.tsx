@@ -192,11 +192,13 @@ describe("checkedLabel", () => {
 describe("the console page", () => {
   const source = (...parts: string[]) => readFileSync(path.join(process.cwd(), ...parts), "utf8");
 
-  it("hands the tile the action, the workspace, and the operating account's last read", () => {
+  it("hands the tile the action, the workspace, and the operating account's last read, a Circle wallet's or the owner's own", () => {
     const page = source("src", "app", "o", "[slug]", "console", "page.tsx");
     expect(page).toContain("refreshAction={refreshOnChainBalanceAction}");
     expect(page).toContain("orgSlug={slug}");
-    expect(page).toMatch(/syncedAt=\{accountsRows\.find\(\(account\) => account\.kind === "operating" && account\.circle_wallet_id\)\?\.balance_synced_at \?\? null\}/);
+    expect(page).toContain(
+      'syncedAt={accountsRows.find((account) => account.kind === "operating" && (account.circle_wallet_id || (walletHost === "external" && account.address)))?.balance_synced_at ?? null}'
+    );
   });
 
   it("keeps the action module out of the tile's imports, but for its type", () => {

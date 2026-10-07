@@ -1,7 +1,7 @@
 /**
  * Subscribes Circle accounts to transaction notifications
- * (docs/superpowers/specs/2026-10-06-circle-notifications-design.md N6): the platform's hosted account, then every
- * workspace with its own Circle credentials stored. A workspace connected from now on is subscribed when it connects;
+ * (docs/superpowers/specs/2026-10-06-circle-notifications-design.md N6): the platform's hosted account, its agent account
+ * on Arc mainnet (wallet treasury W15), then every workspace with its own Circle credentials stored. A workspace connected from now on is subscribed when it connects;
  * this covers the hosted account and the ones connected before. Found or made, so it is safe to run again. It prints
  * each account's result, never a key. Run it once the deployment that serves the endpoint is live: Circle makes a
  * subscription only after the endpoint answers its test notification. A workspace on Arc mainnet is read only where
@@ -39,6 +39,20 @@ async function main(argv: string[]) {
     }
   } else {
     console.log("hosted account: HOSTED_CIRCLE_API_KEY and HOSTED_CIRCLE_ENTITY_SECRET are not set here; skipped");
+  }
+
+  // The agent account holds the agent wallets of workspaces paying from their owners' own wallets (wallet treasury W15).
+  const agentKey = process.env.MAINNET_AGENT_CIRCLE_API_KEY?.trim();
+  const agentSecret = process.env.MAINNET_AGENT_CIRCLE_ENTITY_SECRET?.trim();
+  if (agentKey && agentSecret) {
+    try {
+      console.log(`agent account (Arc mainnet): ${await ensureNotificationSubscription(defaultCircleClient({ apiKey: agentKey, entitySecret: agentSecret }), endpoint)}`);
+    } catch (error) {
+      console.log(`agent account (Arc mainnet): ${failed(error)}`);
+      process.exitCode = 1;
+    }
+  } else {
+    console.log("agent account (Arc mainnet): MAINNET_AGENT_CIRCLE_API_KEY and MAINNET_AGENT_CIRCLE_ENTITY_SECRET are not set here; skipped");
   }
 
   const orgs = unwrap(

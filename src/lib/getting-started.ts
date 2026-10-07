@@ -19,12 +19,13 @@
 
 import { addressUnconfirmed } from "./counterparty-address";
 import { networkProfile, type Network } from "./network";
+import type { WalletHost } from "./config";
 
 export type GettingStartedStepId = "wallet" | "fund" | "live" | "payee" | "payable" | "payment";
 
 export interface GettingStartedInput {
   mode: "sandbox" | "live";
-  accounts: Array<{ kind: string; circle_wallet_id: string | null; balance: number }>;
+  accounts: Array<{ kind: string; circle_wallet_id: string | null; balance: number; address?: string | null }>;
   counterparties: Array<{
     name?: string;
     role?: string;
@@ -41,6 +42,10 @@ export interface GettingStartedInput {
   waitingCount: number;
   /** The workspace's network: the steps name it, and offer only what it has (mainnet copy C1, C2). */
   network: Network;
+  /** Whose wallets it pays from: its owner's own wallet is `external` (wallet treasury W1). */
+  walletHost?: WalletHost | null;
+  /** Whether this deployment offers paying from the owner's own wallet on the network (W2). */
+  walletTreasuryAvailable?: boolean;
 }
 
 export interface GettingStartedStep {
@@ -70,7 +75,9 @@ const SETTINGS_STEPS: ReadonlySet<GettingStartedStepId> = new Set(["wallet", "fu
 export function gettingStarted(input: GettingStartedInput): GettingStarted {
   const live = input.mode === "live";
   const operating = input.accounts.find((account) => account.kind === "operating");
-  const hasWallet = Boolean(operating?.circle_wallet_id);
+  // The owner's own wallet is the workspace's once its address is the operating account's (wallet treasury W12).
+  const ownWallet = input.walletHost === "external";
+  const hasWallet = Boolean(operating?.circle_wallet_id) || (ownWallet && Boolean(operating?.address));
   const funded = (live || hasWallet) && (operating?.balance ?? 0) > 0;
   const payees = input.counterparties.filter(
     (counterparty) => !counterparty.sample && counterparty.role !== "client" && Boolean(counterparty.address)
@@ -90,7 +97,9 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
       title: "Add a wallet",
       body: profile.hostedWallets
         ? `Create the workspace's treasury wallets on ${label}: a hosted wallet in one click, or your own Circle account.`
-        : `Create the workspace's wallet on ${label} with your own Circle account.`,
+        : input.walletTreasuryAvailable
+          ? `Use a wallet you hold, such as MetaMask, as the workspace's treasury on ${label}, or connect your own Circle account.`
+          : `Create the workspace's wallet on ${label} with your own Circle account.`,
       path: GO_LIVE,
       done: live || hasWallet,
       ownerOnly: true,
@@ -98,7 +107,11 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
     {
       id: "fund",
       title: "Fund it with USDC",
-      body: profile.faucet
+      body: ownWallet
+        ? live
+          ? `Your wallet holds no USDC the agent can move, so the agent cannot pay. Add USDC on ${label} to it, the workspace's treasury.`
+          : `Add USDC on ${label} to your own wallet, the workspace's treasury. Settings reads what the agent can move from the chain.`
+        : profile.faucet
         ? live
           ? "The operating wallet holds no USDC, so the agent cannot pay. Send testnet USDC to it from Circle's faucet: Settings lists its address."
           : "Send testnet USDC to the operating wallet from Circle's faucet. Settings shows the wallet's address, and reads the balance from the chain again when you come back."

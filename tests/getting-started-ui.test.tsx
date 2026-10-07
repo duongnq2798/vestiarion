@@ -74,8 +74,9 @@ describe("the console's checklist", () => {
   });
 
   it("uses the rows the console already reads, with no extra query", () => {
+    // Where the treasury lives comes from the workspace's configuration, already in scope (wallet treasury W12).
     expect(page.replace(/\s+/g, " ")).toContain(
-      "gettingStarted({ mode: access.membership.mode, accounts: accountsRows, counterparties, payableCount: ownPayableCount(invoices, counterparties), onchainPayments: dashboardStats.onchainTransfers, waitingCount: needsReview, network, })"
+      "gettingStarted({ mode: access.membership.mode, accounts: accountsRows, counterparties, payableCount: ownPayableCount(invoices, counterparties), onchainPayments: dashboardStats.onchainTransfers, waitingCount: needsReview, network, walletHost, walletTreasuryAvailable: walletTreasuryAvailable(currentOrgConfig(), networkProfile(network)), })"
     );
   });
 });

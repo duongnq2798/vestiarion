@@ -1023,7 +1023,7 @@ describe("goLiveStatus", () => {
   it("starts a new sandbox at connect", async () => {
     const { fake, inScope } = database(sandbox());
     await expect(inScope(() => goLiveStatus(ORG))).resolves.toEqual({
-      step: "connect", connected: false, host: null, hostedAvailable: false, wallets: [], liveSince: null, credentialsUnreadable: false, network: "arc-testnet", mainnetOff: false,
+      step: "connect", connected: false, host: null, hostedAvailable: false, wallets: [], liveSince: null, credentialsUnreadable: false, network: "arc-testnet", mainnetOff: false, walletTreasuryAvailable: false, walletTreasury: null,
     });
     // Only whether credentials are stored is read, never the envelopes themselves.
     const statusRead = fake.requests.filter((request) => request.path === "/rest/v1/orgs" && request.params.get("select")?.includes("->>"));
@@ -1047,7 +1047,7 @@ describe("goLiveStatus", () => {
         { accountName: "Reserve", kind: "reserve", address: "0x" + "cd".repeat(20) },
       ],
       liveSince: null,
-      credentialsUnreadable: false, network: "arc-testnet", mainnetOff: false,
+      credentialsUnreadable: false, network: "arc-testnet", mainnetOff: false, walletTreasuryAvailable: false, walletTreasury: null,
     });
     expect(JSON.stringify(status)).not.toContain("wallet-operating");
   });
@@ -1083,7 +1083,7 @@ describe("goLiveStatus", () => {
         { accountName: "Reserve", kind: "reserve", address: "0x" + "cd".repeat(20) },
       ],
       liveSince: null,
-      credentialsUnreadable: false, network: "arc-testnet", mainnetOff: false,
+      credentialsUnreadable: false, network: "arc-testnet", mainnetOff: false, walletTreasuryAvailable: false, walletTreasury: null,
     });
   });
 
@@ -1606,13 +1606,13 @@ describe("hosted testnet wallets (hosted wallets H1, H3, H4)", () => {
   describe("goLiveStatus", () => {
     it("offers the choice to a fresh sandbox on a deployment with the pair", async () => {
       await expect(database(sandbox(), { platform: hostedConfig }).inScope(() => goLiveStatus(ORG))).resolves.toEqual({
-        step: "connect", connected: false, host: null, hostedAvailable: true, wallets: [], liveSince: null, credentialsUnreadable: false, network: "arc-testnet", mainnetOff: false,
+        step: "connect", connected: false, host: null, hostedAvailable: true, wallets: [], liveSince: null, credentialsUnreadable: false, network: "arc-testnet", mainnetOff: false, walletTreasuryAvailable: false, walletTreasury: null,
       });
     });
 
     it("puts a hosted workspace with no wallets at wallets: the choice was its connect step", async () => {
       await expect(database(hosted(), { platform: hostedConfig }).inScope(() => goLiveStatus(ORG))).resolves.toEqual({
-        step: "wallets", connected: false, host: "hosted", hostedAvailable: true, wallets: [], liveSince: null, credentialsUnreadable: false, network: "arc-testnet", mainnetOff: false,
+        step: "wallets", connected: false, host: "hosted", hostedAvailable: true, wallets: [], liveSince: null, credentialsUnreadable: false, network: "arc-testnet", mainnetOff: false, walletTreasuryAvailable: false, walletTreasury: null,
       });
     });
 

@@ -1,3 +1,4 @@
+import type { WalletHost } from "../config";
 import crypto from "node:crypto";
 import { ledgerKeyId } from "../ledger-keys";
 import { decryptSecret, encryptSecret, type MasterKey, type SecretEnvelope } from "../secrets";
@@ -27,7 +28,7 @@ export function adoptEnvSecrets(input: {
   keys: MasterKey[];
   expectLedgerKeyId: string;
   /** The organization's `wallet_host`, as its row says now. */
-  walletHost: "own" | "hosted" | null;
+  walletHost: WalletHost | null;
 }): AdoptedSecrets {
   if (input.walletHost === "hosted") {
     throw new Error(

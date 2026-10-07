@@ -23,6 +23,7 @@ Makes the agent's spending limit binding on Arc. See [Enforce the limit on Arc](
 - Only its owner, the operating wallet, changes the figures, with `setLimits`. It cannot be upgraded.
 - It emits `Paid` and `LimitsSet`. `spentToday()` and `spentThisWeek()` read what it paid.
 - An owner or admin deploys it with **Enforce on Arc**, signed in the ledger as `spending_limit_enforced`.
+- On Arc mainnet, a workspace that pays from its owner's own wallet gets its copy from that wallet instead, which deploys it as the treasury and the owner, and approves it. Every payment from that workspace leaves through `pay`, including the ones people approve. See [Path C: your own wallet](/docs/guides/go-live#path-c-your-own-wallet).
 
 ### Deployed
 

@@ -1,3 +1,4 @@
+import type { WalletHost } from "../config";
 import crypto from "node:crypto";
 import { currentOrgConfig, currentOrgId } from "../context";
 import { db, unwrap } from "../dal";
@@ -22,9 +23,16 @@ export const TREASURY_WALLET_SET = "vestiarion-treasury";
  * platform's hosted entity, so each has a set of its own, named for its id:
  * the name says which workspace a wallet in that entity belongs to.
  */
-export function walletSetName(orgId: string, host: "own" | "hosted" | null | undefined): string {
+export function walletSetName(orgId: string, host: WalletHost | null | undefined): string {
+  if (host === "external") return AGENT_WALLET_SET;
   return host === "hosted" ? `vestiarion-${orgId}` : TREASURY_WALLET_SET;
 }
+
+/**
+ * The set the agent wallets of workspaces paying from their owners' own wallets live in, inside Vestiarion's agent
+ * account (wallet treasury W5). Each holds only gas; which workspace it serves is on that workspace's own row.
+ */
+export const AGENT_WALLET_SET = "vestiarion-agents";
 
 const WALLET_CALL_DEADLINE_MS = 15_000;
 const WALLET_SET_PAGE_SIZE = 50;
@@ -114,7 +122,11 @@ export async function circleCall<T>(call: string, work: () => Promise<T>, write:
  * harmless: a wallet works from either, and later runs take the first found.
  */
 export async function treasuryWalletSetId(client: CircleClient): Promise<string> {
-  const name = walletSetName(currentOrgId(), currentOrgConfig().chain.walletHost);
+  return walletSetIdNamed(client, walletSetName(currentOrgId(), currentOrgConfig().chain.walletHost));
+}
+
+/** The id of the entity's wallet set of this name, creating it the first time, read a page at a time as above. */
+export async function walletSetIdNamed(client: CircleClient, name: string): Promise<string> {
   let pageAfter: string | undefined;
   for (let page = 0; page < WALLET_SET_PAGE_LIMIT; page += 1) {
     const after = pageAfter;

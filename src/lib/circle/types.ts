@@ -213,6 +213,11 @@ export interface InboundTransfer {
 export interface ChainProvider {
   readonly mode: "simulate" | "live";
   readonly earnMode: "simulate" | "live";
+  /**
+   * Whose wallet the treasury is (wallet treasury W12): a Circle wallet, or absent, as every provider before; or the
+   * owner's own, which pays no gas and sets no reserve aside, since its agent pays the gas.
+   */
+  readonly treasury?: "circle" | "external";
   /** The network it pays on (docs/superpowers/specs/2026-10-05-network-threading-design.md P2): every chain fact it uses is this profile's. */
   readonly network: NetworkProfile;
   /**

@@ -175,3 +175,16 @@ describe("changeAgentBudget on Arc mainnet (mainnet go-live M9)", () => {
     expect(post?.body).toMatchObject({ daily_usdc: null, weekly_usdc: 100 });
   });
 });
+
+describe("changeAgentBudget for a workspace paying from its owner's own wallet (wallet treasury W14)", () => {
+  it("refuses once its contract is deployed, since only the owner's wallet can change the contract's figures", async () => {
+    fake = fakeSupabase(workspace({ budget: [{ daily_usdc: "50", weekly_usdc: "150" }], onChain: ENFORCED }));
+    const external = { ...config, network: "arc-mainnet" as const, chain: { ...config.chain, walletHost: "external" as const } };
+    const attempt = runWith(orgTestContext({ config: external, client: fake.client, orgId: ORG, userId: ACTOR }), () =>
+      changeAgentBudget({ actorId: ACTOR, daily: "60", weekly: "150" })
+    );
+    await expect(attempt).rejects.toMatchObject({ code: "wallet_contract" });
+    expect(setLimitsMock).not.toHaveBeenCalled();
+    expect(fake.requests.some((r) => r.path === "/rest/v1/agent_budgets" && r.method === "POST")).toBe(false);
+  });
+});

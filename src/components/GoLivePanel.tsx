@@ -32,6 +32,7 @@ import { FUNDING_WATCH_INTERVAL_MS, shouldReadBalanceAgain } from "@/lib/funding
 import { MAINNET_OFF } from "@/lib/mainnet";
 import { networkOf, networkProfile, type Network } from "@/lib/network";
 import type { GoLiveStatus } from "@/lib/platform/go-live";
+import WalletTreasurySteps, { WalletTreasuryChoice, WalletTreasurySummary } from "@/components/treasury/WalletTreasurySteps";
 
 /**
  * The Go live section of Settings (docs/superpowers/specs/2026-09-29-go-live-design.md §2).
@@ -304,7 +305,22 @@ function StepsAhead({ network }: { network: Network }) {
   );
 }
 
-function ConnectStep({ orgSlug, hostedAvailable, network }: { orgSlug: string; hostedAvailable: boolean; network: Network }) {
+function ConnectStep({ orgSlug, hostedAvailable, walletTreasuryAvailable, network }: { orgSlug: string; hostedAvailable: boolean; walletTreasuryAvailable: boolean; network: Network }) {
+  // The owner's own wallet first, where the deployment has an agent account (wallet treasury W1, W2).
+  if (walletTreasuryAvailable) {
+    return (
+      <Card className="space-y-4 p-5">
+        <StepHeading n={1}>Choose where the treasury lives</StepHeading>
+        <WalletTreasuryChoice orgSlug={orgSlug} network={network} />
+        <Disclosure summary="Connect your own Circle account">
+          <div className="space-y-4">
+            <ConnectIntro network={network} />
+            <ConnectForm orgSlug={orgSlug} idPrefix="go-live-connect" replacing={false} />
+          </div>
+        </Disclosure>
+      </Card>
+    );
+  }
   if (!hostedAvailable) {
     return (
       <Card className="space-y-4 p-5">
@@ -455,7 +471,8 @@ function GoLiveStep({ orgSlug, status, sampleBalance }: { orgSlug: string; statu
   const faucet = networkProfile(networkOf(status.network)).faucet ?? "";
   return (
     <Card className="space-y-5 p-5">
-      <StepHeading n={3}>Fund the operating wallet, then go live</StepHeading>
+      <StepHeading n={3}>{status.host === "external" ? "Check your wallet, then go live" : "Fund the operating wallet, then go live"}</StepHeading>
+      {status.walletTreasury && <WalletTreasurySummary status={status.walletTreasury} network={status.network ?? "arc-mainnet"} />}
       {operating && (
         <div className="space-y-2">
           <p className="text-sm font-medium text-ink">Operating wallet</p>
@@ -504,6 +521,7 @@ function LiveDetails({ orgSlug, status }: { orgSlug: string; status: GoLiveStatu
   return (
     <div className="space-y-3">
       {status.wallets.length > 0 && <WalletList wallets={status.wallets} />}
+      {status.walletTreasury && <WalletTreasurySummary status={status.walletTreasury} network={status.network ?? "arc-mainnet"} />}
       <div className="space-y-1 text-sm text-ink-2">
         {status.liveSince && <p>Live since {utcMinute(status.liveSince)}</p>}
         <p>
@@ -553,8 +571,18 @@ export default function GoLivePanel({ orgSlug, status, canAdminister, sampleBala
         {hosted ? "An owner can create the wallets and take this workspace live from here." : "An owner can connect Circle and take this workspace live from here."}
       </p>
     );
+  } else if (status.host === "external" && status.walletTreasury && status.step === "wallets") {
+    // The owner's own wallet, set up step by step (wallet treasury W5-W10).
+    body = <WalletTreasurySteps orgSlug={orgSlug} status={status.walletTreasury} network={status.network ?? "arc-mainnet"} />;
   } else if (status.step === "connect") {
-    body = <ConnectStep orgSlug={orgSlug} hostedAvailable={status.hostedAvailable} network={status.network ?? "arc-testnet"} />;
+    body = (
+      <ConnectStep
+        orgSlug={orgSlug}
+        hostedAvailable={status.hostedAvailable}
+        walletTreasuryAvailable={Boolean(status.walletTreasuryAvailable)}
+        network={status.network ?? "arc-testnet"}
+      />
+    );
   } else if (status.step === "wallets") {
     body = <WalletsStep orgSlug={orgSlug} status={status} />;
   } else {
@@ -564,7 +592,8 @@ export default function GoLivePanel({ orgSlug, status, canAdminister, sampleBala
   // With unreadable credentials the warning asks an owner to reconnect, so the
   // form is offered then too; the new pair still has to pass the same checks.
   // A hosted workspace has no credentials of its own to replace.
-  const canReplace = canAdminister && !hosted && !status.mainnetOff && (status.credentialsUnreadable || status.step !== "connect");
+  // A workspace paying from its owner's own wallet takes no Circle credentials at all (wallet treasury W1).
+  const canReplace = canAdminister && !hosted && status.host !== "external" && !status.mainnetOff && (status.credentialsUnreadable || status.step !== "connect");
 
   return (
     <section aria-labelledby="go-live-title">

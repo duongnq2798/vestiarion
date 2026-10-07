@@ -487,6 +487,37 @@ reports `credentialsUnreadable` and pays nothing. Inside the shared hosted entit
 a wallet set of its own, `vestiarion-<orgId>`, and it can pay only from its own `accounts` rows,
 which RLS scopes to the organization, so one hosted workspace cannot spend another's wallet.
 
+**Paying from the owner's own wallet** (`docs/superpowers/specs/2026-10-07-wallet-treasury-design.md`) is a
+third `wallet_host`, `'external'`, on Arc mainnet only (the profile's `walletTreasury`). The treasury is an EOA
+the owner holds, and Vestiarion holds none of its USDC. `orgConfig` hands such a workspace the platform's agent
+pair (`MAINNET_AGENT_CIRCLE_API_KEY`, `MAINNET_AGENT_CIRCLE_ENTITY_SECRET`, read only in `src/lib/config.ts` and
+stripped from every other workspace's config) and nothing else; `walletTreasuryAvailable` offers the choice only
+where that pair is a live key. The setup (`src/lib/treasury/wallet-treasury.ts`, owner only through
+`src/app/actions/wallet-treasury.ts`) runs from Go live in five steps:
+
+- the owner's browser wallet signs a dated proof naming the workspace, the network and its address
+  (`treasury_wallet_proven`, message and signature kept);
+- Vestiarion creates the workspace's agent wallet, an EOA in the agent account's `vestiarion-agents` wallet set
+  (`agent_wallet_created`);
+- the owner's wallet deploys `VestiarionSpendingLimit` with itself as treasury and owner and the agent as the only
+  payer, recorded only once the deployed code equals a creation call with the same immutables
+  (`spending_limit_deployed`, and `agent_budget_changed` when its figures differ);
+- the owner's wallet approves it on USDC (`spending_limit_enforced`, `walletHost: "external"`);
+- the owner's wallet sends the agent 0.50 USDC of gas.
+
+The browser sends only what the server built (`src/lib/browser-wallet.ts`), and keeps a sent hash until the server
+records it (`src/lib/treasury/sent-transaction.ts`); the server reads every result back from the chain through
+`treasuryChain` (`src/lib/treasury/chain.ts`, `ARC_MAINNET_RPC_URL` or the profile's RPC). `goLive` takes such a
+workspace live once its setup is ready, with no Circle credentials of its own (`workspace_went_live`,
+`walletHost: "external"`). From then on `WalletTreasuryProvider` moves money only through the contract, from the
+agent's wallet: the agent's payments through the on-chain limit path, and a person's approval or release through
+`personPaymentThroughContract`, which asks the contract first and refuses by name. For this host alone that
+replaces the rule that a person's payment never goes through the contract. Its balance is the wallet's USDC or the
+allowance, whichever is less, with no gas or reserve set aside; EURC and other chains are refused. Migration `0082`
+adds the host, `treasury_kind`, `treasury_address` and `approve_tx_hash` on `spending_limit_contracts`,
+`accounts.inbound_from_block` for reading money in later, and makes `delete_sandbox_org` refuse a workspace whose
+wallet has approved its contract.
+
 ## Approvals and the pause switch
 
 **The approval inbox** (`/o/[slug]/approvals`, spec §5) lists every payable a

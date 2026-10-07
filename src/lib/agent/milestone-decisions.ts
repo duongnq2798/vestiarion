@@ -27,6 +27,8 @@ import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
 import { needsSecondApprover, TWO_APPROVALS_RULE, type TwoApprovalsFacts } from "../two-approvals";
 import { SECOND_OF_TWO_NOTE } from "./approvals";
 import { bringCashForApproval, CashBackError, cashShortMessage, HELD_FOR_CASH, reserveCover, type ReserveCover } from "./liquidity";
+import { ContractRefusal, personPaymentThroughContract } from "../treasury/person-payment";
+import type { SpendingLimitPayment } from "../circle/types";
 import {
   clearApprovals,
   giveApproval,
@@ -621,6 +623,26 @@ export async function payHeldMilestone(input: {
     }
   }
 
+  // A workspace paying from its owner's own wallet pays a person's release through its contract too, within its figures
+  // (wallet treasury W11): refused here, by name, before anything is claimed. Escrow has no part in such a workspace.
+  let throughContract: SpendingLimitPayment | null = null;
+  if (milestone.escrowState !== "funded") {
+    try {
+      throughContract = await personPaymentThroughContract({
+        sourceType: "milestone",
+        sourceId: milestone.id,
+        to: milestone.facts.contractor.address,
+        amount: milestone.amount,
+        currency: "USDC",
+        crossChain: false,
+        check: !(alreadySent || unknown),
+      });
+    } catch (error) {
+      if (error instanceof ContractRefusal) raise("payments_off", error.message);
+      throw error;
+    }
+  }
+
   await claim(milestone.id, input.actorId);
 
   // The cash comes back now that the decision is claimed, and before any approval is used (approval cash R3, R7).
@@ -654,7 +676,12 @@ export async function payHeldMilestone(input: {
   }
 
   const outcome = await releaseHeldMilestone(
-    { milestoneId: milestone.id, destination: payoutAddress(milestone.facts.contractor.address, milestone.contractorId), amount: milestone.amount },
+    {
+      milestoneId: milestone.id,
+      destination: payoutAddress(milestone.facts.contractor.address, milestone.contractorId),
+      amount: milestone.amount,
+      ...(throughContract ? { spendingLimit: throughContract } : {}),
+    },
     { provider, operatingAccountId: operatingId }
   );
 

@@ -12,6 +12,18 @@ import type { GoLiveStatus } from "@/lib/platform/go-live";
  * forms.
  */
 
+vi.mock("@/app/actions/wallet-treasury", () => ({
+  proofMessageAction: vi.fn(),
+  chooseWalletTreasuryAction: vi.fn(),
+  createAgentWalletAction: vi.fn(),
+  prepareDeploymentAction: vi.fn(),
+  recordDeploymentAction: vi.fn(),
+  prepareApprovalAction: vi.fn(),
+  recordApprovalAction: vi.fn(),
+  prepareAgentGasAction: vi.fn(),
+}));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+
 vi.mock("@/app/actions/go-live", () => ({
   chooseHostedWalletAction: vi.fn(),
   connectCircleAction: vi.fn(),
@@ -393,7 +405,13 @@ describe("GoLivePanel's props", () => {
     expectTypeOf<SecretLike<DeepKeys<GoLivePanelProps>>>().toEqualTypeOf<never>();
     // The names the check walks, so an empty walk cannot pass it vacuously.
     expectTypeOf<DeepKeys<GoLivePanelProps>>().toEqualTypeOf<
-      "orgSlug" | "status" | "canAdminister" | "sampleBalance" | keyof GoLiveStatus | keyof GoLiveStatus["wallets"][number]
+      | "orgSlug"
+      | "status"
+      | "canAdminister"
+      | "sampleBalance"
+      | keyof GoLiveStatus
+      | keyof GoLiveStatus["wallets"][number]
+      | keyof NonNullable<GoLiveStatus["walletTreasury"]>
     >();
   });
 });
@@ -454,5 +472,85 @@ describe("GoLivePanel, on a workspace on Arc mainnet (mainnet go-live M8)", () =
     expect(words).toContain("Arc mainnet is switched off on this deployment.");
     expect(markup).not.toContain('id="go-live-form"');
     expect(words).not.toContain("Replace Circle credentials");
+  });
+});
+
+describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", () => {
+  const WALLET = "0x" + "b0".repeat(20);
+  const AGENT = "0x" + "a9".repeat(20);
+  const CONTRACT = "0x" + "e5".repeat(20);
+  const setup = (overrides: Partial<NonNullable<GoLiveStatus["walletTreasury"]>> = {}): NonNullable<GoLiveStatus["walletTreasury"]> => ({
+    step: "deploy",
+    wallet: WALLET,
+    agent: AGENT,
+    contract: null,
+    dailyUsdc: null,
+    weeklyUsdc: null,
+    walletUsdc: 12.5,
+    spendableUsdc: null,
+    agentGasUsdc: 0,
+    agentGasMinimumUsdc: 0.1,
+    ...overrides,
+  });
+
+  it("offers the owner's own wallet first on Arc mainnet, with their own Circle account still behind a disclosure", () => {
+    const words = text(panel(status({ network: "arc-mainnet", walletTreasuryAvailable: true })));
+    expect(words).toContain("Your own wallet");
+    expect(words).toContain("Recommended");
+    expect(words).toContain("Connect your wallet");
+    expect(words).toContain("Vestiarion never holds your USDC");
+    expect(words).toContain("Connect your own Circle account");
+    expect(words.indexOf("Your own wallet")).toBeLessThan(words.indexOf("Connect your own Circle account"));
+  });
+
+  it("does not offer it where the deployment has no agent account", () => {
+    expect(text(panel(status({ network: "arc-mainnet", walletTreasuryAvailable: false })))).not.toContain("Connect your wallet");
+  });
+
+  it("walks the setup on the wallets step, and asks for no Circle credentials", () => {
+    const markup = panel(status({ step: "wallets", network: "arc-mainnet", host: "external", walletTreasuryAvailable: true, walletTreasury: setup() }));
+    const words = text(markup);
+    expect(words).toContain("Step 2 of 3");
+    expect(words).toContain("Set up your wallet as the treasury");
+    expect(words).toContain("Deploy your contract");
+    expect(words).toContain("Deploy from your wallet");
+    expect(words).toContain(AGENT);
+    expect(words).toContain("12.5 USDC");
+    expect(words).not.toContain("Create treasury wallets");
+    expect(words).not.toContain("Replace Circle credentials");
+    expect(secretInputs(markup)).toHaveLength(0);
+    const approving = setup({ step: "approve", contract: CONTRACT, dailyUsdc: 20, weeklyUsdc: 60 });
+    expect(text(panel(status({ step: "wallets", network: "arc-mainnet", host: "external", walletTreasury: approving })))).toContain("Approve from your wallet");
+    const gas = setup({ step: "gas", contract: CONTRACT });
+    expect(text(panel(status({ step: "wallets", network: "arc-mainnet", host: "external", walletTreasury: gas })))).toContain("Send 0.50 USDC for gas");
+  });
+
+  it("shows the wallet beside Go live once it is set up, with the typed word", () => {
+    const ready = setup({ step: "ready", contract: CONTRACT, dailyUsdc: 20, weeklyUsdc: 60, spendableUsdc: 12.5, agentGasUsdc: 0.5 });
+    const words = text(panel(status({ step: "go_live", network: "arc-mainnet", host: "external", walletTreasury: ready })));
+    expect(words).toContain("Step 3 of 3");
+    expect(words).toContain("Check your wallet, then go live");
+    expect(words).not.toContain("operating wallet");
+    expect(words).toContain("Your contract");
+    expect(words).toContain("20 USDC a day");
+    expect(words).toContain("Type mainnet to confirm");
+    expect(words).not.toContain("Replace Circle credentials");
+  });
+
+  it("offers to connect the wallet again when the workspace chose its own wallet but holds no address for it", () => {
+    // A choice half-written (the host saved, the wallet's address not) must not leave a card with nothing to press.
+    const halfway = setup({ step: "wallet", wallet: null, agent: null, walletUsdc: null, agentGasUsdc: null });
+    const words = text(panel(status({ step: "wallets", network: "arc-mainnet", host: "external", walletTreasuryAvailable: true, walletTreasury: halfway })));
+    expect(words).toContain("Step 2 of 3");
+    expect(words).toContain("Connect your wallet");
+  });
+
+  it("keeps showing the wallet, its contract and its figures once live", () => {
+    const ready = setup({ step: "ready", contract: CONTRACT, dailyUsdc: 20, weeklyUsdc: 60, spendableUsdc: 12.5, agentGasUsdc: 0.5 });
+    const words = text(panel(status({ step: "live", network: "arc-mainnet", host: "external", walletTreasury: ready, liveSince: "2026-10-07T09:12:00Z" })));
+    expect(words).toContain(WALLET);
+    expect(words).toContain(CONTRACT);
+    expect(words).toContain("20 USDC a day, 60 USDC in 7 days");
+    expect(words).toContain("Live since");
   });
 });

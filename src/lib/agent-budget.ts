@@ -1,7 +1,7 @@
 import { CYCLE_IN_PROGRESS_MS } from "./agent/balances";
 import { readSpendingLimitContract, setLimitsOnChain } from "./circle/spending-limit-setup";
 import { agentSpent, budgetRoom, parseBudgetForm, readOutflowBudget, type BudgetRoom, type BudgetSpent, type OutflowBudget } from "./agent/outflow-budget";
-import { currentOrgId } from "./context";
+import { currentOrgConfig, currentOrgId } from "./context";
 import { db, unwrap } from "./dal";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
 import { workspaceNetwork } from "./workspace-network";
@@ -19,13 +19,14 @@ import { workspaceNetwork } from "./workspace-network";
  * refused then, since the contract always holds one.
  */
 
-export type AgentBudgetErrorCode = "invalid" | "unchanged" | "cycle_running" | "enforced_needs_figure" | "onchain" | "mainnet_needs_figure";
+export type AgentBudgetErrorCode = "invalid" | "unchanged" | "cycle_running" | "enforced_needs_figure" | "onchain" | "mainnet_needs_figure" | "wallet_contract";
 
 const MESSAGES: Record<Exclude<AgentBudgetErrorCode, "invalid" | "onchain">, string> = {
   unchanged: "That is already the agent's spending limit.",
   cycle_running: "A cycle is running. Try again in a minute, once it has finished.",
   enforced_needs_figure: "Keep a daily or 7-day figure while the limit is enforced on Arc, or turn that off first.",
   mainnet_needs_figure: "A workspace on Arc mainnet keeps a daily or 7-day limit.",
+  wallet_contract: "This workspace's figures are its wallet's contract's: only that wallet can change them.",
 };
 
 export class AgentBudgetError extends Error {
@@ -86,6 +87,9 @@ export async function changeAgentBudget(input: {
   // The contract first, when the limit is enforced on Arc: the figures are saved only once it holds them (R10).
   let onChain: { contract: string; txHash: string | null } | null = null;
   const contract = await readSpendingLimitContract();
+  // A workspace paying from its owner's own wallet: once its contract is deployed, only that wallet changes its figures
+  // (wallet treasury W14).
+  if (currentOrgConfig().chain.walletHost === "external" && contract?.address) throw new AgentBudgetError("wallet_contract");
   if (contract?.enforced) {
     if (to.dailyUsdc === null && to.weeklyUsdc === null) throw new AgentBudgetError("enforced_needs_figure");
     try {

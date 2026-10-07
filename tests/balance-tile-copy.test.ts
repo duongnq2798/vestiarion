@@ -52,3 +52,12 @@ describe("balanceTileCopy", () => {
     });
   });
 });
+
+describe("the balance tile of a workspace paying from its owner's own wallet (wallet treasury W12)", () => {
+  it("is live once the operating account has the owner's address, though Circle holds no wallet there", () => {
+    const owned = { kind: "operating", circle_wallet_id: null, address: "0xb0b0" };
+    expect(balanceTileMode("live", [owned], "external")).toBe("live");
+    expect(balanceTileMode("live", [owned], "own")).toBe("sandbox");
+    expect(balanceTileMode("simulate", [owned], "external")).toBe("sandbox");
+  });
+});

@@ -1,6 +1,7 @@
 import { db, unwrap, type OrgDb } from "../dal";
 import { chainModes, getChainProvider, type ChainProvider } from "../circle";
 import { CIRCLE_UNREACHABLE } from "../copy";
+import { currentOrgConfig } from "../context";
 
 export { CIRCLE_UNREACHABLE };
 
@@ -116,17 +117,21 @@ export async function syncWalletBalances(): Promise<BalanceSync> {
 
 export async function syncOnChainBalances(provider: ChainProvider, orgDb: OrgDb, options: SyncOptions = {}): Promise<BalanceSync> {
   const rows = unwrap(
-    await orgDb.from("accounts").select("id, name, kind, balance, circle_wallet_id")
-  ) as Array<{ id: string; name: string; kind: string; balance: string; circle_wallet_id: string | null }>;
+    await orgDb.from("accounts").select("id, name, kind, balance, circle_wallet_id, address")
+  ) as Array<{ id: string; name: string; kind: string; balance: string; circle_wallet_id: string | null; address?: string | null }>;
   const syncedAt = new Date().toISOString();
 
+  // The owner's own wallet sets nothing aside, and its operating account is the wallet its address names (W12).
+  const external = provider.treasury === "external";
   const notionalReserve =
-    provider.earnMode === "simulate"
+    !external && provider.earnMode === "simulate"
       ? num(rows.find((a) => a.kind === "reserve")?.balance)
       : 0;
+  const gasReserve = external ? 0 : provider.network.gasReserveUsdc;
 
   const outcomes: BalanceOutcome[] = [];
-  const accounts = rows.filter((a) => a.kind !== "reserve" && (!options.walletsOnly || !!a.circle_wallet_id));
+  const hasWallet = (a: (typeof rows)[number]) => !!a.circle_wallet_id || (external && a.kind === "operating" && !!a.address);
+  const accounts = rows.filter((a) => a.kind !== "reserve" && (!options.walletsOnly || hasWallet(a)));
   for (const account of accounts) {
     try {
       const snapshot = await provider.getBalance(account.id);
@@ -134,7 +139,7 @@ export async function syncOnChainBalances(provider: ChainProvider, orgDb: OrgDb,
       const { spendable, reserve: carveOut } = liveOperatingBalance(
         snapshot.balance,
         carvesReserve ? notionalReserve : 0,
-        carvesReserve ? provider.network.gasReserveUsdc : 0
+        carvesReserve ? gasReserve : 0
       );
       const stored = num(account.balance);
       if (Math.abs(spendable - stored) < 0.000001) {
@@ -172,7 +177,7 @@ export async function syncOnChainBalances(provider: ChainProvider, orgDb: OrgDb,
         name: account.name,
         from: stored,
         to: spendable,
-        note: balanceNote(snapshot.balance, carveOut, carvesReserve ? provider.network.gasReserveUsdc : 0),
+        note: balanceNote(snapshot.balance, carveOut, carvesReserve ? gasReserve : 0),
       });
     } catch (err) {
       outcomes.push({ kind: "failed", accountId: account.id, name: account.name, message: (err as Error).message });
@@ -267,10 +272,10 @@ export interface BalanceRefresh {
   syncedAt: string | null;
 }
 
-type StoredAccount = { id: string; kind: string; balance: string; circle_wallet_id: string | null; balance_synced_at: string | null };
+type StoredAccount = { id: string; kind: string; balance: string; circle_wallet_id: string | null; address?: string | null; balance_synced_at: string | null };
 
 async function storedAccounts(orgDb: OrgDb): Promise<StoredAccount[]> {
-  return unwrap(await orgDb.from("accounts").select("id, kind, balance, circle_wallet_id, balance_synced_at")) as StoredAccount[];
+  return unwrap(await orgDb.from("accounts").select("id, kind, balance, circle_wallet_id, address, balance_synced_at")) as StoredAccount[];
 }
 
 const nonReserveTotal = (rows: StoredAccount[]) =>
@@ -298,7 +303,9 @@ const nonReserveTotal = (rows: StoredAccount[]) =>
 export async function refreshOnChainBalances(options: { now?: number } = {}): Promise<BalanceRefresh> {
   const orgDb = db();
   const rows = await storedAccounts(orgDb);
-  const operating = rows.find((a) => a.kind === "operating" && !!a.circle_wallet_id);
+  // A workspace paying from its owner's own wallet has that wallet's address and no Circle wallet (wallet treasury W12).
+  const external = currentOrgConfig().chain.walletHost === "external";
+  const operating = rows.find((a) => a.kind === "operating" && (!!a.circle_wallet_id || (external && !!a.address)));
   const storedSyncedAt = operating?.balance_synced_at ?? null;
   const stored = (reason: NonNullable<BalanceRefresh["reason"]>): BalanceRefresh => ({
     refreshed: false,
