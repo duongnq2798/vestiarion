@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Gauge, ShieldCheck } from "lucide-react";
 import { useCallback, useState } from "react";
 import { enforceSpendingLimitAction, setAgentBudgetAction, turnOffSpendingLimitAction } from "@/app/actions/agent";
@@ -119,7 +120,7 @@ export function AgentBudgetPanel({
           {canEdit && !(walletTreasury && onChain?.contract) && <BudgetDialog orgSlug={orgSlug} view={view} unset={unset} network={network} />}
           {/* Only where the network runs the spending-limit contract: Arc mainnet does not (final review I1, mainnet copy C3). */}
           {walletTreasury ? (
-            <OnArcWallet onChain={onChain} network={network} />
+            <OnArcWallet orgSlug={orgSlug} onChain={onChain} network={network} />
           ) : (
             networkProfile(network).spendingLimitContract && (
               <OnArc orgSlug={orgSlug} onChain={onChain} canEdit={canEdit} live={live} unset={unset} network={network} />
@@ -132,7 +133,7 @@ export function AgentBudgetPanel({
 }
 
 /** The owner's own wallet's contract (wallet treasury W14): what it holds and has paid; nothing here changes it. */
-function OnArcWallet({ onChain, network }: { onChain: OnChainLimitView | null; network: Network }) {
+function OnArcWallet({ orgSlug, onChain, network }: { orgSlug: string; onChain: OnChainLimitView | null; network: Network }) {
   const reading = onChain?.reading ?? null;
   return (
     <div className="mt-4 space-y-2 border-t border-line pt-4 text-[0.8125rem]">
@@ -141,6 +142,14 @@ function OnArcWallet({ onChain, network }: { onChain: OnChainLimitView | null; n
         On Arc
       </p>
       <p className="leading-5 text-ink-2">{ON_ARC_COPY.wallet}</p>
+      {/* Where the wallet does it (treasury wallet controls C1). */}
+      <p className="leading-5 text-ink-2">
+        Change them, or stop it, in{" "}
+        <Link href={`/o/${orgSlug}/settings`} className="font-medium text-agent underline-offset-4 hover:underline">
+          Settings
+        </Link>
+        , under Go live.
+      </p>
       <dl className="space-y-1">
         {onChain?.contract && (
           <div className="flex items-baseline justify-between gap-3">

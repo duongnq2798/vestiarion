@@ -120,6 +120,10 @@ describe("the spending limit's On Arc section for a workspace paying from its ow
 
   it("offers no figures to change once the wallet deployed its contract: only that wallet can change them", () => {
     expect(text(render({ network: "arc-mainnet", onChain: ENFORCED, walletTreasury: true }))).not.toContain("Change limit");
+    // Where they change instead (treasury wallet controls C1).
+    const markup = render({ network: "arc-mainnet", onChain: ENFORCED, walletTreasury: true });
+    expect(markup).toContain('href="/o/testnet-2/settings"');
+    expect(text(markup)).toContain("Change them, or stop it, in Settings");
     // Before the contract exists, the figures it will be deployed with can still be set here.
     expect(text(render({ network: "arc-mainnet", onChain: null, walletTreasury: true }))).toContain("Change limit");
   });

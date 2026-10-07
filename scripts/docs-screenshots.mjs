@@ -79,6 +79,7 @@ const SHOTS = {
     await page.fill({ "passkey-treasury-daily": "50", "passkey-treasury-weekly": "200" });
   },
   "go-live-passkey-recovery": async () => {},
+  "go-live-wallet-controls": async () => {},
   "go-live-passkey-phone": async (page) => {
     await page.waitFor(`document.querySelector("details[open] svg[role=img]")`);
   },

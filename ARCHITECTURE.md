@@ -561,6 +561,12 @@ with no browser wallet:
     open where `isUserVerifyingPlatformAuthenticatorAvailable` says the device keeps no passkey, absent on a phone. A
     computer reaching a phone's passkey goes over the browser's Bluetooth link, which stayed on "Connecting to your
     device" on the partner's Windows PC on 2026-10-07.
+- **The controls, once live** (`docs/superpowers/specs/2026-10-07-treasury-wallet-controls-design.md`). Go live
+  lets an owner or admin change the contract's figures (`setLimits`), stop the agent's payments (`approve(contract,
+  0)`) and resume them, each built in the browser from what the panel shows (`src/lib/treasury/wallet-controls.ts`) and
+  sent by the treasury's own signer. `recordWalletControl` records each from the chain once, by its transaction: the
+  contract's figures become `agent_budgets`; a stop pauses the agent and a resume lifts only that pause; a loosened
+  figure or a resume starts a cycle.
 - **The recovery.** A recovery phrase made in the browser is registered as a recovery owner with
   Circle's `registerRecoveryAddress` (`treasury_recovery_registered`), or skipped knowingly
   (`treasury_recovery_skipped`). `goLive` refuses until one is recorded (`wallet_recovery_undecided`).
