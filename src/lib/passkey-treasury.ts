@@ -1,5 +1,7 @@
 import { concat, encodeFunctionData, erc20Abi, getAddress, getContractAddress, keccak256, maxUint256, stringToHex, type Hex } from "viem";
-import type { PasskeyWalletConfig } from "./passkey-wallet";
+import { ARC_MAINNET } from "./network";
+import { browserReason, passkeySmartAccount, type PasskeySdk, type PasskeyWalletConfig } from "./passkey-wallet";
+import type { SendOutcome } from "./passkey-wallet-send";
 import { deploymentData } from "./spending-limit/deployment";
 
 /**
@@ -96,4 +98,187 @@ export function checkPasskeySetup(
       return call.to.toLowerCase() === mine.to.toLowerCase() && call.data.toLowerCase() === mine.data.toLowerCase() && BigInt(call.value) === mine.value;
     });
   if (!same) throw new Error(SETUP_MISMATCH);
+}
+
+/** The part of a passkey the browser keeps for a workspace: public by nature; the private key stays in the authenticator. */
+export interface KeptCredential {
+  id: string;
+  publicKey: Hex;
+  rpId?: string;
+}
+
+/** The parts of `localStorage` used here, so a test can stand in for it; null where the browser has none. */
+export type KeepingStore = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+
+const credentialKey = (orgSlug: string) => `vestiarion.passkey-treasury.${orgSlug}`;
+const pendingKey = (orgSlug: string) => `vestiarion.passkey-setup.${orgSlug}`;
+
+function readJson(store: KeepingStore | null, key: string): unknown {
+  try {
+    const value = store?.getItem(key);
+    return value ? JSON.parse(value) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeJson(store: KeepingStore | null, key: string, value: unknown): void {
+  try {
+    store?.setItem(key, JSON.stringify(value));
+  } catch {
+    // A private window or full storage: the passkey is asked to log in next time instead.
+  }
+}
+
+function remove(store: KeepingStore | null, key: string): void {
+  try {
+    store?.removeItem(key);
+  } catch {
+    // Nothing to forget where nothing could be kept.
+  }
+}
+
+/** A passkey's public part, if `value` has one: an id, a hex public key, and its relying party where given. */
+function asKept(value: unknown): KeptCredential | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { id, publicKey, rpId } = value as { id?: unknown; publicKey?: unknown; rpId?: unknown };
+  if (typeof id !== "string" || id === "" || typeof publicKey !== "string" || !/^0x[0-9a-fA-F]+$/.test(publicKey)) return null;
+  return { id, publicKey: publicKey as Hex, ...(typeof rpId === "string" && rpId ? { rpId } : {}) };
+}
+
+/** The passkey kept in this browser for the workspace, if a usable one is (K9). */
+export function keptCredential(store: KeepingStore | null, orgSlug: string): KeptCredential | null {
+  return asKept(readJson(store, credentialKey(orgSlug)));
+}
+
+/** Keeps a passkey's public part for the workspace; anything else about it is dropped (K9). */
+export function keepCredential(store: KeepingStore | null, orgSlug: string, credential: unknown): void {
+  const kept = asKept(credential);
+  if (kept) writeJson(store, credentialKey(orgSlug), kept);
+}
+
+/** A setup sent and not yet recorded (K10): its contract, and its transaction or, until that is known, its user operation. */
+export interface PendingSetup {
+  contract: Hex;
+  txHash?: Hex;
+  userOpHash?: Hex;
+}
+
+const HASH = /^0x[0-9a-fA-F]{64}$/;
+
+export function pendingSetup(store: KeepingStore | null, orgSlug: string): PendingSetup | null {
+  const value = readJson(store, pendingKey(orgSlug));
+  if (typeof value !== "object" || value === null) return null;
+  const { contract, txHash, userOpHash } = value as { contract?: unknown; txHash?: unknown; userOpHash?: unknown };
+  if (typeof contract !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(contract)) return null;
+  const tx = typeof txHash === "string" && HASH.test(txHash) ? (txHash as Hex) : undefined;
+  const op = typeof userOpHash === "string" && HASH.test(userOpHash) ? (userOpHash as Hex) : undefined;
+  if (!tx && !op) return null;
+  return { contract: contract as Hex, ...(tx ? { txHash: tx } : {}), ...(op ? { userOpHash: op } : {}) };
+}
+
+export function keepPendingSetup(store: KeepingStore | null, orgSlug: string, pending: PendingSetup): void {
+  writeJson(store, pendingKey(orgSlug), pending);
+}
+
+export function forgetPendingSetup(store: KeepingStore | null, orgSlug: string): void {
+  remove(store, pendingKey(orgSlug));
+}
+
+/** A refusal of this route's own, said to the person as it is. */
+export class PasskeyTreasuryError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PasskeyTreasuryError";
+  }
+}
+
+const short = (address: string) => `${address.slice(0, 6)}…${address.slice(-4)}`;
+
+/** A passkey wallet opened as the treasury (K2): its address, its USDC, and its user operations. */
+export interface PasskeyTreasury {
+  address: string;
+  /** The passkey's public part, to keep for the workspace (K9). */
+  credential: KeptCredential | null;
+  /** Its USDC on Arc mainnet, in units of 6 decimals. */
+  balance(): Promise<bigint>;
+  /** Sends the calls as one user operation, whose gas the wallet pays itself (K6). Throws only when Circle never took it. */
+  send(calls: SetupCall[]): Promise<SendOutcome>;
+  /** Registers `recoveryAddress` as a recovery owner of the wallet (K8). */
+  registerRecovery(recoveryAddress: string): Promise<SendOutcome>;
+  /** How a user operation sent before ended, from its receipt (K10). */
+  receipt(userOpHash: string): Promise<SendOutcome>;
+}
+
+/**
+ * Opens the owner's passkey wallet on Arc mainnet (K2): with a new passkey (`Register`), one made before (`Login`), or
+ * the one this browser kept (`Kept`, no prompt). With `expected`, a passkey that owns another wallet is refused by
+ * name before anything is signed (Review Focus 3).
+ */
+export async function openPasskeyTreasury(input: {
+  config: PasskeyWalletConfig;
+  sdk: PasskeySdk;
+  mode: "Register" | "Login" | "Kept";
+  username?: string;
+  kept?: KeptCredential | null;
+  expected?: string | null;
+}): Promise<PasskeyTreasury> {
+  const { config, sdk } = input;
+  const chainPath = ARC_MAINNET.modularWallets?.chain;
+  if (!chainPath) throw new PasskeyTreasuryError("Passkey wallets do not run on Arc mainnet here.");
+  if (input.mode === "Kept" && !input.kept) throw new PasskeyTreasuryError("No passkey is kept in this browser.");
+  const opened = await passkeySmartAccount({
+    config,
+    sdk,
+    chainPath,
+    ...(input.mode === "Kept" ? { credential: input.kept } : { mode: input.mode, ...(input.username ? { username: input.username } : {}) }),
+  });
+  const { account, client, transport } = opened;
+  const address = account.address;
+  if (input.expected && address.toLowerCase() !== input.expected.toLowerCase()) {
+    throw new PasskeyTreasuryError(
+      `This passkey owns another wallet (${short(address)}), not this workspace's treasury (${short(input.expected)}). Use the passkey you made for it.`
+    );
+  }
+  const bundler = sdk.createBundlerClient({ account, client, chain: sdk.chain, transport });
+  const settle = async (hash: string): Promise<SendOutcome> => {
+    try {
+      const { success, receipt } = await bundler.waitForUserOperationReceipt({ hash });
+      return success ? { kind: "sent", txHash: receipt.transactionHash } : { kind: "reverted", txHash: receipt.transactionHash };
+    } catch (error) {
+      // Taken, but its receipt could not be read: it may still land, and is not sent again blind.
+      console.error("passkey treasury receipt", error instanceof Error ? error.message : error);
+      return { kind: "unconfirmed", userOpHash: hash };
+    }
+  };
+  return {
+    address,
+    credential: asKept(opened.credential),
+    balance: () =>
+      client.readContract({ address: ARC_MAINNET.tokens.USDC as Hex, abi: erc20Abi, functionName: "balanceOf", args: [address as Hex] }),
+    async send(calls) {
+      // No paymaster: the wallet pays its own gas in USDC (K6).
+      return settle(await bundler.sendUserOperation({ calls: calls.map((call) => ({ to: call.to, data: call.data, value: call.value })) }));
+    },
+    async registerRecovery(recoveryAddress) {
+      if (!sdk.registerRecoveryAddress) throw new PasskeyTreasuryError("Recovery is not available in this browser.");
+      return settle(await sdk.registerRecoveryAddress({ bundler, account, recoveryAddress }));
+    },
+    receipt: settle,
+  };
+}
+
+const OWN_REFUSALS = [SETUP_MISMATCH];
+
+/** What a person is told when the passkey route fails (K10). Anything unforeseen goes to the console only. */
+export function passkeyTreasuryFailure(error: unknown, during: "create" | "open" | "setup" | "recovery"): string {
+  const reason = browserReason(error);
+  if (reason === "NotAllowedError") return during === "create" ? "No passkey was created. Nothing changed." : "The passkey was not used. Nothing changed.";
+  if (reason === "NotSupportedError") return "This browser cannot use passkeys. Use one that can, such as Chrome or Safari, or connect a wallet instead.";
+  if (reason === "SecurityError") return "Passkeys for Vestiarion wallets work only on www.vestiarion.xyz.";
+  const message = error instanceof Error ? error.message : String(error);
+  if (error instanceof PasskeyTreasuryError || OWN_REFUSALS.includes(message)) return message;
+  if (/AA21|prefund|insufficient funds/i.test(message)) return "The wallet does not hold enough USDC for this. Add a little more, then try again. Nothing was sent.";
+  console.error("passkey treasury", during, message);
+  return "That did not work. Nothing was sent. Try again in a moment.";
 }
