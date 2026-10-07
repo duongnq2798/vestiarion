@@ -126,6 +126,9 @@ const OWN_WALLET_DEPLOY: GoLiveStatus = {
     spendableUsdc: null,
     agentGasUsdc: 0,
     agentGasMinimumUsdc: 0.1,
+    signer: "wallet",
+    recovery: null,
+    setupNeedsUsdc: 0,
   },
 };
 

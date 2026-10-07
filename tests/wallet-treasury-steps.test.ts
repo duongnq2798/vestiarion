@@ -254,6 +254,9 @@ describe("walletTreasuryStatus", () => {
       spendableUsdc: 12.5,
       agentGasUsdc: 0.5,
       agentGasMinimumUsdc: 0.1,
+      signer: "wallet",
+      recovery: null,
+      setupNeedsUsdc: 0,
     });
   });
 

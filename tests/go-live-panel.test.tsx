@@ -490,6 +490,9 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
     spendableUsdc: null,
     agentGasUsdc: 0,
     agentGasMinimumUsdc: 0.1,
+    signer: "wallet",
+    recovery: null,
+    setupNeedsUsdc: 0,
     ...overrides,
   });
 

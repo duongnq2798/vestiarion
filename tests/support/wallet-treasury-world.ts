@@ -136,7 +136,19 @@ export function database(state: World) {
       return { body: state.contract ? [state.contract] : [] };
     }
     if (path === "/rest/v1/spending_limit_contracts" && method === "POST") {
-      state.contract = { id: "slc-1", address: null, deploy_tx_hash: null, approve_tx_id: null, approve_tx_hash: null, enforced: false, ...(request.body as Row) };
+      state.contract = {
+        id: "slc-1",
+        address: null,
+        deploy_tx_hash: null,
+        approve_tx_id: null,
+        approve_tx_hash: null,
+        enforced: false,
+        // The columns' defaults (0083).
+        treasury_signer: "wallet",
+        recovery_address: null,
+        recovery_skipped_at: null,
+        ...(request.body as Row),
+      };
       return one(request, [state.contract]);
     }
     if (path === "/rest/v1/spending_limit_contracts" && method === "PATCH") {
@@ -211,6 +223,9 @@ export const agentRow = (extra: Row = {}): Row => ({
   approve_tx_id: null,
   approve_tx_hash: null,
   enforced: false,
+  treasury_signer: "wallet",
+  recovery_address: null,
+  recovery_skipped_at: null,
   ...extra,
 });
 export const chosen = { org: { wallet_host: "external" }, operating: { address: WALLET } };
