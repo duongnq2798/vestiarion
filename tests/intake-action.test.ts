@@ -19,6 +19,8 @@ const { ORG, USER } = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
+const { rateMock } = vi.hoisted(() => ({ rateMock: vi.fn() }));
+vi.mock("@/lib/fx/usd-rates", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/fx/usd-rates")>()), usdRate: rateMock }));
 vi.mock("@/lib/auth/authorize", () => ({
   authorize: async () => ({
     ok: true,
@@ -48,7 +50,7 @@ function invoiceForm(): FormData {
  * answered the way PostgREST answers: an object request for a row that is not
  * there is a 406, an array request is `[]`.
  */
-function organizationDatabase(counterparties: Array<{ id: string; name: string }>) {
+function organizationDatabase(counterparties: Array<{ id: string; name: string }>, shadowOn = false) {
   return (sent: RecordedRequest) => {
     if (sent.path === "/rest/v1/orgs") {
       return { body: { id: ORG, slug: "northstar", name: "Northstar", mode: "sandbox", ledger_signing_key_enc: null, circle_api_key_enc: null, circle_entity_secret_enc: null } };
@@ -64,6 +66,7 @@ function organizationDatabase(counterparties: Array<{ id: string; name: string }
         body: { code: "PGRST116", details: "The result contains 0 rows", hint: null, message: "Cannot coerce the result to a single JSON object" },
       };
     }
+    if (sent.path === "/rest/v1/shadow_modes") return { body: shadowOn ? [{ currency: "VND", started_at: "2026-10-07T00:00:00Z", started_by: USER }] : [] };
     if (sent.path === "/rest/v1/invoices" && sent.method === "POST") {
       const id = (index: number) => `0b6c1c9e-4a4f-4a7e-9b1e-0000000001a${index + 1}`;
       return { body: Array.isArray(sent.body) ? sent.body.map((_, index) => ({ id: id(index) })) : { id: id(0) } };
@@ -200,6 +203,53 @@ describe("importInvoicesAction's insert", () => {
       ok: false,
       message: "Row 2: discount_deadline: Enter the last day the discount applies, on or before the due date, or clear the discount.",
     });
+    expect(fake.requests.some((sent) => sent.path === "/rest/v1/invoices")).toBe(false);
+  });
+});
+
+describe("createInvoiceAction and a bill in the business's own currency (shadow mode S6)", () => {
+  const VND = { currency: "VND", perUsd: 25_935.897512, source: "ExchangeRate-API", at: "2026-10-07T00:02:32.000Z" };
+  const billForm = () => {
+    const form = invoiceForm();
+    form.set("currency", "VND");
+    form.set("amount", "2.500.000");
+    return form;
+  };
+
+  it("adds it in shadow mode at its USDC amount, with the bill's own figure and the rate", async () => {
+    rateMock.mockReset().mockResolvedValue(VND);
+    const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }], true));
+    await runWith({ config, db: fake.client, fetch: fake.fetch }, () => createInvoiceAction({ ok: false, message: "" }, billForm()));
+
+    const insert = fake.requests.find((sent) => sent.path === "/rest/v1/invoices" && sent.method === "POST");
+    expect(insert?.body).toMatchObject({
+      amount: "96.39",
+      currency: "USDC",
+      original_currency: "VND",
+      original_amount: 2_500_000,
+      fx_rate: 25_935.897512,
+      fx_source: "ExchangeRate-API",
+      fx_at: "2026-10-07T00:02:32.000Z",
+    });
+    expect(rateMock).toHaveBeenCalledWith("VND");
+  });
+
+  it("refuses it outside shadow mode, and adds nothing", async () => {
+    rateMock.mockReset().mockResolvedValue(VND);
+    const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }], false));
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => createInvoiceAction({ ok: false, message: "" }, billForm()));
+
+    expect(result).toEqual({ ok: false, message: "A bill in another currency is taken in shadow mode only. Vestiarion pays in USDC or EURC." });
+    expect(fake.requests.some((sent) => sent.path === "/rest/v1/invoices")).toBe(false);
+  });
+
+  it("says when the day's rate could not be read, and adds nothing", async () => {
+    const { FxRateError } = await import("@/lib/fx/usd-rates");
+    rateMock.mockReset().mockRejectedValue(new FxRateError("The day's rate could not be read. Try again in a moment."));
+    const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }], true));
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => createInvoiceAction({ ok: false, message: "" }, billForm()));
+
+    expect(result).toEqual({ ok: false, message: "The day's rate could not be read. Try again in a moment." });
     expect(fake.requests.some((sent) => sent.path === "/rest/v1/invoices")).toBe(false);
   });
 });
