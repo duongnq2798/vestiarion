@@ -15,13 +15,19 @@
  *
  * Sample rows (sample-data design §1) never tick a step: they show the agent
  * working, not the workspace set up.
+ *
+ * In shadow mode (docs/superpowers/specs/2026-10-07-shadow-mode-design.md) the
+ * same three steps set the workspace up, then three more run it beside how the
+ * business pays today: its suppliers, its real bills, and a person's first
+ * verdict on the agent's decision. That checklist hides once a verdict is given,
+ * and the console's Shadow mode section says how often people agreed.
  */
 
 import { addressUnconfirmed } from "./counterparty-address";
 import { networkProfile, type Network } from "./network";
 import type { WalletHost } from "./config";
 
-export type GettingStartedStepId = "wallet" | "fund" | "live" | "payee" | "payable" | "payment";
+export type GettingStartedStepId = "wallet" | "fund" | "live" | "payee" | "payable" | "payment" | "suppliers" | "bills" | "verdict";
 
 export interface GettingStartedInput {
   mode: "sandbox" | "live";
@@ -46,6 +52,11 @@ export interface GettingStartedInput {
   walletHost?: WalletHost | null;
   /** Whether this deployment offers paying from the owner's own wallet on the network (W2). */
   walletTreasuryAvailable?: boolean;
+  /**
+   * Shadow mode, when it is on: the currency bills are entered in, the verdicts people gave, and every bill of a
+   * counterparty a person added, paid or not (`ownBillCount`). Null or absent outside it.
+   */
+  shadow?: { currency: string; verdictsGiven: number; billCount: number } | null;
 }
 
 export interface GettingStartedStep {
@@ -60,13 +71,15 @@ export interface GettingStartedStep {
 }
 
 export interface GettingStarted {
+  /** The section's title when it is not "Get started": the shadow mode checklist names itself. */
+  title?: string;
   /** False once the workspace is live and has made its first payment on Arc testnet: the checklist is done and hides. */
   show: boolean;
   steps: GettingStartedStep[];
   /** The first step not done, or null when every one is. */
   next: GettingStartedStepId | null;
-  /** The guide for where the workspace is: going live, then its first payment. */
-  guide: "go-live" | "first-payment";
+  /** The guide for where the workspace is: going live, then its first payment; or running in shadow mode. */
+  guide: "go-live" | "first-payment" | "shadow-mode";
 }
 
 const GO_LIVE = "/settings#go-live-title";
@@ -91,7 +104,7 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
   // Where real USDC is sent, the wallet keeps a little aside for its own gas (mainnet go-live M6).
   const gas = profile.gasReserveUsdc > 0 ? ` The wallet keeps ${profile.gasReserveUsdc.toFixed(2)} USDC of it aside to pay its own gas.` : "";
 
-  const steps: GettingStartedStep[] = [
+  const setup: GettingStartedStep[] = [
     {
       id: "wallet",
       title: "Add a wallet",
@@ -130,6 +143,12 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
       done: live,
       ownerOnly: true,
     },
+  ];
+
+  if (input.shadow) return shadowChecklist(input.shadow, setup, { payable, unconfirmed, held, label });
+
+  const steps: GettingStartedStep[] = [
+    ...setup,
     {
       id: "payee",
       title: "Add a payee with an Arc address",
@@ -169,6 +188,55 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
   };
 }
 
+/** The checklist in shadow mode: the workspace set up, then its suppliers, its real bills and a person's first verdict. */
+function shadowChecklist(
+  shadow: NonNullable<GettingStartedInput["shadow"]>,
+  setup: GettingStartedStep[],
+  facts: { payable: unknown; unconfirmed: { name?: string } | undefined; held: boolean; label: string }
+): GettingStarted {
+  const inUsdc = shadow.currency === "USDC";
+  const steps: GettingStartedStep[] = [
+    ...setup,
+    {
+      id: "suppliers",
+      title: "Add your suppliers",
+      body: facts.unconfirmed
+        ? `Confirm the new address of ${facts.unconfirmed.name ?? "your supplier"} on its card: the agent holds every payment to an address that is not yet confirmed.`
+        : `Each supplier you pay, in Counterparties. One with no address on ${facts.label} gets a mirror address in one click: Give it a mirror address, on its row. If it sends you no purchase orders, choose Change beside them, then Pay without purchase orders.`,
+      path: "/counterparties",
+      done: Boolean(facts.payable),
+      ownerOnly: false,
+    },
+    {
+      id: "bills",
+      title: "Add your real bills",
+      body: inUsdc
+        ? "Each bill as you receive it, as a payable in AP / AR, in USDC, as on any invoice. Tick Goods or services received once they have come. You keep paying it as you do today."
+        : `Each bill as you receive it, as a payable in AP / AR, in ${shadow.currency}, as written on it: it is paid in USDC at the day's rate. Tick Goods or services received once they have come. You keep paying it as you do today.`,
+      path: "/invoices",
+      done: shadow.billCount > 0,
+      ownerOnly: false,
+    },
+    {
+      id: "verdict",
+      title: "Give your first verdict",
+      body: facts.held
+        ? `The agent decided on a bill, and it waits for you on Approvals. Agree and pay pays it in USDC on ${facts.label}; Disagree, with your reason, does not.`
+        : `The agent decides on each bill within a minute. Its card then asks Do you agree with the agent? Agree and pay pays it in USDC on ${facts.label}; Disagree, with your reason, does not.`,
+      path: facts.held ? "/approvals" : "/invoices",
+      done: shadow.verdictsGiven > 0,
+      ownerOnly: false,
+    },
+  ];
+  return {
+    title: "Get started in shadow mode",
+    show: steps.some((step) => !step.done),
+    steps,
+    next: steps.find((step) => !step.done)?.id ?? null,
+    guide: "shadow-mode",
+  };
+}
+
 /** A payable in one of these can no longer become a payment: paid already (in a sandbox, if the checklist still shows), or rejected. */
 const CLOSED = new Set(["paid", "rejected"]);
 
@@ -185,4 +253,14 @@ export function ownPayableCount(
   return invoices.filter(
     (invoice) => invoice.direction === "payable" && !CLOSED.has(invoice.status ?? "") && !sample.has(invoice.counterparty_id)
   ).length;
+}
+
+/**
+ * Every bill of a counterparty a person added, paid or not: in shadow mode a bill the agent decided on and a person
+ * agreed to pay is still one the workspace added, so "Add your real bills" stays done. Receivables and sample
+ * counterparties' invoices do not count.
+ */
+export function ownBillCount(invoices: Array<{ counterparty_id: string; direction: string }>, counterparties: Array<{ id: string; sample?: boolean }>): number {
+  const sample = new Set(counterparties.filter((counterparty) => counterparty.sample).map((counterparty) => counterparty.id));
+  return invoices.filter((invoice) => invoice.direction === "payable" && !sample.has(invoice.counterparty_id)).length;
 }

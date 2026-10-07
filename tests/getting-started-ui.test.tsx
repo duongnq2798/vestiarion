@@ -26,6 +26,13 @@ const render = (props: { isOwner?: boolean } & Partial<GettingStartedInput> = {}
 };
 
 describe("GettingStarted", () => {
+  it("titles the shadow mode checklist as such, and links its guide", () => {
+    const markup = render({ shadow: { currency: "USDC", verdictsGiven: 0, billCount: 0 } });
+    expect(markup).toContain("Get started in shadow mode");
+    expect(markup).toContain('href="/docs/guides/shadow-mode"');
+    expect(markup).toContain("Give your first verdict");
+  });
+
   it("lists the six steps, counts the done ones, and links the guide", () => {
     const markup = render({ counterparties: [{ role: "vendor", address: "0x1948aB0000000000000000000000000000c345a0" }] });
     expect(markup).toContain("Get started");
@@ -73,10 +80,10 @@ describe("the console's checklist", () => {
     expect(page).toMatch(/const checklist = can\(role, "records\.write"\)\s*\?\s*gettingStarted\(/);
   });
 
-  it("uses the rows the console already reads, with no extra query", () => {
+  it("uses the rows the console already reads, with no extra query, shadow mode's included", () => {
     // Where the treasury lives comes from the workspace's configuration, already in scope (wallet treasury W12).
     expect(page.replace(/\s+/g, " ")).toContain(
-      "gettingStarted({ mode: access.membership.mode, accounts: accountsRows, counterparties, payableCount: ownPayableCount(invoices, counterparties), onchainPayments: dashboardStats.onchainTransfers, waitingCount: needsReview, network, walletHost, walletTreasuryAvailable: walletTreasuryAvailable(currentOrgConfig(), networkProfile(network)), })"
+      "gettingStarted({ mode: access.membership.mode, accounts: accountsRows, counterparties, payableCount: ownPayableCount(invoices, counterparties), onchainPayments: dashboardStats.onchainTransfers, waitingCount: needsReview, network, walletHost, walletTreasuryAvailable: walletTreasuryAvailable(currentOrgConfig(), networkProfile(network)), shadow: shadow ? { currency: shadow.currency, verdictsGiven: (shadowSummary?.agreed ?? 0) + (shadowSummary?.disagreed ?? 0), billCount: ownBillCount(invoices, counterparties) } : null, })"
     );
   });
 });

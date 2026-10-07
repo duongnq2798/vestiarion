@@ -621,6 +621,9 @@ disagrees with every decision.
 - **Proof out.** `npm run traction-digest -- <org-slug> --since YYYY-MM-DD` (`src/lib/traction-digest.ts`) prints a
   workspace's shadow decisions since the day, each with its verdict, what it paid and the transaction on the payable's
   newest decision, and the agreement rate, in ASCII with no blank line for `arc-canteen update-traction`.
+- **Getting started in shadow mode.** While shadow mode is on, the console's checklist (`gettingStarted`,
+  `src/lib/getting-started.ts`) keeps its three setup steps and then asks for suppliers, real bills (`ownBillCount`,
+  paid or not) and a first verdict, from rows the console already reads; it hides once a verdict is given.
 - **What people see.** `verdictView` (`src/lib/verdict-view.ts`) gives each card the verdict on the agent's newest
   decision, given or to give, and `VerdictControl` offers it. The console's `ShadowModeSummary` shows how often people
   agreed (`readShadowSummary`).
