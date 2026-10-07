@@ -59,6 +59,16 @@ describe("a verdict settling a decision held for one (shadow mode S4)", () => {
     await run(() => returnPayable(approver(), { invoiceId: INVOICE, forVerdict: true }));
     expect(mocks.returnInvoice).toHaveBeenCalledWith({ actorId: USER, invoiceId: INVOICE, forVerdict: true });
   });
+
+  it("never passes it for a decision that is not a verdict's, so a hold waiting for one refuses it", async () => {
+    mocks.approveAndPay.mockResolvedValueOnce({ status: "paid", txRef: "0xabc", note: "" });
+    await run(() => approvePayable(approver(), { invoiceId: INVOICE }));
+    await run(() => rejectPayable(approver(), { invoiceId: INVOICE, reason: "Not our bill" }));
+    await run(() => returnPayable(approver(), { invoiceId: INVOICE }));
+    for (const settle of [mocks.approveAndPay, mocks.rejectInvoice, mocks.returnInvoice]) {
+      expect(settle.mock.calls.at(-1)?.[0]).not.toHaveProperty("forVerdict");
+    }
+  });
 });
 
 describe("approvePayable", () => {

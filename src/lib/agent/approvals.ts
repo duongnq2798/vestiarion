@@ -155,8 +155,8 @@ function raise(code: Exclude<ApprovalErrorCode, "insufficient_funds" | "needs_se
  * A payable held in shadow mode for a person's verdict is settled through one (shadow mode S4): before any is given,
  * and for a payment after a disagreement, these refuse, before any claim. A verdict settling it passes `forVerdict`.
  */
-async function refuseUntilVerdict(invoiceId: string, decision: "approve" | "reject" | "return", status?: string): Promise<void> {
-  const gate = await verdictGate(invoiceId, decision, status);
+async function refuseUntilVerdict(invoiceId: string, decision: "approve" | "reject" | "return", facts?: { status: string; transferSent: boolean }): Promise<void> {
+  const gate = await verdictGate(invoiceId, decision, facts);
   if (gate) raise(gate);
 }
 
@@ -768,8 +768,8 @@ export async function approveAndPay(
 ): Promise<{ status: "paid" | "matched" | "held" | "approved"; txRef: string | null; note: string; fromReserveUsdc?: number }> {
   const orgId = currentOrgId();
   const invoice = await loadWaitingPayable(input.invoiceId);
-  if (!input.forVerdict) await refuseUntilVerdict(invoice.id, "approve", invoice.status);
   const intent = await paymentIntentOf(invoice.id);
+  if (!input.forVerdict) await refuseUntilVerdict(invoice.id, "approve", { status: invoice.status, transferSent: transferExists(intent) || transferUnknown(intent) });
   // A transfer that already exists is reconciled, never sent again.
   const alreadySent = transferExists(intent);
   const firstPayment = await firstPaymentTo(invoice);
