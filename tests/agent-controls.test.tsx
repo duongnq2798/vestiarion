@@ -33,4 +33,14 @@ describe("AgentControlsClient", () => {
   it("names a wall-clock run a cycle", () => {
     expect(html(<AgentControlsClient orgSlug="acme" nextDay={4} clockMode="real" />)).toContain("Run cycle now");
   });
+
+  it("makes Run a secondary action on a real clock, where the agent runs on its own, and says so", () => {
+    const real = html(<AgentControlsClient orgSlug="acme" nextDay={4} clockMode="real" />);
+    expect(real).toContain("The agent runs on its own when something changes.");
+    expect(real).toMatch(/<button[^>]*class="[^"]*bg-surface[^"]*"[^>]*>(?:(?!<\/button>).)*Run cycle now/);
+    // On the demo clock each click is the next day: Run stays the main action, with no such line.
+    const demo = html(<AgentControlsClient orgSlug="acme" nextDay={4} clockMode="simulate" />);
+    expect(demo).not.toContain("runs on its own");
+    expect(demo).not.toMatch(/<button[^>]*class="[^"]*bg-surface[^"]*"[^>]*>(?:(?!<\/button>).)*Run day 4/);
+  });
 });

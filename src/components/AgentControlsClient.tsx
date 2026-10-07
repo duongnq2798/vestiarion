@@ -68,13 +68,18 @@ export default function AgentControlsClient({
 
   const running = busy || pending;
   const runLabel = clockMode === "simulate" ? `day ${nextDay}` : "cycle";
-  const status = running ? `Agent is ${STEPS.join(" · ")}.` : (error ?? (paused ? "The agent is paused. Resume it to run a cycle." : null));
+  // On a real clock the agent runs on its own (a change starts a cycle, and a live workspace's schedule another every
+  // 6 hours), so Run is a person's extra, not the way it works; on the demo clock each click is the next day.
+  const runsOnItsOwn = clockMode !== "simulate";
+  const status = running
+    ? `Agent is ${STEPS.join(" · ")}.`
+    : (error ?? (paused ? "The agent is paused. Resume it to run a cycle." : runsOnItsOwn ? "The agent runs on its own when something changes." : null));
 
   return (
     <div className="flex flex-col items-stretch gap-2 sm:items-end">
       <div className="flex flex-wrap items-start gap-2 sm:justify-end">
         {leading}
-        <Button icon={<Play />} loading={running} disabled={paused} onClick={runCycle}>
+        <Button variant={runsOnItsOwn ? "secondary" : "primary"} icon={<Play />} loading={running} disabled={paused} onClick={runCycle}>
           {running ? `Running ${runLabel}…` : clockMode === "simulate" ? `Run day ${nextDay}` : "Run cycle now"}
         </Button>
       </div>
