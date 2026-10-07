@@ -248,6 +248,46 @@ describe("invoiceDecision: a payee on another chain (CCTP payouts X11)", () => {
   });
 });
 
+describe("invoiceDecision: a rule that is not a limit names itself (2026-10-07)", () => {
+  const held = (rule: string, observed: Record<string, unknown> = {}) =>
+    ({ seq: 14, id: "e14", ts: "2026-10-07T08:50:18.000Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "",
+      detail: { invoiceId: "inv-1", currency: "USDC", guardrailBlocked: true, guardrailRule: rule, observed: { paymentLimit: 1, riskLevel: "clear", ...observed } } }) as unknown as LedgerEntry;
+  const guardrail = (rule: string, observed?: Record<string, unknown>) =>
+    invoiceDecision(invoice({ amount: 0.1, status: "held" }), { payment_limit: 1, chain: "ARC" } as never, [held(rule, observed)], { network: "arc-mainnet" }).guardrail;
+
+  it("names the new payee rule and why, not the payment limit the amount is within", () => {
+    // The first payable on Arc mainnet: 0.10 USDC against a 1 USDC limit, held because one person alone stood behind
+    // the address. The card said counterparty.payment_limit, "amount above screened limit", and offered Edit limit.
+    expect(guardrail("counterparty.new_payee")).toEqual({
+      rule: "counterparty.new_payee",
+      attempted: 0.1,
+      reason: "the first payment to this address, and only one person stands behind it",
+    });
+  });
+
+  it.each([
+    ["counterparty.address_unconfirmed", "the payee's address changed, and no one has confirmed it"],
+    ["invoice.match_incomplete", "the three-way match is not complete"],
+    ["invoice.duplicate_of_settled", "it repeats an invoice already paid, being paid or scheduled"],
+    ["counterparty.client_payable", "the counterparty is a client: it pays this business"],
+  ])("names %s and why", (rule, reason) => {
+    expect(guardrail(rule)).toEqual({ rule, attempted: 0.1, reason });
+  });
+
+  it("sets an amount that needs two approvals against that figure", () => {
+    expect(guardrail("workspace.two_approvals", { twoApprovalsAbove: 0.05 })).toEqual({
+      rule: "workspace.two_approvals",
+      attempted: 0.1,
+      limit: 0.05,
+      note: "above it, two people approve",
+    });
+  });
+
+  it("still names the payment limit where that is the rule", () => {
+    expect(guardrail("counterparty.payment_limit")).toMatchObject({ rule: "counterparty.payment_limit", attempted: 0.1, limit: 1 });
+  });
+});
+
 describe("invoiceDecision: a payout code held (review I1, M3, M14)", () => {
   const held = (rule: string, payout: Record<string, unknown>) =>
     ({ seq: 13, id: "e13", ts: "2026-10-01T09:00:00.000Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "",

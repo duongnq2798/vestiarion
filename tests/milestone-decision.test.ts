@@ -54,6 +54,17 @@ describe("milestoneDecision: evidence link", () => {
   });
 });
 
+describe("milestoneDecision: a release held by a rule that is not a limit (2026-10-07)", () => {
+  it("names the new payee rule and why, not the payment limit", () => {
+    const entry = {
+      seq: 23, id: "e23", ts: "2026-10-07T09:00:00.000Z", actor: "agent", domain: "contractor", action: "milestone_release", summary: "",
+      detail: { milestoneId: "ms-1", guardrailBlocked: true, guardrailRule: "counterparty.new_payee", observed: { paymentLimit: 50, riskLevel: "clear" } },
+    } as unknown as LedgerEntry;
+    const decision = milestoneDecision(milestone({ status: "held", verified: true }), [entry], { network: "arc-testnet" });
+    expect(decision.guardrail).toEqual({ rule: "counterparty.new_payee", attempted: 12.5, reason: "the first payment to this address, and only one person stands behind it" });
+  });
+});
+
 describe("milestoneDecision: a release held for the agent's spending limit (outflow budget spec §4)", () => {
   it("sets the amount against what the limit left, and names the rule", () => {
     const entry = {
