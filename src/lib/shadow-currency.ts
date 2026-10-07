@@ -30,6 +30,6 @@ export function shadowModeCurrency(typed: string): string | null {
 }
 
 /** The currency the invoice form converts a bill from, in this shadow mode: none in USDC, or outside shadow mode. */
-export function billCurrencyOf(mode: ShadowMode | null | undefined): string | undefined {
-  return mode && mode.currency !== "USDC" ? mode.currency : undefined;
+export function billCurrencyOf(mode: { currency?: string } | null | undefined): string | undefined {
+  return mode?.currency && mode.currency !== "USDC" ? mode.currency : undefined;
 }
