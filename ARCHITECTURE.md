@@ -611,6 +611,9 @@ disagrees with every decision.
   one dollar from ExchangeRate-API's open endpoint, at most once an hour, naming only the dollar. `shadowBill`
   (`src/lib/shadow-bills.ts`) reads the amount as the bill writes it (`src/lib/bill-amount.ts`) and gives its USDC to
   the cent, only in shadow mode; the invoice keeps the bill in `original_*` and its card shows it, linked to the source.
+- **Proof out.** `npm run traction-digest -- <org-slug> --since YYYY-MM-DD` (`src/lib/traction-digest.ts`) prints a
+  workspace's shadow decisions since the day, each with its verdict, what it paid and the transaction on the payable's
+  newest decision, and the agreement rate, in ASCII with no blank line for `arc-canteen update-traction`.
 - **What people see.** `verdictView` (`src/lib/verdict-view.ts`) gives each card the verdict on the agent's newest
   decision, given or to give, and `VerdictControl` offers it. The console's `ShadowModeSummary` shows how often people
   agreed (`readShadowSummary`).
