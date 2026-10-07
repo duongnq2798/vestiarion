@@ -82,6 +82,7 @@ const SHOTS = {
   "go-live-passkey-phone": async (page) => {
     await page.waitFor(`document.querySelector("details[open] svg[role=img]")`);
   },
+  "go-live-wallet-controls": async () => {},
   "go-live-live": async () => {},
   "go-live-usyc": async () => {},
   "first-payment-counterparty": async (page) => {

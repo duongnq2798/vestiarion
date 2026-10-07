@@ -155,7 +155,7 @@ export function PasskeyWalletCard({ orgSlug, lead }: { orgSlug: string; lead: bo
  * The treasury's passkey wallet: with the passkey this browser kept, without a prompt until it signs, or the one the
  * owner picks. A passkey owning another wallet is refused by name (Review Focus 3); a kept one that does is forgotten.
  */
-async function openTreasury(orgSlug: string, expected: string, say: (text: string) => void): Promise<PasskeyTreasury> {
+export async function openTreasury(orgSlug: string, expected: string, say: (text: string) => void): Promise<PasskeyTreasury> {
   const config = passkeyTreasuryConfig();
   if (!config) throw new PasskeyTreasuryError("Passkey wallets are not set up on this deployment.");
   const { passkeySdk } = await import("@/lib/passkey-wallet-sdk");

@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { authorizeMock, lib } = vi.hoisted(() => ({
+const { authorizeMock, raiseMock, lib } = vi.hoisted(() => ({
   authorizeMock: vi.fn(),
+  raiseMock: vi.fn(),
   lib: {
     proofMessage: vi.fn(),
     chooseWalletTreasury: vi.fn(),
@@ -16,6 +17,7 @@ const { authorizeMock, lib } = vi.hoisted(() => ({
     prepareApproval: vi.fn(),
     recordApproval: vi.fn(),
     prepareAgentGas: vi.fn(),
+    recordWalletControl: vi.fn(),
   },
 }));
 
@@ -23,6 +25,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/revalidate", () => ({ revalidateOrgPages: vi.fn() }));
 vi.mock("@/lib/auth/authorize", () => ({ authorize: authorizeMock }));
 vi.mock("@/lib/dal/scope", () => ({ inOrg: (_access: unknown, fn: () => Promise<unknown>) => fn() }));
+vi.mock("@/lib/agent/cycle-soon", () => ({ raiseCycleEvent: raiseMock }));
 vi.mock("@/lib/treasury/wallet-treasury", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/treasury/wallet-treasury")>()), ...lib }));
 
 import {
@@ -39,6 +42,7 @@ import {
   proofMessageAction,
   recordApprovalAction,
   recordDeploymentAction,
+  recordWalletControlAction,
 } from "@/app/actions/wallet-treasury";
 import { WalletTreasuryError } from "@/lib/treasury/wallet-treasury";
 
@@ -54,6 +58,7 @@ const HASH = `0x${"d1".repeat(32)}`;
 
 beforeEach(() => {
   authorizeMock.mockReset();
+  raiseMock.mockReset();
   for (const fn of Object.values(lib)) fn.mockReset();
 });
 
@@ -146,6 +151,29 @@ describe("the wallet treasury's actions", () => {
       message: "Only an owner can do that.",
       setup: null,
     });
+  });
+
+  it("record a treasury wallet's control, and start a cycle where a figure loosened or payments resumed (treasury wallet controls C4)", async () => {
+    authorizeMock.mockResolvedValue(owner);
+    lib.recordWalletControl.mockResolvedValueOnce({ state: "verified", loosened: true });
+    expect(await recordWalletControlAction("own-wallet-co", { txHash: HASH, kind: "figures" })).toEqual({ ok: true, message: "", state: "verified" });
+    expect(lib.recordWalletControl).toHaveBeenCalledWith({ orgId: "org-1", actorId: "user-1", txHash: HASH, kind: "figures" });
+    expect(raiseMock).toHaveBeenCalledWith(owner, "budget_raised");
+
+    lib.recordWalletControl.mockResolvedValueOnce({ state: "verified", resumed: true });
+    await recordWalletControlAction("own-wallet-co", { txHash: HASH, kind: "resume" });
+    expect(raiseMock).toHaveBeenLastCalledWith(owner, "agent_resumed");
+
+    raiseMock.mockClear();
+    lib.recordWalletControl.mockResolvedValueOnce({ state: "verified", loosened: false });
+    await recordWalletControlAction("own-wallet-co", { txHash: HASH, kind: "figures" });
+    lib.recordWalletControl.mockResolvedValueOnce({ state: "pending" });
+    expect(await recordWalletControlAction("own-wallet-co", { txHash: HASH, kind: "stop" })).toEqual({ ok: true, message: "", state: "pending" });
+    expect(raiseMock).not.toHaveBeenCalled();
+
+    lib.recordWalletControl.mockClear();
+    expect(await recordWalletControlAction("own-wallet-co", { txHash: HASH, kind: "drain" as never })).toMatchObject({ ok: false, state: null });
+    expect(lib.recordWalletControl).not.toHaveBeenCalled();
   });
 
   it("say when a recording step could not read the chain, so the page asks again rather than give up", async () => {

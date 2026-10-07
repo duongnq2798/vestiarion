@@ -8,7 +8,9 @@ import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { MAINNET_NOT_OPEN, mayUseMainnet } from "../mainnet";
 import { networkOf, networkProfile, type NetworkProfile } from "../network";
 import { workspaceNetwork } from "../workspace-network";
-import { readOutflowBudget } from "../agent/outflow-budget";
+import { readOutflowBudget, type OutflowBudget } from "../agent/outflow-budget";
+import { budgetLoosened } from "../agent-budget";
+import { pauseAgent, pauseStateOf, resumeAgent } from "../platform/pause";
 import { passkeySetupCalls, spendingLimitSalt } from "../passkey-treasury";
 import { circleFailureLabel, defaultCircleClient, type CircleClientFactory } from "../circle/check";
 import { ensureNotificationSubscription } from "../circle/notifications";
@@ -63,6 +65,8 @@ export interface WalletTreasuryStatus {
   /** The workspace's agent spending limit, which a setup's figures start from (final review I4); null for one not set. */
   limitDailyUsdc: number | null;
   limitWeeklyUsdc: number | null;
+  /** What the contract may move of the wallet's USDC, once deployed: without a cap, up to one, or nothing since the owner stopped it (treasury wallet controls C1); null before, or when unread. */
+  approval: "unlimited" | "stopped" | number | null;
 }
 
 export type WalletTreasuryErrorCode =
@@ -110,7 +114,18 @@ export interface WalletTreasuryDeps {
   chain?: TreasuryChain;
   circle?: CircleClientFactory;
   now?: number;
+  /** The agent's pause switch, which a stop sets and a resume lifts (treasury wallet controls C4). */
+  agentPause?: AgentPause;
 }
+
+/** The pause switch as a control uses it: the real one (`src/lib/platform/pause.ts`) unless a test gives another. */
+export interface AgentPause {
+  state(orgId: string): Promise<{ reason: string | null } | null>;
+  pause(input: { orgId: string; actorId: string; reason: string }): Promise<void>;
+  resume(input: { orgId: string; actorId: string }): Promise<void>;
+}
+
+const PLATFORM_PAUSE: AgentPause = { state: pauseStateOf, pause: pauseAgent, resume: resumeAgent };
 
 /** What the owner sends the agent for its gas, where it pays its own (W10). */
 const AGENT_GAS_USDC = "0.5";
@@ -244,6 +259,7 @@ export async function walletTreasuryStatus(orgId: string, deps: WalletTreasuryDe
       setupNeedsUsdc: 0,
       limitDailyUsdc: null,
       limitWeeklyUsdc: null,
+      approval: null,
     };
     if (external) {
       const limit = await readOutflowBudget(db());
@@ -269,6 +285,7 @@ export async function walletTreasuryStatus(orgId: string, deps: WalletTreasuryDe
     status.dailyUsdc = daily ? usdcOf(daily) : null;
     status.weeklyUsdc = weekly ? usdcOf(weekly) : null;
     status.spendableUsdc = balance === null || allowance === null ? null : usdcOf(balance < allowance ? balance : allowance);
+    status.approval = allowance === null ? null : allowance === 0n ? "stopped" : allowance >= UNLIMITED ? "unlimited" : Number(allowance) / 1_000_000;
     if (!row?.enforced) return { ...status, step: "approve" };
     if (network.gasReserveUsdc > 0 && (status.agentGasUsdc === null || status.agentGasUsdc < network.gasReserveUsdc)) return { ...status, step: "gas" };
     // A passkey treasury decides its recovery before it goes live (K8).
@@ -795,5 +812,96 @@ export async function prepareAgentGas(input: { orgId: string }): Promise<Prepare
     const { row, network } = await setup({ agent: true });
     if (network.gasReserveUsdc <= 0) throw new WalletTreasuryError("wrong_step", "The agent's gas is paid for it on this network.");
     return { to: asAddress(row?.agent_address as string), data: "0x", value: parseEther(AGENT_GAS_USDC).toString(), chainId: network.chainId };
+  });
+}
+
+/** What a treasury's own wallet controls once its contract carries its payments (treasury wallet controls C2). */
+export type WalletControlKind = "figures" | "stop" | "resume";
+
+/** The pause a stop sets, and the only one a resume lifts (treasury wallet controls C4). */
+export const OWNER_STOPPED = "The owner stopped the agent's payments on Arc";
+
+const CONTROL_ACTIONS: Record<WalletControlKind, string> = {
+  figures: "agent_budget_changed",
+  stop: "spending_limit_stopped",
+  resume: "spending_limit_resumed",
+};
+
+/** Whether this control's transaction is recorded already: the same transaction again changes nothing. */
+async function controlRecorded(kind: WalletControlKind, hash: Hex): Promise<boolean> {
+  const found = unwrap(await db().from("ledger_entries").select("seq").eq("action", CONTROL_ACTIONS[kind]).eq("detail->>txHash", hash).limit(1)) as Array<{ seq: number }>;
+  return found.length > 0;
+}
+
+/**
+ * Records a control a live treasury's own wallet sent (docs/superpowers/specs/2026-10-07-treasury-wallet-controls-design.md
+ * C4), from the chain only and once per transaction: its receipt succeeded and came from this wallet (for a passkey, its
+ * user operation); then the contract's figures become the agent's spending limit, or its approval reads as stopped or
+ * resumed. A stop pauses the agent; a resume lifts only the pause a stop set. `loosened` and `resumed` say a cycle
+ * should decide again what the old state held.
+ */
+export async function recordWalletControl(
+  input: { orgId: string; actorId: string; txHash: string; kind: WalletControlKind },
+  deps: WalletTreasuryDeps = {}
+): Promise<{ state: "pending" | "verified"; loosened?: boolean; resumed?: boolean }> {
+  const hash = txHash(input.txHash);
+  const agentPause = deps.agentPause ?? PLATFORM_PAUSE;
+  return inScopeOf(input.orgId, input.actorId, async () => {
+    const { wallet, row, network } = await setup({ agent: true, contract: true });
+    if (!row?.enforced || !row.address) throw new WalletTreasuryError("wrong_step", "Set up the wallet first.");
+    const contract = asAddress(row.address);
+    const signer: TreasurySigner = row.treasury_signer === "passkey" ? "passkey" : "wallet";
+    if (await controlRecorded(input.kind, hash)) return { state: "verified" };
+    const chain = deps.chain ?? treasuryChain(network);
+    const receipt = await readOrRefuse(() => chain.receipt(hash));
+    if (!receipt) return { state: "pending" };
+    const fromWallet = signer === "passkey" ? userOperationSucceeded(receipt, wallet) : receipt.from.toLowerCase() === wallet.toLowerCase();
+    if (receipt.status !== "success" || !fromWallet) {
+      throw new WalletTreasuryError("chain_refused", "That transaction failed, or this workspace's wallet did not send it; nothing was recorded.");
+    }
+
+    if (input.kind === "figures") {
+      const figure = async (functionName: "dailyLimit" | "weeklyLimit") => {
+        const units = (await readOrRefuse(async () =>
+          decodeFunctionResult({ abi: SPENDING_LIMIT_ABI, functionName, data: await chain.read(contract, encodeFunctionData({ abi: SPENDING_LIMIT_ABI, functionName })) })
+        )) as bigint;
+        return units === 0n ? null : Number(units) / 1_000_000;
+      };
+      const to: OutflowBudget = { dailyUsdc: await figure("dailyLimit"), weeklyUsdc: await figure("weeklyLimit") };
+      const from: OutflowBudget = (await readOutflowBudget(db())) ?? { dailyUsdc: null, weeklyUsdc: null };
+      const budget = await db()
+        .from("agent_budgets")
+        .upsert({ daily_usdc: to.dailyUsdc, weekly_usdc: to.weeklyUsdc, updated_by: input.actorId, updated_at: new Date().toISOString() }, { onConflict: "org_id" });
+      if (budget.error) throw new Error(budget.error.message);
+      await record(input.orgId, input.actorId, {
+        action: "agent_budget_changed",
+        summary: "The owner's wallet changed the figures on its spending limit contract, and the agent's spending limit follows them",
+        detail: { by: input.actorId, from, to, txHash: hash, onChain: { contract, txHash: hash, signer } },
+      });
+      return { state: "verified", loosened: budgetLoosened(from, to) };
+    }
+
+    const allowance = await readOrRefuse(() => chain.allowance(wallet, contract));
+    if (input.kind === "stop") {
+      if (allowance !== 0n) throw new WalletTreasuryError("chain_refused", "The contract may still move the wallet's USDC; nothing was recorded.");
+      await record(input.orgId, input.actorId, {
+        action: "spending_limit_stopped",
+        summary: "The owner's wallet stopped the agent's payments: its spending limit contract may move none of its USDC",
+        detail: { by: input.actorId, contract, txHash: hash, signer },
+      });
+      // So the agent tries nothing the contract would refuse; an agent paused already keeps its own reason.
+      if (!(await agentPause.state(input.orgId))) await agentPause.pause({ orgId: input.orgId, actorId: input.actorId, reason: OWNER_STOPPED });
+      return { state: "verified" };
+    }
+
+    if (allowance === 0n) throw new WalletTreasuryError("chain_refused", "The contract may move none of the wallet's USDC yet; nothing was recorded.");
+    await record(input.orgId, input.actorId, {
+      action: "spending_limit_resumed",
+      summary: "The owner's wallet resumed the agent's payments through its spending limit contract",
+      detail: { by: input.actorId, contract, txHash: hash, signer, allowanceUsdc: allowance >= UNLIMITED ? null : Number(allowance) / 1_000_000 },
+    });
+    const paused = await agentPause.state(input.orgId);
+    if (paused?.reason === OWNER_STOPPED) await agentPause.resume({ orgId: input.orgId, actorId: input.actorId });
+    return { state: "verified", resumed: true };
   });
 }

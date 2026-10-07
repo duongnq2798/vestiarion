@@ -33,6 +33,7 @@ import { MAINNET_OFF } from "@/lib/mainnet";
 import { networkOf, networkProfile, type Network } from "@/lib/network";
 import type { GoLiveStatus } from "@/lib/platform/go-live";
 import PasskeyTreasurySteps from "@/components/treasury/PasskeyTreasurySteps";
+import TreasuryWalletControls from "@/components/treasury/TreasuryWalletControls";
 import { WalletTreasuryChoice } from "@/components/treasury/WalletTreasuryChoice";
 import WalletTreasurySteps, { WalletTreasurySummary } from "@/components/treasury/WalletTreasurySteps";
 
@@ -519,11 +520,13 @@ function GoLiveStep({ orgSlug, status, sampleBalance }: { orgSlug: string; statu
   );
 }
 
-function LiveDetails({ orgSlug, status }: { orgSlug: string; status: GoLiveStatus }) {
+function LiveDetails({ orgSlug, status, canAdminister }: { orgSlug: string; status: GoLiveStatus; canAdminister: boolean }) {
   return (
     <div className="space-y-3">
       {status.wallets.length > 0 && <WalletList wallets={status.wallets} />}
       {status.walletTreasury && <WalletTreasurySummary status={status.walletTreasury} network={status.network ?? "arc-mainnet"} />}
+      {/* The treasury's own wallet changes its contract's figures, or stops and resumes the agent (treasury wallet controls C1). */}
+      {status.walletTreasury && canAdminister && <TreasuryWalletControls orgSlug={orgSlug} status={status.walletTreasury} network={status.network ?? "arc-mainnet"} />}
       <div className="space-y-1 text-sm text-ink-2">
         {status.liveSince && <p>Live since {utcMinute(status.liveSince)}</p>}
         <p>
@@ -566,7 +569,7 @@ export default function GoLivePanel({ orgSlug, status, canAdminister, sampleBala
       </Callout>
     );
   } else if (live) {
-    body = <LiveDetails orgSlug={orgSlug} status={status} />;
+    body = <LiveDetails orgSlug={orgSlug} status={status} canAdminister={canAdminister} />;
   } else if (!canAdminister) {
     body = (
       <p className="text-sm text-ink-2">
