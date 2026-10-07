@@ -26,10 +26,12 @@ export interface DecisionRowItem {
   before?: ReactNode;
   /** A form under the card, such as a milestone's verification. */
   after?: ReactNode;
-  /** Open from the start: a row waiting for a person, with its actions in view, or a screenshot of the opened row. */
+  /** Open from the start: for a screenshot of the opened row. */
   open?: boolean;
   /** What the agent checked, as a short line under the title (`payableSignals`), so it shows before the row opens. */
   signals?: DecisionSignal[];
+  /** Why it waits for a person, in one line under the title (`stoppedWhy`); the card, once opened, has the whole. */
+  why?: string | null;
 }
 
 export function DecisionRows({ items, orgSlug, className }: { items: DecisionRowItem[]; orgSlug: string; className?: string }) {
@@ -64,6 +66,11 @@ function DecisionRow({ item, orgSlug }: { item: DecisionRowItem; orgSlug: string
             </span>
             {item.hint && <span className="block text-xs font-medium text-held">{item.hint}</span>}
             {item.signals && item.signals.length > 0 && <Signals signals={item.signals} />}
+            {item.why && (
+              <span className="mt-1 block text-xs leading-5 text-ink-2">
+                <span className="font-medium text-ink">Why</span> · {item.why}
+              </span>
+            )}
           </span>
           <span className={cn("hidden whitespace-nowrap font-mono text-xs sm:block", date?.tone === "held" ? "text-held" : "text-ink-2")}>{date?.label ?? ""}</span>
           <span className="hidden justify-self-end sm:block">

@@ -19,7 +19,7 @@ import { IntakeFold } from "@/components/vx/IntakeFold";
 import { Money } from "@/components/vx/Primitives";
 import { StatTile } from "@/components/vx/StatTile";
 import { invoiceDecision } from "@/components/vx/map";
-import { payableSignals } from "@/components/vx/decision-signals";
+import { payableSignals, stoppedWhy } from "@/components/vx/decision-signals";
 import { RecurringSummary } from "@/components/vx/RecurringSummary";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -64,8 +64,6 @@ const OPEN = new Set(["pending", "matched", "scheduled", "held", "flagged", "awa
 const WAITING = new Set(["held", "flagged", "awaiting_info"]);
 /** Settled rows shown before "Show all": history, kept short so the work leads. */
 const HISTORY_SHOWN = 5;
-/** Rows waiting for a person open from the start, with their actions in view, while they are this few. */
-const OPEN_WAITING_UP_TO = 3;
 
 type InvoicePageProps = {
   params: Promise<{ slug: string }>;
@@ -206,11 +204,13 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     const row = (
       decision: ReturnType<typeof invoiceDecision>,
       footerFor?: (decision: ReturnType<typeof invoiceDecision>) => React.ReactNode,
-      extra: Pick<DecisionRowItem, "open" | "signals"> = {}
+      extra: Pick<DecisionRowItem, "signals" | "why"> = {}
     ): DecisionRowItem => {
       const invoice = invoicesById.get(decision.id) as InvoiceRow;
       const facts = waiting.get(decision.id);
-      return { decision, date: rowDate(invoice, today), footerAction: footerFor?.(decision), hint: facts ? waitingHint(facts.onFile, facts.added) : undefined, ...extra };
+      const hint = facts ? waitingHint(facts.onFile, facts.added) : undefined;
+      // A row that says what it needs says why already: the why line is for the rest.
+      return { decision, date: rowDate(invoice, today), footerAction: footerFor?.(decision), hint, ...extra, why: hint ? undefined : extra.why };
     };
     const statusOf = (decision: ReturnType<typeof invoiceDecision>) => invoicesById.get(decision.id)?.status ?? "";
     const byDue = (a: ReturnType<typeof invoiceDecision>, b: ReturnType<typeof invoiceDecision>) => dueOf(invoicesById.get(a.id)).localeCompare(dueOf(invoicesById.get(b.id)));
@@ -312,7 +312,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
 
         <div className="space-y-10">
           <section>
-            <SectionHeader title="Payables" meta={`${payables.length} ${plural(payables.length, "invoice", "invoices")} · open one for the agent's reasoning`} />
+            <SectionHeader title="Payables" meta={`${payables.length} ${plural(payables.length, "invoice", "invoices")} · open any to see why the agent decided as it did`} />
             {payables.length === 0 ? (
               <EmptyState compact title="No payables here" body="There are no records in this view." />
             ) : (
@@ -328,10 +328,10 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
                         </Button>
                       }
                     />
-                    {/* The work first: while few wait, each is open on its card, with its reason and actions in view. */}
+                    {/* Closed, so many fit: each says what the agent checked and why it waits; opening it shows the card and its actions. */}
                     <DecisionRows
                       orgSlug={slug}
-                      items={needsYou.map((decision) => row(decision, withVerdict(needsYouFor), { open: needsYou.length <= OPEN_WAITING_UP_TO, signals: payableSignals(decision) }))}
+                      items={needsYou.map((decision) => row(decision, withVerdict(needsYouFor), { signals: payableSignals(decision), why: stoppedWhy(decision) }))}
                     />
                   </>
                 )}

@@ -1,3 +1,4 @@
+import { CASH_SHORTFALL, ruleInBrief, SHADOW_VERDICT } from "@/lib/next-step";
 import type { Decision } from "./types";
 
 /** One fact the agent checked before deciding a payable, in a few words, and whether it stood in the payment's way. */
@@ -36,4 +37,21 @@ export function payableSignals(decision: Decision): DecisionSignal[] {
   if (limit && limit.value !== "none") signals.push(limit.state === "missing" ? { label: "Over its limit", state: "missing" } : { label: "Within its limit", state: "ok" });
 
   return signals;
+}
+
+const WHY_LENGTH = 160;
+
+/**
+ * Why a payable waits for a person, in one line under its row's title, so the row says it before it is opened: the
+ * rule that stopped it, when code did, else the first sentence of the agent's own reasoning. The card keeps the whole.
+ */
+export function stoppedWhy(decision: Decision): string | null {
+  if (decision.domain !== "ap") return null;
+  const rule = decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : decision.heldForVerdict ? SHADOW_VERDICT : null);
+  const brief = rule ? ruleInBrief(rule) : null;
+  // A rule with no words of its own reads as its name: the agent's reasoning says it better.
+  if (brief && !brief.startsWith("rule ")) return `Code stopped it: ${brief}.`;
+  const first = decision.reasoning.split(/(?<=[.!?])\s/)[0]?.trim();
+  if (!first) return null;
+  return first.length > WHY_LENGTH ? `${first.slice(0, WHY_LENGTH - 1).trimEnd()}…` : first;
 }
