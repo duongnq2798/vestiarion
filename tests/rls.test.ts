@@ -53,6 +53,7 @@ const CRUD_UPDATE: Record<string, { column: string; expr: string }> = {
   inbox_emails: { column: "status", expr: "'dismissed'" },
   approval_policies: { column: "two_approvals_above", expr: "coalesce(two_approvals_above, 1) + 1" },
   payment_approvals: { column: "used_at", expr: "now()" },
+  shadow_modes: { column: "currency", expr: "'USD'" },
 };
 
 beforeAll(async () => {
@@ -154,7 +155,7 @@ describe.each(TENANT_TABLES)("%s", (table) => {
   });
 
   it("cannot change or remove another organization's rows", async () => {
-    if (table === "ledger_entries" || table === "cycle_snapshots" || table === "service_purchases") {
+    if (table === "ledger_entries" || table === "cycle_snapshots" || table === "service_purchases" || table === "decision_verdicts") {
       // Append-only tables: the tenant role holds no UPDATE/DELETE privilege
       // at all, cross-org or not, so each statement is refused on its own —
       // the first failure would abort the transaction before the second ran.
@@ -171,7 +172,7 @@ describe.each(TENANT_TABLES)("%s", (table) => {
 });
 
 describe("history is append-only for the tenant role", () => {
-  it.each(["ledger_entries", "cycle_snapshots", "service_purchases"])("%s refuses UPDATE and DELETE even on the tenant's own rows", async (table) => {
+  it.each(["ledger_entries", "cycle_snapshots", "service_purchases", "decision_verdicts"])("%s refuses UPDATE and DELETE even on the tenant's own rows", async (table) => {
     await expect(asTenant(db, A, (tx) => tx.query(`update public.${table} set org_id = org_id`))).rejects.toThrow(/permission denied/);
     await expect(asTenant(db, A, (tx) => tx.query(`delete from public.${table}`))).rejects.toThrow(/permission denied/);
   });
