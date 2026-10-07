@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addressProvenance, newPayeeCheck, PAYEE } from "@/lib/new-payee";
+import { addressProvenance, MIRROR, newPayeeCheck, PAYEE } from "@/lib/new-payee";
 
 /**
  * Two people before the first payment to an address (docs/superpowers/specs/2026-10-05-new-payee-check-design.md
@@ -99,5 +99,26 @@ describe("newPayeeCheck: two parties before the first payment (N1, N3)", () => {
 
   it("asks nothing of a counterparty with no address", () => {
     expect(newPayeeCheck({ address: null, paidTo: paid(), entries: [] })).toBeNull();
+  });
+});
+
+describe("a mirror address Vestiarion made for a payee in shadow mode (shadow mode S7)", () => {
+  const mirrored = changed(ANNA, ADDRESS, { via: "mirror", walletId: "wallet-1" });
+
+  it("is given by Vestiarion itself, not by the member who asked for it", () => {
+    expect(addressProvenance(ADDRESS, [mirrored])).toEqual({ addressBy: MIRROR, confirmers: [] });
+  });
+
+  it("has two parties behind its first payment: no outsider could have given it", () => {
+    expect(newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries: [mirrored] })).toEqual({
+      firstPayment: true,
+      addressBy: MIRROR,
+      confirmedBy: null,
+      twoParties: true,
+    });
+  });
+
+  it("stands behind no other address set over it since", () => {
+    expect(newPayeeCheck({ address: OTHER, paidTo: new Set(), entries: [changed(BAO, OTHER), mirrored] })?.twoParties).toBe(false);
   });
 });

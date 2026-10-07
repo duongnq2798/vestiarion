@@ -66,6 +66,8 @@ export interface CounterpartyRow {
   notice_email?: string | null;
   /** Whether the agent needs a purchase order on file before it pays (three-way match design M2, 0073); absent before 0073. */
   purchase_order_required?: boolean;
+  /** The Circle wallet Vestiarion made as this payee's mirror address in shadow mode (shadow mode S7, 0084); null otherwise. */
+  mirror_wallet_id?: string | null;
 }
 
 export async function listCounterparties(): Promise<CounterpartyRow[]> {

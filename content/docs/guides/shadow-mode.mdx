@@ -17,7 +17,13 @@ Add each bill as a payable, in any of the usual ways: in AP / AR, from a documen
 
 The agent decides on each bill in its next cycle, as in any workspace. It may pay it now, schedule it for a later day, hold it, flag it, or ask for what is missing. If a supplier sends you no purchase orders, turn purchase orders off on its row in Counterparties, so its bills are not held for one.
 
-## 3. Agree or disagree with each decision
+## 3. Give a supplier with no Arc address a mirror address
+
+Most of the people you pay have no wallet on Arc. A payment you agree to still needs an address to go to, so in shadow mode a supplier with no address can be given a mirror address: a wallet Vestiarion makes for it on Arc testnet, in this workspace's Circle wallets.
+
+In **Counterparties**, open the supplier's row and choose **Give it a mirror address**. The row then shows the address, and says: "Mirror address: a wallet Vestiarion made for this payee on Arc testnet, in shadow mode." No person typed it, so its first payment does not wait for a second person to confirm the address. The USDC you agree to pay a supplier stays in its mirror wallet, on Arc testnet.
+
+## 4. Agree or disagree with each decision
 
 When the agent decides to pay a bill now, nothing is sent: the payment is held for your verdict. In Approvals, AP / AR and the console, its card asks **Do you agree with the agent?**, and says what agreeing pays: the amount in USDC, the payee and the payee's address.
 
@@ -30,11 +36,11 @@ Every other decision, such as a payment scheduled for a later day or a bill held
 
 Each decision takes one verdict, and the card shows it once given. A second verdict on the same decision changes nothing.
 
-## 4. See how often you agreed
+## 5. See how often you agreed
 
 The console shows a **Shadow mode** section while shadow mode is on. It says how many of the agent's decisions you agreed with, out of the verdicts given, as a share. It also says how many decisions still wait for your verdict, with **See them in AP / AR** to give them.
 
-## 5. Turn it off
+## 6. Turn it off
 
 In **Settings**, choose **Turn off shadow mode** and confirm. The agent pays on its own again, within its limits. A payment waiting for a person to agree stays held until a person decides it.
 
@@ -44,6 +50,7 @@ Each step is a signed entry in the workspace's ledger, and reaches webhook endpo
 
 - `shadow_mode_started` and `shadow_mode_ended`, with who turned it on or off and the currency.
 - `ap_pay` for a payment held in shadow mode, with `execution.heldBecause: "shadow_verdict"`. It is not a refusal by code: the decision passed every check.
+- `counterparty_address_changed` with `via: "mirror"` when a supplier is given a mirror address: who asked, the address and its Circle wallet id.
 - `decision_verdict` for each verdict: who gave it, the decision it is about (`entrySeq`), the payable (`subjectId`), the agent's action, `agree` or `disagree`, and the reason.
 
 ## If something goes wrong
@@ -60,3 +67,5 @@ Each step is a signed entry in the workspace's ledger, and reaches webhook endpo
 | Keep the reason to 280 characters. | Shorten your reason. |
 | It no longer waits for your verdict, so nothing was paid. | The bill was paid, returned or decided again since. Your agreement is recorded; the card shows where it stands. |
 | A verdict was given on this decision already | Someone gave a verdict on it a moment before. The card shows which. |
+| This payee has an address already. A mirror address is for a payee with none. | The supplier has an address: payments go there. |
+| Go live on Arc testnet first: a mirror address is a wallet in this workspace's Circle wallets. | Take the workspace live on Arc testnet in **Settings**, under **Go live**, then give the mirror address. |

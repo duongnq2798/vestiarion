@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-07: A mirror address for a supplier with none, in shadow mode
+
+- In shadow mode, a supplier with no Arc address can be given a mirror address: a wallet Vestiarion makes for it on Arc testnet, in the workspace's own Circle wallet set. The counterparty's `address` is then that wallet's, and `chain` is `ARC-TESTNET`.
+- It is recorded as **`counterparty_address_changed`** with `via: "mirror"`: `{ by, counterpartyId, via, from: null, to, walletId }`, actor `human`, domain `compliance`. No person typed the address, so the first payment to it does not wait for a second person to confirm it.
+- `GET /api/v1/counterparties` shows the address as any other. Nothing else in `/api/v1` changes.
+
 ## 2026-10-07: Shadow mode: a person agrees with each payment
 
 - A workspace on Arc testnet can run in shadow mode. The business keeps paying its bills as it does today, and the agent pays nothing until a person agrees. Its ledger gains these entries, each sent to webhook endpoints as `ledger.appended`:

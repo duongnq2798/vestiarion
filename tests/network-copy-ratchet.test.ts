@@ -55,6 +55,11 @@ const ALLOWED: Record<string, number> = {
   "src/components/ShadowModeSummary.tsx": 1,
   "src/components/VerdictControl.tsx": 1,
   "src/lib/shadow-mode.ts": 1,
+  // A mirror address, made only in shadow mode: its control and the page's line saying which address is one, the library's
+  // refusal before going live and its ledger summary.
+  "src/components/MirrorAddressControl.tsx": 1,
+  "src/app/o/[slug]/counterparties/page.tsx": 1,
+  "src/lib/mirror-address.ts": 2,
   // Passkey wallets, offered only to a payee on Arc testnet (`modularWallets`).
   "src/components/payee/PasskeyWalletOption.tsx": 1,
   "src/components/wallet/PasskeyWallet.tsx": 1,

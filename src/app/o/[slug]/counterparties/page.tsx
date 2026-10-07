@@ -7,6 +7,7 @@ import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
 import CounterpartyLimitEdit from "@/components/intake/CounterpartyLimitEdit";
 import CounterpartyNoticeEmailEdit from "@/components/intake/CounterpartyNoticeEmailEdit";
 import CounterpartyPurchaseOrdersEdit from "@/components/intake/CounterpartyPurchaseOrdersEdit";
+import MirrorAddressControl from "@/components/MirrorAddressControl";
 import ScreeningMatch from "@/components/intake/ScreeningMatch";
 import PayeeLinkControl from "@/components/intake/PayeeLinkControl";
 import { Callout } from "@/components/ui/Callout";
@@ -25,11 +26,13 @@ import { screeningMode } from "@/lib/compliance";
 import { counterpartiesRefreshMs } from "@/lib/counterparties-refresh";
 import { addressUnconfirmed } from "@/lib/counterparty-address";
 import { purchaseOrdersLabel } from "@/lib/counterparty-purchase-orders";
+import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import { listLedgerEntries } from "@/lib/ledger";
 import { listActivePayeeLinks } from "@/lib/platform/payee-links";
 import { plural } from "@/lib/copy";
 import { listCounterparties, stats } from "@/lib/queries";
+import { readShadowMode } from "@/lib/shadow-mode";
 import { workspaceNetwork } from "@/lib/workspace-network";
 
 export const dynamic = "force-dynamic";
@@ -43,12 +46,17 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
     const network = workspaceNetwork().id;
     // A live match names the entity it matched, which Not this person dismisses (dismiss screening match R6).
     const liveScreening = screeningMode() === "live";
-    const [counterparties, dashboardStats, entries, canWrite, canConfirm] = await Promise.all([
+    const [counterparties, dashboardStats, entries, canWrite, canConfirm, shadow] = await Promise.all([
       listCounterparties(),
       stats(),
       listLedgerEntries(1),
       viewerCan(slug, "records.write"),
       viewerCan(slug, "approval.decide"),
+      // In shadow mode a payee with no Arc address can be given a mirror address (shadow mode S7). Best effort.
+      readShadowMode(db()).catch((error: unknown) => {
+        console.error("counterparties: shadow mode not read", error instanceof Error ? error.message : error);
+        return null;
+      }),
     ]);
     // Only those who may send a payee link see which ones are out.
     const payeeLinks = canWrite ? await listActivePayeeLinks(access.membership.orgId) : new Map<string, { id: string; expiresAt: string }>();
@@ -167,6 +175,14 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
                         canWrite={canWrite}
                         canConfirm={canConfirm}
                       />
+                      {counterparty.mirror_wallet_id && (
+                        <p className="mt-1 text-xs text-ink-3">Mirror address: a wallet Vestiarion made for this payee on Arc testnet, in shadow mode.</p>
+                      )}
+                      {shadow && canWrite && counterparty.role !== "client" && !counterparty.address && (
+                        <div className="mt-2">
+                          <MirrorAddressControl orgSlug={slug} counterparty={{ id: counterparty.id, name: counterparty.name }} />
+                        </div>
+                      )}
                       {canWrite && counterparty.role !== "client" && (
                         <div className="mt-2">
                           <PayeeLinkControl
