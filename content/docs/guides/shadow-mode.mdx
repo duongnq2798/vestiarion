@@ -36,6 +36,8 @@ When the agent decides to pay a bill now, nothing is sent: the payment is held f
 
 If you may not pay it yourself, for example because you entered the bill and another person can approve payments, the card offers **Agree** alone and says why. Your agreement is recorded, and another person pays it in Approvals.
 
+In Slack and Telegram, the agent's message about a payment held for your verdict says it waits for your verdict, and **Give your verdict** opens it here. Slack offers no buttons on it: until someone gives a verdict, nothing else settles it, and a payment someone disagreed with is never made.
+
 Every other decision, such as a payment scheduled for a later day or a bill held for a check, offers **Agree** and **Disagree** on its card in AP / AR. Its own actions stay where they are. When a scheduled payment's day comes, the agent decides again, and that payment is held for your verdict.
 
 Each decision takes one verdict, and the card shows it once given. A second verdict on the same decision changes nothing.
@@ -73,3 +75,5 @@ Each step is a signed entry in the workspace's ledger, and reaches webhook endpo
 | A verdict was given on this decision already | Someone gave a verdict on it a moment before. The card shows which. |
 | This payee has an address already. A mirror address is for a payee with none. | The supplier has an address: payments go there. |
 | Go live on Arc testnet first: a mirror address is a wallet in this workspace's Circle wallets. | Take the workspace live on Arc testnet in **Settings**, under **Go live**, then give the mirror address. |
+| This decision waits for a verdict in shadow mode. Agree or disagree with it in Approvals first. | Give your verdict on its card in **Approvals**: **Agree and pay**, or **Disagree**. |
+| Someone disagreed with this decision in shadow mode, so it is not paid. Return it to the agent or reject it. | A payment someone disagreed with is not made. Return it to the agent, or reject it, in **Approvals**. |

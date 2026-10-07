@@ -595,6 +595,10 @@ disagrees with every decision.
   `entry_seq`, append-only for the tenant role), each with a signed `decision_verdict` entry naming the payable as its
   `subjectId`, so the card keeps showing the decision. Agree and pay goes through `approvePayable`, the command Approvals
   uses, and only while the payable still waits for that verdict. Disagree can return or reject it.
+- **Settled through a verdict.** `verdictGate` (`src/lib/verdicts.ts`): before anyone gives a verdict on a payable
+  held for one, `approveAndPay`, `rejectInvoice` and `returnInvoice` refuse it (`verdict_needed`), and a payment after
+  a disagreement is refused (`verdict_disagreed`). The verdict's own settling passes `forVerdict`; once a verdict is
+  given they settle it as any hold. Slack and Telegram word it as waiting for a verdict, and Slack draws no buttons.
 - **Mirror addresses** (`src/lib/mirror-address.ts`). A payee with no Arc address gets a wallet Vestiarion makes in
   the workspace's own Circle wallet set, keyed by the payee so a retry finds it, written only where the payee still has
   no address, and recorded as an address change `via: "mirror"`. The new payee check reads that as `MIRROR`: no

@@ -199,6 +199,10 @@ function approvalsFake(options: {
   platform?: ReturnType<typeof configFromEnv>;
   /** The workspace's spending limit contract row (wallet treasury W11); none by default. */
   spendingLimit?: Record<string, unknown> | null;
+  /** The agent's newest decision about the payable, as the ledger returns it (shadow mode S4); none by default. */
+  decision?: Record<string, unknown>;
+  /** The verdict given on that decision, a `decision_verdicts` row; none by default. */
+  verdict?: Record<string, unknown>;
 } = {}) {
   const intents = options.intents ?? [];
   const eq = (request: RecordedRequest, column: string) => request.params.get(column)?.match(/^eq\.(.+)$/)?.[1];
@@ -282,6 +286,10 @@ function approvalsFake(options: {
     if (request.path === "/rest/v1/ledger_entries" && request.method === "GET" && request.params.has("detail->>counterpartyId")) {
       return { body: options.addressEntries ?? [] };
     }
+    if (request.path === "/rest/v1/ledger_entries" && request.method === "GET" && request.params.has("detail->>invoiceId")) {
+      return { body: options.decision ? [options.decision] : [] };
+    }
+    if (request.path === "/rest/v1/decision_verdicts" && request.method === "GET") return { body: options.verdict ? [options.verdict] : [] };
     if (request.path === "/rest/v1/rpc/sole_approver" && options.soleApprover) return options.soleApprover;
     if (request.path === "/rest/v1/approval_policies") return { body: options.twoApprovals ? [{ two_approvals_above: String(options.twoApprovals) }] : [] };
     if (request.path === "/rest/v1/payment_approvals" && request.method === "GET") return { body: options.approvals ?? [] };
@@ -2746,5 +2754,86 @@ describe("approveAndPay from a workspace paying from its owner's own wallet (wal
       expect(fake.requests.some((request) => request.path === "/rest/v1/rpc/claim_invoice_decision")).toBe(false);
     }
     expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("a payable held for a person's verdict (shadow mode S4)", () => {
+  /** The agent's decision to pay it, held in shadow mode until a person agrees. */
+  const shadowHold = {
+    seq: 41,
+    ts: "2026-10-07T08:00:00Z",
+    actor: "agent",
+    action: "ap_pay",
+    summary: "Pay Acme Supplies 150 USDC",
+    detail: { invoiceId: INVOICE_ID, execution: { resultingStatus: "held", heldBecause: "shadow_verdict" } },
+  };
+  const paid = () => payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 0 });
+
+  it("is not paid by Approve and pay before anyone gives a verdict on it, and nothing is claimed", async () => {
+    const { fake, run } = approvalsFake({ decision: shadowHold });
+
+    const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    await expect(attempt).rejects.toMatchObject({
+      code: "verdict_needed",
+      message: "This decision waits for a verdict in shadow mode. Agree or disagree with it in Approvals first.",
+    });
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("is not paid after someone disagreed with it", async () => {
+    const { run } = approvalsFake({ decision: shadowHold, verdict: { verdict: "disagree", reason: "Not our bill" } });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toMatchObject({
+      code: "verdict_disagreed",
+      message: "Someone disagreed with this decision in shadow mode, so it is not paid. Return it to the agent or reject it.",
+    });
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("is paid by Approve and pay once someone agreed with it, as when the person who agreed may not pay it", async () => {
+    paid();
+    const { run } = approvalsFake({ decision: shadowHold, verdict: { verdict: "agree", reason: null } });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).resolves.toMatchObject({ status: "paid" });
+    expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("is paid through the verdict agreeing with it, which is kept after the payment", async () => {
+    paid();
+    const { run } = approvalsFake({ decision: shadowHold });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID, forVerdict: true }))).resolves.toMatchObject({ status: "paid" });
+    expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("is not rejected or returned before anyone gives a verdict on it", async () => {
+    for (const settle of [rejectInvoice, returnInvoice]) {
+      const { fake, run } = approvalsFake({ decision: shadowHold });
+      await expect(run(() => settle({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toMatchObject({ code: "verdict_needed" });
+      expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    }
+  });
+
+  it("is rejected or returned through a verdict, or once one is given either way", async () => {
+    const runs = [
+      { options: { decision: shadowHold }, forVerdict: true },
+      { options: { decision: shadowHold, verdict: { verdict: "disagree", reason: "Not our bill" } }, forVerdict: false },
+      { options: { decision: shadowHold, verdict: { verdict: "agree", reason: null } }, forVerdict: false },
+    ];
+    for (const settle of [rejectInvoice, returnInvoice]) {
+      for (const { options, forVerdict } of runs) {
+        const { fake, run } = approvalsFake(options);
+        await run(() => settle({ actorId: ACTOR, invoiceId: INVOICE_ID, ...(forVerdict ? { forVerdict: true } : {}) }));
+        expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(1);
+      }
+    }
+  });
+
+  it("leaves alone a payable whose newest decision was not held for a verdict", async () => {
+    paid();
+    const { run } = approvalsFake({ decision: { ...shadowHold, detail: { invoiceId: INVOICE_ID, execution: { resultingStatus: "held" } } } });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).resolves.toMatchObject({ status: "paid" });
   });
 });

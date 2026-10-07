@@ -670,6 +670,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Audit log", APP_NAV],
   ],
   "guides/telegram": [
+    ["Give your verdict", "src/lib/agent-activity.ts"],
     ["Settings", APP_NAV],
     ["Notifications", "src/components/NotificationsPanel.tsx"],
     ["Email me when payments need a decision", "src/components/NotificationsPanel.tsx"],
@@ -747,6 +748,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   ],
   "guides/slack": [
     ["One more approval, by another person, pays it.", "src/lib/slack/blocks.ts"],
+    ["Give your verdict", "src/lib/agent-activity.ts"],
     ["Settings", APP_NAV],
     ["Slack", SLACK_PANEL],
     ["Add to Slack", SLACK_PANEL],
@@ -887,6 +889,9 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Mirror address: a wallet Vestiarion made for this payee on Arc testnet, in shadow mode.", "src/app/o/[slug]/counterparties/page.tsx"],
     ["This payee has an address already. A mirror address is for a payee with none.", "src/lib/mirror-address.ts"],
     ["Go live on Arc testnet first: a mirror address is a wallet in this workspace's Circle wallets.", "src/lib/mirror-address.ts"],
+    ["Give your verdict", "src/lib/agent-activity.ts"],
+    ["This decision waits for a verdict in shadow mode. Agree or disagree with it in Approvals first.", "src/lib/agent/approvals.ts"],
+    ["Someone disagreed with this decision in shadow mode, so it is not paid. Return it to the agent or reject it.", "src/lib/agent/approvals.ts"],
     ["Currency", "src/components/intake/InvoiceIntake.tsx"],
     ["Amount", "src/components/intake/InvoiceIntake.tsx"],
     ["Rates By Exchange Rate API", "src/components/intake/InvoiceIntake.tsx"],

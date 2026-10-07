@@ -42,9 +42,10 @@ export async function giveVerdictAction(orgSlug: string, input: unknown): Promis
       const result = await giveVerdict(
         { actorId: auth.user.id, ...parsed.data },
         {
-          approve: (invoiceId, shownAddress) => approvePayable(actor, { invoiceId, ...(shownAddress ? { shownAddress } : {}) }),
-          reject: (invoiceId, reason) => rejectPayable(actor, { invoiceId, reason: reason ?? "" }),
-          returnToAgent: (invoiceId) => returnPayable(actor, { invoiceId }),
+          // As the verdict settling it: a payable held for one waits for it (shadow mode S4).
+          approve: (invoiceId, shownAddress) => approvePayable(actor, { invoiceId, ...(shownAddress ? { shownAddress } : {}), forVerdict: true }),
+          reject: (invoiceId, reason) => rejectPayable(actor, { invoiceId, reason: reason ?? "", forVerdict: true }),
+          returnToAgent: (invoiceId) => returnPayable(actor, { invoiceId, forVerdict: true }),
         }
       );
       revalidateOrgPages();
