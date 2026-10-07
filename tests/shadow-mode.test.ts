@@ -22,11 +22,11 @@ let fake: ReturnType<typeof fakeSupabase>;
 const run = <T,>(fn: () => Promise<T>, network: "arc-testnet" | "arc-mainnet" = "arc-testnet") =>
   runWith(orgTestContext({ config: { ...config, network }, client: fake.client, orgId: ORG, userId: OWNER }), fn);
 
-function workspace(over: { row?: unknown[]; read?: FakeReply; running?: unknown[]; insert?: FakeReply } = {}) {
+function workspace(over: { row?: unknown[]; read?: FakeReply; running?: unknown[]; insert?: FakeReply; removed?: FakeReply } = {}) {
   return (r: RecordedRequest): FakeReply => {
     if (r.path === "/rest/v1/shadow_modes" && r.method === "GET") return over.read ?? { body: over.row ?? [] };
     if (r.path === "/rest/v1/shadow_modes" && r.method === "POST") return over.insert ?? { status: 201, body: null };
-    if (r.path === "/rest/v1/shadow_modes" && r.method === "DELETE") return { body: [] };
+    if (r.path === "/rest/v1/shadow_modes" && r.method === "DELETE") return over.removed ?? { body: [{ org_id: ORG }] };
     if (r.path === "/rest/v1/cycle_runs") return { body: over.running ?? [] };
     return { body: [] };
   };
@@ -104,6 +104,12 @@ describe("endShadowMode", () => {
     fake = fakeSupabase(workspace({ row: [ON], running: [{ id: "run-1" }] }));
     await expect(run(() => endShadowMode({ actorId: OWNER }))).rejects.toMatchObject({ code: "cycle_running" });
     expect(writes("DELETE")).toHaveLength(0);
+  });
+
+  it("writes nothing when another tab turned it off a moment before (shadow mode review M5)", async () => {
+    fake = fakeSupabase(workspace({ row: [ON], removed: { body: [] } }));
+    await expect(run(() => endShadowMode({ actorId: OWNER }))).rejects.toMatchObject({ code: "already_off" });
+    expect(ledgerMock).not.toHaveBeenCalled();
   });
 
   it("says each refusal in words a person reads", () => {

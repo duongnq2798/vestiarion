@@ -57,3 +57,31 @@ describe("VerdictControl", () => {
     expect(words).toBe("Waits for a person's verdict.");
   });
 });
+
+describe("VerdictControl and the payment it agrees to (shadow mode review C1, I2)", () => {
+  const payment = { amountUsdc: 96.39, payee: "Dien luc", address: "0x1948aB0000000000000000000000000000c345a0" };
+
+  it("says what agreeing pays, and to which address, and sends that address with it", () => {
+    const words = text(html(<VerdictControl orgSlug="northstar" view={view({ heldForVerdict: true, payment })} />));
+    expect(words).toContain("Agree and pay");
+    expect(words).toContain("Pays 96.39 USDC to Dien luc, at 0x1948aB0000000000000000000000000000c345a0.");
+    expect(source).toContain("shownAddress: view.payment?.address ?? undefined");
+  });
+
+  it("offers Agree alone, and says why, to someone who may not pay it", () => {
+    const words = text(html(<VerdictControl orgSlug="northstar" view={view({ heldForVerdict: true, payment })} payBlocked="You created this invoice" />));
+    expect(words).not.toContain("Agree and pay");
+    expect(words).toContain("Agree");
+    expect(words).toContain("You created this invoice: Agree records your verdict, and another person pays it in Approvals.");
+  });
+});
+
+describe("verdictView and the payment", () => {
+  it("carries the payment the card shows", async () => {
+    const { verdictView } = await import("@/lib/verdict-view");
+    const entry = { seq: 41, ts: "2026-10-07T10:00:00.000Z", actor: "agent" as const, action: "ap_pay", detail: { invoiceId: "inv-1" } };
+    const facts = { shadow: { startedAt: "2026-10-07T00:00:00.000Z" }, given: new Map(), canGive: true };
+    const payment = { amountUsdc: 96.39, payee: "Dien luc", address: "0xabc" };
+    expect(verdictView("inv-1", [entry], facts, true, payment)?.payment).toEqual(payment);
+  });
+});

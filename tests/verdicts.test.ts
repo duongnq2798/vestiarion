@@ -70,7 +70,7 @@ describe("giveVerdict", () => {
   it("records an agreement once, as a row and a signed entry", async () => {
     fake = fakeSupabase(workspace());
     const result = await run(() => giveVerdict({ actorId: PERSON, entrySeq: 41, verdict: "agree" }, actions()));
-    expect(result).toEqual({ given: { verdict: "agree", reason: null }, already: false });
+    expect(result).toEqual({ given: { verdict: "agree", reason: null }, already: false, recorded: true });
     expect(inserted()[0].body).toMatchObject({ entry_seq: 41, subject: "invoice", subject_id: INVOICE, agent_action: "ap_pay", verdict: "agree", reason: null, decided_by: PERSON });
     expect(ledgerMock).toHaveBeenCalledWith(
       ORG,
@@ -89,7 +89,7 @@ describe("giveVerdict", () => {
       workspace({ insert: { status: 409, body: { code: "23505", message: "duplicate key" } }, verdicts: [{ entry_seq: 41, verdict: "disagree", reason: "Paid on the due date", decided_by: PERSON, decided_at: "2026-10-07T11:00:00Z" }] })
     );
     const result = await run(() => giveVerdict({ actorId: PERSON, entrySeq: 41, verdict: "agree", then: "pay" }, acts));
-    expect(result).toEqual({ given: { verdict: "disagree", reason: "Paid on the due date" }, already: true });
+    expect(result).toEqual({ given: { verdict: "disagree", reason: "Paid on the due date" }, already: true, recorded: false });
     expect(acts.approve).not.toHaveBeenCalled();
     expect(ledgerMock).not.toHaveBeenCalled();
   });
@@ -124,12 +124,33 @@ describe("giveVerdict", () => {
     expect(inserted()).toHaveLength(0);
   });
 
-  it("pays a payment held for this verdict once the person agrees", async () => {
+  it("pays a payment held for this verdict once the person agrees, to the address the card showed, then records the agreement", async () => {
     const acts = actions();
+    acts.approve.mockImplementation(async () => {
+      // Paid first: an agreement whose payment is refused is not kept (shadow mode review I2).
+      expect(inserted()).toHaveLength(0);
+      return { ok: true, message: "Paid." };
+    });
     fake = fakeSupabase(workspace());
-    const result = await run(() => giveVerdict({ actorId: PERSON, entrySeq: 41, verdict: "agree", then: "pay" }, acts));
-    expect(acts.approve).toHaveBeenCalledWith(INVOICE);
-    expect(result.after).toEqual({ ok: true, message: "Paid." });
+    const result = await run(() => giveVerdict({ actorId: PERSON, entrySeq: 41, verdict: "agree", then: "pay", shownAddress: "0xA11CE" }, acts));
+    expect(acts.approve).toHaveBeenCalledWith(INVOICE, "0xA11CE");
+    expect(result).toEqual({ given: { verdict: "agree", reason: null }, already: false, recorded: true, after: { ok: true, message: "Paid." } });
+    expect(inserted()).toHaveLength(1);
+  });
+
+  it("records nothing when the payment is refused, so it can be agreed to and paid again", async () => {
+    const acts = actions();
+    acts.approve.mockResolvedValue({ ok: false, message: "The payee's address changed since this card was shown. Reload and check it." });
+    fake = fakeSupabase(workspace());
+    const result = await run(() => giveVerdict({ actorId: PERSON, entrySeq: 41, verdict: "agree", then: "pay", shownAddress: "0xOLD" }, acts));
+    expect(result).toEqual({
+      given: { verdict: "agree", reason: null },
+      already: false,
+      recorded: false,
+      after: { ok: false, message: "The payee's address changed since this card was shown. Reload and check it." },
+    });
+    expect(inserted()).toHaveLength(0);
+    expect(ledgerMock).not.toHaveBeenCalled();
   });
 
   it("records the agreement and pays nothing when the payment is no longer held for it", async () => {
@@ -152,11 +173,22 @@ describe("giveVerdict", () => {
     fake = fakeSupabase(workspace());
     await run(() => giveVerdict({ actorId: PERSON, entrySeq: 41, verdict: "disagree", reason: "We pay it on its due date", then: "return" }, back));
     expect(back.returnToAgent).toHaveBeenCalledWith(INVOICE);
+    expect(inserted()).toHaveLength(1);
 
     const no = actions();
     fake = fakeSupabase(workspace());
     await run(() => giveVerdict({ actorId: PERSON, entrySeq: 41, verdict: "disagree", reason: "The bill is wrong", then: "reject" }, no));
     expect(no.reject).toHaveBeenCalledWith(INVOICE, "The bill is wrong");
+  });
+
+  it("records a disagreement and leaves the payable as it is when it no longer waits for that verdict (shadow mode review M2)", async () => {
+    const acts = actions();
+    fake = fakeSupabase(workspace({ entries: [decision(41), decision(57)] }));
+    const result = await run(() => giveVerdict({ actorId: PERSON, entrySeq: 41, verdict: "disagree", reason: "The bill is wrong", then: "reject" }, acts));
+    expect(acts.reject).not.toHaveBeenCalled();
+    expect(result.after).toEqual({ ok: false, message: "It no longer waits for your verdict, so it was left as it is." });
+    expect(result.recorded).toBe(true);
+    expect(inserted()).toHaveLength(1);
   });
 
   it("pays only on an agreement, and returns or rejects only on a disagreement", async () => {

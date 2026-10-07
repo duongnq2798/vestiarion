@@ -77,3 +77,13 @@ describe("ApprovalCard in shadow mode", () => {
     expect(card()).toContain("Approve and pay");
   });
 });
+
+describe("ApprovalCard in shadow mode, for someone who may not pay it (shadow mode review I2)", () => {
+  it("offers the person who entered the bill Agree alone, saying why", () => {
+    const words = text(
+      html(<ApprovalCard orgSlug="acme" payable={{ ...payable, createdBy: VIEWER }} canDecide viewerId={VIEWER} sandbox={false} verdict={view()} />)
+    );
+    expect(words).toContain("You created this invoice: Agree records your verdict, and another person pays it in Approvals.");
+    expect(words).not.toContain("Agree and pay");
+  });
+});

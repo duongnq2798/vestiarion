@@ -1718,10 +1718,11 @@ async function decideApPayable(
   // Held because the cash it needs is not there (`timing.shortfall`), and nothing else stopped it: decided again once
   // the operating wallet and the reserve cover it (reserve cash back R4). USDC from the operating wallet only: the
   // reserve holds no EURC, and a Gateway payout is paid from the Gateway balance.
-  const shortOfCash = !heldForBudget && !guardrail.blocked && timing.shortfall === true && currency === "USDC" && !viaGateway;
   // Shadow mode (shadow mode S2): a payment that passed every check waits for a person to agree. Not a refusal by code,
   // so it is no guardrail block and counts as none; the follow-up never reopens it, a person ends it.
   const heldForVerdict = decision.action === "pay" && !guardrail.blocked && (ctx.shadow ?? null) !== null;
+  // Held for a verdict, it is not held for want of cash too: a person's Agree and pay weighs the cash then (review M1).
+  const shortOfCash = !heldForBudget && !heldForVerdict && !guardrail.blocked && timing.shortfall === true && currency === "USDC" && !viaGateway;
   metrics.recordDecisionMode(mode, agreedWithReference);
   let status = guardrail.status ?? STATUS_FOR_AP_ACTION[decision.action];
   let txRef: string | null = null;

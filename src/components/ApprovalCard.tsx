@@ -173,6 +173,11 @@ export default function ApprovalCard({
   // A sole approver paying the first payment to an address they gave themselves (new payee check N4).
   const ownAddress = !two && soleApprover && payable.firstPaymentAddressBy === viewerId;
   const status = unfinished ? UNFINISHED : STATUS[payable.status];
+  // Agree and pay pays it now or not at all: where this person may not, or their approval would only be the first of
+  // two, they agree without paying (shadow mode review I2).
+  const verdictPayBlocked =
+    payBlockedReason(payable, viewerId, ownEntry, ownAddress) ??
+    (two && !two.approvals.some((approval) => approval.by !== viewerId) ? "A second person's approval pays it" : null);
   const processing = payable.status === "processing" && !payable.reclaimable;
   const canAddDetails =
     canEdit &&
@@ -265,7 +270,7 @@ export default function ApprovalCard({
         ) : canDecide && verdict && verdict.open && payable.heldForVerdict ? (
           // Held in shadow mode for a person to agree: the verdict is the decision (shadow mode S4).
           <CardFooter>
-            <VerdictControl orgSlug={orgSlug} view={verdict} />
+            <VerdictControl orgSlug={orgSlug} view={verdict} payBlocked={verdictPayBlocked} />
           </CardFooter>
         ) : canDecide ? (
           <>
@@ -293,6 +298,37 @@ export const HIGH_RISK_EXPLAINED =
 /** What the card says to a sole approver about an invoice they entered (sole approver R5). */
 export const OWN_INVOICE_NOTE =
   "You entered this invoice. You are the only person in this workspace who can approve payments, so you can approve it yourself, and the ledger records that you did.";
+
+/**
+ * Why the viewer may not pay this payable now, or null: they entered it, or gave its new payee's address, and are not
+ * the only one who may approve payments (sole approver R5, new payee check N4); it needs two approvals and they gave the
+ * first, or no second person can (two approvals T5); or it is screened high risk. The card's Approve and pay and its
+ * verdict's Agree and pay follow it alike (shadow mode review I2).
+ */
+export function payBlockedReason(payable: WaitingPayable, viewerId: string, ownEntry: boolean, ownAddress: boolean): string | null {
+  const two = payable.twoApprovals ?? null;
+  const viewerApproved = two?.approvals.some((approval) => approval.by === viewerId) ?? false;
+  const willPay = !two || two.approvals.some((approval) => approval.by !== viewerId);
+  return two
+    ? two.approvers < 2
+      ? "Needs a second approver"
+      : viewerApproved && !willPay
+        ? "You approved it"
+        : !mayApproveNow(two, viewerId)
+          ? payable.createdBy === viewerId
+            ? "You created this invoice"
+            : "You gave this payee's address"
+          : payable.riskLevel === "high"
+            ? "Screened high risk"
+            : null
+    : payable.createdBy === viewerId && !ownEntry
+      ? "You created this invoice"
+      : payable.firstPaymentAddressBy === viewerId && !ownAddress
+        ? "You gave this payee's address"
+        : payable.riskLevel === "high"
+          ? "Screened high risk"
+          : null;
+}
 
 function Decisions({
   orgSlug,
@@ -322,27 +358,8 @@ function Decisions({
 
   // Above the figure for two approvals: the viewer's approval pays it only when someone else approved it first (T8).
   const two = payable.twoApprovals ?? null;
-  const viewerApproved = two?.approvals.some((approval) => approval.by === viewerId) ?? false;
   const willPay = !two || two.approvals.some((approval) => approval.by !== viewerId);
-  const blocked = two
-    ? two.approvers < 2
-      ? "Needs a second approver"
-      : viewerApproved && !willPay
-        ? "You approved it"
-        : !mayApproveNow(two, viewerId)
-          ? payable.createdBy === viewerId
-            ? "You created this invoice"
-            : "You gave this payee's address"
-          : payable.riskLevel === "high"
-            ? "Screened high risk"
-            : null
-    : payable.createdBy === viewerId && !ownEntry
-      ? "You created this invoice"
-      : payable.firstPaymentAddressBy === viewerId && !ownAddress
-        ? "You gave this payee's address"
-        : payable.riskLevel === "high"
-          ? "Screened high risk"
-          : null;
+  const blocked = payBlockedReason(payable, viewerId, ownEntry, ownAddress);
   const approveId = `approve-${payable.id}`;
   const returnId = `return-${payable.id}`;
   const blockedId = `${approveId}-blocked`;

@@ -28,7 +28,11 @@ const SETTLE_OPTIONS = [
   { value: "reject", label: "Do not pay it", description: "It is rejected, with your reason in the ledger." },
 ] as const;
 
-export default function VerdictControl({ orgSlug, view }: { orgSlug: string; view: VerdictView }) {
+/**
+ * `payBlocked`: why the viewer may not pay it now (they entered it, gave its payee's address, or it needs another
+ * approval): they agree without paying, and another person pays it in Approvals (shadow mode review I2).
+ */
+export default function VerdictControl({ orgSlug, view, payBlocked = null }: { orgSlug: string; view: VerdictView; payBlocked?: string | null }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [note, setNote] = useState<Note>(null);
@@ -45,7 +49,9 @@ export default function VerdictControl({ orgSlug, view }: { orgSlug: string; vie
   const give = (verdict: "agree" | "disagree", then?: After, typed?: string, onDone?: () => void) =>
     startTransition(async () => {
       setNote(null);
-      const result = await giveVerdictAction(orgSlug, { entrySeq: view.entrySeq, verdict, ...(typed ? { reason: typed } : {}), ...(then ? { then } : {}) });
+      // The address the card showed goes with a payment, which is refused if it changed since (shadow mode review C1).
+      const shown = then === "pay" ? { shownAddress: view.payment?.address ?? undefined } : {};
+      const result = await giveVerdictAction(orgSlug, { entrySeq: view.entrySeq, verdict, ...(typed ? { reason: typed } : {}), ...(then ? { then } : {}), ...shown });
       setNote({ tone: result.ok ? "neutral" : "error", text: result.message });
       if (result.ok) onDone?.();
       router.refresh();
@@ -59,8 +65,9 @@ export default function VerdictControl({ orgSlug, view }: { orgSlug: string; vie
   return (
     <div className="space-y-2">
       <p className="text-sm font-medium text-ink">Do you agree with the agent?</p>
+      {view.heldForVerdict && view.payment && <p className="text-sm text-ink-2">{paysLine(view.payment)}</p>}
       <div className="flex flex-wrap gap-2">
-        {view.heldForVerdict ? (
+        {view.heldForVerdict && !payBlocked ? (
           <ConfirmDialog
             tone="primary"
             trigger={
@@ -69,7 +76,7 @@ export default function VerdictControl({ orgSlug, view }: { orgSlug: string; vie
               </Button>
             }
             title="Agree and pay?"
-            description="You agree with the agent, and it is paid in USDC on Arc testnet now."
+            description={`You agree with the agent, and it is paid in USDC on Arc testnet now.${view.payment ? ` ${paysLine(view.payment)}` : ""}`}
             confirmLabel="Agree and pay"
             onConfirm={() => give("agree", "pay")}
           />
@@ -105,7 +112,15 @@ export default function VerdictControl({ orgSlug, view }: { orgSlug: string; vie
           </DialogContent>
         </Dialog>
       </div>
+      {view.heldForVerdict && payBlocked && (
+        <p className="text-sm text-ink-2">{`${payBlocked}: Agree records your verdict, and another person pays it in Approvals.`}</p>
+      )}
       <FormMessage tone={note?.tone ?? "neutral"}>{note?.text}</FormMessage>
     </div>
   );
+}
+
+/** What agreeing pays, in a line: the amount, the payee, and the address the card shows. */
+function paysLine(payment: NonNullable<VerdictView["payment"]>): string {
+  return `Pays ${payment.amountUsdc} USDC to ${payment.payee}${payment.address ? `, at ${payment.address}` : ""}.`;
 }
