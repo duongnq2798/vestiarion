@@ -6,6 +6,7 @@
  */
 
 import { networkProfile, type Network } from "./network";
+import { MIRROR } from "./new-payee";
 
 /** A ledger entry as the trail reads it. */
 export interface TrailEntry {
@@ -94,7 +95,14 @@ function checksOf(detail: Record<string, unknown>, paying: boolean): string[] {
   // The first payment to an address, and whether two people stood behind it (new payee check N6).
   const newPayee = record(observed.newPayee);
   if (newPayee) {
-    notes.push(newPayee.twoParties === true ? "✓ First payment to this address, with two people behind it" : "✗ First payment to this address, and only one person stands behind it");
+    notes.push(
+      // A mirror address is a wallet Vestiarion made in shadow mode: no person gave it (shadow mode S7).
+      newPayee.addressBy === MIRROR
+        ? "✓ First payment to this address, a mirror address Vestiarion made in shadow mode"
+        : newPayee.twoParties === true
+          ? "✓ First payment to this address, with two people behind it"
+          : "✗ First payment to this address, and only one person stands behind it"
+    );
   }
   const risk = text(observed.riskLevel);
   if (risk) notes.push(risk === "clear" ? "✓ Counterparty screened clear" : `${risk === "high" ? "✗" : "·"} Counterparty screened ${risk}`);
