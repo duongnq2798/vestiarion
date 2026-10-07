@@ -32,7 +32,7 @@ export default function ShadowModeSummary({
           <p className="text-sm text-ink-2">
             {summary.waiting === 1 ? "1 decision waits for your verdict." : `${summary.waiting} decisions wait for your verdict.`}{" "}
             <Link href={orgHref(orgSlug, "/invoices")} className="font-medium text-agent underline-offset-2 hover:underline">
-              See them in Invoices
+              See them in AP / AR
             </Link>
           </p>
         )}

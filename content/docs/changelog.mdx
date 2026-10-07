@@ -1,5 +1,13 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-07: Shadow mode: a person agrees with each payment
+
+- A workspace on Arc testnet can run in shadow mode. The business keeps paying its bills as it does today, and the agent pays nothing until a person agrees. Its ledger gains these entries, each sent to webhook endpoints as `ledger.appended`:
+  - **`shadow_mode_started`** `{ by, currency }` and **`shadow_mode_ended`** `{ by, currency }`, with actor `human` and domain `system`. An owner turned it on for bills in `currency` (ISO 4217), or turned it off.
+  - **`ap_pay`** for a payment held in shadow mode has `execution.resultingStatus: "held"` and `execution.heldBecause: "shadow_verdict"`, with `guardrailBlocked: false`: the decision passed every check. A **`milestone_release`** held the same way has the same `heldBecause`.
+  - **`decision_verdict`** `{ by, entrySeq, subject, subjectId, agentAction, verdict, reason }`, with actor `human` and domain `ap`. A person agreed (`verdict: "agree"`) or disagreed (`"disagree"`) with the agent's decision in entry `entrySeq`. `subject` is `invoice`, `subjectId` is the invoice's id, and `agentAction` is the decision's entry action. `reason` is the person's words: required for a disagreement, `null` for an agreement given without one.
+- A payment a person agrees to is then paid as Approve and pay pays it, with its `approval_paid` entry. A disagreement can return the payable to the agent (`approval_returned`) or reject it (`approval_rejected`). Nothing else in `/api/v1` changes.
+
 ## 2026-10-07: A live treasury's own wallet changes its figures, or stops the agent
 
 - Once a workspace that pays from its owner's own wallet is live on Arc mainnet, the owner or an admin can change the contract's figures, stop the agent's payments, and resume them from **Go live**. The treasury's own wallet sends each change. Each is recorded once per transaction, from the chain only, when the transaction's own logs show that change. Three ledger entries record them, each with actor `human` and domain `system`:

@@ -67,7 +67,9 @@ is hard-coded into the interface:
    address needs two people behind it: the agent never makes one that only the person who
    gave the address stands behind, and that person cannot approve it either. Above a figure
    the workspace's owner sets, every payment needs two approvals: the agent holds it, the
-   first approval is recorded, and only a second person's approval pays it.
+   first approval is recorded, and only a second person's approval pays it. In shadow mode, on Arc testnet, the
+   business keeps paying its bills itself while the agent decides on the same bills: a person agrees or disagrees with
+   each decision, each payment they agree to is made in USDC on Arc testnet, and the console shows how often they agreed.
 3. **Contractor payments** — a GitHub PR URL can be checked for an actual merge before a
    milestone is released. Human verification remains available and is recorded as a human ledger
    action. Verified milestones are released the same day instead of waiting for Net-30.

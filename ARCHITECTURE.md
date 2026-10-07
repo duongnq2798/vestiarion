@@ -579,6 +579,26 @@ with no browser wallet:
   client key, `NEXT_PUBLIC_MODULAR_WALLETS_MAINNET_CLIENT_KEY`, is public by design and bound to the
   site's domain.
 
+## Shadow mode
+
+Shadow mode (`docs/superpowers/specs/2026-10-07-shadow-mode-design.md`) runs an Arc testnet workspace alongside how
+a business pays today: it keeps paying its bills itself, the agent decides on the same bills, and a person agrees or
+disagrees with every decision.
+
+- **The switch** is one row in `shadow_modes` (migration 0084), with the business's currency. An owner turns it on or
+  off in Settings (`src/lib/shadow-mode.ts`), never on Arc mainnet and never while a cycle runs; each change is signed.
+- **The hold.** The AP stage reads it once, like the figure for two approvals. A `pay` that passes every guardrail is
+  then held, not sent, with `execution.heldBecause: "shadow_verdict"` (`src/lib/agent/shadow-hold.ts`). It is no
+  guardrail block, so the public count of code refusals is not inflated. A milestone release is held the same way. The
+  follow-up never reopens such a hold: only a person ends it.
+- **Verdicts** (`src/lib/verdicts.ts`) are rows in `decision_verdicts`, one per agent decision entry (unique on
+  `entry_seq`, append-only for the tenant role), each with a signed `decision_verdict` entry naming the payable as its
+  `subjectId`, so the card keeps showing the decision. Agree and pay goes through `approvePayable`, the command Approvals
+  uses, and only while the payable still waits for that verdict. Disagree can return or reject it.
+- **What people see.** `verdictView` (`src/lib/verdict-view.ts`) gives each card the verdict on the agent's newest
+  decision, given or to give, and `VerdictControl` offers it. The console's `ShadowModeSummary` shows how often people
+  agreed (`readShadowSummary`).
+
 ## Approvals and the pause switch
 
 **The approval inbox** (`/o/[slug]/approvals`, spec §5) lists every payable a

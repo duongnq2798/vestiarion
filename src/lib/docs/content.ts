@@ -56,6 +56,7 @@ export const PAGE_LOADERS: Record<string, () => Promise<MdxModule>> = {
   contracts: () => import("../../../content/docs/contracts.mdx"),
   "guides/try-it": () => import("../../../content/docs/guides/try-it.mdx"),
   "guides/go-live": () => import("../../../content/docs/guides/go-live.mdx"),
+  "guides/shadow-mode": () => import("../../../content/docs/guides/shadow-mode.mdx"),
   "guides/first-payment": () => import("../../../content/docs/guides/first-payment.mdx"),
   "guides/pay-a-contractor": () => import("../../../content/docs/guides/pay-a-contractor.mdx"),
   "guides/get-paid": () => import("../../../content/docs/guides/get-paid.mdx"),
