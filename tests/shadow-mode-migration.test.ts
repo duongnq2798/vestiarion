@@ -44,6 +44,17 @@ async function payable(orgId: string, original: { currency: string | null; amoun
 
 const VND = { currency: "VND", amount: 2_500_000, rate: 25_935.897512, source: "open.er-api.com", at: "2026-10-07T00:02:32Z" };
 
+describe("shadow_modes in USDC (0085)", () => {
+  it("takes USDC as a workspace's currency, and still refuses EURC and a code in lower case", async () => {
+    const orgId = await createOrg(db, "shadow-usdc");
+    await startShadow(orgId, "USDC");
+    const rows = (await db.query<{ currency: string }>("select currency from public.shadow_modes where org_id = $1", [orgId])).rows;
+    expect(rows).toEqual([{ currency: "USDC" }]);
+    await expect(startShadow(orgId, "EURC")).rejects.toThrow(/shadow_modes_currency_check/);
+    await expect(startShadow(orgId, "usdc")).rejects.toThrow(/shadow_modes_currency_check/);
+  });
+});
+
 describe("shadow_modes (0084)", () => {
   it("holds one row per workspace, in a currency of three capital letters", async () => {
     const orgId = await createOrg(db, "shadow-one");

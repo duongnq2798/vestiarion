@@ -42,7 +42,7 @@ function TurnOn({ orgSlug }: { orgSlug: string }) {
       <input type="hidden" name="orgSlug" value={orgSlug} />
       <input type="hidden" name="intent" value="start" />
       <input type="hidden" name="currency" value={currency} />
-      <Field id="shadow-mode-currency" label="Your currency" description="The currency your bills are written in. Each is paid in USDC at the day's rate.">
+      <Field id="shadow-mode-currency" label="Your currency" description="USDC, or the currency your bills are written in. A bill in another currency is paid in USDC at the day's rate.">
         <Select value={currency} onValueChange={setCurrency}>
           <SelectTrigger id="shadow-mode-currency" className="w-40">
             <SelectValue />
