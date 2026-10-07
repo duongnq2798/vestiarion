@@ -101,9 +101,12 @@ export function matches(row: Row, params: URLSearchParams): boolean {
       if (!alternatives.some((alternative) => matches(row, new URLSearchParams([[alternative.split(".")[0], alternative.split(".").slice(1).join(".")]])))) return false;
       continue;
     }
-    const cell = row[key.replace(/->>.*$/, "")];
+    // A JSON field (`detail->>txHash`) is read from its column's object.
+    const [column, field] = key.split("->>");
+    const cell = field === undefined ? row[column] : (row[column] as Row | undefined)?.[field];
     if (value === "is.null" && cell !== null && cell !== undefined) return false;
     if (value.startsWith("eq.") && String(cell) !== value.slice(3)) return false;
+    if (value.startsWith("in.(") && !value.slice(4, -1).split(",").includes(String(cell))) return false;
   }
   return true;
 }
@@ -160,6 +163,10 @@ export function database(state: World) {
     if (path === "/rest/v1/agent_budgets" && method === "POST") {
       state.budget = { ...(request.body as Row) };
       return { body: [] };
+    }
+    // A control is looked up by its transaction (treasury wallet controls C4); every other read of the ledger finds nothing.
+    if (path === "/rest/v1/ledger_entries" && method === "GET" && params.has("detail->>txHash")) {
+      return { body: state.ledger.filter((entry) => matches(entry, params)).map((entry, index) => ({ seq: index + 1, ...entry })) };
     }
     if (path === "/rest/v1/ledger_entries") return { body: [] };
     if (path === "/rest/v1/rpc/append_ledger_entry") {
