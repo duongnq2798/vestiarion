@@ -2,7 +2,15 @@ import { getAddress, parseEther } from "viem";
 import { describe, expect, it } from "vitest";
 import type { TreasuryChain } from "@/lib/treasury/chain";
 import { passkeySetupCalls, spendingLimitSalt } from "@/lib/passkey-treasury";
-import { choosePasskeyTreasury, chooseWalletTreasury, preparePasskeySetup, walletTreasuryStatus } from "@/lib/treasury/wallet-treasury";
+import {
+  choosePasskeyTreasury,
+  chooseWalletTreasury,
+  preparePasskeySetup,
+  recordPasskeySetup,
+  recordRecovery,
+  skipRecovery,
+  walletTreasuryStatus,
+} from "@/lib/treasury/wallet-treasury";
 import {
   ACTOR,
   AGENT,
@@ -13,6 +21,7 @@ import {
   database,
   NOW,
   ORG,
+  ourCode,
   OWNER_EMAIL,
   sealLedgerKeysPerTest,
   signedProof,
@@ -151,5 +160,101 @@ describe("preparing a passkey wallet's setup (K6)", () => {
       prepared(world({ ...passkey, contract: passkeyRow({ address: CONTRACT, approve_tx_hash: APPROVE_TX, enforced: true }) }), chain())
     ).rejects.toMatchObject({ code: "wrong_step" });
     await expect(prepared(world({ ...passkey, contract: passkeyRow() }), chain(), { ...none, capUsdc: 0 })).rejects.toMatchObject({ code: "invalid_figures" });
+  });
+});
+
+describe("recording a passkey wallet's setup from the chain (K7)", () => {
+  const passkey = { org: { wallet_host: "external" }, operating: { address: WALLET } };
+  const SETUP_TX = `0x${"5e".repeat(32)}` as const;
+  const ENTRYPOINT = getAddress("0x0000000071727de22e5e9d8baf0edac6f37da032");
+  const BUNDLER = getAddress("0x00000000000000000000000000000000000b0d1e");
+  const bundled = { status: "success" as const, from: BUNDLER, to: ENTRYPOINT, contractAddress: null };
+  const setUp = (extra: Partial<Parameters<typeof chain>[0]> = {}) =>
+    chain({ receipts: { [SETUP_TX]: bundled }, code: { [CONTRACT.toLowerCase()]: ourCode }, allowance: 2n ** 256n - 1n, gas: 500_000_000_000_000_000n, ...extra });
+  const recordIt = (state: World, onChain: TreasuryChain, txHash: string = SETUP_TX) =>
+    database(state).inScope(() => recordPasskeySetup({ orgId: ORG, actorId: ACTOR, txHash, contract: CONTRACT.toLowerCase() }, { chain: onChain }));
+  const fresh = () => world({ ...passkey, contract: agentRow({ treasury_signer: "passkey" }) });
+
+  it("records nothing while the setup is not mined, or its contract not yet shown", async () => {
+    const state = fresh();
+    expect(await recordIt(state, chain())).toBe("pending");
+    expect(await recordIt(state, setUp({ code: {} }))).toBe("pending");
+    expect(state.contract?.enforced).toBe(false);
+    expect(state.ledger).toEqual([]);
+  });
+
+  it("refuses a setup that failed, a contract that is not Vestiarion's for this wallet and agent, and one the wallet did not approve", async () => {
+    await expect(recordIt(fresh(), setUp({ receipts: { [SETUP_TX]: { ...bundled, status: "reverted" } } }))).rejects.toMatchObject({ code: "chain_refused" });
+    await expect(recordIt(fresh(), setUp({ code: { [CONTRACT.toLowerCase()]: "0x6080" } }))).rejects.toMatchObject({ code: "chain_refused" });
+    await expect(recordIt(fresh(), setUp({ allowance: 0n }))).rejects.toMatchObject({ code: "chain_refused" });
+  });
+
+  it("records the setup once, as the wallet route records its deployment and approval (Review Focus 2)", async () => {
+    const state = fresh();
+    expect(await recordIt(state, setUp())).toBe("verified");
+    expect(state.contract).toMatchObject({ address: CONTRACT, deploy_tx_hash: SETUP_TX, approve_tx_hash: SETUP_TX, enforced: true });
+    expect(state.budget).toMatchObject({ daily_usdc: 20, weekly_usdc: 60 });
+    expect(state.ledger.map((entry) => entry.action)).toEqual(["agent_budget_changed", "spending_limit_deployed", "spending_limit_enforced"]);
+    expect(state.ledger[2].detail).toEqual({
+      by: ACTOR,
+      contract: CONTRACT,
+      agent: AGENT,
+      treasury: WALLET,
+      walletHost: "external",
+      signer: "passkey",
+      dailyUsdc: 20,
+      weeklyUsdc: 60,
+      deployTxHash: SETUP_TX,
+      approveTxHash: SETUP_TX,
+      setLimitsTxHash: null,
+      allowanceUsdc: null,
+    });
+    expect(await recordIt(state, setUp())).toBe("verified");
+    expect(state.ledger).toHaveLength(3);
+    await expect(recordIt(state, setUp(), `0x${"5f".repeat(32)}`)).rejects.toMatchObject({ code: "wrong_step" });
+  });
+
+  it("is refused on the wallet route", async () => {
+    await expect(recordIt(world({ ...passkey, contract: agentRow() }), setUp())).rejects.toMatchObject({ code: "wrong_step" });
+  });
+});
+
+describe("a passkey wallet's recovery (K8)", () => {
+  const passkey = { org: { wallet_host: "external" }, operating: { address: WALLET } };
+  const RECOVERY = getAddress("0x5af3107a4000000000000000000000000000c0de");
+  const RECOVERY_TX = `0x${"7e".repeat(32)}` as const;
+  const done = { status: "success" as const, from: getAddress("0x00000000000000000000000000000000000b0d1e"), to: null, contractAddress: null };
+  const setUpRow = (extra: Record<string, unknown> = {}) =>
+    agentRow({ treasury_signer: "passkey", address: CONTRACT, approve_tx_hash: APPROVE_TX, enforced: true, ...extra });
+  const register = (state: World, onChain: TreasuryChain = chain({ receipts: { [RECOVERY_TX]: done } })) =>
+    database(state).inScope(() => recordRecovery({ orgId: ORG, actorId: ACTOR, recoveryAddress: RECOVERY.toLowerCase(), txHash: RECOVERY_TX }, { chain: onChain }));
+  const skip = (state: World) => database(state).inScope(() => skipRecovery({ orgId: ORG, actorId: ACTOR }));
+
+  it("records the recovery address once its registration is mined, once", async () => {
+    const state = world({ ...passkey, contract: setUpRow() });
+    expect(await register(state, chain())).toBe("pending");
+    expect(await register(state)).toBe("verified");
+    expect(state.contract).toMatchObject({ recovery_address: RECOVERY });
+    expect(await register(state)).toBe("verified");
+    expect(state.ledger).toEqual([{ action: "treasury_recovery_registered", detail: { by: ACTOR, recoveryAddress: RECOVERY, txHash: RECOVERY_TX } }]);
+  });
+
+  it("refuses a registration that failed on chain", async () => {
+    const failed = chain({ receipts: { [RECOVERY_TX]: { ...done, status: "reverted" } } });
+    await expect(register(world({ ...passkey, contract: setUpRow() }), failed)).rejects.toMatchObject({ code: "chain_refused" });
+  });
+
+  it("records a skip once, and not after a recovery is registered", async () => {
+    const state = world({ ...passkey, contract: setUpRow() });
+    await skip(state);
+    await skip(state);
+    expect(state.contract?.recovery_skipped_at).toEqual(expect.any(String));
+    expect(state.ledger).toEqual([{ action: "treasury_recovery_skipped", detail: { by: ACTOR } }]);
+    await expect(skip(world({ ...passkey, contract: setUpRow({ recovery_address: RECOVERY }) }))).rejects.toMatchObject({ code: "wrong_step" });
+  });
+
+  it("is refused before setup, and on the wallet route", async () => {
+    await expect(skip(world({ ...passkey, contract: agentRow({ treasury_signer: "passkey" }) }))).rejects.toMatchObject({ code: "wrong_step" });
+    await expect(register(world({ ...passkey, contract: setUpRow({ treasury_signer: "wallet" }) }))).rejects.toMatchObject({ code: "wrong_step" });
   });
 });

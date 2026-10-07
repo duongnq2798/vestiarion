@@ -77,7 +77,19 @@ export async function verifyDeployment(
   if (receipt.status !== "success") return { state: "refused", reason: "The deployment failed on chain; nothing was deployed." };
   if (!same(receipt.from, input.treasury)) return { state: "refused", reason: "That deployment was not sent from this workspace's wallet." };
   if (!receipt.contractAddress) return { state: "refused", reason: "That transaction did not deploy a contract." };
-  const contract = asAddress(receipt.contractAddress);
+  return verifyDeployedAt(chain, { contract: receipt.contractAddress, usdc: input.usdc, treasury: input.treasury, agent: input.agent });
+}
+
+/**
+ * Vestiarion's contract for this USDC, wallet and agent at `contract`, wherever it came from (passkey treasury K7): a
+ * smart account deploys it through the bundler and the deterministic deployment proxy, so no receipt names it. CREATE2
+ * ties the address to the code, and an equal code proves the wiring, as for a wallet's own deployment (W8).
+ */
+export async function verifyDeployedAt(
+  chain: TreasuryChain,
+  input: { contract: string; usdc: string; treasury: string; agent: string }
+): Promise<ChainCheck<{ contract: Hex; dailyUnits: bigint; weeklyUnits: bigint }>> {
+  const contract = asAddress(input.contract);
   const [code, expected] = await Promise.all([
     chain.code(contract),
     chain.simulateDeploy({ from: asAddress(input.treasury), data: deploymentData({ usdc: input.usdc, treasury: input.treasury, agent: input.agent, dailyUnits: 1n, weeklyUnits: 1n }) }),

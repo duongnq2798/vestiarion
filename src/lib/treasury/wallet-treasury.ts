@@ -17,7 +17,7 @@ import { withDeadline } from "../circle/settlement";
 import { MAX_ALLOWANCE } from "../circle/spending-limit-setup";
 import { SPENDING_LIMIT_ABI, usdcUnits } from "../spending-limit/onchain";
 import { asAddress, treasuryChain, type TreasuryChain } from "./chain";
-import { deploymentData, verifyApproval, verifyDeployment, verifyWalletProof, walletProofMessage } from "./verify";
+import { deploymentData, verifyApproval, verifyDeployedAt, verifyDeployment, verifyWalletProof, walletProofMessage } from "./verify";
 
 /**
  * The setup of a workspace that pays from its owner's own wallet (docs/superpowers/specs/2026-10-07-wallet-treasury-
@@ -465,25 +465,175 @@ export async function recordDeployment(input: { orgId: string; actorId: string; 
     ) as Array<{ id: string }>;
     if (written.length === 0) throw new WalletTreasuryError("wrong_step", "The contract is approved already; it cannot be replaced.");
 
-    const to = { dailyUsdc: check.dailyUnits === 0n ? null : Number(check.dailyUnits) / 1_000_000, weeklyUsdc: check.weeklyUnits === 0n ? null : Number(check.weeklyUnits) / 1_000_000 };
-    const from = await readOutflowBudget(db());
-    if (from?.dailyUsdc !== to.dailyUsdc || from?.weeklyUsdc !== to.weeklyUsdc) {
-      const budget = await db()
-        .from("agent_budgets")
-        .upsert({ daily_usdc: to.dailyUsdc, weekly_usdc: to.weeklyUsdc, updated_by: input.actorId, updated_at: new Date().toISOString() }, { onConflict: "org_id" });
-      if (budget.error) throw new Error(budget.error.message);
-      await record(input.orgId, input.actorId, {
-        action: "agent_budget_changed",
-        summary: "The agent's spending limit follows the contract the owner's wallet deployed",
-        detail: { by: input.actorId, from, to, onChain: { contract: check.contract, txHash: hash } },
-      });
-    }
+    await recordDeployedContract({ orgId: input.orgId, actorId: input.actorId, contract: check.contract, hash, dailyUnits: check.dailyUnits, weeklyUnits: check.weeklyUnits });
+    return "verified";
+  });
+}
+
+/**
+ * What a deployment of the workspace's contract records, on either route (W8, K7): its figures become the agent's
+ * spending limit, so the code's limit and the contract's agree, and the ledger says so; then `spending_limit_deployed`.
+ */
+async function recordDeployedContract(input: {
+  orgId: string;
+  actorId: string;
+  contract: Hex;
+  hash: Hex;
+  dailyUnits: bigint;
+  weeklyUnits: bigint;
+}): Promise<{ dailyUsdc: number | null; weeklyUsdc: number | null }> {
+  const { contract, hash } = input;
+  const to = { dailyUsdc: input.dailyUnits === 0n ? null : Number(input.dailyUnits) / 1_000_000, weeklyUsdc: input.weeklyUnits === 0n ? null : Number(input.weeklyUnits) / 1_000_000 };
+  const from = await readOutflowBudget(db());
+  if (from?.dailyUsdc !== to.dailyUsdc || from?.weeklyUsdc !== to.weeklyUsdc) {
+    const budget = await db()
+      .from("agent_budgets")
+      .upsert({ daily_usdc: to.dailyUsdc, weekly_usdc: to.weeklyUsdc, updated_by: input.actorId, updated_at: new Date().toISOString() }, { onConflict: "org_id" });
+    if (budget.error) throw new Error(budget.error.message);
     await record(input.orgId, input.actorId, {
-      action: "spending_limit_deployed",
-      summary: `The owner's wallet deployed the workspace's spending limit contract ${check.contract}`,
-      detail: { by: input.actorId, contract: check.contract, txHash: hash, dailyUsdc: to.dailyUsdc, weeklyUsdc: to.weeklyUsdc },
+      action: "agent_budget_changed",
+      summary: "The agent's spending limit follows the contract the owner's wallet deployed",
+      detail: { by: input.actorId, from, to, onChain: { contract, txHash: hash } },
+    });
+  }
+  await record(input.orgId, input.actorId, {
+    action: "spending_limit_deployed",
+    summary: `The owner's wallet deployed the workspace's spending limit contract ${contract}`,
+    detail: { by: input.actorId, contract, txHash: hash, dailyUsdc: to.dailyUsdc, weeklyUsdc: to.weeklyUsdc },
+  });
+  return to;
+}
+
+/**
+ * A passkey wallet's setup, recorded once the chain shows it (K7): the user operation's transaction succeeded, Vestiarion's
+ * contract for this wallet and agent is at `contract`, and the wallet approved it, which only its passkey could do
+ * (K3). Recorded as the wallet route records its deployment and approval; asked about again, it is answered, not
+ * recorded twice (Review Focus 2). The agent's gas is the status's to say, as on the wallet route.
+ */
+export async function recordPasskeySetup(
+  input: { orgId: string; actorId: string; txHash: string; contract: string },
+  deps: WalletTreasuryDeps = {}
+): Promise<"pending" | "verified"> {
+  const hash = txHash(input.txHash);
+  let contract: Hex;
+  try {
+    contract = asAddress(input.contract);
+  } catch {
+    throw new WalletTreasuryError("chain_refused", "That is not a contract address.");
+  }
+  return inScopeOf(input.orgId, input.actorId, async () => {
+    const { wallet, row, network } = await setup({ agent: true });
+    if (row?.treasury_signer !== "passkey") throw new WalletTreasuryError("wrong_step", "This workspace's wallet is not a passkey wallet.");
+    if (row.approve_tx_hash === hash && row.enforced) return "verified";
+    if (row.approve_tx_hash) throw new WalletTreasuryError("wrong_step", "The contract is approved already.");
+    const chain = deps.chain ?? treasuryChain(network);
+    const receipt = await readOrRefuse(() => chain.receipt(hash));
+    if (!receipt) return "pending";
+    if (receipt.status !== "success") throw new WalletTreasuryError("chain_refused", "The setup failed on chain; nothing was set up.");
+    const check = await readOrRefuse(() => verifyDeployedAt(chain, { contract, usdc: network.tokens.USDC, treasury: wallet, agent: row.agent_address as string }));
+    if (check.state === "pending") return "pending";
+    if (check.state === "refused") throw new WalletTreasuryError("chain_refused", check.reason);
+    const allowance = await readOrRefuse(() => chain.allowance(wallet, check.contract));
+    if (allowance < 1n) throw new WalletTreasuryError("chain_refused", "The wallet has not approved its contract; nothing was recorded.");
+
+    // Only while no approval is recorded: one recorded meanwhile, from another tab, wins.
+    const written = unwrap(
+      await db()
+        .from("spending_limit_contracts")
+        .update({ address: check.contract, deploy_tx_hash: hash, approve_tx_hash: hash, enforced: true })
+        .eq("id", row.id)
+        .is("approve_tx_hash", null)
+        .select("id")
+    ) as Array<{ id: string }>;
+    if (written.length === 0) throw new WalletTreasuryError("wrong_step", "The contract is approved already.");
+    const figures = await recordDeployedContract({ orgId: input.orgId, actorId: input.actorId, contract: check.contract, hash, dailyUnits: check.dailyUnits, weeklyUnits: check.weeklyUnits });
+    await record(input.orgId, input.actorId, {
+      action: "spending_limit_enforced",
+      summary: "The owner's passkey wallet approved its spending limit contract, which now carries every payment",
+      // The shape every enforcement records: the treasury is the owner's wallet.
+      detail: {
+        by: input.actorId,
+        contract: check.contract,
+        agent: asAddress(row.agent_address as string),
+        treasury: wallet,
+        walletHost: "external",
+        signer: "passkey",
+        dailyUsdc: figures.dailyUsdc,
+        weeklyUsdc: figures.weeklyUsdc,
+        deployTxHash: hash,
+        approveTxHash: hash,
+        setLimitsTxHash: null,
+        allowanceUsdc: allowance >= UNLIMITED ? null : Number(allowance) / 1_000_000,
+      },
     });
     return "verified";
+  });
+}
+
+/** A passkey treasury whose contract carries its payments: where its recovery is decided (K8). */
+async function setUpPasskey(): Promise<ContractRow> {
+  const { row } = await setup({ agent: true, contract: true });
+  if (row?.treasury_signer !== "passkey") throw new WalletTreasuryError("wrong_step", "This workspace's wallet is not a passkey wallet.");
+  if (!row.enforced) throw new WalletTreasuryError("wrong_step", "Set up the wallet first.");
+  return row;
+}
+
+/**
+ * A passkey wallet's recovery address, recorded once its registration is mined (K8): the address of the twelve words
+ * the owner keeps, a recovery owner of their wallet. The words never leave their browser; recorded once.
+ */
+export async function recordRecovery(
+  input: { orgId: string; actorId: string; recoveryAddress: string; txHash: string },
+  deps: WalletTreasuryDeps = {}
+): Promise<"pending" | "verified"> {
+  const hash = txHash(input.txHash);
+  let recoveryAddress: Hex;
+  try {
+    recoveryAddress = asAddress(input.recoveryAddress);
+  } catch {
+    throw new WalletTreasuryError("chain_refused", "That is not a recovery address.");
+  }
+  return inScopeOf(input.orgId, input.actorId, async () => {
+    const row = await setUpPasskey();
+    if (row.recovery_address) return "verified";
+    const chain = deps.chain ?? treasuryChain(workspaceNetwork());
+    const receipt = await readOrRefuse(() => chain.receipt(hash));
+    if (!receipt) return "pending";
+    if (receipt.status !== "success") throw new WalletTreasuryError("chain_refused", "The recovery's registration failed on chain; nothing was recorded.");
+    const written = unwrap(
+      await db().from("spending_limit_contracts").update({ recovery_address: recoveryAddress }).eq("id", row.id).is("recovery_address", null).select("id")
+    ) as Array<{ id: string }>;
+    if (written.length === 0) return "verified";
+    await record(input.orgId, input.actorId, {
+      action: "treasury_recovery_registered",
+      summary: `The owner registered ${recoveryAddress} as their passkey wallet's recovery`,
+      detail: { by: input.actorId, recoveryAddress, txHash: hash },
+    });
+    return "verified";
+  });
+}
+
+/** The owner goes without a recovery phrase, knowing a lost passkey loses the wallet (K8): recorded once. */
+export async function skipRecovery(input: { orgId: string; actorId: string }): Promise<void> {
+  return inScopeOf(input.orgId, input.actorId, async () => {
+    const row = await setUpPasskey();
+    if (row.recovery_address) throw new WalletTreasuryError("wrong_step", "The recovery is registered already.");
+    if (row.recovery_skipped_at) return;
+    const written = unwrap(
+      await db()
+        .from("spending_limit_contracts")
+        .update({ recovery_skipped_at: new Date().toISOString() })
+        .eq("id", row.id)
+        .is("recovery_skipped_at", null)
+        .is("recovery_address", null)
+        .select("id")
+    ) as Array<{ id: string }>;
+    if (written.length === 0) return;
+    await record(input.orgId, input.actorId, {
+      action: "treasury_recovery_skipped",
+      summary: "The owner chose to go without a recovery phrase for their passkey wallet",
+      detail: { by: input.actorId },
+    });
   });
 }
 
