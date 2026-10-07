@@ -47,6 +47,20 @@ beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset();
 });
 
+describe("a verdict settling a decision held for one (shadow mode S4)", () => {
+  it("passes through to the approvals library, so the hold lets it settle the decision", async () => {
+    mocks.approveAndPay.mockResolvedValueOnce({ status: "paid", txRef: "0xabc", note: "" });
+    await run(() => approvePayable(approver(), { invoiceId: INVOICE, forVerdict: true }));
+    expect(mocks.approveAndPay).toHaveBeenCalledWith({ actorId: USER, invoiceId: INVOICE, forVerdict: true });
+
+    await run(() => rejectPayable(approver(), { invoiceId: INVOICE, reason: "Not our bill", forVerdict: true }));
+    expect(mocks.rejectInvoice).toHaveBeenCalledWith({ actorId: USER, invoiceId: INVOICE, reason: "Not our bill", forVerdict: true });
+
+    await run(() => returnPayable(approver(), { invoiceId: INVOICE, forVerdict: true }));
+    expect(mocks.returnInvoice).toHaveBeenCalledWith({ actorId: USER, invoiceId: INVOICE, forVerdict: true });
+  });
+});
+
 describe("approvePayable", () => {
   it("pays as the actor, with nothing about the surface from the console, and tells the payee", async () => {
     mocks.approveAndPay.mockResolvedValueOnce({ status: "paid", txRef: "0xabc", note: "" });

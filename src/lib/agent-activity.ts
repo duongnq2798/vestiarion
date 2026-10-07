@@ -5,7 +5,7 @@
  * the rows, this says them, and the page decides how to show them.
  */
 import { deciderName } from "./decision-trail";
-import { ruleInBrief } from "./next-step";
+import { heldForVerdict, ruleInBrief } from "./next-step";
 import { networkProfile, type Network } from "./network";
 import { txUrl } from "./payee-chains";
 
@@ -202,8 +202,9 @@ function itemOf(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem, "t
   const invoice = id ? refs.invoices.get(id) : undefined;
   if (!id || !invoice) return null;
   const item = invoiceItem(entry, refs, id, invoice);
-  // A stopped payable is what a person decides: a chat's card names it (Slack design S8).
-  return item.tone === "stopped" ? { ...item, invoiceId: id } : item;
+  // A stopped payable is what a person decides: a chat's card names it (Slack design S8). One held for a person's
+  // verdict is settled by giving one, in Vestiarion, so a chat draws no card for it (shadow mode S4).
+  return item.tone === "stopped" && !heldForVerdict(entry.detail) ? { ...item, invoiceId: id } : item;
 }
 
 /**
@@ -277,6 +278,18 @@ function invoiceItem(
       const execution = record(entry.detail.execution);
       // What the payment ended as, as the entry recorded it; the invoice's status now otherwise.
       const resulting = text(execution?.resultingStatus) ?? invoice.status;
+      // Held in shadow mode: it passed every check and waits for a person to agree (shadow mode S2, S4).
+      if (heldForVerdict(entry.detail)) {
+        return {
+          seq: entry.seq,
+          text: `Decided to pay ${invoice.name} ${amount}${after}; it waits for your verdict in shadow mode.`,
+          detail: joined(deciderLine(entry.detail), checksLine(entry.detail)),
+          tone: "stopped",
+          path: decide.path,
+          pathLabel: "Give your verdict",
+          txHash: null,
+        };
+      }
       // A payment that did not go out is held: say so, rather than "paid".
       if (resulting === "held" || resulting === "flagged") {
         return { seq: entry.seq, text: `Tried to pay ${invoice.name} ${amount}; it is held for you.`, detail: deciderLine(entry.detail), tone: "stopped", ...decide, txHash: null };
