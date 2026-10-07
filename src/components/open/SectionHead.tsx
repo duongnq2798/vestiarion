@@ -5,11 +5,11 @@ import { Eyebrow } from "@/components/ui/Eyebrow";
 export function SectionHead({ id, eyebrow, title, children }: { id: string; eyebrow: string; title: string; children?: ReactNode }) {
   return (
     <div>
-      <Eyebrow>{eyebrow}</Eyebrow>
-      <h3 id={id} className="mt-1.5 text-xl font-semibold tracking-tight text-ink sm:text-2xl">
+      <Eyebrow className="text-xs">{eyebrow}</Eyebrow>
+      <h3 id={id} className="mt-2 text-[1.375rem] font-semibold tracking-tight text-ink sm:text-[1.625rem]">
         {title}
       </h3>
-      {children && <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-2">{children}</p>}
+      {children && <p className="mt-2 max-w-3xl text-[0.9375rem] leading-7 text-ink-2">{children}</p>}
     </div>
   );
 }

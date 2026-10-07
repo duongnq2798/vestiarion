@@ -345,6 +345,79 @@ describe("the /open page, one network at a time (network foundation N7)", () => 
   });
 });
 
+describe("the /open page, second round (open redesign §10)", () => {
+  /** A network with a workspace live and an agent at work, but no payment settled yet. */
+  const quiet = (): OpenNumbers => {
+    const ours = { ...zero(), workspacesOpened: 1, liveWorkspaces: 1, people: 1, cycles: 12, modelDecisions: 4 };
+    return { ...EMPTY, sides: { customers: zero(), ours, total: ours } };
+  };
+
+  it("puts the leading network's headline figures under the heading, named as that network's", async () => {
+    const markup = await render();
+    const headline = markup.slice(markup.indexOf('aria-labelledby="headline"'), markup.indexOf('<section aria-labelledby="testnet"'));
+    const page = text(headline);
+    expect(page).toContain("Arc testnet · All time");
+    // In DOM order, each label before its figure. Customers' workspaces, every workspace's payments with customers' share, the on-time share, customers' median.
+    expect(page).toMatch(/Customer workspaces 2 1 live now, 1 made a first payment/);
+    expect(page).toMatch(/Payments settled 12 4 by customers, 3,703\.50 USDC in all/);
+    expect(page).toMatch(/Invoices paid on time 75% 9 of 12, every workspace/);
+    expect(page).toMatch(/Median time to a customer's first payment 1 h 35 min/);
+    // It comes before the trust promises and the networks.
+    expect(markup.indexOf('aria-labelledby="headline"')).toBeLessThan(markup.indexOf("Customers counted apart"));
+  });
+
+  it("shows no headline figures when no network has a payment", async () => {
+    byNetwork({ mainnet: EMPTY, testnet: quiet() });
+    expect(await render()).not.toContain('aria-labelledby="headline"');
+  });
+
+  it("shows a network with workspaces live but no payment as a compact card, not a dashboard of zeros", async () => {
+    byNetwork({ mainnet: quiet(), testnet: NUMBERS });
+    const markup = await render();
+    expect([...markup.matchAll(/<h2 id="(mainnet|testnet)"/g)].map((match) => match[1])).toEqual(["testnet", "mainnet"]);
+    const mainnet = sectionOf(markup, "mainnet");
+    const page = text(mainnet);
+    expect(page).toContain("No payment has settled on Arc mainnet yet.");
+    expect(page).toMatch(/Workspaces live 1 Customers' workspaces live 0 Agent cycles run 12 Payments settled 0/);
+    expect(page).not.toContain("Real customer usage");
+    expect(page).not.toContain("How the agent performs");
+    // Every figure is still there, folded.
+    expect(mainnet).toContain('aria-label="Every figure on Arc mainnet"');
+    expect(mainnet).toMatch(/<details[^>]*>[\s\S]*<table/);
+  });
+
+  it("says a quiet network had no payment in the period, rather than yet, for a period", async () => {
+    byNetwork({ mainnet: quiet(), testnet: NUMBERS });
+    expect(text(sectionOf(await render({ period: "7d" }), "mainnet"))).toContain("No payment has settled on Arc mainnet in this period.");
+  });
+
+  it("draws customers' payments first, with all activity a tab away, both in the markup", async () => {
+    const markup = await render();
+    const chart = markup.slice(markup.indexOf('aria-labelledby="payments-by-day-arc-testnet"'), markup.indexOf('aria-labelledby="our-payments-arc-testnet"'));
+    expect(text(chart)).toMatch(/Customers All activity/);
+    expect(chart).toMatch(/<button[^>]*role="tab"[^>]*aria-selected="true"[^>]*>[\s\S]*?Customers/);
+    expect(chart).toContain('aria-label="Customers&#x27; settled payments by day on Arc testnet, chart"');
+    expect(chart).toContain('aria-label="Settled payments by day on Arc testnet, chart"');
+    // Customers' own view counts their payments by day, and nothing of ours.
+    expect(chart).toContain("<title>Sep 28, 2026: 1 by customers</title>");
+    expect(chart).toContain('aria-label="1 settled payments by customers from Sep 28, 2026');
+  });
+
+  it("opens on all activity when customers paid nothing in the period", async () => {
+    vi.mocked(readOpenNumbers).mockResolvedValue({ ...NUMBERS, daily: [{ day: "2026-09-28", customers: 0, ours: 2, oursUsdc: 3 }] });
+    const markup = await render();
+    const chart = markup.slice(markup.indexOf('aria-labelledby="payments-by-day-arc-testnet"'), markup.indexOf('aria-labelledby="our-payments-arc-testnet"'));
+    expect(chart).toMatch(/<button[^>]*role="tab"[^>]*aria-selected="true"[^>]*>[\s\S]*?All activity/);
+    expect(text(chart)).toContain("No customer payment settled in this period.");
+  });
+
+  it("names each stage between the model and the money", async () => {
+    const markup = await render();
+    const controls = text(markup.slice(markup.indexOf('aria-labelledby="controls-arc-testnet"'), markup.indexOf('aria-labelledby="payments-by-day-arc-testnet"')));
+    expect(controls).toMatch(/Model A model proposes .* Policy Compared with the written policy .* Code Hard limits in code .* Person A person when it matters .* Chain Settles on Arc testnet/);
+  });
+});
+
 describe("the privacy page", () => {
   it("says the open numbers publish counts and totals only, and never a customer's payment", async () => {
     const { default: PrivacyPage } = await import("@/app/privacy/page");

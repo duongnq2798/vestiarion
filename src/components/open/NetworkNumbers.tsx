@@ -1,3 +1,4 @@
+import { ArrowDown, ArrowRight, Blocks, Bot, ScrollText, ShieldCheck, UserCheck, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/components/ui/cn";
 import { Disclosure } from "@/components/ui/Disclosure";
@@ -24,7 +25,7 @@ export function NetworkNumbers({ numbers, period, network }: { numbers: OpenNumb
   const id = network.id;
 
   return (
-    <div className="mt-6 space-y-14">
+    <div className="mt-6 space-y-20 sm:space-y-24">
       {latest && (
         <p className="-mt-2 inline-flex items-center gap-2 text-sm text-ink-2">
           <span aria-hidden className="size-2 rounded-full bg-proof" />
@@ -107,21 +108,21 @@ export function NetworkNumbers({ numbers, period, network }: { numbers: OpenNumb
         <SectionHead id={`controls-${id}`} eyebrow="All workspaces" title="What stands between the model and the money">
           A model never moves money on its say-so. Every payment decision passes the same checks before money moves, and each is counted here, the uncomfortable ones too.
         </SectionHead>
-        <ol className="mt-5 grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-2 lg:grid-cols-5">
-          <Step n={1} title="A model proposes" figure={formatFigure(total.modelDecisions, "count")} measure="decisions made by a model">
+        <ol className="mt-6 flex flex-col lg:flex-row lg:items-stretch">
+          <Step stage="Model" icon={Bot} title="A model proposes" figure={formatFigure(total.modelDecisions, "count")} measure="decisions made by a model" first>
             In {formatFigure(total.cycles, "count")} agent cycles, deciding {formatFigure(total.invoicesDecided, "count")} invoices.
           </Step>
-          <Step n={2} title="Compared with the written policy" figure={formatFigure(total.policyDepartures, "count")} measure="times the model disagreed">
+          <Step stage="Policy" icon={ScrollText} title="Compared with the written policy" figure={formatFigure(total.policyDepartures, "count")} measure="times the model disagreed">
             The written rule-based policy decides every case beside the model, so each disagreement is recorded, not hidden.
           </Step>
-          <Step n={3} title="Hard limits in code" figure={formatFigure(total.refusedByCode, "count")} measure="decisions refused by code" tone="held">
+          <Step stage="Code" icon={ShieldCheck} title="Hard limits in code" figure={formatFigure(total.refusedByCode, "count")} measure="decisions refused by code" tone="held">
             A decision that breaks a hard limit is refused, whatever proposed it. {formatFigure(total.duplicatesCaught, "count")} duplicate{" "}
             {total.duplicatesCaught === 1 ? "invoice" : "invoices"} caught before payment.
           </Step>
-          <Step n={4} title="A person when it matters" figure={formatFigure(total.decisionsEscalated, "count")} measure="decisions escalated to a person">
+          <Step stage="Person" icon={UserCheck} title="A person when it matters" figure={formatFigure(total.decisionsEscalated, "count")} measure="decisions escalated to a person">
             {formatFigure(total.escalationsResolved, "count")} resolved by a person so far.
           </Step>
-          <Step n={5} title={`Settles on ${network.label}`} figure={formatFigure(total.payments, "count")} measure="payments settled" tone="proof">
+          <Step stage="Chain" icon={Blocks} title={`Settles on ${network.label}`} figure={formatFigure(total.payments, "count")} measure="payments settled" tone="proof">
             {formatFigure(total.milestonesReleased, "count")} of them paid contractor milestones.
           </Step>
         </ol>
@@ -155,8 +156,8 @@ function Kpi({ label, value, unit, total, now, children }: { label: string; valu
         {value}
         {unit && value !== "—" && <span className="ml-1.5 text-sm sm:text-base font-medium tracking-normal text-ink-3">{unit}</span>}
       </p>
-      <p className="mb-4 mt-3 flex-1 text-xs leading-5 text-ink-2 sm:text-[0.8125rem]">{children}</p>
-      <p className="border-t border-line pt-3 font-mono text-[0.6875rem] text-ink-3 sm:text-xs">
+      <p className="mb-4 mt-3 flex-1 text-sm leading-6 text-ink-2">{children}</p>
+      <p className="border-t border-line pt-3 font-mono text-xs text-ink-3">
         With our workspaces: <span className="text-ink-2">{total}</span>
       </p>
     </div>
@@ -177,7 +178,7 @@ function Share({ label, row, total, customers, unit, note }: { label: string; ro
         {all && <span className="block h-full rounded-full bg-agent" style={{ width: `${(100 * all.part) / all.whole}%` }} />}
       </span>
       <p className="mt-2 font-mono text-xs text-ink-2">{all ? `${formatRatio(all.part, all.whole)} ${unit}` : "Nothing to measure yet"}</p>
-      <p className="mb-4 mt-3 flex-1 text-[0.8125rem] leading-5 text-ink-2">{note}</p>
+      <p className="mb-4 mt-3 flex-1 text-sm leading-6 text-ink-2">{note}</p>
       <p className="border-t border-line pt-3 font-mono text-xs text-ink-3">
         Customers: <span className="text-ink-2">{theirs ? `${formatPercent(theirs.part, theirs.whole)} (${formatRatio(theirs.part, theirs.whole)})` : "—"}</span>
       </p>
@@ -187,33 +188,128 @@ function Share({ label, row, total, customers, unit, note }: { label: string; ro
 
 const STEP_TONE = { default: "text-ink", held: "text-held", proof: "text-proof" } as const;
 
-/** One step a payment decision passes, with the figure that counts it. */
+/**
+ * One stage a payment decision passes, with the figure that counts it. The
+ * stages read as a pipeline: an arrow leads into every stage but the first,
+ * across on a wide screen and down on a narrow one.
+ */
 function Step({
-  n,
+  stage,
+  icon: Icon,
   title,
   figure,
   measure,
   tone = "default",
+  first = false,
   children,
 }: {
-  n: number;
+  stage: string;
+  icon: LucideIcon;
   title: string;
   figure: string;
   measure: string;
   tone?: keyof typeof STEP_TONE;
+  first?: boolean;
   children: ReactNode;
 }) {
   return (
-    <li className="flex min-w-0 flex-col bg-surface p-5">
-      <p className="flex items-center gap-2 text-sm font-medium text-ink">
-        <span aria-hidden className="grid size-5 shrink-0 place-items-center rounded-full border border-line-strong font-mono text-[0.6875rem] text-ink-3">
-          {n}
+    <li className="flex min-w-0 flex-col lg:flex-1 lg:flex-row">
+      {!first && (
+        <span aria-hidden className="flex items-center justify-center py-1.5 text-ink-3 lg:px-1.5 lg:py-0">
+          <ArrowDown className="size-4 lg:hidden" />
+          <ArrowRight className="hidden size-4 lg:block" />
         </span>
-        {title}
-      </p>
-      <p className={cn("mt-4 text-[1.75rem] font-semibold leading-none tracking-[-0.03em]", STEP_TONE[tone])}>{figure}</p>
-      <p className="mt-1.5 text-xs font-medium text-ink-2">{measure}</p>
-      <p className="mt-3 text-[0.8125rem] leading-5 text-ink-2">{children}</p>
+      )}
+      <div className="flex min-w-0 flex-1 flex-col rounded-2xl border border-line bg-surface p-5">
+        <p className="inline-flex items-center gap-1.5 font-mono text-xs font-semibold uppercase tracking-[0.1em] text-agent">
+          <Icon aria-hidden className="size-3.5" />
+          {stage}
+        </p>
+        <p className="mt-2 text-sm font-semibold leading-snug text-ink lg:min-h-[2.5rem]">{title}</p>
+        <p className={cn("mt-4 text-[2rem] font-semibold leading-none tracking-[-0.03em]", STEP_TONE[tone])}>{figure}</p>
+        <p className="mt-1.5 text-sm font-medium text-ink-2">{measure}</p>
+        <p className="mt-3 text-sm leading-6 text-ink-2">{children}</p>
+      </div>
     </li>
+  );
+}
+
+const ON_TIME: OpenRow = { key: "invoicesPaidOnTime", label: "", kind: "period", format: "ratio", of: ["invoicesPaidOnArc"] };
+
+/**
+ * The handful of figures a visitor should see before scrolling, from the
+ * network that leads the page and named as its, never added across networks
+ * (network foundation N7). Each says whose it is: customers' alone, or every
+ * workspace's.
+ */
+export function Headline({ numbers, period, network }: { numbers: OpenNumbers; period: Period; network: NetworkProfile }) {
+  const { customers, total } = numbers.sides;
+  const onTime = partOf(total, ON_TIME);
+  return (
+    <section aria-labelledby="headline" className="mt-10">
+      <h2 id="headline" className="font-mono text-xs font-semibold uppercase tracking-[0.11em] text-ink-3">
+        {network.label} · {period.label}
+      </h2>
+      <dl className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line lg:grid-cols-4">
+        <HeadlineFigure label="Customer workspaces" value={formatFigure(customers.workspacesOpened, "count")}>
+          {formatFigure(customers.liveWorkspaces, "count")} live now, {formatFigure(customers.firstPayments, "count")} made a first payment
+        </HeadlineFigure>
+        <HeadlineFigure label="Payments settled" value={formatFigure(total.payments, "count")}>
+          {formatFigure(customers.payments, "count")} by customers, {formatFigure(total.usdcPaid, "usdc")} USDC in all
+        </HeadlineFigure>
+        <HeadlineFigure label="Invoices paid on time" value={onTime ? formatPercent(onTime.part, onTime.whole) : "—"}>
+          {onTime ? `${formatRatio(onTime.part, onTime.whole)}, every workspace` : "Nothing to measure yet"}
+        </HeadlineFigure>
+        <HeadlineFigure label="Median time to a customer's first payment" value={formatFigure(customers.medianMinutesToFirstPayment, "duration")}>
+          From opening a workspace to its first settled payment
+        </HeadlineFigure>
+      </dl>
+    </section>
+  );
+}
+
+function HeadlineFigure({ label, value, children }: { label: string; value: string; children: ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col bg-surface p-4 sm:p-6">
+      <dt className="order-2 mt-3 text-sm font-semibold text-ink">{label}</dt>
+      <dd className="order-1 text-[2rem] font-semibold leading-none tracking-[-0.035em] text-ink sm:text-5xl">{value}</dd>
+      <dd className="order-3 mt-1 text-sm leading-6 text-ink-2">{children}</dd>
+    </div>
+  );
+}
+
+/**
+ * A network where workspaces are live but no payment has settled in the
+ * period: a few facts and every figure behind a disclosure, instead of a
+ * dashboard of zeros. It grows into the full section with its first payment.
+ */
+export function QuietNetwork({ numbers, period, network }: { numbers: OpenNumbers; period: Period; network: NetworkProfile }) {
+  const { customers, total } = numbers.sides;
+  const facts: ReadonlyArray<[string, string]> = [
+    ["Workspaces live", formatFigure(total.liveWorkspaces, "count")],
+    ["Customers' workspaces live", formatFigure(customers.liveWorkspaces, "count")],
+    ["Agent cycles run", formatFigure(total.cycles, "count")],
+    ["Payments settled", formatFigure(total.payments, "count")],
+  ];
+  return (
+    <div className="mt-4 rounded-2xl border border-line bg-surface p-5">
+      <p className="text-[0.9375rem] font-semibold text-ink">
+        No payment has settled on {network.label} {period.key === "all" ? "yet" : "in this period"}.
+      </p>
+      <p className="mt-1 text-sm leading-6 text-ink-2">Its figures show here in full once one does.</p>
+      <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-line pt-4">
+        {facts.map(([label, value]) => (
+          <div key={label} className="min-w-0">
+            <dt className="text-xs text-ink-3">{label}</dt>
+            <dd className="mt-0.5 text-xl font-semibold tracking-tight text-ink">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <Disclosure variant="bare" className="mt-4" summaryClassName="text-sm font-medium text-agent hover:underline" summary="Show every figure">
+        <div className="mt-3">
+          <OpenNumbersTable numbers={numbers} period={period} label={`Every figure on ${network.label}`} />
+        </div>
+      </Disclosure>
+    </div>
   );
 }

@@ -2,6 +2,7 @@ import { scaleBand, scaleLinear } from "d3";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { utcDay } from "@/lib/copy";
 import type { DailyPayments } from "@/lib/platform/open-numbers";
 import { SectionHead } from "./SectionHead";
@@ -9,7 +10,7 @@ import { formatFigure } from "./OpenNumbersTable";
 import type { NetworkProfile } from "@/lib/network";
 
 /**
- * Settled payments per UTC day, customers' stacked under ours (spec §2). A
+ * Settled payments per UTC day: customers' alone, or customers' stacked under ours (spec §2). A
  * server-rendered SVG: bars at most 24px wide with a 2px surface gap between
  * the two segments and a 4px rounded top, hairline gridlines, a legend, a
  * tooltip per day through <title> on a hit area as tall as the plot, and the
@@ -40,10 +41,17 @@ function topRounded(x: number, y: number, width: number, height: number): string
 }
 
 /** A day's figures. A customer's amounts are never shown by day, only their count. */
-function dayTitle(row: DailyPayments): string {
+function dayTitle(row: DailyPayments, only?: "customers"): string {
+  if (only) return `${fullDay(row.day)}: ${row.customers} by customers`;
   return `${fullDay(row.day)}: ${row.customers} by customers, ${row.ours} by our workspaces (${formatFigure(row.oursUsdc, "usdc")} USDC)`;
 }
 
+/**
+ * Customers' payments first: the page proves who uses Vestiarion, not how much
+ * the team tests it. "All activity" stacks our own workspaces' on top. Both
+ * views are in the markup; the tabs only choose which shows. When customers
+ * paid nothing in the period, all activity is the one open.
+ */
 export function PaymentsChart({ series, network }: { series: DailyPayments[]; network: NetworkProfile }) {
   const customers = series.reduce((sum, row) => sum + row.customers, 0);
   const ours = series.reduce((sum, row) => sum + row.ours, 0);
@@ -51,29 +59,60 @@ export function PaymentsChart({ series, network }: { series: DailyPayments[]; ne
 
   return (
     <section aria-labelledby={id}>
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <SectionHead id={id} eyebrow="Activity" title="Settled payments by day" />
-        {series.length > 0 && (
-          <ul className="flex flex-wrap gap-4 text-xs text-ink-2" aria-label="Legend">
-            {SERIES.map((entry) => (
-              <li key={entry.key} className="inline-flex items-center gap-2">
-                <span aria-hidden className="size-2.5 rounded-full" style={{ background: entry.color }} />
-                {entry.label}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      <SectionHead id={id} eyebrow="Activity" title="Settled payments by day" />
       {series.length === 0 ? (
         <EmptyState compact className="mt-5" title="No payment settled in this period." body={`Settled ${network.label} payments appear here by day.`} />
       ) : (
-        <Chart series={series} customers={customers} ours={ours} label={network.label} />
+        <>
+          <Tabs defaultValue={customers > 0 ? "customers" : "all"} className="mt-5">
+            <TabsList aria-label="Whose payments">
+              <TabsTrigger value="customers">Customers</TabsTrigger>
+              <TabsTrigger value="all">All activity</TabsTrigger>
+            </TabsList>
+            <TabsContent value="customers" forceMount className="data-[state=inactive]:hidden">
+              {customers > 0 ? (
+                <Chart series={series} customers={customers} ours={0} label={network.label} only="customers" />
+              ) : (
+                <EmptyState compact title="No customer payment settled in this period." body="All activity shows our own workspaces' payments as well." />
+              )}
+            </TabsContent>
+            <TabsContent value="all" forceMount className="data-[state=inactive]:hidden">
+              <Chart series={series} customers={customers} ours={ours} label={network.label} />
+            </TabsContent>
+          </Tabs>
+          <Disclosure variant="default" className="mt-4" summary="Show the days as a table">
+            <Table label="Settled payments by day, as a table" className="text-xs">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Day</TableHead>
+                  <TableHead className="text-right">Customers</TableHead>
+                  <TableHead className="text-right">Our workspaces</TableHead>
+                  <TableHead className="text-right">USDC</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {series
+                  .filter((row) => row.customers + row.ours > 0)
+                  .map((row) => (
+                    <TableRow key={row.day}>
+                      <TableCell className="font-mono">{fullDay(row.day)}</TableCell>
+                      <TableCell className="text-right font-mono tabular-nums">{row.customers}</TableCell>
+                      <TableCell className="text-right font-mono tabular-nums">{row.ours}</TableCell>
+                      <TableCell className="text-right font-mono tabular-nums">{formatFigure(row.oursUsdc, "usdc")}</TableCell>
+                    </TableRow>
+                  ))}
+              </TableBody>
+            </Table>
+          </Disclosure>
+        </>
       )}
     </section>
   );
 }
 
-function Chart({ series, customers, ours, label }: { series: DailyPayments[]; customers: number; ours: number; label: string }) {
+/** The bars: customers' alone when `only` says so, else customers' with ours stacked on top. */
+function Chart({ series: days, customers, ours, label, only }: { series: DailyPayments[]; customers: number; ours: number; label: string; only?: "customers" }) {
+  const series = only ? days.map((row) => ({ ...row, ours: 0 })) : days;
   const x = scaleBand<string>()
     .domain(series.map((row) => row.day))
     .range([MARGIN.left, WIDTH - MARGIN.right]);
@@ -83,11 +122,24 @@ function Chart({ series, customers, ours, label }: { series: DailyPayments[]; cu
   const barWidth = Math.max(1, Math.min(24, x.bandwidth() - GAP));
   const baseline = y(0);
   const labelled = new Set([series[0].day, series[series.length - 1].day, series[Math.floor((series.length - 1) / 2)].day]);
-  const summary = `${customers + ours} settled payments from ${fullDay(series[0].day)} to ${fullDay(series[series.length - 1].day)}: ${customers} by customers, ${ours} by our workspaces.`;
+  const span = `from ${fullDay(series[0].day)} to ${fullDay(series[series.length - 1].day)}`;
+  const summary = only
+    ? `${customers} settled payments by customers ${span}.`
+    : `${customers + ours} settled payments ${span}: ${customers} by customers, ${ours} by our workspaces.`;
 
   return (
-    <figure className="mt-5 rounded-2xl border border-line bg-surface p-4 shadow-surface">
-      <div role="region" aria-label={`Settled payments by day on ${label}, chart`} tabIndex={0} className="overflow-x-auto rounded-lg">
+    <figure className="rounded-2xl border border-line bg-surface p-4 shadow-surface">
+      {!only && (
+        <ul className="mb-3 flex flex-wrap gap-4 text-xs text-ink-2" aria-label="Legend">
+          {SERIES.map((entry) => (
+            <li key={entry.key} className="inline-flex items-center gap-2">
+              <span aria-hidden className="size-2.5 rounded-full" style={{ background: entry.color }} />
+              {entry.label}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div role="region" aria-label={only ? `Customers' settled payments by day on ${label}, chart` : `Settled payments by day on ${label}, chart`} tabIndex={0} className="overflow-x-auto rounded-lg">
         <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label={summary} className="h-auto w-full min-w-[40rem]">
           {ticks.map((tick) => (
             <g key={tick}>
@@ -113,7 +165,7 @@ function Chart({ series, customers, ours, label }: { series: DailyPayments[]; cu
                   ))}
                 {row.ours > 0 && oursHeight > 0 && <path d={topRounded(left, oursTop, barWidth, oursHeight)} fill={SERIES[1].color} />}
                 <rect x={x(row.day)} y={MARGIN.top} width={x.bandwidth()} height={baseline - MARGIN.top} fill="transparent" className="hover:fill-ink/5">
-                  <title>{dayTitle(row)}</title>
+                  <title>{dayTitle(row, only)}</title>
                 </rect>
                 {labelled.has(row.day) && (
                   <text x={(x(row.day) ?? 0) + x.bandwidth() / 2} y={HEIGHT - 8} textAnchor="middle" className="fill-ink-3 font-mono text-[11px]">
@@ -127,30 +179,6 @@ function Chart({ series, customers, ours, label }: { series: DailyPayments[]; cu
         </svg>
       </div>
       <figcaption className="mt-2 text-xs text-ink-3">Days are UTC. Hover a day for its figures.</figcaption>
-      <Disclosure variant="default" className="mt-4" summary="Show the days as a table">
-        <Table label="Settled payments by day, as a table" className="text-xs">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Day</TableHead>
-              <TableHead className="text-right">Customers</TableHead>
-              <TableHead className="text-right">Our workspaces</TableHead>
-              <TableHead className="text-right">USDC</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {series
-              .filter((row) => row.customers + row.ours > 0)
-              .map((row) => (
-                <TableRow key={row.day}>
-                  <TableCell className="font-mono">{fullDay(row.day)}</TableCell>
-                  <TableCell className="text-right font-mono tabular-nums">{row.customers}</TableCell>
-                  <TableCell className="text-right font-mono tabular-nums">{row.ours}</TableCell>
-                  <TableCell className="text-right font-mono tabular-nums">{formatFigure(row.oursUsdc, "usdc")}</TableCell>
-                </TableRow>
-              ))}
-          </TableBody>
-        </Table>
-      </Disclosure>
     </figure>
   );
 }
