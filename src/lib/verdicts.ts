@@ -1,8 +1,10 @@
+import { AGENT_DECISION_ACTIONS } from "./agent/shadow-hold";
 import { currentOrgId } from "./context";
 import { db, unwrap, type OrgDb } from "./dal";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
 import { heldForVerdict } from "./next-step";
 import { readShadowMode, type ShadowMode } from "./shadow-mode";
+import type { VerdictFacts } from "./verdict-view";
 
 /**
  * A person's verdict on a decision of the agent's, in shadow mode (docs/superpowers/specs/2026-10-07-shadow-mode-design.md
@@ -15,8 +17,7 @@ import { readShadowMode, type ShadowMode } from "./shadow-mode";
 
 export type Verdict = "agree" | "disagree";
 
-/** The entries in which the agent decided about a payable. `ap_reconcile` records a settlement, not a decision. */
-export const AGENT_DECISION_ACTIONS = ["ap_pay", "ap_schedule", "ap_hold", "ap_flag_fraud", "ap_request_info"] as const;
+export { AGENT_DECISION_ACTIONS };
 
 const REASON_MAX = 280;
 
@@ -206,4 +207,22 @@ export async function readShadowSummary(orgDb: OrgDb, shadow: ShadowMode): Promi
     disagreed: verdicts.filter((row) => row.verdict === "disagree").length,
     waiting: [...newest.values()].filter((seq) => !given.has(seq)).length,
   };
+}
+
+/**
+ * What the cards need to show and offer verdicts (S3): the workspace's shadow mode, and the verdicts on the agent's
+ * decisions among `entries`. Best effort: facts that cannot be read show no verdict at all, and offer none, rather than
+ * offer one that may be given already.
+ */
+export async function verdictFacts(orgDb: OrgDb, entries: Array<{ seq: number; actor: string; action: string }>, canGive: boolean): Promise<VerdictFacts> {
+  try {
+    const shadow = await readShadowMode(orgDb);
+    const decisions = entries.filter((entry) => entry.actor === "agent" && (AGENT_DECISION_ACTIONS as readonly string[]).includes(entry.action)).map((entry) => entry.seq);
+    const read = await readVerdicts(orgDb, decisions);
+    const given = new Map([...read].map(([seq, verdict]) => [seq, { verdict: verdict.verdict, reason: verdict.reason }] as const));
+    return { shadow: shadow ? { startedAt: shadow.startedAt } : null, given, canGive };
+  } catch (error) {
+    console.error("verdicts not read", error instanceof Error ? error.message : error);
+    return { shadow: null, given: new Map(), canGive: false };
+  }
 }

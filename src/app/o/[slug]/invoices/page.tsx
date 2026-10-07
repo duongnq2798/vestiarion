@@ -10,6 +10,7 @@ import InvoiceIntake from "@/components/intake/InvoiceIntake";
 import RecurringPayableIntake, { RecurringPayablesList } from "@/components/intake/RecurringPayableIntake";
 import { PayLinkControl } from "@/components/PayLinkControl";
 import { ReceiptControl } from "@/components/ReceiptControl";
+import VerdictControl from "@/components/VerdictControl";
 import { WaitingPayableAction } from "@/components/WaitingPayableAction";
 import { Callout } from "@/components/ui/Callout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
@@ -24,12 +25,13 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import { addedSince, latestDecision, recordedFacts, waitingHint } from "@/lib/added-details";
-import { CASH_SHORTFALL } from "@/lib/next-step";
+import { CASH_SHORTFALL, SHADOW_VERDICT } from "@/lib/next-step";
 import { hasRunningCycle } from "@/lib/agent/cycle-running";
 import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { shellModes } from "@/lib/circle";
+import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import { inboxEmailsToDecide } from "@/lib/email-inbox/list";
 import { inboxSettingsFromEnv } from "@/lib/email-inbox/settings";
@@ -38,6 +40,7 @@ import { listCounterparties, listInvoices, stats, type InvoiceRow } from "@/lib/
 import { plural, utcDay } from "@/lib/copy";
 import { payLinkStates, type PayLinkState } from "@/lib/platform/pay-links";
 import { listRecurringPayables } from "@/lib/recurring-payables";
+import { verdictFacts } from "@/lib/verdicts";
 import { receiptShareable } from "@/lib/receipts/facts";
 import { sharedReceipts } from "@/lib/receipts/share";
 import { workspaceNetwork } from "@/lib/workspace-network";
@@ -93,10 +96,12 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         : [],
     ]);
     const entries = await listLedgerEntriesForTargets({ invoiceIds: invoices.map((invoice) => invoice.id) });
+    // In shadow mode, each card carries a person's verdict on the agent's decision, given or to give (shadow mode S3).
+    const verdicts = await verdictFacts(db(), entries, canDecide);
     const filter = typeof query.status === "string" ? query.status : undefined;
     const shown = filter ? invoices.filter((invoice) => invoice.status === filter) : invoices;
     const counterpartiesById = new Map(counterparties.map((counterparty) => [counterparty.id, counterparty]));
-    const decisions = shown.map((invoice) => invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), entries, { network, deciding }));
+    const decisions = shown.map((invoice) => invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), entries, { network, deciding, verdicts }));
     const payables = decisions.filter((decision) => decision.domain === "ap");
     const receivables = decisions.filter((decision) => decision.domain === "ar");
     const ordinaryPayables = payables.filter((decision) => decision.outcome !== "refused");
@@ -167,7 +172,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
           // A transfer recorded against it is approved in Approvals, never completed here (R3).
           canAddDetails={canWrite && invoice.tx_ref === null}
           canDecide={canDecide}
-          rule={decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : null)}
+          rule={decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : decision.heldForVerdict ? SHADOW_VERDICT : null)}
           canFix={canWrite}
         />
       );
@@ -176,6 +181,23 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     // The work, not the documents (AP / AR layout): what waits for a person, what is coming, what is settled.
     const today = new Date().toISOString().slice(0, 10);
     const inAWeek = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
+    // The verdict first: a payment held for it asks for nothing else; any other card keeps its own footer below it.
+    const withVerdict =
+      (footerFor?: (decision: ReturnType<typeof invoiceDecision>) => React.ReactNode) =>
+      function verdictFirst(decision: ReturnType<typeof invoiceDecision>): React.ReactNode {
+        const footer = footerFor?.(decision);
+        if (!decision.verdict) return footer;
+        const verdict = <VerdictControl orgSlug={slug} view={decision.verdict} />;
+        if (decision.verdict.heldForVerdict && decision.verdict.open) return verdict;
+        return footer ? (
+          <div className="space-y-3">
+            {verdict}
+            {footer}
+          </div>
+        ) : (
+          verdict
+        );
+      };
     const row = (decision: ReturnType<typeof invoiceDecision>, footerFor?: (decision: ReturnType<typeof invoiceDecision>) => React.ReactNode): DecisionRowItem => {
       const invoice = invoicesById.get(decision.id) as InvoiceRow;
       const facts = waiting.get(decision.id);
@@ -304,13 +326,13 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
                         </Button>
                       }
                     />
-                    <DecisionRows orgSlug={slug} items={needsYou.map((decision) => row(decision, needsYouFor))} />
+                    <DecisionRows orgSlug={slug} items={needsYou.map((decision) => row(decision, withVerdict(needsYouFor)))} />
                   </>
                 )}
                 {upcoming.length > 0 && (
                   <>
                     <RowGroupHeading title="Upcoming" count={upcoming.length} />
-                    <DecisionRows orgSlug={slug} items={upcoming.map((decision) => row(decision, receiptFor))} />
+                    <DecisionRows orgSlug={slug} items={upcoming.map((decision) => row(decision, withVerdict(receiptFor)))} />
                   </>
                 )}
                 {settled.length > 0 && (
@@ -328,7 +350,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
                         ) : undefined
                       }
                     />
-                    <DecisionRows orgSlug={slug} items={(showAllHistory ? settled : settled.slice(0, HISTORY_SHOWN)).map((decision) => row(decision, receiptFor))} />
+                    <DecisionRows orgSlug={slug} items={(showAllHistory ? settled : settled.slice(0, HISTORY_SHOWN)).map((decision) => row(decision, withVerdict(receiptFor)))} />
                   </>
                 )}
               </>

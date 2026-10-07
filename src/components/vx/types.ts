@@ -1,6 +1,7 @@
 export type Domain = "ap" | "ar" | "contractor" | "treasury" | "compliance" | "system";
 import type { TrailStep } from "@/lib/decision-trail";
 import type { Network } from "@/lib/network";
+import type { VerdictView } from "@/lib/verdict-view";
 
 /** `deciding`: a payable not yet decided while a cycle runs, which is deciding it (decision trail R1). */
 export type Outcome = "settled" | "scheduled" | "held" | "refused" | "simulated" | "recorded" | "deciding";
@@ -53,6 +54,8 @@ export interface Decision {
   heldForCash?: boolean;
   /** A payment held in shadow mode for a person to agree, no rule refusing it (shadow mode S2). */
   heldForVerdict?: boolean;
+  /** A person's verdict on the agent's decision, given or to give (shadow mode S3). */
+  verdict?: VerdictView;
 }
 
 export interface Account {

@@ -4,6 +4,7 @@ import { utcDay } from "@/lib/copy";
 import { explainMilestone, explainPayable, explainTreasury, presentReasoning } from "@/lib/reasoning-copy";
 import { recordedFacts } from "@/lib/added-details";
 import { heldForCash, heldForVerdict } from "@/lib/next-step";
+import { verdictView, type VerdictFacts } from "@/lib/verdict-view";
 import { invoiceTrail } from "@/lib/decision-trail";
 import type { LedgerEntry } from "@/lib/ledger";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow, TreasuryActionRow } from "@/lib/queries";
@@ -236,9 +237,12 @@ export function invoiceDecision(
   invoice: InvoiceRow,
   counterparty: CounterpartyRow | undefined,
   entries: LedgerEntry[],
-  options: { network: Network; deciding?: boolean }
+  options: { network: Network; deciding?: boolean; verdicts?: VerdictFacts }
 ): Decision {
-  return { ...decideInvoice(invoice, counterparty, entries, options), network: options.network };
+  const decision: Decision = { ...decideInvoice(invoice, counterparty, entries, options), network: options.network };
+  // A person's verdict on the agent's decision, where the page reads the facts for it (shadow mode S3).
+  const verdict = options.verdicts ? verdictView(invoice.id, entries, options.verdicts, decision.heldForVerdict === true) : undefined;
+  return verdict ? { ...decision, verdict } : decision;
 }
 
 function decideInvoice(

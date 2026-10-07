@@ -8,6 +8,9 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import { listWaitingPayables } from "@/lib/agent/approvals";
+import { db } from "@/lib/dal";
+import { verdictView, type DecisionEntryFacts } from "@/lib/verdict-view";
+import { verdictFacts } from "@/lib/verdicts";
 import { isSoleApprover } from "@/lib/agent/sole-approver";
 import { requireMembership } from "@/lib/auth/membership";
 import { can } from "@/lib/auth/roles";
@@ -38,6 +41,14 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
       // Whether this person may approve what they entered themselves (sole approver R5).
       canDecide ? isSoleApprover(user.id) : Promise.resolve(false),
     ]);
+    // A payment held in shadow mode waits for a person's verdict, which pays it when they agree (shadow mode S4): the
+    // agent's decision each one waits on, and any verdict given. Best effort, as the cards elsewhere read them.
+    const verdictEntries: DecisionEntryFacts[] = waiting.flatMap((payable) =>
+      payable.verdictEntry ? [{ seq: payable.verdictEntry.seq, ts: payable.verdictEntry.ts, actor: "agent" as const, action: "ap_pay", detail: { invoiceId: payable.id } }] : []
+    );
+    const verdicts = verdictEntries.length > 0 ? await verdictFacts(db(), verdictEntries, canDecide) : null;
+    const verdictFor = (payable: (typeof waiting)[number]) =>
+      verdicts ? verdictView(payable.id, verdictEntries.filter((entry) => entry.detail.invoiceId === payable.id), verdicts, payable.heldForVerdict === true) : undefined;
     // Who approved a payment above the figure for two approvals, by email (two approvals T8): read only when someone has.
     const approverIds = new Set(waiting.flatMap((payable) => payable.twoApprovals?.approvals.map((approval) => approval.by) ?? []));
     const memberEmails: Record<string, string> =
@@ -84,6 +95,7 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
                 soleApprover={soleApprover}
                 canEdit={can(membership.role, "records.write")}
                 memberEmails={memberEmails}
+                verdict={verdictFor(payable)}
               />
             ))}
           </div>

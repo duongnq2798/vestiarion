@@ -564,3 +564,20 @@ describe("invoiceDecision: a payment held in shadow mode (shadow mode S2)", () =
     expect(paid.heldForVerdict).toBeUndefined();
   });
 });
+
+describe("invoiceDecision: the verdict a card shows (shadow mode S3)", () => {
+  const apPay: LedgerEntry = {
+    seq: 41, id: "e41", ts: "2026-10-07T10:00:00.000Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "ap_pay",
+    detail: { invoiceId: "inv-1", decision: { action: "pay" }, guardrailBlocked: false, execution: { resultingStatus: "held", heldBecause: "shadow_verdict" } },
+    bodyHash: "00", signature: "00", prevHash: "00", hash: "00", signingKeyId: null,
+  };
+
+  it("carries the verdict view when the page gives the facts, and none when it does not", () => {
+    const held = invoice({ status: "held" });
+    const verdicts = { shadow: { startedAt: "2026-10-07T00:00:00.000Z" }, given: new Map(), canGive: true };
+    expect(invoiceDecision(held, undefined, [apPay], { network: "arc-testnet", verdicts }).verdict).toEqual({
+      entrySeq: 41, agentAction: "ap_pay", given: null, open: true, heldForVerdict: true,
+    });
+    expect(invoiceDecision(held, undefined, [apPay], { network: "arc-testnet" }).verdict).toBeUndefined();
+  });
+});

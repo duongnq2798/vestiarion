@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
-import { giveVerdict, readShadowSummary, readVerdicts, VerdictError } from "@/lib/verdicts";
+import { giveVerdict, readShadowSummary, readVerdicts, VerdictError, verdictFacts } from "@/lib/verdicts";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
 /**
@@ -199,5 +199,26 @@ describe("readVerdicts and readShadowSummary", () => {
     const summary = await run(() => readShadowSummary(db(), { currency: "VND", startedAt: "2026-10-07T00:00:00Z", startedBy: PERSON }));
     // Northwind's decision has its verdict; the other payable's newest decision (50) and the third's (52) wait.
     expect(summary).toEqual({ agreed: 1, disagreed: 1, waiting: 2 });
+  });
+});
+
+describe("verdictFacts", () => {
+  const ledgerEntry = (seq: number, actor: "agent" | "human", action: string) =>
+    ({ seq, id: `e${seq}`, ts: "2026-10-07T10:00:00Z", actor, domain: "ap", action, summary: action, detail: { invoiceId: INVOICE }, bodyHash: "00", signature: "00", prevHash: "00", hash: "00", signingKeyId: null }) as const;
+
+  it("reads shadow mode and the verdicts on the agent's decisions shown, for the cards", async () => {
+    fake = fakeSupabase(workspace({ verdicts: [{ entry_seq: 41, verdict: "agree", reason: null, decided_by: PERSON, decided_at: "2026-10-07T11:00:00Z" }] }));
+    const facts = await run(() => verdictFacts(db(), [ledgerEntry(44, "human", "approval_paid"), ledgerEntry(41, "agent", "ap_pay")], true));
+    expect(facts.shadow).toEqual({ startedAt: "2026-10-07T00:00:00Z" });
+    expect(facts.given.get(41)).toEqual({ verdict: "agree", reason: null });
+    expect(facts.canGive).toBe(true);
+    const asked = fake.requests.find((r) => r.path === "/rest/v1/decision_verdicts" && r.method === "GET");
+    expect(asked?.params.get("entry_seq")).toBe("in.(41)");
+  });
+
+  it("shows no verdict at all when they cannot be read, rather than offering one twice", async () => {
+    fake = fakeSupabase((r) => (r.path === "/rest/v1/shadow_modes" ? { status: 500, body: { message: "boom" } } : { body: [] }));
+    const facts = await run(() => verdictFacts(db(), [ledgerEntry(41, "agent", "ap_pay")], true));
+    expect(facts).toEqual({ shadow: null, given: new Map(), canGive: false });
   });
 });

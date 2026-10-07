@@ -7,6 +7,8 @@ import AgentPauseControl from "@/components/AgentPauseControl";
 import { GatewayPanel } from "@/components/GatewayPanel";
 import { ServiceBudgetPanel } from "@/components/ServiceBudgetPanel";
 import { SampleDataLoaded, SampleDataOffer } from "@/components/SampleDataPanel";
+import ShadowModeSummary from "@/components/ShadowModeSummary";
+import VerdictControl from "@/components/VerdictControl";
 import { WaitingPayableAction } from "@/components/WaitingPayableAction";
 import { CycleReport } from "@/components/vx/CycleReport";
 import { DecisionCard } from "@/components/vx/DecisionCard";
@@ -24,7 +26,7 @@ import type { Account, Forecast } from "@/components/vx/types";
 import { agentBudgetStatus } from "@/lib/agent-budget";
 import { listWaitingPayables } from "@/lib/agent/approvals";
 import { addedSince, latestDecision, recordedFacts } from "@/lib/added-details";
-import { CASH_SHORTFALL } from "@/lib/next-step";
+import { CASH_SHORTFALL, SHADOW_VERDICT } from "@/lib/next-step";
 import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { can } from "@/lib/auth/roles";
@@ -32,12 +34,15 @@ import { chainModes, paymentsHeld } from "@/lib/circle";
 import { readGatewayState } from "@/lib/circle/gateway-funding";
 import { spendingLimitStatus } from "@/lib/circle/spending-limit-setup";
 import { readServiceBudget } from "@/lib/service-budget";
+import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import { gettingStarted, ownPayableCount } from "@/lib/getting-started";
 import { listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { pauseStateOf } from "@/lib/platform/pause";
 import { cashOutlook } from "@/lib/cash-outlook";
 import { latestForecast, listAccounts, listCounterparties, listInvoices, listMilestones, listTreasuryActions, stats } from "@/lib/queries";
+import { readShadowMode } from "@/lib/shadow-mode";
+import { readShadowSummary, verdictFacts } from "@/lib/verdicts";
 import { offerSampleData } from "@/lib/sample-data-offer";
 import { workspaceNetwork } from "@/lib/workspace-network";
 import { networkProfile } from "@/lib/network";
@@ -133,15 +138,30 @@ export default async function DashboardPage({
           })
         : Promise.resolve(null),
     ]);
+    const canDecide = can(access.membership.role, "approval.decide");
+    // In shadow mode, each card carries a person's verdict on the agent's decision (shadow mode S3), and the console
+    // says how often people agreed (S5). Best effort, like the reads above.
+    const [verdicts, shadow] = await Promise.all([
+      verdictFacts(db(), invoiceEntries, canDecide),
+      readShadowMode(db()).catch((error: unknown) => {
+        console.error("console: shadow mode not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
+        return null;
+      }),
+    ]);
+    const shadowSummary = shadow
+      ? await readShadowSummary(db(), shadow).catch((error: unknown) => {
+          console.error("console: shadow summary not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
+          return null;
+        })
+      : null;
     const invoiceDecisions = invoices.map((invoice) =>
-      invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), invoiceEntries, { network })
+      invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), invoiceEntries, { network, verdicts })
     );
     const stopped = invoiceDecisions.filter((decision) => decision.outcome === "refused" || decision.outcome === "held");
     // A stopped payable's card says what stopped it and where to handle it (agent activity spec R5), as on AP / AR.
     const invoicesById = new Map(invoices.map((invoice) => [invoice.id, invoice]));
     const canWrite = can(access.membership.role, "records.write");
-    const canDecide = can(access.membership.role, "approval.decide");
-    const nextStepFor = (decision: (typeof stopped)[number]) => {
+    const waitingStepFor = (decision: (typeof stopped)[number]) => {
       const invoice = invoicesById.get(decision.id);
       if (!invoice || invoice.direction !== "payable" || !["held", "flagged", "awaiting_info"].includes(invoice.status)) return undefined;
       const onFile = {
@@ -157,9 +177,24 @@ export default async function DashboardPage({
           added={addedSince(recordedFacts(latestDecision(invoiceEntries, invoice.id)), onFile)}
           canAddDetails={canWrite && invoice.tx_ref === null}
           canDecide={canDecide}
-          rule={decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : null)}
+          rule={decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : decision.heldForVerdict ? SHADOW_VERDICT : null)}
           canFix={canWrite}
         />
+      );
+    };
+    // The verdict first: a payment held for it asks for nothing else; any other card keeps its next step below it.
+    const nextStepFor = (decision: (typeof stopped)[number]) => {
+      const step = waitingStepFor(decision);
+      if (!decision.verdict) return step;
+      const verdict = <VerdictControl orgSlug={slug} view={decision.verdict} />;
+      if (decision.verdict.heldForVerdict && decision.verdict.open) return verdict;
+      return step ? (
+        <div className="space-y-3">
+          {verdict}
+          {step}
+        </div>
+      ) : (
+        verdict
       );
     };
     // What the agent will pay next, soonest first (payment timing design §1):
@@ -262,6 +297,8 @@ export default async function DashboardPage({
 
         <div className="grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1fr)_22rem]">
           <div className="min-w-0 space-y-8">
+            {shadow && shadowSummary && <ShadowModeSummary orgSlug={slug} mode={shadow} summary={shadowSummary} />}
+
             {stopped.length > 0 && (
               <section>
                 <SectionHeader title="Stopped" meta="refused by code, or waiting for you" />
