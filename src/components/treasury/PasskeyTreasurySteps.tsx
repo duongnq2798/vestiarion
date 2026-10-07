@@ -243,8 +243,9 @@ function FundStep({ status, label }: { status: WalletTreasuryStatus; label: stri
     <>
       <h3 className="text-sm font-semibold text-ink">Add USDC to your wallet</h3>
       <p className="text-sm leading-relaxed text-ink-2">
-        Send USDC on {label} to your wallet&apos;s address above, from an exchange or another wallet. Setup needs about {status.setupNeedsUsdc.toFixed(2)} USDC:
-        0.50 for the agent&apos;s gas, and up to 0.25 set aside for the network fee, of which about 0.02 is spent. Add only this for now: send what the
+        Send USDC on {label} to <strong className="font-medium text-ink">Your wallet</strong>, the first address above, from an exchange or another
+        wallet. Not to the agent&apos;s wallet: setup pays the agent&apos;s gas from yours. Setup needs about {status.setupNeedsUsdc.toFixed(2)} USDC:
+        0.50 for the agent&apos;s gas, and up to 0.25 set aside for the network fee, of which about 0.07 is spent. Add only this for now: send what the
         workspace will pay once its recovery phrase is saved.
       </p>
       <p className="text-xs text-ink-3">This page checks for it every 10 seconds.</p>
@@ -367,7 +368,7 @@ function SetupStep({ orgSlug, status, label }: { orgSlug: string; status: Wallet
       <Field id="passkey-treasury-cap" label="Cap (USDC)" description="Empty approves without a cap; the figures still bound each day and 7 days." optional>
         <Input id="passkey-treasury-cap" inputMode="decimal" value={cap} onChange={(event) => setCap(event.target.value)} />
       </Field>
-      <p className="text-xs text-ink-3">The network fee is paid from your wallet&apos;s USDC: about 0.02 USDC.</p>
+      <p className="text-xs text-ink-3">The network fee is paid from your wallet&apos;s USDC: about 0.07 USDC.</p>
       <div>
         <Button type="button" icon={<KeyRound />} loading={busy} onClick={setUp}>
           Set up with your passkey
