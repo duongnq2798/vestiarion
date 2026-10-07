@@ -68,10 +68,13 @@ The passkey route:
   - As W3, the choice may be made again until a contract is deployed.
 - **K4. The agent's wallet is created with the choice, on both routes.** It needs nothing from the owner, so the separate
   "Create the agent's wallet" click goes: choosing creates it in the same action. If Circle fails, the step stays as
-  now, with its button, and the choice is kept.
+  now, with its button, and the choice is kept. Its creation opens a scope of its own, since the request's scope was read
+  before the choice changed the workspace's host.
 - **K5. Setup waits for the wallet's USDC.**
   - Below what setup needs, the passkey route shows the address (with a copy button), the wallet's USDC, and what
-    setup needs: 0.50 USDC for the agent's gas plus the network fee, estimated as 0.05 USDC and shown as "about".
+    setup needs: 0.75 USDC, 0.50 for the agent's gas and up to 0.25 for the first user operation's fee, which EntryPoint
+    v0.7 sets aside before the calls run (about 0.11 at Arc's fees on 2026-10-07; about 0.02 is spent). Only this is
+    asked for until the recovery phrase is saved.
   - The page reads the balance again every 10 seconds while open, and when the tab is shown again.
   - The owner's own payments come on top: the page says so.
 - **K6. One confirmation sets everything up.**
@@ -80,8 +83,12 @@ The passkey route:
        creation code with this wallet, this agent and the figures. The salt is `keccak256("vestiarion:spending-limit:" +
        orgId)`, so the address is known before anything is sent. Where Vestiarion's contract for these is already at
        that address (a setup sent before whose recording was lost), the deploy call is left out and the other two go.
-    2. `approve(contract, amount)` on USDC: unlimited, or the owner's cap, as W9.
-    3. 0.50 USDC (Arc's native currency) to the agent's wallet.
+    2. `setLimits(daily, weekly)` on the contract: it is deployed with fixed figures (1 unit each), so its address depends
+       on the wallet and the agent alone and a second setup reuses it; the owner's figures are set here.
+    3. `approve(contract, amount)` on USDC: unlimited, or the owner's cap, as W9.
+    4. 0.50 USDC (Arc's native currency) to the agent's wallet, left out where the agent holds its gas minimum already.
+  - The figures start from the workspace's spending limit in the form, and the browser builds the calls from what the
+    form shows, never from the server's reply.
   - **The browser checks every call before the passkey signs**, because a passkey prompt shows no transaction. It
     rebuilds each call from what it knows (the bundled contract code, the wallet, the agent and the figures shown, USDC's
     address, the contract address computed from the proxy, salt and code) and refuses anything that differs.
@@ -90,7 +97,8 @@ The passkey route:
 - **K7. The setup is recorded from the chain, once.**
   - The browser hands back the transaction hash from the user operation's receipt.
   - The server checks:
-    - the transaction succeeded;
+    - the transaction succeeded, and EntryPoint v0.7's `UserOperationEvent` in it names this wallet as sender with
+      `success`: a bundler's transaction succeeds even when an operation in it reverts;
     - the code at the computed address equals Vestiarion's contract for this wallet and agent (as W8);
     - the figures read from it;
     - `allowance(wallet, contract)` is at least one unit (as W9);
@@ -102,7 +110,10 @@ The passkey route:
   - After setup, the passkey route asks the owner to save a recovery phrase:
     - twelve words (`generateMnemonic`, English), made in the browser, shown once, never sent anywhere;
     - their address registered as a recovery owner with Circle's `registerRecoveryAddress`, one passkey confirmation.
-  - The owner confirms they saved the words before the confirmation is asked.
+  - The words are a full owner of the wallet (Circle adds the address at weight 1 with a threshold of 1), and the page
+    says so: anyone who has them can move every USDC in it. They are not offered for copying.
+  - The owner confirms they wrote the words down before the confirmation is asked. Its record also needs this wallet's
+    successful `UserOperationEvent`.
   - Recorded as `treasury_recovery_registered` `{ by, recoveryAddress, txHash }`.
   - **Skipping it is explicit:** "Skip: I understand that losing this passkey loses this wallet", recorded as
     `treasury_recovery_skipped` `{ by }`.

@@ -526,16 +526,24 @@ with no browser wallet:
   the owner's passkey. The browser keeps only the passkey's public part, and Vestiarion holds no key.
 - **The choice.** It records the address with no signed message (`treasury_wallet_chosen`); control
   is proven on chain by the wallet's own approval.
-- **The agent's wallet.** It is created in the same action as the choice, on both routes.
-- **The setup.** It is one user operation the wallet pays for: the contract through the
-  deterministic deployment proxy at a CREATE2 address salted by the workspace, its approval, and the
-  agent's gas.
+- **The agent's wallet.** It is created in the same action as the choice, on both routes, in a scope
+  of its own read after the choice.
+- **The setup.** It is one user operation the wallet pays for:
+  - the contract, deployed through the deterministic deployment proxy at a CREATE2 address salted by
+    the workspace, with fixed figures, so the address follows the wallet and the agent alone;
+  - `setLimits` with the owner's figures;
+  - its approval;
+  - the agent's gas, left out where the agent holds its own.
   - The server builds it (`preparePasskeySetup`). The browser rebuilds it with the same
-    `passkeySetupCalls` (`src/lib/passkey-treasury.ts`) and refuses any difference before the passkey
-    signs.
-  - `recordPasskeySetup` reads the result back: the transaction's success, the code at the address
-    (`verifyDeployedAt`), and the allowance. It records the wallet route's entries once, with
-    `signer: "passkey"`.
+    `passkeySetupCalls` (`src/lib/passkey-treasury.ts`) from the figures its form shows, and refuses any
+    difference before the passkey signs.
+  - `recordPasskeySetup` reads the result back: EntryPoint v0.7's `UserOperationEvent` for this wallet
+    with `success`, the code at the address (`verifyDeployedAt`), and the allowance. It records the wallet
+    route's entries once, with `signer: "passkey"`.
+  - A setup sent is kept in the browser until it is recorded and checked first on the next load
+    (`settlePasskeySetup`, `passkeyStepView`); a retry reuses the contract and never pays the agent's gas
+    twice. A record call that fails after a send counts as not yet read (`pollRecord`), so the page never says
+    nothing was sent once the passkey sent it.
 - **The recovery.** A recovery phrase made in the browser is registered as a recovery owner with
   Circle's `registerRecoveryAddress` (`treasury_recovery_registered`), or skipped knowingly
   (`treasury_recovery_skipped`). `goLive` refuses until one is recorded (`wallet_recovery_undecided`).
