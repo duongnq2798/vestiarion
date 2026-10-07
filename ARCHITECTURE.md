@@ -325,8 +325,9 @@ mainnet plan).
   - `orgConfig` carries the network. While Arc mainnet is off, a workspace on it gets no Circle credentials, with the
     reason, so its provider refuses.
   - Go live refuses a Circle key whose prefix names another network.
-- **`/open`:** one section per network. A network with figures gets the full section, Arc mainnet first; one with nothing
-  in it yet, or whose numbers cannot be read, a compact card after it.
+- **`/open`:** one section per network. A network where a payment settled in the period gets the full section, Arc
+  mainnet first, and the first one's headline figures sit under the page's heading, named as that network's. One with no
+  payment yet, or whose numbers cannot be read, is a compact card after them.
   - `open_numbers`, `open_first_payments` and `open_outcomes` take `(p_since, p_network)` and count one network.
   - Their one-argument versions stay for older code.
 

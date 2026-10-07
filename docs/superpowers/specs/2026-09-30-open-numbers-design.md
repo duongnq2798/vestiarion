@@ -162,3 +162,26 @@ payments are counted, never listed, and never shown as a day's amount).
   (disagreeing with the written policy, refused by code).
 - Not done, because the data does not exist or would break R6: milestone annotations on the chart, a USDC-by-day view
   for customers, and a "view all payments" page past the latest 20.
+
+## 10. Second round (2026-10-07)
+
+After the redesign, production showed Arc mainnet with one workspace live and no payment: a whole dashboard of zeros
+under the testnet one. Four changes followed; again no figure, query or ruling changed.
+
+- **A network earns the dashboard with a payment.** The full section needs a payment settled on the network in the
+  period. A network with workspaces live but no payment is a compact card: workspaces live, customers' among them, agent
+  cycles, payments settled, and every figure behind a disclosure. A network with no workspace at all keeps its empty
+  state. Network tabs were weighed and left out: they would hide one network's figures behind a click, and the compact
+  card already keeps the page short.
+- **Headline figures under the heading.** Four figures from the first network with a payment, labelled with that network
+  and the period, never added across networks (N7): customer workspaces (with how many are live and made a first
+  payment), payments settled (with customers' share and the USDC), invoices paid on time across every workspace, and the
+  median time to a customer's first payment. Each says whose it is, so the trust promise now says that every figure
+  does, rather than that the headline is customers' alone.
+- **The checks as a pipeline.** Model → Policy → Code → Person → Chain, each stage named and its figures aligned, with an
+  arrow into every stage but the first: across on a wide screen, down on a narrow one.
+- **Customers' payments by day first.** The chart has two tabs, Customers and All activity, both rendered so the page
+  works before JavaScript. Customers' tab counts their payments by day and nothing else (R6). It opens on Customers
+  unless customers paid nothing in the period.
+- Body copy in cards went from 13 px to 14 px, section introductions to 15 px, and the space between chapters grew so
+  each reads as a new one.

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { NetworkNumbers } from "@/components/open/NetworkNumbers";
+import { Headline, NetworkNumbers, QuietNetwork } from "@/components/open/NetworkNumbers";
 import { PeriodNav } from "@/components/open/PeriodNav";
 import { Badge } from "@/components/ui/Badge";
 import { Callout } from "@/components/ui/Callout";
@@ -44,9 +44,12 @@ async function numbersFor(period: Period, profile: NetworkProfile): Promise<Open
 /** Nothing to count yet: no workspace live on the network and no payment settled on it. */
 const empty = (numbers: OpenNumbers) => numbers.sides.total.liveWorkspaces === 0 && numbers.sides.total.payments === 0;
 
+/** Enough to draw the whole dashboard: a payment settled on the network in the period. */
+const settled = (numbers: OpenNumbers) => numbers.sides.total.payments > 0;
+
 /** What the trust strip under the heading promises; the method below says how each is kept. */
 const PROMISES: ReadonlyArray<{ title: string; body: string }> = [
-  { title: "Customers counted apart", body: "The headline figures are customers' alone. The workspaces the team runs to build and test the product are counted beside them, never mixed in." },
+  { title: "Customers counted apart", body: "Workspaces the team runs to build and test the product are counted apart from customers', and every figure says whose it is." },
   { title: "One network at a time", body: "Arc mainnet and Arc testnet are each counted on their own, and never added together." },
   { title: "Checkable on chain", body: "Our own payments link to the explorer. Customers' are counted, never listed." },
 ];
@@ -54,17 +57,20 @@ const PROMISES: ReadonlyArray<{ title: string; body: string }> = [
 /**
  * The open numbers (docs/superpowers/specs/2026-09-30-open-numbers-design.md):
  * platform-wide usage, public, read on every request through the aggregate
- * functions, one network at a time. A network with figures gets the full
- * section, customers' headline figures first; one with nothing in it yet, or
- * whose numbers cannot be read, a compact card after it, so a page of zeros
- * never leads. The database's own message is logged, never shown.
+ * functions, one network at a time. A network where a payment settled in the
+ * period gets the full section, customers' figures first, and the first such
+ * network's headline figures sit under the heading. A network with no payment
+ * yet, or whose numbers cannot be read, is a compact card after them, so a
+ * dashboard of zeros never shows. The database's own message is logged, never
+ * shown.
  */
 export default async function OpenPage({ searchParams }: OpenPageProps) {
   const period = parsePeriod(await searchParams);
   const read = await Promise.all(NETWORKS.map((network) => numbersFor(period, network.profile)));
   const readAt = read.find((numbers) => numbers !== null)?.generatedAt ?? null;
   const networks = NETWORKS.map((network, index) => ({ ...network, numbers: read[index] }));
-  const full = networks.filter((network) => network.numbers !== null && !empty(network.numbers));
+  const full = networks.filter((network) => network.numbers !== null && settled(network.numbers));
+  const lead = full[0];
   const compact = networks.filter((network) => !full.includes(network));
 
   return (
@@ -89,30 +95,32 @@ export default async function OpenPage({ searchParams }: OpenPageProps) {
             </p>
           </header>
 
-          <ul className="mt-8 grid gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-3">
-            {PROMISES.map((promise) => (
-              <li key={promise.title} className="bg-surface px-5 py-4">
-                <p className="text-sm font-semibold text-ink">{promise.title}</p>
-                <p className="mt-1 text-[0.8125rem] leading-5 text-ink-2">{promise.body}</p>
-              </li>
-            ))}
-          </ul>
-
           <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
             <PeriodNav period={period} />
             <p className="text-xs text-ink-3">Figures can be up to a minute old. Days are UTC.</p>
           </div>
           {period.fallback && <p className="mt-3 text-sm text-ink-2">That period could not be read, so this shows all time.</p>}
 
+          {lead?.numbers && <Headline numbers={lead.numbers} period={period} network={lead.profile} />}
+
+          <ul className="mt-4 grid gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-3">
+            {PROMISES.map((promise) => (
+              <li key={promise.title} className="bg-surface px-5 py-4">
+                <p className="text-sm font-semibold text-ink">{promise.title}</p>
+                <p className="mt-1 text-sm leading-6 text-ink-2">{promise.body}</p>
+              </li>
+            ))}
+          </ul>
+
           {full.map(({ section, profile, about, money, numbers }) => (
-            <section key={section} aria-labelledby={section} className="mt-14 border-t border-line pt-10">
+            <section key={section} aria-labelledby={section} className="mt-20 border-t border-line pt-12">
               <NetworkHead id={section} label={profile.label} about={about} money={money} />
               {numbers && <NetworkNumbers numbers={numbers} period={period} network={profile} />}
             </section>
           ))}
 
           {compact.length > 0 && (
-            <div className={full.length > 0 ? "mt-16 grid gap-4 border-t border-line pt-10 md:grid-cols-2" : "mt-14 grid gap-4 md:grid-cols-2"}>
+            <div className={full.length > 0 ? "mt-20 grid gap-6 border-t border-line pt-12 md:grid-cols-2" : "mt-14 grid gap-6 md:grid-cols-2"}>
               {compact.map(({ section, profile, about, money, numbers }) => (
                 <section key={section} aria-labelledby={section} className="min-w-0">
                   <NetworkHead id={section} label={profile.label} about={about} money={money} compact />
@@ -120,6 +128,8 @@ export default async function OpenPage({ searchParams }: OpenPageProps) {
                     <Callout tone="held" className="mt-4" title={`The ${profile.label} numbers could not be read right now.`}>
                       Nothing is wrong with your connection. Try again in a minute.
                     </Callout>
+                  ) : !empty(numbers) ? (
+                    <QuietNetwork numbers={numbers} period={period} network={profile} />
                   ) : (
                     <EmptyState
                       compact
@@ -133,7 +143,7 @@ export default async function OpenPage({ searchParams }: OpenPageProps) {
             </div>
           )}
 
-          <section aria-labelledby="method" className="mt-16 border-t border-line pt-10">
+          <section aria-labelledby="method" className="mt-20 border-t border-line pt-12">
             <Eyebrow>Methodology</Eyebrow>
             <h2 id="method" className="mt-1.5 text-2xl font-semibold tracking-tight text-ink">
               How the figures are counted
