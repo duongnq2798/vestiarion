@@ -42,7 +42,7 @@ export function TelegramCard({ orgSlug, link }: { orgSlug: string; link: { usern
           <input type="hidden" name="orgSlug" value={orgSlug} />
           <div className="min-w-0 max-w-prose space-y-1">
             <p className="inline-flex items-center gap-2 text-sm font-semibold text-ink">
-              <BrandMark brand="telegram" className="size-4 text-ink-2" />
+              <BrandMark brand="telegram" />
               Telegram
             </p>
             <p className="text-sm text-ink-2">
@@ -66,7 +66,7 @@ export function TelegramCard({ orgSlug, link }: { orgSlug: string; link: { usern
         <input type="hidden" name="orgSlug" value={orgSlug} />
         <div className="max-w-prose space-y-1">
           <p className="inline-flex items-center gap-2 text-sm font-semibold text-ink">
-            <BrandMark brand="telegram" className="size-4 text-ink-2" />
+            <BrandMark brand="telegram" />
             Telegram
           </p>
           <p className="text-sm text-ink-2">

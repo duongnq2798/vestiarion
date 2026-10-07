@@ -225,7 +225,7 @@ function NetworkHead({ id, label, about, money, compact = false }: { id: string;
       <div>
         <div className="flex items-center gap-2.5">
           {/* Both networks are Arc's; the mark sits beside the name, which says which one. */}
-          <BrandMark brand="arc" className={compact ? "h-4 w-auto text-ink-2" : "h-6 w-auto text-ink-2"} />
+          <BrandMark brand="arc" size={compact ? 16 : 24} />
           <h2 id={id} className={compact ? "text-xl font-semibold tracking-tight text-ink" : "text-3xl font-semibold tracking-[-0.03em] text-ink"}>
             {label}
           </h2>

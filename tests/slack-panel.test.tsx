@@ -83,6 +83,6 @@ describe("SlackPanel", () => {
 
   it("heads the section with Slack's mark beside its name (brand marks M2)", () => {
     const markup = renderToStaticMarkup(<SlackPanel orgSlug="acme" view={{ installed: false }} canManage canAdminister={false} notice={null} />);
-    expect(markup).toMatch(/<h2 id="slack-title"[^>]*><span[^>]*><svg aria-hidden="true"[^>]*data-brand="slack"[^>]*>.*<\/svg>Slack<\/span><\/h2>/);
+    expect(markup).toMatch(/<h2 id="slack-title"[^>]*><span[^>]*><img [^>]*data-brand="slack"[^>]*\/>Slack<\/span><\/h2>/);
   });
 });

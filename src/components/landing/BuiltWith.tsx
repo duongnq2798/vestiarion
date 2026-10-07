@@ -6,7 +6,7 @@ const REPOSITORY = "https://github.com/duongnq2798/vestiarion";
 /**
  * What Vestiarion is built on and works with, each with a link to the evidence
  * rather than a bare logo (docs/superpowers/specs/2026-10-07-brand-marks-design.md):
- * the services the code integrates with, in one quiet ink, each named in words.
+ * the services the code integrates with, each in its own mark and named in words.
  * "Built on" and "works with", never "partners" or "trusted by": none of them
  * vouches for Vestiarion.
  */
@@ -40,7 +40,7 @@ export function BuiltWith() {
                 <Link href={service.href} className="group block" {...(external ? { target: "_blank", rel: "noreferrer" } : {})}>
                   <p className="font-mono text-[0.6875rem] uppercase tracking-[0.1em] text-ink-3">{service.role}</p>
                   <p className="mt-2 flex h-5 items-center gap-2 text-[0.9375rem] font-semibold text-ink">
-                    <BrandMark brand={service.brand} className="h-4 w-auto text-ink-2 transition-colors duration-150 ease-standard group-hover:text-ink" />
+                    <BrandMark brand={service.brand} />
                     <span className={isWordmark(service.brand) ? "sr-only" : undefined}>{service.name}</span>
                   </p>
                   <p className="mt-1.5 text-xs leading-relaxed text-ink-2">{service.body}</p>
@@ -52,6 +52,10 @@ export function BuiltWith() {
             );
           })}
         </ul>
+        <p className="border-t border-line py-3 text-[0.6875rem] leading-relaxed text-ink-3">
+          npm is a registered trademark of npm, Inc. Arc, Circle, Slack and Telegram are trademarks of their respective owners. Their
+          marks show what Vestiarion is built on and connects to, not an endorsement.
+        </p>
       </div>
     </section>
   );
