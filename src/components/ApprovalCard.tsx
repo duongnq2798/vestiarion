@@ -6,6 +6,7 @@ import { useCallback, useState, type FormEvent } from "react";
 import { approveInvoiceAction, rejectInvoiceAction, returnInvoiceAction } from "@/app/actions/approvals";
 import { AddDetailsDialog } from "@/components/AddDetailsDialog";
 import { Badge, type BadgeProps } from "@/components/ui/Badge";
+import VerdictControl from "@/components/VerdictControl";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -21,11 +22,12 @@ import { withSuccessToast } from "@/components/withSuccessToast";
 import type { WaitingPayable } from "@/lib/agent/approvals";
 import { addedDetailsSentence } from "@/lib/added-details";
 import { approvalAnchor, orgHref } from "@/lib/auth/org-paths";
-import { agentResumes, CASH_SHORTFALL, counterpartyPath, ruleNextStep } from "@/lib/next-step";
+import { agentResumes, CASH_SHORTFALL, SHADOW_VERDICT, counterpartyPath, ruleNextStep } from "@/lib/next-step";
 import { amountToPay } from "@/lib/agent/payment-timing";
 import { utcDay, utcMinute } from "@/lib/copy";
 import { chainById, homeChain, networkOfChain, paidAcrossChains } from "@/lib/payee-chains";
 import { approveFirstDescription, mayApproveNow, onlyApproverOfTwo, SECOND_APPROVAL_PAYS, twoApprovalsLine } from "@/lib/two-approvals";
+import type { VerdictView } from "@/lib/verdict-view";
 
 const INITIAL: ActionResult = { ok: false, message: "" };
 const approve = withSuccessToast(approveInvoiceAction);
@@ -148,6 +150,7 @@ export default function ApprovalCard({
   soleApprover = false,
   canEdit = false,
   memberEmails = {},
+  verdict,
 }: {
   orgSlug: string;
   payable: WaitingPayable;
@@ -160,6 +163,8 @@ export default function ApprovalCard({
   canEdit?: boolean;
   /** The emails of the members who approved a payment above the figure for two approvals, by user id. */
   memberEmails?: Record<string, string>;
+  /** A person's verdict on the agent's decision, in shadow mode: given, or to give in place of approving it (shadow mode S4). */
+  verdict?: VerdictView;
 }) {
   const unfinished = payable.status === "processing" && payable.reclaimable;
   // Above the figure for two approvals: one person, sole approver or not, never pays it alone (two approvals T5).
@@ -257,8 +262,20 @@ export default function ApprovalCard({
           <CardFooter>
             <p className="text-sm text-ink-2">Being decided by someone else right now.</p>
           </CardFooter>
+        ) : canDecide && verdict && verdict.open && payable.heldForVerdict ? (
+          // Held in shadow mode for a person to agree: the verdict is the decision (shadow mode S4).
+          <CardFooter>
+            <VerdictControl orgSlug={orgSlug} view={verdict} />
+          </CardFooter>
         ) : canDecide ? (
-          <Decisions orgSlug={orgSlug} payable={payable} viewerId={viewerId} sandbox={sandbox} ownEntry={ownEntry} ownAddress={ownAddress} canAddDetails={canAddDetails} />
+          <>
+            {verdict?.given && (
+              <CardFooter>
+                <VerdictControl orgSlug={orgSlug} view={verdict} />
+              </CardFooter>
+            )}
+            <Decisions orgSlug={orgSlug} payable={payable} viewerId={viewerId} sandbox={sandbox} ownEntry={ownEntry} ownAddress={ownAddress} canAddDetails={canAddDetails} />
+          </>
         ) : null}
       </article>
     </Card>
@@ -422,7 +439,7 @@ function ApprovalGuidance({
     );
   }
   if (!selfEntered) return null;
-  const rule = payable.guardrailRule ?? (payable.heldForCash ? CASH_SHORTFALL : null);
+  const rule = payable.guardrailRule ?? (payable.heldForCash ? CASH_SHORTFALL : payable.heldForVerdict ? SHADOW_VERDICT : null);
   const resumes = agentResumes(rule);
   const fix = ruleNextStep(rule, { id: payable.counterpartyId, name: payable.counterpartyName })?.fix ?? null;
   return (

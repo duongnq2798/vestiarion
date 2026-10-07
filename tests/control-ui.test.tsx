@@ -35,6 +35,7 @@ vi.mock("@/app/actions/approvals", () => ({
   returnInvoiceAction: vi.fn(),
   addInvoiceDetailsAction: vi.fn(),
 }));
+vi.mock("@/app/actions/verdicts", () => ({ giveVerdictAction: vi.fn() }));
 vi.mock("@/app/actions/agent", () => ({
   pauseAgentAction: vi.fn(),
   resumeAgentAction: vi.fn(),
@@ -517,19 +518,30 @@ describe("the new control screens, as source", () => {
   it("Invoices tells a waiting payable's row what it needs, and gives its card what a person can do about it", () => {
     const invoices = read("src/app/o/[slug]/invoices/page.tsx");
     expect(invoices).toContain("hint: facts ? waitingHint(facts.onFile, facts.added) : undefined");
-    expect(invoices).toContain("needsYou.map((decision) => row(decision, needsYouFor))");
+    expect(invoices).toContain("needsYou.map((decision) => row(decision, withVerdict(needsYouFor)))");
     expect(invoices).toContain("<WaitingPayableAction");
     // A counterparty paid without purchase orders is never asked for one (three-way match design M2).
     expect(invoices).toContain("purchaseOrderRequired: counterpartiesById.get(invoice.counterparty_id)?.purchase_order_required !== false");
     expect(invoices).toContain('viewerCan(slug, "approval.decide")');
   });
 
+  it("shows a verdict on each card in shadow mode, first, and alone on a payment held for it (shadow mode S3, S4)", () => {
+    for (const page of [read("src/app/o/[slug]/console/page.tsx"), read("src/app/o/[slug]/invoices/page.tsx")]) {
+      expect(page).toContain("verdictFacts(db(), ");
+      expect(page).toContain("<VerdictControl orgSlug={slug} view={decision.verdict} />");
+      expect(page).toContain("if (decision.verdict.heldForVerdict && decision.verdict.open) return verdict;");
+    }
+    const invoices = read("src/app/o/[slug]/invoices/page.tsx");
+    expect(invoices).toContain("upcoming.map((decision) => row(decision, withVerdict(receiptFor)))");
+    expect(read("src/app/o/[slug]/console/page.tsx")).toContain("{shadow && shadowSummary && <ShadowModeSummary orgSlug={slug} mode={shadow} summary={shadowSummary} />}");
+  });
+
   it("the console's Stopped cards say what stopped each payable and where to handle it", () => {
     const console_ = read("src/app/o/[slug]/console/page.tsx");
     expect(console_).toContain("footerAction={nextStepFor(decision)}");
     // A hold for want of cash is no guardrail rule, but is explained like one (reserve cash back R4).
-    expect(console_).toContain("rule={decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : null)}");
-    expect(read("src/app/o/[slug]/invoices/page.tsx")).toContain("rule={decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : null)}");
+    expect(console_).toContain("rule={decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : decision.heldForVerdict ? SHADOW_VERDICT : null)}");
+    expect(read("src/app/o/[slug]/invoices/page.tsx")).toContain("rule={decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : decision.heldForVerdict ? SHADOW_VERDICT : null)}");
     // A counterparty paid without purchase orders is never asked for one there either (three-way match design M2).
     expect(console_).toContain("purchaseOrderRequired: counterpartiesById.get(invoice.counterparty_id)?.purchase_order_required !== false");
   });
@@ -537,7 +549,7 @@ describe("the new control screens, as source", () => {
   it("AP / AR says which payables a running cycle is deciding", () => {
     const invoices = read("src/app/o/[slug]/invoices/page.tsx");
     expect(invoices).toContain("hasRunningCycle().catch(() => false)");
-    expect(invoices).toContain("entries, { network, deciding })");
+    expect(invoices).toContain("entries, { network, deciding, verdicts })");
   });
 
   it("every page's frame shows the agent's live state, and a successful form tells it to watch closely", () => {

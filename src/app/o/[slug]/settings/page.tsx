@@ -7,6 +7,7 @@ import GitHubPanel from "@/components/GitHubPanel";
 import LedgerKeyPanel from "@/components/LedgerKeyPanel";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import { SettingsSections, type SettingsGroup } from "@/components/SettingsSections";
+import ShadowModePanel from "@/components/ShadowModePanel";
 import SlackPanel from "@/components/SlackPanel";
 import TwoApprovalsPanel from "@/components/TwoApprovalsPanel";
 import { UsycReservePanel } from "@/components/UsycReservePanel";
@@ -17,7 +18,7 @@ import { twoApprovalsStatus } from "@/lib/approval-policy";
 import { requireMembership } from "@/lib/auth/membership";
 import { can } from "@/lib/auth/roles";
 import { shellModes } from "@/lib/circle";
-import { platformDb, unwrap } from "@/lib/dal";
+import { db, platformDb, unwrap } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import { inboxFor } from "@/lib/email-inbox/inboxes";
 import { inboxAddress, inboxSettingsFromEnv } from "@/lib/email-inbox/settings";
@@ -35,6 +36,7 @@ import { slackSettingsFromEnv } from "@/lib/slack/settings";
 import { linkFor as telegramLinkFor } from "@/lib/telegram/links";
 import { telegramSettingsFromEnv } from "@/lib/telegram/settings";
 import { networkProfile } from "@/lib/network";
+import { readShadowMode } from "@/lib/shadow-mode";
 
 export const dynamic = "force-dynamic";
 
@@ -61,7 +63,7 @@ export default async function SettingsPage({
     // And how connecting GitHub went (GitHub App design G2).
     const { slack: slackOutcome, github: githubOutcome } = await searchParams;
     const inboxSettings = inboxSettingsFromEnv();
-    const [goLive, apiKeys, webhookEndpoints, ledgerKey, dashboardStats, deletion, usyc, slack, notifySwitch, telegramLink, inbox, github, twoApprovals] = await Promise.all([
+    const [goLive, apiKeys, webhookEndpoints, ledgerKey, dashboardStats, deletion, usyc, slack, notifySwitch, telegramLink, inbox, github, twoApprovals, shadow] = await Promise.all([
       goLiveStatus(membership.orgId),
       listApiKeys(membership.orgId),
       listWebhookEndpoints(membership.orgId),
@@ -108,6 +110,13 @@ export default async function SettingsPage({
         console.error("settings: two approvals not loaded", error instanceof Error ? error.message : error);
         return null;
       }),
+      // Shadow mode (shadow mode S1); best effort, like two approvals: a section that cannot be read is left out.
+      readShadowMode(db())
+        .then((mode) => ({ mode }))
+        .catch((error: unknown) => {
+          console.error("settings: shadow mode not loaded", error instanceof Error ? error.message : error);
+          return null;
+        }),
     ]);
     const notifyEmail = notifySwitch ? (unwrap(notifySwitch) as { notify_email: boolean }).notify_email : false;
 
@@ -141,6 +150,13 @@ export default async function SettingsPage({
         sections: [
           // goLiveStatus carries no credential and no wallet id, so the whole status can cross into the client component.
           { id: "go-live-title", title: "Go live", content: <GoLivePanel orgSlug={slug} status={goLive} canAdminister={canAdminister} /> },
+          {
+            id: "shadow-mode-title",
+            title: "Shadow mode",
+            content: shadow ? (
+              <ShadowModePanel orgSlug={slug} mode={shadow.mode} network={membership.network} canChange={can(membership.role, "approval.policy")} />
+            ) : null,
+          },
           {
             id: "usyc-reserve-title",
             title: "USYC reserve",

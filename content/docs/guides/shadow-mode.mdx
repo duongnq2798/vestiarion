@@ -1,0 +1,60 @@
+Shadow mode lets a business try the agent on its real bills without moving its money. You keep paying your bills as you do today, in your own currency. The agent reads the same bills and decides on each one, as it would in any workspace, and you agree or disagree with every decision. Each payment you agree to is made in USDC on Arc testnet, at the bill's amount in USDC. Over time the console shows how often you agreed with the agent.
+
+## Before you start
+
+- **A workspace on Arc testnet**, live, with USDC in its operating wallet: see [Go live](/docs/guides/go-live). Each payment you agree to is paid from that wallet, so keep it funded from Circle's faucet.
+- **The owner of the workspace.** Only an owner turns shadow mode on or off. Anyone who can approve payments (an owner, admin or approver) gives verdicts.
+
+Shadow mode is for Arc testnet only. On Arc mainnet the panel says "Shadow mode runs on Arc testnet. On Arc mainnet the agent pays your real bills." Once you trust the agent, a small share of your bills can move to a workspace on Arc mainnet, which pays them in real USDC.
+
+## 1. Turn it on
+
+Open **Settings**. Under **Workspace**, the **Shadow mode** section says it is off. Choose **Your currency**, the currency your bills are written in, then choose **Turn on shadow mode**. From then on the section says since when it is on, and for which currency, and that the agent pays nothing until a person agrees.
+
+## 2. Add your bills as you do today
+
+Add each bill as a payable, in any of the usual ways: in AP / AR, from a document, by email, or through the API. For now a bill is entered in USDC: enter its amount converted at the day's rate.
+
+The agent decides on each bill in its next cycle, as in any workspace. It may pay it now, schedule it for a later day, hold it, flag it, or ask for what is missing. If a supplier sends you no purchase orders, turn purchase orders off on its row in Counterparties, so its bills are not held for one.
+
+## 3. Agree or disagree with each decision
+
+When the agent decides to pay a bill now, nothing is sent. The payment is held, and its card says: "Shadow mode: the agent decided to pay it, and pays nothing until a person agrees." In Approvals, AP / AR and the console, its card asks **Do you agree with the agent?**
+
+- **Agree and pay** asks you to confirm: "You agree with the agent, and it is paid in USDC on Arc testnet now." The payment then goes through the same checks as **Approve and pay**, and its card shows the transaction on Arc testnet.
+- **Disagree** asks **Why do you disagree?**, in at most 280 characters. Then choose what happens to the bill: **Decide it again later** returns it to the agent for its next cycle, and **Do not pay it** rejects it.
+
+Every other decision, such as a payment scheduled for a later day or a bill held for a check, offers **Agree** and **Disagree** on its card in AP / AR. Its own actions stay where they are. When a scheduled payment's day comes, the agent decides again, and that payment is held for your verdict.
+
+Each decision takes one verdict, and the card shows it once given. A second verdict on the same decision changes nothing.
+
+## 4. See how often you agreed
+
+The console shows a **Shadow mode** section while shadow mode is on. It says how many of the agent's decisions you agreed with, out of the verdicts given, as a share. It also says how many decisions still wait for your verdict, with **See them in AP / AR** to give them.
+
+## 5. Turn it off
+
+In **Settings**, choose **Turn off shadow mode** and confirm. The agent pays on its own again, within its limits. A payment waiting for a person to agree stays held until a person decides it.
+
+## What the ledger records
+
+Each step is a signed entry in the workspace's ledger, and reaches webhook endpoints as `ledger.appended`:
+
+- `shadow_mode_started` and `shadow_mode_ended`, with who turned it on or off and the currency.
+- `ap_pay` for a payment held in shadow mode, with `execution.heldBecause: "shadow_verdict"`. It is not a refusal by code: the decision passed every check.
+- `decision_verdict` for each verdict: who gave it, the decision it is about (`entrySeq`), the payable (`subjectId`), the agent's action, `agree` or `disagree`, and the reason.
+
+## If something goes wrong
+
+| Message | What to do |
+| --- | --- |
+| Choose your currency as a three-letter code, such as VND. USDC and EURC are what the agent pays in, not a bill's currency. | Choose your currency from the list. |
+| Shadow mode is already on. | Someone turned it on a moment before. Reload the page. |
+| Shadow mode is already off. | Someone turned it off a moment before. Reload the page. |
+| A cycle is running. Try again in a minute, once it has finished. | The agent read the workspace's settings when its cycle began. Try again once it ends. |
+| Verdicts are given in shadow mode. An owner turns it on in Settings. | Shadow mode is off. An owner turns it on in **Settings**. |
+| That decision came before shadow mode started. | Verdicts are given on decisions made in shadow mode only. |
+| Say why you disagree, in a few words. | Enter your reason, then choose **Disagree** again. |
+| Keep the reason to 280 characters. | Shorten your reason. |
+| It no longer waits for your verdict, so nothing was paid. | The bill was paid, returned or decided again since. Your agreement is recorded; the card shows where it stands. |
+| A verdict was given on this decision already | Someone gave a verdict on it a moment before. The card shows which. |

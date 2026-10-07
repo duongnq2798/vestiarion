@@ -188,12 +188,15 @@ function apFake(options: {
   newPayee?: { paidTo: Set<string>; entries: Map<string, Array<{ action: string; detail: Record<string, unknown> }>> };
   /** The workspace's figure above which a payment needs two approvals (two approvals T1); none when absent. */
   twoApprovals?: number;
+  /** The business's currency when the workspace is in shadow mode (shadow mode S1); off when absent. */
+  shadow?: string;
 }) {
   const intents = paymentIntentsBackend(ORG);
   const fake = fakeSupabase((request) => {
     if (request.path === "/rest/v1/orgs") return { body: orgRow() };
     if (request.path === "/rest/v1/agent_budgets") return { body: options.budget ? [options.budget] : [] };
     if (request.path === "/rest/v1/approval_policies") return { body: options.twoApprovals ? [{ two_approvals_above: String(options.twoApprovals) }] : [] };
+    if (request.path === "/rest/v1/shadow_modes") return { body: options.shadow ? [{ currency: options.shadow, started_at: "2026-10-01T00:00:00Z", started_by: null }] : [] };
     // The spending limit's read of the agent's payments (filtered by actor), not the ledger's own head read.
     if (request.path === "/rest/v1/ledger_entries" && request.method === "GET" && request.params.has("actor")) return { body: options.agentPayments ?? [] };
     if (request.path === "/rest/v1/rpc/append_ledger_entry") return { body: LEDGER_ROW };
@@ -1548,5 +1551,79 @@ describe("the AP stage and two approvals above the workspace's figure (two appro
 
     const [entry] = ledger(fake.requests);
     expect((entry.p_detail as { observed: Record<string, unknown> }).observed).not.toHaveProperty("twoApprovalsAbove");
+  });
+});
+
+
+describe("the AP stage in shadow mode (shadow mode S2)", () => {
+  const plain = { early_pay_discount_pct: null, discount_due_date: null };
+  const northwind = () => payable({ amount: "300", ...plain });
+  const contoso = () =>
+    payable({
+      id: OTHER_INVOICE_ID, amount: "250", memo: "Hosting", po_reference: "PO-2001", counterparty_id: CONTOSO, ...plain,
+      counterparties: counterparty({ id: CONTOSO, name: "Contoso", address: "0xcontoso" }),
+    });
+  const payNow = () => model(() => ({ action: "pay", reasoning: "Matched and within the limit; paying now.", confidence: 0.9 }));
+
+  it("holds a payment that passed every check for a person to agree, and sends nothing", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    payNow();
+    const { fake, chain, metrics, stage } = apFake({ book: [northwind()], shadow: "VND" });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    const [held] = invoicePatches(fake.requests);
+    expect(held.body).toMatchObject({ status: "held", tx_ref: null, paid_amount: null });
+    expect((held.body as Record<string, string>).agent_reasoning).toContain("[shadow mode: held for a person to agree; nothing is paid until they do]");
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_action).toBe("ap_pay");
+    expect(entry.p_detail).toMatchObject({
+      guardrailBlocked: false,
+      guardrailRule: null,
+      execution: { resultingStatus: "held", heldBecause: "shadow_verdict" },
+    });
+    // Not a refusal by code: the decision passed every check.
+    expect(metrics.snapshot()).toMatchObject({ guardrailOverrideCount: 0 });
+  });
+
+  it("keeps a guardrail's own hold, its rule and its words", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    payNow();
+    const { fake, chain, stage } = apFake({ book: [northwind()], shadow: "VND", twoApprovals: 250 });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_detail).toMatchObject({ guardrailBlocked: true, guardrailRule: "workspace.two_approvals" });
+    expect((entry.p_detail as { execution: Record<string, unknown> }).execution).not.toHaveProperty("heldBecause");
+  });
+
+  it("leaves a schedule standing: on its day the payment is held instead", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    model(() => ({ action: "schedule", payOn: "2026-10-05", reasoning: "Pay on its due date, not before.", confidence: 0.8 }));
+    const { fake, chain, stage } = apFake({ book: [northwind()], shadow: "VND" });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    const [patch] = invoicePatches(fake.requests);
+    expect(patch.body).toMatchObject({ status: "scheduled" });
+    const [entry] = ledger(fake.requests);
+    expect((entry.p_detail as { execution: Record<string, unknown> }).execution).not.toHaveProperty("heldBecause");
+  });
+
+  it("reads shadow mode once for the stage, and pays as before when it is off", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    payNow();
+    const held = apFake({ book: [contoso(), northwind()], shadow: "VND" });
+    await held.stage();
+    expect(held.chain.transfers).toEqual([]);
+    expect(held.fake.requests.filter((r) => r.path === "/rest/v1/shadow_modes")).toHaveLength(1);
+
+    const paid = apFake({ book: [contoso()] });
+    await paid.stage();
+    expect(paid.chain.transfers.map((t) => t.amount)).toEqual([250]);
   });
 });

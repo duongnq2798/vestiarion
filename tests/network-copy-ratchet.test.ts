@@ -27,7 +27,7 @@ const ALLOWED: Record<string, number> = {
   "src/components/landing/LiveProof.tsx": 1,
   "src/components/landing/hero/scenarios.ts": 1,
   "src/components/vx/SiteChrome.tsx": 2,
-  "src/lib/docs/nav.ts": 4,
+  "src/lib/docs/nav.ts": 5,
   "src/components/CreateWorkspaceForm.tsx": 1,
   "src/app/open/page.tsx": 4,
   // Terms and privacy: the partner rewrites them before a deployment switches Arc mainnet on (C5).
@@ -49,6 +49,12 @@ const ALLOWED: Record<string, number> = {
   "src/components/UsycReservePanel.tsx": 5,
   "src/lib/platform/usyc-reserve.ts": 1,
   "src/lib/agent/liquidity.ts": 1,
+  // Shadow mode, only on Arc testnet (shadow mode S1): its Settings panel and the refusal it shows on Arc mainnet, the
+  // console's summary and the verdict's Agree and pay, both shown only while a workspace is in it.
+  "src/components/ShadowModePanel.tsx": 2,
+  "src/components/ShadowModeSummary.tsx": 1,
+  "src/components/VerdictControl.tsx": 1,
+  "src/lib/shadow-mode.ts": 1,
   // Passkey wallets, offered only to a payee on Arc testnet (`modularWallets`).
   "src/components/payee/PasskeyWalletOption.tsx": 1,
   "src/components/wallet/PasskeyWallet.tsx": 1,

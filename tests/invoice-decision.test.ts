@@ -530,3 +530,54 @@ describe("invoiceDecision: a payment held for the agent's spending limit (outflo
     expect(decision.guardrail).toEqual({ rule: "workspace.outflow_budget", attempted: 117, attemptedToken: "USDC", limit: 50, limitToken: "USDC", note: "left of the 2,000.00 USDC 7-day spending limit; 1,950.00 USDC already paid in the last 7 days" });
   });
 });
+
+describe("invoiceDecision: a payment held in shadow mode (shadow mode S2)", () => {
+  const entry = (seq: number, action: string, actor: "agent" | "human", detail: Record<string, unknown>): LedgerEntry => ({
+    seq, id: `e${seq}`, ts: "2026-10-07T10:00:00.000Z", actor, domain: "ap", action, summary: action, detail,
+    bodyHash: "00", signature: "00", prevHash: "00", hash: "00", signingKeyId: null,
+  });
+  const apPay = entry(41, "ap_pay", "agent", {
+    invoiceId: "inv-1",
+    decision: { action: "pay", reasoning: "Matched and within the limit; paying now.", confidence: 0.9 },
+    guardrailBlocked: false,
+    guardrailRule: null,
+    execution: { resultingStatus: "held", heldBecause: "shadow_verdict" },
+  });
+  const held = invoice({ status: "held", agent_reasoning: "Matched and within the limit; paying now. [shadow mode: held for a person to agree; nothing is paid until they do]" });
+
+  it("says it is held for a person to agree, which no guardrail did", () => {
+    const decision = invoiceDecision(held, undefined, [apPay], { network: "arc-testnet" });
+    expect(decision.heldForVerdict).toBe(true);
+    expect(decision.heldForCash).toBeUndefined();
+    expect(decision.auditSeq).toBe(41);
+  });
+
+  it("keeps the agent's decision on the card once a person's verdict on it is newer", () => {
+    const verdict = entry(42, "decision_verdict", "human", { by: "u1", entrySeq: 41, subject: "invoice", subjectId: "inv-1", agentAction: "ap_pay", verdict: "agree", reason: null });
+    const decision = invoiceDecision(held, undefined, [verdict, apPay], { network: "arc-testnet" });
+    expect(decision.auditSeq).toBe(41);
+    expect(decision.heldForVerdict).toBe(true);
+  });
+
+  it("is not held for a verdict once a person paid it", () => {
+    const paid = invoiceDecision(invoice({ status: "paid", tx_ref: "0xabc" }), undefined, [apPay], { network: "arc-testnet" });
+    expect(paid.heldForVerdict).toBeUndefined();
+  });
+});
+
+describe("invoiceDecision: the verdict a card shows (shadow mode S3)", () => {
+  const apPay: LedgerEntry = {
+    seq: 41, id: "e41", ts: "2026-10-07T10:00:00.000Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "ap_pay",
+    detail: { invoiceId: "inv-1", decision: { action: "pay" }, guardrailBlocked: false, execution: { resultingStatus: "held", heldBecause: "shadow_verdict" } },
+    bodyHash: "00", signature: "00", prevHash: "00", hash: "00", signingKeyId: null,
+  };
+
+  it("carries the verdict view when the page gives the facts, and none when it does not", () => {
+    const held = invoice({ status: "held" });
+    const verdicts = { shadow: { startedAt: "2026-10-07T00:00:00.000Z" }, given: new Map(), canGive: true };
+    expect(invoiceDecision(held, undefined, [apPay], { network: "arc-testnet", verdicts }).verdict).toEqual({
+      entrySeq: 41, agentAction: "ap_pay", given: null, open: true, heldForVerdict: true,
+    });
+    expect(invoiceDecision(held, undefined, [apPay], { network: "arc-testnet" }).verdict).toBeUndefined();
+  });
+});

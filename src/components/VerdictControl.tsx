@@ -1,0 +1,111 @@
+"use client";
+
+import { Check, CircleCheck, ThumbsDown } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState, useTransition, type FormEvent } from "react";
+import { giveVerdictAction } from "@/app/actions/verdicts";
+import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from "@/components/ui/Dialog";
+import { Field } from "@/components/ui/Field";
+import { FormMessage } from "@/components/ui/FormMessage";
+import { Textarea } from "@/components/ui/Input";
+import { RadioGroup } from "@/components/ui/RadioGroup";
+import type { VerdictView } from "@/lib/verdict-view";
+
+/**
+ * A person's verdict on the agent's decision, on its card (docs/superpowers/specs/2026-10-07-shadow-mode-design.md
+ * S3–S5): Agree, or Disagree with a reason. On a payment held for the verdict, agreeing pays it, after a confirmation,
+ * and disagreeing returns it to the agent or rejects it. A verdict given is shown in its place; someone who may not
+ * decide payments reads that one is awaited.
+ */
+
+type After = "pay" | "return" | "reject";
+type Note = { tone: "neutral" | "error"; text: string } | null;
+
+const SETTLE_OPTIONS = [
+  { value: "return", label: "Decide it again later", description: "The agent decides it again in its next cycle." },
+  { value: "reject", label: "Do not pay it", description: "It is rejected, with your reason in the ledger." },
+] as const;
+
+export default function VerdictControl({ orgSlug, view }: { orgSlug: string; view: VerdictView }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [note, setNote] = useState<Note>(null);
+  const [disagreeing, setDisagreeing] = useState(false);
+  const [reason, setReason] = useState("");
+  const [settle, setSettle] = useState<"return" | "reject">("return");
+
+  if (view.given) {
+    const said = view.given.verdict === "agree" ? (view.given.reason ? `You agreed: ${view.given.reason}` : "You agreed.") : `You disagreed: ${view.given.reason ?? ""}`;
+    return <p className="text-sm text-ink-2">{said}</p>;
+  }
+  if (!view.open) return <p className="text-sm text-ink-2">Waits for a person&apos;s verdict.</p>;
+
+  const give = (verdict: "agree" | "disagree", then?: After, typed?: string, onDone?: () => void) =>
+    startTransition(async () => {
+      setNote(null);
+      const result = await giveVerdictAction(orgSlug, { entrySeq: view.entrySeq, verdict, ...(typed ? { reason: typed } : {}), ...(then ? { then } : {}) });
+      setNote({ tone: result.ok ? "neutral" : "error", text: result.message });
+      if (result.ok) onDone?.();
+      router.refresh();
+    });
+
+  const submitDisagreement = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    give("disagree", view.heldForVerdict ? settle : undefined, reason.trim(), () => setDisagreeing(false));
+  };
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium text-ink">Do you agree with the agent?</p>
+      <div className="flex flex-wrap gap-2">
+        {view.heldForVerdict ? (
+          <ConfirmDialog
+            tone="primary"
+            trigger={
+              <Button size="sm" icon={<CircleCheck />} loading={pending}>
+                Agree and pay
+              </Button>
+            }
+            title="Agree and pay?"
+            description="You agree with the agent, and it is paid in USDC on Arc testnet now."
+            confirmLabel="Agree and pay"
+            onConfirm={() => give("agree", "pay")}
+          />
+        ) : (
+          <Button size="sm" icon={<Check />} loading={pending} onClick={() => give("agree")}>
+            Agree
+          </Button>
+        )}
+        <Dialog open={disagreeing} onOpenChange={setDisagreeing}>
+          <DialogTrigger asChild>
+            <Button size="sm" variant="secondary" icon={<ThumbsDown />} disabled={pending}>
+              Disagree
+            </Button>
+          </DialogTrigger>
+          <DialogContent title="Disagree with the agent?" description="Your reason is kept with the verdict in the ledger.">
+            <form onSubmit={submitDisagreement} className="grid gap-5">
+              <Field id={`verdict-reason-${view.entrySeq}`} label="Why do you disagree?" description="At most 280 characters.">
+                <Textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={280} rows={3} required />
+              </Field>
+              {view.heldForVerdict && (
+                <RadioGroup legend="Then" options={SETTLE_OPTIONS} value={settle} onValueChange={(value) => setSettle(value === "reject" ? "reject" : "return")} />
+              )}
+              <FormMessage tone={note?.tone ?? "neutral"}>{disagreeing ? note?.text : null}</FormMessage>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button variant="secondary">Cancel</Button>
+                </DialogClose>
+                <Button type="submit" loading={pending} disabled={reason.trim() === ""}>
+                  Disagree
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+      <FormMessage tone={note?.tone ?? "neutral"}>{note?.text}</FormMessage>
+    </div>
+  );
+}

@@ -23,7 +23,7 @@ import { isSoleApprover } from "./sole-approver";
 import { newPayeeCheck } from "../new-payee";
 import { firstPaymentCheck, loadNewPayeeFacts } from "../new-payee-facts";
 import { addedSince, latestDecision, recordedFacts, type AddedDetails } from "../added-details";
-import { heldForCash } from "../next-step";
+import { heldForCash, heldForVerdict } from "../next-step";
 import type { Provenance } from "../provenance";
 import { amountFromReserve, bringCashForApproval, CashBackError, cashShortMessage, cctpFeeCushion, reserveCover, type ReserveCover } from "./liquidity";
 import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
@@ -417,6 +417,10 @@ export interface WaitingPayable {
   guardrailRule: string | null;
   /** Held because the cash it needs was not there, which the agent decides again once cash comes in (reserve cash back R4). */
   heldForCash?: boolean;
+  /** Held in shadow mode for a person to agree, no rule refusing it (shadow mode S2). */
+  heldForVerdict?: boolean;
+  /** The agent's decision a verdict on it is about, while it waits for one (shadow mode S3). */
+  verdictEntry?: { seq: number; ts: string };
   /**
    * A new USDC payment from the operating wallet that the wallet's stored balance cannot cover, and the reserve's can:
    * what the wallet holds, and about what Approve and pay brings back from the reserve first (approval cash R5). Absent
@@ -592,6 +596,8 @@ export async function listWaitingPayables(
       addedSinceDecision: addedSince(recorded, onFile),
       guardrailRule: decision?.detail.guardrailBlocked === true && typeof decision.detail.guardrailRule === "string" ? decision.detail.guardrailRule : null,
       ...(row.status === "held" && heldForCash(decision?.detail) ? { heldForCash: true } : {}),
+      // Held in shadow mode for a person to agree, and the decision a verdict is about (shadow mode S2, S3).
+      ...(row.status === "held" && decision && heldForVerdict(decision.detail) ? { heldForVerdict: true, verdictEntry: { seq: Number(decision.seq), ts: decision.ts } } : {}),
       ...(balances && fromReserveUsdc !== null ? { fromReserve: { operatingUsdc: balances.operating, amountUsdc: fromReserveUsdc } } : {}),
       ...(newPayee?.firstPayment ? { firstPaymentAddressBy: newPayee.addressBy } : {}),
       ...(twoApprovals.has(row.id) ? { twoApprovals: twoApprovals.get(row.id) } : {}),

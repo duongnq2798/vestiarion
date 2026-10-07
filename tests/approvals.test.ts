@@ -1861,6 +1861,29 @@ describe("listWaitingPayables", () => {
     expect(row.explanation).not.toContain("PO-100");
   });
 
+  it("says a payment waits for a person to agree in shadow mode, and which decision a verdict is about (shadow mode S2, S3)", async () => {
+    const decided = (invoiceId: string, seq: number, execution: Record<string, unknown>) => ({
+      seq, id: `e-${invoiceId}`, ts: "2026-10-07T08:00:00Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "",
+      detail: { invoiceId, decision: { action: "pay" }, observed: { riskLevel: "clear" }, guardrailBlocked: false, guardrailRule: null, execution },
+      body_hash: "00", signature: "00", prev_hash: null, hash: "00", signing_key_id: null,
+    });
+    const rows = [invoiceRow({ id: "shadow", status: "held" }), invoiceRow({ id: "cash", status: "held" })];
+    const { run } = approvalsFake({
+      invoice: (r) => (r.params.get("id") ? undefined : { body: rows }),
+      ledgerTargets: [
+        decided("shadow", 41, { resultingStatus: "held", heldBecause: "shadow_verdict" }),
+        decided("cash", 40, { resultingStatus: "held", heldBecause: "cash_shortfall", cashNeededUsdc: 1, cashSeen: { operating: 0, reserve: 0 } }),
+      ],
+    });
+
+    const listed = await run(() => listWaitingPayables());
+    const shadow = listed.find((row) => row.id === "shadow");
+    const cash = listed.find((row) => row.id === "cash");
+    expect(shadow).toMatchObject({ heldForVerdict: true, verdictEntry: { seq: 41, ts: "2026-10-07T08:00:00Z" }, guardrailRule: null });
+    expect(cash?.heldForVerdict).toBeUndefined();
+    expect(cash?.verdictEntry).toBeUndefined();
+  });
+
   it("carries the rule that refused the agent's payment, and none for a stop the model chose", async () => {
     const decided = (invoiceId: string, detail: Record<string, unknown>) => ({
       seq: 9, id: `e-${invoiceId}`, ts: "2026-10-03T08:00:00Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "",

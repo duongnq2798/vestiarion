@@ -16,6 +16,7 @@ import { txUrl } from "@/lib/payee-chains";
 type GuideSlug =
   | "guides/try-it"
   | "guides/go-live"
+  | "guides/shadow-mode"
   | "guides/first-payment"
   | "guides/pay-a-contractor"
   | "guides/get-paid"
@@ -133,6 +134,12 @@ const INBOX_LIBRARY = "src/lib/email-inbox/inboxes.ts";
 const INBOX_RECEIVE = "src/lib/email-inbox/receive.ts";
 const INBOX_COMMANDS = "src/lib/commands/inbox.ts";
 const INBOX_SETTINGS = "src/lib/email-inbox/settings.ts";
+
+const SHADOW_PANEL = "src/components/ShadowModePanel.tsx";
+const SHADOW_LIBRARY = "src/lib/shadow-mode.ts";
+const SHADOW_SUMMARY = "src/components/ShadowModeSummary.tsx";
+const VERDICT = "src/components/VerdictControl.tsx";
+const VERDICTS = "src/lib/verdicts.ts";
 
 /** Each guide's quoted UI strings, as `[text, the file it must appear in]`. */
 /**
@@ -856,6 +863,39 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["for this pull request, by", GITHUB_COMMENTS],
     ["pull_request_commented", GITHUB_COMMENTS],
   ],
+  "guides/shadow-mode": [
+    ["Shadow mode runs on Arc testnet. On Arc mainnet the agent pays your real bills.", SHADOW_LIBRARY],
+    ["Settings", APP_NAV],
+    ["Workspace", "src/app/o/[slug]/settings/page.tsx"],
+    ["Shadow mode", SHADOW_PANEL],
+    ["Your currency", SHADOW_PANEL],
+    ["Turn on shadow mode", SHADOW_PANEL],
+    ["AP / AR", APP_NAV],
+    ["Approvals", APP_NAV],
+    ["Shadow mode: the agent decided to pay it, and pays nothing until a person agrees.", "src/lib/next-step.ts"],
+    ["Do you agree with the agent?", VERDICT],
+    ["Agree and pay", VERDICT],
+    ["You agree with the agent, and it is paid in USDC on Arc testnet now.", VERDICT],
+    ["Approve and pay", APPROVAL_CARD],
+    ["Disagree", VERDICT],
+    ["Why do you disagree?", VERDICT],
+    ["Decide it again later", VERDICT],
+    ["Do not pay it", VERDICT],
+    ["Agree", VERDICT],
+    ["See them in AP / AR", SHADOW_SUMMARY],
+    ["Turn off shadow mode", SHADOW_PANEL],
+    ["A payment waiting for a person to agree stays held until a person decides it.", SHADOW_PANEL],
+    ["Choose your currency as a three-letter code, such as VND. USDC and EURC are what the agent pays in, not a bill's currency.", SHADOW_LIBRARY],
+    ["Shadow mode is already on.", SHADOW_LIBRARY],
+    ["Shadow mode is already off.", SHADOW_LIBRARY],
+    ["A cycle is running. Try again in a minute, once it has finished.", SHADOW_LIBRARY],
+    ["Verdicts are given in shadow mode. An owner turns it on in Settings.", VERDICTS],
+    ["That decision came before shadow mode started.", VERDICTS],
+    ["Say why you disagree, in a few words.", VERDICTS],
+    ["Keep the reason to 280 characters.", VERDICTS],
+    ["It no longer waits for your verdict, so nothing was paid.", VERDICTS],
+    ["A verdict was given on this decision already", "src/app/actions/verdicts.ts"],
+  ],
   "guides/audit-export": [
     ["Audit log", APP_NAV],
     ["Download", EXPORT_MENU],
@@ -920,6 +960,7 @@ const sourceFile = (file: string) => readFileSync(path.join(process.cwd(), file)
 const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/try-it": 20,
   "guides/go-live": 20,
+  "guides/shadow-mode": 20,
   "guides/first-payment": 20,
   "guides/pay-a-contractor": 20,
   "guides/get-paid": 20,
