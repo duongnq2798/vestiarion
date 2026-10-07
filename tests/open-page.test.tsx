@@ -220,7 +220,7 @@ describe("the /open page", () => {
     const markup = await render();
     const customers = markup.slice(markup.indexOf('aria-labelledby="customers-arc-testnet"'), markup.indexOf('aria-labelledby="agent-arc-testnet"'));
     const page = text(customers);
-    expect(page).toContain("Real customer usage");
+    expect(page).toContain("Customers on Arc testnet");
     // Customers' 4 payments, with the 12 that include ours beside them; their median, with the total's.
     expect(page).toMatch(/Payments settled 4 Confirmed by Circle on Arc testnet\. With our workspaces: 12/);
     // text() folds the no-break spaces inside a duration into spaces.
@@ -228,7 +228,7 @@ describe("the /open page", () => {
     expect(page).toContain("1,234.50 USDC");
     expect(page).toContain("never listed one by one");
     // The headline comes before the agent's figures, and both before the full table.
-    expect(markup.indexOf("Real customer usage")).toBeLessThan(markup.indexOf("How the agent performs"));
+    expect(markup.indexOf("Customers on Arc testnet")).toBeLessThan(markup.indexOf("How the agent performs"));
     expect(markup.indexOf("How the agent performs")).toBeLessThan(markup.indexOf('aria-label="Every figure"'));
   });
 
@@ -379,11 +379,34 @@ describe("the /open page, second round (open redesign §10)", () => {
     const page = text(mainnet);
     expect(page).toContain("No payment has settled on Arc mainnet yet.");
     expect(page).toMatch(/Workspaces live 1 Customers' workspaces live 0 Agent cycles run 12 Payments settled 0/);
-    expect(page).not.toContain("Real customer usage");
+    expect(page).not.toContain("Customers on Arc mainnet");
     expect(page).not.toContain("How the agent performs");
     // Every figure is still there, folded.
     expect(mainnet).toContain('aria-label="Every figure on Arc mainnet"');
     expect(mainnet).toMatch(/<details[^>]*>[\s\S]*<table/);
+  });
+
+  it("says a customers' step not reached is not reached yet, rather than a row of zeros", async () => {
+    // Our own workspace paid on Arc mainnet; no customer has opened one there.
+    const ours = { ...side(0), workspacesOpened: 1, liveWorkspaces: 1, firstPayments: 1, payments: 1, usdcPaid: 0.1, payees: 1, medianMinutesToFirstPayment: 1174 };
+    byNetwork({ mainnet: { ...EMPTY, sides: { customers: zero(), ours, total: ours }, daily: [{ day: "2026-10-07", customers: 0, ours: 1, oursUsdc: 0.1 }] }, testnet: NUMBERS });
+    const markup = await render();
+    const customers = text(markup.slice(markup.indexOf('aria-labelledby="customers-arc-mainnet"'), markup.indexOf('aria-labelledby="agent-arc-mainnet"')));
+    expect(customers).toContain("Customers on Arc mainnet");
+    expect(customers).toContain("Workspaces opened on Arc mainnet by people outside the Vestiarion team.");
+    expect(customers).toMatch(/Customer workspaces opened Not yet Each one opened by someone outside the team\. With our workspaces: 1/);
+    expect(customers).toMatch(/Payments settled Not yet Confirmed by Circle on Arc mainnet\. With our workspaces: 1/);
+    expect(customers).toMatch(/USDC paid — No customer payment on Arc mainnet yet\. With our workspaces: 0\.10 USDC/);
+    expect(customers).not.toContain("0.00");
+    // The leading network's headline says the same.
+    const headline = text(markup.slice(markup.indexOf('aria-labelledby="headline"'), markup.indexOf('<section aria-labelledby="mainnet"')));
+    expect(headline).toMatch(/Customer workspaces Not yet None opened by anyone outside the team yet/);
+    expect(headline).toContain("Payments settled 1 None by customers, 0.10 USDC in all");
+    // Within a period, none rather than not yet.
+    const week = await render({ period: "7d" });
+    const weekCustomers = text(week.slice(week.indexOf('aria-labelledby="customers-arc-mainnet"'), week.indexOf('aria-labelledby="agent-arc-mainnet"')));
+    expect(weekCustomers).toMatch(/Customer workspaces opened None/);
+    expect(weekCustomers).toContain("No customer payment on Arc mainnet in this period.");
   });
 
   it("says a quiet network had no payment in the period, rather than yet, for a period", async () => {

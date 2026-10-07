@@ -34,24 +34,35 @@ export function NetworkNumbers({ numbers, period, network }: { numbers: OpenNumb
       )}
 
       <section aria-labelledby={`customers-${id}`}>
-        <SectionHead id={`customers-${id}`} eyebrow="Customers" title="Real customer usage">
-          Workspaces opened by people outside the Vestiarion team. Each figure has the total with our own workspaces beneath it.
+        <SectionHead id={`customers-${id}`} eyebrow="Customers" title={`Customers on ${network.label}`}>
+          Workspaces opened on {network.label} by people outside the Vestiarion team. Each figure has the total with our own workspaces beneath it.
         </SectionHead>
         <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line lg:grid-cols-3">
-          <Kpi label="Customer workspaces opened" value={formatFigure(customers.workspacesOpened, "count")} total={formatFigure(total.workspacesOpened, "count")}>
+          <Kpi label="Customer workspaces opened" value={milestone(customers.workspacesOpened, period)} total={formatFigure(total.workspacesOpened, "count")}>
             Each one opened by someone outside the team.
           </Kpi>
-          <Kpi label="Customer workspaces live" now value={formatFigure(customers.liveWorkspaces, "count")} total={formatFigure(total.liveWorkspaces, "count")}>
+          <Kpi label="Customer workspaces live" now value={milestone(customers.liveWorkspaces, period)} total={formatFigure(total.liveWorkspaces, "count")}>
             Running on {network.label} as this page was read.
           </Kpi>
-          <Kpi label="Reached a first payment" value={formatFigure(customers.firstPayments, "count")} total={formatFigure(total.firstPayments, "count")}>
+          <Kpi label="Reached a first payment" value={milestone(customers.firstPayments, period)} total={formatFigure(total.firstPayments, "count")}>
             Customer workspaces whose first payment settled.
           </Kpi>
-          <Kpi label="Payments settled" value={formatFigure(customers.payments, "count")} total={formatFigure(total.payments, "count")}>
+          <Kpi label="Payments settled" value={milestone(customers.payments, period)} total={formatFigure(total.payments, "count")}>
             Confirmed by Circle on {network.label}.
           </Kpi>
-          <Kpi label="USDC paid" value={formatFigure(customers.usdcPaid, "usdc")} unit="USDC" total={`${formatFigure(total.usdcPaid, "usdc")} USDC`}>
-            Settled to {formatFigure(customers.payees, "count")} payee {customers.payees === 1 ? "wallet" : "wallets"}.
+          <Kpi
+            label="USDC paid"
+            value={customers.usdcPaid === 0 ? "—" : formatFigure(customers.usdcPaid, "usdc")}
+            unit="USDC"
+            total={`${formatFigure(total.usdcPaid, "usdc")} USDC`}
+          >
+            {customers.usdcPaid === 0 ? (
+              `No customer payment on ${network.label} ${period.key === "all" ? "yet" : "in this period"}.`
+            ) : (
+              <>
+                Settled to {formatFigure(customers.payees, "count")} payee {customers.payees === 1 ? "wallet" : "wallets"}.
+              </>
+            )}
           </Kpi>
           <Kpi
             label="Median time to first payment"
@@ -142,6 +153,16 @@ export function NetworkNumbers({ numbers, period, network }: { numbers: OpenNumb
       </section>
     </div>
   );
+}
+
+/**
+ * A customers' count that marks how far adoption has come. Zero reads as a step
+ * not reached, "Not yet" over all time and "None" within a period, rather than a
+ * row of zeros; the figures table beneath still gives the number.
+ */
+function milestone(value: number | null, period: Period): string {
+  if (value === 0) return period.key === "all" ? "Not yet" : "None";
+  return formatFigure(value, "count");
 }
 
 /** A customers' headline figure, with what it means and the total beside it. */
@@ -251,11 +272,13 @@ export function Headline({ numbers, period, network }: { numbers: OpenNumbers; p
         {network.label} · {period.label}
       </h2>
       <dl className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line lg:grid-cols-4">
-        <HeadlineFigure label="Customer workspaces" value={formatFigure(customers.workspacesOpened, "count")}>
-          {formatFigure(customers.liveWorkspaces, "count")} live now, {formatFigure(customers.firstPayments, "count")} made a first payment
+        <HeadlineFigure label="Customer workspaces" value={milestone(customers.workspacesOpened, period)}>
+          {customers.workspacesOpened === 0
+            ? `None opened by anyone outside the team ${period.key === "all" ? "yet" : "in this period"}`
+            : `${formatFigure(customers.liveWorkspaces, "count")} live now, ${formatFigure(customers.firstPayments, "count")} made a first payment`}
         </HeadlineFigure>
         <HeadlineFigure label="Payments settled" value={formatFigure(total.payments, "count")}>
-          {formatFigure(customers.payments, "count")} by customers, {formatFigure(total.usdcPaid, "usdc")} USDC in all
+          {customers.payments === 0 ? "None" : formatFigure(customers.payments, "count")} by customers, {formatFigure(total.usdcPaid, "usdc")} USDC in all
         </HeadlineFigure>
         <HeadlineFigure label="Invoices paid on time" value={onTime ? formatPercent(onTime.part, onTime.whole) : "—"}>
           {onTime ? `${formatRatio(onTime.part, onTime.whole)}, every workspace` : "Nothing to measure yet"}
