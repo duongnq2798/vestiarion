@@ -171,6 +171,18 @@ describe("changeCounterpartyAddress", () => {
     expect(entry.p_detail).toEqual({ by: ACTOR, counterpartyId: COUNTERPARTY_ID, from: OLD, to: NEW });
   });
 
+  it("no longer calls the address a mirror once a person changes it (shadow mode S7)", async () => {
+    const { fake, run } = addressFake({ row: counterpartyRow({ mirror_wallet_id: "wallet-mirror-1" }) });
+
+    await run(() => changeCounterpartyAddress({ actorId: ACTOR, counterpartyId: COUNTERPARTY_ID, raw: NEW }));
+
+    const read = fake.requests.find((r) => r.path === "/rest/v1/counterparties" && r.method === "GET");
+    expect(read?.params.get("select")).toContain("mirror_wallet_id");
+    const body = patches(fake.requests)[0].body as Record<string, unknown>;
+    expect(body.address).toBe(NEW);
+    expect(body.mirror_wallet_id).toBeNull();
+  });
+
   it("records a payee's own change through a payee link as the link, with no person", async () => {
     const { fake, run } = addressFake({ row: counterpartyRow({ address: null }) });
     const LINK = "0b6c1c9e-4a4f-4a7e-9b1e-0000000001e1";

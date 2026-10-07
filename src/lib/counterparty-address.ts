@@ -88,12 +88,14 @@ interface AddressRow {
   address: string | null;
   address_changed_at: string | null;
   address_confirmed_at: string | null;
+  /** Set while the address is a mirror Vestiarion made in shadow mode (0084); absent before it. */
+  mirror_wallet_id?: string | null;
 }
 
 async function loadCounterparty(counterpartyId: string): Promise<AddressRow> {
   const result = await db()
     .from("counterparties")
-    .select("id, name, address, address_changed_at, address_confirmed_at")
+    .select("id, name, address, address_changed_at, address_confirmed_at, mirror_wallet_id")
     .eq("id", counterpartyId)
     .maybeSingle();
   if (result.error) throw new Error(result.error.message);
@@ -127,7 +129,8 @@ export async function changeCounterpartyAddress(
 
   const update = db()
     .from("counterparties")
-    .update({ address: parsed.address, address_changed_at: new Date().toISOString() })
+    // An address a person gives is no longer the mirror Vestiarion made (shadow mode S7).
+    .update({ address: parsed.address, address_changed_at: new Date().toISOString(), ...(current.mirror_wallet_id ? { mirror_wallet_id: null } : {}) })
     .eq("id", current.id);
   // Guarded on everything read, the change and the confirmation included: a
   // confirmation that lands between this read and this write would otherwise be

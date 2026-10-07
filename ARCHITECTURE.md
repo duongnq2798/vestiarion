@@ -598,7 +598,8 @@ disagrees with every decision.
 - **Mirror addresses** (`src/lib/mirror-address.ts`). A payee with no Arc address gets a wallet Vestiarion makes in
   the workspace's own Circle wallet set, keyed by the payee so a retry finds it, written only where the payee still has
   no address, and recorded as an address change `via: "mirror"`. The new payee check reads that as `MIRROR`: no
-  outsider could have given it, so it stands as two parties behind its first payment.
+  outsider could have given it, so it stands as two parties behind its first payment. An address a person enters over
+  it clears `mirror_wallet_id` and is confirmed like any change.
 - **Bills in the business's own currency.** `usdRate` (`src/lib/fx/usd-rates.ts`) reads how many of a currency make
   one dollar from ExchangeRate-API's open endpoint, at most once an hour, naming only the dollar. `shadowBill`
   (`src/lib/shadow-bills.ts`) reads the amount as the bill writes it (`src/lib/bill-amount.ts`) and gives its USDC to
