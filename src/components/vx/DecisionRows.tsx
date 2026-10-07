@@ -1,9 +1,10 @@
-import { ChevronRight } from "lucide-react";
+import { Check, ChevronRight, Minus, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/components/ui/cn";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { DecisionCard } from "./DecisionCard";
+import type { DecisionSignal } from "./decision-signals";
 import { Money, OutcomeBadge } from "./Primitives";
 import type { Decision } from "./types";
 
@@ -25,8 +26,10 @@ export interface DecisionRowItem {
   before?: ReactNode;
   /** A form under the card, such as a milestone's verification. */
   after?: ReactNode;
-  /** Open from the start: for a screenshot of the opened row. */
+  /** Open from the start: a row waiting for a person, with its actions in view, or a screenshot of the opened row. */
   open?: boolean;
+  /** What the agent checked, as a short line under the title (`payableSignals`), so it shows before the row opens. */
+  signals?: DecisionSignal[];
 }
 
 export function DecisionRows({ items, orgSlug, className }: { items: DecisionRowItem[]; orgSlug: string; className?: string }) {
@@ -60,6 +63,7 @@ function DecisionRow({ item, orgSlug }: { item: DecisionRowItem; orgSlug: string
               {date && <span className={cn("sm:hidden", date.tone === "held" && "text-held")}> · {date.label}</span>}
             </span>
             {item.hint && <span className="block text-xs font-medium text-held">{item.hint}</span>}
+            {item.signals && item.signals.length > 0 && <Signals signals={item.signals} />}
           </span>
           <span className={cn("hidden whitespace-nowrap font-mono text-xs sm:block", date?.tone === "held" ? "text-held" : "text-ink-2")}>{date?.label ?? ""}</span>
           <span className="hidden justify-self-end sm:block">
@@ -79,6 +83,30 @@ function DecisionRow({ item, orgSlug }: { item: DecisionRowItem; orgSlug: string
         {item.after}
       </div>
     </Disclosure>
+  );
+}
+
+const SIGNAL = {
+  ok: { icon: Check, className: "text-proof", label: "passed" },
+  missing: { icon: X, className: "text-held", label: "in the way" },
+  neutral: { icon: Minus, className: "text-ink-3", label: "noted" },
+} as const;
+
+/** The checks behind a decision, one word or two each, marked passed, in the way, or noted. */
+function Signals({ signals }: { signals: DecisionSignal[] }) {
+  return (
+    <span role="list" aria-label="What the agent checked" className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-ink-2">
+      {signals.map((signal) => {
+        const { icon: Icon, className, label } = SIGNAL[signal.state];
+        return (
+          <span role="listitem" key={signal.label} className="inline-flex items-center gap-1 whitespace-nowrap">
+            <Icon aria-hidden className={cn("size-3 shrink-0", className)} strokeWidth={2.5} />
+            {signal.label}
+            <span className="sr-only">, {label}</span>
+          </span>
+        );
+      })}
+    </span>
   );
 }
 

@@ -518,7 +518,7 @@ describe("the new control screens, as source", () => {
   it("Invoices tells a waiting payable's row what it needs, and gives its card what a person can do about it", () => {
     const invoices = read("src/app/o/[slug]/invoices/page.tsx");
     expect(invoices).toContain("hint: facts ? waitingHint(facts.onFile, facts.added) : undefined");
-    expect(invoices).toContain("needsYou.map((decision) => row(decision, withVerdict(needsYouFor)))");
+    expect(invoices).toContain("needsYou.map((decision) => row(decision, withVerdict(needsYouFor), ");
     expect(invoices).toContain("<WaitingPayableAction");
     // A counterparty paid without purchase orders is never asked for one (three-way match design M2).
     expect(invoices).toContain("purchaseOrderRequired: counterpartiesById.get(invoice.counterparty_id)?.purchase_order_required !== false");
@@ -532,7 +532,7 @@ describe("the new control screens, as source", () => {
       expect(page).toContain("if (decision.verdict.heldForVerdict && decision.verdict.open) return verdict;");
     }
     const invoices = read("src/app/o/[slug]/invoices/page.tsx");
-    expect(invoices).toContain("upcoming.map((decision) => row(decision, withVerdict(receiptFor)))");
+    expect(invoices).toContain("upcoming.map((decision) => row(decision, withVerdict(receiptFor), ");
     // In shadow mode in a currency other than USDC, a bill is typed in that currency (shadow mode S6); in USDC, as typed.
     expect(invoices).toContain("billCurrency={billCurrencyOf(verdicts.shadow)}");
     expect(read("src/app/o/[slug]/console/page.tsx")).toContain("{shadow && shadowSummary && <ShadowModeSummary orgSlug={slug} mode={shadow} summary={shadowSummary} />}");

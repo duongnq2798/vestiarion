@@ -328,7 +328,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["policy_proposal_accepted", "src/lib/policy-proposals.ts"],
     ["policy_proposal_dismissed", "src/lib/policy-proposals.ts"],
     ["Recurring", "src/app/o/[slug]/invoices/page.tsx"],
-    ["Recurring payments", "src/app/o/[slug]/invoices/page.tsx"],
+    ["Recurring payments", "src/components/vx/RecurringSummary.tsx"],
     ["Pay", "src/components/intake/RecurringPayableIntake.tsx"],
     ["For", "src/components/intake/RecurringPayableIntake.tsx"],
     ["Amount each period", "src/components/intake/RecurringPayableIntake.tsx"],
