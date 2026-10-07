@@ -12,6 +12,7 @@ import { fmt } from "./Primitives";
 import { BRIDGE_FEE_CAP_PERCENT, chainById, homeChain, paidAcrossChains } from "@/lib/payee-chains";
 import { networkProfile, type Network } from "@/lib/network";
 import { SWAP_COST_CAP_PERCENT } from "@/lib/fx/swap-limits";
+import { TWO_APPROVALS_RULE } from "@/lib/two-approvals";
 
 /**
  * Renders the duplicate-billing check as evidence in its own right — including
@@ -373,6 +374,31 @@ function mintOf(invoiceId: string, entries: LedgerEntry[]): Decision["mint"] {
 }
 
 /**
+ * The rules that refuse a payment for something other than its size, and why each did. Before these, such a refusal
+ * read as the payment limit: on 2026-10-07 the first payable on Arc mainnet, 0.10 USDC against a 1 USDC limit, held as
+ * a first payment to a new payee, showed counterparty.payment_limit and offered to edit the limit.
+ */
+const RULE_REASONS: Readonly<Record<string, string>> = {
+  "counterparty.new_payee": "the first payment to this address, and only one person stands behind it",
+  "counterparty.address_unconfirmed": "the payee's address changed, and no one has confirmed it",
+  "invoice.match_incomplete": "the three-way match is not complete",
+  "invoice.duplicate_of_settled": "it repeats an invoice already paid, being paid or scheduled",
+  "counterparty.client_payable": "the counterparty is a client: it pays this business",
+};
+
+/** The band for a rule that is not a limit, or for the figure above which two people approve; null for any other rule. */
+function ruleGuardrail(recorded: string | undefined, amount: number, usdcValue: number | null, detail: Record<string, unknown> | undefined): Guardrail | null {
+  if (!recorded) return null;
+  const reason = RULE_REASONS[recorded];
+  if (reason) return { rule: recorded, attempted: amount, reason };
+  if (recorded === TWO_APPROVALS_RULE) {
+    const figure = numberValue(record(detail?.observed)?.twoApprovalsAbove);
+    if (figure != null) return { rule: recorded, attempted: usdcValue ?? amount, limit: figure, note: "above it, two people approve" };
+  }
+  return null;
+}
+
+/**
  * The band a refused invoice shows. A USDC invoice reads as it always has. A
  * EURC one names its own rule: no rate (EURC against a USDC limit it could not
  * be weighed on), not enough EURC (what it would send against the wallet's
@@ -413,6 +439,8 @@ function invoiceGuardrail(
   }
   const onChain = recorded === "workspace.onchain_limit" ? onChainGuardrail(amount, detail) : null;
   if (onChain) return onChain;
+  const named = ruleGuardrail(recorded, amount, usdcValue, detail);
+  if (named) return currency === "EURC" && named.limit !== undefined ? { ...named, attemptedToken: "USDC", limitToken: "USDC" } : named;
   if (currency !== "EURC") {
     return { rule: inferredRule, attempted: amount, limit, note: risk === "high" ? "risk tier high" : "amount above screened limit" };
   }
@@ -580,7 +608,7 @@ function decideMilestone(milestone: MilestoneRow, entries: LedgerEntry[], contex
             ? onChainGuardrail(milestone.amount, entry.detail)
             : entry?.detail.guardrailRule === "counterparty.unscreened"
               ? { rule: "counterparty.unscreened", attempted: milestone.amount, limit, note: "not screened yet" }
-              : null) ??
+              : ruleGuardrail(stringValue(entry?.detail.guardrailRule), milestone.amount, milestone.amount, entry?.detail)) ??
         { rule: risk === "high" ? "counterparty.high_risk" : "counterparty.payment_limit", attempted: milestone.amount, limit, note: risk === "high" ? "risk tier high" : "amount above screened limit" }
       : null,
     decisionMode: stringValue(decided?.detail.decisionMode ?? entry?.detail.decisionMode),

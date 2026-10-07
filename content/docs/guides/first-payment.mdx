@@ -208,7 +208,7 @@ On **AP / AR**, the tiles at the top count what needs you, what is due within 7 
   caption="A settled payment: the agent's reasoning, the evidence it checked, the ledger entry and the transaction."
 />
 
-When the model decided to pay but a guardrail stopped it, the card also has a "Blocked by code, not by the model" band. The band names the rule, the amount attempted and the amount allowed.
+When the model decided to pay but a guardrail stopped it, the card also has a "Blocked by code, not by the model" band. The band names the rule and the amount attempted. For a limit, it adds the amount allowed; for a rule about something other than the amount, it says why, such as "the first payment to this address, and only one person stands behind it".
 
 At the foot of a payable's card, **How the agent decided** opens its steps, oldest first, each a signed entry in the ledger: who added it, what a person changed, each decision with who decided and whether the written policy agreed, what it checked (the purchase order and goods, screening, the amount against the limit, duplicates), what code refused, what the spending-limit contract on Arc said, and the transaction that reached Arc testnet. Each step shows its time to the second, how long after the step before it, and the number of its entry in the audit log.
 

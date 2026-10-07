@@ -83,6 +83,22 @@ describe("DecisionCard", () => {
     expect(markup).not.toContain('role="alert"');
   });
 
+  it("says why a rule that is not a limit refused it, with no allowed figure (2026-10-07)", () => {
+    const refused: Decision = {
+      ...base,
+      action: "Pay",
+      outcome: "refused",
+      amount: 0.1,
+      guardrail: { rule: "counterparty.new_payee", attempted: 0.1, reason: "the first payment to this address, and only one person stands behind it" },
+      auditSeq: 1806,
+    };
+    const markup = html(<DecisionCard decision={refused} orgSlug="acme" />);
+    expect(markup).toContain("counterparty.new_payee");
+    expect(markup).toContain(">Why<");
+    expect(markup).toContain("the first payment to this address, and only one person stands behind it");
+    expect(markup).not.toContain(">Allowed<");
+  });
+
   it("marks missing evidence in the held tone and keeps its value", () => {
     const markup = html(<DecisionCard decision={{ ...base, evidence: [{ label: "PO", value: "PO-7", state: "missing" }] }} orgSlug="acme" />);
     expect(markup).toContain('aria-label="Evidence cited by this decision"');

@@ -16,7 +16,10 @@ export interface Evidence {
 export interface Guardrail {
   rule: string;
   attempted: number;
-  limit: number;
+  /** What the rule allows, for a rule that is a limit; absent for one that refuses for another reason, which `reason` gives. */
+  limit?: number;
+  /** Why a rule that is not a limit refused it: a first payment to a new payee, an unconfirmed address. */
+  reason?: string;
   note?: string;
   /** What `attempted` and `limit` are in, when not the decision's own token: a EURC invoice is weighed against a USDC limit. */
   attemptedToken?: string;
