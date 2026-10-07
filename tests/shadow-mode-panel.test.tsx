@@ -35,7 +35,9 @@ describe("ShadowModePanel", () => {
       "Keep paying your bills as you do today. The agent decides on the same bills, and you agree or disagree with each decision. Each payment you agree to is made in USDC on Arc testnet, at the bill's amount in USDC."
     );
     expect(words).toContain("Your currency");
-    expect(markup).toContain('name="currency"');
+    expect(words).toContain("USDC, or the currency your bills are written in. A bill in another currency is paid in USDC at the day's rate.");
+    // USDC is chosen until the owner picks another.
+    expect(markup).toContain('name="currency" value="USDC"');
     expect(words).toContain("Turn on shadow mode");
   });
 
