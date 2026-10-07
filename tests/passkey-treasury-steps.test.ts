@@ -5,6 +5,7 @@ import { passkeySetupCalls, spendingLimitSalt } from "@/lib/passkey-treasury";
 import {
   choosePasskeyTreasury,
   chooseWalletTreasury,
+  createAgentWallet,
   preparePasskeySetup,
   recordPasskeySetup,
   recordRecovery,
@@ -17,6 +18,7 @@ import {
   agentRow,
   APPROVE_TX,
   chain,
+  circle,
   CONTRACT,
   database,
   NOW,
@@ -256,5 +258,20 @@ describe("a passkey wallet's recovery (K8)", () => {
   it("is refused before setup, and on the wallet route", async () => {
     await expect(skip(world({ ...passkey, contract: agentRow({ treasury_signer: "passkey" }) }))).rejects.toMatchObject({ code: "wrong_step" });
     await expect(register(world({ ...passkey, contract: setUpRow({ treasury_signer: "wallet" }) }))).rejects.toMatchObject({ code: "wrong_step" });
+  });
+});
+
+describe("the agent's wallet made with the choice (K4, final review I1)", () => {
+  it("is made in the same request as the choice, whose scope was opened before the workspace chose its own wallet", async () => {
+    const state = world();
+    const { factory, createWallets } = circle();
+    // One scope for both, as the action has it: its configuration was read before the choice changed the host.
+    await database(state).inScope(async () => {
+      await choosePasskeyTreasury({ orgId: ORG, actorId: ACTOR, actorEmail: OWNER_EMAIL, address: WALLET });
+      await createAgentWallet({ orgId: ORG, actorId: ACTOR, actorEmail: OWNER_EMAIL }, { circle: factory });
+    });
+    expect(createWallets).toHaveBeenCalledTimes(1);
+    expect(state.contract).toMatchObject({ treasury_signer: "passkey", agent_address: AGENT });
+    expect(state.ledger.map((entry) => entry.action)).toEqual(["treasury_wallet_chosen", "agent_wallet_created"]);
   });
 });

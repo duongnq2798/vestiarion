@@ -366,7 +366,10 @@ async function placeTreasury(
 export async function createAgentWallet(input: { orgId: string; actorId: string; actorEmail?: string | null }, deps: WalletTreasuryDeps = {}): Promise<void> {
   const org = await orgFacts(input.orgId);
   admit(org, input.actorEmail);
-  await inScopeOf(input.orgId, input.actorId, async () => {
+  // A scope of its own, always: one opened before the choice in the same request holds the workspace's configuration
+  // from before it, without the external host and the agent account (final review I1).
+  const freshScope = (fn: () => Promise<void>) => withOrg(input.orgId, fn, { userId: input.actorId });
+  await freshScope(async () => {
     const { wallet, row, network } = await setup({});
     if (row?.agent_address) return;
     const { circleApiKey: apiKey, circleEntitySecret: entitySecret } = currentOrgConfig().chain;
