@@ -7,6 +7,7 @@ import { Callout } from "@/components/ui/Callout";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Eyebrow } from "@/components/ui/Eyebrow";
+import { BrandMark } from "@/components/vx/BrandMarks";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { utcMinute } from "@/lib/copy";
 import { ARC_MAINNET, ARC_TESTNET, type NetworkProfile } from "@/lib/network";
@@ -217,14 +218,18 @@ export default async function OpenPage({ searchParams }: OpenPageProps) {
   );
 }
 
-/** A network's heading, with whether its payments move real money. */
+/** A network's heading, with Arc's mark and whether its payments move real money. */
 function NetworkHead({ id, label, about, money, compact = false }: { id: string; label: string; about: string; money: string; compact?: boolean }) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h2 id={id} className={compact ? "text-xl font-semibold tracking-tight text-ink" : "text-3xl font-semibold tracking-[-0.03em] text-ink"}>
-          {label}
-        </h2>
+        <div className="flex items-center gap-2.5">
+          {/* Both networks are Arc's; the mark sits beside the name, which says which one. */}
+          <BrandMark brand="arc" className={compact ? "h-4 w-auto text-ink-2" : "h-6 w-auto text-ink-2"} />
+          <h2 id={id} className={compact ? "text-xl font-semibold tracking-tight text-ink" : "text-3xl font-semibold tracking-[-0.03em] text-ink"}>
+            {label}
+          </h2>
+        </div>
         <p className="mt-1.5 text-sm leading-6 text-ink-2">{about}</p>
       </div>
       <Badge tone={id === "mainnet" ? "proof" : "neutral"} size="sm" className="font-mono uppercase tracking-[0.08em]">

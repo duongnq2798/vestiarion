@@ -47,4 +47,11 @@ describe("TelegramCard", () => {
     expect(markup).toContain("Disconnect");
     expect(markup).not.toContain("Connect Telegram");
   });
+
+  it("shows Telegram's mark beside its name, connected or not (brand marks M2)", () => {
+    for (const link of [null, { username: "linh_ops", linkedAt: "2026-10-03T09:00:00Z" }]) {
+      const markup = renderToStaticMarkup(<TelegramCard orgSlug="acme" link={link} />);
+      expect(markup).toMatch(/<svg aria-hidden="true"[^>]*data-brand="telegram"[^>]*>.*?<\/svg>Telegram<\/p>/);
+    }
+  });
 });

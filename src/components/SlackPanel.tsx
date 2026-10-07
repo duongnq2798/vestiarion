@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/Input";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
+import { BrandMark } from "@/components/vx/BrandMarks";
 import type { SlackPanelView } from "@/lib/slack/panel";
 
 const INITIAL: SlackActionResult = { ok: false, message: "" };
@@ -118,7 +119,15 @@ export default function SlackPanel({
   const told = notice ? SLACK_NOTICES[notice] : undefined;
   return (
     <section aria-labelledby="slack-title" id="slack">
-      <SectionHeader id="slack-title" title="Slack" />
+      <SectionHeader
+        id="slack-title"
+        title={
+          <span className="inline-flex items-center gap-2">
+            <BrandMark brand="slack" className="size-4 text-ink-2" />
+            Slack
+          </span>
+        }
+      />
       <Card className="space-y-4 p-5">
         {told && (
           <p role="status" className={told.tone === "success" ? "text-sm text-ink" : "text-sm text-refused"}>
