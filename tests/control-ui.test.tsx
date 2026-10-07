@@ -533,8 +533,8 @@ describe("the new control screens, as source", () => {
     }
     const invoices = read("src/app/o/[slug]/invoices/page.tsx");
     expect(invoices).toContain("upcoming.map((decision) => row(decision, withVerdict(receiptFor)))");
-    // In shadow mode, a bill is typed in the business's own currency (shadow mode S6).
-    expect(invoices).toContain("billCurrency={verdicts.shadow?.currency}");
+    // In shadow mode in a currency other than USDC, a bill is typed in that currency (shadow mode S6); in USDC, as typed.
+    expect(invoices).toContain("billCurrency={billCurrencyOf(verdicts.shadow)}");
     expect(read("src/app/o/[slug]/console/page.tsx")).toContain("{shadow && shadowSummary && <ShadowModeSummary orgSlug={slug} mode={shadow} summary={shadowSummary} />}");
   });
 

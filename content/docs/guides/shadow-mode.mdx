@@ -9,13 +9,13 @@ Shadow mode is for Arc testnet only. On Arc mainnet the panel says "Shadow mode 
 
 ## 1. Turn it on
 
-Open **Settings**. Under **Workspace**, the **Shadow mode** section says it is off. Choose **Your currency**, the currency your bills are written in, then choose **Turn on shadow mode**. From then on the section says since when it is on, and for which currency, and that the agent pays nothing until a person agrees.
+Open **Settings**. Under **Workspace**, the **Shadow mode** section says it is off. Choose **Your currency**: USDC, chosen at first, where you enter each bill's amount in USDC, or the currency your bills are written in, such as EUR. Then choose **Turn on shadow mode**. From then on the section says since when it is on, and for which currency, and that the agent pays nothing until a person agrees.
 
 ## 2. Add your bills as you do today
 
-Add each bill as a payable in AP / AR. In shadow mode the invoice form's **Currency** starts at your currency: type the **Amount** as it is written on the bill, such as 2.500.000 for a bill in VND. The bill is paid in USDC at the day's rate, which comes from ExchangeRate-API (**Rates By Exchange Rate API**), and a US dollar is one USDC. The bill's card shows it as written, with the rate and the day of the rate, beside the USDC it is paid in. Outside shadow mode, the form takes only USDC and EURC.
+Add each bill as a payable in AP / AR. In USDC, enter its **Amount** in USDC, as on any invoice. In another currency, the invoice form's **Currency** starts at it: type the **Amount** as it is written on the bill, such as 1,250.00 for a bill in EUR. That bill is paid in USDC at the day's rate, which comes from ExchangeRate-API (**Rates By Exchange Rate API**), and a US dollar is one USDC. Its card shows it as written, with the rate and the day of the rate, beside the USDC it is paid in. Outside shadow mode, the form takes only USDC and EURC.
 
-A bill read from a document, an email or a chat, or sent through the API, is still added in USDC or EURC for now: type its amount in your currency into the form instead.
+A bill read from a document, an email or a chat, or sent through the API, is added in USDC or EURC: for a bill in another currency, type its amount into the form instead.
 
 The agent decides on each bill in its next cycle, as in any workspace. It may pay it now, schedule it for a later day, hold it, flag it, or ask for what is missing. If a supplier sends you no purchase orders, turn purchase orders off on its row in Counterparties, so its bills are not held for one.
 
@@ -63,7 +63,7 @@ Each step is a signed entry in the workspace's ledger, and reaches webhook endpo
 
 | Message | What to do |
 | --- | --- |
-| Choose your currency as a three-letter code, such as VND. USDC and EURC are what the agent pays in, not a bill's currency. | Choose your currency from the list. |
+| Choose USDC, or the currency your bills are written in as a three-letter code, such as EUR. | Choose your currency from the list. |
 | Shadow mode is already on. | Someone turned it on a moment before. Reload the page. |
 | Shadow mode is already off. | Someone turned it off a moment before. Reload the page. |
 | A cycle is running. Try again in a minute, once it has finished. | The agent read the workspace's settings when its cycle began. Try again once it ends. |

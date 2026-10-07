@@ -28,8 +28,8 @@ export type ShadowBillErrorCode = "not_in_shadow" | "invalid_currency" | "amount
 
 const MESSAGES: Record<ShadowBillErrorCode, string> = {
   not_in_shadow: "A bill in another currency is taken in shadow mode only. Vestiarion pays in USDC or EURC.",
-  invalid_currency: "Choose the bill's currency as a three-letter code, such as VND.",
-  amount: "Type the bill's amount as it is written on it, such as 2.500.000.",
+  invalid_currency: "Choose the bill's currency as a three-letter code, such as EUR.",
+  amount: "Type the bill's amount as it is written on it, such as 1,250.00.",
   too_small: "That bill comes to less than 0.01 USDC at the day's rate.",
 };
 

@@ -91,6 +91,7 @@ describe("shadowBill", () => {
   });
 
   it("says each refusal in words a person reads", () => {
-    expect(new ShadowBillError("amount").message).toBe("Type the bill's amount as it is written on it, such as 2.500.000.");
+    expect(new ShadowBillError("amount").message).toBe("Type the bill's amount as it is written on it, such as 1,250.00.");
+    expect(new ShadowBillError("invalid_currency").message).toBe("Choose the bill's currency as a three-letter code, such as EUR.");
   });
 });
