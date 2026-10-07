@@ -10,10 +10,10 @@ const REPOSITORY = "https://github.com/duongnq2798/vestiarion";
  * "Built on" and "works with", never "partners" or "trusted by": none of them
  * vouches for Vestiarion.
  */
-const SERVICES: ReadonlyArray<{ brand: Brand | null; name: string; role: string; body: string; href: string; check: string }> = [
+const SERVICES: ReadonlyArray<{ brand: Brand; name: string; role: string; body: string; href: string; check: string }> = [
   { brand: "arc", name: "Arc", role: "Built on", body: "Payments settle on Arc, and each of ours links to its explorer.", href: "/open", check: "See the payments" },
   {
-    brand: null,
+    brand: "circle",
     name: "Circle",
     role: "Payments through",
     body: "Circle's wallets carry the live USDC payment path.",
@@ -40,8 +40,8 @@ export function BuiltWith() {
                 <Link href={service.href} className="group block" {...(external ? { target: "_blank", rel: "noreferrer" } : {})}>
                   <p className="font-mono text-[0.6875rem] uppercase tracking-[0.1em] text-ink-3">{service.role}</p>
                   <p className="mt-2 flex h-5 items-center gap-2 text-[0.9375rem] font-semibold text-ink">
-                    {service.brand && <BrandMark brand={service.brand} className="h-4 w-auto text-ink-2 transition-colors duration-150 ease-standard group-hover:text-ink" />}
-                    <span className={service.brand && isWordmark(service.brand) ? "sr-only" : undefined}>{service.name}</span>
+                    <BrandMark brand={service.brand} className="h-4 w-auto text-ink-2 transition-colors duration-150 ease-standard group-hover:text-ink" />
+                    <span className={isWordmark(service.brand) ? "sr-only" : undefined}>{service.name}</span>
                   </p>
                   <p className="mt-1.5 text-xs leading-relaxed text-ink-2">{service.body}</p>
                   <span className="mt-2 inline-block font-mono text-xs font-semibold text-agent group-hover:underline">

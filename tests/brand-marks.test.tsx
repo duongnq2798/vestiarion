@@ -12,7 +12,7 @@ import { BrandMark, isWordmark, type Brand } from "@/components/vx/BrandMarks";
  * endorsement.
  */
 
-const BRANDS: Brand[] = ["arc", "slack", "telegram", "npm"];
+const BRANDS: Brand[] = ["arc", "circle", "slack", "telegram", "npm"];
 
 const text = (markup: string) =>
   markup
@@ -42,7 +42,7 @@ describe("a brand mark", () => {
 
   it("is used nowhere without its name beside it", () => {
     // Every file that draws a mark also writes the brand's name.
-    const NAMES: Record<Brand, string> = { arc: "Arc", slack: "Slack", telegram: "Telegram", npm: "npm" };
+    const NAMES: Record<Brand, string> = { arc: "Arc", circle: "Circle", slack: "Slack", telegram: "Telegram", npm: "npm" };
     const walk = (dir: string): string[] =>
       readdirSync(dir, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? walk(path.join(dir, entry.name)) : [path.join(dir, entry.name)]));
     const users = walk(path.join(process.cwd(), "src")).filter((file) => file.endsWith(".tsx") && !file.endsWith("BrandMarks.tsx"));
@@ -60,7 +60,7 @@ describe("a brand mark", () => {
 describe("the landing page's built on and works with", () => {
   const markup = renderToStaticMarkup(<BuiltWith />);
 
-  it("names each service, with its mark where it has one, and links to the evidence", () => {
+  it("names each service beside its mark, and links to the evidence", () => {
     const page = text(markup);
     for (const name of ["Arc", "Circle", "Slack", "Telegram", "npm"]) expect(page).toContain(name);
     const hrefs = [...markup.matchAll(/<a [^>]*href="([^"]+)"/g)].map((match) => match[1]);
@@ -71,7 +71,7 @@ describe("the landing page's built on and works with", () => {
       "/docs/guides/telegram",
       "/docs/get-started/sdk",
     ]);
-    expect([...markup.matchAll(/data-brand="(\w+)"/g)].map((match) => match[1])).toEqual(["arc", "slack", "telegram", "npm"]);
+    expect([...markup.matchAll(/data-brand="(\w+)"/g)].map((match) => match[1])).toEqual(["arc", "circle", "slack", "telegram", "npm"]);
     // npm's mark is its name, so the written name is for screen readers.
     expect(markup).toContain('<span class="sr-only">npm</span>');
   });
