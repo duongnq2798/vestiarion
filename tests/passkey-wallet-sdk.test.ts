@@ -224,3 +224,13 @@ describe("the Modular Wallets binding, with the app's viem", () => {
     expect(await wallet.send("0x840de234Bfc3F66fA380888A0a8204D9487D60d4", 1n)).toEqual({ kind: "unconfirmed", userOpHash: `0x${"ab".repeat(32)}` });
   }, 60_000);
 });
+
+describe("the binding for a passkey treasury (passkey treasury K2, K8)", () => {
+  it("binds Arc mainnet, not a testnet, and carries Circle's recovery", async () => {
+    const { ARC_MAINNET } = await import("@/lib/network");
+    const sdk = passkeySdk(ARC_MAINNET);
+    expect(sdk.chain).toMatchObject({ id: 5042, name: "Arc mainnet", testnet: false, nativeCurrency: { symbol: "USDC", decimals: 18 } });
+    expect(typeof sdk.registerRecoveryAddress).toBe("function");
+    expect(passkeySdk().chain).toMatchObject({ id: ARC_TESTNET.chainId, testnet: true });
+  });
+});
