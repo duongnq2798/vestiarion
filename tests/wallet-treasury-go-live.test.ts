@@ -64,6 +64,19 @@ describe("goLive for a wallet treasury", () => {
     expect(state.org.mode).toBe("sandbox");
   });
 
+  it("waits, on the passkey route, until the recovery is registered or skipped (passkey treasury K8, Review Focus 4)", async () => {
+    const passkeyReady = (extra: Record<string, unknown> = {}) =>
+      world({ ...chosen, contract: agentRow({ treasury_signer: "passkey", address: CONTRACT, approve_tx_hash: APPROVE_TX, enforced: true, ...extra }) });
+    const undecided = passkeyReady();
+    await expect(
+      database(undecided).inScope(() => goLive({ orgId: ORG, actorId: ACTOR, actorEmail: OWNER_EMAIL, confirmation: "mainnet", walletTreasury: { chain: fundedChain() } }))
+    ).rejects.toMatchObject({ code: "wallet_recovery_undecided", message: "Save a recovery phrase for the passkey wallet, or skip it, first." });
+    expect(undecided.org.mode).toBe("sandbox");
+    const skipped = passkeyReady({ recovery_skipped_at: "2026-10-07T10:00:00Z" });
+    await database(skipped).inScope(() => goLive({ orgId: ORG, actorId: ACTOR, actorEmail: OWNER_EMAIL, confirmation: "mainnet", walletTreasury: { chain: fundedChain() } }));
+    expect(skipped.org.mode).toBe("live");
+  });
+
   it("asks for the typed word, then takes it live, saying whose wallet it pays from", async () => {
     const state = ready();
     const { inScope } = database(state);

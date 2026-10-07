@@ -68,19 +68,32 @@ Connecting also adds a webhook to your Circle account, at `https://www.vestiario
 
 ### Path C: your own wallet
 
-On Arc mainnet, where the deployment offers it, **Your own wallet** comes first in step 1. The treasury stays in a wallet you hold, such as MetaMask or Rabby, and you need no Circle account. Your wallet deploys a contract and approves it. The workspace's agent can then pay from your wallet only through that contract, within the daily and 7-day figures you set in it. Vestiarion never holds your USDC. Path C has its own steps 2 and 3, described here. Sections 2 to 4 below are for paths A and B.
+On Arc mainnet, where the deployment offers it, step 1 can put the treasury in a wallet you hold, and you need no Circle account. The workspace's agent can then pay from your wallet only through a contract your wallet deploys and approves, within the daily and 7-day figures you set in it. Vestiarion never holds your USDC. Path C has its own steps 2 and 3, described here. Sections 2 to 4 below are for paths A and B.
+
+Step 1 offers two kinds of wallet, and leads with the one your browser suits:
+
+- **A wallet in your browser**, such as MetaMask or Rabby. When the browser has one, **Your own wallet** comes first, and its button names the wallet when it says its name, as in "Connect MetaMask".
+- **A passkey wallet**, made in Go live with your face, fingerprint or device PIN: Face ID, Touch ID, Windows Hello, or your phone. When the browser has no wallet, **Create a wallet with a passkey** comes first, and a line says how to use MetaMask or Rabby instead. The passkey wallet is a smart account on Arc mainnet owned by your passkey, and Vestiarion holds no key to it.
 
 <Screenshot
   src="/docs/guides/go-live-own-wallet.png"
-  alt="The Go live section of a workspace on Arc mainnet at step 1 of 3, Choose where the treasury lives. A box titled Your own wallet, marked Recommended, explains that the treasury stays in a wallet you hold, that you sign once, deploy a contract and approve it, and that no Circle account is needed, with the button Connect your wallet. Below it, a closed row reads Connect your own Circle account. The badge reads Not live · Arc mainnet."
-  caption="Step 1 on Arc mainnet: your own wallet first, your own Circle account below it."
+  alt="The Go live section of a workspace on Arc mainnet at step 1 of 3, Choose where the treasury lives, in a browser with a wallet. A box titled Your own wallet, marked Recommended, explains that the treasury stays in a wallet you hold and that no Circle account is needed, with the button Connect your wallet. Below it, a box titled Create a wallet with a passkey, marked No app needed, offers Create with a passkey and Use a passkey you made before. A closed row reads Connect your own Circle account."
+  caption="Step 1 in a browser with a wallet: the wallet first, a passkey wallet below it."
 />
+
+<Screenshot
+  src="/docs/guides/go-live-passkey-choice.png"
+  alt="The same step 1 in a browser with no wallet. The box Create a wallet with a passkey, marked Recommended, comes first with the button Create with a passkey. Below it, the box Your own wallet says no browser wallet was found here, so the passkey comes first, and that MetaMask or Rabby can be installed, then the page reloaded."
+  caption="Step 1 in a browser with no wallet: the passkey first, and no error."
+/>
+
+#### With a wallet in your browser
 
 You need a wallet in your browser holding USDC on Arc mainnet: 0.50 USDC for the agent's gas, a little for the gas of your own transactions, and what the workspace will pay. Each step that uses your wallet first asks it to switch to Arc mainnet, and to add Arc mainnet if the wallet does not know it yet.
 
-1. **Prove the wallet is yours.** Choose **Connect your wallet**. If your browser has several wallets, choose one first. Your wallet asks you to connect, then to sign a message that names the workspace, Arc mainnet and your wallet's address. Signing sends nothing. The page confirms: "Your wallet is this workspace's treasury. Create the agent's wallet next."
+1. **Prove the wallet is yours.** Choose **Connect your wallet**. If your browser has several wallets, choose one first. Your wallet asks you to connect, then to sign a message that names the workspace, Arc mainnet and your wallet's address. Signing sends nothing. The page confirms: "Your wallet is this workspace's treasury." Vestiarion creates the agent's wallet at the same time.
 2. **Step 2 of 3, "Set up your wallet as the treasury".** It shows what is set up so far, read from the chain, then the next of four steps:
-   - **Create the agent's wallet.** Choose **Create the agent's wallet**. Vestiarion creates the only wallet that can pay through your contract, in its own Circle account. It holds only gas, never your USDC.
+   - **The agent's wallet.** Vestiarion created it with your choice: the only wallet that can pay through your contract, in its own Circle account. It holds only gas, never your USDC. If Circle could not create it then, the page says "The agent's wallet was not created yet; create it below." Choose **Create the agent's wallet**.
    - **Deploy your contract.** Enter a **Daily figure (USDC)** and a **7-day figure (USDC)**, or leave either empty to use that figure of the agent's spending limit. Then choose **Deploy from your wallet** and confirm in your wallet. Once the chain shows the contract, Vestiarion checks that it is its spending limit contract for your wallet and the agent, then records it.
    - **Approve your contract.** Choose **Approve from your wallet** and confirm. This lets the contract move your wallet's USDC, and it still pays nothing past its figures. Leave **Cap (USDC)** empty to approve without a cap, or enter one.
    - **Give the agent its gas.** On Arc mainnet the agent pays its own gas in USDC. Choose **Send 0.50 USDC for gas** and confirm. Each payment costs it well under 0.01 USDC, and going live needs it to hold at least 0.10 USDC.
@@ -100,7 +113,39 @@ While Arc mainnet confirms a transaction, the page says "Sent. Waiting for Arc m
   caption="Step 3: everything read from the chain, then Go live."
 />
 
-Once the workspace is live, these points differ from [What changes when you go live](#what-changes-when-you-go-live):
+#### With a passkey
+
+You need USDC on Arc mainnet to send to the new wallet: about 0.75 USDC for its setup at first, and what the workspace will pay once its recovery phrase is saved.
+
+1. **Create the wallet.** Choose **Create with a passkey**, and create the passkey when your browser asks. The page confirms: "Your passkey wallet is this workspace's treasury." Vestiarion creates the agent's wallet at the same time. If you made a passkey wallet for this workspace before, choose **Use a passkey you made before** instead.
+2. **Step 2 of 3, "Set up your passkey wallet as the treasury".** It shows what is set up so far, read from the chain, then the next of three steps:
+   - **Add USDC to your wallet.** Send USDC on Arc mainnet to the address under **Your wallet**, from an exchange or another wallet. Setup needs about 0.75 USDC: 0.50 for the agent's gas, and up to 0.25 set aside for the network fee, of which about 0.02 is spent. The rest stays with the wallet for its next confirmations. Add only this for now; send what the workspace will pay once the recovery phrase is saved. The page checks for it every 10 seconds.
+   - **Set up with one confirmation.** The **Daily figure (USDC)** and **7-day figure (USDC)** start from the agent's spending limit; change them if you like, and enter a **Cap (USDC)** if you want one. Choose **Set up with your passkey** and confirm once. In one transaction your wallet deploys its contract, sets these figures in it, approves it, and sends the agent 0.50 USDC for gas, paying the network fee from its own USDC. If the agent's wallet holds its gas already, that part is left out. A passkey prompt shows no transaction, so before it is asked, the page builds the transaction itself from the figures it shows and checks that it matches what Vestiarion sent. Anything else is refused: "The setup Vestiarion sent is not the one this page expected; nothing was signed."
+   - **Save a recovery phrase.** Choose **Create a recovery phrase**. The page shows twelve words, made in your browser and never sent to Vestiarion. They can sign for the wallet on their own: anyone who has them can move every USDC in it, so write them on paper and keep them offline. Vestiarion will never ask for them. Tick "I wrote these twelve words down and keep them offline.", and choose **Register with your passkey**. If this passkey is ever lost, the words let you add a new one and keep the wallet. You may instead choose **Skip: I understand that losing this passkey loses this wallet**. Going live needs one or the other.
+   - **Only when needed.** If Circle could not create the agent's wallet with your choice, step 2 starts with **Create the agent's wallet**. If the agent holds less than 0.10 USDC of gas before you go live, step 2 shows **Give the agent its gas**: choose **Send 0.50 USDC for gas** and confirm with your passkey.
+3. **Step 3 of 3, "Check your wallet, then go live",** as with a wallet in your browser.
+
+<Screenshot
+  src="/docs/guides/go-live-passkey-fund.png"
+  alt="Step 2 of 3, Set up your passkey wallet as the treasury, on Arc mainnet. It lists your wallet with 0 USDC in it, and the agent's wallet with 0 USDC of gas. Under Add USDC to your wallet, the page asks for USDC on Arc mainnet at the address above: setup needs about 0.75 USDC, 0.50 for the agent's gas and up to 0.25 set aside for the network fee, of which about 0.02 is spent, and only this for now. It checks every 10 seconds, with a Refresh button."
+  caption="Step 2 before any USDC: the wallet's address, and what setup needs."
+/>
+
+<Screenshot
+  src="/docs/guides/go-live-passkey-setup.png"
+  alt="Step 2 once the passkey wallet holds 250 USDC, with the agent's gas at 0 USDC. Under Set up with one confirmation, the page lists what the passkey confirms: the wallet deploys its contract, which lets the agent pay from it never past the figures below, approves it to move its USDC, and sends 0.50 USDC to the agent's wallet for its gas. The Daily figure (USDC) field holds 50 and the 7-day figure (USDC) field 200, each noted as coming from the agent's spending limit, and the Cap (USDC) field is empty. A line says the network fee, about 0.02 USDC, is paid from the wallet's USDC, above the button Set up with your passkey."
+  caption="One confirmation deploys the contract, approves it and sends the agent its gas."
+/>
+
+<Screenshot
+  src="/docs/guides/go-live-passkey-recovery.png"
+  alt="Step 2 after setup: the wallet with 249.45 USDC, the agent's gas of 0.5 USDC, the contract, its figures of 50 USDC a day and 200 USDC in 7 days, and what the agent can move. Under Save a recovery phrase, the page explains that twelve words can sign for this wallet on their own, so anyone who has them can move every USDC in it; that they belong on paper, offline, and Vestiarion will never ask for them; and that they let you add a new passkey if this one is lost. Below are the button Create a recovery phrase and the choice Skip: I understand that losing this passkey loses this wallet."
+  caption="A recovery phrase before going live, or a deliberate skip."
+/>
+
+If you reload or close the page while the setup is confirming, the page says "Your setup was sent" and checks the same setup when you come back, before anything else. If it was never recorded and you set it up again, perhaps from another browser, the same contract is used and the agent's gas is not sent twice: only one more network fee is spent. Your device or password manager keeps the passkey, and this browser keeps only its public part, so the next step signs without asking you to pick it first. In another browser the page asks you to choose the passkey, and refuses one that owns another wallet: "Use the passkey you made for it."
+
+On either route, once the workspace is live, these points differ from [What changes when you go live](#what-changes-when-you-go-live):
 
 - **Every payment goes through your contract.** That includes the agent's own and the ones people approve with **Approve and pay** or **Pay now**. A person's payment the contract would refuse is refused before anything is sent, with the reason, for example "Paying 30 USDC would pass the contract's daily limit of 50 USDC: 40 USDC paid so far."
 - **Only USDC on Arc mainnet is paid from it.** A payment in EURC, or to another chain, is refused: "Only USDC on Arc mainnet can be paid from your wallet's contract."
@@ -249,6 +294,7 @@ A failed step shows one of these messages under its button. You can repeat any s
 | Arc mainnet is not open to this account yet. | Arc mainnet is open only to the people the deployment allows, while it is switched on. Use a workspace on Arc testnet, or ask to be added. |
 | Type mainnet to confirm that this workspace pays real USDC. | Type the word `mainnet` in **Type mainnet to confirm**, then choose **Go live** again. |
 | This workspace pays from its owner's own wallet; it takes no Circle account. | The workspace pays from a wallet its owner holds, through its spending limit contract. It never takes a Circle account of its own. To use a Circle account, start a new workspace. |
+| Save a recovery phrase for the passkey wallet, or skip it, first. | A passkey wallet asks for its recovery before it goes live. Save the recovery phrase, or choose to skip it, then choose **Go live** again. |
 | Finish setting up the wallet first: its contract must be approved and its agent must hold gas. | Complete step 2 of path C, **Set up your wallet as the treasury**: deploy the contract from your wallet, approve it, and send the agent its gas. |
 | Paying from your own wallet is not available for this workspace on this deployment. | The deployment has no agent account on Arc mainnet. Connect your own Circle account (path B). |
 | No wallet was found in this browser. Install a wallet such as MetaMask or Rabby, then reload the page. | Path C needs a wallet in your browser. Install one, add your account to it, then reload. |
@@ -261,6 +307,22 @@ A failed step shows one of these messages under its button. You can repeat any s
 | That deployment was not sent from this workspace's wallet. | Another account sent it. Deploy again from the wallet under **Your wallet**. |
 | The chain could not be read just now; nothing was recorded. Try again in a moment. | Arc mainnet did not answer for a while. Reload the page: a transaction your wallet already sent is checked again. |
 | Circle did not create the agent's wallet; nothing was recorded. Try again in a moment. | Choose **Create the agent's wallet** again. |
+| No passkey was created. Nothing changed. | The browser's passkey prompt was closed. Choose **Create with a passkey** again. |
+| The passkey was not used. Nothing changed. | The passkey prompt was closed. Choose the step's button again, and confirm with your passkey. |
+| This browser cannot use passkeys. Use one that can, such as Chrome or Safari, or connect a wallet instead. | Open Settings in a browser with passkeys, or use a wallet in your browser. |
+| Passkeys for Vestiarion wallets work only on www.vestiarion.xyz. | Open Settings at www.vestiarion.xyz, then try again. |
+| This passkey owns another wallet (…), not this workspace's treasury (…). Use the passkey you made for it. | Choose the passkey you created for this workspace's wallet. |
+| The wallet does not hold enough USDC for this. Add a little more, then try again. Nothing was sent. | Send a little more USDC on Arc mainnet to the address under **Your wallet**. |
+| The wallet could not carry out the setup with what it holds. Add a little more USDC, then try again. Nothing was sent. | The setup's fee is set aside before its calls run. Send a little more USDC on Arc mainnet to the address under **Your wallet**. |
+| Arc mainnet did not carry out the setup; nothing was set up, and only its network fee was spent. | Choose **Set up with your passkey** again. |
+| The setup was sent, but it could not be recorded: … | Read the reason after the colon. The setup reached Arc mainnet; if the reason is a passing one, reload the page to check it again. |
+| Recovery is not available in this browser. | Open Settings in a browser with passkeys, then choose **Create a recovery phrase** again. |
+| The setup could not be checked just now; it is kept and not sent twice. Check again in a moment. | Arc mainnet or Vestiarion did not answer while the page checked a setup it sent. Choose **Check again** in a moment, or reload the page. |
+| That did not work. Nothing was sent. Try again in a moment. | Something unforeseen stopped the step before anything was sent. Choose the step's button again; if it happens again, reload the page or try another browser. |
+| The setup Vestiarion sent is not the one this page expected; nothing was signed. | Reload the page and try again. Nothing was signed. |
+| Passkey wallets are not set up on this deployment. | The deployment has no Circle mainnet client key. Use a wallet in your browser. |
+| The setup failed on chain; nothing was set up. | Choose **Set up with your passkey** again. |
+| The wallet has not approved its contract; nothing was recorded. | Choose **Set up with your passkey** again: it approves the contract in the same confirmation. |
 | Going live does not run on this workspace's network yet. | A network takes workspaces live only once it is opened; Arc testnet and Arc mainnet are. You can still connect Circle, create the wallet and fund it. |
 | This workspace's wallets are hosted by Vestiarion; start a new workspace to use your own Circle account. | The hosted wallets exist, so the choice is fixed. Create a new workspace to use your own account. |
 | Could not read the balance from Circle; try again. | The balance could not be read. Choose **Refresh** again. |

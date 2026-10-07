@@ -29,6 +29,9 @@ type GuideSlug =
 
 const PANEL = "src/components/GoLivePanel.tsx";
 const WALLET_STEPS = "src/components/treasury/WalletTreasurySteps.tsx";
+const WALLET_CHOICE = "src/components/treasury/WalletTreasuryChoice.tsx";
+const PASSKEY_STEPS = "src/components/treasury/PasskeyTreasurySteps.tsx";
+const PASSKEY_LIB = "src/lib/passkey-treasury.ts";
 const WALLET_ACTIONS = "src/app/actions/wallet-treasury.ts";
 const WALLET_TREASURY = "src/lib/treasury/wallet-treasury.ts";
 const WALLET_VERIFY = "src/lib/treasury/verify.ts";
@@ -222,9 +225,10 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Something went wrong; try again.", GO_LIVE_ACTIONS],
     // Path C, the owner's own wallet (wallet treasury W1, W3, W5-W11).
     ["Choose where the treasury lives", PANEL],
-    ["Your own wallet", WALLET_STEPS],
-    ["Connect your wallet", WALLET_STEPS],
-    ["Your wallet is this workspace's treasury. Create the agent's wallet next.", WALLET_ACTIONS],
+    ["Your own wallet", WALLET_CHOICE],
+    ["Connect your wallet", WALLET_CHOICE],
+    ["Your wallet is this workspace's treasury.", WALLET_ACTIONS],
+    ["The agent's wallet was not created yet; create it below.", WALLET_ACTIONS],
     ["Set up your wallet as the treasury", WALLET_STEPS],
     ["Create the agent's wallet", WALLET_STEPS, "Create the agent&apos;s wallet"],
     ["Daily figure (USDC)", WALLET_STEPS],
@@ -252,6 +256,37 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["That deployment was not sent from this workspace's wallet.", WALLET_VERIFY],
     ["The chain could not be read just now; nothing was recorded. Try again in a moment.", WALLET_TREASURY],
     ["Circle did not create the agent's wallet; nothing was recorded. Try again in a moment.", WALLET_TREASURY],
+    // Path C with a passkey (passkey treasury K1-K10).
+    ["Create a wallet with a passkey", PASSKEY_STEPS],
+    ["Create with a passkey", PASSKEY_STEPS],
+    ["Use a passkey you made before", PASSKEY_STEPS],
+    ["Your passkey wallet is this workspace's treasury.", WALLET_ACTIONS],
+    ["Set up your passkey wallet as the treasury", PASSKEY_STEPS],
+    ["Add USDC to your wallet", PASSKEY_STEPS],
+    ["Set up with one confirmation", PASSKEY_STEPS],
+    ["Set up with your passkey", PASSKEY_STEPS],
+    ["Create a recovery phrase", PASSKEY_STEPS],
+    ["I wrote these twelve words down and keep them offline.", PASSKEY_STEPS],
+    ["Your setup was sent", PASSKEY_STEPS],
+    ["The wallet could not carry out the setup with what it holds. Add a little more USDC, then try again. Nothing was sent.", PASSKEY_LIB],
+    ["did not carry out the setup; nothing was set up, and only its network fee was spent.", PASSKEY_LIB],
+    ["The setup was sent, but it could not be recorded:", PASSKEY_LIB],
+    ["Recovery is not available in this browser.", PASSKEY_LIB],
+    ["The setup could not be checked just now; it is kept and not sent twice. Check again in a moment.", PASSKEY_LIB],
+    ["That did not work. Nothing was sent. Try again in a moment.", PASSKEY_LIB],
+    ["Register with your passkey", PASSKEY_STEPS],
+    ["Skip: I understand that losing this passkey loses this wallet", PASSKEY_STEPS],
+    ["Passkey wallets are not set up on this deployment.", PASSKEY_STEPS],
+    ["The setup Vestiarion sent is not the one this page expected; nothing was signed.", PASSKEY_LIB],
+    ["Use the passkey you made for it.", PASSKEY_LIB],
+    ["No passkey was created. Nothing changed.", PASSKEY_LIB],
+    ["The passkey was not used. Nothing changed.", PASSKEY_LIB],
+    ["This browser cannot use passkeys. Use one that can, such as Chrome or Safari, or connect a wallet instead.", PASSKEY_LIB],
+    ["Passkeys for Vestiarion wallets work only on www.vestiarion.xyz.", PASSKEY_LIB],
+    ["The wallet does not hold enough USDC for this. Add a little more, then try again. Nothing was sent.", PASSKEY_LIB],
+    ["The setup failed on chain; nothing was set up.", WALLET_TREASURY],
+    ["The wallet has not approved its contract; nothing was recorded.", WALLET_TREASURY],
+    ["Save a recovery phrase for the passkey wallet, or skip it, first.", GO_LIVE_LIBRARY],
   ],
   "guides/first-payment": [
     ["Money you owe", "src/components/intake/InvoiceIntake.tsx"],
@@ -854,6 +889,7 @@ const GO_LIVE_ERRORS: Record<GoLiveErrorCode, true> = {
   go_live_network: true,
   external_wallet: true,
   wallet_treasury_unfinished: true,
+  wallet_recovery_undecided: true,
 };
 
 /** Copy for real users on Arc testnet names the network plainly; it never hedges it away. */

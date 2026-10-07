@@ -1,8 +1,10 @@
-import { decodeFunctionResult, encodeDeployData, encodeFunctionData, recoverMessageAddress, type Hex } from "viem";
+import { decodeEventLog, decodeFunctionResult, encodeFunctionData, parseAbiItem, recoverMessageAddress, type Hex } from "viem";
 import type { NetworkProfile } from "../network";
-import artifact from "../spending-limit/artifact.json";
 import { SPENDING_LIMIT_ABI } from "../spending-limit/onchain";
-import { asAddress, type TreasuryChain } from "./chain";
+import { asAddress, type TreasuryChain, type TreasuryReceipt } from "./chain";
+import { deploymentData } from "../spending-limit/deployment";
+
+export { deploymentData };
 
 /**
  * What the server checks before it trusts an owner's wallet, their contract and their approval (docs/superpowers/
@@ -57,12 +59,27 @@ export async function verifyWalletProof(input: {
   return { ok: true, issuedAt };
 }
 
-/** The deployment an owner's wallet sends (W6): Vestiarion's contract, for this USDC, wallet, agent and figures. */
-export function deploymentData(input: { usdc: string; treasury: string; agent: string; dailyUnits: bigint; weeklyUnits: bigint }): Hex {
-  return encodeDeployData({
-    abi: SPENDING_LIMIT_ABI,
-    bytecode: artifact.bytecode as Hex,
-    args: [asAddress(input.usdc), asAddress(input.treasury), asAddress(input.agent), input.dailyUnits, input.weeklyUnits],
+/** ERC-4337's EntryPoint v0.7, the same address on every chain, Arc mainnet included (checked 2026-10-07). */
+export const ENTRY_POINT_V07 = "0x0000000071727De22E5E9d8BAf0edAc6f37da032" as const;
+
+const USER_OPERATION_EVENT = parseAbiItem(
+  "event UserOperationEvent(bytes32 indexed userOpHash, address indexed sender, address indexed paymaster, uint256 nonce, bool success, uint256 actualGasCost, uint256 actualGasUsed)"
+);
+
+/**
+ * Whether `receipt` carries a user operation of `sender`'s that succeeded (passkey treasury K7, final review I6). A
+ * bundler's transaction succeeds even when a user operation in it reverts, and any hash could be handed back: only the
+ * EntryPoint's own event says that this wallet's operation ran, and how it ended.
+ */
+export function userOperationSucceeded(receipt: TreasuryReceipt, sender: string): boolean {
+  return (receipt.logs ?? []).some((log) => {
+    if (!same(log.address, ENTRY_POINT_V07)) return false;
+    try {
+      const event = decodeEventLog({ abi: [USER_OPERATION_EVENT], topics: log.topics as [Hex, ...Hex[]], data: log.data });
+      return same(event.args.sender, sender) && event.args.success;
+    } catch {
+      return false;
+    }
   });
 }
 
@@ -84,7 +101,19 @@ export async function verifyDeployment(
   if (receipt.status !== "success") return { state: "refused", reason: "The deployment failed on chain; nothing was deployed." };
   if (!same(receipt.from, input.treasury)) return { state: "refused", reason: "That deployment was not sent from this workspace's wallet." };
   if (!receipt.contractAddress) return { state: "refused", reason: "That transaction did not deploy a contract." };
-  const contract = asAddress(receipt.contractAddress);
+  return verifyDeployedAt(chain, { contract: receipt.contractAddress, usdc: input.usdc, treasury: input.treasury, agent: input.agent });
+}
+
+/**
+ * Vestiarion's contract for this USDC, wallet and agent at `contract`, wherever it came from (passkey treasury K7): a
+ * smart account deploys it through the bundler and the deterministic deployment proxy, so no receipt names it. CREATE2
+ * ties the address to the code, and an equal code proves the wiring, as for a wallet's own deployment (W8).
+ */
+export async function verifyDeployedAt(
+  chain: TreasuryChain,
+  input: { contract: string; usdc: string; treasury: string; agent: string }
+): Promise<ChainCheck<{ contract: Hex; dailyUnits: bigint; weeklyUnits: bigint }>> {
+  const contract = asAddress(input.contract);
   const [code, expected] = await Promise.all([
     chain.code(contract),
     chain.simulateDeploy({ from: asAddress(input.treasury), data: deploymentData({ usdc: input.usdc, treasury: input.treasury, agent: input.agent, dailyUnits: 1n, weeklyUnits: 1n }) }),

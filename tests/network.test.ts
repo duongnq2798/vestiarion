@@ -80,7 +80,7 @@ describe("the Arc mainnet profile", () => {
       swapAdapter: null,
       hostedWallets: false,
       circleKeyPrefix: "LIVE_API_KEY:",
-      modularWallets: null,
+      modularWallets: { chain: "arc" },
       // EOAs that pay their own gas in USDC, and no per-workspace contract yet (mainnet go-live M6, M7).
       walletAccountType: "EOA",
       gasReserveUsdc: 0.1,

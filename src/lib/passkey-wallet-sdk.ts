@@ -1,6 +1,7 @@
-import { toCircleSmartAccount, toModularTransport, toPasskeyTransport, toWebAuthnCredential, WebAuthnMode } from "@circle-fin/modular-wallets-core";
+import { registerRecoveryAddress, toCircleSmartAccount, toModularTransport, toPasskeyTransport, toWebAuthnCredential, WebAuthnMode } from "@circle-fin/modular-wallets-core";
 import { createPublicClient, defineChain } from "viem";
 import { createBundlerClient, toWebAuthnAccount } from "viem/account-abstraction";
+import type { NetworkProfile } from "./network";
 import { PASSKEY_WALLET_NETWORK, type PasskeyBundler, type PasskeyPublicClient, type PasskeySdk } from "./passkey-wallet";
 
 /**
@@ -10,19 +11,22 @@ import { PASSKEY_WALLET_NETWORK, type PasskeyBundler, type PasskeyPublicClient, 
  * the types are cast at this one seam.
  */
 
-/** The network's chain as viem describes it, from its profile: USDC is Arc's native token, with 18 decimals there. */
-const CHAIN = defineChain({
-  id: PASSKEY_WALLET_NETWORK.chainId,
-  name: PASSKEY_WALLET_NETWORK.label,
-  nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
-  rpcUrls: { default: { http: [PASSKEY_WALLET_NETWORK.rpcUrl] } },
-  blockExplorers: { default: { name: "Arc explorer", url: PASSKEY_WALLET_NETWORK.explorer } },
-  testnet: true,
-});
+/** A network's chain as viem describes it, from its profile: USDC is Arc's native token, with 18 decimals there. */
+function chainOf(network: NetworkProfile) {
+  return defineChain({
+    id: network.chainId,
+    name: network.label,
+    nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
+    rpcUrls: { default: { http: [network.rpcUrl] } },
+    blockExplorers: { default: { name: "Arc explorer", url: network.explorer } },
+    testnet: network.id !== "arc-mainnet",
+  });
+}
 
-export function passkeySdk(): PasskeySdk {
+/** The SDK bound to `network`: a payee's wallet's by default (P1), Arc mainnet for a passkey treasury (passkey treasury K2). */
+export function passkeySdk(network: NetworkProfile = PASSKEY_WALLET_NETWORK): PasskeySdk {
   return {
-    chain: CHAIN,
+    chain: chainOf(network),
     toPasskeyTransport: (clientUrl, clientKey) => toPasskeyTransport(clientUrl, clientKey),
     toWebAuthnCredential: (parameters) =>
       toWebAuthnCredential({
@@ -45,5 +49,8 @@ export function passkeySdk(): PasskeySdk {
         chain: parameters.chain as never,
         transport: parameters.transport as never,
       }) as unknown as PasskeyBundler,
+    // Circle's recovery: the address is mapped to the wallet with Circle, then added as an owner by a user operation (K8).
+    registerRecoveryAddress: (parameters) =>
+      registerRecoveryAddress(parameters.bundler as never, { account: parameters.account as never, recoveryAddress: parameters.recoveryAddress as `0x${string}` }),
   };
 }

@@ -9,6 +9,7 @@ import { MAINNET_NOT_OPEN, mayUseMainnet } from "../mainnet";
 import { networkOf, networkProfile, type NetworkProfile } from "../network";
 import { workspaceNetwork } from "../workspace-network";
 import { readOutflowBudget } from "../agent/outflow-budget";
+import { passkeySetupCalls, spendingLimitSalt } from "../passkey-treasury";
 import { circleFailureLabel, defaultCircleClient, type CircleClientFactory } from "../circle/check";
 import { ensureNotificationSubscription } from "../circle/notifications";
 import { AGENT_WALLET_SET, createWallet, walletIdempotencyKey, walletSetIdNamed } from "../circle/provision";
@@ -16,7 +17,7 @@ import { withDeadline } from "../circle/settlement";
 import { MAX_ALLOWANCE } from "../circle/spending-limit-setup";
 import { SPENDING_LIMIT_ABI, usdcUnits } from "../spending-limit/onchain";
 import { asAddress, treasuryChain, type TreasuryChain } from "./chain";
-import { deploymentData, verifyApproval, verifyDeployment, verifyWalletProof, walletProofMessage } from "./verify";
+import { deploymentData, userOperationSucceeded, verifyApproval, verifyDeployedAt, verifyDeployment, verifyWalletProof, walletProofMessage } from "./verify";
 
 /**
  * The setup of a workspace that pays from its owner's own wallet (docs/superpowers/specs/2026-10-07-wallet-treasury-
@@ -26,7 +27,17 @@ import { deploymentData, verifyApproval, verifyDeployment, verifyWalletProof, wa
  * every result back from the chain before it records it (W7).
  */
 
-export type WalletTreasuryStep = "wallet" | "agent" | "deploy" | "approve" | "gas" | "ready";
+export type WalletTreasuryStep = "wallet" | "agent" | "deploy" | "approve" | "gas" | "recovery" | "ready";
+
+/** Which kind of wallet signs for the treasury: a browser wallet such as MetaMask, or a passkey (passkey treasury K3). */
+export type TreasurySigner = "wallet" | "passkey";
+
+/**
+ * What a passkey wallet needs before its setup (K5): 0.50 USDC for the agent's gas, and 0.25 for the first user
+ * operation's fee. EntryPoint v0.7 sets the whole fee aside before the calls run, about 0.11 USDC at Arc's fees on
+ * 2026-10-07 for a wallet not yet deployed; about 0.02 is spent and the rest stays the wallet's (final review I2).
+ */
+export const PASSKEY_SETUP_USDC = 0.75;
 
 /** What the Go live panel shows of the setup: nothing secret, and no Circle wallet id. */
 export interface WalletTreasuryStatus {
@@ -43,6 +54,15 @@ export interface WalletTreasuryStatus {
   agentGasUsdc: number | null;
   /** What the agent must hold to go live: the profile's gas reserve, 0 where its gas is paid for it. */
   agentGasMinimumUsdc: number;
+  /** Which kind of wallet signs for the treasury (passkey treasury K3). */
+  signer: TreasurySigner;
+  /** A passkey treasury's recovery: registered, explicitly skipped, or not decided yet (K8). Always null on the wallet route. */
+  recovery: "registered" | "skipped" | null;
+  /** The USDC the wallet must hold before its setup can be sent: the passkey route's, 0 on the wallet route (K5). */
+  setupNeedsUsdc: number;
+  /** The workspace's agent spending limit, which a setup's figures start from (final review I4); null for one not set. */
+  limitDailyUsdc: number | null;
+  limitWeeklyUsdc: number | null;
 }
 
 export type WalletTreasuryErrorCode =
@@ -150,9 +170,13 @@ interface ContractRow {
   deploy_tx_hash: string | null;
   approve_tx_hash: string | null;
   enforced: boolean;
+  treasury_signer: TreasurySigner | null;
+  recovery_address: string | null;
+  recovery_skipped_at: string | null;
 }
 
-const CONTRACT_COLUMNS = "id, treasury_kind, treasury_address, agent_wallet_id, agent_address, address, deploy_tx_hash, approve_tx_hash, enforced";
+const CONTRACT_COLUMNS =
+  "id, treasury_kind, treasury_address, agent_wallet_id, agent_address, address, deploy_tx_hash, approve_tx_hash, enforced, treasury_signer, recovery_address, recovery_skipped_at";
 
 async function contractRow(): Promise<ContractRow | null> {
   const found = await db().from("spending_limit_contracts").select(CONTRACT_COLUMNS).maybeSingle<ContractRow>();
@@ -215,7 +239,21 @@ export async function walletTreasuryStatus(orgId: string, deps: WalletTreasuryDe
       spendableUsdc: null,
       agentGasUsdc: null,
       agentGasMinimumUsdc: network.gasReserveUsdc,
+      signer: row?.treasury_signer === "passkey" ? "passkey" : "wallet",
+      recovery: null,
+      setupNeedsUsdc: 0,
+      limitDailyUsdc: null,
+      limitWeeklyUsdc: null,
     };
+    if (external) {
+      const limit = await readOutflowBudget(db());
+      status.limitDailyUsdc = limit?.dailyUsdc ?? null;
+      status.limitWeeklyUsdc = limit?.weeklyUsdc ?? null;
+    }
+    if (status.signer === "passkey") {
+      status.recovery = row?.recovery_address ? "registered" : row?.recovery_skipped_at ? "skipped" : null;
+      status.setupNeedsUsdc = PASSKEY_SETUP_USDC;
+    }
     if (!status.wallet) return status;
     const chain = deps.chain ?? treasuryChain(network);
     const wallet = status.wallet as Hex;
@@ -233,6 +271,8 @@ export async function walletTreasuryStatus(orgId: string, deps: WalletTreasuryDe
     status.spendableUsdc = balance === null || allowance === null ? null : usdcOf(balance < allowance ? balance : allowance);
     if (!row?.enforced) return { ...status, step: "approve" };
     if (network.gasReserveUsdc > 0 && (status.agentGasUsdc === null || status.agentGasUsdc < network.gasReserveUsdc)) return { ...status, step: "gas" };
+    // A passkey treasury decides its recovery before it goes live (K8).
+    if (status.signer === "passkey" && status.recovery === null) return { ...status, step: "recovery" };
     return { ...status, step: "ready" };
   });
 }
@@ -268,6 +308,46 @@ export async function chooseWalletTreasury(
   const chain = deps.chain ?? treasuryChain(org.network);
   if ((await readOrRefuse(() => chain.code(address))) !== "0x") throw new WalletTreasuryError("not_an_eoa");
 
+  await placeTreasury({ orgId: input.orgId, actorId: input.actorId, address, signer: "wallet" }, {
+    action: "treasury_wallet_proven",
+    summary: `The workspace pays from ${address}, its owner's own wallet`,
+    detail: { by: input.actorId, address, message: input.message, signature: input.signature, network: org.network.id },
+  });
+}
+
+/**
+ * The owner's passkey wallet becomes the workspace's treasury (passkey treasury K3): by its address alone, on the same
+ * terms as a browser wallet (W1, W3). No signature is asked: control is proven on chain when the wallet approves its
+ * contract itself, which only its passkey can do, and an address the owner does not control never gets past setup.
+ */
+export async function choosePasskeyTreasury(input: { orgId: string; actorId: string; actorEmail?: string | null; address: string }): Promise<void> {
+  const org = await orgFacts(input.orgId);
+  admit(org, input.actorEmail);
+  if (org.credentials || (org.walletHost !== null && org.walletHost !== "external")) {
+    throw new WalletTreasuryError("wrong_step", "This workspace chose where its wallets live already; start a new workspace to pay from your own wallet.");
+  }
+  let address: Hex;
+  try {
+    address = asAddress(input.address);
+  } catch {
+    throw new WalletTreasuryError("proof_refused", "That is not a wallet address.");
+  }
+  await placeTreasury({ orgId: input.orgId, actorId: input.actorId, address, signer: "passkey" }, {
+    action: "treasury_wallet_chosen",
+    summary: `The workspace pays from ${address}, its owner's passkey wallet`,
+    detail: { by: input.actorId, address, signer: "passkey", network: org.network.id },
+  });
+}
+
+/**
+ * Makes `address` the workspace's treasury, signed for by `signer`, until its contract is deployed: the host, the
+ * operating account's address, and the contract row, which exists from the choice on (K12); then the ledger entry.
+ */
+async function placeTreasury(
+  input: { orgId: string; actorId: string; address: Hex; signer: TreasurySigner },
+  entry: Omit<LedgerEntryInput, "actor" | "domain">
+): Promise<void> {
+  const { address } = input;
   await inScopeOf(input.orgId, input.actorId, async () => {
     const existing = await contractRow();
     if (existing?.address) throw new WalletTreasuryError("wrong_step", "The wallet is fixed once its contract is deployed.");
@@ -284,15 +364,12 @@ export async function chooseWalletTreasury(
     if (chosen.length === 0) throw new WalletTreasuryError("wrong_step", "This workspace chose where its wallets live already.");
     const placed = unwrap(await db().from("accounts").update({ address }).eq("kind", "operating").is("circle_wallet_id", null).select("id")) as Array<{ id: string }>;
     if (placed.length === 0) throw new WalletTreasuryError("wrong_step", "This workspace's operating account has a Circle wallet already.");
-    if (existing) {
-      const updated = await db().from("spending_limit_contracts").update({ treasury_address: address }).eq("id", existing.id).is("address", null);
-      if (updated.error) throw new Error(updated.error.message);
-    }
-    await record(input.orgId, input.actorId, {
-      action: "treasury_wallet_proven",
-      summary: `The workspace pays from ${address}, its owner's own wallet`,
-      detail: { by: input.actorId, address, message: input.message, signature: input.signature, network: org.network.id },
-    });
+    const fields = { treasury_kind: "external", treasury_address: address, treasury_signer: input.signer };
+    const written = existing
+      ? await db().from("spending_limit_contracts").update(fields).eq("id", existing.id).is("address", null)
+      : await db().from("spending_limit_contracts").insert({ ...fields, created_by: input.actorId });
+    if (written.error) throw new Error(written.error.message);
+    await record(input.orgId, input.actorId, entry);
   });
 }
 
@@ -303,7 +380,10 @@ export async function chooseWalletTreasury(
 export async function createAgentWallet(input: { orgId: string; actorId: string; actorEmail?: string | null }, deps: WalletTreasuryDeps = {}): Promise<void> {
   const org = await orgFacts(input.orgId);
   admit(org, input.actorEmail);
-  await inScopeOf(input.orgId, input.actorId, async () => {
+  // A scope of its own, always: one opened before the choice in the same request holds the workspace's configuration
+  // from before it, without the external host and the agent account (final review I1).
+  const freshScope = (fn: () => Promise<void>) => withOrg(input.orgId, fn, { userId: input.actorId });
+  await freshScope(async () => {
     const { wallet, row, network } = await setup({});
     if (row?.agent_address) return;
     const { circleApiKey: apiKey, circleEntitySecret: entitySecret } = currentOrgConfig().chain;
@@ -402,25 +482,180 @@ export async function recordDeployment(input: { orgId: string; actorId: string; 
     ) as Array<{ id: string }>;
     if (written.length === 0) throw new WalletTreasuryError("wrong_step", "The contract is approved already; it cannot be replaced.");
 
-    const to = { dailyUsdc: check.dailyUnits === 0n ? null : Number(check.dailyUnits) / 1_000_000, weeklyUsdc: check.weeklyUnits === 0n ? null : Number(check.weeklyUnits) / 1_000_000 };
-    const from = await readOutflowBudget(db());
-    if (from?.dailyUsdc !== to.dailyUsdc || from?.weeklyUsdc !== to.weeklyUsdc) {
-      const budget = await db()
-        .from("agent_budgets")
-        .upsert({ daily_usdc: to.dailyUsdc, weekly_usdc: to.weeklyUsdc, updated_by: input.actorId, updated_at: new Date().toISOString() }, { onConflict: "org_id" });
-      if (budget.error) throw new Error(budget.error.message);
-      await record(input.orgId, input.actorId, {
-        action: "agent_budget_changed",
-        summary: "The agent's spending limit follows the contract the owner's wallet deployed",
-        detail: { by: input.actorId, from, to, onChain: { contract: check.contract, txHash: hash } },
-      });
-    }
+    await recordDeployedContract({ orgId: input.orgId, actorId: input.actorId, contract: check.contract, hash, dailyUnits: check.dailyUnits, weeklyUnits: check.weeklyUnits });
+    return "verified";
+  });
+}
+
+/**
+ * What a deployment of the workspace's contract records, on either route (W8, K7): its figures become the agent's
+ * spending limit, so the code's limit and the contract's agree, and the ledger says so; then `spending_limit_deployed`.
+ */
+async function recordDeployedContract(input: {
+  orgId: string;
+  actorId: string;
+  contract: Hex;
+  hash: Hex;
+  dailyUnits: bigint;
+  weeklyUnits: bigint;
+}): Promise<{ dailyUsdc: number | null; weeklyUsdc: number | null }> {
+  const { contract, hash } = input;
+  const to = { dailyUsdc: input.dailyUnits === 0n ? null : Number(input.dailyUnits) / 1_000_000, weeklyUsdc: input.weeklyUnits === 0n ? null : Number(input.weeklyUnits) / 1_000_000 };
+  const from = await readOutflowBudget(db());
+  if (from?.dailyUsdc !== to.dailyUsdc || from?.weeklyUsdc !== to.weeklyUsdc) {
+    const budget = await db()
+      .from("agent_budgets")
+      .upsert({ daily_usdc: to.dailyUsdc, weekly_usdc: to.weeklyUsdc, updated_by: input.actorId, updated_at: new Date().toISOString() }, { onConflict: "org_id" });
+    if (budget.error) throw new Error(budget.error.message);
     await record(input.orgId, input.actorId, {
-      action: "spending_limit_deployed",
-      summary: `The owner's wallet deployed the workspace's spending limit contract ${check.contract}`,
-      detail: { by: input.actorId, contract: check.contract, txHash: hash, dailyUsdc: to.dailyUsdc, weeklyUsdc: to.weeklyUsdc },
+      action: "agent_budget_changed",
+      summary: "The agent's spending limit follows the contract the owner's wallet deployed",
+      detail: { by: input.actorId, from, to, onChain: { contract, txHash: hash } },
+    });
+  }
+  await record(input.orgId, input.actorId, {
+    action: "spending_limit_deployed",
+    summary: `The owner's wallet deployed the workspace's spending limit contract ${contract}`,
+    detail: { by: input.actorId, contract, txHash: hash, dailyUsdc: to.dailyUsdc, weeklyUsdc: to.weeklyUsdc },
+  });
+  return to;
+}
+
+/**
+ * A passkey wallet's setup, recorded once the chain shows it (K7): the user operation's transaction succeeded, Vestiarion's
+ * contract for this wallet and agent is at `contract`, and the wallet approved it, which only its passkey could do
+ * (K3). Recorded as the wallet route records its deployment and approval; asked about again, it is answered, not
+ * recorded twice (Review Focus 2). The agent's gas is the status's to say, as on the wallet route.
+ */
+export async function recordPasskeySetup(
+  input: { orgId: string; actorId: string; txHash: string; contract: string },
+  deps: WalletTreasuryDeps = {}
+): Promise<"pending" | "verified"> {
+  const hash = txHash(input.txHash);
+  let contract: Hex;
+  try {
+    contract = asAddress(input.contract);
+  } catch {
+    throw new WalletTreasuryError("chain_refused", "That is not a contract address.");
+  }
+  return inScopeOf(input.orgId, input.actorId, async () => {
+    const { wallet, row, network } = await setup({ agent: true });
+    if (row?.treasury_signer !== "passkey") throw new WalletTreasuryError("wrong_step", "This workspace's wallet is not a passkey wallet.");
+    if (row.approve_tx_hash === hash && row.enforced) return "verified";
+    if (row.approve_tx_hash) throw new WalletTreasuryError("wrong_step", "The contract is approved already.");
+    const chain = deps.chain ?? treasuryChain(network);
+    const receipt = await readOrRefuse(() => chain.receipt(hash));
+    if (!receipt) return "pending";
+    if (receipt.status !== "success" || !userOperationSucceeded(receipt, wallet)) {
+      throw new WalletTreasuryError("chain_refused", "The setup failed on chain; nothing was set up.");
+    }
+    const check = await readOrRefuse(() => verifyDeployedAt(chain, { contract, usdc: network.tokens.USDC, treasury: wallet, agent: row.agent_address as string }));
+    if (check.state === "pending") return "pending";
+    if (check.state === "refused") throw new WalletTreasuryError("chain_refused", check.reason);
+    const allowance = await readOrRefuse(() => chain.allowance(wallet, check.contract));
+    if (allowance < 1n) throw new WalletTreasuryError("chain_refused", "The wallet has not approved its contract; nothing was recorded.");
+
+    // Only while no approval is recorded: one recorded meanwhile, from another tab, wins.
+    const written = unwrap(
+      await db()
+        .from("spending_limit_contracts")
+        .update({ address: check.contract, deploy_tx_hash: hash, approve_tx_hash: hash, enforced: true })
+        .eq("id", row.id)
+        .is("approve_tx_hash", null)
+        .select("id")
+    ) as Array<{ id: string }>;
+    if (written.length === 0) throw new WalletTreasuryError("wrong_step", "The contract is approved already.");
+    const figures = await recordDeployedContract({ orgId: input.orgId, actorId: input.actorId, contract: check.contract, hash, dailyUnits: check.dailyUnits, weeklyUnits: check.weeklyUnits });
+    await record(input.orgId, input.actorId, {
+      action: "spending_limit_enforced",
+      summary: "The owner's passkey wallet approved its spending limit contract, which now carries every payment",
+      // The shape every enforcement records: the treasury is the owner's wallet.
+      detail: {
+        by: input.actorId,
+        contract: check.contract,
+        agent: asAddress(row.agent_address as string),
+        treasury: wallet,
+        walletHost: "external",
+        signer: "passkey",
+        dailyUsdc: figures.dailyUsdc,
+        weeklyUsdc: figures.weeklyUsdc,
+        deployTxHash: hash,
+        approveTxHash: hash,
+        setLimitsTxHash: null,
+        allowanceUsdc: allowance >= UNLIMITED ? null : Number(allowance) / 1_000_000,
+      },
     });
     return "verified";
+  });
+}
+
+/** A passkey treasury whose contract carries its payments: where its recovery is decided (K8). */
+async function setUpPasskey(): Promise<ContractRow> {
+  const { row } = await setup({ agent: true, contract: true });
+  if (row?.treasury_signer !== "passkey") throw new WalletTreasuryError("wrong_step", "This workspace's wallet is not a passkey wallet.");
+  if (!row.enforced) throw new WalletTreasuryError("wrong_step", "Set up the wallet first.");
+  return row;
+}
+
+/**
+ * A passkey wallet's recovery address, recorded once its registration is mined (K8): the address of the twelve words
+ * the owner keeps, a recovery owner of their wallet. The words never leave their browser; recorded once.
+ */
+export async function recordRecovery(
+  input: { orgId: string; actorId: string; recoveryAddress: string; txHash: string },
+  deps: WalletTreasuryDeps = {}
+): Promise<"pending" | "verified"> {
+  const hash = txHash(input.txHash);
+  let recoveryAddress: Hex;
+  try {
+    recoveryAddress = asAddress(input.recoveryAddress);
+  } catch {
+    throw new WalletTreasuryError("chain_refused", "That is not a recovery address.");
+  }
+  return inScopeOf(input.orgId, input.actorId, async () => {
+    const row = await setUpPasskey();
+    if (row.recovery_address) return "verified";
+    const chain = deps.chain ?? treasuryChain(workspaceNetwork());
+    const receipt = await readOrRefuse(() => chain.receipt(hash));
+    if (!receipt) return "pending";
+    const { wallet } = await setup({ agent: true, contract: true });
+    if (receipt.status !== "success" || !userOperationSucceeded(receipt, wallet)) {
+      throw new WalletTreasuryError("chain_refused", "The recovery's registration failed on chain; nothing was recorded.");
+    }
+    const written = unwrap(
+      await db().from("spending_limit_contracts").update({ recovery_address: recoveryAddress }).eq("id", row.id).is("recovery_address", null).select("id")
+    ) as Array<{ id: string }>;
+    if (written.length === 0) return "verified";
+    await record(input.orgId, input.actorId, {
+      action: "treasury_recovery_registered",
+      summary: `The owner registered ${recoveryAddress} as their passkey wallet's recovery`,
+      detail: { by: input.actorId, recoveryAddress, txHash: hash },
+    });
+    return "verified";
+  });
+}
+
+/** The owner goes without a recovery phrase, knowing a lost passkey loses the wallet (K8): recorded once. */
+export async function skipRecovery(input: { orgId: string; actorId: string }): Promise<void> {
+  return inScopeOf(input.orgId, input.actorId, async () => {
+    const row = await setUpPasskey();
+    if (row.recovery_address) throw new WalletTreasuryError("wrong_step", "The recovery is registered already.");
+    if (row.recovery_skipped_at) return;
+    const written = unwrap(
+      await db()
+        .from("spending_limit_contracts")
+        .update({ recovery_skipped_at: new Date().toISOString() })
+        .eq("id", row.id)
+        .is("recovery_skipped_at", null)
+        .is("recovery_address", null)
+        .select("id")
+    ) as Array<{ id: string }>;
+    if (written.length === 0) return;
+    await record(input.orgId, input.actorId, {
+      action: "treasury_recovery_skipped",
+      summary: "The owner chose to go without a recovery phrase for their passkey wallet",
+      detail: { by: input.actorId },
+    });
   });
 }
 
@@ -484,6 +719,73 @@ export async function recordApproval(input: { orgId: string; actorId: string; tx
       },
     });
     return "verified";
+  });
+}
+
+/** A passkey wallet's setup as the server built it (K6), with what the browser needs to build it again itself. */
+export interface PreparedPasskeySetup {
+  contract: Hex;
+  salt: Hex;
+  /** The contract is at its address already, from a setup whose recording was lost: the deploy call is left out. */
+  deployed: boolean;
+  /** The agent holds its gas minimum already: the gas call is left out, so a second setup never pays it twice. */
+  agentFunded: boolean;
+  /** The figures it deploys with, in units: the owner's, or the workspace's spending limit's where left empty. */
+  dailyUnits: string;
+  weeklyUnits: string;
+  /** The approval's cap in units; null approves without one. */
+  capUnits: string | null;
+  calls: Array<{ to: Hex; data: Hex; value: string }>;
+  chainId: number;
+}
+
+/**
+ * The calls a passkey wallet's one confirmation makes (K6): its contract deployed through the deterministic deployment
+ * proxy, approved on USDC, and the agent's gas. Only for a passkey treasury whose agent exists and whose contract is not
+ * approved yet. A contract already at its address (a setup sent before, whose recording was lost) is not deployed again.
+ */
+export async function preparePasskeySetup(
+  input: { orgId: string; dailyUsdc: number | null; weeklyUsdc: number | null; capUsdc: number | null },
+  deps: WalletTreasuryDeps = {}
+): Promise<PreparedPasskeySetup> {
+  return inScopeOf(input.orgId, undefined, async () => {
+    const { wallet, row, network } = await setup({ agent: true });
+    if (row?.treasury_signer !== "passkey") throw new WalletTreasuryError("wrong_step", "This workspace's wallet is not a passkey wallet.");
+    if (row.approve_tx_hash) throw new WalletTreasuryError("wrong_step", "The contract is approved already.");
+    if (input.capUsdc !== null && !(Number.isFinite(input.capUsdc) && input.capUsdc > 0 && usdcUnits(input.capUsdc) > 0n)) {
+      throw new WalletTreasuryError("invalid_figures", "Set a cap above 0 USDC, or none.");
+    }
+    const figures = await deploymentFigures(input.dailyUsdc, input.weeklyUsdc);
+    const capUnits = input.capUsdc === null ? null : usdcUnits(input.capUsdc);
+    const salt = spendingLimitSalt(input.orgId);
+    const base = {
+      usdc: network.tokens.USDC,
+      treasury: wallet,
+      agent: row.agent_address as string,
+      dailyUnits: figures.daily,
+      weeklyUnits: figures.weekly,
+      capUnits,
+      salt,
+      gasWei: parseEther(AGENT_GAS_USDC),
+    };
+    const chain = deps.chain ?? treasuryChain(network);
+    const planned = passkeySetupCalls({ ...base, deployed: false, agentFunded: false });
+    // CREATE2 ties the address to this code: whatever is there is this contract, and is not deployed twice (Review Focus 2).
+    const deployed = (await readOrRefuse(() => chain.code(planned.contract))) !== "0x";
+    const agentGas = nativeUsdcOf(await readOrRefuse(() => chain.nativeBalance(asAddress(row.agent_address as string))));
+    const agentFunded = network.gasReserveUsdc <= 0 || (agentGas !== null && agentGas >= network.gasReserveUsdc);
+    const { contract, calls } = passkeySetupCalls({ ...base, deployed, agentFunded });
+    return {
+      contract,
+      salt,
+      deployed,
+      agentFunded,
+      dailyUnits: figures.daily.toString(),
+      weeklyUnits: figures.weekly.toString(),
+      capUnits: capUnits === null ? null : capUnits.toString(),
+      calls: calls.map((call) => ({ to: call.to, data: call.data, value: call.value.toString() })),
+      chainId: network.chainId,
+    };
   });
 }
 

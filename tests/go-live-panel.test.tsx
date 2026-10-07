@@ -21,6 +21,11 @@ vi.mock("@/app/actions/wallet-treasury", () => ({
   prepareApprovalAction: vi.fn(),
   recordApprovalAction: vi.fn(),
   prepareAgentGasAction: vi.fn(),
+  choosePasskeyTreasuryAction: vi.fn(),
+  preparePasskeySetupAction: vi.fn(),
+  recordPasskeySetupAction: vi.fn(),
+  recordRecoveryAction: vi.fn(),
+  skipRecoveryAction: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
@@ -490,6 +495,11 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
     spendableUsdc: null,
     agentGasUsdc: 0,
     agentGasMinimumUsdc: 0.1,
+    signer: "wallet",
+    recovery: null,
+    setupNeedsUsdc: 0,
+    limitDailyUsdc: 50,
+    limitWeeklyUsdc: 150,
     ...overrides,
   });
 
@@ -501,6 +511,29 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
     expect(words).toContain("Vestiarion never holds your USDC");
     expect(words).toContain("Connect your own Circle account");
     expect(words.indexOf("Your own wallet")).toBeLessThan(words.indexOf("Connect your own Circle account"));
+  });
+
+  it("offers a passkey wallet beside a browser wallet where the deployment has the mainnet client key, never saying a wallet is missing (passkey treasury K1)", () => {
+    vi.stubEnv("NEXT_PUBLIC_MODULAR_WALLETS_MAINNET_CLIENT_KEY", "LIVE_CLIENT_KEY:abc");
+    try {
+      const words = text(panel(status({ network: "arc-mainnet", walletTreasuryAvailable: true })));
+      expect(words).toContain("Create a wallet with a passkey");
+      expect(words).toContain("Create with a passkey");
+      expect(words).not.toContain("seed phrase");
+      expect(words).toContain("Connect your wallet");
+      expect(words).not.toContain("No wallet was found");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("offers no passkey wallet without the mainnet client key", () => {
+    vi.stubEnv("NEXT_PUBLIC_MODULAR_WALLETS_MAINNET_CLIENT_KEY", "");
+    try {
+      expect(text(panel(status({ network: "arc-mainnet", walletTreasuryAvailable: true })))).not.toContain("Create a wallet with a passkey");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("does not offer it where the deployment has no agent account", () => {
@@ -543,6 +576,51 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
     const words = text(panel(status({ step: "wallets", network: "arc-mainnet", host: "external", walletTreasuryAvailable: true, walletTreasury: halfway })));
     expect(words).toContain("Step 2 of 3");
     expect(words).toContain("Connect your wallet");
+  });
+
+  describe("on the passkey route (passkey treasury K5, K6, K8)", () => {
+    const passkey = (overrides: Partial<NonNullable<GoLiveStatus["walletTreasury"]>>) =>
+      status({ step: "wallets", network: "arc-mainnet", host: "external", walletTreasury: setup({ signer: "passkey", setupNeedsUsdc: 0.75, ...overrides }) });
+
+    it("asks for USDC first, at the wallet's address, saying what setup needs", () => {
+      const words = text(panel(passkey({ step: "deploy", walletUsdc: 0.2 })));
+      expect(words).toContain("Step 2 of 3");
+      expect(words).toContain("Add USDC to your wallet");
+      expect(words).toContain(WALLET);
+      expect(words).toContain("Setup needs about 0.75 USDC: 0.50 for the agent's gas, and up to 0.25 set aside for the network fee, of which about 0.02 is spent.");
+      // Only the setup until the recovery phrase is saved (final review I5).
+      expect(words).toContain("Add only this for now");
+      expect(words).not.toContain("Set up with your passkey");
+    });
+
+    it("sets up with one confirmation once the USDC is there, saying what it does, from the workspace's own figures (final review I4)", () => {
+      const markup = panel(passkey({ step: "deploy", walletUsdc: 12.5 }));
+      expect(markup).toMatch(/<input[^>]*id="passkey-treasury-daily"[^>]*value="50"|<input[^>]*value="50"[^>]*id="passkey-treasury-daily"/);
+      expect(markup).toMatch(/<input[^>]*id="passkey-treasury-weekly"[^>]*value="150"|<input[^>]*value="150"[^>]*id="passkey-treasury-weekly"/);
+      const words = text(markup);
+      expect(words).toContain("Set up with one confirmation");
+      expect(words).toContain("deploys your contract");
+      expect(words).toContain("approves it to move your USDC");
+      expect(words).toContain("sends 0.50 USDC to the agent's wallet for its gas");
+      expect(words).toContain("Daily figure (USDC)");
+      expect(words).toContain("Cap (USDC)");
+      expect(words).toContain("Set up with your passkey");
+      expect(words).not.toContain("Deploy from your wallet");
+    });
+
+    it("asks for a recovery phrase after setup, and lets the owner skip it knowingly", () => {
+      const words = text(panel(passkey({ step: "recovery", contract: CONTRACT, walletUsdc: 12, agentGasUsdc: 0.5 })));
+      expect(words).toContain("Save a recovery phrase");
+      // The words are a full owner of the wallet, said plainly (final review I5).
+      expect(words).toContain("anyone who has them can move every USDC in it");
+      expect(words).toContain("Vestiarion will never ask for them");
+      expect(words).toContain("Create a recovery phrase");
+      expect(words).toContain("Skip: I understand that losing this passkey loses this wallet");
+    });
+
+    it("offers the agent's wallet again where Circle could not make it with the choice", () => {
+      expect(text(panel(passkey({ step: "agent", agent: null })))).toContain("Create the agent's wallet");
+    });
   });
 
   it("keeps showing the wallet, its contract and its figures once live", () => {

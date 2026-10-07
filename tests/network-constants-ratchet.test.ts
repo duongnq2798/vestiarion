@@ -17,7 +17,7 @@ const PROFILE = "src/lib/network.ts";
 const ALLOWED: Record<string, { count: number; why: string }> = {
   "src/app/open/page.tsx": { count: 3, why: "/open shows both networks by design" },
   "src/components/wallet/PasskeyWallet.tsx": { count: 4, why: "the passkey wallet page, /wallet, is Arc testnet's: Modular Wallets run there only" },
-  "src/lib/passkey-wallet-sdk.ts": { count: 5, why: "the passkey wallet's chain for viem, Arc testnet" },
+  "src/lib/passkey-wallet-sdk.ts": { count: 2, why: "the payee passkey wallet's default network, Arc testnet; a passkey treasury passes Arc mainnet" },
   "src/lib/passkey-wallet-send.ts": { count: 3, why: "the passkey wallet's sends, on Arc testnet" },
   "src/lib/passkey-wallet.ts": { count: 6, why: "Modular Wallets run on Arc testnet only; a link offers one when its chain is Arc testnet's" },
   "src/lib/x402/offer.ts": { count: 5, why: "the platform's own x402 service sells on Arc testnet" },

@@ -19,7 +19,8 @@
  *    drives it over the DevTools protocol: a fixed 1200 px viewport, reduced
  *    motion, analytics blocked, and a stand-in browser wallet that answers
  *    nothing, so the own-wallet steps show as they do where a wallet is
- *    installed. Each shot is loaded, prepared (a disclosure opened, a form
+ *    installed (but for the passkey choice, shown as a browser with none
+ *    sees it). Each shot is loaded, prepared (a disclosure opened, a form
  *    filled, a dialog opened, Verify answered), and clipped to its frame,
  *    `[data-docs-shot]`.
  * 3. Stops the server and Edge it started, and nothing else, then deletes
@@ -72,6 +73,12 @@ const SHOTS = {
     await page.fill({ "wallet-treasury-daily": "50", "wallet-treasury-weekly": "200" });
   },
   "go-live-wallet-ready": async () => {},
+  "go-live-passkey-choice": async () => {},
+  "go-live-passkey-fund": async () => {},
+  "go-live-passkey-setup": async (page) => {
+    await page.fill({ "passkey-treasury-daily": "50", "passkey-treasury-weekly": "200" });
+  },
+  "go-live-passkey-recovery": async () => {},
   "go-live-live": async () => {},
   "go-live-usyc": async () => {},
   "first-payment-counterparty": async (page) => {
@@ -343,7 +350,13 @@ async function main() {
   const wanted = names.length > 0 ? names : Object.keys(SHOTS);
   if (!existsSync(EDGE)) throw new Error(`Edge is not at ${EDGE}; set EDGE_PATH`);
 
-  const env = { ...process.env, DOCS_SCREENSHOTS: "1", NEXT_TELEMETRY_DISABLED: "1" };
+  // The passkey card shows only where a mainnet client key is built in: a stand-in where none is, never called here.
+  const env = {
+    ...process.env,
+    DOCS_SCREENSHOTS: "1",
+    NEXT_TELEMETRY_DISABLED: "1",
+    NEXT_PUBLIC_MODULAR_WALLETS_MAINNET_CLIENT_KEY: process.env.NEXT_PUBLIC_MODULAR_WALLETS_MAINNET_CLIENT_KEY || "docs-shots-client-key",
+  };
   if (!skipBuild) run(["build"], env);
 
   const port = await freePort();
@@ -370,8 +383,11 @@ async function main() {
     await page.send("Runtime.enable");
     await page.send("Network.enable");
     await page.send("Network.setBlockedURLs", { urls: ["*googletagmanager.com*", "*google-analytics.com*"] });
-    // A wallet that never answers: the pages find one, and nothing a shot does asks it anything.
-    await page.send("Page.addScriptToEvaluateOnNewDocument", { source: "window.ethereum = { request: () => new Promise(() => {}) };" });
+    // A wallet that never answers: the pages find one, and nothing a shot does asks it anything. The passkey choice is
+    // shown as a browser with no wallet sees it.
+    await page.send("Page.addScriptToEvaluateOnNewDocument", {
+      source: 'if (!location.pathname.endsWith("/go-live-passkey-choice")) window.ethereum = { request: () => new Promise(() => {}) };',
+    });
     await page.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }, { name: "prefers-color-scheme", value: "light" }] });
 
     mkdirSync(OUT_DIR, { recursive: true });

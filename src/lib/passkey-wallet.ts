@@ -72,9 +72,13 @@ export function passkeyMark(): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-/** The bundler client calls a send makes: a user operation, and its receipt, which says whether it was carried out. */
+/**
+ * The bundler client calls a send makes: a user operation, and its receipt, which says whether it was carried out. A
+ * payee's send has Circle Gas Station pay its gas (`paymaster: true`); a passkey treasury pays its own, and its calls
+ * may carry a value (passkey treasury K6).
+ */
 export interface PasskeyBundler {
-  sendUserOperation(operation: { calls: Array<{ to: `0x${string}`; data: `0x${string}` }>; paymaster: true }): Promise<string>;
+  sendUserOperation(operation: { calls: Array<{ to: `0x${string}`; data: `0x${string}`; value?: bigint }>; paymaster?: true }): Promise<string>;
   waitForUserOperationReceipt(parameters: { hash: string }): Promise<{ success: boolean; receipt: { transactionHash: string } }>;
 }
 
@@ -94,23 +98,39 @@ export interface PasskeySdk {
   toWebAuthnAccount(parameters: { credential: unknown }): unknown;
   toCircleSmartAccount(parameters: { client: unknown; owner: unknown }): Promise<{ address: string }>;
   createBundlerClient(parameters: { account: unknown; client: unknown; chain: unknown; transport: unknown }): PasskeyBundler;
+  /** Circle's recovery: registers an address as a recovery owner of the wallet, as a user operation (passkey treasury K8). */
+  registerRecoveryAddress?(parameters: { bundler: PasskeyBundler; account: unknown; recoveryAddress: string }): Promise<string>;
 }
 
 /**
  * The passkey, registered or used, then the smart account it owns on Arc testnet: worked out, never deployed here (P2).
  * The same passkey gives the same wallet either way.
  */
-export async function passkeySmartAccount(input: { config: PasskeyWalletConfig; sdk: PasskeySdk; mode: "Register" | "Login"; username?: string }) {
+export async function passkeySmartAccount(input: {
+  config: PasskeyWalletConfig;
+  sdk: PasskeySdk;
+  mode?: "Register" | "Login";
+  username?: string;
+  /** Modular Wallets' chain path; a payee's wallet's network by default (P1). */
+  chainPath?: string;
+  /** A passkey's public part kept from before: used as is, without a prompt (passkey treasury K9). */
+  credential?: unknown;
+}) {
   const { config, sdk } = input;
-  const chainPath = PASSKEY_WALLET_NETWORK.modularWallets?.chain;
+  const chainPath = input.chainPath ?? PASSKEY_WALLET_NETWORK.modularWallets?.chain;
   if (!chainPath) throw new Error("Passkey wallets do not run on this network");
-  const passkeys = sdk.toPasskeyTransport(config.clientUrl, config.clientKey);
-  const credential = await sdk.toWebAuthnCredential({ transport: passkeys, mode: input.mode, ...(input.username ? { username: input.username } : {}) });
+  const credential =
+    input.credential ??
+    (await sdk.toWebAuthnCredential({
+      transport: sdk.toPasskeyTransport(config.clientUrl, config.clientKey),
+      mode: input.mode ?? "Login",
+      ...(input.username ? { username: input.username } : {}),
+    }));
   const transport = sdk.toModularTransport(`${config.clientUrl}/${chainPath}`, config.clientKey);
   const client = sdk.createPublicClient({ chain: sdk.chain, transport });
   const owner = sdk.toWebAuthnAccount({ credential });
   const account = await sdk.toCircleSmartAccount({ client, owner });
-  return { account, client, transport };
+  return { account, client, transport, credential };
 }
 
 /**
@@ -131,7 +151,7 @@ export async function passkeyWalletAddress(input: {
 const KNOWN_FAILURES = new Set(["NotAllowedError", "NotSupportedError", "SecurityError"]);
 
 /** The browser's own reason for a failure, however deep a library wrapped it: signing wraps a cancelled prompt. */
-function browserReason(error: unknown): string {
+export function browserReason(error: unknown): string {
   let current: unknown = error;
   for (let depth = 0; current && depth < 6; depth += 1) {
     const name = (current as { name?: unknown }).name;

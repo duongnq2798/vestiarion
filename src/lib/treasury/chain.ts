@@ -16,6 +16,8 @@ export interface TreasuryReceipt {
   from: Hex;
   to: Hex | null;
   contractAddress: Hex | null;
+  /** Its logs: a bundler's transaction says in them whether each user operation in it succeeded (passkey treasury K7). */
+  logs?: Array<{ address: Hex; topics: Hex[]; data: Hex }>;
 }
 
 export interface TreasuryChain {
@@ -53,7 +55,13 @@ export function treasuryChain(network: NetworkProfile, options: { rpcUrl?: strin
     async receipt(hash) {
       try {
         const found = await client.getTransactionReceipt({ hash });
-        return { status: found.status, from: found.from, to: found.to ?? null, contractAddress: found.contractAddress ?? null };
+        return {
+          status: found.status,
+          from: found.from,
+          to: found.to ?? null,
+          contractAddress: found.contractAddress ?? null,
+          logs: found.logs.map((log) => ({ address: log.address, topics: log.topics as Hex[], data: log.data })),
+        };
       } catch (error) {
         if (error instanceof TransactionReceiptNotFoundError) return null;
         throw error;

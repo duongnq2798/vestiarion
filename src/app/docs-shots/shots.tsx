@@ -126,6 +126,11 @@ const OWN_WALLET_DEPLOY: GoLiveStatus = {
     spendableUsdc: null,
     agentGasUsdc: 0,
     agentGasMinimumUsdc: 0.1,
+    signer: "wallet",
+    recovery: null,
+    setupNeedsUsdc: 0,
+    limitDailyUsdc: 50,
+    limitWeeklyUsdc: 150,
   },
 };
 
@@ -141,6 +146,31 @@ const OWN_WALLET_READY: GoLiveStatus = {
     weeklyUsdc: 200,
     spendableUsdc: 250,
     agentGasUsdc: 0.5,
+  },
+};
+
+/** A passkey wallet chosen, with the agent's wallet made with it, before any USDC (passkey treasury K5). */
+const PASSKEY_FUND: GoLiveStatus = {
+  ...OWN_WALLET_DEPLOY,
+  walletTreasury: { ...OWN_WALLET_DEPLOY.walletTreasury!, signer: "passkey", setupNeedsUsdc: 0.75, walletUsdc: 0 },
+};
+
+/** The passkey wallet holds its USDC: one confirmation sets it up (K6). */
+const PASSKEY_SETUP: GoLiveStatus = {
+  ...PASSKEY_FUND,
+  walletTreasury: { ...PASSKEY_FUND.walletTreasury!, walletUsdc: 250 },
+};
+
+/** Set up in one confirmation: the recovery is decided next (K8). */
+const PASSKEY_RECOVERY: GoLiveStatus = {
+  ...PASSKEY_FUND,
+  walletTreasury: {
+    ...OWN_WALLET_READY.walletTreasury!,
+    step: "recovery",
+    signer: "passkey",
+    setupNeedsUsdc: 0.75,
+    walletUsdc: 249.45,
+    spendableUsdc: 249.45,
   },
 };
 
@@ -538,6 +568,10 @@ export const DOCS_SHOTS = {
   "go-live-own-wallet": { guide: "go-live", page: "settings", render: goLive(OWN_WALLET_CHOOSING) },
   "go-live-wallet-deploy": { guide: "go-live", page: "settings", render: goLive(OWN_WALLET_DEPLOY) },
   "go-live-wallet-ready": { guide: "go-live", page: "settings", render: goLive(OWN_WALLET_READY) },
+  "go-live-passkey-choice": { guide: "go-live", page: "settings", render: goLive(OWN_WALLET_CHOOSING) },
+  "go-live-passkey-fund": { guide: "go-live", page: "settings", render: goLive(PASSKEY_FUND) },
+  "go-live-passkey-setup": { guide: "go-live", page: "settings", render: goLive(PASSKEY_SETUP) },
+  "go-live-passkey-recovery": { guide: "go-live", page: "settings", render: goLive(PASSKEY_RECOVERY) },
   "go-live-live": {
     guide: "go-live",
     page: "settings",

@@ -3,7 +3,7 @@ import { decodeFunctionData, encodeAbiParameters, getAddress, keccak256, type He
 import { privateKeyToAccount } from "viem/accounts";
 import { SPENDING_LIMIT_ABI } from "@/lib/spending-limit/onchain";
 import type { TreasuryChain, TreasuryReceipt } from "@/lib/treasury/chain";
-import { deploymentData, verifyApproval, verifyDeployment, verifyWalletProof, walletProofMessage } from "@/lib/treasury/verify";
+import { deploymentData, verifyApproval, verifyDeployedAt, verifyDeployment, verifyWalletProof, walletProofMessage } from "@/lib/treasury/verify";
 import { ARC_MAINNET } from "@/lib/network";
 
 /**
@@ -134,5 +134,28 @@ describe("verifyApproval", () => {
 
   it("verifies the approval, with what it allows", async () => {
     expect(await check(fakeChain({ receipts: approval(), allowance: 2n ** 256n - 1n }))).toEqual({ state: "verified", allowanceUnits: 2n ** 256n - 1n });
+  });
+});
+
+describe("verifyDeployedAt (passkey treasury K7)", () => {
+  // A smart account's deployment goes through the bundler and the proxy: there is no receipt naming the contract, so the
+  // contract is checked where it is.
+  const at = (chain: TreasuryChain, agent: Hex = AGENT) => verifyDeployedAt(chain, { contract: CONTRACT.toLowerCase(), usdc: USDC, treasury: WALLET, agent });
+
+  it("waits while there is no code at the address", async () => {
+    expect(await at(fakeChain({ receipts: {} }))).toEqual({ state: "pending" });
+  });
+
+  it("refuses code that is not Vestiarion's contract for this wallet and agent", async () => {
+    expect(await at(fakeChain({ receipts: {}, deployedWith: deployed }), OTHER_AGENT)).toMatchObject({ state: "refused" });
+  });
+
+  it("cannot check where the node simulates no creation", async () => {
+    const blind: TreasuryChain = { ...fakeChain({ receipts: {}, deployedWith: deployed }), simulateDeploy: async () => "0x" };
+    await expect(at(blind)).rejects.toThrow("The node gave no code for a creation call");
+  });
+
+  it("verifies Vestiarion's contract there, with its figures", async () => {
+    expect(await at(fakeChain({ receipts: {}, deployedWith: deployed }))).toEqual({ state: "verified", contract: CONTRACT, dailyUnits: 50_000_000n, weeklyUnits: 150_000_000n });
   });
 });

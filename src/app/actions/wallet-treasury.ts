@@ -6,8 +6,13 @@ import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { inOrg } from "@/lib/dal/scope";
 import {
+  choosePasskeyTreasury,
   chooseWalletTreasury,
   createAgentWallet,
+  preparePasskeySetup,
+  recordPasskeySetup,
+  recordRecovery,
+  skipRecovery,
   prepareAgentGas,
   prepareApproval,
   prepareDeployment,
@@ -15,6 +20,7 @@ import {
   recordApproval,
   recordDeployment,
   WalletTreasuryError,
+  type PreparedPasskeySetup,
   type PreparedTransaction,
 } from "@/lib/treasury/wallet-treasury";
 
@@ -65,10 +71,104 @@ export async function chooseWalletTreasuryAction(
   return inOrg(auth, async () => {
     try {
       await chooseWalletTreasury({ ...actor(auth), ...proof });
-      revalidateOrgPages();
-      return { ok: true, message: "Your wallet is this workspace's treasury. Create the agent's wallet next." };
     } catch (error) {
       return failed("chooseWalletTreasuryAction", error);
+    }
+    return { ok: true, message: await withAgentWallet(actor(auth), "Your wallet is this workspace's treasury.") };
+  });
+}
+
+/**
+ * The agent's wallet, made with the choice on either route (passkey treasury K4): it needs nothing from the owner. When
+ * Circle cannot make it, the choice stands and the page offers its own step to try again.
+ */
+async function withAgentWallet(person: ReturnType<typeof actor>, chosen: string): Promise<string> {
+  try {
+    await createAgentWallet(person);
+    return chosen;
+  } catch (error) {
+    if (!(error instanceof WalletTreasuryError)) console.error("wallet-treasury: the agent's wallet with the choice failed");
+    return `${chosen} The agent's wallet was not created yet; create it below.`;
+  } finally {
+    revalidateOrgPages();
+  }
+}
+
+/** The owner's passkey wallet, by its address, becomes the workspace's treasury (passkey treasury K3). */
+export async function choosePasskeyTreasuryAction(orgSlug: string, address: string): Promise<WalletTreasuryActionResult> {
+  const auth = await authorize(orgSlug, "org.administer");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    try {
+      await choosePasskeyTreasury({ ...actor(auth), address });
+    } catch (error) {
+      return failed("choosePasskeyTreasuryAction", error);
+    }
+    return { ok: true, message: await withAgentWallet(actor(auth), "Your passkey wallet is this workspace's treasury.") };
+  });
+}
+
+export interface PreparedPasskeySetupResult extends WalletTreasuryActionResult {
+  setup: PreparedPasskeySetup | null;
+}
+
+/** A passkey wallet's setup, for the browser to check and its passkey to sign as one user operation (K6). */
+export async function preparePasskeySetupAction(
+  orgSlug: string,
+  input: { dailyUsdc: number | null; weeklyUsdc: number | null; capUsdc: number | null }
+): Promise<PreparedPasskeySetupResult> {
+  const auth = await authorize(orgSlug, "org.administer");
+  if (!auth.ok) return { ok: false, message: auth.message, setup: null };
+  return inOrg(auth, async () => {
+    try {
+      return { ok: true, message: "", setup: await preparePasskeySetup({ orgId: auth.membership.orgId, ...input }) };
+    } catch (error) {
+      return { ...failed("preparePasskeySetupAction", error), setup: null };
+    }
+  });
+}
+
+/** A passkey wallet's setup, recorded once the chain shows it (K7). */
+export async function recordPasskeySetupAction(orgSlug: string, input: { txHash: string; contract: string }): Promise<RecordActionResult> {
+  const auth = await authorize(orgSlug, "org.administer");
+  if (!auth.ok) return { ok: false, message: auth.message, state: null };
+  return inOrg(auth, async () => {
+    try {
+      const state = await recordPasskeySetup({ orgId: auth.membership.orgId, actorId: auth.user.id, ...input });
+      if (state === "verified") revalidateOrgPages();
+      return { ok: true, message: "", state };
+    } catch (error) {
+      return recordFailed("recordPasskeySetupAction", error);
+    }
+  });
+}
+
+/** A passkey wallet's recovery address, recorded once its registration is mined (K8). The words stay in the browser. */
+export async function recordRecoveryAction(orgSlug: string, input: { recoveryAddress: string; txHash: string }): Promise<RecordActionResult> {
+  const auth = await authorize(orgSlug, "org.administer");
+  if (!auth.ok) return { ok: false, message: auth.message, state: null };
+  return inOrg(auth, async () => {
+    try {
+      const state = await recordRecovery({ orgId: auth.membership.orgId, actorId: auth.user.id, ...input });
+      if (state === "verified") revalidateOrgPages();
+      return { ok: true, message: "", state };
+    } catch (error) {
+      return recordFailed("recordRecoveryAction", error);
+    }
+  });
+}
+
+/** The owner goes without a recovery phrase, knowing a lost passkey loses the wallet (K8). */
+export async function skipRecoveryAction(orgSlug: string): Promise<WalletTreasuryActionResult> {
+  const auth = await authorize(orgSlug, "org.administer");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    try {
+      await skipRecovery({ orgId: auth.membership.orgId, actorId: auth.user.id });
+      revalidateOrgPages();
+      return { ok: true, message: "" };
+    } catch (error) {
+      return failed("skipRecoveryAction", error);
     }
   });
 }
