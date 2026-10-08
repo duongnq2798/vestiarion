@@ -75,6 +75,12 @@ const SHOTS = {
   "go-live-wallet-ready": async () => {},
   "go-live-passkey-choice": async () => {},
   "go-live-passkey-fund": async () => {},
+  "go-live-add-usdc": async (page) => {
+    await page.click(`[...document.querySelectorAll("[data-docs-shot] button")].find((b) => b.textContent.trim() === "Add USDC from another chain")`);
+    // The fields' ids come from React's useId: found by their labels.
+    const amount = await page.evaluate(`[...document.querySelectorAll("[data-docs-shot] label")].find((l) => l.textContent.trim() === "Amount (USDC)").htmlFor`);
+    await page.fill({ [amount]: "25.00" });
+  },
   "go-live-passkey-setup": async (page) => {
     await page.fill({ "passkey-treasury-daily": "50", "passkey-treasury-weekly": "200" });
   },

@@ -320,6 +320,8 @@ mainnet plan).
   - The chains a payee can be paid on, its own first (each with its CCTP domain, USDC, RPC and explorer).
   - CCTP (domain, Iris, TokenMessenger), Gateway (API, facilitator, wallet, minter), USYC, and the swap's chain and
     Adapter.
+  - Where USDC can be brought from into it (`inbound`): Arc's CCTP domain, Iris, and the source chains with their USDC
+    and TokenMessengerV2, checked against App Kit's chain table in tests. `cctp` is for paying out of it.
   - Whether hosted wallets and passkey wallets are offered.
 - **Mainnet pays nothing unless a deployment opens it** (phase 2a, below):
   - `orgConfig` carries the network. While Arc mainnet is off, a workspace on it gets no Circle credentials, with the
@@ -581,6 +583,16 @@ with no browser wallet:
 - **The choice's order.** Go live's choice leads with what the browser has (`choiceLead`). The mainnet
   client key, `NEXT_PUBLIC_MODULAR_WALLETS_MAINNET_CLIENT_KEY`, is public by design and bound to the
   site's domain.
+
+**Adding USDC from another chain** (`docs/superpowers/specs/2026-10-08-add-usdc-from-another-chain-design.md`) runs
+in the browser alone. `AddUsdcFromChain` (`src/components/treasury/AddUsdcFromChain.tsx`), folded wherever Go live
+asks for USDC, has the person's browser wallet approve TokenMessengerV2 on a source chain and call
+`depositForBurnWithHook` with the forwarding hook to the workspace's wallet on Arc (`src/lib/inbound-usdc.ts`).
+Circle's Forwarding Service mints there, so a new passkey wallet needs no gas to receive it. Iris quotes the fee before
+anything is signed (the forwarding fee's high estimate plus the fast fee, rounded up, as `maxFee`), and reports the mint
+(`forwardedMintFrom`); the burn's hash is kept in `localStorage` until then. The hook, the fee rows and the mint lookup
+are shared with CCTP payouts through `src/lib/circle/cctp-forward.ts`, which imports no Node module. Nothing is
+recorded on the ledger: the wallet's balance is read from the chain as before.
 
 ## Shadow mode
 

@@ -89,7 +89,7 @@ Step 1 offers two kinds of wallet, and leads with the one your browser suits:
 
 #### With a wallet in your browser
 
-You need a wallet in your browser holding USDC on Arc mainnet: 0.50 USDC for the agent's gas, a little for the gas of your own transactions, and what the workspace will pay. Each step that uses your wallet first asks it to switch to Arc mainnet, and to add Arc mainnet if the wallet does not know it yet.
+You need a wallet in your browser holding USDC on Arc mainnet: 0.50 USDC for the agent's gas, a little for the gas of your own transactions, and what the workspace will pay. If your USDC is on another chain, such as Base or Ethereum, [Add USDC from another chain](#add-usdc-from-another-chain) brings it over, under each step. Each step that uses your wallet first asks it to switch to Arc mainnet, and to add Arc mainnet if the wallet does not know it yet.
 
 1. **Prove the wallet is yours.** Choose **Connect your wallet**. If your browser has several wallets, choose one first. Your wallet asks you to connect, then to sign a message that names the workspace, Arc mainnet and your wallet's address. Signing sends nothing. The page confirms: "Your wallet is this workspace's treasury." Vestiarion creates the agent's wallet at the same time.
 2. **Step 2 of 3, "Set up your wallet as the treasury".** It shows what is set up so far, read from the chain, then the next of four steps:
@@ -101,7 +101,7 @@ You need a wallet in your browser holding USDC on Arc mainnet: 0.50 USDC for the
 
 <Screenshot
   src="/docs/guides/go-live-wallet-deploy.png"
-  alt="Step 2 of 3, Set up your wallet as the treasury, on Arc mainnet. It lists your wallet with 250 USDC in it, the agent's wallet and its gas of 0 USDC. Under Deploy your contract, the Daily figure (USDC) field holds 50 and the 7-day figure (USDC) field holds 200, each noting that empty uses the agent's spending limit, above the button Deploy from your wallet."
+  alt="Step 2 of 3, Set up your wallet as the treasury, on Arc mainnet. It lists your wallet with 250 USDC in it, the agent's wallet and its gas of 0 USDC. Under Deploy your contract, the Daily figure (USDC) field holds 50 and the 7-day figure (USDC) field holds 200, each noting that empty uses the agent's spending limit, above the button Deploy from your wallet. Last is the button Add USDC from another chain."
   caption="Step 2, at the contract: your wallet and the agent's, then the figures to deploy it with."
 />
 
@@ -109,17 +109,17 @@ While Arc mainnet confirms a transaction, the page says "Sent. Waiting for Arc m
 
 <Screenshot
   src="/docs/guides/go-live-wallet-ready.png"
-  alt="Step 3 of 3, Check your wallet, then go live, on Arc mainnet. It lists your wallet with 250 USDC in it, the agent's wallet with 0.5 USDC of gas, your contract, its figures of 50 USDC a day and 200 USDC in 7 days, and The agent can move 250 USDC. Below are the warning that going live cannot be undone from here, the empty Type mainnet to confirm field and the Go live button."
+  alt="Step 3 of 3, Check your wallet, then go live, on Arc mainnet. It lists your wallet with 250 USDC in it, the agent's wallet with 0.5 USDC of gas, your contract, its figures of 50 USDC a day and 200 USDC in 7 days, and The agent can move 250 USDC, then the button Add USDC from another chain. Below are the warning that going live cannot be undone from here, the empty Type mainnet to confirm field and the Go live button."
   caption="Step 3: everything read from the chain, then Go live."
 />
 
 #### With a passkey
 
-You need USDC on Arc mainnet to send to the new wallet: about 0.75 USDC for its setup at first, and what the workspace will pay once its recovery phrase is saved.
+You need USDC on Arc mainnet to send to the new wallet: about 0.75 USDC for its setup at first, and what the workspace will pay once its recovery phrase is saved. It can come from a wallet on another chain: see [Add USDC from another chain](#add-usdc-from-another-chain).
 
 1. **Create the wallet.** Choose **Create with a passkey**, and create the passkey when your browser asks. The page confirms: "Your passkey wallet is this workspace's treasury." Vestiarion creates the agent's wallet at the same time. If you made a passkey wallet for this workspace before, choose **Use a passkey you made before** instead.
 2. **Step 2 of 3, "Set up your passkey wallet as the treasury".** It shows what is set up so far, read from the chain, then the next of three steps:
-   - **Add USDC to your wallet.** Send USDC on Arc mainnet to the address under **Your wallet**, from an exchange or another wallet, and not to the agent's wallet: setup pays the agent's gas from yours. Setup needs about 0.75 USDC: 0.50 for the agent's gas, and up to 0.25 set aside for the network fee, of which about 0.07 is spent. The rest stays with the wallet for its next confirmations. Add only this for now; send what the workspace will pay once the recovery phrase is saved. The page checks for it every 10 seconds.
+   - **Add USDC to your wallet.** Send USDC on Arc mainnet to the address under **Your wallet**, from an exchange or another wallet, and not to the agent's wallet: setup pays the agent's gas from yours. Setup needs about 0.75 USDC: 0.50 for the agent's gas, and up to 0.25 set aside for the network fee, of which about 0.07 is spent. The rest stays with the wallet for its next confirmations. Add only this for now; send what the workspace will pay once the recovery phrase is saved. The page checks for it every 10 seconds. If your USDC is on another chain, choose **Add USDC from another chain** below **Refresh**.
    - **Set up with one confirmation.** The **Daily figure (USDC)** and **7-day figure (USDC)** start from the agent's spending limit; change them if you like, and enter a **Cap (USDC)** if you want one. Choose **Set up with your passkey** and confirm once. In one transaction your wallet deploys its contract, sets these figures in it, approves it, and sends the agent 0.50 USDC for gas, paying the network fee from its own USDC. If the agent's wallet holds its gas already, that part is left out. A passkey prompt shows no transaction, so before it is asked, the page builds the transaction itself from the figures it shows and checks that it matches what Vestiarion sent. Anything else is refused: "The setup Vestiarion sent is not the one this page expected; nothing was signed."
    - **Save a recovery phrase.** Choose **Create a recovery phrase**. The page shows twelve words, made in your browser and never sent to Vestiarion. They can sign for the wallet on their own: anyone who has them can move every USDC in it, so write them on paper and keep them offline. Vestiarion will never ask for them. Tick "I wrote these twelve words down and keep them offline.", and choose **Register with your passkey**. If this passkey is ever lost, the words let you add a new one and keep the wallet. You may instead choose **Skip: I understand that losing this passkey loses this wallet**. Going live needs one or the other.
    - **Only when needed.** If Circle could not create the agent's wallet with your choice, step 2 starts with **Create the agent's wallet**. If the agent holds less than 0.10 USDC of gas before you go live, step 2 shows **Give the agent its gas**: choose **Send 0.50 USDC for gas** and confirm with your passkey.
@@ -127,7 +127,7 @@ You need USDC on Arc mainnet to send to the new wallet: about 0.75 USDC for its 
 
 <Screenshot
   src="/docs/guides/go-live-passkey-fund.png"
-  alt="Step 2 of 3, Set up your passkey wallet as the treasury, on Arc mainnet. It lists your wallet with 0 USDC in it, and the agent's wallet with 0 USDC of gas. Under Add USDC to your wallet, the page asks for USDC on Arc mainnet at Your wallet, the first address above, and not at the agent's wallet: setup needs about 0.75 USDC, 0.50 for the agent's gas and up to 0.25 set aside for the network fee, of which about 0.07 is spent, and only this for now. It checks every 10 seconds, with a Refresh button."
+  alt="Step 2 of 3, Set up your passkey wallet as the treasury, on Arc mainnet. It lists your wallet with 0 USDC in it, and the agent's wallet with 0 USDC of gas. Under Add USDC to your wallet, the page asks for USDC on Arc mainnet at Your wallet, the first address above, and not at the agent's wallet: setup needs about 0.75 USDC, 0.50 for the agent's gas and up to 0.25 set aside for the network fee, of which about 0.07 is spent, and only this for now. It checks every 10 seconds, with a Refresh button, and below it the button Add USDC from another chain."
   caption="Step 2 before any USDC: the wallet's address, and what setup needs."
 />
 
@@ -164,7 +164,7 @@ On either route, once the workspace is live, these points differ from [What chan
 
 <Screenshot
   src="/docs/guides/go-live-wallet-controls.png"
-  alt="The Go live section of a workspace live on Arc mainnet, paying from a passkey wallet: its wallet, the agent's wallet and gas, the contract, its figures of 50 USDC a day and 200 USDC in 7 days, and what the agent can move. Under Change what the agent may pay, the Daily figure (USDC) field holds 50 and the 7-day figure (USDC) field 200, with the button Change with your passkey. Below, the line The contract may move your USDC without a cap, and the button Stop the agent's payments."
+  alt="The Go live section of a workspace live on Arc mainnet, paying from a passkey wallet: its wallet, the agent's wallet and gas, the contract, its figures of 50 USDC a day and 200 USDC in 7 days, and what the agent can move. Under Change what the agent may pay, the Daily figure (USDC) field holds 50 and the 7-day figure (USDC) field 200, with the button Change with your passkey. Below, the line The contract may move your USDC without a cap, the button Stop the agent's payments, and the button Add USDC from another chain."
   caption="Once live, the wallet itself changes the figures, or stops the agent."
 />
 
@@ -194,9 +194,11 @@ The step is headed "Fund the operating wallet, then go live". The agent pays fro
 2. Open [faucet.circle.com](https://faucet.circle.com). As the page says, "select Arc Testnet, and paste this address", then request testnet USDC.
 3. Come back to **Go live**. The balance beside "USDC on chain:" is read from the chain when the step opens, and again on each **Refresh**. While it is 0, the page also reads it again when you return to its tab, and every 30 seconds while the tab is open, for 15 minutes, so the USDC shows without a refresh.
 
+Testnet USDC your wallet holds on another testnet, such as Base Sepolia, can come over with **Add USDC from another chain** instead: see [Add USDC from another chain](#add-usdc-from-another-chain).
+
 <Screenshot
   src="/docs/guides/go-live-fund.png"
-  alt="Step 3 of 3, Fund the operating wallet, then go live. It shows the operating wallet's address with a copy button, the line Get testnet USDC at faucet.circle.com: select Arc Testnet, and paste this address, the line USDC on chain: 20.00 USDC with a Refresh button, and the Go live button below a warning that going live cannot be undone from here."
+  alt="Step 3 of 3, Fund the operating wallet, then go live. It shows the operating wallet's address with a copy button, the line Get testnet USDC at faucet.circle.com: select Arc Testnet, and paste this address, the line USDC on chain: 20.00 USDC with a Refresh button, the button Add USDC from another chain, and the Go live button below a warning that going live cannot be undone from here."
   caption="Step 3 after one faucet request: the operating wallet holds 20.00 USDC."
 />
 
@@ -227,7 +229,7 @@ Next, [make your first payment](/docs/guides/first-payment).
 
 <Screenshot
   src="/docs/guides/go-live-live.png"
-  alt="The Go live section of a live workspace. The badge reads Live · hosted testnet wallet on Arc. Below it are the Operating and Reserve wallet addresses with copy buttons, the line Live since Sep 30, 2026, 09:12 UTC, and Runs every 6 hours; pause the agent from the console to stop it."
+  alt="The Go live section of a live workspace. The badge reads Live · hosted testnet wallet on Arc. Below it are the Operating and Reserve wallet addresses with copy buttons, the button Add USDC from another chain, the line Live since Sep 30, 2026, 09:12 UTC, and Runs every 6 hours; pause the agent from the console to stop it."
   caption="A live workspace: its wallets, when it went live, and how to stop it."
 />
 
@@ -243,11 +245,43 @@ A deployment can open Arc mainnet to the people on its allowlist, or to everyone
 - **Step 1 offers your own wallet, or takes a live key.** Where the deployment offers it, your own wallet comes first, as [path C](#path-c-your-own-wallet) describes. With your own Circle account, paste a live API key, which starts with `LIVE_API_KEY`, and the entity secret registered for it. They come from your Circle account once it is upgraded to production. A test key is refused there, as a live key is refused on Arc testnet. Hosted wallets do not run on Arc mainnet.
 - **With your own Circle account, step 2 creates one wallet.** It is an EOA on Arc mainnet, which pays its own gas in USDC, so the agent keeps 0.10 USDC of it aside for gas. A milestone release the rest cannot cover is held, and decided again once cash comes in.
 - **A stuck payment holds back the ones after it.** An EOA sends its payments in order, and one whose network fee was too low waits until it is resolved. Vestiarion tells you of a payment that has not confirmed 15 minutes after it was sent, as [Your first payment](/docs/guides/first-payment) describes. When the console says "Circle shows it stuck.", look the transaction up in Circle's console by its hash, or contact Circle support. On path C the agent's wallet is in Vestiarion's own Circle account, so look the transaction up on Arc mainnet's explorer instead. Once it confirms or is cancelled, the later payments go out.
-- **Step 3 has no faucet.** With your own Circle account, send USDC on Arc mainnet to the operating wallet's address. On path C your wallet holds it already. To go live, type `mainnet` in **Type mainnet to confirm**, then confirm **Go live**. From then on the agent's payments, and the ones people approve, move real USDC.
+- **Step 3 has no faucet.** With your own Circle account, send USDC on Arc mainnet to the operating wallet's address, or bring it with [Add USDC from another chain](#add-usdc-from-another-chain). On path C your wallet holds it already, and the same control tops it up. To go live, type `mainnet` in **Type mainnet to confirm**, then confirm **Go live**. From then on the agent's payments, and the ones people approve, move real USDC.
 - **Every page and message names Arc mainnet.** Emails to payees and clients, the pay link, the payee's page, receipts, Slack, Telegram and pull request comments name the workspace's network. The USYC reserve, escrow and Gateway, which Arc mainnet does not have, are not shown.
 - **Each step needs a person Arc mainnet is open to.** Anyone else is told "Arc mainnet is not open to this account yet."
 - **Some features are not on Arc mainnet yet.** Payouts to other chains, the USYC reserve, the EURC swap, escrow, enforcing the spending limit in a contract from your own Circle account, and paying in one batch each say so by name. On path C your contract carries every payment. Approving a payment from Slack or Telegram is refused there: approve it in Vestiarion.
 - **When the deployment switches Arc mainnet off**, every workspace on it holds: nothing moves, and the Go live section says "Arc mainnet is switched off on this deployment."
+
+## Add USDC from another chain
+
+Few wallets hold USDC on Arc yet. Wherever Go live asks for USDC, **Add USDC from another chain** brings it from a chain where a wallet in your browser holds it: Base, Ethereum, Arbitrum, Optimism, Polygon, Avalanche, Linea, Unichain or World Chain for a workspace on Arc mainnet, and Base Sepolia, Ethereum Sepolia, Arbitrum Sepolia, Optimism Sepolia, Polygon Amoy or Avalanche Fuji for one on Arc testnet. It shows under the passkey route's **Add USDC to your wallet** step, under each step of setting up your own wallet, at step 3, and once the workspace is live. It sends to **Your wallet** on path C, and to the operating wallet on paths A and B.
+
+It uses Circle's CCTP. Your wallet burns the USDC on the chain it is on, and Circle's Forwarding Service mints it on Arc to the workspace's wallet itself, so that wallet needs no gas for it: a new passkey wallet can receive it while it holds nothing. Your wallet signs both transactions, and Vestiarion takes no part in them and holds nothing.
+
+1. Choose **Add USDC from another chain**. Under **From**, choose the chain your USDC is on, and enter the **Amount (USDC)**. If your browser has several wallets, choose one. Then choose **Review**.
+2. Your wallet asks to connect, then to switch to that chain. The page reads the wallet's USDC there and Circle's fee, and shows what happens: the wallet it comes from, the wallet it goes to, **Circle's fee**, at most a few cents, and what **Arrives**, at least the amount less that fee. The fee is Circle's forwarding fee plus its fast transfer fee, read from Circle when you review.
+3. Choose the **Send** button, such as **Send 25.00 USDC from Base**. Your wallet asks you to approve the transfer, unless you approved enough before, and then to send it. It pays that chain's gas in its own currency, such as ETH on Base, so keep a little there.
+4. The page says the transfer is on its way, with a link to it on that chain, and checks every 5 seconds. Circle mints it on Arc, usually within a minute. The page then links the mint on Arc's explorer, and reads the wallet's balance again.
+
+If you reload or close the page, it follows the same transfer when you come back, and nothing is sent twice. If Circle has not minted it after 30 minutes, for example because your wallet shows the transfer failed, choose **Forget this transfer**. Choose **Add more** to send again once one has arrived.
+
+<Screenshot
+  src="/docs/guides/go-live-add-usdc.png"
+  alt="The passkey route's step 2 on Arc mainnet, at Add USDC to your wallet, with Add USDC from another chain open below the Refresh button. It says that USDC your wallet holds on another chain, such as Base or Ethereum, goes to Your wallet on Arc mainnet, that Circle's CCTP burns it there and mints it on Arc mainnet itself, so Your wallet needs no gas for it, and that your wallet pays the other chain's gas in its own currency, such as ETH on Base. The From field reads Base and the Amount (USDC) field 25.00, above the buttons Review and Cancel."
+  caption="Add USDC from another chain, open: the chain your USDC is on, and how much to bring."
+/>
+
+| Message | What to do |
+| --- | --- |
+| Enter the USDC to send, such as 25 or 12.50, with at most 6 decimals. | Enter the amount in USDC. |
+| Your wallet holds 4.50 USDC on Base: send at most that. | Enter an amount the wallet holds on that chain, or choose another chain. Nothing was asked of your wallet. |
+| Send more than Circle's fee, at most 0.02 USDC. | Enter a larger amount: what arrives is the amount less the fee. |
+| Circle did not answer for the fee from Base. Try again in a moment. | Choose **Review** again in a moment. |
+| Circle offers no fast transfer from Base to Arc mainnet just now. Try again later, or from another chain. | Try again later, or choose another chain under **From**. |
+| Your wallet is on another chain now. Choose Send again: it switches to Base first. | Choose the **Send** button again. Nothing was sent. |
+| Base refused the approval. Your USDC did not leave your wallet. | Look at the transaction in your wallet, for example for too little gas, then try again. |
+| Base has not confirmed the approval yet. Choose Send again in a minute: once it is confirmed, it is not asked for again. | Wait a minute, then choose the **Send** button again. |
+| Base refused the transfer. Your USDC did not leave your wallet. | Look at the transaction in your wallet, then try again. |
+| You declined it in your wallet. | Nothing was sent. Choose the button again when you are ready. |
 
 ## Earn on idle cash with USYC
 

@@ -594,6 +594,8 @@ export const DOCS_SHOTS = {
   "go-live-wallet-ready": { guide: "go-live", page: "settings", render: goLive(OWN_WALLET_READY) },
   "go-live-passkey-choice": { guide: "go-live", page: "settings", render: goLive(OWN_WALLET_CHOOSING) },
   "go-live-passkey-fund": { guide: "go-live", page: "settings", render: goLive(PASSKEY_FUND) },
+  // The same step with Add USDC from another chain opened by the script, the chain and the amount filled.
+  "go-live-add-usdc": { guide: "go-live", page: "settings", render: goLive(PASSKEY_FUND) },
   "go-live-passkey-setup": { guide: "go-live", page: "settings", render: goLive(PASSKEY_SETUP) },
   "go-live-passkey-recovery": { guide: "go-live", page: "settings", render: goLive(PASSKEY_RECOVERY) },
   // A computer with no passkey of its own: the script tells the page so, and the phone handoff opens by itself.
