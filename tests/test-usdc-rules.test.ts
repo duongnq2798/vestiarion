@@ -53,6 +53,15 @@ describe("takenInWindow", () => {
     ];
     expect(takenInWindow(entries, now)).toBe(200);
   });
+  it("counts each transfer once, and an entry naming none as its own", () => {
+    const entries = [
+      { ts: "2026-10-08T11:00:00Z", detail: { amount: 200, transferId: "tx-1" } },
+      { ts: "2026-10-08T11:00:01Z", detail: { amount: 200, transferId: "tx-1" } },
+      { ts: "2026-10-08T11:00:00Z", detail: { amount: 50 } },
+      { ts: "2026-10-08T11:00:00Z", detail: { amount: 50 } },
+    ];
+    expect(takenInWindow(entries, now)).toBe(300);
+  });
 });
 
 describe("testUsdcKey", () => {

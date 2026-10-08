@@ -182,12 +182,14 @@ export function currentSecretWarnings(): string[] {
 }
 
 /**
- * The platform configuration the organization in scope was built from, guarded like its configuration. Only what the
- * platform itself owns is read through it: Vestiarion's test USDC float pays from the hosted Circle account whichever
- * account the workspace pays from (test USDC T1). A workspace's own configuration never carries that pair (R4).
+ * Vestiarion's test USDC float, from the platform configuration the organization in scope was built from, guarded like
+ * its configuration (test USDC T1): the float's wallet id and the hosted Circle pair it lives in. Only these three
+ * leave the platform's configuration this way, and only for the float, whichever account the workspace pays from; the
+ * workspace's own configuration never carries the pair (R4).
  */
-export function currentPlatformConfig(): VestiarionConfig {
-  return organizationContext().platformConfig as VestiarionConfig;
+export function currentShadowFloat(): { walletId: string | undefined; apiKey: string | undefined; entitySecret: string | undefined } {
+  const platform = organizationContext().platformConfig as VestiarionConfig;
+  return { walletId: platform.shadowFloat?.walletId, apiKey: platform.chain.hostedCircleApiKey, entitySecret: platform.chain.hostedCircleEntitySecret };
 }
 
 /**

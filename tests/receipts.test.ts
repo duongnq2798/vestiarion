@@ -14,8 +14,9 @@ import { ARC_MAINNET, ARC_TESTNET } from "@/lib/network";
  * matched receivable becomes received, compare-and-set, and the ledger signs `ar_received`.
  */
 
-const { ledgerMock } = vi.hoisted(() => ({ ledgerMock: vi.fn() }));
+const { ledgerMock, floatMock } = vi.hoisted(() => ({ ledgerMock: vi.fn(), floatMock: vi.fn() }));
 vi.mock("@/lib/ledger", () => ({ appendLedgerEntry: ledgerMock }));
+vi.mock("@/lib/test-usdc", () => ({ floatAddress: floatMock }));
 
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000a0a";
@@ -99,6 +100,7 @@ describe("recordIncomingTransfers", () => {
 
   beforeEach(() => {
     ledgerMock.mockReset().mockResolvedValue(undefined);
+    floatMock.mockReset().mockResolvedValue(null);
     fake = fakeSupabase(workspace());
   });
 
@@ -180,6 +182,26 @@ describe("recordIncomingTransfers", () => {
     expect(patches("/rest/v1/invoices")).toHaveLength(0);
     expect(ledgerMock).not.toHaveBeenCalled();
     expect(result).toMatchObject({ recorded: 1, matched: 0 });
+  });
+
+  it("never matches money from the float's own address, before any entry names it (test USDC review fix E)", async () => {
+    const FLOAT = "0xf10a7000000000000000000000000000000000f1";
+    floatMock.mockResolvedValue("0xF10A7000000000000000000000000000000000F1");
+    fake = fakeSupabase(
+      workspace({ unmatched: [{ ...UNMATCHED[0], from_address: FLOAT }], open: [{ ...OPEN[0], counterparties: { name: "Acme", address: null } }], grants: [] })
+    );
+    const result = await run(() => recordIncomingTransfers(db(), provider([transfer({ from: FLOAT })]), "operating"));
+    expect(floatMock).toHaveBeenCalledTimes(1);
+    expect(patches("/rest/v1/incoming_transfers")).toHaveLength(0);
+    expect(patches("/rest/v1/invoices")).toHaveLength(0);
+    expect(ledgerMock).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ recorded: 1, matched: 0 });
+  });
+
+  it("asks for the float's address only when a transfer waits to be matched", async () => {
+    fake = fakeSupabase(workspace({ unmatched: [] }));
+    await run(() => recordIncomingTransfers(db(), provider([]), "operating"));
+    expect(floatMock).not.toHaveBeenCalled();
   });
 
   it("leaves an ambiguous transfer unmatched", async () => {

@@ -277,6 +277,14 @@ export async function appendLedgerEntry(input: LedgerEntryInput): Promise<Ledger
   return appendSigned(input, privateKey);
 }
 
+/**
+ * Resolves the key `appendLedgerEntry` signs with, as it does, and throws as it would when there is none or it cannot
+ * be read: for a caller that moves money and must refuse before it moves rather than move it unrecorded.
+ */
+export function assertLedgerCanSign(): void {
+  ledgerSigningKey(currentOrgConfig(), NO_LOCAL_KEYS);
+}
+
 export async function listLedgerEntries(limit = 200): Promise<LedgerEntry[]> {
   const rows = unwrap(
     await db()

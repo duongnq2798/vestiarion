@@ -39,23 +39,31 @@ export function testUsdcAmount(input: {
 
 export interface GrantEntry {
   ts: string;
-  detail: { amount?: unknown; status?: unknown };
+  detail: { amount?: unknown; status?: unknown; transferId?: unknown };
 }
 
 /**
- * The USDC a workspace's `test_usdc_added` entries took in the 7 days before `now`. One still processing counts; one
- * Circle reported failed moved nothing, so it does not.
+ * The USDC a workspace's `test_usdc_added` entries took in the 7 days before `now`, for the console. One still
+ * processing counts; one Circle reported failed moved nothing, so it does not. A transfer two entries name (two presses
+ * at once) counts once; an entry that names none counts as its own.
  */
 export function takenInWindow(entries: GrantEntry[], now: number): number {
+  const seen = new Set<string>();
   return entries.reduce((sum, entry) => {
     const at = Date.parse(entry.ts);
     const amount = Number(entry.detail?.amount);
     const counted = Number.isFinite(at) && at > now - WEEK_MS && Number.isFinite(amount) && amount > 0 && entry.detail?.status !== "failed";
-    return counted ? sum + amount : sum;
+    if (!counted) return sum;
+    const transferId = entry.detail?.transferId;
+    if (typeof transferId === "string") {
+      if (seen.has(transferId)) return sum;
+      seen.add(transferId);
+    }
+    return sum + amount;
   }, 0);
 }
 
-/** Circle's idempotency key for a workspace's grant number `ordinal`: two clicks that counted the same entries share it. */
+/** Circle's idempotency key for a workspace's transfer number `ordinal`: two presses that listed the same transfers share it. */
 export function testUsdcKey(orgId: string, ordinal: number): string {
   return walletIdempotencyKey(orgId, `test-usdc:${ordinal}`);
 }

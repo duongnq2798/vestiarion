@@ -2,6 +2,7 @@ import type { ChainProvider, InboundTransfer, Stablecoin } from "../circle/types
 import { sameAddress } from "../counterparty-address";
 import { unwrap, type OrgDb } from "../dal";
 import { appendLedgerEntry } from "../ledger";
+import { floatAddress } from "../test-usdc";
 
 /**
  * Money in, matched to what was owed (docs/superpowers/specs/2026-10-01-receivables-on-arc-design.md §2).
@@ -114,11 +115,15 @@ export async function recordIncomingTransfers(
   if (unmatched.length === 0) return { ...none, recorded: transfers.length };
 
   // Test USDC from Vestiarion's float is money in, owed by no client (test USDC T6): never matched, whatever its amount.
+  // The addresses its entries name, and the float's own, for a transfer whose entry is not written yet (review fix E);
+  // `floatAddress` asks Circle nothing when the float is not set up, and gives null rather than stop this stage.
+  const [grants, float] = await Promise.all([orgDb.from("ledger_entries").select("detail").eq("action", "test_usdc_added"), floatAddress()]);
   const fromFloat = new Set(
-    (unwrap(await orgDb.from("ledger_entries").select("detail").eq("action", "test_usdc_added")) as Array<{ detail: { from?: unknown } | null }>)
+    (unwrap(grants) as Array<{ detail: { from?: unknown } | null }>)
       .map((entry) => (typeof entry.detail?.from === "string" ? entry.detail.from.toLowerCase() : null))
       .filter((address): address is string => address !== null)
   );
+  if (float) fromFloat.add(float.toLowerCase());
 
   const openRows = unwrap(
     await orgDb
