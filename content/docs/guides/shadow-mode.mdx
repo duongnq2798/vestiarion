@@ -2,7 +2,7 @@ Shadow mode lets a business try the agent on its real bills without moving its m
 
 ## Before you start
 
-- **A workspace on Arc testnet**, live, with USDC in its operating wallet: see [Go live](/docs/guides/go-live). Each payment you agree to is paid from that wallet, so keep it funded from Circle's faucet.
+- **A workspace on Arc testnet**, live, with USDC in its operating wallet: see [Go live](/docs/guides/go-live). Each payment you agree to is paid from that wallet, so keep it funded: with test USDC from Vestiarion's float, for what your open bills need (see [Fund it for your real amounts](#fund-it-for-your-real-amounts)), or from Circle's faucet, 20 USDC every two hours.
 - **The owner of the workspace.** Only an owner turns shadow mode on or off. Anyone who can approve payments (an owner, admin or approver) gives verdicts.
 
 Shadow mode is for Arc testnet only. On Arc mainnet the panel says "Shadow mode runs on Arc testnet. On Arc mainnet the agent pays your real bills." Once you trust the agent, a small share of your bills can move to a workspace on Arc mainnet, which pays them in real USDC.
@@ -20,6 +20,16 @@ Add each bill as a payable in AP / AR. In USDC, enter its **Amount** in USDC, as
 A bill read from a document, an email or a chat, or sent through the API, is added in USDC or EURC: for a bill in another currency, type its amount into the form instead.
 
 The agent decides on each bill in its next cycle, as in any workspace. It may pay it now, schedule it for a later day, hold it, flag it, or ask for what is missing. If a supplier sends you no purchase orders, turn purchase orders off on its row in Counterparties, so its bills are not held for one.
+
+## Fund it for your real amounts
+
+Your bills are paid at their real amounts, and Circle's faucet gives 20 USDC every two hours, so a month of bills can need more USDC than the faucet gives. Vestiarion keeps a float of test USDC on Arc testnet for this.
+
+When the console's **Safe to spend today** is below zero, its **Shadow mode** section says "Your open bills need N USDC more than the operating wallet holds." An owner or admin then chooses **Add N test USDC**, "From Vestiarion's test USDC float, on Arc testnet." Vestiarion sends that much test USDC from its float to the operating wallet. It works the amount out again when you press it, from the operating wallet's USDC on Arc testnet and the open bills, milestones and cushion that **Safe to spend today** counts: at least 1 USDC, and at most 5,000 USDC in any 7 days for each workspace.
+
+A notice says **Added N test USDC to the operating wallet.** with **View transaction**, or "Arc testnet is still confirming it." while it settles. The section then says "Last added: N test USDC on" the day, with **View transaction**. Within seconds the agent decides again on any payment it held for want of cash.
+
+Vestiarion fills the float with testnet USDC bought in bulk from TestMint. Once your workspace has taken its 5,000 USDC for the week, the section says so, with the operating wallet's address: buy testnet USDC from [TestMint](https://testmint.myproceeds.xyz) yourself, with destination Arc Testnet and that address as recipient, or use Circle's faucet.
 
 ## 3. Give a supplier with no Arc address a mirror address
 
@@ -67,6 +77,7 @@ Each step is a signed entry in the workspace's ledger, and reaches webhook endpo
 - `shadow_mode_started` and `shadow_mode_ended`, with who turned it on or off and the currency.
 - `ap_pay` for a payment held in shadow mode, with `execution.heldBecause: "shadow_verdict"`. It is not a refusal by code: the decision passed every check.
 - `counterparty_address_changed` with `via: "mirror"` when a supplier is given a mirror address: who asked, the address and its Circle wallet id.
+- `test_usdc_added` when test USDC came in from Vestiarion's float: who asked, the amount, the float's address and the operating wallet's, Circle's transfer id, the transaction hash once Arc testnet confirmed it, its status, the shortfall and the weekly limit. Money from the float is never matched to a receivable.
 - `decision_verdict` for each verdict: who gave it, the decision it is about (`entrySeq`), the payable (`subjectId`), the agent's action, `agree` or `disagree`, and the reason.
 
 ## If something goes wrong
@@ -87,5 +98,11 @@ Each step is a signed entry in the workspace's ledger, and reaches webhook endpo
 | Go live on Arc testnet first: a mirror address is a wallet in this workspace's Circle wallets. | Take the workspace live on Arc testnet in **Settings**, under **Go live**, then give the mirror address. |
 | A mirror address is for shadow mode. An owner turns it on in Settings. | Shadow mode was turned off after the page loaded. Reload the page. |
 | This workspace's Circle credentials are stored but could not be read. | Vestiarion cannot use this workspace's Circle wallets just now. Try again later; nothing was given. |
+| Test USDC is for shadow mode. An owner turns it on in Settings. | Shadow mode was turned off after the page loaded. Reload the page. |
+| Go live on Arc testnet first: test USDC goes to the operating wallet. | Take the workspace live on Arc testnet in **Settings**, under **Go live**, then add the test USDC. |
+| Vestiarion's test USDC float is not set up on this deployment. | Fund the operating wallet from Circle's faucet. |
+| Nothing to add: the operating wallet covers your open bills. | **Safe to spend today** is no longer below zero, so nothing was sent. Reload the page. |
+| This workspace took its 5,000 test USDC for this week. | Buy testnet USDC from [TestMint](https://testmint.myproceeds.xyz) and send it to the operating wallet, or use Circle's faucet. |
+| Vestiarion's test USDC float is empty just now. | Use Circle's faucet, or buy testnet USDC from TestMint and send it to the operating wallet. |
 | This decision waits for a verdict in shadow mode. Agree or disagree with it in Approvals first. | Give your verdict on its card in **Approvals**: **Agree and pay**, or **Disagree**. |
 | Someone disagreed with this decision in shadow mode, so it is not paid. Return it to the agent or reject it. | A payment someone disagreed with is not made. Return it to the agent, or reject it, in **Approvals**. |

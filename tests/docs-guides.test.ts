@@ -138,6 +138,9 @@ const INBOX_SETTINGS = "src/lib/email-inbox/settings.ts";
 const SHADOW_PANEL = "src/components/ShadowModePanel.tsx";
 const SHADOW_LIBRARY = "src/lib/shadow-mode.ts";
 const SHADOW_SUMMARY = "src/components/ShadowModeSummary.tsx";
+const TEST_USDC_CONTROL = "src/components/TestUsdcControl.tsx";
+const TEST_USDC_ACTION = "src/app/actions/test-usdc.ts";
+const TEST_USDC_LIBRARY = "src/lib/test-usdc.ts";
 const VERDICT = "src/components/VerdictControl.tsx";
 const VERDICTS = "src/lib/verdicts.ts";
 
@@ -911,6 +914,23 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Do not pay it", VERDICT],
     ["Agree", VERDICT],
     ["See them in AP / AR", SHADOW_SUMMARY],
+    // Test USDC from Vestiarion's float, in the console's shadow mode section (test USDC T8).
+    ["Safe to spend today", "src/components/vx/CashOutlook.tsx"],
+    ["Your open bills need N USDC more than the operating wallet holds.", SHADOW_SUMMARY, "Your open bills need ${usdc(testUsdc.view.need)} USDC more than the operating wallet holds."],
+    ["Add N test USDC", TEST_USDC_CONTROL, "Add ${usdc(amount)} test USDC"],
+    ["From Vestiarion's test USDC float, on Arc testnet.", TEST_USDC_CONTROL, "From Vestiarion&apos;s test USDC float, on Arc testnet."],
+    ["Added N test USDC to the operating wallet.", TEST_USDC_ACTION, "Added ${usdc(added.amount)} test USDC to the operating wallet."],
+    ["Arc testnet is still confirming it.", TEST_USDC_ACTION],
+    ["Last added: N test USDC on", SHADOW_SUMMARY, "Last added: ${usdc(testUsdc.latest.amount)} test USDC on"],
+    ["https://testmint.myproceeds.xyz", SHADOW_SUMMARY],
+    ["test_usdc_added", TEST_USDC_LIBRARY],
+    ["Test USDC is for shadow mode. An owner turns it on in Settings.", TEST_USDC_LIBRARY],
+    ["Go live on Arc testnet first: test USDC goes to the operating wallet.", TEST_USDC_LIBRARY],
+    ["Vestiarion's test USDC float is not set up on this deployment.", TEST_USDC_LIBRARY],
+    ["Nothing to add: the operating wallet covers your open bills.", TEST_USDC_LIBRARY],
+    ["This workspace took its 5,000 test USDC for this week.", TEST_USDC_LIBRARY, "This workspace took its ${usdc(weeklyLimit)} test USDC for this week."],
+    ["Vestiarion's test USDC float is empty just now.", TEST_USDC_LIBRARY],
+    ["Use Circle's faucet, or buy testnet USDC from TestMint and send it to the operating wallet.", TEST_USDC_ACTION],
     ["Counterparties", APP_NAV],
     ["Give it a mirror address", "src/components/MirrorAddressControl.tsx"],
     ["Mirror address: a wallet Vestiarion made for this payee on Arc testnet, in shadow mode.", "src/app/o/[slug]/counterparties/page.tsx"],

@@ -52,10 +52,11 @@ const ALLOWED: Record<string, number> = {
   "src/components/VerdictControl.tsx": 1,
   "src/lib/shadow-mode.ts": 1,
   // Test USDC for shadow mode, only on Arc testnet (test USDC T2): the console summary's line and where to buy more, its
-  // button's line, the action's word that Arc testnet still confirms it, and the library's refusals and ledger summary.
+  // button's line, the action's word that Arc testnet still confirms it and where else testnet USDC comes from, and the
+  // library's refusals and ledger summary.
   "src/components/ShadowModeSummary.tsx": 2,
   "src/components/TestUsdcControl.tsx": 1,
-  "src/app/actions/test-usdc.ts": 1,
+  "src/app/actions/test-usdc.ts": 3,
   "src/lib/test-usdc.ts": 3,
   // A mirror address, made only in shadow mode: its control and the page's line saying which address is one, the library's
   // refusal before going live and its ledger summary.

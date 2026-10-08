@@ -28,6 +28,7 @@
     "org:adopt-env": "tsx scripts/org-adopt-env.ts",
     "numbers": "tsx scripts/open-numbers.ts",
     "traction-digest": "tsx scripts/traction-digest.ts",
+    "shadow-float": "tsx scripts/shadow-float.ts",
     "payments": "tsx scripts/payments-switch.ts",
     "escrow:compile": "tsx scripts/compile-escrow.ts",
     "spending-limit:compile": "tsx scripts/compile-spending-limit.ts",

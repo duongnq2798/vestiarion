@@ -89,6 +89,15 @@ describe("addTestUsdcAction", () => {
     expect(raiseMock).not.toHaveBeenCalled();
   });
 
+  it("says where else to find testnet USDC while the float is empty", async () => {
+    authorizeMock.mockResolvedValueOnce(ACCESS);
+    addMock.mockRejectedValueOnce(new TestUsdcError("float_empty"));
+    expect(await run(() => addTestUsdcAction(INITIAL, form()))).toEqual({
+      ok: false,
+      message: "Vestiarion's test USDC float is empty just now. Use Circle's faucet, or buy testnet USDC from TestMint and send it to the operating wallet.",
+    });
+  });
+
   it("says payments are switched off in the switch's own words", async () => {
     authorizeMock.mockResolvedValueOnce(ACCESS);
     addMock.mockRejectedValueOnce(new PaymentsDisabledError());

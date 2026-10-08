@@ -23,6 +23,8 @@ export interface TestUsdcActionResult {
 }
 
 const usdc = (value: number) => value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+/** Where else testnet USDC comes from while the float is empty (test USDC T8). */
+const ELSEWHERE = "Use Circle's faucet, or buy testnet USDC from TestMint and send it to the operating wallet.";
 
 export async function addTestUsdcAction(_previous: TestUsdcActionResult, formData: FormData): Promise<TestUsdcActionResult> {
   const auth = await authorize(formData.get("orgSlug"), "records.write");
@@ -38,7 +40,8 @@ export async function addTestUsdcAction(_previous: TestUsdcActionResult, formDat
       const message = added.status === "pending" ? `${said} Arc testnet is still confirming it.` : said;
       return added.txUrl ? { ok: true, message, txUrl: added.txUrl } : { ok: true, message };
     } catch (error) {
-      if (error instanceof TestUsdcError || error instanceof PaymentsDisabledError) return { ok: false, message: error.message };
+      if (error instanceof TestUsdcError) return { ok: false, message: error.code === "float_empty" ? `${error.message} ${ELSEWHERE}` : error.message };
+      if (error instanceof PaymentsDisabledError) return { ok: false, message: error.message };
       console.error("test USDC failed", error instanceof Error ? error.message : "unknown error");
       return { ok: false, message: "That did not work. Try again in a moment." };
     }
