@@ -167,11 +167,12 @@ interface FloatTransfer {
 }
 
 /**
- * Every transfer Circle lists from the float to `to` on `blockchain`, newest first, a page at a time to the end. Each
- * page is its own `circleCall`, under its own deadline. A list longer than `LIST_PAGE_LIMIT` pages is refused rather than
- * read in part, since its length is the next transfer's key.
+ * Every transfer Circle lists from the float to `to`, newest first, a page at a time to the end. Each page is its own
+ * `circleCall`, under its own deadline. A list longer than `LIST_PAGE_LIMIT` pages is refused rather than read in part,
+ * since its length is the next transfer's key. No `blockchain` filter: Circle answers 400 to `ARC-TESTNET` as one, and
+ * the wallet id names its chain already.
  */
-async function sentFromFloat(client: FloatClient, walletId: string, to: string, blockchain: string): Promise<FloatTransfer[]> {
+async function sentFromFloat(client: FloatClient, walletId: string, to: string): Promise<FloatTransfer[]> {
   const sent: FloatTransfer[] = [];
   let pageAfter: string | undefined;
   for (let page = 0; page < LIST_PAGE_LIMIT; page += 1) {
@@ -183,7 +184,6 @@ async function sentFromFloat(client: FloatClient, walletId: string, to: string, 
           walletIds: [walletId],
           destinationAddress: to,
           txType: "OUTBOUND",
-          blockchain,
           // Every token, as the balance reads do (mainnet pre-flight).
           includeAll: true,
           pageSize: LIST_PAGE_SIZE,
@@ -264,7 +264,7 @@ export async function addTestUsdc(
   const [balance, entries, listed, floatBalances, float] = await Promise.all([
     provider.getTokenBalance ? provider.getTokenBalance(operating.id, "USDC") : provider.getBalance(operating.id),
     grants(),
-    sentFromFloat(client, walletId, to, network.circleBlockchain),
+    sentFromFloat(client, walletId, to),
     circleCall("getWalletTokenBalance", () => client.getWalletTokenBalance({ id: walletId, includeAll: true }), false),
     circleCall("getWallet", () => client.getWallet({ id: walletId }), false),
   ]);
