@@ -2,7 +2,8 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 
 ## 2026-10-08: Test USDC for shadow mode
 
-- A workspace in shadow mode on Arc testnet can take the test USDC its open bills need from Vestiarion's float. Its ledger gains **`test_usdc_added`**, actor `human`, domain `treasury`, sent to webhook endpoints as `ledger.appended`: `{ by, amount, from, to, transferId, txHash, status, shortfall, weeklyLimit }`. `from` is the float's address and `to` the operating wallet's; `txHash` is `null` and `status` is `pending` while Arc testnet still confirms the transfer. `shortfall` is what the open bills needed, and `amount` what was sent.
+- A workspace in shadow mode on Arc testnet can take the test USDC its open bills need from Vestiarion's float. Its ledger gains **`test_usdc_added`**, actor `human`, domain `treasury`, sent to webhook endpoints as `ledger.appended`: `{ by, amount, from, to, transferId, txHash, status, shortfall, weeklyLimit }`. `from` is the float's address and `to` the operating wallet's. `status` is `confirmed`, `pending` or `failed`, as Circle reported the transfer when the entry was written; `txHash` is `null` while Arc testnet still confirms it. `shortfall` is what the open bills needed, and `amount` what Circle says was sent.
+- Entries are never updated: a transfer recorded as `pending` stays so in its entry. A later entry with `recovered: true` and `by: null` records a transfer Vestiarion's float sent whose entry was never written, from Circle's own figures, with `shortfall: null`.
 - Each one starts a cycle, whose `cycle_complete` entry lists the new event kind `test_usdc_added` in `events`.
 - Money from the float is never matched to a receivable: no `ar_received` follows it. Nothing else in `/api/v1` changes.
 

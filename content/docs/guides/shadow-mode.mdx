@@ -77,7 +77,7 @@ Each step is a signed entry in the workspace's ledger, and reaches webhook endpo
 - `shadow_mode_started` and `shadow_mode_ended`, with who turned it on or off and the currency.
 - `ap_pay` for a payment held in shadow mode, with `execution.heldBecause: "shadow_verdict"`. It is not a refusal by code: the decision passed every check.
 - `counterparty_address_changed` with `via: "mirror"` when a supplier is given a mirror address: who asked, the address and its Circle wallet id.
-- `test_usdc_added` when test USDC came in from Vestiarion's float: who asked, the amount, the float's address and the operating wallet's, Circle's transfer id, the transaction hash once Arc testnet confirmed it, its status, the shortfall and the weekly limit. Money from the float is never matched to a receivable.
+- `test_usdc_added` when test USDC came in from Vestiarion's float: who asked, the amount, the float's address and the operating wallet's, Circle's transfer id, the transaction hash once Arc testnet confirmed it, its status, the shortfall and the weekly limit. A transfer from the float that no entry recorded, because its request stopped before the ledger was written, is recorded the next time someone adds test USDC, with `recovered: true`. Money from the float is never matched to a receivable.
 - `decision_verdict` for each verdict: who gave it, the decision it is about (`entrySeq`), the payable (`subjectId`), the agent's action, `agree` or `disagree`, and the reason.
 
 ## If something goes wrong
@@ -101,8 +101,10 @@ Each step is a signed entry in the workspace's ledger, and reaches webhook endpo
 | Test USDC is for shadow mode. An owner turns it on in Settings. | Shadow mode was turned off after the page loaded. Reload the page. |
 | Go live on Arc testnet first: test USDC goes to the operating wallet. | Take the workspace live on Arc testnet in **Settings**, under **Go live**, then add the test USDC. |
 | Vestiarion's test USDC float is not set up on this deployment. | Fund the operating wallet from Circle's faucet. |
+| Arc testnet is still confirming the last test USDC. Try again in a minute. | The float's last transfer to this workspace is still settling. Try again once it is confirmed. |
+| Circle could not send the test USDC. Try again in a moment. | Circle reported the transfer failed, so nothing arrived. Choose **Add N test USDC** again. |
 | Nothing to add: the operating wallet covers your open bills. | **Safe to spend today** is no longer below zero, so nothing was sent. Reload the page. |
 | This workspace took its 5,000 test USDC for this week. | Buy testnet USDC from [TestMint](https://testmint.myproceeds.xyz) and send it to the operating wallet, or use Circle's faucet. |
-| Vestiarion's test USDC float is empty just now. | Use Circle's faucet, or buy testnet USDC from TestMint and send it to the operating wallet. |
+| Vestiarion's test USDC float is empty just now. Use Circle's faucet, or buy testnet USDC from TestMint and send it to the operating wallet. | Vestiarion refills the float from TestMint. Until then, fund the operating wallet from Circle's faucet, or buy testnet USDC from [TestMint](https://testmint.myproceeds.xyz) yourself. |
 | This decision waits for a verdict in shadow mode. Agree or disagree with it in Approvals first. | Give your verdict on its card in **Approvals**: **Agree and pay**, or **Disagree**. |
 | Someone disagreed with this decision in shadow mode, so it is not paid. Return it to the agent or reject it. | A payment someone disagreed with is not made. Return it to the agent, or reject it, in **Approvals**. |

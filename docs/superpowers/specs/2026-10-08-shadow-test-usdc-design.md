@@ -61,7 +61,8 @@ and each shadow workspace takes what its open bills need from there.
   - detail `{ by, amount, from, to, transferId, txHash, status, shortfall, weeklyLimit }`, `txHash` null while Arc
     testnet still confirms it.
 - It is written even while the transfer is still processing, so the weekly limit counts it.
-- It is money in, not a payment: /open, the traction digest and the agreement rate never count it.
+- It is money in, not a payment: the payments /open counts, the traction digest and the agreement rate never count
+  it. The operating wallets' USDC that /open shows does include it, as it includes faucet drips.
 - It reaches webhook endpoints as `ledger.appended`, like every entry.
 
 **T6. Money in is not a client paying.**
@@ -99,6 +100,7 @@ and each shadow workspace takes what its open bills need from there.
 | `mainnet` | Test USDC is for Arc testnet. On Arc mainnet the agent pays your real bills. |
 | `not_live` | Go live on Arc testnet first: test USDC goes to the operating wallet. |
 | `unavailable` | Vestiarion's test USDC float is not set up on this deployment. |
+| `in_flight` | Arc testnet is still confirming the last test USDC. Try again in a minute. (review fix A) |
 | `nothing_needed` | Nothing to add: the operating wallet covers your open bills. |
 | `limit_reached` | This workspace took its N test USDC for this week. |
 | `float_empty` | Vestiarion's test USDC float is empty just now. |
@@ -120,6 +122,34 @@ and each shadow workspace takes what its open bills need from there.
   processing, the key reused by a second call that counted the same entries.
 - The console line and button render for an owner and not for a viewer (component test).
 - The docs tests that hold the guide and changelog to the code.
+
+## Review fixes
+
+Decided 2026-10-08 after review, before rollout.
+
+- **A. Circle is the record of what the float sent.** Before deciding, the float's transfers to the operating wallet
+  are listed from Circle (`listTransactions`: the float's wallet, the operating address, outbound, Arc testnet), every
+  page. One not settled yet (not COMPLETE, CONFIRMED, FAILED, CANCELLED or DENIED) refuses with `in_flight`: "Arc
+  testnet is still confirming the last test USDC. Try again in a minute." One that arrived (CONFIRMED or COMPLETE) but
+  that no entry names as its `transferId` is recorded first, from Circle's figures: `by: null`, `recovered: true`,
+  `shortfall: null`, summary "Recorded N test USDC that Vestiarion's float sent earlier to the operating wallet, on Arc
+  testnet". The idempotency key's ordinal is the number of transfers Circle listed, in any state, plus one; the week's
+  total is what Circle lists sent in the last 7 days, failed, cancelled and denied transfers aside.
+- **B. One entry per transfer.** When Circle answers with a transfer it listed already, or the ledger names it when
+  checked right before writing, no second entry is written: a press at the same moment sent it. The entry records the
+  amount Circle's transaction reports when it does, and a transaction naming another destination than the operating
+  wallet is refused before anything is recorded.
+- **C. Nothing is sent that could not be signed for.** The ledger's signing key is resolved as `appendLedgerEntry`
+  resolves it (`assertLedgerCanSign`) after the stop switch and before Circle is asked anything.
+- **D. Only the float leaves the platform's configuration.** `currentShadowFloat()` gives the float's wallet id and the
+  hosted pair, from the configuration the workspace's scope was built from, in place of the whole of it.
+- **E. The float's own address is never a client's.** The receipts stage also leaves unmatched a transfer from the
+  float's address, read with the hosted pair once per process (`floatAddress`, null when it cannot be read), for a
+  transfer whose entry is not written yet. The addresses entries name still count too.
+- **F. The console counts each transfer once.** Its week's total counts a `transferId` once and leaves out failed
+  transfers, and "Last added" names the newest grant that did not fail.
+
+Not done: a limit across every workspace, or per person. The weekly limit is per workspace.
 
 ## Rollout
 
