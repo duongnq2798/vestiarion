@@ -198,7 +198,8 @@ export function formatDigest(facts: DigestFacts, options: { hidePayees?: boolean
         `- ${utcMinute(decision.ts)}: ${ACTION_WORDS[decision.action] ?? decision.action} ${named(decision.payee)} ${money}.`,
         decision.reasoning ? ` Agent: ${ended(named(decision.reasoning))}` : "",
         ` Verdict: ${ended(verdict)}`,
-        decision.txHash ? ` Tx: ${facts.explorer}/tx/${decision.txHash}` : "",
+        // A payment on a decision not to pay is a person's, not the agent's: said so, lest an agreed hold read as paid (2026-10-08).
+        decision.txHash ? ` ${decision.action === "ap_pay" ? "Tx" : "Paid later by a person"}: ${facts.explorer}/tx/${decision.txHash}` : "",
       ].join("");
     }),
   ];

@@ -648,7 +648,7 @@ disagrees with every decision.
   since crypto is no means of payment in Vietnam.
 - **Proof out.** `npm run traction-digest -- <org-slug> --since YYYY-MM-DD` (`src/lib/traction-digest.ts`) prints a
   workspace's shadow decisions since the day, each with its verdict, what it paid and the transaction on the payable's
-  newest decision, and the agreement rate, in ASCII with no blank line for `arc-canteen update-traction`.
+  newest decision ("Paid later by a person" when that decision was not to pay), and the agreement rate, in ASCII with no blank line for `arc-canteen update-traction`.
 - **Getting started in shadow mode.** While shadow mode is on, the console's checklist (`gettingStarted`,
   `src/lib/getting-started.ts`) keeps its three setup steps and then asks for suppliers, real bills (`ownBillCount`,
   paid or not) and a first verdict, from rows the console already reads; it hides once a verdict is given.
