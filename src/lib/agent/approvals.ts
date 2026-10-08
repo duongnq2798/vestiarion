@@ -757,7 +757,14 @@ export async function approveAndPay(
     bridgeFee?: (chain: string, amount: number) => Promise<BridgeFee>;
     gatewayQuote?: (chain: string, amount: number) => Promise<GatewayQuote | null>;
   } = {}
-): Promise<{ status: "paid" | "matched" | "held" | "approved"; txRef: string | null; note: string; fromReserveUsdc?: number }> {
+): Promise<{
+  status: "paid" | "matched" | "held" | "approved";
+  txRef: string | null;
+  note: string;
+  fromReserveUsdc?: number;
+  /** What went out, to whom and in what, once the transfer did: the person's confirmation says it. */
+  paid?: { amount: number; currency: string; payee: string };
+}> {
   const orgId = currentOrgId();
   const invoice = await loadWaitingPayable(input.invoiceId);
   const intent = await paymentIntentOf(invoice.id);
@@ -1087,7 +1094,13 @@ export async function approveAndPay(
     },
   });
 
-  return { status: result.status, txRef: result.txRef, note: result.note, ...(fromReserveUsdc !== null ? { fromReserveUsdc } : {}) };
+  return {
+    status: result.status,
+    txRef: result.txRef,
+    note: result.note,
+    ...(fromReserveUsdc !== null ? { fromReserveUsdc } : {}),
+    ...(sent ? { paid: { amount: result.amountPaid ?? invoice.amount, currency: invoice.currency, payee: invoice.counterpartyName } } : {}),
+  };
 }
 
 /** Both routes' figures for a payout to another chain, read now: CCTP's fee, and Gateway's fee with its balance. */
