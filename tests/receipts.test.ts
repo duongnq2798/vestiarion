@@ -77,8 +77,9 @@ describe("recordIncomingTransfers", () => {
     counterparties: { name: "Acme", address: CLIENT },
   }];
 
-  function workspace(over: { latest?: unknown[]; unmatched?: unknown[]; open?: unknown[]; invoicePatch?: unknown[] } = {}) {
+  function workspace(over: { latest?: unknown[]; unmatched?: unknown[]; open?: unknown[]; invoicePatch?: unknown[]; grants?: unknown[] } = {}) {
     return (r: RecordedRequest): FakeReply => {
+      if (r.path === "/rest/v1/ledger_entries" && r.params.get("action") === "eq.test_usdc_added") return { body: over.grants ?? [] };
       if (r.path === "/rest/v1/incoming_transfers" && r.method === "GET") {
         return r.params.has("invoice_id") ? { body: over.unmatched ?? UNMATCHED } : { body: over.latest ?? [] };
       }
@@ -161,6 +162,24 @@ describe("recordIncomingTransfers", () => {
     expect(claims[1].body).toEqual({ invoice_id: null, matched_by: null });
     expect(ledgerMock).not.toHaveBeenCalled();
     expect(result.matched).toBe(0);
+  });
+
+  it("never matches money from Vestiarion's test USDC float to a receivable, whatever its amount (test USDC T6)", async () => {
+    const FLOAT = "0xf10a7000000000000000000000000000000000f1";
+    // The one open receivable of that amount was sent its pay link: an amount alone would match it.
+    expect(matchTransfer(transfer({ from: FLOAT }), [receivable({ clientAddress: null })])).toEqual({ invoiceId: "inv-1", matchedBy: "amount" });
+    fake = fakeSupabase(
+      workspace({
+        unmatched: [{ ...UNMATCHED[0], from_address: FLOAT }],
+        open: [{ ...OPEN[0], counterparties: { name: "Acme", address: null } }],
+        grants: [{ detail: { from: "0xF10A7000000000000000000000000000000000F1" } }],
+      })
+    );
+    const result = await run(() => recordIncomingTransfers(db(), provider([transfer({ from: FLOAT })]), "operating"));
+    expect(patches("/rest/v1/incoming_transfers")).toHaveLength(0);
+    expect(patches("/rest/v1/invoices")).toHaveLength(0);
+    expect(ledgerMock).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ recorded: 1, matched: 0 });
   });
 
   it("leaves an ambiguous transfer unmatched", async () => {

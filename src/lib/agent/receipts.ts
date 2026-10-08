@@ -11,7 +11,8 @@ import { appendLedgerEntry } from "../ledger";
  * client's own address first (oldest due among them), else the only receivable of that amount. Two of
  * the same amount with no sender to tell them apart stay unmatched for a person (R1). A sandbox has no
  * real wallet and reads nothing (R4). Only a matched transfer counts as money received: the wallet also
- * receives faucet drips and swap proceeds, which owe nothing to a receivable.
+ * receives faucet drips and swap proceeds, which owe nothing to a receivable, nor does test USDC from Vestiarion's
+ * float (docs/superpowers/specs/2026-10-08-shadow-test-usdc-design.md T6), which is never matched.
  */
 
 export interface OpenReceivable {
@@ -112,6 +113,13 @@ export async function recordIncomingTransfers(
   ) as Array<{ id: string; circle_tx_id: string; tx_hash: string | null; from_address: string | null; amount: string; token: Stablecoin; received_at: string }>;
   if (unmatched.length === 0) return { ...none, recorded: transfers.length };
 
+  // Test USDC from Vestiarion's float is money in, owed by no client (test USDC T6): never matched, whatever its amount.
+  const fromFloat = new Set(
+    (unwrap(await orgDb.from("ledger_entries").select("detail").eq("action", "test_usdc_added")) as Array<{ detail: { from?: unknown } | null }>)
+      .map((entry) => (typeof entry.detail?.from === "string" ? entry.detail.from.toLowerCase() : null))
+      .filter((address): address is string => address !== null)
+  );
+
   const openRows = unwrap(
     await orgDb
       .from("invoices")
@@ -149,6 +157,7 @@ export async function recordIncomingTransfers(
   const lines: ReceiptsResult["lines"] = [];
   let matched = 0;
   for (const row of unmatched) {
+    if (row.from_address && fromFloat.has(row.from_address.toLowerCase())) continue;
     const transfer: InboundTransfer = {
       circleTxId: row.circle_tx_id,
       txHash: row.tx_hash,
