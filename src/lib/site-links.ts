@@ -17,6 +17,12 @@ export const X_HANDLE = "@vestiarionhq";
 
 export const X_URL = `https://x.com/${X_HANDLE.slice(1)}`;
 
+/** Arc's own site, where the footer and "Built on" send a reader who wants to know what Arc is (arc.network redirects here). */
+export const ARC_URL = "https://www.arc.io";
+
+/** Circle's own site, beside Arc's. */
+export const CIRCLE_URL = "https://www.circle.com";
+
 /** Vestiarion's page on Product Hunt, launched 2026-10-05. */
 export const PRODUCT_HUNT_URL = "https://www.producthunt.com/products/vestiarion";
 

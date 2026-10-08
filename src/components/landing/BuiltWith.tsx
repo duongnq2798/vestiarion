@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BrandMark, isWordmark, type Brand } from "@/components/vx/BrandMarks";
+import { ARC_URL, CIRCLE_URL } from "@/lib/site-links";
 
 const REPOSITORY = "https://github.com/duongnq2798/vestiarion";
 
@@ -8,10 +9,11 @@ const REPOSITORY = "https://github.com/duongnq2798/vestiarion";
  * rather than a bare logo (docs/superpowers/specs/2026-10-07-brand-marks-design.md):
  * the services the code integrates with, each in its own mark and named in words.
  * "Built on" and "works with", never "partners" or "trusted by": none of them
- * vouches for Vestiarion.
+ * vouches for Vestiarion. Arc and Circle also link to their own sites, beside
+ * the evidence, in a new tab.
  */
-const SERVICES: ReadonlyArray<{ brand: Brand; name: string; role: string; body: string; href: string; check: string }> = [
-  { brand: "arc", name: "Arc", role: "Built on", body: "Payments settle on Arc, and each of ours links to its explorer.", href: "/open", check: "See the payments" },
+const SERVICES: ReadonlyArray<{ brand: Brand; name: string; role: string; body: string; href: string; check: string; site?: { href: string; label: string } }> = [
+  { brand: "arc", name: "Arc", role: "Built on", body: "Payments settle on Arc, and each of ours links to its explorer.", href: "/open", check: "See the payments", site: { href: ARC_URL, label: "arc.io" } },
   {
     brand: "circle",
     name: "Circle",
@@ -19,6 +21,7 @@ const SERVICES: ReadonlyArray<{ brand: Brand; name: string; role: string; body: 
     body: "Circle's wallets carry the live USDC payment path.",
     href: `${REPOSITORY}/blob/main/src/lib/circle/liveProvider.ts`,
     check: "Read the code",
+    site: { href: CIRCLE_URL, label: "circle.com" },
   },
   { brand: "slack", name: "Slack", role: "Works with", body: "The agent's decisions in a channel your team picks.", href: "/docs/guides/slack", check: "Read the guide" },
   { brand: "telegram", name: "Telegram", role: "Works with", body: "The agent's decisions in your own chat. The bot never pays.", href: "/docs/guides/telegram", check: "Read the guide" },
@@ -48,6 +51,16 @@ export function BuiltWith() {
                     {service.check} {external ? "↗" : "→"}
                   </span>
                 </Link>
+                {service.site && (
+                  <a
+                    href={service.site.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 inline-block font-mono text-xs text-ink-3 underline-offset-4 transition-colors duration-150 ease-standard hover:text-agent hover:underline"
+                  >
+                    {service.site.label} ↗<span className="sr-only">{`, ${service.name}'s own site (opens in a new tab)`}</span>
+                  </a>
+                )}
               </li>
             );
           })}
