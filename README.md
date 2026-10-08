@@ -12,6 +12,7 @@
 [![npm](https://img.shields.io/npm/v/%40vestiarion%2Fsdk?style=flat-square&logo=npm&label=%40vestiarion%2Fsdk)](https://www.npmjs.com/package/@vestiarion/sdk)
 [![CI](https://img.shields.io/github/actions/workflow/status/duongnq2798/vestiarion/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/duongnq2798/vestiarion/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6b7280?style=flat-square)](LICENSE)
+[![Demo video](https://img.shields.io/badge/Demo_video-4%3A48-b91c1c?style=flat-square&logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=hIS3THDLtVQ)
 
 [![Arc mainnet](https://img.shields.io/badge/Arc_mainnet-first_payment_settled-111827?style=flat-square)](https://explorer.arc.io/tx/0xcecef38e3f751bc118f8f00cee5bb5344679e84f89123d679b986b47d7f1dee6)
 [![Arc testnet](https://img.shields.io/badge/Arc_testnet-open_to_everyone-4b5563?style=flat-square)](https://www.vestiarion.xyz/docs/guides/try-it)
@@ -20,7 +21,7 @@
 [![Slack](https://img.shields.io/badge/Slack-guide-4A154B?style=flat-square&logo=slack)](https://www.vestiarion.xyz/docs/guides/slack)
 [![Telegram](https://img.shields.io/badge/Telegram-guide-26A5E4?style=flat-square&logo=telegram&logoColor=white)](https://www.vestiarion.xyz/docs/guides/telegram)
 
-**[Open the app](https://www.vestiarion.xyz)** · **[Try it in 5 minutes](https://www.vestiarion.xyz/docs/guides/try-it)** · **[Open numbers](https://www.vestiarion.xyz/open)** · **[Docs](https://www.vestiarion.xyz/docs)** · **[@vestiarionhq](https://x.com/vestiarionhq)**
+**[Open the app](https://www.vestiarion.xyz)** · **[Watch the demo](https://www.youtube.com/watch?v=hIS3THDLtVQ)** · **[Try it in 5 minutes](https://www.vestiarion.xyz/docs/guides/try-it)** · **[Open numbers](https://www.vestiarion.xyz/open)** · **[Docs](https://www.vestiarion.xyz/docs)** · **[@vestiarionhq](https://x.com/vestiarionhq)**
 
 </div>
 
@@ -29,6 +30,10 @@ contractor pay, collects receivables and keeps idle cash working. A model propos
 whether it may happen; a person decides what code sends to them; and on Arc mainnet the money itself can only leave
 through a spending-limit contract the owner's own wallet deployed. Every outcome, refusals included, is signed into a
 hash-chained ledger anyone in the workspace can verify.
+
+**Watch it work:** [the full demo](https://www.youtube.com/watch?v=hIS3THDLtVQ) (4:48, recorded from the live app: decisions, shadow
+mode, customers and Arc mainnet in the first 2:20, then email intake, cross-chain payouts, EURC, x402, escrow, GitHub
+bounties and collections) or [a 2:50 cut](https://youtu.be/3I-HfGHHbWs).
 
 > *Tameion* is ancient Greek for a treasury, the room the money was kept in. In Byzantium that room grew into the
 > *vestiarion*, the department that minted the coin, held the stores and paid the army.
