@@ -7,18 +7,20 @@ import { Hero } from "@/components/landing/Hero";
 import { HowItWorks } from "@/components/landing/HowItWorks";
 import { LatestDecision } from "@/components/landing/LatestDecision";
 import { LiveProof } from "@/components/landing/LiveProof";
+import { landingProvenance, latestOwnPaymentUrl } from "@/components/landing/provenance";
 import { WhatItPays } from "@/components/landing/WhatItPays";
 import type { ChainHeadEntry } from "@/components/landing/hero/EvidenceReplay";
-import type { ProvenanceLeg } from "@/components/vx/Provenance";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { chainModes } from "@/lib/circle";
 import { screeningMode } from "@/lib/compliance";
 import { hostedWalletsAvailable } from "@/lib/config";
 import { currentConfig } from "@/lib/context";
 import { withFoundingOrg } from "@/lib/dal/scope";
-import { getLandingMetrics } from "@/lib/landing";
 import { listLedgerEntries } from "@/lib/ledger";
+import { ARC_MAINNET } from "@/lib/network";
 import { readLatestDecision } from "@/lib/platform/latest-decision";
+import { readAllTimeOrNull } from "@/lib/platform/open-numbers";
+import { reserveRunsLive } from "@/lib/platform/usyc-reserve";
 import { X_HANDLE } from "@/lib/site-links";
 
 export const dynamic = "force-dynamic";
@@ -59,24 +61,48 @@ async function chainHead(): Promise<ChainHeadEntry[]> {
 }
 
 /**
+ * Whether any live workspace runs a real USYC reserve; false when that cannot be read, so the hero says simulated
+ * rather than claiming a reserve it could not see.
+ */
+async function reserveLiveAnywhere(): Promise<boolean> {
+  try {
+    return await reserveRunsLive();
+  } catch (error) {
+    console.error("landing: USYC reserve count not read", error instanceof Error ? error.message : error);
+    return false;
+  }
+}
+
+/**
  * The public showcase reads the founding organization, named explicitly: a
  * sandbox organization's demo data must never inflate its "live" figures.
  * Every read starts here, inside that scope, and the sections take the
- * results as props; the metrics stream in behind their own skeleton.
+ * results as props. The measurements are the open numbers, every workspace's, read through the aggregate functions
+ * one network at a time (landing proof P3); Arc testnet's stream in behind their own skeleton, and Arc mainnet's are
+ * read before the hero, whose payments leg links to the team's latest payment there (P2).
  */
 export default async function LandingPage() {
-  const metrics = withFoundingOrg(() => getLandingMetrics());
+  const mainnet = readAllTimeOrNull("arc-mainnet");
+  const testnet = readAllTimeOrNull("arc-testnet");
   // chainModes() still answers when the Circle credentials cannot be read (R12).
   // The team's latest decision is read before the page renders, so the band never pushes the page down after it (L2).
-  const [modes, head, latest] = await Promise.all([withFoundingOrg(async () => chainModes()), chainHead(), readLatestDecision()]);
+  const [modes, head, latest, reserveLive, mainnetNumbers] = await Promise.all([
+    withFoundingOrg(async () => chainModes()),
+    chainHead(),
+    readLatestDecision(),
+    reserveLiveAnywhere(),
+    mainnet,
+  ]);
   const currentScreeningMode = screeningMode();
   // The platform's config, outside any organization's scope: a boolean only, never the pair (R4).
   const hostedAvailable = hostedWalletsAvailable(currentConfig());
-  const provenance: ProvenanceLeg[] = [
-    { label: "Payments", detail: "Arc mainnet and testnet", live: modes.mode === "live" },
-    { label: "Yield", detail: "USYC reserve", live: modes.earnMode === "live" },
-    { label: "Screening", detail: currentScreeningMode === "live" ? "OpenSanctions" : "bundled list", live: currentScreeningMode === "live" },
-  ];
+  const provenance = landingProvenance({
+    paymentsLive: modes.mode === "live",
+    foundingReserveLive: modes.earnMode === "live",
+    reserveRunsLive: reserveLive,
+    screeningLive: currentScreeningMode === "live",
+    mainnetTxUrl: latestOwnPaymentUrl(mainnetNumbers, ARC_MAINNET),
+  });
 
   return (
     <div className="min-h-dvh overflow-x-clip bg-transparent">
@@ -88,7 +114,7 @@ export default async function LandingPage() {
         <WhatItPays />
         <Credentials screeningMode={currentScreeningMode} />
         <BuiltWith />
-        <LiveProof metrics={metrics} />
+        <LiveProof numbers={testnet.then((testnetNumbers) => ({ mainnet: mainnetNumbers, testnet: testnetNumbers }))} />
         <HowItWorks />
         <Claims />
         <FinalCta hostedAvailable={hostedAvailable} />

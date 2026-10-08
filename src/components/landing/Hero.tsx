@@ -20,7 +20,13 @@ export function Hero({ provenance, head, hostedAvailable }: { provenance: Proven
       {/* One column that may shrink below its content on a phone: otherwise the replay's width pushed every line past the right edge. */}
       <div className="relative mx-auto grid max-w-6xl grid-cols-1 gap-12 px-4 pb-16 pt-12 sm:px-6 sm:pb-20 sm:pt-16 lg:grid-cols-[minmax(0,1fr)_31rem] lg:items-center lg:gap-14 lg:py-20">
         <div className="min-w-0">
-          <Eyebrow className="text-agent">An agent for your bills · Live on Arc mainnet</Eyebrow>
+          {/* The mainnet claim links to the numbers that show it: Arc mainnet's own block on /open (landing proof P2). */}
+          <Eyebrow className="text-agent">
+            An agent for your bills ·{" "}
+            <Link href="/open#mainnet" className="underline decoration-agent/40 underline-offset-4 transition-colors duration-150 ease-standard hover:decoration-agent">
+              Live on Arc mainnet
+            </Link>
+          </Eyebrow>
           <h1 id="hero-title" className="mt-5 text-balance text-5xl font-semibold leading-[0.95] tracking-[-0.055em] text-ink sm:text-7xl">
             The agent pays your bills.
             <br />

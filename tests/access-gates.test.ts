@@ -222,7 +222,7 @@ describe("the membership lookup", () => {
 
 /** Modules that read or write tenant data, or hand out an organization's secrets. */
 const TENANT_DATA_MODULES = [
-  "src/lib/queries", "src/lib/ledger", "src/lib/insights", "src/lib/landing", "src/lib/dal",
+  "src/lib/queries", "src/lib/ledger", "src/lib/insights", "src/lib/dal",
   "src/lib/circle", "src/lib/compliance", "src/lib/payments", "src/lib/seed",
 ];
 

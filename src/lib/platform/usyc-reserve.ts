@@ -52,6 +52,16 @@ async function treasuryWallets(): Promise<Partial<TreasuryWallets>> {
   return { operating: rows.find((row) => row.kind === "operating"), reserve: rows.find((row) => row.kind === "reserve") };
 }
 
+/**
+ * Whether any live workspace runs a real USYC reserve (docs/superpowers/specs/2026-10-08-landing-proof-design.md P1): a
+ * count across workspaces, never which ones, so the landing can say the reserve runs live without naming a workspace.
+ */
+export async function reserveRunsLive(): Promise<boolean> {
+  const result = await platformDb().from("orgs").select("id", { count: "exact", head: true }).eq("mode", "live").not("usyc_live_at", "is", null);
+  if (result.error) throw new Error(result.error.message);
+  return (result.count ?? 0) > 0;
+}
+
 export async function usycReserveStatus(orgId: string): Promise<UsycReserveStatus> {
   const org = unwrap(await platformDb().from("orgs").select("mode, usyc_live_at").eq("id", orgId).single()) as { mode: "live" | "sandbox"; usyc_live_at: string | null };
   const wallets = await treasuryWallets();

@@ -347,6 +347,15 @@ mainnet plan).
     the workspace's id stays there. `src/lib/latest-decision.ts` says it in words.
   - The reader's browser checks the signature and the link to the entry before it with `verifySignedLink`, the
     receipt verifier's half that needs no body. Until 0087 runs, or when the read fails, there is no band.
+- **The landing's proof** (`docs/superpowers/specs/2026-10-08-landing-proof-design.md`): what the hero says runs live,
+  and the measurements, come from every workspace, never from the founding one alone.
+  - The hero's legs (`src/components/landing/provenance.ts`): the USYC reserve is live once any live workspace runs a
+    real one (`reserveRunsLive()`, a count over `orgs.usyc_live_at`, never which workspace), and links to the research
+    note's section on it. Payments link to the team's latest Arc mainnet payment on the explorer, read from
+    `open_numbers`; the hero's "Live on Arc mainnet" links to /open's mainnet section.
+  - The measurements are the open numbers, all time (`readAllTimeOrNull`): Arc mainnet's panel, then Arc testnet's,
+    customers' figures with the total beside them as /open's headline has them, and the team's latest payment on each
+    network. A network whose numbers cannot be read says so, and the other still shows.
 
 **Every module on its workspace's network** (`docs/superpowers/specs/2026-10-05-network-threading-design.md`,
 phase 1b).
