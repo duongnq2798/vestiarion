@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleCheck, CircleX, Info, TriangleAlert } from "lucide-react";
+import { CircleCheck, CircleX, Info, TriangleAlert, X } from "lucide-react";
 import { Toaster as Sonner } from "sonner";
 import { Spinner } from "./Spinner";
 
@@ -24,17 +24,23 @@ export function Toaster() {
         info: <Info className="size-[1.125rem] text-agent" />,
         warning: <TriangleAlert className="size-[1.125rem] text-held" />,
         loading: <Spinner className="size-[1.125rem] text-agent" />,
+        close: <X />,
       }}
       toastOptions={{
         unstyled: true,
+        closeButtonAriaLabel: "Close",
         classNames: {
           toast: "flex w-(--width) items-start gap-3 rounded-xl border border-line bg-surface p-4 font-sans text-sm text-ink shadow-overlay",
           content: "min-w-0 flex-1",
           title: "font-semibold leading-5 text-ink",
           description: "mt-0.5 leading-5 text-ink-2",
-          icon: "mt-px flex size-5 shrink-0 items-center justify-center",
+          // Relative: Sonner centres a loading toast's spinner on its icon box, which is the box's own.
+          icon: "relative mt-px flex size-5 shrink-0 items-center justify-center",
           actionButton: "ml-auto h-8 shrink-0 cursor-pointer rounded-lg bg-agent px-3 text-xs font-semibold text-on-agent transition-colors duration-150 ease-standard hover:bg-agent/90",
           cancelButton: "h-8 shrink-0 cursor-pointer rounded-lg px-3 text-xs font-medium text-ink-2 transition-colors duration-150 ease-standard hover:bg-raised",
+          // Only on a toast that asks for one (a payment's confirmation), in its top right corner.
+          closeButton:
+            "absolute top-2.5 right-2.5 grid size-7 cursor-pointer place-items-center rounded-lg text-ink-3 transition-colors duration-150 ease-standard hover:bg-raised/70 hover:text-ink [&_svg]:size-3.5",
         },
       }}
     />

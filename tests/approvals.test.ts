@@ -422,7 +422,18 @@ describe("approveAndPay", () => {
     const { run } = approvalsFake();
 
     const result = await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
-    expect(result.paid).toEqual({ amount: 148.5, currency: "USDC", payee: "Acme Supplies" });
+    // This file's provider is the sandbox's simulator: the confirmation never names a network for it.
+    expect(result.paid).toEqual({ amount: 148.5, currency: "USDC", payee: "Acme Supplies", simulated: true });
+  });
+
+  it("says nothing was simulated when the live provider paid it", async () => {
+    getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.01 });
+    syncOperatingBalanceMock.mockResolvedValue(500);
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 0, amountPaid: 150 });
+    const { run } = approvalsFake();
+
+    const result = await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    expect(result.paid).toEqual({ amount: 150, currency: "USDC", payee: "Acme Supplies" });
   });
 
   it("refuses a high-risk counterparty before any claim", async () => {

@@ -17,6 +17,7 @@ import {
   Users,
 } from "lucide-react";
 import { useState } from "react";
+import { paymentReceiptToast, paymentSendingToast, paymentToastId } from "@/components/payment-toast";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
@@ -48,6 +49,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { toast } from "@/components/ui/Toaster";
 import { MOTION } from "@/components/ui/tokens";
 import { useActionForm, type ActionResult } from "@/components/ui/useActionForm";
+import { networkProfile } from "@/lib/network";
+import { txUrl } from "@/lib/payee-chains";
+import { WORKSPACE } from "./fixtures";
+import type { PaymentReceipt } from "@/lib/payment-receipt";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -410,6 +415,26 @@ function RunDemo() {
   );
 }
 
+/** A payment agreed to in shadow mode, as its notices tell it: approved and being sent, then what it came to. */
+async function payDemo(state: PaymentReceipt["state"]) {
+  const id = paymentToastId(`demo-${Date.now()}`);
+  paymentSendingToast(id, { amount: 4.5, currency: "USDC", payee: "Design Studio", decidedBy: "verdict" });
+  await wait(1800);
+  paymentReceiptToast(
+    {
+      state,
+      amount: 4.5,
+      currency: "USDC",
+      payee: "Design Studio",
+      network: networkProfile(WORKSPACE.network).label,
+      decidedBy: "verdict",
+      txUrl: state === "confirmed" ? txUrl(WORKSPACE.network, `0x${"3f5c9a1e".repeat(8)}`) : null,
+      fromReserve: null,
+    },
+    id
+  );
+}
+
 export function FeedbackDemo() {
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -447,6 +472,20 @@ export function FeedbackDemo() {
             onClick={() => toast.success("Counterparty added", { description: "Screened against OpenSanctions: clear.", action: { label: "View", onClick: () => {} } })}
           >
             With an action
+          </Button>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>A person&apos;s payment</CardTitle>
+          <CardDescription>Approved while it is sent, then confirmed, or processing while the network confirms it.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <Button variant="secondary" size="sm" onClick={() => payDemo("confirmed")}>
+            Confirmed
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => payDemo("confirming")}>
+            Processing
           </Button>
         </CardContent>
       </Card>

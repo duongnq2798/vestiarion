@@ -8,13 +8,14 @@ import { consoleActor } from "@/lib/commands/actor";
 import { addPayableDetails, approvePayable, rejectPayable, returnPayable } from "@/lib/commands/payables";
 import { inOrg } from "@/lib/dal/scope";
 import { invoiceDetailsInputSchema, invoiceFormRefusal } from "@/lib/intake-validation";
+import type { PaymentReceipt } from "@/lib/payment-receipt";
 import { consoleAnswer } from "./command-result";
 
 export interface ApprovalActionResult {
   ok: boolean;
   message: string;
-  /** The payment's transaction on the explorer, for its confirmation to link. */
-  txUrl?: string;
+  /** What the payment did, for its confirmation to lay out (payment confirmation). */
+  receipt?: PaymentReceipt;
 }
 
 const invoiceIdSchema = z.string().uuid();
@@ -37,7 +38,7 @@ export async function approveInvoiceAction(_previous: ApprovalActionResult, form
     if (!parsed.success) return { ok: false, message: "That invoice is not waiting for a decision." };
     // The address the card showed goes with the approval, so a changed one is refused rather than paid unseen.
     const outcome = await approvePayable(consoleActor(auth), { invoiceId: parsed.data, shownAddress: formString(formData, "address") });
-    return { ...consoleAnswer(outcome), ...(outcome.ok && outcome.txUrl ? { txUrl: outcome.txUrl } : {}) };
+    return { ...consoleAnswer(outcome), ...(outcome.ok && outcome.receipt ? { receipt: outcome.receipt } : {}) };
   });
 }
 

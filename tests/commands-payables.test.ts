@@ -77,13 +77,46 @@ describe("approvePayable", () => {
     const TX = `0x${"ab".repeat(32)}`;
     mocks.approveAndPay.mockResolvedValueOnce({ status: "paid", txRef: TX, note: "", paid: { amount: 13.5, currency: "USDC", payee: "Design Studio" } });
     const paid = await run(() => approvePayable(approver(), { invoiceId: INVOICE }));
-    expect(paid).toMatchObject({ ok: true, message: "Paid 13.50 USDC to Design Studio on Arc testnet.", txUrl: txUrl("arc-testnet", TX) });
+    expect(paid).toMatchObject({
+      ok: true,
+      message: "Paid 13.50 USDC to Design Studio on Arc testnet.",
+      receipt: {
+        state: "confirmed",
+        amount: 13.5,
+        currency: "USDC",
+        payee: "Design Studio",
+        network: "Arc testnet",
+        decidedBy: "approval",
+        txUrl: txUrl("arc-testnet", TX),
+        fromReserve: null,
+      },
+    });
 
     mocks.approveAndPay.mockResolvedValueOnce({ status: "matched", txRef: "circle-tx-1", note: "", paid: { amount: 13.5, currency: "USDC", payee: "Design Studio" } });
     const sent = await run(() => approvePayable(approver(), { invoiceId: INVOICE }));
     expect(sent).toMatchObject({ ok: true, message: "Sent 13.50 USDC to Design Studio; Arc testnet is confirming it." });
-    // A transfer Circle has not put on chain yet has no transaction to open.
-    expect(sent).not.toHaveProperty("txUrl");
+    // Sent is not confirmed; and a transfer Circle has not put on chain yet has no transaction to open.
+    expect(sent).toMatchObject({ receipt: { state: "confirming", txUrl: null } });
+  });
+
+  it("says a payment agreed to in shadow mode was the agent's decision, and cash the reserve gave back", async () => {
+    mocks.approveAndPay.mockResolvedValueOnce({ status: "paid", txRef: "0xabc", note: "", fromReserveUsdc: 1.2, paid: { amount: 4.5, currency: "USDC", payee: "Design Studio" } });
+    const paid = await run(() => approvePayable(approver(), { invoiceId: INVOICE, forVerdict: true }));
+    expect(paid).toMatchObject({
+      message: "Paid 4.50 USDC to Design Studio on Arc testnet. 1.2 USDC came back from the USYC reserve first.",
+      receipt: { decidedBy: "verdict", fromReserve: "1.2 USDC came back from the USYC reserve first.", txUrl: null },
+    });
+  });
+
+  it("never names a network for a payment the sandbox simulated", async () => {
+    mocks.approveAndPay.mockResolvedValueOnce({ status: "paid", txRef: "sim-1", note: "", paid: { amount: 4.5, currency: "USDC", payee: "Design Studio", simulated: true } });
+    const paid = await run(() => approvePayable(approver(), { invoiceId: INVOICE }));
+    expect(paid).toMatchObject({ message: "Paid 4.50 USDC to Design Studio in the sandbox (simulated).", receipt: { network: "Sandbox (simulated)", txUrl: null } });
+  });
+
+  it("has no confirmation to show when nothing went out", async () => {
+    mocks.approveAndPay.mockResolvedValueOnce({ status: "paid", txRef: "0xabc", note: "" });
+    expect(await run(() => approvePayable(approver(), { invoiceId: INVOICE }))).not.toHaveProperty("receipt");
   });
 
   it("pays as the actor, with nothing about the surface from the console, and tells the payee", async () => {

@@ -9,6 +9,7 @@ import { gate } from "./policy";
 import { APPROVAL_RECORDED } from "../two-approvals";
 import { activityAmount } from "../agent-activity";
 import { txUrl } from "../payee-chains";
+import { SIMULATED_NETWORK, type PaymentReceipt } from "../payment-receipt";
 import { workspaceNetwork } from "../workspace-network";
 
 /**
@@ -35,12 +36,33 @@ const verdictSettles = (input: { forVerdict?: boolean }) => (input.forVerdict ? 
 /** A transaction on chain, which the explorer opens; Circle's own ids before it is on chain are not. */
 const TX_HASH = /^0x[0-9a-fA-F]{64}$/;
 
-/** A person's confirmation of a payment: what went out, to whom and on which network. */
-function paidMessage(status: "paid" | "matched", paid: { amount: number; currency: string; payee: string } | undefined): string {
+type Paid = NonNullable<Awaited<ReturnType<typeof approveAndPay>>["paid"]>;
+
+/** A person's confirmation of a payment in words: what went out, to whom and on which network, or that it was simulated. */
+function paidMessage(status: "paid" | "matched", paid: Paid | undefined): string {
   if (!paid) return status === "paid" ? "Paid." : "Payment submitted; waiting for confirmation.";
   const what = `${activityAmount(paid.amount, paid.currency)} to ${paid.payee}`;
+  if (paid.simulated) return status === "paid" ? `Paid ${what} in the sandbox (simulated).` : `Sent ${what} in the sandbox (simulated).`;
   const network = workspaceNetwork().label;
   return status === "paid" ? `Paid ${what} on ${network}.` : `Sent ${what}; ${network} is confirming it.`;
+}
+
+/**
+ * The same confirmation for a screen to lay out (payment confirmation): confirmed only once the network says so, the
+ * transaction once it has a hash, and whether the person approved the agent's stop or agreed with its decision.
+ */
+function paymentReceipt(status: "paid" | "matched", paid: Paid, txRef: string | null, fromReserveUsdc: number | undefined, forVerdict: boolean): PaymentReceipt {
+  const network = workspaceNetwork();
+  return {
+    state: status === "paid" ? "confirmed" : "confirming",
+    amount: paid.amount,
+    currency: paid.currency,
+    payee: paid.payee,
+    network: paid.simulated ? SIMULATED_NETWORK : network.label,
+    decidedBy: forVerdict ? "verdict" : "approval",
+    txUrl: !paid.simulated && txRef && TX_HASH.test(txRef) ? txUrl(network.id, txRef) : null,
+    fromReserve: fromReserveNote(fromReserveUsdc).trim() || null,
+  };
 }
 
 /** An `ApprovalError` carries a message safe to show; anything else goes to the server log. */
@@ -64,7 +86,7 @@ export function heldMessage(note: string): string {
 export async function approvePayable(
   actor: Actor,
   input: { invoiceId: string; shownAddress?: string; card?: ShownCard; forVerdict?: boolean }
-): Promise<CommandOutcome<{ status: "paid" | "matched" | "approved"; txRef: string | null; txUrl?: string }>> {
+): Promise<CommandOutcome<{ status: "paid" | "matched" | "approved"; txRef: string | null; receipt?: PaymentReceipt }>> {
   const refusal = gate(actor, "payable.approve");
   if (refusal) return refusal;
   let result: Awaited<ReturnType<typeof approveAndPay>>;
@@ -83,11 +105,11 @@ export async function approvePayable(
   if (result.status === "approved") return done(APPROVAL_RECORDED, { status: "approved", txRef: null });
   // A confirmed payment's payee hears of it now, not at the next cycle (payment notices R5).
   if (result.status === "paid") sendNoticesSoon(accessOf(actor));
-  // What went out, to whom and on which network, with its transaction one click away; cash brought back from the
-  // reserve to pay it is said too (approval cash R4).
+  // What went out, to whom and on which network, in words and laid out with its transaction one click away; cash
+  // brought back from the reserve to pay it is said too (approval cash R4).
   const message = paidMessage(result.status, result.paid);
-  const link = result.txRef && TX_HASH.test(result.txRef) ? txUrl(workspaceNetwork().id, result.txRef) : null;
-  return done(`${message}${fromReserveNote(result.fromReserveUsdc)}`, { status: result.status, txRef: result.txRef, ...(link ? { txUrl: link } : {}) });
+  const receipt = result.paid ? paymentReceipt(result.status, result.paid, result.txRef, result.fromReserveUsdc, input.forVerdict === true) : null;
+  return done(`${message}${fromReserveNote(result.fromReserveUsdc)}`, { status: result.status, txRef: result.txRef, ...(receipt ? { receipt } : {}) });
 }
 
 export async function rejectPayable(actor: Actor, input: { invoiceId: string; reason: string; card?: ShownCard; forVerdict?: boolean }): Promise<CommandOutcome> {

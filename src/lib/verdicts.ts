@@ -4,6 +4,7 @@ import { db, unwrap, type OrgDb } from "./dal";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
 import { isReclaimable } from "./agent/claim-age";
 import { awaitsVerdict } from "./next-step";
+import type { PaymentReceipt } from "./payment-receipt";
 import { readShadowMode, type ShadowMode } from "./shadow-mode";
 import type { VerdictFacts } from "./verdict-view";
 
@@ -61,8 +62,8 @@ export interface ActionOutcome {
   ok: boolean;
   message: string;
   changed?: boolean;
-  /** A payment's transaction on the explorer, for the confirmation to link. */
-  txUrl?: string;
+  /** What a payment did, for its confirmation to lay out (payment confirmation). */
+  receipt?: PaymentReceipt;
 }
 
 /**
