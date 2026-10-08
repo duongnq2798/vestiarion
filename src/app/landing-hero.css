@@ -128,3 +128,121 @@
     display: none;
   }
 }
+
+/*
+ * "How a decision becomes an action", told by scrolling (docs/superpowers/specs/2026-10-08-landing-motion-design.md
+ * M1). Each step, and each part of its diagram, carries `data-state`: `lit` until a step is chosen (the server's HTML),
+ * then `active` for the step being read, `done` before it and `idle` after it. A part draws in `--pl-ink`, its tone at
+ * full strength when lit or active, softened when done, and a faint line when idle. Only colours and opacity change,
+ * so all of it runs under reduced motion; the pulse and the arriving entry's slide are the only movement.
+ */
+.pipeline-diagram .pl-part {
+  --pl-tone: var(--color-ground);
+  --pl-ink: color-mix(in srgb, var(--pl-tone) 78%, transparent);
+}
+
+.pipeline-diagram .pl-part[data-tone="agent"] { --pl-tone: var(--color-agent-line); }
+.pipeline-diagram .pl-part[data-tone="refused"] { --pl-tone: var(--color-refused-line); }
+.pipeline-diagram .pl-part[data-tone="proof"] { --pl-tone: var(--color-proof-line); }
+.pipeline-diagram .pl-part[data-state="active"] { --pl-ink: var(--pl-tone); }
+.pipeline-diagram .pl-part[data-state="done"] { --pl-ink: color-mix(in srgb, var(--pl-tone) 55%, transparent); }
+.pipeline-diagram .pl-part[data-state="idle"] { --pl-ink: color-mix(in srgb, var(--color-ground) 16%, transparent); }
+
+.pipeline-diagram .pl-line {
+  fill: none;
+  stroke: var(--pl-ink);
+  transition: stroke 450ms var(--ease-standard);
+}
+
+.pipeline-diagram .pl-box {
+  fill: color-mix(in srgb, var(--pl-ink) 9%, transparent);
+  stroke: var(--pl-ink);
+  transition: fill 450ms var(--ease-standard), stroke 450ms var(--ease-standard);
+}
+
+.pipeline-diagram .pl-text {
+  fill: var(--pl-ink);
+  transition: fill 450ms var(--ease-standard);
+}
+
+.pipeline-diagram .pl-strong { font-weight: 600; }
+.pipeline-diagram .pl-part:not([data-state="idle"]) .pl-soft { fill: color-mix(in srgb, var(--color-ground) 55%, transparent); }
+
+/* The rules that passed, and the path a refusal takes, keep their own colours once the gate is reached. */
+.pipeline-diagram .pl-part:not([data-state="idle"]) .pl-ok { stroke: var(--color-proof-line); }
+.pipeline-diagram .pl-part:not([data-state="idle"]) .pl-refused { stroke: var(--color-refused-line); }
+.pipeline-diagram .pl-part:not([data-state="idle"]) .pl-refused-text { fill: var(--color-refused-line); }
+.pipeline-diagram .pl-part:not([data-state="idle"]) [data-entry-tone="refused"] { --pl-ink: var(--color-refused-line); }
+.pipeline-diagram .pl-part:not([data-state="idle"]) [data-entry-tone="plain"] { --pl-ink: color-mix(in srgb, var(--color-ground) 70%, transparent); }
+
+/* The part being read glows a little. */
+.pipeline-diagram .pl-part[data-state="active"] .pl-box {
+  fill: color-mix(in srgb, var(--pl-tone) 16%, transparent);
+}
+
+.pipeline-diagram .pl-part[data-state="active"] {
+  filter: drop-shadow(0 0 14px color-mix(in srgb, var(--pl-tone) 40%, transparent));
+}
+
+/* A short light running down the path into the part being read. */
+.pipeline-diagram .pl-pulse {
+  fill: none;
+  stroke: var(--pl-tone);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-dasharray: 10 110;
+  stroke-dashoffset: 10;
+  opacity: 0;
+}
+
+.pipeline-diagram .pl-part[data-state="active"] .pl-pulse {
+  opacity: 1;
+  animation: pl-pulse 1.8s var(--ease-standard) infinite;
+}
+
+@keyframes pl-pulse {
+  from { stroke-dashoffset: 10; }
+  to { stroke-dashoffset: -100; }
+}
+
+/* The newest entry arrives when Sign is read; before that it is not there yet. */
+.pipeline-diagram .pl-newest {
+  transition: opacity 600ms var(--ease-emphasized), translate 600ms var(--ease-emphasized);
+}
+
+.pipeline-diagram .pl-part[data-state="idle"] .pl-newest {
+  opacity: 0;
+  translate: 22px 0;
+}
+
+/* The steps beside it: the one being read at full strength, the others stepped back. */
+.pipeline-step {
+  transition: opacity 450ms var(--ease-standard);
+}
+
+.pipeline-step[data-state="done"] { opacity: 0.5; }
+.pipeline-step[data-state="idle"] { opacity: 0.32; }
+
+.pipeline-node {
+  border-color: color-mix(in srgb, var(--color-ground) 30%, transparent);
+  background: var(--color-ink);
+  transition: border-color 450ms var(--ease-standard), background-color 450ms var(--ease-standard), box-shadow 450ms var(--ease-standard);
+}
+
+.pipeline-step[data-state="lit"] .pipeline-node,
+.pipeline-step[data-state="done"] .pipeline-node {
+  border-color: var(--color-proof-line);
+  background: var(--color-proof-line);
+}
+
+.pipeline-step[data-state="active"] .pipeline-node {
+  border-color: var(--color-agent-line);
+  background: var(--color-ink);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--color-agent-line) 22%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pipeline-diagram .pl-pulse {
+    display: none;
+  }
+}

@@ -356,6 +356,11 @@ mainnet plan).
   - The measurements are the open numbers, all time (`readAllTimeOrNull`): Arc mainnet's panel, then Arc testnet's,
     customers' figures with the total beside them as /open's headline has them, and the team's latest payment on each
     network. A network whose numbers cannot be read says so, and the other still shows.
+- **Motion** (`docs/superpowers/specs/2026-10-08-landing-motion-design.md`): reduced motion removes movement, not every
+  change. Under `prefers-reduced-motion: reduce`, `globals.css` keeps transitions for opacity and colours only and cuts
+  keyframe animations, except on an element marked `data-calm-motion`; `Reveal` fades without lifting. Each moving
+  piece has a designed reduced state. "How a decision becomes an action" (`src/components/landing/pipeline/`) lights the
+  step crossing the middle of the viewport and its part of a sticky diagram; the server's HTML lights every step.
 
 **Every module on its workspace's network** (`docs/superpowers/specs/2026-10-05-network-threading-design.md`,
 phase 1b).
