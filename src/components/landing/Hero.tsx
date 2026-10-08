@@ -4,6 +4,7 @@ import { Eyebrow } from "@/components/ui/Eyebrow";
 import { ProvenanceBar, type ProvenanceLeg } from "@/components/vx/Provenance";
 import { PRODUCT_HUNT_BADGE } from "@/lib/site-links";
 import { EvidenceReplay, type ChainHeadEntry } from "./hero/EvidenceReplay";
+import { TreasuryArch } from "./TreasuryArch";
 
 /**
  * `head` is the live ledger's newest entries, reduced by the page to what a
@@ -54,7 +55,9 @@ export function Hero({ provenance, head, hostedAvailable }: { provenance: Proven
             <ProvenanceBar legs={provenance} />
           </div>
         </div>
-        <EvidenceReplay head={head} />
+        <TreasuryArch>
+          <EvidenceReplay head={head} />
+        </TreasuryArch>
       </div>
     </section>
   );
