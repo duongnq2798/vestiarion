@@ -188,9 +188,10 @@ describe("addTestUsdc", () => {
     // The workspace's own configuration has no hosted pair: the float's credentials come from the platform's.
     expect(workspaceOf(PLATFORM).chain.hostedCircleApiKey).toBeUndefined();
     expect(calls).toHaveBeenCalledWith({ apiKey: "hosted-key", entitySecret: "hosted-secret" });
-    expect(listTransactions).toHaveBeenCalledWith(
-      expect.objectContaining({ walletIds: ["float-wallet"], destinationAddress: OPERATING, txType: "OUTBOUND", blockchain: "ARC-TESTNET" })
-    );
+    expect(listTransactions).toHaveBeenCalledWith(expect.objectContaining({ walletIds: ["float-wallet"], destinationAddress: OPERATING, txType: "OUTBOUND" }));
+    // Circle answers 400 to `blockchain: "ARC-TESTNET"` as a list filter (seen in production 2026-10-08), and a wallet id
+    // names its chain already: the list never carries one.
+    expect(listTransactions).toHaveBeenCalledWith(expect.not.objectContaining({ blockchain: expect.anything() }));
     expect(createTransaction).toHaveBeenCalledWith(
       expect.objectContaining({
         walletId: "float-wallet",
