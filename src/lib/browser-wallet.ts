@@ -165,9 +165,27 @@ export async function sendPrepared(provider: Eip1193Provider, from: string, tx: 
   return hash;
 }
 
+/**
+ * A wallet error's own words: MetaMask's are plain objects with a `message`, not `Error`s, so `String(error)` would say
+ * "[object Object]" (2026-10-08). Null when it carries none.
+ */
+export function walletErrorText(error: unknown): string | null {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  const message = typeof error === "object" && error !== null ? (error as { message?: unknown }).message : undefined;
+  return typeof message === "string" && message.length > 0 ? message : null;
+}
+
 /** What a wallet's refusal or failure says, in plain words. */
 export function walletErrorMessage(error: unknown): string {
   if (errorCode(error) === 4001) return "You declined it in your wallet.";
-  const message = error instanceof Error ? error.message : String(error);
-  return `Your wallet did not send it: ${message}`;
+  const message = walletErrorText(error);
+  return message ? `Your wallet did not send it: ${message}` : "Your wallet did not send it.";
+}
+
+/** The wallet's own currency on the chain it is on, in its smallest unit: the gas it can pay. */
+export async function nativeBalance(provider: Eip1193Provider, address: string): Promise<bigint> {
+  const answer = await provider.request({ method: "eth_getBalance", params: [address, "latest"] });
+  if (typeof answer !== "string" || !answer.startsWith("0x")) throw new Error("The wallet could not read the chain.");
+  return BigInt(answer);
 }

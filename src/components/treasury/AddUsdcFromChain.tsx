@@ -8,7 +8,7 @@ import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { Input } from "@/components/ui/Input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
-import { connectWallet, discoverWallets, switchChain, walletErrorMessage, type DiscoveredWallet, type Eip1193Provider, type WalletWindow } from "@/lib/browser-wallet";
+import { connectWallet, discoverWallets, switchChain, type DiscoveredWallet, type Eip1193Provider, type WalletWindow } from "@/lib/browser-wallet";
 import {
   forgetInbound,
   formatUsdc,
@@ -17,6 +17,7 @@ import {
   InboundError,
   inboundSource,
   inboundSources,
+  inboundWalletError,
   pendingInbound,
   reviewInbound,
   sendInbound,
@@ -158,8 +159,9 @@ export default function AddUsdcFromChain({ network, recipient, recipientLabel }:
     try {
       await work((text) => setNote({ tone: "neutral", text }));
     } catch (error) {
-      const code = typeof error === "object" && error !== null ? (error as { code?: unknown }).code : undefined;
-      setNote({ tone: "error", text: typeof code === "number" ? walletErrorMessage(error) : error instanceof Error ? error.message : String(error) });
+      // A wallet that cannot pay the gas is named in the chain's own currency; MetaMask's errors are plain objects (2026-10-08).
+      const source = review?.source ?? sources.find((entry) => entry.id === sourceId) ?? null;
+      setNote({ tone: "error", text: inboundWalletError(error, source) });
     } finally {
       setBusy(false);
     }
