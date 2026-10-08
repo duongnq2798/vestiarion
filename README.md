@@ -42,6 +42,7 @@ hash-chained ledger anyone in the workspace can verify.
 - [Arc mainnet and Arc testnet](#arc-mainnet-and-arc-testnet)
 - [Product capabilities](#product-capabilities)
 - [Integrations](#integrations)
+- [Primitives for Arc builders](#primitives-for-arc-builders)
 - [Quick start](#quick-start)
 - [Verifiable activity](#verifiable-activity)
 - [Documentation](#documentation)
@@ -266,6 +267,24 @@ There is no standalone CLI; operators run the repository's scripts (`npm run cyc
 ```bash
 npm install @vestiarion/sdk
 ```
+
+## Primitives for Arc builders
+
+Pieces of Vestiarion another Arc app can take as they are, under this repository's license. Each is tested on its own.
+
+| Primitive | What it gives an Arc app | Where |
+| --- | --- | --- |
+| **`VestiarionSpendingLimit`** | An agent that pays from a treasury it does not hold. Only the agent's wallet calls `pay(to, amount, ref)`; it never passes a daily or a 7-day figure and never pays a `ref` twice. The treasury keeps its USDC and approves the contract, so the contract holds nothing; its owner changes the figures with `setLimits`, or stops the agent by approving 0. Runs on Arc mainnet: [`0xd90cA89Fc318d0330Bb14eaeF78B72C3CA7E7fB6`](https://explorer.arc.io/address/0xd90cA89Fc318d0330Bb14eaeF78B72C3CA7E7fB6). | [`contracts/VestiarionSpendingLimit.sol`](contracts/VestiarionSpendingLimit.sol), deploy and calls in [`src/lib/spending-limit/`](src/lib/spending-limit/), tested in an in-process EVM in [`tests/spending-limit-contract.test.ts`](tests/spending-limit-contract.test.ts) |
+| **`VestiarionEscrow`** | Milestone escrow in about 80 lines: the payer locks USDC for a payee, releases it, or takes it back from a set date. No owner, no upgrade. | [`contracts/VestiarionEscrow.sol`](contracts/VestiarionEscrow.sol), [`src/lib/circle/escrow-holds.ts`](src/lib/circle/escrow-holds.ts), [`tests/escrow-contract.test.ts`](tests/escrow-contract.test.ts) |
+| **A signed decision ledger** | Every decision an agent makes, with the facts it saw, as an Ed25519-signed, hash-chained entry. Anyone verifies one entry or a whole chain, in a browser or offline from an export. | [`src/lib/ledger.ts`](src/lib/ledger.ts), [`verifyLedgerEntry`](sdk/src/webhooks.ts) in the SDK, [Verify an audit export](https://www.vestiarion.xyz/docs/guides/audit-export) |
+| **Shadow mode** | A way to try an agent on a business's real bills without moving its money: each decision waits for a person's verdict, each agreed payment settles on Arc testnet at the real amount, and the agreement rate is counted. | [`src/lib/shadow-mode.ts`](src/lib/shadow-mode.ts), [`src/lib/verdicts.ts`](src/lib/verdicts.ts), [Shadow mode](https://www.vestiarion.xyz/docs/guides/shadow-mode) |
+| **`@vestiarion/sdk`** | A typed client with no dependencies, plus webhook and ledger signature checks. | [`sdk/`](sdk/), [npm](https://www.npmjs.com/package/@vestiarion/sdk) |
+
+**What these add to the circlefin/arc-\* samples.** The samples show how to move USDC on Arc: checkout, peer-to-peer
+payments, a treasury across chains, an escrow released by an AI review, an agent paying for x402 services. An agent's
+budget there, as in arc-nanopayments' `--limit`, is enforced by the agent's own process. Here the bound is a contract
+on Arc that the agent's wallet cannot get past, while the treasury keeps custody. Each payment carries a signed record
+of why it was made, and shadow mode measures how often people agree with the agent before it pays on its own.
 
 ## Quick start
 

@@ -44,6 +44,21 @@ The workspace's wallets around them:
 | Escrow deployer | [`0x2590cc3c26f691af6b7203bd283eb055160a1a6c`](https://explorer.testnet.arc.io/address/0x2590cc3c26f691af6b7203bd283eb055160a1a6c) | Deployed the escrow. |
 | Spending-limit deployer | [`0x10e8f32d53bdcae4b48cb391c0bb84374b7565f3`](https://explorer.testnet.arc.io/address/0x10e8f32d53bdcae4b48cb391c0bb84374b7565f3) | Deployed the spending-limit contract. |
 
+### Deployed on Arc mainnet
+
+A spending limit contract runs on Arc mainnet in mainnet-wp, our own workspace there, which pays from a passkey wallet. The passkey wallet deployed it, set its figures and approved it in one transaction. Its figures, read from the contract: 50 USDC a day and 150 USDC in 7 days.
+
+| Contract | Address | Deployed | Deploy transaction |
+| --- | --- | --- | --- |
+| VestiarionSpendingLimit | [`0xd90cA89Fc318d0330Bb14eaeF78B72C3CA7E7fB6`](https://explorer.arc.io/address/0xd90cA89Fc318d0330Bb14eaeF78B72C3CA7E7fB6) | Oct 7, 2026 | [`0xe6261540…a9bb`](https://explorer.arc.io/tx/0xe62615407f44383d52a470574a877069e7e0114c2a074cc112149b3ab3efa9bb) |
+
+| Wallet | Address | What it does |
+| --- | --- | --- |
+| Treasury | [`0x49A0e31153562a81cdc79ACF6D138B1965F71631`](https://explorer.arc.io/address/0x49A0e31153562a81cdc79ACF6D138B1965F71631) | The passkey wallet. It holds the USDC and is the contract's owner and the treasury it draws from. |
+| Agent | [`0x67b278c94852F8C9058418d3F17C9A98F4B05D6C`](https://explorer.arc.io/address/0x67b278c94852F8C9058418d3F17C9A98F4B05D6C) | Calls `pay` on the contract. It holds only USDC for gas. |
+
+Its first payment, 0.10 USDC to a vendor on Oct 7, 2026: [`0xcecef38e…dee6`](https://explorer.arc.io/tx/0xcecef38e3f751bc118f8f00cee5bb5344679e84f89123d679b986b47d7f1dee6). USDC on Arc mainnet is [`0x3600000000000000000000000000000000000000`](https://explorer.arc.io/address/0x3600000000000000000000000000000000000000), the same address as on Arc testnet.
+
 ## Circle's contracts Vestiarion calls
 
 On Arc testnet:
