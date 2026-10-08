@@ -417,6 +417,14 @@ describe("approveAndPay", () => {
     expect(append.p_detail).not.toHaveProperty("soleApprover");
   });
 
+  it("says what it paid, to whom and in what, once the transfer went out", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 0, amountPaid: 148.5, discountTaken: 1.5 });
+    const { run } = approvalsFake();
+
+    const result = await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    expect(result.paid).toEqual({ amount: 148.5, currency: "USDC", payee: "Acme Supplies" });
+  });
+
   it("refuses a high-risk counterparty before any claim", async () => {
     const { fake, run } = approvalsFake({
       invoice: (r) => (r.params.get("id") ? { body: invoiceRow({ counterparties: { name: "Acme", risk_level: "high", address: null } }) } : undefined),
@@ -728,7 +736,7 @@ describe("approveAndPay", () => {
 
     const result = await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
 
-    expect(result).toEqual({ status: "paid", txRef: "0xhash", note: "" });
+    expect(result).toEqual({ status: "paid", txRef: "0xhash", note: "", paid: expect.objectContaining({ currency: "USDC", payee: "Acme Supplies" }) });
 
     const [claim] = rpcBodies(fake.requests, "claim_invoice_decision");
     expect(claim).toEqual({ p_org_id: ORG, p_invoice_id: INVOICE_ID, p_by: ACTOR, p_decision: "approve" });
@@ -978,7 +986,7 @@ describe("approveAndPay after Circle ended the last attempt in a terminal failur
 
     const result = await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
 
-    expect(result).toEqual({ status: "paid", txRef: "0xhash2", note: "" });
+    expect(result).toEqual({ status: "paid", txRef: "0xhash2", note: "", paid: expect.objectContaining({ currency: "USDC", payee: "Acme Supplies" }) });
     expect(payInvoiceMock).toHaveBeenCalledTimes(1);
     expect(payInvoiceMock.mock.calls[0][1]).toMatchObject({ retryTerminalFailure: true });
     const [lookup] = fake.requests.filter((r) => r.path === "/rest/v1/payment_intents");
@@ -2559,7 +2567,7 @@ describe("approveAndPay when the operating wallet falls short and the reserve co
 
     const result = await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
 
-    expect(result).toEqual({ status: "paid", txRef: "0xhash", note: "", fromReserveUsdc: 0.215761 });
+    expect(result).toEqual({ status: "paid", txRef: "0xhash", note: "", fromReserveUsdc: 0.215761, paid: expect.objectContaining({ currency: "USDC", payee: "Centronex" }) });
     expect(withdrawFromEarn).toHaveBeenCalledTimes(1);
     expect(withdrawFromEarn.mock.calls[0][0]).toMatchObject({ accountId: ACCOUNT_ID, reserveAccountId: RESERVE.id, amount: 0.215761 });
     // Claimed first, so a second click never brings cash back twice; paid after.
@@ -2653,7 +2661,7 @@ describe("approveAndPay when the operating wallet falls short and the reserve co
   it("brings nothing back when the operating wallet covers the payment", async () => {
     const { run } = short({ account: () => ({ body: accountRow("5") }) });
 
-    expect(await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).toEqual({ status: "paid", txRef: "0xhash", note: "" });
+    expect(await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).toEqual({ status: "paid", txRef: "0xhash", note: "", paid: expect.objectContaining({ currency: "USDC", payee: "Centronex" }) });
     expect(withdrawFromEarn).not.toHaveBeenCalled();
   });
 

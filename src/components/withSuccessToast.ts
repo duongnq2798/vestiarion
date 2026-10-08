@@ -1,6 +1,6 @@
 "use client";
 
-import { toast } from "@/components/ui/Toaster";
+import { successToast } from "@/components/success-toast";
 import type { ActionResult } from "@/components/ui/useActionForm";
 
 /**
@@ -13,7 +13,8 @@ import type { ActionResult } from "@/components/ui/useActionForm";
 export function withSuccessToast<State extends ActionResult>(action: (previous: State, formData: FormData) => Promise<State>) {
   return async (previous: State, formData: FormData): Promise<State> => {
     const result = await action(previous, formData);
-    if (result.ok && result.message) toast.success(result.message);
+    // A payment's confirmation links its transaction (`txUrl`), when the action returns one.
+    if (result.ok && result.message) successToast(result.message, (result as { txUrl?: string }).txUrl);
     return result;
   };
 }

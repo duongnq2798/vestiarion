@@ -20,6 +20,8 @@ export interface VerdictActionResult {
   ok: boolean;
   message: string;
   given?: GivenVerdict;
+  /** The payment's transaction, when the verdict paid it: its confirmation links it. */
+  txUrl?: string;
 }
 
 const inputSchema = z.object({
@@ -55,7 +57,7 @@ export async function giveVerdictAction(orgSlug: string, input: unknown): Promis
       if (!result.recorded && result.after) return { ok: false, message: `Nothing was paid, and your verdict was not recorded: ${result.after.message}` };
       const said = result.given.verdict === "agree" ? "You agreed with the agent." : "You disagreed with the agent.";
       if (!result.after) return { ok: true, message: said, given: result.given };
-      return { ok: result.after.ok, message: `${said} ${result.after.message}`, given: result.given };
+      return { ok: result.after.ok, message: `${said} ${result.after.message}`, given: result.given, ...(result.after.txUrl ? { txUrl: result.after.txUrl } : {}) };
     } catch (error) {
       if (error instanceof VerdictError) return { ok: false, message: error.message };
       console.error("verdict failed", error instanceof Error ? error.message : "unknown error");

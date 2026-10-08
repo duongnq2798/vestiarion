@@ -7,6 +7,9 @@ import { checkChatDecision, type ShownCard } from "./chat-decisions";
 import { done, refused, TRY_AGAIN, type CommandOutcome, type Refused } from "./outcome";
 import { gate } from "./policy";
 import { APPROVAL_RECORDED } from "../two-approvals";
+import { activityAmount } from "../agent-activity";
+import { txUrl } from "../payee-chains";
+import { workspaceNetwork } from "../workspace-network";
 
 /**
  * A person's decisions on a payable the agent stopped (integrations design §9, Phase 0): the console's Approvals
@@ -29,6 +32,17 @@ async function chatRules(actor: Actor, decision: "approve" | "reject" | "return"
 /** The verdict's own settling of a payable held for one, passed on only when it is that (shadow mode S4). */
 const verdictSettles = (input: { forVerdict?: boolean }) => (input.forVerdict ? { forVerdict: true } : {});
 
+/** A transaction on chain, which the explorer opens; Circle's own ids before it is on chain are not. */
+const TX_HASH = /^0x[0-9a-fA-F]{64}$/;
+
+/** A person's confirmation of a payment: what went out, to whom and on which network. */
+function paidMessage(status: "paid" | "matched", paid: { amount: number; currency: string; payee: string } | undefined): string {
+  if (!paid) return status === "paid" ? "Paid." : "Payment submitted; waiting for confirmation.";
+  const what = `${activityAmount(paid.amount, paid.currency)} to ${paid.payee}`;
+  const network = workspaceNetwork().label;
+  return status === "paid" ? `Paid ${what} on ${network}.` : `Sent ${what}; ${network} is confirming it.`;
+}
+
 /** An `ApprovalError` carries a message safe to show; anything else goes to the server log. */
 function approvalRefusal(error: unknown): Refused {
   if (error instanceof ApprovalError) return refused(error.code, error.message);
@@ -50,7 +64,7 @@ export function heldMessage(note: string): string {
 export async function approvePayable(
   actor: Actor,
   input: { invoiceId: string; shownAddress?: string; card?: ShownCard; forVerdict?: boolean }
-): Promise<CommandOutcome<{ status: "paid" | "matched" | "approved"; txRef: string | null }>> {
+): Promise<CommandOutcome<{ status: "paid" | "matched" | "approved"; txRef: string | null; txUrl?: string }>> {
   const refusal = gate(actor, "payable.approve");
   if (refusal) return refusal;
   let result: Awaited<ReturnType<typeof approveAndPay>>;
@@ -69,9 +83,11 @@ export async function approvePayable(
   if (result.status === "approved") return done(APPROVAL_RECORDED, { status: "approved", txRef: null });
   // A confirmed payment's payee hears of it now, not at the next cycle (payment notices R5).
   if (result.status === "paid") sendNoticesSoon(accessOf(actor));
-  // Cash brought back from the reserve to pay it is said too (approval cash R4).
-  const message = result.status === "paid" ? "Paid." : "Payment submitted; waiting for confirmation.";
-  return done(`${message}${fromReserveNote(result.fromReserveUsdc)}`, { status: result.status, txRef: result.txRef });
+  // What went out, to whom and on which network, with its transaction one click away; cash brought back from the
+  // reserve to pay it is said too (approval cash R4).
+  const message = paidMessage(result.status, result.paid);
+  const link = result.txRef && TX_HASH.test(result.txRef) ? txUrl(workspaceNetwork().id, result.txRef) : null;
+  return done(`${message}${fromReserveNote(result.fromReserveUsdc)}`, { status: result.status, txRef: result.txRef, ...(link ? { txUrl: link } : {}) });
 }
 
 export async function rejectPayable(actor: Actor, input: { invoiceId: string; reason: string; card?: ShownCard; forVerdict?: boolean }): Promise<CommandOutcome> {

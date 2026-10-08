@@ -4,6 +4,7 @@ import { Check, CircleCheck, ThumbsDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type FormEvent } from "react";
 import { giveVerdictAction } from "@/app/actions/verdicts";
+import { successToast } from "@/components/success-toast";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from "@/components/ui/Dialog";
@@ -53,6 +54,8 @@ export default function VerdictControl({ orgSlug, view, payBlocked = null }: { o
       const shown = then === "pay" ? { shownAddress: view.payment?.address ?? undefined } : {};
       const result = await giveVerdictAction(orgSlug, { entrySeq: view.entrySeq, verdict, ...(typed ? { reason: typed } : {}), ...(then ? { then } : {}), ...shown });
       setNote({ tone: result.ok ? "neutral" : "error", text: result.message });
+      // A payment's confirmation outlives the card it paid, which leaves the page: what was paid, and its transaction.
+      if (result.ok && result.txUrl) successToast(result.message, result.txUrl);
       if (result.ok) onDone?.();
       router.refresh();
     });
