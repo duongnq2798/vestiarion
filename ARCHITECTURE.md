@@ -361,6 +361,8 @@ mainnet plan).
   keyframe animations, except on an element marked `data-calm-motion`; `Reveal` fades without lifting. Each moving
   piece has a designed reduced state. "How a decision becomes an action" (`src/components/landing/pipeline/`) lights the
   step crossing the middle of the viewport and its part of a sticky diagram; the server's HTML lights every step.
+  The hero's receipt prints as calm motion under reduce, and publishes a beat (`hero/replay-beat.ts`) with the time
+  its first line started; `ArchLights` climbs the arch's stones on that clock and rings the keystone in the outcome.
 
 **Every module on its workspace's network** (`docs/superpowers/specs/2026-10-05-network-threading-design.md`,
 phase 1b).

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
 import { HashText, Receipt, Seal, Verdict } from "../evidence/Evidence";
+import { publishBeat } from "./replay-beat";
 import { HOLD_MS, PRINT_AT, REPLAY_MS, SCENARIOS, type ReplayScenario } from "./scenarios";
 
 /** The newest entries of the live ledger, newest first: only what the landing page may show. */
@@ -16,6 +17,17 @@ export interface ChainHeadEntry {
 }
 
 const GENESIS = "0".repeat(64);
+
+/**
+ * When the receipt in view began to print, on the page's clock: its first line's animation's start time. The first
+ * receipt starts printing with the page's styles, before this script runs; a later one, as it is chosen. Now, when the
+ * animation has not started yet.
+ */
+function printStart(figure: HTMLElement | null): number {
+  const animation = figure?.querySelector("[data-replay-current] .replay-print")?.getAnimations()[0];
+  const start = animation?.startTime;
+  return typeof start === "number" ? start : performance.now();
+}
 
 function at(ms: number): CSSProperties {
   return { "--d": `${ms}ms` } as CSSProperties;
@@ -35,16 +47,17 @@ function Stage({ number, name, delay, children }: { number: string; name: string
 /**
  * One decision printed as a receipt, stage by stage: what the agent saw, what
  * the model argued, what code allowed and the signature that closes it. The
- * printing is CSS, so it runs before hydration and is instant under reduced
- * motion; this component only chooses which replay runs and when the next
- * one starts. Every line is in the DOM from the start, so a screen reader
- * reads the whole receipt and the slip never changes height.
+ * printing is CSS, so it runs before hydration; under reduced motion each line
+ * fades in where it stands, with no wipe, scan or turning stamp (calm motion,
+ * landing motion M2). This component only chooses which replay runs and when
+ * the next one starts. Every line is in the DOM from the start, so a screen
+ * reader reads the whole receipt and the slip never changes height.
  */
 function ReceiptSlip({ scenario, prev, frozen }: { scenario: ReplayScenario; prev: string; frozen: boolean }) {
   const refused = scenario.outcome.tone === "refused";
   return (
     <Receipt slipClassName="relative overflow-hidden px-4 py-6 sm:px-6" className="relative">
-      <div data-frozen={frozen || undefined} className="replay">
+      <div data-frozen={frozen || undefined} data-calm-motion="" className="replay">
         <span aria-hidden className="replay-scan pointer-events-none absolute inset-x-0 h-10 bg-linear-to-b from-transparent to-agent-soft/80" />
         <div className="replay-print flex items-baseline justify-between gap-3" style={at(PRINT_AT.head)}>
           <span className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-ink">Decision receipt</span>
@@ -162,20 +175,15 @@ export function EvidenceReplay({ head }: { head: ChainHeadEntry[] }) {
   const [autoplay, setAutoplay] = useState(true);
   const [frozen, setFrozen] = useState(false);
   const [offscreen, setOffscreen] = useState(false);
-  const [stillMotion, setStillMotion] = useState(false);
   const figure = useRef<HTMLElement>(null);
 
-  // Reduced motion: every receipt is shown whole and nothing switches by itself.
+  // What moves in time with the receipt (the arch's lights) follows each one printed, paused or hidden, from when it
+  // began to print.
+  const startedAt = useRef<Map<number, number>>(new Map());
   useEffect(() => {
-    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => {
-      setStillMotion(query.matches);
-      if (query.matches) setAutoplay(false);
-    };
-    update();
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, []);
+    if (!startedAt.current.has(run)) startedAt.current.set(run, printStart(figure.current));
+    publishBeat({ run, tone: SCENARIOS[index].outcome.tone, playing: !(frozen || offscreen), startedAt: startedAt.current.get(run) });
+  }, [run, index, frozen, offscreen]);
 
   // A replay nobody can see neither prints nor advances.
   useEffect(() => {
@@ -250,17 +258,16 @@ export function EvidenceReplay({ head }: { head: ChainHeadEntry[] }) {
               </Button>
             ))}
           </div>
-          {!stillMotion && (
-            <Button
-              variant="secondary"
-              size="icon-sm"
-              onClick={togglePlay}
-              aria-label={autoplay ? "Pause the replay" : "Play the replays"}
-              className="ml-auto rounded-full"
-            >
-              {autoplay ? <Pause aria-hidden /> : <Play aria-hidden />}
-            </Button>
-          )}
+          {/* Always offered: the replays change by themselves, under reduced motion too, so they can be stopped. */}
+          <Button
+            variant="secondary"
+            size="icon-sm"
+            onClick={togglePlay}
+            aria-label={autoplay ? "Pause the replay" : "Play the replays"}
+            className="ml-auto rounded-full"
+          >
+            {autoplay ? <Pause aria-hidden /> : <Play aria-hidden />}
+          </Button>
         </div>
 
         <div className="ledger-grid rounded-xl border border-line/70 bg-ground/70 px-2.5 pb-4 pt-3 sm:px-4">
@@ -268,7 +275,12 @@ export function EvidenceReplay({ head }: { head: ChainHeadEntry[] }) {
               taller one and switching replays never moves the page. */}
           <div className="grid">
             {SCENARIOS.map((item, itemIndex) => (
-              <div key={item.id} className={cn("col-start-1 row-start-1", itemIndex !== index && "invisible")} aria-hidden={itemIndex !== index || undefined}>
+              <div
+                key={item.id}
+                data-replay-current={itemIndex === index ? "" : undefined}
+                className={cn("col-start-1 row-start-1", itemIndex !== index && "invisible")}
+                aria-hidden={itemIndex !== index || undefined}
+              >
                 <ReceiptSlip
                   key={itemIndex === index ? run : "idle"}
                   scenario={item}
