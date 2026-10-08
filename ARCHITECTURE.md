@@ -335,6 +335,16 @@ mainnet plan).
     and how many agreed; /open shows customers' share beneath the agent's cards once one is given, and a row in Every
     figure. Read like `open_outcomes`: until it can be read, its figures are dashes and the rest of /open shows.
   - Their one-argument versions stay for older code.
+- **The landing's latest decision** (`docs/superpowers/specs/2026-10-08-landing-owner-hero-design.md`): a band under
+  the hero with the newest decision the agent made in one of the team's own live workspaces.
+  - `latest_team_decision()` (0087), the service role's alone, looks only where `/open` lists payments from: the
+    founding workspace and those a team member created, never a sample payee's decision. It returns facts that name no
+    one (action, amount, network, model, policy agreement, code's verdict, why a hold held, a person's verdict, the
+    transaction) and the entry's signed chain fields; never its summary, reasoning, names or ids.
+  - `src/lib/platform/latest-decision.ts` reads it at most once a minute and adds the signing workspace's public keys;
+    the workspace's id stays there. `src/lib/latest-decision.ts` says it in words.
+  - The reader's browser checks the signature and the link to the entry before it with `verifySignedLink`, the
+    receipt verifier's half that needs no body. Until 0087 runs, or when the read fails, there is no band.
 
 **Every module on its workspace's network** (`docs/superpowers/specs/2026-10-05-network-threading-design.md`,
 phase 1b).

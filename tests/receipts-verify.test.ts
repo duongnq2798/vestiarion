@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { bodyHashOf, canonicalJson } from "@/lib/ledger";
 import { canonicalJson as sharedCanonicalJson } from "@/lib/canonical-json";
 import { ledgerKeyId } from "@/lib/ledger-keys";
-import { recordsTransaction, verifyEntry, type PublicLedgerRow } from "@/lib/receipts/verify";
+import { recordsTransaction, verifyEntry, verifySignedLink, type PublicLedgerRow } from "@/lib/receipts/verify";
 
 /**
  * The receipt's verifier (docs/superpowers/specs/2026-10-01-payment-receipts-design.md P5, R5): one
@@ -62,6 +62,25 @@ describe("verifyEntry", () => {
 
   it("says it could not check, not that it failed, when the signing key is not known", async () => {
     expect(await verifyEntry(signed(DETAIL), { other: OTHER_PEM })).toEqual({ ok: null, reason: "The key that signed this entry is not known here." });
+  });
+});
+
+describe("verifySignedLink", () => {
+  // What a page may publish of an entry whose content stays private (landing latest decision R3): no body at all.
+  const link = ({ body_hash, signature, prev_hash, hash, signing_key_id }: PublicLedgerRow) => ({ body_hash, signature, prev_hash, hash, signing_key_id });
+
+  it("checks the signature over the body hash and the link to the entry before it, without the body", async () => {
+    expect(await verifySignedLink(link(signed(DETAIL)), { [KEY_ID]: PEM })).toEqual({ ok: true });
+  });
+
+  it("finds a body hash the signature was not made over, and a link that does not follow", async () => {
+    const row = link(signed(DETAIL));
+    expect(await verifySignedLink({ ...row, body_hash: "1".repeat(64) }, { [KEY_ID]: PEM })).toEqual({ ok: false, reason: "The signature does not verify with the workspace's key." });
+    expect(await verifySignedLink({ ...row, prev_hash: "2".repeat(64) }, { [KEY_ID]: PEM })).toEqual({ ok: false, reason: "The entry's chain hash does not match." });
+  });
+
+  it("says it could not check when the key is not known here", async () => {
+    expect(await verifySignedLink(link(signed(DETAIL)), { other: OTHER_PEM })).toEqual({ ok: null, reason: "The key that signed this entry is not known here." });
   });
 });
 

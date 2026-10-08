@@ -1,8 +1,7 @@
 import { db, unwrap } from "../dal";
-import { appendLedgerEntry, ledgerVerificationKeyring, listLedgerEntriesForTargets } from "../ledger";
+import { appendLedgerEntry, ledgerPublicKeyPems, ledgerVerificationKeyring, listLedgerEntriesForTargets } from "../ledger";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { currentOrgId } from "../context";
-import { ledgerKeyId } from "../ledger-keys";
 import { buildReceipt, receiptSummary, type ReceiptIntent } from "./facts";
 import { generateReceiptToken } from "./token";
 
@@ -34,11 +33,7 @@ async function receiptOf(invoiceId: string): Promise<ReceiptRow | null> {
 }
 
 /** The public halves of every key this workspace has signed with, by id: they verify the receipt and the entry it names. */
-function publicKeys(): Record<string, string> {
-  const keyring = ledgerVerificationKeyring();
-  const keys = [keyring.active, ...keyring.retired].filter((key) => key !== null);
-  return Object.fromEntries(keys.map((key) => [ledgerKeyId(key), key.export({ type: "spki", format: "pem" }).toString()]));
-}
+const publicKeys = () => ledgerPublicKeyPems(ledgerVerificationKeyring());
 
 export async function shareReceipt(input: { actorId: string; invoiceId: string }): Promise<{ token: string; receiptId: string; renewed: boolean }> {
   const { token, secretHash } = generateReceiptToken();

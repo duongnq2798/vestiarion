@@ -16,20 +16,21 @@ export function Hero({ provenance, head, hostedAvailable }: { provenance: Proven
     <section aria-labelledby="hero-title" className="ledger-grid relative overflow-hidden border-b border-line bg-surface/30">
       <div aria-hidden className="absolute -left-36 top-8 size-[28rem] rounded-full bg-proof-soft/80 blur-3xl motion-safe:animate-drift" />
       <div aria-hidden className="absolute -right-28 bottom-0 size-[30rem] rounded-full bg-agent-soft/80 blur-3xl motion-safe:animate-drift" />
-      <div className="relative mx-auto grid max-w-6xl gap-12 px-4 pb-16 pt-12 sm:px-6 sm:pb-20 sm:pt-16 lg:grid-cols-[minmax(0,1fr)_31rem] lg:items-center lg:gap-14 lg:py-20">
-        <div>
-          <Eyebrow className="text-agent">Autonomous treasury agent · Arc testnet</Eyebrow>
+      {/* One column that may shrink below its content on a phone: otherwise the replay's width pushed every line past the right edge. */}
+      <div className="relative mx-auto grid max-w-6xl grid-cols-1 gap-12 px-4 pb-16 pt-12 sm:px-6 sm:pb-20 sm:pt-16 lg:grid-cols-[minmax(0,1fr)_31rem] lg:items-center lg:gap-14 lg:py-20">
+        <div className="min-w-0">
+          <Eyebrow className="text-agent">An agent for your bills · Arc testnet</Eyebrow>
           <h1 id="hero-title" className="mt-5 text-balance text-5xl font-semibold leading-[0.95] tracking-[-0.055em] text-ink sm:text-7xl">
-            Money moves.
+            The agent pays your bills.
             <br />
             <span className="font-serif font-normal italic text-agent">Evidence remains.</span>
           </h1>
           <p className="mt-6 max-w-xl text-pretty font-serif text-xl leading-relaxed text-ink-2 sm:text-2xl">
-            Vestiarion pays a business’s bills. A model proposes each payment, code decides whether it may happen, and every outcome — refusals included — is signed into a chain you can verify.
+            Keep paying your bills the way you do, and let the agent decide each one beside you. Agree, and it is paid in USDC on Arc testnet; disagree, and nothing moves. Every decision, refusals included, is signed into a chain anyone can verify.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button asChild size="lg">
-              <Link href={"/onboarding"}>{hostedAvailable ? "Start on Arc testnet" : "Open a workspace"}</Link>
+              <Link href={"/onboarding"}>{hostedAvailable ? "Try it on your bills" : "Open a workspace"}</Link>
             </Button>
             <Button asChild size="lg" variant="secondary" className="bg-surface/80">
               <a href="#how-it-works">How a decision is made</a>
@@ -38,7 +39,10 @@ export function Hero({ provenance, head, hostedAvailable }: { provenance: Proven
           <p className="mt-3 text-[0.8125rem] text-ink-3">
             {hostedAvailable
               ? "Email sign-in, a workspace of your own, and an Arc testnet wallet in one click. Fund it with USDC from Circle's faucet, and the agent pays from it."
-              : "Email sign-in, then a workspace of your own. Connect your Circle account from Settings to pay on Arc testnet."}
+              : "Email sign-in, then a workspace of your own. Connect your Circle account from Settings to pay on Arc testnet."}{" "}
+            <Link href="/docs/guides/shadow-mode" className="font-medium text-agent underline-offset-2 hover:underline">
+              How shadow mode works
+            </Link>
           </p>
           <a href={PRODUCT_HUNT_BADGE.href} target="_blank" rel="noopener noreferrer" className="mt-5 inline-flex rounded-lg">
             {/* Product Hunt draws the badge with its live upvote count, so it stays their image. */}
