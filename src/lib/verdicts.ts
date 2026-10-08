@@ -61,6 +61,8 @@ export interface ActionOutcome {
   ok: boolean;
   message: string;
   changed?: boolean;
+  /** A payment's transaction on the explorer, for the confirmation to link. */
+  txUrl?: string;
 }
 
 /**

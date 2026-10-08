@@ -13,6 +13,8 @@ import { consoleAnswer } from "./command-result";
 export interface ApprovalActionResult {
   ok: boolean;
   message: string;
+  /** The payment's transaction on the explorer, for its confirmation to link. */
+  txUrl?: string;
 }
 
 const invoiceIdSchema = z.string().uuid();
@@ -34,7 +36,8 @@ export async function approveInvoiceAction(_previous: ApprovalActionResult, form
     const parsed = invoiceIdSchema.safeParse(formString(formData, "invoiceId"));
     if (!parsed.success) return { ok: false, message: "That invoice is not waiting for a decision." };
     // The address the card showed goes with the approval, so a changed one is refused rather than paid unseen.
-    return consoleAnswer(await approvePayable(consoleActor(auth), { invoiceId: parsed.data, shownAddress: formString(formData, "address") }));
+    const outcome = await approvePayable(consoleActor(auth), { invoiceId: parsed.data, shownAddress: formString(formData, "address") });
+    return { ...consoleAnswer(outcome), ...(outcome.ok && outcome.txUrl ? { txUrl: outcome.txUrl } : {}) };
   });
 }
 

@@ -4,6 +4,7 @@ import { runWith } from "@/lib/context";
 import { ApprovalError } from "@/lib/agent/approvals";
 import type { Actor } from "@/lib/commands/actor";
 import { addPayableDetails, approvePayable, rejectPayable, returnPayable } from "@/lib/commands/payables";
+import { txUrl } from "@/lib/payee-chains";
 import { fakeSupabase, orgTestContext } from "./support/fake-supabase";
 
 /**
@@ -72,6 +73,19 @@ describe("a verdict settling a decision held for one (shadow mode S4)", () => {
 });
 
 describe("approvePayable", () => {
+  it("says what was paid, to whom and on which network, with the transaction one click away", async () => {
+    const TX = `0x${"ab".repeat(32)}`;
+    mocks.approveAndPay.mockResolvedValueOnce({ status: "paid", txRef: TX, note: "", paid: { amount: 13.5, currency: "USDC", payee: "Design Studio" } });
+    const paid = await run(() => approvePayable(approver(), { invoiceId: INVOICE }));
+    expect(paid).toMatchObject({ ok: true, message: "Paid 13.50 USDC to Design Studio on Arc testnet.", txUrl: txUrl("arc-testnet", TX) });
+
+    mocks.approveAndPay.mockResolvedValueOnce({ status: "matched", txRef: "circle-tx-1", note: "", paid: { amount: 13.5, currency: "USDC", payee: "Design Studio" } });
+    const sent = await run(() => approvePayable(approver(), { invoiceId: INVOICE }));
+    expect(sent).toMatchObject({ ok: true, message: "Sent 13.50 USDC to Design Studio; Arc testnet is confirming it." });
+    // A transfer Circle has not put on chain yet has no transaction to open.
+    expect(sent).not.toHaveProperty("txUrl");
+  });
+
   it("pays as the actor, with nothing about the surface from the console, and tells the payee", async () => {
     mocks.approveAndPay.mockResolvedValueOnce({ status: "paid", txRef: "0xabc", note: "" });
 

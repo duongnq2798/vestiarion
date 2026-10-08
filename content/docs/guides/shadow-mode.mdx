@@ -33,7 +33,7 @@ If the supplier later gives you an Arc address of its own, enter it as you would
 
 When the agent decides to pay a bill now, nothing is sent: the payment is held for your verdict. In Approvals, AP / AR and the console, its card asks **Do you agree with the agent?**, and says what agreeing pays: the amount in USDC, the payee and the payee's address.
 
-- **Agree and pay** asks you to confirm: "You agree with the agent, and it is paid in USDC on Arc testnet now", with that payment. It then goes through the same checks as **Approve and pay**, to the address the card showed: if the payee's address changed since, nothing is paid. Your agreement is recorded once the payment goes, or its transfer was tried. If the payment is refused, nothing is recorded: agree and pay again once it can be paid.
+- **Agree and pay** asks you to confirm: "You agree with the agent, and it is paid in USDC on Arc testnet now", with that payment. It then goes through the same checks as **Approve and pay**, to the address the card showed: if the payee's address changed since, nothing is paid. Your agreement is recorded once the payment goes, or its transfer was tried, and a confirmation says what was paid, to whom, with **View transaction**. If the payment is refused, nothing is recorded: agree and pay again once it can be paid.
 - **Disagree** asks **Why do you disagree?**, in at most 280 characters. Then choose what happens to the bill: **Decide it again later** returns it to the agent for its next cycle, and **Do not pay it** rejects it.
 
 If you may not pay it yourself, for example because you entered the bill and another person can approve payments, the card offers **Agree** alone and says why. Your agreement is recorded, and another person pays it in Approvals.

@@ -310,6 +310,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Save a recovery phrase for the passkey wallet, or skip it, first.", GO_LIVE_LIBRARY],
   ],
   "guides/first-payment": [
+    ["View transaction", "src/components/success-toast.ts"],
     ["Money you owe", "src/components/intake/InvoiceIntake.tsx"],
     ["USYC reserve", "src/lib/next-step.ts"],
     ["The agent decides it again on its own once cash comes in: USDC added to the operating wallet, or brought back from the reserve.", "src/lib/next-step.ts"],
@@ -894,6 +895,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Give your verdict", "src/lib/agent-activity.ts"],
     ["Unfinished decision", "src/components/ApprovalCard.tsx"],
     ["Get started in shadow mode", "src/lib/getting-started.ts"],
+    ["View transaction", "src/components/success-toast.ts"],
     ["This decision waits for a verdict in shadow mode. Agree or disagree with it in Approvals first.", "src/lib/agent/approvals.ts"],
     ["Someone disagreed with this decision in shadow mode, so it is not paid. Return it to the agent or reject it.", "src/lib/agent/approvals.ts"],
     ["Currency", "src/components/intake/InvoiceIntake.tsx"],

@@ -58,6 +58,17 @@ describe("giveVerdictAction", () => {
     expect(commands.approvePayable).toHaveBeenCalledWith({ userId: "u1", surface: { kind: "console" } }, { invoiceId: "inv-1", shownAddress: "0xA11CE", forVerdict: true });
   });
 
+  it("passes on the transaction of the payment it agreed to, for its confirmation to link", async () => {
+    commands.approvePayable.mockResolvedValue({ ok: true, message: "Paid 13.50 USDC to Design Studio on Arc testnet.", txUrl: "https://testnet.arcscan.app/tx/0xab" });
+    giveVerdictMock.mockImplementation(async (_input, actions) => ({ given: { verdict: "agree", reason: null }, already: false, recorded: true, after: await actions.approve("inv-1") }));
+    expect(await giveVerdictAction("northstar", { entrySeq: 41, verdict: "agree", then: "pay" })).toEqual({
+      ok: true,
+      message: "You agreed with the agent. Paid 13.50 USDC to Design Studio on Arc testnet.",
+      given: { verdict: "agree", reason: null },
+      txUrl: "https://testnet.arcscan.app/tx/0xab",
+    });
+  });
+
   it("says nothing was paid or recorded, and why, when the payment is refused", async () => {
     commands.approvePayable.mockResolvedValue({ ok: false, message: "Someone else must approve paying it." });
     giveVerdictMock.mockImplementation(async (_input, actions) => ({ given: { verdict: "agree", reason: null }, already: false, recorded: false, after: await actions.approve("inv-1") }));
