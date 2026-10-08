@@ -17,6 +17,8 @@ export interface PaysForCard {
   checks: string[];
   /** The guide, and the heading in it, that says how the agent decides it. */
   href: string;
+  /** What of it Arc mainnet does not have yet, as Go live's "On Arc mainnet" lists it. */
+  notOnMainnet?: string;
 }
 
 export const PAYS_FOR: PaysForCard[] = [
@@ -54,6 +56,7 @@ export const PAYS_FOR: PaysForCard[] = [
     body: "A vendor who wants USDC on Base, Arbitrum or Ethereum Sepolia is paid from Arc through CCTP, or from a Circle Gateway balance when that costs less.",
     checks: ["Fee weighed", "Held above 10% of the bill"],
     href: "/docs/guides/first-payment#pay-a-payee-on-another-chain",
+    notOnMainnet: "Not on Arc mainnet yet: on Arc testnet.",
   },
   {
     key: "eurc",
@@ -61,6 +64,7 @@ export const PAYS_FOR: PaysForCard[] = [
     body: "A bill in EURC is paid in EURC. When the wallet is short of it, the agent can swap USDC for it through Circle, within a 3% cost cap.",
     checks: ["USDC value within the limit", "Swap cost cap"],
     href: "/docs/guides/first-payment#invoices-in-eurc",
+    notOnMainnet: "The swap is not on Arc mainnet yet.",
   },
 ];
 
@@ -180,7 +184,7 @@ export function WhatItPays() {
             Bills, contractors, bounties. One agent, the same checks.
           </h2>
           <p className="mt-4 text-pretty font-serif text-lg leading-relaxed text-ink-2 sm:text-xl">
-            Each payment passes screening, the payee&apos;s limit, a confirmed address and your spending limit before money moves on Arc testnet, and each
+            Each payment passes screening, the payee&apos;s limit, a confirmed address and your spending limit before money moves on Arc, and each
             decision is signed into the ledger.
           </p>
         </div>
@@ -192,6 +196,7 @@ export function WhatItPays() {
               </div>
               <h3 className="mt-4 text-base font-semibold text-ink">{card.title}</h3>
               <p className="mt-1.5 text-sm leading-relaxed text-ink-2">{card.body}</p>
+              {card.notOnMainnet && <p className="mt-1.5 text-xs font-medium text-held">{card.notOnMainnet}</p>}
               <ul aria-label="Checked before it is paid" className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
                 {card.checks.map((check) => (
                   <li key={check} className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-ink-3">

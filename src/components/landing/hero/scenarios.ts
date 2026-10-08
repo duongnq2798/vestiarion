@@ -39,7 +39,7 @@ export const SCENARIOS: readonly ReplayScenario[] = [
       { rule: "counterparty.high_risk", passed: true },
       { rule: "counterparty.payment_limit", passed: true, note: "4,200 within the 10,000 USDC limit" },
     ],
-    outcome: { tone: "proof", verdict: "Paid", seal: "Signed · Ed25519 · Hash-linked ·", detail: "Settled on Arc testnet" },
+    outcome: { tone: "proof", verdict: "Paid", seal: "Signed · Ed25519 · Hash-linked ·", detail: "Settled on Arc" },
     hash: "7b1e04c9a8f2d6135e9b0c47aa21f8d3e6c05b9127f4ad83c1e6b20f9d45c21e",
   },
   {

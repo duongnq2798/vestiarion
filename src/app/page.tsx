@@ -25,11 +25,11 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Vestiarion — Verifiable Treasury Agent on Arc",
-  description: "A treasury agent that screens counterparties, pays obligations, applies code-level guardrails, and signs every decision into an auditable chain on Arc testnet.",
+  description: "A treasury agent that screens counterparties, pays obligations, applies code-level guardrails, and signs every decision into an auditable chain on Arc.",
   alternates: { canonical: "/" },
   openGraph: {
     title: "Vestiarion — Verifiable Treasury Agent on Arc",
-    description: "See the live console, measured Arc testnet outcomes, and signed decision ledger behind an autonomous business treasury.",
+    description: "See the live console, measured outcomes on Arc, and the signed decision ledger behind an autonomous business treasury.",
     url: "/",
     type: "website",
     siteName: "Vestiarion",
@@ -73,7 +73,7 @@ export default async function LandingPage() {
   // The platform's config, outside any organization's scope: a boolean only, never the pair (R4).
   const hostedAvailable = hostedWalletsAvailable(currentConfig());
   const provenance: ProvenanceLeg[] = [
-    { label: "Payments", detail: "Arc testnet", live: modes.mode === "live" },
+    { label: "Payments", detail: "Arc mainnet and testnet", live: modes.mode === "live" },
     { label: "Yield", detail: "USYC reserve", live: modes.earnMode === "live" },
     { label: "Screening", detail: currentScreeningMode === "live" ? "OpenSanctions" : "bundled list", live: currentScreeningMode === "live" },
   ];

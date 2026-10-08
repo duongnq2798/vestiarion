@@ -126,11 +126,11 @@ export function HowItWorks() {
               sample={
                 <p className="flex flex-wrap items-center gap-2 font-mono text-xs text-ground/75">
                   <span className="rounded-md border border-proof-line/50 px-1.5 py-0.5 font-semibold uppercase tracking-[0.12em] text-proof-line">confirmed</span>
-                  payment intent · Arc testnet
+                  payment intent · Arc
                 </p>
               }
             >
-              An allowed payment goes to Circle on Arc testnet. A refused or held one stops at the boundary, and its reason is kept.
+              An allowed payment goes to Circle on Arc. A refused or held one stops at the boundary, and its reason is kept.
             </Layer>
           </ol>
         </Reveal>

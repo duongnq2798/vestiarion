@@ -15,20 +15,16 @@ const COPY = /Arc testnet|testnet USDC|Circle(?:'|&apos;)s faucet|faucet\.circle
 const PROFILE = "src/lib/network.ts";
 
 const ALLOWED: Record<string, number> = {
-  // The platform's own pages, which describe it as it runs in production (C5): the social preview, the landing page and
-  // its sections, the footer of the landing page and the compact footer's default for platform pages (C6), the docs
-  // site's navigation, the network picker that names both networks, and /open, which counts each network apart.
-  "src/app/_og/SocialPreview.tsx": 1,
-  "src/app/page.tsx": 3,
-  "src/components/landing/Credentials.tsx": 1,
+  // The platform's own pages, which name Arc for what both networks share and Arc testnet only for what is Arc
+  // testnet's (Arc mainnet open to everyone, 2026-10-08): the landing's hero, call to action and grid (shadow mode, a
+  // wallet in one click, Circle's faucet, what Arc mainnet does not have yet), its measurement note on testnet rows,
+  // the docs site's navigation (shadow mode, Arc testnet beside Arc mainnet), the network picker that names both
+  // networks, and /open, which counts each network apart.
   "src/components/landing/FinalCta.tsx": 4,
-  "src/components/landing/Hero.tsx": 5,
-  "src/components/landing/HowItWorks.tsx": 2,
+  "src/components/landing/Hero.tsx": 4,
   "src/components/landing/LiveProof.tsx": 1,
   "src/components/landing/WhatItPays.tsx": 2,
-  "src/components/landing/hero/scenarios.ts": 1,
-  "src/components/vx/SiteChrome.tsx": 2,
-  "src/lib/docs/nav.ts": 5,
+  "src/lib/docs/nav.ts": 2,
   "src/components/CreateWorkspaceForm.tsx": 1,
   "src/app/open/page.tsx": 4,
   // Terms and privacy: the partner rewrites them before a deployment switches Arc mainnet on (C5).

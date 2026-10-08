@@ -21,10 +21,10 @@ const finalCta = (hostedAvailable: boolean) => text(renderToStaticMarkup(<FinalC
 const DISCLAIMERS = [/no real money/i, /no real funds/i, /not real money/i, /fictional/i, /simulated money/i];
 
 describe("the landing hero", () => {
-  it("with the hosted pair: an Arc testnet wallet in one click, funded from Circle's faucet", () => {
+  it("with the hosted pair: an Arc testnet wallet in one click, funded from Circle's faucet, or a wallet you hold on Arc mainnet", () => {
     const words = hero(true);
     expect(words).toContain(
-      "Email sign-in, a workspace of your own, and an Arc testnet wallet in one click. Fund it with USDC from Circle's faucet, and the agent pays from it."
+      "Email sign-in and a workspace of your own. On Arc testnet, a wallet in one click and USDC from Circle's faucet; on Arc mainnet, the agent pays from a wallet you hold."
     );
     expect(words).toContain("Try it on your bills");
   });
@@ -32,8 +32,9 @@ describe("the landing hero", () => {
   it("speaks to the owner whose bills it pays, and leads into shadow mode (landing owner hero L1)", () => {
     const words = hero(true);
     expect(words).toContain("The agent pays your bills. Evidence remains.");
-    expect(words).toContain("Keep paying your bills the way you do, and let the agent decide each one beside you.");
-    expect(words).toContain("Agree, and it is paid in USDC on Arc testnet; disagree, and nothing moves.");
+    expect(words).toContain("An agent for your bills · Live on Arc mainnet");
+    expect(words).toContain("Try it beside how you pay today: the agent decides each bill, and you agree or disagree, on Arc testnet.");
+    expect(words).toContain("Once you trust it, it pays your real bills in USDC on Arc mainnet, within the spending limits you set.");
     expect(words).toContain("Every decision, refusals included, is signed into a chain anyone can verify.");
     const markup = renderToStaticMarkup(<TooltipProvider><Hero provenance={[]} head={[]} hostedAvailable /></TooltipProvider>);
     expect(markup).toMatch(/<a [^>]*href="\/docs\/guides\/shadow-mode"[^>]*>How shadow mode works/);
@@ -41,7 +42,7 @@ describe("the landing hero", () => {
 
   it("without it: a workspace of your own, with Circle connected from Settings", () => {
     const words = hero(false);
-    expect(words).toContain("Email sign-in, then a workspace of your own. Connect your Circle account from Settings to pay on Arc testnet.");
+    expect(words).toContain("Email sign-in, then a workspace of your own. Connect your Circle account from Settings to pay on Arc testnet or Arc mainnet.");
     expect(words).toContain("Open a workspace");
     expect(words).not.toContain("one click");
   });
@@ -68,8 +69,8 @@ describe("the landing page's final call to action", () => {
   it("with the hosted pair: a wallet one click away in Settings, and the agent at work", () => {
     const words = finalCta(true);
     expect(words).toContain("Open a workspace. Put the agent to work on Arc.");
-    expect(words).toContain("Add an Arc testnet wallet in one click from Settings");
-    expect(words).toContain("USDC from Circle's faucet");
+    expect(words).toContain("Try it on Arc testnet with a wallet added in one click from Settings and USDC from Circle's faucet");
+    expect(words).toContain("open a workspace on Arc mainnet and the agent pays your invoices and contractors in real USDC, from a wallet you hold.");
     expect(words).toContain("Open a workspace");
   });
 
