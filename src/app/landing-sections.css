@@ -2,3 +2,12 @@
  * The landing page's other sections: live proof, credentials, claims and the
  * closing call to action.
  */
+
+/* The "Build on it" terminal's caret blinks while it types. Under reduced motion there is no typing, so no caret. */
+.terminal-caret {
+  animation: terminal-caret 1s steps(2, start) infinite;
+}
+
+@keyframes terminal-caret {
+  to { visibility: hidden; }
+}

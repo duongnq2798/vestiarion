@@ -282,7 +282,11 @@ export function SiteFooter({ compact = false, networkLabel = "Arc" }: { compact?
             </nav>
           ))}
         </div>
-        <div className="mt-10 flex flex-col gap-3 border-t border-line pt-6 font-mono text-xs text-ink-3 sm:flex-row sm:items-center sm:justify-between">
+        {/* The name, set across the footer as the page's last image (landing motion M3): decoration, the logo above already names it. */}
+        <p aria-hidden className="mt-12 select-none whitespace-nowrap text-center text-[min(15vw,10.5rem)] font-semibold leading-[0.8] tracking-[-0.055em] text-ink/[0.06]">
+          VESTIARION
+        </p>
+        <div className="mt-6 flex flex-col gap-3 border-t border-line pt-6 font-mono text-xs text-ink-3 sm:flex-row sm:items-center sm:justify-between">
           <p>
             {COPYRIGHT} ·{" "}
             <FooterAnchor href={LICENSE_URL} className="underline decoration-line-strong underline-offset-4 transition-colors duration-150 ease-standard hover:text-agent">

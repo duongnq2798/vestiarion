@@ -92,10 +92,10 @@ receipt, which makes the motion mean something.
   (create an invoice; the typed client; adding the MCP server; `/bounty 25` on a pull request) typed into a terminal,
   then its real response shape, with a **Replay** control and a link to its guide. Reduced motion: the finished snippet,
   no typing.
-- **One strip under the hero**: Built on Arc and Circle, works with Slack, Telegram, GitHub and npm, as a slow marquee
-  (paused on hover and focus; static row under reduce).
+- **No marquee.** Ruling while building M3: "Built on, and works with" stays a row of five, because each entry's line
+  and link (see the payments, read the guide) would be lost in a marquee.
 - **Claims, once**: "Four claims you can check" folds into "Claims with receipts" as its first row, so the page has one
-  claims section.
+  claims section, and the four claims sit two by two, each card with its receipt, instead of one per screen.
 - **The footer's wordmark**: VESTIARION set very large across the footer, as the page's last image.
 
 ## Order

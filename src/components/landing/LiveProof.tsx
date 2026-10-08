@@ -10,6 +10,7 @@ import { Hash } from "@/components/vx/Primitives";
 import { utcMinute } from "@/lib/copy";
 import { ARC_MAINNET, ARC_TESTNET, type NetworkProfile } from "@/lib/network";
 import type { OpenNumbers } from "@/lib/platform/open-numbers";
+import { CountUp } from "./CountUp";
 import { latestOwnPaymentUrl } from "./provenance";
 
 /** Both networks' all-time open numbers; either is null when it could not be read. */
@@ -184,7 +185,9 @@ function Figure({ label, value, children }: { label: string; value: string; chil
     <div className="flex min-w-0 flex-col bg-surface px-5 py-5 sm:px-6">
       <dt className="order-2 mt-2.5 text-sm font-semibold text-ink">{label}</dt>
       {/* Kept to one line: three figures share half the page's width beside the other network from lg up. */}
-      <dd className="order-1 whitespace-nowrap font-mono text-3xl font-semibold leading-none tracking-[-0.04em] text-ink tabular-nums lg:text-[1.75rem]">{value}</dd>
+      <dd className="order-1 whitespace-nowrap font-mono text-3xl font-semibold leading-none tracking-[-0.04em] text-ink tabular-nums lg:text-[1.75rem]">
+        <CountUp value={value} />
+      </dd>
       <dd className="order-3 mt-1 text-sm leading-6 text-ink-2">{children}</dd>
     </div>
   );

@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { Receipt, Seal, Verdict } from "@/components/landing/evidence/Evidence";
-import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { Reveal } from "@/components/ui/Reveal";
+import { CredentialChecks } from "./Credentials";
 
 const claims = [
   {
@@ -90,7 +90,11 @@ function ClaimArtifact({ index }: { index: number }) {
   );
 }
 
-export function Claims() {
+/**
+ * One claims section (docs/superpowers/specs/2026-10-08-landing-motion-design.md M3): the four claims a reader can
+ * check at their source, then the four design claims, each with the receipt that shows it, two by two.
+ */
+export function Claims({ screeningMode }: { screeningMode: "live" | "simulate" }) {
   return (
     <section id="proof" aria-labelledby="proof-title" className="scroll-mt-16 bg-ground">
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
@@ -103,19 +107,21 @@ export function Claims() {
           </div>
         </Reveal>
 
-        <div className="mt-10 border-b border-line sm:mt-14">
+        <Reveal className="mt-10 sm:mt-12">
+          <CredentialChecks screeningMode={screeningMode} />
+        </Reveal>
+
+        <div className="mt-5 grid gap-5 lg:grid-cols-2">
           {claims.map((claim, index) => (
-            <Reveal key={claim.title} delay={index * 60}>
-              <article className="grid items-center gap-8 border-t border-line py-10 sm:py-14 lg:grid-cols-2 lg:gap-16">
-                <div className={cn("max-w-xl", index % 2 === 0 ? "lg:order-1" : "lg:order-2")}>
-                  <p className="font-mono text-xs font-semibold text-ink-3">0{index + 1}</p>
-                  <h3 className="mt-3 font-serif text-3xl leading-[1.08] text-ink sm:text-4xl">{claim.title}</h3>
-                  <p className="mt-4 text-[0.9375rem] leading-relaxed text-ink-2">{claim.body}</p>
-                  <Link href={claim.href} className="mt-5 inline-block text-[0.9375rem] font-semibold text-agent underline-offset-4 hover:underline">
-                    {claim.evidence} →
-                  </Link>
-                </div>
-                <div className={cn("flex min-w-0 lg:justify-center", index % 2 === 0 ? "lg:order-2" : "lg:order-1")}>
+            <Reveal key={claim.title} delay={(index % 2) * 60} className="min-w-0">
+              <article className="flex h-full flex-col rounded-2xl border border-line bg-surface/70 p-6 sm:p-8">
+                <p className="font-mono text-xs font-semibold text-ink-3">0{index + 1}</p>
+                <h3 className="mt-3 font-serif text-2xl leading-[1.12] text-ink sm:text-3xl">{claim.title}</h3>
+                <p className="mt-3 text-[0.9375rem] leading-relaxed text-ink-2">{claim.body}</p>
+                <Link href={claim.href} className="mt-4 inline-block self-start text-[0.9375rem] font-semibold text-agent underline-offset-4 hover:underline">
+                  {claim.evidence} →
+                </Link>
+                <div className="mt-auto flex min-w-0 pt-7">
                   <ClaimArtifact index={index} />
                 </div>
               </article>
