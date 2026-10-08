@@ -1,4 +1,4 @@
-import { toHex } from "viem";
+import { decodeFunctionResult, encodeFunctionData, erc20Abi, toHex } from "viem";
 import type { NetworkProfile } from "./network";
 
 /**
@@ -62,9 +62,19 @@ export async function connectWallet(provider: Eip1193Provider): Promise<string> 
 
 const errorCode = (error: unknown) => (typeof error === "object" && error !== null ? (error as { code?: unknown }).code : undefined);
 
-/** Switches the wallet to the workspace's network, adding it first when the wallet does not know it (EIP-3085, 3326). */
-export async function ensureNetwork(provider: Eip1193Provider, network: Pick<NetworkProfile, "chainId" | "label" | "rpcUrl" | "explorer">): Promise<void> {
-  const chainId = `0x${network.chainId.toString(16)}`;
+/** A chain a wallet is switched to: its id, its name, an RPC and an explorer the wallet is taught when it does not know it. */
+export interface WalletChain {
+  chainId: number;
+  label: string;
+  rpcUrl: string;
+  explorer: string;
+  /** The chain's own currency, its gas: "ETH" on Base, "USDC" on Arc. */
+  nativeSymbol: string;
+}
+
+/** Switches the wallet to a chain, adding it first when the wallet does not know it (EIP-3085, 3326). */
+export async function switchChain(provider: Eip1193Provider, chain: WalletChain): Promise<void> {
+  const chainId = `0x${chain.chainId.toString(16)}`;
   try {
     await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId }] });
     return;
@@ -76,15 +86,57 @@ export async function ensureNetwork(provider: Eip1193Provider, network: Pick<Net
     params: [
       {
         chainId,
-        chainName: network.label,
-        // Arc's native currency is USDC, in 18 decimals.
-        nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
-        rpcUrls: [network.rpcUrl],
-        blockExplorerUrls: [network.explorer],
+        chainName: chain.label,
+        // EVM chains count their own currency in 18 decimals, Arc's USDC included.
+        nativeCurrency: { name: chain.nativeSymbol, symbol: chain.nativeSymbol, decimals: 18 },
+        rpcUrls: [chain.rpcUrl],
+        blockExplorerUrls: [chain.explorer],
       },
     ],
   });
   await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId }] });
+}
+
+/** Switches the wallet to the workspace's network, whose own currency is USDC. */
+export async function ensureNetwork(provider: Eip1193Provider, network: Pick<NetworkProfile, "chainId" | "label" | "rpcUrl" | "explorer">): Promise<void> {
+  await switchChain(provider, { chainId: network.chainId, label: network.label, rpcUrl: network.rpcUrl, explorer: network.explorer, nativeSymbol: "USDC" });
+}
+
+/** A view call on the chain the wallet is on, through the wallet's own RPC. */
+async function call(provider: Eip1193Provider, to: string, data: string): Promise<`0x${string}`> {
+  const answer = await provider.request({ method: "eth_call", params: [{ to, data }, "latest"] });
+  if (typeof answer !== "string" || !answer.startsWith("0x")) throw new Error("The wallet could not read the chain.");
+  return answer as `0x${string}`;
+}
+
+/** An ERC-20 balance, in the token's base units, on the chain the wallet is on. */
+export async function erc20Balance(provider: Eip1193Provider, token: string, owner: string): Promise<bigint> {
+  const data = encodeFunctionData({ abi: erc20Abi, functionName: "balanceOf", args: [owner as `0x${string}`] });
+  return decodeFunctionResult({ abi: erc20Abi, functionName: "balanceOf", data: await call(provider, token, data) });
+}
+
+/** What `spender` may move of `owner`'s ERC-20, in base units, on the chain the wallet is on. */
+export async function erc20Allowance(provider: Eip1193Provider, token: string, owner: string, spender: string): Promise<bigint> {
+  const data = encodeFunctionData({ abi: erc20Abi, functionName: "allowance", args: [owner as `0x${string}`, spender as `0x${string}`] });
+  return decodeFunctionResult({ abi: erc20Abi, functionName: "allowance", data: await call(provider, token, data) });
+}
+
+/**
+ * A transaction's receipt, asked of the wallet's chain up to `tries` times, `waitMs` apart: "success" or "reverted" once
+ * the chain has it, "pending" when it has not shown it by the last try.
+ */
+export async function waitForReceipt(
+  provider: Eip1193Provider,
+  hash: string,
+  options: { tries: number; waitMs: number; sleep?: (ms: number) => Promise<void> }
+): Promise<"success" | "reverted" | "pending"> {
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  for (let attempt = 0; attempt < options.tries; attempt += 1) {
+    if (attempt > 0) await sleep(options.waitMs);
+    const receipt = (await provider.request({ method: "eth_getTransactionReceipt", params: [hash] })) as { status?: unknown } | null;
+    if (receipt && typeof receipt.status === "string") return BigInt(receipt.status) === BigInt(1) ? "success" : "reverted";
+  }
+  return "pending";
 }
 
 /** The wallet's signature of the proof message (EIP-191 personal_sign), the message given in hex. */

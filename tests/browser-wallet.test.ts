@@ -1,6 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import { hexToString } from "viem";
-import { connectWallet, discoverWallets, ensureNetwork, sendPrepared, signProof, walletErrorMessage, type Eip1193Provider } from "@/lib/browser-wallet";
+import {
+  connectWallet,
+  discoverWallets,
+  ensureNetwork,
+  erc20Allowance,
+  erc20Balance,
+  sendPrepared,
+  signProof,
+  switchChain,
+  waitForReceipt,
+  walletErrorMessage,
+  type Eip1193Provider,
+} from "@/lib/browser-wallet";
 import { ARC_MAINNET } from "@/lib/network";
 
 /**
@@ -120,5 +132,63 @@ describe("the owner's wallet", () => {
   it("says plainly when the person declined in their wallet", () => {
     expect(walletErrorMessage(Object.assign(new Error("User rejected the request."), { code: 4001 }))).toBe("You declined it in your wallet.");
     expect(walletErrorMessage(new Error("insufficient funds for gas"))).toBe("Your wallet did not send it: insufficient funds for gas");
+  });
+});
+
+describe("the wallet on another chain (add USDC B3, B4)", () => {
+  const BASE = { chainId: 8453, label: "Base", rpcUrl: "https://mainnet.base.org", explorer: "https://basescan.org", nativeSymbol: "ETH" };
+
+  it("switches to a chain, teaching the wallet its own currency when it does not know it", async () => {
+    let added = false;
+    const unknown = provider((request) => {
+      if (request.method === "wallet_addEthereumChain") {
+        added = true;
+        return null;
+      }
+      if (!added) throw Object.assign(new Error("Unrecognized chain ID"), { code: 4902 });
+      return null;
+    });
+    await switchChain(unknown.wallet, BASE);
+    expect(unknown.requests[0]).toEqual({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x2105" }] });
+    expect(unknown.requests[1].params).toEqual([
+      { chainId: "0x2105", chainName: "Base", nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 }, rpcUrls: ["https://mainnet.base.org"], blockExplorerUrls: ["https://basescan.org"] },
+    ]);
+    expect(unknown.requests).toHaveLength(3);
+  });
+
+  it("passes on any refusal other than an unknown chain", async () => {
+    const declined = provider(() => {
+      throw Object.assign(new Error("User rejected the request."), { code: 4001 });
+    });
+    await expect(switchChain(declined.wallet, BASE)).rejects.toMatchObject({ code: 4001 });
+    expect(declined.requests).toHaveLength(1);
+  });
+
+  it("reads an ERC-20 balance and allowance with eth_call on the chain it is on", async () => {
+    const owner = "0x" + "b0".repeat(20);
+    const spender = "0x" + "28".repeat(20);
+    const { wallet, requests } = provider((request) => {
+      const [call] = request.params as [{ to: string; data: string }];
+      return call.data.startsWith("0x70a08231") ? `0x${(25_500_000).toString(16).padStart(64, "0")}` : `0x${"0".repeat(64)}`;
+    });
+    expect(await erc20Balance(wallet, "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", owner)).toBe(BigInt(25_500_000));
+    expect(await erc20Allowance(wallet, "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", owner, spender)).toBe(BigInt(0));
+    expect(requests[0]).toEqual({ method: "eth_call", params: [{ to: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", data: `0x70a08231${"0".repeat(24)}${"b0".repeat(20)}` }, "latest"] });
+    expect((requests[1].params as [{ data: string }])[0].data).toBe(`0xdd62ed3e${"0".repeat(24)}${"b0".repeat(20)}${"0".repeat(24)}${"28".repeat(20)}`);
+  });
+
+  it("waits for a receipt: confirmed, refused, or not yet after its tries", async () => {
+    const sleep = vi.fn(async () => {});
+    let asked = 0;
+    const later = provider(() => (++asked < 3 ? null : { status: "0x1" }));
+    expect(await waitForReceipt(later.wallet, "0xabc", { tries: 5, waitMs: 2000, sleep })).toBe("success");
+    expect(later.requests).toEqual([
+      { method: "eth_getTransactionReceipt", params: ["0xabc"] },
+      { method: "eth_getTransactionReceipt", params: ["0xabc"] },
+      { method: "eth_getTransactionReceipt", params: ["0xabc"] },
+    ]);
+    expect(sleep).toHaveBeenCalledWith(2000);
+    expect(await waitForReceipt(provider(() => ({ status: "0x0" })).wallet, "0xabc", { tries: 5, waitMs: 1, sleep })).toBe("reverted");
+    expect(await waitForReceipt(provider(() => null).wallet, "0xabc", { tries: 3, waitMs: 1, sleep })).toBe("pending");
   });
 });

@@ -13,6 +13,7 @@ import {
   recordRecoveryAction,
   skipRecoveryAction,
 } from "@/app/actions/wallet-treasury";
+import AddUsdcFromChain from "@/components/treasury/AddUsdcFromChain";
 import { PhoneHandoff } from "@/components/treasury/PhoneHandoff";
 import { WalletTreasurySummary } from "@/components/treasury/WalletTreasurySteps";
 import { Badge } from "@/components/ui/Badge";
@@ -228,7 +229,7 @@ function AgentStep({ orgSlug }: { orgSlug: string }) {
  * Below what setup needs (K5; final review I2, I5): the wallet's address is in the summary above, and the page reads its
  * USDC again by itself. Only the setup's own amount is asked for until the recovery phrase is saved.
  */
-function FundStep({ status, label }: { status: WalletTreasuryStatus; label: string }) {
+function FundStep({ status, label, network }: { status: WalletTreasuryStatus; label: string; network: Network }) {
   const router = useRouter();
   useEffect(() => {
     const refresh = () => {
@@ -256,6 +257,8 @@ function FundStep({ status, label }: { status: WalletTreasuryStatus; label: stri
           Refresh
         </Button>
       </div>
+      {/* Few people hold USDC on Arc yet: CCTP brings it from where they do (add USDC B6). */}
+      {status.wallet && <AddUsdcFromChain network={network} recipient={status.wallet} recipientLabel="Your wallet" />}
     </>
   );
 }
@@ -538,7 +541,7 @@ export default function PasskeyTreasurySteps({ orgSlug, status, network }: { org
   let body: ReactNode = null;
   if (view === "agent") body = <AgentStep orgSlug={orgSlug} />;
   else if (view === "pending") body = <PendingSetupStep orgSlug={orgSlug} status={status} label={label} />;
-  else if (view === "fund") body = <FundStep status={status} label={label} />;
+  else if (view === "fund") body = <FundStep status={status} label={label} network={network} />;
   else if (view === "setup") body = <SetupStep orgSlug={orgSlug} status={status} label={label} />;
   else if (view === "gas") body = <GasStep orgSlug={orgSlug} status={status} label={label} />;
   else if (view === "recovery") body = <RecoveryStep orgSlug={orgSlug} status={status} label={label} />;

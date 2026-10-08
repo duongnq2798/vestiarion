@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import { chainOn, homeChain } from "../payee-chains";
 import { FeatureOffError, type NetworkProfile } from "../network";
+import { CCTP_FORWARD_HOOK, FAST_FINALITY, fastForwardedRoute, forwardedMintFrom, toBytes32, ZERO_BYTES32 } from "./cctp-forward";
+
+export { CCTP_FORWARD_HOOK, FAST_FINALITY, toBytes32 } from "./cctp-forward";
 
 /**
  * CCTP V2 from Arc testnet, with Circle's Forwarding Service
@@ -11,15 +14,10 @@ import { FeatureOffError, type NetworkProfile } from "../network";
  * (R1). Iris, Circle's attestation API, quotes the fee and reports the mint.
  */
 
-/** `depositForBurnWithHook`'s hook data asking the Forwarding Service to submit the mint ("cctp-forward"). */
-export const CCTP_FORWARD_HOOK = "0x636374702d666f72776172640000000000000000000000000000000000000000";
-/** Fast transfer: attested at "confirmed" finality, in seconds rather than minutes. */
-export const FAST_FINALITY = 1000;
 /** What a fast forwarded transfer takes end to end, as Circle documents it (8–20 s), rounded up. */
 export const EXPECTED_BRIDGE_SECONDS = 30;
 
 const IRIS_DEADLINE_MS = 10_000;
-const ZERO_BYTES32 = `0x${"0".repeat(64)}`;
 
 /**
  * CCTP on a network (network threading P2, P5): its domain, Iris and the TokenMessenger a burn goes through. A network
@@ -72,16 +70,10 @@ export async function bridgeFee(network: NetworkProfile, chain: string, amount: 
     if (error instanceof BridgeFeeError) throw error;
     throw new BridgeFeeError(`Iris did not answer for the fee to ${target.label}`);
   }
-  const fast = Array.isArray(rows)
-    ? (rows as Array<{ finalityThreshold?: number; minimumFee?: number; forwardFee?: { high?: number } }>).find((row) => row.finalityThreshold === FAST_FINALITY)
-    : undefined;
-  const forward = fast?.forwardFee?.high;
-  if (!fast || typeof forward !== "number" || !Number.isFinite(forward) || forward < 0) {
-    throw new BridgeFeeError(`Iris has no fast forwarded route to ${target.label}`);
-  }
-  const bps = typeof fast.minimumFee === "number" && fast.minimumFee > 0 ? fast.minimumFee : 0;
-  const protocolUnits = (toUnits(amount) * BigInt(Math.round(bps * 100))) / BigInt(1_000_000);
-  const maxFeeUnits = BigInt(Math.round(forward)) + protocolUnits;
+  const route = fastForwardedRoute(rows);
+  if (!route) throw new BridgeFeeError(`Iris has no fast forwarded route to ${target.label}`);
+  const protocolUnits = (toUnits(amount) * BigInt(Math.round(route.bps * 100))) / BigInt(1_000_000);
+  const maxFeeUnits = route.forwardUnits + protocolUnits;
   return { feeUsdc: fromUnits(maxFeeUnits), maxFeeUnits, domain };
 }
 
@@ -97,12 +89,6 @@ export function bridgeStepKey(attemptKey: string, step: "approve" | "burn"): str
   hash[8] = (hash[8] & 0x3f) | 0x80;
   const hex = hash.subarray(0, 16).toString("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
-}
-
-/** An EVM address as the 32 bytes CCTP takes for a recipient. */
-export function toBytes32(address: string): string {
-  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) throw new Error(`${address} is not an address`);
-  return `0x${"0".repeat(24)}${address.slice(2).toLowerCase()}`;
 }
 
 export interface ContractCall {
@@ -144,16 +130,5 @@ export function burnCalls(input: { amount: number; maxFeeUnits: bigint; domain: 
  */
 export async function forwardedMint(network: NetworkProfile, burnTxHash: string, options: { fetch?: typeof fetch } = {}): Promise<{ mintTxHash: string } | null> {
   const cctp = cctpOf(network);
-  try {
-    const response = await (options.fetch ?? fetch)(`${cctp.iris}/v2/messages/${cctp.domain}?transactionHash=${burnTxHash}`, {
-      signal: AbortSignal.timeout(IRIS_DEADLINE_MS),
-      cache: "no-store",
-    });
-    if (!response.ok) return null;
-    const body = (await response.json()) as { messages?: Array<{ forwardTxHash?: unknown }> };
-    const mint = body.messages?.find((message) => typeof message.forwardTxHash === "string" && message.forwardTxHash.length > 0)?.forwardTxHash;
-    return typeof mint === "string" ? { mintTxHash: mint } : null;
-  } catch {
-    return null;
-  }
+  return forwardedMintFrom(cctp.iris, cctp.domain, burnTxHash, options);
 }

@@ -35,6 +35,30 @@ export interface PayeeChainEntry {
   readonly nativeUsdc?: string;
 }
 
+/**
+ * A chain USDC can be brought from into a network (add USDC from another chain B1): a person's browser wallet burns it there
+ * through CCTP V2 with the forwarding hook, and Circle's Forwarding Service mints it on Arc. Circle's own values, checked
+ * against App Kit's chain table in tests/inbound-usdc.test.ts.
+ */
+export interface InboundSource {
+  /** App Kit's name for the chain: "Base", "Base_Sepolia". */
+  readonly id: string;
+  readonly label: string;
+  readonly chainId: number;
+  /** CCTP's domain for the chain. */
+  readonly domain: number;
+  /** USDC's ERC-20 contract on the chain. */
+  readonly usdc: string;
+  /** CCTP V2's TokenMessenger on the chain, which the burn goes through. */
+  readonly tokenMessenger: string;
+  /** An RPC a wallet is taught when it does not know the chain. */
+  readonly rpcUrl: string;
+  /** A transaction on the chain's explorer, without its hash. */
+  readonly explorerTx: string;
+  /** The chain's own currency, which its gas is paid in: "ETH", "POL", "AVAX". */
+  readonly nativeSymbol: string;
+}
+
 export interface NetworkProfile {
   id: Network;
   /** How copy names it: "Arc testnet", "Arc mainnet". */
@@ -57,6 +81,11 @@ export interface NetworkProfile {
    * where CCTP payouts do not run.
    */
   cctp: { domain: number; iris: string; tokenMessenger: string } | null;
+  /**
+   * Where USDC can be brought from into this network (add USDC from another chain B1): CCTP's domain for it, Iris, and the
+   * chains a browser wallet burns on; null where it cannot. Separate from `cctp`, which is for payouts from it.
+   */
+  inbound: { domain: number; iris: string; sources: readonly [InboundSource, ...InboundSource[]] } | null;
   /** Gateway's API, Circle's x402 facilitator, and Gateway's wallet and minter contracts; null where Gateway does not run. */
   gateway: { api: string; facilitator: string; wallet: string; minter: string } | null;
   /** The real reserve's token, Teller and entitlements; null where USYC is not offered. */
@@ -162,6 +191,18 @@ export const ARC_TESTNET = {
   ],
   // The TokenMessenger, and Gateway's wallet and minter, are the same contracts on every testnet CCTP and Gateway serve.
   cctp: { domain: 26, iris: "https://iris-api-sandbox.circle.com", tokenMessenger: "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA" },
+  inbound: {
+    domain: 26,
+    iris: "https://iris-api-sandbox.circle.com",
+    sources: [
+      { id: "Base_Sepolia", label: "Base Sepolia", chainId: 84532, domain: 6, usdc: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", tokenMessenger: "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA", rpcUrl: "https://sepolia.base.org", explorerTx: "https://sepolia.basescan.org/tx/", nativeSymbol: "ETH" },
+      { id: "Ethereum_Sepolia", label: "Ethereum Sepolia", chainId: 11155111, domain: 0, usdc: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", tokenMessenger: "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA", rpcUrl: "https://ethereum-sepolia-rpc.publicnode.com", explorerTx: "https://sepolia.etherscan.io/tx/", nativeSymbol: "ETH" },
+      { id: "Arbitrum_Sepolia", label: "Arbitrum Sepolia", chainId: 421614, domain: 3, usdc: "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d", tokenMessenger: "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA", rpcUrl: "https://sepolia-rollup.arbitrum.io/rpc", explorerTx: "https://sepolia.arbiscan.io/tx/", nativeSymbol: "ETH" },
+      { id: "Optimism_Sepolia", label: "Optimism Sepolia", chainId: 11155420, domain: 2, usdc: "0x5fd84259d66Cd46123540766Be93DFE6D43130D7", tokenMessenger: "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA", rpcUrl: "https://sepolia.optimism.io", explorerTx: "https://sepolia-optimistic.etherscan.io/tx/", nativeSymbol: "ETH" },
+      { id: "Polygon_Amoy_Testnet", label: "Polygon Amoy", chainId: 80002, domain: 7, usdc: "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582", tokenMessenger: "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA", rpcUrl: "https://polygon-amoy-bor-rpc.publicnode.com", explorerTx: "https://amoy.polygonscan.com/tx/", nativeSymbol: "POL" },
+      { id: "Avalanche_Fuji", label: "Avalanche Fuji", chainId: 43113, domain: 1, usdc: "0x5425890298aed601595a70AB815c96711a31Bc65", tokenMessenger: "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA", rpcUrl: "https://api.avax-test.network/ext/bc/C/rpc", explorerTx: "https://subnets-test.avax.network/c-chain/tx/", nativeSymbol: "AVAX" },
+    ],
+  },
   gateway: {
     api: "https://gateway-api-testnet.circle.com/v1",
     facilitator: "https://gateway-api-testnet.circle.com",
@@ -212,6 +253,22 @@ export const ARC_MAINNET = {
     },
   ],
   cctp: null,
+  // Arc's CCTP domain is 26 on mainnet too; Iris quoted a fast forwarded route into it from each source on 2026-10-08.
+  inbound: {
+    domain: 26,
+    iris: "https://iris-api.circle.com",
+    sources: [
+      { id: "Base", label: "Base", chainId: 8453, domain: 6, usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", tokenMessenger: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d", rpcUrl: "https://mainnet.base.org", explorerTx: "https://basescan.org/tx/", nativeSymbol: "ETH" },
+      { id: "Ethereum", label: "Ethereum", chainId: 1, domain: 0, usdc: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", tokenMessenger: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d", rpcUrl: "https://ethereum-rpc.publicnode.com", explorerTx: "https://etherscan.io/tx/", nativeSymbol: "ETH" },
+      { id: "Arbitrum", label: "Arbitrum", chainId: 42161, domain: 3, usdc: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", tokenMessenger: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d", rpcUrl: "https://arb1.arbitrum.io/rpc", explorerTx: "https://arbiscan.io/tx/", nativeSymbol: "ETH" },
+      { id: "Optimism", label: "Optimism", chainId: 10, domain: 2, usdc: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", tokenMessenger: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d", rpcUrl: "https://mainnet.optimism.io", explorerTx: "https://optimistic.etherscan.io/tx/", nativeSymbol: "ETH" },
+      { id: "Polygon", label: "Polygon", chainId: 137, domain: 7, usdc: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", tokenMessenger: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d", rpcUrl: "https://polygon.publicnode.com", explorerTx: "https://polygonscan.com/tx/", nativeSymbol: "POL" },
+      { id: "Avalanche", label: "Avalanche", chainId: 43114, domain: 1, usdc: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", tokenMessenger: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d", rpcUrl: "https://api.avax.network/ext/bc/C/rpc", explorerTx: "https://subnets.avax.network/c-chain/tx/", nativeSymbol: "AVAX" },
+      { id: "Linea", label: "Linea", chainId: 59144, domain: 11, usdc: "0x176211869cA2b568f2A7D4EE941E073a821EE1ff", tokenMessenger: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d", rpcUrl: "https://rpc.linea.build", explorerTx: "https://lineascan.build/tx/", nativeSymbol: "ETH" },
+      { id: "Unichain", label: "Unichain", chainId: 130, domain: 10, usdc: "0x078D782b760474a361dDA0AF3839290b0EF57AD6", tokenMessenger: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d", rpcUrl: "https://mainnet.unichain.org", explorerTx: "https://unichain.blockscout.com/tx/", nativeSymbol: "ETH" },
+      { id: "World_Chain", label: "World Chain", chainId: 480, domain: 14, usdc: "0x79A02482A880bCE3F13e09Da970dC34db4CD24d1", tokenMessenger: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d", rpcUrl: "https://worldchain-mainnet.g.alchemy.com/public", explorerTx: "https://worldscan.org/tx/", nativeSymbol: "ETH" },
+    ],
+  },
   gateway: null,
   usyc: null,
   stablecoinServiceChain: null,
