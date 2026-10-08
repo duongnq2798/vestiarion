@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Claims } from "@/components/landing/Claims";
+import { BuildOnIt } from "@/components/landing/BuildOnIt";
 import { BuiltWith } from "@/components/landing/BuiltWith";
-import { Credentials } from "@/components/landing/Credentials";
 import { FinalCta } from "@/components/landing/FinalCta";
 import { Hero } from "@/components/landing/Hero";
 import { HowItWorks } from "@/components/landing/HowItWorks";
@@ -112,11 +112,11 @@ export default async function LandingPage() {
         <Hero provenance={provenance} head={head} hostedAvailable={hostedAvailable} />
         <LatestDecision decision={latest} />
         <WhatItPays />
-        <Credentials screeningMode={currentScreeningMode} />
         <BuiltWith />
         <LiveProof numbers={testnet.then((testnetNumbers) => ({ mainnet: mainnetNumbers, testnet: testnetNumbers }))} />
         <HowItWorks />
-        <Claims />
+        <BuildOnIt />
+        <Claims screeningMode={currentScreeningMode} />
         <FinalCta hostedAvailable={hostedAvailable} />
       </main>
 
