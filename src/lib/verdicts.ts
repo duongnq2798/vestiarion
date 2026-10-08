@@ -3,7 +3,7 @@ import { currentOrgId } from "./context";
 import { db, unwrap, type OrgDb } from "./dal";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
 import { isReclaimable } from "./agent/claim-age";
-import { heldForVerdict } from "./next-step";
+import { awaitsVerdict } from "./next-step";
 import { readShadowMode, type ShadowMode } from "./shadow-mode";
 import type { VerdictFacts } from "./verdict-view";
 
@@ -111,7 +111,7 @@ async function stillHeldFor(entry: DecisionEntry, invoiceId: string): Promise<bo
   )[0];
   if (!invoice || (invoice.status !== "held" && !isReclaimable(invoice.status, invoice.reviewed_at ?? null, Date.now()))) return false;
   const newest = await newestDecision(invoiceId);
-  return newest !== null && Number(newest.seq) === Number(entry.seq) && heldForVerdict(newest.detail);
+  return newest !== null && Number(newest.seq) === Number(entry.seq) && awaitsVerdict(newest.detail);
 }
 
 async function verdictOn(entrySeq: number): Promise<GivenVerdict | null> {
@@ -138,7 +138,7 @@ export async function verdictGate(
   // A claim in progress, or one that never finished, stays a hold waiting for a verdict (review minor 3).
   if (held !== "held" && held !== "processing") return null;
   const newest = await newestDecision(invoiceId);
-  if (!newest || !heldForVerdict(newest.detail)) return null;
+  if (!newest || !awaitsVerdict(newest.detail)) return null;
   const shadow = await readShadowMode(db());
   if (!shadow || Date.parse(newest.ts) < Date.parse(shadow.startedAt)) return null;
   const given = await verdictOn(Number(newest.seq));
@@ -170,7 +170,7 @@ export async function awaitingVerdicts(invoiceIds: readonly string[]): Promise<S
     const id = row.detail?.invoiceId;
     if (typeof id === "string" && !newest.has(id)) newest.set(id, { seq: Number(row.seq), ts: row.ts, detail: row.detail });
   }
-  const held = [...newest].filter(([, row]) => heldForVerdict(row.detail) && Date.parse(row.ts) >= Date.parse(shadow.startedAt));
+  const held = [...newest].filter(([, row]) => awaitsVerdict(row.detail) && Date.parse(row.ts) >= Date.parse(shadow.startedAt));
   if (held.length === 0) return waiting;
   const given = new Set(
     (unwrap(await db().from("decision_verdicts").select("entry_seq").in("entry_seq", held.map(([, row]) => row.seq))) as Array<{ entry_seq: number | string }>).map(

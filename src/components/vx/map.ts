@@ -3,7 +3,7 @@ import { invoiceDiscount } from "@/lib/agent/payment-timing";
 import { utcDay } from "@/lib/copy";
 import { explainMilestone, explainPayable, explainTreasury, presentReasoning } from "@/lib/reasoning-copy";
 import { recordedFacts } from "@/lib/added-details";
-import { heldForCash, heldForVerdict } from "@/lib/next-step";
+import { awaitsVerdict, heldForCash } from "@/lib/next-step";
 import { verdictView, type VerdictFacts } from "@/lib/verdict-view";
 import { invoiceTrail } from "@/lib/decision-trail";
 import type { LedgerEntry } from "@/lib/ledger";
@@ -344,7 +344,7 @@ function decideInvoice(
     // says nothing of it (shadow mode review I1).
     ...(invoice.status === "held" && heldForCash(decided?.detail) ? { heldForCash: true } : {}),
     // Held in shadow mode for a person to agree, which no rule did (shadow mode S2).
-    ...(invoice.status === "held" && heldForVerdict(decided?.detail) ? { heldForVerdict: true } : {}),
+    ...(invoice.status === "held" && awaitsVerdict(decided?.detail) ? { heldForVerdict: true } : {}),
     decisionMode: stringValue(entry?.detail.decisionMode),
     // A Gateway payout has no Arc transaction of its own: its hash is the mint, linked below on the payee's
     // chain. No mint is ever linked to Arc's explorer (Gateway review I4).

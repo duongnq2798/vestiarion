@@ -1879,6 +1879,8 @@ async function decideApPayable(
       timingRule,
       ...(requestedPayOn ? { requestedPayOn } : {}),
       terms,
+      // Decided in shadow mode: a payment code held is settled through a person's verdict too (shadow mode S4).
+      ...(ctx.shadow ? { shadow: true } : {}),
       // The day an earlier cycle scheduled this invoice for, now decided again.
       ...(previouslyScheduledFor ? { scheduledFor: previouslyScheduledFor } : {}),
       // Decided again because a fresh quote cleared what held it: the reopen, its trigger and the decision it follows (F6).

@@ -1895,6 +1895,22 @@ describe("listWaitingPayables", () => {
     expect(cash?.verdictEntry).toBeUndefined();
   });
 
+  it("lists a payment a check in code held in shadow mode as waiting for a verdict", async () => {
+    const rows = [invoiceRow({ id: "code-held", status: "held" })];
+    const { run } = approvalsFake({
+      invoice: (r) => (r.params.get("id") ? undefined : { body: rows }),
+      ledgerTargets: [
+        {
+          seq: 44, id: "e-code-held", ts: "2026-10-07T08:00:00Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "",
+          detail: { invoiceId: "code-held", shadow: true, decision: { action: "pay" }, observed: { riskLevel: "clear" }, guardrailBlocked: true, guardrailRule: "counterparty.new_payee", execution: { resultingStatus: "held" } },
+          body_hash: "00", signature: "00", prev_hash: null, hash: "00", signing_key_id: null,
+        },
+      ],
+    });
+    const [listed] = await run(() => listWaitingPayables());
+    expect(listed).toMatchObject({ heldForVerdict: true, verdictEntry: { seq: 44 }, guardrailRule: "counterparty.new_payee" });
+  });
+
   it("still waits for a verdict when an Agree and pay did not finish, but not while someone is paying it (review minor 3)", async () => {
     const decided = (invoiceId: string, seq: number) => ({
       seq, id: `e-${invoiceId}`, ts: "2026-10-07T08:00:00Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "",
@@ -2898,6 +2914,16 @@ describe("a payable held for a person's verdict (shadow mode S4)", () => {
       await expect(run(() => settle({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toMatchObject({ code: "verdict_needed" });
       expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
     }
+  });
+
+  it("settles a payment a check in code held in shadow mode through a verdict too", async () => {
+    const codeHeld = { ...shadowHold, detail: { invoiceId: INVOICE_ID, shadow: true, guardrailBlocked: true, guardrailRule: "counterparty.new_payee", decision: { action: "pay" }, execution: { resultingStatus: "held" } } };
+    const { run } = approvalsFake({ decision: codeHeld, shadow: on });
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toMatchObject({ code: "verdict_needed" });
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    paid();
+    const agreed = approvalsFake({ decision: codeHeld, shadow: on });
+    await expect(agreed.run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID, forVerdict: true }))).resolves.toMatchObject({ status: "paid" });
   });
 
   it("leaves alone a payable whose newest decision was not held for a verdict", async () => {

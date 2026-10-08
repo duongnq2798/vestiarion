@@ -23,7 +23,7 @@ import { isSoleApprover } from "./sole-approver";
 import { newPayeeCheck } from "../new-payee";
 import { firstPaymentCheck, loadNewPayeeFacts } from "../new-payee-facts";
 import { addedSince, latestDecision, recordedFacts, type AddedDetails } from "../added-details";
-import { heldForCash, heldForVerdict } from "../next-step";
+import { awaitsVerdict, heldForCash } from "../next-step";
 import { verdictGate } from "../verdicts";
 import { isReclaimable } from "./claim-age";
 import type { Provenance } from "../provenance";
@@ -601,7 +601,7 @@ export async function listWaitingPayables(
       ...(row.status === "held" && heldForCash(decision?.detail) ? { heldForCash: true } : {}),
       // Held in shadow mode for a person to agree, and the decision a verdict is about (shadow mode S2, S3).
       // An Agree and pay that did not finish leaves it still waiting for a verdict, once its claim may be retaken (review minor 3).
-      ...((row.status === "held" || isReclaimable(row.status, row.reviewed_at, now)) && decision && heldForVerdict(decision.detail)
+      ...((row.status === "held" || isReclaimable(row.status, row.reviewed_at, now)) && decision && awaitsVerdict(decision.detail)
         ? { heldForVerdict: true, verdictEntry: { seq: Number(decision.seq), ts: decision.ts } }
         : {}),
       ...(balances && fromReserveUsdc !== null ? { fromReserve: { operatingUsdc: balances.operating, amountUsdc: fromReserveUsdc } } : {}),

@@ -42,6 +42,20 @@ export function heldForVerdict(detail: Record<string, unknown> | null | undefine
 }
 
 /**
+ * Whether a person settles this AP decision through a verdict (shadow mode S4): shadow mode held the agent's payment,
+ * or the agent decided to pay in shadow mode (`shadow` on its entry) and a check in code held it, such as a first
+ * payment to an address only one person stands behind. Either way the agent decided to pay, and a person agrees or
+ * disagrees before anything moves, so every payment made in shadow mode carries a verdict.
+ */
+export function awaitsVerdict(detail: Record<string, unknown> | null | undefined): boolean {
+  if (heldForVerdict(detail)) return true;
+  if (!detail || detail.shadow !== true || detail.guardrailBlocked !== true) return false;
+  const decision = detail.decision as Record<string, unknown> | null | undefined;
+  const execution = detail.execution as Record<string, unknown> | null | undefined;
+  return decision?.action === "pay" && execution?.resultingStatus === "held";
+}
+
+/**
  * The guardrail rule for an incomplete three-way match (three-way match design M3). Unlike the other rules, what removes
  * its cause can be added where the payable waits: the details it lacks, with Add details.
  */
