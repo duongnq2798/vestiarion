@@ -13,6 +13,7 @@ import {
   type PreparedActionResult,
   type RecordActionResult,
 } from "@/app/actions/wallet-treasury";
+import AddUsdcFromChain from "@/components/treasury/AddUsdcFromChain";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -348,6 +349,8 @@ export default function WalletTreasurySteps({ orgSlug, status, network }: { orgS
         <WalletPicker wallets={wallet.wallets} picked={wallet.picked} onPick={wallet.setPicked} />
       )}
       <FormMessage tone={note?.tone ?? "neutral"}>{note?.text}</FormMessage>
+      {/* Each step's gas is USDC on the network: CCTP brings it from where the wallet holds it (add USDC B6). */}
+      {status.wallet && status.step !== "ready" && <AddUsdcFromChain network={network} recipient={status.wallet} recipientLabel="Your wallet" />}
     </Card>
   );
 }

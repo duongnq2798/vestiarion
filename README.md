@@ -168,7 +168,7 @@ Each workspace lives on one network, chosen when it is created, and never moves.
 | | Arc testnet | Arc mainnet |
 | --- | --- | --- |
 | **Who can use it** | Anyone who signs in | Only people the deployment opens it to (`MAINNET_ALLOWLIST`) |
-| **Money** | Testnet USDC and EURC from Circle's faucet | Real USDC |
+| **Money** | Testnet USDC and EURC from Circle's faucet | Real USDC, sent on Arc or brought from another chain through CCTP |
 | **Treasury** | Hosted wallet, or your own Circle account | Your own wallet or passkey wallet, or your own Circle account |
 | **Spending-limit contract** | Opt-in, deployed through Circle's Smart Contract Platform | Deployed by the owner's wallet on the own-wallet path |
 | **Also available** | USYC reserve, milestone escrow, EURC swaps, CCTP and Gateway payouts to other chains, x402, shadow mode | USDC on Arc only; features Arc mainnet lacks are not shown |
@@ -243,6 +243,7 @@ run in production, with its ledger entries and transactions.
 | **Gas Station** | Paying the agent wallet's gas on Arc testnet |
 | **USYC** | The yield-bearing reserve, through its Teller (Arc testnet) |
 | **CCTP V2** and **Gateway** | Paying payees on other chains; Gateway also settles x402 purchases (Arc testnet) |
+| **CCTP V2 Forwarding Service** | Adding USDC to a workspace's wallet on Arc from Base, Ethereum and other chains, minted by Circle so the wallet needs no gas (both networks) |
 | **Stablecoin Service** | EURC quotes and USDC→EURC swaps (Arc testnet) |
 | **Notifications** | Settlement and incoming-transfer webhooks, recorded within seconds |
 

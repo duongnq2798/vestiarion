@@ -32,6 +32,7 @@ import { FUNDING_WATCH_INTERVAL_MS, shouldReadBalanceAgain } from "@/lib/funding
 import { MAINNET_OFF } from "@/lib/mainnet";
 import { networkOf, networkProfile, type Network } from "@/lib/network";
 import type { GoLiveStatus } from "@/lib/platform/go-live";
+import AddUsdcFromChain from "@/components/treasury/AddUsdcFromChain";
 import PasskeyTreasurySteps from "@/components/treasury/PasskeyTreasurySteps";
 import TreasuryWalletControls from "@/components/treasury/TreasuryWalletControls";
 import { WalletTreasuryChoice } from "@/components/treasury/WalletTreasuryChoice";
@@ -467,6 +468,23 @@ function BalanceLine({ orgSlug, sampleBalance }: { orgSlug: string; sampleBalanc
   );
 }
 
+/**
+ * The wallet USDC is added to from another chain (add USDC B6): the owner's wallet on path C, the operating wallet on paths
+ * A and B; none until its address is known.
+ */
+function fundingTarget(status: GoLiveStatus): { network: Network; recipient: string; label: string } | null {
+  if (status.walletTreasury) {
+    return status.walletTreasury.wallet ? { network: status.network ?? "arc-mainnet", recipient: status.walletTreasury.wallet, label: "Your wallet" } : null;
+  }
+  const operating = status.wallets.find((wallet) => wallet.kind === "operating");
+  return operating ? { network: networkOf(status.network), recipient: operating.address, label: "the operating wallet" } : null;
+}
+
+function AddUsdc({ status }: { status: GoLiveStatus }) {
+  const target = fundingTarget(status);
+  return target ? <AddUsdcFromChain network={target.network} recipient={target.recipient} recipientLabel={target.label} /> : null;
+}
+
 function GoLiveStep({ orgSlug, status, sampleBalance }: { orgSlug: string; status: GoLiveStatus; sampleBalance?: number }) {
   const { state, pending, formProps } = useActionForm(goLiveAction, INITIAL, { toastOnSuccess: true });
   const operating = status.wallets.find((wallet) => wallet.kind === "operating");
@@ -493,6 +511,7 @@ function GoLiveStep({ orgSlug, status, sampleBalance }: { orgSlug: string; statu
           <BalanceLine orgSlug={orgSlug} sampleBalance={sampleBalance} />
         </div>
       )}
+      <AddUsdc status={status} />
       <form id="go-live-form" {...formProps} className="grid gap-3 border-t border-line pt-4">
         <input type="hidden" name="orgSlug" value={orgSlug} />
         <p className="text-sm leading-relaxed text-ink-2">Going live cannot be undone from here; pausing the agent stops it paying.</p>
@@ -528,6 +547,8 @@ function LiveDetails({ orgSlug, status, canAdminister }: { orgSlug: string; stat
       {status.walletTreasury && <WalletTreasurySummary status={status.walletTreasury} network={status.network ?? "arc-mainnet"} />}
       {/* The treasury's own wallet changes its contract's figures, or stops and resumes the agent (treasury wallet controls C1). */}
       {status.walletTreasury && canAdminister && <TreasuryWalletControls orgSlug={orgSlug} status={status.walletTreasury} network={status.network ?? "arc-mainnet"} />}
+      {/* "Your wallet" is the owner's: a member who cannot administer the workspace is not asked to fund it (review M5). */}
+      {canAdminister && <AddUsdc status={status} />}
       <div className="space-y-1 text-sm text-ink-2">
         {status.liveSince && <p>Live since {utcMinute(status.liveSince)}</p>}
         <p>

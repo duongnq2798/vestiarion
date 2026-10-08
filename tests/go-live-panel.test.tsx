@@ -34,6 +34,15 @@ vi.mock("@/components/treasury/PhoneHandoff", async () => {
   return { PhoneHandoff: ({ kind }: { kind: string }) => createElement("i", { "data-phone-handoff": kind }) };
 });
 
+// Adding USDC from another chain runs in the browser; here it marks where the panel places it, for which wallet (add USDC B6).
+vi.mock("@/components/treasury/AddUsdcFromChain", async () => {
+  const { createElement } = await import("react");
+  return {
+    default: ({ network, recipient, recipientLabel }: { network: string; recipient: string; recipientLabel: string }) =>
+      createElement("i", { "data-add-usdc": recipient, "data-add-usdc-network": network, "data-add-usdc-label": recipientLabel }),
+  };
+});
+
 vi.mock("@/app/actions/go-live", () => ({
   chooseHostedWalletAction: vi.fn(),
   connectCircleAction: vi.fn(),
@@ -167,6 +176,14 @@ describe("GoLivePanel, for an owner", () => {
     expect(text(panel("go_live"))).toContain("USDC on chain: not read yet");
     const sample = html(<GoLivePanel orgSlug="acme" status={STEPS.go_live} canAdminister sampleBalance={20} />);
     expect(text(sample)).toContain("USDC on chain: 20.00 USDC");
+  });
+
+  it("go_live and live: offer to add USDC from another chain to the operating wallet (add USDC B6)", () => {
+    for (const step of ["go_live", "live"] as const) {
+      const markup = panel(step);
+      expect(markup, step).toContain(`data-add-usdc="${OPERATING}" data-add-usdc-network="arc-testnet" data-add-usdc-label="the operating wallet"`);
+    }
+    expect(panel("wallets")).not.toContain("data-add-usdc");
   });
 
   it("go_live: the confirmation states the three consequences of spec §2", () => {
@@ -461,6 +478,11 @@ describe("GoLivePanel, on a workspace on Arc mainnet (mainnet go-live M8)", () =
     expect(words).toContain("Not live · nothing moves until an owner takes it live");
   });
 
+  it("go_live: offers to bring the USDC from another chain to the operating wallet, on Arc mainnet (add USDC B6)", () => {
+    const markup = panel(main({ step: "go_live", connected: true, wallets: MAIN_WALLET }));
+    expect(markup).toContain(`data-add-usdc="${OPERATING}" data-add-usdc-network="arc-mainnet" data-add-usdc-label="the operating wallet"`);
+  });
+
   it("go_live: the confirmation says real USDC moves", () => {
     expect(text(html(<>{goLiveConsequences("arc-mainnet")}</>))).toContain("Real USDC moves when the agent pays.");
     expect(text(html(<>{goLiveConsequences("arc-testnet")}</>))).toBe(text(html(<>{GO_LIVE_CONSEQUENCES}</>)));
@@ -645,6 +667,20 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
     expect(words).not.toContain("Replace Circle credentials");
   });
 
+  it("offers to add USDC from another chain to the owner's wallet through setup, Go live and once live (add USDC B6)", () => {
+    const mark = `data-add-usdc="${WALLET}" data-add-usdc-network="arc-mainnet" data-add-usdc-label="Your wallet"`;
+    for (const step of ["agent", "deploy", "approve", "gas"] as const) {
+      expect(panel(status({ step: "wallets", network: "arc-mainnet", host: "external", walletTreasury: setup({ step }) })), step).toContain(mark);
+    }
+    const ready = setup({ step: "ready", contract: CONTRACT, dailyUsdc: 20, weeklyUsdc: 60, spendableUsdc: 12.5, agentGasUsdc: 0.5 });
+    expect(panel(status({ step: "go_live", network: "arc-mainnet", host: "external", walletTreasury: ready }))).toContain(mark);
+    expect(panel(status({ step: "live", network: "arc-mainnet", host: "external", walletTreasury: ready, liveSince: "2026-10-07T09:12:00Z" }))).toContain(mark);
+    const halfway = setup({ step: "wallet", wallet: null, agent: null, walletUsdc: null, agentGasUsdc: null });
+    expect(panel(status({ step: "wallets", network: "arc-mainnet", host: "external", walletTreasuryAvailable: true, walletTreasury: halfway }))).not.toContain("data-add-usdc");
+    // A member who cannot administer the workspace is not asked to fund what the page calls Your wallet (review M5).
+    expect(panel(status({ step: "live", network: "arc-mainnet", host: "external", walletTreasury: ready, liveSince: "2026-10-07T09:12:00Z" }), false)).not.toContain("data-add-usdc");
+  });
+
   it("offers to connect the wallet again when the workspace chose its own wallet but holds no address for it", () => {
     // A choice half-written (the host saved, the wallet's address not) must not leave a card with nothing to press.
     const halfway = setup({ step: "wallet", wallet: null, agent: null, walletUsdc: null, agentGasUsdc: null });
@@ -671,6 +707,14 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
       // Only the setup until the recovery phrase is saved (final review I5).
       expect(words).toContain("Add only this for now");
       expect(words).not.toContain("Set up with your passkey");
+    });
+
+    it("offers to bring that USDC from another chain, to the passkey wallet, once (add USDC B6)", () => {
+      const markup = panel(passkey({ step: "deploy", walletUsdc: 0.2 }));
+      expect(markup.split("data-add-usdc=").length - 1).toBe(1);
+      expect(markup).toContain(`data-add-usdc="${WALLET}" data-add-usdc-network="arc-mainnet" data-add-usdc-label="Your wallet"`);
+      // What setup needs arrives less Circle's fee (review M9).
+      expect(text(markup)).toContain("From another chain, send a little more than this: Circle's fee comes out of what you send.");
     });
 
     it("sets up with one confirmation once the USDC is there, saying what it does, from the workspace's own figures (final review I4)", () => {
