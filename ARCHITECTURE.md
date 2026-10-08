@@ -514,10 +514,12 @@ which RLS scopes to the organization, so one hosted workspace cannot spend anoth
 
 The hosted pair has one other use: Vestiarion's test USDC float for shadow mode (`SHADOW_FLOAT_WALLET_ID`,
 `src/lib/test-usdc.ts`, `docs/superpowers/specs/2026-10-08-shadow-test-usdc-design.md`), a wallet of the platform's own
-in the hosted entity, in the wallet set `vestiarion-shadow-float` that `npm run shadow-float -- setup` makes. It is read
-through `currentPlatformConfig()`, the configuration the workspace's scope was built from, and never put into a
-workspace's configuration, which still carries only `hostedAvailable`. It only sends from that one wallet to a shadow
-workspace's operating wallet on Arc testnet, whichever account the workspace itself pays from.
+in the hosted entity, in the wallet set `vestiarion-shadow-float` that `npm run shadow-float -- setup` makes. Only the
+float's wallet id and the pair leave the platform's configuration, through `currentShadowFloat()` (`src/lib/context.ts`),
+which reads them from the configuration the workspace's scope was built from, guarded as `currentOrgConfig()` is; they
+are never put into a workspace's configuration, which still carries only `hostedAvailable`. The float only sends from
+that one wallet to a shadow workspace's operating wallet on Arc testnet, whichever account the workspace itself pays
+from.
 
 **Paying from the owner's own wallet** (`docs/superpowers/specs/2026-10-07-wallet-treasury-design.md`) is a
 third `wallet_host`, `'external'`, on Arc mainnet only (the profile's `walletTreasury`). The treasury is an EOA
@@ -662,13 +664,19 @@ disagrees with every decision.
 - **Test USDC from Vestiarion's float** (`src/lib/test-usdc.ts`, rules in `src/lib/test-usdc-rules.ts`). A bill is
   paid at its real amount and the faucet gives 20 USDC every two hours, so the console offers an owner or admin the
   shortfall **Safe to spend today** shows, from one float wallet in the hosted entity (`SHADOW_FLOAT_WALLET_ID`, filled
-  from TestMint or the faucet outside the code). `addTestUsdc` works the amount out again with the operating wallet's
-  USDC read from the chain: at least 1 USDC, within `SHADOW_FLOAT_WEEKLY_LIMIT` (5,000) in any 7 days, counted from
-  the workspace's `test_usdc_added` entries, and within the float's USDC. Shadow mode, Arc testnet, a live workspace
-  and the platform's stop switch are checked before Circle is asked anything. The transfer's idempotency key is the
-  workspace's grant count, so two presses that read the same entries make one transfer. Each grant is a signed
-  `test_usdc_added` entry, written while it still settles, and raises a `test_usdc_added` cycle event. The receipts
-  stage never matches money from an address such an entry names as `from` to a receivable.
+  from TestMint or the faucet outside the code). Shadow mode, Arc testnet, a live workspace, the platform's stop switch
+  and a readable ledger signing key (`assertLedgerCanSign`) are checked before Circle is asked anything. Circle is the
+  record of what the float sent: `addTestUsdc` lists the float's transfers to the operating wallet, every page. One
+  still confirming refuses the press (`in_flight`); one that arrived but that no entry names (its request died before
+  the ledger was written) is recorded first from Circle's figures, `by: null`, `recovered: true`. The amount is worked
+  out again with the operating wallet's USDC read from the chain: at least 1 USDC, within `SHADOW_FLOAT_WEEKLY_LIMIT`
+  (5,000) of what Circle lists sent in any 7 days (failed transfers aside), and within the float's USDC. The transfer's
+  idempotency key is the number of transfers Circle listed plus one, so two presses that listed the same ones make one
+  transfer, and the second writes no entry: Circle answers with a transfer it listed, or the ledger names it already
+  when checked right before writing. The entry records the amount Circle's transaction reports, written while it still
+  settles, and refuses one naming another destination. Each raises a `test_usdc_added` cycle event. The receipts stage
+  never matches to a receivable money from an address such an entry names as `from`, nor from the float's own address
+  (`floatAddress`, read once per process, null when it cannot be read).
 - **What people see.** `verdictView` (`src/lib/verdict-view.ts`) gives each card the verdict on the agent's newest
   decision, given or to give, and `VerdictControl` offers it. The console's `ShadowModeSummary` shows how often people
   agreed (`readShadowSummary`).
