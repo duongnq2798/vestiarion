@@ -25,6 +25,7 @@ const ALLOWED: Record<string, number> = {
   "src/components/landing/Hero.tsx": 5,
   "src/components/landing/HowItWorks.tsx": 2,
   "src/components/landing/LiveProof.tsx": 1,
+  "src/components/landing/WhatItPays.tsx": 2,
   "src/components/landing/hero/scenarios.ts": 1,
   "src/components/vx/SiteChrome.tsx": 2,
   "src/lib/docs/nav.ts": 5,
