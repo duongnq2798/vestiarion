@@ -31,7 +31,7 @@ If the supplier later gives you an Arc address of its own, enter it as you would
 
 ## 4. Agree or disagree with each decision
 
-When the agent decides to pay a bill now, nothing is sent: the payment is held for your verdict. In Approvals, AP / AR and the console, its card asks **Do you agree with the agent?**, and says what agreeing pays: the amount in USDC, the payee and the payee's address.
+When the agent decides to pay a bill now, nothing is sent: the payment is held for your verdict. In Approvals, AP / AR and the console, its card asks **Do you agree with the agent?**, and says what agreeing pays: the amount in USDC, the payee and the payee's address. Its row in AP / AR says why it waits: "Shadow mode: it waits for a person to agree."
 
 The same holds when a check in code stopped the payment the agent decided, such as a first payment to an address only you stand behind, or one above the payee's limit. The card says why, and still asks for your verdict: **Agree and pay** pays it through the same checks as **Approve and pay**, and nothing else settles it until a verdict is given. So every payment made in shadow mode has a verdict behind it.
 
@@ -51,6 +51,8 @@ Each decision takes one verdict, and the card shows it once given. A second verd
 ## 5. See how often you agreed
 
 The console shows a **Shadow mode** section while shadow mode is on. It says how many of the agent's decisions you agreed with, out of the verdicts given, as a share. It also says how many decisions still wait for your verdict, with **See them in AP / AR** to give them.
+
+For a traction update, `npm run traction-digest -- <workspace> --since <day>` lists each decision with its verdict and the transaction that paid it. A payment a person made on a decision the agent did not make to pay, such as a bill it held, reads "Paid later by a person", so an agreed hold is never read as the agent's payment.
 
 Vestiarion's public numbers at [/open](https://www.vestiarion.xyz/open) count how often customers agreed with the agent in shadow mode, across every workspace, as a share. They never show a workspace's name, a bill or a verdict's reason.
 

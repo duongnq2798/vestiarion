@@ -92,6 +92,31 @@ describe("formatDigest", () => {
   });
 });
 
+describe("a payment a person made on a decision not to pay (2026-10-08)", () => {
+  it("is said to be paid later by a person, while a payment the agent decided keeps its Tx", () => {
+    const held = facts({
+      decisions: [
+        {
+          seq: 50,
+          ts: "2026-10-08T05:23:00Z",
+          action: "ap_hold",
+          payee: "Firm Studio",
+          reasoning: "Only 2 USDC is in the operating balance.",
+          amount: 4.2,
+          currency: "USDC",
+          bill: null,
+          verdict: { verdict: "agree", reason: null },
+          txHash: TX,
+        },
+      ],
+    });
+    const digest = formatDigest(held);
+    expect(digest).toContain(`Verdict: agreed. Paid later by a person: https://testnet.arcscan.app/tx/${TX}`);
+    expect(digest).not.toContain(" Tx: ");
+    expect(formatDigest(facts())).toContain(` Tx: https://testnet.arcscan.app/tx/${TX}`);
+  });
+});
+
 describe("asciiOnly", () => {
   it("keeps the letters of a Vietnamese or French name, and plain marks for typographic ones", () => {
     expect(asciiOnly("Điện lực – “Café” … ok · ₫")).toBe('Dien luc - "Cafe" ... ok - ');

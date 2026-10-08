@@ -1,4 +1,4 @@
-import { CASH_SHORTFALL, ruleInBrief, SHADOW_VERDICT } from "@/lib/next-step";
+import { CASH_SHORTFALL, ruleInBrief } from "@/lib/next-step";
 import type { Decision } from "./types";
 
 /** One fact the agent checked before deciding a payable, in a few words, and whether it stood in the payment's way. */
@@ -47,7 +47,9 @@ const WHY_LENGTH = 160;
  */
 export function stoppedWhy(decision: Decision): string | null {
   if (decision.domain !== "ap") return null;
-  const rule = decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : decision.heldForVerdict ? SHADOW_VERDICT : null);
+  // Shadow mode holds a payment that passed every check: no code stopped it, a person's verdict is awaited (2026-10-08).
+  if (decision.heldForVerdict && !decision.guardrail) return "Shadow mode: it waits for a person to agree.";
+  const rule = decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : null);
   const brief = rule ? ruleInBrief(rule) : null;
   // A rule with no words of its own reads as its name: the agent's reasoning says it better.
   if (brief && !brief.startsWith("rule ")) return `Code stopped it: ${brief}.`;

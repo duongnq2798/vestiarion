@@ -891,6 +891,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["pull_request_commented", GITHUB_COMMENTS],
   ],
   "guides/shadow-mode": [
+    ["Shadow mode: it waits for a person to agree.", "src/components/vx/decision-signals.ts"],
+    ["Paid later by a person", "src/lib/traction-digest.ts"],
     ["Shadow mode runs on Arc testnet. On Arc mainnet the agent pays your real bills.", SHADOW_LIBRARY],
     ["Settings", APP_NAV],
     ["Workspace", "src/app/o/[slug]/settings/page.tsx"],

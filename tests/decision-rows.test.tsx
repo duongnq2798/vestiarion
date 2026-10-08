@@ -231,6 +231,14 @@ describe("what the agent checked on a payable", () => {
     expect(stoppedWhy({ ...held, domain: "ar" })).toBeNull();
   });
 
+  it("says a payment held for a verdict in shadow mode waits for one, not that code stopped it (2026-10-08)", () => {
+    const shadowHeld = { ...DECISION, outcome: "held" as const, heldForVerdict: true };
+    expect(stoppedWhy(shadowHeld)).toBe("Shadow mode: it waits for a person to agree.");
+    // A payment the agent decided in shadow mode that code held still says code stopped it.
+    const codeHeld = { ...shadowHeld, guardrail: { rule: "bridge.fee_above_cap", attempted: 0.75 } };
+    expect(stoppedWhy(codeHeld)).toBe("Code stopped it: the payout fee is above 10% of the invoice.");
+  });
+
   it("says nothing for a receivable", () => {
     expect(payableSignals({ ...DECISION, domain: "ar", evidence: evidence("PO-1", "ok", true, "clear", "2.00 USDC", "neutral") })).toEqual([]);
   });
