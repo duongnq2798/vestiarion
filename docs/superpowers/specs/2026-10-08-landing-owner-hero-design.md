@@ -109,6 +109,15 @@ times (first payment, Get paid by a client). A caption says the illustrations us
 the steps, checks and rules are the agent's own, as the hero's replay does. A test holds every link to a guide and a
 heading that exist.
 
+## L5. The treasury's arch
+
+Vestiarion is named after the Byzantine treasury. The hero's decision receipt stands in that treasury's gate, drawn
+in the landing's own line and colour (`src/components/landing/TreasuryArch.tsx`): two columns of ledger entries, each
+naming the hash of the one below it, hold up a flat arch whose keystone carries the mark, over the line "Vestiarion · the
+treasury". The columns grow with the receipt, so a longer replay never breaks the drawing. The hashes and numbers on the
+stones are drawn, not read from a ledger. It is decoration only (`aria-hidden`), and shows from the `xl` breakpoint
+up: below it the hero has no room for the columns beside the receipt, and the receipt shows alone.
+
 ## Out of scope
 
 A customer story (only with a named business's consent) and a new illustration: later items.
