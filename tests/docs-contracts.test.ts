@@ -39,6 +39,12 @@ describe("Contracts on Arc testnet", () => {
     }
   });
 
+  it("links the spending limit contract deployed on Arc mainnet in both, on Arc mainnet's explorer", () => {
+    const mainnet = "0xd90cA89Fc318d0330Bb14eaeF78B72C3CA7E7fB6";
+    expect(PAGE).toContain(`[\`${mainnet}\`](${addressUrl("arc-mainnet", mainnet)})`);
+    expect(README).toContain(`[\`${mainnet}\`](${addressUrl("arc-mainnet", mainnet)})`);
+  });
+
   it("names the compiler the contracts are built with", () => {
     const settings = JSON.parse(readFileSync(path.join(ROOT, "contracts", "solc-settings.json"), "utf8")) as { evmVersion: string; optimizer: { enabled: boolean; runs: number } };
     for (const file of ["VestiarionEscrow.sol", "VestiarionSpendingLimit.sol"]) {
