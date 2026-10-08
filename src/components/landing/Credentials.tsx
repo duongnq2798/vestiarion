@@ -48,7 +48,7 @@ export function Credentials({ screeningMode }: { screeningMode: "live" | "simula
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4">
           <Credential
-            badge="Arc testnet"
+            badge="Arc"
             body="Circle Developer-Controlled Wallets route the live USDC payment path."
             href={`${REPOSITORY}/blob/main/src/lib/circle/liveProvider.ts`}
             label="Circle payment rail"

@@ -156,9 +156,10 @@ describe("the compact footer", () => {
     }
   });
 
-  it("keeps the copyright and the Arc testnet line", () => {
+  it("keeps the copyright, and names Arc for a platform page, which stands for both networks", () => {
     expect(text(markup)).toContain("© 2026 Vestiarion contributors · MIT License");
-    expect(text(markup)).toContain("Signed decisions on Arc testnet");
+    expect(text(markup)).toContain("Signed decisions on Arc");
+    expect(text(markup)).not.toContain("Arc testnet");
   });
 
   it("names a link's network on its page: Arc mainnet for a link there (mainnet copy C6)", () => {

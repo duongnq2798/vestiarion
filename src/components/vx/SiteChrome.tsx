@@ -232,7 +232,7 @@ const COPYRIGHT = "© 2026 Vestiarion contributors";
  * links, two across on a phone, four from `sm` and beside the wordmark from
  * `lg`. `compact` is one line and four links, for every other public page.
  */
-export function SiteFooter({ compact = false, networkLabel = "Arc testnet" }: { compact?: boolean; networkLabel?: string }) {
+export function SiteFooter({ compact = false, networkLabel = "Arc" }: { compact?: boolean; networkLabel?: string }) {
   if (compact) {
     return (
       <footer className="border-t border-line/80 px-4 py-6 font-mono text-xs text-ink-3">
@@ -290,7 +290,7 @@ export function SiteFooter({ compact = false, networkLabel = "Arc testnet" }: { 
             </FooterAnchor>
           </p>
           <div className="flex items-center justify-between gap-4 sm:justify-end">
-            <p className="min-w-0">Hash-chained decisions · Ed25519 signed · Arc testnet</p>
+            <p className="min-w-0">Hash-chained decisions · Ed25519 signed · Arc</p>
             <div className="flex shrink-0 items-center gap-1">
               <FooterAnchor href={GITHUB_URL} label="Vestiarion on GitHub" className={ICON_LINK}>
                 <GitHubMark className="size-5" />

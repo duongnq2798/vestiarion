@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/Button";
 /**
  * `hostedAvailable` is whether this deployment offers a hosted testnet wallet
  * (hosted wallets H8). With it, an Arc testnet wallet is one click away in
- * Settings; without it, an owner connects their own Circle account there.
+ * Settings; without it, an owner connects their own Circle account there. Arc
+ * mainnet, open on this deployment, pays from a wallet the owner holds.
  */
 export function FinalCta({ hostedAvailable }: { hostedAvailable: boolean }) {
   return (
@@ -18,8 +19,8 @@ export function FinalCta({ hostedAvailable }: { hostedAvailable: boolean }) {
             </h2>
             <p className="mt-5 max-w-2xl text-[0.9375rem] leading-relaxed text-on-agent/85 sm:text-base">
               {hostedAvailable
-                ? "Passwordless email sign-in, then a workspace of your own. Add an Arc testnet wallet in one click from Settings, fund it with USDC from Circle's faucet, and the agent pays your invoices and contractors from it."
-                : "Passwordless email sign-in, then a workspace of your own to run the agent in. Connect your Circle account from Settings when you are ready to pay on Arc testnet."}
+                ? "Passwordless email sign-in, then a workspace of your own. Try it on Arc testnet with a wallet added in one click from Settings and USDC from Circle's faucet, or open a workspace on Arc mainnet and the agent pays your invoices and contractors in real USDC, from a wallet you hold."
+                : "Passwordless email sign-in, then a workspace of your own to run the agent in. Connect your Circle account from Settings when you are ready to pay on Arc testnet or Arc mainnet."}
             </p>
           </div>
           <div className="flex flex-col items-stretch gap-3 sm:flex-row lg:flex-col">
@@ -33,7 +34,7 @@ export function FinalCta({ hostedAvailable }: { hostedAvailable: boolean }) {
         </div>
         <p className="mt-8 border-t border-on-agent/25 pt-4 font-mono text-xs leading-relaxed text-on-agent/75">
           {hostedAvailable
-            ? "First click → email sign-in → open a workspace → add an Arc testnet wallet in Settings → the agent pays, and every decision is signed."
+            ? "First click → email sign-in → open a workspace on Arc testnet or Arc mainnet → add its wallet in Settings → the agent pays, and every decision is signed."
             : "First click → email sign-in → open a workspace → inspect decisions, refusals and the chain verifier."}
         </p>
       </div>

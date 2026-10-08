@@ -51,14 +51,14 @@ const statusChips = [
  * The frame every social image shares: the paper ground, the agent-blue rule,
  * the mark and wordmark with a badge, and the footer line. `children` fills
  * the middle, `footer` names where the page lives, and `network` the line beside
- * it: the platform's card says Arc testnet; a link page's says only Arc
+ * it: the platform's card, and a link page's, say only Arc
  * (mainnet polish E1).
  */
 export function renderSocialImage({
   badge,
   footer,
   children,
-  network = "Arc testnet",
+  network = "Arc",
 }: {
   badge: string;
   footer: string;

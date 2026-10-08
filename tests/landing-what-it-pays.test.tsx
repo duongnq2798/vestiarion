@@ -52,6 +52,12 @@ describe("WhatItPays", () => {
     for (const card of PAYS_FOR) expect(markup).toContain(`aria-label="How it decides: ${card.title}"`);
   });
 
+  it("says which of it Arc mainnet does not have yet, as Go live says", () => {
+    expect(words).toContain("Not on Arc mainnet yet: on Arc testnet.");
+    expect(words).toContain("The swap is not on Arc mainnet yet.");
+    expect(PAYS_FOR.filter((card) => card.notOnMainnet).map((card) => card.key)).toEqual(["chains", "eurc"]);
+  });
+
   it("says the illustrations are examples, and never talks the product down", () => {
     expect(words).toContain("Illustrations with example payees and amounts. The steps, checks and rules are the agent's own.");
     for (const phrase of DISCLAIMERS) expect(words).not.toMatch(phrase);

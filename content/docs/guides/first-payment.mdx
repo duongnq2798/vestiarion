@@ -290,7 +290,7 @@ The limit above is checked in Vestiarion's code. Under its figures, the panel's 
 - **People's payments do not go through it.** **Approve and pay** and **Pay now** are transfers from the operating wallet, as before, outside the agent's limit.
 - **Changing the figures changes the contract first.** The new figures are saved once Circle confirms the change on Arc testnet, and `agent_budget_changed` records its transaction. While the limit is enforced, a figure must stay set.
 - **Turning it off.** **Turn off on Arc** sets the operating wallet's approval to 0, so the contract can draw nothing, and the agent's payments are checked in code only. The contract stays on Arc testnet; **Enforce on Arc** uses it again. It is signed as `spending_limit_unenforced`.
-- **The contract.** Its source, its functions and the address it runs at in production are on [Contracts on Arc testnet](/docs/contracts).
+- **The contract.** Its source, its functions and the address it runs at in production are on [Contracts on Arc](/docs/contracts).
 - **Who holds the keys.** The operating wallet, the agent's wallet and the deployer are developer-controlled wallets: Circle signs for them on Vestiarion's behalf. The contract keeps the agent, and the code that pays for it, within the limit. It does not protect against someone who took over Vestiarion's server, who could also sign for the operating wallet.
 
 <Screenshot

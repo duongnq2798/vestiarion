@@ -12,7 +12,8 @@ team's real decisions happen in other team workspaces.
 
 ## L1. The hero speaks to the owner
 
-- Eyebrow: "An agent for your bills · Arc testnet".
+- Eyebrow: "An agent for your bills · Live on Arc mainnet" (Arc testnet until Arc mainnet opened to everyone; see
+  "Naming the network" below).
 - Headline: "The agent pays your bills." with "Evidence remains." kept as the second, serif line.
 - Lead: keep paying as you do, the agent decides each bill beside you; agree and it is paid in USDC on Arc testnet at
   the same amount, disagree and nothing moves; every decision, refusals included, is signed into a chain anyone can
@@ -21,6 +22,15 @@ team's real decisions happen in other team workspaces.
   otherwise (unchanged rule); both open `/onboarding`. Secondary: "How a decision is made", unchanged.
 - Under the buttons, the existing sign-in line, then a link to the shadow mode guide.
 - Product copy rules hold: Arc testnet is named plainly, no disclaimers about money.
+
+### Naming the network (2026-10-08, Arc mainnet open to everyone)
+
+The platform's own copy names **Arc** for what both networks share (signing, the decision loop, the footer, the social
+card), **Arc mainnet** for a claim about real money ("Live on Arc mainnet"; paying real bills), and **Arc testnet**
+only for what is Arc testnet's: shadow mode, a wallet in one click, Circle's faucet, and what Go live lists as not on
+Arc mainnet yet (payouts to other chains, the EURC swap, the USYC reserve, escrow). The lead tells the path: try it
+beside how you pay today on Arc testnet, then the agent pays real bills on Arc mainnet within the spending limits you
+set. A workspace's own pages already name its network from its profile.
 
 ## L2. The latest decision, from the team's own workspaces
 

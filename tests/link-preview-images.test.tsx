@@ -74,8 +74,10 @@ describe("a link page's preview card (mainnet polish E1)", () => {
     }
   });
 
-  it("keeps the platform's own card as it was, with its Arc testnet line (2c C5)", async () => {
+  it("names Arc on the platform's own card, which stands for both networks", async () => {
     const root = (await import("@/app/opengraph-image")) as unknown as { default: () => { element: ReactElement } };
-    expect(text(renderToStaticMarkup(root.default().element))).toContain("Arc testnet");
+    const drawn = text(renderToStaticMarkup(root.default().element));
+    expect(drawn).toContain("vestiarion.xyz · Arc");
+    expect(drawn).not.toContain("Arc testnet");
   });
 });
