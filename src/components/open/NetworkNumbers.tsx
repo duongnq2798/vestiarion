@@ -77,7 +77,8 @@ export function NetworkNumbers({ numbers, period, network }: { numbers: OpenNumb
 
       <section aria-labelledby={`agent-${id}`}>
         <SectionHead id={`agent-${id}`} eyebrow="All workspaces" title="How the agent performs">
-          What the agent did with the payment decisions it made, and how those payments turned out. Customers&apos; share is beneath each.
+          What the agent did with the payment decisions it made, and how those payments turned out. Customers&apos; share is beneath each,
+          except on flags, where customers&apos; verdicts lead: in our own workspaces a person is testing the product, not judging the agent.
         </SectionHead>
         <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Share
@@ -105,12 +106,14 @@ export function NetworkNumbers({ numbers, period, network }: { numbers: OpenNumb
             note="Nobody approved, rejected or returned the invoice."
           />
           <Share
-            label="Agent flags upheld"
+            label="Agent flags customers upheld"
             row={{ key: "flagsUpheld", label: "", kind: "period", format: "ratio", of: ["flagsResolved"] }}
             total={total}
             customers={customers}
-            unit="flags a person decided"
-            note="The agent said not to pay, and the person who decided agreed."
+            lead="customers"
+            unit="flags a customer decided"
+            empty="No customer has decided a flag yet"
+            note="The agent said not to pay, and the customer who decided agreed."
           />
         </div>
         <ShadowAgreement customers={customers} />
@@ -186,23 +189,48 @@ function Kpi({ label, value, unit, total, now, children }: { label: string; valu
   );
 }
 
-/** A share of a whole, as a percent with its meter, the counts behind it, and customers' own. */
-function Share({ label, row, total, customers, unit, note }: { label: string; row: OpenRow; total: SideNumbers; customers: SideNumbers; unit: string; note: string }) {
+/**
+ * A share of a whole, as a percent with its meter and the counts behind it. It
+ * leads with every workspace and gives customers' own beneath, or, for a
+ * verdict on the agent, leads with customers' and gives the total beneath: a
+ * person in our own workspaces is testing the product, not judging the agent.
+ */
+function Share({
+  label,
+  row,
+  total,
+  customers,
+  lead = "total",
+  unit,
+  empty = "Nothing to measure yet",
+  note,
+}: {
+  label: string;
+  row: OpenRow;
+  total: SideNumbers;
+  customers: SideNumbers;
+  lead?: "total" | "customers";
+  unit: string;
+  empty?: string;
+  note: string;
+}) {
   const all = partOf(total, row);
   const theirs = partOf(customers, row);
+  const [shown, beneath] = lead === "customers" ? [theirs, all] : [all, theirs];
   return (
     <div className="flex min-w-0 flex-col rounded-2xl border border-line bg-surface p-5">
       <p className="text-sm font-medium text-ink">{label}</p>
-      <p className={cn("mt-3 text-[2.25rem] font-semibold leading-none tracking-[-0.03em]", all ? "text-agent" : "text-ink-3")}>
-        {all ? formatPercent(all.part, all.whole) : "—"}
+      <p className={cn("mt-3 text-[2.25rem] font-semibold leading-none tracking-[-0.03em]", shown ? "text-agent" : "text-ink-3")}>
+        {shown ? formatPercent(shown.part, shown.whole) : "—"}
       </p>
       <span aria-hidden className="mt-3 block h-1.5 overflow-hidden rounded-full bg-agent-soft">
-        {all && <span className="block h-full rounded-full bg-agent" style={{ width: `${(100 * all.part) / all.whole}%` }} />}
+        {shown && <span className="block h-full rounded-full bg-agent" style={{ width: `${(100 * shown.part) / shown.whole}%` }} />}
       </span>
-      <p className="mt-2 font-mono text-xs text-ink-2">{all ? `${formatRatio(all.part, all.whole)} ${unit}` : "Nothing to measure yet"}</p>
+      <p className="mt-2 font-mono text-xs text-ink-2">{shown ? `${formatRatio(shown.part, shown.whole)} ${unit}` : empty}</p>
       <p className="mb-4 mt-3 flex-1 text-sm leading-6 text-ink-2">{note}</p>
       <p className="border-t border-line pt-3 font-mono text-xs text-ink-3">
-        Customers: <span className="text-ink-2">{theirs ? `${formatPercent(theirs.part, theirs.whole)} (${formatRatio(theirs.part, theirs.whole)})` : "—"}</span>
+        {lead === "customers" ? "With our workspaces: " : "Customers: "}
+        <span className="text-ink-2">{beneath ? `${formatPercent(beneath.part, beneath.whole)} (${formatRatio(beneath.part, beneath.whole)})` : "—"}</span>
       </p>
     </div>
   );
