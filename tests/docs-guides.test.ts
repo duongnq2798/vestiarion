@@ -327,6 +327,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["refused the approval. Your USDC did not leave your wallet.", "src/lib/inbound-usdc.ts"],
     ["has not confirmed the approval yet. Choose Send again in a minute: once it is confirmed, it is not asked for again.", "src/lib/inbound-usdc.ts"],
     ["refused the transfer. Your USDC did not leave your wallet.", "src/lib/inbound-usdc.ts"],
+    ["Your wallet holds no ETH on Base to pay its gas. Add a little ETH there, then choose Review again.", "src/lib/inbound-usdc.ts", " to pay its gas. Add a little "],
+    ["Your wallet does not hold enough ETH on Base for the gas. Add a little ETH there, then send again.", "src/lib/inbound-usdc.ts", " for the gas. Add a little "],
   ],
   "guides/first-payment": [
     ["View transaction", "src/components/payment-toast.tsx"],

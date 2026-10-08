@@ -129,6 +129,12 @@ describe("the owner's wallet", () => {
     expect(requests.map((request) => request.method)).toEqual(["eth_chainId"]);
   });
 
+  it("reads the message of a wallet error that is a plain object, as MetaMask's are (2026-10-08)", () => {
+    const metamask = { code: -32603, message: "RPC 0x2105 Custom eth_sendRawTransaction: insufficient funds for gas * price + value: have 0 want 1350303222160" };
+    expect(walletErrorMessage(metamask)).toBe("Your wallet did not send it: RPC 0x2105 Custom eth_sendRawTransaction: insufficient funds for gas * price + value: have 0 want 1350303222160");
+    expect(walletErrorMessage({ code: -32000 })).toBe("Your wallet did not send it.");
+  });
+
   it("says plainly when the person declined in their wallet", () => {
     expect(walletErrorMessage(Object.assign(new Error("User rejected the request."), { code: 4001 }))).toBe("You declined it in your wallet.");
     expect(walletErrorMessage(new Error("insufficient funds for gas"))).toBe("Your wallet did not send it: insufficient funds for gas");

@@ -1,5 +1,5 @@
 import { encodeFunctionData, erc20Abi, parseAbi } from "viem";
-import { erc20Allowance, erc20Balance, waitForReceipt, type Eip1193Provider } from "./browser-wallet";
+import { erc20Allowance, erc20Balance, nativeBalance, waitForReceipt, walletErrorMessage, walletErrorText, type Eip1193Provider } from "./browser-wallet";
 import { CCTP_FORWARD_HOOK, FAST_FINALITY, fastForwardedRoute, irisMessagesFor, mintIn, toBytes32, ZERO_BYTES32 } from "./circle/cctp-forward";
 import { FeatureOffError, type InboundSource, type NetworkProfile } from "./network";
 import type { SentStore } from "./treasury/sent-transaction";
@@ -229,12 +229,34 @@ export async function reviewInbound(input: {
   if (!(await onSource(input.provider, input.source))) {
     throw new InboundError(`Your wallet is not on ${input.source.label} yet. Choose Review again: it switches to ${input.source.label} first.`);
   }
+  // Both transactions pay the chain's own gas: a wallet with none would only be refused by the chain (2026-10-08).
+  const { label, nativeSymbol } = input.source;
+  if ((await nativeBalance(input.provider, input.from)) === BigInt(0)) {
+    throw new InboundError(`Your wallet holds no ${nativeSymbol} on ${label} to pay its gas. Add a little ${nativeSymbol} there, then choose Review again.`);
+  }
   const balanceUnits = await erc20Balance(input.provider, input.source.usdc, input.from);
   if (balanceUnits < input.amountUnits) {
     throw new InboundError(`Your wallet holds ${formatUsdc(balanceUnits)} USDC on ${input.source.label}: send at most that.`);
   }
   const quote = await inboundQuote(input.profile, input.source, input.amountUnits, { fetch: input.fetch });
   return { balanceUnits, quote };
+}
+
+/**
+ * What a failure says on this page (2026-10-08): this page's own refusals as they are; a wallet that cannot pay the gas,
+ * in the source chain's currency; any other wallet error in its own words.
+ */
+export function inboundWalletError(error: unknown, source: InboundSource | null): string {
+  if (error instanceof InboundError) return error.message;
+  const text = walletErrorText(error);
+  if (text && /insufficient funds/i.test(text)) {
+    return source
+      ? `Your wallet does not hold enough ${source.nativeSymbol} on ${source.label} for the gas. Add a little ${source.nativeSymbol} there, then send again.`
+      : "Your wallet does not hold enough for the gas on that chain. Add a little of its own currency there, then send again.";
+  }
+  const code = typeof error === "object" && error !== null ? (error as { code?: unknown }).code : undefined;
+  if (typeof code === "number") return walletErrorMessage(error);
+  return text ?? String(error);
 }
 
 /** Whether the wallet is on the source chain now, as it answers itself. */

@@ -11,6 +11,7 @@ import {
   InboundError,
   inboundQuote,
   inboundSource,
+  inboundWalletError,
   inboundSources,
   pendingInbound,
   rememberInbound,
@@ -229,7 +230,7 @@ describe("a transfer on its way (B5)", () => {
 type Request = { method: string; params?: unknown };
 
 /** A browser wallet on Base: its chain, its USDC and allowance, and the receipts its chain gives. */
-function wallet(options: { chainId?: number; balance?: bigint; allowance?: bigint; receipts?: Array<"0x1" | "0x0" | null | "throw"> } = {}) {
+function wallet(options: { chainId?: number; balance?: bigint; native?: bigint; allowance?: bigint; receipts?: Array<"0x1" | "0x0" | null | "throw"> } = {}) {
   const requests: Request[] = [];
   const sent: Array<{ to: string; data: string }> = [];
   const receipts = [...(options.receipts ?? [])];
@@ -239,6 +240,8 @@ function wallet(options: { chainId?: number; balance?: bigint; allowance?: bigin
       switch (request.method) {
         case "eth_chainId":
           return `0x${(options.chainId ?? 8453).toString(16)}`;
+        case "eth_getBalance":
+          return `0x${(options.native ?? BigInt(10) ** BigInt(15)).toString(16)}`;
         case "eth_call": {
           const [call] = request.params as [{ data: string }];
           const value = call.data.startsWith("0x70a08231") ? options.balance ?? BigInt(0) : options.allowance ?? BigInt(0);
@@ -271,8 +274,9 @@ describe("checking before the wallet asks (B4)", () => {
     const w = wallet({ balance: BigInt(25_000_000) });
     const review = await reviewInbound({ provider: w.provider, from: FROM, profile: ARC_MAINNET, source: base(), amountUnits: BigInt(10_000_000), fetch: vi.fn(async () => json(BASE_TO_ARC)) });
     expect(review).toEqual({ balanceUnits: BigInt(25_000_000), quote: QUOTE });
-    expect(w.requests.map((request) => request.method)).toEqual(["eth_chainId", "eth_call"]);
-    expect((w.requests[1].params as [{ to: string }])[0].to).toBe(base().usdc);
+    expect(w.requests.map((request) => request.method)).toEqual(["eth_chainId", "eth_getBalance", "eth_call"]);
+    expect(w.requests[1].params).toEqual([FROM, "latest"]);
+    expect((w.requests[2].params as [{ to: string }])[0].to).toBe(base().usdc);
   });
 
   it("reads nothing on a chain other than the source, saying so (review M8)", async () => {
@@ -283,6 +287,15 @@ describe("checking before the wallet asks (B4)", () => {
     expect(w.requests.map((request) => request.method)).toEqual(["eth_chainId"]);
   });
 
+  it("refuses a wallet with none of the chain's own currency for gas, before any prompt (2026-10-08)", async () => {
+    const w = wallet({ balance: BigInt(3_900_000), native: BigInt(0) });
+    const fetch = vi.fn();
+    await expect(reviewInbound({ provider: w.provider, from: FROM, profile: ARC_MAINNET, source: base(), amountUnits: BigInt(1_000_000), fetch })).rejects.toThrow(
+      "Your wallet holds no ETH on Base to pay its gas. Add a little ETH there, then choose Review again."
+    );
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("refuses more than the wallet holds there, before any prompt", async () => {
     const w = wallet({ balance: BigInt(4_500_000) });
     const fetch = vi.fn();
@@ -290,6 +303,18 @@ describe("checking before the wallet asks (B4)", () => {
       "Your wallet holds 4.50 USDC on Base: send at most that."
     );
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("what a wallet's refusal says (2026-10-08)", () => {
+  it("names the chain's own currency when the wallet cannot pay the gas, and reads a plain-object error's message", () => {
+    const noGas = { code: -32603, message: "RPC 0x2105 Custom eth_sendRawTransaction: insufficient funds for gas * price + value: have 0 want 1350303222160" };
+    expect(inboundWalletError(noGas, base())).toBe("Your wallet does not hold enough ETH on Base for the gas. Add a little ETH there, then send again.");
+    expect(inboundWalletError(noGas, null)).toBe("Your wallet does not hold enough for the gas on that chain. Add a little of its own currency there, then send again.");
+    expect(inboundWalletError({ code: 4001, message: "User rejected the request." }, base())).toBe("You declined it in your wallet.");
+    expect(inboundWalletError({ code: -32000, message: "nonce too low" }, base())).toBe("Your wallet did not send it: nonce too low");
+    expect(inboundWalletError(new InboundError("Circle did not answer."), base())).toBe("Circle did not answer.");
+    expect(inboundWalletError(new Error("insufficient funds for gas"), base())).toBe("Your wallet does not hold enough ETH on Base for the gas. Add a little ETH there, then send again.");
   });
 });
 
