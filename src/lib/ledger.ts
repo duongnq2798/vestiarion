@@ -497,6 +497,15 @@ export function ledgerVerificationKeyring(): LedgerKeyring {
   return ledgerReadKeyring();
 }
 
+/**
+ * The public halves of every key the organization in scope has signed with, by id, as PEM: what a reader's browser
+ * checks one of its entries with (payment receipts P4, the landing's latest decision R3).
+ */
+export function ledgerPublicKeyPems(keyring: LedgerKeyring = ledgerVerificationKeyring()): Record<string, string> {
+  const keys = [keyring.active, ...keyring.retired].filter((key) => key !== null);
+  return Object.fromEntries(keys.map((key) => [ledgerKeyId(key), key.export({ type: "spki", format: "pem" }).toString()]));
+}
+
 /** PostgREST's `max_rows` on Supabase: the most rows one request answers with. */
 export const LEDGER_PAGE_SIZE = 1000;
 

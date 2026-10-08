@@ -5,6 +5,7 @@ import { Credentials } from "@/components/landing/Credentials";
 import { FinalCta } from "@/components/landing/FinalCta";
 import { Hero } from "@/components/landing/Hero";
 import { HowItWorks } from "@/components/landing/HowItWorks";
+import { LatestDecision } from "@/components/landing/LatestDecision";
 import { LiveProof } from "@/components/landing/LiveProof";
 import type { ChainHeadEntry } from "@/components/landing/hero/EvidenceReplay";
 import type { ProvenanceLeg } from "@/components/vx/Provenance";
@@ -16,6 +17,7 @@ import { currentConfig } from "@/lib/context";
 import { withFoundingOrg } from "@/lib/dal/scope";
 import { getLandingMetrics } from "@/lib/landing";
 import { listLedgerEntries } from "@/lib/ledger";
+import { readLatestDecision } from "@/lib/platform/latest-decision";
 import { X_HANDLE } from "@/lib/site-links";
 
 export const dynamic = "force-dynamic";
@@ -64,7 +66,8 @@ async function chainHead(): Promise<ChainHeadEntry[]> {
 export default async function LandingPage() {
   const metrics = withFoundingOrg(() => getLandingMetrics());
   // chainModes() still answers when the Circle credentials cannot be read (R12).
-  const [modes, head] = await Promise.all([withFoundingOrg(async () => chainModes()), chainHead()]);
+  // The team's latest decision is read before the page renders, so the band never pushes the page down after it (L2).
+  const [modes, head, latest] = await Promise.all([withFoundingOrg(async () => chainModes()), chainHead(), readLatestDecision()]);
   const currentScreeningMode = screeningMode();
   // The platform's config, outside any organization's scope: a boolean only, never the pair (R4).
   const hostedAvailable = hostedWalletsAvailable(currentConfig());
@@ -80,6 +83,7 @@ export default async function LandingPage() {
 
       <main id="main">
         <Hero provenance={provenance} head={head} hostedAvailable={hostedAvailable} />
+        <LatestDecision decision={latest} />
         <Credentials screeningMode={currentScreeningMode} />
         <BuiltWith />
         <LiveProof metrics={metrics} />

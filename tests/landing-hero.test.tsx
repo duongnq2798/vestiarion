@@ -26,7 +26,17 @@ describe("the landing hero", () => {
     expect(words).toContain(
       "Email sign-in, a workspace of your own, and an Arc testnet wallet in one click. Fund it with USDC from Circle's faucet, and the agent pays from it."
     );
-    expect(words).toContain("Start on Arc testnet");
+    expect(words).toContain("Try it on your bills");
+  });
+
+  it("speaks to the owner whose bills it pays, and leads into shadow mode (landing owner hero L1)", () => {
+    const words = hero(true);
+    expect(words).toContain("The agent pays your bills. Evidence remains.");
+    expect(words).toContain("Keep paying your bills the way you do, and let the agent decide each one beside you.");
+    expect(words).toContain("Agree, and it is paid in USDC on Arc testnet; disagree, and nothing moves.");
+    expect(words).toContain("Every decision, refusals included, is signed into a chain anyone can verify.");
+    const markup = renderToStaticMarkup(<TooltipProvider><Hero provenance={[]} head={[]} hostedAvailable /></TooltipProvider>);
+    expect(markup).toMatch(/<a [^>]*href="\/docs\/guides\/shadow-mode"[^>]*>How shadow mode works/);
   });
 
   it("without it: a workspace of your own, with Circle connected from Settings", () => {

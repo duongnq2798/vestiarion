@@ -28,6 +28,12 @@ export interface PublicLedgerRow {
   signing_key_id: string | null;
 }
 
+/**
+ * An entry's signed link alone, without its body: what a page may publish of an entry whose content stays private (the
+ * landing's latest decision, docs/superpowers/specs/2026-10-08-landing-owner-hero-design.md R3).
+ */
+export type SignedLink = Pick<PublicLedgerRow, "body_hash" | "signature" | "prev_hash" | "hash" | "signing_key_id">;
+
 /** `ok: null` is not a failure: it means the check could not be made here. */
 export type EntryCheck = { ok: true } | { ok: false; reason: string } | { ok: null; reason: string };
 
@@ -62,7 +68,7 @@ function pemToDer(pem: string): Uint8Array<ArrayBuffer> {
 }
 
 /** The keys an entry may be checked against: the one its label names, if that key really has that id; any key for an unlabelled entry. */
-async function candidateKeys(row: PublicLedgerRow, keys: Record<string, string>): Promise<Uint8Array<ArrayBuffer>[]> {
+async function candidateKeys(row: Pick<PublicLedgerRow, "signing_key_id">, keys: Record<string, string>): Promise<Uint8Array<ArrayBuffer>[]> {
   const filed = await Promise.all(
     Object.entries(keys).map(async ([id, pem]) => {
       const der = pemToDer(pem);
@@ -76,7 +82,15 @@ async function candidateKeys(row: PublicLedgerRow, keys: Record<string, string>)
 export async function verifyEntry(row: PublicLedgerRow, keys: Record<string, string>): Promise<EntryCheck> {
   const body = canonicalJson({ actor: row.actor, domain: row.domain, action: row.action, summary: row.summary, detail: row.detail });
   if ((await sha256Hex(body)) !== row.body_hash) return { ok: false, reason: "The entry's content does not match its body hash." };
+  return verifySignedLink(row, keys);
+}
 
+/**
+ * The half of `verifyEntry` that needs no body: the Ed25519 signature over the body hash, by the key the entry names,
+ * and the chain hash that links it to the entry before it. It cannot say what the body held, only that this hash was
+ * signed and sits in the chain.
+ */
+export async function verifySignedLink(row: SignedLink, keys: Record<string, string>): Promise<EntryCheck> {
   const candidates = await candidateKeys(row, keys);
   if (candidates.length === 0) return { ok: null, reason: UNKNOWN_KEY };
   let signed = false;
