@@ -340,7 +340,9 @@ mainnet plan).
   - `latest_team_decision()` (0087), the service role's alone, looks only where `/open` lists payments from: the
     founding workspace and those a team member created, never a sample payee's decision. It returns facts that name no
     one (action, amount, network, model, policy agreement, code's verdict, why a hold held, a person's verdict, the
-    transaction) and the entry's signed chain fields; never its summary, reasoning, names or ids.
+    transaction) and the entry's signed chain fields; never its summary, reasoning, names or ids. Since 0088 the
+    transaction includes the payment a person sent after the agent held it (a shadow mode verdict, an approval): the
+    bill's or milestone's confirmed payment intent.
   - `src/lib/platform/latest-decision.ts` reads it at most once a minute and adds the signing workspace's public keys;
     the workspace's id stays there. `src/lib/latest-decision.ts` says it in words.
   - The reader's browser checks the signature and the link to the entry before it with `verifySignedLink`, the

@@ -84,6 +84,14 @@ describe("readLatestDecision", () => {
     expect(rpc).toHaveBeenCalledTimes(2);
   });
 
+  it("reads the payment that followed, and goes without it before 0088 runs", async () => {
+    rpc.mockResolvedValue({ data: { ...FOUND, resultingStatus: "held", heldBecause: "shadow_verdict", txRef: null, verdict: "agree", paidTxHash: TX }, error: null });
+    expect(await readLatestDecision(at())).toMatchObject({ headline: "Paid a 0.35 USDC bill after a person agreed.", txUrl: `https://explorer.testnet.arc.io/tx/${TX}` });
+    // FOUND has no paidTxHash, as 0087's function answers.
+    rpc.mockResolvedValue({ data: FOUND, error: null });
+    expect(await readLatestDecision(at())).toMatchObject({ headline: "Paid a 0.35 USDC bill." });
+  });
+
   it("is null when the team has decided nothing yet", async () => {
     rpc.mockResolvedValue({ data: null, error: null });
     expect(await readLatestDecision(at())).toBeNull();

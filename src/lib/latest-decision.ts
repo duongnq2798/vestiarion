@@ -26,6 +26,11 @@ export interface LatestDecisionFacts {
   txRef: string | null;
   payOn: string | null;
   verdict: "agree" | "disagree" | null;
+  /**
+   * The confirmed payment of the bill or milestone a pay or release decision was about, whoever sent it (0088): a
+   * payment held for a person is sent by them later, so the agent's own entry never records it.
+   */
+  paidTxHash: string | null;
   link: SignedLink;
 }
 
@@ -71,8 +76,9 @@ const RULE_WORDS: Record<string, string> = {
 };
 
 /** Why a decision held, by the marker the stage recorded (src/lib/agent/shadow-hold.ts, liquidity.ts, pause.ts, outflow-budget.ts). */
+const HELD_FOR_VERDICT = "shadow_verdict";
 const HELD_WORDS: Record<string, string> = {
-  shadow_verdict: "It waits for a person's verdict, in shadow mode.",
+  [HELD_FOR_VERDICT]: "It waits for a person's verdict, in shadow mode.",
   cash_shortfall: "The operating wallet was short of cash for it.",
   agent_paused: "The agent was paused.",
   outflow_budget: "It would have passed the workspace's spending limit.",
@@ -113,6 +119,8 @@ function headline(facts: LatestDecisionFacts, network: string): string {
     case "milestone_release":
       if (facts.resultingStatus === "paid") return `Paid ${what}.`;
       if (facts.resultingStatus === "matched" || facts.resultingStatus === "verified") return `Sent ${what}; ${network} is confirming it.`;
+      // Held for a person, who then paid it.
+      if (facts.paidTxHash) return facts.verdict === "agree" ? `Paid ${what} after a person agreed.` : `Paid ${what} after a person approved it.`;
       return `Decided to pay ${what}.`;
     case "ap_schedule":
       return facts.payOn ? `Scheduled ${what} for ${MONTHS[Number(facts.payOn.slice(5, 7)) - 1]} ${Number(facts.payOn.slice(8, 10))}.` : `Scheduled ${what}.`;
@@ -127,6 +135,11 @@ function headline(facts: LatestDecisionFacts, network: string): string {
 
 /** Why it did not go out, when it did not: the recorded marker, then the rule code refused it by, then the model's own hold. */
 function why(facts: LatestDecisionFacts): string | null {
+  // Held for a verdict that was given: never "still waits" once a person answered.
+  if (facts.heldBecause === HELD_FOR_VERDICT && facts.verdict === "agree") {
+    return facts.paidTxHash ? "In shadow mode, a person agrees before anything is paid." : "A person agreed, in shadow mode; its payment has not confirmed yet.";
+  }
+  if (facts.heldBecause === HELD_FOR_VERDICT && facts.verdict === "disagree") return "In shadow mode, a person disagreed, so it was not paid.";
   if (facts.heldBecause && HELD_WORDS[facts.heldBecause]) return HELD_WORDS[facts.heldBecause];
   if (facts.guardrailBlocked) return `Code refused it: ${(facts.guardrailRule && RULE_WORDS[facts.guardrailRule]) || "a hard limit in code"}.`;
   if (facts.action === "ap_hold" || facts.action === "milestone_hold") return "The model held it for a person to look at.";
@@ -144,7 +157,7 @@ function factsOf(facts: LatestDecisionFacts): LatestDecisionFact[] {
     shown.push({ label: "Code checks", value: facts.guardrailBlocked ? "Refused it" : "Passed", tone: facts.guardrailBlocked ? "refused" : "proof" });
   }
   if (facts.verdict) shown.push({ label: "Person", value: facts.verdict === "agree" ? "Agreed" : "Disagreed", tone: facts.verdict === "agree" ? "proof" : "held" });
-  else if (facts.heldBecause === "shadow_verdict") shown.push({ label: "Person", value: "Deciding", tone: "held" });
+  else if (facts.heldBecause === HELD_FOR_VERDICT) shown.push({ label: "Person", value: "Deciding", tone: "held" });
   return shown;
 }
 
@@ -158,7 +171,7 @@ export function latestDecisionView(facts: LatestDecisionFacts, now: number = Dat
     headline: headline(facts, network),
     why: why(facts),
     facts: factsOf(facts),
-    txUrl: facts.txRef && TX_HASH.test(facts.txRef) ? txUrl(facts.network, facts.txRef) : null,
+    txUrl: [facts.txRef, facts.paidTxHash].map((ref) => (ref && TX_HASH.test(ref) ? txUrl(facts.network, ref) : null)).find(Boolean) ?? null,
     link: facts.link,
   };
 }
