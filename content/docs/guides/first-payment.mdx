@@ -326,7 +326,7 @@ A payment Vestiarion recorded as failed is told too when it may still have moved
 
 Owners, admins and approvers decide each one:
 
-- **Approve and pay** starts the transfer. A dialog asks you to confirm, and **Pay now** sends it at once. The ledger records who approved it. When the payment goes out, a confirmation says what was paid, to whom and on which network, such as "Paid 8.00 USDC to Bluebird Logistics on Arc testnet.", with **View transaction** to open it on the explorer.
+- **Approve and pay** starts the transfer. A dialog asks you to confirm, and **Pay now** sends it at once. The ledger records who approved it. While it is sent, a notice in the corner says **Payment approved**, with the amount and the payee. It then turns into **Payment confirmed** once Arc testnet confirms the transfer: the amount, who it was paid to, that you approved it, the network, and **View transaction** to open it on the explorer. If Arc testnet is still confirming it, the notice says **Payment processing** instead, and the payment is not called confirmed until it is.
 - **Reject** marks it not paid. You can give a reason, which is kept in the ledger.
 - **Return to agent** sends it back to pending, and the agent usually decides it again within a minute.
 

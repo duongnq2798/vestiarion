@@ -8,6 +8,7 @@ import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { consoleActor } from "@/lib/commands/actor";
 import { approvePayable, rejectPayable, returnPayable } from "@/lib/commands/payables";
 import { inOrg } from "@/lib/dal/scope";
+import type { PaymentReceipt } from "@/lib/payment-receipt";
 import { giveVerdict, VerdictError, type GivenVerdict } from "@/lib/verdicts";
 
 /**
@@ -20,8 +21,8 @@ export interface VerdictActionResult {
   ok: boolean;
   message: string;
   given?: GivenVerdict;
-  /** The payment's transaction, when the verdict paid it: its confirmation links it. */
-  txUrl?: string;
+  /** What the payment did, when the verdict paid it, for its confirmation to lay out (payment confirmation). */
+  receipt?: PaymentReceipt;
 }
 
 const inputSchema = z.object({
@@ -57,7 +58,7 @@ export async function giveVerdictAction(orgSlug: string, input: unknown): Promis
       if (!result.recorded && result.after) return { ok: false, message: `Nothing was paid, and your verdict was not recorded: ${result.after.message}` };
       const said = result.given.verdict === "agree" ? "You agreed with the agent." : "You disagreed with the agent.";
       if (!result.after) return { ok: true, message: said, given: result.given };
-      return { ok: result.after.ok, message: `${said} ${result.after.message}`, given: result.given, ...(result.after.txUrl ? { txUrl: result.after.txUrl } : {}) };
+      return { ok: result.after.ok, message: `${said} ${result.after.message}`, given: result.given, ...(result.after.receipt ? { receipt: result.after.receipt } : {}) };
     } catch (error) {
       if (error instanceof VerdictError) return { ok: false, message: error.message };
       console.error("verdict failed", error instanceof Error ? error.message : "unknown error");

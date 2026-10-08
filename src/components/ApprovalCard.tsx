@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/Input";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm, type ActionResult } from "@/components/ui/useActionForm";
 import { Money, fmt } from "@/components/vx/Primitives";
+import { paymentSendingToast, paymentToastId, withPaymentReceipt } from "@/components/payment-toast";
 import { withSuccessToast } from "@/components/withSuccessToast";
 import type { WaitingPayable } from "@/lib/agent/approvals";
 import { addedDetailsSentence } from "@/lib/added-details";
@@ -30,7 +31,7 @@ import { approveFirstDescription, mayApproveNow, onlyApproverOfTwo, SECOND_APPRO
 import type { VerdictView } from "@/lib/verdict-view";
 
 const INITIAL: ActionResult = { ok: false, message: "" };
-const approve = withSuccessToast(approveInvoiceAction);
+const approve = withPaymentReceipt(approveInvoiceAction);
 const reject = withSuccessToast(rejectInvoiceAction);
 const giveBack = withSuccessToast(returnInvoiceAction);
 
@@ -398,6 +399,18 @@ function Decisions({
             willPay ? `${payConfirmDescription(payable, ownEntry)}${two ? ` ${SECOND_APPROVAL_PAYS}` : ""}` : two ? approveFirstDescription(two.above) : ""
           }
           confirmLabel={willPay ? "Pay now" : "Approve"}
+          // Approved and being sent, until the payment's confirmation replaces it (payment confirmation).
+          onConfirm={
+            willPay
+              ? () =>
+                  paymentSendingToast(paymentToastId(payable.id), {
+                    amount: amountToPay(payable.amount, payable.discount, new Date()).amountPaid,
+                    currency: payable.currency ?? "USDC",
+                    payee: payable.counterpartyName,
+                    decidedBy: "approval",
+                  })
+              : undefined
+          }
         />
         {canAddDetails && <AddDetailsDialog orgSlug={orgSlug} payable={payable} />}
         {(!payable.paymentSent || payable.lastAttempt?.state === "unanswered") && payable.lastAttempt?.state !== "in_flight" && (

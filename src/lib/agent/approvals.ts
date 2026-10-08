@@ -762,8 +762,8 @@ export async function approveAndPay(
   txRef: string | null;
   note: string;
   fromReserveUsdc?: number;
-  /** What went out, to whom and in what, once the transfer did: the person's confirmation says it. */
-  paid?: { amount: number; currency: string; payee: string };
+  /** What went out, to whom and in what, once the transfer did: the person's confirmation says it; `simulated` in a sandbox. */
+  paid?: { amount: number; currency: string; payee: string; simulated?: true };
 }> {
   const orgId = currentOrgId();
   const invoice = await loadWaitingPayable(input.invoiceId);
@@ -1099,7 +1099,16 @@ export async function approveAndPay(
     txRef: result.txRef,
     note: result.note,
     ...(fromReserveUsdc !== null ? { fromReserveUsdc } : {}),
-    ...(sent ? { paid: { amount: result.amountPaid ?? invoice.amount, currency: invoice.currency, payee: invoice.counterpartyName } } : {}),
+    ...(sent
+      ? {
+          paid: {
+            amount: result.amountPaid ?? invoice.amount,
+            currency: invoice.currency,
+            payee: invoice.counterpartyName,
+            ...(provider.mode === "live" ? {} : { simulated: true as const }),
+          },
+        }
+      : {}),
   };
 }
 

@@ -4,7 +4,7 @@ import { Check, CircleCheck, ThumbsDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type FormEvent } from "react";
 import { giveVerdictAction } from "@/app/actions/verdicts";
-import { successToast } from "@/components/success-toast";
+import { paymentSendingToast, paymentToastId, settlePaymentToast } from "@/components/payment-toast";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from "@/components/ui/Dialog";
@@ -52,10 +52,18 @@ export default function VerdictControl({ orgSlug, view, payBlocked = null }: { o
       setNote(null);
       // The address the card showed goes with a payment, which is refused if it changed since (shadow mode review C1).
       const shown = then === "pay" ? { shownAddress: view.payment?.address ?? undefined } : {};
-      const result = await giveVerdictAction(orgSlug, { entrySeq: view.entrySeq, verdict, ...(typed ? { reason: typed } : {}), ...(then ? { then } : {}), ...shown });
+      // A payment agreed to is told as it goes: approved and being sent, then confirmed or still processing. Its
+      // confirmation outlives the card it paid, which leaves the page (payment confirmation).
+      const paying = then === "pay" ? paymentToastId(`verdict-${view.entrySeq}`) : null;
+      if (paying && view.payment) paymentSendingToast(paying, { amount: view.payment.amountUsdc, currency: "USDC", payee: view.payment.payee, decidedBy: "verdict" });
+      const result = await giveVerdictAction(orgSlug, { entrySeq: view.entrySeq, verdict, ...(typed ? { reason: typed } : {}), ...(then ? { then } : {}), ...shown }).catch(
+        (error: unknown) => {
+          if (paying) settlePaymentToast(paying, null);
+          throw error;
+        }
+      );
       setNote({ tone: result.ok ? "neutral" : "error", text: result.message });
-      // A payment's confirmation outlives the card it paid, which leaves the page: what was paid, and its transaction.
-      if (result.ok && result.txUrl) successToast(result.message, result.txUrl);
+      if (paying) settlePaymentToast(paying, result);
       if (result.ok) onDone?.();
       router.refresh();
     });
