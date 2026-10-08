@@ -182,6 +182,15 @@ export function currentSecretWarnings(): string[] {
 }
 
 /**
+ * The platform configuration the organization in scope was built from, guarded like its configuration. Only what the
+ * platform itself owns is read through it: Vestiarion's test USDC float pays from the hosted Circle account whichever
+ * account the workspace pays from (test USDC T1). A workspace's own configuration never carries that pair (R4).
+ */
+export function currentPlatformConfig(): VestiarionConfig {
+  return organizationContext().platformConfig as VestiarionConfig;
+}
+
+/**
  * Drops the environment-derived context so the next call rebuilds it. Tests
  * that change the environment need this; nothing in production should.
  */
