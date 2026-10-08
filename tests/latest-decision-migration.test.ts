@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { applyMigrations, appendSignedForOrg, asRole, asServiceRole, createDatabase, createUser } from "./support/pglite";
 
 /**
- * Migration 0087 (docs/superpowers/specs/2026-10-08-landing-owner-hero-design.md R1, R2, R4): `latest_team_decision()`,
+ * Migrations 0087 and 0088 (docs/superpowers/specs/2026-10-08-landing-owner-hero-design.md R1, R2, R4): `latest_team_decision()`,
  * the newest decision the agent made in one of the team's own live workspaces, for the landing page. Never a customer's,
  * a sandbox's, a workspace whose creator left, or one about a sample payee; and only the fields the page may show.
  */
@@ -25,6 +25,7 @@ interface Latest {
   txRef: string | null;
   payOn: string | null;
   verdict: string | null;
+  paidTxHash: string | null;
   bodyHash: string;
   signature: string;
   prevHash: string;
@@ -166,15 +167,34 @@ describe("latest_team_decision (0087)", () => {
     );
 
     const found = await latest();
-    expect(found).toMatchObject({ network: "arc-mainnet", resultingStatus: "held", heldBecause: "shadow_verdict", txRef: null, verdict: "agree" });
+    expect(found).toMatchObject({ network: "arc-mainnet", resultingStatus: "held", heldBecause: "shadow_verdict", txRef: null, verdict: "agree", paidTxHash: null });
     // The person's own reason stays in the workspace.
     expect(JSON.stringify(found)).not.toContain("ordered from them");
+  });
+
+  it("gives the transaction of the payment that followed, once it confirmed (0088)", async () => {
+    const ours = await org("ours-agreed", team);
+    const supplier = await payee(ours, "Agreed supplier");
+    const entry = decision(supplier, { execution: { txRef: null, resultingStatus: "held", heldBecause: "shadow_verdict" } });
+    await appendSignedForOrg(db, ours, entry, privateKey);
+    const intent = (status: string, txHash: string | null) =>
+      db.query(
+        `insert into public.payment_intents (org_id, source_type, source_id, idempotency_key, provider, provider_mode, amount, destination, status, tx_hash, chain)
+         values ($1, 'invoice', $2, gen_random_uuid()::text, 'circle', 'live', 0.35, '0xAAA', $3, $4, 'ARC-TESTNET')`,
+        [ours, entry.detail.invoiceId, status, txHash]
+      );
+
+    // Sent but not confirmed: nothing to link yet.
+    await intent("pending", `0x${"cd".repeat(32)}`);
+    expect((await latest())?.paidTxHash).toBeNull();
+    await db.query("update public.payment_intents set status = 'confirmed' where source_id = $1", [entry.detail.invoiceId]);
+    expect((await latest())?.paidTxHash).toBe(`0x${"cd".repeat(32)}`);
   });
 
   it("is the service role's alone", async () => {
     await expect(asRole(db, "anon", (tx) => tx.query("select public.latest_team_decision()"))).rejects.toThrow(/permission denied/);
     await expect(asRole(db, "authenticated", (tx) => tx.query("select public.latest_team_decision()"))).rejects.toThrow(/permission denied/);
     const served = await asServiceRole(db, (tx) => tx.query<{ l: Latest | null }>("select public.latest_team_decision() as l"));
-    expect(served.rows[0].l?.network).toBe("arc-mainnet");
+    expect(served.rows[0].l?.network).toBe("arc-testnet");
   });
 });

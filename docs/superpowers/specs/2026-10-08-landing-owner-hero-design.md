@@ -54,7 +54,11 @@ an id of a bill, payee or workspace.
   whether code let it through or refused it; a person's verdict when one was given (agreed, disagreed), or that one is
   awaited.
 - When, as "2 h ago" from the page's own read, and on which network.
-- The transaction on the explorer, when the decision paid and its reference is an on-chain hash.
+- The transaction on the explorer, when the decision paid and its reference is an on-chain hash, or when a person paid
+  it afterwards (0088): a payment held for a person's verdict, or held and then approved, is sent by that person, so the
+  agent's entry never records it. Its bill's or milestone's confirmed payment intent gives the hash. Once a verdict is
+  given, the band never says the decision still waits for one: "Paid a 4.50 USDC bill after a person agreed.", or that
+  the person disagreed and nothing was paid.
 - The entry's sequence number and its signature check.
 
 ### The check in the browser (R3)
@@ -68,7 +72,7 @@ Web Crypto is told the check could not run here, never that it failed.
 
 ### How it is read (R4)
 
-Migration 0087 adds `latest_team_decision()`: security definer, `search_path = ''`, executable by the service role
+Migration 0087 adds `latest_team_decision()` (0088 adds the payment that followed a decision): security definer, `search_path = ''`, executable by the service role
 only, returning one jsonb document or null. It returns the workspace id for the server's own use (none today) and the
 fields above; the server never passes the workspace id, or anything not listed in R2, to the page.
 

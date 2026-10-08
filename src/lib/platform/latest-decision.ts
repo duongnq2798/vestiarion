@@ -37,6 +37,11 @@ const foundSchema = z.object({
   txRef: z.string().nullable(),
   payOn: z.string().nullable(),
   verdict: z.enum(["agree", "disagree"]).nullable(),
+  // Absent until migration 0088 runs.
+  paidTxHash: z
+    .string()
+    .nullish()
+    .transform((value) => value ?? null),
   bodyHash: z.string(),
   signature: z.string(),
   prevHash: z.string(),

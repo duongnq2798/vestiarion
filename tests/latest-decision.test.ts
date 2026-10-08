@@ -27,6 +27,7 @@ const paid: LatestDecisionFacts = {
   txRef: TX,
   payOn: null,
   verdict: null,
+  paidTxHash: null,
   link: LINK,
 };
 
@@ -66,6 +67,26 @@ describe("latestDecisionView", () => {
     expect(fact(waiting, "Person")).toBe("Deciding");
     expect(fact({ ...waiting, verdict: "agree" }, "Person")).toBe("Agreed");
     expect(fact({ ...waiting, verdict: "disagree" }, "Person")).toBe("Disagreed");
+  });
+
+  it("says a payment a person agreed to in shadow mode was paid, with the transaction that paid it", () => {
+    const agreed = { resultingStatus: "held", heldBecause: "shadow_verdict", txRef: null, verdict: "agree" as const };
+    expect(view({ ...agreed, paidTxHash: TX })).toMatchObject({
+      headline: "Paid a 0.35 USDC bill after a person agreed.",
+      why: "In shadow mode, a person agrees before anything is paid.",
+      txUrl: `https://explorer.testnet.arc.io/tx/${TX}`,
+    });
+    // Agreed, but its payment has not confirmed: never called paid, nothing to link, and never "still waits".
+    expect(view(agreed)).toMatchObject({ headline: "Decided to pay a 0.35 USDC bill.", why: "A person agreed, in shadow mode; its payment has not confirmed yet.", txUrl: null });
+    expect(view({ ...agreed, verdict: "disagree" })).toMatchObject({ headline: "Decided to pay a 0.35 USDC bill.", why: "In shadow mode, a person disagreed, so it was not paid." });
+  });
+
+  it("says a payment a person approved after the agent held it, with its transaction", () => {
+    expect(view({ resultingStatus: "held", heldBecause: "cash_shortfall", txRef: null, paidTxHash: TX })).toMatchObject({
+      headline: "Paid a 0.35 USDC bill after a person approved it.",
+      why: "The operating wallet was short of cash for it.",
+      txUrl: `https://explorer.testnet.arc.io/tx/${TX}`,
+    });
   });
 
   it("says what code refused, in words that name no one", () => {
