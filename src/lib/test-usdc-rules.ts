@@ -39,15 +39,19 @@ export function testUsdcAmount(input: {
 
 export interface GrantEntry {
   ts: string;
-  detail: { amount?: unknown };
+  detail: { amount?: unknown; status?: unknown };
 }
 
-/** The USDC a workspace's `test_usdc_added` entries took in the 7 days before `now`. */
+/**
+ * The USDC a workspace's `test_usdc_added` entries took in the 7 days before `now`. One still processing counts; one
+ * Circle reported failed moved nothing, so it does not.
+ */
 export function takenInWindow(entries: GrantEntry[], now: number): number {
   return entries.reduce((sum, entry) => {
     const at = Date.parse(entry.ts);
     const amount = Number(entry.detail?.amount);
-    return Number.isFinite(at) && at > now - WEEK_MS && Number.isFinite(amount) && amount > 0 ? sum + amount : sum;
+    const counted = Number.isFinite(at) && at > now - WEEK_MS && Number.isFinite(amount) && amount > 0 && entry.detail?.status !== "failed";
+    return counted ? sum + amount : sum;
   }, 0);
 }
 

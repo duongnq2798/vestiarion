@@ -46,6 +46,13 @@ describe("takenInWindow", () => {
     ];
     expect(takenInWindow(entries, now)).toBeCloseTo(500.01, 6);
   });
+  it("leaves out a transfer Circle reported failed, which moved nothing, and counts one still processing", () => {
+    const entries = [
+      { ts: "2026-10-08T11:00:00Z", detail: { amount: 300, status: "failed" } },
+      { ts: "2026-10-08T11:00:00Z", detail: { amount: 200, status: "pending" } },
+    ];
+    expect(takenInWindow(entries, now)).toBe(200);
+  });
 });
 
 describe("testUsdcKey", () => {
