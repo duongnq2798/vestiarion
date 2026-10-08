@@ -1,5 +1,10 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-08: Decisions made in shadow mode say so
+
+- An agent decision entry (`ap_pay`, `ap_schedule`, `ap_hold`, `ap_flag_fraud`, `ap_request_info`) written while the workspace is in shadow mode carries `shadow: true` in its `detail`, in `GET /api/v1/ledger` and in the webhooks alike. Entries written outside shadow mode are unchanged.
+- A payment the agent decided in shadow mode that a check in code held (`guardrailBlocked: true`) is now settled through a person's verdict, as one shadow mode held: its `decision_verdict` entry precedes any `approval_paid`, `approval_rejected` or `approval_returned` for it.
+
 ## 2026-10-07: A mirror address for a supplier with none, in shadow mode
 
 - In shadow mode, a supplier with no Arc address can be given a mirror address: a wallet Vestiarion makes for it on Arc testnet, in the workspace's own Circle wallet set. The counterparty's `address` is then that wallet's, and `chain` is `ARC-TESTNET`.

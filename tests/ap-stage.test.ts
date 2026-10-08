@@ -1600,6 +1600,17 @@ describe("the AP stage in shadow mode (shadow mode S2)", () => {
     expect((entry.p_detail as { execution: Record<string, unknown> }).execution).not.toHaveProperty("heldBecause");
   });
 
+  it("marks each decision made in shadow mode, so a person settles a payment code held through a verdict too", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    payNow();
+    const held = apFake({ book: [northwind()], shadow: "VND", twoApprovals: 250 });
+    await held.stage();
+    expect(ledger(held.fake.requests)[0].p_detail).toMatchObject({ shadow: true, guardrailBlocked: true });
+    const paid = apFake({ book: [northwind()] });
+    await paid.stage();
+    expect(ledger(paid.fake.requests)[0].p_detail).not.toHaveProperty("shadow");
+  });
+
   it("leaves a schedule standing: on its day the payment is held instead", async () => {
     today("2026-10-02T09:00:00.000Z");
     model(() => ({ action: "schedule", payOn: "2026-10-05", reasoning: "Pay on its due date, not before.", confidence: 0.8 }));

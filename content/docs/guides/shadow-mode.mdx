@@ -33,6 +33,8 @@ If the supplier later gives you an Arc address of its own, enter it as you would
 
 When the agent decides to pay a bill now, nothing is sent: the payment is held for your verdict. In Approvals, AP / AR and the console, its card asks **Do you agree with the agent?**, and says what agreeing pays: the amount in USDC, the payee and the payee's address.
 
+The same holds when a check in code stopped the payment the agent decided, such as a first payment to an address only you stand behind, or one above the payee's limit. The card says why, and still asks for your verdict: **Agree and pay** pays it through the same checks as **Approve and pay**, and nothing else settles it until a verdict is given. So every payment made in shadow mode has a verdict behind it.
+
 - **Agree and pay** asks you to confirm: "You agree with the agent, and it is paid in USDC on Arc testnet now", with that payment. It then goes through the same checks as **Approve and pay**, to the address the card showed: if the payee's address changed since, nothing is paid. Your agreement is recorded once the payment goes, or its transfer was tried, and a confirmation says what was paid, to whom, with **View transaction**. If the payment is refused, nothing is recorded: agree and pay again once it can be paid.
 - **Disagree** asks **Why do you disagree?**, in at most 280 characters. Then choose what happens to the bill: **Decide it again later** returns it to the agent for its next cycle, and **Do not pay it** rejects it.
 
@@ -42,7 +44,7 @@ In Slack and Telegram, the agent's message about a payment held for your verdict
 
 If an **Agree and pay** stops before it finishes, the card says **Unfinished decision**. After ten minutes it offers **Agree and pay** and **Disagree** again, and nothing else settles the payment until a verdict is given.
 
-Every other decision, such as a payment scheduled for a later day or a bill held for a check, offers **Agree** and **Disagree** on its card in AP / AR. Its own actions stay where they are. When a scheduled payment's day comes, the agent decides again, and that payment is held for your verdict.
+Every other decision, such as a payment scheduled for a later day, or a bill the agent itself held, flagged or asked about, offers **Agree** and **Disagree** on its card in AP / AR. Its own actions stay where they are. When a scheduled payment's day comes, the agent decides again, and that payment is held for your verdict.
 
 Each decision takes one verdict, and the card shows it once given. A second verdict on the same decision changes nothing.
 

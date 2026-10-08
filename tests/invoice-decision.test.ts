@@ -560,6 +560,19 @@ describe("invoiceDecision: a payment held in shadow mode (shadow mode S2)", () =
     expect(decision.heldForVerdict).toBe(true);
   });
 
+  it("waits for a verdict when the agent decided to pay in shadow mode and a check in code held it", () => {
+    const codeHeld = entry(43, "ap_pay", "agent", {
+      invoiceId: "inv-1",
+      shadow: true,
+      decision: { action: "pay", reasoning: "Matched and within the limit.", confidence: 0.9 },
+      observed: { amount: 400, riskLevel: "clear" },
+      guardrailBlocked: true,
+      guardrailRule: "counterparty.new_payee",
+      execution: { resultingStatus: "held" },
+    });
+    expect(invoiceDecision(held, undefined, [codeHeld], { network: "arc-testnet" }).heldForVerdict).toBe(true);
+  });
+
   it("is not held for a verdict once a person paid it", () => {
     const paid = invoiceDecision(invoice({ status: "paid", tx_ref: "0xabc" }), undefined, [apPay], { network: "arc-testnet" });
     expect(paid.heldForVerdict).toBeUndefined();

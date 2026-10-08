@@ -598,6 +598,10 @@ disagrees with every decision.
   `entry_seq`, append-only for the tenant role), each with a signed `decision_verdict` entry naming the payable as its
   `subjectId`, so the card keeps showing the decision. Agree and pay goes through `approvePayable`, the command Approvals
   uses, and only while the payable still waits for that verdict. Disagree can return or reject it.
+- **Which payments await a verdict.** `awaitsVerdict` (`src/lib/next-step.ts`): the agent decided to pay and either
+  shadow mode held it (`heldBecause: "shadow_verdict"`) or, on a decision marked `shadow: true` (every AP decision the
+  orchestrator writes in shadow mode), a check in code held it. The gate, the approvals list, the AP / AR card and the
+  chat words below all read it, so a solo owner's first payment to an address they typed has a verdict too.
 - **Settled through a verdict.** `verdictGate` (`src/lib/verdicts.ts`): while a verdict can be given on a payable held
   for one (shadow mode on, and the decision made since it started), `approveAndPay`, `rejectInvoice` and
   `returnInvoice` refuse it before any verdict (`verdict_needed`), and a payment after a disagreement is refused

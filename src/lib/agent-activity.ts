@@ -5,7 +5,7 @@
  * the rows, this says them, and the page decides how to show them.
  */
 import { deciderName } from "./decision-trail";
-import { heldForVerdict, ruleInBrief } from "./next-step";
+import { awaitsVerdict, heldForVerdict, ruleInBrief } from "./next-step";
 import { networkProfile, type Network } from "./network";
 import { txUrl } from "./payee-chains";
 
@@ -204,7 +204,7 @@ function itemOf(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem, "t
   const item = invoiceItem(entry, refs, id, invoice);
   // A stopped payable is what a person decides: a chat's card names it (Slack design S8). One held for a person's
   // verdict is settled by giving one, in Vestiarion, so a chat draws no card for it (shadow mode S4).
-  return item.tone === "stopped" && !heldForVerdict(entry.detail) ? { ...item, invoiceId: id } : item;
+  return item.tone === "stopped" && !awaitsVerdict(entry.detail) ? { ...item, invoiceId: id } : item;
 }
 
 /**
@@ -264,12 +264,17 @@ function invoiceItem(
   }
   const decide = { path: `/approvals#payable-${id}`, pathLabel: "Decide in Approvals" };
   if (blocked) {
+    // In shadow mode a payment code held still waits for a person's verdict, given in Vestiarion (shadow mode S4).
+    const verdict = awaitsVerdict(entry.detail);
     return {
       seq: entry.seq,
-      text: `Code stopped paying ${invoice.name} ${amount}${after}.`,
+      text: verdict
+        ? `Code stopped paying ${invoice.name} ${amount}${after}; it waits for your verdict in shadow mode.`
+        : `Code stopped paying ${invoice.name} ${amount}${after}.`,
       detail: stoppedByCode(entry.detail, text(entry.detail.guardrailRule)),
       tone: "stopped",
       ...decide,
+      ...(verdict ? { pathLabel: "Give your verdict" } : {}),
       txHash: null,
     };
   }

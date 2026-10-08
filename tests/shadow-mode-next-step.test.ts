@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HELD_FOR_VERDICT } from "@/lib/agent/shadow-hold";
-import { agentResumes, heldForVerdict, ruleInBrief, ruleNextStep, SHADOW_VERDICT } from "@/lib/next-step";
+import { agentResumes, awaitsVerdict, heldForVerdict, ruleInBrief, ruleNextStep, SHADOW_VERDICT } from "@/lib/next-step";
 
 /**
  * What a person reads about a payment held in shadow mode (docs/superpowers/specs/2026-10-07-shadow-mode-design.md S2,
@@ -9,6 +9,19 @@ import { agentResumes, heldForVerdict, ruleInBrief, ruleNextStep, SHADOW_VERDICT
  */
 
 const counterparty = { id: "cp-1", name: "Northwind" };
+
+describe("a payment awaiting a person's verdict (shadow mode S4)", () => {
+  it("is one shadow mode held, or one the agent decided to pay in shadow mode that a check in code held", () => {
+    expect(awaitsVerdict({ guardrailBlocked: false, execution: { resultingStatus: "held", heldBecause: HELD_FOR_VERDICT } })).toBe(true);
+    expect(awaitsVerdict({ shadow: true, guardrailBlocked: true, decision: { action: "pay" }, execution: { resultingStatus: "held" } })).toBe(true);
+    // Outside shadow mode a code hold is settled as it always was.
+    expect(awaitsVerdict({ guardrailBlocked: true, decision: { action: "pay" }, execution: { resultingStatus: "held" } })).toBe(false);
+    // The agent's own hold, flag or question is not a payment it decided.
+    expect(awaitsVerdict({ shadow: true, guardrailBlocked: true, decision: { action: "hold" }, execution: { resultingStatus: "held" } })).toBe(false);
+    expect(awaitsVerdict({ shadow: true, guardrailBlocked: false, decision: { action: "pay" }, execution: { resultingStatus: "paid" } })).toBe(false);
+    expect(awaitsVerdict(null)).toBe(false);
+  });
+});
 
 describe("a payment held in shadow mode", () => {
   it("is read from its decision's entry, and never from a guardrail's hold", () => {

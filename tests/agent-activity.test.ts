@@ -120,6 +120,15 @@ describe("what the agent did, in words", () => {
     expect(waiting?.invoiceId).toBeUndefined();
   });
 
+  it("says a payment code held in shadow mode waits for a verdict, and offers a chat no card to settle it", () => {
+    const waiting = activityItem(
+      entry("ap_pay", { shadow: true, decision: { action: "pay" }, guardrailBlocked: true, guardrailRule: "bridge.fee_above_cap", execution: { resultingStatus: "held" } }),
+      refs({ status: "held" })
+    );
+    expect(waiting).toMatchObject({ text: "Code stopped paying Jiren 0.30 USDC; it waits for your verdict in shadow mode.", pathLabel: "Give your verdict", tone: "stopped" });
+    expect(waiting?.invoiceId).toBeUndefined();
+  });
+
   it("says a refusal by code, why and the way through, and sends the person to Approvals", () => {
     const refused = activityItem(
       entry("ap_pay", { decisionMode: "deepseek", agreedWithReference: false, guardrailBlocked: true, guardrailRule: "bridge.fee_above_cap" }),
