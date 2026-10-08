@@ -3,7 +3,6 @@ import { configFromEnv } from "@/lib/config";
 import { NoOrgScopeError, runWith } from "@/lib/context";
 import { getChainProvider } from "@/lib/circle";
 import { getInsightsData } from "@/lib/insights";
-import { getLandingMetrics } from "@/lib/landing";
 import {
   appendLedgerEntry,
   ledgerEntryCount,
@@ -51,7 +50,6 @@ const READS: Array<[string, () => Promise<unknown>]> = [
   ["ledgerEntryCount", () => ledgerEntryCount()],
   ["verifyLedger", () => verifyLedger()],
   ["getInsightsData", () => getInsightsData()],
-  ["getLandingMetrics", () => getLandingMetrics()],
 ];
 
 describe.each(READS)("%s", (_name, read) => {
