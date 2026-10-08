@@ -21,6 +21,8 @@ describe("the Arc testnet profile", () => {
       tokens: { USDC: "0x3600000000000000000000000000000000000000", EURC: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a" },
       payeeChains: ARC_TESTNET.payeeChains,
       cctp: { domain: 26, iris: "https://iris-api-sandbox.circle.com", tokenMessenger: "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA" },
+      // Each source is checked against App Kit's chain table in tests/inbound-usdc.test.ts.
+      inbound: { domain: 26, iris: "https://iris-api-sandbox.circle.com", sources: expect.any(Array) },
       gateway: {
         api: "https://gateway-api-testnet.circle.com/v1",
         facilitator: "https://gateway-api-testnet.circle.com",
@@ -74,6 +76,8 @@ describe("the Arc mainnet profile", () => {
       tokens: { USDC: "0x3600000000000000000000000000000000000000", EURC: "0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1" },
       payeeChains: ARC_MAINNET.payeeChains,
       cctp: null,
+      // Bringing USDC in through CCTP runs on Arc mainnet, paying out through it does not yet.
+      inbound: { domain: 26, iris: "https://iris-api.circle.com", sources: expect.any(Array) },
       gateway: null,
       usyc: null,
       stablecoinServiceChain: null,
