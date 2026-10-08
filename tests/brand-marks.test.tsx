@@ -90,13 +90,15 @@ describe("a brand mark", () => {
 describe("the landing page's built on and works with", () => {
   const markup = renderToStaticMarkup(<BuiltWith />);
 
-  it("names each service beside its mark, and links to the evidence", () => {
+  it("names each service beside its mark, and links to the evidence, Arc and Circle to their own sites as well", () => {
     const page = text(markup);
     for (const name of ["Arc", "Circle", "Slack", "Telegram", "npm"]) expect(page).toContain(name);
     const hrefs = [...markup.matchAll(/<a [^>]*href="([^"]+)"/g)].map((match) => match[1]);
     expect(hrefs).toEqual([
       "/open",
+      "https://www.arc.io",
       "https://github.com/duongnq2798/vestiarion/blob/main/src/lib/circle/liveProvider.ts",
+      "https://www.circle.com",
       "/docs/guides/slack",
       "/docs/guides/telegram",
       "/docs/get-started/sdk",

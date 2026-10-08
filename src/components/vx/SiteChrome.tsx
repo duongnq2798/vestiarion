@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
-import { GITHUB_URL, ISSUES_URL, LICENSE_URL, PRODUCT_HUNT_URL, X_URL } from "@/lib/site-links";
+import { ARC_URL, CIRCLE_URL, GITHUB_URL, ISSUES_URL, LICENSE_URL, PRODUCT_HUNT_URL, X_URL } from "@/lib/site-links";
 import { BrandMark } from "./Brand";
 import { SiteMenu } from "./SiteMenu";
 
@@ -223,6 +223,7 @@ function XMark({ className }: { className?: string }) {
 }
 
 const COLUMN_LINK = "inline-flex py-1.5 text-sm text-ink-2 transition-colors duration-150 ease-standard hover:text-agent";
+const INLINE_LINK = "font-medium text-ink underline decoration-line-strong underline-offset-4 transition-colors duration-150 ease-standard hover:text-agent hover:decoration-agent";
 const COMPACT_LINK = "inline-flex py-1 text-ink-2 transition-colors duration-150 ease-standard hover:text-agent";
 const ICON_LINK = "-my-2 inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-ink-2 transition-colors duration-150 ease-standard hover:bg-raised/70 hover:text-ink";
 const COPYRIGHT = "© 2026 Vestiarion contributors";
@@ -265,6 +266,17 @@ export function SiteFooter({ compact = false, networkLabel = "Arc" }: { compact?
             <Wordmark />
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-ink-2">
               An autonomous treasury agent. A model proposes, code enforces the boundary, and every decision is signed into a chain anyone can verify.
+            </p>
+            {/* What it runs on, each named and linked to its own site, in a new tab. */}
+            <p className="mt-3 text-sm text-ink-2">
+              Built on{" "}
+              <FooterAnchor href={ARC_URL} className={INLINE_LINK}>
+                Arc ↗
+              </FooterAnchor>{" "}
+              · payments through{" "}
+              <FooterAnchor href={CIRCLE_URL} className={INLINE_LINK}>
+                Circle ↗
+              </FooterAnchor>
             </p>
           </div>
           {FOOTER_COLUMNS.map((column) => (

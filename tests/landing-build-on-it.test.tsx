@@ -98,3 +98,23 @@ describe("Claims", () => {
     }
   });
 });
+
+describe("the terminal's lines", () => {
+  it("fit the frame at desktop width, so none wraps there", () => {
+    for (const snippet of SNIPPETS) {
+      for (const line of snippet.lines) {
+        expect((line.kind === "command" ? `$ ${line.text}` : line.text).length, line.text).toBeLessThanOrEqual(76);
+      }
+    }
+  });
+
+  it("wrap under themselves on a narrow screen, never scrolling the frame sideways", () => {
+    const markup = renderToStaticMarkup(
+      <TooltipProvider>
+        <Terminal snippet={SNIPPETS[0]} />
+      </TooltipProvider>
+    );
+    expect(markup).not.toContain("overflow-x-auto");
+    expect(markup).toContain("whitespace-pre-wrap break-words");
+  });
+});

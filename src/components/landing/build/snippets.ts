@@ -43,7 +43,9 @@ const CURL = [
 const SDK = [
   'import { Vestiarion } from "@vestiarion/sdk";',
   "",
-  "const vestiarion = new Vestiarion({ apiKey: process.env.VESTIARION_API_KEY! });",
+  "const vestiarion = new Vestiarion({",
+  "  apiKey: process.env.VESTIARION_API_KEY!,",
+  "});",
   "",
   "const invoice = await vestiarion.invoices.create(",
   '  { counterpartyId, amount: "420.00", dueDate: "2026-10-31",',
@@ -53,7 +55,11 @@ const SDK = [
   "const verification = await vestiarion.ledger.verify();",
 ];
 
-const MCP = ["claude mcp add --transport http vestiarion https://www.vestiarion.xyz/api/mcp \\", '  --header "Authorization: Bearer $VESTIARION_API_KEY"'];
+const MCP = [
+  "claude mcp add --transport http vestiarion \\",
+  "  https://www.vestiarion.xyz/api/mcp \\",
+  '  --header "Authorization: Bearer $VESTIARION_API_KEY"',
+];
 
 export const SNIPPETS: readonly Snippet[] = [
   {
@@ -63,8 +69,10 @@ export const SNIPPETS: readonly Snippet[] = [
     lines: [
       command(CURL[0]),
       ...CURL.slice(1).map(code),
-      output('201 Created  { "status": "pending", "amount": "420.00", "dueDate": "2026-10-31", … }'),
-      note("# The agent decides it as one typed into the console, with every guardrail."),
+      output("201 Created"),
+      output('{ "status": "pending", "amount": "420.00", "dueDate": "2026-10-31", … }'),
+      note("# The agent decides it as one typed into the console,"),
+      note("# with every guardrail."),
     ],
     copy: CURL.join("\n"),
     guide: { href: "/docs/guides/api-invoices", label: "Send invoices from your system" },
@@ -83,10 +91,11 @@ export const SNIPPETS: readonly Snippet[] = [
     context: "Claude Code · MCP server",
     lines: [
       command(MCP[0]),
-      code(MCP[1]),
+      ...MCP.slice(1).map(code),
       note("# Then ask in plain language:"),
       output("> Is our ledger intact, and are any payments held? Why was each one held?"),
-      note('# It calls verify_ledger, then list_invoices with status "held": each carries the agent\'s reasoning.'),
+      note('# It calls verify_ledger, then list_invoices with status "held":'),
+      note("# each held invoice carries the agent's reasoning."),
     ],
     copy: MCP.join("\n"),
     guide: { href: "/docs/ai-integration/mcp", label: "Connect an AI agent" },
@@ -99,7 +108,8 @@ export const SNIPPETS: readonly Snippet[] = [
       note("# Anyone who can write to the repository comments, on a line of its own:"),
       code("/bounty 25"),
       note("# The app replies with the bounty, and asks the author where to be paid."),
-      note("# Once it is merged, the agent pays them, and the transaction is posted on the pull request."),
+      note("# Once it is merged, the agent pays them,"),
+      note("# and the transaction is posted on the pull request."),
     ],
     copy: "/bounty 25",
     guide: { href: "/docs/guides/github", label: "Pay for merged pull requests" },
