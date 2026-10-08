@@ -677,6 +677,8 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
     expect(panel(status({ step: "live", network: "arc-mainnet", host: "external", walletTreasury: ready, liveSince: "2026-10-07T09:12:00Z" }))).toContain(mark);
     const halfway = setup({ step: "wallet", wallet: null, agent: null, walletUsdc: null, agentGasUsdc: null });
     expect(panel(status({ step: "wallets", network: "arc-mainnet", host: "external", walletTreasuryAvailable: true, walletTreasury: halfway }))).not.toContain("data-add-usdc");
+    // A member who cannot administer the workspace is not asked to fund what the page calls Your wallet (review M5).
+    expect(panel(status({ step: "live", network: "arc-mainnet", host: "external", walletTreasury: ready, liveSince: "2026-10-07T09:12:00Z" }), false)).not.toContain("data-add-usdc");
   });
 
   it("offers to connect the wallet again when the workspace chose its own wallet but holds no address for it", () => {
@@ -711,6 +713,8 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
       const markup = panel(passkey({ step: "deploy", walletUsdc: 0.2 }));
       expect(markup.split("data-add-usdc=").length - 1).toBe(1);
       expect(markup).toContain(`data-add-usdc="${WALLET}" data-add-usdc-network="arc-mainnet" data-add-usdc-label="Your wallet"`);
+      // What setup needs arrives less Circle's fee (review M9).
+      expect(text(markup)).toContain("From another chain, send a little more than this: Circle's fee comes out of what you send.");
     });
 
     it("sets up with one confirmation once the USDC is there, saying what it does, from the workspace's own figures (final review I4)", () => {

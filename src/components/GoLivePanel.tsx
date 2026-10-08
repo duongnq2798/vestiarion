@@ -547,7 +547,8 @@ function LiveDetails({ orgSlug, status, canAdminister }: { orgSlug: string; stat
       {status.walletTreasury && <WalletTreasurySummary status={status.walletTreasury} network={status.network ?? "arc-mainnet"} />}
       {/* The treasury's own wallet changes its contract's figures, or stops and resumes the agent (treasury wallet controls C1). */}
       {status.walletTreasury && canAdminister && <TreasuryWalletControls orgSlug={orgSlug} status={status.walletTreasury} network={status.network ?? "arc-mainnet"} />}
-      <AddUsdc status={status} />
+      {/* "Your wallet" is the owner's: a member who cannot administer the workspace is not asked to fund it (review M5). */}
+      {canAdminister && <AddUsdc status={status} />}
       <div className="space-y-1 text-sm text-ink-2">
         {status.liveSince && <p>Live since {utcMinute(status.liveSince)}</p>}
         <p>

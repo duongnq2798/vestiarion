@@ -12,6 +12,7 @@ import { connectWallet, discoverWallets, switchChain, walletErrorMessage, type D
 import {
   forgetInbound,
   formatUsdc,
+  freshQuote,
   inboundArrival,
   InboundError,
   inboundSource,
@@ -39,7 +40,7 @@ const ARRIVAL_POLL_MS = 5_000;
 const FORGET_AFTER_MS = 30 * 60_000;
 
 type Note = { tone: "neutral" | "error"; text: string } | null;
-type Review = { provider: Eip1193Provider; from: string; source: InboundSource; balanceUnits: bigint; quote: InboundQuote };
+type Review = { provider: Eip1193Provider; from: string; source: InboundSource; balanceUnits: bigint; quote: InboundQuote; quotedAt: number };
 
 /** Where a transfer is kept until Circle mints it; none where the browser refuses storage. */
 function browserStore(): SentStore | null {
@@ -93,6 +94,8 @@ export default function AddUsdcFromChain({ network, recipient, recipientLabel }:
   const [picked, setPicked] = useState(0);
   const [review, setReview] = useState<Review | null>(null);
   const [arrived, setArrived] = useState<{ pending: PendingInbound; mintTxHash: string } | null>(null);
+  const [sentHere, setSentHere] = useState<PendingInbound | null>(null);
+  const [seen, setSeen] = useState(false);
   const [stale, setStale] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<Note>(null);
@@ -100,8 +103,10 @@ export default function AddUsdcFromChain({ network, recipient, recipientLabel }:
   // A transfer this browser sent and has not seen minted (B5): read in the browser only, as the server keeps nothing.
   const keptJson = useSyncExternalStore(subscribeKept, () => JSON.stringify(pendingInbound(browserStore(), profile, recipient)), () => "null");
   const kept = useMemo(() => JSON.parse(keptJson) as PendingInbound | null, [keptJson]);
-  const keptSource = kept ? (inboundSources(profile).find((entry) => entry.id === kept.sourceId) ?? null) : null;
-  const open = opened || kept !== null || arrived !== null;
+  // Followed from storage, or from this page alone where the browser keeps nothing (review I1).
+  const following = kept ?? sentHere;
+  const followingSource = following ? (inboundSources(profile).find((entry) => entry.id === following.sourceId) ?? null) : null;
+  const open = opened || following !== null || arrived !== null;
 
   useEffect(() => {
     if (!open || wallets !== null) return;
@@ -112,22 +117,30 @@ export default function AddUsdcFromChain({ network, recipient, recipientLabel }:
     };
   }, [open, wallets]);
 
-  // Iris is asked every 5 seconds while the page is in view, until it reports the mint.
+  // Iris is asked every 5 seconds while the page is in view, one question at a time, until it reports the mint.
   useEffect(() => {
-    if (!kept || !keptSource) return;
+    if (!following || !followingSource) return;
     let alive = true;
+    let asking = false;
     const ask = async () => {
-      if (document.visibilityState !== "visible") return;
-      const minted = await inboundArrival(profile, keptSource, kept.burnTxHash);
-      if (!alive) return;
-      if (!minted) {
-        setStale(Date.now() - Date.parse(kept.sentAt) > FORGET_AFTER_MS);
-        return;
+      if (asking || document.visibilityState !== "visible") return;
+      asking = true;
+      try {
+        const arrival = await inboundArrival(profile, followingSource, following.burnTxHash);
+        if (!alive) return;
+        if (arrival?.state === "minted") {
+          forgetInbound(browserStore(), profile, recipient);
+          keptChanged();
+          setSentHere(null);
+          setArrived({ pending: following, mintTxHash: arrival.mintTxHash });
+          router.refresh();
+          return;
+        }
+        setSeen(arrival?.state === "seen");
+        setStale(Date.now() - Date.parse(following.sentAt) > FORGET_AFTER_MS);
+      } finally {
+        asking = false;
       }
-      forgetInbound(browserStore(), profile, recipient);
-      keptChanged();
-      setArrived({ pending: kept, mintTxHash: minted.mintTxHash });
-      router.refresh();
     };
     void ask();
     const timer = window.setInterval(() => void ask(), ARRIVAL_POLL_MS);
@@ -135,7 +148,7 @@ export default function AddUsdcFromChain({ network, recipient, recipientLabel }:
       alive = false;
       window.clearInterval(timer);
     };
-  }, [kept, keptSource, profile, recipient, router]);
+  }, [following, followingSource, profile, recipient, router]);
 
   if (sources.length === 0) return null;
 
@@ -156,7 +169,7 @@ export default function AddUsdcFromChain({ network, recipient, recipientLabel }:
     run(async (say) => {
       const source = inboundSource(profile, sourceId);
       const amountUnits = usdcUnits(amount);
-      if (amountUnits === null) throw new InboundError("Enter the USDC to send, such as 25 or 12.50, with at most 6 decimals.");
+      if (amountUnits === null) throw new InboundError("Enter the USDC to send with a point for decimals, such as 25 or 12.50, and at most 6 decimals.");
       const wallet = wallets?.[picked];
       if (!wallet) throw new InboundError("No wallet was found in this browser. Install a wallet such as MetaMask or Rabby, then reload the page.");
       say("Connect your wallet…");
@@ -166,16 +179,25 @@ export default function AddUsdcFromChain({ network, recipient, recipientLabel }:
       say(`Reading your wallet on ${source.label} and Circle's fee…`);
       const { balanceUnits, quote } = await reviewInbound({ provider: wallet.provider, from, profile, source, amountUnits });
       setNote(null);
-      setReview({ provider: wallet.provider, from, source, balanceUnits, quote });
+      setReview({ provider: wallet.provider, from, source, balanceUnits, quote, quotedAt: Date.now() });
     });
 
   const send = (current: Review) =>
     run(async (say) => {
       // The wallet may have moved since the review: it is switched back, and asked its chain again before each send.
       await switchChain(current.provider, walletChain(current.source));
-      await sendInbound({ provider: current.provider, from: current.from, profile, source: current.source, recipient, quote: current.quote, store: browserStore(), say });
+      // Circle's fee follows Arc's gas: asked for again when the review is more than a minute old (review I3).
+      const fresh = await freshQuote({ profile, source: current.source, quote: current.quote, quotedAt: current.quotedAt, now: Date.now() });
+      if (fresh.rose) {
+        setReview({ ...current, quote: fresh.quote, quotedAt: Date.now() });
+        say("Circle's fee rose since you reviewed it. Check it above, then send again.");
+        return;
+      }
+      const pending = await sendInbound({ provider: current.provider, from: current.from, profile, source: current.source, recipient, quote: current.quote, store: browserStore(), say });
+      setSentHere(pending);
       setNote(null);
       setReview(null);
+      setSeen(false);
       setStale(false);
       keptChanged();
     });
@@ -218,25 +240,32 @@ export default function AddUsdcFromChain({ network, recipient, recipientLabel }:
         </div>
       </>
     );
-  } else if (kept) {
+  } else if (following) {
     body = (
       <>
         <p className="text-sm leading-relaxed text-ink-2">
-          On its way: you sent {formatUsdc(BigInt(kept.amountUnits))} USDC from {keptSource?.label ?? kept.sourceId}
-          {keptSource && (
+          On its way: you sent {formatUsdc(BigInt(following.amountUnits))} USDC from {followingSource?.label ?? following.sourceId}
+          {followingSource && (
             <>
               {" "}
-              (<TxLink href={`${keptSource.explorerTx}${kept.burnTxHash}`}>see it on {keptSource.label}</TxLink>)
+              (<TxLink href={`${followingSource.explorerTx}${following.burnTxHash}`}>see it on {followingSource.label}</TxLink>)
             </>
           )}
           . Circle mints it to {recipientLabel} on {profile.label}, usually within a minute. This page checks every 5 seconds.
         </p>
-        {(stale || !keptSource) && (
+        {stale && followingSource && seen && (
+          <p className="text-xs leading-relaxed text-ink-3">
+            Your USDC left {followingSource.label} and Circle has the transfer, but has not minted it on {profile.label} after 30 minutes. It is not
+            lost: Circle&apos;s attestation lets it be minted to {recipientLabel} later, and this page keeps checking. Keep the link to the transaction
+            above.
+          </p>
+        )}
+        {((stale && !seen) || !followingSource) && (
           <div className="space-y-2">
             <p className="text-xs leading-relaxed text-ink-3">
-              {keptSource
-                ? "Circle has not minted it after 30 minutes. If your wallet shows the transfer failed, forget it here; nothing is sent again."
-                : `This page no longer follows transfers from ${kept.sourceId}. Forget it here; nothing is sent again.`}
+              {followingSource
+                ? "Circle has not seen this transfer after 30 minutes. If your wallet shows it failed or was dropped, forget it here; nothing is sent again."
+                : `This page no longer follows transfers from ${following.sourceId}. Forget it here; nothing is sent again.`}
             </p>
             <Button
               type="button"
@@ -244,6 +273,8 @@ export default function AddUsdcFromChain({ network, recipient, recipientLabel }:
               size="sm"
               onClick={() => {
                 forgetInbound(browserStore(), profile, recipient);
+                setSentHere(null);
+                setSeen(false);
                 setStale(false);
                 keptChanged();
               }}

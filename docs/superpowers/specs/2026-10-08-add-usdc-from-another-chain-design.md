@@ -29,19 +29,23 @@ same burn with the hook, in the other direction, from a wallet in the browser.
   Arc's (`/v2/burn/USDC/fees/{source}/{arc}?forward=true`): the forwarding fee's high estimate plus the protocol's
   minimum fee in basis points of the amount, rounded up. That is the burn's `maxFee`. The page says it as "at most", and
   what arrives as "at least" the amount less it. An amount at or below the fee is refused, as is a moment Iris does not
-  answer or lists no fast forwarded route.
+  answer or lists no fast forwarded route. A review more than a minute old is quoted again before sending; a fee that
+  rose is shown, and nothing is sent until the person sends again (review I3).
 - **B3. Two transactions.** `approve(TokenMessengerV2, amount)` on the source's USDC, skipped when the allowance covers
   the amount, then `depositForBurnWithHook(amount, arcDomain, recipient, usdc, 0, maxFee, 1000, "cctp-forward")`.
   The wallet is switched to the source chain first, and asked its chain again just before each send: a wallet moved to
   another chain sends nothing. The approval is confirmed on chain before the burn is asked for.
 - **B4. Checks before the wallet asks.** The wallet's USDC on the source chain is read first; an amount above it is
-  refused in words, before any prompt. Amounts are USDC with at most 6 decimals, above 0.
+  refused in words, before any prompt, as is a wallet that did not switch to the source chain. Amounts are USDC with a
+  point for decimals, at most 6 of them, above 0; a comma is refused, since "12,50" means twelve and a half in much of
+  the world (review M1).
 - **B5. On its way, across reloads.** Once the wallet answers with the burn's hash, it is kept in the browser
   (`localStorage`, keyed by network and recipient) until Iris reports the mint. The page then says it is on its way,
   links the burn on the source chain's explorer, and asks Iris every 5 seconds. A reload or a second visit resumes the
   same transfer. Once minted, the page links the mint on Arc's explorer and reads the wallet's balance again. A burn the
-  source chain refused is forgotten and said. A transfer still not minted after 30 minutes can be forgotten by the
-  person; nothing is sent again.
+  source chain refused is forgotten and said. A browser that keeps nothing still follows the transfer while the page is
+  open (review I1). After 30 minutes without a mint, a burn Iris has seen is said to be not lost, mintable later, and is
+  never offered to be forgotten; one Iris has not seen can be forgotten by the person; nothing is sent again (review I2).
 - **B6. Where it shows.** Collapsed behind one secondary button, wherever Go live asks for USDC on the network:
   the passkey route's **Add USDC to your wallet** step; the own-wallet route's setup steps, whose transactions pay gas in
   USDC on Arc; step 3 and a live workspace's details, for the treasury wallet (path C) or the operating wallet (paths A

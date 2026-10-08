@@ -41,16 +41,28 @@ export function fastForwardedRoute(rows: unknown): { forwardUnits: bigint; bps: 
  * hash; null while there is none yet, or when Iris cannot say (not found, an error, no answer).
  */
 export async function forwardedMintFrom(iris: string, domain: number, burnTxHash: string, options: { fetch?: typeof fetch } = {}): Promise<{ mintTxHash: string } | null> {
+  const messages = await irisMessagesFor(iris, domain, burnTxHash, options);
+  const mint = messages ? mintIn(messages) : null;
+  return mint ? { mintTxHash: mint } : null;
+}
+
+/** Iris's messages for a burn's transaction on the chain of CCTP domain `domain`; null when Iris cannot say (not found, an error, no answer). */
+export async function irisMessagesFor(iris: string, domain: number, burnTxHash: string, options: { fetch?: typeof fetch } = {}): Promise<Array<{ forwardTxHash?: unknown }> | null> {
   try {
     const response = await (options.fetch ?? fetch)(`${iris}/v2/messages/${domain}?transactionHash=${burnTxHash}`, {
       signal: AbortSignal.timeout(IRIS_DEADLINE_MS),
       cache: "no-store",
     });
     if (!response.ok) return null;
-    const body = (await response.json()) as { messages?: Array<{ forwardTxHash?: unknown }> };
-    const mint = body.messages?.find((message) => typeof message.forwardTxHash === "string" && message.forwardTxHash.length > 0)?.forwardTxHash;
-    return typeof mint === "string" ? { mintTxHash: mint } : null;
+    const body = (await response.json()) as { messages?: unknown };
+    return Array.isArray(body.messages) ? (body.messages as Array<{ forwardTxHash?: unknown }>) : null;
   } catch {
     return null;
   }
+}
+
+/** The mint transaction the Forwarding Service submitted, among a burn's messages; null while there is none. */
+export function mintIn(messages: Array<{ forwardTxHash?: unknown }>): string | null {
+  const mint = messages.find((message) => typeof message.forwardTxHash === "string" && message.forwardTxHash.length > 0)?.forwardTxHash;
+  return typeof mint === "string" ? mint : null;
 }

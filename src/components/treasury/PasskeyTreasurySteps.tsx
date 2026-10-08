@@ -257,8 +257,13 @@ function FundStep({ status, label, network }: { status: WalletTreasuryStatus; la
           Refresh
         </Button>
       </div>
-      {/* Few people hold USDC on Arc yet: CCTP brings it from where they do (add USDC B6). */}
-      {status.wallet && <AddUsdcFromChain network={network} recipient={status.wallet} recipientLabel="Your wallet" />}
+      {/* Few people hold USDC on Arc yet: CCTP brings it from where they do (add USDC B6), less Circle's fee (review M9). */}
+      {status.wallet && (
+        <>
+          <p className="text-xs text-ink-3">From another chain, send a little more than this: Circle&apos;s fee comes out of what you send.</p>
+          <AddUsdcFromChain network={network} recipient={status.wallet} recipientLabel="Your wallet" />
+        </>
+      )}
     </>
   );
 }

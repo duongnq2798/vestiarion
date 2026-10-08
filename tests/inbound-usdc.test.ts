@@ -5,6 +5,7 @@ import { CCTP_FORWARD_HOOK, FAST_FINALITY, toBytes32 } from "@/lib/circle/cctp-f
 import {
   forgetInbound,
   formatUsdc,
+  freshQuote,
   inboundArrival,
   inboundCalls,
   InboundError,
@@ -77,11 +78,15 @@ describe("where USDC comes from (B1)", () => {
 });
 
 describe("amounts (B4)", () => {
-  it("reads USDC with up to 6 decimals, above 0", () => {
+  it("reads USDC with up to 6 decimals, above 0, and a point for decimals", () => {
     expect(usdcUnits("10")).toBe(BigInt(10_000_000));
     expect(usdcUnits(" 1.234567 ")).toBe(BigInt(1_234_567));
     expect(usdcUnits("0.5")).toBe(BigInt(500_000));
-    expect(usdcUnits("1,000.25")).toBe(BigInt(1_000_250_000));
+    expect(usdcUnits("1000.25")).toBe(BigInt(1_000_250_000));
+  });
+
+  it("refuses any comma, which half the world writes for decimals: 12,50 is never 1250 USDC (review M1)", () => {
+    for (const refused of ["12,50", "1,2", "1,000", "1,000.25"]) expect(usdcUnits(refused), refused).toBeNull();
     for (const refused of ["", "0", "0.0000001", "-1", "abc", "1e3", "1.2.3", "."]) expect(usdcUnits(refused), refused).toBeNull();
   });
 
@@ -120,6 +125,24 @@ describe("the fee (B2)", () => {
   });
 });
 
+describe("the fee again before sending (review I3)", () => {
+  const QUOTED = { amountUnits: BigInt(10_000_000), maxFeeUnits: BigInt(19_200), arrivesUnits: BigInt(9_980_800) };
+
+  it("is not asked for again within a minute of the review", async () => {
+    const fetch = vi.fn();
+    expect(await freshQuote({ profile: ARC_MAINNET, source: base(), quote: QUOTED, quotedAt: 1_000, now: 61_000, fetch })).toEqual({ quote: QUOTED, rose: false });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("is asked for again after a minute: a fee that rose is shown before anything is sent, a lower one changes nothing", async () => {
+    const higher = [{ finalityThreshold: 1000, minimumFee: 0.325, forwardFee: { high: 25_000 } }];
+    const rose = await freshQuote({ profile: ARC_MAINNET, source: base(), quote: QUOTED, quotedAt: 1_000, now: 62_000, fetch: vi.fn(async () => json(higher)) });
+    expect(rose).toEqual({ quote: { amountUnits: BigInt(10_000_000), maxFeeUnits: BigInt(25_325), arrivesUnits: BigInt(9_974_675) }, rose: true });
+    const lower = [{ finalityThreshold: 1000, minimumFee: 0.325, forwardFee: { high: 16_000 } }];
+    expect(await freshQuote({ profile: ARC_MAINNET, source: base(), quote: QUOTED, quotedAt: 1_000, now: 62_000, fetch: vi.fn(async () => json(lower)) })).toEqual({ quote: QUOTED, rose: false });
+  });
+});
+
 describe("the two transactions (B3)", () => {
   const DEPOSIT = parseAbi([
     "function depositForBurnWithHook(uint256 amount, uint32 destinationDomain, bytes32 mintRecipient, address burnToken, bytes32 destinationCaller, uint256 maxFee, uint32 minFinalityThreshold, bytes hookData)",
@@ -152,9 +175,14 @@ describe("the two transactions (B3)", () => {
 describe("the mint (B5)", () => {
   it("is the transaction Circle's Forwarding Service submitted on Arc, from Iris's messages for the burn", async () => {
     const fetch = vi.fn(async () => json({ messages: [{ status: "complete", forwardState: "CONFIRMED", forwardTxHash: "0xmint" }] }));
-    expect(await inboundArrival(ARC_MAINNET, base(), BURN, { fetch })).toEqual({ mintTxHash: "0xmint" });
+    expect(await inboundArrival(ARC_MAINNET, base(), BURN, { fetch })).toEqual({ state: "minted", mintTxHash: "0xmint" });
     expect(fetch).toHaveBeenCalledWith(`https://iris-api.circle.com/v2/messages/6?transactionHash=${BURN}`, expect.anything());
-    expect(await inboundArrival(ARC_MAINNET, base(), BURN, { fetch: vi.fn(async () => json({ messages: [{ status: "pending_confirmations" }] })) })).toBeNull();
+  });
+
+  it("tells a burn Circle has seen and not minted from one it has never seen (review I2)", async () => {
+    expect(await inboundArrival(ARC_MAINNET, base(), BURN, { fetch: vi.fn(async () => json({ messages: [{ status: "pending_confirmations" }] })) })).toEqual({ state: "seen" });
+    expect(await inboundArrival(ARC_MAINNET, base(), BURN, { fetch: vi.fn(async () => json({ messages: [{ status: "complete", forwardState: "PENDING" }] })) })).toEqual({ state: "seen" });
+    expect(await inboundArrival(ARC_MAINNET, base(), BURN, { fetch: vi.fn(async () => json({ messages: [] })) })).toBeNull();
     expect(await inboundArrival(ARC_MAINNET, base(), BURN, { fetch: vi.fn(async () => json({ error: "Message hash not found" }, 404)) })).toBeNull();
     expect(await inboundArrival(ARC_MAINNET, base(), BURN, { fetch: vi.fn().mockRejectedValue(new TypeError("fetch failed")) })).toBeNull();
   });
@@ -201,7 +229,7 @@ describe("a transfer on its way (B5)", () => {
 type Request = { method: string; params?: unknown };
 
 /** A browser wallet on Base: its chain, its USDC and allowance, and the receipts its chain gives. */
-function wallet(options: { chainId?: number; balance?: bigint; allowance?: bigint; receipts?: Array<"0x1" | "0x0" | null> } = {}) {
+function wallet(options: { chainId?: number; balance?: bigint; allowance?: bigint; receipts?: Array<"0x1" | "0x0" | null | "throw"> } = {}) {
   const requests: Request[] = [];
   const sent: Array<{ to: string; data: string }> = [];
   const receipts = [...(options.receipts ?? [])];
@@ -223,6 +251,7 @@ function wallet(options: { chainId?: number; balance?: bigint; allowance?: bigin
         }
         case "eth_getTransactionReceipt": {
           const status = receipts.length > 0 ? receipts.shift() : "0x1";
+          if (status === "throw") throw Object.assign(new Error("request limit reached"), { code: -32005 });
           return status === null ? null : { status };
         }
         default:
@@ -242,7 +271,16 @@ describe("checking before the wallet asks (B4)", () => {
     const w = wallet({ balance: BigInt(25_000_000) });
     const review = await reviewInbound({ provider: w.provider, from: FROM, profile: ARC_MAINNET, source: base(), amountUnits: BigInt(10_000_000), fetch: vi.fn(async () => json(BASE_TO_ARC)) });
     expect(review).toEqual({ balanceUnits: BigInt(25_000_000), quote: QUOTE });
-    expect((w.requests[0].params as [{ to: string }])[0].to).toBe(base().usdc);
+    expect(w.requests.map((request) => request.method)).toEqual(["eth_chainId", "eth_call"]);
+    expect((w.requests[1].params as [{ to: string }])[0].to).toBe(base().usdc);
+  });
+
+  it("reads nothing on a chain other than the source, saying so (review M8)", async () => {
+    const w = wallet({ chainId: 1, balance: BigInt(25_000_000) });
+    await expect(reviewInbound({ provider: w.provider, from: FROM, profile: ARC_MAINNET, source: base(), amountUnits: BigInt(10_000_000), fetch: vi.fn() })).rejects.toThrow(
+      "Your wallet is not on Base yet. Choose Review again: it switches to Base first."
+    );
+    expect(w.requests.map((request) => request.method)).toEqual(["eth_chainId"]);
   });
 
   it("refuses more than the wallet holds there, before any prompt", async () => {
@@ -293,6 +331,16 @@ describe("sending (B3, B5)", () => {
     const slow = wallet({ receipts: [null, null, null] });
     await expect(sendWith(slow)).rejects.toThrow("Base has not confirmed the approval yet. Choose Send again in a minute: once it is confirmed, it is not asked for again.");
     expect(slow.sent).toHaveLength(1);
+  });
+
+  it("never says a failed receipt read refused anything: the approval is asked about again, the burn is kept (review M2)", async () => {
+    const approval = wallet({ receipts: ["throw"] });
+    const refused = sendWith(approval);
+    await expect(refused).rejects.toThrow("Base has not confirmed the approval yet.");
+    await expect(refused).rejects.toBeInstanceOf(InboundError);
+    const store = memoryStore();
+    const pending = await sendWith(wallet({ allowance: BigInt(10_000_000), receipts: ["throw"] }), store);
+    expect(pendingInbound(store, ARC_MAINNET, RECIPIENT)).toEqual(pending);
   });
 
   it("forgets a burn the source chain refused, and keeps one it has not confirmed yet", async () => {
