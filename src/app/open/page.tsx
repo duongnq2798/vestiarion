@@ -194,7 +194,8 @@ export default async function OpenPage({ searchParams }: OpenPageProps) {
                 <li>
                   A flag is the agent saying an invoice should not be paid. A person upholds it by rejecting the invoice and overturns it
                   by paying it; sending it back to the agent counts as neither. A hold or a request for information asks a person to
-                  decide, so it is not counted as agreement either way.
+                  decide, so it is not counted as agreement either way. The share of flags upheld leads with customers&apos; verdicts: in
+                  our own workspaces a person pays a flagged invoice to test the product, which says nothing about the agent.
                 </li>
                 <li>
                   An invoice is paid on time when its payment settles on or before its due day (UTC). No person involved means nobody

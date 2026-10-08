@@ -259,7 +259,17 @@ describe("the /open page", () => {
     expect(page).toMatch(/Decided by the agent itself 75% 9 of 12 payment decisions/);
     expect(page).toContain("Customers: 75% (3 of 4)");
     expect(page).toMatch(/Invoices paid on time 75% 9 of 12 invoices paid/);
-    expect(page).toMatch(/Agent flags upheld 50% 3 of 6 flags a person decided/);
+    // A verdict on a flag leads with customers' (1 of 2), the total that includes ours beneath.
+    expect(page).toMatch(/Agent flags customers upheld 50% 1 of 2 flags a customer decided .* With our workspaces: 50% \(3 of 6\)/);
+  });
+
+  it("never lets our own verdicts on flags stand for the agent's record", async () => {
+    // Our workspaces paid five flagged invoices while testing; no customer has decided a flag.
+    const ours = { ...side(2), flagsResolved: 5, flagsUpheld: 0 };
+    vi.mocked(readOpenNumbers).mockResolvedValue({ ...NUMBERS, sides: { customers: { ...side(1), flagsResolved: 0, flagsUpheld: 0 }, ours, total: ours } });
+    const page = text(await render());
+    expect(page).toMatch(/Agent flags customers upheld — No customer has decided a flag yet .* With our workspaces: 0% \(0 of 5\)/);
+    expect(page).not.toMatch(/Agent flags customers upheld 0%/);
   });
 
   it("counts each check between a model and the money, the uncomfortable ones too", async () => {
