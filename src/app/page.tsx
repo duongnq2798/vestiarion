@@ -7,6 +7,7 @@ import { Hero } from "@/components/landing/Hero";
 import { HowItWorks } from "@/components/landing/HowItWorks";
 import { LatestDecision } from "@/components/landing/LatestDecision";
 import { LiveProof } from "@/components/landing/LiveProof";
+import { WhatItPays } from "@/components/landing/WhatItPays";
 import type { ChainHeadEntry } from "@/components/landing/hero/EvidenceReplay";
 import type { ProvenanceLeg } from "@/components/vx/Provenance";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
@@ -84,6 +85,7 @@ export default async function LandingPage() {
       <main id="main">
         <Hero provenance={provenance} head={head} hostedAvailable={hostedAvailable} />
         <LatestDecision decision={latest} />
+        <WhatItPays />
         <Credentials screeningMode={currentScreeningMode} />
         <BuiltWith />
         <LiveProof metrics={metrics} />

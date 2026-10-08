@@ -79,9 +79,29 @@ fields above; the server never passes the workspace id, or anything not listed i
 `src/lib/platform/latest-decision.ts` calls it through `platformDb()`, parses it, and returns the band's view or null.
 Until the migration runs, or if the read fails, the band is not shown and the rest of the landing is unchanged.
 
+## L3. What the agent pays
+
+A grid of six cards right under the latest decision, so an owner sees at once which of their payments the agent can
+take, each in their own words, with a small illustration and a link to the guide that says how it decides. Every card
+states only what the product does today, as its guide says:
+
+| Card | What it says | Guide |
+|---|---|---|
+| Supplier bills | forwarded or read from a PDF, matched to the purchase order and receipt, paid on the discount's last day or the due date | first payment, When the agent pays |
+| Freelancers and contractors | paid once the work is verified; a new freelancer gets a link to say where | pay a contractor |
+| Bounties on pull requests | `/bounty 25` on a pull request; paid once merged, the transaction posted on it | GitHub, Attach a bounty |
+| Retainers and subscriptions | set up once, each period becomes a bill, paid no later than due | first payment, Pay something every period |
+| Payees on other chains | Base, Arbitrum or Ethereum Sepolia from Arc, through CCTP or a Gateway balance when cheaper | first payment, Pay a payee on another chain |
+| Bills in euros | paid in EURC; a USDC swap through Circle when short, within a 3% cost cap | first payment, Invoices in EURC |
+
+Under the grid, one line on the other direction: a client's pay link, matched on arrival, and reminders the agent
+times (first payment, Get paid by a client). A caption says the illustrations use example payees and amounts, and that
+the steps, checks and rules are the agent's own, as the hero's replay does. A test holds every link to a guide and a
+heading that exist.
+
 ## Out of scope
 
-A customer story (only with a named business's consent), the services grid, and a new illustration: later items.
+A customer story (only with a named business's consent) and a new illustration: later items.
 
 ## Cost if wrong
 
