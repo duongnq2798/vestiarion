@@ -95,7 +95,7 @@ const NEVER_SENT = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ENETUNREA
  * A write that moves no money (`movesMoney` false: a bridge's approve) says so instead, since nothing could have left
  * (payment safety R8).
  */
-async function sendToCircle(work: Promise<{ data?: { id?: string } }>, what: string, subject = "it", movesMoney = true): Promise<string> {
+export async function sendToCircle(work: Promise<{ data?: { id?: string } }>, what: string, subject = "it", movesMoney = true): Promise<string> {
   const unknown = movesMoney ? `${subject} ${MAY_HAVE_BEEN_ACCEPTED}` : `${subject} moved no money`;
   let created: { data?: { id?: string } };
   try {

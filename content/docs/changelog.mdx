@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-08: Test USDC for shadow mode
+
+- A workspace in shadow mode on Arc testnet can take the test USDC its open bills need from Vestiarion's float. Its ledger gains **`test_usdc_added`**, actor `human`, domain `treasury`, sent to webhook endpoints as `ledger.appended`: `{ by, amount, from, to, transferId, txHash, status, shortfall, weeklyLimit }`. `from` is the float's address and `to` the operating wallet's; `txHash` is `null` and `status` is `pending` while Arc testnet still confirms the transfer. `shortfall` is what the open bills needed, and `amount` what was sent.
+- Each one starts a cycle, whose `cycle_complete` entry lists the new event kind `test_usdc_added` in `events`.
+- Money from the float is never matched to a receivable: no `ar_received` follows it. Nothing else in `/api/v1` changes.
+
 ## 2026-10-08: Decisions made in shadow mode say so
 
 - An agent decision entry (`ap_pay`, `ap_schedule`, `ap_hold`, `ap_flag_fraud`, `ap_request_info`) written while the workspace is in shadow mode carries `shadow: true` in its `detail`, in `GET /api/v1/ledger` and in the webhooks alike. Entries written outside shadow mode are unchanged.

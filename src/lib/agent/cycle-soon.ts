@@ -44,6 +44,8 @@ export type CycleEventKind =
   /** The figure for two approvals was raised or turned off: a payment held for two approvals may need one now (two approvals T3). */
   | "two_approvals_raised"
   | "cash_returned"
+  /** Test USDC came in from Vestiarion's float: a payable held for cash may be paid now (test USDC T7). */
+  | "test_usdc_added"
   | "reminders_on"
   | "agent_resumed"
   | "sample_loaded"

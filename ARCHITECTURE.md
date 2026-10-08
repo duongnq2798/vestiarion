@@ -512,6 +512,13 @@ reports `credentialsUnreadable` and pays nothing. Inside the shared hosted entit
 a wallet set of its own, `vestiarion-<orgId>`, and it can pay only from its own `accounts` rows,
 which RLS scopes to the organization, so one hosted workspace cannot spend another's wallet.
 
+The hosted pair has one other use: Vestiarion's test USDC float for shadow mode (`SHADOW_FLOAT_WALLET_ID`,
+`src/lib/test-usdc.ts`, `docs/superpowers/specs/2026-10-08-shadow-test-usdc-design.md`), a wallet of the platform's own
+in the hosted entity, in the wallet set `vestiarion-shadow-float` that `npm run shadow-float -- setup` makes. It is read
+through `currentPlatformConfig()`, the configuration the workspace's scope was built from, and never put into a
+workspace's configuration, which still carries only `hostedAvailable`. It only sends from that one wallet to a shadow
+workspace's operating wallet on Arc testnet, whichever account the workspace itself pays from.
+
 **Paying from the owner's own wallet** (`docs/superpowers/specs/2026-10-07-wallet-treasury-design.md`) is a
 third `wallet_host`, `'external'`, on Arc mainnet only (the profile's `walletTreasury`). The treasury is an EOA
 the owner holds, and Vestiarion holds none of its USDC. `orgConfig` hands such a workspace the platform's agent
@@ -652,6 +659,16 @@ disagrees with every decision.
 - **Getting started in shadow mode.** While shadow mode is on, the console's checklist (`gettingStarted`,
   `src/lib/getting-started.ts`) keeps its three setup steps and then asks for suppliers, real bills (`ownBillCount`,
   paid or not) and a first verdict, from rows the console already reads; it hides once a verdict is given.
+- **Test USDC from Vestiarion's float** (`src/lib/test-usdc.ts`, rules in `src/lib/test-usdc-rules.ts`). A bill is
+  paid at its real amount and the faucet gives 20 USDC every two hours, so the console offers an owner or admin the
+  shortfall **Safe to spend today** shows, from one float wallet in the hosted entity (`SHADOW_FLOAT_WALLET_ID`, filled
+  from TestMint or the faucet outside the code). `addTestUsdc` works the amount out again with the operating wallet's
+  USDC read from the chain: at least 1 USDC, within `SHADOW_FLOAT_WEEKLY_LIMIT` (5,000) in any 7 days, counted from
+  the workspace's `test_usdc_added` entries, and within the float's USDC. Shadow mode, Arc testnet, a live workspace
+  and the platform's stop switch are checked before Circle is asked anything. The transfer's idempotency key is the
+  workspace's grant count, so two presses that read the same entries make one transfer. Each grant is a signed
+  `test_usdc_added` entry, written while it still settles, and raises a `test_usdc_added` cycle event. The receipts
+  stage never matches money from an address such an entry names as `from` to a receivable.
 - **What people see.** `verdictView` (`src/lib/verdict-view.ts`) gives each card the verdict on the agent's newest
   decision, given or to give, and `VerdictControl` offers it. The console's `ShadowModeSummary` shows how often people
   agreed (`readShadowSummary`).

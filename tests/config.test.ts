@@ -187,6 +187,12 @@ describe("configFromEnv — the hosted Circle account (hosted wallets H2, H5)", 
     expect(hostedWalletsAvailable({ ...org, chain: { ...org.chain, hostedAvailable: true } })).toBe(true);
     expect(hostedWalletsAvailable({ ...org, chain: { ...org.chain, hostedAvailable: false } })).toBe(false);
   });
+
+  it("reads the shadow mode float: its wallet id and a weekly limit of 5,000 USDC unless set", () => {
+    expect(configFromEnv(env()).shadowFloat).toEqual({ walletId: undefined, weeklyLimit: 5000 });
+    expect(configFromEnv(env({ SHADOW_FLOAT_WALLET_ID: " w-1 ", SHADOW_FLOAT_WEEKLY_LIMIT: "2500" })).shadowFloat).toEqual({ walletId: "w-1", weeklyLimit: 2500 });
+    expect(configFromEnv(env({ SHADOW_FLOAT_WEEKLY_LIMIT: "-4" })).shadowFloat?.weeklyLimit).toBe(5000);
+  });
 });
 
 describe("describeConfig", () => {

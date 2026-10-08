@@ -186,6 +186,12 @@ export interface VestiarionConfig {
   mainnetEnabled?: boolean;
   /** Who may open a mainnet workspace and take one live (MAINNET_ALLOWLIST): lower-cased email addresses. */
   mainnetAllowlist?: readonly string[];
+  /**
+   * Vestiarion's test USDC float for shadow mode (SHADOW_FLOAT_WALLET_ID, SHADOW_FLOAT_WEEKLY_LIMIT; test USDC T1, T3):
+   * a wallet on Arc testnet in the platform's hosted Circle account, and what one workspace may take from it in 7 days.
+   * Without a wallet id, or without the hosted pair, nothing is offered.
+   */
+  shadowFloat?: { walletId?: string; weeklyLimit: number };
 }
 
 /** Reads a positive number, falling back when absent or nonsense. */
@@ -341,6 +347,7 @@ export function configFromEnv(env: EnvLike = process.env): VestiarionConfig {
       .split(/[\s,;]+/)
       .map((address) => address.trim().toLowerCase())
       .filter(Boolean),
+    shadowFloat: { walletId: trimmed(env.SHADOW_FLOAT_WALLET_ID), weeklyLimit: positiveNumber(env.SHADOW_FLOAT_WEEKLY_LIMIT, 5000) },
   };
 }
 
