@@ -247,8 +247,9 @@
 /*
  * Reduced motion removes movement, not every change (docs/superpowers/specs/2026-10-08-landing-motion-design.md M0):
  * transitions keep their duration for opacity and colours only, so nothing travels, grows or slides; keyframe
- * animations are cut, except on an element that asks for calm motion (`data-calm-motion`: opacity or colour only, at
- * least 2 s a cycle). A revealed element fades in where it stands.
+ * animations are cut, except in an element that asks for calm motion (`data-calm-motion`) and everything inside it:
+ * there, each animation changes opacity or colour only, and nothing flashes faster than once in 2 s. A revealed
+ * element fades in where it stands.
  */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -258,9 +259,9 @@
     transition-property: opacity, color, background-color, border-color, outline-color, fill, stroke, box-shadow !important;
   }
 
-  :not([data-calm-motion]),
-  :not([data-calm-motion])::before,
-  :not([data-calm-motion])::after {
+  :not([data-calm-motion], [data-calm-motion] *),
+  :not([data-calm-motion], [data-calm-motion] *)::before,
+  :not([data-calm-motion], [data-calm-motion] *)::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }

@@ -65,19 +65,24 @@ and nothing depends on the script to be read. The script only dims what is not b
 
 **Words.** Unchanged from today's section, so the claims stay those already reviewed.
 
-## M2. The hero's signature: the chain, alive
+## M2. The hero's signature: the arch, alive with the receipt
 
-A generative field behind the hero's right side: the ledger as a lattice of small blocks in an isometric wave. Every
-couple of seconds one block is signed: it lights cobalt, a hash link draws to the block before it, the light runs a
-short way down the chain and settles to jade. The newest block carries the live ledger head's sequence number, which
-the page already reads (never a summary). It replaces the hero's two drifting blobs; the receipt and its arch stay in
-front of it.
+Ruling, on seeing the hero at 1440 px: the hero already has its signature, the treasury's arch around the printing
+receipt. A generative field behind it would compete with both, so the arch itself comes alive instead, in time with the
+receipt, which makes the motion mean something.
 
-Canvas 2D, no new dependency: at most ~120 blocks, the device pixel ratio honoured, drawing stopped while the hero is
-off screen or the tab is hidden, and the field fading to nothing under the headline so the words keep their contrast.
-
-**Reduced motion.** One composed still frame; the newest block's glow breathes (opacity only, `data-calm-motion`
-rules apply to its CSS equivalent).
+- **The arch's light** (`ArchLights`, from `xl` up where the arch is drawn): while the receipt is observed and
+  reasoned, a light climbs the twelve stones from the left springing over to the right, each brightening and settling
+  to a tint; when the receipt is signed, the keystone rings in its outcome, jade for a payment, vermilion for a
+  refusal. A new receipt starts it again; it pauses with the replay.
+- **One clock.** The replay publishes a beat (`hero/replay-beat.ts`) each time a receipt starts printing, is paused or
+  goes off screen, carrying the time its first line's animation started (`getAnimations()`), since the first receipt
+  prints from the page's styles before the script runs. The light moves its delays back by the time already elapsed.
+- **Reduced motion.** The receipt still prints, as calm motion: each line fades in where it stands, the stage being
+  worked on still lights, and there is no wipe, scan or turning stamp. The replays still change by themselves, so the
+  pause control shows under every setting. The arch's light changes only opacity and colour, so it runs as it is.
+- **Calm motion reaches inside.** The global rule spares an element marked `data-calm-motion` and everything inside
+  it, so a container can say it once.
 
 ## M3. Numbers, a demo with tabs, one strip and one wordmark
 

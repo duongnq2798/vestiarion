@@ -48,8 +48,8 @@ describe("the reduced motion rule", () => {
     expect(block).not.toMatch(/transition-duration/);
   });
 
-  it("cuts keyframe animations, except where an element asks for calm motion", () => {
-    expect(block).toMatch(/:not\(\[data-calm-motion\]\)[^{]*\{[^}]*animation-duration:\s*0\.01ms/);
+  it("cuts keyframe animations, except in an element that asks for calm motion and everything inside it", () => {
+    expect(block).toMatch(/:not\(\[data-calm-motion\], \[data-calm-motion\] \*\)[^{]*\{[^}]*animation-duration:\s*0\.01ms/);
   });
 
   it("still stops smooth scrolling", () => {

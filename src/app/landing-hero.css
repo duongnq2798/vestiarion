@@ -35,9 +35,9 @@
  * The hero's receipt prints itself: each line arrives at its own `--d`
  * delay, the stage being worked on lights up, a scan line passes down the
  * slip and the seal is stamped last. All of it is CSS, so it runs before
- * hydration. Under reduced motion none of it runs: the finished receipt is
- * simply there (the global rule only shortens durations, and these delays
- * would still hold each line back).
+ * hydration. Under reduced motion the receipt still prints, as calm motion
+ * (`data-calm-motion` on `.replay`): each line fades in where it stands, the
+ * stage still lights, and there is no wipe, no scan and no turning stamp.
  */
 @utility replay-print {
   animation: replay-print 460ms var(--ease-emphasized) var(--d, 0ms) both;
@@ -118,15 +118,67 @@
   to { background-position: 0 8px; }
 }
 
+@keyframes replay-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .replay,
-  .replay * {
-    animation: none !important;
+  .replay .replay-print,
+  .replay .replay-stamp {
+    animation-name: replay-fade;
+  }
+
+  .replay .replay-lit {
+    animation-name: replay-fade, replay-lit;
   }
 
   .replay-scan {
     display: none;
   }
+}
+
+/*
+ * The light that climbs the treasury's arch while the receipt prints (`ArchLights`, landing motion M2): each stone
+ * brightens at its own `--d` and settles to a tint, and the keystone rings in the receipt's outcome when it is signed.
+ * Opacity and colour only, so it is calm motion and runs under reduced motion too. A paused replay pauses it.
+ */
+.arch-lights .arch-light {
+  fill: var(--color-agent-line);
+  stroke: var(--color-agent);
+  stroke-width: 1;
+  opacity: 0;
+  animation: arch-light 1200ms var(--ease-standard) var(--d, 0ms) both;
+}
+
+.arch-lights .arch-key-light {
+  fill: none;
+  stroke: var(--color-proof);
+  opacity: 0;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--color-proof) 60%, transparent));
+  animation: arch-key 1800ms var(--ease-standard) var(--d, 0ms) both;
+}
+
+.arch-lights[data-tone="refused"] .arch-key-light {
+  stroke: var(--color-refused);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--color-refused) 60%, transparent));
+}
+
+.arch-lights[data-paused],
+.arch-lights[data-paused] * {
+  animation-play-state: paused !important;
+}
+
+@keyframes arch-light {
+  0% { opacity: 0; }
+  30% { opacity: 0.95; }
+  100% { opacity: 0.5; }
+}
+
+@keyframes arch-key {
+  0% { opacity: 0; }
+  30% { opacity: 1; }
+  100% { opacity: 0.85; }
 }
 
 /*
