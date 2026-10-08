@@ -535,7 +535,8 @@ describe("the new control screens, as source", () => {
     expect(invoices).toContain("upcoming.map((decision) => row(decision, withVerdict(receiptFor), ");
     // In shadow mode in a currency other than USDC, a bill is typed in that currency (shadow mode S6); in USDC, as typed.
     expect(invoices).toContain("billCurrency={billCurrencyOf(verdicts.shadow)}");
-    expect(read("src/app/o/[slug]/console/page.tsx")).toContain("{shadow && shadowSummary && <ShadowModeSummary orgSlug={slug} mode={shadow} summary={shadowSummary} />}");
+    // With the test USDC its open bills need, beside it (test USDC T8).
+    expect(read("src/app/o/[slug]/console/page.tsx")).toContain("{shadow && shadowSummary && <ShadowModeSummary orgSlug={slug} mode={shadow} summary={shadowSummary} testUsdc={testUsdc} />}");
   });
 
   it("the console's Stopped cards say what stopped each payable and where to handle it", () => {

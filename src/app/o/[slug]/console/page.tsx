@@ -43,6 +43,9 @@ import { cashOutlook } from "@/lib/cash-outlook";
 import { latestForecast, listAccounts, listCounterparties, listInvoices, listMilestones, listTreasuryActions, stats } from "@/lib/queries";
 import { readShadowMode } from "@/lib/shadow-mode";
 import { readShadowSummary, verdictFacts } from "@/lib/verdicts";
+import { readTestUsdcWeek, testUsdcAvailable } from "@/lib/test-usdc";
+import { testUsdcView } from "@/lib/test-usdc-rules";
+import { txUrl } from "@/lib/payee-chains";
 import { offerSampleData } from "@/lib/sample-data-offer";
 import { workspaceNetwork } from "@/lib/workspace-network";
 import { networkProfile } from "@/lib/network";
@@ -148,12 +151,19 @@ export default async function DashboardPage({
         return null;
       }),
     ]);
-    const shadowSummary = shadow
-      ? await readShadowSummary(db(), shadow).catch((error: unknown) => {
-          console.error("console: shadow summary not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
-          return null;
-        })
-      : null;
+    // In shadow mode the section also offers test USDC for what the open bills need (test USDC T8); best effort too.
+    const [shadowSummary, testUsdcWeek] = shadow
+      ? await Promise.all([
+          readShadowSummary(db(), shadow).catch((error: unknown) => {
+            console.error("console: shadow summary not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
+            return null;
+          }),
+          readTestUsdcWeek().catch((error: unknown) => {
+            console.error("console: test USDC not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
+            return null;
+          }),
+        ])
+      : [null, null];
     const invoiceDecisions = invoices.map((invoice) =>
       invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), invoiceEntries, { network, verdicts })
     );
@@ -214,6 +224,22 @@ export default async function DashboardPage({
         .filter((invoice) => invoice.direction === "receivable")
         .map((invoice) => ({ ...invoice, counterparty: invoice.counterparty_name, currency: invoice.currency ?? null })),
     });
+    // What the open bills need beyond the wallet, and for an owner or admin the test USDC to cover it (test USDC T8).
+    const operatingAccount = accountsRows.find((account) => account.kind === "operating");
+    const testUsdc = testUsdcWeek
+      ? {
+          view: testUsdcView({
+            safeToSpend: outlook.safeToSpend,
+            takenThisWeek: testUsdcWeek.takenThisWeek,
+            weeklyLimit: testUsdcWeek.weeklyLimit,
+            available: access.membership.mode === "live" && network === "arc-testnet" && testUsdcAvailable() && Boolean(operatingAccount?.address),
+            canAdd: can(access.membership.role, "records.write"),
+          }),
+          latest: testUsdcWeek.latest,
+          operatingAddress: operatingAccount?.address ?? null,
+          latestTxUrl: testUsdcWeek.latest?.txHash ? txUrl(network, testUsdcWeek.latest.txHash) : null,
+        }
+      : undefined;
     const treasuryDecisions = treasuryDecisionEntries(treasuryEntries, 2).map((entry) => treasuryLedgerDecision(entry, network));
     const executedReserveMoves = actionRows.slice(0, 2).map((action) => treasuryActionDecision(action, network));
     const headSeq = headEntries[0]?.seq ?? 0;
@@ -301,7 +327,7 @@ export default async function DashboardPage({
 
         <div className="grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1fr)_22rem]">
           <div className="min-w-0 space-y-8">
-            {shadow && shadowSummary && <ShadowModeSummary orgSlug={slug} mode={shadow} summary={shadowSummary} />}
+            {shadow && shadowSummary && <ShadowModeSummary orgSlug={slug} mode={shadow} summary={shadowSummary} testUsdc={testUsdc} />}
 
             {stopped.length > 0 && (
               <section>
