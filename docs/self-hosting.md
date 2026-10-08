@@ -430,11 +430,12 @@ ship a sample series: a chart with no rows behind it renders an explicit empty r
 older checks do not carry a sweep id, the UI transparently groups consecutive checks
 within two minutes as an observed batch rather than claiming a stronger association.
 
-The public `/` landing page queries its statistics through `src/lib/landing.ts`. Instrumented
-cycles and decisions come from `cycle_runs`; settled transfers and median settlement time come
-from confirmed live `payment_intents`; median fee includes only `chain_reported` samples; ledger
-height is an exact count of `ledger_entries`. A missing sample renders as unavailable prose rather
-than a zero achievement. Every claim links to the console route that provides its evidence.
+The public `/` landing page shows the open numbers, read through the same aggregate functions as
+`/open` (`src/lib/platform/open-numbers.ts`): Arc mainnet and Arc testnet each on its own, customers'
+workspaces apart from the team's, all time. Its hero calls the USYC reserve live once any live
+workspace runs a real one, a count over `orgs.usyc_live_at`. A network whose numbers cannot be read
+says so rather than showing a zero, and every live claim links to what shows it: an explorer
+transaction, `/open`, or the research note.
 
 
 ## Tests

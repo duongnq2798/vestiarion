@@ -245,3 +245,16 @@ export async function listTeam(): Promise<Array<{ email: string; addedAt: string
     .parse(unwrap(await platformDb().rpc("platform_team_members")));
   return rows.map((row) => ({ email: row.email, addedAt: row.added_at }));
 }
+
+/**
+ * One network's all-time open numbers for the landing (docs/superpowers/specs/2026-10-08-landing-proof-design.md P3),
+ * or null when they could not be read: the database's message is logged, and the landing shows the other network.
+ */
+export async function readAllTimeOrNull(network: Network): Promise<OpenNumbers | null> {
+  try {
+    return await readOpenNumbers(parsePeriod({}), network);
+  } catch (error) {
+    console.error(`landing: ${network} open numbers not read`, error instanceof Error ? error.message : error);
+    return null;
+  }
+}
