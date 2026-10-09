@@ -299,7 +299,7 @@ of why it was made, and shadow mode measures how often people agree with the age
 
 1. Sign in at [www.vestiarion.xyz](https://www.vestiarion.xyz) with your email and open a workspace on Arc testnet.
 2. Load sample data, and watch the agent decide within a minute.
-3. Approve a payment yourself, then verify the signed ledger.
+3. Approve a payment yourself, read the **Report** of what the agent did, then verify the signed ledger.
 
 The whole path is in [Try it in 5 minutes](https://www.vestiarion.xyz/docs/guides/try-it). To move testnet USDC,
 follow [Go live](https://www.vestiarion.xyz/docs/guides/go-live) and fund the wallet from

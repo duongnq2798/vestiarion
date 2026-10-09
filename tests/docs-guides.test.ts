@@ -153,6 +153,9 @@ const VERDICTS = "src/lib/verdicts.ts";
  */
 const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   "guides/try-it": [
+    ["Report", APP_NAV],
+    ["This workspace has no real bill yet, so the report counts its sample data.", "src/components/vx/WorkspaceReport.tsx"],
+    ["Sandbox: payments here are simulated.", "src/components/vx/WorkspaceReport.tsx"],
     ["Safe to spend today", "src/components/vx/CashOutlook.tsx"],
     ["Next 30 days", "src/components/vx/CashOutlook.tsx"],
     ["Continue with Google", LOGIN_PAGE],
