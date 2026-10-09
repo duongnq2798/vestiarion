@@ -17,6 +17,7 @@ type GuideSlug =
   | "guides/try-it"
   | "guides/go-live"
   | "guides/shadow-mode"
+  | "guides/report"
   | "guides/first-payment"
   | "guides/pay-a-contractor"
   | "guides/get-paid"
@@ -142,6 +143,7 @@ const TEST_USDC_CONTROL = "src/components/TestUsdcControl.tsx";
 const TEST_USDC_ACTION = "src/app/actions/test-usdc.ts";
 const TEST_USDC_LIBRARY = "src/lib/test-usdc.ts";
 const VERDICT = "src/components/VerdictControl.tsx";
+const REPORT = "src/components/vx/WorkspaceReport.tsx";
 const VERDICTS = "src/lib/verdicts.ts";
 
 /** Each guide's quoted UI strings, as `[text, the file it must appear in]`. */
@@ -893,6 +895,33 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["for this pull request, by", GITHUB_COMMENTS],
     ["pull_request_commented", GITHUB_COMMENTS],
   ],
+  "guides/report": [
+    ["Report", APP_NAV],
+    ["Payments on Arc testnet, in test USDC.", REPORT, "title={`Payments on ${profile.label}, in ${report.realMoney ? \"real\" : \"test\"} USDC.`}"],
+    ["Mirror", REPORT],
+    ["Bills handled", REPORT],
+    ["Time to decide", REPORT],
+    ["Paid on Arc", REPORT],
+    ["Stopped before paying", REPORT],
+    ["Needed a person", REPORT],
+    ["Your verdicts", REPORT],
+    ["Discounts captured", REPORT],
+    ["What it stopped", REPORT],
+    ["Paid since", REPORT],
+    ["Rejected", REPORT],
+    ["Still open", REPORT],
+    ["Payments and their proof", REPORT],
+    ["The agent", REPORT],
+    ["A person", REPORT],
+    ["Your verdict", REPORT],
+    ["Every entry, signed: Audit log", REPORT],
+    ["Before a live slice", REPORT],
+    ["Give verdicts on at least", REPORT],
+    ["Leave no decision waiting for your verdict", REPORT],
+    ["Have each supplier's own Arc address", REPORT],
+    ["Open a workspace on", REPORT],
+    ["No real bills yet", REPORT],
+  ],
   "guides/shadow-mode": [
     ["Shadow mode: it waits for a person to agree.", "src/components/vx/decision-signals.ts"],
     ["Paid later by a person", "src/lib/traction-digest.ts"],
@@ -1031,6 +1060,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/try-it": 20,
   "guides/go-live": 20,
   "guides/shadow-mode": 20,
+  "guides/report": 20,
   "guides/first-payment": 20,
   "guides/pay-a-contractor": 20,
   "guides/get-paid": 20,

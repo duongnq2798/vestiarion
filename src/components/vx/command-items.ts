@@ -21,6 +21,7 @@ export interface CommandTarget {
 const SECTION_KEYWORDS: Record<NavKey, string[]> = {
   treasury: ["home", "console", "balance", "cash", "reserve", "forecast", "pause", "resume"],
   insights: ["charts", "metrics", "measurements", "fees", "settlement"],
+  report: ["impact", "summary", "results", "outcomes", "proof", "discounts", "readiness"],
   invoices: ["invoices", "payables", "receivables", "bills", "ap", "ar"],
   counterparties: ["vendors", "clients", "suppliers", "payees"],
   contractors: ["milestones", "freelancers", "work"],

@@ -11,6 +11,7 @@ export const NAV_GROUPS = [
     items: [
       { key: "treasury", path: "/console", label: "Treasury" },
       { key: "insights", path: "/insights", label: "Insights" },
+      { key: "report", path: "/report", label: "Report" },
     ],
   },
   {
