@@ -1663,14 +1663,17 @@ async function decideApPayable(
   // still means the policy itself decided, so there was nothing to compare.
   const agreedWithReference = sameActionAsReference === null ? null : sameApDecision(decision, reference);
 
+  // No address to pay where payments are real: the guardrail holds it before anything is sent (counterparty.no_address),
+  // so neither limit is read for it. A sandbox simulates the payee's address.
+  const addressMissing = provider.mode === "live" && !counterparty.address;
   // The agent's spending limit (outflow budget spec R4): read only for a
   // payment now, since a schedule is decided again on its day. A read that
   // fails throws, and the stage pays nothing (R8).
-  const outflowBudget = decision.action === "pay" ? await ctx.budget.room() : null;
+  const outflowBudget = decision.action === "pay" && !addressMissing ? await ctx.budget.room() : null;
   // The same limit on Arc (onchain spending limit R4, R7, R8): for a payment now, whether its contract can carry
   // it and what the contract itself says, asked before anything is sent. Null when the workspace does not enforce it.
   const onChainLimit =
-    decision.action === "pay"
+    decision.action === "pay" && !addressMissing
       ? await ctx.onChainLimit.check({
           sourceType: "invoice",
           sourceId: invoice.id,
@@ -1693,6 +1696,7 @@ async function decideApPayable(
     counterpartyRole: counterparty.role ?? null,
     paymentLimit: limit,
     duplicates,
+    addressMissing,
     addressChangedAt: counterparty.address_changed_at,
     addressConfirmedAt: counterparty.address_confirmed_at,
     match: { poReference: invoice.po_reference, goodsReceived: invoice.goods_received, purchaseOrderRequired },
@@ -1912,6 +1916,8 @@ async function decideApPayable(
         ...(ctx.addressHistory?.(counterparty.id) ? { addressHistory: ctx.addressHistory(counterparty.id) } : {}),
         operatingBalance: operatingBalanceAfter ?? operatingBalance,
         addressUnconfirmed: addressUnconfirmed(counterparty.address_changed_at, counterparty.address_confirmed_at),
+        // No address where payments are real: the follow-up decides it again once one is added and confirmed.
+        ...(addressMissing ? { addressMissing: true } : {}),
         // Recorded whether or not anything matched. "We looked and found
         // nothing" is the half of a fraud control that a log which only
         // records hits can never prove.
@@ -3182,6 +3188,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         heldForVerdict: execution?.heldBecause === HELD_FOR_VERDICT,
         // Decided while the counterparty's new address waited for a person: once confirmed, it is decided again.
         addressUnconfirmed: observed.addressUnconfirmed === true,
+        // Decided with no address to pay: once one is added and confirmed, it is decided again.
+        addressMissing: observed.addressMissing === true,
         // Decided while the counterparty needed a purchase order: once paid without them, decided again (three-way
         // match design M5). Absent for a decision recorded before the setting, when every counterparty needed one.
         purchaseOrderRequired: typeof observed.purchaseOrderRequired === "boolean" ? observed.purchaseOrderRequired : undefined,
@@ -3257,6 +3265,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           ...(room !== undefined ? { budgetRoom: room === null ? null : room.remaining } : {}),
           ...(cash !== undefined ? { cash } : {}),
           addressUnconfirmed: addressUnconfirmed(row.counterparties.address_changed_at, row.counterparties.address_confirmed_at),
+          addressMissing: !row.counterparties.address,
           purchaseOrderRequired: row.counterparties.purchase_order_required,
           ...(fxNow.has(row.id) ? { fx: fxNow.get(row.id) } : {}),
           ...(newPayeeNow.has(row.id) ? { newPayee: newPayeeNow.get(row.id) } : {}),
