@@ -1,7 +1,8 @@
 /**
  * Prints the figures the public /open page shows, read the same way
- * (docs/superpowers/specs/2026-09-30-open-numbers-design.md), and keeps the
- * team list that decides which workspaces are ours.
+ * (docs/superpowers/specs/2026-09-30-open-numbers-design.md), then the
+ * activation funnel of the workspaces opened in the period (0089, not on /open),
+ * and keeps the team list that decides which workspaces are ours.
  *
  *   npm run numbers
  *   npm run numbers -- --since 2026-09-27
@@ -43,6 +44,7 @@ async function team(argv: string[]) {
 
 async function numbers(argv: string[]) {
   const { dailySeries, parsePeriod, readOpenNumbers } = await import("../src/lib/platform/open-numbers");
+  const { funnelRows, readFunnel } = await import("../src/lib/platform/funnel");
   const { ARC_MAINNET, ARC_TESTNET } = await import("../src/lib/network");
   const period = parsePeriod({ since: option(argv, "--since"), period: option(argv, "--period") });
   if (period.fallback) throw new Error(`That period could not be read. Usage: ${USAGE}`);
@@ -65,6 +67,16 @@ async function numbers(argv: string[]) {
     if (numbers.ourPayments.length > 0) {
       console.log(`\nOur own workspaces' latest payments on ${network.label}`);
       for (const payment of numbers.ourPayments) console.log(`${payment.at}   ${payment.amount.toFixed(2)} ${payment.token ?? "USDC"}   ${payment.txHash}`);
+    }
+
+    // How far the workspaces opened in the period got (activation funnel design F3); read apart, so a database
+    // without migration 0089 still prints everything above.
+    try {
+      const rows = funnelRows(await readFunnel(period.since, network.id));
+      console.log(`\nActivation funnel on ${network.label}: workspaces opened ${period.label.charAt(0).toLowerCase()}${period.label.slice(1)}`);
+      console.table(Object.fromEntries(rows.map((row) => [row.step, { customers: row.customers, "customers lost": row.customersLost ?? "", ours: row.ours, total: row.total }])));
+    } catch (error) {
+      console.log(`\nActivation funnel on ${network.label}: not read (${error instanceof Error ? error.message : String(error)}). Migration 0089 adds it.`);
     }
   }
 }

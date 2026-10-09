@@ -335,6 +335,10 @@ mainnet plan).
     and how many agreed; /open shows customers' share beneath the agent's cards once one is given, and a row in Every
     figure. Read like `open_outcomes`: until it can be read, its figures are dashes and the rest of /open shows.
   - Their one-argument versions stay for older code.
+  - `open_funnel(p_since, p_network)` (0089, `docs/superpowers/specs/2026-10-09-activation-funnel-design.md`) counts
+    the workspaces opened in the period and how many reached each step: a real bill, the agent's decision on one, a
+    confirmed live payment, payments on two UTC days, a verdict, two people. `npm run numbers` prints it per network
+    (`src/lib/platform/funnel.ts`); /open does not show it.
 - **The landing's latest decision** (`docs/superpowers/specs/2026-10-08-landing-owner-hero-design.md`): a band under
   the hero with the newest decision the agent made in one of the team's own live workspaces.
   - `latest_team_decision()` (0087), the service role's alone, looks only where `/open` lists payments from: the
