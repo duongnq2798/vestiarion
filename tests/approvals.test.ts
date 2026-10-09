@@ -448,6 +448,27 @@ describe("approveAndPay", () => {
     expect(payInvoiceMock).not.toHaveBeenCalled();
   });
 
+  it("refuses a payee with no address before any claim where payments are real, and lets a sandbox simulate one", async () => {
+    getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.01 });
+    const noAddress = { invoice: (r: RecordedRequest) => (r.params.get("id") ? { body: invoiceRow({ counterparties: { name: "Acme", risk_level: "low", address: null } }) } : undefined) };
+    const { fake, run } = approvalsFake(noAddress);
+
+    const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    await expect(attempt).rejects.toBeInstanceOf(ApprovalError);
+    await expect(attempt).rejects.toThrow("This payee has no payment address yet. Add it on Counterparties, or ask them for it with a one-time link.");
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+
+    getChainProviderMock.mockReturnValue({ mode: "simulate", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.01 });
+    const sandbox = approvalsFake(noAddress);
+    const outcome = await sandbox.run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID })).then(
+      () => null,
+      (error: unknown) => error
+    );
+    expect(outcome instanceof ApprovalError && outcome.code === "no_address").toBe(false);
+    expect(rpcBodies(sandbox.fake.requests, "claim_invoice_decision")).toHaveLength(1);
+  });
+
   it("refuses with no_operating_account before any claim, when the workspace has no operating account", async () => {
     const { fake, run } = approvalsFake({ account: () => ({ body: null }) });
 
