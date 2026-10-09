@@ -58,17 +58,21 @@ export interface ReportVerdict {
   verdict: "agree" | "disagree";
 }
 
-/** A payable's confirmed live Circle payment: what the transfer carried, its transaction, and when it settled. */
+/** A payable's confirmed payment: what the transfer carried, its transaction, and when it settled. */
 export interface ReportPayment {
   invoiceId: string;
   amount: number;
   token: string;
   txHash: string | null;
   at: string;
+  /** Made by the simulated provider (a sandbox), not a live Circle transfer: nothing moved on chain. */
+  simulated: boolean;
 }
 
 export interface ReportFacts {
   network: Network;
+  /** The workspace is a sandbox: its payments are simulated, and only those count. */
+  sandbox: boolean;
   /** The workspace's first ledger entry; null when it has none yet. */
   openedAt: string | null;
   shadow: { currency: string; startedAt: string } | null;
@@ -110,6 +114,8 @@ export interface PaymentRow {
   decidedBy: "agent" | "person" | "verdict";
   /** It mirrors a bill the business paid itself, in shadow mode. */
   mirror: boolean;
+  /** A sandbox's simulated payment: no transaction to link. */
+  simulated: boolean;
   txHash: string | null;
 }
 
@@ -122,6 +128,10 @@ export type ReadinessStep =
 export interface WorkspaceReport {
   network: Network;
   realMoney: boolean;
+  /** A sandbox: every payment counted was simulated. */
+  simulated: boolean;
+  /** What the figures count: the real bills, or the sample data while a workspace has no real bill yet. */
+  source: "real" | "sample";
   openedAt: string | null;
   shadow: { currency: string; startedAt: string } | null;
   bills: { handled: number; decided: number; medianMinutesToDecision: number | null };
@@ -190,13 +200,18 @@ function stopOf(decision: ReportDecision): { kind: StopKind; why: string } | nul
 }
 
 export function buildReport(facts: ReportFacts): WorkspaceReport {
-  const bills = facts.bills.filter((bill) => !bill.payee.sample);
+  // The real bills; while there is none, the sample data, so a workspace being tried shows what the report is.
+  const real = facts.bills.filter((bill) => !bill.payee.sample);
+  const sample = facts.bills.filter((bill) => bill.payee.sample);
+  const source: WorkspaceReport["source"] = real.length === 0 && sample.length > 0 ? "sample" : "real";
+  const bills = source === "sample" ? sample : real;
   const billsById = new Map(bills.map((bill) => [bill.id, bill]));
   const decisions = facts.decisions.filter((decision) => billsById.has(decision.invoiceId)).sort((a, b) => a.seq - b.seq);
   const actions = facts.personActions.filter((action) => billsById.has(action.invoiceId)).sort((a, b) => a.seq - b.seq);
   // What a paid bill's transfer carried: the bill's own record of it, else the intent's first amount.
+  // A live workspace counts its live payments; a sandbox its simulated ones, which are all it can make.
   const payments = facts.payments
-    .filter((payment) => billsById.has(payment.invoiceId))
+    .filter((payment) => billsById.has(payment.invoiceId) && payment.simulated === facts.sandbox)
     .map((payment) => ({ ...payment, amount: billsById.get(payment.invoiceId)!.paidAmount ?? payment.amount }));
   // Verdicts on the agent's decisions about real bills only.
   const decisionSeqs = new Set(decisions.map((decision) => decision.seq));
@@ -245,7 +260,8 @@ export function buildReport(facts: ReportFacts): WorkspaceReport {
       bill: bill.bill,
       decidedBy,
       mirror: mirrored(payment),
-      txHash: payment.txHash,
+      simulated: payment.simulated,
+      txHash: payment.simulated ? null : payment.txHash,
     };
   });
 
@@ -292,7 +308,9 @@ export function buildReport(facts: ReportFacts): WorkspaceReport {
 
   return {
     network: facts.network,
-    realMoney: facts.network === "arc-mainnet",
+    realMoney: facts.network === "arc-mainnet" && !facts.sandbox,
+    simulated: facts.sandbox,
+    source,
     openedAt: facts.openedAt,
     shadow: facts.shadow,
     bills: { handled: bills.length, decided: decisionsOf.size, medianMinutesToDecision: median(minutes) },

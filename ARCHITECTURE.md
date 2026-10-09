@@ -727,7 +727,9 @@ stop), people stepping in, verdicts on real bills, and discounts: captured measu
 `paid_amount` (the intent's amount is a first try's, which a resend after the deadline does not change), on offer
 estimated from the terms. A
 payment is a shadow mirror when its decision was made in shadow mode, carries a verdict, or came while shadow mode was
-on. No migration and no write; a failed read shows the section's error state rather than a report with rows missing.
+on. A live workspace counts its live Circle payments; a sandbox counts its simulated ones, labelled, with no transaction
+link. While a workspace has no real bill, the report counts its sample data and says so, so a workspace being tried with
+sample data shows what the report is. No migration and no write; a failed read shows the section's error state rather than a report with rows missing.
 
 ## Approvals and the pause switch
 

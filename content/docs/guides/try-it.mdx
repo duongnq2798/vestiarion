@@ -30,12 +30,16 @@ Open **AP / AR**. Each decision is a card. **Agent’s reasoning** says why, cit
 
 Open **Approvals**. The held and flagged payables wait there for a person. On the held one, choose **Approve and pay**, then **Pay now**. In a sandbox the payment is simulated, and the ledger records that you approved it. When the list is empty it reads "Nothing is waiting for a decision."
 
-## 6. Check the ledger
+## 6. Read the report
+
+Open **Report**. It counts what the agent did with the sample bills: how many it handled and how fast it decided, what it paid, what it stopped and why, and how often a person stepped in. The box says "This workspace has no real bill yet, so the report counts its sample data." and, in a sandbox, "Sandbox: payments here are simulated." See [Read your workspace report](/docs/guides/report).
+
+## 7. Check the ledger
 
 Open **Audit log** and choose **Verify hash chain**. Every entry is signed with Ed25519 and linked to the one before it. When every signature and link holds, it answers "Chain intact". To check a workspace's ledger outside the app, see [Verify an audit export](/docs/guides/audit-export).
 
 
-## 7. See it on Arc testnet
+## 8. See it on Arc testnet
 
 [www.vestiarion.xyz/open](https://www.vestiarion.xyz/open) shows the platform's own numbers, read from the production database, with Arc mainnet and Arc testnet counted apart: **Payments settled**, USDC paid, payees, decisions, and how quickly workspaces reach a first payment. It also lists our own workspaces' latest payments, each linked to the Arc testnet explorer. Among them:
 

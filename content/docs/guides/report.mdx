@@ -4,9 +4,10 @@ The **Report** section says what the agent did with your workspace's real bills 
 
 The report counts from two things the workspace already keeps: its signed ledger, and the transfers Circle confirmed. Nothing on it is typed in by hand.
 
-- **Bills** are your payables. A bill from sample data is left out, with everything about it.
-- **Payments** are the bills' confirmed transfers on Arc. The amount is what the transfer carried. A sandbox's simulated payments are not counted.
-- The box at the top says which money it was: "Payments on Arc testnet, in test USDC." or "Payments on Arc mainnet, in real USDC.".
+- **Bills** are your payables. A bill from sample data is left out, with everything about it, once the workspace has a real bill. Until then the report counts the sample data, and the box says "This workspace has no real bill yet, so the report counts its sample data."
+- **Payments** are the bills' confirmed transfers on Arc. The amount is what the transfer carried.
+- **In a sandbox,** where payments are simulated, the box says "Sandbox: payments here are simulated." The figure reads **Paid (simulated)**, and each payment is marked **Simulated**, with no transaction to open.
+- Once the workspace is live, the box at the top says which money it was: "Payments on Arc testnet, in test USDC." or "Payments on Arc mainnet, in real USDC.".
 - In shadow mode, the box also says since when, and that your business paid these bills itself. A payment made in shadow mode is marked **Mirror**: it is the copy, in USDC on Arc testnet, of a bill you paid as you always do.
 
 <Screenshot
@@ -56,4 +57,4 @@ Nothing on the report moves money, opens a workspace or changes a setting.
 
 ## A new workspace
 
-Until the workspace has a real bill, the section says **No real bills yet** and links to AP / AR, where you add one.
+Until the workspace has a bill, real or sample, the section says **No real bills yet** and links to AP / AR, where you add one.

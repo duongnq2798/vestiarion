@@ -153,6 +153,9 @@ const VERDICTS = "src/lib/verdicts.ts";
  */
 const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   "guides/try-it": [
+    ["Report", APP_NAV],
+    ["This workspace has no real bill yet, so the report counts its sample data.", "src/components/vx/WorkspaceReport.tsx"],
+    ["Sandbox: payments here are simulated.", "src/components/vx/WorkspaceReport.tsx"],
     ["Safe to spend today", "src/components/vx/CashOutlook.tsx"],
     ["Next 30 days", "src/components/vx/CashOutlook.tsx"],
     ["Continue with Google", LOGIN_PAGE],
@@ -900,8 +903,12 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   ],
   "guides/report": [
     ["Report", APP_NAV],
-    ["Payments on Arc testnet, in test USDC.", REPORT, "title={`Payments on ${profile.label}, in ${report.realMoney ? \"real\" : \"test\"} USDC.`}"],
+    ["Payments on Arc testnet, in test USDC.", REPORT, "`Payments on ${profile.label}, in ${report.realMoney ? \"real\" : \"test\"} USDC.`"],
     ["Mirror", REPORT],
+    ["Sandbox: payments here are simulated.", REPORT],
+    ["Paid (simulated)", REPORT],
+    ["Simulated", REPORT],
+    ["This workspace has no real bill yet, so the report counts its sample data.", REPORT],
     ["Bills handled", REPORT],
     ["Time to decide", REPORT],
     ["Paid on Arc", REPORT],
