@@ -698,6 +698,25 @@ disagrees with every decision.
 - **What people see.** `verdictView` (`src/lib/verdict-view.ts`) gives each card the verdict on the agent's newest
   decision, given or to give, and `VerdictControl` offers it. The console's `ShadowModeSummary` shows how often people
   agreed (`readShadowSummary`).
+- **Before a live slice.** The workspace report (below) lists, while shadow mode is on, what we suggest before a slice
+  of bills moves to Arc mainnet: verdicts on five decisions, none waiting, and no supplier paid at a mirror address.
+  Suggestions only; it moves nothing.
+
+## The workspace report
+
+`/o/[slug]/report` (spec `2026-10-09-workspace-report-design.md`) tells every member what the agent did with the
+workspace's real bills since it opened. `readReportFacts` (`src/lib/workspace-report-read.ts`) reads, inside the
+organization scope and a page at a time: payables with their counterparty (sample data flagged), the agent's AP
+decisions with only the `detail` fields the report uses (PostgREST JSON paths, never the whole detail), people's
+`approval_paid` / `approval_rejected` / `approval_returned`, verdicts, and each payable's confirmed live Circle
+payment. `buildReport` (`src/lib/workspace-report.ts`) is pure and counts them: bills handled, the median minutes to a
+bill's first decision, payments and on-time payments, bills stopped (waited for cash, a pause or the spending limit,
+refused by code, the agent's own call, or a payment it decided whose transfer failed; a hold for a verdict is not a
+stop), people stepping in, verdicts on real bills, and discounts: captured measured as a bill's amount less its
+`paid_amount` (the intent's amount is a first try's, which a resend after the deadline does not change), on offer
+estimated from the terms. A
+payment is a shadow mirror when its decision was made in shadow mode, carries a verdict, or came while shadow mode was
+on. No migration and no write; a failed read shows the section's error state rather than a report with rows missing.
 
 ## Approvals and the pause switch
 

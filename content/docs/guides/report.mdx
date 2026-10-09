@@ -1,0 +1,59 @@
+The **Report** section says what the agent did with your workspace's real bills since the workspace opened: how many it handled and how fast it decided, what it paid and the transaction for each payment, what it stopped and why, how often a person stepped in, and what an early-payment discount took off a bill. Every member of the workspace can read it, viewers included. It works the same on Arc testnet and on Arc mainnet.
+
+## What it counts
+
+The report counts from two things the workspace already keeps: its signed ledger, and the transfers Circle confirmed. Nothing on it is typed in by hand.
+
+- **Bills** are your payables. A bill from sample data is left out, with everything about it.
+- **Payments** are the bills' confirmed transfers on Arc. The amount is what the transfer carried. A sandbox's simulated payments are not counted.
+- The box at the top says which money it was: "Payments on Arc testnet, in test USDC." or "Payments on Arc mainnet, in real USDC.".
+- In shadow mode, the box also says since when, and that your business paid these bills itself. A payment made in shadow mode is marked **Mirror**: it is the copy, in USDC on Arc testnet, of a bill you paid as you always do.
+
+<Screenshot
+  src="/docs/guides/report-shadow.png"
+  alt="The Report section of a workspace in shadow mode. A box says Payments on Arc testnet, in test USDC, that shadow mode is on since Oct 8, 2026 and the business paid the bills itself in USD. Tiles below: Bills handled 5, Time to decide 1 min, Paid on Arc 3 (83.43 USDC, 3 on or before the due day), Stopped before paying 2, Needed a person 1, Your verdicts 4 of 4, Discounts captured 0.48 USDC."
+  caption="A shadow workspace's figures, each counted from its ledger and confirmed transfers."
+/>
+
+## The figures
+
+- **Bills handled**: your real bills, and how many of them the agent has decided.
+- **Time to decide**: the median time from a bill arriving to the agent's first decision on it.
+- **Paid on Arc**: how many bills were paid, how much in each currency, and how many were paid on or before their due day (UTC).
+- **Stopped before paying**: bills one of the agent's decisions kept from being paid, by the newest such decision, split by why: refused by code (a check the agent cannot talk its way past, such as a payment limit or a first payment to a new address), the agent's own call, and waited (no cash in the operating wallet, the agent paused, or the spending limit full for the day). When a payment the agent decided was not sent, because the transfer itself failed, it is counted as not sent. A payment held for your verdict in shadow mode is not counted as stopped: a person decides it by design.
+- **Needed a person**: bills a person approved, rejected or returned after the agent or a check stopped them, and how many were paid with no one stepping in. In shadow mode every payment waits for your verdict by design, so that second figure is not shown.
+- **Your verdicts**: in shadow mode, or once any verdict was given, how many of the agent's decisions you agreed with, and how many still wait for a verdict.
+- **Discounts captured**: what early-payment discounts actually took off bills, measured as the bill's amount less what its transfer carried. Beside it, what was on offer across all bills with discount terms, worked out from the terms. That second figure is the only estimate on the page.
+
+## The two lists
+
+**What it stopped** shows the newest ten stopped bills: the day, the payee, the amount, why it stopped, and what happened since: **Paid since**, **Being paid** (its transfer is on its way), **Rejected** or **Still open**.
+
+<Screenshot
+  src="/docs/guides/report-lists.png"
+  alt="What it stopped: a Northwind Cloud bill of 46.41 USDC the agent flagged because it repeats a bill from two days before, now Rejected, and an Atlas Compute bill of 61.87 USDC that code refused because its three-way match is incomplete, Still open. Payments and their proof: three payments marked Mirror, each decided by Your verdict, with the bill's own amount in USD and a link to its transaction."
+  caption="What the agent stopped and why, and each payment with its transaction."
+/>
+
+**Payments and their proof** shows the newest ten payments: the day, the payee, the amount (and the bill's own amount when it was written in another currency), who decided it (**The agent**; **A person**, who approved it; or **Your verdict**, when you agreed with the agent's decision to pay it in shadow mode), and its transaction on the explorer. **Every entry, signed: Audit log** opens every entry, each signed and hash-linked, which you can export and check yourself: see [Verify an audit export](/docs/guides/audit-export).
+
+## Before a live slice
+
+In shadow mode, the report also lists what we suggest before you move a slice of your bills to real USDC on Arc mainnet, each ticked from the workspace's own records:
+
+1. **Give verdicts on at least** five decisions.
+2. **Leave no decision waiting for your verdict.**
+3. **Have each supplier's own Arc address.** A supplier paid at a mirror address needs its real address in a live workspace.
+4. **Open a workspace on** Arc mainnet for the slice: see [Run alongside how you pay today](/docs/guides/shadow-mode#before-a-live-slice).
+
+<Screenshot
+  src="/docs/guides/report-readiness.png"
+  alt="Before a live slice, 0 of 3 done: Give verdicts on at least 5 decisions, 4 of 5 given; Leave no decision waiting for your verdict, 1 decision waits in AP / AR; Have each supplier's own Arc address, 1 supplier is paid at a mirror address; Open a workspace on Arc mainnet for the slice."
+  caption="What is left before a live slice, ticked from the workspace's own records."
+/>
+
+Nothing on the report moves money, opens a workspace or changes a setting.
+
+## A new workspace
+
+Until the workspace has a real bill, the section says **No real bills yet** and links to AP / AR, where you add one.

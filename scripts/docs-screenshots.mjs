@@ -168,6 +168,9 @@ const SHOTS = {
   "slack-settings": async () => {},
   "email-inbox-settings": async () => {},
   "email-inbox-ap": async () => {},
+  "report-shadow": async () => {},
+  "report-readiness": async () => {},
+  "report-lists": async () => {},
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

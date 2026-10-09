@@ -84,6 +84,11 @@ const HELD_WORDS: Record<string, string> = {
   outflow_budget: "It would have passed the workspace's spending limit.",
 };
 
+/** Why a decision was held, by its `heldBecause` marker, as a sentence; null for a marker without words. */
+export function heldWords(marker: string | null | undefined): string | null {
+  return (marker && HELD_WORDS[marker]) || null;
+}
+
 const MODELS: Record<string, string> = {
   anthropic: "Anthropic model",
   openai: "OpenAI model",
@@ -140,7 +145,7 @@ function why(facts: LatestDecisionFacts): string | null {
     return facts.paidTxHash ? "In shadow mode, a person agrees before anything is paid." : "A person agreed, in shadow mode; its payment has not confirmed yet.";
   }
   if (facts.heldBecause === HELD_FOR_VERDICT && facts.verdict === "disagree") return "In shadow mode, a person disagreed, so it was not paid.";
-  if (facts.heldBecause && HELD_WORDS[facts.heldBecause]) return HELD_WORDS[facts.heldBecause];
+  if (heldWords(facts.heldBecause)) return heldWords(facts.heldBecause);
   if (facts.guardrailBlocked) return `Code refused it: ${(facts.guardrailRule && RULE_WORDS[facts.guardrailRule]) || "a hard limit in code"}.`;
   if (facts.action === "ap_hold" || facts.action === "milestone_hold") return "The model held it for a person to look at.";
   return null;

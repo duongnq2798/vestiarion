@@ -37,6 +37,7 @@ import { GettingStarted } from "@/components/vx/GettingStarted";
 import { invoiceDecision, milestoneDecision } from "@/components/vx/map";
 import type { NavKey } from "@/components/vx/nav";
 import { Hash } from "@/components/vx/Primitives";
+import { ReportLists, ReportReadiness, ReportSummary } from "@/components/vx/WorkspaceReport";
 import type { WaitingPayable } from "@/lib/agent/approvals";
 import { waitingHint } from "@/lib/added-details";
 import { heldReason } from "@/lib/agent/milestone-decisions";
@@ -45,6 +46,7 @@ import type { PayeeLinkStatus } from "@/lib/payee-journey";
 import type { GoLiveStatus } from "@/lib/platform/go-live";
 import { gettingStarted } from "@/lib/getting-started";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow } from "@/lib/queries";
+import { buildReport, type ReportBill, type ReportDecision } from "@/lib/workspace-report";
 import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
 
 /**
@@ -62,7 +64,7 @@ import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
 
 export interface DocsShot {
   /** The guide the picture belongs to. */
-  guide: "go-live" | "first-payment" | "pay-a-contractor" | "get-paid" | "telegram" | "slack" | "email-invoices";
+  guide: "go-live" | "first-payment" | "pay-a-contractor" | "get-paid" | "telegram" | "slack" | "email-invoices" | "report";
   /** The workspace page it is on: its title heads the frame. None for a public page, such as a payee's link. */
   page?: NavKey;
   /** The page's line under its title, where the real page has one. */
@@ -566,6 +568,76 @@ function PayeeShot({ status }: { status: PayeeLinkStatus }) {
     </div>
   );
 }
+
+
+/** A shadow workspace's month of cloud bills, for the report (workspace report design): made up, like the rest. */
+const REPORT_OPENED = "2026-10-08T09:00:00Z";
+const reportBill = (id: string, name: string, amount: number, over: Partial<ReportBill> = {}): ReportBill => ({
+  id: `00000000-0000-4000-8000-0000000003${id}`,
+  createdAt: "2026-10-08T09:30:00Z",
+  dueDate: "2026-10-20T00:00:00Z",
+  amount,
+  currency: "USDC",
+  status: "paid",
+  reviewedBy: null,
+  paidAmount: null,
+  discount: null,
+  bill: { amount, currency: "USD" },
+  payee: { id: `cp-${id}`, name, mirror: false, sample: false },
+  ...over,
+});
+const reportDecision = (seq: number, id: string, over: Partial<ReportDecision> = {}): ReportDecision => ({
+  seq,
+  ts: "2026-10-08T09:31:00Z",
+  action: "ap_pay",
+  invoiceId: `00000000-0000-4000-8000-0000000003${id}`,
+  guardrailBlocked: false,
+  guardrailRule: null,
+  heldBecause: "shadow_verdict",
+  resultingStatus: "held",
+  shadow: true,
+  reasoning: "The bill matches last month's plan.",
+  ...over,
+});
+const reportPayment = (id: string, amount: number, minute: number) => ({
+  invoiceId: `00000000-0000-4000-8000-0000000003${id}`,
+  amount,
+  token: "USDC",
+  txHash: `0x${id.repeat(32)}`,
+  at: `2026-10-08T10:${String(minute).padStart(2, "0")}:00Z`,
+});
+const REPORT = buildReport({
+  network: "arc-testnet",
+  openedAt: REPORT_OPENED,
+  shadow: { currency: "USD", startedAt: REPORT_OPENED },
+  bills: [
+    reportBill("11", "Northwind Cloud", 46.41),
+    reportBill("22", "Harbor VPS", 24, { discount: { pct: 2, deadline: "2026-10-10T00:00:00Z" }, paidAmount: 23.52 }),
+    reportBill("33", "Lumen Hosting", 13.5, { payee: { id: "cp-33", name: "Lumen Hosting", mirror: true, sample: false } }),
+    reportBill("44", "Atlas Compute", 61.87, { status: "held", bill: null }),
+    reportBill("55", "Northwind Cloud", 46.41, { status: "rejected", bill: null }),
+  ],
+  decisions: [
+    reportDecision(1, "11"),
+    reportDecision(2, "22"),
+    reportDecision(3, "33"),
+    reportDecision(4, "44", { action: "ap_hold", heldBecause: null, guardrailBlocked: true, guardrailRule: "invoice.match_incomplete", ts: "2026-10-08T09:32:00Z" }),
+    reportDecision(5, "55", { action: "ap_flag_fraud", heldBecause: null, resultingStatus: "flagged", reasoning: "It repeats Northwind Cloud's bill from two days ago, to the cent.", ts: "2026-10-09T08:02:00Z" }),
+  ],
+  personActions: [
+    { seq: 6, ts: "2026-10-08T10:00:00Z", action: "approval_paid", invoiceId: "00000000-0000-4000-8000-000000000311" },
+    { seq: 7, ts: "2026-10-08T10:05:00Z", action: "approval_paid", invoiceId: "00000000-0000-4000-8000-000000000322" },
+    { seq: 8, ts: "2026-10-08T10:10:00Z", action: "approval_paid", invoiceId: "00000000-0000-4000-8000-000000000333" },
+    { seq: 9, ts: "2026-10-09T08:30:00Z", action: "approval_rejected", invoiceId: "00000000-0000-4000-8000-000000000355" },
+  ],
+  verdicts: [
+    { entrySeq: 1, verdict: "agree" },
+    { entrySeq: 2, verdict: "agree" },
+    { entrySeq: 3, verdict: "agree" },
+    { entrySeq: 5, verdict: "agree" },
+  ],
+  payments: [reportPayment("11", 46.41, 1), reportPayment("22", 23.52, 6), reportPayment("33", 13.5, 11)],
+});
 
 export const DOCS_SHOTS = {
   "go-live-checklist": {
@@ -1080,6 +1152,14 @@ export const DOCS_SHOTS = {
       />
     ),
   },
+  "report-shadow": {
+    guide: "report",
+    page: "report",
+    sub: "What the agent did with this workspace's real bills since it opened: what it paid and with what proof, what it stopped and why, and how often a person stepped in.",
+    render: () => <ReportSummary report={REPORT} />,
+  },
+  "report-readiness": { guide: "report", render: () => <ReportReadiness steps={REPORT.readiness ?? []} /> },
+  "report-lists": { guide: "report", render: () => <ReportLists slug={SLUG} report={REPORT} /> },
 } satisfies Record<string, DocsShot>;
 
 export type DocsShotName = keyof typeof DOCS_SHOTS;

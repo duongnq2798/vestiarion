@@ -149,12 +149,13 @@ describe("the docs navigation", () => {
     );
   });
 
-  it("lists the user guides right after Overview: trying it, going live, shadow mode, the first payment, paying a contractor, getting paid, Telegram, Slack, adding invoices and paying for pull requests through the API, then verifying an export", () => {
+  it("lists the user guides right after Overview: trying it, going live, shadow mode, the workspace report, the first payment, paying a contractor, getting paid, Telegram, Slack, adding invoices and paying for pull requests through the API, then verifying an export", () => {
     const section = DOCS_NAV.find((candidate) => candidate.title === "Guides")!;
     expect(section.pages.map((page) => [page.slug, page.title])).toEqual([
       ["guides/try-it", "Try it in 5 minutes"],
       ["guides/go-live", "Go live"],
       ["guides/shadow-mode", "Run alongside how you pay today"],
+      ["guides/report", "Read your workspace report"],
       ["guides/first-payment", "Your first payment"],
       ["guides/pay-a-contractor", "Pay a contractor for delivered work"],
       ["guides/get-paid", "Get paid as a freelancer"],
@@ -191,7 +192,8 @@ describe("the docs navigation", () => {
     expect(neighbours("contracts").next?.slug).toBe("guides/try-it");
     expect(neighbours("guides/try-it").next?.slug).toBe("guides/go-live");
     expect(neighbours("guides/go-live").next?.slug).toBe("guides/shadow-mode");
-    expect(neighbours("guides/shadow-mode").next?.slug).toBe("guides/first-payment");
+    expect(neighbours("guides/shadow-mode").next?.slug).toBe("guides/report");
+    expect(neighbours("guides/report").next?.slug).toBe("guides/first-payment");
     expect(neighbours("guides/first-payment").next?.slug).toBe("guides/pay-a-contractor");
     expect(neighbours("guides/pay-a-contractor").next?.slug).toBe("guides/get-paid");
     expect(neighbours("guides/get-paid").next?.slug).toBe("guides/telegram");

@@ -234,6 +234,8 @@ run in production, with its ledger entries and transactions.
 - **Treasury** — safe-to-spend today, cash outlook, USYC reserve with **Bring cash back** (Arc testnet).
 - **Cross-currency and cross-chain** — EURC invoices and swaps, CCTP and Gateway payouts (Arc testnet).
 - **Shadow mode** — try the agent on real bills, paid in the business's own way, before it pays anything itself.
+- **Report** — what the agent did with a workspace's real bills: payments with their transactions, what it stopped
+  and why, how often a person stepped in, discounts measured from the transfers, and what is left before a live slice.
 - **Workspaces and members** — per-network workspaces, invitations, four roles, per-member notifications.
 - **Audit** — the signed ledger, one-click verification, exports, and signed webhooks.
 
@@ -352,7 +354,7 @@ What each one is for, the wallets around them, and the USDC of the chains payees
 | | |
 | --- | --- |
 | **Start** | [Try it in 5 minutes](https://www.vestiarion.xyz/docs/guides/try-it) · [Go live](https://www.vestiarion.xyz/docs/guides/go-live) · [Your first payment](https://www.vestiarion.xyz/docs/guides/first-payment) · [Shadow mode](https://www.vestiarion.xyz/docs/guides/shadow-mode) |
-| **Guides** | [Pay a contractor](https://www.vestiarion.xyz/docs/guides/pay-a-contractor) · [Get paid](https://www.vestiarion.xyz/docs/guides/get-paid) · [Audit export](https://www.vestiarion.xyz/docs/guides/audit-export) |
+| **Guides** | [Workspace report](https://www.vestiarion.xyz/docs/guides/report) · [Pay a contractor](https://www.vestiarion.xyz/docs/guides/pay-a-contractor) · [Get paid](https://www.vestiarion.xyz/docs/guides/get-paid) · [Audit export](https://www.vestiarion.xyz/docs/guides/audit-export) |
 | **Developers** | [Quickstart](https://www.vestiarion.xyz/docs/get-started/quickstart) · [API reference](https://www.vestiarion.xyz/docs/api) · [SDK](https://www.vestiarion.xyz/docs/get-started/sdk) · [Webhooks](https://www.vestiarion.xyz/docs/webhooks) · [MCP](https://www.vestiarion.xyz/docs/ai-integration/mcp) · [Changelog](https://www.vestiarion.xyz/docs/changelog) |
 | **This repository** | [ARCHITECTURE.md](ARCHITECTURE.md) · [Running it yourself](docs/self-hosting.md) · [Feature designs](docs/superpowers/specs) · [Contracts](contracts) · [SDK source](sdk) |
 

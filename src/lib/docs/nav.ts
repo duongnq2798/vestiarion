@@ -48,6 +48,7 @@ export const DOCS_NAV: NavSection[] = [
       { slug: "guides/try-it", title: "Try it in 5 minutes", description: "Sign in, load sample data, watch the agent decide, approve a payment and verify the signed ledger." },
       { slug: "guides/go-live", title: "Go live", description: "Create the workspace's wallets, fund them with USDC and take the agent live, on Arc testnet or on Arc mainnet." },
       { slug: "guides/shadow-mode", title: "Run alongside how you pay today", description: "Shadow mode: keep paying your bills as you do; the agent decides on the same bills, you agree or disagree with each decision, and each payment you agree to is made in USDC on Arc testnet." },
+      { slug: "guides/report", title: "Read your workspace report", description: "What the agent did with your real bills: what it paid and with what proof, what it stopped and why, how often a person stepped in, and what is left before a live slice." },
       { slug: "guides/first-payment", title: "Your first payment", description: "Add a counterparty and an invoice, run a cycle, and follow the payment to the explorer and the ledger." },
       { slug: "guides/pay-a-contractor", title: "Pay a contractor for delivered work", description: "Add a milestone, verify the work by hand or by a merged pull request, and let the agent release the pay." },
       { slug: "guides/get-paid", title: "Get paid as a freelancer", description: "For the person being paid: add your wallet address through the link a business sent, follow each step, and check the payment on Arc." },
