@@ -15,6 +15,11 @@ export interface ApGuardrailInput {
   paymentLimit: number | null;
   /** Reportable repeats of this invoice, strongest first. */
   duplicates?: DuplicateMatch[];
+  /**
+   * The counterparty has no payment address, where payments are real (a sandbox simulates one). Nothing can be sent, so
+   * a payment is held before any transfer is tried, as a contractor's milestone is (`payeeNotReady`).
+   */
+  addressMissing?: boolean;
   /** When a person last changed the counterparty's address; null when it was set as the counterparty was added. */
   addressChangedAt?: string | null;
   /** When a person last confirmed the counterparty's address. */
@@ -95,6 +100,7 @@ export type ApGuardrailRule =
   | "counterparty.client_payable"
   | "counterparty.payment_limit"
   | "counterparty.address_unconfirmed"
+  | "counterparty.no_address"
   | "invoice.duplicate_of_settled"
   | "invoice.match_incomplete"
   | "counterparty.new_payee"
@@ -224,6 +230,17 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       reasoning: `${input.reasoning} [guardrail override: the counterparty is a client, which pays this business — ${verb} refused before execution; a person pays it in Approvals if it is a refund]`,
     };
   }
+  // No address to pay: held before anything else is weighed, since nothing could be sent. The follow-up stage decides it
+  // again once an address is added and confirmed.
+  if (input.addressMissing === true) {
+    return {
+      blocked: true,
+      status: "held",
+      rule: "counterparty.no_address",
+      reasoning: `${input.reasoning} [guardrail override: the counterparty has no payment address yet — held until someone adds one; the agent decides again once it is confirmed]`,
+    };
+  }
+
   // Ahead of the limit so the reason names the change: an edited address is
   // the classic payment-redirection fraud, and whatever the amount, the first
   // payment to it waits for a person.

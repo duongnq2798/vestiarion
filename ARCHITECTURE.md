@@ -257,6 +257,13 @@ payment to an address.
 - **Afterwards:** the follow-up reopens a payable held this way once its address is paid, or two parties stand behind
   it.
 
+**No address, nothing sent.** Wherever payments are real, a pay or schedule decision for a counterparty with no
+payment address is held by `counterparty.no_address` (`enforceApGuardrails`) before any limit is read or transfer tried,
+as a milestone already is (`payeeNotReady`). The entry records `observed.addressMissing`, and the follow-up reopens the
+payable once the counterparty has an address and a person confirmed it (a payee link's address waits for that
+confirmation first). Approve and pay refuses such a payable before any claim (`no_address`), as the chat commands do.
+A sandbox still simulates the payee's address (`payoutAddress`).
+
 **A person's payout to another chain takes the agent's route** (`docs/superpowers/specs/2026-10-05-approval-payout-route-design.md`).
 `choosePayoutRoute` (`src/lib/payout-route.ts`) is the one rule for the AP stage and Approve and pay: Gateway when its
 balance covers the amount and its fee and it costs no more than CCTP, CCTP otherwise, and a route an earlier attempt took

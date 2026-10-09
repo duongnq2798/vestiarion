@@ -105,6 +105,7 @@ export type ApprovalErrorCode =
   | "payment_unknown"
   | "payments_off"
   | "address_changed"
+  | "no_address"
   | "bridge_unsupported_token"
   | "nothing_to_add"
   | "invoice_changed"
@@ -130,6 +131,7 @@ const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds" | "needs_
   payment_unknown:
     "Circle did not answer when this invoice's payment was sent, and Vestiarion cannot tell yet whether Circle took it. Approve and pay looks for it first and sends nothing twice; until it is known, it cannot be closed.",
   address_changed: "This counterparty's address changed after this page loaded. Check the new address and try again.",
+  no_address: "This payee has no payment address yet. Add it on Counterparties, or ask them for it with a one-time link.",
   bridge_unsupported_token: "Only USDC crosses chains. This invoice is in EURC, and its payee is paid on another chain.",
   nothing_to_add: "Enter a PO reference or tick Goods or services received.",
   invoice_changed: "This invoice changed a moment ago. Reload the page to see it.",
@@ -811,6 +813,8 @@ export async function approveAndPay(
     if (firstPayment?.addressBy === input.actorId && !(await isSoleApprover(input.actorId))) raise("new_payee_self");
   }
   if (invoice.riskLevel === "high") raise("high_risk");
+  // Nothing to pay where payments are real: refused before any claim, as the agent holds it (counterparty.no_address).
+  if (!invoice.address && chainModes().mode === "live") raise("no_address");
   const shownAddress = input.shownAddress?.trim();
   if (shownAddress !== undefined && !sameAddress(invoice.address, shownAddress === "" ? null : shownAddress)) {
     raise("address_changed");

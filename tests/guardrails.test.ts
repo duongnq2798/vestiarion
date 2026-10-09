@@ -170,6 +170,42 @@ describe("AP guardrails — a changed address no one has confirmed", () => {
   });
 });
 
+describe("AP guardrails — a counterparty with no payment address", () => {
+  const base = { action: "pay" as const, reasoning: "Pay now.", amount: 1, riskLevel: "clear", paymentLimit: 5 };
+
+  it("holds a payment before any transfer is tried, saying what is missing", () => {
+    const result = enforceApGuardrails({ ...base, addressMissing: true });
+    expect(result).toMatchObject({ blocked: true, status: "held", rule: "counterparty.no_address" });
+    expect(result.reasoning).toBe(
+      "Pay now. [guardrail override: the counterparty has no payment address yet — held until someone adds one; the agent decides again once it is confirmed]"
+    );
+  });
+
+  it("holds a schedule the same way", () => {
+    expect(enforceApGuardrails({ ...base, action: "schedule", addressMissing: true })).toMatchObject({ blocked: true, rule: "counterparty.no_address" });
+  });
+
+  it("leaves a payment alone when the address is there, or was not asked about", () => {
+    expect(enforceApGuardrails({ ...base, addressMissing: false })).toEqual({ blocked: false, status: null, rule: null, reasoning: "Pay now." });
+    expect(enforceApGuardrails(base)).toMatchObject({ blocked: false });
+  });
+
+  it("still flags high risk and a client first", () => {
+    expect(enforceApGuardrails({ ...base, riskLevel: "high", addressMissing: true })).toMatchObject({ rule: "counterparty.high_risk" });
+    expect(enforceApGuardrails({ ...base, counterpartyRole: "client", addressMissing: true })).toMatchObject({ rule: "counterparty.client_payable" });
+  });
+
+  it("names the missing address ahead of the limit and the match", () => {
+    expect(
+      enforceApGuardrails({ ...base, amount: 50, addressMissing: true, match: { poReference: null, goodsReceived: false, purchaseOrderRequired: true } })
+    ).toMatchObject({ rule: "counterparty.no_address" });
+  });
+
+  it("leaves a non-payment verdict alone", () => {
+    expect(enforceApGuardrails({ ...base, action: "hold", addressMissing: true })).toEqual({ blocked: false, status: null, rule: null, reasoning: "Pay now." });
+  });
+});
+
 describe("AP guardrails — schedule is bound exactly like pay", () => {
   const settledTwin: DuplicateMatch = {
     otherId: "inv-old",

@@ -70,6 +70,7 @@ You don't have to collect a payee's address yourself. In the counterparty's row,
 - The payee opens it without an account. They see which business wants to pay them and enter their own Arc address.
 - The link works once and expires after 7 days. A new link replaces the payee's unused one, and **Revoke** in the row stops it.
 - An address that comes in through a link counts as a change, like any other: the row says "not yet confirmed", and the agent holds payments to that payee until someone here confirms it, as below.
+- A bill can come before the address. Wherever payments are real, the agent holds a bill to a payee with no address before it tries any transfer (`counterparty.no_address`), and its card says to add the address or ask for it. "The agent decides it again on its own once the counterparty has an address and a person has confirmed it."
 
 ### Changing an address
 
@@ -335,6 +336,8 @@ Owners, admins and approvers decide each one:
   alt="An approval card on the Approvals page: Bluebird Logistics, due Oct 9, 2026, 8.00 USDC, marked Held, with the reasoning: Held 8.00 USDC for Bluebird Logistics: no receipt is recorded for PO-2213, so the three-way match is incomplete, and below it Pays to and the counterparty's address. The buttons are Approve and pay, Reject and Return to agent."
   caption="A held payable, with the three decisions a person can make."
 />
+
+Where payments are real, **Approve and pay** also refuses a payee with no address yet: "This payee has no payment address yet. Add it on Counterparties, or ask them for it with a one-time link."
 
 **Approve and pay** is disabled in two cases, and the card says why, and what you can do instead:
 

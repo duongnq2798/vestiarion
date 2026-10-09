@@ -72,6 +72,12 @@ export function ruleNextStep(rule: string | null | undefined, counterparty: { id
   switch (rule) {
     case "counterparty.payment_limit":
       return { sentence: `It is above ${counterparty.name}'s payment limit. Pay it in Approvals, or raise the limit.`, fix: { label: "Edit limit", path: row } };
+    case "counterparty.no_address":
+      // Nothing can be sent until there is an address (counterparty.no_address); the follow-up decides it again once confirmed.
+      return {
+        sentence: `${counterparty.name} has no payment address yet. Add it, or ask ${counterparty.name} for it with a one-time link; the agent decides it again once the address is confirmed.`,
+        fix: { label: "Add address", path: row },
+      };
     case "counterparty.address_unconfirmed":
       return {
         sentence: `${counterparty.name}'s payment address changed and no one has confirmed it. Confirm it, or pay it in Approvals.`,
@@ -168,6 +174,8 @@ export function agentResumes(rule: string | null | undefined): string | null {
       return "The agent decides it again on its own once an owner or admin raises the counterparty's payment limit.";
     case "counterparty.unscreened":
       return "The agent decides it again on its own once screening gives a verdict.";
+    case "counterparty.no_address":
+      return "The agent decides it again on its own once the counterparty has an address and a person has confirmed it.";
     case MATCH_INCOMPLETE:
       return "The agent decides it again on its own once an owner or admin adds what the match lacks, or marks the counterparty as paid without purchase orders.";
     case "counterparty.new_payee":
@@ -188,6 +196,8 @@ export function ruleInBrief(rule: string | null | undefined): string | null {
       return "it is above the counterparty's payment limit";
     case "counterparty.address_unconfirmed":
       return "the payment address changed and is not confirmed";
+    case "counterparty.no_address":
+      return "the counterparty has no payment address yet";
     case "counterparty.unscreened":
       return "the counterparty is not screened yet";
     case "counterparty.high_risk":

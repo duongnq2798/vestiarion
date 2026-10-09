@@ -1495,6 +1495,45 @@ describe("the AP stage and the first payment to a new payee (new payee check)", 
 });
 
 
+describe("the AP stage and a counterparty with no payment address", () => {
+  const plain = { early_pay_discount_pct: null, discount_due_date: null };
+  const noAddress = () => payable({ amount: "300", ...plain, counterparties: counterparty({ address: null }) });
+  const payNow = () => model(() => ({ action: "pay", reasoning: "Matched and within the limit; paying now.", confidence: 0.9 }));
+
+  it("holds the payment before any transfer is tried, and records that the address was missing", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    payNow();
+    const { fake, chain, stage } = apFake({ book: [noAddress()] });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    const [held] = invoicePatches(fake.requests);
+    expect(held.body).toMatchObject({ status: "held" });
+    expect((held.body as Record<string, string>).agent_reasoning).toContain("[guardrail override: the counterparty has no payment address yet");
+    expect((held.body as Record<string, string>).agent_reasoning).not.toContain("sim:");
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_detail).toMatchObject({
+      guardrailBlocked: true,
+      guardrailRule: "counterparty.no_address",
+      observed: { addressMissing: true },
+      execution: { resultingStatus: "held" },
+    });
+  });
+
+  it("records nothing about a missing address when the counterparty has one", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    payNow();
+    const { fake, chain, stage } = apFake({ book: [payable({ amount: "300", ...plain })] });
+
+    await stage();
+
+    expect(chain.transfers).toHaveLength(1);
+    expect((ledger(fake.requests)[0].p_detail as { observed: Record<string, unknown> }).observed).not.toHaveProperty("addressMissing");
+  });
+});
+
+
 describe("the AP stage and two approvals above the workspace's figure (two approvals T3)", () => {
   const plain = { early_pay_discount_pct: null, discount_due_date: null };
   const northwind = () => payable({ amount: "300", ...plain });
