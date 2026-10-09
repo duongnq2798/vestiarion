@@ -42,11 +42,11 @@ function decision(seq: number, invoiceId: string, over: Partial<ReportDecision> 
 }
 
 function payment(invoiceId: string, over: Partial<ReportPayment> = {}): ReportPayment {
-  return { invoiceId, amount: 100, token: "USDC", txHash: `0x${"a".repeat(64)}`, at: "2026-10-02T10:02:00.000Z", ...over };
+  return { invoiceId, amount: 100, token: "USDC", txHash: `0x${"a".repeat(64)}`, at: "2026-10-02T10:02:00.000Z", simulated: false, ...over };
 }
 
 function facts(over: Partial<ReportFacts> = {}): ReportFacts {
-  return { network: "arc-testnet", openedAt: OPENED, shadow: null, bills: [], decisions: [], personActions: [], verdicts: [], payments: [], ...over };
+  return { network: "arc-testnet", sandbox: false, openedAt: OPENED, shadow: null, bills: [], decisions: [], personActions: [], verdicts: [], payments: [], ...over };
 }
 
 describe("buildReport", () => {
@@ -357,9 +357,52 @@ describe("buildReport", () => {
     expect(report.paymentList[9].payee).toBe("Payee b2");
   });
 
+  it("counts only live payments in a live workspace", () => {
+    const report = buildReport(
+      facts({ bills: [bill("a"), bill("b")], decisions: [decision(1, "a"), decision(2, "b")], payments: [payment("a"), payment("b", { simulated: true, txHash: "sim_x" })] })
+    );
+    expect(report.paid.count).toBe(1);
+    expect(report.simulated).toBe(false);
+  });
+
+  it("counts a sandbox's simulated payments, and links none of them to an explorer", () => {
+    const report = buildReport(
+      facts({ sandbox: true, bills: [bill("a")], decisions: [decision(1, "a")], payments: [payment("a", { simulated: true, txHash: "sim_key" })] })
+    );
+    expect(report.simulated).toBe(true);
+    expect(report.realMoney).toBe(false);
+    expect(report.paid.count).toBe(1);
+    expect(report.paymentList[0]).toMatchObject({ simulated: true, txHash: null });
+  });
+
+  it("uses the sample data, and says so, when a workspace has no real bill yet", () => {
+    const sampleBill = (id: string) => bill(id, { payee: { id: `s-${id}`, name: `Sample ${id}`, mirror: false, sample: true } });
+    const report = buildReport(
+      facts({
+        sandbox: true,
+        bills: [sampleBill("a"), sampleBill("b")],
+        decisions: [decision(1, "a"), decision(2, "b", { action: "ap_hold", resultingStatus: "held", guardrailBlocked: true, guardrailRule: "counterparty.payment_limit" })],
+        payments: [payment("a", { simulated: true, txHash: "sim_a" })],
+      })
+    );
+    expect(report.source).toBe("sample");
+    expect(report.bills.handled).toBe(2);
+    expect(report.stopped.byCode).toBe(1);
+    expect(report.paid.count).toBe(1);
+  });
+
+  it("leaves sample data out as soon as there is one real bill", () => {
+    const report = buildReport(
+      facts({ bills: [bill("real"), bill("s", { payee: { id: "s", name: "Sample", mirror: false, sample: true } })], decisions: [decision(1, "real"), decision(2, "s")] })
+    );
+    expect(report.source).toBe("real");
+    expect(report.bills.handled).toBe(1);
+  });
+
   it("says whether money was real from the network", () => {
     expect(buildReport(facts()).realMoney).toBe(false);
     expect(buildReport(facts({ network: "arc-mainnet" })).realMoney).toBe(true);
+    expect(buildReport(facts({ network: "arc-mainnet", sandbox: true })).realMoney).toBe(false);
   });
 });
 
@@ -416,7 +459,12 @@ describe("readReportFacts", () => {
       }
       if (request.path === "/rest/v1/decision_verdicts") return { body: [{ entry_seq: "41", verdict: "agree" }] };
       if (request.path === "/rest/v1/payment_intents") {
-        return { body: [{ source_id: "inv-1", amount: "196.000000", token: "USDC", tx_hash: `0x${"b".repeat(64)}`, executed_at: null, confirmed_at: "2026-10-07T09:06:00Z", updated_at: "2026-10-07T09:07:00Z" }] };
+        return {
+          body: [
+            { source_id: "inv-1", provider: "circle", provider_mode: "live", amount: "196.000000", token: "USDC", tx_hash: `0x${"b".repeat(64)}`, executed_at: null, confirmed_at: "2026-10-07T09:06:00Z", updated_at: "2026-10-07T09:07:00Z" },
+            { source_id: "inv-2", provider: "simulate", provider_mode: "simulate", amount: "5", token: "USDC", tx_hash: "sim_key", executed_at: "2026-10-07T09:10:00Z", confirmed_at: null, updated_at: "2026-10-07T09:10:00Z" },
+          ],
+        };
       }
       return { body: [] };
     };
@@ -424,7 +472,7 @@ describe("readReportFacts", () => {
 
   it("reads the payables, the agent's decisions, people's approvals, verdicts and confirmed live payments of the workspace", async () => {
     const fake = fakeSupabase(workspace());
-    const read = await runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), () => readReportFacts(db(), "arc-testnet"));
+    const read = await runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), () => readReportFacts(db(), "arc-testnet", { sandbox: false }));
 
     expect(read.openedAt).toBe("2026-10-01T00:00:00Z");
     expect(read.shadow).toEqual({ currency: "USD", startedAt: "2026-10-07T08:00:00Z" });
@@ -459,17 +507,17 @@ describe("readReportFacts", () => {
     ]);
     expect(read.personActions).toEqual([{ seq: 43, ts: "2026-10-07T09:05:00Z", action: "approval_paid", invoiceId: "inv-1" }]);
     expect(read.verdicts).toEqual([{ entrySeq: 41, verdict: "agree" }]);
-    expect(read.payments).toEqual([{ invoiceId: "inv-1", amount: 196, token: "USDC", txHash: `0x${"b".repeat(64)}`, at: "2026-10-07T09:06:00Z" }]);
+    expect(read.sandbox).toBe(false);
+    expect(read.payments).toEqual([
+      { invoiceId: "inv-1", amount: 196, token: "USDC", txHash: `0x${"b".repeat(64)}`, at: "2026-10-07T09:06:00Z", simulated: false },
+      { invoiceId: "inv-2", amount: 5, token: "USDC", txHash: "sim_key", at: "2026-10-07T09:10:00Z", simulated: true },
+    ]);
 
     const invoices = fake.requests.find((request) => request.path === "/rest/v1/invoices");
     expect(invoices?.params.get("direction")).toBe("eq.payable");
     const intents = fake.requests.find((request) => request.path === "/rest/v1/payment_intents");
-    expect(Object.fromEntries(["source_type", "provider", "provider_mode", "status"].map((key) => [key, intents?.params.get(key)]))).toEqual({
-      source_type: "eq.invoice",
-      provider: "eq.circle",
-      provider_mode: "eq.live",
-      status: "eq.confirmed",
-    });
+    expect(Object.fromEntries(["source_type", "status"].map((key) => [key, intents?.params.get(key)]))).toEqual({ source_type: "eq.invoice", status: "eq.confirmed" });
+    expect(intents?.params.get("select")).toContain("provider_mode");
     const agent = fake.requests.find((request) => request.path === "/rest/v1/ledger_entries" && request.params.get("actor") === "eq.agent");
     expect(agent?.params.get("action")).toBe("in.(ap_pay,ap_schedule,ap_hold,ap_flag_fraud,ap_request_info)");
     expect(agent?.params.get("select")).toContain("held_because:detail->execution->>heldBecause");

@@ -8,7 +8,7 @@ import type { ReportBill, ReportDecision, ReportFacts, ReportPayment, ReportPers
 /**
  * Reads what the workspace report counts (docs/superpowers/specs/2026-10-09-workspace-report-design.md R2), inside the
  * workspace's organization scope: its payables, the agent's decisions on them and people's approvals from the ledger,
- * the verdicts, and the payables' confirmed live Circle payments. Ledger entries come back with the few fields the
+ * the verdicts, and the payables' confirmed payments, live or simulated (a sandbox's). Ledger entries come back with the few fields the
  * report reads, not their whole detail. Every read pages through, so a long-lived workspace is counted whole.
  */
 
@@ -58,6 +58,8 @@ type PersonRow = { seq: number | string; ts: string; action: ReportPersonAction[
 type VerdictRow = { entry_seq: number | string; verdict: ReportVerdict["verdict"] };
 type PaymentRow = {
   source_id: string;
+  provider: string;
+  provider_mode: string | null;
   amount: number | string;
   token: string | null;
   tx_hash: string | null;
@@ -66,7 +68,7 @@ type PaymentRow = {
   updated_at: string;
 };
 
-export async function readReportFacts(orgDb: OrgDb, network: Network): Promise<ReportFacts> {
+export async function readReportFacts(orgDb: OrgDb, network: Network, workspace: { sandbox: boolean }): Promise<ReportFacts> {
   const [invoices, decisions, people, verdicts, payments, first, shadow] = await Promise.all([
     allRows<InvoiceRow>((from, to) =>
       orgDb
@@ -102,10 +104,8 @@ export async function readReportFacts(orgDb: OrgDb, network: Network): Promise<R
     allRows<PaymentRow>((from, to) =>
       orgDb
         .from("payment_intents")
-        .select("source_id, amount, token, tx_hash, executed_at, confirmed_at, updated_at")
+        .select("source_id, provider, provider_mode, amount, token, tx_hash, executed_at, confirmed_at, updated_at")
         .eq("source_type", "invoice")
-        .eq("provider", "circle")
-        .eq("provider_mode", "live")
         .eq("status", "confirmed")
         .order("source_id", { ascending: true })
         .range(from, to)
@@ -136,6 +136,7 @@ export async function readReportFacts(orgDb: OrgDb, network: Network): Promise<R
 
   return {
     network,
+    sandbox: workspace.sandbox,
     openedAt: (unwrap(first) as Array<{ ts: string }>)[0]?.ts ?? null,
     shadow: shadow ? { currency: shadow.currency, startedAt: shadow.startedAt } : null,
     bills,
@@ -165,6 +166,8 @@ export async function readReportFacts(orgDb: OrgDb, network: Network): Promise<R
       token: row.token ?? "USDC",
       txHash: row.tx_hash,
       at: row.executed_at ?? row.confirmed_at ?? row.updated_at,
+      // Only a live Circle transfer moved anything on chain (0049 counts the same ones).
+      simulated: !(row.provider === "circle" && row.provider_mode === "live"),
     })),
   };
 }

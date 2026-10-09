@@ -84,6 +84,12 @@ The page never moves money, opens a workspace or changes a setting.
 A read that fails shows the page's error state (`error.tsx`), as the audit log does: a report with missing rows would
 understate what happened.
 
+**R8. A sandbox, and sample data (added 2026-10-09).** A workspace tried with sample data showed an empty report: sample
+bills were left out and a sandbox's payments are simulated. Now a sandbox counts its simulated payments (and a live
+workspace only its live ones), says so in the box ("Sandbox: payments here are simulated."), marks each **Simulated** and
+links none. While a workspace has no real bill, the report counts its sample bills and says so; the first real bill
+switches it to real bills only.
+
 ## Not now
 
 - A public, shareable copy of the report (SM4). It needs a link table (a migration) and the business's consent per

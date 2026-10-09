@@ -101,7 +101,12 @@ export function ReportSummary({ report }: { report: Report }) {
   const given = report.verdicts ? report.verdicts.agreed + report.verdicts.disagreed : 0;
   return (
     <div className="space-y-8">
-      <Callout tone={report.realMoney ? "proof" : "neutral"} title={`Payments on ${profile.label}, in ${report.realMoney ? "real" : "test"} USDC.`}>
+      <Callout
+        tone={report.realMoney ? "proof" : "neutral"}
+        title={report.simulated ? "Sandbox: payments here are simulated." : `Payments on ${profile.label}, in ${report.realMoney ? "real" : "test"} USDC.`}
+      >
+        {report.simulated && <p>Nothing moves on chain until the workspace goes live.</p>}
+        {report.source === "sample" && <p>This workspace has no real bill yet, so the report counts its sample data. Add a real bill and it counts yours instead.</p>}
         {report.shadow && (
           <p>
             Shadow mode since {utcDay(report.shadow.startedAt)}: your business paid these bills itself, in {report.shadow.currency}. A payment marked
@@ -109,8 +114,8 @@ export function ReportSummary({ report }: { report: Report }) {
           </p>
         )}
         <p>
-          Counted from this workspace&apos;s signed ledger and its confirmed transfers{report.openedAt ? `, since it opened on ${utcDay(report.openedAt)}` : ""}. Sample data and
-          a sandbox&apos;s simulated payments are left out.
+          Counted from this workspace&apos;s signed ledger and its confirmed transfers{report.openedAt ? `, since it opened on ${utcDay(report.openedAt)}` : ""}.
+          {report.source === "real" ? " Sample data is left out." : ""}
         </p>
       </Callout>
 
@@ -122,7 +127,7 @@ export function ReportSummary({ report }: { report: Report }) {
           {report.bills.medianMinutesToDecision === null ? "—" : minutesInWords(report.bills.medianMinutesToDecision)}
         </StatTile>
         <StatTile
-          label="Paid on Arc"
+          label={report.simulated ? "Paid (simulated)" : "Paid on Arc"}
           sub={report.paid.count === 0 ? "Nothing paid yet" : `${amounts(report.paid.byCurrency)} · ${report.paid.onTime} on or before the due day`}
         >
           {report.paid.count}
@@ -239,6 +244,11 @@ export function ReportLists({ slug, report }: { slug: string; report: Report }) 
                         {row.mirror && (
                           <Badge size="sm" tone="simulated" title="A copy of a bill the business paid itself, in shadow mode">
                             Mirror
+                          </Badge>
+                        )}
+                        {row.simulated && (
+                          <Badge size="sm" tone="simulated" title="A sandbox payment: nothing moved on chain">
+                            Simulated
                           </Badge>
                         )}
                       </span>

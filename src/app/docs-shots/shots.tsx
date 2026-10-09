@@ -605,9 +605,11 @@ const reportPayment = (id: string, amount: number, minute: number) => ({
   token: "USDC",
   txHash: `0x${id.repeat(32)}`,
   at: `2026-10-08T10:${String(minute).padStart(2, "0")}:00Z`,
+  simulated: false,
 });
 const REPORT = buildReport({
   network: "arc-testnet",
+  sandbox: false,
   openedAt: REPORT_OPENED,
   shadow: { currency: "USD", startedAt: REPORT_OPENED },
   bills: [

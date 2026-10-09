@@ -25,7 +25,7 @@ export default async function ReportPage({ params }: { params: Promise<{ slug: s
   const { slug } = await params;
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
-    const [facts, dashboardStats] = await Promise.all([readReportFacts(db(), workspaceNetwork().id), stats()]);
+    const [facts, dashboardStats] = await Promise.all([readReportFacts(db(), workspaceNetwork().id, { sandbox: access.membership.mode === "sandbox" }), stats()]);
     const report = buildReport(facts);
 
     return (

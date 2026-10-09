@@ -15,6 +15,7 @@ const TX = `0x${"c".repeat(64)}`;
 function facts(over: Partial<ReportFacts> = {}): ReportFacts {
   return {
     network: "arc-testnet",
+    sandbox: false,
     openedAt: "2026-10-01T00:00:00.000Z",
     shadow: null,
     bills: [
@@ -51,7 +52,7 @@ function facts(over: Partial<ReportFacts> = {}): ReportFacts {
     ],
     personActions: [],
     verdicts: [],
-    payments: [{ invoiceId: "inv-1", amount: 192.08, token: "USDC", txHash: TX, at: "2026-10-02T10:03:00.000Z" }],
+    payments: [{ invoiceId: "inv-1", amount: 192.08, token: "USDC", txHash: TX, at: "2026-10-02T10:03:00.000Z", simulated: false }],
     ...over,
   };
 }
@@ -89,6 +90,24 @@ describe("WorkspaceReport", () => {
     const html = render(facts());
     expect(html).toContain("3.92 USDC");
     expect(html).toContain("On offer: 3.92 USDC on 1 bill, from their terms");
+  });
+
+  it("says a sandbox's payments are simulated, marks each one, and links none", () => {
+    const html = render(facts({ sandbox: true, payments: [{ invoiceId: "inv-1", amount: 192.08, token: "USDC", txHash: "sim_key", at: "2026-10-02T10:03:00.000Z", simulated: true }] }));
+    expect(html).toContain("Sandbox: payments here are simulated.");
+    expect(html).toContain("Paid (simulated)");
+    expect(html).toContain("Simulated");
+    expect(html).not.toContain("/tx/");
+  });
+
+  it("says when the figures count the sample data", () => {
+    const sample = facts({
+      sandbox: true,
+      payments: [],
+      bills: facts().bills.map((bill) => ({ ...bill, payee: { ...bill.payee, sample: true } })),
+    });
+    const html = render(sample);
+    expect(html).toContain("This workspace has no real bill yet, so the report counts its sample data.");
   });
 
   it("points a workspace with no real bill to AP / AR", () => {
