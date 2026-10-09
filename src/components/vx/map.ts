@@ -409,6 +409,7 @@ function mintOf(invoiceId: string, entries: LedgerEntry[]): Decision["mint"] {
 const RULE_REASONS: Readonly<Record<string, string>> = {
   "counterparty.new_payee": "the first payment to this address, and only one person stands behind it",
   "counterparty.address_unconfirmed": "the payee's address changed, and no one has confirmed it",
+  "counterparty.no_address": "the payee has no payment address yet",
   "invoice.match_incomplete": "the three-way match is not complete",
   "invoice.duplicate_of_settled": "it repeats an invoice already paid, being paid or scheduled",
   "counterparty.client_payable": "the counterparty is a client: it pays this business",

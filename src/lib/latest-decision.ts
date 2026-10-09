@@ -56,6 +56,7 @@ export interface LatestDecisionView {
 const RULE_WORDS: Record<string, string> = {
   "counterparty.payment_limit": "it is above the payee's payment limit",
   "counterparty.address_unconfirmed": "the payee's address changed and no one had confirmed it",
+  "counterparty.no_address": "the payee had no payment address yet",
   "counterparty.unscreened": "the payee had not been screened yet",
   "counterparty.high_risk": "the payee was screened high risk",
   "counterparty.client_payable": "the payee is a client, who pays the business",

@@ -233,7 +233,7 @@ describe("a code stop, in a few words", () => {
     expect(budget?.detail).toBe("DeepSeek decided to pay it; code stopped it: the agent's spending limit has no room today, and the agent pays it once there is.");
     const rules = [
       "bridge.fee_above_cap", "bridge.fee_unavailable", "bridge.gateway_balance_short", "bridge.unsupported_token",
-      "counterparty.address_unconfirmed", "counterparty.client_payable", "counterparty.high_risk", "counterparty.payment_limit", "counterparty.unscreened",
+      "counterparty.address_unconfirmed", "counterparty.client_payable", "counterparty.high_risk", "counterparty.no_address", "counterparty.payment_limit", "counterparty.unscreened",
       "fx.rate_unavailable", "fx.swap_cost_above_cap", "fx.swap_usdc_short", "invoice.duplicate_of_settled", "invoice.match_incomplete", "counterparty.new_payee",
       "treasury.insufficient_eurc", "workspace.onchain_limit", "workspace.onchain_limit_route", "workspace.outflow_budget", "workspace.two_approvals",
     ];
@@ -260,6 +260,15 @@ describe("how often an open page asks", () => {
 
 describe("what to do about a payable code stopped", () => {
   const counterparty = { id: "cp-1", name: "CME" };
+
+  it("asks for the address of a payee that has none, and says the agent decides it again once it is confirmed", () => {
+    expect(ruleNextStep("counterparty.no_address", counterparty)).toEqual({
+      sentence: "CME has no payment address yet. Add it, or ask CME for it with a one-time link; the agent decides it again once the address is confirmed.",
+      fix: { label: "Add address", path: "/counterparties#counterparty-cp-1" },
+    });
+    expect(ruleInBrief("counterparty.no_address")).toBe("the counterparty has no payment address yet");
+    expect(agentResumes("counterparty.no_address")).toBe("The agent decides it again on its own once the counterparty has an address and a person has confirmed it.");
+  });
 
   it("links the page that removes the cause, for the rules a person can change", () => {
     expect(ruleNextStep("counterparty.payment_limit", counterparty)).toEqual({
@@ -337,7 +346,7 @@ describe("what to do about a payable code stopped", () => {
   it("has a next step for every rule code holds by", () => {
     const rules = [
       "bridge.fee_above_cap", "bridge.fee_unavailable", "bridge.gateway_balance_short", "bridge.unsupported_token",
-      "counterparty.address_unconfirmed", "counterparty.client_payable", "counterparty.high_risk", "counterparty.payment_limit", "counterparty.unscreened",
+      "counterparty.address_unconfirmed", "counterparty.client_payable", "counterparty.high_risk", "counterparty.no_address", "counterparty.payment_limit", "counterparty.unscreened",
       "fx.rate_unavailable", "fx.swap_cost_above_cap", "fx.swap_usdc_short", "invoice.duplicate_of_settled",
       "treasury.insufficient_eurc", "workspace.onchain_limit", "workspace.onchain_limit_route", "workspace.outflow_budget", "workspace.two_approvals",
     ];

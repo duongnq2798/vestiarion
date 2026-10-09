@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-09: A payable to a payee with no address is held before anything is sent
+
+- Wherever payments are real, an agent decision (`ap_pay` or `ap_schedule`) about a payable whose counterparty has no payment address is held by a new guardrail rule, **`counterparty.no_address`**: `guardrailBlocked: true`, `execution.resultingStatus: "held"`, and `observed.addressMissing: true`. Before, the transfer was tried and failed, and the reasoning carried the provider's error. A sandbox's entries are unchanged.
+- Once the counterparty has an address and a person confirmed it, the follow-up decides the payable again, with an `invoice_reopened` entry whose `changes` include "the counterparty now has a confirmed payment address".
+- Approve and pay refuses such a payable with the error code `no_address`: "This payee has no payment address yet. Add it on Counterparties, or ask them for it with a one-time link." Nothing else in `/api/v1` changes.
+
 ## 2026-10-08: Test USDC for shadow mode
 
 - A workspace in shadow mode on Arc testnet can take the test USDC its open bills need from Vestiarion's float. Its ledger gains **`test_usdc_added`**, actor `human`, domain `treasury`, sent to webhook endpoints as `ledger.appended`: `{ by, amount, from, to, transferId, txHash, status, shortfall, weeklyLimit }`. `from` is the float's address and `to` the operating wallet's. `status` is `confirmed`, `pending` or `failed`, as Circle reported the transfer when the entry was written; `txHash` is `null` while Arc testnet still confirms it. `shortfall` is what the open bills needed, and `amount` what Circle says was sent.

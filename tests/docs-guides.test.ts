@@ -336,6 +336,9 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Your wallet does not hold enough ETH on Base for the gas. Add a little ETH there, then send again.", "src/lib/inbound-usdc.ts", " for the gas. Add a little "],
   ],
   "guides/first-payment": [
+    // A bill before its payee's address (counterparty.no_address), from the card and from Approve and pay.
+    ["The agent decides it again on its own once the counterparty has an address and a person has confirmed it.", "src/lib/next-step.ts"],
+    ["This payee has no payment address yet. Add it on Counterparties, or ask them for it with a one-time link.", "src/lib/agent/approvals.ts"],
     ["View transaction", "src/components/payment-toast.tsx"],
     ["Payment approved", "src/components/payment-toast.tsx"],
     ["Payment confirmed", "src/components/payment-toast.tsx"],
