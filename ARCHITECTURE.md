@@ -710,9 +710,11 @@ organization scope and a page at a time: payables with their counterparty (sampl
 decisions with only the `detail` fields the report uses (PostgREST JSON paths, never the whole detail), people's
 `approval_paid` / `approval_rejected` / `approval_returned`, verdicts, and each payable's confirmed live Circle
 payment. `buildReport` (`src/lib/workspace-report.ts`) is pure and counts them: bills handled, the median minutes to a
-bill's first decision, payments and on-time payments, bills stopped (refused by code, waited for cash, a pause or the
-spending limit, or the agent's own call; a hold for a verdict is not a stop), people stepping in, verdicts, and
-discounts: captured measured as a bill's amount less its confirmed transfer, on offer estimated from the terms. A
+bill's first decision, payments and on-time payments, bills stopped (waited for cash, a pause or the spending limit,
+refused by code, the agent's own call, or a payment it decided whose transfer failed; a hold for a verdict is not a
+stop), people stepping in, verdicts on real bills, and discounts: captured measured as a bill's amount less its
+`paid_amount` (the intent's amount is a first try's, which a resend after the deadline does not change), on offer
+estimated from the terms. A
 payment is a shadow mirror when its decision was made in shadow mode, carries a verdict, or came while shadow mode was
 on. No migration and no write; a failed read shows the section's error state rather than a report with rows missing.
 

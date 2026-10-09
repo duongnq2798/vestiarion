@@ -17,6 +17,7 @@ function bill(id: string, over: Partial<ReportBill> = {}): ReportBill {
     currency: "USDC",
     status: "pending",
     reviewedBy: null,
+    paidAmount: null,
     discount: null,
     bill: null,
     payee: { id: `payee-${id}`, name: `Payee ${id}`, mirror: false, sample: false },
@@ -116,12 +117,83 @@ describe("buildReport", () => {
         ],
       })
     );
-    expect(report.stopped).toEqual({ total: 3, byCode: 1, waited: 1, byAgent: 1 });
+    expect(report.stopped).toEqual({ total: 3, byCode: 1, waited: 1, byAgent: 1, notSent: 0 });
     const why = Object.fromEntries(report.stoppedList.map((row) => [row.payee, row.why]));
     expect(why["Payee code"]).toBe("Code refused it: it is above the counterparty's payment limit.");
     expect(why["Payee cash"]).toBe("The operating wallet was short of cash for it.");
     expect(why["Payee agent"]).toBe("The agent's call: The bank details changed.");
     expect(report.stoppedList.find((row) => row.payee === "Payee verdict")).toBeUndefined();
+  });
+
+  it("counts a spending-limit hold as a wait, though code set it, and a transfer that did not go through apart from the agent's calls", () => {
+    const report = buildReport(
+      facts({
+        bills: [bill("budget"), bill("failed"), bill("schedule")],
+        decisions: [
+          decision(1, "budget", { resultingStatus: "held", guardrailBlocked: true, guardrailRule: "workspace.outflow_budget", heldBecause: "outflow_budget" }),
+          decision(2, "failed", { action: "ap_pay", resultingStatus: "held", reasoning: "Pay it. The bill matches the order." }),
+          decision(3, "schedule", { action: "ap_schedule", resultingStatus: "scheduled" }),
+        ],
+      })
+    );
+    expect(report.stopped).toEqual({ total: 2, byCode: 0, waited: 1, byAgent: 0, notSent: 1 });
+    const why = Object.fromEntries(report.stoppedList.map((row) => [row.payee, row.why]));
+    expect(why["Payee budget"]).toBe("It would have passed the workspace's spending limit.");
+    expect(why["Payee failed"]).toBe("The agent decided to pay, and the transfer did not go through.");
+  });
+
+  it("takes what a paid bill's transfer carried from the bill, so a resend at the full amount shows no discount", () => {
+    const terms = { pct: 2, deadline: "2026-10-05T00:00:00.000Z" };
+    const report = buildReport(
+      facts({
+        bills: [bill("resent", { amount: 100, discount: terms, paidAmount: 100 }), bill("taken", { amount: 100, discount: terms, paidAmount: 98 })],
+        decisions: [decision(1, "resent"), decision(2, "taken")],
+        // The intent kept the discounted amount of a first try that failed; the resend carried the full amount.
+        payments: [payment("resent", { amount: 98 }), payment("taken", { amount: 98 })],
+      })
+    );
+    expect(report.paid.byCurrency).toEqual([{ currency: "USDC", amount: 198 }]);
+    expect(report.discounts.captured).toEqual({ count: 1, byCurrency: [{ currency: "USDC", amount: 2 }] });
+    expect(report.paymentList.find((row) => row.payee === "Payee resent")?.amount).toBe(100);
+  });
+
+  it("counts verdicts on real bills only", () => {
+    const report = buildReport(
+      facts({
+        shadow: { currency: "USD", startedAt: "2026-10-02T00:00:00.000Z" },
+        bills: [bill("real"), bill("sample", { payee: { id: "s", name: "Sample Co", mirror: false, sample: true } })],
+        decisions: [decision(1, "real", { shadow: true }), decision(2, "sample", { shadow: true })],
+        verdicts: [
+          { entrySeq: 1, verdict: "agree" },
+          { entrySeq: 2, verdict: "disagree" },
+        ],
+      })
+    );
+    expect(report.verdicts).toEqual({ agreed: 1, disagreed: 0, waiting: 0 });
+  });
+
+  it("credits a person, not a verdict, for paying a bill after agreeing that the agent should hold it", () => {
+    const report = buildReport(
+      facts({
+        shadow: { currency: "USD", startedAt: "2026-10-02T00:00:00.000Z" },
+        bills: [bill("held", { status: "paid" })],
+        decisions: [decision(1, "held", { action: "ap_hold", resultingStatus: "held", shadow: true })],
+        personActions: [{ seq: 3, ts: "2026-10-02T11:00:00.000Z", action: "approval_paid", invoiceId: "held" }],
+        verdicts: [{ entrySeq: 1, verdict: "agree" }],
+        payments: [payment("held")],
+      })
+    );
+    expect(report.paymentList[0].decidedBy).toBe("person");
+  });
+
+  it("says a stopped bill whose transfer is in flight is being paid", () => {
+    const report = buildReport(
+      facts({
+        bills: [bill("flight", { status: "matched" })],
+        decisions: [decision(1, "flight", { resultingStatus: "held", heldBecause: "cash_shortfall" })],
+      })
+    );
+    expect(report.stoppedList[0].since).toBe("paying");
   });
 
   it("says what happened to a stopped bill since", () => {
@@ -309,6 +381,7 @@ describe("readReportFacts", () => {
               currency: "USDC",
               status: "paid",
               reviewed_by: null,
+              paid_amount: "196.000000",
               early_pay_discount_pct: "2",
               discount_due_date: "2026-10-10T00:00:00Z",
               original_currency: "USD",
@@ -364,6 +437,7 @@ describe("readReportFacts", () => {
         currency: "USDC",
         status: "paid",
         reviewedBy: null,
+        paidAmount: 196,
         discount: { pct: 2, deadline: "2026-10-10T00:00:00Z" },
         bill: { amount: 196, currency: "USD" },
         payee: { id: "cp-1", name: "Hetzner", mirror: true, sample: false },

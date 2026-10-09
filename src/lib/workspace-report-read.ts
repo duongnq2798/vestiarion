@@ -33,6 +33,7 @@ type InvoiceRow = {
   currency: string | null;
   status: string;
   reviewed_by: string | null;
+  paid_amount: number | string | null;
   early_pay_discount_pct: number | string | null;
   discount_due_date: string | null;
   original_currency: string | null;
@@ -71,7 +72,7 @@ export async function readReportFacts(orgDb: OrgDb, network: Network): Promise<R
       orgDb
         .from("invoices")
         .select(
-          "id, created_at, due_date, amount, currency, status, reviewed_by, early_pay_discount_pct, discount_due_date, original_currency, original_amount, counterparties(id, name, sample, mirror_wallet_id)"
+          "id, created_at, due_date, amount, currency, status, reviewed_by, paid_amount, early_pay_discount_pct, discount_due_date, original_currency, original_amount, counterparties(id, name, sample, mirror_wallet_id)"
         )
         .eq("direction", "payable")
         .order("id", { ascending: true })
@@ -122,6 +123,7 @@ export async function readReportFacts(orgDb: OrgDb, network: Network): Promise<R
     currency: row.currency ?? "USDC",
     status: row.status,
     reviewedBy: row.reviewed_by,
+    paidAmount: row.paid_amount == null ? null : Number(row.paid_amount),
     discount: invoiceDiscount(row),
     bill: row.original_currency && row.original_amount != null ? { amount: Number(row.original_amount), currency: row.original_currency } : null,
     payee: {

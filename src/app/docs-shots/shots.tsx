@@ -580,6 +580,7 @@ const reportBill = (id: string, name: string, amount: number, over: Partial<Repo
   currency: "USDC",
   status: "paid",
   reviewedBy: null,
+  paidAmount: null,
   discount: null,
   bill: { amount, currency: "USD" },
   payee: { id: `cp-${id}`, name, mirror: false, sample: false },
@@ -611,7 +612,7 @@ const REPORT = buildReport({
   shadow: { currency: "USD", startedAt: REPORT_OPENED },
   bills: [
     reportBill("11", "Northwind Cloud", 46.41),
-    reportBill("22", "Harbor VPS", 24, { discount: { pct: 2, deadline: "2026-10-10T00:00:00Z" } }),
+    reportBill("22", "Harbor VPS", 24, { discount: { pct: 2, deadline: "2026-10-10T00:00:00Z" }, paidAmount: 23.52 }),
     reportBill("33", "Lumen Hosting", 13.5, { payee: { id: "cp-33", name: "Lumen Hosting", mirror: true, sample: false } }),
     reportBill("44", "Atlas Compute", 61.87, { status: "held", bill: null }),
     reportBill("55", "Northwind Cloud", 46.41, { status: "rejected", bill: null }),

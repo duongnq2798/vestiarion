@@ -39,18 +39,26 @@ with a business, and what the business would show to someone else.
   mode was on. The page says so above the figures, and each mirrored payment row is tagged.
 - The one estimate is the early-payment discount on offer: the sum of amount × percent over bills with valid terms
   (`invoiceDiscount`). It is labelled "on offer, from the bills' terms".
-- The discount captured is measured: for a paid bill with discount terms, the bill's amount minus what its confirmed
-  transfer carried, when that is above zero. Never a model's claim, never a ledger summary.
+- The discount captured is measured: for a paid bill with discount terms, the bill's amount minus what its transfer
+  carried, when that is above zero. What the transfer carried is the bill's `paid_amount` (0038), written with the
+  transfer that went through; the payment intent's amount is used only when that is empty, since the intent keeps its
+  first try's amount and a resend after the deadline sends the full one. Never a model's claim, never a ledger summary.
 - Nothing on the page says "saved" except the captured discount.
 
 **R4. The figures.**
 - Bills handled; decided by the agent, with the median minutes from a bill being added to its first decision.
 - Paid on Arc: count, sum per currency, and how many on or before the due day (UTC), as 0049 counts on time.
-- Stopped before paying: bills whose newest agent decision held, flagged or asked for information, split into
-  refused by code (`guardrailBlocked`), held for an operational reason (`heldBecause` cash, pause or budget), and the
-  agent's own call. A decision held for a verdict in shadow mode is not a stop.
+- Stopped before paying: bills one of the agent's decisions held, flagged or asked about, classified by the newest
+  such decision: waited (`heldBecause` cash, pause or budget; the budget hold is set by code but lifts by itself, so it
+  is checked first), refused by code (`guardrailBlocked`), the agent's own call (`ap_hold`, `ap_flag_fraud`,
+  `ap_request_info`), and not sent (a pay or schedule that passed every check but whose transfer failed). A decision
+  held for a verdict in shadow mode is not a stop. A bill later paid still counts, with "since" saying so.
 - Needed a person: bills a person approved, rejected or returned (`approval_paid`, `approval_rejected`,
-  `approval_returned`); paid with no one stepping in: paid bills with no such entry and no reviewer.
+  `approval_returned`) after a decision that was not a hold for a verdict (a verdict hold is decided by a person by
+  design, even when shadow mode was turned off before they approved it); paid with no one stepping in: paid bills
+  with no such entry and no reviewer.
+- Verdicts count only those on decisions about real bills. A payment is "Your verdict" when a person agreed with the
+  agent's decision to pay it; agreeing that it should hold a bill and then paying it is "A person".
 - Verdicts: agreed and disagreed, and the bills whose newest decision waits for one (only when any verdict exists or
   shadow mode is on).
 - Early-payment discounts: captured (measured) and on offer (estimated).

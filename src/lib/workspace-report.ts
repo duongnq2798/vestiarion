@@ -18,6 +18,11 @@ export interface ReportBill {
   currency: string;
   status: string;
   reviewedBy: string | null;
+  /**
+   * What left when it was paid (`paid_amount`, 0038), written with the transfer that went through. The payment intent
+   * keeps the amount of its first try, which a resend after the discount deadline does not change.
+   */
+  paidAmount: number | null;
   /** The early-payment discount its terms carry (`invoiceDiscount`), or null. */
   discount: { pct: number; deadline: string } | null;
   /** The bill as it was written, when it was in a currency of its own (shadow mode S6). */
@@ -79,7 +84,8 @@ export interface CurrencyAmount {
   amount: number;
 }
 
-export type StopKind = "code" | "waited" | "agent";
+/** Refused by code, waited for something outside the bill, the agent's own call, or a payment it made that was not sent. */
+export type StopKind = "code" | "waited" | "agent" | "notSent";
 
 export interface StoppedRow {
   invoiceId: string;
@@ -89,8 +95,8 @@ export interface StoppedRow {
   currency: string;
   kind: StopKind;
   why: string;
-  /** What happened to the bill since: paid (by anyone), rejected, or still open. */
-  since: "paid" | "rejected" | "open";
+  /** What happened to the bill since: paid (by anyone), its transfer in flight, rejected, or still open. */
+  since: "paid" | "paying" | "rejected" | "open";
 }
 
 export interface PaymentRow {
@@ -120,7 +126,7 @@ export interface WorkspaceReport {
   shadow: { currency: string; startedAt: string } | null;
   bills: { handled: number; decided: number; medianMinutesToDecision: number | null };
   paid: { count: number; byCurrency: CurrencyAmount[]; onTime: number; untouched: number; mirrored: number };
-  stopped: { total: number; byCode: number; waited: number; byAgent: number };
+  stopped: { total: number; byCode: number; waited: number; byAgent: number; notSent: number };
   people: { steppedIn: number };
   verdicts: { agreed: number; disagreed: number; waiting: number } | null;
   discounts: { captured: { count: number; byCurrency: CurrencyAmount[] }; onOffer: { count: number; byCurrency: CurrencyAmount[] } };
@@ -171,12 +177,16 @@ function stopOf(decision: ReportDecision): { kind: StopKind; why: string } | nul
   if (heldForVerdict(decision)) return null;
   const stopped = STOPPED_STATUSES.has(decision.resultingStatus ?? "") || decision.guardrailBlocked;
   if (!stopped) return null;
-  if (decision.guardrailBlocked) return { kind: "code", why: `Code refused it: ${ruleInBrief(decision.guardrailRule) ?? "a hard limit in code"}.` };
+  // A wait first: the spending limit's hold is set by code too, but it lifts by itself once the limit has room.
   if (decision.heldBecause && WAIT_MARKERS.has(decision.heldBecause)) {
     return { kind: "waited", why: heldWords(decision.heldBecause) ?? "It waited for a reason outside the bill." };
   }
-  const reason = firstSentence(decision.reasoning) ?? `${AGENT_CALL[decision.action] ?? "it stopped the bill"}.`;
-  return { kind: "agent", why: `The agent's call: ${reason}` };
+  if (decision.guardrailBlocked) return { kind: "code", why: `Code refused it: ${ruleInBrief(decision.guardrailRule) ?? "a hard limit in code"}.` };
+  if (AGENT_CALL[decision.action]) {
+    return { kind: "agent", why: `The agent's call: ${firstSentence(decision.reasoning) ?? `${AGENT_CALL[decision.action]}.`}` };
+  }
+  // The agent decided to pay and passed every check, but the transfer was not made: Circle refused it, or it failed.
+  return { kind: "notSent", why: "The agent decided to pay, and the transfer did not go through." };
 }
 
 export function buildReport(facts: ReportFacts): WorkspaceReport {
@@ -184,8 +194,14 @@ export function buildReport(facts: ReportFacts): WorkspaceReport {
   const billsById = new Map(bills.map((bill) => [bill.id, bill]));
   const decisions = facts.decisions.filter((decision) => billsById.has(decision.invoiceId)).sort((a, b) => a.seq - b.seq);
   const actions = facts.personActions.filter((action) => billsById.has(action.invoiceId)).sort((a, b) => a.seq - b.seq);
-  const payments = facts.payments.filter((payment) => billsById.has(payment.invoiceId));
-  const verdictBySeq = new Map(facts.verdicts.map((verdict) => [verdict.entrySeq, verdict.verdict]));
+  // What a paid bill's transfer carried: the bill's own record of it, else the intent's first amount.
+  const payments = facts.payments
+    .filter((payment) => billsById.has(payment.invoiceId))
+    .map((payment) => ({ ...payment, amount: billsById.get(payment.invoiceId)!.paidAmount ?? payment.amount }));
+  // Verdicts on the agent's decisions about real bills only.
+  const decisionSeqs = new Set(decisions.map((decision) => decision.seq));
+  const verdicts = facts.verdicts.filter((verdict) => decisionSeqs.has(verdict.entrySeq));
+  const verdictBySeq = new Map(verdicts.map((verdict) => [verdict.entrySeq, verdict.verdict]));
 
   const decisionsOf = new Map<string, ReportDecision[]>();
   for (const decision of decisions) decisionsOf.set(decision.invoiceId, [...(decisionsOf.get(decision.invoiceId) ?? []), decision]);
@@ -203,8 +219,11 @@ export function buildReport(facts: ReportFacts): WorkspaceReport {
     if (!before || !heldForVerdict(before)) steppedIn.add(action.invoiceId);
   }
 
-  const hasVerdict = (invoiceId: string, verdict?: "agree") =>
-    (decisionsOf.get(invoiceId) ?? []).some((decision) => verdictBySeq.has(decision.seq) && (!verdict || verdictBySeq.get(decision.seq) === verdict));
+  const hasVerdict = (invoiceId: string) => (decisionsOf.get(invoiceId) ?? []).some((decision) => verdictBySeq.has(decision.seq));
+  // A person agreed with the agent's decision to pay (held for the verdict, or by a check in code): the payment is theirs
+  // by verdict. Agreeing that it should hold a bill, then paying it, is a person's decision.
+  const agreedToPay = (invoiceId: string) =>
+    (decisionsOf.get(invoiceId) ?? []).some((decision) => (decision.action === "ap_pay" || decision.action === "ap_schedule") && verdictBySeq.get(decision.seq) === "agree");
   const mirrored = (payment: ReportPayment) =>
     (decisionsOf.get(payment.invoiceId) ?? []).some((decision) => decision.shadow) ||
     hasVerdict(payment.invoiceId) ||
@@ -212,7 +231,7 @@ export function buildReport(facts: ReportFacts): WorkspaceReport {
 
   const paymentRows: PaymentRow[] = payments.map((payment) => {
     const bill = billsById.get(payment.invoiceId)!;
-    const decidedBy = hasVerdict(payment.invoiceId, "agree")
+    const decidedBy = agreedToPay(payment.invoiceId)
       ? "verdict"
       : (actionsOf.get(payment.invoiceId) ?? []).some((action) => action.action === "approval_paid")
         ? "person"
@@ -243,7 +262,14 @@ export function buildReport(facts: ReportFacts): WorkspaceReport {
       currency: bill.currency,
       kind: newestStop.stop.kind,
       why: newestStop.stop.why,
-      since: paymentOf.has(invoiceId) || bill.status === "paid" ? "paid" : bill.status === "rejected" ? "rejected" : "open",
+      since:
+        paymentOf.has(invoiceId) || bill.status === "paid"
+          ? "paid"
+          : bill.status === "matched" || bill.status === "processing"
+            ? "paying"
+            : bill.status === "rejected"
+              ? "rejected"
+              : "open",
     });
   }
 
@@ -260,8 +286,8 @@ export function buildReport(facts: ReportFacts): WorkspaceReport {
         .map((list) => list.at(-1)!)
         .filter((newest) => Date.parse(newest.ts) >= Date.parse(facts.shadow!.startedAt) && !verdictBySeq.has(newest.seq)).length
     : 0;
-  const agreed = facts.verdicts.filter((verdict) => verdict.verdict === "agree").length;
-  const disagreed = facts.verdicts.length - agreed;
+  const agreed = verdicts.filter((verdict) => verdict.verdict === "agree").length;
+  const disagreed = verdicts.length - agreed;
   const mirrorPayees = new Set(bills.filter((bill) => bill.payee.mirror).map((bill) => bill.payee.id)).size;
 
   return {
@@ -285,9 +311,10 @@ export function buildReport(facts: ReportFacts): WorkspaceReport {
       byCode: stoppedRows.filter((row) => row.kind === "code").length,
       waited: stoppedRows.filter((row) => row.kind === "waited").length,
       byAgent: stoppedRows.filter((row) => row.kind === "agent").length,
+      notSent: stoppedRows.filter((row) => row.kind === "notSent").length,
     },
     people: { steppedIn: steppedIn.size },
-    verdicts: facts.shadow || facts.verdicts.length > 0 ? { agreed, disagreed, waiting } : null,
+    verdicts: facts.shadow || verdicts.length > 0 ? { agreed, disagreed, waiting } : null,
     discounts: {
       captured: { count: captured.length, byCurrency: byCurrency(captured) },
       onOffer: { count: onOffer.length, byCurrency: byCurrency(onOffer) },

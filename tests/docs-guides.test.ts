@@ -908,6 +908,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Discounts captured", REPORT],
     ["What it stopped", REPORT],
     ["Paid since", REPORT],
+    ["Being paid", REPORT],
     ["Rejected", REPORT],
     ["Still open", REPORT],
     ["Payments and their proof", REPORT],

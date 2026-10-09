@@ -32,8 +32,9 @@ export function minutesInWords(minutes: number): string {
 
 const amounts = (items: CurrencyAmount[]) => items.map((item) => `${item.amount.toLocaleString("en-US", { maximumFractionDigits: 6 })} ${item.currency}`).join(" + ");
 
-const SINCE: Record<StoppedRow["since"], { word: string; tone: "proof" | "refused" | "held" }> = {
+const SINCE: Record<StoppedRow["since"], { word: string; tone: "proof" | "refused" | "held" | "neutral" }> = {
   paid: { word: "Paid since", tone: "proof" },
+  paying: { word: "Being paid", tone: "neutral" },
   rejected: { word: "Rejected", tone: "refused" },
   open: { word: "Still open", tone: "held" },
 };
@@ -108,8 +109,8 @@ export function ReportSummary({ report }: { report: Report }) {
           </p>
         )}
         <p>
-          Counted from this workspace&apos;s signed ledger and its confirmed transfers{report.openedAt ? `, since it opened on ${utcDay(report.openedAt)}` : ""}. Sample data is left
-          out.
+          Counted from this workspace&apos;s signed ledger and its confirmed transfers{report.openedAt ? `, since it opened on ${utcDay(report.openedAt)}` : ""}. Sample data and
+          a sandbox&apos;s simulated payments are left out.
         </p>
       </Callout>
 
@@ -126,7 +127,10 @@ export function ReportSummary({ report }: { report: Report }) {
         >
           {report.paid.count}
         </StatTile>
-        <StatTile label="Stopped before paying" sub={`${report.stopped.byCode} refused by code · ${report.stopped.byAgent} the agent's call · ${report.stopped.waited} waited`}>
+        <StatTile
+          label="Stopped before paying"
+          sub={`${report.stopped.byCode} refused by code · ${report.stopped.byAgent} the agent's call · ${report.stopped.waited} waited${report.stopped.notSent > 0 ? ` · ${report.stopped.notSent} not sent` : ""}`}
+        >
           {report.stopped.total}
         </StatTile>
         <StatTile label="Needed a person" sub={report.shadow ? "In shadow mode, every payment waits for your verdict" : `${report.paid.untouched} paid with no one stepping in`}>

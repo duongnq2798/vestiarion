@@ -5,7 +5,7 @@ The **Report** section says what the agent did with your workspace's real bills 
 The report counts from two things the workspace already keeps: its signed ledger, and the transfers Circle confirmed. Nothing on it is typed in by hand.
 
 - **Bills** are your payables. A bill from sample data is left out, with everything about it.
-- **Payments** are the bills' confirmed transfers on Arc. The amount is what the transfer carried.
+- **Payments** are the bills' confirmed transfers on Arc. The amount is what the transfer carried. A sandbox's simulated payments are not counted.
 - The box at the top says which money it was: "Payments on Arc testnet, in test USDC." or "Payments on Arc mainnet, in real USDC.".
 - In shadow mode, the box also says since when, and that your business paid these bills itself. A payment made in shadow mode is marked **Mirror**: it is the copy, in USDC on Arc testnet, of a bill you paid as you always do.
 
@@ -20,14 +20,14 @@ The report counts from two things the workspace already keeps: its signed ledger
 - **Bills handled**: your real bills, and how many of them the agent has decided.
 - **Time to decide**: the median time from a bill arriving to the agent's first decision on it.
 - **Paid on Arc**: how many bills were paid, how much in each currency, and how many were paid on or before their due day (UTC).
-- **Stopped before paying**: bills one of the agent's decisions kept from being paid, by the newest such decision, split three ways: refused by code (a check the agent cannot talk its way past, such as a payment limit or a first payment to a new address), the agent's own call, and waited (no cash in the operating wallet, the agent paused, or the spending limit full for the day). A payment held for your verdict in shadow mode is not counted as stopped: a person decides it by design.
+- **Stopped before paying**: bills one of the agent's decisions kept from being paid, by the newest such decision, split by why: refused by code (a check the agent cannot talk its way past, such as a payment limit or a first payment to a new address), the agent's own call, and waited (no cash in the operating wallet, the agent paused, or the spending limit full for the day). When a payment the agent decided was not sent, because the transfer itself failed, it is counted as not sent. A payment held for your verdict in shadow mode is not counted as stopped: a person decides it by design.
 - **Needed a person**: bills a person approved, rejected or returned after the agent or a check stopped them, and how many were paid with no one stepping in. In shadow mode every payment waits for your verdict by design, so that second figure is not shown.
 - **Your verdicts**: in shadow mode, or once any verdict was given, how many of the agent's decisions you agreed with, and how many still wait for a verdict.
 - **Discounts captured**: what early-payment discounts actually took off bills, measured as the bill's amount less what its transfer carried. Beside it, what was on offer across all bills with discount terms, worked out from the terms. That second figure is the only estimate on the page.
 
 ## The two lists
 
-**What it stopped** shows the newest ten stopped bills: the day, the payee, the amount, why it stopped, and what happened since: **Paid since**, **Rejected** or **Still open**.
+**What it stopped** shows the newest ten stopped bills: the day, the payee, the amount, why it stopped, and what happened since: **Paid since**, **Being paid** (its transfer is on its way), **Rejected** or **Still open**.
 
 <Screenshot
   src="/docs/guides/report-lists.png"
@@ -35,7 +35,7 @@ The report counts from two things the workspace already keeps: its signed ledger
   caption="What the agent stopped and why, and each payment with its transaction."
 />
 
-**Payments and their proof** shows the newest ten payments: the day, the payee, the amount (and the bill's own amount when it was written in another currency), who decided it (**The agent**, **A person**, or **Your verdict** in shadow mode), and its transaction on the explorer. **Every entry, signed: Audit log** opens every entry, each signed and hash-linked, which you can export and check yourself: see [Verify an audit export](/docs/guides/audit-export).
+**Payments and their proof** shows the newest ten payments: the day, the payee, the amount (and the bill's own amount when it was written in another currency), who decided it (**The agent**; **A person**, who approved it; or **Your verdict**, when you agreed with the agent's decision to pay it in shadow mode), and its transaction on the explorer. **Every entry, signed: Audit log** opens every entry, each signed and hash-linked, which you can export and check yourself: see [Verify an audit export](/docs/guides/audit-export).
 
 ## Before a live slice
 
