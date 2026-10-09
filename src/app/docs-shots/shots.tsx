@@ -1157,7 +1157,7 @@ export const DOCS_SHOTS = {
   "report-shadow": {
     guide: "report",
     page: "report",
-    sub: "What the agent did with this workspace's real bills since it opened: what it paid and with what proof, what it stopped and why, and how often a person stepped in.",
+    sub: "What the agent did with this workspace's bills since it opened: what it paid and with what proof, what it stopped and why, and how often a person stepped in.",
     render: () => <ReportSummary report={REPORT} />,
   },
   "report-readiness": { guide: "report", render: () => <ReportReadiness steps={REPORT.readiness ?? []} /> },

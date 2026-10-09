@@ -32,7 +32,7 @@ export default async function ReportPage({ params }: { params: Promise<{ slug: s
       <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()}>
         <PageHead
           title={sectionTitle("report")}
-          sub="What the agent did with this workspace's real bills since it opened: what it paid and with what proof, what it stopped and why, and how often a person stepped in."
+          sub="What the agent did with this workspace's bills since it opened: what it paid and with what proof, what it stopped and why, and how often a person stepped in."
           right={<DocsLink href="/docs/guides/report" topic="reading the report" />}
         />
         <WorkspaceReport slug={slug} report={report} />
