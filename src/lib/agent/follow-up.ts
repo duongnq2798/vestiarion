@@ -64,6 +64,8 @@ export interface FrozenInvoice {
   cash?: { operating: number; reserve: number };
   /** Whether the counterparty's address changed and no one has confirmed it, now. Absent when it was not read. */
   addressUnconfirmed?: boolean;
+  /** Whether the counterparty has no payment address, now. Absent when it was not read. */
+  addressMissing?: boolean;
   /** Whether the counterparty needs a purchase order, now (three-way match design M5). Absent when it was not read. */
   purchaseOrderRequired?: boolean;
   /**
@@ -101,6 +103,8 @@ export interface DecisionFacts {
    * decision recorded before the address was observed.
    */
   addressUnconfirmed?: boolean;
+  /** Whether the counterparty had no payment address (`observed.addressMissing`), so the guardrail held it. */
+  addressMissing?: boolean;
   /**
    * Whether the counterparty needed a purchase order (`observed.purchaseOrderRequired`). Absent for a decision recorded
    * before the setting existed, when every counterparty needed one.
@@ -219,6 +223,11 @@ export function factChanges(current: DecisionFacts, atDecision: DecisionFacts): 
   if (atDecision.addressUnconfirmed === true && current.addressUnconfirmed === false) {
     changes.push("the counterparty's new address has since been confirmed");
   }
+  // One way only: a payment held for want of any address (counterparty.no_address) is decided again once there is one and
+  // a person confirmed it. An address given through a payee link waits for that confirmation first.
+  if (atDecision.addressMissing === true && current.addressMissing === false && current.addressUnconfirmed === false) {
+    changes.push("the counterparty now has a confirmed payment address");
+  }
 
   // One way only, as for the address: a counterparty now paid without purchase orders may complete a match that waited
   // for one, so only a decision taken with none on file. Requiring them again reopens nothing; the guardrail asks for
@@ -282,6 +291,7 @@ export function planFollowUp(
       riskLevel: invoice.riskLevel,
       paymentLimit: invoice.paymentLimit,
       addressUnconfirmed: invoice.addressUnconfirmed,
+      addressMissing: invoice.addressMissing,
       purchaseOrderRequired: invoice.purchaseOrderRequired,
     },
     atDecision

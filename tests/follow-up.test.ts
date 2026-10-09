@@ -391,6 +391,28 @@ describe("follow-up — held while the counterparty's new address waited for a p
   });
 });
 
+describe("follow-up — held because the counterparty had no payment address", () => {
+  // The decision saw no address (`observed.addressMissing`), so the AP guardrail held it (counterparty.no_address).
+  const noAddress: DecisionFacts = { ...facts, addressMissing: true };
+  const held = (over: Partial<FrozenInvoice> = {}) => frozen({ status: "held", ...over });
+
+  it("reopens a payable once the counterparty has an address and it is confirmed", () => {
+    const plan = planFollowUp(held({ addressMissing: false, addressUnconfirmed: false }), noAddress, NOW, config);
+    expect(plan.action).toBe("reopen");
+    expect(plan.changes).toEqual(["the counterparty now has a confirmed payment address"]);
+  });
+
+  it("waits while the address is missing, unconfirmed, or was not read", () => {
+    expect(planFollowUp(held({ addressMissing: true, addressUnconfirmed: false }), noAddress, NOW, config).action).toBe("wait");
+    expect(planFollowUp(held({ addressMissing: false, addressUnconfirmed: true }), noAddress, NOW, config).action).toBe("wait");
+    expect(planFollowUp(held(), noAddress, NOW, config).action).toBe("wait");
+  });
+
+  it("does not reopen a decision that had an address", () => {
+    expect(planFollowUp(held({ addressMissing: false, addressUnconfirmed: false }), facts, NOW, config).action).toBe("wait");
+  });
+});
+
 describe("follow-up — held only for the agent's spending limit (outflow budget R6)", () => {
   const heldForBudget: DecisionFacts = { ...facts, heldForBudgetUsdc: 1.5 };
   const budgetHeld = (over: Partial<FrozenInvoice> = {}) => frozen({ status: "held", amount: 1.5, ...over });
