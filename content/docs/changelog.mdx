@@ -1,5 +1,13 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-10: What the business paid outside Vestiarion
+
+- An owner or admin can record how the business paid a payable outside Vestiarion, or that it did not, from the workspace report. Its ledger gains two entries, actor `human`, domain `ap`, each sent to webhook endpoints as `ledger.appended` and listed by `GET /api/v1/ledger`:
+  - **`actual_payment_recorded`** `{ by, actualId, subject, subjectId, outcome, paidOn, amount, currency, method, reference, note, reason }` for a bill's first record. `subject` is `invoice` and `subjectId` the invoice's id. `outcome` is `paid`, with `paidOn` (YYYY-MM-DD), `amount`, `currency` (three capital letters, or `USDC` or `EURC`) and `method` (`bank_transfer`, `card`, `cash` or `other`), and `reason` null; or `not_paid`, with `reason` and the four others null. `reference` and `note` are null when none was given.
+  - **`actual_payment_corrected`**, the same fields plus `replaces`, the `actualId` of the record it corrects. A record is never changed: the newest of a bill's records is what the business did.
+  - A record from a CSV carries `via: "csv"`.
+- The entry names the payable as `subjectId`, never `invoiceId`. Nothing else in `/api/v1` changes.
+
 ## 2026-10-09: A payable to a payee with no address is held before anything is sent
 
 - Wherever payments are real, an agent decision (`ap_pay` or `ap_schedule`) about a payable whose counterparty has no payment address is held by a new guardrail rule, **`counterparty.no_address`**: `guardrailBlocked: true`, `execution.resultingStatus: "held"`, and `observed.addressMissing: true`. Before, the transfer was tried and failed, and the reasoning carried the provider's error. A sandbox's entries are unchanged.
