@@ -47,13 +47,14 @@ anything is written, and adds the rows through the same command as an invoice ty
     Customer name, Bill from, Billed to;
   - amount: Amount, Total, Amount due, Balance, Balance due, Total amount, Grand total, Invoice amount, Bill amount,
     Amount payable, Open amount, Outstanding;
-  - due date: Due date, Due, Payment due, Due on, Date due, Pay by, Payment date, Due_date;
+  - due date: Due date, Due, Payment due, Due on, Date due, Pay by, due_date (a bare "Date", or "Invoice date", is
+    never taken for the due date);
   - invoice number: Invoice no, Invoice number, Number, Bill no, Bill number, Reference, Ref, Invoice, Document no;
   - purchase order: PO, PO number, PO no, PO reference, Purchase order, po_reference;
   - currency: Currency, Ccy, Cur;
   - memo: Memo, Description, Details, Notes, Note, Item, Items;
   - goods received: Goods received, Received, Delivered, goods_received;
-  - direction: Direction, Type, Kind, AP/AR;
+  - direction: Direction, AP/AR, Payable/Receivable (not "Type", which a list often uses for a category);
   - early-payment discount: early_pay_discount_pct, Discount %, Discount, Early payment discount;
   - discount deadline: discount_deadline, Discount deadline, Discount until, Discount by.
 - A column is given to at most one field, first come in the order above.
