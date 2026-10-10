@@ -26,6 +26,8 @@ const ALLOWED: Record<string, number> = {
   "src/lib/docs/nav.ts": 2,
   "src/components/CreateWorkspaceForm.tsx": 1,
   "src/app/open/page.tsx": 4,
+  // The page for studios: shadow mode and its mirror addresses, both only on Arc testnet, in its FAQ.
+  "src/components/studios/StudiosSections.tsx": 2,
   // Terms and privacy: the partner rewrites them before a deployment switches Arc mainnet on (C5).
   "src/app/terms/page.tsx": 8,
   "src/app/privacy/page.tsx": 3,

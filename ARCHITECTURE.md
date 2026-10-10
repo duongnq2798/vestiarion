@@ -1327,6 +1327,23 @@ where each figure comes from. **It never sends a message to anyone**: approving 
 Vestiarion never sends outreach. Payment volume is never shown as revenue, and amounts in different currencies are
 never added together.
 
+**Inbound leads from /studios.** The page for studios that pay contractors per deliverable (`src/app/studios/page.tsx`)
+reads the landing's figures the same way (`readAllTimeOrNull` per network, `readLatestDecision`); its count of code
+refusals is `refusedByCode` from those open numbers, one network at a time, customers apart, never written into the
+page. Its guided setup form posts to `requestGuidedSetupAction` (`src/app/studios/actions.ts`), which has no session
+to gate on: `submitGuidedSetup` (`src/lib/growth/inbound.ts`) is the gate. There is no shared rate limiter
+(`src/lib/rate-limit.ts` is per instance), so a bot is kept out without a store: a honeypot field, a form token signed
+when the page is drawn (`vx1.<body>.<HMAC>`, keyed by HKDF from `VESTIARION_MASTER_KEYS` for this purpose alone, as the
+GitHub and Slack states are) that must be at least 3 seconds and at most a day old, and a cap of 4,000 characters on the
+whole submission (`src/lib/growth/guided-setup.ts`). A bot is thanked like a person and nothing is written; a token
+older than a day asks the person to reload. A request that reads right is written through `growth_import_leads` as one
+lead: source `inbound`, contact channel `website_form`, the email as the handle, the first touch's `utm_campaign` as
+the campaign only when `growth_campaigns` has that id, the first touch's tags in `source_detail` either way, and the
+answers in the notes. A dedupe key already taken is skipped, as in an import, and the person is thanked all the same.
+When `GROWTH_INBOUND_NOTIFY_EMAIL` is set, the team gets a short note through `sendEmail` about a new lead (never the
+message); nothing is ever sent to the person who asked. The approval queue's card shows an inbound lead's contact,
+site, notes and source detail.
+
 ## Data ownership
 
 Supabase tables read by the API include `accounts`, `counterparties`,

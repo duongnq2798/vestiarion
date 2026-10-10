@@ -57,9 +57,10 @@ describe("the full footer's columns", () => {
     ]);
   });
 
-  it("put the open numbers, the two guides, Support (GitHub Issues), X and Product Hunt under Resources", () => {
+  it("put the open numbers, the page for studios, the two guides, Support (GitHub Issues), X and Product Hunt under Resources", () => {
     expect(FOOTER_COLUMNS[2].links).toEqual([
       { href: "/open", label: "Open numbers" },
+      { href: "/studios", label: "For studios" },
       { href: "/docs/guides/go-live", label: "Go live guide" },
       { href: "/docs/guides/first-payment", label: "First payment guide" },
       { href: ISSUES_URL, label: "Support" },
