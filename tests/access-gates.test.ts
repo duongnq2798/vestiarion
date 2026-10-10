@@ -74,14 +74,14 @@ describe("every /o/[slug] page", () => {
 });
 
 describe("every server action", () => {
-  it("lives in src/app/actions, except sign-in, accepting an invitation, creating a first workspace, your own account, a payee's own address, a client's payment check, and the founder dashboard", () => {
+  it("lives in src/app/actions, except sign-in, accepting an invitation, creating a first workspace, your own account, a payee's own address, a client's payment check, the founder dashboard, and a studio's guided setup request", () => {
     const withDirective = walk(path.join(ROOT, "src")).filter(
       (file) => /\.(ts|tsx)$/.test(file) && /^\s*["']use server["']/.test(read(file))
     );
     const outside = withDirective.map(rel).filter((file) => !file.startsWith("src/app/actions/"));
     expect(outside.sort()).toEqual([
       "src/app/account/actions.ts", "src/app/admin/growth/actions.ts", "src/app/invite/actions.ts", "src/app/login/actions.ts", "src/app/onboarding/actions.ts",
-      "src/app/pay/[token]/actions.ts", "src/app/payee/[token]/actions.ts",
+      "src/app/pay/[token]/actions.ts", "src/app/payee/[token]/actions.ts", "src/app/studios/actions.ts",
     ]);
   });
 
@@ -123,6 +123,24 @@ describe("the payee's address action", () => {
     const [action] = actions;
     expect(awaitedNames(action.body)[0]).toBe("submitPayeeAddress");
     expect(action.body).not.toMatch(/inOrg|withOrg|authorize/);
+  });
+});
+
+describe("the guided setup action", () => {
+  // A visitor asking for a guided setup on /studios has no account and no workspace, so there is no session to gate on:
+  // the request's own checks are the gate (honeypot, signed form token, length cap, every field), all inside
+  // submitGuidedSetup, which writes one growth lead and nothing in any workspace.
+  const STUDIOS_ACTIONS = path.join(ROOT, "src", "app", "studios", "actions.ts");
+  const actions = exportedAsyncFunctions(read(STUDIOS_ACTIONS));
+
+  it("is the one submit action", () => {
+    expect(actions.map((action) => action.name)).toEqual(["requestGuidedSetupAction"]);
+  });
+
+  it("hands the form straight to submitGuidedSetup, and enters no workspace itself", () => {
+    const [action] = actions;
+    expect(action.body).toMatch(/return submitGuidedSetup\(formData, /);
+    expect(action.body).not.toMatch(/inOrg|withOrg|authorize|platformDb/);
   });
 });
 

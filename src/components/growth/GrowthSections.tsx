@@ -317,6 +317,33 @@ export function ApprovalCard({ lead }: { lead: Lead }) {
           <dt className="text-ink-3">Signal</dt>
           <dd className="whitespace-pre-wrap text-ink-2">{lead.signal ?? "None recorded"}</dd>
         </div>
+        {/* An inbound lead, such as a guided setup request from /studios, carries who asked and what they said here. */}
+        {lead.contact_handle && (
+          <div>
+            <dt className="text-ink-3">Contact</dt>
+            <dd className="break-words text-ink-2">{lead.contact_handle}</dd>
+          </div>
+        )}
+        {lead.company_url && (
+          <div>
+            <dt className="text-ink-3">Company</dt>
+            <dd className="text-ink-2">
+              <Evidence url={lead.company_url} />
+            </dd>
+          </div>
+        )}
+        {lead.notes && (
+          <div className="sm:col-span-2">
+            <dt className="text-ink-3">Notes</dt>
+            <dd className="whitespace-pre-wrap break-words text-ink-2">{lead.notes}</dd>
+          </div>
+        )}
+        {lead.source_detail && (
+          <div className="sm:col-span-2">
+            <dt className="text-ink-3">Source detail</dt>
+            <dd className="break-words text-ink-2">{lead.source_detail}</dd>
+          </div>
+        )}
         <div>
           <dt className="text-ink-3">Evidence</dt>
           <dd className="text-ink-2">
