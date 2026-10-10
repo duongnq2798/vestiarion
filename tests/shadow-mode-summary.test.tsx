@@ -30,7 +30,7 @@ describe("ShadowModeSummary", () => {
     const markup = panel({ agreed: 1, disagreed: 0, waiting: 3 });
     expect(text(markup)).toContain("3 decisions wait for your verdict.");
     expect(markup).toContain('href="/o/northstar/invoices"');
-    expect(text(markup)).toContain("See them in AP / AR");
+    expect(text(markup)).toContain("See them in Bills &amp; receivables");
     expect(text(panel({ agreed: 1, disagreed: 0, waiting: 1 }))).toContain("1 decision waits for your verdict.");
   });
 

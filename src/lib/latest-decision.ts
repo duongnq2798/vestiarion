@@ -1,6 +1,7 @@
 import { activityAmount } from "./agent-activity";
 import { networkProfile, type Network } from "./network";
 import { txUrl } from "./payee-chains";
+import { ruleWords } from "./rule-words";
 import type { SignedLink } from "./receipts/verify";
 
 /**
@@ -51,30 +52,6 @@ export interface LatestDecisionView {
   txUrl: string | null;
   link: SignedLink;
 }
-
-/** A guardrail rule in words that name no one: the payee is "the payee", whoever it is. */
-const RULE_WORDS: Record<string, string> = {
-  "counterparty.payment_limit": "it is above the payee's payment limit",
-  "counterparty.address_unconfirmed": "the payee's address changed and no one had confirmed it",
-  "counterparty.no_address": "the payee had no payment address yet",
-  "counterparty.unscreened": "the payee had not been screened yet",
-  "counterparty.high_risk": "the payee was screened high risk",
-  "counterparty.client_payable": "the payee is a client, who pays the business",
-  "counterparty.new_payee": "a first payment to a new address needs two people",
-  "invoice.duplicate_of_settled": "it repeats a bill already paid",
-  "invoice.match_incomplete": "its purchase order or goods receipt was missing",
-  "workspace.outflow_budget": "it would pass the workspace's spending limit",
-  "workspace.onchain_limit": "it would pass the spending limit set on Arc",
-  "workspace.onchain_limit_route": "the spending limit on Arc cannot pay it this way",
-  "treasury.insufficient_eurc": "the wallet held too little EURC",
-  "fx.rate_unavailable": "no exchange rate could be read",
-  "fx.swap_cost_above_cap": "the currency swap cost more than its cap",
-  "fx.swap_usdc_short": "too little USDC was left to swap",
-  "bridge.fee_above_cap": "the cross-chain fee was above its cap",
-  "bridge.fee_unavailable": "the cross-chain fee could not be read",
-  "bridge.gateway_balance_short": "the Gateway balance was short",
-  "bridge.unsupported_token": "that token cannot cross chains",
-};
 
 /** Why a decision held, by the marker the stage recorded (src/lib/agent/shadow-hold.ts, liquidity.ts, pause.ts, outflow-budget.ts). */
 const HELD_FOR_VERDICT = "shadow_verdict";
@@ -147,7 +124,7 @@ function why(facts: LatestDecisionFacts): string | null {
   }
   if (facts.heldBecause === HELD_FOR_VERDICT && facts.verdict === "disagree") return "In shadow mode, a person disagreed, so it was not paid.";
   if (heldWords(facts.heldBecause)) return heldWords(facts.heldBecause);
-  if (facts.guardrailBlocked) return `Code refused it: ${(facts.guardrailRule && RULE_WORDS[facts.guardrailRule]) || "a hard limit in code"}.`;
+  if (facts.guardrailBlocked) return `Code refused it: ${ruleWords(facts.guardrailRule) || "a hard limit in code"}.`;
   if (facts.action === "ap_hold" || facts.action === "milestone_hold") return "The model held it for a person to look at.";
   return null;
 }

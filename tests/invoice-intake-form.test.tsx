@@ -129,6 +129,22 @@ describe("the CSV import's preview (review M2)", () => {
   });
 });
 
+describe("InvoiceIntake with no counterparty yet", () => {
+  it("says every invoice is against one, and links to adding one, with Add counterparty open", () => {
+    const empty = renderToStaticMarkup(<InvoiceIntake orgSlug="acme" counterparties={[]} />);
+    expect(empty).toContain("Add a counterparty first — every invoice is against one.");
+    expect(empty).toMatch(/<a[^>]*href="\/o\/acme\/counterparties\?add=1"[^>]*>Add a counterparty<\/a>/);
+    expect(renderToStaticMarkup(<InvoiceIntake orgSlug="acme" counterparties={COUNTERPARTIES} />)).not.toContain("counterparties?add=1");
+  });
+
+  it("is where the Counterparties page opens Add counterparty", async () => {
+    const { readFileSync } = await import("node:fs");
+    const page = readFileSync("src/app/o/[slug]/counterparties/page.tsx", "utf8");
+    expect(page).toContain("const adding = (await searchParams).add !== undefined;");
+    expect(page).toContain("defaultOpen={counterparties.length === 0 || adding}");
+  });
+});
+
 describe("the counterparty form's chain help (mainnet polish E2)", () => {
   it("says another chain is paid through CCTP where the network has it, and that Arc mainnet pays on its own chain only", async () => {
     const { chainHelp } = await import("@/components/intake/CounterpartyIntake");
@@ -143,7 +159,7 @@ describe("the counterparty form's chain (CCTP payouts X1)", () => {
     const source = readFileSync("src/components/intake/CounterpartyIntake.tsx", "utf8");
     expect(source).toContain('<Select name="chain" defaultValue={homeChain(network).id}>');
     expect(source).toContain("chainsOn(network).map");
-    expect(readFileSync("src/app/o/[slug]/counterparties/page.tsx", "utf8")).toContain("<CounterpartyIntake orgSlug={slug} framed={false} network={network} />");
+    expect(readFileSync("src/app/o/[slug]/counterparties/page.tsx", "utf8")).toContain("<CounterpartyIntake orgSlug={slug} framed={false} network={network} askPurchaseOrders={shadow !== null} />");
   });
 });
 

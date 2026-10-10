@@ -110,10 +110,11 @@ describe("WorkspaceReport", () => {
     expect(html).toContain("This workspace has no real bill yet, so the report counts its sample data.");
   });
 
-  it("points a workspace with no real bill to AP / AR", () => {
+  it("points a workspace with no real bill to Bills & receivables", () => {
     const html = render(facts({ bills: [], decisions: [], payments: [] }));
     expect(html).toContain("No real bills yet");
     expect(html).toContain("/o/northstar/invoices");
+    expect(html).toContain("Open Bills &amp; receivables");
   });
 });
 

@@ -41,7 +41,7 @@ const GENERATED_SLUGS = new Set(OPERATIONS.map((op) => `api/${op.id}`));
 const OTHER_TARGETS = new Set(["/api/v1/openapi.json", "/llms.txt", "/llms-full.txt", "/tools/verify-ledger-export.mjs"]);
 
 /** Real app pages outside /docs that a docs page may link to. */
-const APP_ROUTES = new Set(["/", "/login", "/signup", "/onboarding", "/terms", "/privacy", "/open"]);
+const APP_ROUTES = new Set(["/", "/login", "/signup", "/onboarding", "/terms", "/privacy", "/open", "/studios"]);
 
 /** The source without code: fenced blocks and inline code spans, where a link is an example, not a link. */
 function withoutCode(source: string): string {
@@ -149,10 +149,11 @@ describe("the docs navigation", () => {
     );
   });
 
-  it("lists the user guides right after Overview: trying it, going live, shadow mode, the workspace report, the first payment, paying a contractor, getting paid, Telegram, Slack, adding invoices and paying for pull requests through the API, then verifying an export", () => {
+  it("lists the user guides right after Overview: trying it, finding your way around a workspace, going live, shadow mode, the workspace report, the first payment, paying a contractor, getting paid, Telegram, Slack, adding invoices and paying for pull requests through the API, then verifying an export", () => {
     const section = DOCS_NAV.find((candidate) => candidate.title === "Guides")!;
     expect(section.pages.map((page) => [page.slug, page.title])).toEqual([
       ["guides/try-it", "Try it in 5 minutes"],
+      ["guides/workspace", "Find your way around a workspace"],
       ["guides/go-live", "Go live"],
       ["guides/shadow-mode", "Run alongside how you pay today"],
       ["guides/report", "Read your workspace report"],
@@ -190,7 +191,8 @@ describe("the docs navigation", () => {
     expect(neighbours("").next?.slug).toBe(pages[1].slug);
     expect(neighbours("data-delivery").next?.slug).toBe("contracts");
     expect(neighbours("contracts").next?.slug).toBe("guides/try-it");
-    expect(neighbours("guides/try-it").next?.slug).toBe("guides/go-live");
+    expect(neighbours("guides/try-it").next?.slug).toBe("guides/workspace");
+    expect(neighbours("guides/workspace").next?.slug).toBe("guides/go-live");
     expect(neighbours("guides/go-live").next?.slug).toBe("guides/shadow-mode");
     expect(neighbours("guides/shadow-mode").next?.slug).toBe("guides/report");
     expect(neighbours("guides/report").next?.slug).toBe("guides/first-payment");
@@ -252,12 +254,13 @@ describe("the Errors page", () => {
 });
 
 describe("the sitemap", () => {
-  it("lists the landing page, the open numbers, every published docs page in nav order, then the terms and the privacy page, each as an absolute URL", () => {
+  it("lists the landing page, the open numbers, the page for studios, every published docs page in nav order, then the terms and the privacy page, each as an absolute URL", () => {
     const origin = publicOrigin();
     const urls = sitemap().map((entry) => entry.url);
     expect(urls).toEqual([
       `${origin}/`,
       `${origin}/open`,
+      `${origin}/studios`,
       ...publishedPages().map((page) => `${origin}${page.slug ? `/docs/${page.slug}` : "/docs"}`),
       `${origin}/terms`,
       `${origin}/privacy`,

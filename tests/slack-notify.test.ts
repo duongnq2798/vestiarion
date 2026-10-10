@@ -34,7 +34,7 @@ const config = configFromEnv({
 });
 const orgs = signedOrgs();
 
-const PAID: ActivityItem = { seq: 52, text: "Paid Centronex 0.35 USDC.", detail: null, tone: "done", path: "/invoices", pathLabel: "AP / AR", txHash: null, txUrl: null, network: "arc-testnet" };
+const PAID: ActivityItem = { seq: 52, text: "Paid Centronex 0.35 USDC.", detail: null, tone: "done", path: "/invoices", pathLabel: "Bills & receivables", txHash: null, txUrl: null, network: "arc-testnet" };
 const HELD: ActivityItem = {
   seq: 53, text: "Held Jiren 0.50 USDC for you.", detail: "No purchase order.", tone: "stopped", path: `/approvals#payable-${INVOICE}`, pathLabel: "Decide in Approvals",
   txHash: null, txUrl: null, invoiceId: INVOICE, network: "arc-testnet",

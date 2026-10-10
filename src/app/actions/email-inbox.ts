@@ -37,8 +37,8 @@ export async function addInboxEmailAction(_previous: InboxActionResult, formData
 }
 
 /**
- * Adds an emailed invoice as the person finished it in the invoice form on AP / AR (reader follow-up F5): a records
- * write, read by the form's own rules, and always a payable, whatever the form posted.
+ * Adds an emailed invoice as the person finished it in the invoice form on Bills & receivables (reader follow-up F5): a
+ * records write, read by the form's own rules, and always a payable, whatever the form posted.
  */
 export async function finishInboxEmailAction(_previous: IntakeActionResult, formData: FormData): Promise<IntakeActionResult> {
   const auth = await authorize(formData.get("orgSlug"), "records.write");
@@ -104,11 +104,14 @@ export async function changeInboxAddressAction(_previous: InboxActionResult, for
   );
 }
 
-/** Turns the address off; emails already in stay on AP / AR. */
+/** Turns the address off; emails already in stay on Bills & receivables. */
 export async function turnOffInboxAction(_previous: InboxActionResult, formData: FormData): Promise<InboxActionResult> {
   const auth = await authorize(formData.get("orgSlug"), "integrations.manage");
   if (!auth.ok) return { ok: false, message: auth.message };
   return inOrg(auth, async () =>
-    addressChanged(() => turnInboxOff(auth.membership.orgId, auth.user.id), "Invoices by email are off. Emails already in stay on AP / AR.")
+    addressChanged(
+      () => turnInboxOff(auth.membership.orgId, auth.user.id),
+      "Invoices by email are off. Emails already in stay on Bills & receivables."
+    )
   );
 }

@@ -243,7 +243,11 @@ export function invoiceDecision(
   // A person's verdict on the agent's decision, where the page reads the facts for it (shadow mode S3).
   const payment = { amountUsdc: invoice.amount, payee: invoice.counterparty_name ?? counterparty?.name ?? "the payee", address: counterparty?.address ?? null };
   const verdict = options.verdicts ? verdictView(invoice.id, entries, options.verdicts, decision.heldForVerdict === true, payment) : undefined;
-  return verdict ? { ...decision, verdict } : decision;
+  if (!verdict) return decision;
+  // A payment that waits for this viewer's verdict, which they can give now, is the agent asking, not a problem: its
+  // badge says so (workspace shell design S8). Once a verdict is given, or shadow mode is off, it is an ordinary hold.
+  const asking = decision.outcome === "held" && verdict.heldForVerdict && verdict.open && verdict.given === null;
+  return { ...decision, verdict, ...(asking ? { outcomeLabel: "Waiting for your verdict" } : {}) };
 }
 
 /** Where the rates for bills in another currency come from: ExchangeRate-API asks to be named and linked where they are shown. */
@@ -292,7 +296,6 @@ function decideInvoice(
   // A payout to another chain settles on that chain, not on Arc: named from its recorded mint, or
   // from the payee's chain for one recorded before mints were.
   const settledOn = outcome !== "settled" ? null : mint ? mint.chainLabel : paidAcrossChains(counterparty?.chain) ? chainById(counterparty?.chain as string).label : null;
-
   return {
     id: invoice.id,
     domain: invoice.direction === "receivable" ? "ar" : "ap",

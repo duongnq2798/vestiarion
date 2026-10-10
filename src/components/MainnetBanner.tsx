@@ -3,23 +3,19 @@ import { networkHold } from "@/lib/mainnet";
 
 /**
  * What every page of a workspace on Arc mainnet says above its content (docs/superpowers/specs/2026-10-06-mainnet-go-live-design.md
- * M13): that its payments move real USDC, or why nothing moves yet. Drawn by the workspace layout from platform data
- * only, its membership and the deployment's switch, so it reads no tenant rows.
+ * M13): that its payments move real USDC, or why nothing moves yet. Read by the workspace layout from platform data
+ * only, its membership and the deployment's switch, so it reads no tenant rows; drawn under the page's header.
  */
 export function MainnetBanner({ mode, enabled }: { mode: "sandbox" | "live"; enabled: boolean }) {
   // The same rule every gate reads (mainnet limits L7), so the banner and the gates never disagree.
   const held = networkHold("arc-mainnet", mode, { mainnetEnabled: enabled });
-  return (
-    <div className="mx-auto w-full max-w-6xl px-4 pt-5 sm:px-6 sm:pt-7 lg:px-8 lg:pt-8">
-      {held ? (
-        <Callout tone="held" title="Arc mainnet">
-          {held}
-        </Callout>
-      ) : (
-        <Callout tone="proof" title="Arc mainnet">
-          Arc mainnet: payments here move real USDC.
-        </Callout>
-      )}
-    </div>
+  return held ? (
+    <Callout tone="held" title="Arc mainnet">
+      {held}
+    </Callout>
+  ) : (
+    <Callout tone="proof" title="Arc mainnet">
+      Arc mainnet: payments here move real USDC.
+    </Callout>
   );
 }

@@ -1,0 +1,43 @@
+Every workspace page has the same frame: the sections on the left, and a header across the top that says where you are and what state the workspace is in. This guide is a map of it.
+
+## The sections
+
+The sidebar lists the workspace's sections in groups:
+
+- At the top, with no heading: **Treasury**, where a workspace opens, and **Approvals**, where you decide what the agent would not pay on its own.
+- **Operations**: **Bills & receivables**, the bills you pay and the invoices your customers pay you; **Counterparties**; **Contractors**.
+- **Controls**: **Compliance** and **Audit log**.
+- **Analytics**: **Insights** and **Report**.
+- **Workspace**: **Members** and **Settings**.
+
+Above them, the workspace switcher names the workspace, whether it is **Live**, a **Sandbox** or **Not live yet**, its network and your role. Open it to move to another workspace, landing on the same section, or to create one.
+
+## Fold the sidebar
+
+On a screen 1024 pixels wide or more, the first button in the header, **Collapse sidebar**, folds the sidebar to a column of icons and gives the page the room. Hover over an icon, or move to it with the keyboard, to see its name. **Expand sidebar** unfolds it. The `[` key does the same from anywhere except a field you are typing in.
+
+Your browser remembers the choice for the next page and the next visit, in one cookie described on the [privacy page](/privacy). On a phone the sections are in the menu at the top left instead.
+
+## The header
+
+From the left, the header names the workspace and the section you are in; the workspace's name takes you back to **Treasury**. On the right it says when the agent's last cycle ran, or "The agent is working · *n* s" while one runs, and three chips:
+
+- **The network**: **Arc testnet**, or **Arc mainnet** in blue, where payments move real USDC.
+- **What happens to payments**, the first that holds: **Payments off** while the platform has switched payments off for every workspace; **Payments held** when nothing can be paid from this workspace, for example a workspace on Arc mainnet that is not live yet; **Shadow mode** when each payment waits for a person to agree with the agent; **Payments simulated** in a sandbox that pays through no wallet yet; **Payments live** otherwise.
+- **The agent**: **Agent on**, **Agent paused**, or **Agent stopped** while payments are off or held, when the agent runs no cycle.
+
+A fact that could not be read is said as such, never as its usual value.
+
+Choose the chips to open **Workspace status**, which says each of them in a sentence, with the reserve, screening and the clock:
+
+<Screenshot
+  src="/docs/guides/workspace-status.png"
+  alt="Three chips: Arc testnet, Shadow mode, Agent on. Under them the Workspace status panel lists Network, Arc testnet; Payments, Live, after your verdict; Shadow mode, On; Agent, On; Reserve, Simulated; Screening, Live; and Clock, Wall clock, each with a sentence."
+  caption="A live workspace on Arc testnet in shadow mode: each payment the agent decides waits for a person's verdict."
+/>
+
+A pause shows twice: the chip says **Agent paused**, and a box under the header says since when, by whom and why. A paused agent decides and pays nothing by itself, and people can still pay from Approvals.
+
+## Search and shortcuts
+
+Press Ctrl K, or ⌘K on a Mac, or choose **Search…** in the sidebar, to open the command palette. Type part of a section's name, or a word such as "bills" or "ledger", and press Enter. Its **Shortcuts** go to a form or a setting directly: **Add a bill**, **Add a counterparty**, **Agent spending limit**, **Shadow mode** on Arc testnet and, until the workspace is live, **Go live**. On a wide screen it also offers **Collapse sidebar** or **Expand sidebar**. Nothing in the palette pays or changes anything by itself: each shortcut opens the page, where its own buttons and your role decide what you can do.

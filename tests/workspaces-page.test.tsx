@@ -82,10 +82,16 @@ describe("the workspaces page", () => {
     memberships.value = [];
     const markup = await render();
     expect(text(markup)).toContain("Welcome to Vestiarion");
-    expect(text(markup)).toContain("Create your first workspace to run Vestiarion.");
+    expect(text(markup)).toContain("Create your first workspace, then add one of your bills and see what the agent decides.");
     expect(markup).toContain('id="create-workspace"');
     expect(markup).not.toContain("<details");
     expect(markup).toContain('name="name"');
+  });
+
+  it("ticks shadow mode on the form for someone who came from the landing page's Try it on your bills (?shadow=1)", async () => {
+    memberships.value = [];
+    expect(await render({ shadow: "1" })).toMatch(/<button[^>]*role="checkbox"[^>]*aria-checked="true"/);
+    expect(await render()).toMatch(/<button[^>]*role="checkbox"[^>]*aria-checked="false"/);
   });
 
   it("welcomes back someone with workspaces, most recent first and marked, each with when it was last in use", async () => {

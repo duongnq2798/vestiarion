@@ -12,7 +12,7 @@ import { parseRecurringForm } from "@/lib/recurring";
 import { createRecurringPayable, RecurringPayableError, stopRecurringPayable } from "@/lib/recurring-payables";
 
 /**
- * Recurring payments on AP / AR (docs/superpowers/specs/2026-10-02-recurring-payables-design.md §2):
+ * Recurring payments on Bills & receivables (docs/superpowers/specs/2026-10-02-recurring-payables-design.md §2):
  * an owner or admin (`records.write`) sets one up or stops it. Setting one up starts a cycle, so a
  * period already near has its invoice within a minute.
  */

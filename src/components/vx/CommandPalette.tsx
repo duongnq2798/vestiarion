@@ -1,12 +1,13 @@
 "use client";
 
-import { BookOpen, LayoutGrid, LogOut, Plus } from "lucide-react";
+import { ArrowRight, BookOpen, LayoutGrid, LogOut, PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, startTransition, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { signOut } from "@/app/login/actions";
 import { Avatar } from "@/components/ui/Avatar";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/Command";
-import { DOCS_TARGET, sectionTargets, shortcutLabel, workspaceTargets } from "./command-items";
+import { DOCS_TARGET, quickActions, sectionGroups, shortcutLabel, workspaceTargets } from "./command-items";
+import { useOptionalFrame, useWide } from "./FrameContext";
 import { NAV_ICONS } from "./nav-icons";
 import type { WorkspaceSummary } from "./workspace";
 
@@ -28,8 +29,10 @@ export function useShortcutLabel(): string {
 
 /**
  * The workspace's command palette: ⌘K or Ctrl K from anywhere in the frame,
- * or a search button. It goes somewhere — a section, another workspace, the
- * workspace list, the developer docs — or signs out; nothing in it moves money.
+ * or a search button. It goes somewhere — a section (grouped as the sidebar
+ * groups them), a form or setting that already exists, another workspace, the
+ * workspace list, the developer docs — folds the sidebar, or signs out;
+ * nothing in it moves money (workspace shell design S9).
  */
 export function CommandPaletteProvider({
   workspace,
@@ -56,8 +59,12 @@ export function CommandPaletteProvider({
   }, []);
 
   const context = useMemo(() => ({ open: () => setOpen(true) }), []);
-  const sections = sectionTargets(workspace.slug);
+  const groups = sectionGroups(workspace.slug);
+  const actions = quickActions(workspace);
   const others = workspaceTargets(workspace, workspaces, pathname);
+  const frame = useOptionalFrame();
+  // Only where there is a sidebar to fold: below lg the navigation is a drawer.
+  const wide = useWide();
 
   function go(href: string) {
     setOpen(false);
@@ -71,16 +78,39 @@ export function CommandPaletteProvider({
         <CommandInput placeholder="Jump to a section, workspace or action…" />
         <CommandList>
           <CommandEmpty>Nothing matches.</CommandEmpty>
-          <CommandGroup heading={workspace.name}>
-            {sections.map((target) => {
-              const Icon = NAV_ICONS[target.key];
-              return (
-                <CommandItem key={target.id} value={target.id} keywords={[target.label, ...target.keywords]} onSelect={() => go(target.href)}>
-                  <Icon aria-hidden />
-                  {target.label}
-                </CommandItem>
-              );
-            })}
+          {groups.map((group) => (
+            <CommandGroup key={group.heading} heading={group.heading}>
+              {group.targets.map((target) => {
+                const Icon = NAV_ICONS[target.key];
+                return (
+                  <CommandItem key={target.id} value={target.id} keywords={[target.label, ...target.keywords]} onSelect={() => go(target.href)}>
+                    <Icon aria-hidden />
+                    {target.label}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          ))}
+          <CommandGroup heading="Shortcuts">
+            {actions.map((target) => (
+              <CommandItem key={target.id} value={target.id} keywords={[target.label, ...target.keywords]} onSelect={() => go(target.href)}>
+                <ArrowRight aria-hidden />
+                {target.label}
+              </CommandItem>
+            ))}
+            {frame && wide && (
+              <CommandItem
+                value="toggle-sidebar"
+                keywords={[frame.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar", "sidebar", "navigation", "rail", "fold"]}
+                onSelect={() => {
+                  setOpen(false);
+                  frame.toggleSidebar();
+                }}
+              >
+                {frame.sidebarCollapsed ? <PanelLeftOpen aria-hidden /> : <PanelLeftClose aria-hidden />}
+                {frame.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              </CommandItem>
+            )}
           </CommandGroup>
           {others.length > 0 && (
             <CommandGroup heading="Switch workspace">
