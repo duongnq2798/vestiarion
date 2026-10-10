@@ -117,6 +117,23 @@ describe("a payment a person made on a decision not to pay (2026-10-08)", () => 
   });
 });
 
+describe("against what the business recorded paying (actual payments A11)", () => {
+  it("adds one line: how often the agent and the business did the same, the median days, and the bills not recorded yet", () => {
+    const lines = formatDigest(facts({ actuals: { compared: 5, agreed: 4, disagreed: 1, notRecorded: 2, medianDays: 1.5 } })).split("\n");
+    expect(lines[2]).toBe(
+      "Every bill so far, against what the business recorded paying outside Vestiarion: the agent and the business did the same on 4 of 5 bills (80%); the agent was a median 1.5 days earlier; 2 bills not recorded yet."
+    );
+    const later = formatDigest(facts({ actuals: { compared: 1, agreed: 0, disagreed: 1, notRecorded: 0, medianDays: -2 } })).split("\n");
+    expect(later[2]).toBe(
+      "Every bill so far, against what the business recorded paying outside Vestiarion: the agent and the business did the same on 0 of 1 bill (0%); the agent was a median 2 days later."
+    );
+  });
+
+  it("adds nothing while nothing is recorded", () => {
+    expect(formatDigest(facts({ actuals: null }))).toBe(formatDigest(facts()));
+  });
+});
+
 describe("asciiOnly", () => {
   it("keeps the letters of a Vietnamese or French name, and plain marks for typographic ones", () => {
     expect(asciiOnly("Điện lực – “Café” … ok · ₫")).toBe('Dien luc - "Cafe" ... ok - ');

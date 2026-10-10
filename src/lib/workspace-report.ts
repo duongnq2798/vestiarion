@@ -43,6 +43,8 @@ export interface ReportDecision {
   /** Decided in shadow mode (`detail.shadow`). */
   shadow: boolean;
   reasoning: string | null;
+  /** The day a schedule pays on (`decision.payOn`, YYYY-MM-DD); null or absent otherwise. */
+  payOn?: string | null;
 }
 
 /** A person's approve, reject or return of a payable. */
@@ -150,7 +152,7 @@ export const VERDICTS_BEFORE_LIVE = 5;
 const LIST_LENGTH = 10;
 const STOPPED_STATUSES = new Set(["held", "flagged", "awaiting_info"]);
 /** Holds for a reason outside the bill: no cash, the agent paused, or the spending limit full for the day. */
-const WAIT_MARKERS = new Set(["cash_shortfall", "agent_paused", "outflow_budget"]);
+export const WAIT_MARKERS: ReadonlySet<string> = new Set(["cash_shortfall", "agent_paused", "outflow_budget"]);
 const AGENT_CALL: Record<string, string> = {
   ap_hold: "it held the bill for a person to look at",
   ap_flag_fraud: "it flagged the bill",
@@ -183,7 +185,8 @@ function firstSentence(text: string | null): string | null {
 /** A held for a verdict in shadow mode: a person decides it by design, so it is no stop. */
 const heldForVerdict = (decision: ReportDecision) => decision.heldBecause === HELD_FOR_VERDICT;
 
-function stopOf(decision: ReportDecision): { kind: StopKind; why: string } | null {
+/** Why a decision stopped its bill, in plain words, or null when it did not stop it (a hold for a verdict included). */
+export function stopOf(decision: ReportDecision): { kind: StopKind; why: string } | null {
   if (heldForVerdict(decision)) return null;
   const stopped = STOPPED_STATUSES.has(decision.resultingStatus ?? "") || decision.guardrailBlocked;
   if (!stopped) return null;
@@ -199,20 +202,35 @@ function stopOf(decision: ReportDecision): { kind: StopKind; why: string } | nul
   return { kind: "notSent", why: "The agent decided to pay, and the transfer did not go through." };
 }
 
-export function buildReport(facts: ReportFacts): WorkspaceReport {
-  // The real bills; while there is none, the sample data, so a workspace being tried shows what the report is.
+/**
+ * The bills the report counts, and their decisions and payments: the real bills, or while there is none, the sample
+ * data, so a workspace being tried shows what the report is. A live workspace counts its live payments, a sandbox its
+ * simulated ones, which are all it can make; each carries what its bill records it carried. Shared with the comparison
+ * against what the business paid (src/lib/actual-payments-compare.ts), so both count the same bills.
+ */
+export function reportScope(facts: ReportFacts): {
+  source: WorkspaceReport["source"];
+  bills: ReportBill[];
+  billsById: Map<string, ReportBill>;
+  decisions: ReportDecision[];
+  payments: ReportPayment[];
+} {
   const real = facts.bills.filter((bill) => !bill.payee.sample);
   const sample = facts.bills.filter((bill) => bill.payee.sample);
   const source: WorkspaceReport["source"] = real.length === 0 && sample.length > 0 ? "sample" : "real";
   const bills = source === "sample" ? sample : real;
   const billsById = new Map(bills.map((bill) => [bill.id, bill]));
   const decisions = facts.decisions.filter((decision) => billsById.has(decision.invoiceId)).sort((a, b) => a.seq - b.seq);
-  const actions = facts.personActions.filter((action) => billsById.has(action.invoiceId)).sort((a, b) => a.seq - b.seq);
   // What a paid bill's transfer carried: the bill's own record of it, else the intent's first amount.
-  // A live workspace counts its live payments; a sandbox its simulated ones, which are all it can make.
   const payments = facts.payments
     .filter((payment) => billsById.has(payment.invoiceId) && payment.simulated === facts.sandbox)
     .map((payment) => ({ ...payment, amount: billsById.get(payment.invoiceId)!.paidAmount ?? payment.amount }));
+  return { source, bills, billsById, decisions, payments };
+}
+
+export function buildReport(facts: ReportFacts): WorkspaceReport {
+  const { source, bills, billsById, decisions, payments } = reportScope(facts);
+  const actions = facts.personActions.filter((action) => billsById.has(action.invoiceId)).sort((a, b) => a.seq - b.seq);
   // Verdicts on the agent's decisions about real bills only.
   const decisionSeqs = new Set(decisions.map((decision) => decision.seq));
   const verdicts = facts.verdicts.filter((verdict) => decisionSeqs.has(verdict.entrySeq));

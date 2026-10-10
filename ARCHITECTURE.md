@@ -712,6 +712,20 @@ disagrees with every decision.
 - **Before a live slice.** The workspace report (below) lists, while shadow mode is on, what we suggest before a slice
   of bills moves to Arc mainnet: verdicts on five decisions, none waiting, and no supplier paid at a mirror address.
   Suggestions only; it moves nothing.
+- **What the business really paid** (`docs/superpowers/specs/2026-10-10-actual-payments-design.md`). An owner or admin
+  (`records.write`, as for adding an invoice) records how the business paid a payable outside Vestiarion: the day, the
+  amount and currency as paid (the bill's own by default), the method (bank transfer, card, cash, other), a reference and
+  a note; or **Not paid**, with a reason. Each is a row in `payment_actuals` (migration 0090), which the tenant role can
+  only read and add to: a change appends a correction naming the record it `replaces`, and unique indexes keep one
+  first record per bill and one correction per record, so the history is one line. Composite foreign keys keep a record
+  in its bill's workspace and a correction on the same bill. `recordActual` (`src/lib/actual-payments.ts`) checks the
+  signing key before writing the row, then appends `actual_payment_recorded` or `actual_payment_corrected`
+  `{ by, actualId, subject, subjectId, outcome, paidOn, amount, currency, method, reference, note, reason }` (`replaces` on
+  a correction, `via: "csv"` from a CSV), naming the payable as `subjectId` so the AP / AR card keeps showing the
+  agent's decision. The commands `payable.record_actual` and `payable.import_actuals` run from the console only. A CSV
+  (`src/lib/actual-payments-csv.ts`) names each bill by its Vestiarion id, or by an invoice number its memo carries as a
+  whole word, and is previewed before it is saved, then matched again on the server. Until migration 0090 runs, reading
+  answers `available: false` (`PGRST205` or `42P01`) and recording refuses with `not_ready`, so the report never fails for it.
 
 ## The workspace report
 
@@ -729,7 +743,21 @@ estimated from the terms. A
 payment is a shadow mirror when its decision was made in shadow mode, carries a verdict, or came while shadow mode was
 on. A live workspace counts its live Circle payments; a sandbox counts its simulated ones, labelled, with no transaction
 link. While a workspace has no real bill, the report counts its sample data and says so, so a workspace being tried with
-sample data shows what the report is. No migration and no write; a failed read shows the section's error state rather than a report with rows missing.
+sample data shows what the report is. These figures need no migration and write nothing; a failed read shows the section's error state rather than a report with rows missing.
+
+**Agent vs what really happened** (`docs/superpowers/specs/2026-10-10-actual-payments-design.md`) is the report's
+comparison with what the business recorded paying (above). `compareActuals` (`src/lib/actual-payments-compare.ts`) is
+pure and takes the report's own facts through `reportScope`, so it counts the same bills and payments, and each bill's
+newest record (`currentActuals`). The agent's side is its newest decision and the bill's confirmed payment: paid on
+Arc, would pay, scheduled, held (its own call or a check in code), waited (cash, a pause, the spending limit) or no
+decision. The business's side is the record, or **Not recorded**: nothing is inferred from a payment on Arc, a verdict or
+a status. Days apart are the business's paid day less the earliest day the agent decided to pay (or a schedule's day,
+or the Arc payment's day when a person paid it after a hold). Flags: held but paid, paid on Arc or decided to pay but
+not paid, and an amount that differs by the currency's smallest unit from what Arc carried or the bill. Discounts are
+measured from recorded facts and the offer is labelled estimated. Two currencies are never compared or summed, USD and
+USDC included. Each figure links to its source: the decision and the verdict to their ledger entries
+(`/audit?before=<seq + 1>#seq-<seq>`), the payment to the explorer, the record to its entry with who recorded it and
+when. `npm run traction-digest` adds one line from the same totals.
 
 ## Approvals and the pause switch
 
@@ -867,7 +895,7 @@ workspace's mode for that action, never from a link, a key or a button. A
 **command** is one function per action — `approvePayable`, `rejectPayable`,
 `returnPayable`, `addPayableDetails`, `payMilestoneNow`, `closeMilestoneUnpaid`,
 `pauseWorkspaceAgent`, `resumeWorkspaceAgent`, `runWorkspaceCycle`,
-`addInvoice` — whose first statement is `gate(actor, "<command>")`:
+`addInvoice`, `recordActualPayment`, `importActualPayments` — whose first statement is `gate(actor, "<command>")`:
 
 - the scope in force must be the actor's workspace, or it throws
   (`ActorScopeError`): a surface that entered one workspace cannot act for

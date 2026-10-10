@@ -7,3 +7,4 @@ export { addMilestone, closeMilestoneUnpaid, payMilestoneNow } from "./milestone
 export { pauseWorkspaceAgent, resumeWorkspaceAgent, runWorkspaceCycle } from "./agent";
 export { addInvoice } from "./invoices";
 export { issuePayeeLink } from "./payee-links";
+export { importActualPayments, recordActualPayment } from "./actuals";

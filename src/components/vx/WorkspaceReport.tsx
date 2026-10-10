@@ -1,5 +1,6 @@
 import { ArrowRight, BookOpen, Check, FileText } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
@@ -67,7 +68,8 @@ function readinessWords(step: ReadinessStep, mainnetLabel: string): { title: str
   }
 }
 
-export function WorkspaceReport({ slug, report }: { slug: string; report: Report }) {
+/** `actuals`: the comparison with what the business paid, shown after the figures (actual payments A5). */
+export function WorkspaceReport({ slug, report, actuals }: { slug: string; report: Report; actuals?: ReactNode }) {
   if (report.bills.handled === 0) {
     return (
       <EmptyState
@@ -90,6 +92,7 @@ export function WorkspaceReport({ slug, report }: { slug: string; report: Report
     <div className="space-y-8">
       <ReportSummary report={report} />
       {report.readiness && <ReportReadiness steps={report.readiness} />}
+      {actuals}
       <ReportLists slug={slug} report={report} />
     </div>
   );
