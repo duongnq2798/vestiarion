@@ -7,6 +7,7 @@ import sitemap from "@/app/sitemap";
 import TermsPage, { metadata as termsMetadata } from "@/app/terms/page";
 import { ORG_ROLES } from "@/lib/auth/roles";
 import { loginRedirectFor, requiresSession } from "@/lib/auth/routes";
+import { FIRST_TOUCH_COOKIE, FIRST_TOUCH_DAYS, TAG_KEYS, TAG_MAX } from "@/lib/growth/attribution";
 import { SANDBOX_IDLE_DAYS, WEBHOOK_DELIVERY_RETENTION_DAYS } from "@/lib/platform/cleanup";
 import { publicOrigin } from "@/lib/public-origin";
 import { ISSUES_URL } from "@/lib/site-links";
@@ -30,7 +31,7 @@ const source = (file: string) => readFileSync(path.join(process.cwd(), file), "u
 
 const PAGES = [
   { path: "/terms", file: "src/app/terms/page.tsx", Page: TermsPage, metadata: termsMetadata, heading: "Terms of use", updated: "2026-09-30" },
-  { path: "/privacy", file: "src/app/privacy/page.tsx", Page: PrivacyPage, metadata: privacyMetadata, heading: "Privacy", updated: "2026-10-05" },
+  { path: "/privacy", file: "src/app/privacy/page.tsx", Page: PrivacyPage, metadata: privacyMetadata, heading: "Privacy", updated: "2026-10-10" },
 ] as const;
 
 describe.each(PAGES)("$path", ({ path: route, file, Page, metadata, heading, updated }) => {
@@ -122,6 +123,20 @@ describe("the privacy page", () => {
     for (const phrase of ["/invite/:token", "/o/:org", "Google signals", "ad personalization", "query string", "origin"]) {
       expect(body, phrase).toContain(phrase);
     }
+  });
+
+  it("describes the first-touch cookie as the code sets it: its name, the tags, how long, first-party, never an email", () => {
+    const section = text(renderToStaticMarkup(<PrivacyPage />).split('id="campaign-cookie"')[1]?.split('id="retention"')[0] ?? "");
+    expect(section).toContain(FIRST_TOUCH_COOKIE);
+    expect(section).toContain(`${FIRST_TOUCH_DAYS} days`);
+    expect(section).toContain(`${TAG_MAX} letters`);
+    for (const tag of Object.keys(TAG_KEYS)) expect(section, tag).toContain(tag);
+    for (const phrase of ["first-party", "never holds your email address", "without its query", "host of the site", "deleted with the workspace"]) {
+      expect(section, phrase).toContain(phrase);
+    }
+    const cookie = source("src/lib/growth/attribution.ts");
+    expect(cookie).toContain('"Path=/", "SameSite=Lax"');
+    expect(cookie).not.toMatch(/Domain=/);
   });
 
   it("says API keys are kept only as a SHA-256 hash, as the code keeps them", () => {

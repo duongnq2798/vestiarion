@@ -26,6 +26,15 @@ vi.mock("@/lib/platform/workspace", async (importOriginal) => ({
   createWorkspace: createWorkspaceMock,
 }));
 
+const { cookieValue, rpcMock } = vi.hoisted(() => ({ cookieValue: { current: undefined as string | undefined }, rpcMock: vi.fn() }));
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: (name: string) => (name === "vx_ft" && cookieValue.current !== undefined ? { name, value: cookieValue.current } : undefined) }),
+}));
+vi.mock("@/lib/dal", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/dal")>()),
+  platformDb: () => ({ rpc: rpcMock, from: () => { throw new Error("not read here"); } }),
+}));
+
 import { createWorkspaceAction } from "@/app/onboarding/actions";
 
 const env = { NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" };
@@ -43,6 +52,8 @@ beforeEach(() => {
   getSessionUserMock.mockReset().mockResolvedValue({ id: "user-1", email: "owner@acme.test" });
   createWorkspaceMock.mockReset().mockResolvedValue({ orgId: "org-1", slug: "acme" });
   redirectMock.mockClear();
+  cookieValue.current = undefined;
+  rpcMock.mockReset().mockResolvedValue({ data: true, error: null });
 });
 
 describe("createWorkspaceAction (mainnet go-live M2)", () => {
@@ -72,5 +83,52 @@ describe("createWorkspaceAction (mainnet go-live M2)", () => {
       await expect(runWithConfig(on, () => createWorkspaceAction(INITIAL, form(fields)))).rejects.toThrow("NEXT_REDIRECT");
       expect(createWorkspaceMock).toHaveBeenCalledWith({ userId: "user-1", name: "Acme", network: "arc-testnet" });
     }
+  });
+});
+
+describe("the workspace's first touch", () => {
+  it("is recorded once the workspace exists, from the vx_ft cookie, sanitized again", async () => {
+    cookieValue.current = "v=1&s=linkedin&c=agency-oct&p=/open&h=www.linkedin.com&at=2026-10-09T08:00:00.000Z&x=ignored";
+    await expect(runWithConfig(on, () => createWorkspaceAction(INITIAL, form({ name: "Acme" })))).rejects.toThrow("NEXT_REDIRECT");
+    expect(rpcMock).toHaveBeenCalledWith("record_org_attribution", {
+      p_org: "org-1",
+      p_attr: { utm_source: "linkedin", utm_campaign: "agency-oct", landing_path: "/open", referrer_host: "www.linkedin.com", first_seen_at: "2026-10-09T08:00:00.000Z" },
+    });
+  });
+
+  it("is not recorded without a cookie, or when the workspace was not created", async () => {
+    await expect(runWithConfig(on, () => createWorkspaceAction(INITIAL, form({ name: "Acme" })))).rejects.toThrow("NEXT_REDIRECT");
+    cookieValue.current = "v=1&s=linkedin";
+    createWorkspaceMock.mockRejectedValue(new Error("boom"));
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    expect(await runWithConfig(on, () => createWorkspaceAction(INITIAL, form({ name: "Acme" })))).toMatchObject({ ok: false });
+    expect(rpcMock).not.toHaveBeenCalled();
+    logged.mockRestore();
+  });
+
+  it("never fails or blocks creating the workspace: a database error or a throw is only logged", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    cookieValue.current = "v=1&s=linkedin";
+    rpcMock.mockResolvedValue({ data: null, error: { message: "relation does not exist" } });
+    await expect(runWithConfig(on, () => createWorkspaceAction(INITIAL, form({ name: "Acme" })))).rejects.toThrow("NEXT_REDIRECT");
+    rpcMock.mockRejectedValue(new Error("network down"));
+    await expect(runWithConfig(on, () => createWorkspaceAction(INITIAL, form({ name: "Acme" })))).rejects.toThrow("NEXT_REDIRECT");
+    expect(redirectMock).toHaveBeenCalledTimes(2);
+    expect(logged).toHaveBeenCalledWith("first touch: not recorded", "relation does not exist");
+    expect(logged).toHaveBeenCalledWith("first touch: not recorded", "network down");
+    logged.mockRestore();
+  });
+
+  it("goes on without it when the database is slow", async () => {
+    vi.useFakeTimers();
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    cookieValue.current = "v=1&s=linkedin";
+    rpcMock.mockReturnValue(new Promise(() => undefined));
+    const done = expect(runWithConfig(on, () => createWorkspaceAction(INITIAL, form({ name: "Acme" })))).rejects.toThrow("NEXT_REDIRECT");
+    await vi.advanceTimersByTimeAsync(1500);
+    await done;
+    expect(logged).toHaveBeenCalledWith("first touch: not recorded in time");
+    logged.mockRestore();
+    vi.useRealTimers();
   });
 });
