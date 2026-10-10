@@ -16,6 +16,7 @@ import { billDigits } from "@/lib/bill-amount";
 import { plural, utcDay } from "@/lib/copy";
 import { networkProfile } from "@/lib/network";
 import { txUrl } from "@/lib/payee-chains";
+import { agreementRate } from "@/lib/verdict-rate";
 import type { CurrencyAmount, PaymentRow, ReadinessStep, StoppedRow, WorkspaceReport as Report } from "@/lib/workspace-report";
 
 /**
@@ -147,7 +148,7 @@ export function ReportSummary({ report }: { report: Report }) {
         {report.verdicts && (
           <StatTile
             label="Your verdicts"
-            sub={`${given === 0 ? "None given yet" : `${Math.round((report.verdicts.agreed / given) * 100)}% agreed`} · ${report.verdicts.waiting} waiting`}
+            sub={`${given === 0 ? "None given yet" : `${agreementRate(report.verdicts)}% agreed`} · ${report.verdicts.waiting} waiting`}
           >
             {report.verdicts.agreed} of {given}
           </StatTile>
