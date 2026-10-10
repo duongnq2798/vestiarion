@@ -9,6 +9,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { Input } from "@/components/ui/Input";
+import { RULE_TRIAL_COPY, RuleTrial, RuleTrialFields, useRuleTrial } from "@/components/RuleTrial";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm, type ActionResult } from "@/components/ui/useActionForm";
@@ -21,6 +22,8 @@ import { DocsLink } from "@/components/DocsLink";
  * above which a payment needs two people's approval, or Off, and how many people can approve payments. Everyone sees
  * it; an owner (`canChange`) sets the figure, or turns it off behind a confirmation that says what that frees. On Arc
  * mainnet a figure always stays (mainnet limits L2), so the panel offers no Turn off there and says so (mainnet copy C11).
+ * A figure can be tried on past decisions first and applied from the result (policy replay §2); trying it off leaves
+ * turning it off to Turn off, behind its confirmation, which then records the replay.
  */
 export interface TwoApprovalsPanelProps {
   orgSlug: string;
@@ -41,9 +44,15 @@ function approversLine(count: number): string {
   return `${count} ${count === 1 ? "person can" : "people can"} approve payments here.`;
 }
 
+const TRIED_OFF = "To turn it off, choose Turn off.";
+
 function ChangeForms({ orgSlug, above, keepsFigure }: { orgSlug: string; above: number | null; keepsFigure: boolean }) {
-  const setForm = useActionForm(save, INITIAL);
-  const offForm = useActionForm(save, INITIAL);
+  const trial = useRuleTrial("two_approvals");
+  const { clear } = trial;
+  const setForm = useActionForm(save, INITIAL, { onSuccess: clear });
+  const offForm = useActionForm(save, INITIAL, { onSuccess: clear });
+  // A trial of Off is applied by Turn off, behind its confirmation; any other figure by the set form.
+  const triedOff = trial.view?.to === "Off";
   // Both forms report in one place: whichever was submitted last.
   const [last, setLast] = useState<"set" | "off" | null>(null);
   const shown = last === "set" ? setForm.state : last === "off" ? offForm.state : INITIAL;
@@ -54,17 +63,22 @@ function ChangeForms({ orgSlug, above, keepsFigure }: { orgSlug: string; above: 
 
   return (
     <div className="space-y-3">
-      <form {...setForm.formProps} onSubmit={submitting("set", setForm.formProps.onSubmit)} className="flex flex-wrap items-end gap-3">
+      <form {...setForm.formProps} onSubmit={submitting("set", setForm.formProps.onSubmit)} onChange={clear} className="grid gap-3">
         <input type="hidden" name="orgSlug" value={orgSlug} />
-        <Field id="two-approvals-above" label="Payments above (USDC)" description="Two people approve any payment to a payee above this.">
-          <Input name="above" inputMode="decimal" defaultValue={above ?? ""} placeholder="500" required className="w-40" />
-        </Field>
-        <SubmitButton pendingLabel="Saving…">Save</SubmitButton>
+        <div className="flex flex-wrap items-end gap-3">
+          <Field id="two-approvals-above" label="Payments above (USDC)" description="Two people approve any payment to a payee above this.">
+            <Input name="above" inputMode="decimal" defaultValue={above ?? ""} placeholder="500" required className="w-40" />
+          </Field>
+          <SubmitButton pendingLabel="Saving…">{trial.view && !triedOff ? RULE_TRIAL_COPY.apply : "Save"}</SubmitButton>
+        </div>
+        <RuleTrial orgSlug={orgSlug} trial={trial} />
+        {triedOff && <p className="text-xs text-ink-2">{TRIED_OFF}</p>}
       </form>
       {above !== null && !keepsFigure && (
         <form id={OFF_FORM_ID} {...offForm.formProps} onSubmit={submitting("off", offForm.formProps.onSubmit)}>
           <input type="hidden" name="orgSlug" value={orgSlug} />
           <input type="hidden" name="above" value="" />
+          <RuleTrialFields view={triedOff ? trial.view : null} />
           <ConfirmDialog
             formId={OFF_FORM_ID}
             tone="danger"

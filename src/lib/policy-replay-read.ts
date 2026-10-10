@@ -11,6 +11,7 @@ import {
   type CantTellReason,
   type ReplayChange,
   type ReplayCounts,
+  type ReplayedDecision,
   type ReplayEntry,
   type ReplayResult,
   type ReplaySummary,
@@ -161,7 +162,8 @@ function spendingLimitWords(budget: OutflowBudget): string {
   return `${daily}, ${weekly}`;
 }
 
-interface Setting {
+/** The setting a trial changes: its candidate, and the words and fields the result shows and Apply posts. */
+export interface TrialSetting {
   candidate: RuleCandidate;
   setting: string;
   from: string;
@@ -169,8 +171,11 @@ interface Setting {
   apply: Record<string, string>;
 }
 
+/** Each counterparty's name and role, by id. */
+export type CounterpartyNames = Map<string, { name: string; role: string }>;
+
 /** The candidate, read with the setting's own parser, against the figures in force; refused as Save would refuse it. */
-function settingOf(input: RuleTrialInput, current: RuleFigures, names: Map<string, { name: string; role: string }>): Setting {
+export function trialSetting(input: RuleTrialInput, current: RuleFigures, names: CounterpartyNames): TrialSetting {
   const replayDays = String(input.days);
   switch (input.rule) {
     case "counterparty_limit": {
@@ -252,11 +257,22 @@ async function readDecisions(since: string): Promise<ReplayEntry[]> {
 }
 
 interface Replayed {
-  setting: Setting;
+  setting: TrialSetting;
   result: ReplayResult;
   entries: ReplayEntry[];
-  names: Map<string, { name: string; role: string }>;
-  window: { days: ReplayWindow; from: string; to: string };
+  names: CounterpartyNames;
+  window: ReplayWindowSpan;
+}
+
+export interface ReplayWindowSpan {
+  days: ReplayWindow;
+  from: string;
+  to: string;
+}
+
+/** The window ending `now`. */
+export function windowSpan(days: ReplayWindow, now: Date): ReplayWindowSpan {
+  return { days, from: new Date(now.getTime() - days * DAY_MS).toISOString(), to: now.toISOString() };
 }
 
 async function replay(input: RuleTrialInput, now: Date): Promise<Replayed> {
@@ -272,35 +288,40 @@ async function replay(input: RuleTrialInput, now: Date): Promise<Replayed> {
     twoApprovalsAbove,
     spendingLimit: budget ?? { dailyUsdc: null, weeklyUsdc: null },
   };
-  const setting = settingOf(input, current, names);
+  const setting = trialSetting(input, current, names);
 
-  const from = new Date(now.getTime() - input.days * DAY_MS);
+  const window = windowSpan(input.days, now);
   // The spending limit's 7 days reach back six UTC days before the window's first day (P6).
-  const entries = await readDecisions(budgetWindows(from).weekStart);
-  const result = replayDecisions(entries, { windowStart: from.toISOString(), current, candidate: withCandidate(current, setting.candidate) });
-  return { setting, result, entries, names, window: { days: input.days, from: from.toISOString(), to: now.toISOString() } };
+  const entries = await readDecisions(budgetWindows(new Date(window.from)).weekStart);
+  const result = replayDecisions(entries, { windowStart: window.from, current, candidate: withCandidate(current, setting.candidate) });
+  return { setting, result, entries, names, window };
 }
 
-/** The replay of a candidate figure, for the setting's form to show (P8). */
-export async function ruleReplay(input: RuleTrialInput, now: Date = new Date()): Promise<RuleReplayView> {
-  const { setting, result, entries, names, window } = await replay(input, now);
-  const actions = new Map(entries.map((entry) => [entry.seq, entry.action]));
-  // What changed first, then what it cannot tell, each in ledger order.
+/** What the result lists: what changed first, then what it cannot tell, each in ledger order, up to `REPLAY_ROWS_SHOWN`. */
+export function listedDecisions(result: ReplayResult): { shown: ReplayedDecision[]; more: number } {
   const listed = [
     ...result.decisions.filter((decision) => decision.change !== "unchanged" && decision.change !== "cant_tell"),
     ...result.decisions.filter((decision) => decision.change === "cant_tell"),
   ];
   const shown = listed.slice(0, REPLAY_ROWS_SHOWN);
+  return { shown, more: listed.length - shown.length };
+}
 
-  const billIds = [...new Set(shown.filter((d) => d.source === "bill" && d.sourceId).map((d) => d.sourceId as string))];
-  const milestoneIds = [...new Set(shown.filter((d) => d.source === "milestone" && d.sourceId).map((d) => d.sourceId as string))];
-  const [invoices, milestones] = await Promise.all([
-    billIds.length > 0 ? db().from("invoices").select("id, memo").in("id", billIds) : null,
-    milestoneIds.length > 0 ? db().from("milestones").select("id, title").in("id", milestoneIds) : null,
-  ]);
-  const memos = new Map((invoices ? (unwrap(invoices) as Array<{ id: string; memo: string | null }>) : []).map((row) => [row.id, row.memo]));
-  const titles = new Map((milestones ? (unwrap(milestones) as Array<{ id: string; title: string }>) : []).map((row) => [row.id, row.title]));
-
+/** The result as the setting's form shows it. Pure: the names come from the caller. */
+export function replayView(input: {
+  rule: RuleKind;
+  setting: TrialSetting;
+  result: ReplayResult;
+  window: ReplayWindowSpan;
+  /** Each decision's ledger action, by sequence. */
+  actions: Map<number, string>;
+  names: CounterpartyNames;
+  /** Invoice memos and milestone titles, by id. */
+  memos: Map<string, string | null>;
+  titles: Map<string, string>;
+}): RuleReplayView {
+  const { setting, result, window, actions, names, memos, titles } = input;
+  const { shown, more } = listedDecisions(result);
   return {
     rule: input.rule,
     setting: setting.setting,
@@ -327,8 +348,30 @@ export async function ruleReplay(input: RuleTrialInput, now: Date = new Date()):
         after: verdictWords(decision.after, decision.source, action),
       };
     }),
-    more: listed.length - shown.length,
+    more,
   };
+}
+
+/** The replay of a candidate figure, for the setting's form to show (P8). */
+export async function ruleReplay(input: RuleTrialInput, now: Date = new Date()): Promise<RuleReplayView> {
+  const { setting, result, entries, names, window } = await replay(input, now);
+  const { shown } = listedDecisions(result);
+  const billIds = [...new Set(shown.filter((d) => d.source === "bill" && d.sourceId).map((d) => d.sourceId as string))];
+  const milestoneIds = [...new Set(shown.filter((d) => d.source === "milestone" && d.sourceId).map((d) => d.sourceId as string))];
+  const [invoices, milestones] = await Promise.all([
+    billIds.length > 0 ? db().from("invoices").select("id, memo").in("id", billIds) : null,
+    milestoneIds.length > 0 ? db().from("milestones").select("id, title").in("id", milestoneIds) : null,
+  ]);
+  return replayView({
+    rule: input.rule,
+    setting,
+    result,
+    window,
+    actions: new Map(entries.map((entry) => [entry.seq, entry.action])),
+    names,
+    memos: new Map((invoices ? (unwrap(invoices) as Array<{ id: string; memo: string | null }>) : []).map((row) => [row.id, row.memo])),
+    titles: new Map((milestones ? (unwrap(milestones) as Array<{ id: string; title: string }>) : []).map((row) => [row.id, row.title])),
+  });
 }
 
 /** The replay's summary, for the signed entry of the change applied after it (P10): computed here, never taken from a form. */
@@ -348,7 +391,7 @@ export function trialFromForm(formData: FormData, rule?: RuleKind): RuleTrialInp
   };
   rule ??= text("rule") as RuleKind | undefined;
   if (rule !== "counterparty_limit" && rule !== "two_approvals" && rule !== "spending_limit") return null;
-  const days = Number(text("replayDays") ?? text("days") ?? "30");
+  const days = Number(text("days") ?? text("replayDays") ?? "30");
   if (!(REPLAY_WINDOWS as readonly number[]).includes(days)) return null;
   return {
     rule,

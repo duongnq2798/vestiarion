@@ -57,7 +57,8 @@ import { AccountsList, BalanceTile, ForecastPanel, StatTile } from "@/components
 import { derivePerformanceScore } from "@/lib/agent/counterparty-history";
 import { PageHead } from "@/components/vx/Shell";
 import { ACCOUNTS, COUNTERPARTIES, DECISIONS, DESIGN_SLUG, FORECAST, HISTORY, INSIGHTS, INVITATIONS, LEDGER, MEMBERS, OUTLOOK, PROVENANCE } from "./fixtures";
-import { FeedbackDemo, FormLab, OverlayDemo, TabsDemo } from "./Demos";
+import { FeedbackDemo, FormLab, OverlayDemo, RuleTrialDemo, TabsDemo } from "./Demos";
+import { designRuleReplay } from "./replay-fixture";
 import { FrameDemo } from "./Screens";
 
 export const metadata: Metadata = {
@@ -464,6 +465,7 @@ export default function DesignPage() {
               />
               <AgentBudgetPanel network="arc-testnet" orgSlug={DESIGN_SLUG} canEdit view={{ dailyUsdc: 500, weeklyUsdc: 2000, spentToday: 320, spentThisWeek: 1240.5, remaining: 180 }} />
               <AgentBudgetPanel network="arc-testnet" orgSlug={DESIGN_SLUG} canEdit view={{ dailyUsdc: null, weeklyUsdc: null, spentToday: 12.5, spentThisWeek: 40, remaining: null }} />
+              <RuleTrialDemo views={{ "1500": designRuleReplay("1500"), "300": designRuleReplay("300") }} />
               <ProposalCard
                 orgSlug={DESIGN_SLUG}
                 canDecide
