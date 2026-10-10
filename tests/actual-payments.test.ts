@@ -162,6 +162,37 @@ describe("recordActual", () => {
     expect(fake.requests.find((r) => r.path === "/rest/v1/invoices")?.params.get("org_id")).toBe(`eq.${ORG}`);
   });
 
+  it("keeps a record from a bank statement with its line, and puts the line in the entry", async () => {
+    fake = fakeSupabase(workspace());
+    const statementLine = {
+      id: "line-1",
+      account: "DBS operating",
+      line: 7,
+      bookedOn: "2026-10-09",
+      valueOn: "2026-10-10",
+      amount: -1250,
+      currency: "EUR",
+      description: "GIRO NORTHWIND INV-2207",
+      payee: null,
+      reference: "BANK-2207",
+      balance: 3750,
+    };
+    const result = await run(() =>
+      recordActual({ actorId: PERSON, today: TODAY, source: "statement", statementLine, invoiceId: INVOICE, outcome: "paid", paidOn: "2026-10-09", amount: "1250.00", currency: "EUR", method: "bank_transfer", reference: "BANK-2207" })
+    );
+    expect(result.record.source).toBe("statement");
+    expect(posted()[0].body).toMatchObject({ source: "statement", statement_line_id: "line-1", method: "bank_transfer", reference: "BANK-2207" });
+    expect(ledgerMock.mock.calls[0][1]).toMatchObject({ action: "actual_payment_recorded", detail: { via: "statement", statementLine } });
+  });
+
+  it("says recording from a statement is not set up when its column is not there yet", async () => {
+    fake = fakeSupabase(workspace({ insert: { status: 400, body: { code: "PGRST204", message: "Could not find the 'statement_line_id' column of 'payment_actuals' in the schema cache" } } }));
+    const statementLine = { id: "line-1", account: "A", line: 2, bookedOn: "2026-10-09", valueOn: null, amount: -1, currency: "EUR", description: "x", payee: null, reference: null, balance: null };
+    await expect(
+      run(() => recordActual({ actorId: PERSON, today: TODAY, source: "statement", statementLine, invoiceId: INVOICE, outcome: "paid", paidOn: "2026-10-09", amount: "1", currency: "EUR", method: "bank_transfer" }))
+    ).rejects.toMatchObject({ code: "not_ready" });
+  });
+
   it("says recording is not set up yet when migration 0090 has not run", async () => {
     fake = fakeSupabase(workspace({ actuals: MISSING }));
     const refused = run(() => recordActual({ actorId: PERSON, today: TODAY, source: "form", ...PAID }));

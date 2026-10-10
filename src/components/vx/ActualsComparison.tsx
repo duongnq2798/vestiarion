@@ -133,7 +133,7 @@ function BusinessSide({ row, slug, members }: { row: ComparisonRow; slug: string
       {actual.note && <p className="text-ink-2">{actual.note}</p>}
       <p className="text-xs text-ink-3">
         Recorded by {who} on {utcDay(actual.recordedAt)}
-        {actual.source === "csv" ? " from a CSV" : ""}
+        {actual.source === "csv" ? " from a CSV" : actual.source === "statement" ? " from a bank statement" : ""}
         {row.corrections > 0 ? `, correcting ${row.corrections} earlier ${plural(row.corrections, "record", "records")}` : ""}
         {actual.entrySeq !== null && (
           <>

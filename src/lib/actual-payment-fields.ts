@@ -16,6 +16,8 @@ export const METHOD_WORDS: Record<ActualMethod, string> = {
 };
 
 export const REFERENCE_MAX = 140;
+
+export type ActualSource = "form" | "csv" | "statement";
 export const NOTE_MAX = 280;
 export const REASON_MAX = 280;
 
@@ -35,7 +37,8 @@ export interface ActualRecord {
   reason: string | null;
   /** The record this one corrects. */
   replaces: string | null;
-  source: "form" | "csv";
+  /** Typed into the form, a row of a CSV, or a line of a bank statement. */
+  source: ActualSource;
   recordedBy: string | null;
   recordedAt: string;
 }

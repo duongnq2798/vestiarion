@@ -8,6 +8,7 @@ import {
   REFERENCE_MAX,
   type ActualMethod,
   type ActualRecord,
+  type ActualSource,
 } from "./actual-payment-fields";
 import type { ActualsFacts } from "./actual-payments-compare";
 import { matchActualsCsv, parseActualsCsv, type MatchBill, type PreviewRow } from "./actual-payments-csv";
@@ -122,7 +123,7 @@ function toRecord(row: ActualRow): ActualRecord {
     note: row.note,
     reason: row.reason,
     replaces: row.replaces,
-    source: row.source === "csv" ? "csv" : "form",
+    source: row.source === "csv" || row.source === "statement" ? row.source : "form",
     recordedBy: row.recorded_by,
     recordedAt: row.recorded_at,
   };
@@ -172,9 +173,27 @@ async function newestRecordOf(invoiceId: string): Promise<string | null> {
   return rows.find((row) => !replaced.has(row.id))?.id ?? null;
 }
 
-export async function recordActual(
-  input: ActualInput & { actorId: string; source: "form" | "csv"; today?: string }
-): Promise<{ record: ActualRecord; corrected: boolean }> {
+/**
+ * The line of a bank statement a record comes from (docs/superpowers/specs/2026-10-10-bank-statement-design.md B8), as
+ * kept in `bank_statement_lines` (0094) and put in the record's entry. Amounts in the currency, money out negative.
+ */
+export interface StatementLineDetail {
+  id: string;
+  account: string;
+  line: number;
+  bookedOn: string;
+  valueOn: string | null;
+  amount: number;
+  currency: string;
+  description: string;
+  payee: string | null;
+  reference: string | null;
+  balance: number | null;
+}
+
+export type RecordSource = { source: Exclude<ActualSource, "statement"> } | { source: "statement"; statementLine: StatementLineDetail };
+
+export async function recordActual(input: ActualInput & RecordSource & { actorId: string; today?: string }): Promise<{ record: ActualRecord; corrected: boolean }> {
   const fields = checkedFields(input, input.today ?? new Date().toISOString().slice(0, 10));
 
   const invoice = (unwrap(await db().from("invoices").select("id, direction").eq("id", input.invoiceId).limit(1)) as Array<{ id: string; direction: string }>)[0];
@@ -189,14 +208,22 @@ export async function recordActual(
 
   const write = await db()
     .from("payment_actuals")
-    .insert({ invoice_id: invoice.id, ...fields, replaces, source: input.source, recorded_by: input.actorId })
+    .insert({
+      invoice_id: invoice.id,
+      ...fields,
+      replaces,
+      source: input.source,
+      recorded_by: input.actorId,
+      // Only a statement's record names its line: before migration 0094 the column is not there to name.
+      ...(input.source === "statement" ? { statement_line_id: input.statementLine.id } : {}),
+    })
     .select(COLUMNS)
     .single<ActualRow>();
   if (write.error) {
     // One first record per bill and one correction per record: someone else's came first.
     if (write.error.code === "23505") throw new ActualPaymentError("changed");
     if (write.error.code === "23503") throw new ActualPaymentError("not_a_payable");
-    if (missingTable(write.error)) throw new ActualPaymentError("not_ready");
+    if (missingTable(write.error) || write.error.code === "PGRST204" || write.error.code === "42703") throw new ActualPaymentError("not_ready");
     throw new Error(write.error.message);
   }
   const record = toRecord(write.data);
@@ -227,6 +254,7 @@ export async function recordActual(
       reason: record.reason,
       ...(corrected ? { replaces } : {}),
       ...(input.source === "csv" ? { via: "csv" } : {}),
+      ...(input.source === "statement" ? { via: "statement", statementLine: input.statementLine } : {}),
     },
   });
   return { record, corrected };
