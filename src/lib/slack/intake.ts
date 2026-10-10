@@ -42,10 +42,11 @@ export interface SlackIntakeDeps {
 
 const RECONNECT =
   "Vestiarion cannot open files in this Slack yet. An owner or admin chooses *Reconnect Slack* in Settings once, to let it read the invoices you choose.";
-const NOT_OPENED = "The file could not be opened from Slack. Add it in Vestiarion instead: From a document, on AP / AR.";
+// Slack mrkdwn: `&amp;` shows as &.
+const NOT_OPENED = "The file could not be opened from Slack. Add it in Vestiarion instead: From a document, on Bills &amp; receivables.";
 // Slack lets the app read a file only in a conversation it is in, so a refusal after the permission is granted means that.
 const NOT_IN_CHANNEL =
-  "Vestiarion cannot open this file: Slack lets it read files only in channels it is in. Type `/invite @Vestiarion` in this channel and choose *Add invoice* again, or add the invoice in Vestiarion: From a document, on AP / AR.";
+  "Vestiarion cannot open this file: Slack lets it read files only in channels it is in. Type `/invite @Vestiarion` in this channel and choose *Add invoice* again, or add the invoice in Vestiarion: From a document, on Bills &amp; receivables.";
 const UNREACHABLE = "Slack could not be reached. Try again in a moment.";
 const SLOW_DOWN = "That is five invoices read this minute. Try again in a few seconds.";
 const UNREADABLE = "The invoice could not be read. Try again in a moment.";

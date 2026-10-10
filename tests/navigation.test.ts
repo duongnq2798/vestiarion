@@ -32,11 +32,25 @@ describe("the workspace navigation", () => {
     for (const legacy of LEGACY_PRODUCT_PATHS) expect(NAV_ITEMS.map((item) => item.path)).toContain(legacy);
   });
 
-  it("lists Approvals in Controls, first, before Compliance", () => {
-    const controls = NAV_GROUPS.find((group) => group.label === "Controls");
-    expect(controls?.items.map((item) => item.key)).toEqual(["approvals", "compliance", "audit", "members", "settings"]);
+  // Workspace shell design S1: where the money is and what waits for a person first, then the work, the controls, the
+  // measurements and the workspace itself.
+  it("groups the sections as people use them, Approvals beside Treasury", () => {
+    expect(NAV_GROUPS.map((group) => [group.label, group.items.map((item) => item.key)])).toEqual([
+      ["Home", ["treasury", "approvals"]],
+      ["Operations", ["invoices", "counterparties", "contractors"]],
+      ["Controls", ["compliance", "audit"]],
+      ["Analytics", ["insights", "report"]],
+      ["Workspace", ["members", "settings"]],
+    ]);
+    // Only the first group goes without a visible heading; its label still names it for a screen reader.
+    expect(NAV_GROUPS.map((group) => group.hideLabel)).toEqual([true, false, false, false, false]);
     expect(sectionTitle("approvals")).toBe("Approvals");
     expect(NAV_ITEMS.find((item) => item.key === "approvals")?.path).toBe("/approvals");
+  });
+
+  it("calls the bills page by what it holds, at the path it always had", () => {
+    expect(sectionTitle("invoices")).toBe("Bills & receivables");
+    expect(NAV_ITEMS.find((item) => item.key === "invoices")?.path).toBe("/invoices");
   });
 
   it("opens a workspace on its first section, the treasury", () => {

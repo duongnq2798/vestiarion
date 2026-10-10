@@ -190,7 +190,7 @@ export function missingMessage(read: InvoiceDraftRead, reasons: string[], invoic
       `${bold(`Read the invoice${from ? ` from ${from}` : ""}`)}, but it cannot be added from here:`,
       ...reasons.map((reason) => `• ${escapeHtml(reason)}`),
       "",
-      `Add it in Vestiarion, where you can fix each field: ${link(invoicesUrl, "Invoices")}.`,
+      `Add it in Vestiarion, where you can fix each field: ${link(invoicesUrl, "Bills & receivables")}.`,
     ].join("\n"),
     MESSAGE_MAX
   );

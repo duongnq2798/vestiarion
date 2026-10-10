@@ -135,8 +135,8 @@ describe("where Delete account lives (A1)", () => {
     expect(menu.match(/tone="danger"/g)).toHaveLength(1);
   });
 
-  it("is reached from the workspace sidebar and from the /onboarding header", () => {
-    expect(source("src/components/vx/AppNav.tsx")).toContain('<AccountMenu email={email} placement="sidebar">');
+  it("is reached from the workspace sidebar, folded or not, and from the /onboarding header", () => {
+    expect(source("src/components/vx/AppNav.tsx")).toContain('<AccountMenu email={email} placement={collapsed ? "rail" : "sidebar"} railTip={collapsed}>');
     const onboarding = source("src/app/onboarding/page.tsx");
     expect(onboarding).toContain('<AccountMenu email={user.email} placement="header" />');
     expect(onboarding).not.toContain("Delete account");

@@ -12,8 +12,8 @@ export interface ContentsGroup {
   sections: { id: string; title: string }[];
 }
 
-/** How far below the top of the window a section's heading counts as the one being read. No header sits above it from `xl`, where the rail shows. */
-const READING_LINE = 96;
+/** How far below the top of the window a section's heading counts as the one being read: below the workspace header, which sticks at every width (workspace shell design S4), and below where a jump to a heading lands. */
+const READING_LINE = 128;
 
 /**
  * The contents of Settings (Settings structure design S2). `rail`: a column that stays beside the sections from `xl`,
@@ -56,7 +56,7 @@ export function SettingsContents({ groups, variant, className }: { groups: Conte
 
   return (
     <nav aria-label="Settings sections" className={className}>
-      <div className="sticky top-8 space-y-5">
+      <div className="sticky top-22 space-y-5">
         {groups.map((group, index) => (
           <div key={group.key}>
             <p id={`${id}-${index}`} className={GROUP_LABEL}>

@@ -33,6 +33,7 @@ import {
 import { exportKeys } from "@/lib/ledger-export";
 import { stats } from "@/lib/queries";
 import { DocsLink } from "@/components/DocsLink";
+import { shellStatus } from "@/lib/shell-status";
 
 export const dynamic = "force-dynamic";
 
@@ -75,7 +76,7 @@ export default async function AuditPage({ params, searchParams }: AuditPageProps
     const retiredKeys = exportKeys(ledgerVerificationKeyring()).filter((key) => key.status === "retired");
 
     return (
-      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()} status={await shellStatus()}>
         <PageHead
           title={sectionTitle("audit")}
           sub="Every decision is appended here, hash-linked to the one before it and signed with Ed25519. The summary stays readable; raw detail and cryptographic material remain inspectable."

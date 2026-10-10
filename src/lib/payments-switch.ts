@@ -31,6 +31,8 @@ export interface PaymentsSwitchState {
   off: boolean;
   /** Why, when the database's switch gives a reason. */
   reason: string | null;
+  /** The page's read failed: no banner, but the header says it is not known (workspace shell design S5), since the gates refuse. */
+  unread?: boolean;
 }
 
 /** How long a read of the database's switch is kept (S7): a switch thrown takes at most this long to reach every instance. */
@@ -101,7 +103,7 @@ export async function paymentsSwitchForPages(): Promise<PaymentsSwitchState> {
     return await readSwitch(Date.now());
   } catch (error) {
     console.error("payments switch: not read for the page", error instanceof Error ? error.message : String(error));
-    return { off: false, reason: null };
+    return { off: false, reason: null, unread: true };
   }
 }
 

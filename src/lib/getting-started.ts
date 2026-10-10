@@ -188,7 +188,7 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
       {
         id: "payable",
         title: "Add a bill",
-        body: "One of your bills from that supplier, in AP / AR. Tick Goods or services received once they have come. The agent decides on it within a minute.",
+        body: "One of your bills from that supplier, in Bills & receivables. Tick Goods or services received once they have come. The agent decides on it within a minute.",
         path: "/invoices",
         done: (input.billCount ?? input.payableCount) > 0,
         ownerOnly: false,
@@ -196,7 +196,7 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
       {
         id: "decision",
         title: "See the agent's decision",
-        body: "Its card in AP / AR says what the agent decided and why. A payment it makes in a sandbox is simulated.",
+        body: "Its card in Bills & receivables says what the agent decided and why. A payment it makes in a sandbox is simulated.",
         path: "/invoices",
         done: (input.decidedCount ?? 0) > 0 || held,
         ownerOnly: false,
@@ -268,8 +268,8 @@ function shadowChecklist(
       id: "bills",
       title: "Add your real bills",
       body: inUsdc
-        ? "Each bill as you receive it, as a payable in AP / AR, in USDC, as on any invoice. Tick Goods or services received once they have come. You keep paying it as you do today."
-        : `Each bill as you receive it, as a payable in AP / AR, in ${shadow.currency}, as written on it: it is paid in USDC at the day's rate. Tick Goods or services received once they have come. You keep paying it as you do today.`,
+        ? "Each bill as you receive it, as a payable in Bills & receivables, in USDC, as on any invoice. Tick Goods or services received once they have come. You keep paying it as you do today."
+        : `Each bill as you receive it, as a payable in Bills & receivables, in ${shadow.currency}, as written on it: it is paid in USDC at the day's rate. Tick Goods or services received once they have come. You keep paying it as you do today.`,
       path: "/invoices",
       done: shadow.billCount > 0,
       ownerOnly: false,

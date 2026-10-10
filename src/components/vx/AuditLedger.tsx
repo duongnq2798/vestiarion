@@ -67,7 +67,7 @@ export function AuditLedger({ entries, since }: { entries: LedgerEntry[]; since?
       </div>
       {groups.map((group, groupIndex) => (
         <section key={`${group.day}-${groupIndex}`} aria-label={group.day}>
-          <div className="sticky top-14 z-10 flex items-baseline justify-between border-b border-line bg-raised/95 px-4 py-1.5 backdrop-blur sm:pl-9 lg:top-0">
+          <div className="sticky top-14 z-10 flex items-baseline justify-between border-b border-line bg-raised/95 px-4 py-1.5 backdrop-blur sm:pl-9">
             <span className="text-[0.8125rem] font-semibold text-ink">{group.day}</span>
             <span className="font-mono text-[0.6875rem] text-ink-2">
               #{pad(group.rows.at(-1)!.seq)}–#{pad(group.rows[0].seq)} · {group.rows.length} entries
@@ -100,7 +100,7 @@ function AuditRow({ entry, previous, fresh, index }: { entry: LedgerEntry; previ
     <li
       id={`seq-${entry.seq}`}
       className={cn(
-        "relative scroll-mt-24 border-b border-line last:border-b-0 lg:scroll-mt-12",
+        "relative scroll-mt-10 border-b border-line last:border-b-0",
         fresh && "bg-agent-soft/60 motion-safe:animate-arrive",
         refused && "bg-refused-soft/70",
         changed && !refused && "bg-held-soft/35"

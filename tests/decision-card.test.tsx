@@ -124,8 +124,8 @@ describe("DecisionCard", () => {
 });
 
 /**
- * An invoice's card, as the AP / AR page renders it: the badge says where the
- * invoice is, and only a scheduled one says Scheduled, with its day.
+ * An invoice's card, as the Bills & receivables page renders it: the badge says
+ * where the invoice is, and only a scheduled one says Scheduled, with its day.
  */
 describe("DecisionCard for an invoice", () => {
   const invoice = (overrides: Partial<InvoiceRow>): InvoiceRow => ({

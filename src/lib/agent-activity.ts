@@ -249,7 +249,7 @@ function invoiceItem(
   const how = { path: `/invoices#trail-${id}`, pathLabel: "How it decided" };
 
   if (entry.action === "ar_received") {
-    return { seq: entry.seq, text: `Received ${amount} from ${invoice.name}.`, detail: null, tone: "done", path: "/invoices", pathLabel: "AP / AR", txHash: arcTx(text(entry.detail.txHash)) };
+    return { seq: entry.seq, text: `Received ${amount} from ${invoice.name}.`, detail: null, tone: "done", path: "/invoices", pathLabel: "Bills & receivables", txHash: arcTx(text(entry.detail.txHash)) };
   }
   if (entry.action === "ar_reminder_sent") {
     const tone = text(entry.detail.tone) ?? "friendly";

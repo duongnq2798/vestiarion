@@ -11,6 +11,7 @@ import { keyNamesForViewer } from "@/lib/member-keys";
 import { activeKeyNamesByCreator } from "@/lib/platform/api-keys";
 import { listMembers, listOpenInvitations } from "@/lib/platform/members";
 import { stats } from "@/lib/queries";
+import { shellStatus } from "@/lib/shell-status";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,7 @@ export default async function MembersPage({ params }: { params: Promise<{ slug: 
     const assignable = ORG_ROLES.filter((role) => canAssignRole(membership.role, role));
 
     return (
-      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()} status={await shellStatus()}>
         <PageHead
           title={sectionTitle("members")}
           sub="Everyone in this workspace, and the invitations still open. Anyone may leave on their own; an owner or admin invites, changes roles and removes."

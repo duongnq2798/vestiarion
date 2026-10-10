@@ -4,9 +4,10 @@ import type { InvoiceRow } from "@/lib/queries";
 import { Card } from "@/components/ui/Card";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Money, Reasoning } from "./Primitives";
+import { MoreLink } from "./Treasury";
 import { presentReasoning } from "@/lib/reasoning-copy";
 
-/** How many scheduled payables the console shows before the rest wait for the Invoices page. */
+/** How many scheduled payables the console shows before the rest wait for the Bills & receivables page. */
 const MAX_ROWS = 5;
 
 /** One row of the console's "Scheduled payments" section. */
@@ -50,14 +51,14 @@ export function scheduledPaymentRows(invoices: ReadonlyArray<InvoiceRow>): Sched
     }));
 }
 
-/** What the agent will pay next: hidden entirely when nothing is scheduled. */
-export function ScheduledPayments({ payments }: { payments: ScheduledPaymentRow[] }) {
+/** What the agent will pay next: hidden entirely when nothing is scheduled. `allHref` links to every bill. */
+export function ScheduledPayments({ payments, allHref }: { payments: ScheduledPaymentRow[]; allHref?: string }) {
   if (payments.length === 0) return null;
   return (
     <Card asChild className="overflow-hidden">
       <section>
         <div className="px-4 pt-4 sm:px-5">
-          <SectionHeader title="Scheduled payments" meta="soonest first" />
+          <SectionHeader title="Scheduled payments" meta="soonest first" action={allHref ? <MoreLink href={allHref}>All bills</MoreLink> : undefined} />
         </div>
         <ul className="divide-y divide-line border-t border-line">
           {payments.map((payment) => (

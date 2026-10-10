@@ -184,9 +184,10 @@ function EmailCard({ orgSlug, email, canAdd, counterparties }: { orgSlug: string
 }
 
 /**
- * The invoices that arrived by email and wait for a person, on AP / AR (docs/superpowers/specs/2026-10-03-email-invoices-design.md
- * E6, E7): what was read, the sender's checks, and for an owner or admin Add (with the goods received or not) and
- * Dismiss. Nothing here is added by itself. Renders nothing when nothing waits.
+ * The invoices that arrived by email and wait for a person, on Bills & receivables
+ * (docs/superpowers/specs/2026-10-03-email-invoices-design.md E6, E7): what was read, the sender's checks, and for an
+ * owner or admin Add (with the goods received or not) and Dismiss. Nothing here is added by itself. Renders nothing
+ * when nothing waits.
  */
 export default function InboxEmails({
   orgSlug,

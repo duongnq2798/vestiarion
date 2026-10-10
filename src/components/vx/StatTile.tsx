@@ -21,7 +21,7 @@ export function StatTile({
   const content = (
     <>
       <Eyebrow className={tone === "held" ? "text-held" : undefined}>{label}</Eyebrow>
-      <div className="mt-2 min-w-0 text-[1.375rem] font-semibold leading-none tracking-tight text-ink sm:text-[1.625rem]">{children}</div>
+      <div className="mt-2 min-w-0 text-[1.375rem] font-semibold tabular-nums leading-none tracking-tight text-ink sm:text-[1.625rem]">{children}</div>
       {sub && <div className="mt-2 text-[0.8125rem] leading-snug text-ink-2">{sub}</div>}
     </>
   );

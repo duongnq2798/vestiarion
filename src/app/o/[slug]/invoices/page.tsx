@@ -47,6 +47,7 @@ import { verdictFacts } from "@/lib/verdicts";
 import { receiptShareable } from "@/lib/receipts/facts";
 import { sharedReceipts } from "@/lib/receipts/share";
 import { workspaceNetwork } from "@/lib/workspace-network";
+import { shellStatus } from "@/lib/shell-status";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +57,8 @@ type InvoiceSearchParams = Promise<{
   status?: string | string[];
   /** `all` shows every settled invoice; otherwise the latest ten. */
   history?: string | string[];
+  /** Present: the new invoice form opens, as the command palette's "Add a bill" asks (workspace shell design S9). */
+  add?: string | string[];
 }>;
 
 /** Payables still to be paid: decided or not, held or scheduled. */
@@ -181,7 +184,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       );
     };
 
-    // The work, not the documents (AP / AR layout): what waits for a person, what is coming, what is settled.
+    // The work, not the documents (Bills & receivables layout): what waits for a person, what is coming, what is settled.
     const today = new Date().toISOString().slice(0, 10);
     const inAWeek = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
     // The verdict first: a payment held for it asks for nothing else; any other card keeps its own footer below it.
@@ -229,7 +232,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     const waitingCount = openPayables.filter((invoice) => WAITING.has(invoice.status)).length;
 
     return (
-      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()} status={await shellStatus()}>
         <PageHead
           title={sectionTitle("invoices")}
           sub="Your bills, what the agent decided on each, and why."
@@ -271,7 +274,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
 
         {canWrite ? (
           // Folded until it is needed; open on a workspace with no invoice yet, where adding one is the next step.
-          <IntakeFold label="New invoice" meta="typed in, read from a document, imported from a CSV, or recurring" defaultOpen={invoices.length === 0}>
+          <IntakeFold label="New invoice" meta="typed in, read from a document, imported from a CSV, or recurring" defaultOpen={invoices.length === 0 || query.add !== undefined}>
             <Tabs defaultValue="manual">
               <TabsList aria-label="New invoice">
                 <TabsTrigger value="manual">

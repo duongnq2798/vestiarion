@@ -19,6 +19,7 @@ import { inOrg } from "@/lib/dal/scope";
 import { listMembers } from "@/lib/platform/members";
 import { listOpenProposals } from "@/lib/policy-proposals";
 import { stats } from "@/lib/queries";
+import { shellStatus } from "@/lib/shell-status";
 
 export const dynamic = "force-dynamic";
 
@@ -63,7 +64,7 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
         : {};
 
     return (
-      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()} status={await shellStatus()}>
         <PageHead
           title={sectionTitle("approvals")}
           sub={
