@@ -66,6 +66,12 @@ For a traction update, `npm run traction-digest -- <workspace> --since <day>` li
 
 Vestiarion's public numbers at [/open](https://www.vestiarion.xyz/open) count how often customers agreed with the agent in shadow mode, across every workspace, as a share. They never show a workspace's name, a bill or a verdict's reason.
 
+## Compare with what your business really paid
+
+A verdict says whether you agreed with a decision. To see what your business then did, record how it paid each bill from its bank. Open **Report**: **Agent vs what really happened** lists each bill the agent decided on, with **Record what you paid** for an owner or admin. Record the day it was paid, the amount and currency as paid, how it was paid and the reference, or that it was **Not paid** and why. A CSV of many payments can be imported there too, previewed before anything is saved; **Download the bills not recorded yet** gives you one to fill in.
+
+Bill by bill, the report then shows the agent's decision beside what your business did and how many days apart they were, and marks what is worth a look: a bill the agent held that your business paid, a bill paid on Arc that your business did not pay, and an amount that differs. A bill nobody has recorded says **Not recorded**: nothing is guessed. Once something is recorded, `npm run traction-digest` adds a line saying how often the agent and the business did the same. See [Read your workspace report](/docs/guides/report#agent-vs-what-really-happened).
+
 ## 6. Turn it off
 
 In **Settings**, choose **Turn off shadow mode** and confirm. The agent pays on its own again, within its limits. A payment waiting for a person to agree stays held until a person decides it. Decide it in Approvals with **Approve and pay**, **Reject** or **Return**, as any held payment: no verdict can be given on it once shadow mode is off.
@@ -83,6 +89,7 @@ Each step is a signed entry in the workspace's ledger, and reaches webhook endpo
 - `counterparty_address_changed` with `via: "mirror"` when a supplier is given a mirror address: who asked, the address and its Circle wallet id.
 - `test_usdc_added` when test USDC came in from Vestiarion's float: who asked, the amount, the float's address and the operating wallet's, Circle's transfer id, the transaction hash once Arc testnet confirmed it, its status, the shortfall and the weekly limit. A transfer from the float that no entry recorded, because its request stopped before the ledger was written, is recorded the next time someone adds test USDC, with `recovered: true`. Money from the float is never matched to a receivable.
 - `decision_verdict` for each verdict: who gave it, the decision it is about (`entrySeq`), the payable (`subjectId`), the agent's action, `agree` or `disagree`, and the reason.
+- `actual_payment_recorded` when someone records what your business paid, and `actual_payment_corrected` for a correction, which names the record it replaces (`replaces`): who recorded it, the record (`actualId`), the payable (`subjectId`), `paid` or `not_paid`, the day, amount, currency, method, reference and note, or the reason it was not paid, and `via: "csv"` for a row from a CSV.
 
 ## If something goes wrong
 

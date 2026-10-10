@@ -101,7 +101,7 @@ export const TENANT_TABLES = [
   "forecasts", "ledger_entries", "payment_intents", "cycle_runs", "cycle_snapshots", "sim_clock", "gateway_signers", "payment_receipts", "escrow_contracts",
   "fx_swaps", "screening_dismissals", "receivable_links", "incoming_transfers", "agent_budgets", "recurring_payables", "policy_proposals",
   "service_purchases", "spending_limit_contracts", "ar_reminders", "inbox_emails", "approval_policies", "payment_approvals",
-  "shadow_modes", "decision_verdicts",
+  "shadow_modes", "decision_verdicts", "payment_actuals",
 ] as const;
 
 export interface SeededRows {
@@ -172,6 +172,10 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
   await db.query("insert into shadow_modes (org_id, currency) values ($1, 'VND')", [orgId]);
   await db.query(
     "insert into decision_verdicts (org_id, entry_seq, subject, subject_id, agent_action, verdict) values ($1, 1, 'invoice', $2, 'ap_pay', 'agree')",
+    [orgId, invoiceId]
+  );
+  await db.query(
+    "insert into payment_actuals (org_id, invoice_id, outcome, paid_on, amount, currency, method) values ($1, $2, 'paid', '2026-10-09', 1, 'USDC', 'bank_transfer')",
     [orgId, invoiceId]
   );
   const approver = await one("insert into auth.users (id, email) values (gen_random_uuid(), $1) returning id", [`approver-${tag}-${crypto.randomUUID()}@example.com`]);

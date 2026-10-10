@@ -103,3 +103,9 @@ switches it to real bills only.
   stop classification (code, operational, agent, verdict hold excluded), on-time, captured vs on-offer discount,
   median time to decision, readiness states.
 - `tests/navigation.test.ts` and the docs tests keep the new section, its guide and its quoted labels in step.
+
+## Added 2026-10-10: what the business really paid
+
+The report gains a comparison of each bill's agent side with what the business recorded paying outside Vestiarion,
+with its own table (migration 0090) and its own writes: see `2026-10-10-actual-payments-design.md`. The figures above
+still need no migration and write nothing.

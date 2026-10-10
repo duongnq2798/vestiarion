@@ -1,8 +1,8 @@
-The **Report** section says what the agent did with your workspace's bills since the workspace opened: how many it handled and how fast it decided, what it paid and the transaction for each payment, what it stopped and why, how often a person stepped in, and what an early-payment discount took off a bill. Every member of the workspace can read it, viewers included. It works the same on Arc testnet and on Arc mainnet.
+The **Report** section says what the agent did with your workspace's bills since the workspace opened: how many it handled and how fast it decided, what it paid and the transaction for each payment, what it stopped and why, how often a person stepped in, what an early-payment discount took off a bill, and, bill by bill, what your business really paid beside what the agent decided. Every member of the workspace can read it, viewers included. It works the same on Arc testnet and on Arc mainnet.
 
 ## What it counts
 
-The report counts from two things the workspace already keeps: its signed ledger, and the transfers Circle confirmed. Nothing on it is typed in by hand.
+The report counts from two things the workspace already keeps: its signed ledger, and the transfers Circle confirmed. Nothing on it is typed in by hand, except what your business paid outside Vestiarion, in [Agent vs what really happened](#agent-vs-what-really-happened), which says who recorded it.
 
 - **Bills** are your payables. A bill from sample data is left out, with everything about it, once the workspace has a real bill. Until then the report counts the sample data, and the box says "This workspace has no real bill yet, so the report counts its sample data."
 - **Payments** are the bills' confirmed transfers on Arc. The amount is what the transfer carried.
@@ -54,6 +54,77 @@ In shadow mode, the report also lists what we suggest before you move a slice of
 />
 
 Nothing on the report moves money, opens a workspace or changes a setting.
+
+## Agent vs what really happened
+
+In shadow mode your business keeps paying its bills from its bank, as it does today. **Agent vs what really happened** sets, bill by bill, what the agent decided beside what your business actually did, once someone records it. Every member can read it; an owner or admin records it, as they add invoices.
+
+For each bill that the agent decided on, or that has a record:
+
+- **The agent**, on Arc testnet or Arc mainnet: its newest decision and its day, such as "Decided to pay it on", "Scheduled it for" or "Held it on" with why, or the day it was paid on Arc, with the payment's transaction. **Your verdict:** agreed or disagreed, when one was given.
+- **Your business**: what was recorded. Paid on a day, the amount and currency, how and the reference; or **Not paid**, with the reason. Under it, **Recorded by** the member's email, and the day. A bill nobody has recorded says **Not recorded**. Nothing is guessed from a payment on Arc, a verdict or the bill's status, and a payment on Arc is always the agent's, never your bank's.
+- Under both: how many days before or after your business paid the agent decided to pay it (or the day it scheduled, or for a bill a person paid on Arc after a hold, the day of that payment); the two amounts when they differ; and the early-payment discount each side took, measured from what was recorded, beside the one on offer, estimated from the terms.
+
+Each figure links to where it comes from. The entry link beside the agent's decision, your verdict or your business's record opens that signed entry in the audit log; the transaction opens on the explorer.
+
+<Screenshot
+  src="/docs/guides/report-actuals-bills.png"
+  alt="Two bills. Atlas Compute, 61.87 USDC, marked Held by the agent, paid by your business: the agent side says it held it on Oct 8, 2026 because code refused it, its three-way match being incomplete, with a link to entry 4; the business side says it was paid on Oct 10, 2026, 61.87 USD by bank transfer, reference SEPA-1110, recorded by ops@harbor-books.example, with a link to entry 24 and a Correct button; below, paid in USD and the bill is in USDC, so the amounts are not compared. Northwind Cloud, 46.41 USDC: the agent held it on Oct 9, 2026 as a repeat of a bill from two days before, the verdict agreed; the business side says Not recorded, with Record what you paid."
+  caption="A bill the agent held that the business paid, and one nobody has recorded yet, each figure linked to its signed entry."
+/>
+
+These bills are marked as worth a look, and come first:
+
+- **Held by the agent, paid by your business**: the agent held, flagged or asked about it, or a check in code stopped it, and your business paid it. A bill the agent only waited on, for cash, a pause or the spending limit, is not counted as held.
+- **Paid on Arc, not paid by your business**, or **The agent would pay it, your business did not**.
+- **Amount differs**: your business paid another amount than Arc carried, or than the bill, in the same currency.
+
+The figures above the bills:
+
+- **Bills compared**: bills with a decision of the agent's and a record, and how many decided bills are not recorded yet.
+- **Agent and business agreed**: bills both paid, or neither paid, out of those compared.
+- **Days apart**: the median of those days, from the agent's side.
+- **Worth a look**: the bills marked, by why.
+- **Paid by your business**: what was recorded, in each currency. Two currencies are never added together, and USD and USDC count as two.
+- **Discounts taken**: by the agent and by your business, each measured; on offer, estimated from the terms.
+
+<Screenshot
+  src="/docs/guides/report-actuals.png"
+  alt="Agent vs what really happened, in a shadow workspace on Arc testnet. Bills compared: 4, 1 not recorded yet. Agent and business agreed: 2 of 4, both paid it or neither did. Days apart: 2.5 days earlier, the median over 2 bills. Worth a look: 2, 1 held but paid and 1 not paid by the business. Paid by your business: 132.28 USD. Discounts taken: 0.48 USDC by the agent, measured; none by the business; 0.48 USD on offer, estimated from the terms."
+  caption="The comparison's figures, each counted from the agent's entries and the business's records."
+/>
+
+In a sandbox the agent's payments are simulated and say so. While the workspace has no real bill, the comparison uses its sample data, as the rest of the report does.
+
+### Record what your business paid
+
+An owner or admin chooses **Record what you paid** on the bill. Under **Outcome**, choose **Paid** or **Not paid**.
+
+- **Paid**: the **Day paid**, the **Amount paid** as it left your account (it starts at the bill's amount), the **Currency** (the bill's own, unless you paid in another), **How it was paid** (**Bank transfer**, **Card**, **Cash** or **Other**), and the **Reference**, if any.
+- **Not paid**: **Why was it not paid?**, in at most 280 characters.
+
+Add a **Note** if you like, then **Save**. To change a record, choose **Correct** and **Save the correction**. The record you corrected stays in the history and in the audit log; the comparison reads the newest.
+
+### Import a CSV
+
+Under **Import what your business paid from a CSV**, choose a file with the columns `invoice`, `paid_date` (YYYY-MM-DD) and `amount`, and if you like `currency` (blank is the bill's own), `reference` and `method` (blank is other). `invoice` is the Vestiarion invoice id, or the bill's invoice number when its memo carries it. **Download the bills not recorded yet** gives a CSV of those bills with their ids, payees, amounts and due days filled in, ready to complete.
+
+Nothing is saved until you check the preview. Each row reads **New**, **Corrects the record** (the bill has a record, and the row differs), **Same as recorded** (skipped), **Not matched** or **Not read**, with why. **Save N payments** saves the rows that change something, each as its own signed entry, and the preview then shows what is left.
+
+### If something goes wrong
+
+| Message | What to do |
+| --- | --- |
+| Recording what your business paid is not set up on this deployment yet. | The deployment's database has not been updated for it yet. The rest of the report is unchanged; try again after the next update. |
+| What your business did about this bill is recorded already. Correct it instead. | Someone recorded it since the page loaded. Reload the page and choose **Correct**. |
+| That record was corrected since. Reload the page and correct the newest one. | Reload the page: the comparison shows the newest record. |
+| Someone recorded this bill a moment before. Reload the page to see it. | Reload the page, then correct it if it is not right. |
+| Choose the day it was paid, on or before tomorrow. | Choose a day that has come. |
+| Type the amount as it was paid, above zero, such as 1,250.00. | A currency with no cents, such as JPY, takes a whole amount. |
+| Type the currency as a three-letter code, such as EUR, or USDC or EURC. | Type the code of the currency you paid in. |
+| Say why it was not paid, in a few words. | Fill in the reason, then save. |
+
+Each record is a signed entry in the ledger: `actual_payment_recorded`, or `actual_payment_corrected` for a correction, with who recorded it, the payable and what was recorded.
 
 ## A new workspace
 

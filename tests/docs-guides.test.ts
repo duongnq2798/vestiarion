@@ -146,6 +146,11 @@ const TEST_USDC_LIBRARY = "src/lib/test-usdc.ts";
 const VERDICT = "src/components/VerdictControl.tsx";
 const REPORT = "src/components/vx/WorkspaceReport.tsx";
 const VERDICTS = "src/lib/verdicts.ts";
+const ACTUALS = "src/components/vx/ActualsComparison.tsx";
+const ACTUAL_CONTROL = "src/components/ActualPaymentControl.tsx";
+const ACTUALS_CSV = "src/components/ActualsCsvImport.tsx";
+const ACTUALS_LIBRARY = "src/lib/actual-payments.ts";
+const ACTUAL_FIELDS = "src/lib/actual-payment-fields.ts";
 
 /** Each guide's quoted UI strings, as `[text, the file it must appear in]`. */
 /**
@@ -157,6 +162,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Report", APP_NAV],
     ["This workspace has no real bill yet, so the report counts its sample data.", "src/components/vx/WorkspaceReport.tsx"],
     ["Sandbox: payments here are simulated.", "src/components/vx/WorkspaceReport.tsx"],
+    ["Agent vs what really happened", "src/components/vx/ActualsComparison.tsx"],
+    ["Record what you paid", "src/components/ActualPaymentControl.tsx"],
     ["Safe to spend today", "src/components/vx/CashOutlook.tsx"],
     ["Next 30 days", "src/components/vx/CashOutlook.tsx"],
     ["Continue with Google", LOGIN_PAGE],
@@ -980,6 +987,59 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Have each supplier's own Arc address", REPORT],
     ["Open a workspace on", REPORT],
     ["No real bills yet", REPORT],
+    // Agent vs what really happened (actual payments A5-A8).
+    ["Agent vs what really happened", ACTUALS],
+    ["Decided to pay it on", ACTUALS],
+    ["Scheduled it for", ACTUALS],
+    ["Held it on", ACTUALS],
+    ["Your verdict:", ACTUALS],
+    ["Your business", ACTUALS],
+    ["Recorded by", ACTUALS],
+    ["Not recorded", ACTUALS],
+    ["Held by the agent, paid by your business", ACTUALS],
+    ["Paid on Arc, not paid by your business", ACTUALS],
+    ["The agent would pay it, your business did not", ACTUALS],
+    ["Amount differs", ACTUALS],
+    ["Bills compared", ACTUALS],
+    ["Agent and business agreed", ACTUALS],
+    ["Days apart", ACTUALS],
+    ["Worth a look", ACTUALS],
+    ["Paid by your business", ACTUALS],
+    ["Discounts taken", ACTUALS],
+    ["Import what your business paid from a CSV", ACTUALS],
+    ["Download the bills not recorded yet", ACTUALS],
+    ["Recording what your business paid is not set up on this deployment yet.", ACTUALS],
+    ["Record what you paid", ACTUAL_CONTROL],
+    ["Outcome", ACTUAL_CONTROL],
+    ["Not paid", ACTUAL_CONTROL],
+    ["Day paid", ACTUAL_CONTROL],
+    ["Amount paid", ACTUAL_CONTROL],
+    ["How it was paid", ACTUAL_CONTROL],
+    ["Reference", ACTUAL_CONTROL],
+    ["Why was it not paid?", ACTUAL_CONTROL],
+    ["Note", ACTUAL_CONTROL],
+    ["Correct", ACTUAL_CONTROL],
+    ["Save the correction", ACTUAL_CONTROL],
+    ["Bank transfer", ACTUAL_FIELDS],
+    ["Card", ACTUAL_FIELDS],
+    ["Cash", ACTUAL_FIELDS],
+    ["Other", ACTUAL_FIELDS],
+    ["New", ACTUALS_CSV],
+    ["Corrects the record", ACTUALS_CSV],
+    ["Same as recorded", ACTUALS_CSV],
+    ["Not matched", ACTUALS_CSV],
+    ["Not read", ACTUALS_CSV],
+    ["Save N payments", ACTUALS_CSV, "Save ${toSave} ${toSave === 1 ? \"payment\" : \"payments\"}"],
+    ["Recording what your business paid is not set up on this deployment yet.", ACTUALS_LIBRARY],
+    ["What your business did about this bill is recorded already. Correct it instead.", ACTUALS_LIBRARY],
+    ["That record was corrected since. Reload the page and correct the newest one.", ACTUALS_LIBRARY],
+    ["Someone recorded this bill a moment before. Reload the page to see it.", ACTUALS_LIBRARY],
+    ["Choose the day it was paid, on or before tomorrow.", ACTUALS_LIBRARY],
+    ["Type the amount as it was paid, above zero, such as 1,250.00.", ACTUALS_LIBRARY],
+    ["Type the currency as a three-letter code, such as EUR, or USDC or EURC.", ACTUALS_LIBRARY],
+    ["Say why it was not paid, in a few words.", ACTUALS_LIBRARY],
+    ["actual_payment_recorded", ACTUALS_LIBRARY],
+    ["actual_payment_corrected", ACTUALS_LIBRARY],
   ],
   "guides/shadow-mode": [
     ["Shadow mode: it waits for a person to agree.", "src/components/vx/decision-signals.ts"],
@@ -1053,6 +1113,11 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Keep the reason to 280 characters.", VERDICTS],
     ["It no longer waits for your verdict, so nothing was paid.", VERDICTS],
     ["A verdict was given on this decision already", "src/app/actions/verdicts.ts"],
+    ["Agent vs what really happened", ACTUALS],
+    ["Record what you paid", ACTUAL_CONTROL],
+    ["Download the bills not recorded yet", ACTUALS],
+    ["actual_payment_recorded", ACTUALS_LIBRARY],
+    ["actual_payment_corrected", ACTUALS_LIBRARY],
   ],
   "guides/audit-export": [
     ["Audit log", APP_NAV],

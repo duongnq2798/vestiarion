@@ -39,6 +39,8 @@ import { invoiceDecision, milestoneDecision } from "@/components/vx/map";
 import type { NavKey } from "@/components/vx/nav";
 import { Hash } from "@/components/vx/Primitives";
 import { ReportLists, ReportReadiness, ReportSummary } from "@/components/vx/WorkspaceReport";
+import { ActualsBills, ActualsSummary } from "@/components/vx/ActualsComparison";
+import { compareActuals, type ActualRecord } from "@/lib/actual-payments-compare";
 import type { WaitingPayable } from "@/lib/agent/approvals";
 import { waitingHint } from "@/lib/added-details";
 import { heldReason } from "@/lib/agent/milestone-decisions";
@@ -47,7 +49,7 @@ import type { PayeeLinkStatus } from "@/lib/payee-journey";
 import type { GoLiveStatus } from "@/lib/platform/go-live";
 import { gettingStarted } from "@/lib/getting-started";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow } from "@/lib/queries";
-import { buildReport, type ReportBill, type ReportDecision } from "@/lib/workspace-report";
+import { buildReport, type ReportBill, type ReportDecision, type ReportFacts } from "@/lib/workspace-report";
 import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
 
 /**
@@ -608,7 +610,7 @@ const reportPayment = (id: string, amount: number, minute: number) => ({
   at: `2026-10-08T10:${String(minute).padStart(2, "0")}:00Z`,
   simulated: false,
 });
-const REPORT = buildReport({
+const REPORT_FACTS: ReportFacts = {
   network: "arc-testnet",
   sandbox: false,
   openedAt: REPORT_OPENED,
@@ -640,6 +642,47 @@ const REPORT = buildReport({
     { entrySeq: 5, verdict: "agree" },
   ],
   payments: [reportPayment("11", 46.41, 1), reportPayment("22", 23.52, 6), reportPayment("33", 13.5, 11)],
+};
+const REPORT = buildReport(REPORT_FACTS);
+
+/** What the same business recorded paying from its bank, for the comparison (actual payments design): made up too. */
+const ACTUALS_RECORDER = "00000000-0000-4000-8000-0000000004aa";
+const actualRecord = (id: string, over: Partial<ActualRecord>): ActualRecord => ({
+  id: `00000000-0000-4000-8000-0000000004${id}`,
+  invoiceId: `00000000-0000-4000-8000-0000000003${id}`,
+  outcome: "paid",
+  paidOn: "2026-10-09",
+  amount: null,
+  currency: "USD",
+  method: "bank_transfer",
+  reference: null,
+  note: null,
+  reason: null,
+  replaces: null,
+  source: "form",
+  recordedBy: ACTUALS_RECORDER,
+  recordedAt: "2026-10-12T08:15:00Z",
+  ...over,
+});
+const ACTUALS = compareActuals(REPORT_FACTS, {
+  records: [
+    actualRecord("11", { amount: 46.41, reference: "SEPA-1108" }),
+    actualRecord("22", { paidOn: "2026-10-12", amount: 24, method: "card" }),
+    actualRecord("33", { outcome: "not_paid", paidOn: null, amount: null, currency: null, method: null, reason: "Moved to annual billing: this month's bill was cancelled" }),
+    actualRecord("44", { paidOn: "2026-10-10", amount: 61.87, reference: "SEPA-1110" }),
+  ],
+  entries: new Map([
+    ["00000000-0000-4000-8000-000000000411", 21],
+    ["00000000-0000-4000-8000-000000000422", 22],
+    ["00000000-0000-4000-8000-000000000433", 23],
+    ["00000000-0000-4000-8000-000000000444", 24],
+  ]),
+  verdictEntries: new Map([
+    [1, 12],
+    [2, 13],
+    [3, 14],
+    [5, 15],
+  ]),
 });
 
 export const DOCS_SHOTS = {
@@ -1163,6 +1206,28 @@ export const DOCS_SHOTS = {
   },
   "report-readiness": { guide: "report", render: () => <ReportReadiness steps={REPORT.readiness ?? []} /> },
   "report-lists": { guide: "report", render: () => <ReportLists slug={SLUG} report={REPORT} /> },
+  "report-actuals": {
+    guide: "report",
+    render: () => (
+      <>
+        <SectionHeader title="Agent vs what really happened" />
+        <ActualsSummary comparison={ACTUALS} />
+      </>
+    ),
+  },
+  "report-actuals-bills": {
+    guide: "report",
+    render: () => (
+      <ActualsBills
+        slug={SLUG}
+        comparison={ACTUALS}
+        // A bill held but paid by the business, and one nobody has recorded yet.
+        rows={ACTUALS.rows.filter((row) => row.flags.includes("held_but_paid") || row.actual === null)}
+        canRecord
+        members={{ [ACTUALS_RECORDER]: "ops@harbor-books.example" }}
+      />
+    ),
+  },
   "import-bills-columns": { guide: "import-bills", page: "invoices", render: () => <BillImportShot step="columns" /> },
   "import-bills-check": { guide: "import-bills", page: "invoices", render: () => <BillImportShot step="check" /> },
 } satisfies Record<string, DocsShot>;

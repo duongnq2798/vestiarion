@@ -171,6 +171,8 @@ const SHOTS = {
   "report-shadow": async () => {},
   "report-readiness": async () => {},
   "report-lists": async () => {},
+  "report-actuals": async () => {},
+  "report-actuals-bills": async () => {},
   "import-bills-columns": async () => {},
   "import-bills-check": async () => {},
 };
