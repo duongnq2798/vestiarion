@@ -210,7 +210,9 @@ export function compareActuals(facts: ReportFacts, actuals: ActualsFacts): Actua
   const verdictOf = new Map(facts.verdicts.map((verdict) => [verdict.entrySeq, verdict.verdict]));
   const current = currentActuals(actuals.records);
 
-  const rows: Array<ComparisonRow & { sortAt: number }> = [];
+  const rows: ComparisonRow[] = [];
+  /** When each bill last moved: added, decided on, or recorded. */
+  const lastMoved = new Map<string, number>();
   for (const bill of bills) {
     const list = decisionsOf.get(bill.id) ?? [];
     const recorded = current.get(bill.id);
@@ -275,7 +277,7 @@ export function compareActuals(facts: ReportFacts, actuals: ActualsFacts): Actua
       };
     }
 
-    const newestAt = Math.max(Date.parse(bill.createdAt), ...list.map((decision) => Date.parse(decision.ts)), actual ? Date.parse(actual.recordedAt) : 0);
+    lastMoved.set(bill.id, Math.max(Date.parse(bill.createdAt), ...list.map((decision) => Date.parse(decision.ts)), actual ? Date.parse(actual.recordedAt) : 0));
     rows.push({
       invoiceId: bill.id,
       payee: bill.payee.name,
@@ -290,12 +292,13 @@ export function compareActuals(facts: ReportFacts, actuals: ActualsFacts): Actua
       flags,
       agrees,
       discount,
-      sortAt: newestAt,
     });
   }
 
   // What is worth a look first, then the newest.
-  rows.sort((a, b) => Number(b.flags.length > 0) - Number(a.flags.length > 0) || b.sortAt - a.sortAt || (a.invoiceId < b.invoiceId ? -1 : 1));
+  rows.sort(
+    (a, b) => Number(b.flags.length > 0) - Number(a.flags.length > 0) || lastMoved.get(b.invoiceId)! - lastMoved.get(a.invoiceId)! || (a.invoiceId < b.invoiceId ? -1 : 1)
+  );
   const decided = rows.filter((row) => row.agent.stance !== "none");
   const days = rows.flatMap((row) => (row.daysDiff === null ? [] : [row.daysDiff]));
 
@@ -303,7 +306,7 @@ export function compareActuals(facts: ReportFacts, actuals: ActualsFacts): Actua
     network: facts.network,
     simulated: facts.sandbox,
     source,
-    rows: rows.map(({ sortAt: _sortAt, ...row }) => row),
+    rows,
     totals: {
       compared: decided.filter((row) => row.actual !== null).length,
       notRecorded: decided.filter((row) => row.actual === null).length,

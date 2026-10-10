@@ -61,13 +61,26 @@ const COLUMNS: Record<keyof Omit<ActualsCsvRow, "line">, readonly string[]> = {
 const REQUIRED = ["invoice", "paidDate", "amount"] as const;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** A file that cannot be read as a payments CSV, in words to show the person who chose it. */
+export class ActualsCsvError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ActualsCsvError";
+  }
+}
+
 export function parseActualsCsv(csv: string): ActualsCsvRow[] {
-  const rows = rowsFromCsv(csv.replace(/^﻿/, ""));
-  if (rows.length === 0) throw new Error("The CSV is empty.");
+  let rows: string[][];
+  try {
+    rows = rowsFromCsv(csv.replace(/^\uFEFF/, ""));
+  } catch {
+    throw new ActualsCsvError("The CSV has a quoted field that is never closed.");
+  }
+  if (rows.length === 0) throw new ActualsCsvError("The CSV is empty.");
   const headers = rows[0].map(normalizedHeader);
   const at = Object.fromEntries(Object.entries(COLUMNS).map(([key, names]) => [key, headers.findIndex((header) => names.includes(header))])) as Record<keyof typeof COLUMNS, number>;
   const missing = REQUIRED.filter((key) => at[key] === -1).map((key) => COLUMNS[key][0]);
-  if (missing.length > 0) throw new Error(`Missing CSV column${missing.length === 1 ? "" : "s"}: ${missing.join(", ")}`);
+  if (missing.length > 0) throw new ActualsCsvError(`Missing CSV column${missing.length === 1 ? "" : "s"}: ${missing.join(", ")}`);
 
   const cell = (values: string[], key: keyof typeof COLUMNS) => (at[key] === -1 ? "" : (values[at[key]] ?? "").trim());
   const read = rows.slice(1).flatMap((values, index) => {
@@ -83,8 +96,8 @@ export function parseActualsCsv(csv: string): ActualsCsvRow[] {
     // A row not filled in, such as the template's, is no payment.
     return row.paidDate === "" && row.amount === "" ? [] : [row];
   });
-  if (read.length === 0) throw new Error("The CSV has a header but no payment.");
-  if (read.length > ACTUALS_CSV_MAX_ROWS) throw new Error(`Import at most ${ACTUALS_CSV_MAX_ROWS} payments at a time.`);
+  if (read.length === 0) throw new ActualsCsvError("The CSV has a header but no payment.");
+  if (read.length > ACTUALS_CSV_MAX_ROWS) throw new ActualsCsvError(`Import at most ${ACTUALS_CSV_MAX_ROWS} payments at a time.`);
   return read;
 }
 

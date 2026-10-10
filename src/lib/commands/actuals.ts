@@ -1,5 +1,5 @@
 import { ActualPaymentError, readMatchBills, recordActual, type ActualInput } from "../actual-payments";
-import { matchActualsCsv, parseActualsCsv } from "../actual-payments-csv";
+import { ActualsCsvError, matchActualsCsv, parseActualsCsv } from "../actual-payments-csv";
 import { billDigits } from "../bill-amount";
 import { plural, utcDay } from "../copy";
 import { db } from "../dal";
@@ -54,7 +54,8 @@ export async function importActualPayments(
   try {
     rows = parseActualsCsv(input.csv);
   } catch (error) {
-    return refused("csv", error instanceof Error ? error.message : "The CSV could not be read.");
+    if (error instanceof ActualsCsvError) return refused("csv", error.message);
+    throw error;
   }
 
   let preview: ReturnType<typeof matchActualsCsv>;
@@ -72,7 +73,7 @@ export async function importActualPayments(
   let same = 0;
   const notSaved: NotSavedRow[] = [];
   for (const row of preview) {
-    if (row.status === "unmatched" || row.status === "invalid") {
+    if (!("record" in row)) {
       notSaved.push({ line: row.line, invoice: row.invoice, why: row.why });
       continue;
     }
