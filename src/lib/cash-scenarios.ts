@@ -153,6 +153,8 @@ export interface Coverage {
 
 export interface ScenarioResult {
   horizon: Horizon;
+  /** The levers as they were applied, each held within its range. */
+  levers: { lateDays: number; costPct: number; costScope: ScenarioLevers["costScope"] };
   today: string;
   lastDay: string;
   cash: number;
@@ -339,6 +341,7 @@ export function cashScenario(basis: ScenarioBasis, levers: ScenarioLevers): Scen
 
   return {
     horizon,
+    levers: { lateDays, costPct, costScope: levers.costScope },
     today: basis.today,
     lastDay: dayOf(horizon - 1),
     cash: basis.cash,
