@@ -34,6 +34,7 @@ import { plural } from "@/lib/copy";
 import { listCounterparties, stats } from "@/lib/queries";
 import { readShadowMode } from "@/lib/shadow-mode";
 import { workspaceNetwork } from "@/lib/workspace-network";
+import { shellStatus } from "@/lib/shell-status";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +49,7 @@ export default async function CounterpartiesPage({
 }) {
   const { slug } = await params;
   const access = await requireMembership(slug);
-  // `?add`, from an invoice with no counterparty to choose (AP / AR, From a document), opens Add counterparty.
+  // `?add`, from an invoice with no counterparty to choose (Bills & receivables, From a document), opens Add counterparty.
   const adding = (await searchParams).add !== undefined;
   return inOrg(access, async () => {
     const network = workspaceNetwork().id;
@@ -77,7 +78,7 @@ export default async function CounterpartiesPage({
     });
 
     return (
-      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()} status={await shellStatus()}>
         <PageHead
           title={sectionTitle("counterparties")}
           sub="Add the people and businesses Vestiarion may invoice or pay. Each new record is screened immediately."

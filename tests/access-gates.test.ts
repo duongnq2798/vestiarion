@@ -316,8 +316,9 @@ describe("every component", () => {
   // organization's scope, where a tenant read refuses — and a component in a
   // client bundle has no database at all. So a component takes tenant data
   // as props and never loads it: a type from these modules is fine, a value
-  // is not. The one exception reads platform configuration, not tenant data:
-  // Shell's `import { screeningMode } from "@/lib/compliance"`.
+  // is not. The workspace header's screening status is read by each page in
+  // its scope (src/lib/shell-status.ts) and handed down, so no component is an
+  // exception (workspace shell design S5).
   const COMPONENTS = walk(path.join(ROOT, "src", "components")).filter((file) => /\.(ts|tsx)$/.test(file));
 
   it("exists — the list is not empty", () => {
@@ -329,7 +330,6 @@ describe("every component", () => {
       valueImports(read(file)).flatMap(({ specifier, names }) => {
         const imported = moduleOf(specifier, file);
         if (!imported || !loadsTenantData(imported)) return [];
-        if (imported === "src/lib/compliance" && names.length > 0 && names.every((name) => name === "screeningMode")) return [];
         return [`${rel(file)}: { ${names.join(", ")} } from "${specifier}"`];
       })
     );
@@ -338,8 +338,8 @@ describe("every component", () => {
 
   it("reads imports the way that check depends on", () => {
     // Without this, a parser that found nothing would pass the check above.
-    expect(valueImports(read(path.join(ROOT, "src", "components", "vx", "Shell.tsx")))).toContainEqual({
-      specifier: "@/lib/compliance",
+    expect(valueImports(read(path.join(ROOT, "src", "lib", "shell-status.ts")))).toContainEqual({
+      specifier: "./compliance",
       names: ["screeningMode"],
     });
     expect(valueImports('import type { LedgerEntry } from "@/lib/ledger";\nimport { type A,\n  type B } from "@/lib/queries";\n')).toEqual([]);

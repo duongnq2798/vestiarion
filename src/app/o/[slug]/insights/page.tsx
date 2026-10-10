@@ -7,6 +7,7 @@ import { shellModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
 import { getInsightsData } from "@/lib/insights";
 import { stats } from "@/lib/queries";
+import { shellStatus } from "@/lib/shell-status";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ export default async function InsightsPage({ params }: { params: Promise<{ slug:
     const [data, dashboardStats] = await Promise.all([getInsightsData(), stats()]);
 
     return (
-      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()} status={await shellStatus()}>
         <PageHead
           title={sectionTitle("insights")}
           sub="Measured outcomes: receipts from completed cycles, payment execution, and screening checks. Empty space means the system has not measured it yet."

@@ -4,9 +4,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import GitHubPanel from "@/components/GitHubPanel";
 import { noticeEmailDescription } from "@/components/intake/CounterpartyNoticeEmailEdit";
-import { ProvenanceBar } from "@/components/vx/Provenance";
-import { chainLegs, shellFooterLine } from "@/components/vx/Shell";
+import { shellFooterLine } from "@/components/vx/Shell";
 import { AccountsList } from "@/components/vx/Treasury";
+import { statusChips, statusRows, type PageStatus, type PlatformStatus } from "@/components/vx/workspace-status";
 
 /**
  * Workspace pages name their workspace's network, and draw only the features it has (docs/superpowers/specs/
@@ -16,45 +16,48 @@ import { AccountsList } from "@/components/vx/Treasury";
 
 vi.mock("server-only", () => ({}));
 
-const PAGES = ["approvals", "audit", "compliance", "console", "contractors", "counterparties", "insights", "invoices", "members", "settings"] as const;
+const PAGES = ["approvals", "audit", "compliance", "console", "contractors", "counterparties", "insights", "invoices", "members", "report", "settings"] as const;
 const source = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8");
 const page = (name: string) => source(`src/app/o/[slug]/${name}/page.tsx`);
 const squash = (text: string) => text.replace(/\s+/g, " ");
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/\s+/g, " ").trim();
 
-describe("the shell on the workspace's network (mainnet copy C1, C3)", () => {
+describe("the shell on the workspace's network (mainnet copy C1, C3; workspace shell design S5)", () => {
   const modes = { mode: "live" as const, earnMode: "simulate" as const, held: false };
+  const platform = (network: PlatformStatus["network"]): PlatformStatus => ({ network, mode: "live", mainnetEnabled: true, paymentsOff: null, pause: null });
+  const pageStatus = (chain: PageStatus["chain"]): PageStatus => ({ chain, shadow: false, screening: { live: true, source: "OpenSanctions" }, clock: { mode: "real", day: 1 } });
 
-  it("names Arc testnet, beside the USYC reserve's Yield leg, as before", () => {
-    expect(chainLegs("arc-testnet", modes)).toEqual([
-      { label: "Payments", detail: "Arc testnet", live: true },
-      { label: "Yield", detail: "USYC reserve", live: false },
-    ]);
+  it("names Arc testnet, with the USYC reserve beside it, as before", () => {
+    expect(statusChips(platform("arc-testnet"), pageStatus(modes))[0]).toEqual({ key: "network", label: "Arc testnet", tone: "quiet" });
+    expect(statusRows(platform("arc-testnet"), pageStatus(modes)).find((row) => row.key === "reserve")?.value).toBe("Simulated");
     expect(shellFooterLine("arc-testnet")).toBe("Hash-chained decisions · Ed25519 signed · Arc testnet");
   });
 
-  it("names Arc mainnet, with no Yield leg where the network has no reserve", () => {
-    expect(chainLegs("arc-mainnet", modes)).toEqual([{ label: "Payments", detail: "Arc mainnet", live: true }]);
+  it("names Arc mainnet, with no reserve where the network has none", () => {
+    expect(statusChips(platform("arc-mainnet"), pageStatus(modes))[0]).toEqual({ key: "network", label: "Arc mainnet", tone: "mainnet" });
+    expect(statusRows(platform("arc-mainnet"), pageStatus(modes)).map((row) => row.key)).not.toContain("reserve");
     expect(shellFooterLine("arc-mainnet")).toBe("Hash-chained decisions · Ed25519 signed · Arc mainnet");
   });
 
-  it("says Held, not Live or Simulated, when nothing can pay: the status API's unavailable (final review I2, mainnet copy C12)", () => {
+  it("says held, not live or simulated, when nothing can pay: the status API's unavailable (final review I2, mainnet copy C12)", () => {
     // Arc mainnet connected but not live, with no Circle account, or switched off: chainModes() reads live or simulate.
     for (const mode of ["live", "simulate"] as const) {
-      expect(chainLegs("arc-mainnet", { mode, earnMode: "simulate", held: true })).toEqual([{ label: "Payments", detail: "Arc mainnet", live: false, held: true }]);
+      expect(statusChips(platform("arc-mainnet"), pageStatus({ mode, earnMode: "simulate", held: true }))[1]).toEqual({ key: "payments", label: "Payments held", tone: "held" });
     }
-    // Credentials that cannot be read hold Arc testnet too, both legs.
-    expect(chainLegs("arc-testnet", { mode: "simulate", earnMode: "simulate", held: true })).toEqual([
-      { label: "Payments", detail: "Arc testnet", live: false, held: true },
-      { label: "Yield", detail: "USYC reserve", live: false, held: true },
-    ]);
-    const markup = text(renderToStaticMarkup(<ProvenanceBar legs={chainLegs("arc-mainnet", { mode: "live", earnMode: "simulate", held: true })} />));
-    expect(markup).toContain("Held");
-    expect(markup).not.toMatch(/Live|Simulated/);
+    // Credentials that cannot be read hold Arc testnet too: payments and the reserve.
+    const rows = statusRows(platform("arc-testnet"), pageStatus({ mode: "simulate", earnMode: "simulate", held: true }));
+    expect(rows.find((row) => row.key === "payments")?.value).toBe("Held");
+    expect(rows.find((row) => row.key === "reserve")?.value).toBe("Held");
   });
 
   it.each(PAGES)("is handed whether nothing can pay by the %s page", (name) => {
     expect(squash(page(name))).toMatch(/<ProductShell [^>]*chainModes=\{(shellModes\(\)|\{ \.\.\.modes, held: paymentsHeld\(\) \})\}/);
+  });
+
+  // Shadow mode and screening are read inside the workspace's scope (workspace shell design S5): out of it, screening
+  // would be the deployment's settings, not the workspace's.
+  it.each(PAGES)("is handed shadow mode and screening by the %s page", (name) => {
+    expect(squash(page(name))).toMatch(/<ProductShell [^>]*status=\{await shellStatus\(\)\}/);
   });
 
   it("reads Held from the rule the status API reads", () => {

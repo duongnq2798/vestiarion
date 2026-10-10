@@ -53,7 +53,7 @@ function readinessWords(step: ReadinessStep, mainnetLabel: string): { title: str
     case "waiting":
       return {
         title: "Leave no decision waiting for your verdict",
-        note: step.waiting === 0 ? "None waiting." : `${step.waiting} ${plural(step.waiting, "decision waits", "decisions wait")} in AP / AR.`,
+        note: step.waiting === 0 ? "None waiting." : `${step.waiting} ${plural(step.waiting, "decision waits", "decisions wait")} in Bills & receivables.`,
       };
     case "addresses":
       return {
@@ -75,11 +75,11 @@ export function WorkspaceReport({ slug, report, actuals }: { slug: string; repor
       <EmptyState
         icon={<FileText />}
         title="No real bills yet"
-        body="Add a bill in AP / AR, or forward one by email, and the agent decides on it within a minute. This report counts what it did from then on."
+        body="Add a bill in Bills & receivables, or forward one by email, and the agent decides on it within a minute. This report counts what it did from then on."
         action={
           <Button asChild size="sm">
             <Link href={orgHref(slug, "/invoices")}>
-              Open AP / AR
+              Open Bills & receivables
               <ArrowRight aria-hidden />
             </Link>
           </Button>

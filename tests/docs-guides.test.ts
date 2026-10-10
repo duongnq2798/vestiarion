@@ -15,6 +15,7 @@ import { txUrl } from "@/lib/payee-chains";
 
 type GuideSlug =
   | "guides/try-it"
+  | "guides/workspace"
   | "guides/go-live"
   | "guides/shadow-mode"
   | "guides/report"
@@ -159,6 +160,44 @@ const ACTUAL_FIELDS = "src/lib/actual-payment-fields.ts";
  * text from the workspace's network (mainnet copy C1), the text as the file writes it.
  */
 const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
+  // The workspace frame (workspace shell design S1-S5, S9).
+  "guides/workspace": [
+    ["Treasury", APP_NAV],
+    ["Approvals", APP_NAV],
+    ["Operations", APP_NAV],
+    ["Bills & receivables", APP_NAV],
+    ["Counterparties", APP_NAV],
+    ["Contractors", APP_NAV],
+    ["Controls", APP_NAV],
+    ["Compliance", APP_NAV],
+    ["Audit log", APP_NAV],
+    ["Analytics", APP_NAV],
+    ["Insights", APP_NAV],
+    ["Report", APP_NAV],
+    ["Members", APP_NAV],
+    ["Settings", APP_NAV],
+    ["Live", "src/components/vx/WorkspaceMeta.tsx"],
+    ["Sandbox", "src/components/vx/WorkspaceMeta.tsx"],
+    ["Not live yet", "src/components/vx/WorkspaceMeta.tsx"],
+    ["Collapse sidebar", "src/components/vx/WorkspaceHeader.tsx"],
+    ["Expand sidebar", "src/components/vx/WorkspaceHeader.tsx"],
+    ["Workspace status", "src/components/vx/WorkspaceHeader.tsx"],
+    ["Arc mainnet", "src/lib/network.ts"],
+    ["Payments off", "src/components/vx/workspace-status.ts"],
+    ["Payments held", "src/components/vx/workspace-status.ts"],
+    ["Shadow mode", "src/components/vx/workspace-status.ts"],
+    ["Payments simulated", "src/components/vx/workspace-status.ts"],
+    ["Payments live", "src/components/vx/workspace-status.ts"],
+    ["Agent on", "src/components/vx/workspace-status.ts"],
+    ["Agent paused", "src/components/vx/workspace-status.ts"],
+    ["Agent stopped", "src/components/vx/workspace-status.ts"],
+    ["Search…", "src/components/vx/AppNav.tsx"],
+    ["Shortcuts", "src/components/vx/CommandPalette.tsx"],
+    ["Add a bill", "src/components/vx/command-items.ts"],
+    ["Add a counterparty", "src/components/vx/command-items.ts"],
+    ["Agent spending limit", "src/components/vx/command-items.ts"],
+    ["Go live", "src/components/vx/command-items.ts"],
+  ],
   "guides/try-it": [
     ["Run alongside how you pay today (shadow mode)", CREATE_FORM],
     ["Add a supplier", GETTING_STARTED],
@@ -181,7 +220,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Try it with sample data", SAMPLE_PANEL],
     ["Load sample data", SAMPLE_PANEL],
     ["Run cycle now", RUN],
-    ["AP / AR", APP_NAV],
+    ["Bills & receivables", APP_NAV],
     ["Agent’s reasoning", DECISION_CARD],
     ["Blocked by code, not by the model", DECISION_CARD],
     ["Approvals", APP_NAV],
@@ -457,7 +496,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Add and screen", COUNTERPARTY_FORM],
     ["added and screened:", INTAKE_ACTIONS],
     ["A payment to a counterparty without one is held for review.", PANEL],
-    ["AP / AR", APP_NAV],
+    ["Bills & receivables", APP_NAV],
     ["New invoice", INVOICES_PAGE],
     ["Needs you", INVOICES_PAGE],
     ["Upcoming", INVOICES_PAGE],
@@ -756,7 +795,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["/disconnect", TELEGRAM_MESSAGES],
     ["Verify hash chain", VERIFY_BADGE],
     ["From a document", INVOICES_PAGE],
-    ["AP / AR", APP_NAV],
+    ["Bills & receivables", APP_NAV],
     ["The model's note:", TELEGRAM_MESSAGES],
     ["Add, goods received", TELEGRAM_INTAKE],
     ["Add, not received yet", TELEGRAM_INTAKE],
@@ -771,7 +810,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   ],
   "guides/email-invoices": [
     ["Settings", APP_NAV],
-    ["AP / AR", APP_NAV],
+    ["Bills & receivables", APP_NAV],
     ["From a document", INVOICES_PAGE],
     ["Invoices by email", INBOX_PANEL],
     ["Turn on", INBOX_PANEL],
@@ -800,7 +839,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Its invoice is attached as an image (", INBOX_RECEIVE],
     ["which Vestiarion cannot read yet. Ask the sender for the PDF, or type it in with Finish and add.", INBOX_RECEIVE],
     ["Check it against the invoice.", DOCUMENT_NORMALIZE],
-    ["Review in AP / AR", INBOX_RECEIVE],
+    ["Review in Bills & receivables", INBOX_RECEIVE],
     ["invoice_email_received", INBOX_RECEIVE],
     ["invoice_email_dismissed", INBOX_COMMANDS],
     ["This email was already decided, or cannot be added as it was read.", INBOX_COMMANDS],
@@ -1027,7 +1066,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Shadow mode", SHADOW_PANEL],
     ["Your currency", SHADOW_PANEL],
     ["Turn on shadow mode", SHADOW_PANEL],
-    ["AP / AR", APP_NAV],
+    ["Bills & receivables", APP_NAV],
     ["Approvals", APP_NAV],
     ["Do you agree with the agent?", VERDICT],
     ["Agree and pay", VERDICT],
@@ -1038,7 +1077,11 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Decide it again later", VERDICT],
     ["Do not pay it", VERDICT],
     ["Agree", VERDICT],
-    ["See them in AP / AR", SHADOW_SUMMARY],
+    ["Waiting for your verdict", "src/components/vx/map.ts"],
+    ["See them in Bills & receivables", SHADOW_SUMMARY],
+    ["Agreement", SHADOW_SUMMARY],
+    ["Verdicts given", SHADOW_SUMMARY],
+    ["Waiting for you", SHADOW_SUMMARY],
     // Test USDC from Vestiarion's float, in the console's shadow mode section (test USDC T8).
     ["Safe to spend today", "src/components/vx/CashOutlook.tsx"],
     ["Your open bills need N USDC more than the operating wallet holds.", SHADOW_SUMMARY, "Your open bills need ${usdc(testUsdc.view.need)} USDC more than the operating wallet holds."],
@@ -1159,6 +1202,7 @@ const sourceFile = (file: string) => readFileSync(path.join(process.cwd(), file)
  */
 const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/try-it": 20,
+  "guides/workspace": 20,
   "guides/go-live": 20,
   "guides/shadow-mode": 20,
   "guides/report": 20,

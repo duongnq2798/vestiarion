@@ -90,12 +90,12 @@ What you decide is rewritten into the message for the channel: "Approved and pai
 An owner or admin can add a payable from an invoice in Slack: a PDF, an `.eml` or `.txt` file of at most 4 MB attached to a message, or the invoice's text in the message itself.
 
 1. On the message, open **More actions** and choose **Add invoice**.
-2. Vestiarion reads it the way **From a document** on AP / AR reads one, and answers you alone with every field it read, what to check, and The model's note: when there is one.
+2. Vestiarion reads it the way **From a document** on Bills & receivables reads one, and answers you alone with every field it read, what to check, and The model's note: when there is one.
 3. Choose **Add, goods received** or **Add, not received yet** to add it, or **Cancel**, which answers "Not added."
 
-The payable is added exactly as one added on AP / AR: the ledger's `create_invoice` entry names you, and adds `via: "slack"`, the id of your Slack link and the hash of the document. The document itself is not kept. The agent usually decides within a minute, and its decision is posted to the channel like any other. A draft can be added once, within an hour; after that you are told "This draft was already used or has expired."
+The payable is added exactly as one added on Bills & receivables: the ledger's `create_invoice` entry names you, and adds `via: "slack"`, the id of your Slack link and the hash of the document. The document itself is not kept. The agent usually decides within a minute, and its decision is posted to the channel like any other. A draft can be added once, within an hour; after that you are told "This draft was already used or has expired."
 
-When the invoice's vendor matches no counterparty in the workspace, or it has no amount or due date, Vestiarion says what is missing and links to AP / AR, where you can add it by hand. An approver or a viewer is told "Only an owner or admin can add invoices."
+When the invoice's vendor matches no counterparty in the workspace, or it has no amount or due date, Vestiarion says what is missing and links to Bills & receivables, where you can add it by hand. An approver or a viewer is told "Only an owner or admin can add invoices."
 
 Vestiarion reads only the message you chose it on, and Slack lets it open a file only in a channel it is in: for a file shared anywhere else, type `/invite @Vestiarion` in that channel first. If Slack was connected before this was possible, Vestiarion answers that it cannot open files in this Slack yet: an owner or admin chooses **Reconnect Slack** once, and Slack asks them to allow it.
 

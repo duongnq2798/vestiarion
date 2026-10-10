@@ -128,17 +128,18 @@ function shown(read: InvoiceDraftRead, known: boolean): ShownRead {
 /** The channel's message about an email that arrived: what it holds, and the link to decide it (E9). */
 function slackMessage(status: Status, from: string, read: InvoiceDraftRead | null, reasons: string[], url: string) {
   const who = read?.counterpartyName ?? read?.draft.vendorName ?? from;
+  // Slack mrkdwn: `&amp;` shows as &.
   const line =
     status === "ready" && read
-      ? `New invoice by email from *${mrkdwn(who)}*: ${mrkdwn(`${read.draft.amount ?? "?"} ${read.draft.currency ?? "USDC"}`)}, due ${mrkdwn(read.draft.dueDate ?? "?")}. A person adds it in AP / AR; nothing is paid until then.`
+      ? `New invoice by email from *${mrkdwn(who)}*: ${mrkdwn(`${read.draft.amount ?? "?"} ${read.draft.currency ?? "USDC"}`)}, due ${mrkdwn(read.draft.dueDate ?? "?")}. A person adds it in Bills &amp; receivables; nothing is paid until then.`
       : status === "needs_details"
-        ? `New invoice by email from *${mrkdwn(who)}*, but it cannot be added as it was read: ${mrkdwn(reasons[0] ?? "a field is missing")}. Finish it in AP / AR.`
+        ? `New invoice by email from *${mrkdwn(who)}*, but it cannot be added as it was read: ${mrkdwn(reasons[0] ?? "a field is missing")}. Finish it in Bills &amp; receivables.`
         : `An email arrived at the invoice address from ${mrkdwn(from)}, but it could not be read: ${mrkdwn(reasons[0] ?? UNREADABLE)}`;
   return {
     text: line,
     blocks: [
       { type: "section", text: { type: "mrkdwn", text: line } },
-      { type: "actions", elements: [{ type: "button", action_id: "vx_open", text: { type: "plain_text", text: "Review in AP / AR", emoji: false }, url }] },
+      { type: "actions", elements: [{ type: "button", action_id: "vx_open", text: { type: "plain_text", text: "Review in Bills & receivables", emoji: false }, url }] },
     ],
   };
 }
@@ -210,7 +211,7 @@ async function readInboxEmail(inbox: InvoiceInbox, rowId: string, emailId: strin
     },
   });
 
-  // Best effort: the email is decided in AP / AR whether or not the channel hears of it.
+  // Best effort: the email is decided in Bills & receivables whether or not the channel hears of it.
   try {
     const install = await installFor(inbox.orgId);
     if (install) {

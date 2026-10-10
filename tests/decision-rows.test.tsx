@@ -11,9 +11,10 @@ import { RecurringSummary } from "@/components/vx/RecurringSummary";
 import type { Decision } from "@/components/vx/types";
 
 /**
- * Decisions as a list to scan (AP / AR layout): a row says who, what, the date that matters, the amount and the
- * outcome, closed by default; opening it shows the full decision card with its reasoning and actions. AP / AR
- * groups payables into what needs a person, what is upcoming and what is settled, and lists the latest settled.
+ * Decisions as a list to scan (Bills & receivables layout): a row says who, what, the date that matters, the amount
+ * and the outcome, closed by default; opening it shows the full decision card with its reasoning and actions.
+ * Bills & receivables groups payables into what needs a person, what is upcoming and what is settled, and lists the
+ * latest settled.
  */
 
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/\s+/g, " ").trim();
@@ -91,15 +92,15 @@ describe("DecisionRows", () => {
   });
 });
 
-describe("the AP / AR page", () => {
+describe("the Bills & receivables page", () => {
   const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "invoices", "page.tsx"), "utf8");
 
   it("leads with what needs a person, what is due within 7 days, what is overdue and what is still to pay", () => {
     for (const label of ["Needs you", "Due within 7 days", "Overdue", "Open payables"]) expect(page).toContain(`label="${label}"`);
   });
 
-  it("folds New invoice, open only for a workspace with no invoice yet", () => {
-    expect(page).toMatch(/<IntakeFold label="New invoice"[^>]*defaultOpen=\{invoices\.length === 0\}>/);
+  it("folds New invoice, open only for a workspace with no invoice yet, or when asked to add one (?add, the palette's Add a bill)", () => {
+    expect(page).toMatch(/<IntakeFold label="New invoice"[^>]*defaultOpen=\{invoices\.length === 0 \|\| query\.add !== undefined\}>/);
   });
 
   it("groups payables into Needs you, Upcoming, and Paid and closed, the latest five of those until Show all", () => {
@@ -244,7 +245,7 @@ describe("what the agent checked on a payable", () => {
   });
 });
 
-describe("the recurring schedules on AP / AR", () => {
+describe("the recurring schedules on Bills & receivables", () => {
   const schedule = (id: string, name: string, nextDueOn: string | null, status: "active" | "stopped" | "ended", amount = 0.5) => ({
     id,
     counterpartyName: name,

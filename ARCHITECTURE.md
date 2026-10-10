@@ -158,7 +158,7 @@ windows); otherwise, in one transaction, it writes a tombstone to the service-ro
 `signing_key_id`), deletes every tenant table in `delete_sandbox_org`'s order, and deletes the org
 row, which cascades to memberships, invitations, API keys and webhooks.
 
-**Deleting your account** (spec §6) is the last item of `AccountMenu` (`src/components/vx/AccountMenu.tsx`: the workspace sidebar and the `/onboarding` header), gated by the
+**Deleting your account** (spec §6) is the last item of `AccountMenu` (`src/components/vx/AccountMenu.tsx`: the workspace sidebar, folded or not, and the `/onboarding` header), gated by the
 session alone (`src/app/account/actions.ts`, never a user id from the form). `accountDeletionPlan`
 (`src/lib/platform/delete-account.ts`) blocks it while the person is the last owner of a workspace
 with other members or of the founding workspace; `deleteAccount` then runs `delete_org` on each
@@ -466,7 +466,7 @@ phase 1b).
 - **Elsewhere:**
   - Chats refuse a mainnet payment ("approved in Vestiarion").
   - The API's `chain` enum is every network's chains, and SDK 0.3.0 types it.
-  - The workspace layout shows `MainnetBanner`.
+  - The workspace layout reads `MainnetBanner`, drawn under each page's header.
   - 0078 accepts `ARC` in `counterparties_chain_check` (0044's rewrite keeps it) and names the home chain in both
     link functions.
 
@@ -483,8 +483,8 @@ would find.
     limit. Turning the limit off stays allowed, since it only takes the agent's power to pay away.
   - `runAgentCycle` refuses first. The schedule and the FX watcher skip every workspace as `payments_off`, and
     event cycles drop quietly.
-  - Approve and pay, Pay now and Bring cash back refuse before any claim, and the workspace layout draws
-    `PaymentsOffBanner` with the recorded reason.
+  - Approve and pay, Pay now and Bring cash back refuse before any claim, and the workspace layout reads
+    `PaymentsOffBanner`, with the recorded reason, which each page draws under its header.
   - Approve and pay, and Pay now, still record a transfer already sent; that only reads Circle.
   - The agent's purchases from its service budget check the switch too.
 - **Addresses checked where they enter:** the console's forms and `POST /api/v1/counterparties` refuse an address
@@ -648,6 +648,38 @@ anything is signed (the forwarding fee's high estimate plus the fast fee, rounde
 are shared with CCTP payouts through `src/lib/circle/cctp-forward.ts`, which imports no Node module. Nothing is
 recorded on the ledger: the wallet's balance is read from the chain as before.
 
+## The workspace frame
+
+Every page under `/o/[slug]` sits in one frame (spec `2026-10-10-workspace-shell-design.md`).
+
+- **Layout, platform data only.** `src/app/o/[slug]/layout.tsx` reads the membership, the viewer's other memberships,
+  the pause (`pausedBanner`) and the payments switch (`paymentsSwitchForPages`), never an organization's own rows. It
+  hands `AppFrame` the workspace, a `PlatformStatus` (network, mode, the deployment's mainnet switch, payments off with
+  its reason, the pause with since, by and why), the three banners as one node, and the `vx_sidebar` cookie.
+- **`AppFrame`** (`src/components/vx/AppFrame.tsx`) wraps everything in `FrameProvider`
+  (`src/components/vx/FrameContext.tsx`): the workspace, the platform status, the banners and the sidebar's state. The
+  sidebar (`Sidebar` and `NavPanel` in `AppNav.tsx`) is 14.5rem from `lg`, or a 4rem icon rail when folded; the
+  drawer below `lg` is the same panel, never folded. The state lives in the cookie (`sidebar-preference.ts`): the
+  layout reads it so the server draws the first paint at the right width, and the client reads `document.cookie` through
+  `useSyncExternalStore`, so a layout served from the router's cache never undoes a toggle. `[` toggles it outside text
+  fields; so does the header's button and the command palette.
+- **Sections** are `NAV_GROUPS` in `nav.ts`: Treasury and Approvals, then Operations, Controls, Analytics and Workspace.
+  The sidebar, the drawer, the palette and each page's title read that one list.
+- **Header, drawn by the page.** `ProductShell` (`src/components/vx/Shell.tsx`) draws `WorkspaceHeader`: the toggle,
+  the workspace and section, the agent's last cycle (`AgentActivity`, mounted once at every width so its toasts always
+  come) and three chips, network, payments and agent, which open a "Workspace status" panel. The chips combine the
+  layout's `PlatformStatus` with the page's `PageStatus`, which only the page can read, inside `inOrg`:
+  `chainModes={shellModes()}` and `status={await shellStatus()}` (`src/lib/shell-status.ts`: shadow mode, and the
+  workspace's own screening, which read out of scope would be the deployment's). `workspace-status.ts` turns both into
+  chips and rows, pure and tested; payments off wins, then held, shadow mode, simulated, live. A fact the layout or the
+  page could not read (the switch, the pause, shadow mode) shows as not known, never as its healthy value, since the
+  payment gates refuse on the same failure; the agent shows as stopped while payments are off or held.
+- **Banners** (Arc mainnet, payments switched off, agent paused) are read by the layout and drawn by each page under its
+  header (`FrameBanners`). The loading and error states draw the same header with the layout's facts alone, and the
+  same `CONTENT_FRAME` width (`frame.ts`, 90rem).
+- Inside a workspace a bar sticks to the top at every width (the phone bar below `lg`, `WorkspaceHeader` from `lg`), so
+  `html:has([data-workspace-frame])` sets a `scroll-padding-top` that every anchor lands below.
+
 ## Shadow mode
 
 Shadow mode (`docs/superpowers/specs/2026-10-07-shadow-mode-design.md`) runs an Arc testnet workspace alongside how
@@ -666,8 +698,9 @@ disagrees with every decision.
   uses, and only while the payable still waits for that verdict. Disagree can return or reject it.
 - **Which payments await a verdict.** `awaitsVerdict` (`src/lib/next-step.ts`): the agent decided to pay and either
   shadow mode held it (`heldBecause: "shadow_verdict"`) or, on a decision marked `shadow: true` (every AP decision the
-  orchestrator writes in shadow mode), a check in code held it. The gate, the approvals list, the AP / AR card and the
-  chat words below all read it, so a solo owner's first payment to an address they typed has a verdict too.
+  orchestrator writes in shadow mode), a check in code held it. The gate, the approvals list, the payable's card on
+  Bills & receivables and the chat words below all read it, so a solo owner's first payment to an address they typed has
+  a verdict too.
 - **Settled through a verdict.** `verdictGate` (`src/lib/verdicts.ts`): while a verdict can be given on a payable held
   for one (shadow mode on, and the decision made since it started), `approveAndPay`, `rejectInvoice` and
   `returnInvoice` refuse it before any verdict (`verdict_needed`), and a payment after a disagreement is refused
@@ -729,11 +762,12 @@ disagrees with every decision.
   in its bill's workspace and a correction on the same bill. `recordActual` (`src/lib/actual-payments.ts`) checks the
   signing key before writing the row, then appends `actual_payment_recorded` or `actual_payment_corrected`
   `{ by, actualId, subject, subjectId, outcome, paidOn, amount, currency, method, reference, note, reason }` (`replaces` on
-  a correction, `via: "csv"` from a CSV), naming the payable as `subjectId` so the AP / AR card keeps showing the
-  agent's decision. The commands `payable.record_actual` and `payable.import_actuals` run from the console only. A CSV
-  (`src/lib/actual-payments-csv.ts`) names each bill by its Vestiarion id, or by an invoice number its memo carries as a
-  whole word, and is previewed before it is saved, then matched again on the server. Until migration 0090 runs, reading
-  answers `available: false` (`PGRST205` or `42P01`) and recording refuses with `not_ready`, so the report never fails for it.
+  a correction, `via: "csv"` from a CSV), naming the payable as `subjectId` so its card on Bills & receivables keeps
+  showing the agent's decision. The commands `payable.record_actual` and `payable.import_actuals` run from the console
+  only. A CSV (`src/lib/actual-payments-csv.ts`) names each bill by its Vestiarion id, or by an invoice number its memo
+  carries as a whole word, and is previewed before it is saved, then matched again on the server. Until migration 0090
+  runs, reading answers `available: false` (`PGRST205` or `42P01`) and recording refuses with `not_ready`, so the report
+  never fails for it.
 
 ## The workspace report
 
@@ -1097,11 +1131,11 @@ own domains, `resend.com` and `resend.app`), else its text, through the same
 document is named in the reasons. The row ends `ready`, `needs_details` or
 `unreadable`, with reasons a person reads, and keeps what was read (with the
 matched counterparty's id and the document's hash); the workspace's Slack
-channel is told. Nothing is added by itself: on AP / AR an owner or admin runs
-`inbox.add` (the draft used once, put back if the invoice cannot be added;
-`create_invoice` names `via: "email"` and `inboxEmailId`), `inbox.finish` (the
-invoice form started from what was read, for any email ready, needing details
-or unreadable; the entry also lists the fields the person changed) or
+channel is told. Nothing is added by itself: on Bills & receivables an owner or
+admin runs `inbox.add` (the draft used once, put back if the invoice cannot be
+added; `create_invoice` names `via: "email"` and `inboxEmailId`), `inbox.finish`
+(the invoice form started from what was read, for any email ready, needing
+details or unreadable; the entry also lists the fields the person changed) or
 `inbox.dismiss`.
 
 **A workspace can connect GitHub**

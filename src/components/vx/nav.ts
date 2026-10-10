@@ -1,40 +1,61 @@
 /**
  * The workspace's sections, in the order and groups the navigation shows
- * them. Pure data, free of React: the sidebar, the mobile drawer and
- * `tests/navigation.test.ts` all read this one list, and each page's title
- * is its label here — so a section cannot be added, renamed or removed in one
- * place and left stale in another.
+ * them. Pure data, free of React: the sidebar, the mobile drawer, the command
+ * palette and `tests/navigation.test.ts` all read this one list, and each
+ * page's title is its label here — so a section cannot be added, renamed or
+ * removed in one place and left stale in another.
+ *
+ * The first group has no visible heading: Treasury and Approvals, where a
+ * workspace opens and where a person decides what the agent would not pay on
+ * its own (workspace shell design S1). Its label still names the group for a
+ * screen reader.
  */
 export const NAV_GROUPS = [
   {
-    label: "Overview",
+    label: "Home",
+    hideLabel: true,
     items: [
       { key: "treasury", path: "/console", label: "Treasury" },
-      { key: "insights", path: "/insights", label: "Insights" },
-      { key: "report", path: "/report", label: "Report" },
+      { key: "approvals", path: "/approvals", label: "Approvals" },
     ],
   },
   {
     label: "Operations",
+    hideLabel: false,
     items: [
-      { key: "invoices", path: "/invoices", label: "AP / AR" },
+      { key: "invoices", path: "/invoices", label: "Bills & receivables" },
       { key: "counterparties", path: "/counterparties", label: "Counterparties" },
       { key: "contractors", path: "/contractors", label: "Contractors" },
     ],
   },
   {
     label: "Controls",
+    hideLabel: false,
     items: [
-      { key: "approvals", path: "/approvals", label: "Approvals" },
       { key: "compliance", path: "/compliance", label: "Compliance" },
       { key: "audit", path: "/audit", label: "Audit log" },
+    ],
+  },
+  {
+    label: "Analytics",
+    hideLabel: false,
+    items: [
+      { key: "insights", path: "/insights", label: "Insights" },
+      { key: "report", path: "/report", label: "Report" },
+    ],
+  },
+  {
+    label: "Workspace",
+    hideLabel: false,
+    items: [
       { key: "members", path: "/members", label: "Members" },
       { key: "settings", path: "/settings", label: "Settings" },
     ],
   },
 ] as const;
 
-export type NavItem = (typeof NAV_GROUPS)[number]["items"][number];
+export type NavGroup = (typeof NAV_GROUPS)[number];
+export type NavItem = NavGroup["items"][number];
 export type NavKey = NavItem["key"];
 
 export const NAV_ITEMS: readonly NavItem[] = NAV_GROUPS.flatMap<NavItem>((group) => group.items);

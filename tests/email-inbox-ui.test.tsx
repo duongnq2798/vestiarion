@@ -17,9 +17,9 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 const html = (node: ReactElement) => renderToStaticMarkup(<TooltipProvider>{node}</TooltipProvider>);
 
 /**
- * Invoices by email on screen (email invoices design E2, E6, E7): on AP / AR, each email still to decide with what was
- * read, the sender's checks, and for an owner or admin the buttons that add it or dismiss it; in Settings, the address
- * for an owner or admin, who turns it on, changes it or turns it off.
+ * Invoices by email on screen (email invoices design E2, E6, E7): on Bills & receivables, each email still to decide
+ * with what was read, the sender's checks, and for an owner or admin the buttons that add it or dismiss it; in
+ * Settings, the address for an owner or admin, who turns it on, changes it or turns it off.
  */
 
 const READY: InboxEmailView = {

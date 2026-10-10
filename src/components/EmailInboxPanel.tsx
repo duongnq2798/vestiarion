@@ -54,7 +54,7 @@ export default function EmailInboxPanel({ orgSlug, view, canManage }: { orgSlug:
       <Card className="max-w-none space-y-4 p-5">
         <p className="max-w-prose text-sm text-ink-2">
           Forward invoices from your suppliers to this workspace&apos;s address. Vestiarion reads each one the way From a document does,
-          and it waits on AP / AR for a person to add it: nothing that arrives by email is added, or paid, by itself.
+          and it waits on Bills & receivables for a person to add it: nothing that arrives by email is added, or paid, by itself.
         </p>
         {!view.on ? (
           canManage ? (

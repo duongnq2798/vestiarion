@@ -500,7 +500,7 @@ export default function DesignPage() {
               {DECISIONS.map((decision) => (
                 <DecisionCard key={decision.id} decision={decision} orgSlug={DESIGN_SLUG} />
               ))}
-              {/* As AP / AR and Contractors list them: one row each, the card inside. */}
+              {/* As Bills & receivables and Contractors list them: one row each, the card inside. */}
               <div>
                 <RowGroupHeading title="Upcoming" count={DECISIONS.length} />
                 <DecisionRows

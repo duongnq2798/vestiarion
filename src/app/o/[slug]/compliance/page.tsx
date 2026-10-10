@@ -24,6 +24,7 @@ import { screeningMode } from "@/lib/compliance";
 import { inOrg } from "@/lib/dal/scope";
 import { listLedgerEntries, listLedgerEntriesByDomain } from "@/lib/ledger";
 import { listCounterparties, stats } from "@/lib/queries";
+import { shellStatus } from "@/lib/shell-status";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +53,7 @@ export default async function CompliancePage({ params }: { params: Promise<{ slu
     const riskChanges = entries.filter((entry) => entry.action === "risk_level_changed").slice(0, 5);
 
     return (
-      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()} status={await shellStatus()}>
         <PageHead
           title={sectionTitle("compliance")}
           sub="Continuous screening changes payment authority by tier. A hit reduces a limit; it does not silently turn the counterparty into a yes/no ban."

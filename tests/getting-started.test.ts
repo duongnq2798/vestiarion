@@ -119,7 +119,7 @@ describe("gettingStarted", () => {
     expect(done(gettingStarted(input({ payableCount: 1 }))).payable).toBe(true);
   });
 
-  it("waits for the first payment on AP / AR, or on Approvals while the agent holds something for a person", () => {
+  it("waits for the first payment on Bills & receivables, or on Approvals while the agent holds something for a person", () => {
     const ready = input({ mode: "live", accounts: FUNDED, counterparties: [PAYEE], payableCount: 1 });
     const deciding = gettingStarted(ready);
     expect(deciding.next).toBe("payment");

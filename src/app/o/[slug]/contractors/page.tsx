@@ -39,6 +39,7 @@ import { workspaceNetwork } from "@/lib/workspace-network";
 import { paidAcrossChains } from "@/lib/payee-chains";
 import { networkProfile } from "@/lib/network";
 import { DocsLink } from "@/components/DocsLink";
+import { shellStatus } from "@/lib/shell-status";
 
 export const dynamic = "force-dynamic";
 
@@ -234,7 +235,7 @@ export default async function ContractorsPage({ params, searchParams }: { params
     const paidTotal = milestones.filter((milestone) => milestone.status === "paid").reduce((sum, milestone) => sum + Number(milestone.amount), 0);
 
     return (
-      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()} status={await shellStatus()}>
         <PageHead
           title={sectionTitle("contractors")}
           sub="Milestone pay follows verified work instead of a Net-30 calendar. Every release still passes risk and authority guardrails."

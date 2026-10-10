@@ -103,16 +103,17 @@ export function AgentActivity({ lastCycleAt: initialLastCycleAt }: { lastCycleAt
   }, [running]);
 
   return (
-    <span aria-live="polite" className="inline-flex items-center gap-1.5">
+    // In the header beside the breadcrumb and the chips, where room can be short: the words shorten with an ellipsis.
+    <span aria-live="polite" className="inline-flex max-w-full items-center gap-1.5 align-middle">
       {running ? (
         <>
-          <LoaderCircle aria-hidden className="size-3.5 text-agent motion-safe:animate-spin" />
-          <span className="font-medium text-agent">{workingLabel(running.startedAt, now)}</span>
+          <LoaderCircle aria-hidden className="size-3.5 shrink-0 text-agent motion-safe:animate-spin" />
+          <span className="truncate font-medium text-agent">{workingLabel(running.startedAt, now)}</span>
         </>
       ) : (
         <>
-          <Clock aria-hidden className="size-3.5" />
-          {lastCycleAt ? `Last cycle ${utcMinute(lastCycleAt)}` : "No cycle recorded yet"}
+          <Clock aria-hidden className="size-3.5 shrink-0" />
+          <span className="truncate">{lastCycleAt ? `Last cycle ${utcMinute(lastCycleAt)}` : "No cycle recorded yet"}</span>
         </>
       )}
     </span>

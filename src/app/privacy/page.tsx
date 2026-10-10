@@ -31,6 +31,10 @@ export default function PrivacyPage() {
           Signing in sets cookies that keep your session. When a sign-in link should take you somewhere other than the default page, such as an invitation,
           one more cookie remembers where, for up to an hour.
         </p>
+        <p>
+          When you fold or unfold the sidebar in a workspace, your browser keeps that choice in a first-party cookie, <code>vx_sidebar</code>, for a year, so
+          the next page opens the same way. It holds only the word <code>collapsed</code> or <code>expanded</code>: Vestiarion reads it to draw the page, and it goes nowhere else.
+        </p>
       </LegalSection>
 
       <LegalSection id="workspace-data" title="What a workspace stores">
