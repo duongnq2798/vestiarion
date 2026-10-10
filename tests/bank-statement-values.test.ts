@@ -25,6 +25,8 @@ describe("readDate", () => {
     expect(readDate("31/02/2026", "dmy")).toBeNull();
     expect(readDate("13/10/2026", "mdy")).toBeNull();
     expect(readDate("2026-10-03", "dmy")).toBeNull();
+    // A date written with dots is day first wherever dots are used.
+    expect(readDate("03.10.2026", "mdy")).toBeNull();
     expect(readDate("Opening balance", "dmy")).toBeNull();
   });
 
@@ -44,6 +46,10 @@ describe("decideDateOrder", () => {
 
   it("asks when day first and month first both read every value, with the first value read two ways", () => {
     expect(decideDateOrder(["03/04/2026", "05/04/2026"])).toEqual({ ask: ["dmy", "mdy"], example: "03/04/2026" });
+  });
+
+  it("reads dates written with dots as day first, without asking", () => {
+    expect(decideDateOrder(["03.10.2026", "04.10.2026"])).toEqual({ order: "dmy" });
   });
 
   it("needs no answer when every reading is the same day", () => {

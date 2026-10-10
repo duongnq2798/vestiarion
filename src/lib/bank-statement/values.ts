@@ -32,7 +32,8 @@ const COMPACT = /^(\d{4})(\d{2})(\d{2})$/;
 
 /**
  * The day a value names, read in `order`; null when it is not a real day in that order. A month written in English
- * reads the same in every order. A time after the date is dropped; a two-digit year is 20xx.
+ * reads the same in every order. A time after the date is dropped; a two-digit year is 20xx. A date written with dots
+ * is day first.
  */
 export function readDate(value: string, order: DateOrder): string | null {
   const text = value.trim();
@@ -47,6 +48,8 @@ export function readDate(value: string, order: DateOrder): string | null {
   const [, a, b, c] = numeric;
   if (order === "ymd") return a.length === 4 && c.length <= 2 ? realDay(Number(a), Number(b), Number(c)) : null;
   if (a.length > 2 || (c.length !== 2 && c.length !== 4)) return null;
+  // Dots are written day first wherever they are used (03.10.2026): month first never reads them.
+  if (order === "mdy" && text.charAt(a.length) === ".") return null;
   return order === "dmy" ? realDay(fullYear(c), Number(b), Number(a)) : realDay(fullYear(c), Number(a), Number(b));
 }
 
