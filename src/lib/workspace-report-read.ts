@@ -52,6 +52,7 @@ type DecisionRow = {
   resulting_status: string | null;
   shadow: boolean | null;
   reasoning: string | null;
+  pay_on: string | null;
 };
 
 type PersonRow = { seq: number | string; ts: string; action: ReportPersonAction["action"]; invoice_id: string | null };
@@ -84,7 +85,7 @@ export async function readReportFacts(orgDb: OrgDb, network: Network, workspace:
       orgDb
         .from("ledger_entries")
         .select(
-          "seq, ts, action, invoice_id:detail->>invoiceId, guardrail_blocked:detail->guardrailBlocked, guardrail_rule:detail->>guardrailRule, held_because:detail->execution->>heldBecause, resulting_status:detail->execution->>resultingStatus, shadow:detail->shadow, reasoning:detail->decision->>reasoning"
+          "seq, ts, action, invoice_id:detail->>invoiceId, guardrail_blocked:detail->guardrailBlocked, guardrail_rule:detail->>guardrailRule, held_because:detail->execution->>heldBecause, resulting_status:detail->execution->>resultingStatus, shadow:detail->shadow, reasoning:detail->decision->>reasoning, pay_on:detail->decision->>payOn"
         )
         .eq("actor", "agent")
         .in("action", [...AGENT_DECISION_ACTIONS])
@@ -154,6 +155,7 @@ export async function readReportFacts(orgDb: OrgDb, network: Network, workspace:
               resultingStatus: row.resulting_status,
               shadow: row.shadow === true,
               reasoning: row.reasoning,
+              payOn: row.pay_on,
             },
           ]
         : []
