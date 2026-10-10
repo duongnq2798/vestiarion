@@ -5,7 +5,7 @@ import type { InvoiceInput } from "../invoices/create";
 import type { Network } from "../network";
 import type { OriginalBill } from "../shadow-bills";
 import { SHADOW_CURRENCIES } from "../shadow-currency";
-import { currencyDigits, decimalKey, decimalMarkOf, isCurrencyCode, readAmount, splitCurrency, symbolFits, type DecimalMark } from "./amounts";
+import { decimalKey, decimalMarkOf, isCurrencyCode, readAmount, splitCurrency, symbolFits, type DecimalMark } from "./amounts";
 import { billRows, columnNames, columnCount, detectMapping, FIELD_LABELS, IMPORT_FIELDS, looksLikeHeader, REQUIRED_FIELDS, type ColumnMapping, type ImportField } from "./columns";
 import { dateOrderOf, readDate, type DateOrder } from "./dates";
 import type { Table, TableRow } from "./table";
@@ -54,12 +54,10 @@ const cellOf = (row: TableRow, mapping: ColumnMapping, field: ImportField): stri
 
 /** The currencies the amounts' symbols could be, one list per amount that has one. */
 function amountSymbols(table: Table, settings: Pick<ImportSettings, "hasHeader" | "mapping">): string[][] {
-  return billRows(table, settings.hasHeader).flatMap((row) => splitCurrency(cellOf(row, settings.mapping, "amount")).codes ?? []).length === 0
-    ? []
-    : billRows(table, settings.hasHeader).flatMap((row) => {
-        const codes = splitCurrency(cellOf(row, settings.mapping, "amount")).codes;
-        return codes ? [codes] : [];
-      });
+  return billRows(table, settings.hasHeader).flatMap((row) => {
+    const codes = splitCurrency(cellOf(row, settings.mapping, "amount")).codes;
+    return codes ? [codes] : [];
+  });
 }
 
 /** The list's currency to start at: the business's own in shadow mode, else the one the workspace takes that every symbol fits. */
@@ -346,7 +344,7 @@ export interface ImportFacts {
   conversions: ReadonlyMap<string, Conversion>;
 }
 
-interface FateBase {
+export interface FateBase {
   line: number;
   /** The counterparty's name: the workspace's, once matched; as written otherwise. */
   counterparty: string;
@@ -485,6 +483,18 @@ export function fatesOf(rows: readonly ReadRow[], facts: ImportFacts): RowFate[]
     return { ...base, status: "add", counterpartyId: counterparty.id, invoice: parsed.data, original, invoiceNumber: row.invoiceNumber };
   });
 }
+
+/** What every fate shows of its row, whatever happened to it. */
+export function baseOf(fate: RowFate): FateBase {
+  const { line, counterparty, amount, currency, dueDate, reference, usdc } = fate;
+  return { line, counterparty, amount, currency, dueDate, reference, usdc };
+}
+
+/** A row after the import: added, with the invoice it became; already in Vestiarion; or not added, and why (B12). */
+export type ImportedFate =
+  | (FateBase & { status: "added"; invoiceId: string })
+  | Extract<RowFate, { status: "duplicate" }>
+  | Extract<RowFate, { status: "error" }>;
 
 export function countFates(fates: readonly RowFate[]): { add: number; duplicate: number; error: number } {
   return {

@@ -19,6 +19,8 @@ export const COMMAND_PERMISSIONS = {
   "agent.resume": "agent.resume",
   "agent.run_cycle": "agent.run_cycle",
   "invoice.add": "records.write",
+  /** A bill list, each of its rows then added through `invoice.add` (import design B12); the console only. */
+  "invoice.import": "records.write",
   "milestone.add": "records.write",
   "payee_link.create": "records.write",
   "inbox.add": "records.write",
