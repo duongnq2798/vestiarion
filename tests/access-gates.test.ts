@@ -74,13 +74,13 @@ describe("every /o/[slug] page", () => {
 });
 
 describe("every server action", () => {
-  it("lives in src/app/actions, except sign-in, accepting an invitation, creating a first workspace, your own account, a payee's own address, and a client's payment check", () => {
+  it("lives in src/app/actions, except sign-in, accepting an invitation, creating a first workspace, your own account, a payee's own address, a client's payment check, and the founder dashboard", () => {
     const withDirective = walk(path.join(ROOT, "src")).filter(
       (file) => /\.(ts|tsx)$/.test(file) && /^\s*["']use server["']/.test(read(file))
     );
     const outside = withDirective.map(rel).filter((file) => !file.startsWith("src/app/actions/"));
     expect(outside.sort()).toEqual([
-      "src/app/account/actions.ts", "src/app/invite/actions.ts", "src/app/login/actions.ts", "src/app/onboarding/actions.ts",
+      "src/app/account/actions.ts", "src/app/admin/growth/actions.ts", "src/app/invite/actions.ts", "src/app/login/actions.ts", "src/app/onboarding/actions.ts",
       "src/app/pay/[token]/actions.ts", "src/app/payee/[token]/actions.ts",
     ]);
   });
@@ -138,6 +138,30 @@ describe("every onboarding action", () => {
 
   it.each(actions.map((action) => [action.name, action.body]))("%s awaits getSessionUser first", (_name, body) => {
     expect(awaitedNames(body)[0]).toBe("getSessionUser");
+  });
+});
+
+describe("every founder dashboard action", () => {
+  // The dashboard belongs to no workspace, so its gate is the team: each action asks it first, itself, since an
+  // action is a public POST endpoint whatever the page did (src/lib/growth/gate.ts).
+  const GROWTH_ACTIONS = path.join(ROOT, "src", "app", "admin", "growth", "actions.ts");
+  const actions = existsSync(GROWTH_ACTIONS) ? exportedAsyncFunctions(read(GROWTH_ACTIONS)) : [];
+
+  it("exists — the list is not empty", () => {
+    expect(actions.map((action) => action.name)).toContain("decideLeadAction");
+  });
+
+  it.each(actions.map((action) => [action.name, action.body]))("%s awaits growthTeamUser first, and stops without it", (_name, body) => {
+    expect(awaitedNames(body)[0]).toBe("growthTeamUser");
+    expect(body).toMatch(/const user = await growthTeamUser\(\);\s+if \(!user\) return \{ ok: false, message: NOT_AVAILABLE \};/);
+  });
+
+  it("the page and the export ask the gate first too", () => {
+    const page = defaultExportBody(read(path.join(ROOT, "src", "app", "admin", "growth", "page.tsx")));
+    expect(awaitedNames(page)[0]).toBe("growthTeamUser");
+    expect(page).toMatch(/if \(!user\) notFound\(\);/);
+    const route = read(path.join(ROOT, "src", "app", "admin", "growth", "leads.csv", "route.ts"));
+    expect(awaitedNames(route.slice(route.indexOf("export async function GET")))[0]).toBe("growthTeamUser");
   });
 });
 

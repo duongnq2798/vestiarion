@@ -18,7 +18,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy"
-      updated="2026-10-05"
+      updated="2026-10-10"
       intro="Vestiarion is an autonomous treasury agent on Arc testnet. This page describes what the service stores and sends, as its code does it today. The code is public, so every statement here can be checked against it."
     >
       <LegalSection id="signing-in" title="Signing in">
@@ -241,6 +241,26 @@ export default function PrivacyPage() {
           <li>a referrer on this site is redacted the same way, and a referrer from another site is cut to its origin.</li>
         </ul>
         <p>Google signals and ad personalization signals are turned off. Google Analytics sets its own cookies to tell visits apart.</p>
+      </LegalSection>
+
+      <LegalSection id="campaign-cookie" title="Which link brought a workspace">
+        <p>
+          When you arrive from a link that carries campaign tags (<code>utm_source</code>, <code>utm_medium</code>, <code>utm_campaign</code>,{" "}
+          <code>utm_content</code>, <code>utm_term</code> or <code>ref</code>), Vestiarion sets one first-party cookie, <code>vx_ft</code>, for 90 days. It is
+          set only when a link carries such a tag and the browser does not hold one already, and setting it sends nothing anywhere.
+        </p>
+        <ul>
+          <li>
+            It holds those tags, each cut to 100 letters, digits, dots, hyphens, underscores and tildes, the page you landed on without its query, the
+            host of the site that linked to it, and when.
+          </li>
+          <li>It never holds your email address, your name or anything you type; a tag with an @ in it is dropped.</li>
+          <li>
+            When you create a workspace, Vestiarion reads it once and keeps those tags with the workspace, never replaced, so the team can see which
+            outreach or page brought it. Only the team sees them, and they are deleted with the workspace.
+          </li>
+          <li>Deleting the cookie in your browser changes nothing else.</li>
+        </ul>
       </LegalSection>
 
       <LegalSection id="retention" title="How long data is kept">

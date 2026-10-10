@@ -8,6 +8,7 @@ import { orgHref } from "@/lib/auth/org-paths";
 import { getSessionUser } from "@/lib/auth/session";
 import { currentConfig } from "@/lib/context";
 import { inOrg } from "@/lib/dal/scope";
+import { recordFirstTouch } from "@/lib/growth/record";
 import { MAINNET_NOT_OPEN, mayUseMainnet } from "@/lib/mainnet";
 import { createWorkspace, WorkspaceLimitError } from "@/lib/platform/workspace";
 import { SHADOW_NOT_STARTED, startShadowMode } from "@/lib/shadow-mode";
@@ -55,13 +56,17 @@ export async function createWorkspaceAction(_previous: CreateWorkspaceResult, fo
   // Shadow mode is for Arc testnet only: asked for with an Arc mainnet workspace, it is not turned on.
   const shadow = network === "arc-testnet" && formData.get("shadow") === "on";
   let slug: string;
+  let orgId: string;
   try {
-    ({ slug } = await createWorkspace({ userId: user.id, name, network }));
+    ({ slug, orgId } = await createWorkspace({ userId: user.id, name, network }));
   } catch (error) {
     if (error instanceof WorkspaceLimitError) return { ok: false, message: error.message };
     console.error("workspace creation failed", error);
     return { ok: false, message: "The workspace could not be created. Try again in a moment." };
   }
+  // Which campaign brought this person, from the first-touch cookie, recorded once; it never fails or holds up the
+  // workspace, which already exists (src/lib/growth/record.ts).
+  await recordFirstTouch(orgId);
   const shadowStarted = shadow ? await startShadowModeIn(slug) : true;
   // `redirect` throws to navigate, so it stays outside the `try` above.
   redirect(orgHref(slug, shadowStarted ? "/console" : `/console?shadow=${SHADOW_NOT_STARTED}`));
