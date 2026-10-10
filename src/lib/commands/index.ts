@@ -8,3 +8,4 @@ export { pauseWorkspaceAgent, resumeWorkspaceAgent, runWorkspaceCycle } from "./
 export { addInvoice } from "./invoices";
 export { issuePayeeLink } from "./payee-links";
 export { importActualPayments, recordActualPayment } from "./actuals";
+export { importBankStatement } from "./statements";
