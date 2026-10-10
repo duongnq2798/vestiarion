@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Geist, Geist_Mono, Newsreader } from "next/font/google";
+import { FirstTouch } from "@/components/analytics/FirstTouch";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { Toaster } from "@/components/ui/Toaster";
 import { TooltipProvider } from "@/components/ui/Tooltip";
@@ -76,6 +77,8 @@ export default function RootLayout({ children }: RootLayoutProps) {
           {children}
         </TooltipProvider>
         <Toaster />
+        {/* The first-party first-touch cookie, campaign tags only (src/lib/growth/attribution.ts); on whatever the analytics setting. */}
+        <FirstTouch />
         {gaMeasurementId ? <GoogleAnalytics measurementId={gaMeasurementId} /> : null}
       </body>
     </html>

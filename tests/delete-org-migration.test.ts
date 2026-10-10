@@ -38,6 +38,7 @@ const ENVELOPE = { v: 1, iv: "x", tag: "y", data: "z" };
 const PLATFORM_TABLES = [
   "memberships", "invitations", "api_keys", "webhook_endpoints", "webhook_deliveries", "payee_links", "telegram_link_codes", "telegram_links",
   "api_idempotency", "slack_installs", "slack_links", "invoice_inboxes", "github_installations", "github_bounties",
+  "growth_leads", "growth_revenue", "org_attribution",
 ] as const;
 
 const deleteOrg = (orgId: string, by: string | null = owner) =>
@@ -172,6 +173,14 @@ async function populated(slug: string): Promise<string> {
     "insert into public.github_installations (org_id, installation_id, account_login, account_type, repository_selection, connected_by) values ($1, $2, 'acme', 'Organization', 'selected', $3)",
     [orgId, crypto.randomInt(1, 2 ** 31), member]
   );
+  // The team's growth records (0099): the first touch goes with the workspace, and a lead or a revenue event linked to
+  // it loses the link (set null), so no row names the workspace once it is gone.
+  await db.query("insert into public.org_attribution (org_id, utm_source) values ($1, 'linkedin')", [orgId]);
+  const leadId = (await db.query<{ id: string }>(
+    "insert into public.growth_leads (business_name, source, dedupe_key, org_id) values ($1, 'directory', $1, $2) returning id",
+    [`${slug}-lead`, orgId]
+  )).rows[0].id;
+  await db.query("insert into public.growth_revenue (lead_id, org_id, kind, occurred_on) values ($1, $2, 'pricing_discussed', '2026-10-09')", [leadId, orgId]);
   await closeCycles(orgId);
   return orgId;
 }

@@ -17,6 +17,7 @@ import { stats } from "@/lib/queries";
 import { workspaceNetwork } from "@/lib/workspace-network";
 import { buildReport } from "@/lib/workspace-report";
 import { readReportFacts } from "@/lib/workspace-report-read";
+import { shellStatus } from "@/lib/shell-status";
 
 export const dynamic = "force-dynamic";
 
@@ -63,7 +64,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
         : null;
 
     return (
-      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()} status={await shellStatus()}>
         <PageHead
           title={sectionTitle("report")}
           sub="What the agent did with this workspace's bills since it opened: what it paid and with what proof, what it stopped and why, and how often a person stepped in."

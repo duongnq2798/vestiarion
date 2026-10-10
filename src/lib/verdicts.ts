@@ -3,6 +3,7 @@ import { currentOrgId } from "./context";
 import { db, unwrap, type OrgDb } from "./dal";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
 import { isReclaimable } from "./agent/claim-age";
+import { getChainProvider, hasNoProvider } from "./circle";
 import { awaitsVerdict } from "./next-step";
 import type { PaymentReceipt } from "./payment-receipt";
 import { readShadowMode, type ShadowMode } from "./shadow-mode";
@@ -299,6 +300,18 @@ export async function readShadowSummary(orgDb: OrgDb, shadow: ShadowMode): Promi
 }
 
 /**
+ * Whether a payment agreed to here is simulated: a sandbox with no Circle account of its own simulates its payments, so
+ * Agree and pay says so. False where nothing can pay, or the provider cannot be read: the payment then says why itself.
+ */
+function simulatesPayments(): boolean {
+  try {
+    return !hasNoProvider() && getChainProvider().mode === "simulate";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * What the cards need to show and offer verdicts (S3): the workspace's shadow mode, and the verdicts on the agent's
  * decisions among `entries`. Best effort: facts that cannot be read show no verdict at all, and offer none, rather than
  * offer one that may be given already.
@@ -309,7 +322,7 @@ export async function verdictFacts(orgDb: OrgDb, entries: Array<{ seq: number; a
     const decisions = entries.filter((entry) => entry.actor === "agent" && (AGENT_DECISION_ACTIONS as readonly string[]).includes(entry.action)).map((entry) => entry.seq);
     const read = await readVerdicts(orgDb, decisions);
     const given = new Map([...read].map(([seq, verdict]) => [seq, { verdict: verdict.verdict, reason: verdict.reason }] as const));
-    return { shadow: shadow ? { startedAt: shadow.startedAt, currency: shadow.currency } : null, given, canGive };
+    return { shadow: shadow ? { startedAt: shadow.startedAt, currency: shadow.currency } : null, given, canGive, simulated: simulatesPayments() };
   } catch (error) {
     console.error("verdicts not read", error instanceof Error ? error.message : error);
     return { shadow: null, given: new Map(), canGive: false };

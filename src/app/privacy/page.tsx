@@ -18,7 +18,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy"
-      updated="2026-10-05"
+      updated="2026-10-10"
       intro="Vestiarion is an autonomous treasury agent on Arc testnet. This page describes what the service stores and sends, as its code does it today. The code is public, so every statement here can be checked against it."
     >
       <LegalSection id="signing-in" title="Signing in">
@@ -30,6 +30,10 @@ export default function PrivacyPage() {
         <p>
           Signing in sets cookies that keep your session. When a sign-in link should take you somewhere other than the default page, such as an invitation,
           one more cookie remembers where, for up to an hour.
+        </p>
+        <p>
+          When you fold or unfold the sidebar in a workspace, your browser keeps that choice in a first-party cookie, <code>vx_sidebar</code>, for a year, so
+          the next page opens the same way. It holds only the word <code>collapsed</code> or <code>expanded</code>: Vestiarion reads it to draw the page, and it goes nowhere else.
         </p>
       </LegalSection>
 
@@ -123,7 +127,8 @@ export default function PrivacyPage() {
           <li>
             <strong>Resend</strong> sends transactional email: invitations to a workspace, digests of the payments waiting for a decision, the link a payee
             adds their address through, payment notices to a payee once a live workspace&apos;s payment to them is confirmed, and the reminders an owner
-            or admin turns on for a client&apos;s invoice, with its pay link. It receives each recipient&apos;s email address and the message.
+            or admin turns on for a client&apos;s invoice, with its pay link. It receives each recipient&apos;s email address and the message. When the
+            team has turned it on, it also sends the team a short note about each new guided setup request, described below.
           </li>
           <li>
             <strong>A model provider</strong>, when this deployment has one configured (Anthropic, OpenAI or DeepSeek), receives the context of each decision
@@ -241,6 +246,50 @@ export default function PrivacyPage() {
           <li>a referrer on this site is redacted the same way, and a referrer from another site is cut to its origin.</li>
         </ul>
         <p>Google signals and ad personalization signals are turned off. Google Analytics sets its own cookies to tell visits apart.</p>
+      </LegalSection>
+
+      <LegalSection id="campaign-cookie" title="Which link brought a workspace">
+        <p>
+          When you arrive from a link that carries campaign tags (<code>utm_source</code>, <code>utm_medium</code>, <code>utm_campaign</code>,{" "}
+          <code>utm_content</code>, <code>utm_term</code> or <code>ref</code>), Vestiarion sets one first-party cookie, <code>vx_ft</code>, for 90 days. It is
+          set only when a link carries such a tag and the browser does not hold one already, and setting it sends nothing anywhere.
+        </p>
+        <ul>
+          <li>
+            It holds those tags, each cut to 100 letters, digits, dots, hyphens, underscores and tildes, the page you landed on without its query, the
+            host of the site that linked to it, and when.
+          </li>
+          <li>It never holds your email address, your name or anything you type; a tag with an @ in it is dropped.</li>
+          <li>
+            When you create a workspace, Vestiarion reads it once and keeps those tags with the workspace, never replaced, so the team can see which
+            outreach or page brought it. Only the team sees them, and they are deleted with the workspace.
+          </li>
+          <li>When you ask for a guided setup, those tags are kept with your request too, as described below.</li>
+          <li>Deleting the cookie in your browser changes nothing else.</li>
+        </ul>
+      </LegalSection>
+
+      <LegalSection id="guided-setup" title="Asking for a guided setup">
+        <p>
+          The form on the <LegalLink href="/studios">page for studios</LegalLink> asks for your name, your work email, your studio&apos;s name and,
+          if you give it, its website, how many contractors you pay a month, how invoices reach you, and anything else you write, up to 500 characters.
+        </p>
+        <ul>
+          <li>We use these details only to set up a call with you about Vestiarion.</li>
+          <li>
+            They are stored in Vestiarion&apos;s Supabase Postgres database as one entry in the team&apos;s own records, apart from every workspace, with
+            the day you sent them and, when your browser holds the <code>vx_ft</code> cookie above, its campaign tags. Your IP address is not kept with them.
+          </li>
+          <li>
+            Only the Vestiarion team sees them, in a dashboard nobody else can open. They are not shared with anyone else and not added to any marketing
+            list, and nothing is sent to you automatically: a person on the team writes to you.
+          </li>
+          <li>
+            When the team has turned it on, Resend emails the team your studio&apos;s name, how many contractors you pay and how invoices reach you,
+            never your message.
+          </li>
+          <li>They are kept until the team deletes them. Ask through Contact, below, and we delete them.</li>
+        </ul>
       </LegalSection>
 
       <LegalSection id="retention" title="How long data is kept">

@@ -38,6 +38,8 @@ import { invoiceDecision, milestoneDecision } from "@/components/vx/map";
 import type { NavKey } from "@/components/vx/nav";
 import { Hash } from "@/components/vx/Primitives";
 import { ReportLists, ReportReadiness, ReportSummary } from "@/components/vx/WorkspaceReport";
+import { StatusChipRow, StatusPanel } from "@/components/vx/WorkspaceHeader";
+import { statusChips, statusRows, type PageStatus, type PlatformStatus } from "@/components/vx/workspace-status";
 import { ActualsBills, ActualsSummary } from "@/components/vx/ActualsComparison";
 import { compareActuals, type ActualRecord } from "@/lib/actual-payments-compare";
 import type { WaitingPayable } from "@/lib/agent/approvals";
@@ -71,7 +73,7 @@ import { Input } from "@/components/ui/Input";
 
 export interface DocsShot {
   /** The guide the picture belongs to. */
-  guide: "go-live" | "first-payment" | "try-a-rule" | "pay-a-contractor" | "get-paid" | "telegram" | "slack" | "email-invoices" | "report";
+  guide: "go-live" | "first-payment" | "try-a-rule" | "pay-a-contractor" | "get-paid" | "telegram" | "slack" | "email-invoices" | "report" | "workspace";
   /** The workspace page it is on: its title heads the frame. None for a public page, such as a payee's link. */
   page?: NavKey;
   /** The page's line under its title, where the real page has one. */
@@ -1178,7 +1180,7 @@ export const DOCS_SHOTS = {
   "email-inbox-ap": {
     guide: "email-invoices",
     page: "invoices",
-    sub: "Three-way match, counterparty risk, and payment authority — with the agent’s complete reasoning on every line.",
+    sub: "Your bills, what the agent decided on each, and why.",
     render: () => (
       <InboxEmails
         orgSlug={SLUG}
@@ -1257,6 +1259,24 @@ export const DOCS_SHOTS = {
         members={{ [ACTUALS_RECORDER]: "ops@harbor-books.example" }}
       />
     ),
+  },
+  "workspace-status": {
+    guide: "workspace",
+    render: function WorkspaceStatusShot() {
+      // A live workspace on Arc testnet in shadow mode, as its header says it and the panel its chips open.
+      const platform: PlatformStatus = { network: "arc-testnet", mode: "live", mainnetEnabled: true, paymentsOff: null, pause: null };
+      const page: PageStatus = { chain: { mode: "live", earnMode: "simulate", held: false }, shadow: true, screening: { live: true, source: "OpenSanctions" }, clock: { mode: "real", day: 1 } };
+      return (
+        <div className="flex flex-col items-start gap-2">
+          <div className="flex flex-wrap gap-1.5">
+            <StatusChipRow chips={statusChips(platform, page)} />
+          </div>
+          <Card className="w-[22rem] overflow-hidden">
+            <StatusPanel rows={statusRows(platform, page)} />
+          </Card>
+        </div>
+      );
+    },
   },
 } satisfies Record<string, DocsShot>;
 

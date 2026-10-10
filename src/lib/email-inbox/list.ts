@@ -1,9 +1,9 @@
 import { db, unwrap } from "../dal";
 
 /**
- * The emails still to decide on AP / AR (email invoices design E7): newest first, what was read and why it cannot be
- * added when it cannot. Never the stored draft: the page shows what was read, and the command adds what was stored.
- * Runs inside the workspace's scope.
+ * The emails still to decide on Bills & receivables (email invoices design E7): newest first, what was read and why it
+ * cannot be added when it cannot. Never the stored draft: the page shows what was read, and the command adds what was
+ * stored. Runs inside the workspace's scope.
  */
 
 /** What the inbox shows of a read: the fields, what to check, and whether the sender is the counterparty's known one. */

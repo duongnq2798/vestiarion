@@ -68,6 +68,10 @@ testnet; no other count would hold it. `createWorkspace` then seeds two accounts
 an empty `Reserve (simulated)` — and appends the first ledger entry, `org_created`, signed with the
 new key; a failure at this stage is rolled back (accounts deleted, then the organization row) —
 unless its first ledger entry already committed, in which case the chain, and the workspace, stay.
+The form also offers shadow mode for an Arc testnet workspace (ticked from `/onboarding?shadow=1`, the landing's "Try it
+on your bills"): once the workspace exists, the action turns it on as Settings does, `authorize(slug, "approval.policy")`
+then `startShadowMode` in USDC with the creator as actor. A refusal leaves the workspace created and sends the console
+`?shadow=not-started`, where it says so until shadow mode is on.
 
 `0020` also adds a trigger, `memberships_keep_an_owner`, that fires before every membership update
 or delete: removing or demoting an organization's last `owner` raises rather than commits, checked
@@ -154,7 +158,7 @@ windows); otherwise, in one transaction, it writes a tombstone to the service-ro
 `signing_key_id`), deletes every tenant table in `delete_sandbox_org`'s order, and deletes the org
 row, which cascades to memberships, invitations, API keys and webhooks.
 
-**Deleting your account** (spec §6) is the last item of `AccountMenu` (`src/components/vx/AccountMenu.tsx`: the workspace sidebar and the `/onboarding` header), gated by the
+**Deleting your account** (spec §6) is the last item of `AccountMenu` (`src/components/vx/AccountMenu.tsx`: the workspace sidebar, folded or not, and the `/onboarding` header), gated by the
 session alone (`src/app/account/actions.ts`, never a user id from the form). `accountDeletionPlan`
 (`src/lib/platform/delete-account.ts`) blocks it while the person is the last owner of a workspace
 with other members or of the founding workspace; `deleteAccount` then runs `delete_org` on each
@@ -483,7 +487,7 @@ phase 1b).
 - **Elsewhere:**
   - Chats refuse a mainnet payment ("approved in Vestiarion").
   - The API's `chain` enum is every network's chains, and SDK 0.3.0 types it.
-  - The workspace layout shows `MainnetBanner`.
+  - The workspace layout reads `MainnetBanner`, drawn under each page's header.
   - 0078 accepts `ARC` in `counterparties_chain_check` (0044's rewrite keeps it) and names the home chain in both
     link functions.
 
@@ -500,8 +504,8 @@ would find.
     limit. Turning the limit off stays allowed, since it only takes the agent's power to pay away.
   - `runAgentCycle` refuses first. The schedule and the FX watcher skip every workspace as `payments_off`, and
     event cycles drop quietly.
-  - Approve and pay, Pay now and Bring cash back refuse before any claim, and the workspace layout draws
-    `PaymentsOffBanner` with the recorded reason.
+  - Approve and pay, Pay now and Bring cash back refuse before any claim, and the workspace layout reads
+    `PaymentsOffBanner`, with the recorded reason, which each page draws under its header.
   - Approve and pay, and Pay now, still record a transfer already sent; that only reads Circle.
   - The agent's purchases from its service budget check the switch too.
 - **Addresses checked where they enter:** the console's forms and `POST /api/v1/counterparties` refuse an address
@@ -665,6 +669,38 @@ anything is signed (the forwarding fee's high estimate plus the fast fee, rounde
 are shared with CCTP payouts through `src/lib/circle/cctp-forward.ts`, which imports no Node module. Nothing is
 recorded on the ledger: the wallet's balance is read from the chain as before.
 
+## The workspace frame
+
+Every page under `/o/[slug]` sits in one frame (spec `2026-10-10-workspace-shell-design.md`).
+
+- **Layout, platform data only.** `src/app/o/[slug]/layout.tsx` reads the membership, the viewer's other memberships,
+  the pause (`pausedBanner`) and the payments switch (`paymentsSwitchForPages`), never an organization's own rows. It
+  hands `AppFrame` the workspace, a `PlatformStatus` (network, mode, the deployment's mainnet switch, payments off with
+  its reason, the pause with since, by and why), the three banners as one node, and the `vx_sidebar` cookie.
+- **`AppFrame`** (`src/components/vx/AppFrame.tsx`) wraps everything in `FrameProvider`
+  (`src/components/vx/FrameContext.tsx`): the workspace, the platform status, the banners and the sidebar's state. The
+  sidebar (`Sidebar` and `NavPanel` in `AppNav.tsx`) is 14.5rem from `lg`, or a 4rem icon rail when folded; the
+  drawer below `lg` is the same panel, never folded. The state lives in the cookie (`sidebar-preference.ts`): the
+  layout reads it so the server draws the first paint at the right width, and the client reads `document.cookie` through
+  `useSyncExternalStore`, so a layout served from the router's cache never undoes a toggle. `[` toggles it outside text
+  fields; so does the header's button and the command palette.
+- **Sections** are `NAV_GROUPS` in `nav.ts`: Treasury and Approvals, then Operations, Controls, Analytics and Workspace.
+  The sidebar, the drawer, the palette and each page's title read that one list.
+- **Header, drawn by the page.** `ProductShell` (`src/components/vx/Shell.tsx`) draws `WorkspaceHeader`: the toggle,
+  the workspace and section, the agent's last cycle (`AgentActivity`, mounted once at every width so its toasts always
+  come) and three chips, network, payments and agent, which open a "Workspace status" panel. The chips combine the
+  layout's `PlatformStatus` with the page's `PageStatus`, which only the page can read, inside `inOrg`:
+  `chainModes={shellModes()}` and `status={await shellStatus()}` (`src/lib/shell-status.ts`: shadow mode, and the
+  workspace's own screening, which read out of scope would be the deployment's). `workspace-status.ts` turns both into
+  chips and rows, pure and tested; payments off wins, then held, shadow mode, simulated, live. A fact the layout or the
+  page could not read (the switch, the pause, shadow mode) shows as not known, never as its healthy value, since the
+  payment gates refuse on the same failure; the agent shows as stopped while payments are off or held.
+- **Banners** (Arc mainnet, payments switched off, agent paused) are read by the layout and drawn by each page under its
+  header (`FrameBanners`). The loading and error states draw the same header with the layout's facts alone, and the
+  same `CONTENT_FRAME` width (`frame.ts`, 90rem).
+- Inside a workspace a bar sticks to the top at every width (the phone bar below `lg`, `WorkspaceHeader` from `lg`), so
+  `html:has([data-workspace-frame])` sets a `scroll-padding-top` that every anchor lands below.
+
 ## Shadow mode
 
 Shadow mode (`docs/superpowers/specs/2026-10-07-shadow-mode-design.md`) runs an Arc testnet workspace alongside how
@@ -672,7 +708,7 @@ a business pays today: it keeps paying its bills itself, the agent decides on th
 disagrees with every decision.
 
 - **The switch** is one row in `shadow_modes` (migration 0084), with the business's currency. An owner turns it on or
-  off in Settings (`src/lib/shadow-mode.ts`), never on Arc mainnet and never while a cycle runs; each change is signed.
+  off in Settings (`src/lib/shadow-mode.ts`), or on when creating the workspace, through the same library, never on Arc mainnet and never while a cycle runs; each change is signed.
 - **The hold.** The AP stage reads it once, like the figure for two approvals. A `pay` that passes every guardrail is
   then held, not sent, with `execution.heldBecause: "shadow_verdict"` (`src/lib/agent/shadow-hold.ts`). It is no
   guardrail block, so the public count of code refusals is not inflated. A milestone release is held the same way. The
@@ -683,8 +719,9 @@ disagrees with every decision.
   uses, and only while the payable still waits for that verdict. Disagree can return or reject it.
 - **Which payments await a verdict.** `awaitsVerdict` (`src/lib/next-step.ts`): the agent decided to pay and either
   shadow mode held it (`heldBecause: "shadow_verdict"`) or, on a decision marked `shadow: true` (every AP decision the
-  orchestrator writes in shadow mode), a check in code held it. The gate, the approvals list, the AP / AR card and the
-  chat words below all read it, so a solo owner's first payment to an address they typed has a verdict too.
+  orchestrator writes in shadow mode), a check in code held it. The gate, the approvals list, the payable's card on
+  Bills & receivables and the chat words below all read it, so a solo owner's first payment to an address they typed has
+  a verdict too.
 - **Settled through a verdict.** `verdictGate` (`src/lib/verdicts.ts`): while a verdict can be given on a payable held
   for one (shadow mode on, and the decision made since it started), `approveAndPay`, `rejectInvoice` and
   `returnInvoice` refuse it before any verdict (`verdict_needed`), and a payment after a disagreement is refused
@@ -709,8 +746,12 @@ disagrees with every decision.
   workspace's shadow decisions since the day, each with its verdict, what it paid and the transaction on the payable's
   newest decision ("Paid later by a person" when that decision was not to pay), and the agreement rate, in ASCII with no blank line for `arc-canteen update-traction`.
 - **Getting started in shadow mode.** While shadow mode is on, the console's checklist (`gettingStarted`,
-  `src/lib/getting-started.ts`) keeps its three setup steps and then asks for suppliers, real bills (`ownBillCount`,
-  paid or not) and a first verdict, from rows the console already reads; it hides once a verdict is given.
+  `src/lib/getting-started.ts`) asks for suppliers, real bills (`ownBillCount`, paid or not) and a first verdict, from
+  rows the console already reads, beside its three setup steps: after them in a live workspace or one with a wallet,
+  before them, which are then listed under "To pay on Arc", in an Arc testnet sandbox with no wallet, since it simulates
+  its payments. Outside shadow mode such a sandbox likewise starts with a supplier, a bill and the agent's decision
+  (`ownDecidedCount`). It hides once every step is done. In shadow mode, Add counterparty asks whether a vendor or
+  contractor sends purchase orders, and its answer is stored as `purchase_order_required` with the row.
 - **Test USDC from Vestiarion's float** (`src/lib/test-usdc.ts`, rules in `src/lib/test-usdc-rules.ts`). A bill is
   paid at its real amount and the faucet gives 20 USDC every two hours, so the console offers an owner or admin the
   shortfall **Safe to spend today** shows, from one float wallet in the hosted entity (`SHADOW_FLOAT_WALLET_ID`, filled
@@ -742,11 +783,12 @@ disagrees with every decision.
   in its bill's workspace and a correction on the same bill. `recordActual` (`src/lib/actual-payments.ts`) checks the
   signing key before writing the row, then appends `actual_payment_recorded` or `actual_payment_corrected`
   `{ by, actualId, subject, subjectId, outcome, paidOn, amount, currency, method, reference, note, reason }` (`replaces` on
-  a correction, `via: "csv"` from a CSV), naming the payable as `subjectId` so the AP / AR card keeps showing the
-  agent's decision. The commands `payable.record_actual` and `payable.import_actuals` run from the console only. A CSV
-  (`src/lib/actual-payments-csv.ts`) names each bill by its Vestiarion id, or by an invoice number its memo carries as a
-  whole word, and is previewed before it is saved, then matched again on the server. Until migration 0090 runs, reading
-  answers `available: false` (`PGRST205` or `42P01`) and recording refuses with `not_ready`, so the report never fails for it.
+  a correction, `via: "csv"` from a CSV), naming the payable as `subjectId` so its card on Bills & receivables keeps
+  showing the agent's decision. The commands `payable.record_actual` and `payable.import_actuals` run from the console
+  only. A CSV (`src/lib/actual-payments-csv.ts`) names each bill by its Vestiarion id, or by an invoice number its memo
+  carries as a whole word, and is previewed before it is saved, then matched again on the server. Until migration 0090
+  runs, reading answers `available: false` (`PGRST205` or `42P01`) and recording refuses with `not_ready`, so the report
+  never fails for it.
 
 ## The workspace report
 
@@ -1110,11 +1152,11 @@ own domains, `resend.com` and `resend.app`), else its text, through the same
 document is named in the reasons. The row ends `ready`, `needs_details` or
 `unreadable`, with reasons a person reads, and keeps what was read (with the
 matched counterparty's id and the document's hash); the workspace's Slack
-channel is told. Nothing is added by itself: on AP / AR an owner or admin runs
-`inbox.add` (the draft used once, put back if the invoice cannot be added;
-`create_invoice` names `via: "email"` and `inboxEmailId`), `inbox.finish` (the
-invoice form started from what was read, for any email ready, needing details
-or unreadable; the entry also lists the fields the person changed) or
+channel is told. Nothing is added by itself: on Bills & receivables an owner or
+admin runs `inbox.add` (the draft used once, put back if the invoice cannot be
+added; `create_invoice` names `via: "email"` and `inboxEmailId`), `inbox.finish`
+(the invoice form started from what was read, for any email ready, needing
+details or unreadable; the entry also lists the fields the person changed) or
 `inbox.dismiss`.
 
 **A workspace can connect GitHub**
@@ -1300,6 +1342,62 @@ npm publish public/sdk/vestiarion-sdk-<version>.tgz --access public
 
 Both installs then get the same bytes. The next version's `sdk/README.md` should name `npm install @vestiarion/sdk`
 first; 0.1.0's README, inside its immutable tarball, names the site's URL.
+
+## Growth tracking for the team
+
+Migration `0099` adds what the team records about its own growth, apart from any workspace: `growth_campaigns`,
+`growth_leads` (businesses the team found by hand, each with its source, segment, campaign, evidence, a draft message,
+a review status and a stage), `growth_spend` (cash and founder hours) and `growth_revenue` (pricing talks, pilots,
+invoices and payments; only `payment_received` ever counts as revenue). They are platform tables: row level security
+on, nothing for `anon` or `authenticated`, reached only through `platformDb()`.
+
+Every change to a lead's stage, review status, campaign, workspace or source, and its creation, is written to the
+append-only `growth_lead_events` by the trigger `growth_leads_log`, so attribution and stage are never overwritten
+without a trace; the events refuse update, delete and truncate, except the cascade when their lead is deleted. The
+note and the team member reach the trigger through two transaction-local settings, `growth.note` and `growth.by`, that
+`growth_update_lead(p_lead, p_changes, p_note, p_by)` and `growth_import_leads(p_rows, p_by)` set before they write.
+A write made any other way (the link cleared when a workspace is deleted) is logged with neither.
+
+**The first-touch cookie.** `FirstTouch` (`src/components/analytics/FirstTouch.tsx`), in the root layout, writes a
+first-party cookie, `vx_ft`, when the address carries `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`,
+`utm_term` or `ref` and the browser holds none yet: those tags, each cut to 100 characters of `[A-Za-z0-9._~-]` (a
+tag with an `@` is dropped), the landing path without its query, the referring site's host, and the time; 90 days,
+`SameSite=Lax`, `Secure` on https, under 1 KB (`src/lib/growth/attribution.ts`). `createWorkspaceAction` reads it once
+the workspace exists and calls `record_org_attribution`, which keeps the first touch in `org_attribution` and never
+replaces it. Recording never fails or holds up onboarding: no cookie, a database error, or an answer slower than 1.5
+seconds is logged at most (`src/lib/growth/record.ts`). The privacy page describes the cookie.
+
+**The founder dashboard** at `/admin/growth` is for people on `platform_team` only. `growthTeamUser()`
+(`src/lib/growth/gate.ts`) asks `growth_team_member(p_user)` on every call and fails closed; the page answers anyone
+else, signed in or not, with `notFound()`, so it never says it exists, and every action in
+`src/app/admin/growth/actions.ts` and the CSV export at `/admin/growth/leads.csv` ask the gate again themselves
+(`tests/access-gates.test.ts`, `tests/growth-access.test.ts`). It is in no navigation and no sitemap, and asks not to
+be indexed. It shows `open_funnel` per network, the workspaces from `growth_workspaces(p_since)` (customers apart from
+ours by `open_funnel`'s rule, with the first decision and the second real bill by `0089`'s definitions, and no email or
+person's name), figures with their numerators and denominators ("Not enough data yet" where a denominator is 0),
+breakdowns by source, segment and campaign, the leads with their trails, an approval queue, a CSV import that previews
+every row and never overwrites a lead, and forms for campaigns, spend and revenue. The calculations live in
+`src/lib/growth/metrics.ts` and `csv.ts`, and the page's Definitions section (`src/lib/growth/definitions.ts`) says
+where each figure comes from. **It never sends a message to anyone**: approving a lead records a decision, and
+Vestiarion never sends outreach. Payment volume is never shown as revenue, and amounts in different currencies are
+never added together.
+
+**Inbound leads from /studios.** The page for studios that pay contractors per deliverable (`src/app/studios/page.tsx`)
+reads the landing's figures the same way (`readAllTimeOrNull` per network, `readLatestDecision`); its count of code
+refusals is `refusedByCode` from those open numbers, one network at a time, customers apart, never written into the
+page. Its guided setup form posts to `requestGuidedSetupAction` (`src/app/studios/actions.ts`), which has no session
+to gate on: `submitGuidedSetup` (`src/lib/growth/inbound.ts`) is the gate. There is no shared rate limiter
+(`src/lib/rate-limit.ts` is per instance), so a bot is kept out without a store: a honeypot field, a form token signed
+when the page is drawn (`vx1.<body>.<HMAC>`, keyed by HKDF from `VESTIARION_MASTER_KEYS` for this purpose alone, as the
+GitHub and Slack states are) that must be at least 3 seconds and at most a day old, and a cap of 4,000 characters on the
+whole submission (`src/lib/growth/guided-setup.ts`). A bot is thanked like a person and nothing is written; a token
+older than a day asks the person to reload. A request that reads right is written through `growth_import_leads` as one
+lead: source `inbound`, contact channel `website_form`, the email as the handle, the first touch's `utm_campaign` as
+the campaign only when `growth_campaigns` has that id, the first touch's tags in `source_detail` either way, and the
+answers in the notes. A dedupe key already taken is skipped, as in an import, and the person is thanked all the same.
+When `GROWTH_INBOUND_NOTIFY_EMAIL` is set, the team gets a short note through `sendEmail` about a new lead (never the
+message); nothing is ever sent to the person who asked. The approval queue's card shows an inbound lead's contact,
+site, notes and source detail.
 
 ## Data ownership
 

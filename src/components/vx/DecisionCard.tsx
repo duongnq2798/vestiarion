@@ -8,6 +8,7 @@ import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { orgHref } from "@/lib/auth/org-paths";
 import { txUrl } from "@/lib/payee-chains";
+import { ruleLabel } from "@/lib/rule-words";
 import { CollapsibleReasoning } from "./CollapsibleReasoning";
 import { DecisionTrail } from "./DecisionTrail";
 import { DOMAIN_NAME, DomainGlyph } from "./Glyphs";
@@ -153,13 +154,16 @@ export function DecisionCard({
   );
 }
 
+/** The rule in words; its id, which the ledger and the API name, only on hover. */
 function GuardrailBand({ guardrail, token = "USDC", action }: { guardrail: Guardrail; token?: string; action: string }) {
   return (
     <Callout tone="refused" icon={<ShieldX />} title="Blocked by code, not by the model" className="mx-4 mt-4 sm:mx-5">
       <p>The agent decided to {action}. The guardrail refused it before anything was signed or sent.</p>
       <dl className="mt-2.5 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[0.8125rem]">
         <dt className="text-ink-3">Rule</dt>
-        <dd className="font-mono text-ink [overflow-wrap:anywhere]">{guardrail.rule}</dd>
+        <dd className="text-ink [overflow-wrap:anywhere]" title={guardrail.rule}>
+          {ruleLabel(guardrail.rule)}
+        </dd>
         <dt className="text-ink-3">Attempted</dt>
         <dd className="font-mono tabular-nums text-ink">
           {fmt(guardrail.attempted)} {guardrail.attemptedToken ?? token}

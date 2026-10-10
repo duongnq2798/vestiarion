@@ -39,6 +39,11 @@ describe("VerdictControl", () => {
     expect(source).toContain("You agree with the agent, and it is paid in USDC on Arc testnet now.");
   });
 
+  it("says the payment is simulated where the workspace simulates its payments (a sandbox with no Circle account)", () => {
+    expect(source).toContain('const AGREE_AND_PAY_SIMULATED = "You agree with the agent, and it is paid now, simulated in this sandbox.";');
+    expect(source).toContain("view.simulated ? AGREE_AND_PAY_SIMULATED : AGREE_AND_PAY");
+  });
+
   it("asks why a person disagrees, and what to do with a payment held for the verdict", () => {
     expect(source).toContain('title="Disagree with the agent?"');
     expect(source).toContain('label="Why do you disagree?"');

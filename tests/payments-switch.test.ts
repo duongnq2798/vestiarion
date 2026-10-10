@@ -103,7 +103,8 @@ describe("the switch on every page (S5)", () => {
   it("shows nothing when the switch cannot be read: it never takes a page down", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const state = await inScope(database({ status: 500, body: { message: "connection reset" } }), () => paymentsSwitchForPages());
-    expect(state).toEqual({ off: false, reason: null });
+    // No banner; the header says it is not known, since every payment gate refuses on the same failure.
+    expect(state).toEqual({ off: false, reason: null, unread: true });
     error.mockRestore();
   });
 });

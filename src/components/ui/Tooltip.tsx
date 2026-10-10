@@ -17,11 +17,23 @@ const TOOLTIP_MOTION = [
 /**
  * A short label for a control with no visible text — an icon button, a
  * truncated value. Never the only place something essential is said: touch
- * screens cannot hover.
+ * screens cannot hover. `disabled` keeps it closed while leaving the trigger
+ * where it is, so a control that only sometimes needs one (the sidebar's icon
+ * rail) keeps its element, and its focus, when it stops needing it.
  */
-export function Tooltip({ content, side = "top", children }: { content: ReactNode; side?: "top" | "right" | "bottom" | "left"; children: ReactElement }) {
+export function Tooltip({
+  content,
+  side = "top",
+  disabled = false,
+  children,
+}: {
+  content: ReactNode;
+  side?: "top" | "right" | "bottom" | "left";
+  disabled?: boolean;
+  children: ReactElement;
+}) {
   return (
-    <TooltipPrimitive.Root>
+    <TooltipPrimitive.Root {...(disabled ? { open: false } : {})}>
       <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
       <TooltipPrimitive.Portal>
         <TooltipPrimitive.Content

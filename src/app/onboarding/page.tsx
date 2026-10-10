@@ -24,7 +24,7 @@ import { activeLine, byRecentActivity } from "@/lib/workspace-recency";
 export const metadata: Metadata = { title: "Workspaces" };
 
 type OnboardingPageProps = {
-  searchParams: Promise<{ new?: string | string[]; create?: string | string[] }>;
+  searchParams: Promise<{ new?: string | string[]; create?: string | string[]; shadow?: string | string[] }>;
 };
 
 /** Past this many workspaces, the most recent lead under "Recent" and the rest follow under "Other workspaces". */
@@ -40,7 +40,8 @@ const expiresFormat = new Intl.DateTimeFormat("en-US", { year: "numeric", month:
  * workspaces, and `?create` opens the form to create another. Someone with a
  * workspace is welcomed back to the one in use most recently, and creating
  * another waits behind a button; someone with none is welcomed and creates
- * their first.
+ * their first. `?shadow=1`, from the landing page's "Try it on your bills",
+ * ticks shadow mode on the form.
  *
  * Also where an invitation on another device, another browser, or from
  * Google sign-in, is found again: the `vx_after_sign_in` cookie
@@ -68,6 +69,7 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
   }
   // Arc mainnet is offered only to a person on the deployment's allowlist while it is on (mainnet go-live M1, M2).
   const mainnetOffered = mayUseMainnet(user.email, currentConfig());
+  const shadowChosen = query.shadow === "1";
   const workspaces = byRecentActivity(memberships);
   const split = workspaces.length > RECENT;
 
@@ -128,17 +130,17 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
                 }
               >
                 <div className="mt-4">
-                  <CreateWorkspaceForm mainnetOffered={mainnetOffered} />
+                  <CreateWorkspaceForm mainnetOffered={mainnetOffered} shadowChosen={shadowChosen} />
                 </div>
               </Disclosure>
             </>
           ) : (
             <>
               <p className="mt-3 text-[0.9375rem] leading-relaxed text-ink-2">
-                Create your first workspace to run Vestiarion. An owner adds a wallet from Settings, and the agent pays from it. A teammate can also invite you to theirs.
+                Create your first workspace, then add one of your bills and see what the agent decides. A teammate can also invite you to theirs.
               </p>
               <div id="create-workspace" className="mt-6 scroll-mt-24">
-                <CreateWorkspaceForm mainnetOffered={mainnetOffered} />
+                <CreateWorkspaceForm mainnetOffered={mainnetOffered} shadowChosen={shadowChosen} />
               </div>
             </>
           )}

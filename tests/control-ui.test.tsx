@@ -536,7 +536,7 @@ describe("the new control screens, as source", () => {
     // In shadow mode in a currency other than USDC, a bill is typed in that currency (shadow mode S6); in USDC, as typed.
     expect(invoices).toContain("billCurrency={billCurrencyOf(verdicts.shadow)}");
     // With the test USDC its open bills need, beside it (test USDC T8).
-    expect(read("src/app/o/[slug]/console/page.tsx")).toContain("{shadow && shadowSummary && <ShadowModeSummary orgSlug={slug} mode={shadow} summary={shadowSummary} testUsdc={testUsdc} />}");
+    expect(read("src/app/o/[slug]/console/page.tsx")).toContain('{shadow && shadowSummary && <ShadowModeSummary orgSlug={slug} mode={shadow} summary={shadowSummary} testUsdc={testUsdc} simulated={modes.mode !== "live" && !paymentsHeld()} />}');
   });
 
   it("the console's Stopped cards say what stopped each payable and where to handle it", () => {
@@ -549,7 +549,7 @@ describe("the new control screens, as source", () => {
     expect(console_).toContain("purchaseOrderRequired: counterpartiesById.get(invoice.counterparty_id)?.purchase_order_required !== false");
   });
 
-  it("AP / AR says which payables a running cycle is deciding", () => {
+  it("Bills & receivables says which payables a running cycle is deciding", () => {
     const invoices = read("src/app/o/[slug]/invoices/page.tsx");
     expect(invoices).toContain("hasRunningCycle().catch(() => false)");
     expect(invoices).toContain("entries, { network, deciding, verdicts })");
@@ -624,7 +624,7 @@ describe("the new control screens, as source", () => {
 
   it("the workspace layout draws the paused banner from platform data", () => {
     const layout = read("src/app/o/[slug]/layout.tsx");
-    expect(layout).toContain("pausedBanner(membership.orgId)");
+    expect(layout).toContain("readPause(membership.orgId)");
     expect(layout).toContain("<AgentPausedBanner");
     expect(layout).toContain("<AgentPausedBanner");
   });
