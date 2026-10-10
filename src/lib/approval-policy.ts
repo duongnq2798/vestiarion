@@ -60,6 +60,11 @@ export async function approversBesides(excluded: string[]): Promise<number> {
   return result.data;
 }
 
+/** What a change to the figure already in force is told. */
+export function unchangedTwoApprovalsMessage(to: number | null): string {
+  return to === null ? "Two approvals are already off." : `Payments above ${to} USDC already need two approvals.`;
+}
+
 function summary(from: number | null, to: number | null): string {
   if (to === null) return `Turned off two approvals above ${from} USDC`;
   if (from === null) return `Payments above ${to} USDC now need two approvals`;
@@ -76,9 +81,7 @@ export async function changeTwoApprovals(input: { actorId: string; value: string
   if (to === null && workspaceNetwork().id === "arc-mainnet") throw new ApprovalPolicyError("mainnet_keeps_figure");
 
   const from = await readTwoApprovalsAbove(db());
-  if (from === to) {
-    throw new ApprovalPolicyError("unchanged", to === null ? "Two approvals are already off." : `Payments above ${to} USDC already need two approvals.`);
-  }
+  if (from === to) throw new ApprovalPolicyError("unchanged", unchangedTwoApprovalsMessage(to));
 
   const running = unwrap(
     await db()
