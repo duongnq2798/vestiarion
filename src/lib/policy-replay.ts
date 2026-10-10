@@ -213,12 +213,13 @@ function factsOf(entry: ReplayEntry): Facts | null {
   const newPayee = record(observed?.newPayee);
   const execution = record(detail.execution);
   const goes = source === "bill" ? action === "pay" || action === "schedule" : action === "release";
+  const sourceId = source === "bill" ? detail.invoiceId : detail.milestoneId;
   return {
     seq: entry.seq,
     ts: entry.ts,
     day: Math.floor(Date.parse(entry.ts) / DAY_MS),
     source,
-    sourceId: typeof (source === "bill" ? detail.invoiceId : detail.milestoneId) === "string" ? ((source === "bill" ? detail.invoiceId : detail.milestoneId) as string) : null,
+    sourceId: typeof sourceId === "string" ? sourceId : null,
     counterpartyId: typeof detail.counterpartyId === "string" ? detail.counterpartyId : null,
     action,
     goes,
@@ -227,7 +228,8 @@ function factsOf(entry: ReplayEntry): Facts | null {
     currency,
     amountUsdc,
     risk: typeof observed?.riskLevel === "string" ? observed.riskLevel : null,
-    recordedLimit: observed && "paymentLimit" in observed ? numeric(observed.paymentLimit) : undefined,
+    // No limit is recorded as null; a value that is not a number says nothing.
+    recordedLimit: observed?.paymentLimit === null ? null : (numeric(observed?.paymentLimit) ?? undefined),
     recordedRule,
     paidUsdc: agentOutflowUsdc({ actor: "agent", action: entry.action, detail }),
     shadow: detail.shadow === true,

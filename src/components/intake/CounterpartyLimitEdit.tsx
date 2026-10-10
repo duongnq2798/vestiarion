@@ -7,7 +7,8 @@ import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from 
 import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { Input } from "@/components/ui/Input";
-import { RULE_TRIAL_COPY, RuleTrial, useRuleTrial } from "@/components/RuleTrial";
+import { RuleTrial, useRuleTrial } from "@/components/RuleTrial";
+import { RULE_TRIAL_COPY } from "@/lib/rule-trial-copy";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { withSuccessToast } from "@/components/withSuccessToast";

@@ -52,7 +52,8 @@ import { useActionForm, type ActionResult } from "@/components/ui/useActionForm"
 import { networkProfile } from "@/lib/network";
 import { txUrl } from "@/lib/payee-chains";
 import { DESIGN_SLUG, WORKSPACE } from "./fixtures";
-import { RULE_TRIAL_COPY, RuleTrial, useRuleTrial } from "@/components/RuleTrial";
+import { RuleTrial, useRuleTrial } from "@/components/RuleTrial";
+import { RULE_TRIAL_COPY } from "@/lib/rule-trial-copy";
 import type { RuleReplayView } from "@/lib/policy-replay-read";
 import type { PaymentReceipt } from "@/lib/payment-receipt";
 

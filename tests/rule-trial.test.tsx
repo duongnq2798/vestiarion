@@ -4,7 +4,8 @@ import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { designRuleReplay } from "@/app/design/replay-fixture";
-import { RULE_TRIAL_COPY, RuleTrialFields, RuleTrialResult } from "@/components/RuleTrial";
+import { RuleTrialFields, RuleTrialResult } from "@/components/RuleTrial";
+import { RULE_TRIAL_COPY } from "@/lib/rule-trial-copy";
 import TwoApprovalsPanel from "@/components/TwoApprovalsPanel";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 

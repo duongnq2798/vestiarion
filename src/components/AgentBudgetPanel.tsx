@@ -12,7 +12,8 @@ import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from 
 import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { Input } from "@/components/ui/Input";
-import { RULE_TRIAL_COPY, RuleTrial, useRuleTrial } from "@/components/RuleTrial";
+import { RuleTrial, useRuleTrial } from "@/components/RuleTrial";
+import { RULE_TRIAL_COPY } from "@/lib/rule-trial-copy";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm, type ActionResult } from "@/components/ui/useActionForm";
