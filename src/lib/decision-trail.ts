@@ -130,6 +130,16 @@ function codeNotes(detail: Record<string, unknown>): { notes: string[]; refused:
   return { notes, refused };
 }
 
+/**
+ * What was checked about a decision, one short line each, marked passed or not: its facts, then what code and the
+ * spending-limit contract said. The trail's notes without what it sent; the evidence chain shows them on its decision
+ * step (evidence chain E2), so the two never word a check differently.
+ */
+export function decisionChecks(detail: Record<string, unknown>, paying: boolean): { notes: string[]; refused: boolean } {
+  const code = codeNotes(detail);
+  return { notes: [...checksOf(detail, paying), ...code.notes], refused: code.refused };
+}
+
 /** ", as the written policy would", or how the model departed from it; nothing for the written policy itself. */
 function agreement(detail: Record<string, unknown>): string {
   if (deciderName(detail.decisionMode) === "The written policy") return "";
@@ -176,17 +186,17 @@ export function trailStep(entry: TrailEntry, network: Network = "arc-testnet"): 
       const decider = deciderName(detail.decisionMode);
       const agreed = detail.agreedWithReference;
       const policy = decider === "The written policy" ? "" : agreed === true ? ", as the written policy would" : agreed === false ? "; the written policy would have decided otherwise" : "";
-      const code = codeNotes(detail);
+      const paying = entry.action === "ap_pay" || entry.action === "ap_schedule";
+      const code = decisionChecks(detail, paying);
       const execution = record(detail.execution);
       const tx = entry.action === "ap_pay" && !code.refused ? arcTx(execution?.txRef) : null;
-      const paying = entry.action === "ap_pay" || entry.action === "ap_schedule";
       const stopped = code.refused || !paying || text(execution?.resultingStatus) === "held";
       return {
         ...base,
         who: "agent",
         tone: stopped ? "stopped" : "done",
         text: `${decider} decided ${VERBS[entry.action](detail)}${policy}.`,
-        notes: [...checksOf(detail, paying), ...code.notes, ...(tx ? [`✓ Sent on ${label}`] : [])],
+        notes: [...code.notes, ...(tx ? [`✓ Sent on ${label}`] : [])],
         txHash: tx,
       };
     }
