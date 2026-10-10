@@ -263,7 +263,7 @@ export async function recordActual(input: ActualInput & RecordSource & { actorId
 const PAGE = 1000;
 
 /** Every row of a read, a page at a time, or the read's error. */
-async function pages<T>(read: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: PostgrestError }>): Promise<{ rows: T[]; error: PostgrestError }> {
+export async function pages<T>(read: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: PostgrestError }>): Promise<{ rows: T[]; error: PostgrestError }> {
   const rows: T[] = [];
   for (let from = 0; ; from += PAGE) {
     const page = await read(from, from + PAGE - 1);
@@ -274,7 +274,7 @@ async function pages<T>(read: (from: number, to: number) => PromiseLike<{ data: 
   }
 }
 
-function rowsOrThrow<T>(read: { rows: T[]; error: PostgrestError }): T[] {
+export function rowsOrThrow<T>(read: { rows: T[]; error: PostgrestError }): T[] {
   if (read.error) throw new Error(read.error.message ?? "read failed");
   return read.rows;
 }
@@ -321,9 +321,18 @@ type PayableRow = {
   counterparties: { name: string } | null;
 };
 
+/** Each payable's newest record, by its id: the one no other replaces. Throws `not_ready` before migration 0090 runs. */
+export async function readNewestRecords(orgDb: OrgDb): Promise<Map<string, ActualRecord>> {
+  const records = await pages<ActualRow>((from, to) => orgDb.from("payment_actuals").select(COLUMNS).order("recorded_at", { ascending: true }).order("id", { ascending: true }).range(from, to));
+  if (missingTable(records.error)) throw new ActualPaymentError("not_ready");
+  const all = rowsOrThrow(records).map(toRecord);
+  const replaced = new Set(all.flatMap((record) => (record.replaces ? [record.replaces] : [])));
+  return new Map(all.filter((record) => !replaced.has(record.id)).map((record) => [record.invoiceId, record]));
+}
+
 /** The workspace's payables as the CSV matches them, each with its newest record. Throws `not_ready` before 0090. */
 export async function readMatchBills(orgDb: OrgDb): Promise<MatchBill[]> {
-  const [payables, records] = await Promise.all([
+  const [payables, newest] = await Promise.all([
     pages<PayableRow>((from, to) =>
       orgDb
         .from("invoices")
@@ -332,12 +341,8 @@ export async function readMatchBills(orgDb: OrgDb): Promise<MatchBill[]> {
         .order("id", { ascending: true })
         .range(from, to)
     ),
-    pages<ActualRow>((from, to) => orgDb.from("payment_actuals").select(COLUMNS).order("recorded_at", { ascending: true }).order("id", { ascending: true }).range(from, to)),
+    readNewestRecords(orgDb),
   ]);
-  if (missingTable(records.error)) throw new ActualPaymentError("not_ready");
-  const all = rowsOrThrow(records).map(toRecord);
-  const replaced = new Set(all.flatMap((record) => (record.replaces ? [record.replaces] : [])));
-  const newest = new Map(all.filter((record) => !replaced.has(record.id)).map((record) => [record.invoiceId, record]));
   return rowsOrThrow(payables).map((row) => ({
     id: row.id,
     memo: row.memo,
