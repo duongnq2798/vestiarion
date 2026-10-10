@@ -171,6 +171,7 @@ const SHOTS = {
   "report-shadow": async () => {},
   "report-readiness": async () => {},
   "report-lists": async () => {},
+  "try-a-rule-result": async () => {},
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

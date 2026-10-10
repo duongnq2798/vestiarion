@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-10: A limit applied after trying it records the replay
+
+- A person can try a new payment limit, figure for two approvals or spending limit on the agent's past decisions before saving it. When they apply it from that result, its entry gains `replay` in its `detail`: `{ windowDays, from, to, decisions, unchanged, nowHeld, nowPaid, nowTwoPeople, cantTell }`. `windowDays` is 30 or 90, `from` and `to` bound the window, and the counts are the decisions replayed and how their outcome would change.
+- The entries are **`counterparty_limit_changed`**, **`approval_policy_changed`** and **`agent_budget_changed`**, in `GET /api/v1/ledger` and as `ledger.appended` alike. A change saved without trying it first has no `replay`, as before.
+- Trying a figure writes nothing to the ledger. Nothing else in `/api/v1` changes.
+
 ## 2026-10-09: A payable to a payee with no address is held before anything is sent
 
 - Wherever payments are real, an agent decision (`ap_pay` or `ap_schedule`) about a payable whose counterparty has no payment address is held by a new guardrail rule, **`counterparty.no_address`**: `guardrailBlocked: true`, `execution.resultingStatus: "held"`, and `observed.addressMissing: true`. Before, the transfer was tried and failed, and the reasoning carried the provider's error. A sandbox's entries are unchanged.

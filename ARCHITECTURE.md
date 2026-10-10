@@ -316,6 +316,27 @@ plan, on Arc testnet).
     fewer than two approvers in all, no approval is taken.
   - Reject, Return and Close clear the approvals; a transfer already sent is recorded on one approval.
 
+**Trying a limit on past decisions** (`docs/superpowers/specs/2026-10-10-policy-replay-design.md`).
+- **What it replays** (`replayDecisions`, `src/lib/policy-replay.ts`, pure): the agent's `ap_*` and `milestone_*`
+  decisions in the window, by ledger sequence, twice: under the figures in force (each counterparty's
+  `baseline_payment_limit`, `approval_policies`, `agent_budgets`) and with one candidate swapped in. No model is asked.
+- **The checks:** the stages of `enforceApGuardrails`, and of the contractor stage for a release, in their order. The
+  three figure checks are run again: the payment limit for the risk the decision recorded (`paymentLimitForRisk`), two
+  approvals, and the spending limit against running UTC-day and 7-day totals carried from decision to decision, with the
+  six days before the window counted as recorded. Every other check is read from the recorded `guardrailRule`: passed
+  before it, fired at it, and settled past it only from the facts (no `payout`, a USDC bill, `observed.newPayee`, a
+  bill's recorded `onChainLimit`); anything else is can't tell. A bill paid earlier in the replay counts once.
+- **Can't tell** is counted, never guessed: an entry without an amount, decision or known rule, a missing risk level,
+  an unsettled check, a spending-limit check whose low and high running totals disagree, or a contract refusal for want
+  of room under other figures.
+- **Reading and the action:** `ruleReplay` (`src/lib/policy-replay-read.ts`) parses the candidate with the setting's own
+  parser and reads the window in pages (at most 20 of 1,000). `tryRuleAction` authorizes the permission that changes
+  the setting (`records.write`, `approval.policy`, `agent.budget`) and changes nothing.
+- **Applying it** posts the setting's own form to its own action. `policy-replay-apply.ts` reads the figure tried
+  and replays again on the server; `changeCounterpartyLimit`, `changeTwoApprovals` and `changeAgentBudget` refuse
+  with `stale` when the figure in force is no longer the one tried, and add `detail.replay` (window and counts) to
+  their signed entry. The contract on Arc, maker and checker and every other protection are unchanged by it.
+
 **A network for every workspace** (`docs/superpowers/specs/2026-10-05-network-foundation-design.md`, phase 1 of the
 mainnet plan).
 - **The column:** `orgs.network` is `arc-testnet` or `arc-mainnet`, Arc testnet by default (migration 0075).

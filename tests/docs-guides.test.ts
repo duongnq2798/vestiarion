@@ -19,6 +19,7 @@ type GuideSlug =
   | "guides/shadow-mode"
   | "guides/report"
   | "guides/first-payment"
+  | "guides/try-a-rule"
   | "guides/pay-a-contractor"
   | "guides/get-paid"
   | "guides/telegram"
@@ -144,6 +145,12 @@ const TEST_USDC_ACTION = "src/app/actions/test-usdc.ts";
 const TEST_USDC_LIBRARY = "src/lib/test-usdc.ts";
 const VERDICT = "src/components/VerdictControl.tsx";
 const REPORT = "src/components/vx/WorkspaceReport.tsx";
+const RULE_TRIAL = "src/components/RuleTrial.tsx";
+const RULE_TRIAL_COPY = "src/lib/rule-trial-copy.ts";
+const LIMIT_EDIT = "src/components/intake/CounterpartyLimitEdit.tsx";
+const TWO_APPROVALS_PANEL = "src/components/TwoApprovalsPanel.tsx";
+const BUDGET_PANEL = "src/components/AgentBudgetPanel.tsx";
+const REPLAY_READ = "src/lib/policy-replay-read.ts";
 const VERDICTS = "src/lib/verdicts.ts";
 
 /** Each guide's quoted UI strings, as `[text, the file it must appear in]`. */
@@ -337,6 +344,41 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["refused the transfer. Your USDC did not leave your wallet.", "src/lib/inbound-usdc.ts"],
     ["Your wallet holds no ETH on Base to pay its gas. Add a little ETH there, then choose Review again.", "src/lib/inbound-usdc.ts", " to pay its gas. Add a little "],
     ["Your wallet does not hold enough ETH on Base for the gas. Add a little ETH there, then send again.", "src/lib/inbound-usdc.ts", " for the gas. Add a little "],
+  ],
+  "guides/try-a-rule": [
+    ["Try it on past decisions", RULE_TRIAL_COPY],
+    ["Counterparties", APP_NAV],
+    ["Edit limit", LIMIT_EDIT],
+    ["Payment limit (USDC)", LIMIT_EDIT],
+    ["Settings", APP_NAV],
+    ["Two approvals", TWO_APPROVALS_PANEL],
+    ["Payments above (USDC)", TWO_APPROVALS_PANEL],
+    ["Agent spending limit", BUDGET_PANEL],
+    ["Change limit", BUDGET_PANEL],
+    ["Per day (USDC)", BUDGET_PANEL],
+    ["Per 7 days (USDC)", BUDGET_PANEL],
+    ["Past decisions from", RULE_TRIAL_COPY],
+    ["Last 30 days", RULE_TRIAL, "Last {days} days"],
+    ["Last 90 days", RULE_TRIAL, "Last {days} days"],
+    ["In force now", RULE_TRIAL],
+    ["Trying", RULE_TRIAL],
+    ["Unchanged", RULE_TRIAL_COPY],
+    ["Would now be paid", RULE_TRIAL_COPY],
+    ["Would now be held", RULE_TRIAL_COPY],
+    ["Would now need two people", RULE_TRIAL_COPY],
+    ["Can't tell", RULE_TRIAL_COPY],
+    ["Apply this figure", RULE_TRIAL_COPY],
+    ["Save limit", LIMIT_EDIT],
+    ["Save", TWO_APPROVALS_PANEL],
+    ["This counterparty's limit changed since you tried it. Try it again.", "src/lib/counterparty-limit.ts"],
+    ["The figure for two approvals changed since you tried it. Try it again.", "src/lib/approval-policy.ts"],
+    ["The agent's spending limit changed since you tried it. Try it again.", "src/lib/agent-budget.ts"],
+    ["counterparty_limit_changed", "src/lib/counterparty-limit.ts"],
+    ["approval_policy_changed", "src/lib/approval-policy.ts"],
+    ["agent_budget_changed", "src/lib/agent-budget.ts"],
+    ["To turn it off, choose Turn off.", TWO_APPROVALS_PANEL],
+    ["Turn off", TWO_APPROVALS_PANEL],
+    ["This window holds too many decisions to try at once. Try the last 30 days.", REPLAY_READ],
   ],
   "guides/first-payment": [
     // A bill before its payee's address (counterparty.no_address), from the card and from Approve and pay.
@@ -1073,6 +1115,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/shadow-mode": 20,
   "guides/report": 20,
   "guides/first-payment": 20,
+  "guides/try-a-rule": 20,
   "guides/pay-a-contractor": 20,
   "guides/get-paid": 20,
   "guides/telegram": 20,

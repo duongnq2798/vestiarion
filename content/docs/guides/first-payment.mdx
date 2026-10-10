@@ -53,6 +53,8 @@ The form marks **Payment address** "Optional until payment setup", but the agent
 
 Owners and admins open the counterparty's row and change its limit with **Edit limit**, under **Configured limit**. Enter the new **Payment limit (USDC)** and choose **Save limit**. **Allowed now** follows at once: the whole limit for a counterparty screened clear, a quarter of it for medium risk, and 0 for high risk. A vendor or contractor always has a limit, because without one the agent could pay any amount. The ledger records who changed the limit, and from what to what.
 
+To see first which of this counterparty's bills a new limit would have held or let through, choose **Try it on past decisions** in the same dialog: see [Try a limit before you change it](/docs/guides/try-a-rule).
+
 ### Pay a counterparty without purchase orders
 
 The agent pays an invoice on its own only when its three-way match is complete: the goods or services received and a purchase order on file. Some suppliers never issue one, such as a utility or a subscription. A vendor's or contractor's row on **Counterparties** shows **Purchase orders**: "Needed before the agent pays", as for every counterparty at first, or "Not needed · goods received still is". Owners and admins choose **Change** beside it, then **Pay without purchase orders** or **Require purchase orders**.
@@ -279,6 +281,7 @@ The console's **Agent spending limit** panel shows what the agent has paid on it
 - **A person's approval does not count.** A held payable waits in **Approvals**, and what you approve there is never stopped by the limit, nor counted against it.
 - **It comes back by itself.** When the limit has room again (a new day, a higher figure, or no limit), the agent decides the held payment again. Raising a figure brings it back within a minute, and the audit log records the reopening with "the agent's spending limit has room for it again".
 - **Schedules are checked on their day.** Scheduling a payment does not count against the limit; paying it does.
+- **Try a figure first.** In the same dialog, **Try it on past decisions** replays the agent's payments of the last 30 or 90 days, in order, under the figures you entered: see [Try a limit before you change it](/docs/guides/try-a-rule).
 
 ### Enforce the limit on Arc
 
@@ -389,6 +392,7 @@ An owner can make larger payments need two people. In **Settings**, under **Two 
 - **An approval is of one payment.** It holds the amount, the currency and the payee's address. If any of them changes, or the person who gave it can no longer approve payments, it no longer counts. **Reject**, **Return to agent** and **Close without paying** clear it. A transfer that fails needs two approvals again.
 - **Who gives them.** As many of the two approvals as can must come from people who neither entered the payment nor gave a new payee's address. Those two people give the rest only when no one else can approve. In a workspace with one person who can approve, the button is disabled with "Needs a second approver" beside it: nothing above the figure is paid until the figure is raised or someone else can approve.
 - **Raising it or turning it off** brings payments held for two approvals back to the agent within a minute. **Turn off** asks first: "Turn off two approvals?"
+- **Try a figure first.** **Try it on past decisions** counts the payments the agent made on its own that a lower figure would have put before two people: see [Try a limit before you change it](/docs/guides/try-a-rule).
 - **On Arc mainnet** a workspace starts with two approvals above 100 USDC and keeps a figure: the section offers no **Turn off**, and says "A workspace on Arc mainnet keeps two approvals above a figure. Raise it to let one person pay more."
 - **A payment Circle never took** is sent again by the agent only when one approval may pay it, or two people's approvals of it paid it. Otherwise it waits in **Approvals**, or on **Contractors**, for two people. This covers a figure set or lowered after the first send. Raising the figure does not bring such a payment back: two people approve it, or one returns it to the agent.
 - **In Slack**, a card keeps its buttons after the first approval, with who approved it, so a second person can approve it there.

@@ -81,7 +81,7 @@ what was paid. That is enough to run the code's checks again with one figure cha
   running total of what the agent pays:
   - a decision the replay lets through counts what it paid if it paid; if code had stopped it, its full USDC value (an
     early-payment discount it might have taken is not known); if something other than a rule stopped it (a pause, the
-    cash it needed, a failed transfer, shadow mode's wait for a verdict), nothing, as then;
+    cash it needed, a failed transfer), nothing, as then; in shadow mode nothing, since a person's verdict pays;
   - the agent's payments in the six days before the window count as recorded, so the first week's totals are right;
   - once the replay has paid a bill, a later decision on the same bill is that bill paid earlier: it counts nothing
     and is unchanged if the bill is paid in both columns.
@@ -121,8 +121,13 @@ what was paid. That is enough to run the code's checks again with one figure cha
     also the existing compare-and-set.
   - The action replays again on the server, with the same window and candidate, and the library adds that summary to
     the change's signed entry as `detail.replay`: the window's days, start and end, and the five counts. The browser's
-    copy is never trusted for the record.
-  - The dialog shows the change as a before and after: the figure in force and the candidate, beside the counts.
+    copy is never trusted for the record. The entries reach webhook endpoints and `GET /api/v1/ledger` as before,
+    with the new field, so `content/docs/changelog.mdx` says so.
+  - The dialog shows the change as a before and after: the figure in force and the candidate, beside the counts. While a
+    result is shown the form's button reads **Apply this figure**; editing the figure or the window clears the result,
+    and the button saves without a replay again, as **Save** always did.
+  - Two approvals tried at Off (the figure emptied) is applied by **Turn off**, behind its existing confirmation, which
+    then carries the replay; the set form never turns it off. On Arc mainnet trying Off is refused, as saving it is.
   *Cost if wrong:* a decision written between the try and the apply makes the recorded counts differ from the ones
   shown by that decision; the entry records what the server saw when it applied.
 
@@ -139,8 +144,11 @@ what was paid. That is enough to run the code's checks again with one figure cha
   figures in force and the window's entries, runs the replay, and names each decision's bill and counterparty.
 - `src/app/actions/policy-replay.ts`: `tryRuleAction`, read-only, authorized by the setting's permission.
 - The three existing actions and library functions take an optional `expected` figure and `replay` summary.
-- `src/components/RuleTrial.tsx`: the window, **Try it on past decisions**, the result, and the apply switch, used by
-  the three settings' forms.
+- `src/lib/policy-replay-apply.ts`: what the three actions read from a form that tried the figure first.
+- `src/components/RuleTrial.tsx`: the window, **Try it on past decisions**, the result, and the apply fields, used by
+  the three settings' forms. A request that never answers is said in the form, never thrown at the page.
+- `src/app/design/replay-fixture.ts`: the sample data's first week replayed with the pure functions, for /design (an
+  interactive demo) and the guide's screenshot (`/docs-shots/try-a-rule-result`).
 
 ## 5. Tests
 
@@ -148,4 +156,6 @@ what was paid. That is enough to run the code's checks again with one figure cha
   totals in order across days and weeks, a bill paid earlier, missing facts as can't tell, a range that cannot settle,
   unchanged decisions and the model's own holds, milestone order.
 - `tests/policy-replay-read.test.ts`: the reader against a recorded fake Supabase.
-- The apply path: permission, the stale refusal, and `detail.replay` in each setting's signed entry.
+- The apply path: permission, the stale refusal, and `detail.replay` in each setting's signed entry
+  (`tests/policy-replay-actions.test.ts`, and each library's own test).
+- `tests/rule-trial.test.tsx`: the result's markup on the sample, the apply fields, and the control in each form.

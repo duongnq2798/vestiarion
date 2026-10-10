@@ -1,0 +1,50 @@
+Changing a limit changes which bills the agent pays on its own and which wait for you. Before you change one, try the new figure on the agent's own past decisions: Vestiarion runs the same checks again on what each decision recorded, with the figure in force and with yours, and lists every bill whose outcome would change. Nothing is paid, held or saved while you try. It works the same in a workspace on Arc testnet and on Arc mainnet.
+
+## Where to try a figure
+
+Three settings hold the figures code checks a payment against. Each has **Try it on past decisions** inside its own form, for whoever may change that setting:
+
+- **A counterparty's payment limit.** On **Counterparties**, open the counterparty and choose **Edit limit**, then enter the **Payment limit (USDC)**. Owners and admins.
+- **Two approvals.** In **Settings**, under **Two approvals**, enter **Payments above (USDC)**. Owners.
+- **The agent's spending limit.** On the console's **Agent spending limit**, choose **Change limit**, then enter **Per day (USDC)**, **Per 7 days (USDC)**, or both. Owners and admins.
+
+## Try it
+
+1. Enter the figure you are thinking of, as you would to save it.
+2. Under **Past decisions from**, choose **Last 30 days** or **Last 90 days**.
+3. Choose **Try it on past decisions**.
+
+The result names the setting, the figure **In force now** and the one you are **Trying**, and how many decisions it replayed. Then it counts them:
+
+- **Unchanged**: the agent would do with the bill what it does with the figure in force.
+- **Would now be paid**: a bill a check stops today that the agent would pay, schedule or release with your figure.
+- **Would now be held**: a bill the agent goes ahead with today that your payment limit or spending limit would hold for a person.
+- **Would now need two people**: a bill the agent goes ahead with today that your two-approvals figure would hold for two people's approval.
+- **Can't tell**: a decision whose ledger entry lacks what the check needs. It is counted, never guessed.
+
+Below the counts, each decision that would change, and each it cannot tell, is listed with the bill, the counterparty, the amount, the day it was decided, what happens now and what would happen with your figure, and a link to its entry in the audit log. The list shows up to 100; the counts cover them all.
+
+<Screenshot
+  src="/docs/guides/try-a-rule-result.png"
+  alt="Harbor Office Supply's payment limit, with 1,500 entered under Payment limit (USDC). Under Past decisions from, Last 30 days is chosen, beside Try it on past decisions. The result reads In force now: 500.00 USDC, Trying: 1,500.00 USDC, 7 decisions replayed, Sep 10 to Oct 10 (UTC). Counts: Unchanged 6, Would now be held 0, Would now be paid 1, Would now need two people 0, Can't tell 0. One bill is listed: Standing desks from Harbor Office Supply, 1,200.00 USDC on Oct 3, Would now be paid, held today above the payment limit and paid by the agent with this figure. The button at the bottom reads Apply this figure."
+  caption="The sample data's standing desks, which a 1,500 USDC limit would have let the agent pay."
+/>
+
+## Apply it
+
+While the result is on screen, the form's button reads **Apply this figure**. It saves the figure exactly as **Save limit** or **Save** would: the same people may do it, it is refused while a cycle runs, and a figure that frees held payments brings them back to the agent within a minute. Changing the figure or the window clears the result, and the button saves without a replay again.
+
+- **If the setting changed since you tried it,** someone else saved a figure in between, and nothing is saved. The form says "This counterparty's limit changed since you tried it. Try it again.", "The figure for two approvals changed since you tried it. Try it again." or "The agent's spending limit changed since you tried it. Try it again."
+- **The audit log records the replay.** The change's own entry (`counterparty_limit_changed`, `approval_policy_changed` or `agent_budget_changed`) gains the replay it was applied after: the window and the five counts, worked out again when you applied it.
+- **Turning two approvals off** is tried by emptying **Payments above (USDC)**. The result then says "To turn it off, choose Turn off.", and **Turn off** asks first, as always, and records the replay.
+
+## What it replays, and what it does not
+
+- **The checks code makes, in code's order.** Each decision is replayed with the checks the agent runs before it pays, in the same order. A check before the one that stopped a bill passed then and passes now; the checks no setting here changes, such as screening, duplicates, the three-way match and the new payee check, say what they said then.
+- **Your figures only.** The figures in force now are used for every setting, and yours is swapped in for one. So the counts are your figure's doing alone, even if a limit changed during the window. What actually happened is in each decision's audit log entry.
+- **The spending limit in order.** Decisions are replayed in the order they were made, with what the agent pays each UTC day and each 7 days carried from one to the next, so a bill your figure lets through counts against the room the next one has. Payments in the six days before the window count as they were made. A bill the replay pays is paid once, even if the agent decided it again later.
+- **Not the model.** A decision where the agent chose to hold a bill, flag it or ask for information stays as it was: the replay never asks the model again.
+- **Not the contract on Arc.** Where the agent's spending limit is enforced on Arc, the contract's answer stands as it was recorded. A payment the contract refused for want of room, replayed under other spending-limit figures, is counted as **Can't tell**.
+- **Not who approves.** Maker and checker, the new payee check and who may approve a payment do not change here.
+
+A window with more than 20,000 of the agent's decisions is too large to try at once: the form says "This window holds too many decisions to try at once. Try the last 30 days."
