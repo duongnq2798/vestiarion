@@ -38,7 +38,7 @@ export const TENANT_TABLES = [
   "forecasts", "ledger_entries", "payment_intents", "cycle_runs", "cycle_snapshots", "sim_clock", "gateway_signers", "payment_receipts", "escrow_contracts",
   "fx_swaps", "screening_dismissals", "receivable_links", "incoming_transfers", "agent_budgets", "recurring_payables", "policy_proposals",
   "service_purchases", "spending_limit_contracts", "ar_reminders", "inbox_emails", "approval_policies", "payment_approvals",
-  "shadow_modes", "decision_verdicts", "payment_actuals",
+  "shadow_modes", "decision_verdicts", "payment_actuals", "report_shares", "report_baselines",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
@@ -65,7 +65,7 @@ export const PLATFORM_RPCS = [
   "open_numbers", "open_first_payments", "open_outcomes", "open_verdicts", "open_funnel", "set_platform_team_member", "platform_team_members",
   "latest_team_decision",
   "create_payee_link", "payee_link_preview", "payee_link_chain", "claim_payee_link", "release_payee_link", "revoke_payee_link", "payee_link_status",
-  "payment_receipt_by_token", "pay_link_preview", "enable_usyc_reserve", "payee_history",
+  "payment_receipt_by_token", "report_share_by_token", "pay_link_preview", "enable_usyc_reserve", "payee_history",
   "telegram_claim_code", "telegram_activate", "slack_link_member",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
