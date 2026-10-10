@@ -141,7 +141,17 @@ export interface WorkspaceReport {
   stopped: { total: number; byCode: number; waited: number; byAgent: number; notSent: number };
   people: { steppedIn: number };
   verdicts: { agreed: number; disagreed: number; waiting: number } | null;
-  discounts: { captured: { count: number; byCurrency: CurrencyAmount[] }; onOffer: { count: number; byCurrency: CurrencyAmount[] } };
+  /**
+   * Bills the agent flagged (`ap_flag_fraud`), or code refused as a repeat of a bill already paid
+   * (`invoice.duplicate_of_settled`), once each: stopping one is not money saved (shared report S8).
+   */
+  repeats: number;
+  discounts: {
+    captured: { count: number; byCurrency: CurrencyAmount[] };
+    onOffer: { count: number; byCurrency: CurrencyAmount[] };
+    /** On offer, from the terms, on the bills no transfer took a discount on: an estimate, never counted as saved. */
+    notTaken: { count: number; byCurrency: CurrencyAmount[] };
+  };
   stoppedList: StoppedRow[];
   paymentList: PaymentRow[];
   readiness: ReadinessStep[] | null;
@@ -307,12 +317,20 @@ export function buildReport(facts: ReportFacts): WorkspaceReport {
     });
   }
 
+  const capturedOn = new Set<string>();
   const captured = payments.flatMap((payment) => {
     const bill = billsById.get(payment.invoiceId)!;
     const off = round6(bill.amount - payment.amount);
-    return bill.discount && payment.token === bill.currency && off > 0 ? [{ currency: bill.currency, amount: off }] : [];
+    if (!(bill.discount && payment.token === bill.currency && off > 0)) return [];
+    capturedOn.add(bill.id);
+    return [{ currency: bill.currency, amount: off }];
   });
-  const onOffer = bills.flatMap((bill) => (bill.discount ? [{ currency: bill.currency, amount: round6((bill.amount * bill.discount.pct) / 100) }] : []));
+  const offerOf = (bill: ReportBill) => ({ currency: bill.currency, amount: round6((bill.amount * bill.discount!.pct) / 100) });
+  const onOffer = bills.filter((bill) => bill.discount).map(offerOf);
+  const notTaken = bills.filter((bill) => bill.discount && !capturedOn.has(bill.id)).map(offerOf);
+  const repeats = [...decisionsOf.values()].filter((list) =>
+    list.some((decision) => decision.action === "ap_flag_fraud" || decision.guardrailRule === "invoice.duplicate_of_settled")
+  ).length;
 
   // The bills whose newest decision since shadow mode started waits for a verdict, as the console counts them (S5).
   const waiting = facts.shadow
@@ -351,9 +369,11 @@ export function buildReport(facts: ReportFacts): WorkspaceReport {
     },
     people: { steppedIn: steppedIn.size },
     verdicts: facts.shadow || verdicts.length > 0 ? { agreed, disagreed, waiting } : null,
+    repeats,
     discounts: {
       captured: { count: captured.length, byCurrency: byCurrency(captured) },
       onOffer: { count: onOffer.length, byCurrency: byCurrency(onOffer) },
+      notTaken: { count: notTaken.length, byCurrency: byCurrency(notTaken) },
     },
     stoppedList: stoppedRows.sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, LIST_LENGTH),
     paymentList: paymentRows.sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, LIST_LENGTH),
