@@ -297,7 +297,7 @@ interface Context {
   networkLabel: string;
 }
 
-function paymentView(input: EvidenceInput, own: EvidenceEntry[], status: string, txRef: string | null, ref: { invoiceId: string } | { milestoneId: string }): PaymentView {
+function paymentView(input: Pick<EvidenceInput, "subject" | "payment" | "network">, own: EvidenceEntry[], status: string, txRef: string | null, ref: { invoiceId: string } | { milestoneId: string }): PaymentView {
   const onChain = paymentOnChain(input);
   if (onChain) return { state: "chain", facts: onChain, recording: recordingEntry(ref, own, onChain.txHash, onChain.sourceTxHash ?? null) };
   const intent = input.payment;
