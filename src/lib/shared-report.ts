@@ -109,6 +109,15 @@ export const DECISIONS_SHOWN = 50;
 export const REASONING_MAX = 200;
 const HIDDEN = "[hidden]";
 
+/** What a share shows, in words, for its ledger entry and its row in the list of live links. */
+export function shareOptionWords(options: ShareOptions): string[] {
+  return [
+    options.names === "shown" ? "supplier names" : "supplier labels",
+    options.amounts === "shown" ? "amounts shown" : "amounts hidden",
+    options.title === "workspace" ? "the workspace's name as its title" : "a neutral title",
+  ];
+}
+
 /** "Supplier A" … "Supplier Z", then "Supplier AA", "Supplier AB" … */
 export function supplierLabel(index: number): string {
   let letters = "";
