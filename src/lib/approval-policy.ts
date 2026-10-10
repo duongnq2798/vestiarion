@@ -5,6 +5,7 @@ import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
 import { parseTwoApprovalsForm } from "./two-approvals";
 import { workspaceNetwork } from "./workspace-network";
 import { MAINNET_STARTING_TWO_APPROVALS } from "./mainnet";
+import { sameFigure, type ReplaySummary } from "./policy-replay";
 
 /**
  * The figure above which a payment needs two approvals (docs/superpowers/specs/2026-10-05-two-approvals-design.md T1):
@@ -15,14 +16,19 @@ import { MAINNET_STARTING_TWO_APPROVALS } from "./mainnet";
  * Raising it is always allowed, and so is turning it off, except on Arc mainnet, where a figure always stands
  * (mainnet limits L2). A change is refused while a cycle runs, as the agent's spending limit is: the cycle read the
  * figure when it began.
+ *
+ * Applied after trying it on past decisions (docs/superpowers/specs/2026-10-10-policy-replay-design.md P10), a change
+ * carries the figure the replay ran against and is refused when it is no longer the one in force; its signed entry
+ * records the replay's summary.
  */
 
-export type ApprovalPolicyErrorCode = "invalid" | "unchanged" | "cycle_running" | "too_few_approvers" | "mainnet_keeps_figure";
+export type ApprovalPolicyErrorCode = "invalid" | "unchanged" | "cycle_running" | "too_few_approvers" | "mainnet_keeps_figure" | "stale";
 
 const MESSAGES: Record<Exclude<ApprovalPolicyErrorCode, "invalid" | "unchanged">, string> = {
   cycle_running: "A cycle is running. Try again in a minute, once it has finished.",
   too_few_approvers: "Two approvals need two people who can approve payments. Add an approver on Members first.",
   mainnet_keeps_figure: "A workspace on Arc mainnet keeps two approvals above a figure.",
+  stale: "The figure for two approvals changed since you tried it. Try it again.",
 };
 
 export class ApprovalPolicyError extends Error {
@@ -60,6 +66,11 @@ export async function approversBesides(excluded: string[]): Promise<number> {
   return result.data;
 }
 
+/** What a change to the figure already in force is told. */
+export function unchangedTwoApprovalsMessage(to: number | null): string {
+  return to === null ? "Two approvals are already off." : `Payments above ${to} USDC already need two approvals.`;
+}
+
 function summary(from: number | null, to: number | null): string {
   if (to === null) return `Turned off two approvals above ${from} USDC`;
   if (from === null) return `Payments above ${to} USDC now need two approvals`;
@@ -68,7 +79,14 @@ function summary(from: number | null, to: number | null): string {
     : `Lowered the figure for two approvals from ${from} USDC to ${to} USDC`;
 }
 
-export async function changeTwoApprovals(input: { actorId: string; value: string }): Promise<{ from: number | null; to: number | null }> {
+export async function changeTwoApprovals(input: {
+  actorId: string;
+  value: string;
+  /** The figure a replay ran against; the change is refused when it is no longer the one in force. */
+  expected?: number | null;
+  /** The replay the change is applied after, for its signed entry. */
+  replay?: ReplaySummary;
+}): Promise<{ from: number | null; to: number | null }> {
   const parsed = parseTwoApprovalsForm(input.value);
   if (!parsed.ok) throw new ApprovalPolicyError("invalid", parsed.message);
   const to = parsed.above;
@@ -76,9 +94,8 @@ export async function changeTwoApprovals(input: { actorId: string; value: string
   if (to === null && workspaceNetwork().id === "arc-mainnet") throw new ApprovalPolicyError("mainnet_keeps_figure");
 
   const from = await readTwoApprovalsAbove(db());
-  if (from === to) {
-    throw new ApprovalPolicyError("unchanged", to === null ? "Two approvals are already off." : `Payments above ${to} USDC already need two approvals.`);
-  }
+  if (input.expected !== undefined && !sameFigure(from, input.expected)) throw new ApprovalPolicyError("stale");
+  if (from === to) throw new ApprovalPolicyError("unchanged", unchangedTwoApprovalsMessage(to));
 
   const running = unwrap(
     await db()
@@ -105,7 +122,7 @@ export async function changeTwoApprovals(input: { actorId: string; value: string
     domain: "system",
     action: "approval_policy_changed",
     summary: summary(from, to),
-    detail: { by: input.actorId, from, to },
+    detail: { by: input.actorId, from, to, ...(input.replay ? { replay: input.replay } : {}) },
   });
 
   return { from, to };

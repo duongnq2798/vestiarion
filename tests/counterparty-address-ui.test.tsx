@@ -12,6 +12,8 @@ import CounterpartyLimitEdit from "@/components/intake/CounterpartyLimitEdit";
  * changed address waits for a person.
  */
 
+// Try it on past decisions, inside the setting's form (policy replay §2): a server action, as the form's own.
+vi.mock("@/app/actions/policy-replay", () => ({ tryRuleAction: vi.fn() }));
 vi.mock("@/app/actions/intake", () => ({
   updateCounterpartyAddressAction: vi.fn(),
   confirmCounterpartyAddressAction: vi.fn(),

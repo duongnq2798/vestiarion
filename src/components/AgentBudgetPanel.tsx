@@ -12,6 +12,8 @@ import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from 
 import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { Input } from "@/components/ui/Input";
+import { RuleTrial, useRuleTrial } from "@/components/RuleTrial";
+import { RULE_TRIAL_COPY } from "@/lib/rule-trial-copy";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm, type ActionResult } from "@/components/ui/useActionForm";
@@ -209,13 +211,25 @@ function Usage({ label, spent, limit }: { label: string; spent: number; limit: n
   );
 }
 
+/** The figures, which can be tried on past decisions first and applied from the result (policy replay §2). */
 function BudgetDialog({ orgSlug, view, unset, network }: { orgSlug: string; view: AgentBudgetView; unset: boolean; network: Network }) {
   const [open, setOpen] = useState(false);
-  const close = useCallback(() => setOpen(false), []);
+  const trial = useRuleTrial("spending_limit");
+  const { clear } = trial;
+  const close = useCallback(() => {
+    setOpen(false);
+    clear();
+  }, [clear]);
   const { state, formProps } = useActionForm(save, INITIAL, { onSuccess: close });
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) clear();
+      }}
+    >
       <DialogTrigger asChild>
         <Button variant="secondary" size="sm" icon={<Gauge />} className="mt-4">
           {unset ? "Set limit" : "Change limit"}
@@ -225,7 +239,7 @@ function BudgetDialog({ orgSlug, view, unset, network }: { orgSlug: string; view
         title="Agent spending limit"
         description={budgetDialogDescription(network)}
       >
-        <form {...formProps} className="grid gap-5">
+        <form {...formProps} onChange={clear} className="grid gap-5">
           <input type="hidden" name="orgSlug" value={orgSlug} />
           <Field id="budget-daily" label="Per day (USDC)" optional>
             <Input name="daily" inputMode="decimal" placeholder="No daily limit" defaultValue={view.dailyUsdc ?? ""} />
@@ -233,12 +247,13 @@ function BudgetDialog({ orgSlug, view, unset, network }: { orgSlug: string; view
           <Field id="budget-weekly" label="Per 7 days (USDC)" optional description="Today and the six days before it. At least the daily figure.">
             <Input name="weekly" inputMode="decimal" placeholder="No 7-day limit" defaultValue={view.weeklyUsdc ?? ""} />
           </Field>
+          <RuleTrial orgSlug={orgSlug} trial={trial} />
           <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.ok ? null : state.message}</FormMessage>
           <DialogFooter>
             <DialogClose asChild>
               <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <SubmitButton pendingLabel="Saving…">Save limit</SubmitButton>
+            <SubmitButton pendingLabel="Saving…">{trial.view ? RULE_TRIAL_COPY.apply : "Save limit"}</SubmitButton>
           </DialogFooter>
         </form>
       </DialogContent>

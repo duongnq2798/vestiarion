@@ -8,6 +8,8 @@ import { AgentBudgetPanel, budgetDialogDescription, ON_ARC_COPY, type AgentBudge
  * figure, while it is being set up, and once it is enforced, with the contract's own count.
  */
 
+// Try it on past decisions, inside the setting's form (policy replay §2): a server action, as the form's own.
+vi.mock("@/app/actions/policy-replay", () => ({ tryRuleAction: vi.fn() }));
 vi.mock("@/app/actions/agent", () => ({
   setAgentBudgetAction: vi.fn(),
   enforceSpendingLimitAction: vi.fn(),

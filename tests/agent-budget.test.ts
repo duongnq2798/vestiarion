@@ -188,3 +188,22 @@ describe("changeAgentBudget for a workspace paying from its owner's own wallet (
     expect(fake.requests.some((r) => r.path === "/rest/v1/agent_budgets" && r.method === "POST")).toBe(false);
   });
 });
+
+describe("changeAgentBudget after a replay (policy replay P10)", () => {
+  const REPLAY = { windowDays: 30, from: "2026-09-10T12:00:00.000Z", to: "2026-10-10T12:00:00.000Z", decisions: 5, unchanged: 4, nowHeld: 0, nowPaid: 1, nowTwoPeople: 0, cantTell: 0 };
+
+  it("refuses when either figure changed since it was tried, and writes nothing", async () => {
+    fake = fakeSupabase(workspace({ budget: [{ daily_usdc: "100", weekly_usdc: "400" }] }));
+    await expect(
+      run(() => changeAgentBudget({ actorId: ACTOR, daily: "150", weekly: "", expected: { dailyUsdc: 100, weeklyUsdc: null }, replay: REPLAY }))
+    ).rejects.toMatchObject({ code: "stale", message: "The agent's spending limit changed since you tried it. Try it again." });
+    expect(fake.requests.some((r) => r.method === "POST")).toBe(false);
+    expect(ledgerMock).not.toHaveBeenCalled();
+  });
+
+  it("changes it when the figures are the ones tried, and signs the replay it was applied after", async () => {
+    fake = fakeSupabase(workspace({ budget: [{ daily_usdc: "100.000000", weekly_usdc: null }] }));
+    await run(() => changeAgentBudget({ actorId: ACTOR, daily: "150", weekly: "", expected: { dailyUsdc: 100, weeklyUsdc: null }, replay: REPLAY }));
+    expect(ledgerMock.mock.calls[0][1].detail).toEqual({ by: ACTOR, from: { dailyUsdc: 100, weeklyUsdc: null }, to: { dailyUsdc: 150, weeklyUsdc: null }, replay: REPLAY });
+  });
+});

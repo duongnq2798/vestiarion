@@ -200,3 +200,24 @@ describe("a mainnet workspace with no figure stored (final review I1)", () => {
     expect(await run(() => readTwoApprovalsAbove(db()))).toBeNull();
   });
 });
+
+describe("changeTwoApprovals after a replay (policy replay P10)", () => {
+  const REPLAY = { windowDays: 90, from: "2026-07-12T12:00:00.000Z", to: "2026-10-10T12:00:00.000Z", decisions: 12, unchanged: 10, nowHeld: 0, nowPaid: 0, nowTwoPeople: 2, cantTell: 0 };
+
+  it("refuses when the figure changed since it was tried, and writes nothing", async () => {
+    fake = fakeSupabase(workspace({ policy: [{ two_approvals_above: "250" }] }));
+    await expect(run(() => changeTwoApprovals({ actorId: OWNER, value: "100", expected: null, replay: REPLAY }))).rejects.toMatchObject({
+      code: "stale",
+      message: "The figure for two approvals changed since you tried it. Try it again.",
+    });
+    expect(posted()).toHaveLength(0);
+    expect(ledgerMock).not.toHaveBeenCalled();
+  });
+
+  it("changes it when the figure is the one tried, and signs the replay it was applied after", async () => {
+    fake = fakeSupabase(workspace({ policy: [{ two_approvals_above: "250.000000" }], approvers: 2 }));
+    await run(() => changeTwoApprovals({ actorId: OWNER, value: "100", expected: 250, replay: REPLAY }));
+    expect(posted()).toHaveLength(1);
+    expect(ledgerMock.mock.calls[0][1].detail).toEqual({ by: OWNER, from: 250, to: 100, replay: REPLAY });
+  });
+});

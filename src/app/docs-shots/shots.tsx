@@ -50,6 +50,11 @@ import { gettingStarted } from "@/lib/getting-started";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow } from "@/lib/queries";
 import { buildReport, type ReportBill, type ReportDecision, type ReportFacts } from "@/lib/workspace-report";
 import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
+import { designRuleReplay } from "../design/replay-fixture";
+import { RuleTrialPanel } from "@/components/RuleTrial";
+import { RULE_TRIAL_COPY } from "@/lib/rule-trial-copy";
+import { Field } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
 
 /**
  * The screenshots in the user guides, one state each, rendered by the app's
@@ -66,7 +71,7 @@ import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
 
 export interface DocsShot {
   /** The guide the picture belongs to. */
-  guide: "go-live" | "first-payment" | "pay-a-contractor" | "get-paid" | "telegram" | "slack" | "email-invoices" | "report";
+  guide: "go-live" | "first-payment" | "try-a-rule" | "pay-a-contractor" | "get-paid" | "telegram" | "slack" | "email-invoices" | "report";
   /** The workspace page it is on: its title heads the frame. None for a public page, such as a payee's link. */
   page?: NavKey;
   /** The page's line under its title, where the real page has one. */
@@ -1205,6 +1210,32 @@ export const DOCS_SHOTS = {
   },
   "report-readiness": { guide: "report", render: () => <ReportReadiness steps={REPORT.readiness ?? []} /> },
   "report-lists": { guide: "report", render: () => <ReportLists slug={SLUG} report={REPORT} /> },
+  "try-a-rule-result": {
+    guide: "try-a-rule",
+    page: "counterparties",
+    render: function TryARuleShot() {
+      // Edit limit's dialog once Try it on past decisions answered, laid flat: the sample data's Harbor Office Supply,
+      // its 500 USDC limit tried at 1,500 USDC over the last 30 days (src/app/design/replay-fixture.ts).
+      return (
+        <Card className="mx-auto grid max-w-lg gap-5 p-6">
+          <div>
+            <h2 className="text-lg font-semibold tracking-[-0.01em] text-ink">Harbor Office Supply&apos;s payment limit</h2>
+            <p className="mt-1 text-sm text-ink-2">
+              The most the agent pays this counterparty in one payment on its own. Anything above it waits for a person to approve. Screening can lower it for risk.
+            </p>
+          </div>
+          <Field id="shot-limit" label="Payment limit (USDC)" description="A vendor or contractor always has a limit.">
+            <Input name="paymentLimit" inputMode="decimal" defaultValue="1500" readOnly />
+          </Field>
+          <RuleTrialPanel orgSlug={SLUG} days={30} view={designRuleReplay("1500")} />
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary">Cancel</Button>
+            <Button>{RULE_TRIAL_COPY.apply}</Button>
+          </div>
+        </Card>
+      );
+    },
+  },
   "report-actuals": {
     guide: "report",
     render: () => (

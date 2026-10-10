@@ -51,7 +51,10 @@ import { MOTION } from "@/components/ui/tokens";
 import { useActionForm, type ActionResult } from "@/components/ui/useActionForm";
 import { networkProfile } from "@/lib/network";
 import { txUrl } from "@/lib/payee-chains";
-import { WORKSPACE } from "./fixtures";
+import { DESIGN_SLUG, WORKSPACE } from "./fixtures";
+import { RuleTrial, useRuleTrial } from "@/components/RuleTrial";
+import { RULE_TRIAL_COPY } from "@/lib/rule-trial-copy";
+import type { RuleReplayView } from "@/lib/policy-replay-read";
 import type { PaymentReceipt } from "@/lib/payment-receipt";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -531,5 +534,43 @@ export function TabsDemo() {
         </Callout>
       </TabsContent>
     </Tabs>
+  );
+}
+
+/**
+ * Try it on past decisions inside a limit's form (policy replay §2), against the sample's decisions: `views` holds the
+ * server's answers for the figures the demo knows, computed from the replay's own functions (./replay-fixture.ts).
+ */
+export function RuleTrialDemo({ views }: { views: Record<string, RuleReplayView> }) {
+  const trial = useRuleTrial("counterparty_limit", async (data) => {
+    const typed = String(data.get("paymentLimit") ?? "").trim();
+    const view = views[typed];
+    return view ? { ok: true, message: "", view } : { ok: false, message: `In this demo, try ${Object.keys(views).join(" or ")}.` };
+  });
+  const [applied, setApplied] = useState<string | null>(null);
+  return (
+    <Card className="max-w-lg p-5">
+      <form
+        className="grid gap-5"
+        onChange={() => {
+          trial.clear();
+          setApplied(null);
+        }}
+        onSubmit={(event) => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          setApplied(data.has("replayDays") ? `Applied after a ${data.get("replayDays")}-day replay, against ${data.get("expectedLimit")} USDC in force.` : "Saved without a replay.");
+        }}
+      >
+        <Field id="design-trial-limit" label="Payment limit (USDC)" description="Harbor Office Supply, in the sample data.">
+          <Input name="paymentLimit" inputMode="decimal" defaultValue="1500" autoComplete="off" />
+        </Field>
+        <RuleTrial orgSlug={DESIGN_SLUG} trial={trial} />
+        {applied && <p className="text-sm text-ink-2">{applied}</p>}
+        <div className="flex justify-end">
+          <Button type="submit">{trial.view ? RULE_TRIAL_COPY.apply : "Save limit"}</Button>
+        </div>
+      </form>
+    </Card>
   );
 }

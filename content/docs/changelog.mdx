@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-10: A limit applied after trying it records the replay
+
+- A person can try a new payment limit, figure for two approvals or spending limit on the agent's past decisions before saving it. When they apply it from that result, its entry gains `replay` in its `detail`: `{ windowDays, from, to, decisions, unchanged, nowHeld, nowPaid, nowTwoPeople, cantTell }`. `windowDays` is 30 or 90, `from` and `to` bound the window, and the counts are the decisions replayed and how their outcome would change.
+- The entries are **`counterparty_limit_changed`**, **`approval_policy_changed`** and **`agent_budget_changed`**, in `GET /api/v1/ledger` and as `ledger.appended` alike. A change saved without trying it first has no `replay`, as before.
+- Trying a figure writes nothing to the ledger. Nothing else in `/api/v1` changes.
+
 ## 2026-10-10: What the business paid outside Vestiarion
 
 - An owner or admin can record how the business paid a payable outside Vestiarion, or that it did not, from the workspace report. Its ledger gains two entries, actor `human`, domain `ap`, each sent to webhook endpoints as `ledger.appended` and listed by `GET /api/v1/ledger`:
