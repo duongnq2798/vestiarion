@@ -20,6 +20,9 @@ import { readReportFacts } from "@/lib/workspace-report-read";
 
 export const dynamic = "force-dynamic";
 
+/** A CSV of up to 200 payments is saved here a row at a time, each with its signed entry: the page's actions may take a while. */
+export const maxDuration = 300;
+
 export const metadata: Metadata = { title: sectionTitle("report") };
 
 /**
