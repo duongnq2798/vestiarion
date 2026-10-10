@@ -90,6 +90,17 @@ describe("shadowBill", () => {
     await expect(inWorkspace(true, () => shadowBill({ currency: "VND", amount: "2.500.000" }, { rate }))).rejects.toThrow("The day's rate could not be read. Try again in a moment.");
   });
 
+  it("takes the shadow mode it is told, reading no row, for an import of many bills (import design B15)", async () => {
+    const fake = fakeSupabase(() => ({ body: [] }));
+    const scope = () => orgTestContext({ config, client: fake.client, orgId: ORG, userId: "u1" });
+    const bill = await runWith(scope(), () => shadowBill({ currency: "VND", amount: "2500000" }, { rate: async () => VND, shadowOn: true }));
+    expect(bill.usdc).toBe(96.39);
+    await expect(runWith(scope(), () => shadowBill({ currency: "VND", amount: "2500000" }, { rate: async () => VND, shadowOn: false }))).rejects.toMatchObject({
+      code: "not_in_shadow",
+    });
+    expect(fake.requests).toEqual([]);
+  });
+
   it("says each refusal in words a person reads", () => {
     expect(new ShadowBillError("amount").message).toBe("Type the bill's amount as it is written on it, such as 1,250.00.");
     expect(new ShadowBillError("invalid_currency").message).toBe("Choose the bill's currency as a three-letter code, such as EUR.");
