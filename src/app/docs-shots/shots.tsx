@@ -18,7 +18,8 @@ import { DecisionTrail } from "@/components/vx/DecisionTrail";
 import { WaitingPayableAction } from "@/components/WaitingPayableAction";
 import CounterpartyAddress from "@/components/intake/CounterpartyAddressEdit";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
-import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
+import BillImport from "@/components/intake/BillImport";
+import { BillImportShot } from "./BillImportShot";
 import InvoiceDocumentIntake, { DocumentDraft } from "@/components/intake/InvoiceDocumentIntake";
 import InvoiceIntake from "@/components/intake/InvoiceIntake";
 import PayFreelancerForm, { PaymentLinkReady } from "@/components/intake/PayFreelancerForm";
@@ -66,7 +67,7 @@ import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
 
 export interface DocsShot {
   /** The guide the picture belongs to. */
-  guide: "go-live" | "first-payment" | "pay-a-contractor" | "get-paid" | "telegram" | "slack" | "email-invoices" | "report";
+  guide: "go-live" | "first-payment" | "import-bills" | "pay-a-contractor" | "get-paid" | "telegram" | "slack" | "email-invoices" | "report";
   /** The workspace page it is on: its title heads the frame. None for a public page, such as a payee's link. */
   page?: NavKey;
   /** The page's line under its title, where the real page has one. */
@@ -783,7 +784,7 @@ export const DOCS_SHOTS = {
     page: "invoices",
     render: function InvoiceShot() {
       return (
-        <IntakeFold label="New invoice" meta="typed in, read from a document, imported from a CSV, or recurring" defaultOpen className="">
+        <IntakeFold label="New invoice" meta="typed in, read from a document, imported from a list, or recurring" defaultOpen className="">
             <Tabs defaultValue="manual">
               <TabsList aria-label="New invoice">
                 <TabsTrigger value="manual">
@@ -794,9 +795,9 @@ export const DOCS_SHOTS = {
                   <FileText aria-hidden />
                   From a document
                 </TabsTrigger>
-                <TabsTrigger value="csv">
+                <TabsTrigger value="list">
                   <FileSpreadsheet aria-hidden />
-                  Import CSV
+                  Import a list
                 </TabsTrigger>
                 <TabsTrigger value="recurring">
                   <Repeat aria-hidden />
@@ -809,8 +810,8 @@ export const DOCS_SHOTS = {
               <TabsContent value="document" forceMount className="data-[state=inactive]:hidden">
                 <InvoiceDocumentIntake orgSlug={SLUG} counterparties={[{ id: COUNTERPARTY.id, name: COUNTERPARTY.name, role: COUNTERPARTY.role }]} />
               </TabsContent>
-              <TabsContent value="csv" forceMount className="data-[state=inactive]:hidden">
-                <InvoiceCsvImport orgSlug={SLUG} />
+              <TabsContent value="list" forceMount className="data-[state=inactive]:hidden">
+                <BillImport orgSlug={SLUG} workspace={{ shadowOn: false, shadowCurrency: null, network: "arc-testnet" }} />
               </TabsContent>
             </Tabs>
         </IntakeFold>
@@ -823,7 +824,7 @@ export const DOCS_SHOTS = {
     render: function DocumentShot() {
       const asked = `0x${"5af3107a".repeat(5)}`;
       return (
-        <IntakeFold label="New invoice" meta="typed in, read from a document, imported from a CSV, or recurring" defaultOpen className="">
+        <IntakeFold label="New invoice" meta="typed in, read from a document, imported from a list, or recurring" defaultOpen className="">
             <DocumentDraft
               orgSlug={SLUG}
               counterparties={[{ id: COUNTERPARTY.id, name: COUNTERPARTY.name, role: COUNTERPARTY.role }]}
@@ -1227,6 +1228,8 @@ export const DOCS_SHOTS = {
       />
     ),
   },
+  "import-bills-columns": { guide: "import-bills", page: "invoices", render: () => <BillImportShot step="columns" /> },
+  "import-bills-check": { guide: "import-bills", page: "invoices", render: () => <BillImportShot step="check" /> },
 } satisfies Record<string, DocsShot>;
 
 export type DocsShotName = keyof typeof DOCS_SHOTS;

@@ -173,6 +173,8 @@ const SHOTS = {
   "report-lists": async () => {},
   "report-actuals": async () => {},
   "report-actuals-bills": async () => {},
+  "import-bills-columns": async () => {},
+  "import-bills-check": async () => {},
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

@@ -1,6 +1,6 @@
 import { actualCurrency, actualMethod, paidDay, REFERENCE_MAX, type ActualMethod, type ActualRecord } from "./actual-payment-fields";
 import { billAmount, billDigits } from "./bill-amount";
-import { normalizedHeader, rowsFromCsv } from "./invoice-csv";
+import { normalizedHeader, rowsFromCsv } from "./csv-rows";
 
 /**
  * What the business paid, from a CSV (docs/superpowers/specs/2026-10-10-actual-payments-design.md A6). Each row names a

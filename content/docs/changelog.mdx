@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-10: An imported bill is a create_invoice entry
+
+- A bill list imported on AP / AR adds each row as a **`create_invoice`** entry, as an invoice typed into the form, sent to webhook endpoints as `ledger.appended`. Such an entry carries `via: "import"`, `importFile` (the SHA-256 of the list's text as it was sent) and `importRow` (the row's number in the list, as the spreadsheet shows it), and `invoiceNumber` when the row has one. A bill in the business's own currency, in shadow mode, carries `bill` as one typed into the form does.
+- Imports no longer write **`import_invoice`** entries. Entries already written keep their action.
+- The invoice number starts the invoice's `memo`, for instance `Invoice KP-1042: Copy paper`, in `GET /api/v1/invoices` as everywhere. Nothing else in `/api/v1` changes.
+
 ## 2026-10-10: What the business paid outside Vestiarion
 
 - An owner or admin can record how the business paid a payable outside Vestiarion, or that it did not, from the workspace report. Its ledger gains two entries, actor `human`, domain `ap`, each sent to webhook endpoints as `ledger.appended` and listed by `GET /api/v1/ledger`:

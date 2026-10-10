@@ -6,7 +6,6 @@ import { resumeAgentAction, setAgentBudgetAction } from "@/app/actions/agent";
 import {
   confirmCounterpartyAddressAction,
   createInvoiceAction,
-  importInvoicesAction,
   updateCounterpartyLimitAction,
   updateCounterpartyPurchaseOrdersAction,
 } from "@/app/actions/intake";
@@ -126,10 +125,6 @@ function form(fields: Record<string, string>): FormData {
 const invoice = (direction: "payable" | "receivable") =>
   form({ direction, counterpartyId: COUNTERPARTY, amount: "10.50", memo: "Services", poReference: "PO-42", goodsReceived: "on", dueDate: "2026-10-31" });
 
-const csvRow = (direction: string) => ({
-  direction, counterparty: "Acme", amount: "5", memo: "", po_reference: "PO-1", goods_received: "yes", due_date: "2026-10-31",
-});
-
 const empty = { ok: false, message: "" };
 
 beforeEach(() => {
@@ -156,21 +151,6 @@ describe("adding an invoice", () => {
   it("raises nothing when the caller is refused", async () => {
     authorizeMock.mockResolvedValueOnce({ ok: false, message: "You do not have access to that workspace." });
     await createInvoiceAction(empty, invoice("payable"));
-    expect(raiseMock).not.toHaveBeenCalled();
-  });
-});
-
-describe("importing invoices", () => {
-  it("raises invoice_added once when any row is a payable", async () => {
-    const result = await importInvoicesAction(empty, form({ rowsJson: JSON.stringify([csvRow("payable"), csvRow("receivable"), csvRow("payable")]) }));
-    expect(result).toMatchObject({ ok: true, created: 3 });
-    expect(raiseMock).toHaveBeenCalledTimes(1);
-    expect(raiseMock).toHaveBeenCalledWith(ACCESS, "invoice_added");
-  });
-
-  it("raises nothing when every row is a receivable, or the file does not parse", async () => {
-    await importInvoicesAction(empty, form({ rowsJson: JSON.stringify([csvRow("receivable")]) }));
-    await importInvoicesAction(empty, form({ rowsJson: "not json" }));
     expect(raiseMock).not.toHaveBeenCalled();
   });
 });

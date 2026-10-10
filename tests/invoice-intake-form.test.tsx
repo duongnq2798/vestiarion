@@ -120,15 +120,6 @@ describe("the invoice form's early-payment discount", () => {
   });
 });
 
-describe("the CSV import's preview (review M2)", () => {
-  it("shows each row's currency before anything is imported, USDC where the row leaves it blank", async () => {
-    const { readFileSync } = await import("node:fs");
-    const source = readFileSync("src/components/intake/InvoiceCsvImport.tsx", "utf8");
-    expect(source).toContain('"Amount", "Currency"');
-    expect(source).toContain('{row.currency ? row.currency.toUpperCase() : "USDC"}');
-  });
-});
-
 describe("the counterparty form's chain help (mainnet polish E2)", () => {
   it("says another chain is paid through CCTP where the network has it, and that Arc mainnet pays on its own chain only", async () => {
     const { chainHelp } = await import("@/components/intake/CounterpartyIntake");

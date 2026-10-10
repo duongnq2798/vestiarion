@@ -4,7 +4,7 @@ import Link from "next/link";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import InboxEmails from "@/components/InboxEmails";
 import AgentControls from "@/components/AgentControls";
-import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
+import BillImport from "@/components/intake/BillImport";
 import InvoiceDocumentIntake from "@/components/intake/InvoiceDocumentIntake";
 import InvoiceIntake from "@/components/intake/InvoiceIntake";
 import RecurringPayableIntake from "@/components/intake/RecurringPayableIntake";
@@ -49,6 +49,9 @@ import { sharedReceipts } from "@/lib/receipts/share";
 import { workspaceNetwork } from "@/lib/workspace-network";
 
 export const dynamic = "force-dynamic";
+
+/** An imported list of up to 200 bills is added one bill at a time, each with its signed entry (import design B12). */
+export const maxDuration = 300;
 
 export const metadata: Metadata = { title: sectionTitle("invoices") };
 
@@ -271,7 +274,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
 
         {canWrite ? (
           // Folded until it is needed; open on a workspace with no invoice yet, where adding one is the next step.
-          <IntakeFold label="New invoice" meta="typed in, read from a document, imported from a CSV, or recurring" defaultOpen={invoices.length === 0}>
+          <IntakeFold label="New invoice" meta="typed in, read from a document, imported from a list, or recurring" defaultOpen={invoices.length === 0}>
             <Tabs defaultValue="manual">
               <TabsList aria-label="New invoice">
                 <TabsTrigger value="manual">
@@ -282,9 +285,9 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
                   <FileText aria-hidden />
                   From a document
                 </TabsTrigger>
-                <TabsTrigger value="csv">
+                <TabsTrigger value="list">
                   <FileSpreadsheet aria-hidden />
-                  Import CSV
+                  Import a list
                 </TabsTrigger>
                 <TabsTrigger value="recurring">
                   <Repeat aria-hidden />
@@ -298,8 +301,11 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
               <TabsContent value="document" forceMount className="data-[state=inactive]:hidden">
                 <InvoiceDocumentIntake orgSlug={slug} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} />
               </TabsContent>
-              <TabsContent value="csv" forceMount className="data-[state=inactive]:hidden">
-                <InvoiceCsvImport orgSlug={slug} />
+              <TabsContent value="list" forceMount className="data-[state=inactive]:hidden">
+                <BillImport
+                  orgSlug={slug}
+                  workspace={{ shadowOn: verdicts.shadow !== null, shadowCurrency: billCurrencyOf(verdicts.shadow) ?? null, network }}
+                />
               </TabsContent>
               <TabsContent value="recurring" forceMount className="data-[state=inactive]:hidden">
                 <RecurringPayableIntake orgSlug={slug} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} />

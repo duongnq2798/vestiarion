@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INVOICE_CSV_TEMPLATE, parseInvoiceCsv } from "@/lib/invoice-csv";
-import { counterpartyInputSchema, csvInvoiceInputSchema, firstZodMessage, invoiceFormRefusal, invoiceInputSchema, usdcAmountSchema } from "@/lib/intake-validation";
+import { counterpartyInputSchema, firstZodMessage, invoiceFormRefusal, invoiceInputSchema, usdcAmountSchema } from "@/lib/intake-validation";
 
 describe("USDC intake precision", () => {
   it.each(["0.000001", "100.123456", "1", "99999999999999.999999", " 42.50 "])("accepts %s without numeric coercion", (amount) => {
@@ -95,24 +94,6 @@ describe("invoice intake", () => {
       if (!result.success) expect(firstZodMessage(result.error)).toContain("USDC or EURC");
     });
 
-    it("reads a CSV row's currency without regard to case, and a blank one as USDC", () => {
-      const row = {
-        direction: "payable",
-        counterparty: "Example Supplier",
-        amount: "1.00",
-        memo: "",
-        po_reference: "",
-        goods_received: "true",
-        due_date: "2026-10-31",
-        early_pay_discount_pct: "",
-        discount_deadline: "",
-      };
-      expect(csvInvoiceInputSchema.parse({ ...row, currency: "eurc" }).currency).toBe("EURC");
-      expect(csvInvoiceInputSchema.parse({ ...row, currency: "" }).currency).toBe("USDC");
-      expect(csvInvoiceInputSchema.parse(row).currency).toBe("USDC");
-      expect(csvInvoiceInputSchema.safeParse({ ...row, currency: "EUR" }).success).toBe(false);
-    });
-
     it("says nothing about USDC when an amount cannot be read", () => {
       const result = invoiceInputSchema.safeParse({ ...base, amount: "ten", currency: "EURC" });
       expect(result.success).toBe(false);
@@ -122,23 +103,6 @@ describe("invoice intake", () => {
 
   it.each(["2026-02-30", "2026-13-01", "31-10-2026", ""])("rejects invalid due date %s", (dueDate) => {
     expect(invoiceInputSchema.safeParse({ ...base, dueDate }).success).toBe(false);
-  });
-
-  it("normalizes supported CSV boolean values", () => {
-    for (const value of ["true", "yes", "1", true]) {
-      const result = csvInvoiceInputSchema.parse({
-        direction: "payable",
-        counterparty: "Example Supplier",
-        amount: "1.00",
-        memo: "",
-        po_reference: "",
-        goods_received: value,
-        due_date: "2026-10-31",
-        early_pay_discount_pct: "",
-        discount_deadline: "",
-      });
-      expect(result.goods_received).toBe(true);
-    }
   });
 
   describe("early-payment discount", () => {
@@ -225,127 +189,5 @@ describe("invoice intake", () => {
       const result = invoiceInputSchema.safeParse({ ...base, earlyPayDiscountPct: "2", discountDeadline: "not-a-date" });
       expect(result.success).toBe(false);
     });
-
-    it("applies the same rules to a CSV row", () => {
-      const rejected = csvInvoiceInputSchema.safeParse({
-        direction: "payable",
-        counterparty: "Example Supplier",
-        amount: "1.00",
-        memo: "",
-        po_reference: "",
-        goods_received: "true",
-        due_date: "2026-10-31",
-        early_pay_discount_pct: "2",
-        discount_deadline: "",
-      });
-      expect(rejected.success).toBe(false);
-      if (!rejected.success) expect(firstZodMessage(rejected.error)).toBe("discount_deadline: Enter the last day the discount applies, on or before the due date, or clear the discount.");
-
-      const accepted = csvInvoiceInputSchema.safeParse({
-        direction: "payable",
-        counterparty: "Example Supplier",
-        amount: "1.00",
-        memo: "",
-        po_reference: "",
-        goods_received: "true",
-        due_date: "2026-10-31",
-        early_pay_discount_pct: "2",
-        discount_deadline: "2026-10-10",
-      });
-      expect(accepted.success).toBe(true);
-      if (accepted.success) expect(accepted.data).toMatchObject({ early_pay_discount_pct: "2", discount_deadline: "2026-10-10" });
-    });
-
-    it("treats a CSV row object with neither discount key at all as no discount", () => {
-      // Older callers, and rows built by hand rather than through
-      // parseInvoiceCsv, may not carry these keys at all — absent means the
-      // same thing as blank, not a validation failure.
-      const result = csvInvoiceInputSchema.safeParse({
-        direction: "payable",
-        counterparty: "Example Supplier",
-        amount: "1.00",
-        memo: "",
-        po_reference: "",
-        goods_received: "true",
-        due_date: "2026-10-31",
-      });
-      expect(result.success).toBe(true);
-      if (result.success) expect(result.data).toMatchObject({ early_pay_discount_pct: null, discount_deadline: null });
-    });
-
-    it("imports a CSV file whose header lacks both discount columns", () => {
-      const rows = parseInvoiceCsv(
-        "direction,counterparty,amount,memo,po_reference,goods_received,due_date\npayable,Acme,100.00,memo,PO-1,true,2026-10-31"
-      );
-      const result = csvInvoiceInputSchema.safeParse(rows[0]);
-      expect(result.success).toBe(true);
-      if (result.success) expect(result.data).toMatchObject({ early_pay_discount_pct: null, discount_deadline: null });
-    });
-  });
-});
-
-describe("invoice CSV parser", () => {
-  const header = "direction,counterparty,amount,memo,po_reference,goods_received,due_date";
-
-  it("handles CRLF, quoted commas, escaped quotes, and embedded newlines", () => {
-    const rows = parseInvoiceCsv(`${header}\r\npayable,"Acme, Inc",100.00,"Design ""system""\nphase 1",PO-9,yes,2026-10-31\r\n`);
-    expect(rows).toEqual([{
-      direction: "payable",
-      counterparty: "Acme, Inc",
-      amount: "100.00",
-      memo: "Design \"system\"\nphase 1",
-      po_reference: "PO-9",
-      goods_received: "yes",
-      due_date: "2026-10-31",
-      early_pay_discount_pct: "",
-      discount_deadline: "",
-      currency: "",
-    }]);
-  });
-
-  it("accepts columns in any order and ignores extra columns", () => {
-    const rows = parseInvoiceCsv("amount,due date,direction,counterparty,memo,goods received,po reference,ignored\n1.00,2026-10-31,receivable,Client A,Retainer,no,,x");
-    expect(rows[0]).toMatchObject({ direction: "receivable", counterparty: "Client A", amount: "1.00", goods_received: "no" });
-  });
-
-  it("rejects a missing required header", () => {
-    expect(() => parseInvoiceCsv("direction,counterparty,amount\npayable,Acme,1.00")).toThrow("Missing CSV columns");
-  });
-
-  it("rejects an unclosed quoted field", () => {
-    expect(() => parseInvoiceCsv(`${header}\npayable,"Acme,1.00,memo,PO-1,true,2026-10-31`)).toThrow("unclosed quoted field");
-  });
-
-  it("requires at least one invoice row", () => {
-    expect(() => parseInvoiceCsv(header)).toThrow("at least one invoice row");
-  });
-
-  it("offers a template with the optional discount columns in its header, blank in the sample row, that imports as it is", () => {
-    const [templateHeader, sample, ...rest] = INVOICE_CSV_TEMPLATE.split("\n");
-    expect(rest).toEqual([]);
-    expect(templateHeader).toBe(`${header},early_pay_discount_pct,discount_deadline,currency`);
-    expect(sample).toBe("payable,Vendor name,100.00,Invoice memo,PO-100,true,2026-10-15,,,USDC");
-
-    const rows = parseInvoiceCsv(INVOICE_CSV_TEMPLATE);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ counterparty: "Vendor name", due_date: "2026-10-15", early_pay_discount_pct: "", discount_deadline: "" });
-    const result = csvInvoiceInputSchema.safeParse(rows[0]);
-    expect(result.success).toBe(true);
-    if (result.success) expect(result.data).toMatchObject({ early_pay_discount_pct: null, discount_deadline: null, currency: "USDC" });
-  });
-
-  it("parses an optional currency column", () => {
-    const rows = parseInvoiceCsv(`${header},currency\npayable,Acme,100.00,memo,PO-1,true,2026-10-31,EURC`);
-    expect(rows[0]).toMatchObject({ currency: "EURC" });
-  });
-
-  it("parses the optional discount columns when present, and leaves them blank when absent", () => {
-    const withDiscount = parseInvoiceCsv(
-      `${header},early_pay_discount_pct,discount_deadline\npayable,Acme,100.00,memo,PO-1,true,2026-10-31,2,2026-10-10`
-    );
-    expect(withDiscount[0]).toMatchObject({ early_pay_discount_pct: "2", discount_deadline: "2026-10-10" });
-
-    const without = parseInvoiceCsv(`${header}\npayable,Acme,100.00,memo,PO-1,true,2026-10-31`);
-    expect(without[0]).toMatchObject({ early_pay_discount_pct: "", discount_deadline: "" });
   });
 });

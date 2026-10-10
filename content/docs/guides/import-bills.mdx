@@ -1,0 +1,109 @@
+Most businesses keep their bills in a spreadsheet, with their own column names, date format, number format and currency. **Import a list** reads that list as it is. It matches its columns, asks only what the list cannot say, and shows what happens to every row before anything is added. Each row is then added as one typed into the invoice form, with the same checks and a signed ledger entry. The rows that can't be added come back to you as a file with the reason, ready to fix and import again.
+
+## Before you start
+
+- **A workspace you can add invoices to**, as an owner or admin. Anyone else sees "Only an owner or admin of this workspace can add or import invoices."
+- **Your counterparties.** The import never creates a counterparty: each one is screened, and its address confirmed by a person. Add your suppliers and clients in **Counterparties** first. A row is matched to a counterparty by its name, without regard to case, punctuation or a legal suffix such as Ltd, Pte, Inc, Sdn Bhd or KK.
+- **Your list**, as a CSV file of at most 1 MB, or as rows you copy from Excel or Google Sheets. One import takes up to 200 bills.
+
+## 1. Give it your list
+
+Open **AP / AR**, open **New invoice** and choose **Import a list**.
+
+- **Choose a CSV file, or drop one here.** Excel's "CSV UTF-8" keeps names in any language. A file saved as plain "CSV" is read too; if its names look wrong, the panel says "This file is not saved as UTF-8." Save it as "CSV UTF-8", or paste the rows instead.
+- **Or paste rows from Excel or Google Sheets.** Select the rows with their column names, copy them, paste them, and choose **Read the pasted rows**.
+
+A comma, semicolon or tab between columns is found by itself, and so are quoted fields. Starting from nothing? **Copy a CSV template** gives Vestiarion's own column names and one sample row.
+
+## 2. Check the columns
+
+The panel lists each part of an invoice with the column it found for it, and the first values that column holds, such as "Reads: Kanto Paper · Lion City Logistics Pte Ltd · Manila Print House".
+
+<Screenshot
+  src="/docs/guides/import-bills-columns.png"
+  alt="The Columns step of Import a list: a pasted list of six bills and six columns, The first row holds column names ticked, each field with the column it reads and its first values, such as Counterparty reading column A, Supplier, and Amount reading column E, Total; the fields the list does not have, folded under Not in the list; then These rows are, with Bills to pay chosen, and the currency for rows that leave it blank, JPY, paid in USDC at the day's rate."
+  caption="The columns of a pasted list, matched and confirmed before any row is read."
+/>
+
+- Columns are matched from the names businesses give them: Vendor, Supplier, Payee or Customer for the counterparty; Amount, Total, Amount due or Balance for the amount; Due date, Due or Payment due for the due date; Invoice no, Number or Reference for the invoice number; PO or PO number for the purchase order; and Currency, Memo or Description, Goods received and Direction. A column called just "Date" is never taken for the due date.
+- Change any match, or set it to **Not in the list**. The fields your list does not have wait folded under **Not in the list**: open it to choose a column for one. Counterparty, Amount and Due date are needed. Any column not chosen is left out.
+- **The first row holds column names** is ticked when the first row looks like names. Untick it for a list of bills alone; its columns are then called Column A, Column B, and so on.
+
+Then answer what only you can say. Each question appears only when the list needs it:
+
+- **These rows are**: **Bills to pay** or **Invoices to collect**, when the list has no direction column. Nothing is chosen for you.
+- **Day first (15/10/2026)** or **Month first (10/15/2026)**, when no date in the list settles it. A date such as 25/10/2026 settles it; a list of dates like 03/04/2026 does not, and Vestiarion never guesses.
+- **1,234.50** or **1.234,50**, when no amount settles how the list writes its numbers.
+- The currency of the bills, or of the rows that leave it blank.
+- **The goods or services on every bill were received**, when the list has no column that says so. Tick it only if they all were: the agent waits for goods to be marked received before it pays a bill.
+
+Then choose **Check 6 rows**. The button counts your bills.
+
+## 3. Check the rows
+
+Vestiarion reads the list again on its own side, finds each counterparty, and gives every row its fate. Nothing is added yet.
+
+<Screenshot
+  src="/docs/guides/import-bills-check.png"
+  alt="The Check step: To add 3, Already in Vestiarion 0, Can't add 3; then a table of six rows, each with its row number, the counterparty with the invoice number and due date, the amount with a yen bill's amount in USDC at the day's rate, and its result: To add, or Can't add with the reason; and the Change columns, Download the rows that can't be added and Add 3 bills buttons."
+  caption="Every row's fate before anything is added."
+/>
+
+- **To add**: the row is read and its counterparty found. A bill in your own currency in shadow mode shows its amount in USDC at the day's rate.
+- **Already in Vestiarion**: the workspace has an invoice with the same counterparty, amount, due date and reference, whatever its status. Or the list holds the row twice: "Same as row 4 of this list." Such a row is never added again, so importing the same list twice adds its bills once.
+- **Can't add**: the reason, such as "Due date “31/02/2026” is not a real day."
+
+**Change columns** goes back with your answers kept. **Add 3 bills** adds the rows to add; the button counts them.
+
+## 4. Add them
+
+Each row is added through the same step as an invoice typed into the form: the same permission check and the same signed ledger entry. The agent decides each payable in its next cycle, usually within a minute, as it decides any payable.
+
+The panel then says what happened, for instance "Added 84 bills. 3 were already in Vestiarion. 13 can't be added.", and lists every row as **Added**, **Already in Vestiarion** or **Can't add**. Choose **Import another list** to start again.
+
+A row's invoice number starts its memo: "Invoice KP-1042: Copy paper". The memo reaches the payee's payment notice and the client's reminder, so they see their own invoice number. It is never put in the purchase order field, which the agent reads as the purchase order when it matches a bill.
+
+## 5. Fix the rows that can't be added
+
+Choose **Download the rows that can't be added**. The file holds those rows exactly as your list wrote them, every column in its order, with a last column, "Why it can't be added". Fix them in your spreadsheet and import that file. The extra column is left out of the import.
+
+Rows already added are not in that file. If you import the whole list again, they show as **Already in Vestiarion**, and keep the invoices they became.
+
+## Bills in your own currency
+
+In a workspace in [shadow mode](/docs/guides/shadow-mode), on Arc testnet, a bill in the business's own currency is added as the invoice form adds one: its amount read as written, its USDC at the day's rate from ExchangeRate-API (**Rates By Exchange Rate API**), and the bill's own figure and rate kept beside it. Each rate is read once for the whole list.
+
+Outside shadow mode, Vestiarion takes bills in USDC or EURC. A row in another currency can't be added, and says how to add it: "Bills in JPY are taken in shadow mode only. Turn it on for JPY in Settings, or convert the amount to USDC."
+
+## How dates, amounts and currencies are read
+
+- **Dates**: 2026-10-15, 2026/10/15, 2026年10月15日, 15/10/2026 or 10/15/2026 as the list writes them, 15.10.26, 15 Oct 2026, Oct 15, 2026, and Excel's own date numbers, such as 46310.
+- **Amounts**: 1,234.50, 1.234,50, 1 234,50 or 1'234.50, as the list writes them, read exactly. A minus sign or brackets is a credit note, which is not a bill.
+- **Decimals by currency**: USDC and EURC take up to 6. The yen and the won take none: "Amount “¥1,500.5” has decimals, and JPY amounts are whole numbers." Other currencies take up to 2.
+- **Currency**: a code in the currency column, or a symbol beside the amount when it names one currency: ₩ is KRW, ₱ PHP, RM MYR, S$ SGD, € EUR. A $ or a ¥ could be several currencies, so it only fits the currency the row or the list names: $ with USDC, ¥ with JPY.
+
+## What the ledger records
+
+Each row added is a `create_invoice` entry in the workspace's signed ledger, as for an invoice typed into the form, and reaches webhook endpoints as `ledger.appended`. It also carries:
+
+- `via: "import"`;
+- `importFile`, the SHA-256 of the list as it was sent, and `importRow`, the row's number in it;
+- `invoiceNumber`, when the row has one;
+- `bill`, for a bill in your own currency: the currency, the amount as written, the rate and when it was published.
+
+The list itself is not kept. A payable's decision trail says "A person added it, imported from a list."
+
+## If something goes wrong
+
+| Message | What to do |
+| --- | --- |
+| A quoted field is never closed. Check the list's quotes, then try again. | A cell opens a quote it never closes. Fix it in the spreadsheet, or paste the rows instead. |
+| The list must be smaller than 1 MB. | Split the list. |
+| Import at most 200 bills at a time. Split the list. | Import the list in parts. |
+| Choose whether the list's dates are day first or month first. | Answer the question about dates. |
+| No counterparty named “Harbor Movers” in this workspace. Add it in Counterparties, then import this row again. | Add the counterparty, then import the row again. |
+| “Northwind Hosting” matches more than one counterparty in this workspace. Add this bill with the invoice form. | Choose the counterparty yourself on the invoice form. |
+| Vestiarion takes bills in USDC or EURC. Convert the amount to USDC. | Convert the amount, and write USDC in its currency. |
+| XYZ is not a currency code. | Write the currency's three-letter code, such as SGD. |
+| Amount “-500” is negative: a credit note is not a bill. | Leave credit notes out of the list. |
+| The day's rate could not be read. Try again in a moment. | Check the rows again in a moment. |

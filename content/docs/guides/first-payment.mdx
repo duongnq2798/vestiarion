@@ -93,7 +93,7 @@ Anyone who may not add records sees "Only an owner or admin of this workspace ca
 
 ## 2. Add an invoice
 
-Open **AP / AR** and open **New invoice**. Choose **Enter one invoice**, **From a document** to have the model read it from a PDF or an email (see [Read an invoice from a document](#read-an-invoice-from-a-document)), or **Import CSV** to add several from a file.
+Open **AP / AR** and open **New invoice**. Choose **Enter one invoice**, **From a document** to have the model read it from a PDF or an email (see [Read an invoice from a document](#read-an-invoice-from-a-document)), or **Import a list** to add many from a spreadsheet, in its own columns, dates and currency (see [Import your bill list](/docs/guides/import-bills)).
 
 - **Direction**: **Payable**, for an invoice you pay. Choosing a counterparty sets it: **Receivable** for a client, which pays you, and **Payable** for anyone else; the line under it says which it is. A payable to a client is never paid by the agent: it waits for a person, who pays it in **Approvals** if it is a refund.
 - **Counterparty**: the one you just added.
@@ -137,7 +137,7 @@ A PDF is read from its text, and an email (an `.eml` file) from its own text and
 
 ### Invoices in EURC
 
-A vendor that bills in euros can be paid in EURC, Circle's euro stablecoin, on Arc testnet. Choose **EURC** under **Currency** on the invoice form, or put `EURC` in a CSV row's `currency` column. As the form says, "A EURC payable is paid in EURC, and checked against the payment limit at its USDC value."
+A vendor that bills in euros can be paid in EURC, Circle's euro stablecoin, on Arc testnet. Choose **EURC** under **Currency** on the invoice form, or write EURC in the currency column of a list you import. As the form says, "A EURC payable is paid in EURC, and checked against the payment limit at its USDC value."
 
 - **The rate.** Payment limits stay in USDC. Before it decides a EURC payable, the agent asks Circle's Stablecoin Service what the amount is worth in USDC on Arc testnet, and checks that value against the limit. The decision's ledger entry records the rate and when it was quoted. It is the testnet market's rate, not a reference exchange rate.
 - **No rate, no payment.** When the quote does not answer, the payable is held for a person, and its card shows **USDC value** "no rate". If the model had decided to pay it anyway, the card's "Blocked by code, not by the model" band names the rule, `fx.rate_unavailable`. You can still approve it on **Approvals**.
@@ -240,7 +240,7 @@ A stop only a decision resolves, such as a payout fee above 10% of the invoice o
 
 An invoice does not have to be paid the moment it is decided. At intake, a payable can carry an early-payment discount: **Early-payment discount (%)** and **Discount deadline**, alongside its other fields. On a cycle, the agent chooses not only whether to pay an invoice but when, within a bound code enforces: never later than the invoice's due date.
 
-A discount needs its deadline. Once you enter a percent, **Discount deadline** is no longer optional. As the form says, "Needed with a discount: the last day it applies, on or before the due date." An invoice with a percent and no deadline is not added, and the form says under the field: "Enter the last day the discount applies, on or before the due date, or clear the discount." A CSV row's `early_pay_discount_pct` and `discount_deadline` columns follow the same rule: both, or neither.
+A discount needs its deadline. Once you enter a percent, **Discount deadline** is no longer optional. As the form says, "Needed with a discount: the last day it applies, on or before the due date." An invoice with a percent and no deadline is not added, and the form says under the field: "Enter the last day the discount applies, on or before the due date, or clear the discount." An imported row's discount and discount deadline columns follow the same rule: both, or neither.
 
 - With an early-payment discount still available, it schedules the payment for the discount's last day, and pays the discounted amount then.
 - Otherwise, it schedules the payment for the due date, holding the cash until it is owed.
