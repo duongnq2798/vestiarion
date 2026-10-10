@@ -1,7 +1,8 @@
 # Why it was paid: one evidence chain per payment
 
-Date: 2026-10-10. Status: decided (autonomy grant 2026-10-05). Roadmap: F22, with I22 (how each link is known) and
-I24 (links outside are checked where we can).
+Date: 2026-10-10, revised 2026-10-11 (see "Changes since the first draft"). Status: decided (autonomy grant
+2026-10-05). Roadmap: F22, with I22 (how each link is known, and from where) and I28 (who may see, download and share
+it, said where the chain is shown).
 
 ## Why
 
@@ -18,8 +19,13 @@ and when, not that the fact is true.
   The address is stable: it names the record, not a payment attempt.
 - Every member may read it (`requireMembership`), viewers included, as they may read the audit log. The page awaits its
   params, then `requireMembership`, then reads inside `inOrg`, like every workspace page.
-- A receivable, an id the workspace does not hold, or another workspace's id answers the workspace's not-found page.
-- Paid or not: an open payable or milestone shows the chain so far, read-only, and says it is not paid yet.
+- A receivable, an id that is not a UUID, an id the workspace does not hold, or another workspace's id answers the
+  workspace's not-found page.
+- Paid or not: an open payable or milestone shows the chain so far, read-only, and says it is not paid yet. A rejected
+  payable or a closed milestone says it was not paid.
+- It sits in the workspace frame like every page (workspace shell design, PR #303): `ProductShell` with
+  `status={await shellStatus()}`, the page's own `PageHead`, the 90rem content frame. The sidebar and the header name
+  the section it is part of: Bills & receivables for a payable, Contractors for a milestone (`navItemForPathname`).
 - Cost if wrong: a rename later needs a redirect.
 
 **E2. The chain, in order.** Each step is a list of facts; each fact carries how it is known (E3).
@@ -34,8 +40,8 @@ and when, not that the fact is true.
    address Vestiarion made in shadow mode) and who confirmed it; the screening result before the payment and its
    source; any screening match a person dismissed.
 5. **The decision.** Who decided (the model by name, or the written policy), whether the written policy agreed, and
-   what code checked before anything was sent, as the decision trail words it. It links into the trail on AP / AR
-   rather than repeating its steps.
+   what code checked before anything was sent, as the decision trail words it (`decisionChecks`, shared with the
+   trail). It links into the trail on Bills & receivables rather than repeating its steps.
 6. **People.** Approvals (Approve and pay, Pay now, a first of two approvals), verdicts in shadow mode, returns and
    rejections before the payment. When nobody stepped in: "No person approved it: code let the agent pay it within the
    workspace's rules."
@@ -44,7 +50,9 @@ and when, not that the fact is true.
 8. **The receipt** (payables only; receipts exist for bills, payment receipts P1): shared or not, its signed entry,
    and whether its link still opens. The link itself is never shown again: only its hash is stored.
 9. **Signatures.** Every entry the chain cites and every entry about the record, each checked on the server and again
-   in the reader's browser with the receipt page's verifier (`verifyEntry`, Web Crypto).
+   in the reader's browser with the receipt page's verifier (`verifyEntry`, Web Crypto). The check covers an entry
+   alone: its body hash, its signature and its chain hash from its `prev_hash`. The whole chain, entry after entry, is
+   the Audit log's Verify and the audit export's.
 
 **E3. How each fact is known (I22).** One of five, plus two outcomes of a check:
 - **Checked by code**: a rule Vestiarion runs computed it: the three-way match, the guardrails, the new payee check,
@@ -52,9 +60,10 @@ and when, not that the fact is true.
 - **Verified outside**: a third party said so: Arc's record of the transaction, GitHub's answer about a pull request,
   the screening service (OpenSanctions).
 - **Stated by a person**: a member, or the payee, entered it. The fact names who (by email, E8) and when.
-- **Inferred**: read, not recorded: the model's judgement (it decides from facts it was given), a bill loaded with
+- **Inferred**: read, not recorded: the model's judgement (it decides from facts it was given), a record loaded with
   sample data and no entry of its own, a setting read as it is today because the decision did not record it.
-- **Missing**: shown, with what would fill it ("A person marks the goods received with Add details on AP / AR").
+- **Missing**: shown, with what would fill it ("A person marks them received with Add details on Bills &
+  receivables").
 - **Could not open**: a check we make that got no answer, or a link revoked. Never "verified".
 - **Does not match**: a check that answered and contradicts the record (a transaction without this transfer, a
   signature that does not verify).
@@ -62,20 +71,22 @@ and when, not that the fact is true.
 A step reads as its weakest fact, in this order: Does not match, Could not open, Missing, Inferred, Stated by a person,
 Checked by code, Verified outside. So a step is never labelled above what its least-supported fact is.
 
+Each label is shown in words with an icon beside it, never by colour alone, and the page explains the seven words once.
+
 **Never upgraded.** The label of a fact is decided by where the fact came from, never by the entry that recorded it.
 Goods marked received by a person stay "Stated by a person" though the entry is signed. The signatures step says, in
 one plain line: "A signed entry proves who recorded what, and when. It does not prove the goods were good or the work
 was done."
 
-**E4. Links outside (I24).**
+**E4. Links outside.**
 - Shown as links: a deliverable URL a person gave, a pull request, a bounty comment, the explorer.
 - Checked here, cheaply, on every view: the signed entries (E2.9); our own receipt (its entry verifies, names the
-  entry that records this transaction, and its link is not revoked); and the transaction we recorded, read from the
-  chain's public RPC with `eth_getTransactionReceipt` (`readOnChain`, 4 s, a mined receipt remembered per instance),
-  which must hold a transfer of the amount to the payee.
+  entry that records this transaction by its seq and hash, and its link is not revoked); and the transaction we
+  recorded, read from the chain's public RPC with `eth_getTransactionReceipt` (`readOnChain`, 4 s, a mined receipt
+  remembered per instance), which must hold a transfer of the amount to the payee.
 - Not fetched: any URL a person or a payee typed. Fetching it from the server would let a payee make our server call an
   address of their choosing, and a deliverable page proves nothing a person did not state. Its fact stays "Stated by a
-  person" and the link is marked "Not opened by Vestiarion".
+  person" and the link is marked "Not opened by Vestiarion". Only `https` links are shown as links.
 - GitHub is not asked again here: the verification cycle asked it with the workspace's own token, and the fact says
   when. An answer GitHub did not give (`unavailable`, `failed`) reads "Could not open".
 - Cost if wrong: a dead deliverable link still shows as a link. Its label is "Stated by a person" either way.
@@ -84,16 +95,23 @@ was done."
 - `buildEvidenceChain` (`src/lib/evidence-chain.ts`) is pure: it takes the record, its counterparty, the ledger
   entries, the screening check, the payment, the receipt, the members' emails and the results of the checks, and
   returns the steps, a tally of labels and the entries. Unit tests hold it to E2 and E3.
+- `chainAnchors` (same module) names the decision the chain rests on and the entry that records the payment, so the
+  reader asks for the screening check at the right time without deciding anything itself.
 - `readEvidence` (`src/lib/evidence-read.ts`) reads through the DAL inside the organization scope: the record and its
   counterparty, `ledger_entries_for_targets`, the verdict entries (`decision_verdict` names the payable as
   `subjectId`), the counterparty's compliance entries (address set and confirmed, purchase orders, dismissed matches),
-  the newest complete screening check at or before the paying decision, the payment intent, the receipt and its
-  entries, and the members. Then it runs the checks (E4) and calls the builder.
-- No migration, no write, no ledger entry. Tenant isolation is the DAL's: every read is `db()`.
+  the newest complete screening check at or before the decision the chain rests on (or the payment, or now), the
+  payment intent, the receipt and its entries (by its seq, and by `receiptId`), and the members. Then it runs the
+  checks (E4) and calls the builder.
+- The members are read best effort: when they cannot be read, a person is "a member", never "a former member".
+- No migration, no write, no ledger entry. Tenant isolation is the DAL's: every read is `db()`, and the members are
+  read for the organization in scope only.
 
 **E6. Entry points.**
-- On AP / AR and Contractors, every payable's and milestone's card footer links **Why it was paid** (a paid one) or
-  **Evidence so far** (an open one).
+- On Bills & receivables and Contractors (and wherever a payable's or milestone's card is shown, such as Treasury's
+  recent decisions), every payable's and milestone's card footer links **Why it was paid** (a paid one) or **Evidence
+  so far** (any other). The card carries the link as data (`Decision.chain`, set by `invoiceDecision` for a payable
+  and by `milestoneDecision`); receivables and treasury moves have none.
 - At the foot of the decision trail: **The whole chain, from purchase order to receipt**.
 - The page's decision step links back to the trail (`/invoices?history=all#trail-<id>`), and each entry to its place in
   the audit log.
@@ -103,8 +121,9 @@ was done."
   `vestiarion-evidence/1`: the workspace, the subject, every step with its facts and labels, every entry in full (the
   fields the audit export carries, so each can be checked alone: body hash, signature, and its chain hash from its
   `prev_hash`), the server's check of each, and the workspace's public keys.
-- Same gate as the audit export: a session, membership (404 otherwise, never saying whether a workspace exists), and a
-  cross-site request refused.
+- Same gate as the audit export: a session (401), membership (404 otherwise, never saying whether a workspace exists),
+  and a cross-site request refused (403). A kind or id that is not one answers 400; a record the workspace does not
+  hold, or a receivable, 404.
 - Not recorded in the ledger: it is a read of one payment's evidence every member can already see. The whole-ledger
   export records itself because it carries everything. Cost if wrong: no trace of who took one payment's evidence out.
 - No printable page in this version: the page prints from the browser. Cost if wrong: the navigation prints too.
@@ -113,19 +132,50 @@ was done."
 former member" otherwise, "the payee" for an address sent through a payee link or GitHub. The download carries the
 same, so an accountant can say who. Ledger entries themselves keep user ids only, as before.
 
-**E9. Product copy.** The network's own label ("Arc testnet", "Arc mainnet"). A payment on Arc testnet is never
-called the business's bank paying; in shadow mode the payment step says it mirrors a bill the business paid its own
-way.
+**E9. Product copy.** The network's own label (`networkProfile(network).label`, the chain's own label for a payee
+paid on another chain). A payment on Arc testnet is never called the business's bank paying; in shadow mode the payment
+step says it mirrors a bill the business paid its own way.
+
+**E10. Who may see, download and share it, said where it is shown (I28).** A panel at the foot of the page, "Who can
+see this":
+- **This page**: every member of the workspace, viewers included. Nobody outside it: the page needs a member's
+  session.
+- **Download evidence**: every member, as the audit export. The file names people by email, as this page does.
+- **Outside the workspace**: only the receipt, and only once an owner or admin shares it with Share receipt on Bills &
+  receivables (`records.write`, payment receipts P3). Its public page shows the amount, the payee's address and the
+  transactions, and no names. The panel says whether the receipt is shared now, was shared and stopped, or is not
+  shared, and whether the person reading may share it (their role) or must ask an owner or admin.
+- A milestone has no receipt: the panel says nothing of it leaves the workspace.
+- Nothing on the page shares, unshares or exports anything by itself besides the download link. Cost if wrong: one
+  line of copy, since the permissions themselves are the existing ones.
+
+## Changes since the first draft (2026-10-11)
+
+- Main renamed "AP / AR" to "Bills & receivables" and reworked the workspace frame (#303): the copy, E1 and E6 follow.
+- The first draft cited I24 for E4. On the roadmap I24 belongs to day 8; this feature carries I22 and I28, so E10 is
+  new and E4 keeps its content without the label.
+- `chainAnchors` (E5) replaces "the newest screening check at or before the paying decision" read by the reader alone:
+  a workspace screens every counterparty every cycle, so the check must be asked for at a time, and the builder is the
+  one place that says which decision the chain rests on.
+- The receipt's revoked entry is found by `receiptId` (its entries name the receipt, not the invoice), and the entry
+  the receipt names must match by seq and by hash, as the public receipt page checks.
+- A first of two approvals on a payable (`approval_given`) is among the people step's facts.
+- E2.9 says what an entry's own check covers, rather than "linked to the entry before it", which only the whole chain
+  shows.
 
 ## Testing
 
 - The builder: a payable paid with full evidence; paid with no purchase order; a milestone with GitHub evidence; a
   delivery a person stated; an unreachable link (Arc did not answer, a revoked receipt, GitHub unavailable); an open
-  bill; labels never upgraded (a signed entry leaves a stated fact stated; a step takes its weakest fact).
-- The reader: reads only through `db()` in scope, and a receivable or unknown id is not found.
-- The route: session, membership 404, cross-site 403, the JSON's shape and file name.
+  bill; a rejected bill; labels never upgraded (a signed entry leaves a stated fact stated; a step takes its weakest
+  fact); sample data; members not read.
+- The reader: reads only through `db()` in scope, asks for the screening check at the decision's time, finds the
+  receipt's entries, and a receivable, a malformed or an unknown id is not found.
+- The route: session, membership 404, cross-site 403, bad kind 400, the JSON's shape and file name.
+- The page: rendered markup of a built chain (labels in words, links' states, the trail link, the I28 panel by role),
+  and the source pins every workspace page has (params, then `requireMembership`, `inOrg`, the shell's status).
 - The page renders on sample data (the guide's screenshot, from `/docs-shots`).
 
 ## Rollout
 
-Merge. No migration. Open a paid payable on AP / AR, then **Why it was paid**.
+Merge. No migration. Open a paid payable on Bills & receivables, then **Why it was paid**.

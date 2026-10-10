@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildEvidenceChain,
+  chainAnchors,
   EVIDENCE_ORDER,
   EVIDENCE_WORDS,
   SIGNED_ENTRY_PROVES,
@@ -140,7 +141,7 @@ function paidInFull(overrides: Partial<EvidenceInput> = {}): EvidenceInput {
       confirmed_at: at("10:03:00"),
       network: "arc-testnet",
     },
-    receipt: { entry_seq: 30, created_at: at("11:00:00"), revoked_at: null, created_by: ALICE },
+    receipt: { id: "rcpt-1", entry_seq: 30, created_at: at("11:00:00"), revoked_at: null, created_by: ALICE },
     people: PEOPLE,
     checks: { entries: okChecks(entries), onChain: { state: "matches", block: 4_210_331 } },
     ...overrides,
@@ -347,7 +348,7 @@ describe("a link that cannot be opened", () => {
   });
 
   it("reads Could not open for a receipt whose link was revoked", () => {
-    const revoked = entry(31, "12:00:00", "human", "receipt_revoked", { by: ALICE, receiptId: "r1" });
+    const revoked = entry(31, "12:00:00", "human", "receipt_revoked", { by: ALICE, receiptId: "rcpt-1" });
     const input = paidInFull();
     const chain = buildEvidenceChain({
       ...input,
@@ -506,6 +507,150 @@ describe("a milestone a person verified", () => {
     const delivered = step(chain, "delivered");
     expect(delivered.kind).toBe("stated");
     expect(delivered.facts[0]).toMatchObject({ kind: "stated", who: "bob@northstar.test", seqs: [71], link: expect.objectContaining({ href: LINK, state: "not_opened" }) });
+  });
+});
+
+describe("the page's name for where bills live (workspace shell design S2)", () => {
+  it("never says AP / AR: a fill names Bills & receivables", () => {
+    const base = paidInFull();
+    const open = buildEvidenceChain({
+      ...base,
+      subject: { kind: "invoice", invoice: { ...(base.subject as { invoice: object }).invoice, status: "held", tx_ref: null, po_reference: null, goods_received: false } as never },
+      counterparty: { ...base.counterparty!, purchase_order_required: true },
+      entries: [ADDRESS_GIVEN],
+      payment: null,
+      receipt: null,
+      checks: { entries: okChecks([ADDRESS_GIVEN]), onChain: null },
+    });
+    const words = JSON.stringify(open.steps);
+    expect(words).not.toContain("AP / AR");
+    expect(step(open, "delivered").facts[0].fill).toBe("A person marks them received with Add details on Bills & receivables.");
+    expect(step(open, "agreed").facts[0].fill).toMatch(/Add details on Bills & receivables/);
+    expect(JSON.stringify(buildEvidenceChain(paidInFull({ receipt: null })).steps)).toContain("Share receipt on Bills & receivables");
+  });
+});
+
+describe("a first of two approvals", () => {
+  it("is a person's fact, before the second approval that paid it", () => {
+    const input = paidInFull();
+    const first = entry(23, "10:30:00", "human", "approval_given", { by: BOB, invoiceId: INVOICE, counterpartyId: CP, amount: 12.5, currency: "USDC", twoApprovalsAbove: 10 });
+    const second = entry(24, "10:40:00", "human", "approval_paid", {
+      by: CAROL,
+      invoiceId: INVOICE,
+      counterpartyId: CP,
+      txRef: TX,
+      status: "paid",
+      approvals: [{ by: BOB, at: at("10:30:00") }, { by: CAROL, at: at("10:40:00") }],
+    });
+    const held = entry(22, "10:02:40", "agent", "ap_hold", { ...AGENT_PAID.detail, decision: { action: "hold" }, execution: { resultingStatus: "held" } });
+    const entries = [...input.entries.filter((row) => row.seq !== 22 && row.seq !== 30), held, first, second];
+    const chain = buildEvidenceChain({ ...input, entries, receipt: null, checks: { ...input.checks, entries: okChecks(entries) } });
+    const people = step(chain, "people");
+    expect(people.facts.map((fact) => [fact.text, fact.who])).toEqual([
+      ["Gave the first of two approvals.", "bob@northstar.test"],
+      ["Approved and paid it.", "carol@northstar.test"],
+    ]);
+    expect(people.facts[1].notes).toEqual(["Approved by bob@northstar.test on Oct 5, 2026, 10:30 UTC", "Approved by carol@northstar.test on Oct 5, 2026, 10:40 UTC"]);
+    expect(step(chain, "payment").facts[1].seqs).toEqual([24]);
+  });
+});
+
+describe("a shared receipt, checked as its public page checks it", () => {
+  const RECEIPT_ID = "rcpt-1";
+
+  it("finds the entry that revoked its link by the receipt, not by the newest revoke in the workspace", () => {
+    const input = paidInFull();
+    const other = entry(31, "11:30:00", "human", "receipt_revoked", { by: BOB, receiptId: "another-receipt" });
+    const own = entry(33, "12:00:00", "human", "receipt_revoked", { by: ALICE, receiptId: RECEIPT_ID });
+    const later = entry(35, "13:00:00", "human", "receipt_revoked", { by: BOB, receiptId: "yet-another" });
+    const entries = [...input.entries, other, own, later];
+    const chain = buildEvidenceChain({
+      ...input,
+      entries,
+      receipt: { ...input.receipt!, id: RECEIPT_ID, revoked_at: at("12:00:00") },
+      checks: { ...input.checks, entries: okChecks(entries) },
+    });
+    expect(step(chain, "receipt").facts[0]).toMatchObject({ kind: "unreachable", seqs: [30, 33] });
+  });
+
+  it("does not match when the entry it names has another hash", () => {
+    const input = paidInFull();
+    const forged = entry(30, "11:00:00", "human", "receipt_shared", { receipt: { txHash: TX }, records: { seq: 22, hash: "f".repeat(64) } });
+    const entries = [...input.entries.filter((row) => row.seq !== 30), forged];
+    const receipt = step(buildEvidenceChain({ ...input, entries, checks: { ...input.checks, entries: okChecks(entries) } }), "receipt");
+    expect(receipt.kind).toBe("contradicted");
+    expect(receipt.facts[0].text).toBe("The receipt names an entry that does not record this transaction.");
+  });
+});
+
+describe("members who could not be read", () => {
+  it("names a person as a member, never as a former member", () => {
+    const chain = buildEvidenceChain(paidInFull({ people: null }));
+    expect(step(chain, "agreed").facts[0].who).toBe("a member");
+    expect(JSON.stringify(chain.steps)).not.toContain("a former member");
+  });
+
+  it("names someone no longer in the workspace as a former member", () => {
+    const chain = buildEvidenceChain(paidInFull({ people: new Map([[BOB, "bob@northstar.test"]]) }));
+    expect(step(chain, "agreed").facts[0].who).toBe("a former member");
+  });
+});
+
+describe("sample data's own facts", () => {
+  it("infers a purchase order and goods received that sample data loaded with no entry", () => {
+    const base = paidInFull();
+    const chain = buildEvidenceChain({ ...base, counterparty: { ...base.counterparty!, sample: true }, entries: [], payment: null, receipt: null, checks: { entries: new Map(), onChain: null } });
+    expect(step(chain, "agreed").facts[0]).toMatchObject({ kind: "inferred", text: "Purchase order PO-2207 is on the bill, loaded with the sample data." });
+    expect(step(chain, "delivered").facts[0]).toMatchObject({ kind: "inferred", text: "The goods or services are marked received, loaded with the sample data." });
+  });
+});
+
+describe("a bill a person rejected", () => {
+  it("says it was not paid, with no way to pay it offered", () => {
+    const base = paidInFull();
+    const rejected = entry(45, "12:00:00", "human", "approval_rejected", { by: CAROL, invoiceId: INVOICE, reason: "Duplicate of an earlier bill" });
+    const entries = [ADDRESS_GIVEN, rejected];
+    const chain = buildEvidenceChain({
+      ...base,
+      subject: { kind: "invoice", invoice: { ...(base.subject as { invoice: object }).invoice, status: "rejected", tx_ref: null } as never },
+      entries,
+      payment: null,
+      receipt: null,
+      checks: { entries: okChecks(entries), onChain: null },
+    });
+    expect(chain.subject).toMatchObject({ paid: false, closed: true });
+    expect(step(chain, "payment").facts).toEqual([expect.objectContaining({ kind: "missing", text: "Not paid: a person rejected it." })]);
+    expect(step(chain, "payment").facts[0].fill).toBeUndefined();
+    expect(step(chain, "people").facts[0]).toMatchObject({ kind: "stated", text: "Rejected it.", notes: ["Reason: Duplicate of an earlier bill"] });
+    expect(step(chain, "receipt").facts[0].fill).toBe("A receipt is made only for a payment on chain.");
+  });
+});
+
+describe("the anchors a reader asks the screening check for", () => {
+  it("names the decision that paid it and the entry that records the payment", () => {
+    const anchors = chainAnchors(paidInFull());
+    expect(anchors.decision?.seq).toBe(22);
+    expect(anchors.recording?.seq).toBe(22);
+    expect(anchors.at).toBe(at("10:02:40"));
+  });
+
+  it("names the agent's last decision before a person paid it, and the payment's time when the agent never decided", () => {
+    const base = paidInFull();
+    const paidByPerson = entry(42, "12:00:00", "human", "approval_paid", { by: CAROL, invoiceId: INVOICE, counterpartyId: CP, txRef: TX, status: "paid" });
+    expect(chainAnchors({ ...base, entries: [paidByPerson] })).toMatchObject({ decision: null, at: at("12:00:00") });
+  });
+
+  it("names no time for an open bill nobody decided: the newest check stands", () => {
+    const base = paidInFull();
+    expect(chainAnchors({ ...base, entries: [], payment: null, subject: { kind: "invoice", invoice: { ...(base.subject as { invoice: object }).invoice, status: "pending", tx_ref: null } as never } }).at).toBeNull();
+  });
+});
+
+describe("what a signature step says it checked", () => {
+  it("says each entry is checked alone, and where the whole chain is checked", () => {
+    const signatures = step(buildEvidenceChain(paidInFull()), "signatures");
+    expect(signatures.facts[0].text).toBe("6 entries verify: each is signed with the workspace's key, and its hash follows from its content, its signature and the hash before it.");
+    expect(signatures.facts[0].notes).toEqual(["The Audit log checks the whole chain, entry after entry."]);
   });
 });
 

@@ -40,7 +40,7 @@ export function weakest(kinds: readonly EvidenceKind[]): EvidenceKind {
 export const SIGNED_ENTRY_PROVES = "A signed entry proves who recorded what, and when. It does not prove the goods were good or the work was done.";
 
 /** A ledger entry as the chain reads it: its whole signed body, so each can be checked alone. */
-export type EvidenceEntry = PublicLedgerRow & { ts: string };
+export type EvidenceEntry = PublicLedgerRow & { ts: string; id?: string };
 
 /** A link a fact points to (E4): checked here, shown without being opened, unanswered, or contradicting the record. */
 export interface EvidenceLink {
@@ -138,6 +138,8 @@ export type EvidencePayment = ReceiptIntent & { provider: string };
 
 /** The record's receipt row (payment receipts P3); the link itself is never stored, only its hash. */
 export interface EvidenceReceipt {
+  /** Its id, which its later entries name (`receipt_link_renewed`, `receipt_revoked`). */
+  id: string;
   entry_seq: number;
   created_at: string;
   revoked_at: string | null;
@@ -159,8 +161,8 @@ export interface EvidenceInput {
   screening: EvidenceScreening | null;
   payment: EvidencePayment | null;
   receipt: EvidenceReceipt | null;
-  /** Members' emails by user id. */
-  people: ReadonlyMap<string, string>;
+  /** Members' emails by user id; null when they could not be read, so a person is "a member" (E5). */
+  people: ReadonlyMap<string, string> | null;
   checks: {
     /** Each entry's check (`verifyEntry`), by seq. */
     entries: ReadonlyMap<number, EntryCheck>;
@@ -170,7 +172,18 @@ export interface EvidenceInput {
 }
 
 export interface EvidenceChain {
-  subject: { kind: EvidenceSubject["kind"]; id: string; title: string; payee: string; amount: number; currency: string; status: string; paid: boolean };
+  subject: {
+    kind: EvidenceSubject["kind"];
+    id: string;
+    title: string;
+    payee: string;
+    amount: number;
+    currency: string;
+    status: string;
+    paid: boolean;
+    /** Rejected by a person (a payable) or closed without paying (a milestone): it will not be paid. */
+    closed: boolean;
+  };
   network: Network;
   steps: EvidenceStep[];
   /** How many facts are known each way. */
@@ -271,6 +284,8 @@ interface Context {
   id: string;
   name: string;
   paid: boolean;
+  /** Rejected or closed: it will not be paid. */
+  closed: boolean;
   /** The entries about the record, oldest first. */
   own: EvidenceEntry[];
   /** The counterparty's entries up to the payment, newest first. */
@@ -312,6 +327,7 @@ function agreedInvoice(ctx: Context, invoice: EvidenceInvoice): EvidenceStep {
   const po = invoice.po_reference;
   if (po) {
     const source = newest(ctx.own, (entry) => (entry.action === "invoice_details_added" && record(entry.detail.added)?.poReference === po) || (CREATION.has(entry.action) && entry.detail.poReference === po));
+    if (!source && ctx.input.counterparty?.sample) return step("agreed", title, [{ kind: "inferred", text: `Purchase order ${po} is on the bill, loaded with the sample data.`, seqs: [] }]);
     return step("agreed", title, [stated(ctx, `Purchase order ${po} is on the bill${source ? via(source.detail) : ""}.`, source)]);
   }
   const observed = record(ctx.decision?.detail.observed);
@@ -330,7 +346,9 @@ function agreedInvoice(ctx: Context, invoice: EvidenceInvoice): EvidenceStep {
       text: "No purchase order is on file.",
       fill: ctx.paid
         ? "None was on the bill when it was paid. Keep the purchase order with the books if there is one."
-        : "Add the purchase order with Add details on AP / AR, or mark the counterparty as paid without purchase orders.",
+        : ctx.closed
+          ? "None was on the bill."
+          : "Add the purchase order with Add details on Bills & receivables, or mark the counterparty as paid without purchase orders on Counterparties.",
       seqs: [],
     },
   ]);
@@ -365,6 +383,7 @@ function deliveredInvoice(ctx: Context, invoice: EvidenceInvoice): EvidenceStep 
   const title = "What was delivered";
   if (invoice.goods_received) {
     const source = newest(ctx.own, (entry) => (entry.action === "invoice_details_added" && record(entry.detail.added)?.goodsReceived === true) || (CREATION.has(entry.action) && entry.detail.goodsReceived === true));
+    if (!source && ctx.input.counterparty?.sample) return step("delivered", title, [{ kind: "inferred", text: "The goods or services are marked received, loaded with the sample data.", seqs: [] }]);
     const sentence = source?.action === "recurring_invoice_created" ? "The goods or services are marked received by its recurring schedule." : `The goods or services are marked received${source ? via(source.detail) : ""}.`;
     return step("delivered", title, [stated(ctx, sentence, source)]);
   }
@@ -372,7 +391,7 @@ function deliveredInvoice(ctx: Context, invoice: EvidenceInvoice): EvidenceStep 
     {
       kind: "missing",
       text: "Nothing records that the goods or services were received.",
-      fill: ctx.paid ? "Nothing more can be added to a paid bill here." : "A person marks them received with Add details on AP / AR.",
+      fill: ctx.paid || ctx.closed ? "Nothing more can be added to it here." : "A person marks them received with Add details on Bills & receivables.",
       seqs: [],
     },
   ]);
@@ -435,23 +454,23 @@ function billStep(ctx: Context, invoice: EvidenceInvoice): EvidenceStep {
   const currency = invoice.currency ?? "USDC";
   if (!created) {
     if (ctx.input.counterparty?.sample) return step("bill", title, [{ kind: "inferred", text: "Loaded with the sample data; it has no ledger entry of its own.", seqs: [] }]);
-    return step("bill", title, [{ kind: "missing", text: "No entry records who added this bill.", fill: "A bill added on AP / AR, by email, from a chat or through the API records it.", seqs: [] }]);
+    return step("bill", title, [{ kind: "missing", text: "No entry records who added this bill.", fill: "A bill added on Bills & receivables, by email, from a chat or through the API records it.", seqs: [] }]);
   }
   const amount = typeof created.detail.amount === "number" ? money(created.detail.amount, text(created.detail.currency) ?? currency) : money(invoice.amount, currency);
   if (created.action === "recurring_invoice_created") {
     return step("bill", title, [{ kind: "stated", text: `${amount}, made on its due day by a recurring payment a person set up.`, who: null, at: created.ts, seqs: [created.seq] }]);
   }
-  if (created.action === "import_invoice") return step("bill", title, [stated(ctx, `${amount}, imported from a CSV file on AP / AR.`, created)]);
+  if (created.action === "import_invoice") return step("bill", title, [stated(ctx, `${amount}, imported from a CSV file on Bills & receivables.`, created)]);
   const document = record(created.detail.document);
   const source = document
-    ? `read from ${DOCUMENT_KIND[text(document.kind) ?? ""] ?? "a document"} by ${READER[text(document.reader) ?? ""] ?? "a model"}, then added${via(created.detail) || " on AP / AR"} by the person who checked it`
+    ? `read from ${DOCUMENT_KIND[text(document.kind) ?? ""] ?? "a document"} by ${READER[text(document.reader) ?? ""] ?? "a model"}, then added${via(created.detail) || " on Bills & receivables"} by the person who checked it`
     : created.detail.via === "api"
       ? "sent through the API with a workspace key"
       : created.detail.via === "email"
-        ? "arrived by email and added on AP / AR"
+        ? "arrived by email and added on Bills & receivables"
         : created.detail.via
           ? `added${via(created.detail)}`
-          : "added in the invoice form on AP / AR";
+          : "added in the invoice form on Bills & receivables";
   const notes = document && text(document.sha256) ? [`The document's SHA-256 is ${text(document.sha256)}; the document itself is not kept.`] : [];
   return step("bill", title, [stated(ctx, `${amount}, ${source}.`, created, notes.length > 0 ? { notes } : {})]);
 }
@@ -592,11 +611,12 @@ function peopleStep(ctx: Context): EvidenceStep {
   if (ctx.paid && ctx.decision && PAYING.has(ctx.decision.action)) {
     return step("people", "People", [{ kind: "checked", text: "No person approved it: code let the agent pay it within the workspace's rules.", seqs: [ctx.decision.seq] }]);
   }
-  if (!ctx.paid) return step("people", "People", [{ kind: "missing", text: "No person has decided it yet.", fill: "When the agent holds it, a person decides it in Approvals.", seqs: [] }]);
+  if (!ctx.paid && !ctx.closed) return step("people", "People", [{ kind: "missing", text: "No person has decided it yet.", fill: "When the agent holds it, a person decides it in Approvals.", seqs: [] }]);
   return step("people", "People", [{ kind: "missing", text: "No person's approval is recorded.", seqs: [] }]);
 }
 
 const PEOPLE_WORDS: Record<string, (detail: Record<string, unknown>) => string> = {
+  approval_given: () => "Gave the first of two approvals",
   approval_paid: (detail) => (detail.soleApprover === true ? "Approved and paid it, as the workspace's only approver" : "Approved and paid it"),
   approval_returned: () => "Returned it to the agent",
   approval_rejected: () => "Rejected it",
@@ -660,6 +680,9 @@ function paymentStep(ctx: Context, onChain: OnChainCheck | null): EvidenceStep {
     case "no_record":
       return step("payment", title, [{ kind: "missing", text: "Marked paid, with no payment recorded.", fill: "Sample data and history imported as paid carry none.", seqs: [] }]);
     default:
+      if (ctx.closed) {
+        return step("payment", title, [{ kind: "missing", text: ctx.key === "invoiceId" ? "Not paid: a person rejected it." : "Not paid: a person closed it without paying it.", seqs: [] }]);
+      }
       return step("payment", title, [{ kind: "missing", text: "Not paid yet.", fill: `Paid on ${ctx.networkLabel} when the agent or a person pays it.`, seqs: [] }]);
   }
 }
@@ -677,14 +700,21 @@ function receiptStep(ctx: Context): EvidenceStep {
   const view = ctx.payment;
   const recording = view.state === "chain" ? view.recording : null;
   if (!receipt) {
-    if (view.state === "chain" && ctx.paid) return step("receipt", title, [{ kind: "missing", text: "Not shared.", fill: "An owner or admin shares it with Share receipt on AP / AR.", seqs: [] }]);
-    const why = view.state === "simulated" ? "A simulated payment has nothing on chain to show." : ctx.paid ? "A receipt needs a transaction on chain." : "A receipt is made once it is paid.";
+    if (view.state === "chain" && ctx.paid) return step("receipt", title, [{ kind: "missing", text: "Not shared.", fill: "An owner or admin shares it with Share receipt on Bills & receivables.", seqs: [] }]);
+    const why =
+      view.state === "simulated"
+        ? "A simulated payment has nothing on chain to show."
+        : ctx.paid
+          ? "A receipt needs a transaction on chain."
+          : ctx.closed
+            ? "A receipt is made only for a payment on chain."
+            : "A receipt is made once it is paid.";
     return step("receipt", title, [{ kind: "missing", text: "No receipt.", fill: why, seqs: [] }]);
   }
   const shared = ctx.input.entries.find((entry) => entry.seq === receipt.entry_seq && entry.action === "receipt_shared") ?? null;
   const base = { who: ctx.who(receipt.created_by), at: receipt.created_at };
   if (receipt.revoked_at) {
-    const revoked = newest(ctx.input.entries, (entry) => entry.action === "receipt_revoked");
+    const revoked = newest(ctx.input.entries, (entry) => entry.action === "receipt_revoked" && entry.detail.receiptId === receipt.id);
     return step("receipt", title, [
       { kind: "unreachable", text: "Shared, then its link was revoked: it no longer opens.", ...base, notes: [`Revoked on ${utcMinute(receipt.revoked_at)}.`], seqs: [receipt.entry_seq, ...(revoked ? [revoked.seq] : [])] },
     ]);
@@ -693,10 +723,18 @@ function receiptStep(ctx: Context): EvidenceStep {
   const check = ctx.input.checks.entries.get(shared.seq);
   if (check?.ok === false) return step("receipt", title, [{ kind: "contradicted", text: `The receipt's entry does not verify: ${check.reason}`, ...base, seqs: [shared.seq], warn: true }]);
   if (!check || check.ok === null) return step("receipt", title, [{ kind: "unreachable", text: `The receipt's entry could not be checked here${check ? `: ${check.reason}` : "."}`, ...base, seqs: [shared.seq] }]);
-  const names = record(shared.detail.records)?.seq;
-  const named = ctx.own.find((entry) => entry.seq === names) ?? null;
+  // As the public receipt page checks it (payment receipts P5): the entry it names, by seq and by hash, written before
+  // it, records a payment of this transaction.
+  const names = record(shared.detail.records);
+  const named = ctx.own.find((entry) => entry.seq === names?.seq) ?? null;
   const tx = view.state === "chain" ? view.facts.txHash.toLowerCase() : null;
-  const records = named !== null && tx !== null && RECORDING_ACTIONS.has(named.action) && JSON.stringify(named.detail).toLowerCase().includes(tx);
+  const records =
+    named !== null &&
+    tx !== null &&
+    named.hash === names?.hash &&
+    named.seq < shared.seq &&
+    RECORDING_ACTIONS.has(named.action) &&
+    JSON.stringify(named.detail).toLowerCase().includes(tx);
   if (!records) return step("receipt", title, [{ kind: "contradicted", text: "The receipt names an entry that does not record this transaction.", ...base, seqs: [shared.seq], warn: true }]);
   return step("receipt", title, [
     {
@@ -720,7 +758,8 @@ function signaturesStep(rows: Array<EvidenceEntry & { check: EntryCheck }>): Evi
   if (good.length > 0) {
     facts.push({
       kind: "checked",
-      text: `${good.length === 1 ? "1 entry" : `${good.length} entries`}, each signed with the workspace's key and linked to the entry before it.`,
+      text: `${good.length === 1 ? "1 entry verifies: it is" : `${good.length} entries verify: each is`} signed with the workspace's key, and its hash follows from its content, its signature and the hash before it.`,
+      notes: ["The Audit log checks the whole chain, entry after entry."],
       seqs: good.map((row) => row.seq),
     });
   }
@@ -733,32 +772,70 @@ function signaturesStep(rows: Array<EvidenceEntry & { check: EntryCheck }>): Evi
 
 const NOT_CHECKED: EntryCheck = { ok: null, reason: "It was not checked." };
 
-export function buildEvidenceChain(input: EvidenceInput): EvidenceChain {
+/** The record the chain is about, as one shape for either kind. */
+function subjectOf(input: Pick<EvidenceInput, "subject">) {
   const invoice = input.subject.kind === "invoice" ? input.subject.invoice : null;
   const milestone = input.subject.kind === "milestone" ? input.subject.milestone : null;
-  const key = invoice ? "invoiceId" : "milestoneId";
-  const id = (invoice ?? milestone)!.id;
-  const status = (invoice ?? milestone)!.status;
-  const ref = invoice ? { invoiceId: id } : { milestoneId: id };
-  const own = input.entries.filter((entry) => entry.detail[key] === id).sort((a, b) => a.seq - b.seq);
-  const payment = paymentView(input, own, status, (invoice ?? milestone)!.tx_ref, ref);
+  const row = (invoice ?? milestone) as EvidenceInvoice | EvidenceMilestone;
+  const key = invoice ? ("invoiceId" as const) : ("milestoneId" as const);
+  const ref = invoice ? { invoiceId: row.id } : { milestoneId: row.id };
+  return { invoice, milestone, row, key, ref };
+}
+
+export interface ChainAnchors {
+  /** The entry that records the payment's transaction, when there is one. */
+  recording: EvidenceEntry | null;
+  /** The agent's decision the chain rests on: the one that paid it, or its newest before the payment, or its newest of all while open. */
+  decision: EvidenceEntry | null;
+  /** When the payee's screening is read for (E5): the decision's time, else the payment's; null for now. */
+  at: string | null;
+}
+
+/**
+ * The decision the chain rests on and the entry that records the payment (E5). The builder words the chain from them;
+ * the reader asks for the screening check at their time, so a workspace that screens every cycle is read once.
+ */
+export function chainAnchors(input: Pick<EvidenceInput, "subject" | "entries" | "payment" | "network">): ChainAnchors {
+  const { row, key, ref } = subjectOf(input);
+  const own = input.entries.filter((entry) => entry.detail[key] === row.id).sort((a, b) => a.seq - b.seq);
+  const payment = paymentView(input, own, row.status, row.tx_ref, ref);
+  return anchorsOf(own, payment);
+}
+
+function anchorsOf(own: EvidenceEntry[], payment: PaymentView): ChainAnchors {
   const recording = payment.state === "chain" || payment.state === "recorded" ? payment.recording : null;
   const cutoff = recording?.seq ?? Number.POSITIVE_INFINITY;
   const decision = recording && isAgentDecision(recording) ? recording : newest(own, (entry) => isAgentDecision(entry) && entry.seq < cutoff);
+  return { recording, decision, at: decision?.ts ?? recording?.ts ?? null };
+}
+
+/** Rejected by a person, or closed without paying: it will not be paid. */
+const CLOSED = new Set(["rejected", "closed"]);
+
+export function buildEvidenceChain(input: EvidenceInput): EvidenceChain {
+  const { invoice, milestone, row, key, ref } = subjectOf(input);
+  const { id, status } = row;
+  const own = input.entries.filter((entry) => entry.detail[key] === id).sort((a, b) => a.seq - b.seq);
+  const payment = paymentView(input, own, status, row.tx_ref, ref);
+  const { recording, decision } = anchorsOf(own, payment);
+  const cutoff = recording?.seq ?? Number.POSITIVE_INFINITY;
   const counterpartyId = input.counterparty?.id ?? null;
+  const people = input.people;
   const ctx: Context = {
     input,
     key,
     id,
     name: input.counterparty?.name ?? "The payee",
     paid: status === "paid",
+    closed: CLOSED.has(status),
     own,
     counterparty: input.entries
       .filter((entry) => counterpartyId !== null && entry.domain === "compliance" && entry.detail.counterpartyId === counterpartyId && entry.seq <= cutoff)
       .sort((a, b) => b.seq - a.seq),
     payment,
     decision,
-    who: (user) => (typeof user === "string" && user.length > 0 ? (input.people.get(user) ?? "a former member") : null),
+    // By email (E8); "a member" when the members could not be read, never a guess that they left.
+    who: (user) => (typeof user === "string" && user.length > 0 ? (people === null ? "a member" : (people.get(user) ?? "a former member")) : null),
     networkLabel: networkProfile(input.network).label,
   };
 
@@ -783,10 +860,11 @@ export function buildEvidenceChain(input: EvidenceInput): EvidenceChain {
       id,
       title: invoice ? (invoice.memo ?? "A bill") : milestone!.title,
       payee: ctx.name,
-      amount: (invoice ?? milestone)!.amount,
+      amount: row.amount,
       currency: invoice ? (invoice.currency ?? "USDC") : "USDC",
       status,
       paid: ctx.paid,
+      closed: ctx.closed,
     },
     network: input.network,
     steps,
