@@ -2,16 +2,18 @@ Shadow mode lets a business try the agent on its real bills without moving its m
 
 ## Before you start
 
-- **A workspace on Arc testnet**, live, with USDC in its operating wallet: see [Go live](/docs/guides/go-live). Each payment you agree to is paid from that wallet, so keep it funded: with test USDC from Vestiarion's float, for what your open bills need (see [Fund it for your real amounts](#fund-it-for-your-real-amounts)), or from Circle's faucet, 20 USDC every two hours.
+- **A workspace on Arc testnet.** A sandbox is enough to start: with no wallet, it decides on your real bills, and a payment you agree to there is simulated. To pay what you agree to in USDC on Arc testnet, take it live with USDC in its operating wallet: see [Go live](/docs/guides/go-live). Each payment you agree to is then paid from that wallet, so keep it funded: with test USDC from Vestiarion's float, for what your open bills need (see [Fund it for your real amounts](#fund-it-for-your-real-amounts)), or from Circle's faucet, 20 USDC every two hours.
 - **The owner of the workspace.** Only an owner turns shadow mode on or off. Anyone who can approve payments (an owner, admin or approver) gives verdicts.
 
 Shadow mode is for Arc testnet only. On Arc mainnet the panel says "Shadow mode runs on Arc testnet. On Arc mainnet the agent pays your real bills." Once you trust the agent, a small share of your bills can move to a workspace on Arc mainnet, which pays them in real USDC.
 
 ## 1. Turn it on
 
-Open **Settings**. Under **Workspace**, the **Shadow mode** section says it is off. Choose **Your currency**: USDC, chosen at first, where you enter each bill's amount in USDC, or the currency your bills are written in, such as EUR. Then choose **Turn on shadow mode**. From then on the section says since when it is on, and for which currency, and that the agent pays nothing until a person agrees.
+When you create a workspace, tick **Run alongside how you pay today (shadow mode)**. It is ticked already when you come from **Try it on your bills** on the home page. The workspace then starts in shadow mode, for bills in USDC, and the ledger records that you turned it on, as it does from Settings. If it cannot be turned on, the workspace is still created, and the console says "Your workspace is ready, but shadow mode did not turn on." with a link to Settings.
 
-The console's **Get started in shadow mode** checklist then walks you through the rest and ticks each step as you take it: a wallet, funded and live; your suppliers; your real bills; and your first verdict. It hides once you give that verdict.
+In a workspace you have already, or for bills in your own currency, open **Settings**. Under **Workspace**, the **Shadow mode** section says it is off. Choose **Your currency**: USDC, chosen at first, where you enter each bill's amount in USDC, or the currency your bills are written in, such as EUR. Then choose **Turn on shadow mode**. From then on the section says since when it is on, and for which currency, and that the agent pays nothing until a person agrees.
+
+The console's **Get started in shadow mode** checklist then walks you through the rest and ticks each step as you take it: your suppliers, your real bills and your first verdict, and a wallet, funded and live. A live workspace, or one with a wallet, lists the wallet first. A sandbox with no wallet lists it last, under **To pay on Arc**, so your first verdict needs no wallet. The checklist hides once every step is done.
 
 ## 2. Add your bills as you do today
 
@@ -19,7 +21,7 @@ Add each bill as a payable in AP / AR. In USDC, enter its **Amount** in USDC, as
 
 A bill read from a document, an email or a chat, or sent through the API, is added in USDC or EURC: for a bill in another currency, type its amount into the form instead.
 
-The agent decides on each bill in its next cycle, as in any workspace. It may pay it now, schedule it for a later day, hold it, flag it, or ask for what is missing. If a supplier sends you no purchase orders, turn purchase orders off on its row in Counterparties, so its bills are not held for one.
+The agent decides on each bill in its next cycle, as in any workspace. It may pay it now, schedule it for a later day, hold it, flag it, or ask for what is missing. When you add a supplier, **Add counterparty** asks **Does this supplier send you purchase orders?** **No** adds it paid without purchase orders, so its bills are not held for one; **Yes** keeps them needed. For a supplier added before, change it on its row in Counterparties.
 
 ## Fund it for your real amounts
 
@@ -33,7 +35,7 @@ Vestiarion fills the float with testnet USDC bought in bulk from TestMint. Once 
 
 ## 3. Give a supplier with no Arc address a mirror address
 
-Most of the people you pay have no wallet on Arc. A payment you agree to still needs an address to go to, so in shadow mode a supplier with no address can be given a mirror address: a wallet Vestiarion makes for it on Arc testnet, in this workspace's Circle wallets.
+Most of the people you pay have no wallet on Arc. In a sandbox with no wallet that does not matter: the payment you agree to is simulated, the address included. Once the workspace pays on Arc testnet, a payment you agree to needs an address to go to, so in shadow mode a supplier with no address can be given a mirror address: a wallet Vestiarion makes for it on Arc testnet, in this workspace's Circle wallets.
 
 In **Counterparties**, open the supplier's row and choose **Give it a mirror address**. The row then shows the address, and says: "Mirror address: a wallet Vestiarion made for this payee on Arc testnet, in shadow mode." No person typed it, so its first payment does not wait for a second person to confirm the address. The USDC you agree to pay a supplier stays in its mirror wallet, on Arc testnet.
 
@@ -45,7 +47,7 @@ When the agent decides to pay a bill now, nothing is sent: the payment is held f
 
 The same holds when a check in code stopped the payment the agent decided, such as a first payment to an address only you stand behind, or one above the payee's limit. The card says why, and still asks for your verdict: **Agree and pay** pays it through the same checks as **Approve and pay**, and nothing else settles it until a verdict is given. So every payment made in shadow mode has a verdict behind it.
 
-- **Agree and pay** asks you to confirm: "You agree with the agent, and it is paid in USDC on Arc testnet now", with that payment. It then goes through the same checks as **Approve and pay**, to the address the card showed: if the payee's address changed since, nothing is paid. Your agreement is recorded once the payment goes, or its transfer was tried. A notice says **Payment approved** while it is sent, then **Payment confirmed** with the amount, the payee, "Agent decision approved by you", the network and **View transaction**, or **Payment processing** while Arc testnet still confirms it. If the payment is refused, nothing is recorded: agree and pay again once it can be paid.
+- **Agree and pay** asks you to confirm: "You agree with the agent, and it is paid in USDC on Arc testnet now", with that payment. In a sandbox with no wallet it says "You agree with the agent, and it is paid now, simulated in this sandbox". It then goes through the same checks as **Approve and pay**, to the address the card showed: if the payee's address changed since, nothing is paid. Your agreement is recorded once the payment goes, or its transfer was tried. A notice says **Payment approved** while it is sent, then **Payment confirmed** with the amount, the payee, "Agent decision approved by you", the network and **View transaction**, or **Payment processing** while Arc testnet still confirms it. If the payment is refused, nothing is recorded: agree and pay again once it can be paid.
 - **Disagree** asks **Why do you disagree?**, in at most 280 characters. Then choose what happens to the bill: **Decide it again later** returns it to the agent for its next cycle, and **Do not pay it** rejects it.
 
 If you may not pay it yourself, for example because you entered the bill and another person can approve payments, the card offers **Agree** alone and says why. Your agreement is recorded, and another person pays it in Approvals.

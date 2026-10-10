@@ -38,6 +38,8 @@ describe("the landing hero", () => {
     expect(words).toContain("Every decision, refusals included, is signed into a chain anyone can verify.");
     const markup = renderToStaticMarkup(<TooltipProvider><Hero provenance={[]} head={[]} hostedAvailable /></TooltipProvider>);
     expect(markup).toMatch(/<a [^>]*href="\/docs\/guides\/shadow-mode"[^>]*>How shadow mode works/);
+    // Its call to action ticks shadow mode on the form that creates the workspace.
+    expect(markup).toMatch(/<a [^>]*href="\/onboarding\?shadow=1"[^>]*>Try it on your bills/);
   });
 
   it("without it: a workspace of your own, with Circle connected from Settings", () => {

@@ -37,7 +37,7 @@ export function Hero({ provenance, head, hostedAvailable }: { provenance: Proven
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button asChild size="lg">
-              <Link href={"/onboarding"}>{hostedAvailable ? "Try it on your bills" : "Open a workspace"}</Link>
+              <Link href="/onboarding?shadow=1">{hostedAvailable ? "Try it on your bills" : "Open a workspace"}</Link>
             </Button>
             <Button asChild size="lg" variant="secondary" className="bg-surface/80">
               <a href="#how-it-works">How a decision is made</a>

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { refreshOnChainBalanceAction } from "@/app/actions/treasury";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import AgentControls from "@/components/AgentControls";
@@ -17,6 +18,7 @@ import { invoiceDecision, treasuryActionDecision, treasuryDecisionEntries, treas
 import { Money } from "@/components/vx/Primitives";
 import { CashOutlookPanel, SafeToSpendFigure } from "@/components/vx/CashOutlook";
 import { ScheduledPayments, scheduledPaymentRows } from "@/components/vx/ScheduledPayments";
+import { Callout } from "@/components/ui/Callout";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
@@ -36,12 +38,12 @@ import { spendingLimitStatus } from "@/lib/circle/spending-limit-setup";
 import { readServiceBudget } from "@/lib/service-budget";
 import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
-import { gettingStarted, ownBillCount, ownPayableCount } from "@/lib/getting-started";
+import { gettingStarted, ownBillCount, ownDecidedCount, ownPayableCount } from "@/lib/getting-started";
 import { listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { pauseStateOf } from "@/lib/platform/pause";
 import { cashOutlook } from "@/lib/cash-outlook";
 import { latestForecast, listAccounts, listCounterparties, listInvoices, listMilestones, listTreasuryActions, stats } from "@/lib/queries";
-import { readShadowMode } from "@/lib/shadow-mode";
+import { readShadowMode, SHADOW_NOT_STARTED } from "@/lib/shadow-mode";
 import { readShadowSummary, verdictFacts } from "@/lib/verdicts";
 import { readTestUsdcWeek, testUsdcAvailable } from "@/lib/test-usdc";
 import { testUsdcView } from "@/lib/test-usdc-rules";
@@ -251,13 +253,16 @@ export default async function DashboardPage({
     // Computed from the rows above, with no extra read (getting-started design G1, G2), until the first
     // payment on Arc testnet (first-payment design §2). Only people who can act on it see it: owners and
     // admins add records, and an owner takes the workspace live. In shadow mode it has steps of its own: suppliers, real
-    // bills and a first verdict, from the shadow mode and verdicts read above.
+    // bills and a first verdict, from the shadow mode and verdicts read above. A sandbox with no wallet starts with its
+    // first bill and the agent's decision on it, from the invoices read above.
     const checklist = can(role, "records.write")
       ? gettingStarted({
           mode: access.membership.mode,
           accounts: accountsRows,
           counterparties,
           payableCount: ownPayableCount(invoices, counterparties),
+          billCount: ownBillCount(invoices, counterparties),
+          decidedCount: ownDecidedCount(invoices, counterparties),
           onchainPayments: dashboardStats.onchainTransfers,
           waitingCount: needsReview,
           network,
@@ -297,6 +302,17 @@ export default async function DashboardPage({
         {/* The agent decides within a minute of an event (an invoice added, a payable returned): the page
             re-reads its data every 20 s, and at once on return to the tab, so the decision appears without a reload. */}
         <AutoRefresh intervalMs={20_000} />
+
+        {/* Shadow mode asked for as the workspace was created, and not turned on: the workspace is there, and Settings turns it on. */}
+        {query.shadow === SHADOW_NOT_STARTED && !shadow && (
+          <Callout tone="held" className="mb-8">
+            Your workspace is ready, but shadow mode did not turn on.{" "}
+            <Link href={orgHref(slug, "/settings#shadow-mode-title")} className="font-medium text-agent underline-offset-2 hover:underline">
+              Turn it on in Settings
+            </Link>
+            .
+          </Callout>
+        )}
 
         {checklist && <GettingStarted slug={slug} checklist={checklist} isOwner={can(role, "org.administer")} />}
 

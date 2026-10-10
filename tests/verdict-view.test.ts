@@ -45,4 +45,9 @@ describe("verdictView", () => {
   it("shows someone who may not decide payments that it waits, and offers them nothing", () => {
     expect(verdictView(INVOICE, [entry(42, "ap_pay", "agent")], facts({ canGive: false }), true)).toMatchObject({ given: null, open: false });
   });
+
+  it("carries whether the workspace simulates its payments, so Agree and pay can say so", () => {
+    expect(verdictView(INVOICE, [entry(42, "ap_pay", "agent")], facts({ simulated: true }), true)?.simulated).toBe(true);
+    expect(verdictView(INVOICE, [entry(42, "ap_pay", "agent")], facts(), true)).not.toHaveProperty("simulated");
+  });
 });

@@ -22,6 +22,10 @@ import type { VerdictView } from "@/lib/verdict-view";
  */
 
 type After = "pay" | "return" | "reject";
+
+/** What Agree and pay does, said before it does it: in a sandbox with no Circle account, the payment is simulated. */
+const AGREE_AND_PAY = "You agree with the agent, and it is paid in USDC on Arc testnet now.";
+const AGREE_AND_PAY_SIMULATED = "You agree with the agent, and it is paid now, simulated in this sandbox.";
 type Note = { tone: "neutral" | "error"; text: string } | null;
 
 const SETTLE_OPTIONS = [
@@ -87,7 +91,7 @@ export default function VerdictControl({ orgSlug, view, payBlocked = null }: { o
               </Button>
             }
             title="Agree and pay?"
-            description={`You agree with the agent, and it is paid in USDC on Arc testnet now.${view.payment ? ` ${paysLine(view.payment)}` : ""}`}
+            description={`${view.simulated ? AGREE_AND_PAY_SIMULATED : AGREE_AND_PAY}${view.payment ? ` ${paysLine(view.payment)}` : ""}`}
             confirmLabel="Agree and pay"
             onConfirm={() => give("agree", "pay")}
           />

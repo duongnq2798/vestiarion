@@ -127,9 +127,9 @@ describe("two platform lines that would turn false with the first mainnet worksp
     expect(open).toContain('about: "Payments on Arc testnet."');
   });
 
-  it("onboarding says an owner adds a wallet, on whichever network the workspace is", () => {
+  it("onboarding leads to a first bill, in words true on whichever network the workspace is", () => {
     const onboarding = source("src/app/onboarding/page.tsx");
     expect(onboarding).not.toContain("adds an Arc testnet wallet");
-    expect(onboarding).toContain("An owner adds a wallet from Settings, and the agent pays from it.");
+    expect(onboarding).toContain("Create your first workspace, then add one of your bills and see what the agent decides.");
   });
 });

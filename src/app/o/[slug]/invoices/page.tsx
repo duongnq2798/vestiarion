@@ -232,7 +232,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()}>
         <PageHead
           title={sectionTitle("invoices")}
-          sub="Three-way match, counterparty risk, and payment authority — with the agent’s complete reasoning on every line."
+          sub="Your bills, what the agent decided on each, and why."
           right={<AgentControls orgSlug={slug} nextDay={dashboardStats.day + 1} headSeq={headEntries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
         />
         {/* The agent decides within a minute of an event (an invoice added, a payable returned): the page

@@ -1173,7 +1173,7 @@ export const DOCS_SHOTS = {
   "email-inbox-ap": {
     guide: "email-invoices",
     page: "invoices",
-    sub: "Three-way match, counterparty risk, and payment authority — with the agent’s complete reasoning on every line.",
+    sub: "Your bills, what the agent decided on each, and why.",
     render: () => (
       <InboxEmails
         orgSlug={SLUG}

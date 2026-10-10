@@ -69,6 +69,18 @@ describe("createCounterparty", () => {
     expect(screenMock).toHaveBeenCalledWith(CREATED);
   });
 
+  it("stores whether the supplier sends purchase orders when the person said so, and records it; otherwise the default stands", async () => {
+    const answered = workspace();
+    await answered.run(() => createCounterparty({ actorId: USER, counterparty: input(), purchaseOrderRequired: false, now: () => NOW }));
+    expect(insertOf(answered.fake.requests)).toMatchObject({ purchase_order_required: false });
+    expect(ledgerOf(answered.fake.requests).p_detail).toMatchObject({ purchaseOrderRequired: false });
+
+    const unasked = workspace();
+    await unasked.run(() => createCounterparty({ actorId: USER, counterparty: input(), now: () => NOW }));
+    expect(insertOf(unasked.fake.requests)).not.toHaveProperty("purchase_order_required");
+    expect(ledgerOf(unasked.fake.requests).p_detail).not.toHaveProperty("purchaseOrderRequired");
+  });
+
   it("stores an address that came through the API as a change waiting for a person (write API R3)", async () => {
     const { fake, run } = workspace();
     await run(() => createCounterparty({ actorId: USER, counterparty: input(), via: "api", apiKeyId: KEY_ID, now: () => NOW }));

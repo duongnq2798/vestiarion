@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gettingStarted, ownBillCount, ownPayableCount, type GettingStartedInput } from "@/lib/getting-started";
+import { gettingStarted, ownBillCount, ownDecidedCount, ownPayableCount, PAY_ON_ARC, type GettingStartedInput } from "@/lib/getting-started";
 
 /**
  * The console's Get started checklist, computed from rows the console
@@ -10,6 +10,8 @@ import { gettingStarted, ownBillCount, ownPayableCount, type GettingStartedInput
 
 const ADDRESS = "0x1948aB0000000000000000000000000000c345a0";
 const FUNDED = [{ kind: "operating", circle_wallet_id: "w-1", balance: 40 }];
+/** A sandbox that has its wallet, not yet funded: it keeps the order to a first payment. */
+const WALLET = [{ kind: "operating", circle_wallet_id: "w-1", balance: 0 }];
 const PAYEE = { name: "Northstar Studio", role: "vendor", address: ADDRESS };
 
 function input(overrides: Partial<GettingStartedInput> = {}): GettingStartedInput {
@@ -32,8 +34,8 @@ const done = (result: ReturnType<typeof gettingStarted>) => Object.fromEntries(r
 const step = (result: ReturnType<typeof gettingStarted>, id: string) => result.steps.find((candidate) => candidate.id === id)!;
 
 describe("gettingStarted", () => {
-  it("lists the six steps to a first payment in order, none done, the wallet next, for a new workspace", () => {
-    const result = gettingStarted(input());
+  it("lists the six steps to a first payment in order, none done, the wallet next, for a new workspace on Arc mainnet", () => {
+    const result = gettingStarted(input({ network: "arc-mainnet" }));
     expect(result.show).toBe(true);
     expect(result.steps.map((each) => each.title)).toEqual([
       "Add a wallet",
@@ -41,10 +43,17 @@ describe("gettingStarted", () => {
       "Go live",
       "Add a payee with an Arc address",
       "Add a payable",
-      "First payment on Arc testnet",
+      "First payment on Arc mainnet",
     ]);
     expect(Object.values(done(result))).toEqual([false, false, false, false, false, false]);
     expect(result.next).toBe("wallet");
+  });
+
+  it("keeps that order on Arc testnet once the workspace has a wallet, or is live", () => {
+    const order = ["wallet", "fund", "live", "payee", "payable", "payment"];
+    expect(gettingStarted(input({ accounts: WALLET })).steps.map((each) => each.id)).toEqual(order);
+    expect(gettingStarted(input({ mode: "live" })).steps.map((each) => each.id)).toEqual(order);
+    expect(gettingStarted(input({ accounts: WALLET })).steps.every((each) => each.section === undefined)).toBe(true);
   });
 
   it("ticks the wallet once the operating account has a Circle wallet, and moves on to funding", () => {
@@ -85,7 +94,7 @@ describe("gettingStarted", () => {
   });
 
   it("ticks the payee step only for a vendor or contractor with an address", () => {
-    const payee = (counterparties: GettingStartedInput["counterparties"]) => done(gettingStarted(input({ counterparties }))).payee;
+    const payee = (counterparties: GettingStartedInput["counterparties"]) => done(gettingStarted(input({ accounts: WALLET, counterparties }))).payee;
     expect(payee([{ ...PAYEE, address: null }])).toBe(false);
     expect(payee([{ ...PAYEE, address: "" }])).toBe(false);
     expect(payee([{ ...PAYEE, role: "client" }])).toBe(false);
@@ -143,12 +152,12 @@ describe("gettingStarted", () => {
   });
 
   it("points at the first step not done, even when a later one is", () => {
-    const result = gettingStarted(input({ counterparties: [PAYEE], payableCount: 2 }));
+    const result = gettingStarted(input({ network: "arc-mainnet", counterparties: [PAYEE], payableCount: 2 }));
     expect(result.next).toBe("wallet");
   });
 
   it("links each step to the page where it is done", () => {
-    expect(Object.fromEntries(gettingStarted(input()).steps.map((each) => [each.id, each.path]))).toEqual({
+    expect(Object.fromEntries(gettingStarted(input({ accounts: WALLET })).steps.map((each) => [each.id, each.path]))).toEqual({
       wallet: "/settings#go-live-title",
       fund: "/settings#go-live-title",
       live: "/settings#go-live-title",
@@ -256,7 +265,7 @@ describe("gettingStarted in shadow mode", () => {
   const MIRRORED = { name: "Dien luc", role: "vendor", address: ADDRESS, address_changed_at: null, address_confirmed_at: null };
 
   it("lists the steps of running beside how the business pays today, titled for shadow mode, with its guide", () => {
-    const result = gettingStarted(input({ shadow: shadow() }));
+    const result = gettingStarted(input({ accounts: WALLET, shadow: shadow() }));
     expect(result.title).toBe("Get started in shadow mode");
     expect(result.guide).toBe("shadow-mode");
     expect(result.steps.map((each) => each.title)).toEqual([
@@ -268,7 +277,7 @@ describe("gettingStarted in shadow mode", () => {
       "Give your first verdict",
     ]);
     expect(result.show).toBe(true);
-    expect(result.next).toBe("wallet");
+    expect(result.next).toBe("fund");
   });
 
   it("ticks a supplier with a mirror address, a bill once any was added, paid or not, and the first verdict, then hides", () => {
@@ -280,10 +289,10 @@ describe("gettingStarted in shadow mode", () => {
   });
 
   it("says how a supplier with no Arc address gets a mirror address, and one with no purchase orders is paid without them", () => {
-    const body = step(gettingStarted(input({ shadow: shadow() })), "suppliers").body;
+    const body = step(gettingStarted(input({ accounts: WALLET, shadow: shadow() })), "suppliers").body;
     expect(body).toContain("Give it a mirror address");
     expect(body).toContain("Pay without purchase orders");
-    expect(step(gettingStarted(input({ shadow: shadow() })), "suppliers").path).toBe("/counterparties");
+    expect(step(gettingStarted(input({ accounts: WALLET, shadow: shadow() })), "suppliers").path).toBe("/counterparties");
   });
 
   it("says bills are entered in USDC, or in the business's own currency at the day's rate", () => {
@@ -299,9 +308,93 @@ describe("gettingStarted in shadow mode", () => {
   });
 
   it("is the first-payment checklist outside shadow mode", () => {
-    const result = gettingStarted(input({ shadow: null }));
+    const result = gettingStarted(input({ accounts: WALLET, shadow: null }));
     expect(result.title).toBeUndefined();
     expect(result.guide).toBe("go-live");
+  });
+
+  it("in a sandbox with no wallet, asks for suppliers, bills and the first verdict first, then the setup to pay on Arc", () => {
+    const result = gettingStarted(input({ shadow: shadow() }));
+    expect(result.title).toBe("Get started in shadow mode");
+    expect(result.steps.map((each) => each.id)).toEqual(["suppliers", "bills", "verdict", "wallet", "fund", "live"]);
+    expect(result.steps.map((each) => each.section)).toEqual([undefined, undefined, undefined, PAY_ON_ARC, PAY_ON_ARC, PAY_ON_ARC]);
+    expect(result.next).toBe("suppliers");
+    expect(result.guide).toBe("shadow-mode");
+  });
+
+  it("in a sandbox with no wallet, ticks a supplier with no address, asks whether it sends purchase orders, and says agreeing is simulated", () => {
+    const supplier = { name: "Dien luc", role: "vendor", address: null };
+    const result = gettingStarted(input({ counterparties: [supplier], shadow: shadow({ billCount: 1 }) }));
+    expect(done(result)).toMatchObject({ suppliers: true, bills: true, verdict: false, wallet: false });
+    expect(result.next).toBe("verdict");
+    expect(step(gettingStarted(input({ shadow: shadow() })), "suppliers").body).toContain("whether it sends you purchase orders");
+    expect(step(result, "suppliers").body).not.toContain("mirror address");
+    expect(step(result, "verdict").body).toContain("Agree and pay pays it, simulated in this sandbox");
+    expect(step(result, "verdict").body).not.toContain("USDC on Arc testnet");
+    // The verdict given, the setup to pay on Arc is what is left.
+    expect(gettingStarted(input({ counterparties: [supplier], shadow: shadow({ billCount: 1, verdictsGiven: 1 }) })).next).toBe("wallet");
+  });
+});
+
+describe("gettingStarted in a sandbox with no wallet: the first bill before the wallet", () => {
+  const SUPPLIER = { name: "Northstar Studio", role: "vendor", address: null };
+
+  it("asks for a supplier, a bill and the agent's decision first, then the wallet, USDC, going live and the first payment, to pay on Arc", () => {
+    const result = gettingStarted(input());
+    expect(result.steps.map((each) => each.title)).toEqual([
+      "Add a supplier",
+      "Add a bill",
+      "See the agent's decision",
+      "Add a wallet",
+      "Fund it with USDC",
+      "Go live",
+      "First payment on Arc testnet",
+    ]);
+    expect(result.steps.map((each) => each.section)).toEqual([undefined, undefined, undefined, PAY_ON_ARC, PAY_ON_ARC, PAY_ON_ARC, PAY_ON_ARC]);
+    expect(result.next).toBe("payee");
+    expect(result.guide).toBe("first-payment");
+    expect(result.show).toBe(true);
+  });
+
+  it("asks for no Arc address: a sandbox simulates the payee's", () => {
+    const supplier = step(gettingStarted(input()), "payee");
+    expect(supplier.title).not.toContain("Arc address");
+    expect(supplier.body).toContain("Its Arc address can wait");
+    expect(supplier.path).toBe("/counterparties");
+    expect(done(gettingStarted(input({ counterparties: [SUPPLIER] }))).payee).toBe(true);
+    expect(done(gettingStarted(input({ counterparties: [{ ...SUPPLIER, role: "client" }] }))).payee).toBe(false);
+    expect(done(gettingStarted(input({ counterparties: [{ ...SUPPLIER, sample: true }] }))).payee).toBe(false);
+  });
+
+  it("ticks the bill once one was added, paid or not, and the decision once the agent made one", () => {
+    const billed = gettingStarted(input({ counterparties: [SUPPLIER], payableCount: 0, billCount: 1, decidedCount: 0 }));
+    expect(done(billed)).toMatchObject({ payee: true, payable: true, decision: false });
+    expect(billed.next).toBe("decision");
+    expect(step(billed, "decision").path).toBe("/invoices");
+    const decided = gettingStarted(input({ counterparties: [SUPPLIER], billCount: 1, decidedCount: 1 }));
+    expect(done(decided).decision).toBe(true);
+    expect(decided.next).toBe("wallet");
+    expect(decided.guide).toBe("go-live");
+    // A bill held for a person was decided too.
+    expect(done(gettingStarted(input({ counterparties: [SUPPLIER], billCount: 1, waitingCount: 1 }))).decision).toBe(true);
+  });
+
+  it("keeps the order to a first payment on Arc mainnet, which never simulates", () => {
+    expect(gettingStarted(input({ network: "arc-mainnet" })).steps[0].id).toBe("wallet");
+  });
+});
+
+describe("ownDecidedCount", () => {
+  it("counts the payables of counterparties a person added that left pending, paid or not, and no receivable or sample bill", () => {
+    const counterparties = [{ id: "c1" }, { id: "c2", sample: true }];
+    const invoices = [
+      { counterparty_id: "c1", direction: "payable", status: "pending" },
+      { counterparty_id: "c1", direction: "payable", status: "paid" },
+      { counterparty_id: "c1", direction: "payable", status: "awaiting_info" },
+      { counterparty_id: "c1", direction: "receivable", status: "matched" },
+      { counterparty_id: "c2", direction: "payable", status: "held" },
+    ];
+    expect(ownDecidedCount(invoices, counterparties)).toBe(2);
   });
 });
 
