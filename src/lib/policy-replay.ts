@@ -476,3 +476,9 @@ export interface ReplaySummary extends ReplayCounts {
 export function replaySummary(result: ReplayResult, window: { days: number; from: string; to: string }): ReplaySummary {
   return { windowDays: window.days, from: window.from, to: window.to, ...result.counts };
 }
+
+/** Whether a figure read now is the one a replay ran against (P10): both none, or the same to the micro-USDC. */
+export function sameFigure(now: number | null, tried: number | null): boolean {
+  if (now === null || tried === null) return now === tried;
+  return Math.abs(now - tried) < 0.0000005;
+}

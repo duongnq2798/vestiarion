@@ -337,13 +337,16 @@ export async function replayForApply(input: RuleTrialInput, now: Date = new Date
   return replaySummary(result, window);
 }
 
-/** The form's fields for a trial, or null when they name no setting or window it knows. */
-export function trialFromForm(formData: FormData): RuleTrialInput | null {
+/**
+ * A setting's form as a trial: its figure fields, the counterparty, and the window (`days` when trying it, `replayDays`
+ * when applying it). `rule` names the setting when the form does not; null for a setting or window it does not know.
+ */
+export function trialFromForm(formData: FormData, rule?: RuleKind): RuleTrialInput | null {
   const text = (key: string) => {
     const value = formData.get(key);
     return typeof value === "string" ? value : undefined;
   };
-  const rule = text("rule");
+  rule ??= text("rule") as RuleKind | undefined;
   if (rule !== "counterparty_limit" && rule !== "two_approvals" && rule !== "spending_limit") return null;
   const days = Number(text("replayDays") ?? text("days") ?? "30");
   if (!(REPLAY_WINDOWS as readonly number[]).includes(days)) return null;

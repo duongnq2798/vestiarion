@@ -4,6 +4,7 @@ import { agentSpent, budgetRoom, parseBudgetForm, readOutflowBudget, type Budget
 import { currentOrgConfig, currentOrgId } from "./context";
 import { db, unwrap } from "./dal";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
+import { sameFigure, type ReplaySummary } from "./policy-replay";
 import { workspaceNetwork } from "./workspace-network";
 
 /**
@@ -17,9 +18,13 @@ import { workspaceNetwork } from "./workspace-network";
  * While the limit is enforced on Arc (docs/superpowers/specs/2026-10-03-onchain-spending-limit-design.md R10),
  * the contract is changed first, and the figures are saved only once Circle confirms it; removing both figures is
  * refused then, since the contract always holds one.
+ *
+ * Applied after trying it on past decisions (docs/superpowers/specs/2026-10-10-policy-replay-design.md P10), a change
+ * carries the figures the replay ran against and is refused when they are no longer the ones in force; its signed entry
+ * records the replay's summary.
  */
 
-export type AgentBudgetErrorCode = "invalid" | "unchanged" | "cycle_running" | "enforced_needs_figure" | "onchain" | "mainnet_needs_figure" | "wallet_contract";
+export type AgentBudgetErrorCode = "invalid" | "unchanged" | "cycle_running" | "enforced_needs_figure" | "onchain" | "mainnet_needs_figure" | "wallet_contract" | "stale";
 
 const MESSAGES: Record<Exclude<AgentBudgetErrorCode, "invalid" | "onchain">, string> = {
   unchanged: "That is already the agent's spending limit.",
@@ -27,6 +32,7 @@ const MESSAGES: Record<Exclude<AgentBudgetErrorCode, "invalid" | "onchain">, str
   enforced_needs_figure: "Keep a daily or 7-day figure while the limit is enforced on Arc, or turn that off first.",
   mainnet_needs_figure: "A workspace on Arc mainnet keeps a daily or 7-day limit.",
   wallet_contract: "This workspace's figures are its wallet's contract's: change them with that wallet in Settings, under Go live.",
+  stale: "The agent's spending limit changed since you tried it. Try it again.",
 };
 
 export class AgentBudgetError extends Error {
@@ -64,6 +70,10 @@ export async function changeAgentBudget(input: {
   actorId: string;
   daily: string;
   weekly: string;
+  /** The figures a replay ran against; the change is refused when they are no longer the ones in force. */
+  expected?: OutflowBudget;
+  /** The replay the change is applied after, for its signed entry. */
+  replay?: ReplaySummary;
 }): Promise<{ from: OutflowBudget; to: OutflowBudget; loosened: boolean }> {
   const parsed = parseBudgetForm({ daily: input.daily, weekly: input.weekly });
   if (!parsed.ok) throw new AgentBudgetError("invalid", parsed.message);
@@ -72,6 +82,8 @@ export async function changeAgentBudget(input: {
   if (to.dailyUsdc === null && to.weeklyUsdc === null && workspaceNetwork().id === "arc-mainnet") throw new AgentBudgetError("mainnet_needs_figure");
 
   const from = (await readOutflowBudget(db())) ?? NONE;
+  const expected = input.expected;
+  if (expected && !(sameFigure(from.dailyUsdc, expected.dailyUsdc) && sameFigure(from.weeklyUsdc, expected.weeklyUsdc))) throw new AgentBudgetError("stale");
   if (from.dailyUsdc === to.dailyUsdc && from.weeklyUsdc === to.weeklyUsdc) throw new AgentBudgetError("unchanged");
 
   const running = unwrap(
@@ -113,7 +125,7 @@ export async function changeAgentBudget(input: {
     domain: "system",
     action: "agent_budget_changed",
     summary: summary(from, to),
-    detail: { by: input.actorId, from, to, ...(onChain ? { onChain } : {}) },
+    detail: { by: input.actorId, from, to, ...(onChain ? { onChain } : {}), ...(input.replay ? { replay: input.replay } : {}) },
   });
 
   return { from, to, loosened: budgetLoosened(from, to) };

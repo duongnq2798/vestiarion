@@ -190,3 +190,34 @@ describe("changeCounterpartyLimit", () => {
     expect(ledgerBodies(fake.requests)).toHaveLength(0);
   });
 });
+
+describe("changeCounterpartyLimit after a replay (policy replay P10)", () => {
+  const REPLAY = { windowDays: 30, from: "2026-09-10T12:00:00.000Z", to: "2026-10-10T12:00:00.000Z", decisions: 9, unchanged: 7, nowHeld: 2, nowPaid: 0, nowTwoPeople: 0, cantTell: 0 };
+
+  it("refuses when the limit changed since it was tried, and writes nothing", async () => {
+    const { fake, run } = limitFake({ row: counterpartyRow({ baseline_payment_limit: "3.000000" }) });
+
+    const attempt = run(() => changeCounterpartyLimit({ actorId: ACTOR, counterpartyId: COUNTERPARTY_ID, raw: "10", expected: 2, replay: REPLAY }));
+
+    await expect(attempt).rejects.toMatchObject({ code: "stale", message: "This counterparty's limit changed since you tried it. Try it again." });
+    expect(patches(fake.requests)).toHaveLength(0);
+    expect(ledgerBodies(fake.requests)).toHaveLength(0);
+  });
+
+  it("refuses when a limit was set on a client tried with none", async () => {
+    const { fake, run } = limitFake({ row: counterpartyRow({ role: "client", baseline_payment_limit: "5" }) });
+
+    await expect(run(() => changeCounterpartyLimit({ actorId: ACTOR, counterpartyId: COUNTERPARTY_ID, raw: "10", expected: null }))).rejects.toMatchObject({ code: "stale" });
+    expect(patches(fake.requests)).toHaveLength(0);
+  });
+
+  it("changes it when the limit is the one tried, and signs the replay it was applied after", async () => {
+    const { fake, run } = limitFake({ row: counterpartyRow({ baseline_payment_limit: "2.000000" }) });
+
+    await run(() => changeCounterpartyLimit({ actorId: ACTOR, counterpartyId: COUNTERPARTY_ID, raw: "10", expected: 2, replay: REPLAY }));
+
+    expect(patches(fake.requests)).toHaveLength(1);
+    const [entry] = ledgerBodies(fake.requests);
+    expect(entry.p_detail).toEqual({ by: ACTOR, counterpartyId: COUNTERPARTY_ID, from: 2, to: 10, currentLimit: 10, replay: REPLAY });
+  });
+});

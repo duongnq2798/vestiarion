@@ -29,6 +29,8 @@ import {
   CounterpartyAddressError,
 } from "@/lib/counterparty-address";
 import { changeCounterpartyLimit, CounterpartyLimitError } from "@/lib/counterparty-limit";
+import { limitApplied } from "@/lib/policy-replay-apply";
+import { RuleReplayError } from "@/lib/policy-replay-read";
 import { changeCounterpartyPurchaseOrders, CounterpartyPurchaseOrdersError } from "@/lib/counterparty-purchase-orders";
 import { documentProvenance } from "@/lib/invoice-document/provenance";
 import { createCounterparty } from "@/lib/counterparties/create";
@@ -104,7 +106,12 @@ const counterpartyIdSchema = z.string().uuid();
  * show; anything else stays in the server log.
  */
 function addressFailure(error: unknown, what: string): IntakeActionResult {
-  if (error instanceof CounterpartyAddressError || error instanceof CounterpartyLimitError || error instanceof CounterpartyPurchaseOrdersError) {
+  if (
+    error instanceof CounterpartyAddressError ||
+    error instanceof CounterpartyLimitError ||
+    error instanceof CounterpartyPurchaseOrdersError ||
+    error instanceof RuleReplayError
+  ) {
     return { ok: false, message: error.message };
   }
   console.error(what, error instanceof Error ? error.message : "unknown error");
@@ -137,7 +144,11 @@ export async function updateCounterpartyAddressAction(
   });
 }
 
-/** Changes a counterparty's configured payment limit, and with it the current one screening derives. */
+/**
+ * Changes a counterparty's configured payment limit, and with it the current one screening derives. Applied after trying
+ * it on past decisions, the form carries the limit tried and the window, and the change is refused once the limit is no
+ * longer that one (policy replay P10).
+ */
 export async function updateCounterpartyLimitAction(
   _previous: IntakeActionResult,
   formData: FormData
@@ -148,7 +159,13 @@ export async function updateCounterpartyLimitAction(
     const id = counterpartyIdSchema.safeParse(formString(formData, "counterpartyId"));
     if (!id.success) return { ok: false, message: "Counterparty not found." };
     try {
-      const result = await changeCounterpartyLimit({ actorId: auth.user.id, counterpartyId: id.data, raw: formString(formData, "paymentLimit") });
+      const applied = await limitApplied(formData);
+      const result = await changeCounterpartyLimit({
+        actorId: auth.user.id,
+        counterpartyId: id.data,
+        raw: formString(formData, "paymentLimit"),
+        ...(applied ? { expected: applied.expected, replay: applied.replay } : {}),
+      });
       revalidateOrgPages();
       // A higher limit can unblock a payment held over the old one, so the agent looks again within a minute
       // (follow-up reopens it). A lower one, or one screening allows none of, unblocks nothing.

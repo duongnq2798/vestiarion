@@ -10,6 +10,8 @@ import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { consoleActor } from "@/lib/commands/actor";
 import { pauseWorkspaceAgent, resumeWorkspaceAgent, runWorkspaceCycle } from "@/lib/commands/agent";
 import { inOrg } from "@/lib/dal/scope";
+import { spendingLimitApplied } from "@/lib/policy-replay-apply";
+import { RuleReplayError } from "@/lib/policy-replay-read";
 import { consoleAnswer } from "./command-result";
 import { FeatureOffError } from "@/lib/network";
 import { PaymentsDisabledError } from "@/lib/payments-switch";
@@ -63,19 +65,27 @@ function budgetMessage(to: { dailyUsdc: number | null; weeklyUsdc: number | null
 
 /**
  * Sets the agent's spending limit (outflow budget spec R7). A looser limit may let a payment held
- * under the old one through, so the agent looks again within a minute; a tighter one frees nothing.
+ * under the old one through, so the agent looks again within a minute; a tighter one frees nothing. Applied after trying
+ * it on past decisions, the form carries the figures tried and the window, and the change is refused once they are no
+ * longer those (policy replay P10).
  */
 export async function setAgentBudgetAction(_previous: AgentActionResult, formData: FormData): Promise<AgentActionResult> {
   const auth = await authorize(formData.get("orgSlug"), "agent.budget");
   if (!auth.ok) return { ok: false, message: auth.message };
   return inOrg(auth, async () => {
     try {
-      const result = await changeAgentBudget({ actorId: auth.user.id, daily: formString(formData, "daily"), weekly: formString(formData, "weekly") });
+      const applied = await spendingLimitApplied(formData);
+      const result = await changeAgentBudget({
+        actorId: auth.user.id,
+        daily: formString(formData, "daily"),
+        weekly: formString(formData, "weekly"),
+        ...(applied ? { expected: applied.expected, replay: applied.replay } : {}),
+      });
       revalidateOrgPages();
       if (result.loosened) raiseCycleEvent(auth, "budget_raised");
       return { ok: true, message: budgetMessage(result.to) };
     } catch (error) {
-      if (error instanceof AgentBudgetError) return { ok: false, message: error.message };
+      if (error instanceof AgentBudgetError || error instanceof RuleReplayError) return { ok: false, message: error.message };
       console.error("agent budget change failed", error instanceof Error ? error.message : "unknown error");
       return { ok: false, message: "That did not work. Try again in a moment." };
     }
