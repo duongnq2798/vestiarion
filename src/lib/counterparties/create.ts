@@ -25,17 +25,22 @@ export interface CreatedCounterparty {
  * and nobody has confirmed it, so the agent holds every payment to it until an owner, admin or approver confirms it on
  * Counterparties, exactly as for an address a payee sent through a link. An address a person typed into the console is
  * theirs, and is not.
+ *
+ * `purchaseOrderRequired`, when the person said whether the supplier sends purchase orders (asked in shadow mode), is
+ * stored with the row and recorded on its entry; otherwise the column's default, needing them (three-way match M2), stands.
  */
 export async function createCounterparty(input: {
   actorId: string | null;
   counterparty: CounterpartyInput;
   via?: "api" | "github";
   apiKeyId?: string;
+  purchaseOrderRequired?: boolean;
   /** With `via: "github"`: the installation the comment came through, and the GitHub user who wrote it (bounties B11). */
   github?: { installationId: number; login: string };
   now?: () => string;
 }): Promise<CreatedCounterparty> {
-  const { actorId, counterparty, via, apiKeyId, github } = input;
+  const { actorId, counterparty, via, apiKeyId, github, purchaseOrderRequired } = input;
+  const purchaseOrders = purchaseOrderRequired === undefined ? {} : { purchaseOrderRequired };
   // The workspace's own chain when none is given; one its network does not pay on is refused here too (network threading P3).
   const chain = chainOn(workspaceNetwork().id, counterparty.chain).id;
   // An address that came from outside the console waits for a person, whatever brought it.
@@ -54,6 +59,7 @@ export async function createCounterparty(input: {
         payment_limit: null,
         notice_email: counterparty.noticeEmail,
         ...(addressNeedsConfirmation ? { address_changed_at: input.now?.() ?? new Date().toISOString() } : {}),
+        ...(purchaseOrderRequired === undefined ? {} : { purchase_order_required: purchaseOrderRequired }),
       })
       .select("id, name")
       .single<{ id: string; name: string }>()
@@ -74,6 +80,7 @@ export async function createCounterparty(input: {
       baselinePaymentLimit: counterparty.paymentLimit || null,
       // Masked: who is told of a payment, not their whole address (payment notices R1).
       noticeEmail: counterparty.noticeEmail ? maskEmail(counterparty.noticeEmail) : null,
+      ...purchaseOrders,
       ...(via === "api" ? { via, apiKeyId, addressNeedsConfirmation } : {}),
       ...(via === "github" ? { via, installationId: github?.installationId, login: github?.login, addressNeedsConfirmation } : {}),
     },

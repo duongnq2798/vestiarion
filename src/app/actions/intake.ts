@@ -71,10 +71,14 @@ export async function createCounterpartyAction(
     if (!parsed.success) return { ok: false, message: firstZodMessage(parsed.error) };
     const chainProblem = counterpartyChainProblem(workspaceNetwork().id, parsed.data.chain);
     if (chainProblem) return { ok: false, message: chainProblem };
+    // Asked in shadow mode, of a supplier: whether it sends purchase orders sets "Pay without purchase orders" (three-way
+    // match design M2). Unanswered, the default stands.
+    const answer = formString(formData, "purchaseOrders");
+    const purchaseOrderRequired = parsed.data.role === "client" || (answer !== "yes" && answer !== "no") ? undefined : answer === "yes";
 
     try {
       // The one way a counterparty is added, shared with the write API (write API R2).
-      const counterparty = await createCounterparty({ actorId: auth.user.id, counterparty: parsed.data });
+      const counterparty = await createCounterparty({ actorId: auth.user.id, counterparty: parsed.data, purchaseOrderRequired });
       revalidateOrgPages();
       if ("riskLevel" in counterparty.screening) {
         return {

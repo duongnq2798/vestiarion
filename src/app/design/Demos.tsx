@@ -222,7 +222,7 @@ function PersonRow({ email, onRemoved }: { email: string; onRemoved: () => void 
 const SECTIONS = [
   { label: "Treasury", icon: Landmark, shortcut: "G T" },
   { label: "Insights", icon: ChartLine, shortcut: "G I" },
-  { label: "AP / AR", icon: FileText, shortcut: "G P" },
+  { label: "Bills & receivables", icon: FileText, shortcut: "G P" },
   { label: "Counterparties", icon: Users, shortcut: "G C" },
   { label: "Contractors", icon: Flag, shortcut: "G K" },
   { label: "Compliance", icon: ShieldCheck, shortcut: "G S" },

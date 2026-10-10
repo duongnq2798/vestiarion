@@ -16,6 +16,7 @@ const PROFILE = "src/lib/network.ts";
 /** The files that read the testnet profile on purpose, how often, and why (P7). */
 const ALLOWED: Record<string, { count: number; why: string }> = {
   "src/app/open/page.tsx": { count: 3, why: "/open shows both networks by design" },
+  "src/app/studios/page.tsx": { count: 2, why: "the page for studios counts code refusals on both networks by design, each apart, as /open does" },
   "src/components/landing/LiveProof.tsx": { count: 3, why: "the landing's open numbers show both networks by design, as /open does" },
   "src/components/landing/provenance.ts": { count: 2, why: "the landing names the USYC reserve's network, Arc testnet, the only one it runs on" },
   "src/components/wallet/PasskeyWallet.tsx": { count: 4, why: "the passkey wallet page, /wallet, is Arc testnet's: Modular Wallets run there only" },

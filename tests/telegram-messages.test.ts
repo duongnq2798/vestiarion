@@ -21,7 +21,7 @@ function item(overrides: Partial<ActivityItem> = {}): ActivityItem {
     detail: "DeepSeek decided, as the written policy would.",
     tone: "done",
     path: "/invoices#invoice-1",
-    pathLabel: "See it on AP / AR",
+    pathLabel: "See it on Bills & receivables",
     txHash: TX,
     network: "arc-testnet",
     ...overrides,
@@ -50,7 +50,7 @@ describe("decisionsMessage", () => {
   it("links the transaction on Arc testnet only when there is one, and the page under the workspace", () => {
     const paid = decisionsMessage(WORKSPACE, [item()], ORIGIN);
     expect(paid).toContain(`<a href="https://explorer.testnet.arc.io/tx/${TX}">Arc testnet transaction</a>`);
-    expect(paid).toContain('<a href="https://www.vestiarion.xyz/o/acme/invoices#invoice-1">See it on AP / AR</a>');
+    expect(paid).toContain('<a href="https://www.vestiarion.xyz/o/acme/invoices#invoice-1">See it on Bills &amp; receivables</a>');
 
     const held = decisionsMessage(WORKSPACE, [item({ txHash: null, tone: "stopped", path: "/approvals#payable-9", pathLabel: "Decide in Approvals" })], ORIGIN);
     expect(held).not.toContain("/tx/");
@@ -132,7 +132,7 @@ describe("missingMessage", () => {
     const message = missingMessage(READ, ["no counterparty in this workspace matches “Quill & Co”", "no due date"], `${ORIGIN}/o/acme/invoices`);
     expect(message).toContain("no counterparty in this workspace matches “Quill &amp; Co”");
     expect(message).toContain("no due date");
-    expect(message).toContain('<a href="https://www.vestiarion.xyz/o/acme/invoices">');
+    expect(message).toContain('<a href="https://www.vestiarion.xyz/o/acme/invoices">Bills &amp; receivables</a>');
   });
 });
 

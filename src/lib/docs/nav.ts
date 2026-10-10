@@ -46,6 +46,7 @@ export const DOCS_NAV: NavSection[] = [
     title: "Guides",
     pages: [
       { slug: "guides/try-it", title: "Try it in 5 minutes", description: "Sign in, load sample data, watch the agent decide, approve a payment and verify the signed ledger." },
+      { slug: "guides/workspace", title: "Find your way around a workspace", description: "The sections and their groups, folding the sidebar, the header's network, payments and agent status, and the command palette's shortcuts." },
       { slug: "guides/go-live", title: "Go live", description: "Create the workspace's wallets, fund them with USDC and take the agent live, on Arc testnet or on Arc mainnet." },
       { slug: "guides/shadow-mode", title: "Run alongside how you pay today", description: "Shadow mode: keep paying your bills as you do; the agent decides on the same bills, you agree or disagree with each decision, and each payment you agree to is made in USDC on Arc testnet." },
       { slug: "guides/report", title: "Read your workspace report", description: "What the agent did with your real bills: what it paid and with what proof, what it stopped and why, how often a person stepped in, and what is left before a live slice." },
@@ -53,7 +54,7 @@ export const DOCS_NAV: NavSection[] = [
       { slug: "guides/pay-a-contractor", title: "Pay a contractor for delivered work", description: "Add a milestone, verify the work by hand or by a merged pull request, and let the agent release the pay." },
       { slug: "guides/get-paid", title: "Get paid as a freelancer", description: "For the person being paid: add your wallet address through the link a business sent, follow each step, and check the payment on Arc." },
       { slug: "guides/telegram", title: "Get the agent's decisions in Telegram", description: "Connect your own Telegram chat to a workspace: the agent's decisions as it makes them, what is safe to spend and waiting, and invoices sent to the bot." },
-      { slug: "guides/email-invoices", title: "Add invoices by email", description: "Turn on a workspace address, forward suppliers' invoices to it, and add each one from AP / AR with one press; nothing arrives as a payable by itself." },
+      { slug: "guides/email-invoices", title: "Add invoices by email", description: "Turn on a workspace address, forward suppliers' invoices to it, and add each one from Bills & receivables with one press; nothing arrives as a payable by itself." },
       { slug: "guides/slack", title: "Get the agent's decisions in Slack", description: "Connect a workspace to a Slack channel: the agent's decisions as it makes them, /vestiarion for what is safe to spend and waiting, and stopped payments decided from Slack when an owner allows it." },
       { slug: "guides/api-invoices", title: "Add invoices from your own system", description: "Create a read-and-write API key, add a counterparty and an invoice through the API, confirm the address, and follow the agent's decision." },
       { slug: "guides/api-milestones", title: "Pay for merged pull requests", description: "Add a contractor, a payee link and a milestone through the API, and the agent pays once the pull request is merged. With a GitHub Actions workflow." },

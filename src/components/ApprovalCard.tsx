@@ -189,7 +189,7 @@ export default function ApprovalCard({
 
   return (
     <Card asChild tone={payable.status === "flagged" ? "refused" : processing ? "agent" : "held"}>
-      <article id={approvalAnchor(payable.id)} className="scroll-mt-24">
+      <article id={approvalAnchor(payable.id)} className="scroll-mt-4">
         <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 space-y-1">
             <CardTitle className="truncate">{payable.counterpartyName}</CardTitle>

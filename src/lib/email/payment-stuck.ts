@@ -29,7 +29,7 @@ export interface StuckPayment {
 export function paymentStuckEmail(input: {
   orgName: string;
   payments: StuckPayment[];
-  /** The button's link: the one payment's page, or the workspace's AP / AR for several. */
+  /** The button's link: the one payment's page, or the workspace's Bills & receivables page for several. */
   link: string;
   origin: string;
 }): { subject: string; html: string; text: string } {

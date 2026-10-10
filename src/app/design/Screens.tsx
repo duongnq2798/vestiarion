@@ -7,7 +7,8 @@ import { EMAIL, WORKSPACE, WORKSPACES } from "./fixtures";
 const HOME = "/design#screens";
 
 /**
- * The real workspace navigation, in frames: the sidebar panel, and — below
+ * The real workspace navigation, in frames: the sidebar panel, the same panel
+ * folded to its icon rail (hover or focus an icon for its name), and — below
  * `lg` — the phone top bar with its drawer. ⌘K / Ctrl K opens this demo's
  * command palette anywhere on the page. Its links lead to a workspace that
  * does not exist; use the keyboard and the menus, not the links.
@@ -15,9 +16,12 @@ const HOME = "/design#screens";
 export function FrameDemo() {
   return (
     <CommandPaletteProvider workspace={WORKSPACE} workspaces={WORKSPACES}>
-      <div className="grid gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
+      <div className="grid gap-6 lg:grid-cols-[14.5rem_4rem_minmax(0,1fr)]">
         <div className="h-[44rem] overflow-hidden rounded-2xl border border-line bg-surface/80 shadow-surface">
           <NavPanel home={HOME} workspace={WORKSPACE} workspaces={WORKSPACES} email={EMAIL} layoutId="design-sidebar" />
+        </div>
+        <div className="h-[44rem] w-16 overflow-hidden rounded-2xl border border-line bg-surface/80 shadow-surface">
+          <NavPanel home={HOME} workspace={WORKSPACE} workspaces={WORKSPACES} email={EMAIL} layoutId="design-rail" collapsed />
         </div>
         <div className="max-w-sm self-start overflow-hidden rounded-2xl border border-line shadow-surface">
           <MobileNav home={HOME} workspace={WORKSPACE} workspaces={WORKSPACES} email={EMAIL} />

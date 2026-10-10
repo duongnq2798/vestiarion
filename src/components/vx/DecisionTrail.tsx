@@ -42,7 +42,7 @@ export function DecisionTrail({
 }) {
   if (steps.length === 0) return null;
   return (
-    <details id={trailAnchor(id)} open={defaultOpen} className="group/trail scroll-mt-24 border-t border-line first:border-t-0">
+    <details id={trailAnchor(id)} open={defaultOpen} className="group/trail scroll-mt-4 border-t border-line first:border-t-0">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-sm font-medium text-ink-2 transition-colors duration-150 ease-standard hover:text-ink sm:px-5 [&::-webkit-details-marker]:hidden">
         <span className="inline-flex items-center gap-2">
           <ChevronRight aria-hidden className="size-4 text-ink-3 transition-transform duration-200 ease-standard group-open/trail:rotate-90" />

@@ -211,7 +211,7 @@ export async function recordActual(
       record.outcome === "paid" && record.amount !== null && record.currency && record.method
         ? `${verb} what the business paid outside Vestiarion: ${amountWords(record.amount, record.currency)} on ${record.paidOn} by ${methodWords(record.method)}`
         : `${verb} that the business did not pay it: ${record.reason}`,
-    // The payable is its subject, never its invoiceId: the AP / AR card keeps showing the agent's decision.
+    // The payable is its subject, never its invoiceId: its card on Bills & receivables keeps showing the agent's decision.
     detail: {
       by: input.actorId,
       actualId: record.id,

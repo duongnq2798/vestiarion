@@ -74,14 +74,14 @@ describe("every /o/[slug] page", () => {
 });
 
 describe("every server action", () => {
-  it("lives in src/app/actions, except sign-in, accepting an invitation, creating a first workspace, your own account, a payee's own address, and a client's payment check", () => {
+  it("lives in src/app/actions, except sign-in, accepting an invitation, creating a first workspace, your own account, a payee's own address, a client's payment check, the founder dashboard, and a studio's guided setup request", () => {
     const withDirective = walk(path.join(ROOT, "src")).filter(
       (file) => /\.(ts|tsx)$/.test(file) && /^\s*["']use server["']/.test(read(file))
     );
     const outside = withDirective.map(rel).filter((file) => !file.startsWith("src/app/actions/"));
     expect(outside.sort()).toEqual([
-      "src/app/account/actions.ts", "src/app/invite/actions.ts", "src/app/login/actions.ts", "src/app/onboarding/actions.ts",
-      "src/app/pay/[token]/actions.ts", "src/app/payee/[token]/actions.ts",
+      "src/app/account/actions.ts", "src/app/admin/growth/actions.ts", "src/app/invite/actions.ts", "src/app/login/actions.ts", "src/app/onboarding/actions.ts",
+      "src/app/pay/[token]/actions.ts", "src/app/payee/[token]/actions.ts", "src/app/studios/actions.ts",
     ]);
   });
 
@@ -126,6 +126,24 @@ describe("the payee's address action", () => {
   });
 });
 
+describe("the guided setup action", () => {
+  // A visitor asking for a guided setup on /studios has no account and no workspace, so there is no session to gate on:
+  // the request's own checks are the gate (honeypot, signed form token, length cap, every field), all inside
+  // submitGuidedSetup, which writes one growth lead and nothing in any workspace.
+  const STUDIOS_ACTIONS = path.join(ROOT, "src", "app", "studios", "actions.ts");
+  const actions = exportedAsyncFunctions(read(STUDIOS_ACTIONS));
+
+  it("is the one submit action", () => {
+    expect(actions.map((action) => action.name)).toEqual(["requestGuidedSetupAction"]);
+  });
+
+  it("hands the form straight to submitGuidedSetup, and enters no workspace itself", () => {
+    const [action] = actions;
+    expect(action.body).toMatch(/return submitGuidedSetup\(formData, /);
+    expect(action.body).not.toMatch(/inOrg|withOrg|authorize|platformDb/);
+  });
+});
+
 describe("every onboarding action", () => {
   // Creating a workspace happens before there is an organization to authorize
   // against, so the gate is the session: a signed-out POST must stop there.
@@ -138,6 +156,30 @@ describe("every onboarding action", () => {
 
   it.each(actions.map((action) => [action.name, action.body]))("%s awaits getSessionUser first", (_name, body) => {
     expect(awaitedNames(body)[0]).toBe("getSessionUser");
+  });
+});
+
+describe("every founder dashboard action", () => {
+  // The dashboard belongs to no workspace, so its gate is the team: each action asks it first, itself, since an
+  // action is a public POST endpoint whatever the page did (src/lib/growth/gate.ts).
+  const GROWTH_ACTIONS = path.join(ROOT, "src", "app", "admin", "growth", "actions.ts");
+  const actions = existsSync(GROWTH_ACTIONS) ? exportedAsyncFunctions(read(GROWTH_ACTIONS)) : [];
+
+  it("exists — the list is not empty", () => {
+    expect(actions.map((action) => action.name)).toContain("decideLeadAction");
+  });
+
+  it.each(actions.map((action) => [action.name, action.body]))("%s awaits growthTeamUser first, and stops without it", (_name, body) => {
+    expect(awaitedNames(body)[0]).toBe("growthTeamUser");
+    expect(body).toMatch(/const user = await growthTeamUser\(\);\s+if \(!user\) return \{ ok: false, message: NOT_AVAILABLE \};/);
+  });
+
+  it("the page and the export ask the gate first too", () => {
+    const page = defaultExportBody(read(path.join(ROOT, "src", "app", "admin", "growth", "page.tsx")));
+    expect(awaitedNames(page)[0]).toBe("growthTeamUser");
+    expect(page).toMatch(/if \(!user\) notFound\(\);/);
+    const route = read(path.join(ROOT, "src", "app", "admin", "growth", "leads.csv", "route.ts"));
+    expect(awaitedNames(route.slice(route.indexOf("export async function GET")))[0]).toBe("growthTeamUser");
   });
 });
 
@@ -274,8 +316,9 @@ describe("every component", () => {
   // organization's scope, where a tenant read refuses — and a component in a
   // client bundle has no database at all. So a component takes tenant data
   // as props and never loads it: a type from these modules is fine, a value
-  // is not. The one exception reads platform configuration, not tenant data:
-  // Shell's `import { screeningMode } from "@/lib/compliance"`.
+  // is not. The workspace header's screening status is read by each page in
+  // its scope (src/lib/shell-status.ts) and handed down, so no component is an
+  // exception (workspace shell design S5).
   const COMPONENTS = walk(path.join(ROOT, "src", "components")).filter((file) => /\.(ts|tsx)$/.test(file));
 
   it("exists — the list is not empty", () => {
@@ -287,7 +330,6 @@ describe("every component", () => {
       valueImports(read(file)).flatMap(({ specifier, names }) => {
         const imported = moduleOf(specifier, file);
         if (!imported || !loadsTenantData(imported)) return [];
-        if (imported === "src/lib/compliance" && names.length > 0 && names.every((name) => name === "screeningMode")) return [];
         return [`${rel(file)}: { ${names.join(", ")} } from "${specifier}"`];
       })
     );
@@ -296,8 +338,8 @@ describe("every component", () => {
 
   it("reads imports the way that check depends on", () => {
     // Without this, a parser that found nothing would pass the check above.
-    expect(valueImports(read(path.join(ROOT, "src", "components", "vx", "Shell.tsx")))).toContainEqual({
-      specifier: "@/lib/compliance",
+    expect(valueImports(read(path.join(ROOT, "src", "lib", "shell-status.ts")))).toContainEqual({
+      specifier: "./compliance",
       names: ["screeningMode"],
     });
     expect(valueImports('import type { LedgerEntry } from "@/lib/ledger";\nimport { type A,\n  type B } from "@/lib/queries";\n')).toEqual([]);
