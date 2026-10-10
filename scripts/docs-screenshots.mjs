@@ -175,6 +175,7 @@ const SHOTS = {
   "report-actuals-bills": async () => {},
   "import-bills-columns": async () => {},
   "import-bills-check": async () => {},
+  "workspace-status": async () => {},
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

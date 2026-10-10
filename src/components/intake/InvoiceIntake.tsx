@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { createInvoiceAction, type IntakeActionResult } from "@/app/actions/intake";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -10,9 +11,13 @@ import { Input } from "@/components/ui/Input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
+import { orgHref } from "@/lib/auth/org-paths";
 import { billAmount } from "@/lib/bill-amount";
 
 const INITIAL: IntakeActionResult = { ok: false, message: "" };
+
+/** Counterparties with its Add counterparty form open: where an invoice with no counterparty to choose goes next. */
+export const ADD_COUNTERPARTY_PATH = "/counterparties?add=1";
 
 type Direction = "payable" | "receivable";
 
@@ -173,7 +178,16 @@ export default function InvoiceIntake({
         <Field
           id={id("counterparty")}
           label="Counterparty"
-          description={none ? "Add a counterparty first — every invoice is against one." : undefined}
+          description={
+            none ? (
+              <>
+                Add a counterparty first — every invoice is against one.{" "}
+                <Link href={orgHref(orgSlug, ADD_COUNTERPARTY_PATH)} className="font-medium text-agent underline-offset-2 hover:underline">
+                  Add a counterparty
+                </Link>
+              </>
+            ) : undefined
+          }
           error={fieldError("counterpartyId")}
         >
           <Select

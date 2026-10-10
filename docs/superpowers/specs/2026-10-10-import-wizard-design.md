@@ -17,7 +17,7 @@ anything is written, and adds the rows through the same command as an invoice ty
 ## Decisions
 
 **B1. Where it lives.**
-- AP / AR, **New invoice**, tab **Import a list**, in place of **Import CSV**. The tab is shown to whoever may add
+- Bills & receivables, **New invoice**, tab **Import a list**, in place of **Import CSV**. The tab is shown to whoever may add
   invoices (`records.write`), as before.
 - Four steps on one panel: **Your list** (a file or pasted rows), **Columns** (the mapping and the questions),
   **Check** (the preview) and **Done** (the result).

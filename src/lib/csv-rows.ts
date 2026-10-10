@@ -1,9 +1,10 @@
 /**
  * A comma CSV read into rows, as the payments CSV reads it (docs/superpowers/specs/2026-10-10-actual-payments-design.md
- * A6). A bill list is read by `src/lib/bill-import/table.ts`, which also finds its delimiter.
+ * A6), and the growth leads CSV (`src/lib/growth/csv.ts`). A bill list is read by `src/lib/bill-import/table.ts`, which
+ * also finds its delimiter.
  */
 
-/** The rows of a CSV, quoted fields and doubled quotes read, blank rows left out: the payments CSV's. */
+/** The rows of a CSV, quoted fields and doubled quotes read, blank rows left out: the payments and leads CSVs'. */
 export function rowsFromCsv(csv: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];

@@ -15,6 +15,7 @@ import { txUrl } from "@/lib/payee-chains";
 
 type GuideSlug =
   | "guides/try-it"
+  | "guides/workspace"
   | "guides/go-live"
   | "guides/shadow-mode"
   | "guides/report"
@@ -146,6 +147,8 @@ const TEST_USDC_LIBRARY = "src/lib/test-usdc.ts";
 const VERDICT = "src/components/VerdictControl.tsx";
 const REPORT = "src/components/vx/WorkspaceReport.tsx";
 const VERDICTS = "src/lib/verdicts.ts";
+const GETTING_STARTED = "src/lib/getting-started.ts";
+const CREATE_FORM = "src/components/CreateWorkspaceForm.tsx";
 const ACTUALS = "src/components/vx/ActualsComparison.tsx";
 const ACTUAL_CONTROL = "src/components/ActualPaymentControl.tsx";
 const ACTUALS_CSV = "src/components/ActualsCsvImport.tsx";
@@ -158,7 +161,50 @@ const ACTUAL_FIELDS = "src/lib/actual-payment-fields.ts";
  * text from the workspace's network (mainnet copy C1), the text as the file writes it.
  */
 const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
+  // The workspace frame (workspace shell design S1-S5, S9).
+  "guides/workspace": [
+    ["Treasury", APP_NAV],
+    ["Approvals", APP_NAV],
+    ["Operations", APP_NAV],
+    ["Bills & receivables", APP_NAV],
+    ["Counterparties", APP_NAV],
+    ["Contractors", APP_NAV],
+    ["Controls", APP_NAV],
+    ["Compliance", APP_NAV],
+    ["Audit log", APP_NAV],
+    ["Analytics", APP_NAV],
+    ["Insights", APP_NAV],
+    ["Report", APP_NAV],
+    ["Members", APP_NAV],
+    ["Settings", APP_NAV],
+    ["Live", "src/components/vx/WorkspaceMeta.tsx"],
+    ["Sandbox", "src/components/vx/WorkspaceMeta.tsx"],
+    ["Not live yet", "src/components/vx/WorkspaceMeta.tsx"],
+    ["Collapse sidebar", "src/components/vx/WorkspaceHeader.tsx"],
+    ["Expand sidebar", "src/components/vx/WorkspaceHeader.tsx"],
+    ["Workspace status", "src/components/vx/WorkspaceHeader.tsx"],
+    ["Arc mainnet", "src/lib/network.ts"],
+    ["Payments off", "src/components/vx/workspace-status.ts"],
+    ["Payments held", "src/components/vx/workspace-status.ts"],
+    ["Shadow mode", "src/components/vx/workspace-status.ts"],
+    ["Payments simulated", "src/components/vx/workspace-status.ts"],
+    ["Payments live", "src/components/vx/workspace-status.ts"],
+    ["Agent on", "src/components/vx/workspace-status.ts"],
+    ["Agent paused", "src/components/vx/workspace-status.ts"],
+    ["Agent stopped", "src/components/vx/workspace-status.ts"],
+    ["Search…", "src/components/vx/AppNav.tsx"],
+    ["Shortcuts", "src/components/vx/CommandPalette.tsx"],
+    ["Add a bill", "src/components/vx/command-items.ts"],
+    ["Add a counterparty", "src/components/vx/command-items.ts"],
+    ["Agent spending limit", "src/components/vx/command-items.ts"],
+    ["Go live", "src/components/vx/command-items.ts"],
+  ],
   "guides/try-it": [
+    ["Run alongside how you pay today (shadow mode)", CREATE_FORM],
+    ["Add a supplier", GETTING_STARTED],
+    ["Add a bill", GETTING_STARTED],
+    ["See the agent's decision", GETTING_STARTED],
+    ["To pay on Arc", GETTING_STARTED],
     ["Report", APP_NAV],
     ["This workspace has no real bill yet, so the report counts its sample data.", "src/components/vx/WorkspaceReport.tsx"],
     ["Sandbox: payments here are simulated.", "src/components/vx/WorkspaceReport.tsx"],
@@ -175,7 +221,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Try it with sample data", SAMPLE_PANEL],
     ["Load sample data", SAMPLE_PANEL],
     ["Run cycle now", RUN],
-    ["AP / AR", APP_NAV],
+    ["Bills & receivables", APP_NAV],
     ["Agent’s reasoning", DECISION_CARD],
     ["Blocked by code, not by the model", DECISION_CARD],
     ["Approvals", APP_NAV],
@@ -191,6 +237,10 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Get started", CHECKLIST],
   ],
   "guides/go-live": [
+    ["Add a supplier", GETTING_STARTED],
+    ["Add a bill", GETTING_STARTED],
+    ["See the agent's decision", GETTING_STARTED],
+    ["To pay on Arc", GETTING_STARTED],
     ["Circle shows it stuck.", "src/lib/agent-activity.ts"],
     ["boundedByCode", "src/lib/agent/orchestrator.ts"],
     ["USYC reserve", "src/components/UsycReservePanel.tsx"],
@@ -347,6 +397,14 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Your wallet does not hold enough ETH on Base for the gas. Add a little ETH there, then send again.", "src/lib/inbound-usdc.ts", " for the gas. Add a little "],
   ],
   "guides/first-payment": [
+    ["Add a supplier", GETTING_STARTED],
+    ["See the agent's decision", GETTING_STARTED],
+    ["To pay on Arc", GETTING_STARTED],
+    ["Jurisdiction", COUNTERPARTY_FORM],
+    ["Does this supplier send you purchase orders?", COUNTERPARTY_FORM],
+    ["Add a counterparty first — every invoice is against one.", INVOICE_FORM],
+    ["is not one of your counterparties yet.", DOCUMENT_TAB],
+    ["Add a counterparty", DOCUMENT_TAB],
     // A bill before its payee's address (counterparty.no_address), from the card and from Approve and pay.
     ["The agent decides it again on its own once the counterparty has an address and a person has confirmed it.", "src/lib/next-step.ts"],
     ["This payee has no payment address yet. Add it on Counterparties, or ask them for it with a one-time link.", "src/lib/agent/approvals.ts"],
@@ -439,7 +497,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Add and screen", COUNTERPARTY_FORM],
     ["added and screened:", INTAKE_ACTIONS],
     ["A payment to a counterparty without one is held for review.", PANEL],
-    ["AP / AR", APP_NAV],
+    ["Bills & receivables", APP_NAV],
     ["New invoice", INVOICES_PAGE],
     ["Needs you", INVOICES_PAGE],
     ["Upcoming", INVOICES_PAGE],
@@ -654,7 +712,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Refresh", "src/components/wallet/PasskeyWallet.tsx"],
   ],
   "guides/import-bills": [
-    ["AP / AR", APP_NAV],
+    ["Bills & receivables", APP_NAV],
     ["New invoice", INVOICES_PAGE],
     ["Import a list", INVOICES_PAGE],
     ["Only an owner or admin of this workspace can add or import invoices.", INVOICES_PAGE],
@@ -785,7 +843,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["/disconnect", TELEGRAM_MESSAGES],
     ["Verify hash chain", VERIFY_BADGE],
     ["From a document", INVOICES_PAGE],
-    ["AP / AR", APP_NAV],
+    ["Bills & receivables", APP_NAV],
     ["The model's note:", TELEGRAM_MESSAGES],
     ["Add, goods received", TELEGRAM_INTAKE],
     ["Add, not received yet", TELEGRAM_INTAKE],
@@ -800,7 +858,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   ],
   "guides/email-invoices": [
     ["Settings", APP_NAV],
-    ["AP / AR", APP_NAV],
+    ["Bills & receivables", APP_NAV],
     ["From a document", INVOICES_PAGE],
     ["Invoices by email", INBOX_PANEL],
     ["Turn on", INBOX_PANEL],
@@ -829,7 +887,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Its invoice is attached as an image (", INBOX_RECEIVE],
     ["which Vestiarion cannot read yet. Ask the sender for the PDF, or type it in with Finish and add.", INBOX_RECEIVE],
     ["Check it against the invoice.", DOCUMENT_NORMALIZE],
-    ["Review in AP / AR", INBOX_RECEIVE],
+    ["Review in Bills & receivables", INBOX_RECEIVE],
     ["invoice_email_received", INBOX_RECEIVE],
     ["invoice_email_dismissed", INBOX_COMMANDS],
     ["This email was already decided, or cannot be added as it was read.", INBOX_COMMANDS],
@@ -1042,6 +1100,12 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["actual_payment_corrected", ACTUALS_LIBRARY],
   ],
   "guides/shadow-mode": [
+    ["Run alongside how you pay today (shadow mode)", CREATE_FORM],
+    ["Try it on your bills", "src/components/landing/Hero.tsx"],
+    ["Your workspace is ready, but shadow mode did not turn on.", "src/app/o/[slug]/console/page.tsx"],
+    ["To pay on Arc", GETTING_STARTED],
+    ["Does this supplier send you purchase orders?", COUNTERPARTY_FORM],
+    ["You agree with the agent, and it is paid now, simulated in this sandbox", VERDICT],
     ["Shadow mode: it waits for a person to agree.", "src/components/vx/decision-signals.ts"],
     ["Paid later by a person", "src/lib/traction-digest.ts"],
     ["Shadow mode runs on Arc testnet. On Arc mainnet the agent pays your real bills.", SHADOW_LIBRARY],
@@ -1050,7 +1114,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Shadow mode", SHADOW_PANEL],
     ["Your currency", SHADOW_PANEL],
     ["Turn on shadow mode", SHADOW_PANEL],
-    ["AP / AR", APP_NAV],
+    ["Bills & receivables", APP_NAV],
     ["Approvals", APP_NAV],
     ["Do you agree with the agent?", VERDICT],
     ["Agree and pay", VERDICT],
@@ -1061,7 +1125,11 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Decide it again later", VERDICT],
     ["Do not pay it", VERDICT],
     ["Agree", VERDICT],
-    ["See them in AP / AR", SHADOW_SUMMARY],
+    ["Waiting for your verdict", "src/components/vx/map.ts"],
+    ["See them in Bills & receivables", SHADOW_SUMMARY],
+    ["Agreement", SHADOW_SUMMARY],
+    ["Verdicts given", SHADOW_SUMMARY],
+    ["Waiting for you", SHADOW_SUMMARY],
     // Test USDC from Vestiarion's float, in the console's shadow mode section (test USDC T8).
     ["Safe to spend today", "src/components/vx/CashOutlook.tsx"],
     ["Your open bills need N USDC more than the operating wallet holds.", SHADOW_SUMMARY, "Your open bills need ${usdc(testUsdc.view.need)} USDC more than the operating wallet holds."],
@@ -1182,6 +1250,7 @@ const sourceFile = (file: string) => readFileSync(path.join(process.cwd(), file)
  */
 const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/try-it": 20,
+  "guides/workspace": 20,
   "guides/go-live": 20,
   "guides/shadow-mode": 20,
   "guides/report": 20,

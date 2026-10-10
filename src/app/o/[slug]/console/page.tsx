@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { refreshOnChainBalanceAction } from "@/app/actions/treasury";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import AgentControls from "@/components/AgentControls";
@@ -17,6 +18,7 @@ import { invoiceDecision, treasuryActionDecision, treasuryDecisionEntries, treas
 import { Money } from "@/components/vx/Primitives";
 import { CashOutlookPanel, SafeToSpendFigure } from "@/components/vx/CashOutlook";
 import { ScheduledPayments, scheduledPaymentRows } from "@/components/vx/ScheduledPayments";
+import { Callout } from "@/components/ui/Callout";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
@@ -36,12 +38,12 @@ import { spendingLimitStatus } from "@/lib/circle/spending-limit-setup";
 import { readServiceBudget } from "@/lib/service-budget";
 import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
-import { gettingStarted, ownBillCount, ownPayableCount } from "@/lib/getting-started";
+import { gettingStarted, ownBillCount, ownDecidedCount, ownPayableCount } from "@/lib/getting-started";
 import { listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { pauseStateOf } from "@/lib/platform/pause";
 import { cashOutlook } from "@/lib/cash-outlook";
 import { latestForecast, listAccounts, listCounterparties, listInvoices, listMilestones, listTreasuryActions, stats } from "@/lib/queries";
-import { readShadowMode } from "@/lib/shadow-mode";
+import { readShadowMode, SHADOW_NOT_STARTED } from "@/lib/shadow-mode";
 import { readShadowSummary, verdictFacts } from "@/lib/verdicts";
 import { readTestUsdcWeek, testUsdcAvailable } from "@/lib/test-usdc";
 import { testUsdcView } from "@/lib/test-usdc-rules";
@@ -51,6 +53,7 @@ import { workspaceNetwork } from "@/lib/workspace-network";
 import { networkProfile } from "@/lib/network";
 import { currentOrgConfig } from "@/lib/context";
 import { walletTreasuryAvailable } from "@/lib/config";
+import { shellStatus } from "@/lib/shell-status";
 
 export const dynamic = "force-dynamic";
 
@@ -168,7 +171,7 @@ export default async function DashboardPage({
       invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), invoiceEntries, { network, verdicts })
     );
     const stopped = invoiceDecisions.filter((decision) => decision.outcome === "refused" || decision.outcome === "held");
-    // A stopped payable's card says what stopped it and where to handle it (agent activity spec R5), as on AP / AR.
+    // A stopped payable's card says what stopped it and where to handle it (agent activity spec R5), as on Bills & receivables.
     const invoicesById = new Map(invoices.map((invoice) => [invoice.id, invoice]));
     const canWrite = can(access.membership.role, "records.write");
     const waitingStepFor = (decision: (typeof stopped)[number]) => {
@@ -251,13 +254,16 @@ export default async function DashboardPage({
     // Computed from the rows above, with no extra read (getting-started design G1, G2), until the first
     // payment on Arc testnet (first-payment design §2). Only people who can act on it see it: owners and
     // admins add records, and an owner takes the workspace live. In shadow mode it has steps of its own: suppliers, real
-    // bills and a first verdict, from the shadow mode and verdicts read above.
+    // bills and a first verdict, from the shadow mode and verdicts read above. A sandbox with no wallet starts with its
+    // first bill and the agent's decision on it, from the invoices read above.
     const checklist = can(role, "records.write")
       ? gettingStarted({
           mode: access.membership.mode,
           accounts: accountsRows,
           counterparties,
           payableCount: ownPayableCount(invoices, counterparties),
+          billCount: ownBillCount(invoices, counterparties),
+          decidedCount: ownDecidedCount(invoices, counterparties),
           onchainPayments: dashboardStats.onchainTransfers,
           waitingCount: needsReview,
           network,
@@ -279,7 +285,7 @@ export default async function DashboardPage({
     const sampleLoaded = counterparties.some((counterparty) => counterparty.sample);
 
     return (
-      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={{ ...modes, held: paymentsHeld() }}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={{ ...modes, held: paymentsHeld() }} status={await shellStatus()}>
         <PageHead
           title={sectionTitle("treasury")}
           sub="What the agent holds, what it decided, and why."
@@ -298,6 +304,17 @@ export default async function DashboardPage({
             re-reads its data every 20 s, and at once on return to the tab, so the decision appears without a reload. */}
         <AutoRefresh intervalMs={20_000} />
 
+        {/* Shadow mode asked for as the workspace was created, and not turned on: the workspace is there, and Settings turns it on. */}
+        {query.shadow === SHADOW_NOT_STARTED && !shadow && (
+          <Callout tone="held" className="mb-8">
+            Your workspace is ready, but shadow mode did not turn on.{" "}
+            <Link href={orgHref(slug, "/settings#shadow-mode-title")} className="font-medium text-agent underline-offset-2 hover:underline">
+              Turn it on in Settings
+            </Link>
+            .
+          </Callout>
+        )}
+
         {checklist && <GettingStarted slug={slug} checklist={checklist} isOwner={can(role, "org.administer")} />}
 
         {sampleOffered && <SampleDataOffer orgSlug={slug} />}
@@ -305,102 +322,110 @@ export default async function DashboardPage({
 
         {since != null && <CycleReport entries={cycleEntries} day={dashboardStats.day} since={since} clockMode={dashboardStats.clockMode} completedAt={dashboardStats.lastCycleAt} orgSlug={slug} />}
 
-        <div className="mb-8 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 xl:grid-cols-4">
-          <BalanceTile
-            accounts={accounts}
-            mode={balanceTileMode(modes.mode, accountsRows, walletHost)}
-            orgSlug={slug}
-            refreshAction={refreshOnChainBalanceAction}
-            syncedAt={accountsRows.find((account) => account.kind === "operating" && (account.circle_wallet_id || (walletHost === "external" && account.address)))?.balance_synced_at ?? null}
-          />
-          {/* The figure; how it is reached, and the 30 days behind it, are the Next 30 days section below. */}
-          <StatTile label="Safe to spend today" tone={outlook.safeToSpend < 0 ? "held" : "default"} href="#cash-outlook" sub={outlook.reserve > 0 ? "After everything already owed, the USYC reserve included" : "After everything already owed"}>
-            <SafeToSpendFigure outlook={outlook} />
-          </StatTile>
-          <StatTile label="Paid out to date" sub={`${dashboardStats.onchainTransfers} settled on-chain`}>
-            <Money value={dashboardStats.totalPaidOut} />
-          </StatTile>
-          <StatTile label="Needs you" tone={needsReview > 0 ? "held" : "default"} href={orgHref(slug, "/approvals")} sub={needsReview > 0 ? "Waiting for a person's decision" : "Nothing waiting"}>
-            <span className="tabular-nums">{needsReview}</span>
-          </StatTile>
-        </div>
-
-        <div className="grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className="min-w-0 space-y-8">
-            {shadow && shadowSummary && <ShadowModeSummary orgSlug={slug} mode={shadow} summary={shadowSummary} testUsdc={testUsdc} />}
-
-            {stopped.length > 0 && (
-              <section>
-                <SectionHeader title="Stopped" meta="refused by code, or waiting for you" />
-                <div className="space-y-4">
-                  {stopped.slice(0, 3).map((decision) => (
-                    <DecisionCard key={decision.id} decision={decision} orgSlug={slug} footerAction={nextStepFor(decision)} />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {scheduledPayments.length > 0 && <ScheduledPayments payments={scheduledPayments} />}
-
-            <CashOutlookPanel outlook={outlook} />
-
-            <section>
-              <SectionHeader
-                title="Treasury decisions"
-                meta={`${dashboardStats.decisionsLogged} decisions logged, each hash-linked and signed`}
-                action={<MoreLink href={orgHref(slug, "/audit?domain=treasury")}>Full audit log</MoreLink>}
-              />
-              {treasuryDecisions.length === 0 ? (
-                <EmptyState compact title="No treasury decisions yet" body="Run an agent cycle to see why cash was swept, redeemed, or held liquid." />
-              ) : (
-                // Scanned, not read: each shows its first lines, with "View reasoning" for the rest.
-                <div className="space-y-4">{treasuryDecisions.map((decision) => <DecisionCard key={decision.id} decision={decision} orgSlug={slug} collapseReasoning />)}</div>
-              )}
-            </section>
-
-            {executedReserveMoves.length > 0 && (
-              <section>
-                <SectionHeader title="Executed reserve movements" meta="recorded treasury actions" />
-                <div className="space-y-4">{executedReserveMoves.map((decision) => <DecisionCard key={decision.id} decision={decision} compact orgSlug={slug} collapseReasoning />)}</div>
-              </section>
-            )}
+        {/* One container for the figures and the columns under them: from 64rem of content the last figure sits over the
+            aside, the same width, so the page reads in two clean columns (workspace shell design S8). */}
+        <div className="@container">
+          <div className="mb-8 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 @4xl:grid-cols-4 @5xl:grid-cols-[repeat(3,minmax(0,1fr))_22rem] @5xl:gap-6 @7xl:grid-cols-[repeat(3,minmax(0,1fr))_24rem]">
+            <BalanceTile
+              accounts={accounts}
+              mode={balanceTileMode(modes.mode, accountsRows, walletHost)}
+              orgSlug={slug}
+              refreshAction={refreshOnChainBalanceAction}
+              syncedAt={accountsRows.find((account) => account.kind === "operating" && (account.circle_wallet_id || (walletHost === "external" && account.address)))?.balance_synced_at ?? null}
+            />
+            {/* The figure; how it is reached, and the 30 days behind it, are the Next 30 days section below. */}
+            <StatTile label="Safe to spend today" tone={outlook.safeToSpend < 0 ? "held" : "default"} href="#cash-outlook" sub={outlook.reserve > 0 ? "After everything already owed, the USYC reserve included" : "After everything already owed"}>
+              <SafeToSpendFigure outlook={outlook} />
+            </StatTile>
+            <StatTile label="Paid out to date" sub={`${dashboardStats.onchainTransfers} settled on-chain`}>
+              <Money value={dashboardStats.totalPaidOut} />
+            </StatTile>
+            <StatTile label="Needs you" tone={needsReview > 0 ? "held" : "default"} href={orgHref(slug, "/approvals")} sub={needsReview > 0 ? "Waiting for a person's decision" : "Nothing waiting"}>
+              <span className="tabular-nums">{needsReview}</span>
+            </StatTile>
           </div>
 
-          {/* Short by design: the limits and accounts people check, then the funds outside the wallet, whose
-              explanations and forms stay folded until someone opens them. */}
-          <aside className="min-w-0 space-y-6 md:grid md:grid-cols-2 md:items-start md:gap-6 md:space-y-0 xl:block xl:space-y-6">
-            {budget && (
-              <AgentBudgetPanel
-                walletTreasury={walletHost === "external"}
-                network={network}
-                orgSlug={slug}
-                canEdit={can(role, "agent.budget")}
-                live={access.membership.mode === "live"}
-                onChain={onChainLimit ? { ...onChainLimit, reading: onChainLimit.reading?.state === "read" ? onChainLimit.reading : null } : null}
-                view={{
-                  dailyUsdc: budget.budget?.dailyUsdc ?? null,
-                  weeklyUsdc: budget.budget?.weeklyUsdc ?? null,
-                  spentToday: budget.spent.today,
-                  spentThisWeek: budget.spent.week,
-                  remaining: budget.room?.remaining ?? null,
-                }}
-              />
-            )}
-            <AccountsList accounts={accounts} />
-            {forecast && <ForecastPanel forecast={forecast} />}
-            {gateway && (
-              <GatewayPanel
-                orgSlug={slug}
-                signerAddress={gateway.signerAddress}
-                balanceUsdc={gateway.balanceUsdc}
-                canFund={can(role, "treasury.manage")}
-                requestId={crypto.randomUUID()}
-              />
-            )}
-            {serviceBudget && (
-              <ServiceBudgetPanel orgSlug={slug} budget={serviceBudget} canFund={can(role, "treasury.manage")} requestId={crypto.randomUUID()} />
-            )}
-          </aside>
+          <div className="grid grid-cols-1 gap-8 @5xl:grid-cols-[minmax(0,1fr)_22rem] @5xl:gap-6 @7xl:grid-cols-[minmax(0,1fr)_24rem]">
+            <div className="min-w-0 space-y-8">
+              {shadow && shadowSummary && <ShadowModeSummary orgSlug={slug} mode={shadow} summary={shadowSummary} testUsdc={testUsdc} simulated={modes.mode !== "live" && !paymentsHeld()} />}
+
+              {stopped.length > 0 && (
+                <section>
+                  <SectionHeader
+                    title="Stopped"
+                    meta="refused by code, or waiting for you"
+                    action={stopped.length > 3 ? <MoreLink href={orgHref(slug, "/invoices")}>{`See all ${stopped.length}`}</MoreLink> : undefined}
+                  />
+                  <div className="space-y-4">
+                    {stopped.slice(0, 3).map((decision) => (
+                      <DecisionCard key={decision.id} decision={decision} orgSlug={slug} footerAction={nextStepFor(decision)} />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {scheduledPayments.length > 0 && <ScheduledPayments payments={scheduledPayments} allHref={orgHref(slug, "/invoices")} />}
+
+              <CashOutlookPanel outlook={outlook} />
+
+              <section>
+                <SectionHeader
+                  title="Treasury decisions"
+                  meta={`${dashboardStats.decisionsLogged} decisions logged, each hash-linked and signed`}
+                  action={<MoreLink href={orgHref(slug, "/audit?domain=treasury")}>Full audit log</MoreLink>}
+                />
+                {treasuryDecisions.length === 0 ? (
+                  <EmptyState compact title="No treasury decisions yet" body="Run an agent cycle to see why cash was swept, redeemed, or held liquid." />
+                ) : (
+                  // Scanned, not read: each shows its first lines, with "View reasoning" for the rest.
+                  <div className="space-y-4">{treasuryDecisions.map((decision) => <DecisionCard key={decision.id} decision={decision} orgSlug={slug} collapseReasoning />)}</div>
+                )}
+              </section>
+
+              {executedReserveMoves.length > 0 && (
+                <section>
+                  <SectionHeader title="Executed reserve movements" meta="recorded treasury actions" />
+                  <div className="space-y-4">{executedReserveMoves.map((decision) => <DecisionCard key={decision.id} decision={decision} compact orgSlug={slug} collapseReasoning />)}</div>
+                </section>
+              )}
+            </div>
+
+            {/* Short by design: the limits and accounts people check, then the funds outside the wallet, whose
+                explanations and forms stay folded until someone opens them. */}
+            <aside className="min-w-0 space-y-6 @3xl:grid @3xl:grid-cols-2 @3xl:items-start @3xl:gap-6 @3xl:space-y-0 @5xl:block @5xl:space-y-6">
+              {budget && (
+                <AgentBudgetPanel
+                  walletTreasury={walletHost === "external"}
+                  network={network}
+                  orgSlug={slug}
+                  canEdit={can(role, "agent.budget")}
+                  live={access.membership.mode === "live"}
+                  onChain={onChainLimit ? { ...onChainLimit, reading: onChainLimit.reading?.state === "read" ? onChainLimit.reading : null } : null}
+                  view={{
+                    dailyUsdc: budget.budget?.dailyUsdc ?? null,
+                    weeklyUsdc: budget.budget?.weeklyUsdc ?? null,
+                    spentToday: budget.spent.today,
+                    spentThisWeek: budget.spent.week,
+                    remaining: budget.room?.remaining ?? null,
+                  }}
+                />
+              )}
+              <AccountsList accounts={accounts} />
+              {forecast && <ForecastPanel forecast={forecast} />}
+              {gateway && (
+                <GatewayPanel
+                  orgSlug={slug}
+                  signerAddress={gateway.signerAddress}
+                  balanceUsdc={gateway.balanceUsdc}
+                  canFund={can(role, "treasury.manage")}
+                  requestId={crypto.randomUUID()}
+                />
+              )}
+              {serviceBudget && (
+                <ServiceBudgetPanel orgSlug={slug} budget={serviceBudget} canFund={can(role, "treasury.manage")} requestId={crypto.randomUUID()} />
+              )}
+            </aside>
+          </div>
         </div>
       </ProductShell>
     );

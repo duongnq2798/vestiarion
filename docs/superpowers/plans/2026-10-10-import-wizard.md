@@ -79,7 +79,7 @@ per row. The panel `src/components/intake/BillImport.tsx` replaces `InvoiceCsvIm
 
 ### Task 8: The panel
 - [ ] `src/components/intake/BillImport.tsx`: list, columns, check, done; failed rows download.
-- [ ] Replace `InvoiceCsvImport` on AP / AR, the design page and the docs shots; tab **Import a list**.
+- [ ] Replace `InvoiceCsvImport` on Bills & receivables, the design page and the docs shots; tab **Import a list**.
 - [ ] Remove `src/lib/invoice-csv.ts`, `InvoiceCsvImport.tsx`, `importInvoicesAction` and their tests; move what
       they held (the template) to the new tests.
 

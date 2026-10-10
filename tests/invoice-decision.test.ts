@@ -595,6 +595,18 @@ describe("invoiceDecision: the verdict a card shows (shadow mode S3)", () => {
     });
     expect(invoiceDecision(held, undefined, [apPay], { network: "arc-testnet" }).verdict).toBeUndefined();
   });
+
+  // Workspace shell design S8: the agent asking is not a problem, but only while the verdict can still be given.
+  it("says it waits for your verdict while you can give it, and is an ordinary hold once given or out of shadow mode", () => {
+    const held = invoice({ status: "held" });
+    const facts = (over: Record<string, unknown> = {}) => ({ shadow: { startedAt: "2026-10-07T00:00:00.000Z" }, given: new Map(), canGive: true, ...over });
+    expect(invoiceDecision(held, undefined, [apPay], { network: "arc-testnet", verdicts: facts() }).outcomeLabel).toBe("Waiting for your verdict");
+    const agreed = facts({ given: new Map([[41, { verdict: "agree" as const, reason: null }]]) });
+    expect(invoiceDecision(held, undefined, [apPay], { network: "arc-testnet", verdicts: agreed }).outcomeLabel).toBeUndefined();
+    expect(invoiceDecision(held, undefined, [apPay], { network: "arc-testnet", verdicts: facts({ shadow: null }) }).outcomeLabel).toBeUndefined();
+    expect(invoiceDecision(held, undefined, [apPay], { network: "arc-testnet", verdicts: facts({ canGive: false }) }).outcomeLabel).toBeUndefined();
+    expect(invoiceDecision(held, undefined, [apPay], { network: "arc-testnet" }).outcomeLabel).toBeUndefined();
+  });
 });
 
 describe("invoiceDecision: a bill in the business's own currency (shadow mode S6)", () => {

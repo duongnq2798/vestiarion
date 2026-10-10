@@ -42,8 +42,8 @@ export function SettingsSections({ groups }: { groups: SettingsGroup[] }) {
     <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_10rem] xl:gap-10">
       <div className="min-w-0">
         <SettingsContents groups={contents} variant="inline" className="mb-10 xl:hidden" />
-        {/* A section's heading lands below the narrow screen's sticky header, and a little below the top from `lg`. */}
-        <div className="space-y-10 [&_h2]:scroll-mt-24 [&_section]:scroll-mt-24 lg:[&_h2]:scroll-mt-8 lg:[&_section]:scroll-mt-8">
+        {/* A section's heading lands a little below the workspace header, which the page's scroll padding already clears. */}
+        <div className="space-y-10 [&_h2]:scroll-mt-6 [&_section]:scroll-mt-6">
           {shown.map((group, index) => (
             <div key={group.key} role="group" aria-labelledby={`settings-group-${group.key}`} className={cn(index > 0 && "border-t border-line pt-10")}>
               <p id={`settings-group-${group.key}`} className={GROUP_LABEL}>

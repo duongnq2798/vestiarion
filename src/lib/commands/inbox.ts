@@ -46,7 +46,9 @@ export async function addFromInbox(
   if (!invoice || !added?.ok) {
     // Put it back, for someone to add once the reason is fixed, or to dismiss.
     await db().from("inbox_emails").update({ status: "ready", decided_by: null, decided_at: null }).eq("id", input.inboxEmailId).eq("status", "added");
-    return added && !added.ok ? added : refused("invalid", "The invoice as it was read is no longer valid. Add it on AP / AR instead.");
+    return added && !added.ok
+      ? added
+      : refused("invalid", "The invoice as it was read is no longer valid. Add it on Bills & receivables instead.");
   }
   const linked = await db().from("inbox_emails").update({ invoice_id: added.invoiceId }).eq("id", input.inboxEmailId);
   if (linked.error) console.error("an emailed invoice was added but not linked", actor.orgId, linked.error.message);
@@ -84,10 +86,10 @@ function finishedProvenance(row: FinishableRow, invoice: InvoiceInput): Document
 }
 
 /**
- * Adds an emailed invoice as a person finished it on AP / AR (reader follow-up F5): each field as they kept or typed it,
- * from an email that is ready, lacks a detail, or could not be read; `inbox.finish` needs what `inbox.add` does. The
- * email is used once: it moves from the status it had to `added` in one guarded update, and back if the invoice could
- * not be added after all. The entry names the email, and the document with the fields the person changed.
+ * Adds an emailed invoice as a person finished it on Bills & receivables (reader follow-up F5): each field as they kept
+ * or typed it, from an email that is ready, lacks a detail, or could not be read; `inbox.finish` needs what `inbox.add`
+ * does. The email is used once: it moves from the status it had to `added` in one guarded update, and back if the
+ * invoice could not be added after all. The entry names the email, and the document with the fields the person changed.
  */
 export async function finishFromInbox(
   actor: Actor,
