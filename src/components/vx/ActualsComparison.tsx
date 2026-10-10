@@ -230,57 +230,15 @@ function ComparisonItem({ row, slug, label, canRecord, members, network }: { row
   );
 }
 
-export function ActualsComparison({
-  slug,
-  comparison,
-  canRecord,
-  members,
-  templateCsv,
-  showAll,
-}: {
-  slug: string;
-  /** Null before migration 0090 runs on this deployment. */
-  comparison: Comparison | null;
-  canRecord: boolean;
-  /** Members' emails, by user id, for who recorded each. */
-  members: Record<string, string>;
-  /** The bills not recorded yet, as a CSV to fill in. */
-  templateCsv: string | null;
-  showAll: boolean;
-}) {
-  const heading = <SectionHeader id="report-actuals" title="Agent vs what really happened" />;
-  if (!comparison) {
-    return (
-      <section aria-labelledby="report-actuals" id="actuals">
-        {heading}
-        <Callout>Recording what your business paid is not set up on this deployment yet.</Callout>
-      </section>
-    );
-  }
+/** What the comparison is, and its figures: bills compared, agreement, days apart, what is worth a look, amounts. */
+export function ActualsSummary({ comparison }: { comparison: Comparison }) {
   const label = networkProfile(comparison.network).label;
   const totals = comparison.totals;
   const given = totals.agreed + totals.disagreed;
   const flagged = comparison.rows.filter((row) => row.flags.length > 0).length;
-  const shown = showAll ? comparison.rows : comparison.rows.slice(0, ROWS_SHOWN);
   const offered = totals.discounts.onOffer.length > 0;
-
   return (
-    <section aria-labelledby="report-actuals" id="actuals" className="space-y-4">
-      <SectionHeader
-        id="report-actuals"
-        title="Agent vs what really happened"
-        meta={comparison.rows.length > shown.length ? `${flagged > 0 ? "Worth a look first, then the newest" : "Newest"} ${shown.length} of ${comparison.rows.length}` : undefined}
-        action={
-          comparison.rows.length > shown.length ? (
-            <Button asChild size="sm" variant="ghost">
-              <Link href={orgHref(slug, "/report?actuals=all#actuals")} scroll={false}>
-                Show all {comparison.rows.length}
-                <ArrowRight aria-hidden />
-              </Link>
-            </Button>
-          ) : undefined
-        }
-      />
+    <div className="space-y-4">
       <div className="space-y-1 text-[0.8125rem] text-ink-2">
         <p>
           What the agent decided on each bill, next to what your business recorded paying outside Vestiarion. A bill nobody has recorded says Not recorded: nothing
@@ -323,6 +281,84 @@ export function ActualsComparison({
           </StatTile>
         </div>
       )}
+    </div>
+  );
+}
+
+/** The bills, each with its two sides, its flags and its links; with the record controls for someone who may record. */
+export function ActualsBills({
+  slug,
+  comparison,
+  rows,
+  canRecord,
+  members,
+}: {
+  slug: string;
+  comparison: Comparison;
+  rows: ComparisonRow[];
+  canRecord: boolean;
+  members: Record<string, string>;
+}) {
+  const label = networkProfile(comparison.network).label;
+  if (rows.length === 0) return <EmptyState compact title="Nothing to compare yet" body="Once the agent decides on a bill, it shows here, ready for what your business paid." />;
+  return (
+    <Card className="overflow-hidden">
+      <ul className="divide-y divide-line">
+        {rows.map((row) => (
+          <ComparisonItem key={row.invoiceId} row={row} slug={slug} label={label} canRecord={canRecord} members={members} network={comparison.network} />
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+export function ActualsComparison({
+  slug,
+  comparison,
+  canRecord,
+  members,
+  templateCsv,
+  showAll,
+}: {
+  slug: string;
+  /** Null before migration 0090 runs on this deployment. */
+  comparison: Comparison | null;
+  canRecord: boolean;
+  /** Members' emails, by user id, for who recorded each. */
+  members: Record<string, string>;
+  /** The bills not recorded yet, as a CSV to fill in. */
+  templateCsv: string | null;
+  showAll: boolean;
+}) {
+  if (!comparison) {
+    return (
+      <section aria-labelledby="report-actuals" id="actuals">
+        <SectionHeader id="report-actuals" title="Agent vs what really happened" />
+        <Callout>Recording what your business paid is not set up on this deployment yet.</Callout>
+      </section>
+    );
+  }
+  const flagged = comparison.rows.some((row) => row.flags.length > 0);
+  const shown = showAll ? comparison.rows : comparison.rows.slice(0, ROWS_SHOWN);
+
+  return (
+    <section aria-labelledby="report-actuals" id="actuals" className="space-y-4">
+      <SectionHeader
+        id="report-actuals"
+        title="Agent vs what really happened"
+        meta={comparison.rows.length > shown.length ? `${flagged ? "Worth a look first, then the newest" : "Newest"} ${shown.length} of ${comparison.rows.length}` : undefined}
+        action={
+          comparison.rows.length > shown.length ? (
+            <Button asChild size="sm" variant="ghost">
+              <Link href={orgHref(slug, "/report?actuals=all#actuals")} scroll={false}>
+                Show all {comparison.rows.length}
+                <ArrowRight aria-hidden />
+              </Link>
+            </Button>
+          ) : undefined
+        }
+      />
+      <ActualsSummary comparison={comparison} />
 
       {canRecord && (
         <Card className="space-y-3 p-4 sm:p-5">
@@ -341,17 +377,7 @@ export function ActualsComparison({
         </Card>
       )}
 
-      {comparison.rows.length === 0 ? (
-        <EmptyState compact title="Nothing to compare yet" body="Once the agent decides on a bill, it shows here, ready for what your business paid." />
-      ) : (
-        <Card className="overflow-hidden">
-          <ul className="divide-y divide-line">
-            {shown.map((row) => (
-              <ComparisonItem key={row.invoiceId} row={row} slug={slug} label={label} canRecord={canRecord} members={members} network={comparison.network} />
-            ))}
-          </ul>
-        </Card>
-      )}
+      <ActualsBills slug={slug} comparison={comparison} rows={shown} canRecord={canRecord} members={members} />
       {!canRecord && <p className="text-xs text-ink-3">An owner or admin of this workspace records what your business paid.</p>}
     </section>
   );

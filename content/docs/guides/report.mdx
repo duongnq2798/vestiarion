@@ -67,6 +67,12 @@ For each bill that the agent decided on, or that has a record:
 
 Each figure links to where it comes from. The entry link beside the agent's decision, your verdict or your business's record opens that signed entry in the audit log; the transaction opens on the explorer.
 
+<Screenshot
+  src="/docs/guides/report-actuals-bills.png"
+  alt="Two bills. Atlas Compute, 61.87 USDC, marked Held by the agent, paid by your business: the agent side says it held it on Oct 8, 2026 because code refused it, its three-way match being incomplete, with a link to entry 4; the business side says it was paid on Oct 10, 2026, 61.87 USD by bank transfer, reference SEPA-1110, recorded by ops@harbor-books.example, with a link to entry 24 and a Correct button; below, paid in USD and the bill is in USDC, so the amounts are not compared. Northwind Cloud, 46.41 USDC: the agent held it on Oct 9, 2026 as a repeat of a bill from two days before, the verdict agreed; the business side says Not recorded, with Record what you paid."
+  caption="A bill the agent held that the business paid, and one nobody has recorded yet, each figure linked to its signed entry."
+/>
+
 These bills are marked as worth a look, and come first:
 
 - **Held by the agent, paid by your business**: the agent held, flagged or asked about it, or a check in code stopped it, and your business paid it. A bill the agent only waited on, for cash, a pause or the spending limit, is not counted as held.
@@ -81,6 +87,12 @@ The figures above the bills:
 - **Worth a look**: the bills marked, by why.
 - **Paid by your business**: what was recorded, in each currency. Two currencies are never added together, and USD and USDC count as two.
 - **Discounts taken**: by the agent and by your business, each measured; on offer, estimated from the terms.
+
+<Screenshot
+  src="/docs/guides/report-actuals.png"
+  alt="Agent vs what really happened, in a shadow workspace on Arc testnet. Bills compared: 4, 1 not recorded yet. Agent and business agreed: 2 of 4, both paid it or neither did. Days apart: 2.5 days earlier, the median over 2 bills. Worth a look: 2, 1 held but paid and 1 not paid by the business. Paid by your business: 132.28 USD. Discounts taken: 0.48 USDC by the agent, measured; none by the business; 0.48 USD on offer, estimated from the terms."
+  caption="The comparison's figures, each counted from the agent's entries and the business's records."
+/>
 
 In a sandbox the agent's payments are simulated and say so. While the workspace has no real bill, the comparison uses its sample data, as the rest of the report does.
 
