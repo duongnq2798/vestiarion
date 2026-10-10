@@ -7,6 +7,7 @@ import { workspaceNetwork } from "../workspace-network";
 import {
   conversionKey,
   conversionsNeeded,
+  counterpartyIdsOf,
   fatesOf,
   importSettingsSchema,
   questionsFor,
@@ -54,14 +55,16 @@ interface InvoiceRow {
   memo: string | null;
 }
 
-/** The invoices a row could repeat: due within the list's days. Every status counts (B10). */
-async function possibleDuplicates(rows: readonly ReadRow[]): Promise<ExistingInvoice[]> {
+/** The invoices a row could repeat: the rows' counterparties', due within the list's days. Every status counts (B10). */
+async function possibleDuplicates(rows: readonly ReadRow[], counterparties: ImportFacts["counterparties"]): Promise<ExistingInvoice[]> {
   const days = rows.flatMap((row) => (row.dueDate ? [row.dueDate] : [])).sort();
-  if (days.length === 0) return [];
+  const ids = counterpartyIdsOf(rows, counterparties);
+  if (days.length === 0 || ids.length === 0) return [];
   const found = unwrap(
     await db()
       .from("invoices")
       .select("id, counterparty_id, due_date, amount, currency, original_amount, original_currency, po_reference, memo")
+      .in("counterparty_id", ids)
       .gte("due_date", `${days[0]}T00:00:00.000Z`)
       .lte("due_date", `${days.at(-1)}T23:59:59.999Z`)
   ) as InvoiceRow[];
@@ -117,7 +120,7 @@ export async function checkBillList(text: string, answers: unknown): Promise<Che
   const counterparties = unwrap(await db().from("counterparties").select("id, name")) as ImportFacts["counterparties"];
   const facts: ImportFacts = {
     counterparties,
-    existing: await possibleDuplicates(rows),
+    existing: await possibleDuplicates(rows, counterparties),
     conversions: await conversions(rows, workspace),
   };
   return { ok: true, fates: fatesOf(rows, facts), file: createHash("sha256").update(text, "utf8").digest("hex") };

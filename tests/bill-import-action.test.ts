@@ -125,6 +125,12 @@ describe("checkBillListAction", () => {
     expect(inserts(fake)).toEqual([]);
     expect(mocks.ledger).not.toHaveBeenCalled();
     expect(mocks.runCycleSoon).not.toHaveBeenCalled();
+    // The invoices a row could repeat are read in the workspace's scope, for the rows' counterparties and days only.
+    const read = fake.requests.find((sent) => sent.path === "/rest/v1/invoices" && sent.method === "GET");
+    expect(read?.params.get("org_id")).toBe(`eq.${ORG}`);
+    expect(read?.params.get("counterparty_id")).toMatch(/^in\.\(/);
+    expect(read?.params.get("counterparty_id")).toContain(KANTO);
+    expect(read?.params.getAll("due_date")).toEqual(["gte.2026-10-13T00:00:00.000Z", "lte.2026-12-27T23:59:59.999Z"]);
     // The day's rate is read once for the yen, not once per bill.
     expect(mocks.rate).toHaveBeenCalledTimes(1);
     expect(mocks.rate).toHaveBeenCalledWith("JPY");

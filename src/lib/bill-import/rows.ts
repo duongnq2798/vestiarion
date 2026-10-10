@@ -366,6 +366,17 @@ const UNREADABLE_RATE = "The day's rate could not be read. Try again in a moment
 const same = (a: string | null, b: string | null) => a !== null && b !== null && a.trim().toLowerCase() === b.trim().toLowerCase();
 
 /** The counterparty a name means: by its name, or failing that by its name without punctuation and legal suffixes (B8). */
+/** The counterparties the rows name, as their fates will match them: whose invoices a row could repeat. */
+export function counterpartyIdsOf(rows: readonly ReadRow[], counterparties: ImportFacts["counterparties"]): string[] {
+  const ids = new Set<string>();
+  for (const row of rows) {
+    if (row.counterparty === "") continue;
+    const match = counterpartyFor(row.counterparty, counterparties);
+    if (typeof match !== "string") ids.add(match.id);
+  }
+  return [...ids];
+}
+
 function counterpartyFor(name: string, counterparties: ImportFacts["counterparties"]): { id: string; name: string } | string {
   const plain = name.trim().toLowerCase();
   let found = counterparties.filter((counterparty) => counterparty.name.trim().toLowerCase() === plain);
