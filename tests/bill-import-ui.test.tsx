@@ -42,6 +42,8 @@ describe("the columns step", () => {
     expect(markup).toContain("Which column is which");
     expect(markup).toContain("Reads: Kanto Paper · Lion City Logistics Pte Ltd · Manila Print House");
     expect(markup).toContain("Reads: ¥120,000 · 1,250.00 · ¥48,500");
+    // The fields the list does not have wait folded, each one choice away.
+    expect(markup).toContain("Not in the list: Purchase order, Goods received, Bill or invoice, Early-payment discount (%), Discount deadline");
     expect(markup).toContain("These rows are");
     expect(markup).toContain("Bills to pay");
     expect(markup).toContain("Invoices to collect");
@@ -81,7 +83,7 @@ describe("the check step", () => {
     expect(markup).toContain("Can't add: 3");
     expect(markup).toContain("Nothing has been added yet.");
     expect(markup).toContain("120,000 JPY");
-    expect(markup).toContain("800 USDC at the day's rate");
+    expect(markup).toContain("800.00 USDC at the day's rate");
     expect(markup).toContain("Due date “31/02/2026” is not a real day.");
     expect(markup).toContain("Amount “¥1,500.5” has decimals, and JPY amounts are whole numbers.");
     expect(markup).toContain("No counterparty named “Harbor Movers” in this workspace. Add it in Counterparties, then import this row again.");
@@ -103,9 +105,11 @@ describe("the check step", () => {
 });
 
 describe("the panel's words and files", () => {
-  it("groups thousands without changing a digit", () => {
-    expect(grouped("1234567.891234")).toBe("1,234,567.891234");
-    expect(grouped("800")).toBe("800");
+  it("groups thousands without changing a digit, with cents in a currency that has them", () => {
+    expect(grouped("1234567.891234", "USDC")).toBe("1,234,567.891234");
+    expect(grouped("800", "USDC")).toBe("800.00");
+    expect(grouped("1250.5", "SGD")).toBe("1,250.50");
+    expect(grouped("120000", "JPY")).toBe("120,000");
   });
 
   it("names the failed rows after the list", () => {

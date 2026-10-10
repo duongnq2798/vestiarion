@@ -157,6 +157,7 @@ describe("the docs navigation", () => {
       ["guides/shadow-mode", "Run alongside how you pay today"],
       ["guides/report", "Read your workspace report"],
       ["guides/first-payment", "Your first payment"],
+      ["guides/import-bills", "Import your bill list"],
       ["guides/pay-a-contractor", "Pay a contractor for delivered work"],
       ["guides/get-paid", "Get paid as a freelancer"],
       ["guides/telegram", "Get the agent's decisions in Telegram"],
@@ -194,7 +195,8 @@ describe("the docs navigation", () => {
     expect(neighbours("guides/go-live").next?.slug).toBe("guides/shadow-mode");
     expect(neighbours("guides/shadow-mode").next?.slug).toBe("guides/report");
     expect(neighbours("guides/report").next?.slug).toBe("guides/first-payment");
-    expect(neighbours("guides/first-payment").next?.slug).toBe("guides/pay-a-contractor");
+    expect(neighbours("guides/first-payment").next?.slug).toBe("guides/import-bills");
+    expect(neighbours("guides/import-bills").next?.slug).toBe("guides/pay-a-contractor");
     expect(neighbours("guides/pay-a-contractor").next?.slug).toBe("guides/get-paid");
     expect(neighbours("guides/get-paid").next?.slug).toBe("guides/telegram");
     expect(neighbours("guides/telegram").next?.slug).toBe("guides/email-invoices");

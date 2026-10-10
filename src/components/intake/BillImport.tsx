@@ -3,10 +3,12 @@
 import { ArrowLeft, Download, FileSearch, RotateCcw, Upload } from "lucide-react";
 import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { checkBillListAction, importBillListAction, type BillCheckResult, type BillImportResult } from "@/app/actions/bill-import";
+import { DocsLink } from "@/components/DocsLink";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Checkbox } from "@/components/ui/Checkbox";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Field } from "@/components/ui/Field";
 import { FileInput } from "@/components/ui/FileInput";
@@ -17,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
 import { toast } from "@/components/ui/Toaster";
 import { AGENT_EXPECTED_EVENT } from "@/lib/agent-activity";
-import { splitCurrency } from "@/lib/bill-import/amounts";
+import { currencyDigits, splitCurrency } from "@/lib/bill-import/amounts";
 import { billRows, columnLetter, columnNames, detectMapping, FIELD_LABELS, IMPORT_FIELDS, REQUIRED_FIELDS, sampleValues, type ImportField } from "@/lib/bill-import/columns";
 import { readDate } from "@/lib/bill-import/dates";
 import {
@@ -69,11 +71,15 @@ const STEPS: Array<[Step, string]> = [
   ["done", "Done"],
 ];
 
-/** A number with its thousands grouped, exactly as written: no float in between. */
-export function grouped(amount: string): string {
-  const [whole, fraction] = amount.split(".");
+/**
+ * An amount with its thousands grouped and, in a currency with cents, at least two decimals, exactly as read: no float
+ * in between. 1250 USDC shows as 1,250.00; 120000 JPY as 120,000.
+ */
+export function grouped(amount: string, currency: string): string {
+  const [whole, fraction = ""] = amount.split(".");
   const withCommas = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return fraction ? `${withCommas}.${fraction}` : withCommas;
+  const decimals = currencyDigits(currency) === 0 ? fraction : fraction.padEnd(2, "0");
+  return decimals ? `${withCommas}.${decimals}` : withCommas;
 }
 
 /** Saves text as a file in the browser. */
@@ -204,6 +210,36 @@ export function ColumnsStep({
     else mapping[field] = Number(value);
     set({ mapping });
   };
+  // The fields the list has, and the ones a row needs, are shown; the rest wait folded, each one choice away.
+  const shownFields = IMPORT_FIELDS.filter((field) => REQUIRED_FIELDS.includes(field) || settings.mapping[field] !== undefined);
+  const foldedFields = IMPORT_FIELDS.filter((field) => !shownFields.includes(field));
+  const fieldControl = (field: ImportField) => {
+    const column = settings.mapping[field];
+    const samples = column === undefined ? [] : sampleValues(list.table, settings.hasHeader, column);
+    return (
+      <Field
+        key={field}
+        id={`bill-column-${field}`}
+        label={FIELD_LABELS[field]}
+        optional={!REQUIRED_FIELDS.includes(field)}
+        description={column === undefined ? "Not in the list." : samples.length > 0 ? `Reads: ${samples.join(" · ")}` : "This column is empty."}
+      >
+        <Select value={column === undefined ? NONE : String(column)} onValueChange={(value) => choose(field, value)}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE}>Not in the list</SelectItem>
+            {names.map((name, index) => (
+              <SelectItem key={index} value={String(index)}>
+                {columnLetter(index)} · {name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+    );
+  };
   const dateSample = questions.dateOrder.ask ? twoWayDate(list, settings) : null;
   const amountSample = questions.decimalMark.ask ? twoWayAmount(list, settings) : null;
 
@@ -234,35 +270,12 @@ export function ColumnsStep({
         <p className="text-sm font-medium text-ink">Which column is which</p>
         <p className="mt-1 text-xs text-ink-3">Check each match, and change any that is wrong. Columns not chosen here are left out.</p>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        {IMPORT_FIELDS.map((field) => {
-          const column = settings.mapping[field];
-          const samples = column === undefined ? [] : sampleValues(list.table, settings.hasHeader, column);
-          return (
-            <Field
-              key={field}
-              id={`bill-column-${field}`}
-              label={FIELD_LABELS[field]}
-              optional={!REQUIRED_FIELDS.includes(field)}
-              description={column === undefined ? "Not in the list." : samples.length > 0 ? `Reads: ${samples.join(" · ")}` : "This column is empty."}
-            >
-              <Select value={column === undefined ? NONE : String(column)} onValueChange={(value) => choose(field, value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE}>Not in the list</SelectItem>
-                  {names.map((name, index) => (
-                    <SelectItem key={index} value={String(index)}>
-                      {columnLetter(index)} · {name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          );
-        })}
-      </div>
+      <div className="grid gap-4 sm:grid-cols-2">{shownFields.map(fieldControl)}</div>
+      {foldedFields.length > 0 && (
+        <Disclosure summary={`Not in the list: ${foldedFields.map((field) => FIELD_LABELS[field]).join(", ")}`}>
+          <div className="grid gap-4 pt-1 sm:grid-cols-2">{foldedFields.map(fieldControl)}</div>
+        </Disclosure>
+      )}
 
       {questions.direction && (
         <RadioGroup
@@ -358,10 +371,10 @@ const FATE: Record<ShownFate["status"], { label: string; tone: "agent" | "proof"
 /** Every row with its fate: what was read, and what happens to it, or why not. */
 export function FateTable({ fates, label }: { fates: readonly ShownFate[]; label: string }) {
   return (
-    <Table label={label} containerClassName="max-h-96 overflow-auto rounded-xl border border-line" className="min-w-[46rem] text-xs">
+    <Table label={label} containerClassName="max-h-96 overflow-auto rounded-xl border border-line" className="min-w-[36rem] text-xs">
       <TableHeader className="sticky top-0 z-10 bg-ground">
         <TableRow>
-          {["Row", "Counterparty", "Amount", "Due", "Reference", "Result"].map((heading) => (
+          {["Row", "Bill", "Amount", "Result"].map((heading) => (
             <TableHead key={heading} className="px-3 py-2">
               {heading}
             </TableHead>
@@ -371,15 +384,16 @@ export function FateTable({ fates, label }: { fates: readonly ShownFate[]; label
       <TableBody>
         {fates.map((fate) => (
           <TableRow key={fate.line}>
-            <TableCell className="px-3 py-2 font-mono text-ink-3">{fate.line}</TableCell>
-            <TableCell className="max-w-44 truncate px-3 py-2 font-medium">{fate.counterparty || "—"}</TableCell>
-            <TableCell className="whitespace-nowrap px-3 py-2 font-mono">
-              {fate.amount && fate.currency ? `${grouped(fate.amount)} ${fate.currency}` : "—"}
-              {fate.usdc && <span className="block text-ink-3">{`${grouped(fate.usdc)} USDC at the day's rate`}</span>}
+            <TableCell className="px-3 py-2 align-top font-mono text-ink-3">{fate.line}</TableCell>
+            <TableCell className="max-w-48 px-3 py-2 align-top">
+              <span className="block truncate font-medium">{fate.counterparty || "—"}</span>
+              <span className="block truncate text-ink-3">{[fate.reference, fate.dueDate ? `due ${fate.dueDate}` : null].filter(Boolean).join(" · ") || "—"}</span>
             </TableCell>
-            <TableCell className="whitespace-nowrap px-3 py-2 font-mono">{fate.dueDate ?? "—"}</TableCell>
-            <TableCell className="max-w-32 truncate px-3 py-2 font-mono">{fate.reference ?? "—"}</TableCell>
-            <TableCell className="min-w-56 px-3 py-2">
+            <TableCell className="px-3 py-2 align-top">
+              <span className="block whitespace-nowrap font-mono">{fate.amount && fate.currency ? `${grouped(fate.amount, fate.currency)} ${fate.currency}` : "—"}</span>
+              {fate.usdc && <span className="block text-ink-3">{`${grouped(fate.usdc, "USDC")} USDC at the day's rate`}</span>}
+            </TableCell>
+            <TableCell className="min-w-48 px-3 py-2 align-top">
               <Badge tone={FATE[fate.status].tone} size="sm" dot>
                 {FATE[fate.status].label}
               </Badge>
@@ -549,7 +563,10 @@ export default function BillImport({
 
   return (
     <div className="space-y-4">
-      <StepTrail step={step} />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <StepTrail step={step} />
+        <DocsLink href="/docs/guides/import-bills" topic="importing a bill list" />
+      </div>
       {step === "list" && <ListStep onList={read} error={error} />}
       {step === "columns" && list && settings && (
         <ColumnsStep

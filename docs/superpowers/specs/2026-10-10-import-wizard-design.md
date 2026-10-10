@@ -59,7 +59,8 @@ anything is written, and adds the rows through the same command as an invoice ty
   - discount deadline: discount_deadline, Discount deadline, Discount until, Discount by.
 - A column is given to at most one field, first come in the order above.
 - The person sees every field with the column chosen for it and three sample values, and may change each one or set
-  it to **Not in the list**. Nothing is checked or written before they press **Check the rows**.
+  it to **Not in the list**. The fields a row needs, and those the list has, are shown; the others are folded under
+  "Not in the list: …", one click away. Nothing is checked or written before they press **Check N rows**.
 - Counterparty, amount and due date are needed; the button says which is missing.
 - Any other column is ignored, so the error column the import adds (B13) never stops a list coming back.
 - Cost if wrong: a column matched to the wrong field shows its sample values beside the field's name, and the person
@@ -144,9 +145,9 @@ anything is written, and adds the rows through the same command as an invoice ty
   same due day, the same amount, and the same reference:
   - the amount is the bill's own: its `original_amount` and `original_currency` for a bill converted in shadow mode
     (its USDC figure changes with the day's rate), else `amount` and `currency`, compared as exact decimals;
-  - the reference is the row's invoice number, found as a whole word in the invoice's memo or equal to its purchase
-    order; else the row's purchase order, equal to the invoice's; else none, matching an invoice with no purchase
-    order.
+  - the reference matches when the row's invoice number is a whole word of the invoice's memo, or equals its
+    purchase order; or when the row's purchase order equals the invoice's; a row with neither matches an invoice with
+    no purchase order.
 - A row is a duplicate of an earlier row of the same list under the same rule ("Same as row 4 of this list.").
 - A duplicate is never added. The preview names the invoice it matches, by its id, so importing the same list again
   adds nothing, and the rows already imported keep their ids.
@@ -158,8 +159,8 @@ anything is written, and adds the rows through the same command as an invoice ty
   never trusted), finds the counterparties and the invoices that could be duplicates, reads the day's rates the rows
   need, and answers each row's fate: **Add**, **Already in Vestiarion** (with what it matches) or **Can't add** (with
   why). Nothing is written.
-- The panel shows the three counts, then every row with its counterparty, amount (and its USDC figure for a converted
-  bill), due date, reference and fate.
+- The panel shows the three counts, then every row: its number, the counterparty with the reference and due date,
+  the amount (and its USDC figure for a converted bill), and its fate with the reason.
 - **Add N bills** imports. **Change columns** goes back with the answers kept.
 - Cost if wrong: one more round trip before an import.
 
@@ -214,5 +215,15 @@ anything is written, and adds the rows through the same command as an invoice ty
 ## Plan of PRs
 
 One PR, `feat/import-wizard`: the pure reading (table, columns, dates, amounts, rows), the command and the server
-actions, the panel, the guide "Import a bill list", and the README, ARCHITECTURE, first-payment, shadow-mode, try-it,
+actions, the panel, the guide "Import your bill list", and the README, ARCHITECTURE, first-payment, shadow-mode,
 self-hosting and changelog updates.
+
+## Verification
+
+- Pure reading and fates: `tests/bill-import-{table,columns,dates,amounts,rows}.test.ts`, with the 100-row list
+  `tests/fixtures/bill-import/bills-100.csv` (84 to add, 3 already there, 13 seeded problems).
+- The check and the import against a workspace held in memory: `tests/bill-import-action.test.ts` (the check writes
+  nothing; the list imported twice adds its rows once; each row keeps the invoice it became).
+- The panel: `tests/bill-import-ui.test.tsx`, and in the browser on `/design`, whose panel answers its check and
+  import from `src/lib/bill-import/sample.ts`: paste, upload, columns, the date question, check, add, the failed rows'
+  CSV, and the same list again adding nothing.

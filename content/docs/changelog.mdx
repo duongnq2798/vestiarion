@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-10: An imported bill is a create_invoice entry
+
+- A bill list imported on AP / AR adds each row as a **`create_invoice`** entry, as an invoice typed into the form, sent to webhook endpoints as `ledger.appended`. Such an entry carries `via: "import"`, `importFile` (the SHA-256 of the list's text as it was sent) and `importRow` (the row's number in the list, as the spreadsheet shows it), and `invoiceNumber` when the row has one. A bill in the business's own currency, in shadow mode, carries `bill` as one typed into the form does.
+- Imports no longer write **`import_invoice`** entries. Entries already written keep their action.
+- The invoice number starts the invoice's `memo`, for instance `Invoice KP-1042: Copy paper`, in `GET /api/v1/invoices` as everywhere. Nothing else in `/api/v1` changes.
+
 ## 2026-10-09: A payable to a payee with no address is held before anything is sent
 
 - Wherever payments are real, an agent decision (`ap_pay` or `ap_schedule`) about a payable whose counterparty has no payment address is held by a new guardrail rule, **`counterparty.no_address`**: `guardrailBlocked: true`, `execution.resultingStatus: "held"`, and `observed.addressMissing: true`. Before, the transfer was tried and failed, and the reasoning carried the provider's error. A sandbox's entries are unchanged.

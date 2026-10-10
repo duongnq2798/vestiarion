@@ -683,7 +683,8 @@ disagrees with every decision.
   (`src/lib/shadow-bills.ts`) reads the amount as the bill writes it (`src/lib/bill-amount.ts`) and gives its USDC to
   the cent, only in shadow mode; the invoice keeps the bill in `original_*` and its card shows it, linked to the source.
   Settings offers USDC first (`SHADOW_CURRENCIES`, 0085): a workspace in USDC converts nothing. VND is not offered,
-  since crypto is no means of payment in Vietnam.
+  since crypto is no means of payment in Vietnam. An imported bill list's rows in that currency take the same path,
+  with the shadow mode read once for the list (`shadowBill`'s `shadowOn`).
 - **Proof out.** `npm run traction-digest -- <org-slug> --since YYYY-MM-DD` (`src/lib/traction-digest.ts`) prints a
   workspace's shadow decisions since the day, each with its verdict, what it paid and the transaction on the payable's
   newest decision ("Paid later by a person" when that decision was not to pay), and the agreement rate, in ASCII with no blank line for `arc-canteen update-traction`.
@@ -867,7 +868,7 @@ workspace's mode for that action, never from a link, a key or a button. A
 **command** is one function per action — `approvePayable`, `rejectPayable`,
 `returnPayable`, `addPayableDetails`, `payMilestoneNow`, `closeMilestoneUnpaid`,
 `pauseWorkspaceAgent`, `resumeWorkspaceAgent`, `runWorkspaceCycle`,
-`addInvoice` — whose first statement is `gate(actor, "<command>")`:
+`addInvoice`, `importInvoices` — whose first statement is `gate(actor, "<command>")`:
 
 - the scope in force must be the actor's workspace, or it throws
   (`ActorScopeError`): a surface that entered one workspace cannot act for
@@ -899,9 +900,29 @@ refresh their pages through `consoleAnswer`
 (`src/app/actions/command-result.ts`); the Telegram bot's **Add** and every
 Slack command and click build theirs with `memberActor`. `tests/commands-gates.test.ts` holds every command to
 its gate. The console's Add milestone and Create link, and the write API's
-milestones and payee links, run `addMilestone` and `issuePayeeLink`; the
-invoice form, the CSV import and the write API's invoices move onto
-`addInvoice` next.
+milestones and payee links, run `addMilestone` and `issuePayeeLink`; a bill
+list's import runs `importInvoices` (`invoice.import`, the console only), which
+adds each row through `addInvoice`; the invoice form and the write API's
+invoices move onto `addInvoice` next.
+
+**A bill list is imported in its own format**
+(docs/superpowers/specs/2026-10-10-import-wizard-design.md). Pure, browser-safe
+modules under `src/lib/bill-import/` read it: `table.ts` (the delimiter, quotes
+and row numbers), `columns.ts` (each field's column, from the names businesses
+give it), `dates.ts` (day or month first decided from the whole list, or asked,
+never guessed), `amounts.ts` (the list's decimal mark, symbols, and decimals by
+currency, kept as exact decimal strings) and `rows.ts` (each row's fate: added,
+already in the workspace, or why not, and the failed rows as a CSV with the
+reason). The panel on AP / AR (`src/components/intake/BillImport.tsx`) asks the
+person to confirm the columns and answer what the list cannot say; the server
+(`checkBillListAction` and `importBillListAction`, `src/app/actions/bill-import.ts`)
+reads the list's text again with `checkBillList` (`src/lib/bill-import/check.ts`),
+which reads the counterparties, the invoices a row could repeat (same
+counterparty, due day, bill amount and invoice number or purchase order, from
+columns invoices already have), shadow mode and each day's rate once. A bill in
+the business's own currency goes through `shadowBill`. Each added row's
+`create_invoice` entry carries `via: "import"`, `importFile` (the list's SHA-256)
+and `importRow`; the invoice number starts the memo. The list itself is not kept.
 
 ## Notifications
 
