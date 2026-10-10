@@ -366,7 +366,8 @@ function verdictIn(facts: Facts, column: Column): ReplayVerdict {
     let answer: StageAnswer;
     if (FIGURE_STAGES.has(stage)) answer = figureAnswer(stage, facts, column);
     else if (index < recorded) answer = "passes";
-    else if (index === recorded) answer = stage === CONTRACT ? contractAnswer(stage, facts, column.figures) : "fires";
+    // The recorded rule fired; a contract refusal is read again, since it can rest on the spending limit's figures.
+    else if (index === recorded) answer = stage === CONTRACT && facts.contract ? contractAnswer(stage, facts, column.figures) : "fires";
     else answer = settleFromFacts(stage, facts, column.figures);
     if (answer === "fires") return { kind: "stopped", rule: stage };
     if (answer !== "passes") return { kind: "cant_tell", because: answer.cantTell };

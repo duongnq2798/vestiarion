@@ -3,9 +3,7 @@
 import "server-only";
 
 import { authorize } from "@/lib/auth/authorize";
-import type { Permission } from "@/lib/auth/roles";
 import { inOrg } from "@/lib/dal/scope";
-import type { RuleKind } from "@/lib/policy-replay";
 import { RuleReplayError, ruleReplay, trialFromForm, type RuleReplayView } from "@/lib/policy-replay-read";
 
 /**
@@ -17,18 +15,19 @@ import { RuleReplayError, ruleReplay, trialFromForm, type RuleReplayView } from 
 
 export type TryRuleResult = { ok: true; message: string; view: RuleReplayView } | { ok: false; message: string };
 
-const PERMISSION: Record<RuleKind, Permission> = {
-  counterparty_limit: "records.write",
-  two_approvals: "approval.policy",
-  spending_limit: "agent.budget",
-};
-
 export async function tryRuleAction(formData: FormData): Promise<TryRuleResult> {
   const trial = trialFromForm(formData);
   if (!trial) return { ok: false, message: "Choose a setting and a window of 30 or 90 days." };
-  const auth = await authorize(formData.get("orgSlug"), PERMISSION[trial.rule]);
+  // The permission that changes the setting: a counterparty's limit, two approvals, or the agent's spending limit.
+  const slug = formData.get("orgSlug");
+  const auth =
+    trial.rule === "counterparty_limit"
+      ? await authorize(slug, "records.write")
+      : trial.rule === "two_approvals"
+        ? await authorize(slug, "approval.policy")
+        : await authorize(slug, "agent.budget");
   if (!auth.ok) return { ok: false, message: auth.message };
-  return inOrg(auth, async (): Promise<TryRuleResult> => {
+  return inOrg(auth, async () => {
     try {
       return { ok: true, message: "", view: await ruleReplay(trial) };
     } catch (error) {

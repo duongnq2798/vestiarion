@@ -354,6 +354,12 @@ describe("the spending-limit contract on Arc (P2)", () => {
     expect(other.decisions[0].after).toEqual({ kind: "cant_tell", because: "contract_unsettled" });
   });
 
+  it("keeps a contract refusal whose check was not recorded, as it fired", () => {
+    const refused = bill({ amount: 80, rule: "workspace.onchain_limit", execution: live });
+    const result = run([refused], figures(), withCandidate(figures(), { kind: "spending_limit", dailyUsdc: 1000, weeklyUsdc: null }));
+    expect(result.decisions[0].after).toEqual({ kind: "stopped", rule: "workspace.onchain_limit" });
+  });
+
   it("keeps a payment the contract cannot carry held, whatever the figures", () => {
     const route = bill({ amount: 80, rule: "workspace.onchain_limit_route", execution: live, detail: { onChainLimit: { covered: false, uncoveredBecause: "another_chain", verdict: null } } });
     const result = run([route], figures(), withCandidate(figures(), { kind: "spending_limit", dailyUsdc: 1000, weeklyUsdc: null }));
