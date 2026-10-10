@@ -112,6 +112,19 @@ describe("an invoice read from a document", () => {
     expect(readFileSync("src/components/intake/InvoiceDocumentIntake.tsx", "utf8")).toContain("counterpartyId: draft.counterpartyId,");
   });
 
+  it("names a vendor that matches no counterparty, and links to adding one, with Add counterparty open", () => {
+    expect(markup).not.toContain("is not one of your counterparties yet");
+    const unknown = renderToStaticMarkup(
+      <DocumentDraft result={{ ...RESULT, draft: { ...RESULT.draft!, vendorName: "Quill Studio", counterpartyId: null } }} orgSlug="acme" counterparties={COUNTERPARTIES} />
+    );
+    expect(unknown).toContain("Quill Studio is not one of your counterparties yet. Add it, then read the invoice again.");
+    expect(unknown).toMatch(/<a[^>]*href="\/o\/acme\/counterparties\?add=1"[^>]*>Add a counterparty<\/a>/);
+    const unnamed = renderToStaticMarkup(
+      <DocumentDraft result={{ ...RESULT, draft: { ...RESULT.draft!, vendorName: null, counterpartyId: null } }} orgSlug="acme" counterparties={COUNTERPARTIES} />
+    );
+    expect(unnamed).toContain("This invoice matches none of your counterparties.");
+  });
+
   it("never ticks goods received from a document, and says why", () => {
     expect(markup).toContain("A document cannot say this; tick it only if you received them.");
     expect(markup).not.toContain('aria-checked="true"');

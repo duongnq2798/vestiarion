@@ -75,7 +75,8 @@ describe("DecisionCard", () => {
     };
     const markup = html(<DecisionCard decision={refused} orgSlug="acme" />);
     expect(markup).toContain("Blocked by code, not by the model");
-    expect(markup).toContain("payment_limit");
+    // A rule with no words yet is named plainly, its id only on hover.
+    expect(markup).toContain('title="payment_limit">A check in code<');
     expect(markup).toContain("Tried to");
     expect(markup).toContain("no transaction sent");
     expect(markup).toContain("line-through");
@@ -93,10 +94,19 @@ describe("DecisionCard", () => {
       auditSeq: 1806,
     };
     const markup = html(<DecisionCard decision={refused} orgSlug="acme" />);
-    expect(markup).toContain("counterparty.new_payee");
+    expect(markup).toContain('title="counterparty.new_payee">A first payment to a new address needs two people<');
     expect(markup).toContain(">Why<");
     expect(markup).toContain("the first payment to this address, and only one person stands behind it");
     expect(markup).not.toContain(">Allowed<");
+  });
+
+  it("names the rule in words, never its id alone (activation audit: no raw rule id on the card)", () => {
+    const refused: Decision = { ...base, action: "Pay", outcome: "refused", amount: 40, guardrail: { rule: "invoice.match_incomplete", attempted: 40, reason: "the three-way match is not complete" } };
+    const markup = html(<DecisionCard decision={refused} orgSlug="acme" />);
+    expect(markup).toContain("Its purchase order or goods receipt was missing");
+    const shown = markup.replace(/<[^>]+>/g, " ");
+    expect(shown).not.toContain("invoice.match_incomplete");
+    expect(markup).toContain('title="invoice.match_incomplete"');
   });
 
   it("marks missing evidence in the held tone and keeps its value", () => {

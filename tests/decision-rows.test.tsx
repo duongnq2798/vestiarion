@@ -161,8 +161,8 @@ describe("the Contractors page", () => {
 describe("the Counterparties page", () => {
   const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "counterparties", "page.tsx"), "utf8");
 
-  it("folds Add counterparty, open only for a workspace with none yet", () => {
-    expect(page).toMatch(/<IntakeFold label="Add counterparty"[^>]*defaultOpen=\{counterparties\.length === 0\}>/);
+  it("folds Add counterparty, open only for a workspace with none yet, or when a link asks for it", () => {
+    expect(page).toMatch(/<IntakeFold label="Add counterparty"[^>]*defaultOpen=\{counterparties\.length === 0 \|\| adding\}>/);
   });
 
   it("lists each counterparty as a row with what it needs, the ones that need someone first", () => {

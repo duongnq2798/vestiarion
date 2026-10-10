@@ -258,6 +258,8 @@ describe("verdictFacts", () => {
     expect(facts.shadow).toEqual({ startedAt: "2026-10-07T00:00:00Z", currency: "VND" });
     expect(facts.given.get(41)).toEqual({ verdict: "agree", reason: null });
     expect(facts.canGive).toBe(true);
+    // No Circle account of its own: its payments, a verdict's included, are simulated, and Agree and pay says so.
+    expect(facts.simulated).toBe(true);
     const asked = fake.requests.find((r) => r.path === "/rest/v1/decision_verdicts" && r.method === "GET");
     expect(asked?.params.get("entry_seq")).toBe("in.(41)");
   });

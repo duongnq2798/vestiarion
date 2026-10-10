@@ -21,13 +21,18 @@
  * business pays today: its suppliers, its real bills, and a person's first
  * verdict on the agent's decision. That checklist hides once a verdict is given,
  * and the console's Shadow mode section says how often people agreed.
+ *
+ * A sandbox on Arc testnet with no wallet simulates its payments, the payee's address included, so it needs no wallet
+ * to decide a bill. Its checklist starts with what leads to the agent's first decision on a real bill: a supplier, a
+ * bill and the decision (in shadow mode, the first verdict). The wallet, its USDC and going live follow, under "To pay
+ * on Arc", with the first payment. A live workspace, or one with a wallet, keeps the order above.
  */
 
 import { addressUnconfirmed } from "./counterparty-address";
 import { networkProfile, type Network } from "./network";
 import type { WalletHost } from "./config";
 
-export type GettingStartedStepId = "wallet" | "fund" | "live" | "payee" | "payable" | "payment" | "suppliers" | "bills" | "verdict";
+export type GettingStartedStepId = "wallet" | "fund" | "live" | "payee" | "payable" | "decision" | "payment" | "suppliers" | "bills" | "verdict";
 
 export interface GettingStartedInput {
   mode: "sandbox" | "live";
@@ -42,6 +47,10 @@ export interface GettingStartedInput {
   }>;
   /** Open payable invoices of counterparties a person added (`ownPayableCount`). */
   payableCount: number;
+  /** Every bill of a counterparty a person added, paid or not (`ownBillCount`): a sandbox's simulated payment closes one. */
+  billCount?: number;
+  /** Those bills the agent has decided on (`ownDecidedCount`). */
+  decidedCount?: number;
   /** Paid invoices and milestones with an on-chain transaction (`stats().onchainTransfers`). */
   onchainPayments: number;
   /** Payables waiting for a person's decision, as the console's Needs you tile counts them. */
@@ -68,6 +77,8 @@ export interface GettingStartedStep {
   done: boolean;
   /** Only an owner can take this step; an admin sees it but not its controls. */
   ownerOnly: boolean;
+  /** The heading the step is listed under, when the checklist groups its steps: "To pay on Arc" in a sandbox with no wallet. */
+  section?: string;
 }
 
 export interface GettingStarted {
@@ -83,6 +94,8 @@ export interface GettingStarted {
 }
 
 const GO_LIVE = "/settings#go-live-title";
+/** Where a sandbox with no wallet lists the steps to real payments, after its first decision. */
+export const PAY_ON_ARC = "To pay on Arc";
 const SETTINGS_STEPS: ReadonlySet<GettingStartedStepId> = new Set(["wallet", "fund", "live"]);
 
 export function gettingStarted(input: GettingStartedInput): GettingStarted {
@@ -99,6 +112,10 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
   const unconfirmed = payable ? undefined : payees[0];
   const paid = input.onchainPayments > 0;
   const held = input.waitingCount > 0;
+  // Arc mainnet never simulates (mainnet go-live M5): only an Arc testnet sandbox decides a bill before its wallet.
+  const billFirst = !live && !hasWallet && input.network === "arc-testnet";
+  // There a supplier needs no address: a sandbox simulates the payee's (the orchestrator's `addressMissing`).
+  const suppliers = input.counterparties.filter((counterparty) => !counterparty.sample && counterparty.role !== "client");
   const profile = networkProfile(input.network);
   const { label } = profile;
   // Where real USDC is sent, the wallet keeps a little aside for its own gas (mainnet go-live M6).
@@ -145,7 +162,51 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
     },
   ];
 
-  if (input.shadow) return shadowChecklist(input.shadow, setup, { payable, unconfirmed, held, label });
+  const firstPayment: GettingStartedStep = {
+    id: "payment",
+    title: `First payment on ${label}`,
+    body: held
+      ? "The agent is holding a payable for a person: decide it on Approvals."
+      : "The agent pays the payable on its own, or holds it for you on Approvals. A settled payment links to the Arc explorer.",
+    path: held ? "/approvals" : "/invoices",
+    done: paid,
+    ownerOnly: false,
+  };
+
+  if (input.shadow) return shadowChecklist(input.shadow, setup, { payable, unconfirmed, held, label, billFirst, supplierAdded: suppliers.length > 0 });
+
+  if (billFirst) {
+    const steps: GettingStartedStep[] = [
+      {
+        id: "payee",
+        title: "Add a supplier",
+        body: "A vendor or contractor you pay, with the most the agent may pay it on one bill. Its Arc address can wait: a sandbox simulates the payment.",
+        path: "/counterparties",
+        done: suppliers.length > 0,
+        ownerOnly: false,
+      },
+      {
+        id: "payable",
+        title: "Add a bill",
+        body: "One of your bills from that supplier, in AP / AR. Tick Goods or services received once they have come. The agent decides on it within a minute.",
+        path: "/invoices",
+        done: (input.billCount ?? input.payableCount) > 0,
+        ownerOnly: false,
+      },
+      {
+        id: "decision",
+        title: "See the agent's decision",
+        body: "Its card in AP / AR says what the agent decided and why. A payment it makes in a sandbox is simulated.",
+        path: "/invoices",
+        done: (input.decidedCount ?? 0) > 0 || held,
+        ownerOnly: false,
+      },
+      ...[...setup, firstPayment].map((step) => ({ ...step, section: PAY_ON_ARC })),
+    ];
+    // The first-payment guide walks the first three steps; the Go live guide the rest.
+    const decided = steps.slice(0, 3).every((step) => step.done);
+    return { show: true, steps, next: steps.find((step) => !step.done)?.id ?? null, guide: decided ? "go-live" : "first-payment" };
+  }
 
   const steps: GettingStartedStep[] = [
     ...setup,
@@ -167,16 +228,7 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
       done: input.payableCount > 0,
       ownerOnly: false,
     },
-    {
-      id: "payment",
-      title: `First payment on ${label}`,
-      body: held
-        ? "The agent is holding a payable for a person: decide it on Approvals."
-        : "The agent pays the payable on its own, or holds it for you on Approvals. A settled payment links to the Arc explorer.",
-      path: held ? "/approvals" : "/invoices",
-      done: paid,
-      ownerOnly: false,
-    },
+    firstPayment,
   ];
 
   const next = steps.find((step) => !step.done)?.id ?? null;
@@ -188,23 +240,28 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
   };
 }
 
-/** The checklist in shadow mode: the workspace set up, then its suppliers, its real bills and a person's first verdict. */
+/**
+ * The checklist in shadow mode: the workspace set up, then its suppliers, its real bills and a person's first verdict.
+ * In a sandbox with no wallet (`billFirst`) the verdict comes first, and the setup follows under "To pay on Arc".
+ */
 function shadowChecklist(
   shadow: NonNullable<GettingStartedInput["shadow"]>,
   setup: GettingStartedStep[],
-  facts: { payable: unknown; unconfirmed: { name?: string } | undefined; held: boolean; label: string }
+  facts: { payable: unknown; unconfirmed: { name?: string } | undefined; held: boolean; label: string; billFirst: boolean; supplierAdded: boolean }
 ): GettingStarted {
   const inUsdc = shadow.currency === "USDC";
-  const steps: GettingStartedStep[] = [
-    ...setup,
+  const agreePays = facts.billFirst ? "Agree and pay pays it, simulated in this sandbox" : `Agree and pay pays it in USDC on ${facts.label}`;
+  const run: GettingStartedStep[] = [
     {
       id: "suppliers",
       title: "Add your suppliers",
-      body: facts.unconfirmed
+      body: facts.billFirst
+        ? "Each supplier you pay, in Counterparties, and whether it sends you purchase orders. Its Arc address can wait: a sandbox simulates the payment."
+        : facts.unconfirmed
         ? `Confirm the new address of ${facts.unconfirmed.name ?? "your supplier"} on its card: the agent holds every payment to an address that is not yet confirmed.`
         : `Each supplier you pay, in Counterparties. One with no address on ${facts.label} gets a mirror address in one click: Give it a mirror address, on its row. If it sends you no purchase orders, choose Change beside them, then Pay without purchase orders.`,
       path: "/counterparties",
-      done: Boolean(facts.payable),
+      done: facts.billFirst ? facts.supplierAdded : Boolean(facts.payable),
       ownerOnly: false,
     },
     {
@@ -221,13 +278,14 @@ function shadowChecklist(
       id: "verdict",
       title: "Give your first verdict",
       body: facts.held
-        ? `The agent decided on a bill, and it waits for you on Approvals. Agree and pay pays it in USDC on ${facts.label}; Disagree, with your reason, does not.`
-        : `The agent decides on each bill within a minute. Its card then asks Do you agree with the agent? Agree and pay pays it in USDC on ${facts.label}; Disagree, with your reason, does not.`,
+        ? `The agent decided on a bill, and it waits for you on Approvals. ${agreePays}; Disagree, with your reason, does not.`
+        : `The agent decides on each bill within a minute. Its card then asks Do you agree with the agent? ${agreePays}; Disagree, with your reason, does not.`,
       path: facts.held ? "/approvals" : "/invoices",
       done: shadow.verdictsGiven > 0,
       ownerOnly: false,
     },
   ];
+  const steps = facts.billFirst ? [...run, ...setup.map((step) => ({ ...step, section: PAY_ON_ARC }))] : [...setup, ...run];
   return {
     title: "Get started in shadow mode",
     show: steps.some((step) => !step.done),
@@ -263,4 +321,18 @@ export function ownPayableCount(
 export function ownBillCount(invoices: Array<{ counterparty_id: string; direction: string }>, counterparties: Array<{ id: string; sample?: boolean }>): number {
   const sample = new Set(counterparties.filter((counterparty) => counterparty.sample).map((counterparty) => counterparty.id));
   return invoices.filter((invoice) => invoice.direction === "payable" && !sample.has(invoice.counterparty_id)).length;
+}
+
+/**
+ * Those bills the agent has decided on: a payable leaves `pending` once a cycle pays, schedules, holds or flags it, or
+ * asks for what it lacks. "See the agent's decision" is done with the first.
+ */
+export function ownDecidedCount(
+  invoices: Array<{ counterparty_id: string; direction: string; status?: string }>,
+  counterparties: Array<{ id: string; sample?: boolean }>
+): number {
+  const sample = new Set(counterparties.filter((counterparty) => counterparty.sample).map((counterparty) => counterparty.id));
+  return invoices.filter(
+    (invoice) => invoice.direction === "payable" && (invoice.status ?? "pending") !== "pending" && !sample.has(invoice.counterparty_id)
+  ).length;
 }

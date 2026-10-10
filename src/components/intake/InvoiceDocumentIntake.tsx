@@ -1,9 +1,10 @@
 "use client";
 
-import { FileText, ScanText, X } from "lucide-react";
+import { FileText, ScanText, UserPlus, X } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useRef, useState } from "react";
 import { readInvoiceDocumentAction, type DocumentReadResult } from "@/app/actions/invoice-document";
-import InvoiceIntake, { type IntakeCounterparty } from "@/components/intake/InvoiceIntake";
+import InvoiceIntake, { ADD_COUNTERPARTY_PATH, type IntakeCounterparty } from "@/components/intake/InvoiceIntake";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Field } from "@/components/ui/Field";
@@ -12,6 +13,7 @@ import { FormMessage } from "@/components/ui/FormMessage";
 import { Textarea } from "@/components/ui/Input";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
+import { orgHref } from "@/lib/auth/org-paths";
 
 const INITIAL: DocumentReadResult = { ok: false, message: "" };
 
@@ -40,7 +42,8 @@ export function documentFileProblem(file: { size: number }): string | null {
  * An invoice read from a document, in the usual invoice form for a member to
  * check and add (invoice from a document D7). Nothing here is added until
  * **Add invoice**, which goes through the same action and checks as an
- * invoice typed in.
+ * invoice typed in. A vendor that matches no counterparty is named, with the
+ * way to add it: every invoice is against a counterparty.
  */
 export function DocumentDraft({
   result,
@@ -86,6 +89,17 @@ export function DocumentDraft({
           {result.modelNote && <p className="text-ink-2 italic">The model noted: {result.modelNote}</p>}
         </div>
       </Callout>
+      {!draft.counterpartyId && (
+        <Callout tone="held" icon={<UserPlus />}>
+          <p>
+            {draft.vendorName ? `${draft.vendorName} is not one of your counterparties yet.` : "This invoice matches none of your counterparties."} Add it, then read the
+            invoice again.
+          </p>
+          <Button asChild size="sm" variant="secondary" className="mt-2">
+            <Link href={orgHref(orgSlug, ADD_COUNTERPARTY_PATH)}>Add a counterparty</Link>
+          </Button>
+        </Callout>
+      )}
       <InvoiceIntake
         orgSlug={orgSlug}
         counterparties={counterparties}

@@ -26,6 +26,18 @@ describe("CreateWorkspaceForm", () => {
     expect(text(markup)).toContain("Creating a workspace moves no money.");
   });
 
+  it("offers shadow mode for an Arc testnet workspace, ticked only when the person chose it on the landing page", () => {
+    const unticked = renderToStaticMarkup(<CreateWorkspaceForm />);
+    expect(text(unticked)).toContain("Run alongside how you pay today (shadow mode)");
+    expect(text(unticked)).toContain("The agent decides on your real bills and pays nothing until you agree.");
+    expect(unticked).toMatch(/<button[^>]*role="checkbox"[^>]*aria-checked="false"/);
+    const ticked = renderToStaticMarkup(<CreateWorkspaceForm shadowChosen />);
+    expect(ticked).toMatch(/<button[^>]*role="checkbox"[^>]*aria-checked="true"/);
+    // Beside the network choice too, where the test workspace is chosen at first.
+    expect(text(renderToStaticMarkup(<CreateWorkspaceForm mainnetOffered shadowChosen />))).toContain("Run alongside how you pay today (shadow mode)");
+    expect(text(unticked)).not.toMatch(/VND|no real money/);
+  });
+
   it("offers no network otherwise, as before", () => {
     const markup = renderToStaticMarkup(<CreateWorkspaceForm />);
     expect(markup).not.toContain('role="radio"');

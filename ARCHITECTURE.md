@@ -68,6 +68,10 @@ testnet; no other count would hold it. `createWorkspace` then seeds two accounts
 an empty `Reserve (simulated)` — and appends the first ledger entry, `org_created`, signed with the
 new key; a failure at this stage is rolled back (accounts deleted, then the organization row) —
 unless its first ledger entry already committed, in which case the chain, and the workspace, stay.
+The form also offers shadow mode for an Arc testnet workspace (ticked from `/onboarding?shadow=1`, the landing's "Try it
+on your bills"): once the workspace exists, the action turns it on as Settings does, `authorize(slug, "approval.policy")`
+then `startShadowMode` in USDC with the creator as actor. A refusal leaves the workspace created and sends the console
+`?shadow=not-started`, where it says so until shadow mode is on.
 
 `0020` also adds a trigger, `memberships_keep_an_owner`, that fires before every membership update
 or delete: removing or demoting an organization's last `owner` raises rather than commits, checked
@@ -651,7 +655,7 @@ a business pays today: it keeps paying its bills itself, the agent decides on th
 disagrees with every decision.
 
 - **The switch** is one row in `shadow_modes` (migration 0084), with the business's currency. An owner turns it on or
-  off in Settings (`src/lib/shadow-mode.ts`), never on Arc mainnet and never while a cycle runs; each change is signed.
+  off in Settings (`src/lib/shadow-mode.ts`), or on when creating the workspace, through the same library, never on Arc mainnet and never while a cycle runs; each change is signed.
 - **The hold.** The AP stage reads it once, like the figure for two approvals. A `pay` that passes every guardrail is
   then held, not sent, with `execution.heldBecause: "shadow_verdict"` (`src/lib/agent/shadow-hold.ts`). It is no
   guardrail block, so the public count of code refusals is not inflated. A milestone release is held the same way. The
@@ -688,8 +692,12 @@ disagrees with every decision.
   workspace's shadow decisions since the day, each with its verdict, what it paid and the transaction on the payable's
   newest decision ("Paid later by a person" when that decision was not to pay), and the agreement rate, in ASCII with no blank line for `arc-canteen update-traction`.
 - **Getting started in shadow mode.** While shadow mode is on, the console's checklist (`gettingStarted`,
-  `src/lib/getting-started.ts`) keeps its three setup steps and then asks for suppliers, real bills (`ownBillCount`,
-  paid or not) and a first verdict, from rows the console already reads; it hides once a verdict is given.
+  `src/lib/getting-started.ts`) asks for suppliers, real bills (`ownBillCount`, paid or not) and a first verdict, from
+  rows the console already reads, beside its three setup steps: after them in a live workspace or one with a wallet,
+  before them, which are then listed under "To pay on Arc", in an Arc testnet sandbox with no wallet, since it simulates
+  its payments. Outside shadow mode such a sandbox likewise starts with a supplier, a bill and the agent's decision
+  (`ownDecidedCount`). It hides once every step is done. In shadow mode, Add counterparty asks whether a vendor or
+  contractor sends purchase orders, and its answer is stored as `purchase_order_required` with the row.
 - **Test USDC from Vestiarion's float** (`src/lib/test-usdc.ts`, rules in `src/lib/test-usdc-rules.ts`). A bill is
   paid at its real amount and the faucet gives 20 USDC every two hours, so the console offers an owner or admin the
   shortfall **Safe to spend today** shows, from one float wallet in the hosted entity (`SHADOW_FLOAT_WALLET_ID`, filled

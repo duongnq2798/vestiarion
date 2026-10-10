@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWithConfig } from "@/lib/context";
@@ -26,6 +28,13 @@ vi.mock("@/lib/platform/workspace", async (importOriginal) => ({
   createWorkspace: createWorkspaceMock,
 }));
 
+const { authorizeMock, startShadowModeMock } = vi.hoisted(() => ({ authorizeMock: vi.fn(), startShadowModeMock: vi.fn() }));
+vi.mock("@/lib/auth/authorize", () => ({ authorize: authorizeMock }));
+vi.mock("@/lib/dal/scope", () => ({ inOrg: (_access: unknown, fn: () => Promise<unknown>) => fn() }));
+vi.mock("@/lib/shadow-mode", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/shadow-mode")>()),
+  startShadowMode: startShadowModeMock,
+}));
 const { cookieValue, rpcMock } = vi.hoisted(() => ({ cookieValue: { current: undefined as string | undefined }, rpcMock: vi.fn() }));
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: (name: string) => (name === "vx_ft" && cookieValue.current !== undefined ? { name, value: cookieValue.current } : undefined) }),
@@ -36,6 +45,7 @@ vi.mock("@/lib/dal", async (importOriginal) => ({
 }));
 
 import { createWorkspaceAction } from "@/app/onboarding/actions";
+import { ShadowModeError } from "@/lib/shadow-mode";
 
 const env = { NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" };
 const on = configFromEnv({ ...env, MAINNET_ENABLED: "1", MAINNET_ALLOWLIST: "owner@acme.test" });
@@ -52,9 +62,14 @@ beforeEach(() => {
   getSessionUserMock.mockReset().mockResolvedValue({ id: "user-1", email: "owner@acme.test" });
   createWorkspaceMock.mockReset().mockResolvedValue({ orgId: "org-1", slug: "acme" });
   redirectMock.mockClear();
+  authorizeMock.mockReset().mockResolvedValue({ ok: true, user: { id: "user-1", email: "owner@acme.test" }, membership: { orgId: "org-1", role: "owner" } });
+  startShadowModeMock.mockReset().mockResolvedValue({ currency: "USDC", startedAt: "2026-10-10T00:00:00Z", startedBy: "user-1" });
   cookieValue.current = undefined;
   rpcMock.mockReset().mockResolvedValue({ data: true, error: null });
 });
+
+/** Where the action sent the person: the path of its redirect. */
+const redirectedTo = () => redirectMock.mock.calls.at(-1)?.[0];
 
 describe("createWorkspaceAction (mainnet go-live M2)", () => {
   it("creates on Arc mainnet for a person on the allowlist while it is on", async () => {
@@ -83,6 +98,52 @@ describe("createWorkspaceAction (mainnet go-live M2)", () => {
       await expect(runWithConfig(on, () => createWorkspaceAction(INITIAL, form(fields)))).rejects.toThrow("NEXT_REDIRECT");
       expect(createWorkspaceMock).toHaveBeenCalledWith({ userId: "user-1", name: "Acme", network: "arc-testnet" });
     }
+  });
+});
+
+describe("createWorkspaceAction with shadow mode ticked (shadow mode S1)", () => {
+  it("turns it on as Settings does: an owner's, in USDC, with the person who created the workspace as the actor", async () => {
+    await expect(runWithConfig(off, () => createWorkspaceAction(INITIAL, form({ name: "Acme", shadow: "on" })))).rejects.toThrow("NEXT_REDIRECT");
+    expect(createWorkspaceMock).toHaveBeenCalledWith({ userId: "user-1", name: "Acme", network: "arc-testnet" });
+    expect(authorizeMock).toHaveBeenCalledWith("acme", "approval.policy");
+    expect(startShadowModeMock).toHaveBeenCalledWith({ actorId: "user-1", currency: "USDC" });
+    expect(redirectedTo()).toBe("/o/acme/console");
+  });
+
+  it("leaves it off when not ticked", async () => {
+    await expect(runWithConfig(off, () => createWorkspaceAction(INITIAL, form({ name: "Acme" })))).rejects.toThrow("NEXT_REDIRECT");
+    expect(startShadowModeMock).not.toHaveBeenCalled();
+    expect(redirectedTo()).toBe("/o/acme/console");
+  });
+
+  it("never turns it on for an Arc mainnet workspace, whatever the form sent", async () => {
+    await expect(runWithConfig(on, () => createWorkspaceAction(INITIAL, form({ name: "Acme", network: "arc-mainnet", shadow: "on" })))).rejects.toThrow("NEXT_REDIRECT");
+    expect(createWorkspaceMock).toHaveBeenCalledWith({ userId: "user-1", name: "Acme", network: "arc-mainnet" });
+    expect(startShadowModeMock).not.toHaveBeenCalled();
+    expect(redirectedTo()).toBe("/o/acme/console");
+  });
+
+  it("still opens the workspace when it cannot turn on, and the console says so", async () => {
+    startShadowModeMock.mockRejectedValue(new ShadowModeError("cycle_running"));
+    await expect(runWithConfig(off, () => createWorkspaceAction(INITIAL, form({ name: "Acme", shadow: "on" })))).rejects.toThrow("NEXT_REDIRECT");
+    expect(createWorkspaceMock).toHaveBeenCalledTimes(1);
+    expect(redirectedTo()).toBe("/o/acme/console?shadow=not-started");
+
+    startShadowModeMock.mockReset();
+    authorizeMock.mockResolvedValue({ ok: false, message: "You are not a member of this workspace." });
+    await expect(runWithConfig(off, () => createWorkspaceAction(INITIAL, form({ name: "Acme", shadow: "on" })))).rejects.toThrow("NEXT_REDIRECT");
+    expect(startShadowModeMock).not.toHaveBeenCalled();
+    expect(redirectedTo()).toBe("/o/acme/console?shadow=not-started");
+  });
+});
+
+describe("the console, after shadow mode did not turn on at creation", () => {
+  const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "console", "page.tsx"), "utf8");
+
+  it("says so, and links to Settings, until shadow mode is on", () => {
+    expect(page).toContain("{query.shadow === SHADOW_NOT_STARTED && !shadow && (");
+    expect(page).toContain("Your workspace is ready, but shadow mode did not turn on.");
+    expect(page).toContain('orgHref(slug, "/settings#shadow-mode-title")');
   });
 });
 

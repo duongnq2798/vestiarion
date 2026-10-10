@@ -39,9 +39,17 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: sectionTitle("counterparties") };
 
-export default async function CounterpartiesPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function CounterpartiesPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ add?: string | string[] }>;
+}) {
   const { slug } = await params;
   const access = await requireMembership(slug);
+  // `?add`, from an invoice with no counterparty to choose (AP / AR, From a document), opens Add counterparty.
+  const adding = (await searchParams).add !== undefined;
   return inOrg(access, async () => {
     const network = workspaceNetwork().id;
     // A live match names the entity it matched, which Not this person dismisses (dismiss screening match R6).
@@ -52,7 +60,8 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
       listLedgerEntries(1),
       viewerCan(slug, "records.write"),
       viewerCan(slug, "approval.decide"),
-      // In shadow mode a payee with no Arc address can be given a mirror address (shadow mode S7). Best effort.
+      // In shadow mode a payee with no Arc address can be given a mirror address (shadow mode S7), and a new supplier is
+      // asked whether it sends purchase orders. Best effort.
       readShadowMode(db()).catch((error: unknown) => {
         console.error("counterparties: shadow mode not read", error instanceof Error ? error.message : error);
         return null;
@@ -78,9 +87,10 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
         <AutoRefresh intervalMs={refreshMs} />
 
         {canWrite ? (
-          // Folded until it is needed; open on a workspace with no counterparty yet, where adding one is the next step.
-          <IntakeFold label="Add counterparty" meta="human-entered · screened on submission" defaultOpen={counterparties.length === 0}>
-            <CounterpartyIntake orgSlug={slug} framed={false} network={network} />
+          // Folded until it is needed; open on a workspace with no counterparty yet, where adding one is the next step,
+          // or when a link asks for it.
+          <IntakeFold label="Add counterparty" meta="human-entered · screened on submission" defaultOpen={counterparties.length === 0 || adding}>
+            <CounterpartyIntake orgSlug={slug} framed={false} network={network} askPurchaseOrders={shadow !== null} />
           </IntakeFold>
         ) : (
           <Callout className="mb-8">Only an owner or admin of this workspace can add counterparties.</Callout>

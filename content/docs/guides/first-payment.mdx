@@ -1,4 +1,4 @@
-This page takes a workspace from an empty book to its first payment on Arc testnet: add a counterparty and an invoice, let the agent decide, and follow the payment to the explorer and the signed ledger. Start with a workspace that is live and has testnet USDC in its operating wallet. [Go live](/docs/guides/go-live) sets that up. Until the first payment settles, the console's **Get started** checklist follows these steps too, and links the next one.
+This page takes a workspace from an empty book to its first payment on Arc testnet: add a counterparty and an invoice, let the agent decide, and follow the payment to the explorer and the signed ledger. For a payment on Arc testnet, start with a workspace that is live and has testnet USDC in its operating wallet. [Go live](/docs/guides/go-live) sets that up. A sandbox with no wallet can take the first steps now: it simulates its payments, the payee's address included, so the agent decides on your bill straight away. Until the first payment settles, the console's **Get started** checklist follows these steps too, and links the next one. In a sandbox with no wallet it starts with **Add a supplier**, **Add a bill** and **See the agent's decision**, and lists the wallet after them, under **To pay on Arc**.
 
 Who does what:
 
@@ -28,7 +28,7 @@ A counterparty is a business or person the workspace pays or invoices. Open **Co
 - **Payment limit (USDC)**: the most the agent may pay this counterparty in one payment. Screening can lower it: the card shows the limit you set and the current one.
 - **Chain**: **Arc testnet** for a payee paid on Arc. For a payee who wants USDC on another chain, choose **Base Sepolia**, **Arbitrum Sepolia** or **Ethereum Sepolia**: see [Pay a payee on another chain](#pay-a-payee-on-another-chain).
 - **Payment address**: the counterparty's address on the chain you chose, `0x` followed by 40 hexadecimal characters. An address that mixes capital and small letters must match its checksum, or the form says "This address's capital letters do not match its checksum, so a character is likely wrong." A payment to a mistyped address reaches no one, so copy it again from where it came. An address in one case alone is taken as written.
-- **Jurisdiction**: an ISO code or a country name.
+- **Jurisdiction**, optional: an ISO code or a country name.
 - **Billing email**, optional: a payee is told there each time it is paid (see [Tell the payee it was paid](#tell-the-payee-it-was-paid)), and a client gets the reminders you turn on (see [Let the agent remind the client](#let-the-agent-remind-the-client)).
 
 <Screenshot
@@ -56,6 +56,8 @@ Owners and admins open the counterparty's row and change its limit with **Edit l
 ### Pay a counterparty without purchase orders
 
 The agent pays an invoice on its own only when its three-way match is complete: the goods or services received and a purchase order on file. Some suppliers never issue one, such as a utility or a subscription. A vendor's or contractor's row on **Counterparties** shows **Purchase orders**: "Needed before the agent pays", as for every counterparty at first, or "Not needed · goods received still is". Owners and admins choose **Change** beside it, then **Pay without purchase orders** or **Require purchase orders**.
+
+In shadow mode, **Add counterparty** asks about a vendor or contractor: **Does this supplier send you purchase orders?** **No** adds it paid without purchase orders, and **Yes** as needing them. See [Shadow mode](/docs/guides/shadow-mode).
 
 - **Paid without purchase orders.** The agent pays the counterparty's invoices with no purchase order on file. The goods or services still have to be marked received, and every other check stays. Its invoices that waited only for a purchase order are decided again within a minute.
 - **Needing them again.** The agent asks for a purchase order before it pays or schedules any of its invoices. A payment already scheduled without one waits for the details on its day.
@@ -96,7 +98,7 @@ Anyone who may not add records sees "Only an owner or admin of this workspace ca
 Open **AP / AR** and open **New invoice**. Choose **Enter one invoice**, **From a document** to have the model read it from a PDF or an email (see [Read an invoice from a document](#read-an-invoice-from-a-document)), or **Import CSV** to add several from a file.
 
 - **Direction**: **Payable**, for an invoice you pay. Choosing a counterparty sets it: **Receivable** for a client, which pays you, and **Payable** for anyone else; the line under it says which it is. A payable to a client is never paid by the agent: it waits for a person, who pays it in **Approvals** if it is a refund.
-- **Counterparty**: the one you just added.
+- **Counterparty**: the one you just added. With none yet, the form says "Add a counterparty first — every invoice is against one." and links to **Add counterparty**.
 - **Amount**: within the counterparty's payment limit. The agent does not pay an invoice over the limit; it holds it for you.
 - **Currency**: USDC, or EURC for a vendor that bills in euros. See [Invoices in EURC](#invoices-in-eurc).
 - **Due date**.
@@ -128,7 +130,7 @@ What the model read is checked before you see it:
 - An amount written with a decimal comma, as much of Europe and Vietnam write money, is read as such: 3,50 is 3.50 and 1.200,00 is 1200.00. A comma before three digits is a thousands separator, so 1,250 is 1250.
 - A due date read from a date written in numbers whose day and month could swap gets a note naming both days, the one taken first: "The due date, 3 November 2026, was read from 03/11/2026, which can also mean 11 March 2026. Check it against the invoice."
 - When you type over the amount that was read, the form names what was read: "The invoice was read as 12.50: check this amount before you add it."
-- The counterparty is matched by its address on file, or else by its name. When none matches, the form says so: add it on **Counterparties** first, or choose one.
+- The counterparty is matched by its address on file, or else by its name. When none matches, the form says so, naming the vendor it read, such as "Northstar Studio is not one of your counterparties yet.", and **Add a counterparty** opens **Add counterparty**. Add it, then read the invoice again, or choose another counterparty.
 - When the invoice asks to be paid to another address than the one on file, the form warns you. The agent pays the address on file; a document never changes it.
 - **Goods or services received** is never ticked for you: "A document cannot say this; tick it only if you received them."
 - An early-payment discount whose percent the document states is filled in even when its deadline cannot be used, and the form then asks you for the deadline: "The discount deadline was left blank: the invoice does not give one that could be read. Enter the last day the discount applies, or clear the discount."
@@ -140,14 +142,14 @@ A PDF is read from its text, and an email (an `.eml` file) from its own text and
 A vendor that bills in euros can be paid in EURC, Circle's euro stablecoin, on Arc testnet. Choose **EURC** under **Currency** on the invoice form, or put `EURC` in a CSV row's `currency` column. As the form says, "A EURC payable is paid in EURC, and checked against the payment limit at its USDC value."
 
 - **The rate.** Payment limits stay in USDC. Before it decides a EURC payable, the agent asks Circle's Stablecoin Service what the amount is worth in USDC on Arc testnet, and checks that value against the limit. The decision's ledger entry records the rate and when it was quoted. It is the testnet market's rate, not a reference exchange rate.
-- **No rate, no payment.** When the quote does not answer, the payable is held for a person, and its card shows **USDC value** "no rate". If the model had decided to pay it anyway, the card's "Blocked by code, not by the model" band names the rule, `fx.rate_unavailable`. You can still approve it on **Approvals**.
+- **No rate, no payment.** When the quote does not answer, the payable is held for a person, and its card shows **USDC value** "no rate". If the model had decided to pay it anyway, the card's "Blocked by code, not by the model" band names the rule: no exchange rate could be read. You can still approve it on **Approvals**.
 - **Decided again when the rate comes back.** Arc testnet's route comes and goes. Every 5 minutes, Vestiarion asks Circle again for each EURC payable held for want of a rate, of a swap, of a swap within its cost cap, or of a value within the limit. Once a quote clears what held it, the agent takes it up again within a minute and decides it with every check, with no one pressing anything.
   - **On the payable.** Under **How the agent decided**, the reopen step names what came back, for example "A EURC rate is quoted again: 0.5 EURC is worth 0.607631 USDC at 1.215262 USDC per EURC, where there was none at the decision".
   - **In the activity line.** For example "Paid Loto 0.50 EURC · decided again once a EURC rate was quoted".
   - **In the ledger.** The reopen and the decision after it record the rate before and after, and the decision they follow.
   - **Not a loop.** A route that comes and goes reopens a payable at most once in 30 minutes. **Return to agent** on **Approvals** still works at any time.
 - **Paid from EURC.** A EURC payable is paid in EURC from the operating wallet; USDC is never sent in its place.
-  - **When the wallet's EURC is short:** the agent can buy the EURC with USDC first (next point). Otherwise the payable is held. If the model had decided to pay it anyway, the band names the rule, `treasury.insufficient_eurc`.
+  - **When the wallet's EURC is short:** the agent can buy the EURC with USDC first (next point). Otherwise the payable is held. If the model had decided to pay it anyway, the band names the rule: the wallet held too little EURC.
   - **Testnet EURC:** get it at [faucet.circle.com](https://faucet.circle.com) for the operating wallet's address, the same way as USDC.
   - **How much EURC the wallet holds:** the **Balance on-chain** tile on **Console** shows it under the USDC, read from Arc testnet each time the tile refreshes.
 - **Paid from USDC by a swap.** In a live workspace, when a EURC payment is due now and the wallet's EURC is short of it, the agent is offered a swap of USDC for the EURC it needs.
@@ -209,7 +211,7 @@ On **AP / AR**, the tiles at the top count what needs you, what is due within 7 
   caption="A settled payment: the agent's reasoning, the evidence it checked, the ledger entry and the transaction."
 />
 
-When the model decided to pay but a guardrail stopped it, the card also has a "Blocked by code, not by the model" band. The band names the rule and the amount attempted. For a limit, it adds the amount allowed; for a rule about something other than the amount, it says why, such as "the first payment to this address, and only one person stands behind it".
+When the model decided to pay but a guardrail stopped it, the card also has a "Blocked by code, not by the model" band. The band names the rule in words, such as that the purchase order or goods receipt was missing, and the amount attempted. Hold the pointer over it for the rule's id, such as `invoice.match_incomplete`, as the ledger and the API name it. For a limit, it adds the amount allowed; for a rule about something other than the amount, it says why, such as "the first payment to this address, and only one person stands behind it".
 
 At the foot of a payable's card, **How the agent decided** opens its steps, oldest first, each a signed entry in the ledger: who added it, what a person changed, each decision with who decided and whether the written policy agreed, what it checked (the purchase order and goods, screening, the amount against the limit, duplicates), what code refused, what the spending-limit contract on Arc said, and the transaction that reached Arc testnet. Each step shows its time to the second, how long after the step before it, and the number of its entry in the audit log.
 
@@ -232,7 +234,7 @@ A stop only a decision resolves, such as a payout fee above 10% of the invoice o
 
 <Screenshot
   src="/docs/guides/first-payment-stopped.png"
-  alt="The console's Stopped section with one card: Tried to pay Northstar Studio, 75.00 USDC struck through, Refused by guardrail. The band Blocked by code, not by the model names the rule counterparty.payment_limit, 75.00 USDC attempted against 50.00 USDC allowed. Under the agent's reasoning, How the agent decided, folded, and its evidence, the card's last line reads: It is above Northstar Studio's payment limit. Pay it in Approvals, or raise the limit. The buttons are Edit limit and Decide in Approvals."
+  alt="The console's Stopped section with one card: Tried to pay Northstar Studio, 75.00 USDC struck through, Refused by guardrail. The band Blocked by code, not by the model names the rule, It is above the payee's payment limit, 75.00 USDC attempted against 50.00 USDC allowed. Under the agent's reasoning, How the agent decided, folded, and its evidence, the card's last line reads: It is above Northstar Studio's payment limit. Pay it in Approvals, or raise the limit. The buttons are Edit limit and Decide in Approvals."
   caption="A payment code refused, with the way through: raise the limit, or decide it in Approvals."
 />
 
@@ -275,7 +277,7 @@ Above the button, the form reads the schedule back as you fill it in, for exampl
 
 The console's **Agent spending limit** panel shows what the agent has paid on its own today (UTC) and in the last 7 days. To cap it, an owner or admin chooses **Set limit** and fills in **Per day (USDC)**, **Per 7 days (USDC)**, or both, then **Save limit**. A blank figure means no limit. On Arc mainnet a workspace keeps a daily or 7-day figure: it starts at 50 and 150 USDC, and the dialog says "A workspace on Arc mainnet keeps a daily or 7-day limit." Each change is recorded in the audit log as `agent_budget_changed`.
 
-- **Past the limit, a payment waits.** A payment or milestone release that would take the agent past either figure is held before anything is sent. Its card's "Blocked by code, not by the model" band names the rule, `workspace.outflow_budget`, with the amount attempted and what the limit had left.
+- **Past the limit, a payment waits.** A payment or milestone release that would take the agent past either figure is held before anything is sent. Its card's "Blocked by code, not by the model" band names the rule, that it would pass the workspace's spending limit (its id is `workspace.outflow_budget`), with the amount attempted and what the limit had left.
 - **A person's approval does not count.** A held payable waits in **Approvals**, and what you approve there is never stopped by the limit, nor counted against it.
 - **It comes back by itself.** When the limit has room again (a new day, a higher figure, or no limit), the agent decides the held payment again. Raising a figure brings it back within a minute, and the audit log records the reopening with "the agent's spending limit has room for it again".
 - **Schedules are checked on their day.** Scheduling a payment does not count against the limit; paying it does.

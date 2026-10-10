@@ -145,6 +145,8 @@ const TEST_USDC_LIBRARY = "src/lib/test-usdc.ts";
 const VERDICT = "src/components/VerdictControl.tsx";
 const REPORT = "src/components/vx/WorkspaceReport.tsx";
 const VERDICTS = "src/lib/verdicts.ts";
+const GETTING_STARTED = "src/lib/getting-started.ts";
+const CREATE_FORM = "src/components/CreateWorkspaceForm.tsx";
 const ACTUALS = "src/components/vx/ActualsComparison.tsx";
 const ACTUAL_CONTROL = "src/components/ActualPaymentControl.tsx";
 const ACTUALS_CSV = "src/components/ActualsCsvImport.tsx";
@@ -158,6 +160,11 @@ const ACTUAL_FIELDS = "src/lib/actual-payment-fields.ts";
  */
 const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   "guides/try-it": [
+    ["Run alongside how you pay today (shadow mode)", CREATE_FORM],
+    ["Add a supplier", GETTING_STARTED],
+    ["Add a bill", GETTING_STARTED],
+    ["See the agent's decision", GETTING_STARTED],
+    ["To pay on Arc", GETTING_STARTED],
     ["Report", APP_NAV],
     ["This workspace has no real bill yet, so the report counts its sample data.", "src/components/vx/WorkspaceReport.tsx"],
     ["Sandbox: payments here are simulated.", "src/components/vx/WorkspaceReport.tsx"],
@@ -190,6 +197,10 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Get started", CHECKLIST],
   ],
   "guides/go-live": [
+    ["Add a supplier", GETTING_STARTED],
+    ["Add a bill", GETTING_STARTED],
+    ["See the agent's decision", GETTING_STARTED],
+    ["To pay on Arc", GETTING_STARTED],
     ["Circle shows it stuck.", "src/lib/agent-activity.ts"],
     ["boundedByCode", "src/lib/agent/orchestrator.ts"],
     ["USYC reserve", "src/components/UsycReservePanel.tsx"],
@@ -346,6 +357,14 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Your wallet does not hold enough ETH on Base for the gas. Add a little ETH there, then send again.", "src/lib/inbound-usdc.ts", " for the gas. Add a little "],
   ],
   "guides/first-payment": [
+    ["Add a supplier", GETTING_STARTED],
+    ["See the agent's decision", GETTING_STARTED],
+    ["To pay on Arc", GETTING_STARTED],
+    ["Jurisdiction", COUNTERPARTY_FORM],
+    ["Does this supplier send you purchase orders?", COUNTERPARTY_FORM],
+    ["Add a counterparty first — every invoice is against one.", INVOICE_FORM],
+    ["is not one of your counterparties yet.", DOCUMENT_TAB],
+    ["Add a counterparty", DOCUMENT_TAB],
     // A bill before its payee's address (counterparty.no_address), from the card and from Approve and pay.
     ["The agent decides it again on its own once the counterparty has an address and a person has confirmed it.", "src/lib/next-step.ts"],
     ["This payee has no payment address yet. Add it on Counterparties, or ask them for it with a one-time link.", "src/lib/agent/approvals.ts"],
@@ -994,6 +1013,12 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["actual_payment_corrected", ACTUALS_LIBRARY],
   ],
   "guides/shadow-mode": [
+    ["Run alongside how you pay today (shadow mode)", CREATE_FORM],
+    ["Try it on your bills", "src/components/landing/Hero.tsx"],
+    ["Your workspace is ready, but shadow mode did not turn on.", "src/app/o/[slug]/console/page.tsx"],
+    ["To pay on Arc", GETTING_STARTED],
+    ["Does this supplier send you purchase orders?", COUNTERPARTY_FORM],
+    ["You agree with the agent, and it is paid now, simulated in this sandbox", VERDICT],
     ["Shadow mode: it waits for a person to agree.", "src/components/vx/decision-signals.ts"],
     ["Paid later by a person", "src/lib/traction-digest.ts"],
     ["Shadow mode runs on Arc testnet. On Arc mainnet the agent pays your real bills.", SHADOW_LIBRARY],
