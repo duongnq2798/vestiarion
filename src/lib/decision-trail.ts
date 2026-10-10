@@ -211,13 +211,9 @@ export function trailStep(entry: TrailEntry, network: Network = "arc-testnet"): 
         txHash: arcTx(detail.txHash),
       };
     case "approval_paid":
-      return {
-        ...base,
-        who: "person",
-        tone: "done",
-        text: detail.soleApprover === true ? "The person who entered it approved and paid it, as the workspace's only approver." : "A person approved and paid it.",
-        txHash: arcTx(detail.txRef),
-      };
+      // Paid only once its transfer confirmed: sent, failed, or not said by an entry that recorded no status (settlement
+      // lifecycle L9). The step says what the transfer did when the person approved it; the payment's own stages follow it.
+      return { ...base, who: "person", ...approvalStep(text(detail.status), detail.soleApprover === true, label), txHash: arcTx(detail.txRef) };
     case "approval_rejected":
       return { ...base, who: "person", tone: "stopped", text: "A person rejected it.", notes: text(detail.reason) ? [`· ${text(detail.reason)}`] : [] };
     case "approval_returned":
@@ -270,6 +266,16 @@ export function invoiceTrail(entries: readonly TrailEntry[], invoiceId: string, 
     .filter((step): step is TrailStep => step !== null)
     .sort((a, b) => a.seq - b.seq);
   return steps.slice(-TRAIL_STEPS_SHOWN);
+}
+
+/** A person's Approve and pay as a step, by what its transfer did then (`approval_paid`'s `status`). */
+function approvalStep(status: string | null, sole: boolean, network: string): Pick<TrailStep, "text" | "tone"> {
+  const who = sole ? "The person who entered it" : "A person";
+  const own = sole ? ", as the workspace's only approver" : "";
+  if (status === "paid") return { tone: "done", text: `${who} approved and paid it${own}.` };
+  if (status === "matched") return { tone: "neutral", text: `${who} approved it${own}; the payment was sent and ${network} is confirming it.` };
+  if (status === "held") return { tone: "stopped", text: `${who} approved it${own}; the transfer failed.` };
+  return { tone: "neutral", text: `${who} approved paying it${own}.` };
 }
 
 /** How long after the step before it a step came: "26 s later", "4 min later", "2 h later"; null for the first, or a day or more. */

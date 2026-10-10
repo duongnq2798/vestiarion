@@ -81,7 +81,11 @@ describe("the notes code adds", () => {
     expect(noteSentence("transfer failed: provider reported failure")).toBe("The transfer failed: Circle reported a failure.");
     expect(noteSentence("transfer submitted; awaiting provider confirmation")).toBe("The transfer was sent and is waiting for Circle to confirm it.");
     expect(noteSentence("execution failed: column milestones.escrow_state does not exist")).toBe("The payment could not be sent.");
-    expect(noteSentence("approved and paid by a person")).toBe("A person approved and paid it.");
+    // Followed by what the transfer did, when it did not confirm: never "paid" before it was (settlement lifecycle L9).
+    expect(noteSentence("approved and paid by a person")).toBe("A person approved paying it.");
+    expect(presentReasoning("Held for manual review. [approved and paid by a person] [transfer failed: provider reported failure]")).toBe(
+      "Held for manual review. A person approved paying it. The transfer failed: Circle reported a failure."
+    );
     expect(noteSentence("paid now by a person")).toBe("A person chose Pay now.");
     expect(noteSentence("closed without paying by a person: Paid in cash")).toBe("A person closed it without paying: Paid in cash.");
     expect(noteSentence("guardrail override: contractor is high risk — release refused")).toBe("Not released: the contractor is high risk.");
