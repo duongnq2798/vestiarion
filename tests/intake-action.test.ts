@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
-import { createInvoiceAction, importInvoicesAction } from "@/app/actions/intake";
+import { createInvoiceAction } from "@/app/actions/intake";
 import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
 
 /**
- * `createInvoiceAction` and `importInvoicesAction` against a real supabase-js
+ * `createInvoiceAction` against a real supabase-js
  * client whose network is a recorder. Two stand-ins, both for things a node test cannot have: the
  * `server-only` marker, which Next resolves itself and which is not installed
  * as a package, and the signed-in session behind `authorize`, which
@@ -57,7 +57,7 @@ function organizationDatabase(counterparties: Array<{ id: string; name: string }
     }
     const wantsObject = sent.headers.get("accept")?.includes("application/vnd.pgrst.object+json") ?? false;
     if (sent.path === "/rest/v1/counterparties") {
-      // The form looks one up by id; the CSV import reads them all, to match by name.
+      // The form looks one up by id.
       const found = sent.params.get("id") ? counterparties.filter((row) => sent.params.get("id") === `eq.${row.id}`) : counterparties;
       if (!wantsObject) return { body: found };
       if (found.length === 1) return { body: found[0] };
@@ -140,68 +140,6 @@ describe("createInvoiceAction's counterparty lookup", () => {
       ok: false,
       message: "Discount deadline: Enter the last day the discount applies, on or before the due date, or clear the discount.",
       fieldErrors: { discountDeadline: "Enter the last day the discount applies, on or before the due date, or clear the discount." },
-    });
-    expect(fake.requests.some((sent) => sent.path === "/rest/v1/invoices")).toBe(false);
-  });
-});
-
-describe("importInvoicesAction's insert", () => {
-  const csvRow = (overrides: Record<string, string> = {}) => ({
-    direction: "payable",
-    counterparty: "Acme Supplies",
-    amount: "10.50",
-    memo: "Services",
-    po_reference: "PO-42",
-    goods_received: "true",
-    due_date: "2026-10-31",
-    early_pay_discount_pct: "",
-    discount_deadline: "",
-    ...overrides,
-  });
-  function importForm(rows: Array<Record<string, string>>): FormData {
-    const form = new FormData();
-    form.set("orgSlug", "northstar");
-    form.set("rowsJson", JSON.stringify(rows));
-    return form;
-  }
-
-  it("inserts a row's discount percent and its deadline at noon UTC, and no terms for a row that leaves them blank", async () => {
-    const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }]));
-    const rows = [csvRow({ early_pay_discount_pct: "2", discount_deadline: "2026-10-20" }), csvRow({ po_reference: "PO-43" })];
-    await runWith({ config, db: fake.client, fetch: fake.fetch }, () => importInvoicesAction({ ok: false, message: "" }, importForm(rows)));
-
-    const inserts = fake.requests.filter((sent) => sent.path === "/rest/v1/invoices" && sent.method === "POST");
-    expect(inserts).toHaveLength(1);
-    const body = inserts[0].body as Array<Record<string, unknown>>;
-    expect(body).toHaveLength(2);
-    expect(body[0]).toMatchObject({
-      counterparty_id: COUNTERPARTY,
-      org_id: ORG,
-      created_by: USER,
-      due_date: "2026-10-31T12:00:00.000Z",
-      early_pay_discount_pct: "2",
-      discount_due_date: "2026-10-20T12:00:00.000Z",
-    });
-    expect(body[1]).toMatchObject({ counterparty_id: COUNTERPARTY, po_reference: "PO-43", early_pay_discount_pct: null, discount_due_date: null });
-  });
-
-  it("inserts each row's currency, USDC where the row leaves it blank", async () => {
-    const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }]));
-    const rows = [csvRow({ currency: "EURC" }), csvRow({ po_reference: "PO-43", currency: "" })];
-    await runWith({ config, db: fake.client, fetch: fake.fetch }, () => importInvoicesAction({ ok: false, message: "" }, importForm(rows)));
-    const insert = fake.requests.find((sent) => sent.path === "/rest/v1/invoices" && sent.method === "POST");
-    const body = insert?.body as Array<Record<string, unknown>>;
-    expect(body.map((row) => row.currency)).toEqual(["EURC", "USDC"]);
-  });
-
-  it("refuses a row with a discount percent and no deadline, naming the row and its column, and imports nothing", async () => {
-    const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }]));
-    const rows = [csvRow(), csvRow({ po_reference: "PO-43", early_pay_discount_pct: "2" })];
-    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => importInvoicesAction({ ok: false, message: "" }, importForm(rows)));
-
-    expect(result).toEqual({
-      ok: false,
-      message: "Row 2: discount_deadline: Enter the last day the discount applies, on or before the due date, or clear the discount.",
     });
     expect(fake.requests.some((sent) => sent.path === "/rest/v1/invoices")).toBe(false);
   });

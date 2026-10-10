@@ -22,6 +22,7 @@ import {
   type RowFate,
 } from "@/lib/bill-import/rows";
 import { readTable } from "@/lib/bill-import/table";
+import { INVOICE_CSV_TEMPLATE } from "@/lib/bill-import/template";
 
 /**
  * A bill list read row by row and given its fate (import design B3–B13), against a 100-row list with seeded problems:
@@ -313,6 +314,27 @@ describe("a row's fields", () => {
       },
     });
     expect(receivable).toMatchObject({ status: "add", invoice: { direction: "receivable", amount: "0.5", currency: "USDC", goodsReceived: false, memo: null } });
+  });
+
+  it("reads the old template's columns written with spaces, in any order, and leaves out a column it does not know", () => {
+    const [fate] = plainFates("amount,due date,direction,counterparty,memo,goods received,po reference,ignored\n1.00,2026-10-31,receivable,Manila Print House,Retainer,no,,x\n", {
+      direction: null,
+    });
+    expect(fate).toMatchObject({ status: "add", invoice: { direction: "receivable", amount: "1", memo: "Retainer", goodsReceived: false, poReference: null } });
+  });
+
+  it("offers a template that is read with every column matched, and whose sample row only needs its counterparty", () => {
+    const [header, sample, ...rest] = INVOICE_CSV_TEMPLATE.split("\n");
+    expect(rest).toEqual([]);
+    expect(header).toBe("direction,counterparty,amount,memo,po_reference,goods_received,due_date,early_pay_discount_pct,discount_deadline,currency");
+    expect(sample).toBe("payable,Vendor name,100.00,Invoice memo,PO-100,true,2026-10-15,,,USDC");
+    const table = readTable(INVOICE_CSV_TEMPLATE);
+    expect(Object.keys(startingSettings(table, PLAIN).mapping)).toHaveLength(10);
+    const [fate] = plainFates(INVOICE_CSV_TEMPLATE.replace("Vendor name", "Kanto Paper"), { direction: null });
+    expect(fate).toMatchObject({
+      status: "add",
+      invoice: { direction: "payable", amount: "100", currency: "USDC", memo: "Invoice memo", poReference: "PO-100", goodsReceived: true, dueDate: "2026-10-15", earlyPayDiscountPct: null },
+    });
   });
 
   it("reads a direction column's words, and refuses one it does not know", () => {

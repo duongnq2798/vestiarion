@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readTable, TableError } from "@/lib/bill-import/table";
+import { decodeList, readTable, TableError } from "@/lib/bill-import/table";
 
 const cells = (text: string) => readTable(text).rows.map((row) => row.cells);
 
@@ -67,6 +67,11 @@ describe("readTable", () => {
 
   it("refuses an empty list", () => {
     expect(() => readTable(" \n\n")).toThrow("The list is empty");
+  });
+
+  it("reads a file as UTF-8, and one that is not as Excel's Windows-1252, saying so", () => {
+    expect(decodeList(new TextEncoder().encode("Supplier\n株式会社カントー"))).toEqual({ text: "Supplier\n株式会社カントー", legacy: false });
+    expect(decodeList(new Uint8Array([0x4d, 0xfc, 0x6c, 0x6c, 0x65, 0x72]))).toEqual({ text: "Müller", legacy: true });
   });
 
   it("trims each cell's surrounding spaces", () => {

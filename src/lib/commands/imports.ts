@@ -1,6 +1,5 @@
 import { checkBillList } from "../bill-import/check";
-import { baseOf, type ImportedFate } from "../bill-import/rows";
-import { plural } from "../copy";
+import { baseOf, countImported, importMessage, type ImportCounts, type ImportedFate } from "../bill-import/rows";
 import type { Actor } from "./actor";
 import { addInvoice } from "./invoices";
 import { done, refused, TRY_AGAIN, type CommandOutcome } from "./outcome";
@@ -9,15 +8,7 @@ import { gate } from "./policy";
 /** What an import did, row by row and in all. */
 export interface ImportOutcome {
   fates: ImportedFate[];
-  counts: { added: number; duplicate: number; error: number };
-}
-
-/** The import's result in words: "Added 84 bills. 3 were already in Vestiarion. 13 can't be added." */
-export function importMessage(counts: ImportOutcome["counts"]): string {
-  const parts = [counts.added === 0 ? "Added no bills." : `Added ${counts.added} ${plural(counts.added, "bill", "bills")}.`];
-  if (counts.duplicate > 0) parts.push(`${counts.duplicate} ${plural(counts.duplicate, "was", "were")} already in Vestiarion.`);
-  if (counts.error > 0) parts.push(`${counts.error} can't be added.`);
-  return parts.join(" ");
+  counts: ImportCounts;
 }
 
 /**
@@ -52,10 +43,6 @@ export async function importInvoices(actor: Actor, input: { text: string; settin
     });
     fates.push(added.ok ? { ...baseOf(fate), status: "added", invoiceId: added.invoiceId } : { ...baseOf(fate), status: "error", reason: added.message });
   }
-  const counts = {
-    added: fates.filter((fate) => fate.status === "added").length,
-    duplicate: fates.filter((fate) => fate.status === "duplicate").length,
-    error: fates.filter((fate) => fate.status === "error").length,
-  };
+  const counts = countImported(fates);
   return done(importMessage(counts), { fates, counts });
 }

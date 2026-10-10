@@ -25,6 +25,18 @@ export class TableError extends Error {
   }
 }
 
+/**
+ * A file's text: UTF-8 when it is, else read as Windows-1252, the encoding Excel's plain "CSV" uses in the US and Europe,
+ * with `legacy` set so the panel can say how to save it as UTF-8 if its names look wrong.
+ */
+export function decodeList(bytes: ArrayBuffer | Uint8Array): { text: string; legacy: boolean } {
+  try {
+    return { text: new TextDecoder("utf-8", { fatal: true }).decode(bytes), legacy: false };
+  } catch {
+    return { text: new TextDecoder("windows-1252").decode(bytes), legacy: true };
+  }
+}
+
 /** Tab first: a pasted spreadsheet. Then semicolon: a European Excel's CSV, whose amounts hold commas. */
 const PREFERENCE: readonly Delimiter[] = ["\t", ";", ","];
 

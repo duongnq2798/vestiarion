@@ -496,6 +496,28 @@ export type ImportedFate =
   | Extract<RowFate, { status: "duplicate" }>
   | Extract<RowFate, { status: "error" }>;
 
+export interface ImportCounts {
+  added: number;
+  duplicate: number;
+  error: number;
+}
+
+export function countImported(fates: readonly ImportedFate[]): ImportCounts {
+  return {
+    added: fates.filter((fate) => fate.status === "added").length,
+    duplicate: fates.filter((fate) => fate.status === "duplicate").length,
+    error: fates.filter((fate) => fate.status === "error").length,
+  };
+}
+
+/** The import's result in words: "Added 84 bills. 3 were already in Vestiarion. 13 can't be added." */
+export function importMessage(counts: ImportCounts): string {
+  const parts = [counts.added === 0 ? "Added no bills." : `Added ${counts.added} ${counts.added === 1 ? "bill" : "bills"}.`];
+  if (counts.duplicate > 0) parts.push(`${counts.duplicate} ${counts.duplicate === 1 ? "was" : "were"} already in Vestiarion.`);
+  if (counts.error > 0) parts.push(`${counts.error} can't be added.`);
+  return parts.join(" ");
+}
+
 export function countFates(fates: readonly RowFate[]): { add: number; duplicate: number; error: number } {
   return {
     add: fates.filter((fate) => fate.status === "add").length,
@@ -513,7 +535,7 @@ function csvCell(value: string, delimiter: string): string {
  * own delimiter (a pasted list becomes a comma one), with a byte-order mark so a spreadsheet reads its names right.
  * Empty when every row could be added.
  */
-export function failedRowsCsv(table: Table, settings: Pick<ImportSettings, "hasHeader">, fates: readonly RowFate[]): string {
+export function failedRowsCsv(table: Table, settings: Pick<ImportSettings, "hasHeader">, fates: ReadonlyArray<RowFate | ImportedFate>): string {
   const failed = new Map(fates.flatMap((fate) => (fate.status === "error" ? [[fate.line, fate.reason] as const] : [])));
   if (failed.size === 0) return "";
   const delimiter = table.delimiter === ";" ? ";" : ",";
