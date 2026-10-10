@@ -123,7 +123,8 @@ export default function PrivacyPage() {
           <li>
             <strong>Resend</strong> sends transactional email: invitations to a workspace, digests of the payments waiting for a decision, the link a payee
             adds their address through, payment notices to a payee once a live workspace&apos;s payment to them is confirmed, and the reminders an owner
-            or admin turns on for a client&apos;s invoice, with its pay link. It receives each recipient&apos;s email address and the message.
+            or admin turns on for a client&apos;s invoice, with its pay link. It receives each recipient&apos;s email address and the message. When the
+            team has turned it on, it also sends the team a short note about each new guided setup request, described below.
           </li>
           <li>
             <strong>A model provider</strong>, when this deployment has one configured (Anthropic, OpenAI or DeepSeek), receives the context of each decision
@@ -259,7 +260,31 @@ export default function PrivacyPage() {
             When you create a workspace, Vestiarion reads it once and keeps those tags with the workspace, never replaced, so the team can see which
             outreach or page brought it. Only the team sees them, and they are deleted with the workspace.
           </li>
+          <li>When you ask for a guided setup, those tags are kept with your request too, as described below.</li>
           <li>Deleting the cookie in your browser changes nothing else.</li>
+        </ul>
+      </LegalSection>
+
+      <LegalSection id="guided-setup" title="Asking for a guided setup">
+        <p>
+          The form on the <LegalLink href="/studios">page for studios</LegalLink> asks for your name, your work email, your studio&apos;s name and,
+          if you give it, its website, how many contractors you pay a month, how invoices reach you, and anything else you write, up to 500 characters.
+        </p>
+        <ul>
+          <li>We use these details only to set up a call with you about Vestiarion.</li>
+          <li>
+            They are stored in Vestiarion&apos;s Supabase Postgres database as one entry in the team&apos;s own records, apart from every workspace, with
+            the day you sent them and, when your browser holds the <code>vx_ft</code> cookie above, its campaign tags. Your IP address is not kept with them.
+          </li>
+          <li>
+            Only the Vestiarion team sees them, in a dashboard nobody else can open. They are not shared with anyone else and not added to any marketing
+            list, and nothing is sent to you automatically: a person on the team writes to you.
+          </li>
+          <li>
+            When the team has turned it on, Resend emails the team your studio&apos;s name, how many contractors you pay and how invoices reach you,
+            never your message.
+          </li>
+          <li>They are kept until the team deletes them. Ask through Contact, below, and we delete them.</li>
         </ul>
       </LegalSection>
 
