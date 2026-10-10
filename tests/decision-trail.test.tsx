@@ -136,6 +136,16 @@ describe("the decision trail", () => {
     );
     expect(trailStep(step(981, "02:47:18", "human", "approval_rejected", { reason: "Duplicate bill" }))).toMatchObject({ text: "A person rejected it.", notes: ["· Duplicate bill"] });
     expect(trailStep(step(982, "02:47:18", "agent", "recurring_invoice_created"))!.text).toBe("Its recurring schedule created it.");
+    // A person moved its day from the payment plan (payment plan design P9): the agent still checks it on that day.
+    expect(trailStep(step(985, "02:47:18", "human", "payment_rescheduled", { from: "2026-10-22", to: "2026-10-15" }))).toMatchObject({
+      who: "person",
+      tone: "neutral",
+      text: "A person moved its payment to Oct 15 from the payment plan.",
+      notes: ["· The agent checks it again on that day before it pays"],
+    });
+    expect(trailStep(step(986, "02:47:18", "human", "payment_rescheduled", { to: "2026-10-15", soleApprover: true }))!.text).toBe(
+      "A person moved its payment to Oct 15 from the payment plan, as the workspace's only approver."
+    );
     expect(trailStep(step(983, "02:47:18", "human", "create_invoice", { document: { kind: "pdf" } }))!.text).toBe("A person added it, read from a document.");
     expect(trailStep(step(984, "02:47:18", "agent", "ap_schedule", { decisionMode: "heuristic", decision: { payOn: "2026-10-05" } }))!.text).toBe(
       "The written policy decided to pay it on Oct 5."

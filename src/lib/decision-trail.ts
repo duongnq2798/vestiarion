@@ -222,6 +222,19 @@ export function trailStep(entry: TrailEntry, network: Network = "arc-testnet"): 
       return { ...base, who: "person", tone: "stopped", text: "A person rejected it.", notes: text(detail.reason) ? [`· ${text(detail.reason)}`] : [] };
     case "approval_returned":
       return { ...base, who: "person", tone: "neutral", text: "A person returned it to the agent." };
+    // A person moved the day it is decided again on, from the payment plan (payment plan design P9): not a decision.
+    case "payment_rescheduled": {
+      const to = text(detail.to);
+      return {
+        ...base,
+        who: "person",
+        tone: "neutral",
+        text: to
+          ? `A person moved its payment to ${dayOf(to)} from the payment plan${detail.soleApprover === true ? ", as the workspace's only approver" : ""}.`
+          : "A person moved its payment from the payment plan.",
+        notes: ["· The agent checks it again on that day before it pays"],
+      };
+    }
     case "ar_received":
       return { ...base, who: "agent", tone: "done", text: `The agent matched the payment received on ${label}.`, txHash: arcTx(detail.txHash) };
     case "ar_reminders_on":

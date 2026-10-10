@@ -338,6 +338,15 @@ describe("invoiceDecision: a payout code held (review I1, M3, M14)", () => {
     expect(card).toMatchObject({ auditSeq: 580, at: "2026-10-01T08:28:28.000Z", decisionMode: "heuristic" });
   });
 
+  it("keeps the card on the agent's decision when a person moved the bill's day from the payment plan (payment plan P9)", () => {
+    const decision = { seq: 580, id: "e580", ts: "2026-10-01T08:28:28.000Z", actor: "agent", domain: "ap", action: "ap_schedule", summary: "",
+      detail: { invoiceId: "inv-1", decisionMode: "heuristic", guardrailBlocked: false, observed: { paymentLimit: 5, riskLevel: "clear" } } } as unknown as LedgerEntry;
+    const moved = { seq: 702, id: "e702", ts: "2026-10-01T09:00:00.000Z", actor: "human", domain: "ap", action: "payment_rescheduled", summary: "",
+      detail: { by: "user-1", invoiceId: "inv-1", from: "2026-10-09", to: "2026-10-05" } } as unknown as LedgerEntry;
+    const card = invoiceDecision(invoice({ status: "scheduled", scheduled_for: "2026-10-05T00:00:00.000Z" }), { payment_limit: 50, chain: "ARC-TESTNET" } as never, [moved, decision], { network: "arc-testnet" });
+    expect(card).toMatchObject({ auditSeq: 580, at: "2026-10-01T08:28:28.000Z", decisionMode: "heuristic", outcomeLabel: "Scheduled for Oct 5, 2026" });
+  });
+
   const decided = (route: string) =>
     ({ seq: 20, id: "e20", ts: "2026-10-01T09:00:00.000Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "",
       detail: { invoiceId: "inv-1", payout: { chain: "BASE-SEPOLIA", route, domain: 6, feeUsdc: 0.05 } } }) as unknown as LedgerEntry;
