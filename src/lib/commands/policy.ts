@@ -16,6 +16,8 @@ export const COMMAND_PERMISSIONS = {
   // What the business paid outside Vestiarion is a record, entered as an invoice is (actual payments A4).
   "payable.record_actual": "records.write",
   "payable.import_actuals": "records.write",
+  // Moving a scheduled bill to the payment plan's day: a decision on when the agent pays, never a payment (payment plan P10).
+  "payment_plan.approve": "approval.decide",
   "milestone.pay": "approval.decide",
   "milestone.close": "approval.decide",
   "agent.pause": "agent.pause",

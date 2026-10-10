@@ -109,6 +109,10 @@ export interface InvoiceRow {
   paid_amount: number | null;
   /** USDC or EURC (0040); `listInvoices` always sets it. */
   currency?: "USDC" | "EURC";
+  /** Who entered it (`select("*")` reads it): they never approve it themselves, unless they are the only approver. */
+  created_by?: string | null;
+  /** When it was paid or received; null while open. */
+  settled_at?: string | null;
   /**
    * A bill taken in the business's own currency in shadow mode (0084, shadow mode S6): as it was written, and the rate
    * its USDC amount was worked out at. All set, or all null.
