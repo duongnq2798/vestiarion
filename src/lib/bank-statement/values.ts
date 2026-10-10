@@ -80,7 +80,7 @@ export function decideDateOrder(values: readonly string[]): DateDecision {
 }
 
 /** Spaces of every width and apostrophes group thousands; they say nothing about the decimal mark. */
-const GROUPING = /[\s  ']/g;
+const GROUPING = /[\s\u00A0\u202F']/g;
 
 type Vote = DecimalMark | "three" | null;
 
@@ -153,7 +153,7 @@ export function readAmount(value: string, mark: DecimalMark, digits: 0 | 2): Rea
     negative = true;
     text = bracketed[1].trim();
   }
-  const shape = SHAPE.exec(text.replace(/[  ']/g, " ").replace(/(\d) (?=\d)/g, "$1"));
+  const shape = SHAPE.exec(text.replace(/[\u00A0\u202F']/g, " ").replace(/(\d) (?=\d)/g, "$1"));
   if (!shape) return null;
   if (shape[1] === "-" || shape[2] === "-" || shape[4] === "-") negative = true;
   const number = shape[3];

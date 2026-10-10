@@ -33,7 +33,7 @@ export const NO_COLUMNS: ColumnMapping = Object.fromEntries(ROLES.map((role) => 
 export function headerWords(header: string): string {
   return header
     .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036F]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
@@ -44,8 +44,9 @@ const RULES: ReadonlyArray<readonly [Role, RegExp]> = [
   ["balance", /\b(balance|saldo|solde|kontostand)\b/],
   ["valueDate", /\b(value date|valuta\w*|wertstellung|date valeur|effective date)\b/],
   ["bookingDate", /\b(date|datum|buchungstag|buchungsdatum|fecha|posted|posting)\b/],
-  ["moneyOut", /\b(debit|debits|withdrawal|withdrawals|withdrawn|money out|paid out|outflow|out|soll|dr)\b/],
-  ["moneyIn", /\b(credit|credits|deposit|deposits|money in|paid in|inflow|in|haben|cr)\b/],
+  // "In", "Out", "DR" and "CR" only as the whole header: "Amount in SGD" is an amount.
+  ["moneyOut", /\b(debit|debits|withdrawal|withdrawals|withdrawn|money out|paid out|outflow|outgoing|soll)\b|^(out|dr)$/],
+  ["moneyIn", /\b(credit|credits|deposit|deposits|money in|paid in|inflow|incoming|haben)\b|^(in|cr)$/],
   ["amount", /\b(amount|amt|betrag|montant|importe|umsatz)\b/],
   ["currency", /\b(currency|ccy|curr|cur|wahrung|devise|moneda)\b/],
   ["reference", /\b(reference|ref|ref no|cheque|check|transaction id|id|end to end id)\b/],
@@ -53,7 +54,11 @@ const RULES: ReadonlyArray<readonly [Role, RegExp]> = [
   ["description", /\b(description|narrative|details|detail|particulars|remarks|memo|verwendungszweck|buchungstext|libelle|purpose|text)\b/],
 ];
 
-/** The column each role most likely is, from the header row's words. A header takes one role, a role one header. */
+/**
+ * The column each role most likely is, from the header row's words. A header takes one role, a role one header. Money
+ * out and money in together win over a lone amount; a lone amount wins over a single column of one direction, such as
+ * a "Debit/Credit" column beside it, which says the direction and is not read in this version.
+ */
 export function suggestColumns(headers: readonly string[]): ColumnMapping {
   const mapping: ColumnMapping = { ...NO_COLUMNS };
   headers.forEach((header, index) => {
@@ -62,6 +67,8 @@ export function suggestColumns(headers: readonly string[]): ColumnMapping {
     const rule = RULES.find(([role, pattern]) => mapping[role] === null && pattern.test(words));
     if (rule) mapping[rule[0]] = index;
   });
+  if (mapping.moneyOut !== null && mapping.moneyIn !== null) mapping.amount = null;
+  else if (mapping.amount !== null) mapping.moneyOut = mapping.moneyIn = null;
   return mapping;
 }
 

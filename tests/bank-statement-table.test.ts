@@ -42,7 +42,7 @@ describe("detectDelimiter", () => {
 
 describe("readTable", () => {
   it("drops a byte order mark and takes a first line sep= as the delimiter", () => {
-    const table = readTable("﻿sep=;\nDate;Amount\n2026-10-03;-1,50");
+    const table = readTable("\uFEFFsep=;\nDate;Amount\n2026-10-03;-1,50");
     expect(table.delimiter).toBe(";");
     expect(table.records).toEqual([
       { line: 2, cells: ["Date", "Amount"] },

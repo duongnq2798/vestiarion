@@ -115,7 +115,7 @@ export function detectDelimiter(text: string): Delimiter {
 
 /** The statement's table, with the delimiter the person chose, the one a first line `sep=` names, or the one detected. */
 export function readTable(text: string, delimiter?: Delimiter): StatementTable {
-  let body = text.replace(/^﻿/, "");
+  let body = text.replace(/^\uFEFF/, "");
   let named: Delimiter | undefined;
   const sep = /^sep=(.)\r?\n/i.exec(body);
   if (sep && (DELIMITERS as readonly string[]).includes(sep[1])) {

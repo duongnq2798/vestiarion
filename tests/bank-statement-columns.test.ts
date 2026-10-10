@@ -32,7 +32,7 @@ describe("suggestColumns", () => {
       currency: 5,
       payee: 6,
     });
-    expect(suggestColumns(["Date", "Details", "Debit", "Credit", "Amount"])).toMatchObject({ moneyOut: 2, moneyIn: 3, amount: 4 });
+    expect(suggestColumns(["Date", "Details", "Debit", "Credit", "Amount"])).toMatchObject({ moneyOut: 2, moneyIn: 3, amount: null });
     expect(suggestColumns(["Date", "Particulars", "Money out", "Money in"])).toMatchObject({ description: 1, moneyOut: 2, moneyIn: 3 });
   });
 
@@ -46,6 +46,13 @@ describe("suggestColumns", () => {
       balance: 4,
       currency: 5,
     });
+  });
+
+  it("keeps a lone amount over one column of a single direction, and reads in and out only as whole headers", () => {
+    expect(suggestColumns(["Date", "Description", "Amount in SGD", "Debit/Credit"])).toMatchObject({ amount: 2, moneyOut: null, moneyIn: null });
+    expect(suggestColumns(["Date", "Text", "Out", "In"])).toMatchObject({ description: 1, moneyOut: 2, moneyIn: 3, amount: null });
+    expect(suggestColumns(["Date", "Text", "DR", "CR"])).toMatchObject({ moneyOut: 2, moneyIn: 3 });
+    expect(suggestColumns(["Date", "Sign in", "Amount"])).toMatchObject({ moneyIn: null, amount: 2 });
   });
 
   it("leaves a column it does not know unmapped", () => {
