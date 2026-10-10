@@ -17,7 +17,7 @@ The console's **Get started in shadow mode** checklist then walks you through th
 
 ## 2. Add your bills as you do today
 
-Add each bill as a payable in AP / AR. In USDC, enter its **Amount** in USDC, as on any invoice. In another currency, the invoice form's **Currency** starts at it: type the **Amount** as it is written on the bill, such as 1,250.00 for a bill in EUR. That bill is paid in USDC at the day's rate, which comes from ExchangeRate-API (**Rates By Exchange Rate API**), and a US dollar is one USDC. Its card shows it as written, with the rate and the day of the rate, beside the USDC it is paid in. Outside shadow mode, the form takes only USDC and EURC.
+Add each bill as a payable in Bills & receivables. In USDC, enter its **Amount** in USDC, as on any invoice. In another currency, the invoice form's **Currency** starts at it: type the **Amount** as it is written on the bill, such as 1,250.00 for a bill in EUR. That bill is paid in USDC at the day's rate, which comes from ExchangeRate-API (**Rates By Exchange Rate API**), and a US dollar is one USDC. Its card shows it as written, with the rate and the day of the rate, beside the USDC it is paid in. Outside shadow mode, the form takes only USDC and EURC.
 
 A bill read from a document, an email or a chat, or sent through the API, is added in USDC or EURC: for a bill in another currency, type its amount into the form instead.
 
@@ -43,7 +43,7 @@ If the supplier later gives you an Arc address of its own, enter it as you would
 
 ## 4. Agree or disagree with each decision
 
-When the agent decides to pay a bill now, nothing is sent: the payment is held for your verdict. In Approvals, AP / AR and the console, its card asks **Do you agree with the agent?**, and says what agreeing pays: the amount in USDC, the payee and the payee's address. Its row in AP / AR says why it waits: "Shadow mode: it waits for a person to agree."
+When the agent decides to pay a bill now, nothing is sent: the payment is held for your verdict, and its card reads **Waiting for your verdict**. In Approvals, the console and Bills & receivables, its card asks **Do you agree with the agent?**, and says what agreeing pays: the amount in USDC, the payee and the payee's address. Its row in Bills & receivables says why it waits: "Shadow mode: it waits for a person to agree."
 
 The same holds when a check in code stopped the payment the agent decided, such as a first payment to an address only you stand behind, or one above the payee's limit. The card says why, and still asks for your verdict: **Agree and pay** pays it through the same checks as **Approve and pay**, and nothing else settles it until a verdict is given. So every payment made in shadow mode has a verdict behind it.
 
@@ -56,13 +56,13 @@ In Slack and Telegram, the agent's message about a payment held for your verdict
 
 If an **Agree and pay** stops before it finishes, the card says **Unfinished decision**. After ten minutes it offers **Agree and pay** and **Disagree** again, and nothing else settles the payment until a verdict is given.
 
-Every other decision, such as a payment scheduled for a later day, or a bill the agent itself held, flagged or asked about, offers **Agree** and **Disagree** on its card in AP / AR. Its own actions stay where they are. When a scheduled payment's day comes, the agent decides again, and that payment is held for your verdict.
+Every other decision, such as a payment scheduled for a later day, or a bill the agent itself held, flagged or asked about, offers **Agree** and **Disagree** on its card in Bills & receivables. Its own actions stay where they are. When a scheduled payment's day comes, the agent decides again, and that payment is held for your verdict.
 
 Each decision takes one verdict, and the card shows it once given. A second verdict on the same decision changes nothing.
 
 ## 5. See how often you agreed
 
-The console shows a **Shadow mode** section while shadow mode is on. It says how many of the agent's decisions you agreed with, out of the verdicts given, as a share. It also says how many decisions still wait for your verdict, with **See them in AP / AR** to give them.
+The console shows a **Shadow mode** section while shadow mode is on. Three figures lead it: **Agreement**, the share of the agent's decisions you agreed with, out of the verdicts given; **Verdicts given**; and **Waiting for you**, the decisions that still wait for your verdict. Under them, **See them in Bills & receivables** takes you to give them.
 
 For a traction update, `npm run traction-digest -- <workspace> --since <day>` lists each decision with its verdict and the transaction that paid it. A payment a person made on a decision the agent did not make to pay, such as a bill it held, reads "Paid later by a person", so an agreed hold is never read as the agent's payment.
 

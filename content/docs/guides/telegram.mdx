@@ -54,7 +54,7 @@ You can also ask in plain words, in English or Vietnamese: "what is held?", "cò
 
 ## 4. Send it an invoice
 
-An owner or admin can send the bot an invoice: a PDF, an `.eml` or `.txt` file of at most 4 MB, or the invoice's text pasted into the chat. The bot reads it the way **From a document** on AP / AR reads one, and shows every field it read, with what to check and the model's note, marked as The model's note: it can be wrong.
+An owner or admin can send the bot an invoice: a PDF, an `.eml` or `.txt` file of at most 4 MB, or the invoice's text pasted into the chat. The bot reads it the way **From a document** on Bills & receivables reads one, and shows every field it read, with what to check and the model's note, marked as The model's note: it can be wrong.
 
 When it read a counterparty already in the workspace, an amount and a due date, three buttons follow:
 
@@ -64,9 +64,9 @@ When it read a counterparty already in the workspace, an amount and a due date, 
 
 After **Add**, the bot says the payable was added. The agent usually decides within a minute, and its decision will be sent here, to the same chat. A draft can be added once, within an hour; after that the bot says "This draft was already used or has expired." Send the invoice again to read it anew.
 
-The bot does not read photos: it asks you to Send the invoice as a PDF, or paste its text. When it cannot add an invoice from the chat, because no counterparty in the workspace matches its vendor or it has no amount or due date, it says what is missing and links to AP / AR, where you can add it by hand. An approver or a viewer who sends an invoice is told "Only an owner or admin can add invoices."
+The bot does not read photos: it asks you to Send the invoice as a PDF, or paste its text. When it cannot add an invoice from the chat, because no counterparty in the workspace matches its vendor or it has no amount or due date, it says what is missing and links to Bills & receivables, where you can add it by hand. An approver or a viewer who sends an invoice is told "Only an owner or admin can add invoices."
 
-The invoice is added exactly as one added on AP / AR: the ledger's `create_invoice` entry names you, and adds `via: "telegram"` and the hash of the document. The document itself is not stored. Its USDC moves on Arc testnet only when the agent pays it, under every check it applies to any payable.
+The invoice is added exactly as one added on Bills & receivables: the ledger's `create_invoice` entry names you, and adds `via: "telegram"` and the hash of the document. The document itself is not stored. Its USDC moves on Arc testnet only when the agent pays it, under every check it applies to any payable.
 
 ## 5. More than one workspace
 
