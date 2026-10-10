@@ -141,6 +141,12 @@
     scrollbar-gutter: stable;
   }
 
+  /* Inside a workspace a header sticks to the top at every width (workspace
+     shell design S4): a jump to an anchor lands below it. */
+  html:has([data-workspace-frame]) {
+    scroll-padding-top: 4.5rem;
+  }
+
   /* Radix's scroll lock pads the body by the scrollbar's width; the stable
      gutter above already holds that space. */
   html body[data-scroll-locked] {

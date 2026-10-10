@@ -16,6 +16,9 @@ import { workspaceNetwork } from "./workspace-network";
 
 export { SHADOW_CURRENCIES, shadowCurrency, type ShadowMode };
 
+/** The console's `?shadow=` when shadow mode was asked for as the workspace was created, and did not turn on. */
+export const SHADOW_NOT_STARTED = "not-started";
+
 export type ShadowModeErrorCode = "invalid_currency" | "mainnet" | "already_on" | "already_off" | "cycle_running";
 
 const MESSAGES: Record<ShadowModeErrorCode, string> = {

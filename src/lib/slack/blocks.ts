@@ -313,7 +313,7 @@ export function missingAnswer(read: InvoiceDraftRead, reasons: string[], invoice
     [
       `*Read the invoice${from ? ` from ${mrkdwn(from)}` : ""}*, but it cannot be added from here:`,
       ...reasons.map((reason) => `• ${mrkdwn(reason)}`),
-      `Add it in Vestiarion, where you can fix each field: ${link(invoicesUrl, "AP / AR")}.`,
+      `Add it in Vestiarion, where you can fix each field: ${link(invoicesUrl, "Bills & receivables")}.`,
     ].join("\n")
   );
 }

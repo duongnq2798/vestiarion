@@ -29,7 +29,8 @@ const REQUIRED_HEADERS = [
 const OPTIONAL_HEADERS = ["early_pay_discount_pct", "discount_deadline", "currency"] as const;
 const ALL_HEADERS = [...REQUIRED_HEADERS, ...OPTIONAL_HEADERS] as const;
 
-function rowsFromCsv(csv: string): string[][] {
+/** The rows of a CSV, quoted fields and doubled quotes read, blank rows left out; shared with the payments CSV. */
+export function rowsFromCsv(csv: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";
@@ -64,7 +65,7 @@ function rowsFromCsv(csv: string): string[][] {
   return rows;
 }
 
-function normalizedHeader(value: string): string {
+export function normalizedHeader(value: string): string {
   return value.trim().toLowerCase().replace(/[ -]+/g, "_");
 }
 

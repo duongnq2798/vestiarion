@@ -9,7 +9,7 @@ import { Money, OutcomeBadge } from "./Primitives";
 import type { Decision } from "./types";
 
 /**
- * Decisions as a list to scan (AP / AR, Contractors): one row each, with who, what, the date that matters,
+ * Decisions as a list to scan (Bills & receivables, Contractors): one row each, with who, what, the date that matters,
  * the amount and the outcome; opening a row shows the decision's full card, with its reasoning, evidence,
  * receipts and actions. Rows are `<details>`: they open without JavaScript and for find-in-page.
  */

@@ -1,4 +1,4 @@
-Forward an invoice to your workspace's address, and Vestiarion reads it the way **From a document** reads one. It waits on **AP / AR** under **From email** until an owner or admin adds it as a payable with one press, or dismisses it. Nothing that arrives by email is added, or paid, by itself: once it is added, the agent decides it as any payable, and pays on Arc testnet under every check it applies.
+Forward an invoice to your workspace's address, and Vestiarion reads it the way **From a document** reads one. It waits on **Bills & receivables** under **From email** until an owner or admin adds it as a payable with one press, or dismisses it. Nothing that arrives by email is added, or paid, by itself: once it is added, the agent decides it as any payable, and pays on Arc testnet under every check it applies.
 
 ## 1. Turn it on
 
@@ -13,18 +13,18 @@ An owner or admin opens **Settings** and finds **Invoices by email**.
 1. Choose **Turn on**. The section shows the workspace's address, `invoices-…@…`, with **Copy the address**.
 2. Give the address to your suppliers, or forward their emails to it yourself.
 
-Anyone who knows the address can send to it. If it leaks, choose **New address**: the old one stops at once. **Turn off** stops it; the emails already in stay on AP / AR. The ledger records `invoice_inbox_on`, `invoice_inbox_changed` and `invoice_inbox_off`, never the address itself.
+Anyone who knows the address can send to it. If it leaks, choose **New address**: the old one stops at once. **Turn off** stops it; the emails already in stay on Bills & receivables. The ledger records `invoice_inbox_on`, `invoice_inbox_changed` and `invoice_inbox_off`, never the address itself.
 
 Other members see that it is on, and that An owner or admin has the address.
 
 ## 2. What happens to an email
 
-Vestiarion reads the first PDF, `.eml` or `.txt` file attached, of at most 4 MB, or the email's own text when nothing is attached. Within a minute it is on **AP / AR**, under **From email**:
+Vestiarion reads the first PDF, `.eml` or `.txt` file attached, of at most 4 MB, or the email's own text when nothing is attached. Within a minute it is on **Bills & receivables**, under **From email**:
 
 <Screenshot
   src="/docs/guides/email-inbox-ap.png"
-  alt="AP / AR with a From email section: an email titled Invoice INV-2207 from Northwind Billing, read as Northwind Hosting, 200.00 USDC due Oct 31 with purchase order PO-1042; a line saying SPF, DKIM and DMARC pass for this sender and that it is the billing email Northwind Hosting has on file; the Add, goods received, Add, not received yet and Dismiss buttons; and below them a folded Edit and add section."
-  caption="An invoice that arrived by email, read and waiting for a person on AP / AR."
+  alt="Bills & receivables with a From email section: an email titled Invoice INV-2207 from Northwind Billing, read as Northwind Hosting, 200.00 USDC due Oct 31 with purchase order PO-1042; a line saying SPF, DKIM and DMARC pass for this sender and that it is the billing email Northwind Hosting has on file; the Add, goods received, Add, not received yet and Dismiss buttons; and below them a folded Edit and add section."
+  caption="An invoice that arrived by email, read and waiting for a person on Bills & receivables."
 />
 
 - An email ready to add shows the counterparty it matched, the amount, the due date, the purchase order, and what to check.
@@ -36,13 +36,13 @@ The invoice can be laid out any way and written in any language: the model reads
 
 Each says whether the sender passed SPF, DKIM and DMARC, and whether it is the billing email the counterparty has on file. That is a check for you, never permission: Vestiarion adds nothing by itself.
 
-If the workspace has Slack, its channel is told a new invoice arrived by email, with a **Review in AP / AR** link. The ledger records `invoice_email_received`, with the sender's address mostly hidden.
+If the workspace has Slack, its channel is told a new invoice arrived by email, with a **Review in Bills & receivables** link. The ledger records `invoice_email_received`, with the sender's address mostly hidden.
 
 ## 3. Add it, or dismiss it
 
 An owner or admin chooses:
 
-- **Add, goods received** or **Add, not received yet**: the payable is added as one added on AP / AR is, by you. The ledger's `create_invoice` entry names you, and adds `via: "email"`, the email's id in the inbox and the hash of the document. The agent usually decides within a minute.
+- **Add, goods received** or **Add, not received yet**: the payable is added as one added on Bills & receivables is, by you. The ledger's `create_invoice` entry names you, and adds `via: "email"`, the email's id in the inbox and the hash of the document. The agent usually decides within a minute.
 - **Edit and add**, on an email ready to add, or **Finish and add**, on one that cannot be added as it was read or could not be read: the invoice form opens with what was read. Choose the counterparty, fix the amount or the due date, tick **Goods or services received** if you have them, and choose **Add invoice**. If you type over an amount that was read, the form names it, for instance "The invoice was read as 1.20: check this amount before you add it." It is always a payable. The `create_invoice` entry names the email as above, and lists the fields you changed from what was read. An amount typed wrong can't be edited afterwards: **Reject** the payable while it waits, and add it again.
 - **Dismiss**: the email leaves the list, and the ledger records `invoice_email_dismissed`.
 

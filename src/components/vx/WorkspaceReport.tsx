@@ -1,5 +1,6 @@
 import { ArrowRight, BookOpen, Check, FileText } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
@@ -52,7 +53,7 @@ function readinessWords(step: ReadinessStep, mainnetLabel: string): { title: str
     case "waiting":
       return {
         title: "Leave no decision waiting for your verdict",
-        note: step.waiting === 0 ? "None waiting." : `${step.waiting} ${plural(step.waiting, "decision waits", "decisions wait")} in AP / AR.`,
+        note: step.waiting === 0 ? "None waiting." : `${step.waiting} ${plural(step.waiting, "decision waits", "decisions wait")} in Bills & receivables.`,
       };
     case "addresses":
       return {
@@ -67,17 +68,18 @@ function readinessWords(step: ReadinessStep, mainnetLabel: string): { title: str
   }
 }
 
-export function WorkspaceReport({ slug, report }: { slug: string; report: Report }) {
+/** `actuals`: the comparison with what the business paid, shown after the figures (actual payments A5). */
+export function WorkspaceReport({ slug, report, actuals }: { slug: string; report: Report; actuals?: ReactNode }) {
   if (report.bills.handled === 0) {
     return (
       <EmptyState
         icon={<FileText />}
         title="No real bills yet"
-        body="Add a bill in AP / AR, or forward one by email, and the agent decides on it within a minute. This report counts what it did from then on."
+        body="Add a bill in Bills & receivables, or forward one by email, and the agent decides on it within a minute. This report counts what it did from then on."
         action={
           <Button asChild size="sm">
             <Link href={orgHref(slug, "/invoices")}>
-              Open AP / AR
+              Open Bills & receivables
               <ArrowRight aria-hidden />
             </Link>
           </Button>
@@ -90,6 +92,7 @@ export function WorkspaceReport({ slug, report }: { slug: string; report: Report
     <div className="space-y-8">
       <ReportSummary report={report} />
       {report.readiness && <ReportReadiness steps={report.readiness} />}
+      {actuals}
       <ReportLists slug={slug} report={report} />
     </div>
   );

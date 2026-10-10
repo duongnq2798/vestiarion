@@ -1,16 +1,23 @@
+import { readActualsFacts } from "./actual-payments";
+import { compareActuals } from "./actual-payments-compare";
 import { AGENT_DECISION_ACTIONS } from "./agent/shadow-hold";
 import { billDigits } from "./bill-amount";
+import { currentOrgId } from "./context";
 import { plural, utcDay, utcMinute } from "./copy";
-import { db, unwrap } from "./dal";
+import { db, platformDb, unwrap } from "./dal";
+import type { Network } from "./network";
 import { readShadowMode } from "./shadow-mode";
 import { workspaceNetwork } from "./workspace-network";
+import { readReportFacts } from "./workspace-report-read";
 
 /**
  * The shadow mode digest (docs/superpowers/specs/2026-10-07-shadow-mode-design.md S8), `npm run traction-digest`: for
  * one workspace, each decision of the agent's on a real bill since a day, the person's verdict on it, what it pays and
  * its Arc testnet transaction, and how often the person agreed. A decision counts when someone gave a verdict on it, or
  * while shadow mode is on, when it came after shadow mode started. Printed as ASCII with no blank line, so it goes into
- * `arc-canteen update-traction` as it is. Reads run inside an organization scope.
+ * `arc-canteen update-traction` as it is. Once the business records what it paid, one more line says how often the agent
+ * and the business did the same (docs/superpowers/specs/2026-10-10-actual-payments-design.md A11). Reads run inside an
+ * organization scope.
  */
 
 export interface DigestDecision {
@@ -37,6 +44,20 @@ export interface DigestFacts {
   shadow: { currency: string; startedAt: string } | null;
   since: string;
   decisions: DigestDecision[];
+  /**
+   * Every bill so far against what the business recorded paying outside Vestiarion (actual payments A11): null while
+   * nothing is recorded, or before migration 0090 runs.
+   */
+  actuals?: DigestActuals | null;
+}
+
+export interface DigestActuals {
+  compared: number;
+  agreed: number;
+  disagreed: number;
+  notRecorded: number;
+  /** Positive when the agent was earlier than the business. */
+  medianDays: number | null;
 }
 
 type DecisionRow = { seq: number | string; ts: string; action: string; detail: Record<string, unknown> | null };
@@ -128,7 +149,38 @@ export async function readDigestFacts(input: { slug: string; since: string }): P
     shadow: mode ? { currency: mode.currency, startedAt: mode.startedAt } : null,
     since: input.since,
     decisions,
+    actuals: await digestActuals(network.id),
   };
+}
+
+/**
+ * Every bill so far, compared with what the business recorded paying (actual payments A11), as the report compares
+ * them: null while nothing is recorded, and before migration 0090 runs.
+ */
+async function digestActuals(network: Network): Promise<DigestActuals | null> {
+  const read = await readActualsFacts(db());
+  if (!read.available || read.facts.records.length === 0) return null;
+  const org = await platformDb().from("orgs").select("mode").eq("id", currentOrgId()).maybeSingle<{ mode: string }>();
+  if (org.error) throw new Error(org.error.message);
+  const totals = compareActuals(await readReportFacts(db(), network, { sandbox: org.data?.mode !== "live" }), read.facts).totals;
+  return { compared: totals.compared, agreed: totals.agreed, disagreed: totals.disagreed, notRecorded: totals.notRecorded, medianDays: totals.medianDays };
+}
+
+/** The actuals line, or null with nothing to say. */
+function actualsLine(actuals: DigestActuals | null | undefined): string | null {
+  if (!actuals) return null;
+  const given = actuals.agreed + actuals.disagreed;
+  const parts = [
+    given === 0
+      ? "nothing compared yet"
+      : `the agent and the business did the same on ${actuals.agreed} of ${given} ${plural(given, "bill", "bills")} (${Math.round((actuals.agreed / given) * 100)}%)`,
+  ];
+  if (actuals.medianDays !== null) {
+    const days = Math.round(Math.abs(actuals.medianDays) * 10) / 10;
+    parts.push(actuals.medianDays === 0 ? "a median of 0 days between them" : `the agent was a median ${days} ${plural(days, "day", "days")} ${actuals.medianDays > 0 ? "earlier" : "later"}`);
+  }
+  if (actuals.notRecorded > 0) parts.push(`${actuals.notRecorded} ${plural(actuals.notRecorded, "bill", "bills")} not recorded yet`);
+  return `Every bill so far, against what the business recorded paying outside Vestiarion: ${parts.join("; ")}.`;
 }
 
 /** Text in ASCII: letters keep their base form, typographic marks their plain ones, and anything else is dropped. */
@@ -184,6 +236,7 @@ export function formatDigest(facts: DigestFacts, options: { hidePayees?: boolean
       ? `Vestiarion shadow mode, workspace ${facts.slug} on ${facts.network}: on since ${utcDay(facts.shadow.startedAt)}, bills in ${facts.shadow.currency}.`
       : `Vestiarion shadow mode, workspace ${facts.slug} on ${facts.network}: off now.`,
     `${count}${rate}`,
+    actualsLine(facts.actuals) ?? "",
     ...facts.decisions.map((decision) => {
       const paid = `${grouped(decision.amount, 2)} ${decision.currency}`;
       const money = decision.bill ? `${grouped(decision.bill.amount, billDigits(decision.bill.currency))} ${decision.bill.currency} (${paid})` : paid;

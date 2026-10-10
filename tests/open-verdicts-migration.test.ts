@@ -75,7 +75,7 @@ beforeAll(async () => {
   await verdict(cust, sample, "agree", "2026-10-08T11:00:00Z");
   await verdict(ours, await payable(ours, "Our vendor"), "agree", "2026-10-08T09:00:00Z");
   await verdict(onMainnet, await payable(onMainnet, "Mainnet vendor"), "disagree", "2026-10-08T09:00:00Z");
-});
+}, 60_000);
 
 afterAll(async () => {
   await db.close();

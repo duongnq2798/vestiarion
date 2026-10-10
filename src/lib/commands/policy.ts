@@ -13,6 +13,9 @@ export const COMMAND_PERMISSIONS = {
   "payable.reject": "approval.decide",
   "payable.return": "approval.decide",
   "payable.add_details": "records.write",
+  // What the business paid outside Vestiarion is a record, entered as an invoice is (actual payments A4).
+  "payable.record_actual": "records.write",
+  "payable.import_actuals": "records.write",
   "milestone.pay": "approval.decide",
   "milestone.close": "approval.decide",
   "agent.pause": "agent.pause",

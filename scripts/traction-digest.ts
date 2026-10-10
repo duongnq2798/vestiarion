@@ -1,8 +1,9 @@
 /**
  * Prints a workspace's shadow mode digest (docs/superpowers/specs/2026-10-07-shadow-mode-design.md S8): each decision
  * of the agent's on a real bill since a day, the person's verdict, what it paid with its Arc testnet transaction, and
- * the agreement rate. ASCII with no blank line, ready for `arc-canteen update-traction`. Ask the business before
- * publishing it; --hide-payees names each supplier by a letter.
+ * the agreement rate; once the business records what it paid, how often the agent and the business did the same
+ * (docs/superpowers/specs/2026-10-10-actual-payments-design.md A11). ASCII with no blank line, ready for
+ * `arc-canteen update-traction`. Ask the business before publishing it; --hide-payees names each supplier by a letter.
  *
  *   npm run traction-digest -- <org-slug> --since 2026-10-07
  *   npm run traction-digest -- <org-slug> --since 2026-10-07 --hide-payees

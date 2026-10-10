@@ -7,6 +7,8 @@ import sitemap from "@/app/sitemap";
 import TermsPage, { metadata as termsMetadata } from "@/app/terms/page";
 import { ORG_ROLES } from "@/lib/auth/roles";
 import { loginRedirectFor, requiresSession } from "@/lib/auth/routes";
+import { FIRST_TOUCH_COOKIE, FIRST_TOUCH_DAYS, TAG_KEYS, TAG_MAX } from "@/lib/growth/attribution";
+import { CONSENT, MESSAGE_MAX } from "@/lib/growth/guided-setup";
 import { SANDBOX_IDLE_DAYS, WEBHOOK_DELIVERY_RETENTION_DAYS } from "@/lib/platform/cleanup";
 import { publicOrigin } from "@/lib/public-origin";
 import { ISSUES_URL } from "@/lib/site-links";
@@ -30,7 +32,7 @@ const source = (file: string) => readFileSync(path.join(process.cwd(), file), "u
 
 const PAGES = [
   { path: "/terms", file: "src/app/terms/page.tsx", Page: TermsPage, metadata: termsMetadata, heading: "Terms of use", updated: "2026-09-30" },
-  { path: "/privacy", file: "src/app/privacy/page.tsx", Page: PrivacyPage, metadata: privacyMetadata, heading: "Privacy", updated: "2026-10-05" },
+  { path: "/privacy", file: "src/app/privacy/page.tsx", Page: PrivacyPage, metadata: privacyMetadata, heading: "Privacy", updated: "2026-10-10" },
 ] as const;
 
 describe.each(PAGES)("$path", ({ path: route, file, Page, metadata, heading, updated }) => {
@@ -122,6 +124,58 @@ describe("the privacy page", () => {
     for (const phrase of ["/invite/:token", "/o/:org", "Google signals", "ad personalization", "query string", "origin"]) {
       expect(body, phrase).toContain(phrase);
     }
+  });
+
+  it("describes the first-touch cookie as the code sets it: its name, the tags, how long, first-party, never an email", () => {
+    const section = text(renderToStaticMarkup(<PrivacyPage />).split('id="campaign-cookie"')[1]?.split('id="retention"')[0] ?? "");
+    expect(section).toContain(FIRST_TOUCH_COOKIE);
+    expect(section).toContain(`${FIRST_TOUCH_DAYS} days`);
+    expect(section).toContain(`${TAG_MAX} letters`);
+    for (const tag of Object.keys(TAG_KEYS)) expect(section, tag).toContain(tag);
+    for (const phrase of ["first-party", "never holds your email address", "without its query", "host of the site", "deleted with the workspace"]) {
+      expect(section, phrase).toContain(phrase);
+    }
+    const cookie = source("src/lib/growth/attribution.ts");
+    expect(cookie).toContain('"Path=/", "SameSite=Lax"');
+    expect(cookie).not.toMatch(/Domain=/);
+  });
+
+  it("describes the guided setup form as the code reads and keeps it: its fields, why, where, who sees it, never shared", () => {
+    const markup = renderToStaticMarkup(<PrivacyPage />);
+    const section = text(markup.split('id="guided-setup"')[1]?.split('id="retention"')[0] ?? "");
+    const form = source("src/components/studios/GuidedSetupForm.tsx");
+    for (const field of ['name="name"', 'name="email"', 'name="studio"', 'name="website"', 'name="contractors"', 'name="arrival"', 'name="message"']) {
+      expect(form, field).toContain(field);
+    }
+    for (const phrase of [
+      "your name",
+      "your work email",
+      "your studio's name",
+      "its website",
+      "how many contractors you pay a month",
+      "how invoices reach you",
+      `up to ${MESSAGE_MAX} characters`,
+      CONSENT,
+      "Supabase Postgres database",
+      "apart from every workspace",
+      "Only the Vestiarion team sees them",
+      "not shared with anyone else and not added to any marketing list",
+      "vx_ft",
+      "never your message",
+    ]) {
+      expect(section, phrase).toContain(phrase);
+    }
+    // The team's note is sent only where the variable is set, and carries no message.
+    const inbound = source("src/lib/growth/inbound.ts");
+    expect(inbound).toContain("GROWTH_INBOUND_NOTIFY_EMAIL");
+    expect(inbound.split("export function inboundNotice")[1]?.split("\n}\n")[0]).not.toContain("request.message");
+    // The cookie section says a request keeps its tags, and the form's consent line links here.
+    expect(text(markup.split('id="campaign-cookie"')[1]?.split('id="guided-setup"')[0] ?? "")).toContain(
+      "When you ask for a guided setup, those tags are kept with your request too"
+    );
+    expect(form).toContain('href="/privacy#guided-setup"');
+    // Resend's entry names the note.
+    expect(text(markup.split("<strong>Resend</strong>")[1] ?? "")).toContain("a short note about each new guided setup request");
   });
 
   it("says API keys are kept only as a SHA-256 hash, as the code keeps them", () => {
@@ -313,9 +367,10 @@ describe("the privacy page", () => {
 });
 
 describe("the sitemap", () => {
-  it("lists the terms and the privacy page", () => {
+  it("lists the terms, the privacy page and the page for studios", () => {
     const urls = sitemap().map((entry) => entry.url);
     expect(urls).toContain(`${publicOrigin()}/terms`);
     expect(urls).toContain(`${publicOrigin()}/privacy`);
+    expect(urls).toContain(`${publicOrigin()}/studios`);
   });
 });

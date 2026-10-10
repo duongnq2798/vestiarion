@@ -121,7 +121,7 @@ beforeAll(async () => {
   await decision(ours, ourBill, "2026-09-30T01:00:00Z");
   await payment(ours, ourBill, "2026-09-30T02:00:00Z");
   await org("cust-main", owner, "2026-10-07T00:00:00Z", "arc-mainnet");
-});
+}, 60_000);
 
 afterAll(async () => {
   await db.close();

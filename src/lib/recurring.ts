@@ -5,7 +5,7 @@ import { usdcAmountSchema } from "./intake-validation";
 /**
  * Recurring payments (docs/superpowers/specs/2026-10-02-recurring-payables-design.md): when each
  * period of a schedule falls due, when its invoice is created, and what a person typed to set one
- * up. Pure; the cycle's `createRecurringInvoices` and the AP / AR page use it.
+ * up. Pure; the cycle's `createRecurringInvoices` and the Bills & receivables page use it.
  */
 
 export type RecurringUnit = "day" | "week" | "month";

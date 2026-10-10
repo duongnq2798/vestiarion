@@ -151,6 +151,7 @@ export const FOOTER_COLUMNS: ReadonlyArray<{ title: string; links: readonly Foot
     title: "Resources",
     links: [
       { href: "/open", label: "Open numbers" },
+      { href: "/studios", label: "For studios" },
       { href: "/docs/guides/go-live", label: "Go live guide" },
       { href: "/docs/guides/first-payment", label: "First payment guide" },
       { href: ISSUES_URL, label: "Support" },
