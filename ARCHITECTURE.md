@@ -1280,6 +1280,45 @@ npm publish public/sdk/vestiarion-sdk-<version>.tgz --access public
 Both installs then get the same bytes. The next version's `sdk/README.md` should name `npm install @vestiarion/sdk`
 first; 0.1.0's README, inside its immutable tarball, names the site's URL.
 
+## Growth tracking for the team
+
+Migration `0099` adds what the team records about its own growth, apart from any workspace: `growth_campaigns`,
+`growth_leads` (businesses the team found by hand, each with its source, segment, campaign, evidence, a draft message,
+a review status and a stage), `growth_spend` (cash and founder hours) and `growth_revenue` (pricing talks, pilots,
+invoices and payments; only `payment_received` ever counts as revenue). They are platform tables: row level security
+on, nothing for `anon` or `authenticated`, reached only through `platformDb()`.
+
+Every change to a lead's stage, review status, campaign, workspace or source, and its creation, is written to the
+append-only `growth_lead_events` by the trigger `growth_leads_log`, so attribution and stage are never overwritten
+without a trace; the events refuse update, delete and truncate, except the cascade when their lead is deleted. The
+note and the team member reach the trigger through two transaction-local settings, `growth.note` and `growth.by`, that
+`growth_update_lead(p_lead, p_changes, p_note, p_by)` and `growth_import_leads(p_rows, p_by)` set before they write.
+A write made any other way (the link cleared when a workspace is deleted) is logged with neither.
+
+**The first-touch cookie.** `FirstTouch` (`src/components/analytics/FirstTouch.tsx`), in the root layout, writes a
+first-party cookie, `vx_ft`, when the address carries `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`,
+`utm_term` or `ref` and the browser holds none yet: those tags, each cut to 100 characters of `[A-Za-z0-9._~-]` (a
+tag with an `@` is dropped), the landing path without its query, the referring site's host, and the time; 90 days,
+`SameSite=Lax`, `Secure` on https, under 1 KB (`src/lib/growth/attribution.ts`). `createWorkspaceAction` reads it once
+the workspace exists and calls `record_org_attribution`, which keeps the first touch in `org_attribution` and never
+replaces it. Recording never fails or holds up onboarding: no cookie, a database error, or an answer slower than 1.5
+seconds is logged at most (`src/lib/growth/record.ts`). The privacy page describes the cookie.
+
+**The founder dashboard** at `/admin/growth` is for people on `platform_team` only. `growthTeamUser()`
+(`src/lib/growth/gate.ts`) asks `growth_team_member(p_user)` on every call and fails closed; the page answers anyone
+else, signed in or not, with `notFound()`, so it never says it exists, and every action in
+`src/app/admin/growth/actions.ts` and the CSV export at `/admin/growth/leads.csv` ask the gate again themselves
+(`tests/access-gates.test.ts`, `tests/growth-access.test.ts`). It is in no navigation and no sitemap, and asks not to
+be indexed. It shows `open_funnel` per network, the workspaces from `growth_workspaces(p_since)` (customers apart from
+ours by `open_funnel`'s rule, with the first decision and the second real bill by `0089`'s definitions, and no email or
+person's name), figures with their numerators and denominators ("Not enough data yet" where a denominator is 0),
+breakdowns by source, segment and campaign, the leads with their trails, an approval queue, a CSV import that previews
+every row and never overwrites a lead, and forms for campaigns, spend and revenue. The calculations live in
+`src/lib/growth/metrics.ts` and `csv.ts`, and the page's Definitions section (`src/lib/growth/definitions.ts`) says
+where each figure comes from. **It never sends a message to anyone**: approving a lead records a decision, and
+Vestiarion never sends outreach. Payment volume is never shown as revenue, and amounts in different currencies are
+never added together.
+
 ## Data ownership
 
 Supabase tables read by the API include `accounts`, `counterparties`,

@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { orgHref } from "@/lib/auth/org-paths";
 import { getSessionUser } from "@/lib/auth/session";
 import { currentConfig } from "@/lib/context";
+import { recordFirstTouch } from "@/lib/growth/record";
 import { MAINNET_NOT_OPEN, mayUseMainnet } from "@/lib/mainnet";
 import { createWorkspace, WorkspaceLimitError } from "@/lib/platform/workspace";
 
@@ -30,13 +31,17 @@ export async function createWorkspaceAction(_previous: CreateWorkspaceResult, fo
   const network = formData.get("network") === "arc-mainnet" ? "arc-mainnet" : "arc-testnet";
   if (network === "arc-mainnet" && !mayUseMainnet(user.email, currentConfig())) return { ok: false, message: MAINNET_NOT_OPEN };
   let slug: string;
+  let orgId: string;
   try {
-    ({ slug } = await createWorkspace({ userId: user.id, name, network }));
+    ({ slug, orgId } = await createWorkspace({ userId: user.id, name, network }));
   } catch (error) {
     if (error instanceof WorkspaceLimitError) return { ok: false, message: error.message };
     console.error("workspace creation failed", error);
     return { ok: false, message: "The workspace could not be created. Try again in a moment." };
   }
+  // Which campaign brought this person, from the first-touch cookie, recorded once; it never fails or holds up the
+  // workspace, which already exists (src/lib/growth/record.ts).
+  await recordFirstTouch(orgId);
   // `redirect` throws to navigate, so it stays outside the `try` above.
   redirect(orgHref(slug, "/console"));
 }
