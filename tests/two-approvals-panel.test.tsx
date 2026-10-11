@@ -12,6 +12,8 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
  * render leaves closed, so the dialog's own words are checked against the component's source.
  */
 
+// Try it on past decisions, inside the setting's form (policy replay §2): a server action, as the form's own.
+vi.mock("@/app/actions/policy-replay", () => ({ tryRuleAction: vi.fn() }));
 vi.mock("@/app/actions/approval-policy", () => ({ setTwoApprovalsAction: vi.fn() }));
 
 const html = (node: ReactElement) => renderToStaticMarkup(<TooltipProvider>{node}</TooltipProvider>);

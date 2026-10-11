@@ -67,6 +67,7 @@ export const DOCS_NAV: NavSection[] = [
     title: "Trust and controls",
     pages: [
       { slug: "guides/controls", title: "How payments are controlled", description: "What the agent decides and what it may pay: the checks in code, the limits, the people who approve, how to stop it, and where money can move." },
+      { slug: "guides/try-a-rule", title: "Try a limit before you change it", description: "Try a new payment limit, two-approvals figure or spending limit on the agent's past decisions, see which bills it would have held or let through, then apply it." },
       { slug: "guides/audit-export", title: "Verify an audit export", description: "Download a workspace's signed ledger and check it with a standalone verifier." },
       { slug: "research/model-vs-policy", title: "When the model and the policy disagree", description: "Production decisions beside the written policy's answer to the same facts: where they differed, and where code refused the model." },
       { slug: "contracts", title: "Contracts on Arc", description: "The contracts Vestiarion deploys and the Circle contracts it calls, with their addresses." },
