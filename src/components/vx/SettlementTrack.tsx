@@ -6,7 +6,7 @@ import { orgHref } from "@/lib/auth/org-paths";
 import { utcMinute } from "@/lib/copy";
 import { networkProfile, type Network } from "@/lib/network";
 import { chainById, txUrl } from "@/lib/payee-chains";
-import { ageText, SETTLEMENT_STAGES, type Settlement, type SettlementConflict, type SettlementMismatch, type SettlementStage, type StageMark } from "@/lib/settlement";
+import { ageText, GATEWAY_FAILED, SETTLEMENT_STAGES, type Settlement, type SettlementConflict, type SettlementMismatch, type SettlementStage, type StageMark } from "@/lib/settlement";
 import { Hash } from "./Primitives";
 
 /**
@@ -51,6 +51,15 @@ export const MISMATCH_SENTENCE: Record<SettlementMismatch, string> = {
 export const UNKNOWN_OUTCOME =
   "Outcome unknown: Circle did not answer when this payment was sent, so it may have taken the transfer. Vestiarion looks for it on Circle before anything else is sent, and sends a new transfer only once Circle shows none.";
 
+/** The same for a payout to another chain, which Circle cannot list this way: it is asked for again under its own key (R4). */
+export const UNKNOWN_OUTCOME_ACROSS =
+  "Outcome unknown: Circle did not answer when this payment was sent, so it may have taken the transfer. A payout to another chain is asked for again under the same payment key, which Circle takes only once, so it is never sent twice.";
+
+/** What an unknown outcome means for this payment, without its "Outcome unknown: " lead. */
+export function unknownOutcome(settlement: Pick<Settlement, "crossChain">): string {
+  return (settlement.crossChain ? UNKNOWN_OUTCOME_ACROSS : UNKNOWN_OUTCOME).replace(/^Outcome unknown: /, "");
+}
+
 /** Where the payment is now, in a few words: the track's summary, and Treasury's row. */
 export function settlementSummary(settlement: Settlement, now: number): string {
   const attempt = settlement.attempt > 1 ? ` · attempt ${settlement.attempt}` : "";
@@ -91,6 +100,8 @@ function reachedLine(stage: SettlementStage, mark: StageMark, settlement: Settle
       return settlement.attempt > 1 ? `Vestiarion sent it to Circle, as attempt ${settlement.attempt}.` : "Vestiarion sent it to Circle.";
     case "pending":
       if (mark.state === "STUCK") return "Circle shows it stuck: it was sent and can still be mined (Circle: STUCK).";
+      // Gateway's failure is not an end: its attestation may still be minted, so nothing is sent again (L3).
+      if (mark.state === GATEWAY_FAILED) return "Gateway reported it failed, but it may still be minted on the payee's chain, so nothing is sent again (Circle: GATEWAY_FAILED).";
       // The watch names Circle's word only when Circle answered it; otherwise it told the payment from its age alone.
       if (mark.by === "watch") return mark.state ? `Not confirmed when the transfer watch asked Circle${circleWord(mark.state)}.` : "Not confirmed when the transfer watch checked it.";
       return `Circle took it and had not confirmed it yet${circleWord(mark.state)}.`;
@@ -228,7 +239,7 @@ export function SettlementTrack({
                 </StageRow>
               ) : unknown ? (
                 <StageRow key="unknown" kind="unknown" title="Outcome unknown" at={settlement.unknownSince}>
-                  {UNKNOWN_OUTCOME.replace(/^Outcome unknown: /, "")}
+                  {unknownOutcome(settlement)}
                 </StageRow>
               ) : null,
             ].filter((item) => item !== null);

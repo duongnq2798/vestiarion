@@ -115,6 +115,22 @@ describe("the track in flight", () => {
       "Outcome unknown: Circle did not answer when this payment was sent, so it may have taken the transfer. Vestiarion looks for it on Circle before anything else is sent, and sends a new transfer only once Circle shows none."
     );
   });
+
+  it("says a payout to another chain is asked for again under its own key, which Circle cannot list (I18)", () => {
+    const settlement = lifecycle([...decided, { kind: "unanswered", at: T(3), attempt: 1 }], open, { crossChain: true });
+    const words = text(render(settlement));
+    expect(words).toContain(
+      "Circle did not answer when this payment was sent, so it may have taken the transfer. A payout to another chain is asked for again under the same payment key, which Circle takes only once, so it is never sent twice."
+    );
+    expect(words).not.toContain("looks for it on Circle");
+  });
+
+  it("says Gateway's failure may still be minted, and that nothing is sent again (L3)", () => {
+    const words = text(render(lifecycle([...decided, { ...pending, state: "GATEWAY_FAILED" }], open, { crossChain: true })));
+    expect(words).toContain("Pending · sent 39 min ago");
+    expect(words).toContain("Gateway reported it failed, but it may still be minted on the payee's chain, so nothing is sent again (Circle: GATEWAY_FAILED).");
+    expect(words).not.toContain("Circle could not be read just now");
+  });
 });
 
 describe("the ends", () => {

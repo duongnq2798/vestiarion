@@ -1,6 +1,6 @@
 import { FAILED_STATES, MAY_HAVE_BEEN_ACCEPTED } from "./circle/settlement";
 import { paidAcrossChains } from "./payee-chains";
-import { reduceSettlement, type Settlement, type SettlementBooks, type SettlementFact } from "./settlement";
+import { GATEWAY_FAILED, reduceSettlement, type Settlement, type SettlementBooks, type SettlementFact } from "./settlement";
 
 /**
  * The facts a payment's lifecycle is read from (docs/superpowers/specs/2026-10-11-settlement-lifecycle-design.md L2,
@@ -86,8 +86,11 @@ export function intentFacts(intent: IntentRecord, now: number): SettlementFact[]
       if (intent.provider_tx_id) {
         if (terminal(intent.provider_state)) {
           facts.push({ kind: "ended", at: intent.updated_at, attempt, end: circleEnd(intent.provider_state as string), state: intent.provider_state, reason: intent.failure_reason });
+        } else if (intent.provider_state === GATEWAY_FAILED) {
+          // Gateway's failure: its attestation may still be minted, so it is in flight with Gateway's own word (L3).
+          facts.push({ kind: "pending", at: intent.updated_at, attempt, state: intent.provider_state, by: "circle" });
         } else {
-          // Circle took it and has not ended it: a read of ours failed, or Gateway's failure, which may still be minted (L3).
+          // Circle took it and has not ended it: a read of ours failed (L3).
           facts.push({ kind: "pending", at: lastRead, attempt, state: intent.provider_state, by: "circle" }, { kind: "read_failed", at: intent.updated_at, attempt });
         }
         return facts;
@@ -198,18 +201,21 @@ export function booksOf(bill: BillBooks): SettlementBooks {
   return { paid: bill.status === "paid", txRef: bill.tx_ref, at: bill.settled_at ?? null };
 }
 
+/** A payment intent with the bill it pays. */
+type BillPayment = IntentRecord & { source_type: "invoice" | "milestone"; source_id: string };
+
 /**
- * Each payment's lifecycle, by its bill's id, for the bills a page shows (L7): a payment whose bill is not among them is
+ * Each payment with its bill and its lifecycle, for the bills a page shows (L7): a payment whose bill is not among them is
  * left out. The entries are grouped by bill once, so a page with many bills reads each entry once.
  */
-export function settlementsByBill(input: {
-  payments: Iterable<IntentRecord & { source_type: "invoice" | "milestone"; source_id: string }>;
-  invoices?: readonly BillBooks[];
-  milestones?: readonly BillBooks[];
+export function billSettlements<P extends BillPayment, B extends BillBooks>(input: {
+  payments: Iterable<P>;
+  invoices?: readonly B[];
+  milestones?: readonly B[];
   entries: readonly SettlementEntry[];
   now: number;
-}): Map<string, Settlement> {
-  const bills = new Map<string, BillBooks>();
+}): Array<{ payment: P; bill: B; settlement: Settlement }> {
+  const bills = new Map<string, B>();
   for (const bill of input.invoices ?? []) bills.set(`invoice:${bill.id}`, bill);
   for (const bill of input.milestones ?? []) bills.set(`milestone:${bill.id}`, bill);
   const entriesOf = new Map<string, SettlementEntry[]>();
@@ -225,15 +231,67 @@ export function settlementsByBill(input: {
       entriesOf.set(`${type}:${id}`, list);
     }
   }
-  const settlements = new Map<string, Settlement>();
+  const found: Array<{ payment: P; bill: B; settlement: Settlement }> = [];
   for (const payment of input.payments) {
     const key = `${payment.source_type}:${payment.source_id}`;
     const bill = bills.get(key);
     if (!bill) continue;
-    settlements.set(
-      payment.source_id,
-      settlementOf({ intent: payment, entries: entriesOf.get(key) ?? [], source: { type: payment.source_type, id: payment.source_id }, books: booksOf(bill), now: input.now })
-    );
+    const settlement = settlementOf({ intent: payment, entries: entriesOf.get(key) ?? [], source: { type: payment.source_type, id: payment.source_id }, books: booksOf(bill), now: input.now });
+    found.push({ payment, bill, settlement });
   }
-  return settlements;
+  return found;
+}
+
+/** Each payment's lifecycle by its bill's id, for the cards of the bills a page shows (L7). */
+export function settlementsByBill(input: {
+  payments: Iterable<BillPayment>;
+  invoices?: readonly BillBooks[];
+  milestones?: readonly BillBooks[];
+  entries: readonly SettlementEntry[];
+  now: number;
+}): Map<string, Settlement> {
+  return new Map(billSettlements(input).map(({ payment, settlement }) => [payment.source_id, settlement]));
+}
+
+/** A payment as Treasury lists it (L7): whom it pays, the bill it pays, what it carries, and where it is. */
+export interface FlightRow {
+  source: { type: "invoice" | "milestone"; id: string };
+  /** The payee, or the milestone and its contractor. */
+  name: string;
+  /** What was sent: the invoice's `paid_amount`, written with the transfer that carried it, else the intent's amount. */
+  amount: number;
+  currency: string;
+  settlement: Settlement;
+}
+
+type Named = BillBooks & { name: string; sent: number | null };
+
+/**
+ * Treasury's payments (L7, L8): each payment read for it, with its bill's books and the entries about it. The intent keeps
+ * its first attempt's amount, which a resend after a discount's deadline does not change; the invoice's `paid_amount`
+ * is what the transfer in flight carries (0038).
+ */
+export function flightRows(input: {
+  payments: Iterable<BillPayment & { amount: number; token: string }>;
+  invoices: readonly (BillBooks & { counterparty_name: string; paid_amount?: number | null })[];
+  milestones: readonly (BillBooks & { contractor_name: string; title: string })[];
+  entries: readonly SettlementEntry[];
+  now: number;
+}): FlightRow[] {
+  const invoices: Named[] = input.invoices.map((invoice) => ({ id: invoice.id, status: invoice.status, tx_ref: invoice.tx_ref, settled_at: invoice.settled_at, name: invoice.counterparty_name, sent: invoice.paid_amount ?? null }));
+  const milestones: Named[] = input.milestones.map((milestone) => ({
+    id: milestone.id,
+    status: milestone.status,
+    tx_ref: milestone.tx_ref,
+    settled_at: milestone.settled_at,
+    name: `${milestone.title} for ${milestone.contractor_name}`,
+    sent: null,
+  }));
+  return billSettlements({ payments: input.payments, invoices, milestones, entries: input.entries, now: input.now }).map(({ payment, bill, settlement }) => ({
+    source: { type: payment.source_type, id: payment.source_id },
+    name: bill.name,
+    amount: bill.sent ?? payment.amount,
+    currency: payment.token,
+    settlement,
+  }));
 }

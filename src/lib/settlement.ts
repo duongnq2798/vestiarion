@@ -10,6 +10,9 @@
 export const SETTLEMENT_STAGES = ["proposed", "authorized", "submitted", "pending", "confirmed", "available", "reconciled"] as const;
 export type SettlementStage = (typeof SETTLEMENT_STAGES)[number];
 
+/** What the live provider records when Gateway reports a transfer failed: its attestation may still be minted (L3). */
+export const GATEWAY_FAILED = "GATEWAY_FAILED";
+
 /** How an attempt ended without paying the payee (L3): Circle failed or denied it, Circle cancelled it, or it never reached Circle. */
 export type AttemptEnd = "failed" | "cancelled" | "not_sent";
 
@@ -109,6 +112,8 @@ export interface Settlement {
   mismatch: SettlementMismatch | null;
   conflicts: SettlementConflict[];
   simulated: boolean;
+  /** Paid to another chain: an unknown send is asked again under its key there, rather than looked up (I18). */
+  crossChain: boolean;
 }
 
 interface AttemptState {
@@ -329,6 +334,7 @@ export function reduceSettlement(input: SettlementInput): Settlement {
     mismatch,
     conflicts,
     simulated: input.simulated,
+    crossChain: input.crossChain,
   };
 }
 

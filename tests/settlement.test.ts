@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { ageText, paymentsInFlight, reduceSettlement, SETTLEMENT_STAGES, type SettlementBooks, type SettlementFact, type SettlementInput } from "@/lib/settlement";
-import { booksOf, entryFacts, intentFacts, settlementOf, settlementsByBill, type IntentRecord } from "@/lib/settlement-facts";
+import { booksOf, entryFacts, flightRows, intentFacts, settlementOf, settlementsByBill, type IntentRecord } from "@/lib/settlement-facts";
 
 /**
  * One settlement lifecycle per payment (docs/superpowers/specs/2026-10-11-settlement-lifecycle-design.md): the stages
@@ -308,8 +308,11 @@ describe("intentFacts", () => {
       { kind: "pending", at: T(1), attempt: 1, state: "SENT", by: "circle" },
       { kind: "read_failed", at: T(3), attempt: 1 },
     ]);
-    // Gateway's own failure may still be minted: pending too.
-    expect(intentFacts(intent({ status: "failed", provider_tx_id: "gateway:x", provider_state: "GATEWAY_FAILED", confirmed_at: null }), NOW).map((fact) => fact.kind)).toEqual(["submitted", "pending", "read_failed"]);
+    // Gateway's own failure may still be minted: pending too, with Gateway's word, and no failed read of ours.
+    expect(intentFacts(intent({ status: "failed", provider_tx_id: "gateway:x", provider_state: "GATEWAY_FAILED", confirmed_at: null, updated_at: T(3) }), NOW)).toEqual([
+      { kind: "submitted", at: T(0, 2), attempt: 1 },
+      { kind: "pending", at: T(3), attempt: 1, state: "GATEWAY_FAILED", by: "circle" },
+    ]);
   });
 
   it("reads a send Circle never answered as unknown, and one that never reached Circle as not sent", () => {
@@ -504,6 +507,46 @@ describe("settlementsByBill", () => {
       now: NOW,
     });
     expect(settlements.get("same-id")?.stages.proposed).toBeUndefined();
+  });
+});
+
+describe("flightRows", () => {
+  const payment = (sourceType: "invoice" | "milestone", sourceId: string, over: Partial<IntentRecord> = {}, amount = 10, token = "USDC") => ({
+    ...intent(over),
+    source_type: sourceType,
+    source_id: sourceId,
+    amount,
+    token,
+  });
+
+  it("names each payment's payee, carries what was sent, and its lifecycle", () => {
+    const rows = flightRows({
+      payments: [
+        payment("invoice", "inv-1", { status: "pending", provider_state: "SENT", confirmed_at: null, tx_hash: null }, 100),
+        payment("milestone", "ms-1", { status: "submitting", provider_tx_id: null, provider_state: null, confirmed_at: null, tx_hash: null, updated_at: T(29) }, 40, "EURC"),
+        payment("invoice", "gone", { status: "pending", confirmed_at: null }),
+      ],
+      // A resend after the discount's deadline carries the full amount: the invoice's paid_amount says so, not the intent.
+      invoices: [{ id: "inv-1", status: "matched", tx_ref: "circle-tx-1", counterparty_name: "Harbor VPS", paid_amount: 98 }],
+      milestones: [{ id: "ms-1", status: "verified", tx_ref: null, contractor_name: "Ana Lima", title: "Design review" }],
+      entries: [],
+      now: NOW,
+    });
+    expect(rows.map((row) => [row.source, row.name, row.amount, row.currency, row.settlement.status])).toEqual([
+      [{ type: "invoice", id: "inv-1" }, "Harbor VPS", 98, "USDC", "in_flight"],
+      [{ type: "milestone", id: "ms-1" }, "Design review for Ana Lima", 40, "EURC", "in_flight"],
+    ]);
+  });
+
+  it("falls back to the intent's amount when the invoice recorded none", () => {
+    const rows = flightRows({
+      payments: [payment("invoice", "inv-1", { status: "pending", confirmed_at: null }, 12.5)],
+      invoices: [{ id: "inv-1", status: "matched", tx_ref: null, counterparty_name: "Harbor VPS", paid_amount: null }],
+      milestones: [],
+      entries: [],
+      now: NOW,
+    });
+    expect(rows[0].amount).toBe(12.5);
   });
 });
 
