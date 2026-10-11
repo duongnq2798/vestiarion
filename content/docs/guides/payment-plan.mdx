@@ -22,7 +22,7 @@ Under them, a line says how fresh the balance is: "Sandbox: the balance is simul
 
 ## What it counts
 
-- **Bills to pay in USDC that are still open**: waiting for the agent, scheduled, on their way, held, waiting for details, or being decided in **Approvals**. A bill is in the plan when its due date, the day the agent scheduled it for, or its discount's last day falls within the 14 days. A bill whose day falls after them is listed under "After" that day and not counted in the days shown.
+- **Bills to pay in USDC that are still open**: waiting for the agent, scheduled, on their way, held, waiting for details, or being decided in **Approvals**. A bill is in the plan when its due date, the day the agent scheduled it for, or its discount's last day falls within the 14 days. A bill whose day falls after them is listed under "After" the 14th day, and not counted in the days shown.
 - **Open milestones**, counted today: they are paid once their work is verified.
 - **Each obligation once.** A payment already on its way is that payment. A milestone whose USDC is held in escrow is listed under **Listed, not counted**, since its cash has left the wallet, and so is a bill the agent flagged for review, such as a likely duplicate.
 - **A bill and a milestone for the same payee and amount** may be one payment entered twice. The plan cannot tell, and the agent would pay both, so both are counted and both say **May be the same payment** until one of them is closed.
@@ -50,9 +50,9 @@ Each line says why it is on its day, for instance "Overdue since Oct 9, 2026: fi
 Each line has the payee, what leaves that day (a discounted amount shows the billed amount struck through beside it), where it stands with the agent, why it is on its day, and **Balance after**. A line can also carry these marks, each with its reason in a sentence beside it:
 
 - **Short of cash**: the balance cannot cover it on its day. It is not taken off the balance, since the agent holds a bill it cannot pay, and it counts in **Not covered by the cash**. The plan never spends cash that is not there.
-- **Under the cushion**: paid on its due date, it leaves the balance under the cushion. An obligation is still paid on its day: it is never delayed to protect the cushion.
+- **Under the cushion**: paid on its day, it leaves the balance under the cushion. An obligation is still paid on its day: it is never delayed to protect the cushion.
 - **Over the agent's limit**: the agent's daily or 7-day spending limit has no room for it that day, so it waits for a person's approval. What the agent paid in the last 7 days counts against each of the first 7 days.
-- **Above payment limit**, **Two approvals** and **High risk**: the checks the agent runs before every payment. Such a bill is paid by people, not by the agent on its own.
+- **Above payment limit**, **Two approvals** and **High risk**: the checks the agent runs before every payment. Such a bill is not the agent's to pay on its own: people approve it, and a payee screened high risk waits for Compliance.
 - **May be the same payment** and **Due date unreadable**.
 
 A bill that waits for a person, held or waiting for details, is counted on its due date and says **Waits for a person**, with **Decide in Approvals**. A bill the agent has not decided yet gets a day too, but says "Not decided by the agent yet": the agent decides it first.
