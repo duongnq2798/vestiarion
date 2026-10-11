@@ -69,8 +69,11 @@ function readinessWords(step: ReadinessStep, mainnetLabel: string): { title: str
   }
 }
 
-/** `actuals`: the comparison with what the business paid, shown after the figures (actual payments A5). */
-export function WorkspaceReport({ slug, report, actuals }: { slug: string; report: Report; actuals?: ReactNode }) {
+/**
+ * `value`: what the agent was worth, measured, estimated and not counted, shown after the figures (shared report S8).
+ * `actuals`: the comparison with what the business paid (actual payments A5).
+ */
+export function WorkspaceReport({ slug, report, value, actuals }: { slug: string; report: Report; value?: ReactNode; actuals?: ReactNode }) {
   if (report.bills.handled === 0) {
     return (
       <EmptyState
@@ -92,6 +95,7 @@ export function WorkspaceReport({ slug, report, actuals }: { slug: string; repor
   return (
     <div className="space-y-8">
       <ReportSummary report={report} />
+      {value}
       {report.readiness && <ReportReadiness steps={report.readiness} />}
       {actuals}
       <ReportLists slug={slug} report={report} />

@@ -246,3 +246,24 @@ describe("the report's live links", () => {
     );
   });
 });
+
+describe("the workspace's own report page", () => {
+  // A server component the suite does not render: how it gates the controls is read from its source, as
+  // tests/mainnet-copy-pages.test.tsx reads the shell's wiring.
+  const page = source("src/app/o/[slug]/report/page.tsx").replace(/\s+/g, " ");
+
+  it("reads the links and the answer inside the workspace's scope", () => {
+    expect(page).toMatch(/return inOrg\(access, async \(\) => \{.*listReportShares\(db\(\)\).*readBaseline\(db\(\)\)/);
+  });
+
+  it("offers Share this report to an owner or admin, and the answer's form to an owner", () => {
+    expect(page).toContain('const canShare = can(access.membership.role, "report.share");');
+    expect(page).toContain('const canAnswer = can(access.membership.role, "org.administer");');
+    expect(page).toContain("{canShare && <ReportShareButton orgSlug={slug} available={shares.available} />}");
+    expect(page).toMatch(/canAnswer && baseline\.available \? \( <ReportBaselineControl/);
+  });
+
+  it("shows every member the live links, and Stop sharing to an owner or admin", () => {
+    expect(page).toContain("{shares.available && <ReportShareLinks orgSlug={slug} live={liveLinks} stopped={shares.stopped} canStop={canShare} />}");
+  });
+});
