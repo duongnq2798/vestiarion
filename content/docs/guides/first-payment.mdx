@@ -97,7 +97,7 @@ Anyone who may not add records sees "Only an owner or admin of this workspace ca
 
 ## 2. Add an invoice
 
-Open **Bills & receivables** and open **New invoice**. Choose **Enter one invoice**, **From a document** to have the model read it from a PDF or an email (see [Read an invoice from a document](#read-an-invoice-from-a-document)), or **Import CSV** to add several from a file.
+Open **Bills & receivables** and open **New invoice**. Choose **Enter one invoice**, **From a document** to have the model read it from a PDF or an email (see [Read an invoice from a document](#read-an-invoice-from-a-document)), or **Import a list** to add many from a spreadsheet, in its own columns, dates and currency (see [Import your bill list](/docs/guides/import-bills)).
 
 - **Direction**: **Payable**, for an invoice you pay. Choosing a counterparty sets it: **Receivable** for a client, which pays you, and **Payable** for anyone else; the line under it says which it is. A payable to a client is never paid by the agent: it waits for a person, who pays it in **Approvals** if it is a refund.
 - **Counterparty**: the one you just added. With none yet, the form says "Add a counterparty first — every invoice is against one." and links to **Add counterparty**.
@@ -141,7 +141,7 @@ A PDF is read from its text, and an email (an `.eml` file) from its own text and
 
 ### Invoices in EURC
 
-A vendor that bills in euros can be paid in EURC, Circle's euro stablecoin, on Arc testnet. Choose **EURC** under **Currency** on the invoice form, or put `EURC` in a CSV row's `currency` column. As the form says, "A EURC payable is paid in EURC, and checked against the payment limit at its USDC value."
+A vendor that bills in euros can be paid in EURC, Circle's euro stablecoin, on Arc testnet. Choose **EURC** under **Currency** on the invoice form, or write EURC in the currency column of a list you import. As the form says, "A EURC payable is paid in EURC, and checked against the payment limit at its USDC value."
 
 The rate and the swap below come from Circle's Stablecoin Service, which Vestiarion uses on Arc testnet only. On Arc mainnet a EURC payable has no rate, so the agent never pays it on its own: it is held for a person, as under **No rate, no payment** below.
 
@@ -246,7 +246,7 @@ A stop only a decision resolves, such as a payout fee above 10% of the invoice o
 
 An invoice does not have to be paid the moment it is decided. At intake, a payable can carry an early-payment discount: **Early-payment discount (%)** and **Discount deadline**, alongside its other fields. On a cycle, the agent chooses not only whether to pay an invoice but when, within a bound code enforces: never later than the invoice's due date.
 
-A discount needs its deadline. Once you enter a percent, **Discount deadline** is no longer optional. As the form says, "Needed with a discount: the last day it applies, on or before the due date." An invoice with a percent and no deadline is not added, and the form says under the field: "Enter the last day the discount applies, on or before the due date, or clear the discount." A CSV row's `early_pay_discount_pct` and `discount_deadline` columns follow the same rule: both, or neither.
+A discount needs its deadline. Once you enter a percent, **Discount deadline** is no longer optional. As the form says, "Needed with a discount: the last day it applies, on or before the due date." An invoice with a percent and no deadline is not added, and the form says under the field: "Enter the last day the discount applies, on or before the due date, or clear the discount." An imported row's discount and discount deadline columns follow the same rule: both, or neither.
 
 - With an early-payment discount still available, it schedules the payment for the discount's last day, and pays the discounted amount then.
 - Otherwise, it schedules the payment for the due date, holding the cash until it is owed.

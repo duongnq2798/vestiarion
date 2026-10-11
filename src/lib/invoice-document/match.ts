@@ -24,10 +24,12 @@ export interface CounterpartyMatch {
 const LEGAL_SUFFIXES = new Set([
   "ltd", "limited", "inc", "incorporated", "llc", "llp", "co", "company", "corp", "corporation",
   "gmbh", "ag", "sa", "sas", "sarl", "srl", "bv", "nv", "plc", "pte", "pty", "oy", "ab", "the",
+  // Malaysia's Sdn Bhd and Berhad, Japan's KK.
+  "sdn", "bhd", "berhad", "kk",
 ]);
 
 /** A name as lowercase words, punctuation and legal suffixes removed: "Northwind Hosting, Ltd." is "northwind hosting". */
-function nameKey(name: string): string {
+export function nameKey(name: string): string {
   return name
     .toLowerCase()
     .normalize("NFKD")

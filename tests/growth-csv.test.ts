@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { csvCell, dedupeKey, LEAD_CSV_HEADERS, LEADS_CSV_TEMPLATE, LeadsCsvError, leadsToCsv, previewLeadsCsv } from "@/lib/growth/csv";
-import { rowsFromCsv } from "@/lib/invoice-csv";
+import { rowsFromCsv } from "@/lib/csv-rows";
 
 /**
  * Leads to and from a CSV (src/lib/growth/csv.ts): the exact header, every row checked, duplicates reported and never
