@@ -57,6 +57,24 @@ const MARGIN = 40;
  * picture. `tests/docs-screenshots.test.ts` holds this list to that one.
  */
 const SHOTS = {
+  "try-it-workspace": async (page) => {
+    await page.fill({ "workspace-name": "Northwind Studio" });
+  },
+  "try-it-checklist": async () => {},
+  "try-it-supplier": async (page) => {
+    await page.fill({ "cp-name": "Northwind Hosting", "cp-limit": "500.00" });
+    await page.click(`[...document.querySelectorAll("[data-docs-shot] [role=radio]")].find((r) => r.getAttribute("value") === "no")`);
+    await page.waitFor(`[...document.querySelectorAll("[data-docs-shot] [role=radio]")].find((r) => r.getAttribute("value") === "no")?.dataset.state === "checked"`);
+  },
+  "try-it-bill": async (page) => {
+    await page.click(`document.getElementById("invoice-counterparty")`);
+    await page.waitFor(`[...document.querySelectorAll("[role=option]")].some((o) => o.textContent.includes("Northwind Hosting"))`);
+    await page.click(`[...document.querySelectorAll("[role=option]")].find((o) => o.textContent.includes("Northwind Hosting"))`);
+    await page.waitFor(`!document.querySelector("[role=listbox]")`);
+    await page.fill({ "invoice-amount": "120.00", "invoice-due": "2026-10-15", "invoice-memo": "Servers, October" });
+    await page.click(`document.getElementById([...document.querySelectorAll("label")].find((l) => l.textContent.trim() === "Goods or services received").htmlFor)`);
+  },
+  "try-it-verdict": async () => {},
   "go-live-checklist": async () => {},
   "go-live-choose": async () => {},
   "go-live-own-account": async (page) => {
@@ -175,6 +193,8 @@ const SHOTS = {
   "report-actuals-bills": async () => {},
   "report-bank-statement": async () => {},
   "report-bank-statement-matches": async () => {},
+  "import-bills-columns": async () => {},
+  "import-bills-check": async () => {},
   "workspace-status": async () => {},
 };
 

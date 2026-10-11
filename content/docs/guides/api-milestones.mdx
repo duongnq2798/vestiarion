@@ -1,4 +1,4 @@
-Pay a contributor when their pull request is merged, from your own system: a CI job, a bounty board, a script. Through the API, that system adds the contributor as a contractor and sends them a link to add their address. It then adds a milestone whose evidence is the pull request. Vestiarion checks the pull request, verifies the milestone once it is merged, and the agent pays it on Arc testnet with every guardrail.
+Pay a contributor when their pull request is merged, from your own system: a CI job, a bounty board, a script. Through the API, that system adds the contributor as a contractor and sends them a link to add their address. It then adds a milestone whose evidence is the pull request. Vestiarion checks the pull request, verifies the milestone once it is merged, and the agent pays it on the workspace's network, Arc testnet or Arc mainnet, with every guardrail.
 
 A key adds records. It never verifies work, approves or pays. Every address waits for a person in the workspace to confirm it, so a key that leaks cannot point the agent's payments anywhere new.
 
@@ -72,7 +72,7 @@ Each cycle asks GitHub whether the pull request was merged.
 2. **The agent decides.** In the same cycle, it decides the payment with every guardrail:
    - the contractor's screening and payment limit;
    - a confirmed address;
-   - the workspace's spending limits, and its contract on Arc testnet.
+   - the workspace's spending limits, and its contract on Arc where it has one: the limit enforced on Arc testnet, or your own wallet's contract on Arc mainnet.
 3. **Paid.** Read the milestone back with [List milestones](/docs/api/list-milestones), filtered by `contractorId`. `status` says what the agent did and `agentReasoning` says why, and a payment that settled carries its `txHash`.
 
 [Webhooks](/docs/webhooks) push each of these entries as it is written.

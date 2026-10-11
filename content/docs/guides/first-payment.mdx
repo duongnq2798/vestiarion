@@ -1,4 +1,4 @@
-This page takes a workspace from an empty book to its first payment on Arc testnet: add a counterparty and an invoice, let the agent decide, and follow the payment to the explorer and the signed ledger. For a payment on Arc testnet, start with a workspace that is live and has testnet USDC in its operating wallet. [Go live](/docs/guides/go-live) sets that up. A sandbox with no wallet can take the first steps now: it simulates its payments, the payee's address included, so the agent decides on your bill straight away. Until the first payment settles, the console's **Get started** checklist follows these steps too, and links the next one. In a sandbox with no wallet it starts with **Add a supplier**, **Add a bill** and **See the agent's decision**, and lists the wallet after them, under **To pay on Arc**.
+This page takes a workspace from an empty book to its first payment on Arc: add a counterparty and an invoice, let the agent decide, and follow the payment to the explorer and the signed ledger. For a payment on Arc, start with a workspace that is live and has USDC in its operating wallet: testnet USDC on Arc testnet, real USDC on Arc mainnet. [Go live](/docs/guides/go-live) sets that up. A sandbox on Arc testnet with no wallet can take the first steps now: it simulates its payments, the payee's address included, so the agent decides on your bill straight away. A workspace on Arc mainnet never simulates: nothing moves until an owner takes it live. Until the first payment settles, the console's **Get started** checklist follows these steps too, and links the next one. In a sandbox with no wallet it starts with **Add a supplier**, **Add a bill** and **See the agent's decision**, and lists the wallet after them, under **To pay on Arc**.
 
 Who does what:
 
@@ -8,7 +8,7 @@ Who does what:
 
 ## Try it with sample data first
 
-To see the agent at work before you set anything up, open the console of a new workspace. While the workspace has no counterparties and has not connected Circle, the console shows **Try it with sample data**. Choose **Load sample data**: it adds six example counterparties, marked **Sample** on the Counterparties page, with invoices and milestones chosen so that one cycle shows every outcome. The agent usually runs that cycle within a minute on its own; then read the decisions on the console and on **Approvals**:
+To see the agent at work before you set anything up, open the console of a new workspace on Arc testnet; a workspace on Arc mainnet has no sample data. While the workspace has no counterparties and has not connected Circle, the console shows **Try it with sample data**. Choose **Load sample data**: it adds six example counterparties, marked **Sample** on the Counterparties page, with invoices and milestones chosen so that one cycle shows every outcome. The agent usually runs that cycle within a minute on its own; then read the decisions on the console and on **Approvals**:
 
 - a hosting invoice with a purchase order and goods received is paid;
 - an annual support plan with a 2% early-payment discount is scheduled for its discount deadline;
@@ -26,7 +26,7 @@ A counterparty is a business or person the workspace pays or invoices. Open **Co
 - **Legal or trading name**.
 - **Role**: **Vendor** or **Contractor** for someone you pay.
 - **Payment limit (USDC)**: the most the agent may pay this counterparty in one payment. Screening can lower it: the card shows the limit you set and the current one.
-- **Chain**: **Arc testnet** for a payee paid on Arc. For a payee who wants USDC on another chain, choose **Base Sepolia**, **Arbitrum Sepolia** or **Ethereum Sepolia**: see [Pay a payee on another chain](#pay-a-payee-on-another-chain).
+- **Chain**: the workspace's own network for a payee paid on Arc, **Arc testnet** or **Arc mainnet**. On Arc testnet, for a payee who wants USDC on another chain, choose **Base Sepolia**, **Arbitrum Sepolia** or **Ethereum Sepolia**: see [Pay a payee on another chain](#pay-a-payee-on-another-chain). On Arc mainnet the field offers Arc mainnet alone, and says "Arc mainnet pays on its own chain only".
 - **Payment address**: the counterparty's address on the chain you chose, `0x` followed by 40 hexadecimal characters. An address that mixes capital and small letters must match its checksum, or the form says "This address's capital letters do not match its checksum, so a character is likely wrong." A payment to a mistyped address reaches no one, so copy it again from where it came. An address in one case alone is taken as written.
 - **Jurisdiction**, optional: an ISO code or a country name.
 - **Billing email**, optional: a payee is told there each time it is paid (see [Tell the payee it was paid](#tell-the-payee-it-was-paid)), and a client gets the reminders you turn on (see [Let the agent remind the client](#let-the-agent-remind-the-client)).
@@ -95,7 +95,7 @@ Anyone who may not add records sees "Only an owner or admin of this workspace ca
 
 ## 2. Add an invoice
 
-Open **Bills & receivables** and open **New invoice**. Choose **Enter one invoice**, **From a document** to have the model read it from a PDF or an email (see [Read an invoice from a document](#read-an-invoice-from-a-document)), or **Import CSV** to add several from a file.
+Open **Bills & receivables** and open **New invoice**. Choose **Enter one invoice**, **From a document** to have the model read it from a PDF or an email (see [Read an invoice from a document](#read-an-invoice-from-a-document)), or **Import a list** to add many from a spreadsheet, in its own columns, dates and currency (see [Import your bill list](/docs/guides/import-bills)).
 
 - **Direction**: **Payable**, for an invoice you pay. Choosing a counterparty sets it: **Receivable** for a client, which pays you, and **Payable** for anyone else; the line under it says which it is. A payable to a client is never paid by the agent: it waits for a person, who pays it in **Approvals** if it is a refund.
 - **Counterparty**: the one you just added. With none yet, the form says "Add a counterparty first — every invoice is against one." and links to **Add counterparty**.
@@ -139,7 +139,9 @@ A PDF is read from its text, and an email (an `.eml` file) from its own text and
 
 ### Invoices in EURC
 
-A vendor that bills in euros can be paid in EURC, Circle's euro stablecoin, on Arc testnet. Choose **EURC** under **Currency** on the invoice form, or put `EURC` in a CSV row's `currency` column. As the form says, "A EURC payable is paid in EURC, and checked against the payment limit at its USDC value."
+A vendor that bills in euros can be paid in EURC, Circle's euro stablecoin, on Arc testnet. Choose **EURC** under **Currency** on the invoice form, or write EURC in the currency column of a list you import. As the form says, "A EURC payable is paid in EURC, and checked against the payment limit at its USDC value."
+
+The rate and the swap below come from Circle's Stablecoin Service, which Vestiarion uses on Arc testnet only. On Arc mainnet a EURC payable has no rate, so the agent never pays it on its own: it is held for a person, as under **No rate, no payment** below.
 
 - **The rate.** Payment limits stay in USDC. Before it decides a EURC payable, the agent asks Circle's Stablecoin Service what the amount is worth in USDC on Arc testnet, and checks that value against the limit. The decision's ledger entry records the rate and when it was quoted. It is the testnet market's rate, not a reference exchange rate.
 - **No rate, no payment.** When the quote does not answer, the payable is held for a person, and its card shows **USDC value** "no rate". If the model had decided to pay it anyway, the card's "Blocked by code, not by the model" band names the rule: no exchange rate could be read. You can still approve it on **Approvals**.
@@ -164,7 +166,7 @@ A vendor that bills in euros can be paid in EURC, Circle's euro stablecoin, on A
 
 ### Pay a payee on another chain
 
-A vendor who wants USDC on Base, Arbitrum or Ethereum Sepolia is still paid from the operating wallet on Arc testnet. As the form says, "Another chain is paid from Arc through CCTP, for a fee." Choose the vendor's chain under **Chain**, and give their address on that chain under **Payment address**. Only a vendor can be paid on another chain: a contractor's milestones are released on Arc testnet. A payee link sent to such a vendor asks for their address on that chain.
+Payouts to other chains run on Arc testnet only: a workspace on Arc mainnet pays every payee on Arc mainnet. A vendor who wants USDC on Base, Arbitrum or Ethereum Sepolia is still paid from the operating wallet on Arc testnet. As the form says, "Another chain is paid from Arc through CCTP, for a fee." Choose the vendor's chain under **Chain**, and give their address on that chain under **Payment address**. Only a vendor can be paid on another chain: a contractor's milestones are released on Arc testnet. A payee link sent to such a vendor asks for their address on that chain.
 
 - **How it is paid.** The agent burns the USDC on Arc through Circle's Cross-Chain Transfer Protocol (CCTP), and Circle's Forwarding Service mints it to the payee on their chain. The payee is minted the invoice amount, and the fee comes on top of it, from the operating wallet.
 - **The fee.** Before it decides, the agent asks Circle what the transfer costs, and weighs it. The fee depends on the chain: on 2026-10-01 it was about 0.05 USDC to Base Sepolia, 0.13 to Arbitrum Sepolia and 1.85 to Ethereum Sepolia. A payout whose fee is above 10% of the invoice is held for a person, and so is one Circle gave no fee for.
@@ -173,7 +175,7 @@ A vendor who wants USDC on Base, Arbitrum or Ethereum Sepolia is still paid from
   - For each payout to another chain, the agent asks both Gateway and CCTP what it costs. It pays from the Gateway balance when that balance covers the payout and Gateway's fee is no higher than CCTP's; otherwise it pays through CCTP.
   - The card names the route the payout took, under **Payee's chain**, with its fee against the other route's, and links the mint on the payee's chain. Once a payout has started on a route, every later attempt uses that route.
 - **USDC only.** An invoice in EURC to a payee on another chain is held: only USDC crosses chains.
-- **In flight, then paid.** The invoice reads "Payment in flight" from the burn on Arc until the mint lands, usually within half a minute. Its card then reads "Settled on *chain*", naming the chain the money landed on, such as "Settled on Base Sepolia", and links both: the burn on arcscan, and the mint on the payee's chain. A payment still not minted two hours after it was sent is held for a person.
+- **In flight, then paid.** The invoice reads "Payment in flight" from the burn on Arc until the mint lands, usually within half a minute. Its card then reads "Settled on *chain*", naming the chain the money landed on, such as "Settled on Base Sepolia", and links both: the burn on the Arc testnet explorer, and the mint on the payee's chain. A payment still not minted two hours after it was sent is held for a person.
 - **Approving one.** On **Approvals**, the card names the payee's chain. **Approve and pay** takes the route the agent would: Gateway when the Gateway balance covers the payout and Gateway costs no more, CCTP otherwise. A payout an earlier attempt started keeps its route. The confirmation names the route and its fee, for example "The Gateway fee, about 0.163 USDC, comes on top, from the Gateway balance." A CCTP payout needs the operating wallet to hold the amount and the fee; a Gateway payout needs the Gateway balance to.
 
 ## 3. Run a cycle
@@ -213,7 +215,7 @@ On **Bills & receivables**, the tiles at the top count what needs you, what is d
 
 When the model decided to pay but a guardrail stopped it, the card also has a "Blocked by code, not by the model" band. The band names the rule in words, such as that the purchase order or goods receipt was missing, and the amount attempted. Hold the pointer over it for the rule's id, such as `invoice.match_incomplete`, as the ledger and the API name it. For a limit, it adds the amount allowed; for a rule about something other than the amount, it says why, such as "the first payment to this address, and only one person stands behind it".
 
-At the foot of a payable's card, **How the agent decided** opens its steps, oldest first, each a signed entry in the ledger: who added it, what a person changed, each decision with who decided and whether the written policy agreed, what it checked (the purchase order and goods, screening, the amount against the limit, duplicates), what code refused, what the spending-limit contract on Arc said, and the transaction that reached Arc testnet. Each step shows its time to the second, how long after the step before it, and the number of its entry in the audit log.
+At the foot of a payable's card, **How the agent decided** opens its steps, oldest first, each a signed entry in the ledger: who added it, what a person changed, each decision with who decided and whether the written policy agreed, what it checked (the purchase order and goods, screening, the amount against the limit, duplicates), what code refused, what the spending-limit contract on Arc said, and the transaction that reached Arc. Each step shows its time to the second, how long after the step before it, and the number of its entry in the audit log.
 
 <Screenshot
   src="/docs/guides/first-payment-trail.png"
@@ -242,7 +244,7 @@ A stop only a decision resolves, such as a payout fee above 10% of the invoice o
 
 An invoice does not have to be paid the moment it is decided. At intake, a payable can carry an early-payment discount: **Early-payment discount (%)** and **Discount deadline**, alongside its other fields. On a cycle, the agent chooses not only whether to pay an invoice but when, within a bound code enforces: never later than the invoice's due date.
 
-A discount needs its deadline. Once you enter a percent, **Discount deadline** is no longer optional. As the form says, "Needed with a discount: the last day it applies, on or before the due date." An invoice with a percent and no deadline is not added, and the form says under the field: "Enter the last day the discount applies, on or before the due date, or clear the discount." A CSV row's `early_pay_discount_pct` and `discount_deadline` columns follow the same rule: both, or neither.
+A discount needs its deadline. Once you enter a percent, **Discount deadline** is no longer optional. As the form says, "Needed with a discount: the last day it applies, on or before the due date." An invoice with a percent and no deadline is not added, and the form says under the field: "Enter the last day the discount applies, on or before the due date, or clear the discount." An imported row's discount and discount deadline columns follow the same rule: both, or neither.
 
 - With an early-payment discount still available, it schedules the payment for the discount's last day, and pays the discounted amount then.
 - Otherwise, it schedules the payment for the due date, holding the cash until it is owed.
@@ -286,6 +288,8 @@ The console's **Agent spending limit** panel shows what the agent has paid on it
 
 The limit above is checked in Vestiarion's code. Under its figures, the panel's **On Arc** part makes the same limit binding on Arc testnet too: the agent's own payments then leave through a contract that refuses anything past it, whatever the agent decided. In a live workspace with a daily or 7-day figure, an owner or admin chooses **Enforce on Arc**.
 
+**Enforce on Arc** runs on Arc testnet only. On Arc mainnet, a workspace whose treasury is a wallet you hold pays only through a contract your wallet deploys, within the daily and 7-day figures you set in it, and the panel links that contract: see [Path C: your own wallet](/docs/guides/go-live#path-c-your-own-wallet). A workspace on Arc mainnet with your own Circle account checks the limit in code.
+
 - **What it sets up.** A contract on Arc testnet that holds the figures, and a wallet of the agent's own that holds no USDC: Circle's Gas Station pays its gas. The operating wallet keeps its money and approves the contract to draw from it. Setting up sends 0.1 USDC from the operating wallet to the deployer for gas, and is signed in the audit log as `spending_limit_enforced`. If it is interrupted, the button reads **Finish enforcing on Arc** and picks up where it stopped.
 - **The agent's payments go through the contract.** Each payment the agent makes on its own in USDC on Arc testnet is sent by its own wallet to the contract, which draws the amount from the operating wallet. The contract refuses a payment past the daily figure (the current UTC day) or past the 7-day figure (that day and the six before it), and it pays each invoice or milestone once. The panel shows what the contract counts, **Paid through it today** and **In the last 7 days**, with links to the contract and to the agent's wallet on the Arc testnet explorer.
 - **Vestiarion asks the contract first.** Before each payment, it asks the contract whether it would pay, without sending anything. If the contract would refuse, nothing is sent: the payment is held with the rule `workspace.onchain_limit`, and its card shows the contract's own figures. The check in code still runs first, so this hold means the two disagreed. Each decision records the contract's answer as `onChainLimit`.
@@ -306,7 +310,7 @@ The limit above is checked in Vestiarion's code. Under its figures, the panel's 
 
 Before the agent pays an address for the first time, it can buy that address's payment history across Vestiarion. The answer says how many other workspaces here have paid the address, how many payments were confirmed, and when the first and last were made. It names no workspace and no amount. The model weighs it with the payment's other facts: an address no business here has paid deserves a closer look. Code does not act on it.
 
-The agent pays for each answer itself, 0.001 USDC over **x402**, the HTTP payment standard, settled through Circle Gateway on Arc testnet. Vestiarion is the seller. Today no other x402 seller accepts Arc testnet, so the agent buys only from Vestiarion.
+The agent pays for each answer itself, 0.001 USDC over **x402**, the HTTP payment standard, settled through Circle Gateway on Arc testnet. Vestiarion is the seller. Today no other x402 seller accepts Arc testnet, so the agent buys only from Vestiarion. Circle Gateway does not run on Arc mainnet, so a workspace there buys no history and has no service budget.
 
 - **The service budget.** The agent pays from its own small balance, never from the operating wallet. On the console's **Service budget** panel, an owner or admin opens **Manage**, enters an amount (at most 1 USDC at a time) and chooses **Add to the budget**. The operating wallet moves it into Gateway for the workspace's Gateway signer in one transaction. The panel appears once the workspace has funded Gateway, which creates that signer. Each deposit is signed as `service_budget_funded`.
 - **When it buys.** A payable or milestone must be waiting for a decision, the counterparty's Arc address must be confirmed, and this workspace must never have paid that address. An answer counts for 7 days.
@@ -317,7 +321,7 @@ The agent pays for each answer itself, 0.001 USDC over **x402**, the HTTP paymen
 
 A payment usually confirms on Arc within seconds of being sent. One that confirms after the agent stopped waiting for it is recorded within seconds too, when the workspace's Circle account sends Vestiarion its notifications and the agent is running: Circle tells Vestiarion, and a cycle starts at once to record it, with the notices the schedule would send. Otherwise the next scheduled cycle records it. If one has not confirmed 15 minutes after it was sent, Vestiarion tells the workspace's people, once for each attempt:
 
-- **In the console, Slack and Telegram**, within minutes, without waiting for a cycle: "Payment of 12.50 USDC to Jiren has not confirmed 18 min after it was sent on Arc testnet.", with what Circle says, such as "Circle shows it stuck.", and the transaction.
+- **In the console, Slack and Telegram**, within minutes, without waiting for a cycle: "Payment of 12.50 USDC to Jiren has not confirmed 18 min after it was sent on Arc testnet.", naming the workspace's network, with what Circle says, such as "Circle shows it stuck.", and the transaction.
 - **By email**, to every owner, admin and approver with email notices on: one message listing each payment, such as "A payment of 12.50 USDC to Jiren has not confirmed".
 - **In the audit log**, as a signed `payment_stuck` entry, which every webhook endpoint receives too.
 
@@ -329,7 +333,7 @@ A payment Vestiarion recorded as failed is told too when it may still have moved
 
 Owners, admins and approvers decide each one:
 
-- **Approve and pay** starts the transfer. A dialog asks you to confirm, and **Pay now** sends it at once. The ledger records who approved it. While it is sent, a notice in the corner says **Payment approved**, with the amount and the payee. It then turns into **Payment confirmed** once Arc testnet confirms the transfer: the amount, who it was paid to, that you approved it, the network, and **View transaction** to open it on the explorer. If Arc testnet is still confirming it, the notice says **Payment processing** instead, and the payment is not called confirmed until it is.
+- **Approve and pay** starts the transfer. A dialog asks you to confirm, and **Pay now** sends it at once. The ledger records who approved it. While it is sent, a notice in the corner says **Payment approved**, with the amount and the payee. It then turns into **Payment confirmed** once the workspace's network confirms the transfer: the amount, who it was paid to, that you approved it, the network, and **View transaction** to open it on the explorer. If the network is still confirming it, the notice says **Payment processing** instead, and the payment is not called confirmed until it is.
 - **Reject** marks it not paid. You can give a reason, which is kept in the ledger.
 - **Return to agent** sends it back to pending, and the agent usually decides it again within a minute.
 
@@ -364,13 +368,13 @@ If you are the only member of the workspace who can approve payments (the only o
   caption="A payable you entered, when you are the workspace's only approver."
 />
 
-If a payment attempt fails, the card says "The last payment attempt failed: " and Circle's reason, then "Approving sends a new transfer." Fix the cause first if you need to — for example, fund the operating wallet — then choose **Approve and pay** again to send it. Vestiarion never sends a second transfer while the first could still settle: a payment still in flight on Arc testnet instead says "The payment is still in flight on Arc testnet. It cannot be rejected or returned until Circle settles it; approving checks it again." Only **Reject** and **Return to agent** go away then — **Approve and pay** stays: for an invoice waiting here, approving is how its in-flight transfer is checked again, and it never sends a second one.
+If a payment attempt fails, the card says "The last payment attempt failed: " and Circle's reason, then "Approving sends a new transfer." Fix the cause first if you need to — for example, fund the operating wallet — then choose **Approve and pay** again to send it. Vestiarion never sends a second transfer while the first could still settle: a payment still in flight instead says, naming the workspace's network, "The payment is still in flight on Arc testnet. It cannot be rejected or returned until Circle settles it; approving checks it again." Only **Reject** and **Return to agent** go away then — **Approve and pay** stays: for an invoice waiting here, approving is how its in-flight transfer is checked again, and it never sends a second one.
 
 Sometimes Circle does not answer a payment at all, and Circle may still have taken it. Vestiarion then looks for it on Circle before anything else, and the payment stays in flight until it knows. If it waits here meanwhile, the card says "Circle did not answer when this payment was sent, so it may have taken the transfer. Approve and pay, Reject and Return look for it on Circle first: Approve and pay records it if Circle has it, and sends it only once Circle shows none." Once Circle has listed nothing for 15 minutes after the send, it was never taken: approving sends it then, and **Reject** or **Return to agent** closes it.
 
 If every page says "Payments are switched off for every workspace right now.", whoever runs this deployment has stopped all payments. The agent runs no cycle, and **Approve and pay** says the same, until they turn payments back on. Everything else still reads as usual.
 
-**When the operating wallet falls short.** A payment leaves from the operating wallet, with a CCTP payout's fee on top. When the wallet holds less, and the USYC reserve holds the rest, **Approve and pay** brings the difference back from the reserve first, then pays:
+**When the operating wallet falls short.** A payment leaves from the operating wallet, with a CCTP payout's fee on top. When the wallet holds less, and the USYC reserve holds the rest, **Approve and pay** brings the difference back from the reserve first, then pays. The reserve runs on Arc testnet only; on Arc mainnet, **Approve and pay** refuses a payment the operating wallet cannot cover, and sends nothing.
 
 - **Before you confirm,** the dialog says so, for example "The operating wallet holds 0.184239 USDC, so about 0.215761 USDC comes back from the USYC reserve first." It reads the balances last recorded; the approval reads them again.
 - **After paying,** it says "Paid. 0.215761 USDC came back from the USYC reserve first." The audit log records the move as `cash_brought_back`, by you, before the `approval_paid` entry.
@@ -424,10 +428,10 @@ On **Bills & receivables**, the payable waits under **Needs you**, and its row s
 
 A business usually tells a supplier when it pays them. Give a counterparty a **Billing email**, when you add it or later on its row on **Counterparties**, where **Billing email** shows the address with **Add** or **Edit** (owners and admins; empty turns notices off). Someone you pay with **Pay a freelancer** gets them at the email you gave for the link.
 
-Each time a payment to it is confirmed on Arc testnet, whoever approved it, the agent or a person, Vestiarion emails that address from no-reply@vestiarion.xyz: "*Workspace* paid you *amount*", what it pays for (the invoice's memo and purchase order, or the milestone's title), the address it went to, when, and **View the transaction** on Arcscan.
+Each time a payment to it is confirmed on Arc, whoever approved it, the agent or a person, Vestiarion emails that address from no-reply@vestiarion.xyz: "*Workspace* paid you *amount*", the network, what it pays for (the invoice's memo and purchase order, or the milestone's title), the address it went to, when, and **View the transaction** on that network's explorer.
 
 - **Real payments only.** Only a live workspace sends them: a sandbox's payments are simulated, and it emails no one.
-- **On Arc.** This version sends them for payments made on Arc testnet; a payee paid on another chain gets none yet.
+- **On Arc.** This version sends them for payments made on the workspace's own network, Arc testnet or Arc mainnet; a payee paid on another chain gets none yet.
 - **Once.** Each payment is told once. A notice that cannot be sent is tried again at the next cycle, for three days.
 - **Recorded.** Each notice sent is a `payment_notice_sent` entry in the audit log, with the address partly hidden.
 
@@ -445,7 +449,7 @@ Only owners and admins accept or dismiss, as for any limit change.
 
 ## 7. See it on Arc and in the audit log
 
-**On the Arc explorer.** On a settled decision card, the transaction hash is a link. It opens the transaction on the Arc testnet explorer, at `https://explorer.testnet.arc.io/tx/` followed by the hash, in a new tab.
+**On the Arc explorer.** On a settled decision card, the transaction hash is a link. It opens the transaction on the Arc testnet explorer, at `https://explorer.testnet.arc.io/tx/` followed by the hash, in a new tab. In a workspace on Arc mainnet it opens Arc mainnet's explorer, at `https://explorer.arc.io/tx/`.
 
 **In the audit log.** The card's `audit #` link opens the entry in **Audit log**. As that page says, "Every decision is appended here, hash-linked to the one before it and signed with Ed25519." Expand an entry to see its hash, the previous entry's hash, its body hash, its signature and the full detail. **Verify hash chain** checks every signature and every link, and answers "Chain intact" when all of them hold.
 
@@ -477,10 +481,10 @@ A payee, an accountant or anyone else can check a payment without an account: sh
 
 ## 9. Get paid by a client
 
-A receivable is money a client owes the business. In a live workspace, an owner or admin can send the client a link to pay it on Arc testnet:
+A receivable is money a client owes the business. In a live workspace, an owner or admin can send the client a link to pay it on Arc, on the workspace's network:
 
 1. **Make the link.** On **Bills & receivables**, under **Receivables**, open the invoice's row and choose **Get paid on Arc**, then **Copy link** and send it. A new link replaces the old one.
-2. **The client pays.** The link opens a page with the amount, the due date, what it is for, and the workspace's address on Arc testnet. The client sends exactly that amount from any wallet and can choose **I have paid**, which only asks Vestiarion to look now.
+2. **The client pays.** The link opens a page with the amount, the due date, what it is for, the network, Arc testnet or Arc mainnet, and the workspace's address there. The client sends exactly that amount from any wallet on that network and can choose **I have paid**, which only asks Vestiarion to look now.
 3. **The agent matches it.** Every cycle, and on **I have paid**, Vestiarion reads the transfers that arrived in the operating wallet from Circle. A transfer of the same currency and amount as an open receivable, arriving after the receivable was added, settles it: from the client's own address on file, or, from any address, when it is the only such receivable and its client was sent the link. The receivable becomes received with its transaction, and the ledger records `ar_received`. Two open receivables of the same amount, with nothing to tell them apart, stay open for a person.
 
 Only a matched transfer counts as money received. Testnet faucet drips and swaps also arrive in the wallet, and they settle nothing.
@@ -495,7 +499,7 @@ From then on, each cycle, the agent decides whether to send a reminder now or to
 
 - **When.** From 3 days before the due date to 30 days after it, at most every 3 days, and at most 4 reminders. The written policy sends one 3 days before the due date, one on it, one 3 days after it and the last one 10 days after it; the model may wait up to 3 days at a time, and says why.
 - **How firmly.** Friendly at any time; firm only after the due date; final only 7 days after it, once 2 reminders went out. A firmer tone than allowed goes out as the firmest allowed, and the audit log says so.
-- **What it says.** A fixed text by tone: who asks, how much, what for, when it was due and how late it is, with **Pay on Arc testnet**, which opens the pay link. Nothing the model writes reaches the client.
+- **What it says.** A fixed text by tone: who asks, how much, what for, when it was due and how late it is, with **Pay on Arc testnet**, or **Pay on Arc mainnet** for a workspace on Arc mainnet, which opens the pay link. Nothing the model writes reaches the client.
 - **When it stops.** Once the agent matches the payment, or a person rejects the receivable, or after the final reminder. The row then says to follow up with the client yourself.
 
 <Screenshot
