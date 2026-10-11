@@ -11,6 +11,7 @@ import { txUrl } from "@/lib/payee-chains";
 import { ruleLabel } from "@/lib/rule-words";
 import { CollapsibleReasoning } from "./CollapsibleReasoning";
 import { DecisionTrail } from "./DecisionTrail";
+import { SettlementTrack } from "./SettlementTrack";
 import { DOMAIN_NAME, DomainGlyph } from "./Glyphs";
 import { fmt, Hash, Money, OutcomeBadge, Reasoning } from "./Primitives";
 import type { Decision, Evidence, Guardrail, Outcome } from "./types";
@@ -112,6 +113,11 @@ export function DecisionCard({
 
         {/* How it was decided, step by step from the signed entries: folded until opened (decision trail R2). */}
         {decision.trail && decision.trail.length > 0 && <DecisionTrail id={decision.id} steps={decision.trail} orgSlug={orgSlug} network={decision.network} />}
+
+        {/* Where its payment is, stage by stage, each from its own source: folded until opened (settlement lifecycle L7). */}
+        {decision.settlement && (
+          <SettlementTrack id={decision.id} settlement={decision.settlement.lifecycle} orgSlug={orgSlug} network={decision.network} now={decision.settlement.asOf} />
+        )}
 
         {hasFooter && (
           <footer className="border-t border-line bg-ground/40">

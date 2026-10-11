@@ -1,6 +1,7 @@
 export type Domain = "ap" | "ar" | "contractor" | "treasury" | "compliance" | "system";
 import type { TrailStep } from "@/lib/decision-trail";
 import type { Network } from "@/lib/network";
+import type { Settlement } from "@/lib/settlement";
 import type { VerdictView } from "@/lib/verdict-view";
 
 /** `deciding`: a payable not yet decided while a cycle runs, which is deciding it (decision trail R1). */
@@ -56,6 +57,8 @@ export interface Decision {
   heldForVerdict?: boolean;
   /** A person's verdict on the agent's decision, given or to give (shadow mode S3). */
   verdict?: VerdictView;
+  /** Where its payment is, as of when the page read it (settlement lifecycle L7); absent with no payment record. */
+  settlement?: { lifecycle: Settlement; asOf: number };
 }
 
 export interface Account {

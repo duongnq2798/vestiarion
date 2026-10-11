@@ -1,5 +1,4 @@
 import { FAILED_STATES, MAY_HAVE_BEEN_ACCEPTED } from "./circle/settlement";
-import { networkOf, type Network } from "./network";
 import { paidAcrossChains } from "./payee-chains";
 import { reduceSettlement, type Settlement, type SettlementBooks, type SettlementFact } from "./settlement";
 
@@ -186,11 +185,55 @@ export function settlementOf(input: {
   });
 }
 
-/** The network a payment was made on: its own record's, else the workspace's (0075). */
-export function intentNetwork(intent: Pick<IntentRecord, "network">, workspace: Network): Network {
-  try {
-    return intent.network ? networkOf(intent.network) : workspace;
-  } catch {
-    return workspace;
+/** A bill as its payment's books read it: whether it is marked paid, with which transaction, since when (L5). */
+export interface BillBooks {
+  id: string;
+  status: string;
+  tx_ref: string | null;
+  settled_at?: string | null;
+}
+
+/** The books of a bill, as the lifecycle compares them with its transfer: `paid` is the bill's own status (L5). */
+export function booksOf(bill: BillBooks): SettlementBooks {
+  return { paid: bill.status === "paid", txRef: bill.tx_ref, at: bill.settled_at ?? null };
+}
+
+/**
+ * Each payment's lifecycle, by its bill's id, for the bills a page shows (L7): a payment whose bill is not among them is
+ * left out. The entries are grouped by bill once, so a page with many bills reads each entry once.
+ */
+export function settlementsByBill(input: {
+  payments: Iterable<IntentRecord & { source_type: "invoice" | "milestone"; source_id: string }>;
+  invoices?: readonly BillBooks[];
+  milestones?: readonly BillBooks[];
+  entries: readonly SettlementEntry[];
+  now: number;
+}): Map<string, Settlement> {
+  const bills = new Map<string, BillBooks>();
+  for (const bill of input.invoices ?? []) bills.set(`invoice:${bill.id}`, bill);
+  for (const bill of input.milestones ?? []) bills.set(`milestone:${bill.id}`, bill);
+  const entriesOf = new Map<string, SettlementEntry[]>();
+  for (const entry of input.entries) {
+    for (const [type, key] of [
+      ["invoice", "invoiceId"],
+      ["milestone", "milestoneId"],
+    ] as const) {
+      const id = entry.detail[key];
+      if (typeof id !== "string") continue;
+      const list = entriesOf.get(`${type}:${id}`) ?? [];
+      list.push(entry);
+      entriesOf.set(`${type}:${id}`, list);
+    }
   }
+  const settlements = new Map<string, Settlement>();
+  for (const payment of input.payments) {
+    const key = `${payment.source_type}:${payment.source_id}`;
+    const bill = bills.get(key);
+    if (!bill) continue;
+    settlements.set(
+      payment.source_id,
+      settlementOf({ intent: payment, entries: entriesOf.get(key) ?? [], source: { type: payment.source_type, id: payment.source_id }, books: booksOf(bill), now: input.now })
+    );
+  }
+  return settlements;
 }

@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { ageText, paymentsInFlight, reduceSettlement, SETTLEMENT_STAGES, type SettlementBooks, type SettlementFact, type SettlementInput } from "@/lib/settlement";
-import { entryFacts, intentFacts, settlementOf, type IntentRecord } from "@/lib/settlement-facts";
+import { booksOf, entryFacts, intentFacts, settlementOf, settlementsByBill, type IntentRecord } from "@/lib/settlement-facts";
 
 /**
  * One settlement lifecycle per payment (docs/superpowers/specs/2026-10-11-settlement-lifecycle-design.md): the stages
@@ -453,6 +453,57 @@ describe("settlementOf", () => {
     expect(direct.stages.available).toMatchObject({ by: "chain" });
     const simulated = settlementOf({ intent: intent({ provider: "simulate", provider_mode: "simulate", tx_hash: "sim_1" }), entries: [], source: { type: "invoice", id: "inv-1" }, books: null, now: NOW });
     expect(simulated.simulated).toBe(true);
+  });
+});
+
+describe("booksOf", () => {
+  it("reads a bill as paid only from its own status, with its transaction and since when", () => {
+    expect(booksOf({ id: "inv-1", status: "paid", tx_ref: TX, settled_at: T(6) })).toEqual({ paid: true, txRef: TX, at: T(6) });
+    // A transfer in flight leaves the bill matched: not paid yet, whatever its tx_ref says.
+    expect(booksOf({ id: "inv-1", status: "matched", tx_ref: "circle-tx-1" })).toEqual({ paid: false, txRef: "circle-tx-1", at: null });
+  });
+});
+
+describe("settlementsByBill", () => {
+  const payment = (sourceType: "invoice" | "milestone", sourceId: string, over: Partial<IntentRecord> = {}) => ({ ...intent(over), source_type: sourceType, source_id: sourceId });
+
+  it("gives each shown bill's payment its lifecycle, from that bill's entries and books only", () => {
+    const settlements = settlementsByBill({
+      payments: [
+        payment("invoice", "inv-1"),
+        payment("invoice", "inv-2", { status: "pending", provider_state: "QUEUED", confirmed_at: null, tx_hash: null }),
+        payment("milestone", "ms-1"),
+        // A bill the page does not show: left out.
+        payment("invoice", "inv-hidden"),
+      ],
+      invoices: [
+        { id: "inv-1", status: "paid", tx_ref: TX, settled_at: T(6) },
+        { id: "inv-2", status: "matched", tx_ref: "circle-tx-1" },
+      ],
+      milestones: [{ id: "ms-1", status: "verified", tx_ref: "circle-tx-1" }],
+      entries: [
+        { seq: 41, ts: T(0), action: "ap_pay", detail: { invoiceId: "inv-1", execution: { resultingStatus: "paid", txRef: TX } } },
+        { seq: 50, ts: T(0), action: "ap_pay", detail: { invoiceId: "inv-2", execution: { resultingStatus: "matched", txRef: "circle-tx-1" } } },
+        { seq: 60, ts: T(0), action: "milestone_release", detail: { milestoneId: "ms-1", execution: { resultingStatus: "verified", txRef: "circle-tx-1" } } },
+      ],
+      now: NOW,
+    });
+    expect([...settlements.keys()].sort()).toEqual(["inv-1", "inv-2", "ms-1"]);
+    expect(settlements.get("inv-1")).toMatchObject({ status: "reconciled", stages: { proposed: { seq: 41 } } });
+    expect(settlements.get("inv-2")).toMatchObject({ status: "in_flight", stage: "pending", mismatch: null, stages: { proposed: { seq: 50 }, pending: { state: "QUEUED" } } });
+    // Confirmed, but the milestone is not marked paid yet: the next cycle marks it.
+    expect(settlements.get("ms-1")).toMatchObject({ status: "confirmed", mismatch: "confirmed_not_marked_paid", stages: { proposed: { seq: 60 } } });
+  });
+
+  it("never lends one bill's entries to another with the same id of another kind", () => {
+    const settlements = settlementsByBill({
+      payments: [payment("milestone", "same-id", { status: "pending", confirmed_at: null })],
+      invoices: [{ id: "same-id", status: "open", tx_ref: null }],
+      milestones: [{ id: "same-id", status: "approved", tx_ref: null }],
+      entries: [{ seq: 1, ts: T(0), action: "ap_pay", detail: { invoiceId: "same-id", execution: { resultingStatus: "paid", txRef: TX } } }],
+      now: NOW,
+    });
+    expect(settlements.get("same-id")?.stages.proposed).toBeUndefined();
   });
 });
 

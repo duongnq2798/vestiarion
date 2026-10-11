@@ -99,6 +99,8 @@ export interface InvoiceRow {
   status: string;
   agent_reasoning: string | null;
   tx_ref: string | null;
+  /** When it was marked paid (or received); null before. Read with every column, and by a payment's lifecycle (settlement lifecycle L5). */
+  settled_at?: string | null;
   /** The day the agent committed to pay (migration 0038); set only while `status` is `scheduled`. */
   scheduled_for: string | null;
   /** The early-payment discount's percent, when the invoice carries one (numeric(5,2) — a string from PostgREST). */
@@ -155,6 +157,8 @@ export interface MilestoneRow {
   status: string;
   agent_reasoning: string | null;
   tx_ref: string | null;
+  /** When it was marked paid; null before (settlement lifecycle L5). */
+  settled_at?: string | null;
   /** The milestone's hold in the workspace's escrow (milestone escrow E3–E5); null when it has none. */
   escrow_state?: "funding" | "funded" | "released" | "refunded" | null;
   escrow_payee?: string | null;
