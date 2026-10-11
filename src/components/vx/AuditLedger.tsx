@@ -42,6 +42,11 @@ function entryDay(entry: LedgerEntry) {
 
 export const pad = (value: number) => String(value).padStart(4, "0");
 
+/** An entry in the audit log, on the page that starts with it. */
+export function entryHref(slug: string, seq: number): string {
+  return orgHref(slug, `/audit?before=${seq + 1}#seq-${seq}`);
+}
+
 export function AuditLedger({ entries, since }: { entries: LedgerEntry[]; since?: number }) {
   const sorted = [...entries].sort((a, b) => b.seq - a.seq);
   const bySeq = new Map(entries.map((entry) => [entry.seq, entry]));

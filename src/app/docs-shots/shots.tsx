@@ -47,6 +47,11 @@ import { statusChips, statusRows, type PageStatus, type PlatformStatus } from "@
 import { ActualsBills, ActualsSummary } from "@/components/vx/ActualsComparison";
 import { CashScenarios, CoverageList, ScenarioCases, ScenarioFindings } from "@/components/vx/CashScenarios";
 import { cashScenario, DEFAULT_LEVERS, type ScenarioBasis } from "@/lib/cash-scenarios";
+import { EvidenceAccess, EvidenceStepCard, evidenceSub } from "@/components/vx/EvidenceChain";
+import { PageHead } from "@/components/vx/Shell";
+import { evidenceLinkLabel, evidencePath } from "@/lib/evidence-paths";
+import { orgHref } from "@/lib/auth/org-paths";
+import type { EvidenceStep } from "@/lib/evidence-chain";
 import { compareActuals, type ActualRecord } from "@/lib/actual-payments-compare";
 import type { WaitingPayable } from "@/lib/agent/approvals";
 import { waitingHint } from "@/lib/added-details";
@@ -58,6 +63,7 @@ import { gettingStarted } from "@/lib/getting-started";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow } from "@/lib/queries";
 import { buildReport, type ReportBill, type ReportDecision, type ReportFacts } from "@/lib/workspace-report";
 import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
+import { evidenceShot } from "./evidence-fixture";
 import { designRuleReplay } from "../design/replay-fixture";
 import { RuleTrialPanel } from "@/components/RuleTrial";
 import { RULE_TRIAL_COPY } from "@/lib/rule-trial-copy";
@@ -79,7 +85,7 @@ import { Input } from "@/components/ui/Input";
 
 export interface DocsShot {
   /** The guide the picture belongs to. */
-  guide: "try-it" | "go-live" | "first-payment" | "import-bills" | "try-a-rule" | "pay-a-contractor" | "get-paid" | "telegram" | "slack" | "email-invoices" | "report" | "workspace" | "cash-scenarios";
+  guide: "try-it" | "go-live" | "first-payment" | "import-bills" | "try-a-rule" | "pay-a-contractor" | "get-paid" | "telegram" | "slack" | "email-invoices" | "report" | "workspace" | "cash-scenarios" | "evidence";
   /** The workspace page it is on: its title heads the frame. None for a public page, such as a payee's link. */
   page?: NavKey;
   /** The page's line under its title, where the real page has one. */
@@ -1048,7 +1054,7 @@ export const DOCS_SHOTS = {
       const decision = invoiceDecision(TRAIL_INVOICE, COUNTERPARTY, TRAIL_ENTRIES, { network: "arc-testnet" });
       return (
         <Card className="overflow-hidden">
-          <DecisionTrail id={decision.id} steps={decision.trail ?? []} orgSlug={SLUG} network="arc-testnet" defaultOpen />
+          <DecisionTrail id={decision.id} steps={decision.trail ?? []} orgSlug={SLUG} network="arc-testnet" defaultOpen chainHref={orgHref(SLUG, evidencePath("invoice", decision.id))} />
         </Card>
       );
     },
@@ -1475,7 +1481,32 @@ export const DOCS_SHOTS = {
       );
     },
   },
+  "evidence-chain": { guide: "evidence", render: () => <EvidenceShot head ids={["decision", "payment"]} /> },
+  "evidence-signatures": { guide: "evidence", render: () => <EvidenceShot ids={["signatures"]} /> },
+  "evidence-access": { guide: "evidence", render: () => <EvidenceAccess kind="invoice" receipt="shared" role="owner" canShare /> },
 } satisfies Record<string, DocsShot>;
+
+/**
+ * Some links of the evidence guide's chain, numbered as the page numbers them, with the page's head above the first
+ * picture. The page is long: each picture shows a part of it.
+ */
+function EvidenceShot({ ids, head = false }: { ids: EvidenceStep["id"][]; head?: boolean }) {
+  const { chain, publicKeys } = evidenceShot();
+  return (
+    <>
+      {head && <PageHead title={evidenceLinkLabel(chain.subject.paid)} sub={evidenceSub(chain.subject)} />}
+      <ol className="space-y-4">
+        {chain.steps.map((step, index) =>
+          ids.includes(step.id) ? (
+            <li key={step.id}>
+              <EvidenceStepCard step={step} number={index + 1} chain={chain} orgSlug={SLUG} publicKeys={publicKeys} />
+            </li>
+          ) : null
+        )}
+      </ol>
+    </>
+  );
+}
 
 export type DocsShotName = keyof typeof DOCS_SHOTS;
 
