@@ -55,30 +55,16 @@ export function SharedReport({ view }: { view: SharedReportShown }) {
   const profile = networkProfile(view.network);
   return (
     <article className="space-y-10">
-      <header className="space-y-3">
-        <Eyebrow>Shared report</Eyebrow>
-        <h1 className="text-pretty font-serif text-3xl leading-tight text-ink sm:text-4xl">{view.title}</h1>
-        <p className="max-w-3xl text-[0.9375rem] leading-relaxed text-ink-2">
-          {`What Vestiarion's agent did with ${view.named ? "this business's" : "the business's"} bills on ${profile.label}, ${
-            view.openedAt ? `from ${utcDay(view.openedAt)}` : "since its workspace opened"
-          } to now.`}
-        </p>
-        <p className="text-xs text-ink-3">
-          <span className="font-medium text-ink-2">Live: recomputed each time this page opens.</span>{" "}
-          <time dateTime={view.computedAt}>{`Computed ${utcMinute(view.computedAt)}.`}</time>{" "}
-          {`Shared since ${utcDay(view.sharedAt)}.`}
-        </p>
-      </header>
+      <SharedReportHead view={view} />
 
       {view.figures.handled === 0 ? (
         <EmptyState icon={<FileText />} title="No bills yet" body="This business has not added a bill yet. The report counts what the agent does from its first one." />
       ) : (
         <>
-          <MoneyBox view={view} label={profile.label} />
-          <Figures view={view} />
+          <SharedReportFigures view={view} />
           <ReportValue value={view.value} audience="public" />
           <Comparison comparison={view.comparison} label={profile.label} />
-          <Decisions view={view} />
+          <SharedDecisions view={view} />
           <Payments view={view} />
         </>
       )}
@@ -91,11 +77,43 @@ export function SharedReport({ view }: { view: SharedReportShown }) {
           {view.options.amounts === "hidden" ? " Amounts are hidden." : ""}
         </p>
         <p>
-          Each decision is a signed entry in the business&apos;s ledger. Check its signature checks, in your browser, that the business&apos;s key signed it and that
-          it follows the entry before it. The entry&apos;s content stays private.
+          Each decision is a signed entry in the business&apos;s ledger. <strong className="font-medium text-ink-2">Check its signature</strong> runs in your
+          browser: it checks that the business&apos;s key signed the entry and that it follows the entry before it. The entry&apos;s content stays private.
         </p>
       </footer>
     </article>
+  );
+}
+
+/** The title, the period and the network, and that it is live. */
+export function SharedReportHead({ view }: { view: SharedReportShown }) {
+  const profile = networkProfile(view.network);
+  return (
+    <header className="space-y-3">
+      <Eyebrow>Shared report</Eyebrow>
+      <h1 className="text-pretty font-serif text-3xl leading-tight text-ink sm:text-4xl">{view.title}</h1>
+      <p className="max-w-3xl text-[0.9375rem] leading-relaxed text-ink-2">
+        {`What Vestiarion's agent did with ${view.named ? "this business's" : "the business's"} bills on ${profile.label}, ${
+          view.openedAt ? `from ${utcDay(view.openedAt)}` : "since its workspace opened"
+        } to now.`}
+      </p>
+      <p className="text-xs text-ink-3">
+        <span className="font-medium text-ink-2">Live: recomputed each time this page opens.</span>{" "}
+        <time dateTime={view.computedAt}>{`Computed ${utcMinute(view.computedAt)}.`}</time>{" "}
+        {`Shared since ${utcDay(view.sharedAt)}.`}
+      </p>
+    </header>
+  );
+}
+
+/** The money box and the figures. */
+export function SharedReportFigures({ view }: { view: SharedReportShown }) {
+  const profile = networkProfile(view.network);
+  return (
+    <div className="space-y-10">
+      <MoneyBox view={view} label={profile.label} />
+      <Figures view={view} />
+    </div>
   );
 }
 
@@ -185,7 +203,8 @@ function Comparison({ comparison, label }: { comparison: SharedComparison; label
   );
 }
 
-function Decisions({ view }: { view: SharedReportShown }) {
+/** Each decided bill's newest decision, with its signature check and its transaction. */
+export function SharedDecisions({ view }: { view: SharedReportShown }) {
   return (
     <section aria-labelledby="shared-decisions" className="space-y-3">
       <SectionHeader

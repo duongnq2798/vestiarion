@@ -2,7 +2,7 @@
 
 import { Link2, Link2Off, Share2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { shareReportAction, stopSharingReportAction, type ReportShareActionResult } from "@/app/actions/report-share";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -156,9 +156,11 @@ export function ReportShareLinks({ orgSlug, live, stopped, canStop }: { orgSlug:
 function LiveLinkRow({ orgSlug, link, canStop }: { orgSlug: string; link: LiveLink; canStop: boolean }) {
   const router = useRouter();
   const stop = useActionForm(stopSharingReportAction, INITIAL, { onSuccess: () => router.refresh() });
+  // Each row's Stop sharing names its own link to a screen reader: what it shows and who made it.
+  const describedBy = useId();
   return (
     <li className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0 space-y-0.5">
+      <div id={describedBy} className="min-w-0 space-y-0.5">
         <p className="text-sm font-medium text-ink">{link.shows}</p>
         <p className="text-xs text-ink-3">{`Made by ${link.by ?? "a former member"} on ${utcDay(link.createdAt)}`}</p>
         {!stop.state.ok && stop.state.message && <FormMessage tone="error">{stop.state.message}</FormMessage>}
@@ -167,7 +169,7 @@ function LiveLinkRow({ orgSlug, link, canStop }: { orgSlug: string; link: LiveLi
         <form {...stop.formProps} className="shrink-0">
           <input type="hidden" name="orgSlug" value={orgSlug} />
           <input type="hidden" name="shareId" value={link.id} />
-          <SubmitButton size="sm" variant="ghost" icon={<Link2Off />} pendingLabel="Stopping…">
+          <SubmitButton size="sm" variant="ghost" icon={<Link2Off />} pendingLabel="Stopping…" aria-describedby={describedBy}>
             Stop sharing
           </SubmitButton>
         </form>
