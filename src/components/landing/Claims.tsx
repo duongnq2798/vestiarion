@@ -3,31 +3,32 @@ import { Receipt, Seal, Verdict } from "@/components/landing/evidence/Evidence";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { Reveal } from "@/components/ui/Reveal";
 import { CredentialChecks } from "./Credentials";
+import { RESERVE_PROOF_HREF } from "./provenance";
 
 const claims = [
   {
     title: "A model can recommend payment. Code can still refuse it.",
     body: "Risk, screened limits, evidence and liquidity are checked before the provider boundary. The receipt keeps both the model’s argument and the rule that overruled it.",
-    href: "/onboarding",
-    evidence: "See the guardrail receipt",
+    href: "/docs/research/model-vs-policy#code-refused-seven-payments",
+    evidence: "Read the payments code refused",
   },
   {
     title: "Screening changes authority, not history.",
     body: "Every screen derives a limit from the business baseline. A failed lookup keeps the previous verdict instead of silently clearing the counterparty.",
-    href: "/onboarding",
-    evidence: "Inspect tiered limits",
+    href: "/docs/guides/first-payment#changing-a-payment-limit",
+    evidence: "See how risk sets the limit",
   },
   {
     title: "Treasury moves must beat their own cost.",
     body: "Projected yield has to exceed the sweep-and-redemption round trip. Cash needed for near-term obligations remains liquid.",
-    href: "/onboarding",
-    evidence: "Read the economics",
+    href: RESERVE_PROOF_HREF,
+    evidence: "Read what the reserve did",
   },
   {
     title: "The audit log is a cryptographic receipt, not a feed.",
     body: "Human, agent and system actions are Ed25519-signed and linked to the entry before them. The verifier replays authorship, content and continuity on demand.",
-    href: "/onboarding",
-    evidence: "Verify the hash chain",
+    href: "/docs/guides/audit-export",
+    evidence: "Verify a ledger export",
   },
 ] as const;
 
@@ -91,8 +92,9 @@ function ClaimArtifact({ index }: { index: number }) {
 }
 
 /**
- * One claims section (docs/superpowers/specs/2026-10-08-landing-motion-design.md M3): the four claims a reader can
- * check at their source, then the four design claims, each with the receipt that shows it, two by two.
+ * One claims section (docs/superpowers/specs/2026-10-08-landing-motion-design.md M3), on /how-it-decides since landing
+ * clarity: the four claims a reader can check at their source, then the four design claims, each with the receipt that
+ * shows it, two by two, and a link to where each is shown or can be checked.
  */
 export function Claims({ screeningMode }: { screeningMode: "live" | "simulate" }) {
   return (

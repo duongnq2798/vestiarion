@@ -1053,7 +1053,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   ],
   "guides/shadow-mode": [
     ["Run alongside how you pay today (shadow mode)", CREATE_FORM],
-    ["Try it on your bills", "src/components/landing/Hero.tsx"],
+    ["Try it on your bills", "src/components/landing/cta.ts"],
     ["Your workspace is ready, but shadow mode did not turn on.", "src/app/o/[slug]/console/page.tsx"],
     ["To pay on Arc", GETTING_STARTED],
     ["Does this supplier send you purchase orders?", COUNTERPARTY_FORM],

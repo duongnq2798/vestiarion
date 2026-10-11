@@ -3,7 +3,8 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
-import { ARC_URL, CIRCLE_URL, GITHUB_URL, ISSUES_URL, LICENSE_URL, PRODUCT_HUNT_URL, X_URL } from "@/lib/site-links";
+import { START_LABEL, TRY_HREF } from "@/components/landing/cta";
+import { ARC_URL, CIRCLE_URL, GITHUB_URL, ISSUES_URL, LICENSE_URL, PRODUCT_HUNT_BADGE, PRODUCT_HUNT_URL, X_URL } from "@/lib/site-links";
 import { BrandMark } from "./Brand";
 import { SiteMenu } from "./SiteMenu";
 
@@ -15,8 +16,9 @@ import { SiteMenu } from "./SiteMenu";
 
 /** The landing page's own sections, which its header and footer link to. */
 export const LANDING_SECTIONS = [
-  { href: "#measurements", label: "Measurements" },
   { href: "#how-it-works", label: "How it works" },
+  { href: "#who-its-for", label: "Who it’s for" },
+  { href: "#safety", label: "Safety" },
   { href: "#proof", label: "Proof" },
 ] as const;
 
@@ -109,7 +111,9 @@ export function SiteHeader({
                 <Link href="/login">Sign in</Link>
               </Button>
               <Button asChild className="hidden min-[375px]:inline-flex">
-                <Link href="/onboarding">Open console</Link>
+                <Link href={TRY_HREF} data-cta="header-start">
+                  {START_LABEL}
+                </Link>
               </Button>
               <SiteMenu links={LANDING_LINKS} />
             </>
@@ -135,7 +139,7 @@ export interface FooterLink {
 export const FOOTER_COLUMNS: ReadonlyArray<{ title: string; links: readonly FooterLink[] }> = [
   {
     title: "Product",
-    links: [...LANDING_SECTIONS, { href: "/login", label: "Sign in" }, { href: "/onboarding", label: "Open console" }],
+    links: [...LANDING_SECTIONS, { href: "/how-it-decides", label: "How it decides" }, { href: "/login", label: "Sign in" }, { href: TRY_HREF, label: START_LABEL }],
   },
   {
     title: "Developers",
@@ -266,7 +270,8 @@ export function SiteFooter({ compact = false, networkLabel = "Arc" }: { compact?
           <div className="col-span-2 sm:col-span-4 lg:col-span-2">
             <Wordmark />
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-ink-2">
-              An autonomous treasury agent. A model proposes, code enforces the boundary, and every decision is signed into a chain anyone can verify.
+              An accounts payable agent for small teams. It checks every bill before it is paid, pays within the limits you set, and signs every
+              decision into a record anyone can verify.
             </p>
             {/* What it runs on, each named and linked to its own site, in a new tab. */}
             <p className="mt-3 text-sm text-ink-2">
@@ -279,6 +284,11 @@ export function SiteFooter({ compact = false, networkLabel = "Arc" }: { compact?
                 Circle ↗
               </FooterAnchor>
             </p>
+            <a href={PRODUCT_HUNT_BADGE.href} target="_blank" rel="noopener noreferrer" className="mt-5 inline-flex rounded-lg">
+              {/* Product Hunt draws the badge with its live upvote count, so it stays their image. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={PRODUCT_HUNT_BADGE.src} alt={PRODUCT_HUNT_BADGE.alt} width={PRODUCT_HUNT_BADGE.width} height={PRODUCT_HUNT_BADGE.height} loading="lazy" decoding="async" />
+            </a>
           </div>
           {FOOTER_COLUMNS.map((column) => (
             <nav key={column.title} aria-label={column.title} className="min-w-0">

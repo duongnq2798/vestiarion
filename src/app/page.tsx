@@ -1,37 +1,40 @@
 import type { Metadata } from "next";
-import { Claims } from "@/components/landing/Claims";
 import { BuildOnIt } from "@/components/landing/BuildOnIt";
 import { BuiltWith } from "@/components/landing/BuiltWith";
+import { Faq } from "@/components/landing/Faq";
 import { FinalCta } from "@/components/landing/FinalCta";
 import { Hero } from "@/components/landing/Hero";
-import { HowItWorks } from "@/components/landing/HowItWorks";
-import { LatestDecision } from "@/components/landing/LatestDecision";
-import { LiveProof } from "@/components/landing/LiveProof";
+import { Proof } from "@/components/landing/Proof";
 import { landingProvenance, latestOwnPaymentUrl } from "@/components/landing/provenance";
-import { WhatItPays } from "@/components/landing/WhatItPays";
-import type { ChainHeadEntry } from "@/components/landing/hero/EvidenceReplay";
+import { Safety } from "@/components/landing/Safety";
+import { Steps } from "@/components/landing/Steps";
+import { UseCases } from "@/components/landing/UseCases";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { chainModes } from "@/lib/circle";
 import { screeningMode } from "@/lib/compliance";
-import { hostedWalletsAvailable } from "@/lib/config";
 import { currentConfig } from "@/lib/context";
 import { withFoundingOrg } from "@/lib/dal/scope";
-import { listLedgerEntries } from "@/lib/ledger";
+import { mainnetOpenToEveryone } from "@/lib/mainnet";
 import { ARC_MAINNET } from "@/lib/network";
 import { readLatestDecision } from "@/lib/platform/latest-decision";
 import { readAllTimeOrNull } from "@/lib/platform/open-numbers";
 import { reserveRunsLive } from "@/lib/platform/usyc-reserve";
+import { publicOrigin } from "@/lib/public-origin";
 import { X_HANDLE } from "@/lib/site-links";
 
 export const dynamic = "force-dynamic";
 
+const TITLE = "Vestiarion — An accounts payable agent for small teams";
+const DESCRIPTION =
+  "Vestiarion's agent checks every invoice from your contractors and suppliers, says pay, wait or stop and why, and pays in USDC within the limits you set. Try it on your real bills in shadow mode, with no wallet or funds to start.";
+
 export const metadata: Metadata = {
-  title: "Vestiarion — Verifiable Treasury Agent on Arc",
-  description: "A treasury agent that screens counterparties, pays obligations, applies code-level guardrails, and signs every decision into an auditable chain on Arc.",
+  title: TITLE,
+  description: DESCRIPTION,
   alternates: { canonical: "/" },
   openGraph: {
-    title: "Vestiarion — Verifiable Treasury Agent on Arc",
-    description: "See the live console, measured outcomes on Arc, and the signed decision ledger behind an autonomous business treasury.",
+    title: TITLE,
+    description: DESCRIPTION,
     url: "/",
     type: "website",
     siteName: "Vestiarion",
@@ -40,28 +43,29 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     site: X_HANDLE,
-    title: "Vestiarion — Verifiable Treasury Agent on Arc",
-    description: "An autonomous treasury agent whose decisions, refusals, and evidence are inspectable.",
+    title: TITLE,
+    description: "Every bill checked before it's paid, every decision on record. Try the agent on your real bills in shadow mode.",
   },
 };
 
 /**
- * The founding organization's two newest ledger entries, reduced to what a
- * public page may show: sequence, hash, domain and action — never a summary
- * or its detail. A ledger that cannot be read leaves the hero without its
- * chain rather than without the page.
+ * What the page is, for search engines (landing clarity M2): the product as a web application, with no price, since
+ * none is published.
  */
-async function chainHead(): Promise<ChainHeadEntry[]> {
-  try {
-    const entries = await withFoundingOrg(() => listLedgerEntries(2));
-    return entries.map(({ seq, hash, domain, action }) => ({ seq, hash, domain, action }));
-  } catch {
-    return [];
-  }
+function structuredData(): string {
+  return JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "Vestiarion",
+    url: `${publicOrigin()}/`,
+    applicationCategory: "BusinessApplication",
+    operatingSystem: "Web",
+    description: DESCRIPTION,
+  }).replace(/</g, "\\u003c");
 }
 
 /**
- * Whether any live workspace runs a real USYC reserve; false when that cannot be read, so the hero says simulated
+ * Whether any live workspace runs a real USYC reserve; false when that cannot be read, so the proof says simulated
  * rather than claiming a reserve it could not see.
  */
 async function reserveLiveAnywhere(): Promise<boolean> {
@@ -74,50 +78,52 @@ async function reserveLiveAnywhere(): Promise<boolean> {
 }
 
 /**
- * The public showcase reads the founding organization, named explicitly: a
- * sandbox organization's demo data must never inflate its "live" figures.
- * Every read starts here, inside that scope, and the sections take the
- * results as props. The measurements are the open numbers, every workspace's, read through the aggregate functions
- * one network at a time (landing proof P3); Arc testnet's stream in behind their own skeleton, and Arc mainnet's are
- * read before the hero, whose payments leg links to the team's latest payment there (P2).
+ * The landing page (docs/superpowers/specs/2026-10-11-landing-clarity-design.md): what Vestiarion is and how to try it
+ * first, who it is for, how it is kept safe, then the proof, the developer's way in, the questions and the close. The
+ * technical showcase, the decision loop step by step and the receipts behind each claim, is /how-it-decides.
+ *
+ * The public showcase reads the founding organization, named explicitly: a sandbox organization's demo data must never
+ * inflate its "live" figures. The measurements are the open numbers, every workspace's, read through the aggregate
+ * functions one network at a time (landing proof P3); Arc testnet's stream in behind their own skeleton, and Arc
+ * mainnet's are read before the page renders, since the payments leg links to the team's latest payment there (P2).
  */
 export default async function LandingPage() {
   const mainnet = readAllTimeOrNull("arc-mainnet");
   const testnet = readAllTimeOrNull("arc-testnet");
   // chainModes() still answers when the Circle credentials cannot be read (R12).
-  // The team's latest decision is read before the page renders, so the band never pushes the page down after it (L2).
-  const [modes, head, latest, reserveLive, mainnetNumbers] = await Promise.all([
+  const [modes, latest, reserveLive, mainnetNumbers] = await Promise.all([
     withFoundingOrg(async () => chainModes()),
-    chainHead(),
     readLatestDecision(),
     reserveLiveAnywhere(),
     mainnet,
   ]);
-  const currentScreeningMode = screeningMode();
-  // The platform's config, outside any organization's scope: a boolean only, never the pair (R4).
-  const hostedAvailable = hostedWalletsAvailable(currentConfig());
   const provenance = landingProvenance({
     paymentsLive: modes.mode === "live",
     foundingReserveLive: modes.earnMode === "live",
     reserveRunsLive: reserveLive,
-    screeningLive: currentScreeningMode === "live",
+    screeningLive: screeningMode() === "live",
     mainnetTxUrl: latestOwnPaymentUrl(mainnetNumbers, ARC_MAINNET),
   });
 
   return (
     <div className="min-h-dvh overflow-x-clip bg-transparent">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: structuredData() }} />
       <SiteHeader landing />
 
       <main id="main">
-        <Hero provenance={provenance} head={head} hostedAvailable={hostedAvailable} />
-        <LatestDecision decision={latest} />
-        <WhatItPays />
-        <BuiltWith />
-        <LiveProof numbers={testnet.then((testnetNumbers) => ({ mainnet: mainnetNumbers, testnet: testnetNumbers }))} />
-        <HowItWorks />
+        <Hero />
+        <Steps />
+        <UseCases />
+        <Safety />
+        <Proof
+          numbers={testnet.then((testnetNumbers) => ({ mainnet: mainnetNumbers, testnet: testnetNumbers }))}
+          latest={latest}
+          provenance={provenance}
+        />
         <BuildOnIt />
-        <Claims screeningMode={currentScreeningMode} />
-        <FinalCta hostedAvailable={hostedAvailable} />
+        <BuiltWith />
+        <Faq mainnetForEveryone={mainnetOpenToEveryone(currentConfig())} />
+        <FinalCta />
       </main>
 
       <SiteFooter />
