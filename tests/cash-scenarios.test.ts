@@ -208,9 +208,58 @@ describe("cashScenario: advice, never an action", () => {
     expect(result.scenario.shortOn).toBe(ymd(12));
     expect(result.suggestions).toEqual([
       { kind: "need", amount: 40, by: ymd(12) },
-      { kind: "pay_on_due", label: "Northwind", amount: 60, scheduledFor: ymd(6), dueOn: ymd(25) },
+      // Paid on day 25, Northwind's 60 covers Harbor on day 12, and Acme is back by day 25: never short.
+      { kind: "pay_on_due", label: "Northwind", amount: 60, scheduledFor: ymd(6), dueOn: ymd(25), shortOn: null, shortfall: 0 },
       { kind: "follow_up", label: "Acme", amount: 70, expected: ymd(10), arrives: ymd(24) },
     ]);
+  });
+
+  // The guide's studio: paying Northwind Cloud on its due day only moves its 860 to a day that is short anyway.
+  const studio = (northwindDue: number) =>
+    basis({
+      cash: 1840.5,
+      reserve: 3200,
+      outflows: [
+        bill("Minh Pham: Landing page", 600, 0, { kind: "milestone", note: "verified", id: "m-landing" }),
+        bill("Linh Design", 1500, 3, { kind: "recurring", note: "recurring, not billed yet", id: "rec-linh:1" }),
+        bill("Northwind Cloud", 860, 5, { note: "scheduled", dueDay: northwindDue }),
+        bill("Atlas Compute", 1240, 8),
+        bill("Harbor Print", 2150, 18),
+        bill("Kestrel Legal", 950, 27, { foreign: true }),
+        bill("Linh Design", 1500, 34, { kind: "recurring", note: "recurring, not billed yet", id: "rec-linh:2" }),
+      ],
+      receivables: [owed("Acme Studio", 3400, 9), owed("Beacon Labs", 1800, 16)],
+    });
+
+  it("suggests paying a scheduled bill on its due day only when that moves the short day or shrinks the gap", () => {
+    const unchanged = cashScenario(studio(20), levers({ horizon: 60 }));
+    expect(unchanged.scenario.shortOn).toBe(ymd(18));
+    expect(unchanged.shortfall).toBe(1309.5);
+    // On day 20 the 860 leaves anyway, before Acme Studio's 3,400 arrives on day 23: the lowest is still 1,309.50 short.
+    expect(unchanged.suggestions.map((suggestion) => suggestion.kind)).toEqual(["need", "follow_up"]);
+    const helps = cashScenario(studio(25), levers({ horizon: 60 }));
+    expect(helps.suggestions).toContainEqual({
+      kind: "pay_on_due", label: "Northwind Cloud", amount: 860, scheduledFor: ymd(5), dueOn: ymd(25), shortOn: ymd(18), shortfall: 449.5,
+    });
+  });
+
+  it("picks the scheduled bill whose move helps most, not the largest", () => {
+    const result = cashScenario(
+      basis({
+        cash: 200,
+        outflows: [
+          bill("Big", 100, 2, { note: "scheduled", dueDay: 12 }),
+          bill("Small", 80, 3, { note: "scheduled", dueDay: 25 }),
+          bill("Harbor", 120, 10),
+        ],
+        receivables: [owed("Acme", 300, 5)],
+      }),
+      levers()
+    );
+    expect(result.scenario.shortOn).toBe(ymd(10));
+    expect(result.shortfall).toBe(100);
+    // Big on day 12 only moves the same 100 short two days on; Small on day 25 leaves 20 short.
+    expect(result.suggestions).toContainEqual({ kind: "pay_on_due", label: "Small", amount: 80, scheduledFor: ymd(3), dueOn: ymd(25), shortOn: ymd(10), shortfall: 20 });
   });
 
   it("suggests nothing when the scenario never runs short, and no scheduled bill already past the short day", () => {
@@ -247,8 +296,47 @@ describe("cashScenario: what moves it most", () => {
     expect(result.driversOn).toBe(ymd(25));
     expect(result.drivers).toEqual([
       { kind: "payee", label: "Atlas", amount: 400, bills: 1, recurring: 0, milestones: 0 },
-      { kind: "receivable", label: "Acme", amount: 300, count: 1, arrives: ymd(37), never: false },
+      // Due day 7, 30 days late: day 37, after the 30 days.
+      { kind: "receivable", key: "client-Acme", label: "Acme", amount: 300, count: 1, never: 0, outside: 1, arrivesBy: null },
       { kind: "payee", label: "Linh", amount: 250, bills: 1, recurring: 1, milestones: 0 },
+    ]);
+  });
+
+  it("groups a client's receivables under the client, and keeps when each of them arrives", () => {
+    const start = basis({
+      outflows: [bill("Harbor", 150, 10)],
+      receivables: [owed("Acme", 30, 3, { id: "a1", client: "c-acme" }), owed("Acme", 30, 5, { id: "a2", client: "c-acme" })],
+    });
+    const late = cashScenario(start, levers({ horizon: 60 }));
+    expect(late.scenario.shortOn).toBe(ymd(10));
+    // Both arrive inside the 60 days, on days 17 and 19: by the later one.
+    expect(late.drivers).toContainEqual({ kind: "receivable", key: "c-acme", label: "Acme", amount: 60, count: 2, never: 0, outside: 0, arrivesBy: ymd(19) });
+    const mixed = cashScenario(start, levers({ horizon: 60, choices: { a1: "never" } }));
+    expect(mixed.drivers).toContainEqual({ kind: "receivable", key: "c-acme", label: "Acme", amount: 60, count: 2, never: 1, outside: 0, arrivesBy: ymd(19) });
+    // Day 3 + 26 is day 29, inside the 30 days; day 5 + 26 is day 31, after them.
+    const outside = cashScenario(start, levers({ horizon: 30, lateDays: 26 }));
+    expect(outside.drivers).toContainEqual({ kind: "receivable", key: "c-acme", label: "Acme", amount: 60, count: 2, never: 0, outside: 1, arrivesBy: ymd(29) });
+  });
+
+  it("keeps two clients with the same name apart, and each receivable with no client on its own", () => {
+    const start = basis({
+      outflows: [bill("Harbor", 400, 10)],
+      receivables: [
+        owed("Acme", 100, 3, { id: "a1", client: "c-one" }),
+        owed("Acme", 90, 4, { id: "a2", client: "c-two" }),
+        owed("Walk-in", 80, 5, { id: "w1", client: null }),
+        owed("Walk-in", 70, 6, { id: "w2", client: null }),
+      ],
+    });
+    const receivableDrivers = (result: ReturnType<typeof cashScenario>) =>
+      result.drivers.flatMap((driver) => (driver.kind === "receivable" ? [[driver.key, driver.label, driver.amount, driver.count]] : []));
+    expect(receivableDrivers(cashScenario(start, levers()))).toEqual([
+      ["c-one", "Acme", 100, 1],
+      ["c-two", "Acme", 90, 1],
+    ]);
+    expect(receivableDrivers(cashScenario({ ...start, receivables: start.receivables.slice(2) }, levers()))).toEqual([
+      ["w1", "Walk-in", 80, 1],
+      ["w2", "Walk-in", 70, 1],
     ]);
   });
 
@@ -308,7 +396,7 @@ describe("cashScenario: what it is built from", () => {
     ],
   });
 
-  it("counts bills, recurring payments, milestones and receivables within the horizon, and how far bills are known", () => {
+  it("counts bills, recurring payments, milestones and receivables within the horizon, and the weeks with a bill on record", () => {
     expect(cashScenario(start, levers({ horizon: 30 })).coverage).toEqual({
       horizon: 30,
       bills: { count: 2, amount: 30, lastDay: ymd(20) },
@@ -317,7 +405,8 @@ describe("cashScenario: what it is built from", () => {
       receivables: { count: 1, amount: 100, withRecord: 1 },
       records: [{ label: "X", paidOnTime: 2, paidLate: 1, averageDaysLate: 6 }],
       eurc: { bills: { count: 1, amount: 9 }, receivables: { count: 0, amount: 0 } },
-      billsKnownDays: 21,
+      // Weeks from today: days 0-6, 7-13, 14-20, 21-27 and 28-29. A, R and B fall in the first three.
+      weeks: { total: 5, withBills: 3 },
     });
     expect(cashScenario(start, levers({ horizon: 90 })).coverage).toMatchObject({
       bills: { count: 3, amount: 60, lastDay: ymd(50) },
@@ -325,13 +414,29 @@ describe("cashScenario: what it is built from", () => {
       receivables: { count: 3, amount: 210, withRecord: 2 },
       records: [{ label: "X", paidOnTime: 2, paidLate: 1, averageDaysLate: 6 }],
       eurc: { bills: { count: 1, amount: 9 }, receivables: { count: 1, amount: 4 } },
-      billsKnownDays: 51,
+      weeks: { total: 13, withBills: 5 },
     });
+  });
+
+  it("is not filled by one far bill or an overdue one, and gives a scheduled bill's due day as its latest", () => {
+    // An overdue bill and a held one past its due day were due before today: they leave today but fill no week.
+    const sparse = cashScenario(
+      basis({ outflows: [bill("Late", 40, 0, { note: "overdue", overdue: true }), bill("Held", 30, 0, { note: "held", overdue: true }), bill("Insurance", 900, 89)] }),
+      levers({ horizon: 90 })
+    ).coverage;
+    expect(sparse.weeks).toEqual({ total: 13, withBills: 1 });
+    // A bill due this week fills it.
+    expect(cashScenario(basis({ outflows: [bill("Soon", 10, 2)] }), levers()).coverage.weeks).toEqual({ total: 5, withBills: 1 });
+    expect(sparse.bills.lastDay).toBe(ymd(89));
+    const scheduled = cashScenario(basis({ outflows: [bill("Harbor", 10, 3), bill("Northwind", 50, 5, { note: "scheduled", dueDay: 20 })] }), levers()).coverage;
+    expect(scheduled.bills.lastDay).toBe(ymd(20));
+    // The week it leaves in is the scheduled day's.
+    expect(scheduled.weeks).toEqual({ total: 5, withBills: 1 });
   });
 
   it("says when no bill is known, and when recurring payments could not be read", () => {
     const coverage = cashScenario(basis({ recurringRead: false }), levers()).coverage;
-    expect(coverage).toMatchObject({ bills: { count: 0, amount: 0, lastDay: null }, billsKnownDays: 0, recurring: { read: false } });
+    expect(coverage).toMatchObject({ bills: { count: 0, amount: 0, lastDay: null }, weeks: { total: 5, withBills: 0 }, recurring: { read: false } });
   });
 });
 

@@ -10,7 +10,7 @@ The section counts what **Next 30 days** counts, by the same rules, over up to 9
 - **Bills** you owe that are still open, each on its day: a scheduled bill on the day it is scheduled for, any other on its due day, or today when it is overdue. A bill held for a person counts too.
 - **Open milestones**, today: a milestone has no payment day, so it is counted as if paid now, unless its USDC is locked in escrow.
 - **Recurring payments not billed yet**: the periods of each running recurring payment that have no bill yet, each on its due day (one already due, today). A period's bill is created up to 7 days before its due day, so over 60 or 90 days most periods are not billed yet. Each is marked "recurring, not billed yet". This is the one way the section differs from **Next 30 days**, which counts only bills already created.
-- **Receivables**: your open receivables in USDC, already invoiced. Each adds to the balance only on the day it arrives in that case: as things stand, on its due day, or today when it is overdue.
+- **Receivables**: your open receivables in USDC, already invoiced. Each adds to the balance only on the day it arrives in that case: if clients pay on time, on its due day, or today when it is overdue.
 - **Deals not invoiced yet are not counted.** The workspace keeps no record of them, so nothing is made up for them.
 - **EURC** bills and receivables are paid from and into the EURC balance. They are listed as left out, never converted and never added to a USDC figure.
 
@@ -32,24 +32,27 @@ These are settings you choose, not predictions: nothing is weighted by how likel
 
 ## Read the result
 
-**As things stand** and **In this scenario** sit side by side. Each says "Runs short on" the first day the balance falls below zero, or "Never short in the next 60 days"; the lowest balance and its day; and "Below the cushion from" the first day the balance falls under the cushion the treasury keeps, 15% of what leaves in the 7 days from that day, when that comes before any short day. Under **In this scenario** is what you changed: how many receivables are late, and how many of those land after the days you look ahead; how many never arrive; and how much more or less the bills cost.
+**If clients pay on time** and **In this scenario** sit side by side. The first assumes every client pays on its due day, and says so under its name: "Each receivable on its due day, an overdue one today. Next 30 days counts none." So it can show no short day where **Next 30 days**, which counts no receivable until it arrives, says the wallet runs short. To count none here too, set every receivable to **Never arrives**. Each case says "Runs short on" the first day the balance falls below zero, or "Never short in the next 60 days"; the lowest balance and its day; and "Below the cushion from" the first day the balance falls under the cushion the treasury keeps, 15% of what leaves in the 7 days from that day, when that comes before any short day. Under **In this scenario** is what you changed: how many receivables are late, and how many of those land after the days you look ahead; how many never arrive; and how much more or less the bills cost.
 
 Below them, one line gives the cash today, says "No bank balance is counted.", gives the receivables due in the days you look ahead and how much of them arrives within those days in this scenario, and says "Deals not invoiced yet are not counted."
 
 <Screenshot
   src="/docs/guides/cash-scenarios-cases.png"
-  alt="As things stand: Never short in the next 60 days, lowest 840.50 USDC on Oct 20, 2026. In this scenario: Runs short on Oct 30, 2026, lowest minus 1,309.50 USDC on Oct 30, 2026, 2 receivables 14 days late. Below, cash today 5,040.50 USDC in the operating wallet and the USYC reserve, and a chart of both balances from Oct 12 to Dec 10, 2026, with the first short day marked."
-  caption="The same bills and receivables as things stand, and with both clients 14 days late."
+  alt="If clients pay on time, each receivable on its due day: Never short in the next 60 days, lowest 840.50 USDC on Oct 20, 2026. In this scenario: Runs short on Oct 30, 2026, lowest minus 1,309.50 USDC on Oct 30, 2026, 2 receivables 14 days late. Below, cash today 5,040.50 USDC in the operating wallet and the USYC reserve, and a chart of both balances from Oct 12 to Dec 10, 2026, with the first short day marked."
+  caption="The same bills and receivables with clients paying on time, and with both clients 14 days late."
 />
 
-- **The chart** draws the balance every day, as things stand (grey, dashed) and in this scenario (solid), with the first short day marked. Point at a day to read both balances. **Day by day** opens the same figures as a table: today, then each day either balance changes.
+- **The chart** draws the balance every day, if clients pay on time (grey, dashed) and in this scenario (solid), with the first short day marked. Point at a day to read both balances. **Day by day** opens the same figures as a table: today, then each day either balance changes.
 - **Due while the balance is short** lists the bills, recurring payments and milestones that leave on a day the balance in this scenario is below zero, with their day and amount.
-- **What could help**, "advice only: nothing here changes a payment", shows only when the scenario runs short, with at most three points: how much more USDC the wallet would need, by the first short day, to pay every bill on its day; the largest bill scheduled for a day before its due day and no later than the short day, whose due day comes after it: paid on its due day instead, it would stay in the wallet past the short day, and any early-payment discount it was scheduled for would be lost; and, of the receivables that would have arrived by the short day but do not in this scenario, the largest.
-- **What moves it most** names, by the first short day (or by the lowest day when the balance never runs short), the three sources that pull the balance down most: a payee, with its bills, recurring payments and milestones leaving by then together (a milestone counts for its contractor); a client whose receivable this scenario makes late past that day or drops; and a rise in bill costs, as one source.
+- **What could help**, "advice only: nothing here changes a payment", shows only when the scenario runs short, with at most three points:
+  - how much more USDC the wallet would need, by the first short day, to pay every bill on its day;
+  - a bill scheduled for a day before its due day and no later than the short day, whose due day comes after it, that would help if paid on its due day instead. The section works the scenario out again with the bill moved and names it only when the balance then runs short later or by less, saying which: a later short day, less USDC needed, or no short day within the days you look ahead. It ends "Any early-payment discount it was scheduled for is lost." Of several such bills, it names the one that leaves the least to find;
+  - of the receivables that would have arrived by the short day but do not in this scenario, the largest.
+- **What moves it most** names, by the first short day (or by the lowest day when the balance never runs short), the three sources that pull the balance down most: a payee, with its bills, recurring payments and milestones leaving by then together (a milestone counts for its contractor); a client whose receivables this scenario makes late past that day or drops, all of them together, with the day the last of them arrives, how many arrive after the days you look ahead and how many never do; and a rise in bill costs, as one source.
 
 <Screenshot
   src="/docs/guides/cash-scenarios-findings.png"
-  alt="Due while the balance is short: Harbor Print, 2,150.00 USDC on Oct 30, 2026. What could help: the wallet needs 1,309.50 USDC more by Oct 30, 2026; Northwind Cloud is scheduled for Oct 17, 2026, before its due day, Nov 1, 2026; Acme Studio's 3,400.00 USDC arrives on Nov 4, 2026 in this scenario. What moves it most by Oct 30, 2026: Acme Studio's receivable arriving on Nov 4, 2026, Harbor Print's bill, and Beacon Labs' receivable arriving on Nov 11, 2026."
+  alt="Due while the balance is short: Harbor Print, 2,150.00 USDC on Oct 30, 2026. What could help: the wallet needs 1,309.50 USDC more by Oct 30, 2026; Northwind Cloud is scheduled for Oct 17, 2026, before its due day, Nov 6, 2026, and paid then, the wallet needs 449.50 USDC more by Oct 30, 2026 rather than 1,309.50 USDC; Acme Studio's 3,400.00 USDC arrives on Nov 4, 2026 in this scenario. What moves it most by Oct 30, 2026: Acme Studio's receivable arriving on Nov 4, 2026, Harbor Print's bill, and Beacon Labs' receivable arriving on Nov 11, 2026."
   caption="The bill due while the balance is short, advice in words, and what moves the balance most."
 />
 
@@ -57,17 +60,17 @@ A short day is not an instruction to do anything with your money. Nothing in the
 
 ## What this is built from
 
-**What this is built from** says how much of the picture is known. Its badge, "Bills known for 28 of 60 days" in the picture, counts from today to the latest day a bill is due. Bills nobody has added yet are not counted, so the days after the latest bill may look better than they will be, and the section says so under the list.
+**What this is built from** says how much of the picture is known. Its badge, "Bills on record in 5 of 9 weeks" in the picture, counts the weeks from today (the last one may be shorter) in which a bill or a recurring payment leaves. A bill far ahead fills only its own week. A bill or recurring payment that was due before today, held or scheduled ones included, leaves today but fills no week: it says nothing about the bills of the days ahead. When fewer than half the weeks have one, the badge is amber. Bills nobody has added yet are not counted, so the weeks with none on record may look better than they will be, and the section says so under the list.
 
 <Screenshot
   src="/docs/guides/cash-scenarios-coverage.png"
-  alt="What this is built from, with a badge saying Bills known for 28 of 60 days. Bills: 4, 5,200.00 USDC, the latest due Nov 8, 2026. Recurring payments not billed yet: 2, 3,000.00 USDC, from 1 schedule. Open milestones: 1, 600.00 USDC, counted today. Receivables: 2, 5,200.00 USDC, 1 from clients who have paid before: Acme Studio paid 5 receivables before, 3 on time and 2 late, 11 days late on average. Below: bills not added yet are not counted, so the days after Nov 8, 2026 may look better than they will be."
-  caption="Bills are known for 28 of the 60 days; the rest of the list says what the figure counts and leaves out."
+  alt="What this is built from, with a badge saying Bills on record in 5 of 9 weeks. Bills: 4, 5,200.00 USDC, the latest due Nov 8, 2026. Recurring payments not billed yet: 2, 3,000.00 USDC, from 1 schedule. Open milestones: 1, 600.00 USDC, counted today. Receivables: 2, 5,200.00 USDC, 1 from clients who have paid before: Acme Studio paid 5 receivables before, 3 on time and 2 late, 11 days late on average. Below: bills not added yet are not counted, so 4 weeks with none on record may look better than they will be."
+  caption="Bills are on record in 5 of the 9 weeks; the rest of the list says what the figure counts and leaves out."
 />
 
 The list gives:
 
-- the bills: how many, their total and the latest due day;
+- the bills: how many, their total and the latest due day (a scheduled bill's own due day, not the day it is scheduled for);
 - the recurring payments not billed yet: how many, their total, and from how many schedules. When they could not be read, it says "Recurring payments could not be read, so none is counted.";
 - the open milestones, counted today;
 - the receivables: how many, their total, and how many come from clients who have paid before;

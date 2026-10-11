@@ -88,7 +88,7 @@ describe("scenarioBasis", () => {
       })
     );
     expect(basis.outflows).toEqual([
-      { id: "late", kind: "bill", label: "Vendor late", amount: 5, day: 0, note: "overdue", foreign: false },
+      { id: "late", kind: "bill", label: "Vendor late", amount: 5, day: 0, note: "overdue", foreign: false, overdue: true },
       { id: "held", kind: "bill", label: "Vendor held", amount: 6, day: 10, note: "held", foreign: false },
       { id: "sched", kind: "bill", label: "Vendor sched", amount: 7, day: 20, note: "scheduled", foreign: false, dueDay: 40 },
       { id: "fx", kind: "bill", label: "Vendor fx", amount: 10, day: 12, note: "due", foreign: true },
@@ -97,6 +97,24 @@ describe("scenarioBasis", () => {
     expect(basis.receivables).toEqual([
       { id: "r1", label: "Client r1", amount: 30, day: 0, overdue: true, client: "client-r1" },
       { id: "r2", label: "Client r2", amount: 40, day: 50, overdue: false, client: "client-r2" },
+    ]);
+  });
+
+  it("marks a bill overdue by its own due day: held or scheduled, not only one noted overdue", () => {
+    const basis = scenarioBasis(
+      base({
+        payables: [
+          payable("held-late", 6, day(-4), { status: "held" }),
+          payable("sched-late", 7, day(-2), { status: "scheduled", scheduled_for: day(3, 0) }),
+          payable("sched-past", 8, day(9), { status: "scheduled", scheduled_for: day(-1, 0) }),
+        ],
+      })
+    );
+    // Held keeps its note; a scheduled bill whose due day passed is overdue, one whose scheduled day passed is not.
+    expect(basis.outflows.map((outflow) => [outflow.id, outflow.note, outflow.day, outflow.overdue ?? false])).toEqual([
+      ["held-late", "held", 0, true],
+      ["sched-late", "scheduled", 3, true],
+      ["sched-past", "scheduled", 0, false],
     ]);
   });
 
@@ -142,10 +160,10 @@ describe("scenarioBasis", () => {
 
     it("counts a period already due today, as an overdue bill, and stops at the last due day", () => {
       const basis = scenarioBasis(base({ recurring: [schedule({ startsOn: "2026-09-28", everyUnit: "week", endsOn: "2026-10-12" })] }));
-      expect(basis.outflows.map((outflow) => [outflow.id, outflow.day])).toEqual([
-        ["rec-1:2026-09-28", 0],
-        ["rec-1:2026-10-05", 3],
-        ["rec-1:2026-10-12", 10],
+      expect(basis.outflows.map((outflow) => [outflow.id, outflow.day, outflow.overdue ?? false])).toEqual([
+        ["rec-1:2026-09-28", 0, true],
+        ["rec-1:2026-10-05", 3, false],
+        ["rec-1:2026-10-12", 10, false],
       ]);
     });
 

@@ -42,8 +42,11 @@ const levers = (over: Partial<ScenarioLevers> = {}): ScenarioLevers => ({ ...DEF
 describe("ScenarioOutcome", () => {
   const short = text(renderToStaticMarkup(<ScenarioOutcome result={cashScenario(BASIS, levers())} />));
 
-  it("sets the scenario beside things as they stand, with the day it runs short and its lowest", () => {
-    expect(short).toContain("As things stand");
+  it("sets the scenario beside clients paying on time, said to be an assumption, with the day each runs short and its lowest", () => {
+    expect(short).toContain("If clients pay on time");
+    expect(short).not.toContain("As things stand");
+    // The base case counts each receivable on its due day; Next 30 days counts none, so the two can differ.
+    expect(short).toContain("Each receivable on its due day, an overdue one today. Next 30 days counts none.");
     expect(short).toContain("Never short in the next 30 days");
     expect(short).toContain("In this scenario");
     expect(short).toContain("Runs short on Oct 14, 2026");
@@ -69,8 +72,10 @@ describe("ScenarioOutcome", () => {
   it("gives advice in words, said to be advice", () => {
     expect(short).toContain("What could help advice only: nothing here changes a payment");
     expect(short).toMatch(/To pay every bill on its day in this scenario, the wallet needs 70\.00 USDC more by Oct 14, 2026\./);
-    expect(short).toContain("Northwind is scheduled for Oct 8, 2026, before its due day, Oct 27, 2026.");
-    expect(short).toContain("any early-payment discount it was scheduled for is lost");
+    // Paid on Oct 27, Northwind's 60 covers Harbor on Oct 14; the balance next runs short on Oct 24, by 10.
+    expect(short).toContain(
+      "Northwind is scheduled for Oct 8, 2026, before its due day, Oct 27, 2026. Paid on its due day instead, the balance runs short on Oct 24, 2026 rather than Oct 14, 2026, and the wallet needs 10.00 USDC more rather than 70.00 USDC. Any early-payment discount it was scheduled for is lost."
+    );
     expect(short).toMatch(/Acme's 70\.00 USDC, due Oct 12, 2026, arrives on Oct 26, 2026 in this scenario\. Of the receivables, it is the one that matters most for Oct 14, 2026\./);
   });
 
@@ -81,16 +86,18 @@ describe("ScenarioOutcome", () => {
     expect(short).toMatch(/Northwind: 60\.00 USDC out, 1 bill/);
   });
 
-  it("says what it is built from, how far bills are known, and what it leaves out", () => {
+  it("says what it is built from, in how many weeks a bill is on record, and what it leaves out", () => {
     expect(short).toContain("What this is built from");
-    expect(short).toContain("Bills known for 13 of 30 days");
-    expect(short).toMatch(/Bills: 2, 140\.00 USDC, the latest due Oct 14, 2026\./);
+    // Bills leave on days 6, 12 and 22: weeks 1, 2 and 4 of the 5 from today.
+    expect(short).toContain("Bills on record in 3 of 5 weeks");
+    // Northwind is scheduled for Oct 8 but due Oct 27.
+    expect(short).toMatch(/Bills: 2, 140\.00 USDC, the latest due Oct 27, 2026\./);
     expect(short).toMatch(/Recurring payments not billed yet: 1, 25\.00 USDC, from 1 schedule, counted on their due days\./);
     expect(short).toMatch(/Open milestones: 1, 5\.00 USDC, with no payment day, so counted today\./);
     expect(short).toMatch(/Receivables: 1, 70\.00 USDC; 1 from clients who have paid before\./);
     expect(short).toContain("Acme paid 3 receivables before: 2 on time, 1 late, 9 days late on average.");
     expect(short).toMatch(/Left out, paid from and into the EURC balance: 12\.00 EURC in bills, 0\.00 EURC in receivables\./);
-    expect(short).toContain("Bills not added yet are not counted, so the days after Oct 14, 2026 may look better than they will be.");
+    expect(short).toContain("Bills not added yet are not counted, so 2 weeks with none on record may look better than they will be.");
     expect(short).toContain("Client records are counts, not a prediction.");
   });
 
@@ -99,9 +106,35 @@ describe("ScenarioOutcome", () => {
     expect(short).toContain("Nothing here is saved, changes a payment or reaches the agent");
     expect(short).toContain("Day by day");
     const markup = renderToStaticMarkup(<ScenarioOutcome result={cashScenario(BASIS, levers())} />);
-    expect(markup).toMatch(/role="img" aria-label="The balance over the next 30 days\. As things stand, it never runs short\. In this scenario, it runs short on Oct 14, 2026\."/);
+    expect(markup).toMatch(/role="img" aria-label="The balance over the next 30 days\. If clients pay on time, it never runs short\. In this scenario, it runs short on Oct 14, 2026\."/);
     expect(markup).toContain('aria-live="polite"');
     expect(markup).toContain('aria-label="Balance day by day"');
+  });
+
+  it("says when a client's several receivables arrive, by the latest, or which never does", () => {
+    const acme = (id: string, day: number) => ({ id, label: "Acme", amount: 30, day, overdue: false, client: "client-acme" });
+    const twice: ScenarioBasis = {
+      ...BASIS,
+      cash: 100,
+      reserve: 0,
+      outflows: [{ id: "hb", kind: "bill", label: "Harbor", amount: 150, day: 10, note: "due", foreign: false }],
+      receivables: [acme("a1", 3), acme("a2", 5)],
+      eurc: [],
+    };
+    const late = text(renderToStaticMarkup(<ScenarioFindings result={cashScenario(twice, levers({ horizon: 60 }))} />));
+    expect(late).toContain("Acme: 60.00 USDC in 2 receivables that arrive by Oct 21, 2026");
+    const mixed = text(renderToStaticMarkup(<ScenarioFindings result={cashScenario(twice, levers({ horizon: 60, choices: { a1: "never" } }))} />));
+    expect(mixed).toContain("Acme: 60.00 USDC in 2 receivables: 1 arrives on Oct 21, 2026; 1 never arrives");
+    const outside = text(renderToStaticMarkup(<ScenarioFindings result={cashScenario(twice, levers({ horizon: 30, lateDays: 26 }))} />));
+    expect(outside).toContain("Acme: 60.00 USDC in 2 receivables: 1 arrives on Oct 31, 2026; 1 arrives after the next 30 days");
+  });
+
+  it("warns, in the held tone, when one far bill is all that is on record", () => {
+    const far: ScenarioBasis = { ...BASIS, outflows: [{ id: "ins", kind: "bill", label: "Insurance", amount: 900, day: 89, note: "due", foreign: false }], receivables: [], eurc: [] };
+    const markup = renderToStaticMarkup(<CoverageList result={cashScenario(far, levers({ horizon: 90 }))} />);
+    expect(text(markup)).toContain("Bills on record in 1 of 13 weeks");
+    expect(text(markup)).toContain("so 12 weeks with none on record may look better than they will be.");
+    expect(markup).toContain("bg-held-soft");
   });
 
   it("offers no advice when the scenario never runs short", () => {
@@ -143,6 +176,10 @@ describe("CashScenarios", () => {
     expect(shown).toContain("Clients pay late by (days)");
     expect(markup).toMatch(/value="14"/);
     expect(shown).toContain("Change in bill costs (%)");
+    // A phone's decimal keypad has no minus key: the cost field leaves the keyboard to the browser, so -10 can be typed.
+    const cost = /<input[^>]*id="[^"]+-cost"[^>]*>/.exec(markup)?.[0] ?? "";
+    expect(cost).toContain('type="number"');
+    expect(cost).not.toMatch(/inputmode/i);
     expect(shown).toContain("The change applies to");
     expect(shown).toContain("Receivables due in the next 60 days");
     expect(markup).toContain('aria-label="When Acme pays"');
@@ -150,11 +187,11 @@ describe("CashScenarios", () => {
   });
 
   it("works out the outcome inside the section, and draws the levers alone when asked, for the guide's picture", () => {
-    expect(shown).toContain("As things stand");
+    expect(shown).toContain("If clients pay on time");
     expect(shown).toContain("What this is built from");
     const leversOnly = text(renderToStaticMarkup(<CashScenarios basis={BASIS} defaultOpen outcome={false} />));
     expect(leversOnly).toContain("Clients pay late by (days)");
-    expect(leversOnly).not.toContain("As things stand");
+    expect(leversOnly).not.toContain("If clients pay on time");
     expect(leversOnly).not.toContain("What this is built from");
   });
 });
@@ -172,7 +209,7 @@ describe("the outcome's parts", () => {
     expect(findings).toContain("What could help");
     expect(findings).toContain("What moves it most");
     expect(findings).not.toContain("What this is built from");
-    expect(text(renderToStaticMarkup(<CoverageList result={result} />))).toContain("Bills known for 13 of 30 days");
+    expect(text(renderToStaticMarkup(<CoverageList result={result} />))).toContain("Bills on record in 3 of 5 weeks");
   });
 
   it("draw no findings when nothing leaves and nothing runs short", () => {

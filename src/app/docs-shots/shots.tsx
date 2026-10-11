@@ -693,7 +693,8 @@ const ACTUALS = compareActuals(REPORT_FACTS, {
 
 /**
  * A studio's next 60 days for the What if section (cash scenarios guide): a retainer not billed yet, four bills, a
- * verified milestone, and two receivables, the first from a client that has paid before.
+ * verified milestone, and two receivables, the first from a client that has paid before. Northwind Cloud is scheduled
+ * for day 5 and due on day 25, after Acme Studio's late receivable arrives, so paying it on its due day shrinks the gap.
  */
 const SCENARIO_BASIS: ScenarioBasis = {
   today: "2026-10-12",
@@ -702,7 +703,7 @@ const SCENARIO_BASIS: ScenarioBasis = {
   outflows: [
     { id: "m-landing", kind: "milestone", label: "Minh Pham: Landing page", amount: 600, day: 0, note: "verified", foreign: false },
     { id: "rec-linh:2026-10-15", kind: "recurring", label: "Linh Design", amount: 1500, day: 3, note: "recurring, not billed yet", foreign: false },
-    { id: "inv-northwind", kind: "bill", label: "Northwind Cloud", amount: 860, day: 5, note: "scheduled", foreign: false, dueDay: 20 },
+    { id: "inv-northwind", kind: "bill", label: "Northwind Cloud", amount: 860, day: 5, note: "scheduled", foreign: false, dueDay: 25 },
     { id: "inv-atlas", kind: "bill", label: "Atlas Compute", amount: 1240, day: 8, note: "due", foreign: false },
     { id: "inv-harbor", kind: "bill", label: "Harbor Print", amount: 2150, day: 18, note: "due", foreign: false },
     { id: "inv-kestrel", kind: "bill", label: "Kestrel Legal", amount: 950, day: 27, note: "due", foreign: true },

@@ -2,9 +2,10 @@ import type { OutlookItem } from "./cash-outlook";
 
 /**
  * Cash scenarios (docs/superpowers/specs/2026-10-11-cash-scenarios-design.md): from what Treasury already counts
- * (`scenarioBasis`), the balance every day over 30, 60 or 90 days, as it stands and with the levers a person sets:
- * clients paying late, a receivable that never arrives, bills costing more or less. Then the first short day, the bills
- * it touches, advice in words, the three sources that move it most, and what the figure is built from.
+ * (`scenarioBasis`), the balance every day over 30, 60 or 90 days: in the base case, with every client paying on its due
+ * day (an assumption, said so on screen), and with the levers a person sets: clients paying late, a receivable that never
+ * arrives, bills costing more or less. Then the first short day, the bills it touches, advice in words, the three
+ * sources that move it most, and what the figure is built from.
  *
  * Three buckets stay apart (C3): cash (the wallet and the USYC reserve), receivables (invoiced, counted only on the day
  * they arrive in that case) and a pipeline of deals not invoiced, which this version does not count. Pure, and run in
@@ -32,6 +33,11 @@ export interface BasisOutflow {
   foreign: boolean;
   /** A scheduled bill's own due day, in days from today, when it is later than the day it is scheduled for. */
   dueDay?: number;
+  /**
+   * Its own due day was before today, whatever its note (a held bill, a scheduled one, a recurring period already due):
+   * it leaves today, and tells nothing about the bills of the days ahead, so it fills no week of coverage.
+   */
+  overdue?: true;
 }
 
 /** An open USDC receivable, on the day it is due (an overdue one today). */
@@ -89,7 +95,7 @@ export const COST_RANGE = { min: -50, max: 100 } as const;
 export interface ScenarioDay {
   /** A UTC day, YYYY-MM-DD. */
   day: string;
-  /** The balance after the day, as things stand: cash, less what left, plus receivables arrived on their due days. */
+  /** The balance after the day, if clients pay on time (the base case): cash, less what left, plus receivables arrived on their due days. */
   base: number;
   /** The same in the scenario. */
   scenario: number;
@@ -112,7 +118,7 @@ export interface MovedReceivable {
   id: string;
   label: string;
   amount: number;
-  /** The day it is expected as things stand. */
+  /** The day it is expected if clients pay on time: its due day, or today when overdue. */
   expected: string;
   /** The day it arrives in the scenario; null when it never does. */
   arrives: string | null;
@@ -132,16 +138,39 @@ export interface AffectedBill {
 /** Advice, said in words (C7): never an action. */
 export type Suggestion =
   | { kind: "need"; amount: number; by: string }
-  | { kind: "pay_on_due"; label: string; amount: number; scheduledFor: string; dueOn: string }
+  | {
+      kind: "pay_on_due";
+      label: string;
+      amount: number;
+      scheduledFor: string;
+      dueOn: string;
+      /** The scenario worked out again with the bill paid on its due day: its first short day (null when none)… */
+      shortOn: string | null;
+      /** …and what it then lacks at its lowest. One of the two is always better than the scenario's own. */
+      shortfall: number;
+    }
   | { kind: "follow_up"; label: string; amount: number; expected: string; arrives: string | null };
 
 export type Driver =
   | { kind: "payee"; label: string; amount: number; bills: number; recurring: number; milestones: number }
-  | { kind: "receivable"; label: string; amount: number; count: number; arrives: string | null; never: boolean }
+  | {
+      kind: "receivable";
+      /** The client's counterparty id, or the receivable's own id when it has no client: two clients sharing a name stay apart. */
+      key: string;
+      label: string;
+      amount: number;
+      count: number;
+      /** How many of them never arrive, and how many arrive after the horizon. */
+      never: number;
+      outside: number;
+      /** The latest day one of the rest arrives, within the horizon; null when none does. */
+      arrivesBy: string | null;
+    }
   | { kind: "costs"; amount: number; pct: number; scope: ScenarioLevers["costScope"] };
 
 export interface Coverage {
   horizon: Horizon;
+  /** `lastDay` is the latest due day: a scheduled bill's own due day, not the earlier day it is scheduled for. */
   bills: { count: number; amount: number; lastDay: string | null };
   recurring: { count: number; amount: number; schedules: number; read: boolean };
   milestones: { count: number; amount: number };
@@ -149,8 +178,11 @@ export interface Coverage {
   /** The record of each client with a receivable in the horizon that has one. */
   records: Array<{ label: string } & ClientRecord>;
   eurc: { bills: { count: number; amount: number }; receivables: { count: number; amount: number } };
-  /** From today to the latest bill's day, counted in days; 0 with no bill. */
-  billsKnownDays: number;
+  /**
+   * The horizon in weeks from today (the last one may be short), and in how many a bill or recurring payment leaves:
+   * one far bill fills one week, not the horizon. An overdue bill is due before today, so it fills none.
+   */
+  weeks: { total: number; withBills: number };
 }
 
 export interface ScenarioResult {
@@ -189,7 +221,7 @@ const CUSHION_DAYS = 7;
 const round = (value: number) => Math.round(value * 1e6) / 1e6;
 const clamp = (value: number, min: number, max: number) => (Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : 0);
 
-/** The receivables expected within a horizon, as things stand: the ones whose choice a person can set. */
+/** The receivables expected within a horizon, on their due days: the ones whose choice a person can set. */
 export function receivablesIn(basis: ScenarioBasis, horizon: Horizon): BasisReceivable[] {
   return basis.receivables.filter((receivable) => receivable.day < horizon);
 }
@@ -233,15 +265,18 @@ export function cashScenario(basis: ScenarioBasis, levers: ScenarioLevers): Scen
   const leaving = (day: number, amountOf: (outflow: BasisOutflow) => number) =>
     basis.outflows.filter((outflow) => outflow.day >= day && outflow.day < day + CUSHION_DAYS).reduce((sum, outflow) => sum + amountOf(outflow), 0);
 
-  let base = available;
-  let scenario = available;
+  // The balance after each day, from what arrives and what leaves.
+  const balances = (incoming: number[], outgoing: number[]) => {
+    let balance = available;
+    return incoming.map((amount, day) => round((balance += amount - outgoing[day])));
+  };
+  const baseBalances = balances(baseIn, baseOut);
+  const scenarioBalances = balances(scenarioIn, scenarioOut);
   const days: ScenarioDay[] = [];
   const baseCushions: number[] = [];
   for (let day = 0; day < horizon; day += 1) {
-    base += baseIn[day] - baseOut[day];
-    scenario += scenarioIn[day] - scenarioOut[day];
     baseCushions.push(round(leaving(day, (outflow) => outflow.amount) * CUSHION));
-    days.push({ day: dayOf(day), base: round(base), scenario: round(scenario), cushion: round(leaving(day, scenarioAmount) * CUSHION) });
+    days.push({ day: dayOf(day), base: baseBalances[day], scenario: scenarioBalances[day], cushion: round(leaving(day, scenarioAmount) * CUSHION) });
   }
 
   const summary = (balanceOf: (day: ScenarioDay) => number, cushionOf: (index: number) => number): CaseSummary => {
@@ -272,7 +307,7 @@ export function cashScenario(basis: ScenarioBasis, levers: ScenarioLevers): Scen
   const shortfall = scenarioCase.shortOn ? round(-scenarioCase.lowest.balance) : 0;
 
   const offsetOf = (day: string) => Math.round((Date.parse(`${day}T00:00:00Z`) - start) / DAY_MS);
-  // A receivable that would have arrived by `day` as things stand, but not in the scenario.
+  // A receivable that would have arrived by `day` if clients paid on time, but not in the scenario.
   const missedBy = (day: number) =>
     expected.filter((receivable) => {
       const arrives = arrival(receivable);
@@ -283,11 +318,31 @@ export function cashScenario(basis: ScenarioBasis, levers: ScenarioLevers): Scen
   if (scenarioCase.shortOn) {
     const short = offsetOf(scenarioCase.shortOn);
     suggestions.push({ kind: "need", amount: shortfall, by: scenarioCase.shortOn });
+    // A bill scheduled on or before the short day and due after it, paid on its due day instead (out of the horizon
+    // when that is past it): the scenario worked out again. Advised only when that moves the short day later or
+    // shrinks the gap, the bill that helps most first: the smallest gap left, then the latest short day.
     const early = inHorizon
-      .filter((outflow) => outflow.note === "scheduled" && outflow.dueDay !== undefined && outflow.day <= short && outflow.dueDay > short)
-      .sort((a, b) => scenarioAmount(b) - scenarioAmount(a))[0];
-    if (early?.dueDay !== undefined) {
-      suggestions.push({ kind: "pay_on_due", label: early.label, amount: scenarioAmount(early), scheduledFor: dayOf(early.day), dueOn: dayOf(early.dueDay) });
+      .filter((outflow): outflow is BasisOutflow & { dueDay: number } => outflow.note === "scheduled" && outflow.dueDay !== undefined && outflow.day <= short && outflow.dueDay > short)
+      .map((outflow) => {
+        const outgoing = [...scenarioOut];
+        outgoing[outflow.day] -= scenarioAmount(outflow);
+        if (outflow.dueDay < horizon) outgoing[outflow.dueDay] += scenarioAmount(outflow);
+        const after = balances(scenarioIn, outgoing);
+        const shortAfter = after.findIndex((balance) => balance < 0);
+        return { outflow, shortOn: shortAfter < 0 ? null : shortAfter, shortfall: shortAfter < 0 ? 0 : round(-Math.min(...after)) };
+      })
+      .filter((option) => option.shortOn === null || option.shortOn > short || option.shortfall < shortfall)
+      .sort((a, b) => a.shortfall - b.shortfall || (b.shortOn ?? horizon) - (a.shortOn ?? horizon) || scenarioAmount(b.outflow) - scenarioAmount(a.outflow))[0];
+    if (early) {
+      suggestions.push({
+        kind: "pay_on_due",
+        label: early.outflow.label,
+        amount: scenarioAmount(early.outflow),
+        scheduledFor: dayOf(early.outflow.day),
+        dueOn: dayOf(early.outflow.dueDay),
+        shortOn: early.shortOn === null ? null : dayOf(early.shortOn),
+        shortfall: early.shortfall,
+      });
     }
     const matters = missedBy(short).sort((a, b) => b.amount - a.amount)[0];
     if (matters) {
@@ -311,16 +366,19 @@ export function cashScenario(basis: ScenarioBasis, levers: ScenarioLevers): Scen
     payees.set(name, payee);
     costs += scenarioAmount(outflow) - outflow.amount;
   }
-  const late = new Map<string, Extract<Driver, { kind: "receivable" }>>();
+  // A client's receivables together, by the client (by its own id without one), each one's arrival kept.
+  type ReceivableDriver = Extract<Driver, { kind: "receivable" }>;
+  const late = new Map<string, ReceivableDriver>();
   for (const receivable of missedBy(on)) {
     const arrives = arrival(receivable);
-    const known = late.get(receivable.label);
-    late.set(
-      receivable.label,
-      known
-        ? { ...known, amount: round(known.amount + receivable.amount), count: known.count + 1, arrives: null, never: known.never && arrives === null }
-        : { kind: "receivable", label: receivable.label, amount: receivable.amount, count: 1, arrives: arrives === null ? null : dayOf(arrives), never: arrives === null }
-    );
+    const key = receivable.client ?? receivable.id;
+    const group: ReceivableDriver = late.get(key) ?? { kind: "receivable", key, label: receivable.label, amount: 0, count: 0, never: 0, outside: 0, arrivesBy: null };
+    group.amount = round(group.amount + receivable.amount);
+    group.count += 1;
+    if (arrives === null) group.never += 1;
+    else if (arrives >= horizon) group.outside += 1;
+    else if (group.arrivesBy === null || dayOf(arrives) > group.arrivesBy) group.arrivesBy = dayOf(arrives);
+    late.set(key, group);
   }
   const sources: Driver[] = [...payees.values(), ...late.values(), ...(round(costs) > 0 ? [{ kind: "costs" as const, amount: round(costs), pct: costPct, scope: levers.costScope }] : [])];
   const drivers = sources
@@ -332,7 +390,10 @@ export function cashScenario(basis: ScenarioBasis, levers: ScenarioLevers): Scen
   const bills = inHorizon.filter((outflow) => outflow.kind === "bill");
   const recurring = inHorizon.filter((outflow) => outflow.kind === "recurring");
   const milestones = inHorizon.filter((outflow) => outflow.kind === "milestone");
-  const lastBill = bills.reduce<number | null>((latest, outflow) => (latest === null || outflow.day > latest ? outflow.day : latest), null);
+  // The latest due day: a scheduled bill's own, which may be past the horizon, not the day it is scheduled for.
+  const lastBill = bills.reduce<number | null>((latest, outflow) => Math.max(latest ?? 0, outflow.dueDay ?? outflow.day), null);
+  // The weeks from today in which a bill or a recurring payment leaves; one due before today fills none.
+  const weeksWithBills = new Set(inHorizon.filter((outflow) => outflow.kind !== "milestone" && !outflow.overdue).map((outflow) => Math.floor(outflow.day / 7)));
   // Each client once, under the name on its first receivable here.
   const recorded = new Map<string, Coverage["records"][number]>();
   for (const receivable of expected) {
@@ -372,7 +433,7 @@ export function cashScenario(basis: ScenarioBasis, levers: ScenarioLevers): Scen
         bills: { count: eurcIn.filter((move) => move.kind === "bill").length, amount: sum(eurcIn.filter((move) => move.kind === "bill")) },
         receivables: { count: eurcIn.filter((move) => move.kind === "receivable").length, amount: sum(eurcIn.filter((move) => move.kind === "receivable")) },
       },
-      billsKnownDays: lastBill === null ? 0 : lastBill + 1,
+      weeks: { total: Math.ceil(horizon / 7), withBills: weeksWithBills.size },
     },
   };
 }

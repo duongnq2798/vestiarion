@@ -32,13 +32,19 @@ import { Money } from "./Primitives";
  * What if clients pay late? (docs/superpowers/specs/2026-10-11-cash-scenarios-design.md): Treasury's folded section
  * under Next 30 days. A person picks a horizon, how late clients pay, which receivables are late, on time or never
  * arrive, and a change in bill costs; the section works it out in the browser from the rows the page passed, on every
- * render, so a refreshed row moves its day (C10). It shows the balance as things stand and in the scenario, the first
+ * render, so a refreshed row moves its day (C10). It shows the balance if clients pay on time and in the scenario, the first
  * short day, the bills it touches, advice in words, what moves it most and what it is built from. Nothing is saved,
  * paid or sent to the agent (C9).
  */
 
 const dayLabel = (day: string) => utcDay(`${day}T00:00:00Z`);
 const plural = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
+
+/**
+ * The base case's name. It assumes every receivable arrives on its due day, so it is named by that assumption, never
+ * as the status quo: Next 30 days, above, counts no receivable and can run short where this case does not.
+ */
+const BASE_CASE = "If clients pay on time";
 
 /** A balance, with its minus sign when below zero (Money writes the magnitude). */
 function Balance({ value, className }: { value: number; className?: string }) {
@@ -113,7 +119,8 @@ export function CashScenarios({ basis, defaultOpen = false, outcome = true }: { 
             <Input type="number" inputMode="numeric" min={0} max={MAX_LATE_DAYS} step={1} value={lateText} onChange={(event) => setLateText(event.target.value)} />
           </Field>
           <Field id={`${id}-cost`} label="Change in bill costs (%)" description="10 is 10% more, -10 is 10% less. Milestones keep their amounts.">
-            <Input type="number" inputMode="decimal" min={COST_RANGE.min} max={COST_RANGE.max} step={1} value={costText} onChange={(event) => setCostText(event.target.value)} />
+            {/* No inputMode: a phone's decimal keypad has no minus key, and a fall in costs is typed with one. */}
+            <Input type="number" min={COST_RANGE.min} max={COST_RANGE.max} step={1} value={costText} onChange={(event) => setCostText(event.target.value)} />
           </Field>
           <Field id={`${id}-scope`} label="The change applies to" className="sm:col-span-2" description="A bill written in another currency was worked out in USDC at a rate, as shadow mode takes it.">
             <Select value={costScope} onValueChange={(value) => setCostScope(value === "foreign" ? "foreign" : "all")}>
@@ -199,7 +206,12 @@ export function ScenarioCases({ result }: { result: ScenarioResult }) {
           : `In this scenario the balance never runs short in the next ${result.horizon} days.`}
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
-        <CaseBox title="As things stand" summary={result.base} horizon={result.horizon} />
+        <CaseBox
+          title={BASE_CASE}
+          summary={result.base}
+          horizon={result.horizon}
+          assumes="Each receivable on its due day, an overdue one today. Next 30 days counts none."
+        />
         <CaseBox title="In this scenario" summary={result.scenario} horizon={result.horizon} changes={<ScenarioChanges result={result} />} />
       </div>
       <p className="text-xs leading-5 text-ink-3">
@@ -225,11 +237,12 @@ export function ScenarioFindings({ result }: { result: ScenarioResult }) {
   );
 }
 
-function CaseBox({ title, summary, horizon, changes }: { title: string; summary: CaseSummary; horizon: number; changes?: ReactNode }) {
+function CaseBox({ title, summary, horizon, assumes, changes }: { title: string; summary: CaseSummary; horizon: number; assumes?: string; changes?: ReactNode }) {
   const short = summary.shortOn !== null;
   return (
     <div className={cn("rounded-xl border p-3.5", short ? "border-held-line bg-held-soft/40" : "border-line bg-ground/40")}>
       <h3 className="text-xs font-medium text-ink-2">{title}</h3>
+      {assumes && <p className="mt-0.5 text-xs text-ink-3">{assumes}</p>}
       <p className={cn("mt-1 text-sm font-semibold", short ? "text-held" : "text-ink")}>
         {short ? `Runs short on ${dayLabel(summary.shortOn as string)}` : `Never short in the next ${horizon} days`}
       </p>
@@ -272,7 +285,7 @@ function ScenarioChanges({ result }: { result: ScenarioResult }) {
 const CHART = { top: 6, bottom: 94 };
 
 /**
- * The balance every day, as things stand (grey, dashed) and in the scenario (agent blue, solid), as steps: a balance
+ * The balance every day, if clients pay on time (grey, dashed) and in the scenario (agent blue, solid), as steps: a balance
  * moves on a day, not between days. Zero is a hairline; the first short day a held line. Hover names a day's balances;
  * the day-by-day table below says the same in text.
  */
@@ -297,7 +310,7 @@ export function ScenarioChart({ result }: { result: ScenarioResult }) {
   };
 
   const description =
-    `The balance over the next ${result.horizon} days. As things stand, ${result.base.shortOn ? `it runs short on ${dayLabel(result.base.shortOn)}` : "it never runs short"}. ` +
+    `The balance over the next ${result.horizon} days. ${BASE_CASE}, ${result.base.shortOn ? `it runs short on ${dayLabel(result.base.shortOn)}` : "it never runs short"}. ` +
     `In this scenario, ${result.scenario.shortOn ? `it runs short on ${dayLabel(result.scenario.shortOn)}` : "it never runs short"}.`;
 
   return (
@@ -307,7 +320,7 @@ export function ScenarioChart({ result }: { result: ScenarioResult }) {
           <svg aria-hidden width="20" height="4" className="overflow-visible">
             <line x1="0" y1="2" x2="20" y2="2" stroke="var(--color-ink-3)" strokeWidth="2" strokeDasharray="4 3" strokeLinecap="round" />
           </svg>
-          As things stand
+          {BASE_CASE}
         </span>
         <span className="inline-flex items-center gap-1.5">
           <svg aria-hidden width="20" height="4" className="overflow-visible">
@@ -342,7 +355,7 @@ export function ScenarioChart({ result }: { result: ScenarioResult }) {
           >
             <p className="font-medium text-ink">{dayLabel(hovered.day)}</p>
             <p className="text-ink-2">
-              As things stand: <Balance value={hovered.base} />
+              {BASE_CASE}: <Balance value={hovered.base} />
             </p>
             <p className="text-ink-2">
               In this scenario: <Balance value={hovered.scenario} />
@@ -377,7 +390,19 @@ function AffectedBills({ result }: { result: ScenarioResult }) {
 }
 
 /** One piece of advice, in words: never an action (C7). */
-function SuggestionText({ suggestion, shortOn, horizon, lastDay }: { suggestion: Suggestion; shortOn: string; horizon: number; lastDay: string }) {
+function SuggestionText({
+  suggestion,
+  shortOn,
+  shortfall,
+  horizon,
+  lastDay,
+}: {
+  suggestion: Suggestion;
+  shortOn: string;
+  shortfall: number;
+  horizon: number;
+  lastDay: string;
+}) {
   if (suggestion.kind === "need") {
     return (
       <>
@@ -386,10 +411,30 @@ function SuggestionText({ suggestion, shortOn, horizon, lastDay }: { suggestion:
     );
   }
   if (suggestion.kind === "pay_on_due") {
+    // What the move changes, worked out again by the engine: a later short day, a smaller gap, or both.
+    const later = suggestion.shortOn !== shortOn;
+    const smaller = suggestion.shortfall < shortfall;
+    const effect =
+      suggestion.shortOn === null ? (
+        <>the balance does not run short in the next {horizon} days</>
+      ) : later ? (
+        <>
+          the balance runs short on {dayLabel(suggestion.shortOn)} rather than {dayLabel(shortOn)}
+          {smaller && (
+            <>
+              , and the wallet needs <Money value={suggestion.shortfall} /> more rather than <Money value={shortfall} />
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          the wallet needs <Money value={suggestion.shortfall} /> more by {dayLabel(shortOn)} rather than <Money value={shortfall} />
+        </>
+      );
     return (
       <>
-        {suggestion.label} is scheduled for {dayLabel(suggestion.scheduledFor)}, before its due day, {dayLabel(suggestion.dueOn)}. Paid on its due day instead, its{" "}
-        <Money value={suggestion.amount} /> stays in the wallet past {dayLabel(shortOn)}, and any early-payment discount it was scheduled for is lost.
+        {suggestion.label} is scheduled for {dayLabel(suggestion.scheduledFor)}, before its due day, {dayLabel(suggestion.dueOn)}. Paid on its due day instead,{" "}
+        {effect}. Any early-payment discount it was scheduled for is lost.
       </>
     );
   }
@@ -411,7 +456,13 @@ function Suggestions({ result }: { result: ScenarioResult }) {
       <ul className="mt-2 list-disc space-y-1.5 pl-5 text-sm leading-6 text-ink-2 marker:text-ink-3">
         {result.suggestions.map((suggestion) => (
           <li key={suggestion.kind}>
-            <SuggestionText suggestion={suggestion} shortOn={result.scenario.shortOn ?? result.lastDay} horizon={result.horizon} lastDay={result.lastDay} />
+            <SuggestionText
+              suggestion={suggestion}
+              shortOn={result.scenario.shortOn ?? result.lastDay}
+              shortfall={result.shortfall}
+              horizon={result.horizon}
+              lastDay={result.lastDay}
+            />
           </li>
         ))}
       </ul>
@@ -433,16 +484,21 @@ function DriverText({ driver, result }: { driver: Driver; result: ScenarioResult
     );
   }
   if (driver.kind === "receivable") {
-    const when = driver.never
-      ? driver.count === 1
-        ? "never arrives"
-        : "never arrive"
-      : driver.arrives === null || driver.arrives > result.lastDay
-        ? `${driver.count === 1 ? "arrives" : "arrive"} after the next ${result.horizon} days`
-        : `arrives on ${dayLabel(driver.arrives)}`;
+    // A client's receivables in up to three groups, each said as it is: arriving by a day, after the horizon, or never.
+    const verb = (count: number) => (count === 1 ? "arrives" : "arrive");
+    const inside = driver.count - driver.never - driver.outside;
+    const groups = [
+      inside > 0 && driver.arrivesBy !== null && { count: inside, words: `${verb(inside)} ${inside === 1 ? "on" : "by"} ${dayLabel(driver.arrivesBy)}` },
+      driver.outside > 0 && { count: driver.outside, words: `${verb(driver.outside)} after the next ${result.horizon} days` },
+      driver.never > 0 && { count: driver.never, words: `never ${verb(driver.never)}` },
+    ].filter((group): group is { count: number; words: string } => Boolean(group));
+    const when =
+      groups.length === 1
+        ? `${driver.count === 1 ? "a receivable that" : `${driver.count} receivables that`} ${groups[0].words}`
+        : `${driver.count} receivables: ${groups.map((group) => `${group.count} ${group.words}`).join("; ")}`;
     return (
       <>
-        {driver.label}: <Money value={driver.amount} /> in {driver.count === 1 ? "a receivable that" : `${driver.count} receivables that`} {when}
+        {driver.label}: <Money value={driver.amount} /> in {when}
       </>
     );
   }
@@ -461,7 +517,7 @@ function Drivers({ result }: { result: ScenarioResult }) {
       </h3>
       <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm leading-6 text-ink-2 marker:text-ink-3">
         {result.drivers.map((driver) => (
-          <li key={driver.kind === "costs" ? "costs" : `${driver.kind}-${driver.label}`}>
+          <li key={driver.kind === "costs" ? "costs" : driver.kind === "receivable" ? `receivable-${driver.key}` : `payee-${driver.label}`}>
             <DriverText driver={driver} result={result} />
           </li>
         ))}
@@ -470,16 +526,21 @@ function Drivers({ result }: { result: ScenarioResult }) {
   );
 }
 
-/** What the figure is built from (I19): how far bills are known, what is projected, client records and what is left out. */
+/**
+ * What the figure is built from (I19): in how many weeks a bill is on record, what is projected, client records and
+ * what is left out. Weeks, not the latest bill's day, so one far bill cannot make the horizon read as known.
+ */
 export function CoverageList({ result }: { result: ScenarioResult }) {
   const { coverage } = result;
-  const thin = coverage.billsKnownDays < coverage.horizon / 2;
+  const { total, withBills } = coverage.weeks;
+  const thin = withBills < total / 2;
+  const empty = total - withBills;
   return (
     <div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <h3 className="text-sm font-medium text-ink">What this is built from</h3>
         <Badge size="sm" tone={thin ? "held" : "neutral"}>
-          {`Bills known for ${coverage.billsKnownDays} of ${coverage.horizon} days`}
+          {`Bills on record in ${withBills} of ${total} weeks`}
         </Badge>
       </div>
       <ul className="mt-2 space-y-1 text-sm leading-6 text-ink-2">
@@ -531,10 +592,10 @@ export function CoverageList({ result }: { result: ScenarioResult }) {
         )}
       </ul>
       <p className="mt-2 text-xs leading-5 text-ink-3">
-        {coverage.bills.lastDay === null
+        {withBills === 0
           ? "No bill is known for these days yet, so the balance may look better than it will be."
-          : coverage.billsKnownDays < coverage.horizon
-            ? `Bills not added yet are not counted, so the days after ${dayLabel(coverage.bills.lastDay)} may look better than they will be.`
+          : empty > 0
+            ? `Bills not added yet are not counted, so ${plural(empty, "week")} with none on record may look better than ${empty === 1 ? "it" : "they"} will be.`
             : "Bills not added yet are not counted."}{" "}
         Client records are counts, not a prediction.
       </p>
@@ -551,7 +612,7 @@ function DayByDay({ result }: { result: ScenarioResult }) {
         <TableHeader className="sticky top-0 bg-surface">
           <TableRow>
             <TableHead>Day</TableHead>
-            <TableHead className="text-right">As things stand</TableHead>
+            <TableHead className="text-right">{BASE_CASE}</TableHead>
             <TableHead className="text-right">In this scenario</TableHead>
           </TableRow>
         </TableHeader>

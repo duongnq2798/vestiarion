@@ -59,7 +59,10 @@ export function scenarioBasis(input: ScenarioBasisInput): ScenarioBasis {
       receivables.push({ id: move.id, label: item.label, amount: item.amount, day: offset(move.at), overdue: move.overdue, client: move.counterpartyId ?? null });
       continue;
     }
-    const dueDay = move.dueDay ? offset(Date.parse(`${move.dueDay}T00:00:00Z`)) : undefined;
+    const dueAt = move.dueDay ? Date.parse(`${move.dueDay}T00:00:00Z`) : undefined;
+    const dueDay = dueAt === undefined ? undefined : offset(dueAt);
+    // Due before today by its own due day: a scheduled bill's, not the day it is scheduled for.
+    const overdue = dueAt === undefined ? move.overdue : dueAt < today;
     outflows.push({
       id: move.id,
       kind: item.kind === "milestone" ? "milestone" : "bill",
@@ -71,6 +74,7 @@ export function scenarioBasis(input: ScenarioBasisInput): ScenarioBasis {
       note: item.note as OutflowNote,
       foreign: move.foreign === true,
       ...(dueDay !== undefined && dueDay > offset(move.at) ? { dueDay } : {}),
+      ...(overdue && item.kind !== "milestone" ? { overdue: true as const } : {}),
     });
   }
   const eurcMoves: ScenarioBasis["eurc"] = eurc.map((move) => ({ kind: move.kind === "out" ? "bill" : "receivable", amount: move.amount, day: offset(move.at) }));
@@ -92,7 +96,16 @@ export function scenarioBasis(input: ScenarioBasisInput): ScenarioBasis {
         eurcMoves.push({ kind: "bill", amount: schedule.amount, day: offset(at) });
         continue;
       }
-      outflows.push({ id, kind: "recurring", label: schedule.counterpartyName, amount: schedule.amount, day: offset(at), note: "recurring, not billed yet", foreign: false });
+      outflows.push({
+        id,
+        kind: "recurring",
+        label: schedule.counterpartyName,
+        amount: schedule.amount,
+        day: offset(at),
+        note: "recurring, not billed yet",
+        foreign: false,
+        ...(at < today ? { overdue: true as const } : {}),
+      });
     }
   }
 

@@ -73,12 +73,25 @@ Each decision names what it costs if it turns out wrong.
   exactly Safe to spend today's cushion, unless a recurring period not billed yet falls within those 7 days (its bill
   is created up to 7 days before, so only one created late does).
 - The bills that fall due while the scenario's balance is below zero, and how much is missing at its lowest.
+- The base case assumes every receivable arrives on its due day (an overdue one today). It is named by that
+  assumption, **If clients pay on time**, never "as things stand", with a line under it: "Each receivable on its due
+  day, an overdue one today. Next 30 days counts none." Next 30 days, right above, counts no receivable, so it can say
+  the wallet runs short on a day this case does not; the scenario with every receivable set to Never arrives is Next
+  30 days' own balance (tested).
 - Cost if wrong: a wrong day; the engine is pure and tested day by day, including a single due day moved.
 
 **C7. Suggestions are advice, in words, from fixed rules.**
 - At most three, only when the scenario runs short: how much USDC the wallet would need by the short day; a bill
   scheduled before its due day, paid before the short day, that could be paid on its due day instead (with the
   early-payment discount it was scheduled for lost); the receivable whose arrival would matter most for the short day.
+- The scheduled bill is advised only when it helps. For each candidate the scenario is worked out again with the bill
+  paid on its due day (out of the horizon when that is past it); it is advised only when the short day then comes
+  later or the gap at the lowest is smaller, and the advice says which: "the balance runs short on X rather than Y",
+  "the wallet needs A more by Y rather than B", or that it no longer runs short within the horizon. Of several, the
+  one that leaves the smallest gap, then the latest short day. Moving a bill later can only raise the balance between
+  the two days, so the gap never grows; a bill that only moves its amount to a day that is short anyway is not advised, since following
+  it would lose the discount for nothing (tested with the guide's studio, Northwind Cloud due on day 20: the gap of
+  1,309.50 stays; due on day 25, after a receivable arrives, it falls to 449.50, which the guide shows).
 - No button, no link to an action. The words "borrow", "loan", "credit", "invest" and "sweep" never appear in the
   section (a test reads the source). A short day is not an instruction to borrow or to invest, and the what-if moves no
   money.
@@ -87,13 +100,22 @@ Each decision names what it costs if it turns out wrong.
 **C8. Coverage and the three biggest drivers (I19).**
 - **What this is built from**: bills (count, amount, the latest due day), recurring payments projected, milestones with
   no payment day (counted today), receivables and how many come from clients with a payment record, and what is left
-  out (EURC). Its badge, **Bills known for N of H days**, counts from today to the latest bill's day. A sentence says
-  bills not added yet are not counted, so later days may look better than they will be.
+  out (EURC). The latest due day is a scheduled bill's own due day, not the day it is scheduled for.
+- Its badge, **Bills on record in N of W weeks**, counts the weeks from today (the last one may be short: 5, 9 or 13
+  weeks) in which a bill or recurring payment leaves. A milestone has no day, and a bill or recurring period due before
+  today (by its own due day, so a held or scheduled one too; the basis marks it `overdue`) leaves today but says
+  nothing about the days ahead, so neither fills a week. Measured by weeks, not by the latest bill's day, so one far bill (an annual insurance bill
+  entered early) fills one week, not the horizon. Fewer than half the weeks puts the badge in the held tone. A sentence
+  says bills not added yet are not counted, so the weeks with none on record may look better than they will be.
 - Client records come from the workspace's received receivables (`settled_at` against `due_date`, in UTC days), the
   rule collections uses: paid on time, paid late, the average days late. Counts only; no percentage, no likelihood.
 - **What moves it most**: on the scenario's short day, or its lowest day when it never runs short, the three sources that
   pull the balance down most, grouped by counterparty: bills, recurring payments and milestones paid by then; a
   receivable the scenario moves past that day or drops; and the change in bill costs as one source.
+- A client's receivables are grouped by its counterparty id (a receivable with no client stands alone), never by the
+  name shown, so two clients sharing a name stay apart. Each group keeps how many never arrive, how many arrive after
+  the horizon, and the latest day the rest arrive, and is worded to match: "2 receivables that arrive by Oct 21", or
+  "2 receivables: 1 arrives on Oct 21; 1 never arrives".
 - Cost if wrong: coverage read as a score. It is a list of counts.
 
 **C9. Nothing feeds payments, the agent or a guardrail.**
@@ -122,11 +144,15 @@ Each decision names what it costs if it turns out wrong.
 
 - `tests/cash-outlook.test.ts` unchanged: the 30-day outlook is the same.
 - `tests/cash-scenario-basis.test.ts`: the 90-day window with the outlook's rules, recurring periods projected (billed
-  ones skipped, EURC left out, past ones today), client records, EURC apart.
-- `tests/cash-scenarios.test.ts`: the base case equals Next 30 days on the same rows; late, on time and never; late from
-  today for an overdue receivable; past the horizon; cost changes on every bill or on bills in another currency; short
-  day, cushion day, lowest point, bills affected; one due day moved; suggestions and their rules; the three drivers;
-  coverage; no receivable counted before it arrives.
+  ones skipped, EURC left out, past ones today), a bill or period due before today marked `overdue` by its own due day
+  (held and scheduled ones too), client records, EURC apart.
+- `tests/cash-scenarios.test.ts`: the base case equals Next 30 days' balance with receivables expected, and the
+  scenario with none arriving equals its balance and short day; late, on time and never; late from today for an
+  overdue receivable; past the horizon; cost changes on every bill or on bills in another currency; short day, cushion
+  day, lowest point, bills affected; one due day moved; suggestions and their rules (a scheduled bill only when moving
+  it helps, the one that helps most); the three drivers (a client's receivables together by its id, two clients with
+  one name apart, each group's arrivals kept); coverage (weeks with a bill on record, one far bill filling one week, a
+  scheduled bill's due day as the latest); no receivable counted before it arrives.
 - `tests/cash-scenarios-ui.test.tsx`: the section's words and states; its copy has no instruction to borrow or invest;
   no module that moves money imports the scenario modules; the console renders it under Next 30 days.
 - The guide `content/docs/guides/cash-scenarios.mdx`, with its quotes pinned in `tests/docs-guides.test.ts`, and four

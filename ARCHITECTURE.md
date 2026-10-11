@@ -839,9 +839,12 @@ already reads, with no query or write of their own beyond the recurring schedule
   component that runs `cashScenario` (`src/lib/cash-scenarios.ts`, pure) on every render from the basis and the levers
   a person sets: a 30, 60 or 90 day horizon, days late (0 to 90), each receivable late, on time or never, and a change
   in bill costs (-50% to 100%) on every bill or on bills written in another currency (`original_currency`). It gives the
-  balance day by day for the base case and the scenario, the first day below zero and below the cushion (15% of what
-  leaves in the 7 days from that day), the bills due while short, up to three suggestions in words, the three biggest
-  drivers by the short day, and the coverage (how far bills are known, what is projected, what is left out). Cash is the
+  balance day by day for the base case (every receivable on its due day, named "If clients pay on time", since Next 30
+  days counts none) and the scenario, the first day below zero and below the cushion (15% of what leaves in the 7 days
+  from that day), the bills due while short, up to three suggestions in words (a scheduled bill paid on its due day only
+  when the scenario, worked out again with it moved, runs short later or by less), the three biggest drivers by the
+  short day (a client's receivables grouped by its counterparty id), and the coverage (the weeks of the horizon with a
+  bill on record, what is projected, what is left out). Cash is the
   operating wallet and the USYC reserve; a receivable adds to the balance only on the day it arrives in that case; deals
   not invoiced and bank balances are never counted.
 - **Nothing that pays reads it.** No server action, ledger entry or setting: the levers live in component state and
