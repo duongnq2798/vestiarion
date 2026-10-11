@@ -145,13 +145,26 @@ describe("the decision trail", () => {
     expect(trailStep(step(985, "02:47:18", "human", "approval_paid", { txRef: TX, status: "matched" }), "arc-mainnet")!.text).toBe(
       "A person approved it; the payment was sent and Arc mainnet is confirming it."
     );
-    expect(trailStep(step(986, "02:47:18", "human", "approval_paid", { txRef: null, status: "held" }))).toMatchObject({ text: "A person approved it; the transfer failed.", tone: "stopped" });
+    // Held again: Circle may have ended the transfer, or Gateway reported it failed though it may still be minted, or a read
+    // of ours failed on a transfer still moving. The entry does not say which, so the step never says it failed.
+    expect(trailStep(step(986, "02:47:18", "human", "approval_paid", { txRef: null, status: "held" }))).toMatchObject({
+      text: "A person approved it; the payment was not confirmed, so it was held again.",
+      tone: "stopped",
+    });
+    for (const held of [
+      // A Gateway payout whose intent Gateway reported GATEWAY_FAILED: approving read it again and sent nothing.
+      { txRef: "gateway:0f2b", status: "held", attempt: 1 },
+      // A transfer Circle took whose read threw: the intent stays failed with its provider id, and may still settle.
+      { txRef: "circle-tx-7", status: "held", attempt: 1 },
+    ]) {
+      expect(trailStep(step(991, "02:47:18", "human", "approval_paid", held))!.text).not.toMatch(/failed/);
+    }
     expect(trailStep(step(987, "02:47:18", "human", "approval_paid", { txRef: TX }))).toMatchObject({ text: "A person approved paying it.", tone: "neutral" });
     expect(trailStep(step(988, "02:47:18", "human", "approval_paid", { soleApprover: true, status: "matched" }))!.text).toBe(
       "The person who entered it approved it, as the workspace's only approver; the payment was sent and Arc testnet is confirming it."
     );
     expect(trailStep(step(989, "02:47:18", "human", "approval_paid", { soleApprover: true, status: "held" }))!.text).toBe(
-      "The person who entered it approved it, as the workspace's only approver; the transfer failed."
+      "The person who entered it approved it, as the workspace's only approver; the payment was not confirmed, so it was held again."
     );
     expect(trailStep(step(990, "02:47:18", "human", "approval_paid", { soleApprover: true }))!.text).toBe(
       "The person who entered it approved paying it, as the workspace's only approver."

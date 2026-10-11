@@ -451,6 +451,39 @@ describe("a first of two approvals", () => {
   });
 });
 
+describe("a person's approval, by what its transfer did (settlement lifecycle L9)", () => {
+  const peopleSays = (action: "approval_paid" | "milestone_approval_paid", detail: Record<string, unknown>, network: "arc-testnet" | "arc-mainnet" = "arc-testnet") => {
+    const input = action === "approval_paid" ? paidInFull() : milestoneInput();
+    const target = action === "approval_paid" ? { invoiceId: INVOICE } : { milestoneId: MILESTONE };
+    const approval = entry(42, "12:00:00", "human", action, { by: CAROL, counterpartyId: CP, txRef: TX, ...target, ...detail }, action === "approval_paid" ? "ap" : "contractor");
+    const entries = [...input.entries, approval];
+    const chain = buildEvidenceChain({ ...input, network, entries, receipt: null, checks: { ...input.checks, entries: okChecks(entries) } });
+    return step(chain, "people").facts.find((fact) => fact.seqs.includes(42))?.text;
+  };
+
+  it("says paid only once the transfer confirmed", () => {
+    expect(peopleSays("approval_paid", { status: "paid" })).toBe("Approved and paid it.");
+    expect(peopleSays("approval_paid", { status: "paid", soleApprover: true })).toBe("Approved and paid it, as the workspace's only approver.");
+  });
+
+  it("says a payment only sent is being confirmed, on the workspace's network", () => {
+    expect(peopleSays("approval_paid", { status: "matched" })).toBe("Approved it; the payment was sent and Arc testnet is confirming it.");
+    expect(peopleSays("approval_paid", { status: "matched" }, "arc-mainnet")).toBe("Approved it; the payment was sent and Arc mainnet is confirming it.");
+    expect(peopleSays("approval_paid", { status: "matched", via: "slack" })).toBe("Approved it from Slack; the payment was sent and Arc testnet is confirming it.");
+  });
+
+  it("never says failed for a payment held again: Gateway's failure or a failed read may still settle", () => {
+    expect(peopleSays("approval_paid", { status: "held" })).toBe("Approved it; the payment was not confirmed, so it was held again.");
+    expect(peopleSays("approval_paid", {})).toBe("Approved paying it.");
+  });
+
+  it("says the same of a milestone's Pay now, whose transfer in flight leaves it verified", () => {
+    expect(peopleSays("milestone_approval_paid", { status: "paid" })).toBe("Approved and paid it with Pay now.");
+    expect(peopleSays("milestone_approval_paid", { status: "verified" })).toBe("Approved it with Pay now; the payment was sent and Arc testnet is confirming it.");
+    expect(peopleSays("milestone_approval_paid", { status: "held" })).toBe("Approved it with Pay now; the payment was not confirmed, so it was held again.");
+  });
+});
+
 describe("a shared receipt, checked as its public page checks it", () => {
   const RECEIPT_ID = "rcpt-1";
 

@@ -8,7 +8,7 @@
  */
 
 import { utcDay, utcMinute } from "./copy";
-import { deciderName, decisionChecks, trailStep } from "./decision-trail";
+import { deciderName, decisionChecks, PAYMENT_HELD_AGAIN, PAYMENT_SENT, trailStep } from "./decision-trail";
 import { MIRROR, PAYEE, addressProvenance } from "./new-payee";
 import { networkOf, networkProfile, type Network } from "./network";
 import { chainById, homeChain } from "./payee-chains";
@@ -685,7 +685,9 @@ function peopleStep(ctx: Context): EvidenceStep {
       ...approvals.map((approval) => `Approved by ${ctx.who(approval.by) ?? "someone"}${text(approval.at) ? ` on ${utcMinute(approval.at as string)}` : ""}`),
       ...(reason ? [`Reason: ${reason}`] : []),
     ];
-    return stated(ctx, `${PEOPLE_WORDS[entry.action](entry.detail)}${via(entry.detail)}.`, entry, notes.length > 0 ? { notes } : {});
+    const words = PEOPLE_WORDS[entry.action](entry.detail, ctx.networkLabel);
+    // Where it was done is said of the person's act, before what became of the payment.
+    return stated(ctx, `${words.act}${via(entry.detail)}${words.then ?? ""}.`, entry, notes.length > 0 ? { notes } : {});
   });
   if (facts.length > 0) return step("people", "People", facts);
   if (ctx.paid && ctx.decision && PAYING.has(ctx.decision.action)) {
@@ -695,15 +697,30 @@ function peopleStep(ctx: Context): EvidenceStep {
   return step("people", "People", [{ kind: "missing", text: "No person's approval is recorded.", seqs: [] }]);
 }
 
-const PEOPLE_WORDS: Record<string, (detail: Record<string, unknown>) => string> = {
-  approval_given: () => "Gave the first of two approvals",
-  approval_paid: (detail) => (detail.soleApprover === true ? "Approved and paid it, as the workspace's only approver" : "Approved and paid it"),
-  approval_returned: () => "Returned it to the agent",
-  approval_rejected: () => "Rejected it",
-  milestone_approval_given: () => "Gave the first of two approvals",
-  milestone_approval_paid: () => "Approved and paid it with Pay now",
-  milestone_closed: () => "Closed it without paying it",
-  decision_verdict: (detail) => (detail.verdict === "agree" ? "Agreed with the agent's decision" : "Disagreed with the agent's decision"),
+/** What a person did, and, for an approval that pays, what became of the payment then. */
+type PeopleWords = { act: string; then?: string };
+
+/**
+ * A person's Approve and pay, or Pay now, by what its transfer did then (the entry's `status`): paid only once it
+ * confirmed; sent, while the network confirms it (`matched`, `verified` for a milestone); held again, never "failed",
+ * since Gateway's reported failure or a failed read may still settle (settlement lifecycle L3, L9).
+ */
+function approvedWords(detail: Record<string, unknown>, network: string, sent: "matched" | "verified", own: string): PeopleWords {
+  if (detail.status === "paid") return { act: `Approved and paid it${own}` };
+  if (detail.status === sent) return { act: `Approved it${own}`, then: `; ${PAYMENT_SENT(network)}` };
+  if (detail.status === "held") return { act: `Approved it${own}`, then: `; ${PAYMENT_HELD_AGAIN}` };
+  return { act: `Approved paying it${own}` };
+}
+
+const PEOPLE_WORDS: Record<string, (detail: Record<string, unknown>, network: string) => PeopleWords> = {
+  approval_given: () => ({ act: "Gave the first of two approvals" }),
+  approval_paid: (detail, network) => approvedWords(detail, network, "matched", detail.soleApprover === true ? ", as the workspace's only approver" : ""),
+  approval_returned: () => ({ act: "Returned it to the agent" }),
+  approval_rejected: () => ({ act: "Rejected it" }),
+  milestone_approval_given: () => ({ act: "Gave the first of two approvals" }),
+  milestone_approval_paid: (detail, network) => approvedWords(detail, network, "verified", " with Pay now"),
+  milestone_closed: () => ({ act: "Closed it without paying it" }),
+  decision_verdict: (detail) => ({ act: detail.verdict === "agree" ? "Agreed with the agent's decision" : "Disagreed with the agent's decision" }),
 };
 
 /** 7. The payment: the transaction, Arc's own record of it, and the entry that records it. */

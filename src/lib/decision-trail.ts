@@ -279,15 +279,24 @@ export function invoiceTrail(entries: readonly TrailEntry[], invoiceId: string, 
   return steps.slice(-TRAIL_STEPS_SHOWN);
 }
 
-/** A person's Approve and pay as a step, by what its transfer did then (`approval_paid`'s `status`). */
+/**
+ * A person's Approve and pay as a step, by what its transfer did then (`approval_paid`'s `status`). `held` never says the
+ * transfer failed: the entry does not say whether Circle ended it, or Gateway reported it failed though it may still be
+ * minted, or a read of Vestiarion's failed on a transfer still moving (settlement lifecycle L3, L9).
+ */
 function approvalStep(status: string | null, sole: boolean, network: string): Pick<TrailStep, "text" | "tone"> {
   const who = sole ? "The person who entered it" : "A person";
   const own = sole ? ", as the workspace's only approver" : "";
   if (status === "paid") return { tone: "done", text: `${who} approved and paid it${own}.` };
-  if (status === "matched") return { tone: "neutral", text: `${who} approved it${own}; the payment was sent and ${network} is confirming it.` };
-  if (status === "held") return { tone: "stopped", text: `${who} approved it${own}; the transfer failed.` };
+  if (status === "matched") return { tone: "neutral", text: `${who} approved it${own}; ${PAYMENT_SENT(network)}.` };
+  if (status === "held") return { tone: "stopped", text: `${who} approved it${own}; ${PAYMENT_HELD_AGAIN}.` };
   return { tone: "neutral", text: `${who} approved paying it${own}.` };
 }
+
+/** What a person's approval says of a payment it sent that the network has not confirmed yet. */
+export const PAYMENT_SENT = (network: string) => `the payment was sent and ${network} is confirming it`;
+/** What it says of one held again: not confirmed, whatever became of its transfer. */
+export const PAYMENT_HELD_AGAIN = "the payment was not confirmed, so it was held again";
 
 /** How long after the step before it a step came: "26 s later", "4 min later", "2 h later"; null for the first, or a day or more. */
 export function laterBy(previousAt: string | null, at: string): string | null {
