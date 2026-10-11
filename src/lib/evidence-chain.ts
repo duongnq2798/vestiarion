@@ -507,6 +507,8 @@ function payeeStep(ctx: Context): EvidenceStep {
       facts.push(stated(ctx, `${short(address)} was given${via(set.detail) || " on Counterparties"}.`, set));
     } else if (set && typeof setTo === "string" && !sameAddress(setTo, address)) {
       facts.push({ kind: "contradicted", text: `The address paid, ${short(address)}, is not the one the ledger last recorded for ${ctx.name}.`, at: set.ts, seqs: [set.seq], warn: true });
+    } else if (!set && ctx.input.counterparty?.sample) {
+      facts.push({ kind: "inferred", text: `${short(address)} was loaded with the sample data; no entry names who gave it.`, seqs: [] });
     } else {
       facts.push({ kind: "missing", text: `No entry names who gave ${short(address)}.`, fill: "A member confirms it on Counterparties.", seqs: set ? [set.seq] : [] });
     }
