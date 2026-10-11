@@ -231,10 +231,10 @@ export default function PrivacyPage() {
             of the person who attached it, the amount and the comment&apos;s link, and asks GitHub whether that person can write to the repository.
           </li>
           <li>
-            <strong>Google Analytics</strong> receives page views, as described below.
+            <strong>Google Analytics</strong> receives page views, and which button you chose to get started, as described below.
           </li>
           <li>
-            <strong>Product Hunt</strong> serves the badge on the home page, so your browser loads that image from Product Hunt, which sees your IP
+            <strong>Product Hunt</strong> serves the badge in the footer of the home page, the page for studios and the page on how the agent decides, so your browser loads that image from Product Hunt, which sees your IP
             address and browser like any site an image comes from. Nothing else is sent to it.
           </li>
         </ul>
@@ -252,6 +252,11 @@ export default function PrivacyPage() {
           <li>the title of a workspace page, which names the workspace, is replaced with its redacted path;</li>
           <li>a referrer on this site is redacted the same way, and a referrer from another site is cut to its origin.</li>
         </ul>
+        <p>
+          When you choose a button that starts you off, such as <strong>Try it on your bills</strong>, it also counts that choice as an event named{" "}
+          <code>cta_click</code>, with the button&apos;s name (such as <code>hero-try</code>) and the page&apos;s path, redacted the same way. Nothing you
+          typed and nothing about you goes with it.
+        </p>
         <p>Google signals and ad personalization signals are turned off. Google Analytics sets its own cookies to tell visits apart.</p>
       </LegalSection>
 

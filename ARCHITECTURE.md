@@ -350,8 +350,25 @@ mainnet plan).
     the workspaces opened in the period and how many reached each step: a real bill, the agent's decision on one, a
     confirmed live payment, payments on two UTC days, a verdict, two people. `npm run numbers` prints it per network
     (`src/lib/platform/funnel.ts`); /open does not show it.
-- **The landing's latest decision** (`docs/superpowers/specs/2026-10-08-landing-owner-hero-design.md`): a band under
-  the hero with the newest decision the agent made in one of the team's own live workspaces.
+- **The landing, for a business owner first** (`docs/superpowers/specs/2026-10-11-landing-clarity-design.md`): the hero
+  says what Vestiarion is and who it is for, beside two sample bills in the product's own words; then how it works in
+  three steps, who it is for (one tab per kind of team, every panel in the HTML), safety and control in plain words,
+  the proof, the developers' way in, the questions and the close.
+  - One call to action everywhere (`src/components/landing/cta.ts`): `/onboarding?shadow=1`, which opens a workspace
+    with shadow mode ticked; the sign-in page says what follows the link when that is where it leads.
+  - Each call to action carries `data-cta`; Google Analytics, where it runs, sends `cta_click` with that name and the
+    redacted path, nothing else. Activation itself is read from the database (`/admin/growth`).
+  - The technical showcase is `/how-it-decides`: the decision receipt replayed in its arch beside the live ledger's
+    head, the decision loop step by step, and the claims with the receipts behind them.
+  - The questions' answer about Arc mainnet says it is open to anyone only while `MAINNET_ALLOWLIST` holds `*`
+    (`mainnetOpenToEveryone`).
+  - Nothing above the proof waits for a read (landing stream S1): `LandingPage` is not async. It starts the reads (both
+    networks' open numbers, the latest decision, the founding workspace's chain modes, the reserve count) and hands
+    them to `Proof` as promises; its latest decision, figures and live legs each stream in behind their own fallback,
+    so the hero arrives with the first bytes. A chain-mode read that fails shows the legs as not live, never as live.
+- **The landing's latest decision** (`docs/superpowers/specs/2026-10-08-landing-owner-hero-design.md`): the newest
+  decision the agent made in one of the team's own live workspaces, in the landing's proof (a band of its own on
+  /studios).
   - `latest_team_decision()` (0087), the service role's alone, looks only where `/open` lists payments from: the
     founding workspace and those a team member created, never a sample payee's decision. It returns facts that name no
     one (action, amount, network, model, policy agreement, code's verdict, why a hold held, a person's verdict, the
@@ -362,23 +379,26 @@ mainnet plan).
     the workspace's id stays there. `src/lib/latest-decision.ts` says it in words.
   - The reader's browser checks the signature and the link to the entry before it with `verifySignedLink`, the
     receipt verifier's half that needs no body. Until 0087 runs, or when the read fails, there is no band.
-- **The landing's proof** (`docs/superpowers/specs/2026-10-08-landing-proof-design.md`): what the hero says runs live,
-  and the measurements, come from every workspace, never from the founding one alone.
-  - The hero's legs (`src/components/landing/provenance.ts`): the USYC reserve is live once any live workspace runs a
+- **The landing's proof** (`docs/superpowers/specs/2026-10-08-landing-proof-design.md`, and landing clarity P1-P3):
+  what the proof section says runs live, and the measurements, come from every workspace, never from the founding one
+  alone.
+  - The live legs (`src/components/landing/provenance.ts`): the USYC reserve is live once any live workspace runs a
     real one (`reserveRunsLive()`, a count over `orgs.usyc_live_at`, never which workspace), and links to the research
     note's section on it. Payments link to the team's latest Arc mainnet payment on the explorer, read from
-    `open_numbers`; the hero's "Live on Arc mainnet" links to /open's mainnet section.
-  - The measurements are the open numbers, all time (`readAllTimeOrNull`): Arc mainnet's panel, then Arc testnet's,
-    customers' figures with the total beside them as /open's headline has them, and the team's latest payment on each
-    network. A network whose numbers cannot be read says so, and the other still shows.
+    `open_numbers`; "Live on Arc mainnet" links to /open's mainnet section.
+  - The measurements are the open numbers, all time (`readAllTimeOrNull`): Arc mainnet's panel, then Arc testnet's.
+    Under "Customers" every figure is customers' own (workspaces, payments, then their verdicts or their on-time
+    share); the team's payments sit on a line of their own under them, with its latest payment on the explorer. No
+    total is shown where it could be read as customers'. A network whose numbers cannot be read says so, and the other
+    still shows.
 - **Motion** (`docs/superpowers/specs/2026-10-08-landing-motion-design.md`): reduced motion removes movement, not every
   change. Under `prefers-reduced-motion: reduce`, `globals.css` keeps transitions for opacity and colours only and cuts
   keyframe animations, except on an element marked `data-calm-motion`; `Reveal` fades without lifting. Each moving
-  piece has a designed reduced state. "How a decision becomes an action" (`src/components/landing/pipeline/`) lights the
-  step crossing the middle of the viewport and its part of a sticky diagram; the server's HTML lights every step.
-  The hero's receipt prints as calm motion under reduce, and publishes a beat (`hero/replay-beat.ts`) with the time
+  piece has a designed reduced state. On /how-it-decides, "How a decision becomes an action"
+  (`src/components/landing/pipeline/`) lights the step crossing the middle of the viewport and its part of a sticky
+  diagram; the server's HTML lights every step. That page's receipt prints as calm motion under reduce, and publishes a beat (`hero/replay-beat.ts`) with the time
   its first line started; `ArchLights` climbs the arch's stones on that clock and rings the keystone in the outcome.
-  The open numbers count up once when first seen (`CountUp`); "Build on it" types each guide's own snippet (API, SDK,
+  The open numbers count up once when first seen (`CountUp`); "For developers" types each guide's own snippet (API, SDK,
   MCP, GitHub, `landing/build/snippets.ts`) over a complete copy a screen reader reads.
 
 **Every module on its workspace's network** (`docs/superpowers/specs/2026-10-05-network-threading-design.md`,
@@ -1329,7 +1349,13 @@ the webhook verification snippets run against the signing code. The Guides
 pages (`content/docs/guides/`) are for people using the app rather than the
 API; they quote its buttons, fields and messages exactly, and
 `tests/docs-guides.test.ts` checks each quoted string against the source file
-it comes from, so renaming one in the app means updating the guide. Their step screenshots are the app’s own components rendered with sample data by `/docs-shots/<name>` (`src/app/docs-shots/`), which answers only where `DOCS_SCREENSHOTS=1` is set; `npm run docs:screenshots` photographs them into `public/docs/guides/`, and `tests/docs-screenshots.test.tsx` holds every `<Screenshot>` to an existing PNG with alt text, and every PNG to a guide. **A PR that
+it comes from, so renaming one in the app means updating the guide. Their step screenshots are the app’s own components rendered with sample data by `/docs-shots/<name>` (`src/app/docs-shots/`), which answers only where `DOCS_SCREENSHOTS=1` is set; `npm run docs:screenshots` photographs them into `public/docs/guides/`, and `tests/docs-screenshots.test.tsx` holds every `<Screenshot>` to an existing PNG with alt text, and every PNG to a guide. The nav groups pages by what a reader is doing (`docs/superpowers/specs/2026-10-11-docs-clarity-design.md`): Start here,
+Everyday work, Trust and controls, Connect your tools, Developers, then the API reference and webhooks, which the sidebar
+folds (`NavSection.folded`) until opened or holding the page being read; pages keep their addresses whatever their group.
+MDX pages have `<Callout kind="note|tip|important|warning|real-money">`, whose kind is written beside its title on the
+page and in the `.md` view, `<Action href>` for a guide's one next step in the app, and numbered `## 1. …` steps, which
+`DocsHeading` draws with a number badge while keeping their ids. A `<Screenshot>` opens larger in a dialog
+(`ZoomableImage`). **A PR that
 changes `/api/v1` or webhooks adds a changelog entry** to
 `content/docs/changelog.mdx`: dated, newest first, saying what changed for an
 integrator.

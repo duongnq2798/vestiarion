@@ -1,6 +1,7 @@
 import { STATUS_FOR } from "@/lib/api/contract";
 import { jsonSchema, operationById, type DocOperation, type DocParam } from "@/lib/api/openapi";
 import { MCP_TOOLS } from "@/lib/mcp/tools";
+import { calloutLabel } from "./callouts";
 import { hasSource, notesSource, publishedPages, readSource } from "./content";
 import { fencedLines } from "./headings";
 import { findPage, operationsByTag } from "./nav";
@@ -34,7 +35,19 @@ export interface ConvertContext {
  * not, so a page never serves leftover JSX.
  */
 export const MDX_TO_MARKDOWN: Record<string, (attributes: JsxAttributes, children: string, context: ConvertContext) => string> = {
-  Callout: (attributes, children, { convert }) => quote(typeof attributes.title === "string" ? attributes.title : undefined, convert(children)),
+  // A callout's kind (docs clarity C2) leads its title, as on the page: "Warning: …".
+  Callout: (attributes, children, { convert }) => {
+    const title = typeof attributes.title === "string" ? attributes.title : undefined;
+    const label = calloutLabel(attributes.kind);
+    return quote(label ? (title ? `${label}: ${title}` : label) : title, convert(children));
+  },
+  // A guide's next step in the app: a link on a line of its own.
+  Action: (attributes, children, { convert }) => {
+    const { href } = attributes;
+    const label = convert(children).replace(/\s+/g, " ").trim();
+    if (typeof href !== "string" || !label) throw new Error("<Action> needs an href and a label");
+    return `[${label}](${href})`;
+  },
   EndpointTable: (_attributes, _children, { origin }) => endpointTables(origin),
   McpToolTable: (_attributes, _children, { origin }) => mcpToolTable(origin),
   // A grid of cards is a list: one line per card.
@@ -72,7 +85,7 @@ export const MDX_TO_MARKDOWN: Record<string, (attributes: JsxAttributes, childre
  *   table row it would be a cell; after a quote, a list item or text, and
  *   before text, it would continue a paragraph.
  */
-const BLOCK_COMPONENTS = new Set(["Callout", "Cards", "Card", "EndpointTable", "McpToolTable", "Screenshot"]);
+const BLOCK_COMPONENTS = new Set(["Callout", "Action", "Cards", "Card", "EndpointTable", "McpToolTable", "Screenshot"]);
 
 /** Components that belong only inside another: a `Card` is one cell of a `Cards` grid. */
 const PARENT_OF: Record<string, string> = { Card: "Cards" };
