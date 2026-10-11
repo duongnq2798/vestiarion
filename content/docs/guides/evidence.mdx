@@ -1,0 +1,91 @@
+Every payable and every contractor milestone has one page that says why it was paid: what was agreed, what was delivered, the bill, the payee, the decision, the people who stepped in, the payment, the receipt and the signatures, link by link. Each fact on it says how it is known, so what code or someone outside Vestiarion checked stands apart from what a person only stated. Every member of the workspace can read it, viewers included. It works the same on Arc testnet and on Arc mainnet.
+
+## Open it
+
+- **From a card.** On **Bills & receivables**, open a payable's row: its card's footer links **Why it was paid** once it is paid, and **Evidence so far** before. A milestone's card on **Contractors** links it the same way, and so does a payable's card on **Treasury**.
+- **From the decision trail.** At the foot of a payable's **How the agent decided**, **The whole chain, from purchase order to receipt** opens the same page.
+- **Not for receivables.** The page is about money the workspace pays: a receivable has none.
+
+The page belongs to its record's section: the sidebar and the header name **Bills & receivables** for a payable and **Contractors** for a milestone, and the section in the header leads back there. Its address names the record, not a payment attempt, so it stays the same once the record is paid.
+
+A payable or milestone not paid yet shows its chain so far and says "Not paid yet. This is the chain so far, read-only: nothing on this page pays, approves or changes anything." A bill a person rejected says "Not paid: a person rejected this bill."
+
+## How each fact is known
+
+Every fact carries one of seven labels, in words with an icon beside it, never told by colour alone. The box **How each fact is known** explains them, strongest first, and counts how many of the chain's facts each holds:
+
+| Label | What it means |
+|---|---|
+| **Verified outside** | Someone outside Vestiarion answered: the chain's record of the transaction, GitHub, the screening service. |
+| **Checked by code** | A rule Vestiarion runs computed it: the three-way match, the guardrails, a signature, the written policy. |
+| **Stated by a person** | A member or the payee entered it. The page names who, and when. |
+| **Inferred** | Read, not recorded: the model's judgement, sample data, or a setting as it is today. |
+| **Missing** | Nothing records it. Where it can still be added, the page says how. |
+| **Could not open** | A check got no answer, or a link was revoked: it never counts as verified. |
+| **Does not match** | A check answered, and its answer contradicts the record. |
+
+As the box says, "Each link reads as its weakest fact, so it is never labelled above what its least-supported fact is." A label comes from where a fact came from, never from the entry that recorded it: goods a person marked received stay **Stated by a person**, though the entry that records them is signed.
+
+## The links, in order
+
+<Screenshot
+  src="/docs/guides/evidence-chain.png"
+  alt="The evidence page of a paid bill, titled Why it was paid, with the line October design retainer: 12.50 USDC to Northstar Studio. Each link says how it is known, and where it came from. Two of its links: 5, The decision, reads as Inferred: Inferred, DeepSeek decided to pay it, as the written policy would, the model's judgement from the facts it was given; then Checked by code, Code checked it before anything was sent, with each check passed, each fact with its time and entry 45, and the link How the agent decided, step by step. 7, The payment, reads as Checked by code: Verified outside, Paid 12.50 USDC to the payee on Arc testnet, the block that holds the transfer, and The transaction marked Checked by Vestiarion; then Checked by code, Entry 45 records this transaction."
+  caption="Each fact with its label, when it was recorded, and the entries it rests on; a link reads as its weakest fact."
+/>
+
+1. **What was agreed**: the purchase order on the bill, who entered it and when, or that the counterparty is marked as paid without purchase orders. For a milestone, its terms (title, amount, payee) and who added them: on **Contractors**, through the API, or as a bounty on GitHub.
+2. **What was delivered**: the goods or services marked received, by whom and when. For a milestone, the merged pull request GitHub reported, which is **Verified outside**, or a person's verification by hand with the link they gave.
+3. **The bill**, for a payable only: who added it and from where: the invoice form, a document a model read (with the document's SHA-256; the document itself is not kept), a CSV import, an email, Telegram, Slack, the API, or a recurring payment.
+4. **The payee**: the address paid; who gave it (a member, the payee through their payee link or on GitHub, or a mirror address Vestiarion made in shadow mode) and who confirmed it; the screening result before the payment and its source; and any screening match a person dismissed.
+5. **The decision**: who decided, the model by name or the written policy, and whether the written policy agreed; then what code checked before anything was sent, worded as the decision trail words it. The model's judgement is **Inferred**: it decides from the facts it was given. **How the agent decided, step by step** opens the trail on **Bills & receivables**.
+6. **People**: approvals, a first of two approvals, verdicts in shadow mode, returns and rejections. When nobody stepped in, it says "No person approved it: code let the agent pay it within the workspace's rules."
+7. **The payment**: the transaction on the chain it was made on, linked to its explorer. When the page opens, Vestiarion reads that chain's own record of the transaction: it is **Verified outside** when the record holds a transfer of the amount to the payee, **Does not match** when it does not, and **Could not open** when the chain did not answer. A payment made in shadow mode says it mirrors a bill the business paid its own way. Then the entry that records the transaction.
+8. **The receipt**, for a payable only: whether it is shared, by whom, and whether its link still opens. Its signed entry is checked, and so is the entry it names, as the public receipt page checks them. The link itself is never shown again: only its hash is kept.
+9. **Signatures**: every entry the chain rests on (below).
+
+Each fact names who stated it by email, and when: "a former member" for someone no longer in the workspace, and "the payee" for an address sent through a payee link or GitHub.
+
+Under each fact, the numbers of the entries it rests on open them in the **Audit log**.
+
+A link a person typed, such as the evidence a milestone was verified by hand with, is shown as a link marked **Not opened by Vestiarion**: Vestiarion never fetches it, so its fact stays **Stated by a person**. Only `https` links are shown. A link Vestiarion checked, such as the transaction, is marked **Checked by Vestiarion**. A fact that is **Missing** says what would fill it, such as "A person marks them received with Add details on Bills & receivables."
+
+## Signatures
+
+<Screenshot
+  src="/docs/guides/evidence-signatures.png"
+  alt="The last link, 9, Signatures, reads as Checked by code: 6 entries verify, each signed with the workspace's key, its hash following from its content, its signature and the hash before it; the Audit log checks the whole chain, entry after entry. Below, in one line: A signed entry proves who recorded what, and when. It does not prove the goods were good or the work was done. Then Checked again in your browser: all 6 verify, and the list Every entry, checked here one by one (6), opened on entries 41 to 46, each with its summary, action, time and Verifies."
+  caption="Every entry checked on the server and again in the browser, and what a signature does not prove."
+/>
+
+The last link says, in one line: "A signed entry proves who recorded what, and when. It does not prove the goods were good or the work was done."
+
+Each entry is checked alone, twice: its body hash, its Ed25519 signature with the workspace's key, and its hash from the hash before it. The server checks it when the page opens, and your browser checks it again with the same verifier the public receipt page uses, then says, for example, "Checked again in your browser: all 6 verify." **Every entry, checked here one by one** lists each entry with its time and the server's check. The whole chain, entry after entry, is what **Verify hash chain** on the **Audit log** checks, and the audit export: see [Verify an audit export](/docs/guides/audit-export).
+
+## Download evidence
+
+**Download evidence**, beside the page's title, saves the page as a JSON file in the format `vestiarion-evidence/1`:
+
+- `workspace`, `network` and `subject`: the workspace, the network's name, and the record with its payee, amount and status;
+- `labels`: the seven words, what each means, and how many facts each holds;
+- `steps`: every link with its facts, each with its label in words, who stated it and when, its notes, links and entries;
+- `entries`: every entry in full, with the fields the audit export carries (`seq`, `ts`, `actor`, `domain`, `action`, `summary`, `detail`, `body_hash`, `signature`, `prev_hash`, `hash`, `signing_key_id`) and the server's check of each;
+- `keys`: the workspace's public keys, so each entry can be checked alone, and `checkAnEntry`, how.
+
+The file is named for the workspace, the kind of record and the start of its id, such as `vestiarion-evidence-your-workspace-invoice-5f1e2d3c.json`. Every member can download it, viewers included, as they can the audit export. Downloading it is not recorded in the ledger: it carries one payment's evidence, which every member can already see. To print the page, print it from your browser.
+
+## Who can see this
+
+At the foot of the page, **Who can see this** says who may see, download and share it:
+
+<Screenshot
+  src="/docs/guides/evidence-access.png"
+  alt="The panel Who can see this, as an owner sees it for a paid bill whose receipt is shared. This page: Every member of this workspace, viewers included. Nobody outside it: the page needs a member's sign-in. Download evidence: Every member, as the audit export. The file names people by email, as this page does. Outside the workspace: Only the receipt, which is shared now: anyone with its link can open it. A receipt's public page shows the amount, the payee's address and the transactions, and no names. As an owner or admin, you can share it or stop sharing it with Share receipt on Bills & receivables. At the foot: Nothing on this page shares or changes anything: Download evidence is its only action."
+  caption="Who may see, download and share the evidence, with the receipt's state and what your role allows."
+/>
+
+- **This page**: "Every member of this workspace, viewers included. Nobody outside it: the page needs a member's sign-in."
+- **Download evidence**: "Every member, as the audit export. The file names people by email, as this page does."
+- **Outside the workspace**: only the receipt, once an owner or admin shares it with **Share receipt** on **Bills & receivables** (see [Share a receipt](/docs/guides/first-payment#8-share-a-receipt)). "A receipt's public page shows the amount, the payee's address and the transactions, and no names." The panel says whether the receipt is shared now, was shared and then stopped, or is not shared. An owner or admin reads "As an owner or admin, you can share it or stop sharing it with Share receipt on Bills & receivables."; anyone else is told their role cannot, and that an owner or admin shares it. A milestone has no receipt, so nothing about it leaves the workspace.
+
+The page shares, unshares and changes nothing itself: "Nothing on this page shares or changes anything: Download evidence is its only action."

@@ -801,6 +801,36 @@ USDC included. Each figure links to its source: the decision and the verdict to 
 (`/audit?before=<seq + 1>#seq-<seq>`), the payment to the explorer, the record to its entry with who recorded it and
 when. `npm run traction-digest` adds one line from the same totals.
 
+## Why it was paid: the evidence chain
+
+`/o/[slug]/evidence/invoice|milestone/<id>` (spec `2026-10-10-evidence-chain-design.md`) gives every member one page
+per payable or contractor milestone: what was agreed, what was delivered, the bill, the payee, the decision, the people,
+the payment, the receipt and the signatures. `navItemForPathname` files it under its record's section (Bills &
+receivables, or Contractors), and the header's breadcrumb links back there. Every payable's and milestone's card footer
+links it (`Decision.chain`, set by `invoiceDecision` and `milestoneDecision`; `src/lib/evidence-paths.ts`), and so
+does the decision trail's last line.
+
+- **Pure, then read.** `buildEvidenceChain` (`src/lib/evidence-chain.ts`) is pure: it takes the record, its
+  counterparty, the entries, the screening check, the payment intent, the receipt, the members' emails and the checks'
+  results, and labels each fact by where it came from (Checked by code, Verified outside, Stated by a person, Inferred,
+  Missing, Could not open, Does not match); a step reads as its weakest fact, and a signed entry never upgrades a fact
+  a person stated. `chainAnchors` names the decision the chain rests on, so `readEvidence`
+  (`src/lib/evidence-read.ts`) asks for the newest complete screening check at that time. The reader goes through
+  `db()` in the organization's scope only: the record (a receivable, a malformed or an unknown id is null, and the page
+  is the workspace's not-found), `ledger_entries_for_targets`, verdicts by `subjectId`, the counterparty's compliance
+  entries, the intent, the receipt and its entries (by its seq and by `receiptId`), and the members, best effort.
+- **Checks.** Each entry alone with `verifyEntry` (`src/lib/receipts/verify.ts`) on the server, and again in the
+  reader's browser (`EvidenceBrowserCheck`); the transaction with `readOnChain` against the chain's public RPC. A URL a
+  person or a payee typed is shown, marked not opened, and never fetched. `intentFacts` and `recordingEntry`
+  (`src/lib/receipts/facts.ts`) are shared with the payment receipts, so both read the same transaction and the same
+  recording entry; `decisionChecks` is shared with the decision trail.
+- **Download.** `GET /api/evidence?org=&kind=&id=` answers `vestiarion-evidence/1` (`src/lib/evidence-export.ts`):
+  every step and fact with its label, every entry in full with the server's check, and the workspace's public keys.
+  The audit export's gate: a session (401), membership (404), cross-site refused (403), a bad kind or id 400. It writes
+  nothing, the ledger included.
+- **Who can see it** (`EvidenceAccess`) says the existing permissions in words: every member reads and downloads it;
+  only a shared receipt leaves the workspace, shared by an owner or admin (`records.write`). No migration.
+
 ## Approvals and the pause switch
 
 **The approval inbox** (`/o/[slug]/approvals`, spec §5) lists every payable a

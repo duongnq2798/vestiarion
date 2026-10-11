@@ -59,6 +59,7 @@ export const DOCS_NAV: NavSection[] = [
       { slug: "guides/api-invoices", title: "Add invoices from your own system", description: "Create a read-and-write API key, add a counterparty and an invoice through the API, confirm the address, and follow the agent's decision." },
       { slug: "guides/api-milestones", title: "Pay for merged pull requests", description: "Add a contractor, a payee link and a milestone through the API, and the agent pays once the pull request is merged. With a GitHub Actions workflow." },
       { slug: "guides/github", title: "Show payments on GitHub", description: "Connect GitHub so a milestone paid for a pull request gets a comment on it, pull requests in private repositories verify, and a maintainer attaches a bounty with a comment." },
+      { slug: "guides/evidence", title: "Why a payment was paid", description: "One payment's evidence, link by link from the purchase order to the receipt: how each fact is known, the signatures checked in your browser, the download, and who can see it." },
       { slug: "guides/audit-export", title: "Verify an audit export", description: "Download a workspace's signed ledger and check it with a standalone verifier." },
     ],
   },

@@ -149,7 +149,7 @@ describe("the docs navigation", () => {
     );
   });
 
-  it("lists the user guides right after Overview: trying it, finding your way around a workspace, going live, shadow mode, the workspace report, the first payment, paying a contractor, getting paid, Telegram, Slack, adding invoices and paying for pull requests through the API, then verifying an export", () => {
+  it("lists the user guides right after Overview: trying it, finding your way around a workspace, going live, shadow mode, the workspace report, the first payment, paying a contractor, getting paid, Telegram, Slack, adding invoices and paying for pull requests through the API, then why a payment was paid and verifying an export", () => {
     const section = DOCS_NAV.find((candidate) => candidate.title === "Guides")!;
     expect(section.pages.map((page) => [page.slug, page.title])).toEqual([
       ["guides/try-it", "Try it in 5 minutes"],
@@ -166,6 +166,7 @@ describe("the docs navigation", () => {
       ["guides/api-invoices", "Add invoices from your own system"],
       ["guides/api-milestones", "Pay for merged pull requests"],
       ["guides/github", "Show payments on GitHub"],
+      ["guides/evidence", "Why a payment was paid"],
       ["guides/audit-export", "Verify an audit export"],
     ]);
   });
@@ -204,7 +205,8 @@ describe("the docs navigation", () => {
     expect(neighbours("guides/slack").next?.slug).toBe("guides/api-invoices");
     expect(neighbours("guides/api-invoices").next?.slug).toBe("guides/api-milestones");
     expect(neighbours("guides/api-milestones").next?.slug).toBe("guides/github");
-    expect(neighbours("guides/github").next?.slug).toBe("guides/audit-export");
+    expect(neighbours("guides/github").next?.slug).toBe("guides/evidence");
+    expect(neighbours("guides/evidence").next?.slug).toBe("guides/audit-export");
     expect(neighbours("guides/audit-export").next?.slug).toBe("research/model-vs-policy");
     expect(neighbours("research/model-vs-policy").next?.slug).toBe("get-started/quickstart");
     expect(neighbours(pages[pages.length - 1].slug).next).toBeUndefined();

@@ -203,21 +203,22 @@ On **Bills & receivables**, the tiles at the top count what needs you, what is d
 - the outcome: "Settled on Arc", "Scheduled for *date*", "Held for you" or "Refused by guardrail";
 - the amount and the counterparty;
 - **Agent’s reasoning**: why it decided as it did, citing the facts it used, such as the amount, the PO reference, the risk level and the balance;
-- the evidence it checked, the ledger entry (`audit #` and its number), and, for a payment, the transaction hash.
+- the evidence it checked, the ledger entry (`audit #` and its number), and, for a payment, the transaction hash;
+- **Why it was paid** once it is paid, or **Evidence so far** before: the payment's whole chain of evidence, from the purchase order to the receipt, each fact marked with how it is known. See [Why a payment was paid](/docs/guides/evidence).
 
 <Screenshot
   src="/docs/guides/first-payment-decision.png"
-  alt="The Payables list on Bills & receivables, its Paid and closed group holding one row: Northstar Studio, October design retainer, Due Oct 15, 2026, 12.50 USDC, Settled on Arc. The row is open on its decision card: Pay Northstar Studio, 12.50 USDC, marked Settled on Arc. The agent's reasoning reads: Paid 12.50 USDC to Northstar Studio: PO-2207 matches and the work was received, Northstar Studio screened clear with a 50.00 USDC limit, and the operating wallet holds 20.00 USDC. Below are How the agent decided, folded, the evidence chips PO, Goods received, Risk, Limit and Due, then the link to ledger entry 5 and the transaction hash."
+  alt="The Payables list on Bills & receivables, its Paid and closed group holding one row: Northstar Studio, October design retainer, Due Oct 15, 2026, 12.50 USDC, Settled on Arc. The row is open on its decision card: Pay Northstar Studio, 12.50 USDC, marked Settled on Arc. The agent's reasoning reads: Paid 12.50 USDC to Northstar Studio: PO-2207 matches and the work was received, Northstar Studio screened clear with a 50.00 USDC limit, and the operating wallet holds 20.00 USDC. Below are How the agent decided, folded, the evidence chips PO, Goods received, Risk, Limit and Due, then Why it was paid, the link to ledger entry 5 and the transaction hash."
   caption="A settled payment: the agent's reasoning, the evidence it checked, the ledger entry and the transaction."
 />
 
 When the model decided to pay but a guardrail stopped it, the card also has a "Blocked by code, not by the model" band. The band names the rule in words, such as that the purchase order or goods receipt was missing, and the amount attempted. Hold the pointer over it for the rule's id, such as `invoice.match_incomplete`, as the ledger and the API name it. For a limit, it adds the amount allowed; for a rule about something other than the amount, it says why, such as "the first payment to this address, and only one person stands behind it".
 
-At the foot of a payable's card, **How the agent decided** opens its steps, oldest first, each a signed entry in the ledger: who added it, what a person changed, each decision with who decided and whether the written policy agreed, what it checked (the purchase order and goods, screening, the amount against the limit, duplicates), what code refused, what the spending-limit contract on Arc said, and the transaction that reached Arc testnet. Each step shows its time to the second, how long after the step before it, and the number of its entry in the audit log.
+At the foot of a payable's card, **How the agent decided** opens its steps, oldest first, each a signed entry in the ledger: who added it, what a person changed, each decision with who decided and whether the written policy agreed, what it checked (the purchase order and goods, screening, the amount against the limit, duplicates), what code refused, what the spending-limit contract on Arc said, and the transaction that reached Arc testnet. Each step shows its time to the second, how long after the step before it, and the number of its entry in the audit log. Its last line, **The whole chain, from purchase order to receipt**, opens the payment's evidence.
 
 <Screenshot
   src="/docs/guides/first-payment-trail.png"
-  alt="How the agent decided, opened on a paid payable to Northstar Studio, 5 steps, each check on its own line: a person added it; DeepSeek decided to ask for more information before paying it, with No purchase order on file; 14 min later a person added purchase order PO-2215 and goods received; 14 s later the agent saw the facts change and took it up again; 12 s later DeepSeek decided to pay it, as the written policy would, with each check passed, the spending-limit contract on Arc allowing it, and the transaction."
+  alt="How the agent decided, opened on a paid payable to Northstar Studio, 5 steps, each check on its own line: a person added it; DeepSeek decided to ask for more information before paying it, with No purchase order on file; 14 min later a person added purchase order PO-2215 and goods received; 14 s later the agent saw the facts change and took it up again; 12 s later DeepSeek decided to pay it, as the written policy would, with each check passed, the spending-limit contract on Arc allowing it, and the transaction. Its last line reads The whole chain, from purchase order to receipt."
   caption="How the agent decided: each step a signed entry, with what was checked."
 />
 
@@ -234,7 +235,7 @@ A stop only a decision resolves, such as a payout fee above 10% of the invoice o
 
 <Screenshot
   src="/docs/guides/first-payment-stopped.png"
-  alt="The console's Stopped section with one card: Tried to pay Northstar Studio, 75.00 USDC struck through, Refused by guardrail. The band Blocked by code, not by the model names the rule, It is above the payee's payment limit, 75.00 USDC attempted against 50.00 USDC allowed. Under the agent's reasoning, How the agent decided, folded, and its evidence, the card's last line reads: It is above Northstar Studio's payment limit. Pay it in Approvals, or raise the limit. The buttons are Edit limit and Decide in Approvals."
+  alt="The console's Stopped section with one card: Tried to pay Northstar Studio, 75.00 USDC struck through, Refused by guardrail. The band Blocked by code, not by the model names the rule, It is above the payee's payment limit, 75.00 USDC attempted against 50.00 USDC allowed. Under the agent's reasoning, How the agent decided, folded, then its evidence and Evidence so far, the card's last line reads: It is above Northstar Studio's payment limit. Pay it in Approvals, or raise the limit. The buttons are Edit limit and Decide in Approvals."
   caption="A payment code refused, with the way through: raise the limit, or decide it in Approvals."
 />
 
@@ -411,7 +412,7 @@ On **Bills & receivables**, the payable waits under **Needs you**, and its row s
 
 <Screenshot
   src="/docs/guides/first-payment-needs-you.png"
-  alt="Bills & receivables, under Payables, Needs you: one row for Northstar Studio, November design retainer, Needs a purchase order and goods received, due Oct 15, 2026, 12.50 USDC, marked Awaiting info. Opened, its card shows the agent's reasoning, the evidence PO none and Goods received no, How the agent decided, folded, and at the bottom: Add the purchase order and confirm the goods or services were received, and the agent decides it again, with the buttons Add details and Decide in Approvals."
+  alt="Bills & receivables, under Payables, Needs you: one row for Northstar Studio, November design retainer, Needs a purchase order and goods received, due Oct 15, 2026, 12.50 USDC, marked Awaiting info. Opened, its card shows the agent's reasoning, the evidence PO none and Goods received no, How the agent decided, folded, Evidence so far, and at the bottom: Add the purchase order and confirm the goods or services were received, and the agent decides it again, with the buttons Add details and Decide in Approvals."
   caption="A payable waiting for its purchase order, on Bills & receivables."
 />
 
