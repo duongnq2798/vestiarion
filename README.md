@@ -173,7 +173,7 @@ Each workspace lives on one network, chosen when it is created, and never moves.
 
 | | Arc testnet | Arc mainnet |
 | --- | --- | --- |
-| **Who can use it** | Anyone who signs in | Only people the deployment opens it to (`MAINNET_ALLOWLIST`) |
+| **Who can use it** | Anyone who signs in | Anyone who signs in at vestiarion.xyz; a self-hosted deployment chooses who with `MAINNET_ALLOWLIST` |
 | **Money** | Testnet USDC and EURC from Circle's faucet | Real USDC, sent on Arc or brought from another chain through CCTP |
 | **Treasury** | Hosted wallet, or your own Circle account | Your own wallet or passkey wallet, or your own Circle account |
 | **Spending-limit contract** | Opt-in, deployed through Circle's Smart Contract Platform | Deployed by the owner's wallet on the own-wallet path |
