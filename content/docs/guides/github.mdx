@@ -1,4 +1,4 @@
-Connect GitHub, and every milestone paid for a pull request says so on that pull request. Once the payment is confirmed, the Vestiarion app comments there with the amount and the Arc testnet transaction. Contributors, maintainers and anyone reading the pull request see it was paid, where the work was done. The same connection lets the agent verify pull requests in your private repositories, and lets a maintainer attach a bounty with a comment, without leaving GitHub.
+Connect GitHub, and every milestone paid for a pull request says so on that pull request. Once the payment is confirmed, the Vestiarion app comments there with the amount, the network, Arc mainnet or Arc testnet, and the transaction. Contributors, maintainers and anyone reading the pull request see it was paid, where the work was done. The same connection lets the agent verify pull requests in your private repositories, and lets a maintainer attach a bounty with a comment, without leaving GitHub.
 
 The app reads pull requests and their comments, and writes comments, on the repositories you choose. It never changes code, never merges and never approves a payment: the agent decides each payment with every guardrail, as before.
 
@@ -48,7 +48,7 @@ The pull request's author then says where to be paid:
 
 Only the pull request's author can do this. The address waits for an owner, admin or approver to confirm it on **Counterparties**, as an address a payee sends through a payee link does, and they are emailed that it arrived. The agent pays nothing to it before then. A contributor paid before is paid to the address on file, and the reply says so.
 
-Once the pull request is merged and the address confirmed, the agent decides the payment with every guardrail: screening, the contractor's payment limit, and the daily spending limit, with its contract on Arc. The app then comments that it was paid, as below.
+Once the pull request is merged and the address confirmed, the agent decides the payment with every guardrail: screening, the contractor's payment limit, and the agent's spending limit, with its contract on Arc where the workspace has one. The app then comments that it was paid, as below.
 
 When it attaches nothing, the app says why:
 
@@ -62,9 +62,9 @@ When it attaches nothing, the app says why:
 
 ## 4. The comment
 
-Once the payment is confirmed on Arc testnet, the next cycle comments on the pull request. The comment starts with "Paid:", then the amount, "on Arc testnet", "for this pull request, by" your workspace's name, and the transaction's link. The ledger records `pull_request_commented`, with the comment's link.
+Once the payment is confirmed on Arc, the next cycle comments on the pull request. The comment starts with "Paid:", then the amount, the network, such as "on Arc testnet" or "on Arc mainnet", "for this pull request, by" your workspace's name, and the transaction's link on that network's explorer. The ledger records `pull_request_commented`, with the comment's link.
 
-- **Who is named.** Only your workspace. The comment never names the payee; their address is visible on chain through the transaction's link, as for any payment on Arc testnet.
+- **Who is named.** Only your workspace. The comment never names the payee; their address is visible on chain through the transaction's link, as for any payment on Arc.
 - **Where.** Only in a repository whose installation your workspace connected. A pull request in any other repository is paid as usual and gets no comment.
 - **When.** Once per payment, confirmed within the last three days, and after you connected GitHub: connecting never comments on pull requests paid before.
 - **If GitHub refuses.** The comment is tried again at each cycle within those three days. This happens when the app has been uninstalled, for example.

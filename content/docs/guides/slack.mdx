@@ -71,7 +71,7 @@ The invoice is above Jiren's 2 USDC payment limit.
 [Approve and pay] [Reject] [Return to the agent] [Decide in Approvals]
 ```
 
-- **Approve and pay**, when the payable is in USDC, its payee is paid on Arc testnet, its amount is within the limit, and its payee's address is confirmed. Slack asks you first, in a box titled **Approve and pay?** that names the amount, the payee and the address, shortened to its first and last four characters.
+- **Approve and pay**, in a workspace on Arc testnet, when the payable is in USDC, its payee is paid on Arc testnet rather than on another chain, its amount is within the limit, and its payee's address is confirmed. Slack asks you first, in a box titled **Approve and pay?** that names the amount, the payee and the address, shortened to its first and last four characters.
 - **Reject**, after Slack asks you to confirm it.
 - **Return to the agent**, which hands it back for the agent to decide again, usually within a minute.
 
@@ -79,11 +79,13 @@ The limit is for Approve and pay alone: Reject and Return work at any amount.
 
 When Approve and pay is not offered, the message says why under the buttons, after "Approve it in Vestiarion:", and you decide it in the console.
 
+On Arc mainnet, Approve and pay is never offered in Slack. With deciding from Slack on, the message keeps Reject and Return to the agent, which work as on Arc testnet, and reads under its buttons "Approve it in Vestiarion: It is on Arc mainnet, where payments are approved in Vestiarion."
+
 In shadow mode, a payable held for your verdict comes with no buttons: the message says the agent decided to pay it and that it waits for your verdict, and **Give your verdict** opens it in Vestiarion, where you agree or disagree. A button on an earlier message about it refuses until a verdict is given.
 
 A button acts as you, with your role in the workspace as it is when you press it, and runs the same checks as **Approve and pay** in Approvals: you cannot approve a payable you entered unless you are the workspace's only approver, a payee screened high risk is refused, the operating wallet must hold the amount, and a payable is decided once, whoever presses first. Above the workspace's figure for two approvals, its rules apply instead: whoever entered a payable gives one of its two approvals only when no one else can, and the funds are checked by the approval that pays it. Slack adds two of its own: a button works only on the payable as its message showed it, and never confirms a changed address. If the payable was decided, or the agent decided it again, since the message was posted, you are told "This payable changed after this message was posted. Open Vestiarion to see it as it is now." Approve and pay is also refused when the payee's address is no longer the one the message was posted with: a new address is confirmed on Counterparties, in Vestiarion. A button older than 7 days answers "This button no longer works". Someone who has not connected their Slack account is told "Connect your Slack account to Vestiarion first", and nothing is decided.
 
-What you decide is rewritten into the message for the channel: "Approved and paid by" you, with the Arc testnet transaction, or "Rejected by", or "Returned to the agent by". Above the workspace's figure for two approvals, your approval pays nothing yet: the message says you approved it, then "One more approval, by another person, pays it.", and keeps its buttons for a second person, whose approval pays it. A refusal is shown to you alone. In the ledger, the decision is the same `approval_paid`, `approval_rejected` or `approval_returned` entry the console writes, with `via: "slack"` and the id of your Slack link.
+What you decide is rewritten into the message for the channel: "Approved and paid by" you, with the transaction on Arc testnet, or "Rejected by", or "Returned to the agent by". Above the workspace's figure for two approvals, your approval pays nothing yet: the message says you approved it, then "One more approval, by another person, pays it.", and keeps its buttons for a second person, whose approval pays it. A refusal is shown to you alone. In the ledger, the decision is the same `approval_paid`, `approval_rejected` or `approval_returned` entry the console writes, with `via: "slack"` and the id of your Slack link.
 
 ## 6. Add an invoice from Slack
 
@@ -107,7 +109,7 @@ Vestiarion reads only the message you chose it on, and Slack lets it open a file
 
 ## What Slack receives
 
-Workspace and counterparty names, amounts, the agent's reasons, links to Vestiarion and to the Arc testnet explorer. A wallet address only shortened to its first and last four characters; never an email, a key or a full address. The app reads no message in your Slack but the one someone chooses **Add invoice** on: it asks for three permissions, to answer `/vestiarion`, to post to the channel you picked, and to read a file someone chooses.
+Workspace and counterparty names, amounts, the agent's reasons, links to Vestiarion and to the explorer of the workspace's network, Arc testnet or Arc mainnet. A wallet address only shortened to its first and last four characters; never an email, a key or a full address. The app reads no message in your Slack but the one someone chooses **Add invoice** on: it asks for three permissions, to answer `/vestiarion`, to post to the channel you picked, and to read a file someone chooses.
 
 ## For the person who runs the deployment
 

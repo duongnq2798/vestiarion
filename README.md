@@ -223,7 +223,7 @@ run in production, with its ledger entries and transactions.
 
 ## Product capabilities
 
-- **AP automation** — invoices typed in, imported from CSV, read from a PDF, forwarded by email, or sent through the
+- **AP automation** — invoices typed in, imported from a bill list in its own columns, dates and currency, read from a PDF, forwarded by email, or sent through the
   API; recurring payables; early-payment discounts taken when they pay.
 - **Approvals inbox** — approve and pay, reject, or return to the agent; claims keep two people from deciding the
   same row.

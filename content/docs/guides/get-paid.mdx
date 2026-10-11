@@ -1,26 +1,26 @@
-This guide is for the person being paid. A business that uses Vestiarion can pay you in USDC on Arc testnet for work you delivered. You need no account. You need two things: the link the business sent you, and a wallet address. The page behind the link takes you through three steps and tells you which one you are on: **Your address**, **Confirmation** and **Payment**.
+This guide is for the person being paid. A business that uses Vestiarion can pay you in USDC on Arc for work you delivered. Arc is Circle's blockchain for stablecoin payments, and the business pays on its own network: Arc mainnet, where USDC is real money, or Arc testnet, Arc's test network. The email and the page name which one. You need no account. You need two things: the link the business sent you, and a wallet address. The page behind the link takes you through three steps and tells you which one you are on: **Your address**, **Confirmation** and **Payment**.
 
 ## What you need
 
-- **The link.** It comes in an email titled "*Business* wants to pay you *amount* USDC", with an **Add my address** button. A business can also send you the link itself; it starts with `https://www.vestiarion.xyz/payee/`.
-- **A wallet you control** that can hold USDC on Arc testnet, such as MetaMask. Its address starts with `0x` and has 42 characters. Your address on Arc testnet is the same as your Ethereum address in that wallet. No wallet? On Arc testnet the page can make you one with a passkey: see [No wallet yet?](#no-wallet-yet) below.
+- **The link.** It comes in an email titled "*Business* wants to pay you *amount* USDC", with an **Add my address** button. The email names the network it pays you on. A business can also send you the link itself; it starts with `https://www.vestiarion.xyz/payee/`.
+- **A wallet you control** that can hold USDC on Arc, such as MetaMask. Its address starts with `0x` and has 42 characters. Your address on Arc, on Arc mainnet and on Arc testnet alike, is the same as your Ethereum address in that wallet. No wallet? When the business pays you on Arc testnet, the page can make you one with a passkey: see [No wallet yet?](#no-wallet-yet) below.
 - **Nothing else.** No account, no fee, no password. Vestiarion only needs your address. It never asks for your recovery phrase or private key. If anyone asks you for those, stop.
 
-To see Arc testnet in MetaMask, add it as a network:
+To see your USDC in MetaMask, add the network the page names, with these values:
 
-| Field | Value |
-|---|---|
-| Network name | Arc Testnet |
-| RPC URL | `https://rpc.testnet.arc.network` |
-| Chain ID | `5042002` |
-| Currency symbol | USDC |
-| Block explorer | `https://explorer.testnet.arc.io` |
+| Field | Arc mainnet | Arc testnet |
+|---|---|---|
+| Network name | Arc mainnet | Arc testnet |
+| RPC URL | `https://rpc.mainnet.arc.io` | `https://rpc.testnet.arc.network` |
+| Chain ID | `5042` | `5042002` |
+| Currency symbol | USDC | USDC |
+| Block explorer | `https://explorer.arc.io` | `https://explorer.testnet.arc.io` |
 
 ## 1. Add your address
 
-Open the link. The page says who wants to pay you, how much, and for what. Under it are the three steps in a line each.
+Open the link. The page says who wants to pay you, how much, for what, and on which network. Under it are the three steps in a line each.
 
-Copy your address from your wallet's receive screen rather than typing it. Paste it into **Your wallet address on Arc testnet** and choose **Continue**. If the business pays you on another chain, the field names that chain instead, such as Base Sepolia.
+Copy your address from your wallet's receive screen rather than typing it. Paste it into the field, which names the network the business pays you on: **Your wallet address on Arc mainnet**, or **Your wallet address on Arc testnet**. Then choose **Continue**. A business on Arc testnet can also pay you on another chain, and the field then names that chain instead, such as Base Sepolia.
 
 <Screenshot
   src="/docs/guides/get-paid-address.png"
@@ -32,7 +32,7 @@ If what you pasted is not an address, the page says "That doesn't look like a wa
 
 ### No wallet yet?
 
-When the business pays you on Arc testnet, step 1 also has a second button under **Continue**: **No wallet yet? Create one with a passkey**. A passkey is the fingerprint, face or device PIN your phone or computer already uses to sign in.
+When the business pays you on Arc testnet, step 1 also has a second button under **Continue**: **No wallet yet? Create one with a passkey**. A passkey is the fingerprint, face or device PIN your phone or computer already uses to sign in. A business on Arc mainnet does not offer it: give the address of a wallet you hold, such as MetaMask.
 
 - **Choose it,** and your browser asks you to create a passkey for Vestiarion, saved under the name of the business that pays you. Nothing is installed, and there is no recovery phrase to write down.
 - **Made one before,** from another link? Choose **Already made one here? Use my passkey wallet** instead, and use the same passkey: the page reads back the same wallet's address under **Your passkey wallet**.
@@ -78,9 +78,9 @@ Keep the link. It keeps showing your payment's status for 30 days after you sent
 
 Once the business confirms your address, the page shows Step 3, **Your address is confirmed**, with each payment and its status. Their agent pays a confirmed payment usually within a minute.
 
-When every payment is sent, the page becomes your confirmation: "You've been paid", with the amount, and below it who paid you, for what, the address it went to, the network, when it was paid, and the transaction. **View the transaction** opens it on Arc testnet's explorer, where anyone can check it.
+When every payment is sent, the page becomes your confirmation: "You've been paid", with the amount, and below it who paid you, for what, the address it went to, the network, when it was paid, and the transaction. **View the transaction** opens it on the explorer of the network you were paid on, where anyone can check it.
 
-If the business has your email, you are also told by email, from no-reply@vestiarion.xyz, once the payment is confirmed: "*Business* paid you *amount*", what for, the address and the time, and **View the transaction**. For anything about the payment itself, contact the business.
+If the business has your email, you are also told by email, from no-reply@vestiarion.xyz, once the payment is confirmed: "*Business* paid you *amount*", the network, what for, the address and the time, and **View the transaction**. For anything about the payment itself, contact the business.
 
 <Screenshot
   src="/docs/guides/get-paid-paid.png"
@@ -98,30 +98,32 @@ If the business has your email, you are also told by email, from no-reply@vestia
 | Scheduled for *date* | The business pays on that day, as its terms say. | Nothing. |
 | With *business* for review | A person at the business looks at the payment before it is sent. The page never says why. | Nothing. Ask the business if you have questions. |
 | On its way | The transfer was sent and is being confirmed on chain. | Wait a moment. |
-| Paid | The money was sent to your address. | Check your wallet, or the transaction on Arcscan. |
+| Paid | The money was sent to your address. | Check your wallet, or the transaction on the explorer. |
 
 ## Words you will see
 
 - **USDC**: a stablecoin issued by Circle, meant to be worth one US dollar.
-- **Arc testnet**: the test network of Arc, Circle's blockchain for stablecoin payments. Payments there settle in seconds.
+- **Arc**: Circle's blockchain for stablecoin payments. Payments on it settle in seconds.
+- **Arc mainnet**: Arc's main network, where USDC is real money.
+- **Arc testnet**: Arc's test network, with test USDC.
 - **Wallet address**: where money is sent to you, `0x` and 40 letters and numbers. Sharing it is safe; it lets people pay you, not take from you.
 - **Recovery phrase** and **private key**: what opens your wallet. Never share them, with Vestiarion or anyone else.
 - **Transaction**: one transfer on the blockchain, with an id (its hash) that starts with `0x`.
-- **Arcscan**: Arc testnet's public explorer, where anyone can look a transaction up by its hash.
+- **Explorer**: a network's public record, where anyone can look a transaction up by its hash: `https://explorer.arc.io` for Arc mainnet, `https://explorer.testnet.arc.io` for Arc testnet.
 - **Confirm**: the business checking that an address really is yours before it pays to it.
 
 ## Fees and timing
 
 - **Fees.** You pay nothing. The business pays the network fee, which on Arc is less than a cent, in USDC. If you are paid on another chain, the business pays the transfer fee too.
 - **Confirmation.** It depends on the business: a person has to do it.
-- **Payment.** After confirmation, the agent pays within about a minute, and a payment on Arc testnet is final within seconds.
-- **Another chain.** If you are paid on Base Sepolia, Arbitrum Sepolia or Ethereum Sepolia, the money is sent from Arc testnet. It arrives on your chain a few minutes later. The transaction on Arcscan is the sending side.
+- **Payment.** After confirmation, the agent pays within about a minute, and a payment on Arc is final within seconds.
+- **Another chain.** A business on Arc testnet can also pay you on Base Sepolia, Arbitrum Sepolia or Ethereum Sepolia. The money is then sent from Arc testnet, and arrives on your chain a few minutes later. The transaction on the explorer is the sending side. A business on Arc mainnet pays you on Arc mainnet only.
 
 ## Before you send your address
 
 - [ ] I copied it from my wallet's receive screen, not typed it.
 - [ ] It is my own wallet, which I can open, not an exchange deposit address.
-- [ ] It is for the network the page names, usually Arc testnet.
+- [ ] It is for the network the page names, such as Arc mainnet or Arc testnet.
 - [ ] Its first and last characters match my wallet.
 - [ ] Nobody asked me for my recovery phrase or private key.
 
@@ -135,12 +137,12 @@ If the business has your email, you are also told by email, from no-reply@vestia
 | That did not work. Try again in a moment. | Something failed on the way; your address was not saved. | Try again. If it keeps happening, tell the business. |
 | This page could not load. Try again in a moment. | The page could not read the link's status. | Reload in a minute. |
 | Stuck on Waiting for *business* to confirm | Nobody at the business has confirmed it yet. | Ask them to confirm it on their Counterparties page. |
-| Paid, but nothing in your wallet | The wallet is not showing Arc testnet, or not its USDC. | Add Arc testnet with the table above, then check again. The transaction on Arcscan shows where it went. |
+| Paid, but nothing in your wallet | The wallet is not showing the network the page names, or not its USDC. | Add that network with the table above, then check again. The transaction on the explorer shows where it went. |
 | You sent a wrong address | The link cannot change it. | Tell the business before they confirm, and ask for a new link. A payment already sent cannot be reversed. |
 
 ## Your passkey wallet
 
-If you made your wallet with a passkey, open it at `https://www.vestiarion.xyz/wallet`. Choose **Open my wallet** and use the same passkey. The page shows the wallet's address and its USDC on Arc testnet.
+If you made your wallet with a passkey, from the link of a business on Arc testnet, open it at `https://www.vestiarion.xyz/wallet`. Choose **Open my wallet** and use the same passkey. The page shows the wallet's address and its USDC on Arc testnet, where passkey wallets live.
 
 - **To send USDC,** fill in **Send USDC**: an address on Arc testnet and an amount, then **Review**.
 - **The review** names the address, the amount, the network and who pays the gas: "Paid by Circle Gas Station". Check the address, then choose **Send with my passkey**. A send on Arc testnet cannot be taken back.
@@ -150,4 +152,4 @@ Vestiarion never sees your passkey and keeps no record of the wallet page.
 
 ## After you are paid
 
-The confirmation stays on the link for 30 days after you sent your address. To keep a record for longer, keep the transaction link: it stays on Arcscan. If the business pays you again later, it sends a new link, or pays the address it already has.
+The confirmation stays on the link for 30 days after you sent your address. To keep a record for longer, keep the transaction link: it stays on the network's explorer. If the business pays you again later, it sends a new link, or pays the address it already has.

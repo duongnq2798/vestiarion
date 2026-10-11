@@ -58,6 +58,15 @@ describe("addInvoice", () => {
     expect(mocks.runCycleSoon).not.toHaveBeenCalled();
   });
 
+  it("adds a row of an imported list from the console with where it came from, and the bill's own figure", async () => {
+    mocks.createInvoice.mockResolvedValueOnce({ id: "inv-4", counterpartyName: "Kanto Paper" });
+    const original = { currency: "JPY", amount: 120000, perUsd: 150, source: "ExchangeRate-API", at: "2026-10-10T00:00:00.000Z" };
+    const imported = { file: "ab".repeat(32), row: 12, invoiceNumber: "KP-1001" };
+    await run(() => addInvoice(owner({ surface: { kind: "console" } }), { invoice: invoice("payable"), document: null, original, imported }));
+    expect(mocks.createInvoice).toHaveBeenCalledWith({ actorId: USER, invoice: invoice("payable"), document: null, original, via: "import", imported });
+    expect(mocks.runCycleSoon).toHaveBeenCalledWith({ orgId: ORG, userId: USER, sandbox: true, kind: "invoice_added" });
+  });
+
   it("refuses a counterparty the workspace does not hold, and an approver", async () => {
     mocks.createInvoice.mockResolvedValueOnce(null);
     expect(await run(() => addInvoice(owner(), { invoice: invoice("payable"), document: null }))).toEqual({

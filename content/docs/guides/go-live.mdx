@@ -4,7 +4,7 @@ Only an **owner** of the workspace can take it live. Everyone else sees the work
 
 ## Before you start
 
-Until the workspace has made its first payment on Arc testnet, the console shows owners and admins a **Get started** checklist: add a wallet, fund it with USDC, go live, add a payee with an Arc address, add a payable, and the first payment. A sandbox on Arc testnet with no wallet simulates its payments, so its checklist starts with your first bill instead: **Add a supplier**, **Add a bill** and **See the agent's decision**, then, under **To pay on Arc**, the wallet, its USDC, going live and the first payment. Each step ticks itself off from the workspace's own records, and the next one links to the page where it is done. **Read the guide** opens [Your first payment](/docs/guides/first-payment) while a sandbox with no wallet waits for its first decision, this page until the workspace is live and funded, and [Your first payment](/docs/guides/first-payment) after that. The checklist disappears once the workspace is live and its first payment has settled.
+Until the workspace has made its first payment on its network, Arc testnet or Arc mainnet, the console shows owners and admins a **Get started** checklist: add a wallet, fund it with USDC, go live, add a payee with an Arc address, add a payable, and the first payment. A sandbox on Arc testnet with no wallet simulates its payments, so its checklist starts with your first bill instead: **Add a supplier**, **Add a bill** and **See the agent's decision**, then, under **To pay on Arc**, the wallet, its USDC, going live and the first payment. Each step ticks itself off from the workspace's own records, and the next one links to the page where it is done. **Read the guide** opens [Your first payment](/docs/guides/first-payment) while a sandbox with no wallet waits for its first decision, this page until the workspace is live and funded, and [Your first payment](/docs/guides/first-payment) after that. The checklist disappears once the workspace is live and its first payment has settled.
 
 <Screenshot
   src="/docs/guides/go-live-checklist.png"
@@ -47,7 +47,7 @@ Until the wallets are created, you can still change your mind. Open **Connect yo
 
 For this path you need two values from your account in the [Circle developer console](https://console.circle.com):
 
-- **An API key.** Create a testnet API key in the console, because the workspace's wallets are on Arc testnet.
+- **An API key.** For a workspace on Arc testnet, create a testnet API key in the console, because the workspace's wallets are on Arc testnet. A workspace on Arc mainnet takes a live key instead: see [On Arc mainnet](#on-arc-mainnet).
 - **An entity secret.** The entity secret is the key that secures developer-controlled wallets. Generate it and **register it in the Circle console first**, as [Circle's guide to registering an entity secret](https://developers.circle.com/wallets/dev-controlled/register-entity-secret) describes, and keep its recovery file safe. Vestiarion does not register it for you. The field asks for "The one registered for developer-controlled wallets."
 
 Then, in **Go live**:
@@ -175,7 +175,7 @@ On either route, once the workspace is live, these points differ from [What chan
 
 ## 2. Create the treasury wallets
 
-The step is headed "Create treasury wallets". It creates one wallet on Arc testnet for each of the workspace's accounts. With your own Circle account, it also proves the entity secret.
+The step is headed "Create treasury wallets". On Arc testnet it creates one wallet for each of the workspace's accounts; on Arc mainnet it creates one wallet in your own Circle account, as [On Arc mainnet](#on-arc-mainnet) says. With your own Circle account, it also proves the entity secret.
 
 <Screenshot
   src="/docs/guides/go-live-create-wallets.png"
@@ -186,7 +186,7 @@ The step is headed "Create treasury wallets". It creates one wallet on Arc testn
 1. Choose **Create treasury wallets**.
 2. The page confirms with "Treasury wallets created: *n*." and lists each account's wallet address, with a button to copy it. If every account already has one, it says "Every account already has a wallet."
 
-Under the button, a note reads "Counterparties are paid only at a real address." Each counterparty needs its Arc testnet address before the agent can pay it. [Your first payment](/docs/guides/first-payment#1-add-a-counterparty-with-an-arc-address) shows where to enter it.
+Under the button, a note reads "Counterparties are paid only at a real address." Each counterparty needs its address on the workspace's network before the agent can pay it. [Your first payment](/docs/guides/first-payment#1-add-a-counterparty-with-an-arc-address) shows where to enter it.
 
 ## 3. Fund the operating wallet
 
@@ -198,6 +198,8 @@ The step is headed "Fund the operating wallet, then go live". The agent pays fro
 
 Testnet USDC your wallet holds on another testnet, such as Base Sepolia, can come over with **Add USDC from another chain** instead: see [Add USDC from another chain](#add-usdc-from-another-chain).
 
+Arc mainnet has no faucet: there, with your own Circle account, step 3 asks you to send USDC on Arc mainnet to the operating wallet, keeping 0.10 USDC of it for gas, as [On Arc mainnet](#on-arc-mainnet) describes.
+
 <Screenshot
   src="/docs/guides/go-live-fund.png"
   alt="Step 3 of 3, Fund the operating wallet, then go live. It shows the operating wallet's address with a copy button, the line Get testnet USDC at faucet.circle.com: select Arc Testnet, and paste this address, the line USDC on chain: 20.00 USDC with a Refresh button, the button Add USDC from another chain, and the Go live button below a warning that going live cannot be undone from here."
@@ -208,11 +210,11 @@ Testnet USDC your wallet holds on another testnet, such as Base Sepolia, can com
 
 1. Choose **Go live**. The step warns you first: "Going live cannot be undone from here; pausing the agent stops it paying."
 2. A dialog asks "Take this workspace live?" and lists what changes:
-   - "Real testnet USDC moves when the agent pays."
+   - "Real testnet USDC moves when the agent pays." On Arc mainnet, this line reads "Real USDC moves when the agent pays."
    - "The agent runs every 6 hours on its own."
    - "The workspace is no longer deleted when inactive."
    - "To stop it later, pause the agent from the console."
-3. Confirm with **Go live**. The page says "This workspace is live." and the badge changes to "Live · paying on Arc testnet", or to "Live · hosted testnet wallet on Arc" on path A.
+3. Confirm with **Go live**. The page says "This workspace is live." and the badge changes to "Live · paying on Arc testnet", or to "Live · hosted testnet wallet on Arc" on path A, or to "Live · paying on Arc mainnet" on Arc mainnet.
 
 <Screenshot
   src="/docs/guides/go-live-confirm.png"
@@ -225,7 +227,7 @@ Next, [make your first payment](/docs/guides/first-payment).
 ## What changes when you go live
 
 - **The agent runs on a schedule.** A live workspace's agent runs a cycle every 6 hours on its own, with no one pressing a button. It also runs one, usually within a minute, after anything that gives it a decision to make, such as a payable added or returned to it. An owner or admin can still run one at any time with **Run cycle now** on the console. The console is **Treasury** in the app's navigation.
-- **Payments move testnet USDC on Arc** from the operating wallet, within the guardrails. Anything the agent will not pay waits in **Approvals**.
+- **Payments move USDC on Arc** from the operating wallet, within the guardrails: testnet USDC on Arc testnet, real USDC on Arc mainnet. Anything the agent will not pay waits in **Approvals**.
 - **The workspace is kept**, however long it is inactive.
 - **Going live is one-way.** Nothing in the app switches a live workspace back to sandbox.
 
@@ -254,7 +256,7 @@ A deployment can open Arc mainnet to the people on its allowlist, or to everyone
 - **Step 3 has no faucet.** With your own Circle account, send USDC on Arc mainnet to the address of the operating wallet, or bring it with [Add USDC from another chain](#add-usdc-from-another-chain). On path C your wallet holds it already, and the same control tops it up. To go live, type `mainnet` in **Type mainnet to confirm**, then confirm **Go live**. From then on the agent's payments, and the ones people approve, move real USDC.
 - **Every page and message names Arc mainnet.** Emails to payees and clients, the pay link, the payee's page, receipts, Slack, Telegram and pull request comments name the workspace's network. The USYC reserve, escrow and Gateway, which Arc mainnet does not have, are not shown.
 - **Each step needs a person Arc mainnet is open to.** Anyone else is told "Arc mainnet is not open to this account yet."
-- **Some features are not on Arc mainnet yet.** Payouts to other chains, the USYC reserve, the EURC swap, escrow, enforcing the spending limit in a contract from your own Circle account, and paying in one batch each say so by name. On path C your contract carries every payment. Approving a payment from Slack or Telegram is refused there: approve it in Vestiarion.
+- **Some features are not on Arc mainnet yet.** Payouts to other chains, the USYC reserve, the EURC swap, escrow, enforcing the spending limit in a contract from your own Circle account, and paying in one batch each say so by name. On path C your contract carries every payment. Approving a payment from Slack or Telegram is refused there: approve it in Vestiarion. The agent buys no payee history over x402 there, a payee's link offers no passkey wallet, and shadow mode runs on Arc testnet only.
 - **When the deployment switches Arc mainnet off**, every workspace on it holds: nothing moves, and the Go live section says "Arc mainnet is switched off on this deployment."
 
 ## Add USDC from another chain
