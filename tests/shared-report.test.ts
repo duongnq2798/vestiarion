@@ -131,6 +131,15 @@ describe("the agent's reasoning on a shared report", () => {
     );
   });
 
+  it("never keeps an id, names shown or not", () => {
+    const id = "5d0f3a2e-8c1b-4f7a-9e6d-00000000a5a5";
+    for (const names of [null, new Map([["northwind cloud", "Supplier A"]])]) {
+      expect(scrubReasoning(`Invoice ${id.toUpperCase()} from Northwind Cloud matches ${id}.`, { names, others: [], hideAmounts: true })).toBe(
+        `Invoice [hidden] from ${names ? "Supplier A" : "Northwind Cloud"} matches [hidden].`
+      );
+    }
+  });
+
   it("hides a supplier the report does not count, and a name that is part of a longer one goes with it", () => {
     expect(scrubReasoning("Orbit Payroll and Northwind were paid; Northwind Cloud too.", { names: new Map([["northwind cloud", "Supplier A"], ["northwind", "Supplier D"]]), others: ["Orbit Payroll"], hideAmounts: false })).toBe(
       "[hidden] and Supplier D were paid; Supplier A too."
@@ -184,6 +193,15 @@ describe("what a shared report shows", () => {
     expect(view.value.measured.discountsTaken.byCurrency).toBeNull();
     expect(view.value.notCounted.discountsNotTaken.byCurrency).toBeNull();
     expect(JSON.stringify(view)).not.toMatch(/46\.41|61\.87|13\.5/);
+  });
+
+  it("gives no transaction when amounts are hidden, since the public explorer shows each one's amount", () => {
+    const view = buildSharedReport(input({ options: { ...LABELS, amounts: "hidden" } }));
+    expect(view.decisions.find((row) => row.seq === 1)!.payment).toEqual({ simulated: false, txHash: null });
+    expect(view.payments.every((row) => row.txHash === null)).toBe(true);
+    expect(JSON.stringify(view)).not.toContain(TX);
+    // Shown with the amounts.
+    expect(buildSharedReport(input()).payments.some((row) => row.txHash === TX)).toBe(true);
   });
 
   it("never carries an invoice id, a supplier's id, a person's id or the workspace's", () => {

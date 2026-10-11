@@ -31,7 +31,7 @@ const NAMES = [
 ] as const;
 const AMOUNTS = [
   { value: "shown", label: "Show amounts" },
-  { value: "hidden", label: "Hide every amount", description: "Bills, payments, sums and discounts. The counts stay." },
+  { value: "hidden", label: "Hide every amount", description: "Bills, payments, sums and discounts, and the links to transactions, whose explorer page shows the amount. The counts stay." },
 ] as const;
 const TITLES = [
   { value: "workspace", label: "This workspace's name" },
@@ -80,7 +80,8 @@ export function ReportShareButton({ orgSlug, available }: { orgSlug: string; ava
             <RadioGroup legend="Title" name="title" defaultValue="workspace" options={TITLES} />
             <p className="text-xs leading-relaxed text-ink-3">
               Never shown: memos, notes, references, invoice ids, or the names and emails of this workspace&apos;s members. The agent&apos;s reasoning is its
-              first sentence, with any email or 0x address hidden. A payment on chain links to its transaction on the public explorer.
+              first sentence, with any email, 0x address or id hidden. With amounts shown, a payment on chain links to its transaction on the public explorer,
+              which shows its amount and the address it was paid to.
             </p>
             <FormMessage tone="error">{error}</FormMessage>
             <DialogFooter>

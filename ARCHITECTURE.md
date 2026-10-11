@@ -847,8 +847,9 @@ it. `readSharedReport` (`src/lib/platform/shared-report.ts`) then enters that wo
 API does after a key lookup) and reads the report's facts, the comparison's records, the answer, the supplier names it
 knows, the chain fields of the decisions shown and the public halves of its signing keys; the workspace id goes no
 further. `buildSharedReport` (`src/lib/shared-report.ts`) is pure: it relabels suppliers, hides amounts everywhere when
-asked, cuts the agent's reasoning to its first sentence of at most 200 characters with names replaced and any email or
-`0x` address hidden, gives the comparison as totals only and never a person, a memo, a reference or an id. Each decision
+asked (and with them the transaction hashes, since the public explorer shows what each transfer carried), cuts the
+agent's reasoning to its first sentence of at most 200 characters with names replaced and any email, `0x` address or
+UUID hidden, gives the comparison as totals only and never a person, a memo, a reference or an id. Each decision
 carries **Check its signature**, the receipt verifier's half that needs no body, run in the reader's browser. A dead
 link, stopped, unknown or of a deleted workspace, reads one sentence and names no one; the page is `noindex`, has its own
 card, and analytics sees `/report/:token`. Before 0095 runs, reading either table answers `available: false`

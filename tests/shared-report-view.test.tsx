@@ -153,6 +153,14 @@ describe("a shared report's view", () => {
     expect(markup).toContain("Supplier A's bill matches the plan at # USDC.");
   });
 
+  it("links no transaction when amounts are hidden, and says why", () => {
+    const markup = renderToStaticMarkup(<SharedReport view={shown({ options: { ...LABELS, amounts: "hidden" } })} />);
+    expect(markup).not.toContain("/tx/");
+    expect(markup).not.toContain(TX.slice(2, 12));
+    expect(text(markup)).toContain("Not linked");
+    expect(text(markup)).toContain("Transactions are not linked while amounts are hidden: the public explorer shows what each one carried.");
+  });
+
   it("gives each decision its entry number, its signature check and its transaction on the explorer", () => {
     const markup = renderToStaticMarkup(<SharedReport view={shown()} />);
     expect(text(markup)).toContain("Ledger entry #11");

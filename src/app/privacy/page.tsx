@@ -89,7 +89,7 @@ export default function PrivacyPage() {
         <p>
           An owner or admin can also share the workspace&apos;s report as a link, choosing whether it shows suppliers&apos; names or labels, amounts or
           not, and the workspace&apos;s name or a neutral title. Anyone with the link sees a live copy: the figures, the agent&apos;s decisions with the
-          first sentence of its reasoning, and the payments with their transactions. It never shows memos, notes, references, invoice ids, or the names
+          first sentence of its reasoning, and the payments with their transactions, which are not linked when amounts are hidden. It never shows memos, notes, references, invoice ids, or the names
           and emails of the workspace&apos;s members. The link stops working when they stop sharing it, and the workspace&apos;s members see every live
           link.
         </p>

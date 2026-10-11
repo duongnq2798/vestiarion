@@ -72,9 +72,9 @@ export function SharedReport({ view }: { view: SharedReportShown }) {
       <footer className="space-y-2 border-t border-line pt-6 text-xs leading-relaxed text-ink-3">
         <p>
           Shared by the business from its Vestiarion workspace. It leaves out memos, notes, references, invoice ids, and the names and emails of the
-          business&apos;s people. The agent&apos;s reasoning is its first sentence, with any email or 0x address hidden.
+          business&apos;s people. The agent&apos;s reasoning is its first sentence, with any email, 0x address or id hidden.
           {view.options.names === "labels" ? " Suppliers are shown as labels, in the order each one's first bill arrived." : ""}
-          {view.options.amounts === "hidden" ? " Amounts are hidden." : ""}
+          {view.options.amounts === "hidden" ? " Amounts are hidden, and transactions are not linked." : ""}
         </p>
         <p>
           Each decision is a signed entry in the business&apos;s ledger. <strong className="font-medium text-ink-2">Check its signature</strong> runs in your
@@ -249,6 +249,8 @@ export function SharedDecisions({ view }: { view: SharedReportShown }) {
                         </Badge>
                       ) : decision.payment?.txHash ? (
                         <Hash value={decision.payment.txHash} href={txUrl(view.network, decision.payment.txHash)} />
+                      ) : decision.payment && view.options.amounts === "hidden" ? (
+                        <span className="text-xs text-ink-3">Transaction not linked</span>
                       ) : null}
                     </div>
                     {decision.link ? (
@@ -313,12 +315,23 @@ function Payments({ view }: { view: SharedReportShown }) {
                     {row.bill && <span className="block text-xs text-ink-3">Bill: {amountText(row.bill.amount, row.bill.currency)}</span>}
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-ink-2">{DECIDED_BY[row.decidedBy]}</TableCell>
-                  <TableCell>{row.txHash ? <Hash value={row.txHash} href={txUrl(view.network, row.txHash)} /> : <span className="text-ink-3">—</span>}</TableCell>
+                  <TableCell>
+                    {row.txHash ? (
+                      <Hash value={row.txHash} href={txUrl(view.network, row.txHash)} />
+                    ) : !row.simulated && view.options.amounts === "hidden" ? (
+                      <span className="text-xs text-ink-3">Not linked</span>
+                    ) : (
+                      <span className="text-ink-3">—</span>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </Card>
+      )}
+      {view.payments.length > 0 && view.options.amounts === "hidden" && (
+        <p className="text-xs text-ink-3">Transactions are not linked while amounts are hidden: the public explorer shows what each one carried.</p>
       )}
     </section>
   );

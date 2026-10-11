@@ -151,7 +151,7 @@ Each record is a signed entry in the ledger: `actual_payment_recorded`, or `actu
 An owner or admin can give anyone a live copy of the report, without a login: your partner, your accountant, or an outside reviewer. Choose **Share this report**, beside the guide's link at the top of the report, then choose what the copy shows:
 
 - **Supplier names**: **Labels: Supplier A, Supplier B**, in the order each supplier's first bill arrived (the agent's reasoning uses the same labels), or **Their names**.
-- **Amounts**: **Show amounts**, or **Hide every amount**: bills, payments, sums and discounts. The counts stay.
+- **Amounts**: **Show amounts**, or **Hide every amount**: bills, payments, sums and discounts, and the links to transactions, whose explorer page shows the amount. The counts stay.
 - **Title**: **This workspace's name**, or **A business on Vestiarion**.
 
 Choose **Make the link**. The link is shown once, with Copy: "Report shared. Copy the link now: it is shown only once." Vestiarion keeps only a hash of it, so a lost link cannot be shown again: stop it and make a new one.
@@ -162,7 +162,7 @@ Choose **Make the link**. The link is shown once, with Copy: "Report shared. Cop
   caption="Choosing what a shared copy shows, before the link is made."
 />
 
-A copy never shows memos, notes, references, invoice ids, or the names and emails of the workspace's members. The agent's reasoning is its first sentence, at most 200 characters, with any email or 0x address hidden; with labels, every supplier name the workspace knows is replaced by its label, and with amounts hidden, every number in it becomes #. A payment on chain links to its transaction on the public explorer, which shows the address it was paid to, whatever the copy hides.
+A copy never shows memos, notes, references, invoice ids, or the names and emails of the workspace's members. The agent's reasoning is its first sentence, at most 200 characters, with any email, 0x address or id hidden; with labels, every supplier name the workspace knows is replaced by its label, and with amounts hidden, every number in it becomes #. With amounts shown, a payment on chain links to its transaction on the public explorer, which shows its amount and the address it was paid to, even when the copy shows labels. With amounts hidden, no transaction is linked: the copy says "Transactions are not linked while amounts are hidden: the public explorer shows what each one carried.
 
 ### What the link shows
 
@@ -173,8 +173,8 @@ Anyone who opens the link sees the report as it is at that moment: it is recompu
 - The figures: bills handled and decided, time to decide, paid on Arc and on time, stopped before paying, and the people's verdicts with how often they agreed with the agent, counted as the console counts them.
 - **Value**, in the same three groups, with **From the business's answer** for the estimate. It never names who answered.
 - **Agent vs what really happened**, marked **Totals only**: bills compared, bills not recorded yet, the same outcome, a different outcome, and the median days apart. A bill nobody recorded is counted only as not recorded.
-- Each decided bill's newest decision, newest first, at most 50: the day, the supplier or its label, the amount, what the agent did, its reasoning, the person's verdict, its ledger entry number and its transaction on the explorer, or **Simulated**.
-- **Payments and their proof**: the newest ten, with their transactions.
+- Each decided bill's newest decision, newest first, at most 50: the day, the supplier or its label, the amount, what the agent did, its reasoning, the person's verdict, its ledger entry number and its transaction on the explorer, or **Simulated**. With amounts hidden, it reads **Transaction not linked**.
+- **Payments and their proof**: the newest ten, with their transactions, or **Not linked** with amounts hidden.
 
 <Screenshot
   src="/docs/guides/report-shared.png"

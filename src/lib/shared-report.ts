@@ -11,7 +11,8 @@ import { buildReport, reportScope, stopOf, type CurrencyAmount, type PaymentRow,
  *
  * Never in the view: memos, notes, references, a person's typed reasons, people's names, emails or ids, invoice or
  * supplier ids, addresses, the workspace's id. Supplier names are replaced by stable labels unless the share shows
- * them; amounts are hidden everywhere when the share hides them. The agent's reasoning is its first sentence, at most
+ * them; amounts are hidden everywhere when the share hides them, and so are the transactions, whose explorer page
+ * shows each one's amount. The agent's reasoning is its first sentence, at most
  * 200 characters, scrubbed of what the share hides.
  */
 
@@ -38,7 +39,10 @@ export interface SharedDecision {
   /** Why code held it, or what it waited for, in Vestiarion's fixed words; never the agent's own. */
   rule: string | null;
   verdict: "agree" | "disagree" | null;
-  /** The bill's confirmed payment: simulated in a sandbox, with no transaction. */
+  /**
+   * The bill's confirmed payment: simulated in a sandbox, with no transaction. Its transaction is null when the share
+   * hides amounts, since the public explorer shows what each transfer carried.
+   */
   payment: { simulated: true } | { simulated: false; txHash: string | null } | null;
 }
 
@@ -51,6 +55,7 @@ export interface SharedPayment {
   decidedBy: PaymentRow["decidedBy"];
   mirror: boolean;
   simulated: boolean;
+  /** Null when the share hides amounts: the public explorer shows what the transfer carried. */
   txHash: string | null;
 }
 
@@ -140,18 +145,19 @@ function labelsOf(bills: readonly ReportBill[]): Map<string, string> {
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]*[A-Za-z0-9]/g;
 const HEX = /0x[0-9a-fA-F]{4,}/g;
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 const NUMBER = /\d+(?:[.,]\d+)*/g;
 
 /**
- * The agent's reasoning as a shared report says it: its first sentence; any email or `0x` address or hash hidden
- * always (S4's "never"); with names hidden, each name in `names` (lower case → its label) replaced and each of `others`
+ * The agent's reasoning as a shared report says it: its first sentence; any email, `0x` address or hash, or id (a
+ * UUID, such as an invoice's) hidden always (S4's "never"); with names hidden, each name in `names` (lower case → its label) replaced and each of `others`
  * hidden, longest first, ignoring case, whole words only; with amounts hidden, every number "#"; then cut to 200
  * characters.
  */
 export function scrubReasoning(text: string | null, rules: { names: ReadonlyMap<string, string> | null; others: readonly string[]; hideAmounts: boolean }): string | null {
   if (!text || text.trim() === "") return null;
   let said = (text.trim().split(/(?<=[.!?])\s/)[0] ?? text).trim();
-  said = said.replace(EMAIL, HIDDEN).replace(HEX, HIDDEN);
+  said = said.replace(EMAIL, HIDDEN).replace(HEX, HIDDEN).replace(UUID, HIDDEN);
   if (rules.names) {
     const replacements = new Map<string, string>(rules.others.filter((name) => name.trim()).map((name) => [name.trim().toLowerCase(), HIDDEN]));
     for (const [name, label] of rules.names) if (name.trim()) replacements.set(name.trim().toLowerCase(), label);
@@ -187,6 +193,8 @@ export function buildSharedReport(input: SharedReportInput): SharedReportView {
   const others = [...input.knownNames, ...facts.bills.map((bill) => bill.payee.name)];
   const scrub = (text: string | null) => scrubReasoning(text, { names, others, hideAmounts });
   const amountOf = (value: CurrencyAmount) => (hideAmounts ? null : value);
+  // The public explorer shows what a transfer carried, so a share that hides amounts links no transaction.
+  const txOf = (txHash: string | null) => (hideAmounts ? null : txHash);
 
   const verdictOf = new Map(facts.verdicts.map((verdict) => [verdict.entrySeq, verdict.verdict]));
   const paymentOf = new Map(payments.map((payment) => [payment.invoiceId, payment]));
@@ -210,7 +218,7 @@ export function buildSharedReport(input: SharedReportInput): SharedReportView {
       reasoning: scrub(newest.reasoning),
       rule: (stance === "held" || stance === "waited") && stop && (stop.kind === "code" || stop.kind === "waited") ? stop.why : null,
       verdict: verdictOf.get(newest.seq) ?? null,
-      payment: payment ? (payment.simulated ? { simulated: true } : { simulated: false, txHash: payment.txHash }) : null,
+      payment: payment ? (payment.simulated ? { simulated: true } : { simulated: false, txHash: txOf(payment.txHash) }) : null,
     };
   });
   decided.sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || b.seq - a.seq);
@@ -225,7 +233,7 @@ export function buildSharedReport(input: SharedReportInput): SharedReportView {
       decidedBy: row.decidedBy,
       mirror: row.mirror,
       simulated: row.simulated,
-      txHash: row.txHash,
+      txHash: txOf(row.txHash),
     };
   });
 

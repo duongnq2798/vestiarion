@@ -39,6 +39,9 @@ Each decision names what it costs if it turns out wrong.
 - The value question is the business's own figure about itself: an owner's (`org.administer`).
 - Every member reads the report, the live links and the answer. Three commands, `report.share`, `report.unshare` and
   `report.baseline`, run from the console only; each gates first (`tests/commands-gates.test.ts`).
+- Exporting is unchanged: any member may download the signed ledger (audit export E5), since every member already reads
+  each entry on the Audit log; the report itself has no export. Only sharing puts the figures in front of someone who
+  is not a member, so only sharing takes the new permission.
 - Cost if wrong: one line in the permission map to widen or narrow it.
 
 **S4. What a shared report shows, and hides (I28).**
@@ -46,13 +49,16 @@ Each decision names what it costs if it turns out wrong.
   order in which each supplier's first bill arrived (then its id), so it does not move when a new bill arrives. After Z
   come AA, AB …
 - Amounts: shown (default), or hidden everywhere: each bill's amount, the payments, the sums, the discounts (their count
-  stays).
+  stays), and the transactions: with amounts hidden no transaction is linked or named, since the public explorer shows
+  what each transfer carried, and the page says so. With amounts shown, a payment on chain links to its transaction,
+  whose explorer page shows its amount and the address it was paid to; the share dialog says so before the link is
+  made.
 - Title: the workspace's name (default, since the owner opts in to sharing), or a neutral "A business on Vestiarion".
   The name is returned by the database only when the share says to show it.
 - Never: memos, notes, references, reasons typed by a person, people's names or emails, invoice ids, addresses.
 - The agent's reasoning is its own first sentence, at most 200 characters. When names are hidden, every supplier name
-  the workspace knows is replaced in it by its label (longest first, ignoring case), and any `0x` address or email
-  becomes "[hidden]". When amounts are hidden, every number in it becomes "#".
+  the workspace knows is replaced in it by its label (longest first, ignoring case). Any `0x` address, email or id (a
+  UUID, such as an invoice's) becomes "[hidden]", whatever the share shows. When amounts are hidden, every number in it becomes "#".
 - Cost if wrong: a reasoning sentence that names something no rule catches; it is still the agent's one sentence, and
   the owner chose to share it.
 
@@ -82,8 +88,9 @@ Each decision names what it costs if it turns out wrong.
 - Decisions: each decided bill's newest decision, newest first, at most 50: the day, the supplier (or its label), the
   bill's amount, what the agent did (paid on Arc, would pay, scheduled, held, waited), its one-line reasoning, the
   person's verdict, its entry number with a signature check, and its payment's transaction on the explorer (or
-  **Simulated**, with no link).
-- Payments: the newest ten, with their transaction on the explorer, as the report's list.
+  **Simulated**, with no link; or, with amounts hidden, "Transaction not linked").
+- Payments: the newest ten, with their transaction on the explorer, as the report's list (with amounts hidden, "Not
+  linked").
 - Cost if wrong: one section more or less on a page that is computed on view.
 
 **S7. The agreement rate, as the console and /open count it.**
