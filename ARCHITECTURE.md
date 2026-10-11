@@ -849,7 +849,9 @@ does the decision trail's last line.
   The audit export's gate: a session (401), membership (404), cross-site refused (403), a bad kind or id 400. It writes
   nothing, the ledger included.
 - **Who can see it** (`EvidenceAccess`) says the existing permissions in words: every member reads and downloads it;
-  only a shared receipt leaves the workspace, shared by an owner or admin (`records.write`). No migration.
+  only a shared receipt leaves the workspace, shared by an owner or admin (`records.write`). `readEvidence` gives the
+  receipt's state: shared, stopped, not shared, or `unavailable` for a bill with no payment on chain, which has no
+  receipt to share. No migration.
 
 ## Approvals and the pause switch
 

@@ -28,6 +28,7 @@ import {
   okChecks,
   paidInFull,
   PAY_OBSERVED,
+  PAYEE,
   PR,
   step,
   TX,
@@ -566,5 +567,72 @@ describe("a milestone GitHub could not be asked about", () => {
     expect(delivered.kind).toBe("unreachable");
     expect(delivered.facts[0].link?.state).toBe("unreachable");
     expect(delivered.facts[0].text).toMatch(/GitHub/);
+  });
+});
+
+describe("a payable paid in shadow mode (E3, E9)", () => {
+  // A mirror address Vestiarion made for a payee with none, the agent's decision held for a verdict, a person agreeing
+  // with it, and the payment that agreement made through Approve and pay.
+  const mirrored = entry(60, "08:00:00", "human", "counterparty_address_changed", { by: ALICE, counterpartyId: CP, via: "mirror", from: null, to: PAYEE }, "compliance");
+  const decided = entry(62, "10:00:00", "agent", "ap_pay", {
+    invoiceId: INVOICE,
+    counterpartyId: CP,
+    decision: { action: "pay" },
+    decisionMode: "deepseek",
+    agreedWithReference: true,
+    guardrailBlocked: false,
+    shadow: true,
+    observed: PAY_OBSERVED,
+    execution: { resultingStatus: "held" },
+  });
+  const verdict = entry(63, "10:30:00", "human", "decision_verdict", { by: BOB, entrySeq: 62, subject: "invoice", subjectId: INVOICE, agentAction: "ap_pay", verdict: "agree", reason: null });
+  const paid = entry(64, "10:30:05", "human", "approval_paid", { by: BOB, invoiceId: INVOICE, counterpartyId: CP, txRef: TX, status: "paid" });
+  const entries = [
+    mirrored,
+    entry(61, "09:30:00", "human", "create_invoice", { by: ALICE, invoiceId: INVOICE, counterpartyId: CP, amount: 12.5, currency: "USDC", poReference: "PO-2207", goodsReceived: true }),
+    decided,
+    verdict,
+    paid,
+  ];
+  const chain = buildEvidenceChain({ ...paidInFull(), entries, receipt: null, checks: { entries: okChecks(entries), onChain: { state: "matches", block: 7 } } });
+
+  it("says code made the payee's mirror address, and no person typed it", () => {
+    expect(step(chain, "payee").facts[0]).toMatchObject({
+      kind: "checked",
+      text: expect.stringContaining("is a mirror address Vestiarion made for Northstar Studio in shadow mode: no person typed it."),
+      seqs: [60],
+    });
+  });
+
+  it("names the person who agreed with the agent's decision, then paid it", () => {
+    expect(step(chain, "people").facts).toEqual([
+      expect.objectContaining({ kind: "stated", text: "Agreed with the agent's decision.", who: "bob@northstar.test", seqs: [63] }),
+      expect.objectContaining({ kind: "stated", text: "Approved and paid it.", who: "bob@northstar.test", seqs: [64] }),
+    ]);
+  });
+
+  it("says the payment mirrors a bill the business paid its own way, on the network it was made on", () => {
+    const payment = step(chain, "payment");
+    expect(payment.facts[0].notes).toContain("Made in shadow mode on Arc testnet: it mirrors a bill the business paid its own way.");
+    expect(payment.facts[1]).toMatchObject({ kind: "checked", seqs: [64] });
+    // The decision the chain rests on is the agent's, before the person's payment.
+    expect(step(chain, "decision").facts[0].seqs).toEqual([62]);
+  });
+});
+
+describe("a workspace on Arc mainnet (E9)", () => {
+  it("names its own network in what fills a link, never Arc testnet", () => {
+    const base = paidInFull();
+    const chain = buildEvidenceChain({
+      ...base,
+      network: "arc-mainnet",
+      subject: { kind: "invoice", invoice: { ...(base.subject as { invoice: object }).invoice, status: "pending", tx_ref: null } as never },
+      entries: [ADDRESS_GIVEN],
+      payment: null,
+      receipt: null,
+      checks: { entries: okChecks([ADDRESS_GIVEN]), onChain: null },
+    });
+    expect(step(chain, "payment").facts[0].fill).toBe("Paid on Arc mainnet when the agent or a person pays it.");
+    expect(JSON.stringify(chain)).not.toMatch(/testnet/i);
   });
 });
