@@ -78,7 +78,8 @@ export function evidenceShot(): { chain: EvidenceChain; publicKeys: Record<strin
   });
   const shared = ledger.append({
     ts: "2026-09-30T12:30:00Z", actor: "human", domain: "ap", action: "receipt_shared", summary: `Receipt: 12.5 USDC paid on ${HOME.label}`,
-    detail: { by: MAYA, invoiceId: INVOICE, receipt: { amount: 12.5, token: "USDC", chain: HOME.id, txHash: TX }, records: { seq: paid.seq, hash: paid.hash } },
+    // As sharing writes it (payment receipts P2): the public facts and the entry they rest on, and no names or ids.
+    detail: { receipt: { amount: 12.5, token: "USDC", paidAt: "2026-09-30T12:04:20Z", payee: PAYEE, chain: HOME.id, txHash: TX, route: "direct" }, records: { seq: paid.seq, hash: paid.hash } },
   });
 
   const input: EvidenceInput = {
