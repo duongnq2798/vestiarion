@@ -59,6 +59,7 @@ export const DOCS_NAV: NavSection[] = [
       { slug: "guides/pay-a-contractor", title: "Pay a contractor for delivered work", description: "Add a milestone, verify the work by hand or by a merged pull request, and let the agent release the pay." },
       { slug: "guides/email-invoices", title: "Add invoices by email", description: "Turn on a workspace address, forward suppliers' invoices to it, and add each one from Bills & receivables with one press; nothing arrives as a payable by itself." },
       { slug: "guides/report", title: "Read your workspace report", description: "What the agent did with your real bills: what it paid and with what proof, what it stopped and why, how often a person stepped in, what it was worth, and sharing a live copy by a link." },
+      { slug: "guides/cash-scenarios", title: "Plan for clients paying late", description: "Treasury's What if section: look 30, 60 or 90 days ahead, make receivables late or missing, change what bills cost, and see the first short day, the bills it touches and what the figure is built from." },
       { slug: "guides/get-paid", title: "Get paid as a freelancer", description: "For the person being paid: add your wallet address through the link a business sent, follow each step, and check the payment on Arc." },
     ],
   },

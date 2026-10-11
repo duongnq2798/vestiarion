@@ -173,6 +173,7 @@ describe("the docs navigation", () => {
       ["guides/pay-a-contractor", "Pay a contractor for delivered work"],
       ["guides/email-invoices", "Add invoices by email"],
       ["guides/report", "Read your workspace report"],
+      ["guides/cash-scenarios", "Plan for clients paying late"],
       ["guides/get-paid", "Get paid as a freelancer"],
     ]);
     expect(pagesOf("Trust and controls")).toEqual([
@@ -233,6 +234,8 @@ describe("the docs navigation", () => {
     expect(neighbours("contracts").next?.slug).toBe("guides/slack");
     expect(neighbours("guides/github").next?.slug).toBe("get-started/quickstart");
     expect(neighbours("ai-integration/mcp").next?.slug).toBe("api");
+    expect(neighbours("guides/report").next?.slug).toBe("guides/cash-scenarios");
+    expect(neighbours("guides/cash-scenarios").next?.slug).toBe("guides/get-paid");
     expect(neighbours(pages[pages.length - 1].slug).next).toBeUndefined();
     expect(neighbours("no-such-page")).toEqual({});
   });
