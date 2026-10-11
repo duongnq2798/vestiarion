@@ -68,6 +68,7 @@ function shown(over: Partial<SharedReportInput> = {}): SharedReportShown {
     name: "Harbor Books",
     sharedAt: "2026-10-10T08:00:00.000Z",
     knownNames: ["Northwind Cloud", "Atlas Compute"],
+    billTexts: [],
     now: "2026-10-11T12:00:00.000Z",
     ...over,
   });
@@ -199,11 +200,40 @@ describe("a shared report's view", () => {
     expect(markup).toContain("From the business's answer");
     expect(markup).toContain("Not counted");
     expect(markup).toContain("Time saved, estimated");
-    expect(markup).toContain("About 1 h");
-    expect(markup).toContain("2 bills the agent decided × 30 min, the time one bill took before.");
+    expect(markup).toContain("About 30 min");
+    expect(markup).toContain("1 bill the agent paid or scheduled on its own × 30 min, the time one bill took before.");
+    expect(markup).not.toContain("Time it would have saved, estimated");
     expect(markup).toContain("Answered on Oct 9, 2026.");
     expect(markup).not.toMatch(/Answered by/);
     expect(text(renderToStaticMarkup(<ReportValue value={shown().value} audience="public" />))).not.toMatch(/total/i);
+  });
+
+  it("says in shadow mode what the agent would have saved, never that it saved it", () => {
+    const shadow = facts({
+      ...FACTS,
+      shadow: { currency: "USD", startedAt: "2026-10-01T00:00:00.000Z" },
+      decisions: FACTS.decisions.map((item) => ({ ...item, shadow: true, ...(item.seq === 11 ? { heldBecause: "shadow_verdict", resultingStatus: "held" } : {}) })),
+    });
+    const markup = text(renderToStaticMarkup(<SharedReport view={shown({ facts: shadow })} />));
+    expect(markup).toContain("Time it would have saved, estimated");
+    expect(markup).toContain(
+      "In shadow mode, 1 bill the agent would have paid or scheduled on its own × 30 min. The business paid them itself, so this is the time the agent would have saved."
+    );
+    expect(markup).not.toContain("Time saved, estimated");
+  });
+
+  it("keeps a discount still on offer apart from one that was missed", () => {
+    const open = facts({ ...FACTS, bills: FACTS.bills.map((item) => (item.id === "inv-atlas" ? { ...item, discount: { pct: 1, deadline: "2026-10-20T00:00:00.000Z" } } : item)) });
+    const markup = text(renderToStaticMarkup(<SharedReport view={shown({ facts: open })} />));
+    expect(markup).toContain("Discounts on offer, not taken None");
+    expect(markup).toContain("Discounts still on offer 0.62 USDC on 1 bill");
+    expect(markup).toContain("Bills not paid yet 1");
+  });
+
+  it("says the reasoning hides any purchase order reference or memo it quotes", () => {
+    expect(text(renderToStaticMarkup(<SharedReport view={shown()} />))).toContain(
+      "The agent's reasoning is its first sentence, with any email, 0x address or id, and any purchase order reference or memo it quotes, hidden."
+    );
   });
 
   it("says agent vs what really happened is not recorded before it is", () => {

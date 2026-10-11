@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ActualRecord } from "@/lib/actual-payment-fields";
 import type { ActualsFacts } from "@/lib/actual-payments-compare";
 import type { BaselineState } from "@/lib/report-value";
-import { buildSharedReport, scrubReasoning, supplierLabel, type ShareOptions, type SharedReportInput } from "@/lib/shared-report";
+import { buildSharedReport, referenceWords, scrubReasoning, supplierLabel, type ShareOptions, type SharedReportInput } from "@/lib/shared-report";
 import { agreementRate } from "@/lib/verdict-rate";
 import { buildReport } from "@/lib/workspace-report";
 import { bill, decision, facts, payment } from "./support/report-facts";
@@ -65,6 +65,7 @@ function input(over: Partial<SharedReportInput> = {}): SharedReportInput {
     name: "Harbor Books",
     sharedAt: "2026-10-10T08:00:00.000Z",
     knownNames: ["Northwind Cloud", "Atlas Compute", "Lumen Hosting", "Orbit Payroll"],
+    billTexts: [],
     now: NOW,
     ...over,
   };
@@ -134,20 +135,75 @@ describe("the agent's reasoning on a shared report", () => {
   it("never keeps an id, names shown or not", () => {
     const id = "5d0f3a2e-8c1b-4f7a-9e6d-00000000a5a5";
     for (const names of [null, new Map([["northwind cloud", "Supplier A"]])]) {
-      expect(scrubReasoning(`Invoice ${id.toUpperCase()} from Northwind Cloud matches ${id}.`, { names, others: [], hideAmounts: true })).toBe(
+      expect(scrubReasoning(`Invoice ${id.toUpperCase()} from Northwind Cloud matches ${id}.`, { names, others: [], references: [], hideAmounts: true })).toBe(
         `Invoice [hidden] from ${names ? "Supplier A" : "Northwind Cloud"} matches [hidden].`
       );
     }
   });
 
   it("hides a supplier the report does not count, and a name that is part of a longer one goes with it", () => {
-    expect(scrubReasoning("Orbit Payroll and Northwind were paid; Northwind Cloud too.", { names: new Map([["northwind cloud", "Supplier A"], ["northwind", "Supplier D"]]), others: ["Orbit Payroll"], hideAmounts: false })).toBe(
+    expect(scrubReasoning("Orbit Payroll and Northwind were paid; Northwind Cloud too.", { names: new Map([["northwind cloud", "Supplier A"], ["northwind", "Supplier D"]]), others: ["Orbit Payroll"], references: [], hideAmounts: false })).toBe(
       "[hidden] and Supplier D were paid; Supplier A too."
     );
   });
 
   it("does not touch a word that only contains a name", () => {
-    expect(scrubReasoning("Alpha's order is also final.", { names: new Map([["al", "Supplier A"], ["alpha", "Supplier B"]]), others: [], hideAmounts: false })).toBe("Supplier B's order is also final.");
+    expect(scrubReasoning("Alpha's order is also final.", { names: new Map([["al", "Supplier A"], ["alpha", "Supplier B"]]), others: [], references: [], hideAmounts: false })).toBe("Supplier B's order is also final.");
+  });
+
+  it("replaces a name with a full stop in it whole, before it cuts the first sentence", () => {
+    const names = new Map([
+      ["smith bros. plumbing", "Supplier A"],
+      ["acme co. ltd", "Supplier B"],
+    ]);
+    const rules = { names, others: [], references: [], hideAmounts: false };
+    expect(scrubReasoning("Smith Bros. Plumbing invoice matches its PO and is due today, so pay now. It is the usual.", rules)).toBe(
+      "Supplier A invoice matches its PO and is due today, so pay now."
+    );
+    expect(scrubReasoning("Pay Acme Co. Ltd now, ahead of the deadline. Nothing else is due.", rules)).toBe("Pay Supplier B now, ahead of the deadline.");
+    // Shown, a name is not cut in half either.
+    expect(scrubReasoning("Smith Bros. Plumbing invoice matches. Pay.", { ...rules, names: null, others: ["Smith Bros. Plumbing"] })).toBe("Smith Bros. Plumbing invoice matches.");
+  });
+
+  it("gives such a supplier its label on a shared report, in its reasoning too", () => {
+    const smith = facts({
+      bills: [bill("inv-smith", { payee: { id: "cp-smith", name: "Smith Bros. Plumbing", mirror: false, sample: false } })],
+      decisions: [decision(1, "inv-smith", { reasoning: "Smith Bros. Plumbing invoice matches its PO and is due today, so pay now." })],
+    });
+    const row = buildSharedReport(input({ facts: smith, knownNames: ["Smith Bros. Plumbing"] })).decisions[0];
+    expect(row).toMatchObject({ supplier: "Supplier A", reasoning: "Supplier A invoice matches its PO and is due today, so pay now." });
+    expect(JSON.stringify(row)).not.toMatch(/Smith|Bros/);
+  });
+
+  it("hides each bill's purchase order reference and memo, and each code in a memo, names shown or not", () => {
+    const references = referenceWords([
+      { poReference: "PO-FALCON-7781", memo: "Lisbon office retainer, INV-2291." },
+      { poReference: null, memo: "Q3" },
+      { poReference: "  ", memo: null },
+    ]);
+    expect(references).toEqual(expect.arrayContaining(["PO-FALCON-7781", "Lisbon office retainer, INV-2291", "INV-2291"]));
+    // Too short to hide without hiding ordinary words.
+    expect(references).not.toContain("Q3");
+    for (const names of [null, new Map([["atlas compute", "Supplier B"]])]) {
+      const rules = { names, others: ["Atlas Compute"], references, hideAmounts: false };
+      expect(scrubReasoning("Hold: PO-FALCON-7781 for the Lisbon office retainer, INV-2291 does not match. Ask.", rules)).toBe("Hold: [hidden] for the [hidden] does not match.");
+      expect(scrubReasoning("Atlas Compute quotes inv-2291 for October.", rules)).toBe(`${names ? "Supplier B" : "Atlas Compute"} quotes [hidden] for October.`);
+    }
+  });
+
+  it("hides on a shared report the references the workspace's bills carry", () => {
+    const quoted = facts({ ...FACTS, decisions: FACTS.decisions.map((item) => (item.seq === 2 ? { ...item, reasoning: "Hold: PO-FALCON-7781 does not match the goods received." } : item)) });
+    for (const options of [LABELS, SHOWN]) {
+      const view = buildSharedReport(input({ facts: quoted, options, billTexts: [{ poReference: "PO-FALCON-7781", memo: "Lisbon office retainer" }] }));
+      expect(view.decisions.find((row) => row.seq === 2)!.reasoning).toBe("Hold: [hidden] does not match the goods received.");
+      expect(JSON.stringify(view)).not.toMatch(/FALCON|Lisbon/);
+    }
+  });
+
+  it("keeps a shown name whole when amounts are hidden, and turns every other number into #", () => {
+    expect(scrubReasoning("Route 66 Diner is due 120.50 USDC by Oct 20.", { names: null, others: ["Route 66 Diner"], references: [], hideAmounts: true })).toBe(
+      "Route 66 Diner is due # USDC by Oct #."
+    );
   });
 
   it("turns every number into # when amounts are hidden", () => {
@@ -192,6 +248,7 @@ describe("what a shared report shows", () => {
     expect(view.payments.every((row) => row.amount === null && row.bill === null)).toBe(true);
     expect(view.value.measured.discountsTaken.byCurrency).toBeNull();
     expect(view.value.notCounted.discountsNotTaken.byCurrency).toBeNull();
+    expect(view.value.notCounted.discountsOpen.byCurrency).toBeNull();
     expect(JSON.stringify(view)).not.toMatch(/46\.41|61\.87|13\.5/);
   });
 
@@ -207,7 +264,7 @@ describe("what a shared report shows", () => {
   it("never carries an invoice id, a supplier's id, a person's id or the workspace's", () => {
     const json = JSON.stringify(buildSharedReport(input({ options: SHOWN })));
     for (const secret of ["inv-", "cp-", "user-owner-0001"]) expect(json).not.toContain(secret);
-    expect(buildSharedReport(input()).value.estimate).toMatchObject({ kind: "answered", answeredBy: null, hours: 2 });
+    expect(buildSharedReport(input()).value.estimate).toMatchObject({ kind: "answered", answeredBy: null, saved: { bills: 2, hours: 1 }, wouldHaveSaved: null });
   });
 
   it("gives each decided bill's newest decision, newest first, with its verdict and its payment", () => {

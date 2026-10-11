@@ -1,3 +1,4 @@
+import { currentActuals, type ActualsFacts } from "./actual-payments-compare";
 import type { CurrencyAmount, WorkspaceReport } from "./workspace-report";
 
 /**
@@ -20,6 +21,12 @@ export interface ReportBaseline {
 /** The answer as read: none given yet, or the table not there before migration 0095 runs. */
 export type BaselineState = { available: false } | { available: true; answer: ReportBaseline | null };
 
+/** Bills times the minutes one bill took before, and that in hours to one decimal. */
+export interface TimeEstimate {
+  bills: number;
+  hours: number;
+}
+
 export interface ReportValueGroups {
   measured: {
     handled: number;
@@ -39,34 +46,57 @@ export interface ReportValueGroups {
         peoplePerBill: number;
         answeredBy: string | null;
         answeredAt: string;
-        /** Only the bills the agent decided: a bill it has not decided on yet saved nothing. */
-        decided: number;
-        /** decided × minutesPerBill, in hours to one decimal. A person's verdict still takes time; it is not taken off. */
-        hours: number;
+        /**
+         * Time saved: the bills the agent took to payment on its own outside shadow mode, times the answer. A bill it held,
+         * flagged or has not decided, or one a person stepped in on, saved nothing. A person's verdict still takes time; it
+         * is not taken off. Null in shadow mode while the agent has taken no bill to payment outside it.
+         */
+        saved: TimeEstimate | null;
+        /**
+         * Time it would have saved: the same in shadow mode, where the business paid its bills itself. Null outside
+         * shadow mode with no such bill.
+         */
+        wouldHaveSaved: TimeEstimate | null;
       };
   notCounted: {
-    /** Bills not paid yet: no saving is projected onto them. */
+    /** Bills still to pay: not paid, not rejected, not a repeat, and not recorded as paid outside Vestiarion. */
     unpaid: number;
     /** Bills the agent flagged, or code refused as a repeat: stopping one is not money saved. */
     repeats: number;
-    /** Discounts on offer that no transfer took, estimated from the terms; amounts null where a shared copy hides them. */
+    /** Discounts on offer that were missed, estimated from the terms; amounts null where a shared copy hides them. */
     discountsNotTaken: { count: number; byCurrency: CurrencyAmount[] | null };
+    /** Discounts still on offer on bills not paid yet, estimated from the terms; amounts null where a copy hides them. */
+    discountsOpen: { count: number; byCurrency: CurrencyAmount[] | null };
   };
 }
 
-export function reportValue(report: WorkspaceReport, baseline: BaselineState): ReportValueGroups {
-  const decided = report.bills.decided;
+/**
+ * The bills whose newest record (0090) says the business paid them outside Vestiarion; none before 0090 runs. A record
+ * corrected to not paid is not paid.
+ */
+export function paidOutside(actuals: { available: false } | { available: true; facts: ActualsFacts }): Set<string> {
+  if (!actuals.available) return new Set();
+  return new Set([...currentActuals(actuals.facts.records)].filter(([, { current }]) => current.outcome === "paid").map(([invoiceId]) => invoiceId));
+}
+
+const timeOf = (bills: number, minutesPerBill: number): TimeEstimate => ({ bills, hours: Math.round(((bills * minutesPerBill) / 60) * 10) / 10 });
+
+export function reportValue(report: WorkspaceReport, baseline: BaselineState, paidElsewhere: ReadonlySet<string> = new Set()): ReportValueGroups {
   let estimate: ReportValueGroups["estimate"];
   if (!baseline.available) estimate = { kind: "not_ready" };
   else if (!baseline.answer) estimate = { kind: "unanswered" };
   else {
     const { minutesPerBill, peoplePerBill, answeredBy, answeredAt } = baseline.answer;
-    estimate = { kind: "answered", minutesPerBill, peoplePerBill, answeredBy, answeredAt, decided, hours: Math.round(((decided * minutesPerBill) / 60) * 10) / 10 };
+    const { live, shadow } = report.carried;
+    // In shadow mode, and for the bills decided in it, the agent only would have saved the time: the business paid itself.
+    const wouldHaveSaved = shadow > 0 || report.shadow !== null ? timeOf(shadow, minutesPerBill) : null;
+    const saved = live > 0 || wouldHaveSaved === null ? timeOf(live, minutesPerBill) : null;
+    estimate = { kind: "answered", minutesPerBill, peoplePerBill, answeredBy, answeredAt, saved, wouldHaveSaved };
   }
   return {
     measured: {
       handled: report.bills.handled,
-      decided,
+      decided: report.bills.decided,
       medianMinutesToDecision: report.bills.medianMinutesToDecision,
       paid: report.paid.count,
       onTime: report.paid.onTime,
@@ -74,9 +104,10 @@ export function reportValue(report: WorkspaceReport, baseline: BaselineState): R
     },
     estimate,
     notCounted: {
-      unpaid: report.bills.handled - report.paid.count,
+      unpaid: report.unpaid.filter((invoiceId) => !paidElsewhere.has(invoiceId)).length,
       repeats: report.repeats,
       discountsNotTaken: { count: report.discounts.notTaken.count, byCurrency: report.discounts.notTaken.byCurrency },
+      discountsOpen: { count: report.discounts.open.count, byCurrency: report.discounts.open.byCurrency },
     },
   };
 }

@@ -56,11 +56,17 @@ Each decision names what it costs if it turns out wrong.
 - Title: the workspace's name (default, since the owner opts in to sharing), or a neutral "A business on Vestiarion".
   The name is returned by the database only when the share says to show it.
 - Never: memos, notes, references, reasons typed by a person, people's names or emails, invoice ids, addresses.
-- The agent's reasoning is its own first sentence, at most 200 characters. When names are hidden, every supplier name
-  the workspace knows is replaced in it by its label (longest first, ignoring case). Any `0x` address, email or id (a
-  UUID, such as an invoice's) becomes "[hidden]", whatever the share shows. When amounts are hidden, every number in it becomes "#".
-- Cost if wrong: a reasoning sentence that names something no rule catches; it is still the agent's one sentence, and
-  the owner chose to share it.
+- The agent's reasoning is its own first sentence, at most 200 characters. Everything below is replaced on the whole
+  text before the sentence is cut, so a name with a full stop in it ("Smith Bros. Plumbing", "Acme Co. Ltd") is never cut
+  in half and left unmatched. Any `0x` address, email or id (a UUID, such as an invoice's) becomes "[hidden]", whatever
+  the share shows, and so does each payable's purchase order reference and memo where the sentence quotes it, and each
+  code in a memo (a word with letters and digits, such as INV-2291), at least three characters each: code writes the
+  reference into its own reasoning ("PO … matches"), and the agent is given the memo. When names are hidden, every
+  supplier name the workspace knows is replaced in it by its label (longest first, ignoring case, whole words). When
+  amounts are hidden, every number in it becomes "#", but for a name the share shows, which is kept whole.
+- The share dialog says what the sentence hides, and that in its own words it may still say what a bill is for.
+- Cost if wrong: a reasoning sentence that names something no rule catches, such as a memo's words said another way;
+  it is still the agent's one sentence, and the owner chose to share it.
 
 **S5. How the public page reads (as a receipt does, scoped to one workspace).**
 - No session: the link is the credential. A malformed token is never looked up. A well-formed one is hashed and looked
@@ -68,8 +74,9 @@ Each decision names what it costs if it turns out wrong.
   id, its workspace id, options, the day it was made, the workspace's mode and network, and the name only when shown.
   It answers null for a stopped or unknown link, and for a workspace since deleted (the share goes with it).
 - The page then enters that workspace's own scope (`withOrg`, as the API does after a key lookup), so every read runs as
-  the tenant role with that workspace's id: `readReportFacts`, `readActualsFacts`, the value answer, the chain fields of
-  the decisions shown, and the public halves of the workspace's signing keys. No read names another workspace.
+  the tenant role with that workspace's id: `readReportFacts`, `readActualsFacts`, the value answer, the supplier names
+  and the payables' memos and purchase order references (to hide them from the reasoning, S4), the chain fields of the
+  decisions shown, and the public halves of the workspace's signing keys. No read names another workspace.
 - The workspace id goes no further than the server. Nothing on the page, in its title or in its preview card names the
   workspace unless the share shows the name.
 - Cost if wrong: a busy link reads the workspace's rows on every view; a short memo per share can be added.
@@ -106,15 +113,24 @@ On the private report and the shared page, in three labelled groups, with no tot
 - **Measured**, from the ledger and confirmed transfers: bills handled, bills the agent decided, the median minutes to a
   first decision, bills paid on or before their due day out of those paid, and discounts taken (the bill less what its
   transfer carried).
-- **From your answer**, an estimate: time saved = bills the agent decided × the minutes the owner said one bill took
-  before Vestiarion, in hours, with the people who touched a bill as context and who answered and when. Only decided
-  bills count: a bill the agent has not decided on yet saved nothing. A person's verdict still takes time, and it is
-  not taken off: the page says so.
-- **Not counted**: savings projected onto bills not paid yet; a bill flagged or refused as a duplicate (`ap_flag_fraud`,
-  or the rule `invoice.duplicate_of_settled`) is not money saved, with how many there were; discounts on offer but not
-  taken, estimated from the terms.
+- **From your answer**, an estimate: time saved = the bills the agent took to payment on its own × the minutes the
+  owner said one bill took before Vestiarion, in hours, with the people who touched a bill as context and who answered
+  and when. On its own: its newest decision pays or schedules the bill, nothing stopped it (a hold for a verdict is no
+  stop), no person stepped in, and no verdict disagreed with it. A bill it held, flagged or asked about, a bill code
+  refused, and a bill not decided yet saved nothing: a person handled it in full. A person's verdict still takes time,
+  and it is not taken off: the page says so.
+- In shadow mode the business pays its bills itself, so the same count over the bills decided in shadow mode is said
+  as **Time it would have saved, estimated**, never as time saved. A workspace in shadow mode shows only that figure
+  until the agent takes a bill to payment outside it; one never in shadow mode shows only time saved.
+- **Not counted**: savings projected onto bills not paid yet, counting only the bills still to pay: not paid on Arc or
+  marked paid, not rejected, not a repeat, and not recorded as paid outside Vestiarion (0090); a bill flagged or
+  refused as a duplicate (`ap_flag_fraud`, or the rule `invoice.duplicate_of_settled`) is not money saved, with how
+  many there were; discounts on offer but not taken, estimated from the terms: missed only once the bill was paid
+  without one or its last day (a UTC day) passed; and apart, discounts still on offer on a bill not paid yet whose last
+  day has not passed. A rejected bill's discount and a repeat's are in neither.
 - Without an answer, the middle group asks the question (owner) or says none was given (everyone else).
-- Cost if wrong: the estimate's base changes from decided bills to all bills; both are on the page.
+- Cost if wrong: the estimate's base changes from the bills the agent took to payment on its own to the bills it
+  decided, which the measured group counts.
 
 **S9. The answer: append-only, the newest wins.**
 - "Before Vestiarion, how many minutes did one bill take you?" (a whole number, 1 to 6,000) and "How many people
@@ -177,11 +193,14 @@ On the private report and the shared page, in three labelled groups, with no tot
 
 ## Testing
 
-- `tests/shared-report.test.ts`: the pure builder: names replaced by stable labels (in reasoning too), amounts hidden
-  everywhere, memos never, the neutral title, sandbox and sample labels, the agreement rate equal to the console's,
-  no actuals giving no comparison figures, a bill not recorded in no figure but "not recorded", the 50 newest decisions.
+- `tests/shared-report.test.ts`: the pure builder: names replaced by stable labels (in reasoning too, a name with a
+  full stop in it whole), amounts hidden everywhere, memos never and a quoted reference or memo hidden, the neutral
+  title, sandbox and sample labels, the agreement rate equal to the console's, no actuals giving no comparison figures,
+  a bill not recorded in no figure but "not recorded", the 50 newest decisions.
 - `tests/report-value.test.ts`: measured, estimated and not-counted figures in their groups, never summed; no answer,
-  no estimate; duplicates counted as not saved.
+  no estimate; the estimate over bills taken to payment on its own, said as would have saved in shadow mode; duplicates
+  counted as not saved; bills not paid yet leaving out rejected, repeats and bills paid outside; a discount missed only
+  once paid without it or past its last day, and one still on offer apart.
 - `tests/report-shares.test.ts`, `tests/report-baseline.test.ts`: the domain over the fake client: only the hash
   stored, the entry with its options, a failed entry revoking the row, the cap, stopping, not ready.
 - `tests/commands-report.test.ts`: owners and admins share and stop, only owners answer; approvers and viewers are

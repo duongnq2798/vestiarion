@@ -52,13 +52,14 @@ const FOUND = {
 };
 const FACTS = facts({
   bills: [bill("inv-1", { payee: { id: "cp-1", name: "Northwind Cloud", mirror: false, sample: false }, status: "paid" })],
-  decisions: [decision(7, "inv-1", { reasoning: "Northwind Cloud is paid monthly, unlike Orbit Payroll." })],
+  decisions: [decision(7, "inv-1", { reasoning: "Northwind Cloud is paid monthly under PO-FALCON-7781, unlike Orbit Payroll." })],
   payments: [payment("inv-1")],
 });
 const LINK = { seq: 7, body_hash: "b".repeat(64), signature: "s".repeat(128), prev_hash: "p".repeat(64), hash: "h".repeat(64), signing_key_id: "0123456789abcdef" };
 
 function tenantReplies(request: RecordedRequest): FakeReply {
   if (request.path === "/rest/v1/counterparties") return { body: [{ name: "Northwind Cloud" }, { name: "Orbit Payroll" }] };
+  if (request.path === "/rest/v1/invoices") return { body: [{ memo: "Lisbon office retainer", po_reference: "PO-FALCON-7781" }, { memo: null, po_reference: null }] };
   if (request.path === "/rest/v1/ledger_entries") return { body: [LINK] };
   throw new Error(`unexpected request ${request.method} ${request.path}`);
 }
@@ -101,7 +102,7 @@ describe("readSharedReport", () => {
     const now = new Date("2026-10-11T12:00:00.000Z");
     const shown = await readSharedReport(generateReportShareToken().token, now);
     expect(scopes).toEqual([{ orgId: ORG }]);
-    expect(reads.report).toHaveBeenCalledWith(expect.anything(), "arc-testnet", { sandbox: false });
+    expect(reads.report).toHaveBeenCalledWith(expect.anything(), "arc-testnet", { sandbox: false }, now);
     expect(reads.actuals).toHaveBeenCalled();
     expect(reads.baseline).toHaveBeenCalled();
     expect(shown).toMatchObject({
@@ -112,11 +113,12 @@ describe("readSharedReport", () => {
       sharedAt: "2026-10-10T08:00:00.000Z",
       publicKeys: { "0123456789abcdef": expect.stringContaining("PUBLIC KEY") },
     });
-    // Every name the workspace knows is hidden from the reasoning, its own bills' payees as labels.
+    // Every name the workspace knows is hidden from the reasoning, its own bills' payees as labels, and so is every
+    // purchase order reference its bills carry.
     expect(shown!.decisions[0]).toMatchObject({
       seq: 7,
       supplier: "Supplier A",
-      reasoning: "Supplier A is paid monthly, unlike [hidden].",
+      reasoning: "Supplier A is paid monthly under [hidden], unlike [hidden].",
       link: { body_hash: LINK.body_hash, signature: LINK.signature, prev_hash: LINK.prev_hash, hash: LINK.hash, signing_key_id: LINK.signing_key_id },
     });
     const json = JSON.stringify(shown);
@@ -137,10 +139,24 @@ describe("readSharedReport", () => {
     expect(ledger.params.get("select")).toBe("seq,body_hash,signature,prev_hash,hash,signing_key_id");
   });
 
+  it("reads every payable's memo and purchase order reference, a page at a time, to hide them from the reasoning", async () => {
+    const asked: RecordedRequest[] = [];
+    tenant.reply = ((request: RecordedRequest) => {
+      asked.push(request);
+      return tenantReplies(request);
+    }) as (request: unknown) => unknown;
+    rpc.mockResolvedValueOnce({ data: FOUND, error: null });
+    const shown = await readSharedReport(generateReportShareToken().token);
+    const invoices = asked.find((request) => request.path === "/rest/v1/invoices")!;
+    expect(invoices.params.get("select")).toBe("memo,po_reference");
+    expect(invoices.params.get("direction")).toBe("eq.payable");
+    expect(JSON.stringify(shown)).not.toMatch(/FALCON|Lisbon/);
+  });
+
   it("names nothing when the share hides the name, and reads a sandbox's simulated payments", async () => {
     rpc.mockResolvedValueOnce({ data: { ...FOUND, name: null, showWorkspaceName: false, mode: "sandbox", network: "arc-mainnet" }, error: null });
     const shown = await readSharedReport(generateReportShareToken().token);
-    expect(reads.report).toHaveBeenCalledWith(expect.anything(), "arc-mainnet", { sandbox: true });
+    expect(reads.report).toHaveBeenCalledWith(expect.anything(), "arc-mainnet", { sandbox: true }, expect.any(Date));
     expect(shown).toMatchObject({ title: "A business on Vestiarion", named: false });
     expect(JSON.stringify(shown)).not.toContain("Harbor Books");
   });

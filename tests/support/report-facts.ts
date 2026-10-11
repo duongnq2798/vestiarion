@@ -3,6 +3,8 @@ import type { ReportBill, ReportDecision, ReportFacts, ReportPayment } from "@/l
 /** Hand-made report facts for the value groups and the shared report's tests: one bill, decision or payment at a time. */
 
 export const OPENED = "2026-10-01T00:00:00.000Z";
+/** When the facts were read: a discount whose last day is before it has lapsed. */
+export const READ_AT = "2026-10-11T12:00:00.000Z";
 
 export function bill(id: string, over: Partial<ReportBill> = {}): ReportBill {
   return {
@@ -42,5 +44,5 @@ export function payment(invoiceId: string, over: Partial<ReportPayment> = {}): R
 }
 
 export function facts(over: Partial<ReportFacts> = {}): ReportFacts {
-  return { network: "arc-testnet", sandbox: false, openedAt: OPENED, shadow: null, bills: [], decisions: [], personActions: [], verdicts: [], payments: [], ...over };
+  return { network: "arc-testnet", sandbox: false, now: READ_AT, openedAt: OPENED, shadow: null, bills: [], decisions: [], personActions: [], verdicts: [], payments: [], ...over };
 }

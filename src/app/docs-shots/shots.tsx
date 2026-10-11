@@ -58,7 +58,7 @@ import type { GoLiveStatus } from "@/lib/platform/go-live";
 import { gettingStarted } from "@/lib/getting-started";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow } from "@/lib/queries";
 import type { SharedReportShown } from "@/lib/platform/shared-report";
-import { reportValue, type BaselineState } from "@/lib/report-value";
+import { paidOutside, reportValue, type BaselineState } from "@/lib/report-value";
 import { buildSharedReport } from "@/lib/shared-report";
 import { buildReport, type ReportBill, type ReportDecision, type ReportFacts } from "@/lib/workspace-report";
 import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
@@ -624,6 +624,7 @@ const reportPayment = (id: string, amount: number, minute: number) => ({
 const REPORT_FACTS: ReportFacts = {
   network: "arc-testnet",
   sandbox: false,
+  now: "2026-10-13T10:00:00Z",
   openedAt: REPORT_OPENED,
   shadow: { currency: "USD", startedAt: REPORT_OPENED },
   bills: [
@@ -719,6 +720,7 @@ const SHARED_VIEW: SharedReportShown = (() => {
     name: "Harbor Books",
     sharedAt: "2026-10-12T09:00:00Z",
     knownNames: ["Northwind Cloud", "Harbor VPS", "Lumen Hosting", "Atlas Compute"],
+    billTexts: [],
     now: "2026-10-13T10:00:00Z",
   });
   return {
@@ -1410,7 +1412,7 @@ export const DOCS_SHOTS = {
     guide: "report",
     render: () => (
       <ReportValue
-        value={reportValue(REPORT, REPORT_BASELINE)}
+        value={reportValue(REPORT, REPORT_BASELINE, paidOutside({ available: true, facts: ACTUALS_FACTS }))}
         audience="member"
         answeredBy={REPORT_OWNER}
         answer={<ReportBaselineControl orgSlug={SLUG} current={{ minutesPerBill: 25, peoplePerBill: 2 }} />}

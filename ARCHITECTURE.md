@@ -822,11 +822,17 @@ USDC included. Each figure links to its source: the decision and the verdict to 
 when. `npm run traction-digest` adds one line from the same totals.
 
 **Value** (`docs/superpowers/specs/2026-10-10-shared-report-design.md` S8, S9) keeps three kinds of figures apart and
-never sums across them. `reportValue` (`src/lib/report-value.ts`) is pure and takes the built report and the newest
-answer: measured (bills handled and decided, the median minutes to a first decision, paid on or before the due day,
-discounts taken as the bill less what its transfer carried); estimated from the owner's answer (decided bills times the
-minutes one bill took before, in hours, with the people who touched a bill as context only); and not counted (bills not
-paid yet, bills flagged or refused as a repeat of a paid one, discounts on offer that no transfer took). The answer is a
+never sums across them. `reportValue` (`src/lib/report-value.ts`) is pure and takes the built report, the newest answer
+and the bills the business recorded paying outside Vestiarion (`paidOutside`, from 0090's newest records): measured
+(bills handled and decided, the median minutes to a first decision, paid on or before the due day, discounts taken as
+the bill less what its transfer carried); estimated from the owner's answer (the bills the agent took to payment on its
+own, with nothing stopping it, no person stepping in and no verdict disagreeing, times the minutes one bill took
+before, in hours, with the people who touched a bill as context only; over the bills decided in shadow mode, where the
+business paid itself, it is what the agent would have saved); and not counted (bills still to pay, leaving out rejected
+bills, repeats and bills paid outside; bills flagged or refused as a repeat of a paid one; discounts missed, on a bill
+paid without one or past its last day, and apart, discounts still on offer, both from the terms and never a rejected
+bill's or a repeat's). `buildReport` measures a discount's last day against `ReportFacts.now`, when the facts were read.
+The answer is a
 row of `report_baselines` (migration 0095), which the tenant role can only read and add to, and a signed
 `report_baseline_answered` entry; the newest row is read (`src/lib/report-baseline.ts`). The agreement rate the report,
 the console's shadow mode panel and the shared copy show is one function, `agreementRate` (`src/lib/verdict-rate.ts`).
@@ -845,11 +851,14 @@ looked up; a well-formed one is hashed and looked up by the service role's `repo
 answers the live share's workspace id, options, mode and network, and the workspace's name only when the share shows
 it. `readSharedReport` (`src/lib/platform/shared-report.ts`) then enters that workspace's own scope (`withOrg`, as the
 API does after a key lookup) and reads the report's facts, the comparison's records, the answer, the supplier names it
-knows, the chain fields of the decisions shown and the public halves of its signing keys; the workspace id goes no
-further. `buildSharedReport` (`src/lib/shared-report.ts`) is pure: it relabels suppliers, hides amounts everywhere when
-asked (and with them the transaction hashes, since the public explorer shows what each transfer carried), cuts the
-agent's reasoning to its first sentence of at most 200 characters with names replaced and any email, `0x` address or
-UUID hidden, gives the comparison as totals only and never a person, a memo, a reference or an id. Each decision
+knows and its payables' memos and purchase order references, the chain fields of the decisions shown and the public
+halves of its signing keys; the workspace id goes no further. `buildSharedReport` (`src/lib/shared-report.ts`) is
+pure: it relabels suppliers, hides amounts everywhere when asked (and with them the transaction hashes, since the
+public explorer shows what each transfer carried), and scrubs the agent's reasoning on its whole text before cutting it
+to its first sentence of at most 200 characters, so a name with a full stop in it is replaced whole: names replaced,
+and any email, `0x` address, UUID, quoted purchase order reference or memo, or code from a memo hidden
+(`scrubReasoning`, `referenceWords`). It gives the comparison as totals only and never a person, a memo, a reference or
+an id. Each decision
 carries **Check its signature**, the receipt verifier's half that needs no body, run in the reader's browser. A dead
 link, stopped, unknown or of a deleted workspace, reads one sentence and names no one; the page is `noindex`, has its own
 card, and analytics sees `/report/:token`. Before 0095 runs, reading either table answers `available: false`

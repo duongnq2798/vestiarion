@@ -72,7 +72,8 @@ export function SharedReport({ view }: { view: SharedReportShown }) {
       <footer className="space-y-2 border-t border-line pt-6 text-xs leading-relaxed text-ink-3">
         <p>
           Shared by the business from its Vestiarion workspace. It leaves out memos, notes, references, invoice ids, and the names and emails of the
-          business&apos;s people. The agent&apos;s reasoning is its first sentence, with any email, 0x address or id hidden.
+          business&apos;s people. The agent&apos;s reasoning is its first sentence,
+          with any email, 0x address or id, and any purchase order reference or memo it quotes, hidden.
           {view.options.names === "labels" ? " Suppliers are shown as labels, in the order each one's first bill arrived." : ""}
           {view.options.amounts === "hidden" ? " Amounts are hidden, and transactions are not linked." : ""}
         </p>

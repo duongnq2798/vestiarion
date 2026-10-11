@@ -1,6 +1,6 @@
 import { agentSide, compareActuals, type ActualsFacts, type AgentStance } from "./actual-payments-compare";
 import type { Network } from "./network";
-import { reportValue, type BaselineState, type ReportValueGroups } from "./report-value";
+import { paidOutside, reportValue, type BaselineState, type ReportValueGroups } from "./report-value";
 import { agreementRate } from "./verdict-rate";
 import { buildReport, reportScope, stopOf, type CurrencyAmount, type PaymentRow, type ReportBill, type ReportDecision, type ReportFacts } from "./workspace-report";
 
@@ -12,8 +12,8 @@ import { buildReport, reportScope, stopOf, type CurrencyAmount, type PaymentRow,
  * Never in the view: memos, notes, references, a person's typed reasons, people's names, emails or ids, invoice or
  * supplier ids, addresses, the workspace's id. Supplier names are replaced by stable labels unless the share shows
  * them; amounts are hidden everywhere when the share hides them, and so are the transactions, whose explorer page
- * shows each one's amount. The agent's reasoning is its first sentence, at most
- * 200 characters, scrubbed of what the share hides.
+ * shows each one's amount. The agent's reasoning is its first sentence, at most 200 characters, scrubbed of what the
+ * share hides and, whatever it shows, of any purchase order reference or memo it quotes.
  */
 
 export interface ShareOptions {
@@ -106,6 +106,8 @@ export interface SharedReportInput {
   sharedAt: string;
   /** Every supplier name the workspace knows: a name outside the report's bills is hidden from the reasoning too. */
   knownNames: readonly string[];
+  /** Every payable's purchase order reference and memo: hidden from the reasoning wherever it quotes them. */
+  billTexts: ReadonlyArray<{ memo: string | null; poReference: string | null }>;
   now: string;
 }
 
@@ -147,27 +149,71 @@ const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]*[A-Za-z0-9]/g;
 const HEX = /0x[0-9a-fA-F]{4,}/g;
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 const NUMBER = /\d+(?:[.,]\d+)*/g;
+/** Unicode's private use area: a stand-in for each name or reference while the sentence is cut and its numbers hidden. */
+const STAND_IN = /[-]/g;
+const STAND_INS = 0xf8ff - 0xe000 + 1;
+/** A reference shorter than this would hide ordinary words ("Q3", "PO"). */
+const REFERENCE_MIN = 3;
 
 /**
- * The agent's reasoning as a shared report says it: its first sentence; any email, `0x` address or hash, or id (a
- * UUID, such as an invoice's) hidden always (S4's "never"); with names hidden, each name in `names` (lower case → its label) replaced and each of `others`
- * hidden, longest first, ignoring case, whole words only; with amounts hidden, every number "#"; then cut to 200
- * characters.
+ * What a shared report hides from the agent's reasoning, whatever the share shows, from each bill's purchase order
+ * reference and memo: each in full (a memo without its closing full stop), and each code in a memo, a word with both
+ * letters and digits such as INV-2291; at least three characters each.
  */
-export function scrubReasoning(text: string | null, rules: { names: ReadonlyMap<string, string> | null; others: readonly string[]; hideAmounts: boolean }): string | null {
-  if (!text || text.trim() === "") return null;
-  let said = (text.trim().split(/(?<=[.!?])\s/)[0] ?? text).trim();
-  said = said.replace(EMAIL, HIDDEN).replace(HEX, HIDDEN).replace(UUID, HIDDEN);
-  if (rules.names) {
-    const replacements = new Map<string, string>(rules.others.filter((name) => name.trim()).map((name) => [name.trim().toLowerCase(), HIDDEN]));
-    for (const [name, label] of rules.names) if (name.trim()) replacements.set(name.trim().toLowerCase(), label);
-    const names = [...replacements.keys()].sort((a, b) => b.length - a.length);
-    if (names.length > 0) {
-      const pattern = new RegExp(`(?<![\\p{L}\\p{N}])(?:${names.map(escapeRegExp).join("|")})(?![\\p{L}\\p{N}])`, "giu");
-      said = said.replace(pattern, (match) => replacements.get(match.toLowerCase()) ?? HIDDEN);
+export function referenceWords(texts: ReadonlyArray<{ memo: string | null; poReference: string | null }>): string[] {
+  const words = new Set<string>();
+  const add = (word: string) => {
+    const kept = word.trim().replace(/[.!?,;:]+$/, "");
+    if (kept.length >= REFERENCE_MIN) words.add(kept);
+  };
+  for (const { memo, poReference } of texts) {
+    if (poReference) add(poReference);
+    if (!memo) continue;
+    add(memo);
+    for (const word of memo.split(/\s+/)) {
+      const code = word.replace(/^[^\p{L}\p{N}#]+|[^\p{L}\p{N}]+$/gu, "");
+      if (/\p{L}/u.test(code) && /\p{N}/u.test(code)) add(code);
     }
   }
+  return [...words];
+}
+
+/**
+ * The agent's reasoning as a shared report says it. On the whole text first, so a full stop inside a name ("Smith Bros.
+ * Plumbing") never cuts it in half: any email, `0x` address or hash, or id (a UUID, such as an invoice's) is hidden, and
+ * so is each of `references` (a bill's purchase order reference or memo), whatever the share shows (S4's "never"); with
+ * names hidden, each name in `names` (lower case → its label) is replaced and each of `others` hidden; longest first,
+ * ignoring case, whole words only. Then its first sentence; with amounts hidden, every number in it "#" (never one in a
+ * name the share shows); then cut to 200 characters.
+ */
+export function scrubReasoning(
+  text: string | null,
+  rules: { names: ReadonlyMap<string, string> | null; others: readonly string[]; references: readonly string[]; hideAmounts: boolean }
+): string | null {
+  if (!text || text.trim() === "") return null;
+  let said = text.trim().replace(STAND_IN, "").replace(EMAIL, HIDDEN).replace(HEX, HIDDEN).replace(UUID, HIDDEN);
+
+  // Each name or reference, lower case, to what it reads as: null keeps it as written (a name the share shows).
+  const words = new Map<string, string | null>();
+  for (const name of rules.others) if (name.trim()) words.set(name.trim().toLowerCase(), rules.names ? HIDDEN : null);
+  if (rules.names) for (const [name, label] of rules.names) if (name.trim()) words.set(name.trim().toLowerCase(), label);
+  for (const reference of rules.references) if (reference.trim()) words.set(reference.trim().toLowerCase(), HIDDEN);
+  // Each is set aside behind a stand-in, so neither the cut nor the numbers' "#" reaches into it.
+  const kept: string[] = [];
+  const keys = [...words.keys()].sort((a, b) => b.length - a.length);
+  if (keys.length > 0) {
+    const pattern = new RegExp(`(?<![\\p{L}\\p{N}])(?:${keys.map(escapeRegExp).join("|")})(?![\\p{L}\\p{N}])`, "giu");
+    said = said.replace(pattern, (match) => {
+      const as = words.get(match.toLowerCase()) ?? (words.has(match.toLowerCase()) ? match : HIDDEN);
+      if (kept.length >= STAND_INS) return as;
+      kept.push(as);
+      return String.fromCharCode(0xe000 + kept.length - 1);
+    });
+  }
+
+  said = (said.split(/(?<=[.!?])\s/)[0] ?? said).trim();
   if (rules.hideAmounts) said = said.replace(NUMBER, "#");
+  said = said.replace(STAND_IN, (mark) => kept[mark.charCodeAt(0) - 0xe000] ?? "");
   return said.length > REASONING_MAX ? `${said.slice(0, REASONING_MAX - 1).trimEnd()}…` : said;
 }
 
@@ -191,7 +237,8 @@ export function buildSharedReport(input: SharedReportInput): SharedReportView {
   }
   // Every name the workspace knows, its sample data's included, and every bill's payee.
   const others = [...input.knownNames, ...facts.bills.map((bill) => bill.payee.name)];
-  const scrub = (text: string | null) => scrubReasoning(text, { names, others, hideAmounts });
+  const references = referenceWords(input.billTexts);
+  const scrub = (text: string | null) => scrubReasoning(text, { names, others, references, hideAmounts });
   const amountOf = (value: CurrencyAmount) => (hideAmounts ? null : value);
   // The public explorer shows what a transfer carried, so a share that hides amounts links no transaction.
   const txOf = (txHash: string | null) => (hideAmounts ? null : txHash);
@@ -254,7 +301,7 @@ export function buildSharedReport(input: SharedReportInput): SharedReportView {
           };
   }
 
-  const value = reportValue(report, input.baseline);
+  const value = reportValue(report, input.baseline, paidOutside(input.actuals));
   const named = options.title === "workspace" && Boolean(input.name?.trim());
 
   return {
@@ -284,6 +331,7 @@ export function buildSharedReport(input: SharedReportInput): SharedReportView {
       notCounted: {
         ...value.notCounted,
         discountsNotTaken: { ...value.notCounted.discountsNotTaken, byCurrency: hideAmounts ? null : value.notCounted.discountsNotTaken.byCurrency },
+        discountsOpen: { ...value.notCounted.discountsOpen, byCurrency: hideAmounts ? null : value.notCounted.discountsOpen.byCurrency },
       },
     },
     comparison,

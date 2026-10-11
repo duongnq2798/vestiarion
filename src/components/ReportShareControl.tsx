@@ -80,8 +80,9 @@ export function ReportShareButton({ orgSlug, available }: { orgSlug: string; ava
             <RadioGroup legend="Title" name="title" defaultValue="workspace" options={TITLES} />
             <p className="text-xs leading-relaxed text-ink-3">
               Never shown: memos, notes, references, invoice ids, or the names and emails of this workspace&apos;s members. The agent&apos;s reasoning is its
-              first sentence, with any email, 0x address or id hidden. With amounts shown, a payment on chain links to its transaction on the public explorer,
-              which shows its amount and the address it was paid to.
+              first sentence, with any email, 0x address or id, and any purchase order reference or memo it quotes, hidden; in its own words, it may still
+              say what a bill is for. With amounts shown, a payment on chain links to its transaction on the public explorer, which shows its amount and the
+              address it was paid to.
             </p>
             <FormMessage tone="error">{error}</FormMessage>
             <DialogFooter>

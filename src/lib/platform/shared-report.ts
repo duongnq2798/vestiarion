@@ -17,7 +17,8 @@ import { readReportFacts } from "../workspace-report-read";
  * or unknown link, and is missing before 0095 runs, which reads as no share.
  *
  * A live link's report is then read inside that workspace's own scope, as the API reads after a key lookup: the
- * readers the private report uses, the supplier names it knows (to hide them from the agent's reasoning), the chain
+ * readers the private report uses, the supplier names it knows and its payables' memos and purchase order references
+ * (to hide them from the agent's reasoning), the chain
  * fields of the decisions shown and the public halves of its signing keys. The workspace's id goes no further than
  * this file; the view names it only when the share shows its name.
  */
@@ -56,6 +57,18 @@ async function counterpartyNames(orgDb: OrgDb): Promise<string[]> {
   }
 }
 
+/** Every payable's memo and purchase order reference, a page at a time: the agent's reasoning may quote them. */
+async function billTexts(orgDb: OrgDb): Promise<Array<{ memo: string | null; poReference: string | null }>> {
+  const texts: Array<{ memo: string | null; poReference: string | null }> = [];
+  for (let from = 0; ; from += PAGE) {
+    const page = unwrap(
+      await orgDb.from("invoices").select("memo, po_reference").eq("direction", "payable").order("id", { ascending: true }).range(from, from + PAGE - 1)
+    ) as Array<{ memo: string | null; po_reference: string | null }>;
+    texts.push(...page.flatMap((row) => (row.memo || row.po_reference ? [{ memo: row.memo ?? null, poReference: row.po_reference ?? null }] : [])));
+    if (page.length < PAGE) return texts;
+  }
+}
+
 /** The signed links of these entries: their hashes, signature and key, never their bodies. */
 async function signedLinks(orgDb: OrgDb, seqs: number[]): Promise<Map<number, SignedLink>> {
   if (seqs.length === 0) return new Map();
@@ -83,11 +96,12 @@ export async function readSharedReport(token: string, now: Date = new Date()): P
   const network = networkOf(found.network);
 
   return withOrg(found.orgId, async () => {
-    const [facts, actuals, baseline, knownNames] = await Promise.all([
-      readReportFacts(db(), network, { sandbox: found.mode === "sandbox" }),
+    const [facts, actuals, baseline, knownNames, texts] = await Promise.all([
+      readReportFacts(db(), network, { sandbox: found.mode === "sandbox" }, now),
       readActualsFacts(db()),
       readBaseline(db()),
       counterpartyNames(db()),
+      billTexts(db()),
     ]);
     const view = buildSharedReport({
       facts,
@@ -97,6 +111,7 @@ export async function readSharedReport(token: string, now: Date = new Date()): P
       name: found.showWorkspaceName ? found.name : null,
       sharedAt: found.createdAt,
       knownNames,
+      billTexts: texts,
       now: now.toISOString(),
     });
     const links = await signedLinks(db(), view.decisions.map((decision) => decision.seq));

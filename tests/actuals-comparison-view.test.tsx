@@ -22,6 +22,7 @@ const OWNER = "a1b2c3d4-0000-4000-8000-0000000000b1";
 const facts = (over: Partial<ReportFacts> = {}): ReportFacts => ({
   network: "arc-testnet",
   sandbox: false,
+  now: "2026-10-11T12:00:00.000Z",
   openedAt: "2026-10-01T00:00:00.000Z",
   shadow: { currency: "EUR", startedAt: "2026-10-01T00:00:00.000Z" },
   bills: [

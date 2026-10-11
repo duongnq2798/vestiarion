@@ -20,7 +20,7 @@ import { listMembers } from "@/lib/platform/members";
 import { stats } from "@/lib/queries";
 import { readBaseline } from "@/lib/report-baseline";
 import { listReportShares } from "@/lib/report-shares";
-import { reportValue } from "@/lib/report-value";
+import { paidOutside, reportValue } from "@/lib/report-value";
 import { shareOptionWords } from "@/lib/shared-report";
 import { workspaceNetwork } from "@/lib/workspace-network";
 import { buildReport } from "@/lib/workspace-report";
@@ -62,7 +62,8 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
     const canShare = can(access.membership.role, "report.share");
     const canAnswer = can(access.membership.role, "org.administer");
     const report = buildReport(facts);
-    const value = reportValue(report, baseline);
+    // A bill the business recorded paying outside Vestiarion is not "not paid yet".
+    const value = reportValue(report, baseline, paidOutside(actuals));
     const comparison = actuals.available ? compareActuals(facts, actuals.facts) : null;
     // Who recorded each, who made each link and who answered, by email, as Approvals names approvers. Best effort: a
     // name that cannot be read is a member's.

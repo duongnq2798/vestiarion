@@ -41,7 +41,7 @@ export default function ReportBaselineControl({ orgSlug, current }: { orgSlug: s
         </DialogTrigger>
         <DialogContent
           title="How bills were handled before Vestiarion"
-          description="The report estimates the time saved from this answer, and says it is an estimate. A new answer replaces it on the report; the earlier one stays in the audit log."
+          description="The report estimates from this answer the time the agent saved, or in shadow mode would have saved, and says it is an estimate. A new answer replaces it on the report; the earlier one stays in the audit log."
         >
           <form {...form.formProps} className="grid gap-5">
             <input type="hidden" name="orgSlug" value={orgSlug} />

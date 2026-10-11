@@ -4,7 +4,7 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { amountText } from "@/components/vx/ActualsComparison";
 import { minutesInWords } from "@/components/vx/WorkspaceReport";
 import { plural, utcDay } from "@/lib/copy";
-import type { ReportValueGroups } from "@/lib/report-value";
+import type { ReportValueGroups, TimeEstimate } from "@/lib/report-value";
 import type { CurrencyAmount } from "@/lib/workspace-report";
 
 /**
@@ -23,11 +23,15 @@ function sums(items: CurrencyAmount[] | null, count: number, none: string): stri
   return `${amounts(items)} on ${count} ${plural(count, "bill", "bills")}`;
 }
 
-/** The estimated time saved, in hours to one decimal; under an hour, in minutes. */
-export function savedWords(decided: number, minutesPerBill: number, hours: number): string {
-  const minutes = decided * minutesPerBill;
-  return minutes < 60 ? `About ${minutes} min` : `About ${hours.toLocaleString("en-US", { maximumFractionDigits: 1 })} h`;
+/** An estimated time, in hours to one decimal; under an hour, in minutes; "None yet" over no bill. */
+export function timeWords(time: TimeEstimate, minutesPerBill: number): string {
+  if (time.bills === 0) return "None yet";
+  const minutes = time.bills * minutesPerBill;
+  return minutes < 60 ? `About ${minutes} min` : `About ${time.hours.toLocaleString("en-US", { maximumFractionDigits: 1 })} h`;
 }
+
+const billsWords = (bills: number) => `${bills} ${plural(bills, "bill", "bills")}`;
+const minutesWords = (minutes: number) => `${minutes.toLocaleString("en-US")} min`;
 
 function Group({ id, title, note, children }: { id: string; title: string; note: string; children: ReactNode }) {
   return (
@@ -98,11 +102,20 @@ export function ReportValue({
           {estimate.kind === "answered" ? (
             <div className="grid gap-3">
               <dl aria-labelledby="value-estimate" className="grid gap-3">
-                <Figure
-                  label="Time saved, estimated"
-                  value={estimate.decided === 0 ? "None yet" : savedWords(estimate.decided, estimate.minutesPerBill, estimate.hours)}
-                  note={`${estimate.decided} ${plural(estimate.decided, "bill", "bills")} the agent decided × ${estimate.minutesPerBill.toLocaleString("en-US")} min, the time one bill took before. A bill it has not decided saved nothing.`}
-                />
+                {estimate.saved && (
+                  <Figure
+                    label="Time saved, estimated"
+                    value={timeWords(estimate.saved, estimate.minutesPerBill)}
+                    note={`${billsWords(estimate.saved.bills)} the agent paid or scheduled on its own × ${minutesWords(estimate.minutesPerBill)}, the time one bill took before. A bill it held or flagged, or one a person stepped in on or disagreed with, saved nothing.`}
+                  />
+                )}
+                {estimate.wouldHaveSaved && (
+                  <Figure
+                    label="Time it would have saved, estimated"
+                    value={timeWords(estimate.wouldHaveSaved, estimate.minutesPerBill)}
+                    note={`In shadow mode, ${billsWords(estimate.wouldHaveSaved.bills)} the agent would have paid or scheduled on its own × ${minutesWords(estimate.minutesPerBill)}. The business paid them itself, so this is the time the agent would have saved.`}
+                  />
+                )}
                 <Figure
                   label="People who touched a bill before"
                   value={estimate.peoplePerBill}
@@ -121,7 +134,7 @@ export function ReportValue({
             <div className="grid gap-3">
               <p className="text-sm text-ink-2">
                 {answer
-                  ? "How long did one bill take you before Vestiarion? Answer once, and the time saved is estimated here, apart from what was measured."
+                  ? "How long did one bill take you before Vestiarion? Answer once, and the time the agent saved, or in shadow mode would have saved, is estimated here, apart from what was measured."
                   : "No answer given yet, so nothing is estimated. An owner answers how long one bill took before Vestiarion."}
               </p>
               {answer}
@@ -133,12 +146,21 @@ export function ReportValue({
 
         <Group id="value-not-counted" title="Not counted" note="Never counted as saved, here or in the groups beside it.">
           <dl aria-labelledby="value-not-counted" className="grid gap-3">
-            <Figure label="Bills not paid yet" value={notCounted.unpaid} note="No saving is projected onto a bill before it is paid." />
+            <Figure
+              label="Bills not paid yet"
+              value={notCounted.unpaid}
+              note="Still to pay: not rejected, not a repeat, and not recorded as paid outside Vestiarion. No saving is projected onto a bill before it is paid."
+            />
             <Figure label="Flagged, or refused as a repeat" value={notCounted.repeats} note="Stopping one is not money saved." />
             <Figure
               label="Discounts on offer, not taken"
               value={sums(notCounted.discountsNotTaken.byCurrency, notCounted.discountsNotTaken.count, "None")}
-              note="Estimated from the bills' terms."
+              note="Missed: the bill was paid without it, or its last day passed. Estimated from the bills' terms."
+            />
+            <Figure
+              label="Discounts still on offer"
+              value={sums(notCounted.discountsOpen.byCurrency, notCounted.discountsOpen.count, "None")}
+              note="On bills not paid yet, whose last day has not passed. Estimated from the bills' terms."
             />
           </dl>
         </Group>
