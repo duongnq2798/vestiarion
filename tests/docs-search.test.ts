@@ -43,7 +43,7 @@ describe("buildSearchIndex", () => {
 
   it("names each entry's section", () => {
     expect(INDEX.find((entry) => entry.slug === "api/get-status")?.section).toBe("API reference");
-    expect(INDEX.find((entry) => entry.slug === "")?.section).toBe("Overview");
+    expect(INDEX.find((entry) => entry.slug === "")?.section).toBe("Start here");
   });
 });
 
