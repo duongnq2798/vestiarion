@@ -219,10 +219,12 @@ export function SharedDecisions({ view }: { view: SharedReportShown }) {
           <ol aria-label="The agent's newest decision on each bill" className="divide-y divide-line">
             {view.decisions.map((decision) => {
               const stance = stanceWords(decision, view.simulated);
+              // Each Check its signature names its own decision to a screen reader: the day, the supplier, what the agent did.
+              const describedBy = `shared-decision-${decision.seq}`;
               return (
                 <li key={decision.seq} className="grid gap-3 px-4 py-4 sm:px-5 lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-6">
                   <div className="min-w-0 space-y-1.5">
-                    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                    <p id={describedBy} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
                       <time dateTime={decision.at} className="whitespace-nowrap text-ink-3">
                         {utcDay(decision.at)}
                       </time>
@@ -254,7 +256,7 @@ export function SharedDecisions({ view }: { view: SharedReportShown }) {
                       ) : null}
                     </div>
                     {decision.link ? (
-                      <SignatureCheck link={decision.link} publicKeys={view.publicKeys} />
+                      <SignatureCheck link={decision.link} publicKeys={view.publicKeys} describedBy={describedBy} />
                     ) : (
                       <p className="text-xs text-ink-3">Its signed entry could not be read.</p>
                     )}

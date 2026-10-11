@@ -171,6 +171,14 @@ describe("a shared report's view", () => {
     expect(text(markup)).toContain("A person agreed");
   });
 
+  it("names each Check its signature by its own decision, for a screen reader", () => {
+    const markup = renderToStaticMarkup(<SharedReport view={shown()} />);
+    const described = [...markup.matchAll(/<button[^>]*aria-describedby="([^"]+)"[^>]*>(?:(?!<\/button>).)*Check its signature/g)].map((match) => match[1]);
+    expect(described).toHaveLength(2);
+    expect(new Set(described).size).toBe(2);
+    for (const id of described) expect(markup).toContain(`id="${id}"`);
+  });
+
   it("says a sandbox's payments are simulated, with no transaction to open", () => {
     const sandbox = facts({ ...FACTS, sandbox: true, payments: FACTS.payments.map((item) => ({ ...item, simulated: true })) });
     const markup = renderToStaticMarkup(<SharedReport view={shown({ facts: sandbox })} />);

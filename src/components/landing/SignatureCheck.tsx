@@ -17,7 +17,8 @@ export function checkSentence(check: EntryCheck, keyId: string | null): string {
   return check.ok === false ? `Did not verify: ${check.reason}` : `Not checked here: ${check.reason}`;
 }
 
-export function SignatureCheck({ link, publicKeys }: { link: SignedLink; publicKeys: Record<string, string> }) {
+/** `describedBy`: the id of what this entry is, where a page lists several, so each button says which it checks. */
+export function SignatureCheck({ link, publicKeys, describedBy }: { link: SignedLink; publicKeys: Record<string, string>; describedBy?: string }) {
   const [check, setCheck] = useState<EntryCheck | null>(null);
   const [checking, setChecking] = useState(false);
 
@@ -35,7 +36,7 @@ export function SignatureCheck({ link, publicKeys }: { link: SignedLink; publicK
   const Icon = check?.ok === true ? ShieldCheck : check?.ok === false ? ShieldX : CircleDashed;
   return (
     <div className="grid gap-2.5">
-      <Button size="sm" variant="secondary" className="justify-self-start" icon={<ShieldCheck />} loading={checking} onClick={run}>
+      <Button size="sm" variant="secondary" className="justify-self-start" icon={<ShieldCheck />} loading={checking} onClick={run} aria-describedby={describedBy}>
         {check ? "Check it again" : "Check its signature"}
       </Button>
       <p aria-live="polite" className="min-h-0 text-xs leading-relaxed">
