@@ -19,7 +19,7 @@ const { rpc, scopes, reads, tenant } = vi.hoisted(() => ({
   rpc: vi.fn(),
   scopes: [] as Array<{ orgId: string; userId?: string }>,
   reads: { report: vi.fn(), actuals: vi.fn(), baseline: vi.fn() },
-  tenant: { reply: (_request: unknown): unknown => ({ body: [] }) },
+  tenant: { reply: ((): unknown => ({ body: [] })) as (request: unknown) => unknown },
 }));
 vi.mock("@/lib/dal", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/dal")>()),
