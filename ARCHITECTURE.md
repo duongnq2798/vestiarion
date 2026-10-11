@@ -409,6 +409,14 @@ mainnet plan).
     the workspace's id stays there. `src/lib/latest-decision.ts` says it in words.
   - The reader's browser checks the signature and the link to the entry before it with `verifySignedLink`, the
     receipt verifier's half that needs no body. Until 0087 runs, or when the read fails, there is no band.
+  - Under it in the proof, the decisions before it (`docs/superpowers/specs/2026-10-11-landing-recent-decisions-design.md`):
+    `recent_team_decisions()` (0100), the service role's alone, reads the same workspaces on the same terms (and never
+    a simulated payment's decision), one decision per bill (its newest) out of the newest 500, and counts each
+    network's decisions in the past 7 days apart.
+    Its rows carry no signature and no workspace id. `src/lib/platform/recent-decisions.ts` reads it at most once a
+    minute; `recentDecisionView` says what came of each (paid, held, refused by code...) and why, and links a
+    transaction only when one went out. The list shows rows strictly older than the latest decision. Until 0100 runs,
+    or when the read fails, the latest decision stands alone.
 - **The landing's proof** (`docs/superpowers/specs/2026-10-08-landing-proof-design.md`, and landing clarity P1-P3):
   what the proof section says runs live, and the measurements, come from every workspace, never from the founding one
   alone.

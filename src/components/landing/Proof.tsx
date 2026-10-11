@@ -7,13 +7,16 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { ProvenanceBar, type ProvenanceLeg } from "@/components/vx/Provenance";
 import { ARC_MAINNET, ARC_TESTNET } from "@/lib/network";
 import type { LatestDecisionShown } from "@/lib/platform/latest-decision";
+import { earlierThan, type RecentDecisions } from "@/lib/platform/recent-decisions";
 import { GITHUB_URL } from "@/lib/site-links";
 import { LatestDecisionCard } from "./LatestDecision";
 import { NetworkPanels, type LandingNumbers } from "./LiveProof";
+import { RecentDecisionList } from "./RecentDecisions";
 
 /**
  * The landing's proof (docs/superpowers/specs/2026-10-11-landing-clarity-design.md P1-P3), in one section: the agent's
- * latest real decision with its signature checked in the reader's browser, the open numbers with customers apart from
+ * latest real decision with its signature checked in the reader's browser and the decisions before it
+ * (docs/superpowers/specs/2026-10-11-landing-recent-decisions-design.md), the open numbers with customers apart from
  * the team and each network on its own, what runs live now, and where to check each of them without us.
  */
 
@@ -24,9 +27,11 @@ const CHECK_IT = [
   { href: GITHUB_URL, label: "The source code, MIT licensed", external: true },
 ] as const;
 
-/** What the proof reads besides the open numbers: the team's latest decision, and which legs run live. */
+/** What the proof reads besides the open numbers: the team's latest decision, the ones before it, and which legs run live. */
 export interface ProofFacts {
   latest: LatestDecisionShown | null;
+  /** Null when they could not be read: the latest decision then stands alone. */
+  recent: RecentDecisions | null;
   provenance: ProvenanceLeg[];
 }
 
@@ -104,19 +109,23 @@ export function Proof({ numbers, facts }: { numbers: Promise<LandingNumbers>; fa
   );
 }
 
-/** The team's latest decision, or nothing when there is none to show. */
-export function LatestPanel({ latest }: { latest: LatestDecisionShown | null }) {
+/**
+ * The team's latest decision, with the ones before it under it when they could be read; nothing when there is no latest
+ * decision to show, since the earlier ones come from the same workspaces.
+ */
+export function LatestPanel({ latest, recent = null }: { latest: LatestDecisionShown | null; recent?: RecentDecisions | null }) {
   if (!latest) return null;
   return (
     <div className="mt-10 rounded-2xl border border-line bg-surface p-5 shadow-surface sm:p-6">
       <LatestDecisionCard decision={latest} headingLevel={3} />
+      {recent && <RecentDecisionList recent={{ decisions: earlierThan(recent.decisions, latest.seq), pastWeek: recent.pastWeek }} />}
     </div>
   );
 }
 
 async function Latest({ source }: { source: Promise<ProofFacts> }) {
-  const { latest } = await source;
-  return <LatestPanel latest={latest} />;
+  const { latest, recent } = await source;
+  return <LatestPanel latest={latest} recent={recent} />;
 }
 
 async function Live({ source }: { source: Promise<ProofFacts> }) {
@@ -132,8 +141,9 @@ async function Figures({ source }: { source: Promise<LandingNumbers> }) {
 function DecisionFallback() {
   return (
     <div aria-busy="true" className="mt-10">
-      <p className="sr-only">Loading the agent&apos;s latest decision</p>
-      <Skeleton className="h-[30rem] rounded-2xl sm:h-[17rem] lg:h-[12.5rem]" />
+      <p className="sr-only">Loading the agent&apos;s latest decisions</p>
+      {/* As tall as the latest decision with the five before it, as measured, so nothing below jumps when it streams in. */}
+      <Skeleton className="h-[92rem] rounded-2xl sm:h-[70rem] lg:h-[49rem]" />
     </div>
   );
 }
