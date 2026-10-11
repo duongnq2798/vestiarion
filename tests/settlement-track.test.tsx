@@ -142,9 +142,11 @@ describe("the ends", () => {
     expect(text(render(lifecycle([...decided, pending, { kind: "ended", at: T(4), attempt: 1, end: "cancelled", state: "CANCELLED", reason: null }], open)))).toContain(
       "Cancelled: Circle cancelled it. The payee was not paid."
     );
-    expect(text(render(lifecycle([...decided, { kind: "ended", at: T(4), attempt: 1, end: "not_sent", state: null, reason: "refused" }], open)))).toContain(
-      "Not sent: the send did not reach Circle, so the payee was not paid."
-    );
+    const notSent = text(render(lifecycle([...decided, { kind: "ended", at: T(4), attempt: 1, end: "not_sent", state: null, reason: "refused" }], open)));
+    expect(notSent).toContain("Not sent: the send did not reach Circle, so the payee was not paid.");
+    // Started, never said sent to Circle, when it did not reach Circle.
+    expect(notSent).toContain("Vestiarion started sending it.");
+    expect(notSent).not.toContain("Vestiarion sent it to Circle");
   });
 
   it("follows a new attempt, and lists the earlier one with how it ended", () => {

@@ -96,8 +96,11 @@ function reachedLine(stage: SettlementStage, mark: StageMark, settlement: Settle
       return mark.by === "person" ? "A person chose to pay it." : "The agent decided to pay it.";
     case "authorized":
       return mark.by === "two_people" ? "Two people approved it." : mark.by === "person" ? "A person approved it." : "Code's checks passed, so the agent could pay it on its own.";
-    case "submitted":
-      return settlement.attempt > 1 ? `Vestiarion sent it to Circle, as attempt ${settlement.attempt}.` : "Vestiarion sent it to Circle.";
+    case "submitted": {
+      const which = settlement.attempt > 1 ? `, as attempt ${settlement.attempt}` : "";
+      // A send that never reached Circle was started, not sent: the end below says so (L3).
+      return settlement.end?.end === "not_sent" ? `Vestiarion started sending it${which}.` : `Vestiarion sent it to Circle${which}.`;
+    }
     case "pending":
       if (mark.state === "STUCK") return "Circle shows it stuck: it was sent and can still be mined (Circle: STUCK).";
       // Gateway's failure is not an end: its attestation may still be minted, so nothing is sent again (L3).
