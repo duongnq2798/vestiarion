@@ -2,6 +2,9 @@
 
 Spec: `docs/superpowers/specs/2026-10-10-evidence-chain-design.md`. Branch `feat/evidence-chain`. No migration.
 
+Status 2026-10-11: tasks 1 to 8 built on the branch; 9 is the checks (`npm run typecheck`, `npm run lint`, `npm test`). The
+guide has two screenshots, `evidence-chain` and `evidence-signatures`, rather than one.
+
 ## Tasks
 
 1. **Labels and the step rule** (`src/lib/evidence-chain.ts`): the seven kinds, their words, the weakest-first order,

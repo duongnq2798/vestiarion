@@ -162,6 +162,13 @@ see this":
 - A first of two approvals on a payable (`approval_given`) is among the people step's facts.
 - E2.9 says what an entry's own check covers, rather than "linked to the entry before it", which only the whole chain
   shows.
+- Built (2026-10-11): the page's header names the section, and links back to it, since the evidence page is inside the
+  section rather than its own page. The seven words carry a one-line meaning each (`EVIDENCE_MEANINGS`), shown once on
+  the page and carried in the download's `labels`. A sample payee's address with no entry of its own is Inferred, as
+  sample data's other facts are, not Missing. The page lays itself out by its own width (a container query), the labels
+  and the subject beside the steps where it is wide. The guide shows the page in two pictures, three links with the head
+  and the last link with "Who can see this", from `/docs-shots`, whose entries are signed for real so the browser's check
+  verifies them.
 
 ## Testing
 
@@ -174,7 +181,11 @@ see this":
 - The route: session, membership 404, cross-site 403, bad kind 400, the JSON's shape and file name.
 - The page: rendered markup of a built chain (labels in words, links' states, the trail link, the I28 panel by role),
   and the source pins every workspace page has (params, then `requireMembership`, `inOrg`, the shell's status).
-- The page renders on sample data (the guide's screenshot, from `/docs-shots`).
+- The page renders on made-up records signed for real (the guide's screenshots, from `/docs-shots`), and the browser's
+  check verifies them (`tests/evidence-browser-check.test.ts`).
+- The entry points: a payable's and a milestone's card link Why it was paid or Evidence so far, a receivable's and a
+  treasury move's none, and the trail's last line (`tests/evidence-entry-points.test.tsx`); the section the page is in
+  (`tests/navigation.test.ts`, `tests/workspace-frame-ui.test.tsx`).
 
 ## Rollout
 
