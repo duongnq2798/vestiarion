@@ -1314,7 +1314,13 @@ the webhook verification snippets run against the signing code. The Guides
 pages (`content/docs/guides/`) are for people using the app rather than the
 API; they quote its buttons, fields and messages exactly, and
 `tests/docs-guides.test.ts` checks each quoted string against the source file
-it comes from, so renaming one in the app means updating the guide. Their step screenshots are the app’s own components rendered with sample data by `/docs-shots/<name>` (`src/app/docs-shots/`), which answers only where `DOCS_SCREENSHOTS=1` is set; `npm run docs:screenshots` photographs them into `public/docs/guides/`, and `tests/docs-screenshots.test.tsx` holds every `<Screenshot>` to an existing PNG with alt text, and every PNG to a guide. **A PR that
+it comes from, so renaming one in the app means updating the guide. Their step screenshots are the app’s own components rendered with sample data by `/docs-shots/<name>` (`src/app/docs-shots/`), which answers only where `DOCS_SCREENSHOTS=1` is set; `npm run docs:screenshots` photographs them into `public/docs/guides/`, and `tests/docs-screenshots.test.tsx` holds every `<Screenshot>` to an existing PNG with alt text, and every PNG to a guide. The nav groups pages by what a reader is doing (`docs/superpowers/specs/2026-10-11-docs-clarity-design.md`): Start here,
+Everyday work, Trust and controls, Connect your tools, Developers, then the API reference and webhooks, which the sidebar
+folds (`NavSection.folded`) until opened or holding the page being read; pages keep their addresses whatever their group.
+MDX pages have `<Callout kind="note|tip|important|warning|real-money">`, whose kind is written beside its title on the
+page and in the `.md` view, `<Action href>` for a guide's one next step in the app, and numbered `## 1. …` steps, which
+`DocsHeading` draws with a number badge while keeping their ids. A `<Screenshot>` opens larger in a dialog
+(`ZoomableImage`). **A PR that
 changes `/api/v1` or webhooks adds a changelog entry** to
 `content/docs/changelog.mdx`: dated, newest first, saying what changed for an
 integrator.
