@@ -45,7 +45,7 @@ function standing(line: PlanLine, today: string): string | null {
   if (line.state === "not_counted") return "Not counted";
   if (line.status === "pending") return "Not decided by the agent yet";
   if (line.move) return `The agent scheduled it for ${line.move.from === today ? "today" : dayLabel(line.move.from)}`;
-  if (line.agentOn && line.agentOn <= today) return "The agent pays it at its next cycle";
+  if (line.agentOn && line.agentOn <= today) return "The agent decides it again at its next cycle";
   return "Scheduled by the agent for this day";
 }
 

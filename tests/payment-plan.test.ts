@@ -141,12 +141,12 @@ describe("each bill's day (P4)", () => {
     expect(plan.moves).toBe(1);
   });
 
-  it("keeps the due date when paying early would take the balance under the cushion, says on which day, and offers the later day", () => {
+  it("does not propose paying early when that takes the balance under the cushion before the due date, and says on which day", () => {
     const plan = planPayments(
       input({
         operatingUsdc: 1100,
         cushion: 200,
-        bills: [bill({ amount: 1000, dueDate: ISO_DAY("2026-10-22"), scheduledFor: MIDNIGHT("2026-10-15"), discount: { pct: 2, deadline: ISO_DAY("2026-10-15") } })],
+        bills: [bill({ amount: 1000, dueDate: ISO_DAY("2026-10-22"), scheduledFor: MIDNIGHT("2026-10-22"), discount: { pct: 2, deadline: ISO_DAY("2026-10-15") } })],
       })
     );
     const only = line(plan, "b-1");
@@ -158,9 +158,80 @@ describe("each bill's day (P4)", () => {
     );
     // An obligation is never delayed to protect the cushion: on its due day it is paid, and says what it leaves.
     expect(flagCodes(only)).toEqual(["below_cushion"]);
-    expect(only.move).toEqual({ from: "2026-10-15", to: "2026-10-22" });
-    expect(only.approvable).toBe(true);
+    expect(only.move).toBeNull();
     expect(plan.discountsPlanned).toBe(0);
+  });
+
+  it("keeps the discount day the agent chose when only the cushion stands against it: a payment is never moved later to protect the cushion", () => {
+    const plan = planPayments(
+      input({
+        operatingUsdc: 1100,
+        cushion: 200,
+        bills: [bill({ amount: 1000, dueDate: ISO_DAY("2026-10-22"), scheduledFor: MIDNIGHT("2026-10-15"), discount: { pct: 2, deadline: ISO_DAY("2026-10-15") } })],
+      })
+    );
+    const only = line(plan, "b-1");
+    expect(only.on).toBe("2026-10-15");
+    expect(only.pays).toBe(980);
+    expect(only.discount).toEqual({ pct: 2, value: 20, until: "2026-10-15", taken: true });
+    expect(only.reason).toBe(
+      "Pays on Oct 15, 2026, the discount's last day, as the agent scheduled it, to take the 2% early-payment discount (20.00 USDC). The balance goes under the cushion on Oct 15, 2026; the plan never moves a payment later only to protect the cushion."
+    );
+    expect(flagCodes(only)).toEqual(["below_cushion"]);
+    expect(only.move).toBeNull();
+    expect(only.approvable).toBe(false);
+    expect(plan.moves).toBe(0);
+    expect(plan.discountsPlanned).toBe(20);
+  });
+
+  it("weighs the agent's own discount days first, and proposes no other that takes the balance further under the cushion", () => {
+    const plan = planPayments(
+      input({
+        operatingUsdc: 1100,
+        cushion: 200,
+        bills: [
+          bill({ id: "agent", amount: 1000, dueDate: ISO_DAY("2026-10-22"), scheduledFor: MIDNIGHT("2026-10-15"), discount: { pct: 2, deadline: ISO_DAY("2026-10-15") } }),
+          // Its deadline comes first, but it is weighed against the agent's own choice.
+          bill({ id: "deal", payee: "Harbor Office Supply", counterpartyId: "c-2", amount: 50, dueDate: ISO_DAY("2026-10-20"), scheduledFor: MIDNIGHT("2026-10-20"), discount: { pct: 2, deadline: ISO_DAY("2026-10-13") } }),
+        ],
+      })
+    );
+    expect(line(plan, "agent")).toMatchObject({ on: "2026-10-15", move: null });
+    expect(line(plan, "deal")).toMatchObject({ on: "2026-10-20", move: null });
+    expect(line(plan, "deal").reason).toBe(
+      "Pays on its due date, Oct 20, 2026: paying on Oct 13, 2026 for the 2% discount (1.00 USDC) would take the balance further under the cushion on Oct 15, 2026."
+    );
+  });
+
+  it("weighs the cushion only until the due date, where the discount starts leaving more cash, never less", () => {
+    // Without the discount the balance ends at 100 on Oct 21; with it, at 110. Both are under the 135 cushion, but only
+    // because of Beta: from Oct 13 to Oct 15, the days the discount costs cash, the balance stays at 510.
+    const plan = (alphaOn: string) =>
+      planPayments(
+        input({
+          operatingUsdc: 1000,
+          cushion: 135,
+          bills: [
+            bill({ id: "alpha", payee: "Alpha Freight", amount: 500, dueDate: ISO_DAY("2026-10-16"), scheduledFor: MIDNIGHT(alphaOn), discount: { pct: 2, deadline: ISO_DAY("2026-10-13") } }),
+            bill({ id: "beta", payee: "Beta Hosting", counterpartyId: "c-2", amount: 400, dueDate: ISO_DAY("2026-10-21"), scheduledFor: MIDNIGHT("2026-10-21") }),
+          ],
+        })
+      );
+    const proposed = plan("2026-10-16");
+    expect(line(proposed, "alpha")).toMatchObject({ on: "2026-10-13", pays: 490, move: { from: "2026-10-16", to: "2026-10-13" }, approvable: true });
+    expect(line(proposed, "alpha").reason).toBe(
+      "Pays on Oct 13, 2026, the discount's last day, to take the 2% early-payment discount (10.00 USDC); the balance stays above the cushion until Oct 21, 2026."
+    );
+    expect(proposed.days).toEqual([
+      { day: "2026-10-13", out: 490, balance: 510, balanceNow: 1000 },
+      { day: "2026-10-16", out: 0, balance: 510, balanceNow: 500 },
+      { day: "2026-10-21", out: 400, balance: 110, balanceNow: 100 },
+    ]);
+    // The agent chose the deadline itself: the plan keeps it, offering no move that would lose the discount.
+    const kept = plan("2026-10-13");
+    expect(line(kept, "alpha")).toMatchObject({ on: "2026-10-13", pays: 490, move: null, approvable: false });
+    expect(line(kept, "alpha").discount).toMatchObject({ taken: true, value: 10 });
+    expect(kept.moves).toBe(0);
   });
 
   it("does not take a discount that would leave another bill short", () => {
@@ -485,9 +556,55 @@ describe("waiting for a person (P8)", () => {
     expect(line(plan, "b-1")).toMatchObject({ state: "planned", on: "2026-10-14", move: null, approvable: false });
   });
 
-  it("offers no move for a bill the agent pays at its next cycle", () => {
+  it("offers no move for a bill the agent decides again at its next cycle, and counts it on the day the agent's rule gives", () => {
     const plan = planPayments(input({ bills: [bill({ scheduledFor: MIDNIGHT("2026-10-11"), discount: { pct: 2, deadline: ISO_DAY("2026-10-14") } })] }));
-    expect(line(plan, "b-1").move).toBeNull();
+    expect(line(plan, "b-1")).toMatchObject({ on: "2026-10-14", pays: 98, move: null, approvable: false });
+    expect(line(plan, "b-1").reason).toBe(
+      "Pays on Oct 14, 2026, the discount's last day, to take the 2% early-payment discount (2.00 USDC), as the agent decides at its next cycle."
+    );
+    // As scheduled now and with this plan alike: nobody can move it.
+    expect(plan.days).toEqual([{ day: "2026-10-14", out: 98, balance: 902, balanceNow: 902 }]);
+  });
+
+  it("puts a bill whose scheduled day has come where the agent's next cycle will, whatever the cushion", () => {
+    // 09:00 on Oct 11, before any cycle today: the agent scheduled Alpha for today, the discount's last day.
+    const today = planPayments(
+      input({
+        operatingUsdc: 1100,
+        cushion: 200,
+        bills: [bill({ amount: 1000, dueDate: ISO_DAY("2026-10-16"), scheduledFor: MIDNIGHT("2026-10-11"), discount: { pct: 2, deadline: ISO_DAY("2026-10-11") } })],
+      })
+    );
+    const only = line(today, "b-1");
+    expect(only).toMatchObject({ on: "2026-10-11", pays: 980, move: null, approvable: false, balanceAfter: 120 });
+    expect(only.discount).toMatchObject({ taken: true, value: 20 });
+    expect(only.reason).toBe("Pays today, the discount's last day, to take the 2% early-payment discount (20.00 USDC), as the agent decides at its next cycle.");
+    expect(flagCodes(only)).toEqual(["below_cushion"]);
+    expect(today.days).toEqual([{ day: "2026-10-11", out: 980, balance: 120, balanceNow: 120 }]);
+    expect(today.lowest).toEqual({ day: "2026-10-11", balance: 120 });
+    expect(today.lowestNow).toEqual({ day: "2026-10-11", balance: 120 });
+    expect(today.discountsPlanned).toBe(20);
+
+    // A day that passed with no cycle: its discount ended, so the agent's next decision is the due date.
+    const missed = line(
+      planPayments(input({ bills: [bill({ dueDate: ISO_DAY("2026-10-16"), scheduledFor: MIDNIGHT("2026-10-09"), discount: { pct: 2, deadline: ISO_DAY("2026-10-09") } })] })),
+      "b-1"
+    );
+    expect(missed).toMatchObject({ on: "2026-10-16", pays: 100, move: null });
+    expect(missed.reason).toBe("Pays on its due date, Oct 16, 2026; its 2% discount ended Oct 9, 2026.");
+
+    // A discount the reserve's yield outweighs: the agent's next decision is the due date, as the plan says.
+    const yielded = line(
+      planPayments(
+        input({
+          reserveApy: 0.05,
+          bills: [bill({ amount: 1000, dueDate: ISO_DAY("2026-10-22"), scheduledFor: MIDNIGHT("2026-10-11"), discount: { pct: 0.1, deadline: ISO_DAY("2026-10-13") } })],
+        })
+      ),
+      "b-1"
+    );
+    expect(yielded).toMatchObject({ on: "2026-10-22", pays: 1000, move: null });
+    expect(yielded.reason).toContain("the reserve's yield until then");
   });
 });
 

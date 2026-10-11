@@ -1128,11 +1128,13 @@ the two figures never disagree), the open payables and milestones, the agent's
 spending limit with what it paid, and the figure for two approvals, it gives
 each counted line a day (today when overdue, the due date otherwise, a
 discount's last day only when the discount is worth at least the reserve's
-yield to the due date, the balance stays at or above the cushion, no other
-line falls short and the spending limit has room), walks the days in the cash's
-order, marks a line the balance cannot cover as short without spending it, and
-previews each line's checks (payment limit, two approvals, screening, the daily
-and 7-day limit). `paymentPlanInput` (`src/lib/payment-plan-input.ts`) turns the
+yield to the due date, the balance stays at or above the cushion until the due
+date, no other line falls short and the spending limit has room; a discount day
+the agent chose itself is kept against the cushion, never moved later for it,
+and a scheduled bill whose day has come goes where the agent's own rule puts it
+at its next cycle, unmovable), walks the days in the cash's order, marks a line
+the balance cannot cover as short without spending it, and previews each line's
+checks (payment limit, two approvals, screening, the daily and 7-day limit). `paymentPlanInput` (`src/lib/payment-plan-input.ts`) turns the
 rows into that input, and `readPaymentPlan` (`src/lib/payment-plan-read.ts`)
 reads them in the workspace's scope; the page and the command both go through
 it, so they build the same plan. The page reads it best effort: a plan that
@@ -1152,7 +1154,8 @@ and offers the console's own balance read (`refreshOnChainBalanceAction`).
 `approvePlanLines` (`src/lib/commands/payment-plan.ts`, `payment_plan.approve`,
 the console only). The command refuses while a cycle runs (the AP stage writes a
 decided bill without a compare-and-set), reads the plan again, and refuses a
-stale balance or a plan fingerprint other than the one shown. Each line is then
+stale balance or a plan fingerprint other than the one shown, with `changed` so
+the console refreshes the page to the plan as it is now. Each line is then
 checked on its own: its fingerprint, a move to offer, its blocking flags, and
 maker-checker (whoever created the bill approves its day only as the
 workspace's only approver, `isSoleApprover`). `moveScheduledPayment`

@@ -4,15 +4,13 @@ You know today's balance. The payment plan shows the next 14 days: which bill le
 
 Open **Bills & receivables**. **Payment plan** heads the page, above the payables, whenever no status filter is chosen. Every member of the workspace can read it.
 
-At its top are the figures it starts from and ends with:
+At its top, a line says how fresh the balance is: "Sandbox: the balance is simulated." in a sandbox, or how many minutes ago it was read from the chain in a live workspace. Under it are the figures the plan starts from and ends with:
 
 - **Cash now**: the operating wallet, and the USYC reserve when the workspace has one, as **Safe to spend today** counts it. The agent brings back from the reserve what a day needs before it pays.
 - **Cushion**: "15% of what leaves within 7 days", and of the open milestones: the same cushion **Safe to spend today** keeps, so the two never disagree.
 - **Lowest balance with this plan**, and the day it falls on.
 - **Not covered by the cash**, when a bill is marked short: what those bills come to, still owed.
 - **Discounts this plan would take**: "An estimate, if paid as planned". Nothing in the plan calls a discount saved before it is taken.
-
-Under them, a line says how fresh the balance is: "Sandbox: the balance is simulated." in a sandbox, or how many minutes ago it was read from the chain in a live workspace.
 
 <Screenshot
   src="/docs/guides/payment-plan.png"
@@ -35,15 +33,15 @@ Under them, a line says how fresh the balance is: "Sandbox: the balance is simul
 2. **Otherwise its due date.** Never later, and never earlier for any reason but a discount.
 3. **Earlier only for an early-payment discount**, on the discount's last day, and only when all of these hold:
    - the discount is worth at least what holding the cash in the reserve until the due date would earn, which is how the agent decides too;
-   - with that bill paid then, the balance stays at or above the cushion on every day after it;
+   - with that bill paid then, the balance stays at or above the cushion on every day until its due date (from the due date on, paying early leaves more cash, never less);
    - no other bill is left short;
    - the agent's spending limit has room for it that day, without taking the room another payment had.
 
-   Discounts are tried in the order of their last day, the larger first. A bill the agent already scheduled on the discount's last day keeps that day: the plan never moves a payment later only to earn yield.
+   The discounts the agent already chose to take are weighed first, then the others in the order of their last day, the larger first. A bill the agent already scheduled on the discount's last day keeps that day: the plan never moves a payment later only to earn yield or to protect the cushion, and the line says when the balance goes under the cushion. It offers the due date instead only when paying early would leave another bill short or above the agent's spending limit.
 
 Within a day, a payment already on its way comes first, then milestones, then overdue bills from the oldest, then by due date and the smaller amount.
 
-Each line says why it is on its day, for instance "Overdue since Oct 9, 2026: first in line today." or "Pays on Oct 14, 2026, the discount's last day, to take the 1% early-payment discount (6.40 USDC); the balance stays above the cushion." When a discount is not taken, the line says why: it "would take the balance under the cushion", "would leave" another bill short or above the agent's spending limit, or "the reserve's yield until then" is worth more than the discount.
+Each line says why it is on its day, for instance "Overdue since Oct 9, 2026: first in line today." or "Pays on Oct 14, 2026, the discount's last day, to take the 1% early-payment discount (6.40 USDC); the balance stays above the cushion." When the balance goes under the cushion later in the 14 days, the line says until which day it stays above it. When a discount is not taken, the line says why: it "would take the balance under the cushion", "would leave" another bill short or above the agent's spending limit, or "the reserve's yield until then" is worth more than the discount.
 
 ## Reading a line
 
@@ -55,7 +53,7 @@ Each line has the payee, what leaves that day (a discounted amount shows the bil
 - **Above payment limit**, **Two approvals** and **High risk**: the checks the agent runs before every payment. Such a bill is not the agent's to pay on its own: people approve it, and a payee screened high risk waits for Compliance.
 - **May be the same payment** and **Due date unreadable**.
 
-A bill that waits for a person, held or waiting for details, is counted on its due date and says **Waits for a person**, with **Decide in Approvals**. A bill the agent has not decided yet gets a day too, but says "Not decided by the agent yet": the agent decides it first.
+A bill that waits for a person, held or waiting for details, is counted on its due date and says **Waits for a person**, with **Decide in Approvals**. A bill the agent has not decided yet gets a day too, but says "Not decided by the agent yet": the agent decides it first. A bill whose scheduled day has come says "The agent decides it again at its next cycle": it is counted on the day the agent's own rule gives it then, today, a discount's last day or its due date, and nobody moves it.
 
 **Cash effect** lists each day money leaves: what leaves, the balance **As scheduled now**, and the balance **With this plan**, "Projected, before any receivable arrives." A balance under the cushion is in bold.
 
@@ -73,14 +71,14 @@ Owners, admins and approvers see **Approve** on a line whose plan day differs fr
 - **Never your own bill.** Nobody approves the day of a bill they entered: the line says "You created this bill, so someone else must approve its day." The workspace's only approver can, and the audit log says so.
 - **A line whose checks do not pass** cannot be approved: it says "Clear what stops it before approving its day."
 - **Each line on its own.** **Approve all shown** sends the lines you were shown. Each is checked again by itself and only those that pass move; the message names those that did not, and why: "Moved 2 payments. The agent checks each again on its day before it pays."
-- **The plan you saw.** The plan is worked out again when you approve. If anything changed since it was shown, the balance, a bill's amount, payee, address or due date, nothing moves: "The plan changed since it was shown. Look at the new plan, then approve again." A single bill that changed says "This bill changed since the plan was shown. Look at the new plan."
+- **The plan you saw.** The plan is worked out again when you approve. If anything changed since it was shown, the balance, a bill's amount, payee, address or due date, nothing moves: "The plan changed since it was shown. Look at the new plan, then approve again." A single bill that changed says "This bill changed since the plan was shown. Look at the new plan." Either way the page then shows the plan as it is now.
 - **Not during a cycle.** While the agent is deciding: "A cycle is running. Try again in a minute, once it has finished."
 
 Each move is a signed entry in the audit log, `payment_rescheduled`, with who moved it, from which day to which, and the facts the line showed. The bill's decision trail reads "A person moved its payment to" the new day "from the payment plan", and the agent's own decision stays the one its card shows.
 
 ## When the balance is not fresh
 
-In a live workspace, the plan's cash is the balance read from the chain. When that read is more than 10 minutes old, or has never been made, the plan stays on screen with "The balance is not fresh", how old the figure is, and **Refresh balance**. Approving is off until the balance is read again: "The plan below uses the last figures read. Approving is off until they are fresh." The server refuses an approval on a stale balance too.
+In a live workspace, the plan's cash is the balance read from the chain. When that read is more than 10 minutes old, or has never been made, the plan stays on screen with "The balance is not fresh", how old the figure is, and **Refresh balance**. Approving is off until the balance is read again: "The plan below uses the last figures read. Approving is off until they are fresh." The server refuses an approval on a stale balance too, and the page then shows the plan with approving off and **Refresh balance**.
 
 <Screenshot
   src="/docs/guides/payment-plan-stale.png"

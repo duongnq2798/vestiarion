@@ -45,17 +45,28 @@ bill to the plan's day. It never pays anything itself.
 - Overdue or due today: today.
 - Otherwise the due date. Never later, never earlier for any reason but a discount.
 - Earlier only to take an early-payment discount that still applies, on its deadline (today when the deadline is
-  today), and only when, with that bill paid then, the balance stays at or above the cushion on every day from then to
-  the end of the window, no other bill is left short, and the agent's spending limit has room for it that day without
-  taking the room a payment already fitting there had. Discounts are tried in order of deadline, then larger discount
-  first, each against the plan as it stands.
+  today), and only when, with that bill paid then, no other bill is left short, the agent's spending limit has room for
+  it that day without taking the room a payment already fitting there had, and the balance stays at or above the
+  cushion on every day from the deadline to the day before the due date, or is at least no lower there than without
+  the discount. The cushion is weighed only on those days: from the due date on, the discount leaves more cash, never
+  less, so a balance that goes under the cushion later in the window because of another bill is no reason to refuse
+  it. Each discount is tried against the plan as it stands: first those the agent already chose to take (below), then
+  the rest in order of deadline, then larger discount first.
 - The discount must also be worth at least the yield of holding the cash in the reserve from its deadline to the due
   date, with the reserve's own rate (`accounts.apy`): the agent's own rule (payment timing), so a day the plan proposes
   is one the agent pays on when it decides the bill again, and a move is never undone by the agent's next decision.
   The yield only decides whether to propose paying early: a bill the agent already scheduled on or before the
   discount's deadline keeps that day, since the plan never moves a payment later only to earn yield.
-- Cost if wrong: a discount missed, or one taken that the cushion could have spared. Both are estimates; the bill is
-  still paid by its due date, and the agent decides again on the day.
+- The cushion does not move the agent's own choice either (P5): a bill the agent scheduled on or before the deadline
+  keeps that day when only the cushion stands against it, and its line says on which day the balance goes under the
+  cushion. The plan offers the due date instead only when paying early would leave another bill short or the agent
+  past its spending limit. Offering the due date for the cushion alone would make Approve lose a discount the agent
+  would have taken, for a cushion the due date's full payment breaches anyway (the plan counts no money coming in).
+- A taken discount's line says the balance stays above the cushion, or until which day when it goes under it later
+  in the window, so the sentence is true of the plan shown.
+- Cost if wrong: a discount missed, or one taken that the cushion could have spared, or the agent's early payment
+  kept while the balance sits under the cushion for a few days. All are estimates; the bill is still paid by its due
+  date, and the agent decides again on the day.
 
 **P5. Ordered by cash.**
 - Within a day: a payment already on its way first, then milestones, then overdue bills (oldest first), then by due
@@ -64,7 +75,8 @@ bill to the plan's day. It never pays anything itself.
   agent holds a bill it cannot pay for cash), and what such bills come to is shown as still owed. The balance shown is
   never below zero, so the plan never spends cash that is not there.
 - A payment due on its day that leaves the balance under the cushion is still planned on that day, and says so: an
-  obligation is never delayed to protect the cushion, and never past its due date to earn yield.
+  obligation is never delayed to protect the cushion, neither past its due date nor later than the day the agent
+  chose (P4), and never past its due date to earn yield.
 - Cost if wrong: the agent pays in the order it decides; the plan's order is a preview, which is why it moves nothing
   by itself.
 
@@ -91,6 +103,12 @@ bill to the plan's day. It never pays anything itself.
 - Held, awaiting information, being decided, and held milestones: listed with what they wait for and a link to
   Approvals, counted on their due day (today when overdue), never given a plan day. Nothing in the plan acts on them.
 - A bill the agent has not decided yet gets a plan day and cannot be moved: the agent decides it first.
+- A scheduled bill whose day has come (today or before, still `scheduled` until the next cycle runs) is decided again
+  at the agent's next cycle (`dueForDecision`). The plan counts it where the agent's rule (payment timing) puts it then,
+  in the plan and as scheduled now alike: today when overdue or due today, a discount's deadline when the discount is
+  worth at least the yield, its due date otherwise, whatever the cushion. It is not a discount the plan tries, and it
+  cannot be moved; it says "The agent decides it again at its next cycle". Counting it on another day would show a
+  balance, a lowest figure and a reason for a day that will not happen.
 
 **P9. Approving a line moves a scheduled bill's day. Nothing else.**
 - Offered only for a bill the agent scheduled, whose plan day differs from the agent's, within today and its due date.
@@ -121,6 +139,8 @@ bill to the plan's day. It never pays anything itself.
 - The server reads everything again and rebuilds the plan. A plan fingerprint that differs refuses the whole request; a
   line whose own fingerprint differs is refused. A change of payee, amount, balance or due date therefore invalidates
   what was shown.
+- Such a refusal, and a stale balance's (P12), carries `changed`, so the console refreshes the page: the person sees
+  the new plan, or the stale warning with Refresh balance, instead of the old plan's buttons refused again.
 - Cost if wrong: a person asked to approve again after an unrelated change (a payment elsewhere changed the balance).
 
 **P12. Fresh data first (I20).**
@@ -161,13 +181,15 @@ appear in `GET /api/v1/ledger` and as `ledger.appended`, a moved bill's `schedul
 ## Testing
 
 - `tests/payment-plan.test.ts`: the pure planner over hand-made rows: overdue first, due date by default, a discount
-  taken only when the cushion holds, short lines not spent and counted as still owed, each obligation once (flagged,
-  escrow, in flight, bill and milestone alike), the per-line checks and the 7-day window, moves only for scheduled bills,
-  fingerprints that change with payee, amount, balance and due date, freshness, and a fixture plan that never spends
-  more than the cash or pays the agent past its limit.
+  taken only when the cushion holds until its due date, the agent's own discount day kept against the cushion, a
+  scheduled bill whose day has come placed by the agent's rule, short lines not spent and counted as still owed, each
+  obligation once (flagged, escrow, in flight, bill and milestone alike), the per-line checks and the 7-day window,
+  moves only for scheduled bills, fingerprints that change with payee, amount, balance and due date, freshness, and a
+  fixture plan that never spends more than the cash or pays the agent past its limit.
 - `tests/payment-plan-apply.test.ts`: the write is a compare-and-set with the shown facts and appends the signed entry.
-- `tests/commands-payment-plan.test.ts`: the gate, a running cycle, stale balance, changed plan, a line's own checks, the
-  creator refused unless sole approver, a batch applying only the passing lines, and a cycle raised for today.
+- `tests/commands-payment-plan.test.ts`: the gate, a running cycle, stale balance, changed plan (both marked
+  `changed`, so the page refreshes), a line's own checks, the creator refused unless sole approver, a batch applying
+  only the passing lines, and a cycle raised for today.
 - `tests/payment-plan-ui.test.tsx`: the section's words, the stale warning with approving off, the viewer without
   Approve, the projected figures labelled, and the struck amount and a balance under the cushion said in words.
 - `tests/payment-plan-input.test.ts`: the rows turned into the planner's input as the page and the command both read

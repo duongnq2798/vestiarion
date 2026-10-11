@@ -89,9 +89,22 @@ describe("approvePlanAction", () => {
 
   it("passes a refusal on in the command's words, refreshing nothing when nothing changed", async () => {
     authorizeMock.mockResolvedValueOnce(member("admin"));
-    approvePlanLinesMock.mockResolvedValueOnce({ ok: false, code: "stale", message: "The balance was read from the chain 30 minutes ago. Refresh it to approve the plan." });
+    approvePlanLinesMock.mockResolvedValueOnce({ ok: false, code: "cycle_running", message: "A cycle is running. Try again in a minute, once it has finished." });
+    const result = await run(() => approvePlanAction(INITIAL, form([`${INVOICE_A}:abc123`])));
+    expect(result).toEqual({ ok: false, message: "A cycle is running. Try again in a minute, once it has finished." });
+    expect(revalidatePathMock).not.toHaveBeenCalled();
+  });
+
+  it("refreshes the page after a refusal that says the plan shown is out of date", async () => {
+    authorizeMock.mockResolvedValueOnce(member("admin"));
+    approvePlanLinesMock.mockResolvedValueOnce({
+      ok: false,
+      code: "stale",
+      message: "The balance was read from the chain 30 minutes ago. Refresh it to approve the plan.",
+      changed: true,
+    });
     const result = await run(() => approvePlanAction(INITIAL, form([`${INVOICE_A}:abc123`])));
     expect(result).toEqual({ ok: false, message: "The balance was read from the chain 30 minutes ago. Refresh it to approve the plan." });
-    expect(revalidatePathMock).not.toHaveBeenCalled();
+    expect(revalidatePathMock).toHaveBeenCalled();
   });
 });

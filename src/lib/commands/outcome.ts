@@ -1,7 +1,8 @@
 /**
  * What a command did, in the words the console shows (integrations design R6). A surface shows `message`, or says
- * `code` in its own words. `changed` marks a refusal after which something did change, so a surface still refreshes
- * what it shows: an approval whose transfer failed leaves the invoice held with the reason.
+ * `code` in its own words. `changed` marks a refusal after which something did change, or that found what the person
+ * was shown out of date, so a surface still refreshes what it shows: an approval whose transfer failed leaves the
+ * invoice held with the reason; a payment plan that changed since it was shown is shown again as it is now.
  */
 export interface Refused {
   ok: false;

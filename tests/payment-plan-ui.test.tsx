@@ -81,6 +81,15 @@ describe("the payment plan section", () => {
     expect(words).not.toMatch(/saved/i);
   });
 
+  it("says a bill whose scheduled day has come is decided again by the agent, on the day its rule gives, with nothing to approve", () => {
+    const plan = planOf({ bills: [bill({ scheduledFor: "2026-10-11T00:00:00.000Z" })] });
+    const markup = render({ plan });
+    const words = text(markup);
+    expect(words).toContain("The agent decides it again at its next cycle");
+    expect(words).toContain("Pays on Oct 15, 2026, the discount's last day, to take the 2% early-payment discount (20.00 USDC), as the agent decides at its next cycle.");
+    expect(markup).not.toContain("Approve paying");
+  });
+
   it("lists what waits for a person, with the way to Approvals, and what is not counted", () => {
     const markup = render();
     const words = text(markup);

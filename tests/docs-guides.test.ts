@@ -496,6 +496,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Waits for a person", PAYMENT_PLAN],
     ["Decide in Approvals", PAYMENT_PLAN],
     ["Not decided by the agent yet", PAYMENT_PLAN],
+    ["The agent decides it again at its next cycle", PAYMENT_PLAN],
     ["Cash effect", PAYMENT_PLAN],
     ["As scheduled now", PAYMENT_PLAN],
     ["With this plan", PAYMENT_PLAN],

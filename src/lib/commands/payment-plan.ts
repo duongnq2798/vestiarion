@@ -53,8 +53,10 @@ export async function approvePlanLines(
     // The AP stage writes a bill it decides without a compare-and-set: no move while it may be deciding (P13).
     if (await hasRunningCycle()) return refused("cycle_running", "A cycle is running. Try again in a minute, once it has finished.");
     const plan = await readPaymentPlan();
-    if (plan.blocked) return refused("stale", plan.blocked);
-    if (plan.fingerprint !== input.planFingerprint) return refused("plan_changed", PLAN_CHANGED);
+    // `changed` on each refusal that says the plan shown is out of date: the console then shows it as it is now, with
+    // approving off and Refresh balance when the balance is stale, instead of the same buttons refused again.
+    if (plan.blocked) return refused("stale", plan.blocked, { changed: true });
+    if (plan.fingerprint !== input.planFingerprint) return refused("plan_changed", PLAN_CHANGED, { changed: true });
 
     const byId = new Map(plan.lines.map((line) => [line.id, line]));
     const requested = [...new Map(input.lines.map((line) => [line.invoiceId, line])).values()];
@@ -68,6 +70,7 @@ export async function approvePlanLines(
       const line = byId.get(invoiceId);
       const payee = line?.payee ?? "A bill";
       const why = lineRefusal(line, fingerprint, actor.userId, soleApprover);
+      if (!line || line.fingerprint !== fingerprint) changed = true;
       if (why || !line?.move) {
         results.push({ invoiceId, payee, ok: false, message: why ?? "There is nothing to move on this bill." });
         continue;

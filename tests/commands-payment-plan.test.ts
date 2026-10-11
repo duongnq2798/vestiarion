@@ -120,11 +120,12 @@ describe("approvePlanLines", () => {
     expect(mocks.moveScheduledPayment).not.toHaveBeenCalled();
   });
 
-  it("refuses a plan whose balance is stale, with the reason, and moves nothing (I20)", async () => {
+  it("refuses a plan whose balance is stale, with the reason, moves nothing, and has the page show the plan as stale (I20)", async () => {
     const stale = planOf({ balance: { kind: "chain", syncedAt: new Date(NOW - 30 * 60_000).toISOString() } });
     mocks.readPaymentPlan.mockResolvedValueOnce(stale);
     const outcome = await run(() => approvePlanLines(approver(), request(stale, ["deal"])));
-    expect(outcome).toEqual({ ok: false, code: "stale", message: "The balance was read from the chain 30 minutes ago. Refresh it to approve the plan." });
+    // `changed`: the console refreshes the page, which then turns approving off and offers Refresh balance.
+    expect(outcome).toEqual({ ok: false, code: "stale", message: "The balance was read from the chain 30 minutes ago. Refresh it to approve the plan.", changed: true });
     expect(mocks.moveScheduledPayment).not.toHaveBeenCalled();
   });
 
@@ -133,7 +134,8 @@ describe("approvePlanLines", () => {
     for (const changed of [planOf({ operatingUsdc: 999 }), planOf({ bills: [bill({ id: "deal", amount: 101 })] }), planOf({ bills: [bill({ id: "deal", payeeAddress: "0xnew" })] })]) {
       mocks.readPaymentPlan.mockResolvedValueOnce(changed);
       const outcome = await run(() => approvePlanLines(approver(), request(shown, ["deal"])));
-      expect(outcome).toEqual({ ok: false, code: "plan_changed", message: "The plan changed since it was shown. Look at the new plan, then approve again." });
+      // `changed`: the console refreshes the page, so the new plan is the one on screen.
+      expect(outcome).toEqual({ ok: false, code: "plan_changed", message: "The plan changed since it was shown. Look at the new plan, then approve again.", changed: true });
     }
     expect(mocks.moveScheduledPayment).not.toHaveBeenCalled();
   });
@@ -192,7 +194,16 @@ describe("approvePlanLines", () => {
       ok: false,
       code: "not_moved",
       message: "Nothing was moved. Northwind Supply: This bill changed since the plan was shown. Look at the new plan. A bill: It is no longer in the plan.",
+      changed: true,
     });
+  });
+
+  it("refreshes nothing when a refusal leaves the plan on screen as it is", async () => {
+    const plan = planOf();
+    mocks.readPaymentPlan.mockResolvedValueOnce(plan);
+    const outcome = await run(() => approvePlanLines(approver(), request(plan, ["mine", "capped"])));
+    expect(outcome.ok).toBe(false);
+    expect(outcome).not.toHaveProperty("changed");
   });
 
   it("says when a bill changed between the read and the move", async () => {
