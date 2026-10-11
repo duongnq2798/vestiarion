@@ -582,9 +582,19 @@ export function planPayments(input: PaymentPlanInput): PaymentPlan {
     const trial = new Map(chosen).set(draft.line.id, on);
     const tried = run(trial);
     const newlyShort = drafts.find((other) => tried.short.has(other.line.id) && !current.short.has(other.line.id));
+    // Within the agent's limits too: a discount the agent could not pay on its own that day, or one that would take the
+    // room another payment had, is not worth a person's approval.
+    const newlyOver = drafts.find((other) => tried.overLimit.has(other.line.id) && !current.overLimit.has(other.line.id));
     const underDay = days.find((day) => day >= on && (tried.dayBalance.get(day) ?? 0) + EPSILON < input.cushion);
+    const dayIn = (map: Map<string, string>, which: Draft) => place(map, "plan").find((placement) => placement.draft === which)?.day ?? on;
     if (newlyShort) {
-      outcome.set(draft.line.id, { taken: false, why: `would leave ${newlyShort.line.payee} short on ${dayWords(place(trial, "plan").find((placement) => placement.draft === newlyShort)?.day ?? on)}` });
+      outcome.set(draft.line.id, { taken: false, why: `would leave ${newlyShort.line.payee} short on ${dayWords(dayIn(trial, newlyShort))}` });
+    } else if (newlyOver) {
+      const where = dayWords(dayIn(trial, newlyOver));
+      outcome.set(draft.line.id, {
+        taken: false,
+        why: newlyOver === draft ? `would be above what the agent may pay on its own on ${where}` : `would leave ${newlyOver.line.payee} above what the agent may pay on its own on ${where}`,
+      });
     } else if (underDay) {
       outcome.set(draft.line.id, { taken: false, why: `would take the balance under the cushion on ${dayWords(underDay)}` });
     } else {

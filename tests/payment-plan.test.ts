@@ -178,6 +178,42 @@ describe("each bill's day (P4)", () => {
     expect(line(plan, "deal").reason).toContain("would leave Northwind Supply short on Oct 16, 2026");
   });
 
+  it("does not take a discount that would put it, or another payment, above what the agent may pay on its own that day", () => {
+    const limits = { budget: { dailyUsdc: 500, weeklyUsdc: null, spentToday: 0, spentThisWeek: 0 }, twoApprovalsAbove: null };
+    // The rent fits the day's 500; the deal paid that day too would not.
+    const itself = planPayments(
+      input({
+        limits,
+        bills: [
+          bill({ id: "rent", payee: "Harbor Office Supply", counterpartyId: "c-2", amount: 400, dueDate: ISO_DAY("2026-10-13"), scheduledFor: MIDNIGHT("2026-10-13") }),
+          bill({ id: "deal", amount: 300, dueDate: ISO_DAY("2026-10-20"), scheduledFor: MIDNIGHT("2026-10-20"), discount: { pct: 5, deadline: ISO_DAY("2026-10-13") } }),
+        ],
+      })
+    );
+    expect(line(itself, "deal").on).toBe("2026-10-20");
+    expect(line(itself, "deal").reason).toBe(
+      "Pays on its due date, Oct 20, 2026: paying on Oct 13, 2026 for the 5% discount (15.00 USDC) would be above what the agent may pay on its own on Oct 13, 2026."
+    );
+    expect(line(itself, "deal").flags).toEqual([]);
+    expect(line(itself, "rent").agentPays).toBe(true);
+
+    // Two discounts ending the same day: the larger is taken; the smaller, paid first that day for its earlier due date,
+    // would leave the larger above the limit.
+    const other = planPayments(
+      input({
+        limits,
+        bills: [
+          bill({ id: "big", payee: "Harbor Office Supply", counterpartyId: "c-2", amount: 400, dueDate: ISO_DAY("2026-10-24"), scheduledFor: MIDNIGHT("2026-10-24"), discount: { pct: 5, deadline: ISO_DAY("2026-10-13") } }),
+          bill({ id: "small", amount: 300, dueDate: ISO_DAY("2026-10-20"), scheduledFor: MIDNIGHT("2026-10-20"), discount: { pct: 1, deadline: ISO_DAY("2026-10-13") } }),
+        ],
+      })
+    );
+    expect(line(other, "big").on).toBe("2026-10-13");
+    expect(line(other, "big").agentPays).toBe(true);
+    expect(line(other, "small").on).toBe("2026-10-20");
+    expect(line(other, "small").reason).toContain("would leave Harbor Office Supply above what the agent may pay on its own on Oct 13, 2026");
+  });
+
   it("takes a discount whose deadline is today, today", () => {
     const plan = planPayments(
       input({ bills: [bill({ amount: 100, dueDate: ISO_DAY("2026-10-20"), scheduledFor: MIDNIGHT("2026-10-20"), discount: { pct: 1, deadline: ISO_DAY("2026-10-11") } })] })
