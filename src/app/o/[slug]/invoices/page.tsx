@@ -108,20 +108,25 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
           })
         : [],
     ]);
-    const entries = await listLedgerEntriesForTargets({ invoiceIds: invoices.map((invoice) => invoice.id) });
-    // The next 14 days of payments, in the order the cash allows (payment plan design P1), from the invoices and
-    // counterparties read above. Best effort: a plan that cannot be read says so in its section, and nothing else changes.
-    const paymentPlan = await readPaymentPlan({ invoices, counterparties }).catch((error: unknown) => {
-      console.error("invoices: payment plan not read", error instanceof Error ? error.message : error);
-      return null;
-    });
+    const filter = typeof query.status === "string" ? query.status : undefined;
+    const [entries, paymentPlan] = await Promise.all([
+      listLedgerEntriesForTargets({ invoiceIds: invoices.map((invoice) => invoice.id) }),
+      // The next 14 days of payments, in the order the cash allows (payment plan design P1), from the invoices and
+      // counterparties read above, shown over the whole list only. Best effort: a plan that cannot be read says so in
+      // its section, and nothing else changes.
+      filter
+        ? null
+        : readPaymentPlan({ invoices, counterparties }).catch((error: unknown) => {
+            console.error("invoices: payment plan not read", error instanceof Error ? error.message : error);
+            return null;
+          }),
+    ]);
     const paymentOutcomes = planOutcomes({ now: Date.now(), invoices, entries });
     // Whoever entered a bill approves its day only as the workspace's only approver (payment plan P10); asked only then.
     const soleApprover =
       canDecide && paymentPlan?.lines.some((line) => line.move !== null && line.createdBy === access.user.id) ? await isSoleApprover(access.user.id) : false;
     // In shadow mode, each card carries a person's verdict on the agent's decision, given or to give (shadow mode S3).
     const verdicts = await verdictFacts(db(), entries, canDecide);
-    const filter = typeof query.status === "string" ? query.status : undefined;
     const shown = filter ? invoices.filter((invoice) => invoice.status === filter) : invoices;
     const counterpartiesById = new Map(counterparties.map((counterparty) => [counterparty.id, counterparty]));
     const decisions = shown.map((invoice) => invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), entries, { network, deciding, verdicts }));

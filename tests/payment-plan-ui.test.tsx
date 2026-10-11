@@ -133,6 +133,13 @@ describe("the payment plan section", () => {
     expect(words).toContain("With this plan");
   });
 
+  it("says in words what the struck amount and a balance under the cushion are, not by look alone", () => {
+    expect(text(render())).toContain("Billed 1,000.00 USDC , pays 980.00 USDC");
+    const tight = text(render({ plan: planOf({ cushion: 1900 }) }));
+    expect(tight).toContain("1,800.00 USDC , under the cushion");
+    expect(tight).toContain("A balance under the cushion is in bold.");
+  });
+
   it("counts the last 30 days from what happened", () => {
     const words = text(render());
     expect(words).toContain("Last 30 days");

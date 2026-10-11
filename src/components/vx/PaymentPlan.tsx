@@ -77,7 +77,13 @@ function LineRow({
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
             <span className="min-w-0 text-sm font-medium text-ink">{line.payee}</span>
             <span className="flex items-baseline gap-2 text-sm">
-              {line.pays !== line.amount && line.on !== null && <Money value={line.amount} struck className="text-xs text-ink-3" />}
+              {line.pays !== line.amount && line.on !== null && (
+                <>
+                  <span className="sr-only">Billed</span>
+                  <Money value={line.amount} struck className="text-xs text-ink-3" />
+                  <span className="sr-only">, pays</span>
+                </>
+              )}
               <Money value={line.on === null ? line.amount : line.pays} className="text-ink" />
             </span>
           </div>
@@ -152,7 +158,7 @@ function LineGroup({ title, lines, ...rest }: { title: string; lines: PlanLine[]
 function PlanSummary({ plan }: { plan: PaymentPlan }) {
   const rows: Array<{ label: string; value: ReactNode; note?: string; tone?: "held" }> = [
     { label: "Cash now", value: <Money value={plan.cash} />, note: plan.reserve > 0 ? "The operating wallet and the USYC reserve" : "The operating wallet" },
-    { label: "Cushion", value: <Money value={plan.cushion} />, note: "15% of the next 7 days, as Safe to spend keeps" },
+    { label: "Cushion", value: <Money value={plan.cushion} />, note: "15% of what leaves within 7 days, as Safe to spend keeps" },
     ...(plan.lowest ? [{ label: "Lowest balance with this plan", value: <Money value={plan.lowest.balance} />, note: dayLabel(plan.lowest.day) }] : []),
     ...(plan.stillOwed > 0 ? [{ label: "Not covered by the cash", value: <Money value={plan.stillOwed} />, note: "Bills marked short, still owed", tone: "held" as const }] : []),
     { label: "Discounts this plan would take", value: <Money value={plan.discountsPlanned} />, note: "An estimate, if paid as planned" },
@@ -196,8 +202,9 @@ export function PlanCashEffect({ plan }: { plan: PaymentPlan }) {
               <TableCell className="px-2 py-2 text-right text-ink-2 sm:px-3">
                 <Money value={day.balanceNow} />
               </TableCell>
-              <TableCell className={cn("px-2 py-2 text-right sm:px-3", day.balance < plan.cushion && "font-medium text-held")}>
+              <TableCell className={cn("px-2 py-2 text-right sm:px-3", day.balance < plan.cushion && "font-semibold text-held")}>
                 <Money value={day.balance} />
+                {day.balance < plan.cushion && <span className="sr-only">, under the cushion</span>}
               </TableCell>
             </TableRow>
           ))}
@@ -302,8 +309,9 @@ export function PaymentPlanSection({
           )}
           <PlanSummary plan={plan} />
           <p className="text-[0.8125rem] leading-relaxed text-ink-2">
-            Each bill is paid on its due date, or earlier only to take an early-payment discount while the balance stays above the cushion. Approving a line moves
-            the day the agent pays a scheduled bill; on that day the agent checks the bill again, with every rule, before it pays. Nothing here pays a bill.
+            Each bill is paid on its due date, or earlier only to take an early-payment discount worth at least what the cash would earn until then, while the
+            balance stays above the cushion. Approving a line moves the day the agent pays a scheduled bill; on that day the agent checks the bill again, with
+            every rule, before it pays. Nothing here pays a bill.
           </p>
           {canDecide
             ? approvable.length > 1 && (
