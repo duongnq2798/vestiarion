@@ -10,3 +10,4 @@ export { importInvoices, type ImportOutcome } from "./imports";
 export { issuePayeeLink } from "./payee-links";
 export { importActualPayments, recordActualPayment } from "./actuals";
 export { approvePlanLines, type PlanLineResult } from "./payment-plan";
+export { importBankStatement } from "./statements";

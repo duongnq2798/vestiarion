@@ -9,6 +9,7 @@ import { compareActuals } from "@/lib/actual-payments-compare";
 import { actualsCsvTemplate } from "@/lib/actual-payments-csv";
 import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
+import { readStatementSetup } from "@/lib/bank-statements";
 import { shellModes } from "@/lib/circle";
 import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
@@ -21,7 +22,10 @@ import { shellStatus } from "@/lib/shell-status";
 
 export const dynamic = "force-dynamic";
 
-/** A CSV of up to 200 payments is saved here a row at a time, each with its signed entry: the page's actions may take a while. */
+/**
+ * A CSV or a bank statement's ticked lines, up to 200 payments, are saved here one at a time, each with its signed entry:
+ * the page's actions may take a while.
+ */
 export const maxDuration = 300;
 
 export const metadata: Metadata = { title: sectionTitle("report") };
@@ -31,7 +35,8 @@ export const metadata: Metadata = { title: sectionTitle("report") };
  * agent did with the workspace's real bills, and, bill by bill, what the business recorded paying beside it
  * (docs/superpowers/specs/2026-10-10-actual-payments-design.md). A read that fails throws to the section's error state
  * (R7): a report with rows missing would understate what happened. Before migration 0090 runs, the comparison says so
- * and the rest of the report is unchanged.
+ * and the rest of the report is unchanged; before 0094, so does its bank statement card
+ * (docs/superpowers/specs/2026-10-10-bank-statement-design.md B11, B12).
  */
 export default async function ReportPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ actuals?: string | string[] }> }) {
   const { slug } = await params;
@@ -57,6 +62,16 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
           ).map((member) => [member.userId, member.email])
         )
       : {};
+    // Whether a bank statement can be imported, and the accounts named before: for someone who may record only. Best
+    // effort, as the members: the card is a way to record, not a figure of the report. A read that fails for another
+    // reason than the missing migration offers the card with no accounts, and the import says itself what stops it.
+    const statement =
+      canRecord && comparison
+        ? await readStatementSetup(db()).catch((error: unknown) => {
+            console.error("report: bank statement setup not read", error instanceof Error ? error.message : error);
+            return { available: true, accounts: [] };
+          })
+        : null;
     const notRecorded = comparison?.rows.filter((row) => row.actual === null && row.agent.stance !== "none") ?? [];
     const templateCsv =
       canRecord && notRecorded.length > 0
@@ -73,7 +88,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
         <WorkspaceReport
           slug={slug}
           report={report}
-          actuals={<ActualsComparison slug={slug} comparison={comparison} canRecord={canRecord && comparison !== null} members={members} templateCsv={templateCsv} showAll={query.actuals === "all"} />}
+          actuals={<ActualsComparison slug={slug} comparison={comparison} canRecord={canRecord && comparison !== null} members={members} templateCsv={templateCsv} statement={statement} showAll={query.actuals === "all"} />}
         />
       </ProductShell>
     );

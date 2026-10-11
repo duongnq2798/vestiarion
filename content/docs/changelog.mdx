@@ -6,6 +6,13 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 - A move is neither a payment nor a decision: the invoice stays `scheduled`, with the new day as its `scheduledFor` in `GET /api/v1/invoices`, and the agent decides it again on that day with an `ap_*` entry, as for any scheduled bill.
 - A move to today starts a cycle, whose `cycle_complete` entry lists the new event kind `plan_approved` in `events`. Nothing else in `/api/v1` changes.
 
+## 2026-10-11: What the business paid, from its bank statement
+
+- An owner or admin can fill in what the business paid from its bank statement, on the workspace report: each ticked line of money out is recorded against the bill it paid. Each is an `actual_payment_recorded` entry, or `actual_payment_corrected` when the bill had a record, as before, sent to webhook endpoints as `ledger.appended` and listed by `GET /api/v1/ledger`. Such a record is a payment by `bank_transfer` on the line's booking day, for its amount and currency, with its reference, and its entry adds:
+  - **`via: "statement"`**.
+  - **`statementLine`** `{ id, account, line, bookedOn, valueOn, amount, currency, description, payee, reference, balance }`: the kept line's id, the account as the person named it, the line of the file, the booking day and the value day (YYYY-MM-DD, `valueOn` null when the statement has none), the amount as the statement says it (money out negative) in `currency`, the bank's description, and the payee, the reference and the running balance after the line, each null when the statement has none.
+- Entries without these fields are unchanged. Nothing else in `/api/v1` changes.
+
 ## 2026-10-10: A limit applied after trying it records the replay
 
 - A person can try a new payment limit, figure for two approvals or spending limit on the agent's past decisions before saving it. When they apply it from that result, its entry gains `replay` in its `detail`: `{ windowDays, from, to, decisions, unchanged, nowHeld, nowPaid, nowTwoPeople, cantTell }`. `windowDays` is 30 or 90, `from` and `to` bound the window, and the counts are the decisions replayed and how their outcome would change. A later decision on a bill the replay already paid counts as `unchanged`, so each bill moves a count once.

@@ -31,7 +31,7 @@ export function LatestDecisionCard({ decision, headingLevel = 2 }: { decision: L
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start lg:gap-12">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span aria-hidden className="size-2 shrink-0 rounded-full bg-proof motion-safe:animate-pulse" />
+          <span aria-hidden className="size-2 shrink-0 rounded-full bg-proof" />
           <Heading id="latest-decision-title" className="font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.11em] text-proof">
             The agent&apos;s latest decision
           </Heading>
@@ -64,10 +64,12 @@ export function LatestDecisionCard({ decision, headingLevel = 2 }: { decision: L
               href={decision.txUrl}
               target="_blank"
               rel="noopener noreferrer"
+              data-cta="proof-transaction"
               className="inline-flex min-h-6 items-center gap-0.5 text-xs font-medium text-agent underline-offset-2 hover:underline"
             >
               View transaction
               <ArrowUpRight aria-hidden className="size-3.5" />
+              <span className="sr-only">{` on the ${decision.network} explorer (opens in a new tab)`}</span>
             </a>
           )}
         </div>

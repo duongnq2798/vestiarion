@@ -111,6 +111,43 @@ Under **Import what your business paid from a CSV**, choose a file with the colu
 
 Nothing is saved until you check the preview. Each row reads **New**, **Corrects the record** (the bill has a record, and the row differs), **Same as recorded** (skipped), **Not matched** or **Not read**, with why. **Save N payments** saves the rows that change something, each as its own signed entry, and the preview then shows what is left.
 
+### Import a bank statement
+
+Your bank's CSV export of an account fills in many records at once, without typing each one. Under **Import a bank statement**, type the **Account** the statement is from, as you name it; the accounts named before are offered under **Named before:**. Then choose the file under **Choose a statement CSV, or drop one here**, or open **Or paste the cells from a spreadsheet**, paste them and choose **Read the pasted cells**. A statement is up to 2,000 lines and 2 MB. Nothing is saved until you tick the lines. A file saved as UTF-8 keeps names in any language; one that is not is read as Windows-1252, as many banks still export, and the card says "This file is not saved as UTF-8". If names look wrong, paste the cells instead.
+
+The statement is read in your browser at once, under a heading with its name, such as **How statement-october.csv is read**, or **How the pasted cells are read**:
+
+- **Separator** (comma, semicolon, tab or pipe) and **Header row** are found from the file. Banks put the account and the period above the header; a file with no header is read with **No header row**. Change either if it is wrong.
+- Each column is suggested from its header, and you can change it. **Booking date** and **Description** are needed, and either one **Amount** column or **Money out** and **Money in**. **Value date**, **Payee**, **Reference**, **Currency** and **Balance** are read when the statement has them; choose **Not in this statement** for one it lacks. Each column shows its first value beside its name.
+- With one amount column, say how **In the amount column, money out is written**: **As a negative amount, such as -120.00**, as most banks do, or **As a positive amount, such as 120.00**. A value in brackets, or with a minus after it, is read as negative, as is one with the minus sign (−) a spreadsheet writes, and DR or CR after a value says money out or money in. With money out and money in in two columns, the column says which, whatever the sign. A dash alone, as some banks write in the column a line leaves empty, is read as empty.
+- With no currency column, type the **Currency of the account**, such as SGD or EUR, or USDC or EURC.
+
+Nothing is guessed. When every date reads two ways, such as 03/04/2026, the card asks **How are the dates written?** and shows the day each way gives. When an amount such as 1,500 could be thousands or one and a half, it asks which. What is missing or does not fit is listed under **Before the lines can be read**.
+
+Then it says how many lines were read, the first and last day, how many are money out and how many money in, and lists the rows not read as lines, each with why: a footer, a day after tomorrow, a value that is not an amount. With a **Balance** column, it checks the statement against its own running balance, in each currency. **The statement's balance adds up** gives the opening and closing balance and the money out and in; otherwise it names the line where it **does not add up**, and what the balance should have been there. A statement cut from a longer one can start mid-day, so you can still match its lines. When the lines add up only with money in and money out swapped, it says so: check the columns. These are your bank's figures for the account: the agent never counts or spends this money.
+
+<Screenshot
+  src="/docs/guides/report-bank-statement.png"
+  alt="How statement-october.csv is read: Separator Comma; Header row, line 3, with Date, Description, Reference, Money out, Money in and Balance; each column chosen under Booking date, Description, Money out, Money in, Reference and Balance, the others Not in this statement; Currency of the account USD. 8 lines read, from Oct 2, 2026 to Oct 10, 2026: 7 money out, 1 money in; 1 row not read as lines. The statement's balance adds up, in USD: opening balance 2,000.00 USD, money out 706.57 USD, money in 450.00 USD, closing balance 1,743.43 USD, the bank's own figures, which the agent never counts or spends. Find the bills."
+  caption="A bank's CSV export read in the browser, its columns suggested from the header, and checked against its own running balance."
+/>
+
+Choose **Find the bills**. Each line of money out is matched against the bills this report compares, in the same currency (USD is never USDC), booked from the day before the bill was added to 60 days after it was due (or was added, for a bill with no due day):
+
+- The same amount is a match, ticked for you when the line and the bill are each other's only best fit. Each match says why: **Same amount**, the day paid against the due day (or the day the bill was added, for a bill with none), the payee's name or the invoice number found in the line, and the record it would correct. An invoice number is a word of the bill's memo with a digit in it, such as INV-1108 or 10442; a year, a date or an amount in the memo is not one, nor are four digits alone, which are as often a card's last digits.
+- An amount within 5%, such as a bank fee or an early-payment discount, shows as **Amount differs** only when the payee's name or an invoice number is in the line. It is never ticked for you.
+- When several bills fit as well, the line says **Choose the bill**: choose the one it paid, and the line is ticked.
+- **Already used**: the line recorded a payment at an earlier import of this account. **Already recorded**: the bill's record already says this line. **No bill matches**: record that bill by hand if the line paid one.
+- Money in is never matched: receivables are not part of this import. Two lines with the same day, amount and text are both kept, and marked **Looks the same as another line**.
+
+<Screenshot
+  src="/docs/guides/report-bank-statement-matches.png"
+  alt="The lines of money out of the statement. Line 5, 46.41 USD on Oct 2, 2026, Already used for Northwind Cloud. Line 7, a transfer to savings: No bill matches. Lines 8, 9 and 10, ticked: Northwind Cloud, Harbor VPS and Lumen Hosting, each the same amount, paid 11 days before the due day, the payee's name found, Northwind Cloud's invoice number INV-1108 found, and Lumen Hosting's correcting a record of not paid. Line 11, not ticked: Atlas Compute, marked Amount differs, 61.25 USD paid against a bill of 61.87 USD, its name and invoice number found. Line 12, a card payment of 15.00 USD that fits two bills: Choose the bill. Below, 1 line of money in is not matched, and Save 3 payments."
+  caption="Each line of money out with the bill it could have paid and why: the exact matches ticked, the rest for you to decide."
+/>
+
+**Save N payments** saves the ticked lines. The server reads the statement again and matches it again first, and saves a line only while its bill is still one it could have paid. Each is recorded as paid by bank transfer on the booking day, for the line's amount and currency, with its reference, correcting the bill's record when it has one, as its own signed entry. The bill's record then reads **from a bank statement**. A line used once is kept, so the same or an overlapping statement imported again shows it as **Already used**. The rest of the statement is never stored.
+
 ### If something goes wrong
 
 | Message | What to do |
@@ -123,8 +160,17 @@ Nothing is saved until you check the preview. Each row reads **New**, **Corrects
 | Type the amount as it was paid, above zero, such as 1,250.00. | A currency with no cents, such as JPY, takes a whole amount. |
 | Type the currency as a three-letter code, such as EUR, or USDC or EURC. | Type the code of the currency you paid in. |
 | Say why it was not paid, in a few words. | Fill in the reason, then save. |
+| Importing a bank statement is not set up on this deployment yet. | The deployment's database has not been updated for it yet. Record each bill, or import a CSV, until the next update. |
+| Name the account the statement is from, in at most 80 characters. | Type the account's name under **Account**. |
+| Choose a statement smaller than 2 MB. | Export a shorter period from your bank. |
+| The statement has more than 2,000 lines. Import a shorter period. | Export a shorter period, and import each one. |
+| Choose the column with the booking date. | Choose its column under **Booking date**, or the right **Header row**. The description and the amount columns are asked for the same way. |
+| *A value* on line *N* is not a date in the order the other dates are written. | The column chosen as **Booking date** or **Value date** holds something else on that line, or dates in two orders. Check the columns. |
+| *Two values* are written with different decimal marks. | The amounts mix a decimal point and a decimal comma. Check the amount and balance columns. |
+| That bill is not one this line could have paid. Read the statement again. | The bills or their records changed since you chose **Find the bills**. Choose it again. |
+| This line recorded a payment already, for *a payee*. | It was saved at an earlier import, perhaps by someone else a moment before. Nothing to do. |
 
-Each record is a signed entry in the ledger: `actual_payment_recorded`, or `actual_payment_corrected` for a correction, with who recorded it, the payable and what was recorded.
+Each record is a signed entry in the ledger: `actual_payment_recorded`, or `actual_payment_corrected` for a correction, with who recorded it, the payable and what was recorded. A record from a bank statement also carries `via: "statement"` and `statementLine`: the kept line's `id`, the account as you named it, the line of the file, its booking and value days, its amount (money out is negative), currency, description, payee, reference and the balance after it.
 
 ## A new workspace
 
