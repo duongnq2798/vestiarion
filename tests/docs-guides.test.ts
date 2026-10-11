@@ -31,6 +31,7 @@ type GuideSlug =
   | "guides/api-milestones"
   | "guides/github"
   | "guides/audit-export"
+  | "guides/evidence"
   | "guides/controls";
 
 const PANEL = "src/components/GoLivePanel.tsx";
@@ -140,6 +141,12 @@ const INBOX_COMMANDS = "src/lib/commands/inbox.ts";
 const INBOX_SETTINGS = "src/lib/email-inbox/settings.ts";
 
 const SHADOW_PANEL = "src/components/ShadowModePanel.tsx";
+const EVIDENCE_PATHS = "src/lib/evidence-paths.ts";
+const EVIDENCE_CHAIN = "src/lib/evidence-chain.ts";
+const EVIDENCE_VIEW = "src/components/vx/EvidenceChain.tsx";
+const EVIDENCE_PAGE = "src/app/o/[slug]/evidence/[kind]/[id]/page.tsx";
+const EVIDENCE_CHECK = "src/components/EvidenceBrowserCheck.tsx";
+const EVIDENCE_EXPORT = "src/lib/evidence-export.ts";
 const SHADOW_LIBRARY = "src/lib/shadow-mode.ts";
 const SHADOW_SUMMARY = "src/components/ShadowModeSummary.tsx";
 const TEST_USDC_CONTROL = "src/components/TestUsdcControl.tsx";
@@ -284,6 +291,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Audit log", APP_NAV],
     ["Verify hash chain", VERIFY_BADGE],
     ["Chain intact", VERIFY_BADGE],
+    ["Why it was paid", EVIDENCE_PATHS],
   ],
   "guides/go-live": [
     ["Add a supplier", GETTING_STARTED],
@@ -485,6 +493,9 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["The agent pays it once a person agrees, in shadow mode", REPLAY_READ],
   ],
   "guides/first-payment": [
+    ["Why it was paid", EVIDENCE_PATHS],
+    ["Evidence so far", EVIDENCE_PATHS],
+    ["The whole chain, from purchase order to receipt", EVIDENCE_PATHS],
     ["Add a supplier", GETTING_STARTED],
     ["See the agent's decision", GETTING_STARTED],
     ["To pay on Arc", GETTING_STARTED],
@@ -852,6 +863,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["A person added it, imported from a list.", "src/lib/decision-trail.ts", ", imported from a list"],
   ],
   "guides/pay-a-contractor": [
+    ["Why it was paid", EVIDENCE_PATHS],
+    ["Evidence so far", EVIDENCE_PATHS],
     ["Pay a freelancer", "src/app/o/[slug]/contractors/page.tsx"],
     ["paid in one Arc transaction with", "src/lib/agent/orchestrator.ts"],
     ["executeBatch", "src/lib/circle/batch.ts"],
@@ -1110,6 +1123,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["pull_request_commented", GITHUB_COMMENTS],
   ],
   "guides/report": [
+    ["Why it was paid", EVIDENCE_PATHS],
     ["Report", APP_NAV],
     ["Payments on Arc testnet, in test USDC.", REPORT, "`Payments on ${profile.label}, in ${report.realMoney ? \"real\" : \"test\"} USDC.`"],
     ["Mirror", REPORT],
@@ -1298,6 +1312,74 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Retired keys", LEDGER_KEY_PANEL],
     ["An owner of this workspace can rotate the key.", LEDGER_KEY_PANEL],
   ],
+  "guides/evidence": [
+    ["Bills & receivables", APP_NAV],
+    ["Contractors", APP_NAV],
+    ["Treasury", APP_NAV],
+    ["Audit log", APP_NAV],
+    ["Why it was paid", EVIDENCE_PATHS],
+    ["Evidence so far", EVIDENCE_PATHS],
+    ["The whole chain, from purchase order to receipt", EVIDENCE_PATHS],
+    ["How the agent decided", "src/components/vx/DecisionTrail.tsx"],
+    ["Not paid yet. This is the chain so far, read-only: nothing on this page pays, approves or changes anything.", EVIDENCE_PAGE],
+    ["Not paid: a person rejected this bill.", EVIDENCE_PAGE],
+    ["Download evidence", EVIDENCE_PAGE],
+    ["How each fact is known", EVIDENCE_VIEW],
+    ["Each link reads as its weakest fact, so it is never labelled above what its least-supported fact is.", EVIDENCE_VIEW],
+    ["Verified outside", EVIDENCE_CHAIN],
+    ["Checked by code", EVIDENCE_CHAIN],
+    ["Stated by a person", EVIDENCE_CHAIN],
+    ["Inferred", EVIDENCE_CHAIN],
+    ["Missing", EVIDENCE_CHAIN],
+    ["Could not open", EVIDENCE_CHAIN],
+    ["Does not match", EVIDENCE_CHAIN],
+    ["Someone outside Vestiarion answered: the chain's record of the transaction, GitHub, the screening service.", EVIDENCE_CHAIN],
+    ["A rule Vestiarion runs computed it: the three-way match, the guardrails, a signature, the written policy.", EVIDENCE_CHAIN],
+    ["A member or the payee entered it. The page names who, and when.", EVIDENCE_CHAIN],
+    ["Read, not recorded: the model's judgement, sample data, or a setting as it is today.", EVIDENCE_CHAIN],
+    ["Nothing records it. Where it can still be added, the page says how.", EVIDENCE_CHAIN],
+    ["A check got no answer, or a link was revoked: it never counts as verified.", EVIDENCE_CHAIN],
+    ["A check answered, and its answer contradicts the record.", EVIDENCE_CHAIN],
+    ["What was agreed", EVIDENCE_CHAIN],
+    ["What was delivered", EVIDENCE_CHAIN],
+    ["The bill", EVIDENCE_CHAIN],
+    ["The payee", EVIDENCE_CHAIN],
+    ["The decision", EVIDENCE_CHAIN],
+    ["People", EVIDENCE_CHAIN],
+    ["The payment", EVIDENCE_CHAIN],
+    ["The receipt", EVIDENCE_CHAIN],
+    ["Signatures", EVIDENCE_CHAIN],
+    ["No person approved it: code let the agent pay it within the workspace's rules.", EVIDENCE_CHAIN],
+    ["a former member", EVIDENCE_CHAIN],
+    ["the payee", EVIDENCE_CHAIN],
+    ["How the agent decided, step by step", EVIDENCE_VIEW],
+    ["Not opened by Vestiarion", EVIDENCE_VIEW],
+    ["Checked by Vestiarion", EVIDENCE_VIEW],
+    ["A person marks them received with Add details on Bills & receivables.", EVIDENCE_CHAIN],
+    ["A signed entry proves who recorded what, and when. It does not prove the goods were good or the work was done.", EVIDENCE_CHAIN],
+    ["Checked again in your browser", EVIDENCE_CHECK],
+    ["Every entry, checked here one by one", EVIDENCE_VIEW],
+    ["vestiarion-evidence/1", EVIDENCE_EXPORT],
+    ["Who can see this", EVIDENCE_VIEW],
+    ["Every member of this workspace, viewers included. Nobody outside it: the page needs a member's sign-in.", EVIDENCE_VIEW],
+    ["Every member, as the audit export. The file names people by email, as this page does.", EVIDENCE_VIEW],
+    ["A receipt's public page shows the amount, the payee's address and the transactions, and no names.", EVIDENCE_VIEW],
+    ["As an owner or admin, you can share it or stop sharing it with Share receipt on Bills & receivables.", EVIDENCE_VIEW],
+    ["Nothing on this page shares or changes anything: Download evidence is its only action.", EVIDENCE_VIEW],
+    ["From this page, nothing: only a payment Vestiarion made on chain has a receipt, and this bill has none.", EVIDENCE_VIEW],
+    ["From this page, nothing: a milestone has no receipt.", EVIDENCE_VIEW],
+    [
+      "Webhooks and API keys, which an owner or admin sets up in Settings, also carry the ledger outside: a webhook receives each entry written while it is set up, and an API key can read every entry, these included.",
+      EVIDENCE_VIEW,
+    ],
+    ["A connected Slack channel and each member's own Telegram chat are told the agent's decisions.", EVIDENCE_VIEW],
+    ["Paid in a simulation: nothing moved on chain. This is its evidence as it stands.", EVIDENCE_PAGE],
+    ["Paid in a simulation", EVIDENCE_VIEW],
+    ["less its early-payment discount", EVIDENCE_VIEW],
+    ["Import a list", EVIDENCE_CHAIN],
+    ["Share receipt", RECEIPT_CONTROL],
+    ["Verify hash chain", VERIFY_BADGE],
+  ],
 };
 
 /**
@@ -1362,6 +1444,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/api-milestones": 10,
   "guides/github": 10,
   "guides/audit-export": 5,
+  "guides/evidence": 20,
 };
 
 describe.each(Object.entries(QUOTED) as Array<[GuideSlug, Array<readonly [string, string, string?]>]>)("the %s guide", (slug, quoted) => {

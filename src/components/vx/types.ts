@@ -1,5 +1,6 @@
 export type Domain = "ap" | "ar" | "contractor" | "treasury" | "compliance" | "system";
 import type { TrailStep } from "@/lib/decision-trail";
+import type { EvidenceRecordKind } from "@/lib/evidence-paths";
 import type { Network } from "@/lib/network";
 import type { VerdictView } from "@/lib/verdict-view";
 
@@ -56,6 +57,11 @@ export interface Decision {
   heldForVerdict?: boolean;
   /** A person's verdict on the agent's decision, given or to give (shadow mode S3). */
   verdict?: VerdictView;
+  /**
+   * The way into the record's evidence (evidence chain E6), by `id`: a payable's or a milestone's, and whether it is
+   * paid. Receivables and treasury moves have none.
+   */
+  chain?: { kind: EvidenceRecordKind; paid: boolean };
 }
 
 export interface Account {
