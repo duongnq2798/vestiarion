@@ -222,13 +222,9 @@ export function trailStep(entry: TrailEntry, network: Network = "arc-testnet"): 
         txHash: arcTx(detail.txHash),
       };
     case "approval_paid":
-      return {
-        ...base,
-        who: "person",
-        tone: "done",
-        text: detail.soleApprover === true ? "The person who entered it approved and paid it, as the workspace's only approver." : "A person approved and paid it.",
-        txHash: arcTx(detail.txRef),
-      };
+      // Paid only once its transfer confirmed: sent, failed, or not said by an entry that recorded no status (settlement
+      // lifecycle L9). The step says what the transfer did when the person approved it; the payment's own stages follow it.
+      return { ...base, who: "person", ...approvalStep(text(detail.status), detail.soleApprover === true, label), txHash: arcTx(detail.txRef) };
     case "approval_rejected":
       return { ...base, who: "person", tone: "stopped", text: "A person rejected it.", notes: text(detail.reason) ? [`· ${text(detail.reason)}`] : [] };
     case "approval_returned":
@@ -282,6 +278,25 @@ export function invoiceTrail(entries: readonly TrailEntry[], invoiceId: string, 
     .sort((a, b) => a.seq - b.seq);
   return steps.slice(-TRAIL_STEPS_SHOWN);
 }
+
+/**
+ * A person's Approve and pay as a step, by what its transfer did then (`approval_paid`'s `status`). `held` never says the
+ * transfer failed: the entry does not say whether Circle ended it, or Gateway reported it failed though it may still be
+ * minted, or a read of Vestiarion's failed on a transfer still moving (settlement lifecycle L3, L9).
+ */
+function approvalStep(status: string | null, sole: boolean, network: string): Pick<TrailStep, "text" | "tone"> {
+  const who = sole ? "The person who entered it" : "A person";
+  const own = sole ? ", as the workspace's only approver" : "";
+  if (status === "paid") return { tone: "done", text: `${who} approved and paid it${own}.` };
+  if (status === "matched") return { tone: "neutral", text: `${who} approved it${own}; ${PAYMENT_SENT(network)}.` };
+  if (status === "held") return { tone: "stopped", text: `${who} approved it${own}; ${PAYMENT_HELD_AGAIN}.` };
+  return { tone: "neutral", text: `${who} approved paying it${own}.` };
+}
+
+/** What a person's approval says of a payment it sent that the network has not confirmed yet. */
+export const PAYMENT_SENT = (network: string) => `the payment was sent and ${network} is confirming it`;
+/** What it says of one held again: not confirmed, whatever became of its transfer. */
+export const PAYMENT_HELD_AGAIN = "the payment was not confirmed, so it was held again";
 
 /** How long after the step before it a step came: "26 s later", "4 min later", "2 h later"; null for the first, or a day or more. */
 export function laterBy(previousAt: string | null, at: string): string | null {

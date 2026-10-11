@@ -2,6 +2,7 @@ export type Domain = "ap" | "ar" | "contractor" | "treasury" | "compliance" | "s
 import type { TrailStep } from "@/lib/decision-trail";
 import type { EvidenceRecordKind } from "@/lib/evidence-paths";
 import type { Network } from "@/lib/network";
+import type { Settlement } from "@/lib/settlement";
 import type { VerdictView } from "@/lib/verdict-view";
 
 /** `deciding`: a payable not yet decided while a cycle runs, which is deciding it (decision trail R1). */
@@ -62,6 +63,8 @@ export interface Decision {
    * paid. Receivables and treasury moves have none.
    */
   chain?: { kind: EvidenceRecordKind; paid: boolean };
+  /** Where its payment is, as of when the page read it (settlement lifecycle L7); absent with no payment record. */
+  settlement?: { lifecycle: Settlement; asOf: number };
 }
 
 export interface Account {

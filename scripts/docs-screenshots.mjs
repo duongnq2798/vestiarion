@@ -216,6 +216,8 @@ const SHOTS = {
     await page.waitFor(`document.querySelector("[data-docs-shot]").textContent.includes("Checked again in your browser")`);
   },
   "evidence-access": async () => {},
+  "where-a-payment-is-track": async () => {},
+  "where-a-payment-is-in-flight": async () => {},
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

@@ -8,6 +8,7 @@ import { canonicalJson } from "@/lib/canonical-json";
 import { chainById, homeChain, networkOfChain } from "@/lib/payee-chains";
 import type { ReceiptView as ReceiptViewData } from "@/lib/platform/receipts";
 import type { ReceiptFacts } from "@/lib/receipts/facts";
+import { receiptStatus, receiptTime } from "@/lib/receipts/status";
 import type { EntryCheck } from "@/lib/receipts/verify";
 import { BrowserCheck } from "./BrowserCheck";
 
@@ -16,16 +17,6 @@ import { BrowserCheck } from "./BrowserCheck";
  * where and how; the three checks, each with its result; and everything needed to check it again. It names
  * no one: no business, payee or person, and no reasoning.
  */
-
-const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
-/** "1 October 2026, 08:28 UTC", the same on the server and in every browser. */
-function paidOn(at: string): string {
-  const date = new Date(at);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}, ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())} UTC`;
-}
 
 function routeText(facts: ReceiptFacts): string {
   const fee = facts.feeUsdc != null ? `, with a ${facts.feeUsdc} USDC fee` : "";
@@ -69,6 +60,9 @@ export function ReceiptView({ view }: { view: ReceiptViewData }) {
   const keyId = entry.signing_key_id;
   const shownKeys = keyId && view.publicKeys[keyId] ? { [keyId]: view.publicKeys[keyId] } : view.publicKeys;
   const body = canonicalJson({ actor: entry.actor, domain: entry.domain, action: entry.action, summary: entry.summary, detail: entry.detail });
+  // Where the payment is, and from which source (settlement lifecycle L7, I17): confirmed by Circle, reconciled by the checks.
+  const status = receiptStatus(view);
+  const confirmedAt = receiptTime(facts.paidAt);
 
   return (
     <article className="space-y-6">
@@ -82,8 +76,13 @@ export function ReceiptView({ view }: { view: ReceiptViewData }) {
         <h1 className="mt-3 text-2xl font-semibold tracking-[-0.02em] text-ink">
           {facts.amount} {facts.token} paid on {chain.label}
         </h1>
-        <p className="mt-1 text-sm text-ink-2">{paidOn(facts.paidAt)}</p>
+        {confirmedAt && <p className="mt-1 text-sm text-ink-2">Confirmed by Circle: {confirmedAt}</p>}
         <dl className="mt-5 grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-y-3">
+          <dt className="mt-2 text-ink-3 first:mt-0 sm:mt-0">Status</dt>
+          <dd className="space-y-1">
+            <Badge tone={status.state === "reconciled" ? "proof" : status.state === "not_reconciled" ? "refused" : "neutral"}>{status.label}</Badge>
+            <p className="text-ink-2">{status.sentence}</p>
+          </dd>
           <dt className="mt-2 text-ink-3 first:mt-0 sm:mt-0">Paid to</dt>
           <dd className="break-all font-mono text-[0.8125rem] text-ink">{facts.payee}</dd>
           <dt className="mt-2 text-ink-3 first:mt-0 sm:mt-0">Route</dt>

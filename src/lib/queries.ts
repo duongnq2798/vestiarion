@@ -118,7 +118,7 @@ export interface InvoiceRow {
   fx_rate?: number | null;
   fx_source?: string | null;
   fx_at?: string | null;
-  /** When a receivable's payment arrived, or a payable's left (0001); null while it is open. */
+  /** When a receivable's payment arrived, or a payable's left (0001); null while it is open. A payment's lifecycle reads it (settlement lifecycle L5). */
   settled_at?: string | null;
   /** The recurring payment that created this invoice, and the period (`YYYY-MM-DD`) it is for (0055). */
   recurring_id?: string | null;
@@ -160,6 +160,8 @@ export interface MilestoneRow {
   status: string;
   agent_reasoning: string | null;
   tx_ref: string | null;
+  /** When it was marked paid; null before (settlement lifecycle L5). */
+  settled_at?: string | null;
   /** The milestone's hold in the workspace's escrow (milestone escrow E3–E5); null when it has none. */
   escrow_state?: "funding" | "funded" | "released" | "refunded" | null;
   escrow_payee?: string | null;

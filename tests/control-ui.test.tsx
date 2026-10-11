@@ -552,7 +552,7 @@ describe("the new control screens, as source", () => {
   it("Bills & receivables says which payables a running cycle is deciding", () => {
     const invoices = read("src/app/o/[slug]/invoices/page.tsx");
     expect(invoices).toContain("hasRunningCycle().catch(() => false)");
-    expect(invoices).toContain("entries, { network, deciding, verdicts })");
+    expect(invoices).toContain("entries, { network, deciding, verdicts, settlements, asOf })");
   });
 
   it("every page's frame shows the agent's live state, and a successful form tells it to watch closely", () => {
