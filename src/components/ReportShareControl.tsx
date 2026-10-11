@@ -80,7 +80,7 @@ export function ReportShareButton({ orgSlug, available }: { orgSlug: string; ava
             <RadioGroup legend="Title" name="title" defaultValue="workspace" options={TITLES} />
             <p className="text-xs leading-relaxed text-ink-3">
               Never shown: memos, notes, references, invoice ids, or the names and emails of this workspace&apos;s members. The agent&apos;s reasoning is its
-              first sentence, with any email or 0x address hidden.
+              first sentence, with any email or 0x address hidden. A payment on chain links to its transaction on the public explorer.
             </p>
             <FormMessage tone="error">{error}</FormMessage>
             <DialogFooter>

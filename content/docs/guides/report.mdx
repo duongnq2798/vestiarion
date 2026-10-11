@@ -31,7 +31,7 @@ The report counts from two things the workspace already keeps: its signed ledger
 Under the figures, **Value** says what the agent was worth in three groups, under "Three kinds of figures, never added together". Nothing adds one group to another, and no total is drawn across them.
 
 - **Measured**, counted from the signed ledger and the confirmed transfers: **Bills handled** and how many the agent decided, **Time to a first decision** (the median), **Paid on or before the due day**, and **Discounts taken**, the bill less what its transfer carried.
-- **From your answer**, an estimate. **Time saved, estimated** is the bills the agent decided times the minutes one bill took you before Vestiarion, in hours. A bill the agent has not decided saved nothing, so it is not counted. A person's verdict still takes time, and it is not taken off. **People who touched a bill before** is shown as context: the estimate is not multiplied by it. Under them, who answered and when.
+- **From your answer**, an estimate. **Time saved, estimated** is the bills the agent decided times the minutes one bill took you before Vestiarion, in hours (in minutes when it is under one). A bill the agent has not decided saved nothing, so it is not counted. A person's verdict still takes time, and it is not taken off. **People who touched a bill before** is shown as context: the estimate is not multiplied by it. Under them, who answered and when.
 - **Not counted**, never counted as saved: **Bills not paid yet**, since no saving is projected onto a bill before it is paid; **Flagged, or refused as a repeat**, since stopping a bill is not money saved; and **Discounts on offer, not taken**, estimated from the bills' terms.
 
 <Screenshot
@@ -162,7 +162,7 @@ Choose **Make the link**. The link is shown once, with Copy: "Report shared. Cop
   caption="Choosing what a shared copy shows, before the link is made."
 />
 
-A copy never shows memos, notes, references, invoice ids, or the names and emails of the workspace's members. The agent's reasoning is its first sentence, at most 200 characters, with any email or 0x address hidden; with labels, every supplier name the workspace knows is replaced by its label, and with amounts hidden, every number in it becomes #.
+A copy never shows memos, notes, references, invoice ids, or the names and emails of the workspace's members. The agent's reasoning is its first sentence, at most 200 characters, with any email or 0x address hidden; with labels, every supplier name the workspace knows is replaced by its label, and with amounts hidden, every number in it becomes #. A payment on chain links to its transaction on the public explorer, which shows the address it was paid to, whatever the copy hides.
 
 ### What the link shows
 
