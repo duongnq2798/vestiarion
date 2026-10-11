@@ -86,7 +86,7 @@ export interface EvidenceStep {
   title: string;
   kind: EvidenceKind;
   facts: EvidenceFact[];
-  /** The decision step's way into the decision trail on Bills & receivables; null for a milestone, which has no trail. */
+  /** The decision step's way into the decision trail on Bills & receivables; null for a milestone, which has no trail, and a payable no entry is about. */
   trail?: { invoiceId: string } | null;
   /** The signatures step's plain line. */
   caveat?: string;
@@ -562,7 +562,8 @@ const MILESTONE_VERBS: Record<string, string> = { milestone_release: "to release
 
 /** 5. The decision: who decided, and what code checked before anything was sent. The trail has the steps. */
 function decisionStep(ctx: Context): EvidenceStep {
-  const trail = ctx.key === "invoiceId" ? { invoiceId: ctx.id } : null;
+  // A payable's trail exists once an entry is about it; a milestone has none.
+  const trail = ctx.key === "invoiceId" && ctx.own.length > 0 ? { invoiceId: ctx.id } : null;
   const decision = ctx.decision;
   if (!decision) {
     return step(

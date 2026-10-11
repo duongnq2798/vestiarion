@@ -305,6 +305,10 @@ describe("sample data", () => {
     expect(step(chain, "payment").facts[0]).toMatchObject({ kind: "missing", text: "Simulated: nothing moved on chain." });
     expect(step(chain, "signatures").kind).toBe("missing");
   });
+
+  it("offers no way into a decision trail a bill with no entry does not have", () => {
+    expect(step(chain, "decision").trail).toBeNull();
+  });
 });
 
 /** A milestone paid by the agent, its work verified as GitHub reported a merged pull request. */
