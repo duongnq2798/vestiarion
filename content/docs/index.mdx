@@ -1,17 +1,39 @@
-Vestiarion is an autonomous treasury agent for stablecoin businesses on Arc. It pays invoices in USDC or EURC, and contractor milestones in USDC, through Circle, within guardrails: it never pays a high-risk counterparty, never exceeds a payment limit, and keeps a liquidity buffer. Every decision it makes is recorded, with its reasoning, in an Ed25519-signed, hash-chained ledger. The API gives your integration read access to one workspace: its ledger, invoices, counterparties, milestones, treasury and insights. Webhooks push each new ledger entry to your endpoint as it is appended.
+Vestiarion is an accounts payable agent for small teams. It reads each bill your team adds, decides whether to pay it now, pay it on a later day, hold it for a person or ask for what is missing, and writes down why. Rules in code check every payment before money moves, within limits you set, and every decision is signed into a ledger you can verify. Payments are in USDC on Arc: Arc testnet to try everything, Arc mainnet for real money.
+
+These docs take a business from its first decision to live payments, and show developers how to build on the API and webhooks.
+
+## Start here
 
 <Cards>
-  <Card title="Try it in 5 minutes" href="/docs/guides/try-it">
-    Sample data, the agent deciding, a payment you approve, and the signed ledger, with no wallet or keys.
+  <Card title="See your first decision" href="/docs/guides/try-it">
+    Add a supplier and one of your bills, and read what the agent decided and why. No wallet, no USDC, about five minutes.
   </Card>
-  <Card title="Quickstart" href="/docs/get-started/quickstart">
-    Create an API key and make your first two requests.
+  <Card title="Run alongside how you pay today" href="/docs/guides/shadow-mode">
+    Shadow mode: keep paying as you do, and agree or disagree with each of the agent's decisions on your real bills.
   </Card>
-  <Card title="When the model and the policy disagree" href="/docs/research/model-vs-policy">
-    Production decisions beside the written policy's answer to the same facts: where they differed in the first week, and where code refused the model.
+  <Card title="How payments are controlled" href="/docs/guides/controls">
+    The checks in code, the limits, who approves, how to stop the agent, and where money can move.
   </Card>
+  <Card title="Developer quickstart" href="/docs/get-started/quickstart">
+    Create a workspace API key and make your first two requests.
+  </Card>
+</Cards>
+
+<Callout kind="note" title="Testnet and mainnet">
+A workspace is on Arc testnet or on Arc mainnet, chosen when it is created. On Arc testnet nothing has market value and a new workspace simulates its payments until you take it live. On Arc mainnet, a live workspace pays real USDC. See [Where money can move](/docs/guides/controls#where-money-can-move).
+</Callout>
+
+## Go further
+
+<Cards>
   <Card title="Go live" href="/docs/guides/go-live">
     Using the app: create the wallets, fund them and take the agent live.
+  </Card>
+  <Card title="Pay a contractor for delivered work" href="/docs/guides/pay-a-contractor">
+    Add a milestone, verify the work by hand or by a merged pull request, and let the agent release the pay.
+  </Card>
+  <Card title="When the model and the policy disagree" href="/docs/research/model-vs-policy">
+    Production decisions beside the written policy's answer to the same facts, and where code refused the model.
   </Card>
   <Card title="API reference" href="/docs/api">
     Every v1 endpoint with its parameters, response and errors.
@@ -20,10 +42,7 @@ Vestiarion is an autonomous treasury agent for stablecoin businesses on Arc. It 
     Each ledger entry pushed to your HTTPS endpoint, signed.
   </Card>
   <Card title="AI integration" href="/docs/ai-integration">
-    Markdown views, llms.txt and the OpenAPI document for coding agents.
-  </Card>
-  <Card title="Changelog" href="/docs/changelog">
-    Changes to the API and webhooks, newest first.
+    Markdown views, llms.txt, the OpenAPI document and an MCP server for coding agents.
   </Card>
 </Cards>
 

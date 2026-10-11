@@ -29,6 +29,11 @@ export function mayUseMainnet(email: string | null | undefined, config: Pick<Ves
   return allowlist.includes("*") || allowlist.includes(email.trim().toLowerCase());
 }
 
+/** Whether Arc mainnet is on and open to every account (`*` on the allowlist), as the landing's questions say it. */
+export function mainnetOpenToEveryone(config: Pick<VestiarionConfig, "mainnetEnabled" | "mainnetAllowlist">): boolean {
+  return Boolean(config.mainnetEnabled) && (config.mainnetAllowlist ?? []).includes("*");
+}
+
 /**
  * Why a workspace cannot move money now because of its network, or null (M4): on Arc mainnet, while the deployment has
  * it off, and until the workspace is live. Arc testnet holds nothing here; the platform's stop switch still applies.

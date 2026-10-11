@@ -151,13 +151,13 @@ const STEPS: ReactNode[] = [
 ];
 
 /**
- * The page's one dark section: the loop every payment runs, told step by step
+ * The decision loop on /how-it-decides, the page's one dark section: the loop every payment runs, told step by step
  * as the reader scrolls, beside a diagram of it that lights the step being read
  * (docs/superpowers/specs/2026-10-08-landing-motion-design.md M1).
  */
 export function HowItWorks() {
   return (
-    <section id="how-it-works" aria-labelledby="how-it-works-title" className="relative scroll-mt-16 bg-ink text-ground">
+    <section id="decision-loop" aria-labelledby="decision-loop-title" className="relative scroll-mt-16 bg-ink text-ground">
       <div aria-hidden className="ledger-grid-dark absolute inset-0" />
       <div aria-hidden className="absolute inset-x-0 top-0 h-[42rem] overflow-hidden">
         <div className="absolute -top-40 left-1/2 size-[42rem] -translate-x-1/2 rounded-full bg-agent/25 blur-3xl" />
@@ -165,7 +165,7 @@ export function HowItWorks() {
       <div className="relative mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
         <Reveal>
           <p className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-agent-line">How a decision becomes an action</p>
-          <h2 id="how-it-works-title" className="mt-4 max-w-4xl text-balance text-4xl font-semibold leading-[1.02] tracking-[-0.045em] text-surface sm:text-6xl">
+          <h2 id="decision-loop-title" className="mt-4 max-w-4xl text-balance text-4xl font-semibold leading-[1.02] tracking-[-0.045em] text-surface sm:text-6xl">
             One loop. Two layers of judgment. <span className="font-serif font-normal italic text-agent-line">One receipt chain.</span>
           </h2>
           <p className="mt-5 max-w-2xl text-pretty text-lg leading-relaxed text-ground/70">
