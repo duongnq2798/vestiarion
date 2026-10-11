@@ -86,6 +86,15 @@ export function navItemForPathname(pathname: string): NavItem | undefined {
   return NAV_ITEMS.find((item) => item.path === section);
 }
 
+/**
+ * Whether a pathname is a page inside a section rather than the section's own page, such as a payment's evidence: the
+ * sidebar marks the section current (`aria-current="true"`) and the header links back to it, but neither calls it the
+ * page being read.
+ */
+export function insideSection(pathname: string): boolean {
+  return NESTED.some(([pattern]) => pattern.test(pathname));
+}
+
 /** The section the URL is in, or the workspace's home — where a switch to another workspace lands. */
 export function sectionPathOf(pathname: string): string {
   return navItemForPathname(pathname)?.path ?? HOME_PATH;

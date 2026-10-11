@@ -102,6 +102,17 @@ describe("the sidebar folded to its icon rail", () => {
     expect(markup).toMatch(/<a[^>]*aria-current="page"[^>]*href="\/o\/acme\/approvals"|<a[^>]*href="\/o\/acme\/approvals"[^>]*aria-current="page"/);
   });
 
+  it("marks the section a page sits inside as current, not as the page itself (evidence chain E1)", () => {
+    route.pathname = "/o/acme/evidence/milestone/5f1e2d3c-0000-4000-8000-000000000002";
+    try {
+      const markup = panel(false);
+      expect(markup).toMatch(/<a[^>]*aria-current="true"[^>]*href="\/o\/acme\/contractors"|<a[^>]*href="\/o\/acme\/contractors"[^>]*aria-current="true"/);
+      expect(markup).not.toContain('aria-current="page"');
+    } finally {
+      route.pathname = "/o/acme/approvals";
+    }
+  });
+
   it("names its icon-only controls", () => {
     const markup = panel(true);
     expect(markup).toContain('aria-label="Switch workspace: Acme Studio"');

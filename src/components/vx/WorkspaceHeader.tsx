@@ -12,7 +12,7 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { orgHref } from "@/lib/auth/org-paths";
 import { CONTENT_FRAME } from "./frame";
 import { useFrame } from "./FrameContext";
-import { HOME_PATH, navItemForPathname } from "./nav";
+import { HOME_PATH, insideSection, navItemForPathname } from "./nav";
 import { statusChips, statusRows, statusSummary, type PageStatus, type StatusChip, type StatusRow, type StatusTone } from "./workspace-status";
 
 /**
@@ -30,7 +30,7 @@ export function WorkspaceHeader({ page, activity }: { page?: PageStatus; activit
   // A page inside a section without being under its path, such as a payment's evidence (evidence chain E1): the
   // section is the way back to it, not the current page.
   const sectionHref = section ? orgHref(workspace.slug, section.path) : null;
-  const inside = sectionHref !== null && pathname !== sectionHref && !pathname.startsWith(`${sectionHref}/`);
+  const inside = sectionHref !== null && insideSection(pathname);
   const chips = statusChips(platform, page);
   const rows = statusRows(platform, page);
 
