@@ -1222,6 +1222,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["A receipt's public page shows the amount, the payee's address and the transactions, and no names.", EVIDENCE_VIEW],
     ["As an owner or admin, you can share it or stop sharing it with Share receipt on Bills & receivables.", EVIDENCE_VIEW],
     ["Nothing on this page shares or changes anything: Download evidence is its only action.", EVIDENCE_VIEW],
+    ["Nothing: only a payment Vestiarion made on chain has a receipt, and this bill has none.", EVIDENCE_VIEW],
     ["Share receipt", RECEIPT_CONTROL],
     ["Verify hash chain", VERIFY_BADGE],
   ],

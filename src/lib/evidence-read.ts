@@ -35,8 +35,11 @@ export interface EvidenceRequest {
   id: string;
 }
 
-/** Whether the receipt's link opens now, was stopped, or was never made (E10); null for a milestone, which has none. */
-export type ReceiptState = { state: "shared" | "stopped" | "none" } | null;
+/**
+ * Whether the receipt's link opens now, was stopped, or was never made (E10); `unavailable` for a payable with no
+ * payment on chain, which has no receipt to share (payment receipts P1); null for a milestone, which has none.
+ */
+export type ReceiptState = { state: "shared" | "stopped" | "none" | "unavailable" } | null;
 
 export interface EvidenceRead {
   chain: EvidenceChain;
@@ -273,9 +276,10 @@ export async function readEvidence(
     people,
     checks: { entries: new Map(checked), onChain },
   };
+  const chain = buildEvidenceChain(input);
   return {
-    chain: buildEvidenceChain(input),
+    chain,
     publicKeys,
-    receipt: invoiceId ? { state: !receipt ? "none" : receipt.revoked_at ? "stopped" : "shared" } : null,
+    receipt: invoiceId ? { state: receipt ? (receipt.revoked_at ? "stopped" : "shared") : chain.subject.onChain ? "none" : "unavailable" } : null,
   };
 }

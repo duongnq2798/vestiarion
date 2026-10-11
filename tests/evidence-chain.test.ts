@@ -72,7 +72,7 @@ describe("a payable paid with full evidence", () => {
 
   it("chains the nine links in order", () => {
     expect(chain.steps.map((s) => s.id)).toEqual(["agreed", "delivered", "bill", "payee", "decision", "people", "payment", "receipt", "signatures"]);
-    expect(chain.subject).toMatchObject({ kind: "invoice", id: INVOICE, payee: "Northstar Studio", amount: 12.5, currency: "USDC", paid: true });
+    expect(chain.subject).toMatchObject({ kind: "invoice", id: INVOICE, payee: "Northstar Studio", amount: 12.5, currency: "USDC", paid: true, onChain: true });
   });
 
   it("says who stated the purchase order and the goods, and when", () => {
@@ -275,6 +275,7 @@ describe("an open bill", () => {
 
   it("is read-only and says it is not paid yet", () => {
     expect(chain.subject.paid).toBe(false);
+    expect(chain.subject.onChain).toBe(false);
     const payment = step(chain, "payment");
     expect(payment.facts).toEqual([expect.objectContaining({ kind: "missing", text: "Not paid yet." })]);
     expect(payment.facts[0].fill).toMatch(/Arc testnet/);

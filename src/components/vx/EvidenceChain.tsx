@@ -333,8 +333,11 @@ function Signatures({ caveat, entries, orgSlug, publicKeys }: { caveat?: string;
   );
 }
 
-/** Whether the receipt's link opens now, was stopped, or was never made; null for a milestone (E10). */
-export type ReceiptSharing = "shared" | "stopped" | "none" | null;
+/**
+ * Whether the receipt's link opens now, was stopped, or was never made; `unavailable` for a payable with no payment on
+ * chain, which has no receipt to share (payment receipts P1); null for a milestone (E10). `readEvidence` decides it.
+ */
+export type ReceiptSharing = "shared" | "stopped" | "none" | "unavailable" | null;
 
 /**
  * Who may see, download and share this evidence (E10, roadmap I28), said where the evidence is shown: the existing
@@ -366,11 +369,13 @@ export function EvidenceAccess({ kind, receipt, role, canShare }: { kind: Chain[
               <>
                 <p>{RECEIPT_WORDS[receipt ?? "none"]}</p>
                 <p>{"A receipt's public page shows the amount, the payee's address and the transactions, and no names."}</p>
-                <p>
-                  {canShare
-                    ? "As an owner or admin, you can share it or stop sharing it with Share receipt on Bills & receivables."
-                    : `Your role, ${role}, cannot share it: an owner or admin shares it with Share receipt on Bills & receivables.`}
-                </p>
+                {receipt !== "unavailable" && (
+                  <p>
+                    {canShare
+                      ? "As an owner or admin, you can share it or stop sharing it with Share receipt on Bills & receivables."
+                      : `Your role, ${role}, cannot share it: an owner or admin shares it with Share receipt on Bills & receivables.`}
+                  </p>
+                )}
               </>
             )}
           </dd>
@@ -381,8 +386,9 @@ export function EvidenceAccess({ kind, receipt, role, canShare }: { kind: Chain[
   );
 }
 
-const RECEIPT_WORDS: Record<"shared" | "stopped" | "none", string> = {
+const RECEIPT_WORDS: Record<NonNullable<ReceiptSharing>, string> = {
   shared: "Only the receipt, which is shared now: anyone with its link can open it.",
   stopped: "Nothing now: the receipt was shared, then its link was stopped, so it no longer opens.",
-  none: "Nothing: the receipt is not shared. Only a receipt for a payment on chain can be shared.",
+  none: "Nothing: the receipt is not shared.",
+  unavailable: "Nothing: only a payment Vestiarion made on chain has a receipt, and this bill has none.",
 };

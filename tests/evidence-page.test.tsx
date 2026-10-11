@@ -153,6 +153,13 @@ describe("who can see this (E10)", () => {
     expect(access({ kind: "invoice", receipt: "none", role: "viewer", canShare: false })).toContain("Your role, viewer, cannot share it: an owner or admin shares it");
   });
 
+  it("offers no one a receipt for a payment with nothing on chain, which has none to share", () => {
+    const words = access({ kind: "invoice", receipt: "unavailable", role: "owner", canShare: true });
+    expect(words).toContain("Nothing: only a payment Vestiarion made on chain has a receipt, and this bill has none.");
+    expect(words).not.toContain("you can share it");
+    expect(words).not.toContain("cannot share it");
+  });
+
   it("says nothing of a milestone leaves the workspace", () => {
     const words = access({ kind: "milestone", receipt: null, role: "owner", canShare: true });
     expect(words).toContain("a milestone has no receipt, so none of this leaves the workspace");
@@ -196,12 +203,13 @@ describe("the page", () => {
   it("shows an open bill's evidence so far, read-only", async () => {
     const base = paidInFull();
     const chain = buildEvidenceChain({ ...base, subject: { kind: "invoice", invoice: { ...(base.subject as { invoice: object }).invoice, status: "held", tx_ref: null } as never }, payment: null, receipt: null });
-    readEvidenceMock.mockResolvedValue(read(chain, { state: "none" }));
+    readEvidenceMock.mockResolvedValue(read(chain, { state: "unavailable" }));
     ACCESS.membership.role = "owner";
     const markup = await page();
     expect(markup).toMatch(/<h1[^>]*>Evidence so far<\/h1>/);
     expect(text(markup)).toContain("Not paid yet. This is the chain so far, read-only: nothing on this page pays, approves or changes anything.");
-    expect(text(markup)).toContain("As an owner or admin, you can share it");
+    expect(text(markup)).toContain("Nothing: only a payment Vestiarion made on chain has a receipt, and this bill has none.");
+    expect(text(markup)).not.toContain("you can share it");
   });
 
   it("says a rejected bill was not paid", async () => {

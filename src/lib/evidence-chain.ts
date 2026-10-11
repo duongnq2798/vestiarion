@@ -194,6 +194,8 @@ export interface EvidenceChain {
     paid: boolean;
     /** Rejected by a person (a payable) or closed without paying (a milestone): it will not be paid. */
     closed: boolean;
+    /** Paid by a transaction on chain the chain shows: the only payment a receipt can be shared for. */
+    onChain: boolean;
   };
   network: Network;
   steps: EvidenceStep[];
@@ -879,6 +881,7 @@ export function buildEvidenceChain(input: EvidenceInput): EvidenceChain {
       status,
       paid: ctx.paid,
       closed: ctx.closed,
+      onChain: ctx.paid && payment.state === "chain",
     },
     network: input.network,
     steps,

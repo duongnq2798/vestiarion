@@ -144,7 +144,8 @@ see this":
 - **Outside the workspace**: only the receipt, and only once an owner or admin shares it with Share receipt on Bills &
   receivables (`records.write`, payment receipts P3). Its public page shows the amount, the payee's address and the
   transactions, and no names. The panel says whether the receipt is shared now, was shared and stopped, or is not
-  shared, and whether the person reading may share it (their role) or must ask an owner or admin.
+  shared, and whether the person reading may share it (their role) or must ask an owner or admin. A payable with no
+  payment on chain (simulated, or not paid yet) has no receipt to share, and the panel says so instead.
 - A milestone has no receipt: the panel says nothing of it leaves the workspace.
 - Nothing on the page shares, unshares or exports anything by itself besides the download link. Cost if wrong: one
   line of copy, since the permissions themselves are the existing ones.
