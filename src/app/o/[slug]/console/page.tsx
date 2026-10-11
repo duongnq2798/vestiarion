@@ -14,6 +14,7 @@ import { WaitingPayableAction } from "@/components/WaitingPayableAction";
 import { CycleReport } from "@/components/vx/CycleReport";
 import { DecisionCard } from "@/components/vx/DecisionCard";
 import { GettingStarted } from "@/components/vx/GettingStarted";
+import { PaymentsInFlight } from "@/components/vx/PaymentsInFlight";
 import { invoiceDecision, treasuryActionDecision, treasuryDecisionEntries, treasuryLedgerDecision } from "@/components/vx/map";
 import { Money } from "@/components/vx/Primitives";
 import { CashOutlookPanel, SafeToSpendFigure } from "@/components/vx/CashOutlook";
@@ -54,6 +55,8 @@ import { networkProfile } from "@/lib/network";
 import { currentOrgConfig } from "@/lib/context";
 import { walletTreasuryAvailable } from "@/lib/config";
 import { shellStatus } from "@/lib/shell-status";
+import { flightRows, type FlightRow } from "@/lib/settlement-facts";
+import { readPaymentsInFlight } from "@/lib/settlement-read";
 
 export const dynamic = "force-dynamic";
 
@@ -167,6 +170,21 @@ export default async function DashboardPage({
           }),
         ])
       : [null, null];
+    // Payments in flight (settlement lifecycle L7, L8): every payment sent and not confirmed, and the confirmed ones whose
+    // bills the books still show in flight. Best effort: a read that fails is logged and hides only that section.
+    const flightNow = Date.now();
+    const flight = await (async (): Promise<FlightRow[]> => {
+      const payments = await readPaymentsInFlight(db(), [
+        ...invoices.filter((invoice) => invoice.direction === "payable" && invoice.status === "matched").map((invoice) => invoice.id),
+        ...milestones.filter((milestone) => milestone.status === "verified").map((milestone) => milestone.id),
+      ]);
+      const milestoneIds = [...new Set(payments.filter((payment) => payment.source_type === "milestone").map((payment) => payment.source_id))];
+      const milestoneEntries = milestoneIds.length > 0 ? await listLedgerEntriesForTargets({ milestoneIds }) : [];
+      return flightRows({ payments, invoices, milestones, entries: [...invoiceEntries, ...milestoneEntries], now: flightNow });
+    })().catch((error: unknown) => {
+      console.error("console: payments in flight not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
+      return [];
+    });
     const invoiceDecisions = invoices.map((invoice) =>
       invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), invoiceEntries, { network, verdicts })
     );
@@ -363,6 +381,8 @@ export default async function DashboardPage({
                   </div>
                 </section>
               )}
+
+              <PaymentsInFlight payments={flight} now={flightNow} stuckAfterMinutes={networkProfile(network).stuckAfterMinutes} orgSlug={slug} />
 
               {scheduledPayments.length > 0 && <ScheduledPayments payments={scheduledPayments} allHref={orgHref(slug, "/invoices")} />}
 
