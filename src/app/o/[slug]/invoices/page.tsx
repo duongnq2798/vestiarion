@@ -21,6 +21,7 @@ import { StatTile } from "@/components/vx/StatTile";
 import { invoiceDecision } from "@/components/vx/map";
 import { payableSignals, stoppedWhy } from "@/components/vx/decision-signals";
 import { RecurringSummary } from "@/components/vx/RecurringSummary";
+import { PaymentPlanSection } from "@/components/vx/PaymentPlan";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionHeader } from "@/components/ui/SectionHeader";
@@ -29,6 +30,7 @@ import { sectionTitle } from "@/components/vx/nav";
 import { addedSince, latestDecision, recordedFacts, waitingHint } from "@/lib/added-details";
 import { CASH_SHORTFALL, SHADOW_VERDICT } from "@/lib/next-step";
 import { hasRunningCycle } from "@/lib/agent/cycle-running";
+import { isSoleApprover } from "@/lib/agent/sole-approver";
 import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
@@ -42,6 +44,8 @@ import { listCounterparties, listInvoices, stats, type InvoiceRow } from "@/lib/
 import { plural, utcDay } from "@/lib/copy";
 import { payLinkStates, type PayLinkState } from "@/lib/platform/pay-links";
 import { listRecurringPayables } from "@/lib/recurring-payables";
+import { readPaymentPlan } from "@/lib/payment-plan-read";
+import { planOutcomes } from "@/lib/payment-plan-outcomes";
 import { billCurrencyOf } from "@/lib/shadow-currency";
 import { verdictFacts } from "@/lib/verdicts";
 import { receiptShareable } from "@/lib/receipts/facts";
@@ -106,10 +110,25 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
           })
         : [],
     ]);
-    const entries = await listLedgerEntriesForTargets({ invoiceIds: invoices.map((invoice) => invoice.id) });
+    const filter = typeof query.status === "string" ? query.status : undefined;
+    const [entries, paymentPlan] = await Promise.all([
+      listLedgerEntriesForTargets({ invoiceIds: invoices.map((invoice) => invoice.id) }),
+      // The next 14 days of payments, in the order the cash allows (payment plan design P1), from the invoices and
+      // counterparties read above, shown over the whole list only. Best effort: a plan that cannot be read says so in
+      // its section, and nothing else changes.
+      filter
+        ? null
+        : readPaymentPlan({ invoices, counterparties }).catch((error: unknown) => {
+            console.error("invoices: payment plan not read", error instanceof Error ? error.message : error);
+            return null;
+          }),
+    ]);
+    const paymentOutcomes = planOutcomes({ now: Date.now(), invoices, entries });
+    // Whoever entered a bill approves its day only as the workspace's only approver (payment plan P10); asked only then.
+    const soleApprover =
+      canDecide && paymentPlan?.lines.some((line) => line.move !== null && line.createdBy === access.user.id) ? await isSoleApprover(access.user.id) : false;
     // In shadow mode, each card carries a person's verdict on the agent's decision, given or to give (shadow mode S3).
     const verdicts = await verdictFacts(db(), entries, canDecide);
-    const filter = typeof query.status === "string" ? query.status : undefined;
     const shown = filter ? invoices.filter((invoice) => invoice.status === filter) : invoices;
     const counterpartiesById = new Map(counterparties.map((counterparty) => [counterparty.id, counterparty]));
     // Where each payable's payment is, from its payment intent, the entries about it and the bill (settlement lifecycle
@@ -331,6 +350,11 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         )}
 
         <div className="space-y-10">
+          {/* The plan covers every open bill, so it is shown over the whole list, not over a status filter. */}
+          {!filter && (
+            <PaymentPlanSection plan={paymentPlan} outcomes={paymentOutcomes} orgSlug={slug} canDecide={canDecide} viewerId={access.user.id} soleApprover={soleApprover} />
+          )}
+
           <section>
             <SectionHeader title="Payables" meta={`${payables.length} ${plural(payables.length, "invoice", "invoices")} · open any to see why the agent decided as it did`} />
             {payables.length === 0 ? (

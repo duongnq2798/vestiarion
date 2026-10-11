@@ -18,6 +18,8 @@ export const COMMAND_PERMISSIONS = {
   "payable.import_actuals": "records.write",
   // So is filling them in from a bank statement (bank statement B8).
   "payable.import_statement": "records.write",
+  // Moving a scheduled bill to the payment plan's day: a decision on when the agent pays, never a payment (payment plan P10).
+  "payment_plan.approve": "approval.decide",
   "milestone.pay": "approval.decide",
   "milestone.close": "approval.decide",
   "agent.pause": "agent.pause",

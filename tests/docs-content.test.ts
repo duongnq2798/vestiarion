@@ -173,6 +173,7 @@ describe("the docs navigation", () => {
       ["guides/import-bills", "Import your bill list"],
       ["guides/pay-a-contractor", "Pay a contractor for delivered work"],
       ["guides/email-invoices", "Add invoices by email"],
+      ["guides/payment-plan", "Plan the next two weeks of payments"],
       ["guides/report", "Read your workspace report"],
       ["guides/cash-scenarios", "Plan for clients paying late"],
       ["guides/get-paid", "Get paid as a freelancer"],
@@ -228,6 +229,8 @@ describe("the docs navigation", () => {
     expect(neighbours("guides/first-payment").next?.slug).toBe("guides/where-a-payment-is");
     expect(neighbours("guides/where-a-payment-is").next?.slug).toBe("guides/import-bills");
     expect(neighbours("guides/import-bills").next?.slug).toBe("guides/pay-a-contractor");
+    expect(neighbours("guides/email-invoices").next?.slug).toBe("guides/payment-plan");
+    expect(neighbours("guides/payment-plan").next?.slug).toBe("guides/report");
     expect(neighbours("guides/get-paid").next?.slug).toBe("guides/controls");
     // How payments are controlled, trying a limit first, why one payment was paid, then checking the whole ledger.
     expect(neighbours("guides/controls").next?.slug).toBe("guides/try-a-rule");

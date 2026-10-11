@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-11: A bill moved from the payment plan is a payment_rescheduled entry
+
+- Bills & receivables shows a payment plan for the next 14 days. A member who can approve payments can move a bill the agent scheduled to the day the plan proposes. Its ledger gains **`payment_rescheduled`**, actor `human`, domain `ap`, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`: `{ by, invoiceId, counterpartyId, from, to, dueOn, amount, pays, discount, balanceAfter, planFingerprint, lineFingerprint }`. `from` and `to` are the days (YYYY-MM-DD, UTC) the bill was scheduled for and is now; `pays` is what the plan expects to leave that day, less the early-payment discount when paid by its deadline; `discount` is `{ pct, value, until }` or null; `balanceAfter` is the plan's projected balance after it: the plan only moves a bill to an earlier day within the 14 days it shows. `soleApprover: true` is added when the person who entered the bill moved it as the workspace's only approver.
+- A move is neither a payment nor a decision: the invoice stays `scheduled`, with the new day as its `scheduledFor` in `GET /api/v1/invoices`, and the agent decides it again on that day with an `ap_*` entry, as for any scheduled bill.
+- A move to today starts a cycle, whose `cycle_complete` entry lists the new event kind `plan_approved` in `events`. Nothing else in `/api/v1` changes.
+
 ## 2026-10-11: A report shared by a link, and the value question
 
 - An owner or admin can share the workspace report by a public link, and stop one; an owner can answer how long one bill took before Vestiarion, which the report's value section estimates from. Its ledger gains three entries, actor `human`, domain `system`, each sent to webhook endpoints as `ledger.appended` and listed by `GET /api/v1/ledger`:

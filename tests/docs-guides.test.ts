@@ -24,6 +24,7 @@ type GuideSlug =
   | "guides/try-a-rule"
   | "guides/where-a-payment-is"
   | "guides/import-bills"
+  | "guides/payment-plan"
   | "guides/pay-a-contractor"
   | "guides/get-paid"
   | "guides/telegram"
@@ -170,6 +171,12 @@ const ACTUAL_CONTROL = "src/components/ActualPaymentControl.tsx";
 const ACTUALS_CSV = "src/components/ActualsCsvImport.tsx";
 const ACTUALS_LIBRARY = "src/lib/actual-payments.ts";
 const ACTUAL_FIELDS = "src/lib/actual-payment-fields.ts";
+const PAYMENT_PLAN = "src/components/vx/PaymentPlan.tsx";
+const PLAN_CONTROLS = "src/components/PaymentPlanControls.tsx";
+const PLANNER = "src/lib/payment-plan.ts";
+const PLAN_COMMAND = "src/lib/commands/payment-plan.ts";
+const PLAN_APPLY = "src/lib/payment-plan-apply.ts";
+const DECISION_TRAIL = "src/lib/decision-trail.ts";
 const SETTLEMENT_TRACK = "src/components/vx/SettlementTrack.tsx";
 const IN_FLIGHT = "src/components/vx/PaymentsInFlight.tsx";
 const RECEIPT_STATUS = "src/lib/receipts/status.ts";
@@ -476,6 +483,68 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["refused the transfer. Your USDC did not leave your wallet.", "src/lib/inbound-usdc.ts"],
     ["Your wallet holds no ETH on Base to pay its gas. Add a little ETH there, then choose Review again.", "src/lib/inbound-usdc.ts", " to pay its gas. Add a little "],
     ["Your wallet does not hold enough ETH on Base for the gas. Add a little ETH there, then send again.", "src/lib/inbound-usdc.ts", " for the gas. Add a little "],
+  ],
+  // The payment plan on Bills & receivables (payment plan design P1-P14).
+  "guides/payment-plan": [
+    ["Bills & receivables", APP_NAV],
+    ["Payment plan", PAYMENT_PLAN],
+    ["Cash now", PAYMENT_PLAN],
+    ["Safe to spend today", "src/components/vx/CashOutlook.tsx"],
+    ["Cushion", PAYMENT_PLAN],
+    ["15% of what leaves within 7 days", PAYMENT_PLAN],
+    ["Lowest balance with this plan", PAYMENT_PLAN],
+    ["Not covered by the cash", PAYMENT_PLAN],
+    ["Discounts this plan would take", PAYMENT_PLAN],
+    ["An estimate, if paid as planned", PAYMENT_PLAN],
+    ["Sandbox: the balance is simulated.", PAYMENT_PLAN],
+    ["Listed, not counted", PAYMENT_PLAN],
+    ["May be the same payment", PAYMENT_PLAN],
+    ["Overdue since Oct 9, 2026: first in line today.", PLANNER, ": first in line today."],
+    ["Pays on Oct 14, 2026, the discount's last day, to take the 1% early-payment discount (6.40 USDC); the balance stays above the cushion.", PLANNER, "the discount's last day, to take the "],
+    ["would take the balance under the cushion", PLANNER],
+    ["would leave", PLANNER],
+    ["would be short of cash", PLANNER],
+    ["the reserve's yield until then", PLANNER],
+    ["Balance after", PAYMENT_PLAN],
+    ["Short of cash", PAYMENT_PLAN],
+    ["Under the cushion", PAYMENT_PLAN],
+    ["Over the agent's limit", PAYMENT_PLAN],
+    ["Above payment limit", PAYMENT_PLAN],
+    ["Two approvals", PAYMENT_PLAN],
+    ["High risk", PAYMENT_PLAN],
+    ["Due date unreadable", PAYMENT_PLAN],
+    ["Waits for a person", PAYMENT_PLAN],
+    ["Decide in Approvals", PAYMENT_PLAN],
+    ["Not decided by the agent yet", PAYMENT_PLAN],
+    ["The agent decides it again at its next cycle", PAYMENT_PLAN],
+    ["Cash effect", PAYMENT_PLAN],
+    ["As scheduled now", PAYMENT_PLAN],
+    ["With this plan", PAYMENT_PLAN],
+    ["Projected, before any receivable arrives.", PAYMENT_PLAN],
+    ["A balance under the cushion is in bold.", PAYMENT_PLAN],
+    ["Approve", PLAN_CONTROLS],
+    ["Approve all shown", PLAN_CONTROLS],
+    ["You created this bill, so someone else must approve its day.", PAYMENT_PLAN],
+    ["You created this bill, so someone else must approve its day.", PLAN_COMMAND],
+    ["Clear what stops it before approving its day.", PAYMENT_PLAN],
+    ["Moved 2 payments. The agent checks each again on its day before it pays.", PLAN_COMMAND, " payments. The agent checks each again on its day before it pays."],
+    ["The plan changed since it was shown. Look at the new plan, then approve again.", PLAN_COMMAND],
+    ["This bill changed a moment ago. Look at the new plan.", PLAN_COMMAND],
+    ["Together with the moves just made", PLAN_COMMAND],
+    ["A cycle is running. Try again in a minute, once it has finished.", PLAN_COMMAND],
+    ["payment_rescheduled", PLAN_APPLY],
+    ["A person moved its payment to", DECISION_TRAIL],
+    ["from the payment plan", DECISION_TRAIL],
+    ["The balance is not fresh", PAYMENT_PLAN],
+    ["Refresh balance", PLAN_CONTROLS],
+    ["The plan below uses the last figures read. Approving is off until they are fresh.", PAYMENT_PLAN],
+    ["Part of the plan could not be read", PAYMENT_PLAN],
+    ["Last 30 days", PAYMENT_PLAN],
+    ["Counted from what was paid and recorded, not from a plan.", PAYMENT_PLAN],
+    ["Paid by the due day", PAYMENT_PLAN],
+    ["Overdue now", PAYMENT_PLAN],
+    ["Discounts taken", PAYMENT_PLAN],
+    ["Days moved by a person", PAYMENT_PLAN],
   ],
   // Where a payment is (settlement lifecycle L7): the card's stages, Treasury's payments in flight, a receipt's status.
   "guides/where-a-payment-is": [
@@ -1684,6 +1753,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/try-a-rule": 20,
   "guides/where-a-payment-is": 20,
   "guides/import-bills": 20,
+  "guides/payment-plan": 20,
   "guides/pay-a-contractor": 20,
   "guides/get-paid": 20,
   "guides/telegram": 20,

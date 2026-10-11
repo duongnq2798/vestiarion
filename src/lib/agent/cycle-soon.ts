@@ -43,6 +43,8 @@ export type CycleEventKind =
   | "budget_raised"
   /** The figure for two approvals was raised or turned off: a payment held for two approvals may need one now (two approvals T3). */
   | "two_approvals_raised"
+  /** A person moved a scheduled bill to today from the payment plan: decided now, not at the next schedule (payment plan P9). */
+  | "plan_approved"
   | "cash_returned"
   /** Test USDC came in from Vestiarion's float: a payable held for cash may be paid now (test USDC T7). */
   | "test_usdc_added"

@@ -70,11 +70,17 @@ function stringValue(value: unknown): string | undefined {
 /**
  * The newest entry about the record that decided or recorded it: a receipt's entries are about sharing, not deciding
  * (receipts review #1), a payment_stuck alert is about a payment already decided (stuck-transfer alert, final review M7),
- * and a person's verdict is about the decision, not one (shadow mode S3).
+ * a person's verdict is about the decision, not one (shadow mode S3), and a person moving a scheduled bill's day from the
+ * payment plan changes when the agent decides it again, not what it decided (payment plan P9).
  */
 function matchingEntry(entries: LedgerEntry[], key: "invoiceId" | "milestoneId", id: string) {
   return entries.find(
-    (entry) => entry.detail[key] === id && !entry.action.startsWith("receipt_") && entry.action !== "payment_stuck" && entry.action !== "decision_verdict"
+    (entry) =>
+      entry.detail[key] === id &&
+      !entry.action.startsWith("receipt_") &&
+      entry.action !== "payment_stuck" &&
+      entry.action !== "decision_verdict" &&
+      entry.action !== "payment_rescheduled"
   );
 }
 

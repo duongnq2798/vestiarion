@@ -80,6 +80,8 @@ import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
 import { evidenceShot } from "./evidence-fixture";
 import { designRuleReplay } from "../design/replay-fixture";
 import { RuleTrialPanel } from "@/components/RuleTrial";
+import { PaymentPlanSection, PlanCashEffect, PlanOutcomesStrip } from "@/components/vx/PaymentPlan";
+import { PAYMENT_PLAN_OUTCOMES, PAYMENT_PLAN_VIEWER, paymentPlanShot, planPart } from "./payment-plan-fixture";
 import { RULE_TRIAL_COPY } from "@/lib/rule-trial-copy";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
@@ -99,7 +101,23 @@ import { Input } from "@/components/ui/Input";
 
 export interface DocsShot {
   /** The guide the picture belongs to. */
-  guide: "try-it" | "go-live" | "first-payment" | "where-a-payment-is" | "import-bills" | "try-a-rule" | "pay-a-contractor" | "get-paid" | "telegram" | "slack" | "email-invoices" | "report" | "workspace" | "cash-scenarios" | "evidence";
+  guide:
+    | "try-it"
+    | "go-live"
+    | "first-payment"
+    | "where-a-payment-is"
+    | "import-bills"
+    | "try-a-rule"
+    | "pay-a-contractor"
+    | "get-paid"
+    | "telegram"
+    | "slack"
+    | "email-invoices"
+    | "payment-plan"
+    | "report"
+    | "workspace"
+    | "cash-scenarios"
+    | "evidence";
   /** The workspace page it is on: its title heads the frame. None for a public page, such as a payee's link. */
   page?: NavKey;
   /** The page's line under its title, where the real page has one. */
@@ -1666,6 +1684,35 @@ export const DOCS_SHOTS = {
   },
   "import-bills-columns": { guide: "import-bills", page: "invoices", render: () => <BillImportShot step="columns" /> },
   "import-bills-check": { guide: "import-bills", page: "invoices", render: () => <BillImportShot step="check" /> },
+  "payment-plan": {
+    guide: "payment-plan",
+    page: "invoices",
+    render: function PaymentPlanShot() {
+      // The top of the section that heads Bills & receivables, as an approver who entered none of its bills sees it,
+      // down to the two days the plan would move.
+      const plan = planPart(paymentPlanShot(), ["Harbor Office Supply", "Northwind Hosting"]);
+      return <PaymentPlanSection plan={plan} outcomes={null} orgSlug={SLUG} canDecide viewerId={PAYMENT_PLAN_VIEWER} />;
+    },
+  },
+  "payment-plan-cash": {
+    guide: "payment-plan",
+    render: () => (
+      // The foot of the same section: the cash effect day by day, and the last 30 days.
+      <Card className="overflow-hidden">
+        <PlanCashEffect plan={paymentPlanShot()} />
+        <PlanOutcomesStrip outcomes={PAYMENT_PLAN_OUTCOMES} />
+      </Card>
+    ),
+  },
+  "payment-plan-stale": {
+    guide: "payment-plan",
+    page: "invoices",
+    render: function PaymentPlanStaleShot() {
+      // The same plan with the balance read 40 minutes before: on screen, with approving off until it is read again.
+      const plan = planPart(paymentPlanShot({ stale: true }), ["Harbor Office Supply"]);
+      return <PaymentPlanSection plan={plan} outcomes={null} orgSlug={SLUG} canDecide viewerId={PAYMENT_PLAN_VIEWER} />;
+    },
+  },
   "workspace-status": {
     guide: "workspace",
     render: function WorkspaceStatusShot() {
