@@ -30,6 +30,8 @@ import { plural, utcDay } from "@/lib/copy";
  * the statement's own balance check; it asks the date order or the decimal mark when the file allows two readings. The
  * server then reads the same text with the same choices, matches the money-out lines to the bills, and saves only the
  * lines the person ticks, each checked again.
+ *
+ * `StatementReadPanel` and `StatementMatches` take what they show as props, so a guide's screenshot renders each alone.
  */
 
 const NONE = "none";
@@ -37,13 +39,13 @@ const ORDER_WORDS: Record<DateOrder, string> = { ymd: "Year first", dmy: "Day fi
 const day = (date: string) => utcDay(`${date.slice(0, 10)}T00:00:00Z`);
 
 type Source = { text: string; name: string };
-type Note = { tone: "neutral" | "error"; text: string } | null;
+type Note = { tone: "success" | "error"; text: string } | null;
 /** What the server read and matched: each line of the statement, and its match, in the same order. */
 export type Found = { lines: StatementLine[]; matches: LineMatch[] };
 /** The bill each ticked line paid, by the line of the file. */
 type Ticks = Record<number, string>;
 
-/** Where the card starts: empty, or, for a guide's screenshot, a statement read with its choices and its matches. */
+/** Where the card starts: empty, or, for a test, a statement read with its choices and its matches. */
 export interface StatementStart {
   text: string;
   name: string;
@@ -55,6 +57,13 @@ export interface StatementStart {
 /** The lines ticked from the start: each exact match that is the line's and the bill's single best (B8). */
 export function defaultTicks(matches: readonly LineMatch[]): Ticks {
   return Object.fromEntries(matches.flatMap((match) => (match.status === "matched" && match.ticked ? [[match.line, match.candidate.invoiceId]] : [])));
+}
+
+function withTick(ticks: Ticks, line: number, invoiceId: string | null): Ticks {
+  const next = { ...ticks };
+  if (invoiceId) next[line] = invoiceId;
+  else delete next[line];
+  return next;
 }
 
 function readOrError(source: Source | null, choices: StatementChoices, today: string): { read: StatementRead | null; error: string | null } {
@@ -97,6 +106,178 @@ function BalanceCallout({ check }: { check: BalanceCheck }) {
   );
 }
 
+/**
+ * How the statement is read (B2-B5): the separator, the header row and each column, as found or chosen; the questions
+ * the file leaves open; what stops it being read; then the lines read, the period, the rows not read and the balance
+ * check; and Find the bills. Without `onChoose` the choices show but do not change, as in a guide's screenshot.
+ */
+export function StatementReadPanel({
+  name,
+  read,
+  choices,
+  onChoose,
+  findBlocked = null,
+  finding = false,
+  busy = false,
+  onFind,
+}: {
+  name: string;
+  read: StatementRead;
+  choices: StatementChoices;
+  onChoose?: (change: Partial<StatementChoices>) => void;
+  /** Why the bills cannot be found yet, such as an account not named; null when they can. */
+  findBlocked?: string | null;
+  finding?: boolean;
+  busy?: boolean;
+  onFind?: () => void;
+}) {
+  const choose = (change: Partial<StatementChoices>) => onChoose?.(change);
+  const open = read.problems.length === 0 && read.questions.length === 0;
+  const ready = open && read.lines.length > 0;
+
+  const columnSelect = (role: Role) => {
+    const value = read.columns[role];
+    return (
+      <Field key={role} id={`statement-column-${role}`} label={ROLE_WORDS[role]}>
+        <Select value={value === null ? NONE : String(value)} onValueChange={(next) => choose({ columns: { ...read.columns, [role]: next === NONE ? null : Number(next) } as ColumnMapping })}>
+          <SelectTrigger size="sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE}>Not in this statement</SelectItem>
+            {read.headers.map((header, index) => (
+              <SelectItem key={index} value={String(index)}>
+                {header}
+                {read.example[index] ? ` (${read.example[index].slice(0, 24)})` : ""}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+    );
+  };
+
+  return (
+    <div className="space-y-4 rounded-xl border border-line p-4">
+      <p className="text-sm font-medium text-ink">How {name} is read</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field id="statement-delimiter" label="Separator">
+          <Select value={read.delimiter} onValueChange={(next) => choose({ delimiter: DELIMITERS.find((item) => item === next) as Delimiter, headerRow: null, columns: null })}>
+            <SelectTrigger size="sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DELIMITERS.map((item) => (
+                <SelectItem key={item} value={item}>
+                  {DELIMITER_WORDS[item]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field id="statement-header" label="Header row">
+          <Select value={String(read.headerRow)} onValueChange={(next) => choose({ headerRow: Number(next), columns: null })}>
+            <SelectTrigger size="sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="-1">No header row</SelectItem>
+              {read.firstRecords.map((record, index) => (
+                <SelectItem key={record.line} value={String(index)}>
+                  Line {record.line}: {record.cells.filter(Boolean).join(", ").slice(0, 48)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {ROLES.map(columnSelect)}
+        {read.needsCurrency && (
+          <Field id="statement-currency" label="Currency of the account" description="Three letters, such as SGD or EUR, or USDC or EURC.">
+            <Input value={choices.currency ?? ""} maxLength={4} size="sm" className="uppercase" onChange={(event) => choose({ currency: event.target.value })} />
+          </Field>
+        )}
+      </div>
+      {read.columns.amount !== null && (
+        <RadioGroup
+          legend="In the amount column, money out is written"
+          value={read.outIs}
+          onValueChange={(next) => choose({ outIs: next === "positive" ? "positive" : "negative" })}
+          options={[
+            { value: "negative", label: "As a negative amount, such as -120.00" },
+            { value: "positive", label: "As a positive amount, such as 120.00" },
+          ]}
+        />
+      )}
+      {read.questions.map((question) =>
+        question.kind === "dateOrder" ? (
+          <RadioGroup
+            key="dateOrder"
+            legend={`How are the dates written? ${question.example} reads two ways.`}
+            value={choices.dateOrder ?? ""}
+            onValueChange={(next) => choose({ dateOrder: question.readings.find((reading) => reading.order === next)?.order ?? null })}
+            options={question.readings.map((reading) => ({ value: reading.order, label: `${ORDER_WORDS[reading.order]}: ${question.example} is ${day(reading.day)}` }))}
+          />
+        ) : (
+          <RadioGroup
+            key="decimalMark"
+            legend={`Is ${question.example} a whole number in thousands, or a number with decimals?`}
+            value={choices.decimalMark ?? ""}
+            onValueChange={(next) => choose({ decimalMark: next === "," ? "," : "." })}
+            options={(question.example.includes(",") ? [".", ","] : [",", "."]).map((mark, index) => ({
+              value: mark,
+              label: index === 0 ? `Thousands: the ${mark === "." ? "comma" : "dot"} groups them` : `Decimals: the ${mark === "," ? "comma" : "dot"} is the decimal mark`,
+            }))}
+          />
+        )
+      )}
+      {read.problems.length > 0 && (
+        <Callout tone="held" title="Before the lines can be read">
+          <ul className="list-disc space-y-0.5 pl-4">
+            {read.problems.map((problem) => (
+              <li key={problem}>{problem}</li>
+            ))}
+          </ul>
+        </Callout>
+      )}
+      {open && read.period && (
+        <p className="text-sm text-ink-2">
+          <span className="tabular-nums">{read.lines.length}</span> {plural(read.lines.length, "line", "lines")} read, from {day(read.period.from)} to {day(read.period.to)}:{" "}
+          <span className="tabular-nums">{read.lines.filter((line) => line.minor < 0).length}</span> money out,{" "}
+          <span className="tabular-nums">{read.lines.filter((line) => line.minor > 0).length}</span> money in. Money in is never matched to bills.
+        </p>
+      )}
+      {open && read.lines.length === 0 && <p className="text-sm text-ink-2">No line of the statement could be read. The rows not read say why.</p>}
+      {open && read.skipped.length > 0 && (
+        <Disclosure summary={`${read.skipped.length} ${plural(read.skipped.length, "row", "rows")} not read as lines`}>
+          <ul className="space-y-0.5 text-xs text-ink-2">
+            {read.skipped.map((row) => (
+              <li key={row.line}>
+                Line <span className="tabular-nums">{row.line}</span>: {row.why}
+              </li>
+            ))}
+          </ul>
+        </Disclosure>
+      )}
+      {ready && read.balances.length > 0 && (
+        <div className="space-y-2">
+          {read.balances.map((check) => (
+            <BalanceCallout key={check.currency} check={check} />
+          ))}
+          <p className="text-xs text-ink-3">These are your bank statement&apos;s own figures for the account: the agent never counts or spends this money.</p>
+        </div>
+      )}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {findBlocked && <span className="text-xs text-ink-3">{findBlocked}</span>}
+        <Button icon={<Search />} variant="secondary" loading={finding} disabled={!ready || findBlocked !== null || busy} onClick={onFind}>
+          Find the bills
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function Why({ candidate }: { candidate: Candidate }) {
   return (
     <ul className="space-y-0.5 text-xs text-ink-3">
@@ -110,17 +291,36 @@ function Why({ candidate }: { candidate: Candidate }) {
 const billText = (candidate: Candidate) =>
   `${candidate.payee}, ${minorText(Math.round(candidate.bill.amount * 10 ** billDigits(candidate.bill.currency)), candidate.bill.currency)}${candidate.dueDate ? `, due ${day(candidate.dueDate)}` : ""}`;
 
-/** Each line of money out, the bill it paid and why, with a box to tick it for saving (B7, B8). */
-function StatementMatches({ found, ticked, onTick }: { found: Found; ticked: Ticks; onTick: (line: number, invoiceId: string | null) => void }) {
+/**
+ * Each line of money out, the bill it paid and why, with a box to tick it for saving, and Save (B7, B8). The card holds
+ * the ticks; alone, as in a guide's screenshot, it keeps its own, starting from the unique exact matches.
+ */
+export function StatementMatches({
+  found,
+  ticked,
+  onTick,
+  onSave,
+  saving = false,
+}: {
+  found: Found;
+  ticked?: Ticks;
+  onTick?: (line: number, invoiceId: string | null) => void;
+  onSave?: () => void;
+  saving?: boolean;
+}) {
+  const [own, setOwn] = useState<Ticks>(() => defaultTicks(found.matches));
+  const ticks = ticked ?? own;
+  const tick = onTick ?? ((line: number, invoiceId: string | null) => setOwn((current) => withTick(current, line, invoiceId)));
   const outLines = found.lines.flatMap((line, index) => (line.minor < 0 ? [{ line, match: found.matches[index] }] : []));
   const moneyIn = found.lines.filter((line) => line.minor > 0).length;
-  const chosenBills = new Set(Object.values(ticked));
+  const chosenBills = new Set(Object.values(ticks));
+  const toSave = Object.keys(ticks).length;
   return (
     <div className="space-y-3">
       {outLines.length === 0 ? (
         <p className="text-sm text-ink-2">No line of money out to match.</p>
       ) : (
-        <Table label="Statement lines and the bills they paid" containerClassName="max-h-[32rem] overflow-auto rounded-xl border border-line" className="min-w-[48rem] text-xs">
+        <Table label="Statement lines and the bills they paid" containerClassName="max-h-[48rem] overflow-auto rounded-xl border border-line" className="min-w-[40rem] text-xs">
           <TableHeader className="sticky top-0 z-10 bg-ground">
             <TableRow>
               <TableHead className="px-3 py-2">Save</TableHead>
@@ -131,7 +331,7 @@ function StatementMatches({ found, ticked, onTick }: { found: Found; ticked: Tic
           </TableHeader>
           <TableBody>
             {outLines.map(({ line, match }) => {
-              const choice = ticked[line.line];
+              const choice = ticks[line.line];
               return (
                 <TableRow key={line.line}>
                   <TableCell className="px-3 py-2 align-top">
@@ -141,7 +341,7 @@ function StatementMatches({ found, ticked, onTick }: { found: Found; ticked: Tic
                         checked={choice !== undefined}
                         // A line with bills to choose from is ticked by choosing one.
                         disabled={match.status === "choose" && choice === undefined}
-                        onCheckedChange={(checked) => onTick(line.line, checked === true && match.status === "matched" ? match.candidate.invoiceId : null)}
+                        onCheckedChange={(checked) => tick(line.line, checked === true && match.status === "matched" ? match.candidate.invoiceId : null)}
                       />
                     )}
                   </TableCell>
@@ -178,7 +378,7 @@ function StatementMatches({ found, ticked, onTick }: { found: Found; ticked: Tic
                         <Badge size="sm" tone="held">
                           Choose the bill
                         </Badge>
-                        <Select value={choice ?? ""} onValueChange={(next) => onTick(line.line, next)}>
+                        <Select value={choice ?? ""} onValueChange={(next) => tick(line.line, next)}>
                           <SelectTrigger size="sm" aria-label={`The bill line ${line.line} paid`}>
                             <SelectValue placeholder="Choose the bill" />
                           </SelectTrigger>
@@ -222,6 +422,11 @@ function StatementMatches({ found, ticked, onTick }: { found: Found; ticked: Tic
           <span className="tabular-nums">{moneyIn}</span> {plural(moneyIn, "line of money in is", "lines of money in are")} not matched: receivables are not part of this import.
         </p>
       )}
+      <div className="flex justify-end">
+        <Button icon={<Upload />} loading={saving} disabled={toSave === 0} onClick={onSave}>
+          {toSave === 0 ? "Nothing ticked" : `Save ${toSave} ${toSave === 1 ? "payment" : "payments"}`}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -270,11 +475,10 @@ export default function BankStatementImport({ orgSlug, accounts, initial }: { or
     void file.text().then((text) => start({ text, name: file.name }));
   }
 
-  const ready = read !== null && read.questions.length === 0 && read.problems.length === 0 && read.lines.length > 0;
   const named = account.trim() !== "" && account.trim().length <= ACCOUNT_MAX;
 
   function find() {
-    if (!source || !ready) return;
+    if (!source || !read) return;
     startTransition(async () => {
       setNote(null);
       const result = await previewStatementAction(orgSlug, { account, text: source.text, choices });
@@ -293,7 +497,7 @@ export default function BankStatementImport({ orgSlug, accounts, initial }: { or
     startTransition(async () => {
       const result = await importStatementAction(orgSlug, { account, text: source.text, choices, pairs });
       const reasons = result.notSaved.map((line) => `Line ${line.line}: ${line.why}`).join(" ");
-      setNote({ tone: result.ok ? "neutral" : "error", text: [result.message, reasons].filter(Boolean).join(" ") });
+      setNote({ tone: result.ok ? "success" : "error", text: [result.message, reasons].filter(Boolean).join(" ") });
       // What is left, read again: the lines saved now read as already used.
       const again = await previewStatementAction(orgSlug, { account, text: source.text, choices });
       setFound(again.ok && again.lines && again.matches ? { lines: again.lines, matches: again.matches } : null);
@@ -301,40 +505,6 @@ export default function BankStatementImport({ orgSlug, accounts, initial }: { or
       router.refresh();
     });
   }
-
-  const tick = (line: number, invoiceId: string | null) =>
-    setTicked((current) => {
-      const next = { ...current };
-      if (invoiceId) next[line] = invoiceId;
-      else delete next[line];
-      return next;
-    });
-
-  const columnSelect = (role: Role) => {
-    if (!read) return null;
-    const value = read.columns[role];
-    return (
-      <Field key={role} id={`statement-column-${role}`} label={ROLE_WORDS[role]}>
-        <Select value={value === null ? NONE : String(value)} onValueChange={(next) => choose({ columns: { ...read.columns, [role]: next === NONE ? null : Number(next) } as ColumnMapping })}>
-          <SelectTrigger size="sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={NONE}>Not in this statement</SelectItem>
-            {read.headers.map((header, index) => (
-              <SelectItem key={index} value={String(index)}>
-                {header}
-                {read.example[index] ? ` (${read.example[index].slice(0, 24)})` : ""}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-    );
-  };
-
-  const toSave = Object.keys(ticked).length;
-  const open = read !== null && read.problems.length === 0 && read.questions.length === 0;
 
   return (
     <div className="space-y-4">
@@ -369,136 +539,22 @@ export default function BankStatementImport({ orgSlug, accounts, initial }: { or
           </Button>
         </div>
       </Disclosure>
-      <FormMessage tone={error || note?.tone === "error" ? "error" : "neutral"}>{error ?? note?.text}</FormMessage>
+      <FormMessage tone={error ? "error" : (note?.tone ?? "neutral")}>{error ?? note?.text}</FormMessage>
 
       {read && source && (
-        <div className="space-y-4 rounded-xl border border-line p-4">
-          <p className="text-sm font-medium text-ink">How {source.name} is read</p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field id="statement-delimiter" label="Separator">
-              <Select value={read.delimiter} onValueChange={(next) => choose({ delimiter: DELIMITERS.find((item) => item === next) as Delimiter, headerRow: null, columns: null })}>
-                <SelectTrigger size="sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {DELIMITERS.map((item) => (
-                    <SelectItem key={item} value={item}>
-                      {DELIMITER_WORDS[item]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field id="statement-header" label="Header row">
-              <Select value={String(read.headerRow)} onValueChange={(next) => choose({ headerRow: Number(next), columns: null })}>
-                <SelectTrigger size="sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="-1">No header row</SelectItem>
-                  {read.firstRecords.map((record, index) => (
-                    <SelectItem key={record.line} value={String(index)}>
-                      Line {record.line}: {record.cells.filter(Boolean).join(", ").slice(0, 48)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{ROLES.map(columnSelect)}</div>
-          {read.columns.amount !== null && (
-            <RadioGroup
-              legend="In the amount column, money out is written"
-              value={read.outIs}
-              onValueChange={(next) => choose({ outIs: next === "positive" ? "positive" : "negative" })}
-              options={[
-                { value: "negative", label: "As a negative amount, such as -120.00" },
-                { value: "positive", label: "As a positive amount, such as 120.00" },
-              ]}
-            />
-          )}
-          {read.needsCurrency && (
-            <Field id="statement-currency" label="Currency of the account" description="Three letters, such as SGD or EUR, or USDC or EURC.">
-              <Input value={choices.currency ?? ""} maxLength={4} className="uppercase" onChange={(event) => choose({ currency: event.target.value })} />
-            </Field>
-          )}
-          {read.questions.map((question) =>
-            question.kind === "dateOrder" ? (
-              <RadioGroup
-                key="dateOrder"
-                legend={`How are the dates written? ${question.example} reads two ways.`}
-                value={choices.dateOrder ?? ""}
-                onValueChange={(next) => choose({ dateOrder: question.readings.find((reading) => reading.order === next)?.order ?? null })}
-                options={question.readings.map((reading) => ({ value: reading.order, label: `${ORDER_WORDS[reading.order]}: ${question.example} is ${day(reading.day)}` }))}
-              />
-            ) : (
-              <RadioGroup
-                key="decimalMark"
-                legend={`Is ${question.example} a whole number in thousands, or a number with decimals?`}
-                value={choices.decimalMark ?? ""}
-                onValueChange={(next) => choose({ decimalMark: next === "," ? "," : "." })}
-                options={(question.example.includes(",") ? [".", ","] : [",", "."]).map((mark, index) => ({
-                  value: mark,
-                  label: index === 0 ? `Thousands: the ${mark === "." ? "comma" : "dot"} groups them` : `Decimals: the ${mark === "," ? "comma" : "dot"} is the decimal mark`,
-                }))}
-              />
-            )
-          )}
-          {read.problems.length > 0 && (
-            <Callout tone="held" title="Before the lines can be read">
-              <ul className="list-disc space-y-0.5 pl-4">
-                {read.problems.map((problem) => (
-                  <li key={problem}>{problem}</li>
-                ))}
-              </ul>
-            </Callout>
-          )}
-          {open && read.period && (
-            <p className="text-sm text-ink-2">
-              <span className="tabular-nums">{read.lines.length}</span> {plural(read.lines.length, "line", "lines")} read, from {day(read.period.from)} to {day(read.period.to)}:{" "}
-              <span className="tabular-nums">{read.lines.filter((line) => line.minor < 0).length}</span> money out,{" "}
-              <span className="tabular-nums">{read.lines.filter((line) => line.minor > 0).length}</span> money in. Money in is never matched to bills.
-            </p>
-          )}
-          {open && read.lines.length === 0 && <p className="text-sm text-ink-2">No line of the statement could be read. The rows not read say why.</p>}
-          {open && read.skipped.length > 0 && (
-            <Disclosure summary={`${read.skipped.length} ${plural(read.skipped.length, "row", "rows")} not read as lines`}>
-              <ul className="space-y-0.5 text-xs text-ink-2">
-                {read.skipped.map((row) => (
-                  <li key={row.line}>
-                    Line <span className="tabular-nums">{row.line}</span>: {row.why}
-                  </li>
-                ))}
-              </ul>
-            </Disclosure>
-          )}
-          {ready && read.balances.length > 0 && (
-            <div className="space-y-2">
-              {read.balances.map((check) => (
-                <BalanceCallout key={check.currency} check={check} />
-              ))}
-              <p className="text-xs text-ink-3">These are your bank statement&apos;s own figures for the account: the agent never counts or spends this money.</p>
-            </div>
-          )}
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {!named && <span className="text-xs text-ink-3">Name the account first.</span>}
-            <Button icon={<Search />} variant="secondary" loading={pending && !found} disabled={!ready || !named || pending} onClick={find}>
-              Find the bills
-            </Button>
-          </div>
-        </div>
+        <StatementReadPanel
+          name={source.name}
+          read={read}
+          choices={choices}
+          onChoose={choose}
+          findBlocked={named ? null : "Name the account first."}
+          finding={pending && !found}
+          busy={pending}
+          onFind={find}
+        />
       )}
 
-      {found && (
-        <div className="space-y-3">
-          <StatementMatches found={found} ticked={ticked} onTick={tick} />
-          <div className="flex justify-end">
-            <Button icon={<Upload />} loading={pending} disabled={toSave === 0} onClick={save}>
-              {toSave === 0 ? "Nothing ticked" : `Save ${toSave} ${toSave === 1 ? "payment" : "payments"}`}
-            </Button>
-          </div>
-        </div>
-      )}
+      {found && <StatementMatches found={found} ticked={ticked} onTick={(line, invoiceId) => setTicked((current) => withTick(current, line, invoiceId))} onSave={save} saving={pending} />}
     </div>
   );
 }

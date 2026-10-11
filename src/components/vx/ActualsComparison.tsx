@@ -315,6 +315,25 @@ export function ActualsBills({
   );
 }
 
+/**
+ * Import a bank statement (docs/superpowers/specs/2026-10-10-bank-statement-design.md B11, B12), for someone who may
+ * record: the import, or before migration 0094 runs, a plain message.
+ */
+export function BankStatementCard({ slug, statement }: { slug: string; statement: { available: boolean; accounts: string[] } }) {
+  return (
+    <Card className="space-y-3 p-4 sm:p-5">
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-ink">Import a bank statement</p>
+        <p className="text-xs text-ink-3">
+          Each line of money out is matched to the bill it paid, with why, and saved as what your business paid once you tick it. Money in is not matched:
+          receivables are not part of this import.
+        </p>
+      </div>
+      {statement.available ? <BankStatementImport orgSlug={slug} accounts={statement.accounts} /> : <Callout>{STATEMENT_NOT_READY}</Callout>}
+    </Card>
+  );
+}
+
 export function ActualsComparison({
   slug,
   comparison,
@@ -383,18 +402,7 @@ export function ActualsComparison({
         </Card>
       )}
 
-      {canRecord && statement && (
-        <Card className="space-y-3 p-4 sm:p-5">
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-ink">Import a bank statement</p>
-            <p className="text-xs text-ink-3">
-              Each line of money out is matched to the bill it paid, with why, and saved as what your business paid once you tick it. Money in is not matched:
-              receivables are not part of this import.
-            </p>
-          </div>
-          {statement.available ? <BankStatementImport orgSlug={slug} accounts={statement.accounts} /> : <Callout>{STATEMENT_NOT_READY}</Callout>}
-        </Card>
-      )}
+      {canRecord && statement && <BankStatementCard slug={slug} statement={statement} />}
 
       <ActualsBills slug={slug} comparison={comparison} rows={shown} canRecord={canRecord} members={members} />
       {!canRecord && <p className="text-xs text-ink-3">An owner or admin of this workspace records what your business paid.</p>}
