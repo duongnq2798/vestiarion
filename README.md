@@ -240,7 +240,8 @@ run in production, with its ledger entries and transactions.
 - **Report** — what the agent did with a workspace's real bills: payments with their transactions, what it stopped
   and why, how often a person stepped in, discounts measured from the transfers, and what is left before a live slice.
   Agent vs what really happened lays each bill's decision beside what the business recorded paying outside
-  Vestiarion, one bill at a time or from a CSV, each figure linked to its signed entry.
+  Vestiarion, one bill at a time, from a CSV, or from a bank statement whose lines are matched to the bills they could
+  have paid, each figure linked to its signed entry.
 - **Workspaces and members** — per-network workspaces, invitations, four roles, per-member notifications.
 - **Why it was paid** — one page per payment, link by link from the purchase order to the receipt, each fact marked
   checked by code, verified outside or stated by a person; entries checked again in the browser, and a JSON download.

@@ -16,6 +16,8 @@ export const COMMAND_PERMISSIONS = {
   // What the business paid outside Vestiarion is a record, entered as an invoice is (actual payments A4).
   "payable.record_actual": "records.write",
   "payable.import_actuals": "records.write",
+  // So is filling them in from a bank statement (bank statement B8).
+  "payable.import_statement": "records.write",
   "milestone.pay": "approval.decide",
   "milestone.close": "approval.decide",
   "agent.pause": "agent.pause",

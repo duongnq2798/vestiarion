@@ -8,6 +8,7 @@ import {
   REFERENCE_MAX,
   type ActualMethod,
   type ActualRecord,
+  type ActualSource,
 } from "./actual-payment-fields";
 import type { ActualsFacts } from "./actual-payments-compare";
 import { matchActualsCsv, parseActualsCsv, type MatchBill, type PreviewRow } from "./actual-payments-csv";
@@ -122,7 +123,7 @@ function toRecord(row: ActualRow): ActualRecord {
     note: row.note,
     reason: row.reason,
     replaces: row.replaces,
-    source: row.source === "csv" ? "csv" : "form",
+    source: row.source === "csv" || row.source === "statement" ? row.source : "form",
     recordedBy: row.recorded_by,
     recordedAt: row.recorded_at,
   };
@@ -172,9 +173,27 @@ async function newestRecordOf(invoiceId: string): Promise<string | null> {
   return rows.find((row) => !replaced.has(row.id))?.id ?? null;
 }
 
-export async function recordActual(
-  input: ActualInput & { actorId: string; source: "form" | "csv"; today?: string }
-): Promise<{ record: ActualRecord; corrected: boolean }> {
+/**
+ * The line of a bank statement a record comes from (docs/superpowers/specs/2026-10-10-bank-statement-design.md B8), as
+ * kept in `bank_statement_lines` (0094) and put in the record's entry. Amounts in the currency, money out negative.
+ */
+export interface StatementLineDetail {
+  id: string;
+  account: string;
+  line: number;
+  bookedOn: string;
+  valueOn: string | null;
+  amount: number;
+  currency: string;
+  description: string;
+  payee: string | null;
+  reference: string | null;
+  balance: number | null;
+}
+
+export type RecordSource = { source: Exclude<ActualSource, "statement"> } | { source: "statement"; statementLine: StatementLineDetail };
+
+export async function recordActual(input: ActualInput & RecordSource & { actorId: string; today?: string }): Promise<{ record: ActualRecord; corrected: boolean }> {
   const fields = checkedFields(input, input.today ?? new Date().toISOString().slice(0, 10));
 
   const invoice = (unwrap(await db().from("invoices").select("id, direction").eq("id", input.invoiceId).limit(1)) as Array<{ id: string; direction: string }>)[0];
@@ -189,14 +208,22 @@ export async function recordActual(
 
   const write = await db()
     .from("payment_actuals")
-    .insert({ invoice_id: invoice.id, ...fields, replaces, source: input.source, recorded_by: input.actorId })
+    .insert({
+      invoice_id: invoice.id,
+      ...fields,
+      replaces,
+      source: input.source,
+      recorded_by: input.actorId,
+      // Only a statement's record names its line: before migration 0094 the column is not there to name.
+      ...(input.source === "statement" ? { statement_line_id: input.statementLine.id } : {}),
+    })
     .select(COLUMNS)
     .single<ActualRow>();
   if (write.error) {
     // One first record per bill and one correction per record: someone else's came first.
     if (write.error.code === "23505") throw new ActualPaymentError("changed");
     if (write.error.code === "23503") throw new ActualPaymentError("not_a_payable");
-    if (missingTable(write.error)) throw new ActualPaymentError("not_ready");
+    if (missingTable(write.error) || write.error.code === "PGRST204" || write.error.code === "42703") throw new ActualPaymentError("not_ready");
     throw new Error(write.error.message);
   }
   const record = toRecord(write.data);
@@ -227,6 +254,7 @@ export async function recordActual(
       reason: record.reason,
       ...(corrected ? { replaces } : {}),
       ...(input.source === "csv" ? { via: "csv" } : {}),
+      ...(input.source === "statement" ? { via: "statement", statementLine: input.statementLine } : {}),
     },
   });
   return { record, corrected };
@@ -235,7 +263,7 @@ export async function recordActual(
 const PAGE = 1000;
 
 /** Every row of a read, a page at a time, or the read's error. */
-async function pages<T>(read: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: PostgrestError }>): Promise<{ rows: T[]; error: PostgrestError }> {
+export async function pages<T>(read: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: PostgrestError }>): Promise<{ rows: T[]; error: PostgrestError }> {
   const rows: T[] = [];
   for (let from = 0; ; from += PAGE) {
     const page = await read(from, from + PAGE - 1);
@@ -246,7 +274,7 @@ async function pages<T>(read: (from: number, to: number) => PromiseLike<{ data: 
   }
 }
 
-function rowsOrThrow<T>(read: { rows: T[]; error: PostgrestError }): T[] {
+export function rowsOrThrow<T>(read: { rows: T[]; error: PostgrestError }): T[] {
   if (read.error) throw new Error(read.error.message ?? "read failed");
   return read.rows;
 }
@@ -293,9 +321,18 @@ type PayableRow = {
   counterparties: { name: string } | null;
 };
 
+/** Each payable's newest record, by its id: the one no other replaces. Throws `not_ready` before migration 0090 runs. */
+export async function readNewestRecords(orgDb: OrgDb): Promise<Map<string, ActualRecord>> {
+  const records = await pages<ActualRow>((from, to) => orgDb.from("payment_actuals").select(COLUMNS).order("recorded_at", { ascending: true }).order("id", { ascending: true }).range(from, to));
+  if (missingTable(records.error)) throw new ActualPaymentError("not_ready");
+  const all = rowsOrThrow(records).map(toRecord);
+  const replaced = new Set(all.flatMap((record) => (record.replaces ? [record.replaces] : [])));
+  return new Map(all.filter((record) => !replaced.has(record.id)).map((record) => [record.invoiceId, record]));
+}
+
 /** The workspace's payables as the CSV matches them, each with its newest record. Throws `not_ready` before 0090. */
 export async function readMatchBills(orgDb: OrgDb): Promise<MatchBill[]> {
-  const [payables, records] = await Promise.all([
+  const [payables, newest] = await Promise.all([
     pages<PayableRow>((from, to) =>
       orgDb
         .from("invoices")
@@ -304,12 +341,8 @@ export async function readMatchBills(orgDb: OrgDb): Promise<MatchBill[]> {
         .order("id", { ascending: true })
         .range(from, to)
     ),
-    pages<ActualRow>((from, to) => orgDb.from("payment_actuals").select(COLUMNS).order("recorded_at", { ascending: true }).order("id", { ascending: true }).range(from, to)),
+    readNewestRecords(orgDb),
   ]);
-  if (missingTable(records.error)) throw new ActualPaymentError("not_ready");
-  const all = rowsOrThrow(records).map(toRecord);
-  const replaced = new Set(all.flatMap((record) => (record.replaces ? [record.replaces] : [])));
-  const newest = new Map(all.filter((record) => !replaced.has(record.id)).map((record) => [record.invoiceId, record]));
   return rowsOrThrow(payables).map((row) => ({
     id: row.id,
     memo: row.memo,

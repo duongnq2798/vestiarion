@@ -9,6 +9,7 @@ import GoLivePanel from "@/components/GoLivePanel";
 import InboxEmails from "@/components/InboxEmails";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import { HeldMilestoneActions } from "@/components/HeldMilestoneActions";
+import { StatementMatches, StatementReadPanel } from "@/components/BankStatementImport";
 import { PayLinkControl } from "@/components/PayLinkControl";
 import SlackPanel from "@/components/SlackPanel";
 import { UsycReservePanel } from "@/components/UsycReservePanel";
@@ -53,6 +54,8 @@ import { evidenceLinkLabel, evidencePath } from "@/lib/evidence-paths";
 import { orgHref } from "@/lib/auth/org-paths";
 import type { EvidenceStep } from "@/lib/evidence-chain";
 import { compareActuals, type ActualRecord } from "@/lib/actual-payments-compare";
+import { readStatement, type StatementChoices } from "@/lib/bank-statement/lines";
+import { matchStatement, type StatementBill } from "@/lib/bank-statement/match";
 import type { WaitingPayable } from "@/lib/agent/approvals";
 import { waitingHint } from "@/lib/added-details";
 import { heldReason } from "@/lib/agent/milestone-decisions";
@@ -702,6 +705,57 @@ const ACTUALS = compareActuals(REPORT_FACTS, {
     [5, 15],
   ]),
 });
+
+/**
+ * The same business's bank statement, read and matched (bank statement design B1-B8): a CSV export with the bank's own
+ * lines above its header, money out and money in in two columns and a running balance; the bills it is matched against.
+ * Every match is `matchStatement`'s own, as the server makes it.
+ */
+const STATEMENT_TEXT = [
+  "Operating account ****4821",
+  "Statement period,2026-10-01 to 2026-10-10",
+  "Date,Description,Reference,Money out,Money in,Balance",
+  '2026-10-01,Opening balance,,,,"2,000.00"',
+  '2026-10-02,ACH NORTHWIND CLOUD INV-1101,,46.41,,"1,953.59"',
+  '2026-10-05,CUSTOMER PAYMENT HB-204,,,450.00,"2,403.59"',
+  '2026-10-08,TRANSFER TO SAVINGS,,500.00,,"1,903.59"',
+  '2026-10-09,ACH NORTHWIND CLOUD INV-1108,,46.41,,"1,857.18"',
+  '2026-10-09,CARD HARBOR VPS,,24.00,,"1,833.18"',
+  '2026-10-09,LUMEN HOSTING,ACH-88215,13.50,,"1,819.68"',
+  '2026-10-10,ATLAS COMPUTE AC-5531,ACH-88240,61.25,,"1,758.43"',
+  '2026-10-10,CARD PAYMENT,,15.00,,"1,743.43"',
+].join("\n");
+const STATEMENT_CHOICES: StatementChoices = { currency: "USD" };
+const statementBill = (id: string, payee: string, amount: number, over: Partial<StatementBill> = {}): StatementBill => ({
+  id: `00000000-0000-4000-8000-0000000005${id}`,
+  payee,
+  memo: null,
+  amount,
+  currency: "USD",
+  createdAt: "2026-10-08T09:30:00Z",
+  dueDate: "2026-10-20",
+  current: null,
+  ...over,
+});
+const STATEMENT_BILLS: StatementBill[] = [
+  statementBill("11", "Northwind Cloud", 46.41, { memo: "Invoice INV-1108" }),
+  statementBill("22", "Harbor VPS", 24),
+  statementBill("33", "Lumen Hosting", 13.5, { current: { id: "00000000-0000-4000-8000-000000000633", outcome: "not_paid", paidOn: null, amount: null, currency: null, source: "form" } }),
+  statementBill("44", "Atlas Compute", 61.87, { memo: "AC-5531" }),
+  statementBill("55", "Kestrel Mail", 15),
+  statementBill("66", "Pine Analytics", 15),
+];
+const STATEMENT_READ = readStatement(STATEMENT_TEXT, STATEMENT_CHOICES, "2026-10-11");
+const STATEMENT_LINES = STATEMENT_READ.lines;
+// The first line of money out recorded Northwind Cloud's September bill at an earlier import.
+const STATEMENT_FOUND = {
+  lines: STATEMENT_LINES,
+  matches: matchStatement(
+    STATEMENT_LINES,
+    STATEMENT_BILLS,
+    STATEMENT_LINES.map((line) => (line.description.endsWith("INV-1101") ? { invoiceId: "00000000-0000-4000-8000-000000000500", payee: "Northwind Cloud" } : null))
+  ),
+};
 
 /**
  * A studio's next 60 days for the What if section (cash scenarios guide): a retainer not billed yet, four bills, a
@@ -1429,6 +1483,11 @@ export const DOCS_SHOTS = {
       />
     ),
   },
+  "report-bank-statement": {
+    guide: "report",
+    render: () => <StatementReadPanel name="statement-october.csv" read={STATEMENT_READ} choices={STATEMENT_CHOICES} />,
+  },
+  "report-bank-statement-matches": { guide: "report", render: () => <StatementMatches found={STATEMENT_FOUND} /> },
   "cash-scenarios": {
     guide: "cash-scenarios",
     page: "treasury",
