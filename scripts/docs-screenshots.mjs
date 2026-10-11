@@ -199,6 +199,8 @@ const SHOTS = {
   "report-links": async () => {},
   "report-shared": async () => {},
   "report-shared-decisions": async () => {},
+  "import-bills-columns": async () => {},
+  "import-bills-check": async () => {},
   "workspace-status": async () => {},
 };
 

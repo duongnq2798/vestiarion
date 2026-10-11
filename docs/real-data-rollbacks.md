@@ -26,7 +26,7 @@ Database rollback: the added evidence columns are backward-compatible and should
 
 Application rollback: revert the Phase 4 commit to remove the intake forms and Server Actions. Records already created remain valid business data; do not delete them as part of an application rollback. The external, bearer-protected emergency reset API remains separate from normal product navigation.
 
-Data recovery: creation and CSV import are append operations, and each accepted row has a human ledger entry containing its id. If a bad import must be reversed, identify its exact invoice ids from `import_invoice` entries, export those rows, and delete only those ids during a controlled maintenance window. Ledger entries remain as the immutable record of both the original action and the correction.
+Data recovery: creation and CSV import are append operations, and each accepted row has a human ledger entry containing its id. If a bad import must be reversed, identify its exact invoice ids from its `create_invoice` entries with `via: "import"` and the list's `importFile` hash (older imports wrote `import_invoice` entries), export those rows, and delete only those ids during a controlled maintenance window. Ledger entries remain as the immutable record of both the original action and the correction.
 
 ## Phase 5 — verification and wall clock
 
