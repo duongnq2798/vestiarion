@@ -53,7 +53,7 @@ const invoiceAmountSchema = positiveAmountSchema("Use a positive amount with at 
 export const INVOICE_CURRENCIES = ["USDC", "EURC"] as const;
 export type InvoiceCurrency = (typeof INVOICE_CURRENCIES)[number];
 
-/** USDC when left out or blank; read without regard to case, so a CSV's "eurc" is EURC. */
+/** USDC when left out or blank; read without regard to case, so "eurc" is EURC. */
 export const invoiceCurrencySchema = z
   .string()
   .optional()
@@ -61,15 +61,6 @@ export const invoiceCurrencySchema = z
   .pipe(z.enum(INVOICE_CURRENCIES, { message: "Choose USDC or EURC as the currency." }));
 
 const optionalText = (max: number) => z.string().trim().max(max).transform((value) => value || null);
-
-/**
- * Like `optionalText`, but also accepts the key being absent entirely — for
- * CSV rows that were not built by `parseInvoiceCsv` (which always fills in
- * every optional column as `""`), such as a row object a caller constructs
- * by hand in the old, pre-discount column shape. Absent means the same as
- * blank: no discount.
- */
-const optionalCsvText = (max: number) => z.string().trim().max(max).nullish().transform((value) => value || null);
 
 /** A payee's chain (CCTP payouts X1): read without regard to case. */
 const payeeChainSchema = z
@@ -137,7 +128,7 @@ function isValidDiscountPct(value: string): boolean {
 }
 
 /**
- * The early-payment discount pair, on an invoice form or a CSV row: both
+ * The early-payment discount pair, on an invoice form or an imported row: both
  * fields or neither, a percent strictly between 0 and 100, a real deadline,
  * and a deadline no later than the due date (migration 0038's own checks).
  *
@@ -198,39 +189,11 @@ export const invoiceInputSchema = z
     checkDiscountPair(context, "earlyPayDiscountPct", "discountDeadline", value.earlyPayDiscountPct, value.discountDeadline, value.dueDate);
   });
 
-const csvBooleanSchema = z.union([z.boolean(), z.string()]).transform((value, context) => {
-  if (typeof value === "boolean") return value;
-  const normalized = value.trim().toLowerCase();
-  if (["true", "yes", "1"].includes(normalized)) return true;
-  if (["false", "no", "0", ""].includes(normalized)) return false;
-  context.addIssue({ code: "custom", message: "goods_received must be true/false, yes/no, or 1/0" });
-  return z.NEVER;
-});
-
 /** What a person may add to a payable the agent stopped on, read as the invoice form reads it (complete held invoice R2). */
 export const invoiceDetailsInputSchema = z.object({
   poReference: optionalText(100),
   goodsReceived: z.boolean(),
 });
-
-export const csvInvoiceInputSchema = z
-  .object({
-    direction: z.string().trim().toLowerCase().pipe(z.enum(["payable", "receivable"])),
-    counterparty: z.string().trim().min(1).max(160),
-    amount: invoiceAmountSchema,
-    currency: invoiceCurrencySchema,
-    memo: optionalText(280),
-    po_reference: optionalText(100),
-    goods_received: csvBooleanSchema,
-    due_date: dueDateSchema,
-    early_pay_discount_pct: optionalCsvText(10),
-    discount_deadline: optionalCsvText(10),
-  })
-  .superRefine((value, context) => {
-    checkDiscountPair(context, "early_pay_discount_pct", "discount_deadline", value.early_pay_discount_pct, value.discount_deadline, value.due_date);
-  });
-
-export type CsvInvoiceInput = z.input<typeof csvInvoiceInputSchema>;
 
 export function dueDateIso(value: string): string {
   return new Date(`${value}T12:00:00.000Z`).toISOString();
@@ -271,14 +234,6 @@ export function invoiceFormRefusal(error: z.ZodError): { message: string; fieldE
     message ??= `${INVOICE_FIELD_LABELS[key]}: ${issue.message}`;
   }
   return { message: message ?? firstZodMessage(error), fieldErrors };
-}
-
-/** A refused CSV import, naming the row as the preview counts them, from 1, and the column. */
-export function csvBatchMessage(error: z.ZodError): string {
-  const issue = error.issues[0];
-  const [row, ...column] = issue?.path ?? [];
-  if (typeof row !== "number") return firstZodMessage(error);
-  return `Row ${row + 1}: ${column.length > 0 ? `${column.join(".")}: ` : ""}${issue.message}`;
 }
 
 /**
