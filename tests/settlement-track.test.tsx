@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { DecisionCard } from "@/components/vx/DecisionCard";
@@ -212,5 +214,15 @@ describe("a payable's card", () => {
     expect(invoiceDecision(INVOICE, undefined, [], { network: "arc-testnet" }).settlement).toBeUndefined();
     // A receivable's card never shows one: it is money coming in.
     expect(invoiceDecision({ ...INVOICE, direction: "receivable" }, undefined, [], { network: "arc-testnet", settlements: new Map([[ID, settlement]]) }).settlement).toBeUndefined();
+  });
+});
+
+describe("Bills & receivables", () => {
+  const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "invoices", "page.tsx"), "utf8");
+
+  it("reads each payable's payment in the workspace's scope, best effort, and hands the cards their lifecycle (L8)", () => {
+    expect(page).toMatch(/return inOrg\(access, async \(\) => \{[\s\S]*readInvoicePayments\(db\(\)\)\.catch\(/);
+    expect(page).toContain("settlementsByBill({ payments: payments.values(), invoices: shown.filter((invoice) => invoice.direction === \"payable\"), entries, now: asOf })");
+    expect(page).toContain("{ network, deciding, verdicts, settlements, asOf }");
   });
 });
