@@ -19,7 +19,11 @@ type PageParameters = {
 type Gtag = {
   (command: "set", parameters: Partial<PageParameters>): void;
   (command: "event", eventName: "page_view", parameters: PageParameters): void;
+  (command: "event", eventName: "cta_click", parameters: { cta_id: string; page_path: string }): void;
 };
+
+/** A call to action's name, as `data-cta` gives it: lowercase words and hyphens only, so nothing else can ride along. */
+const CTA_ID = /^[a-z][a-z-]{0,39}$/;
 
 export function GoogleAnalytics({ measurementId }: GoogleAnalyticsProps) {
   const pathname = usePathname();
@@ -42,6 +46,20 @@ export function GoogleAnalytics({ measurementId }: GoogleAnalyticsProps) {
     analyticsWindow.gtag?.("set", parameters);
     analyticsWindow.gtag?.("event", "page_view", parameters);
   }, [isInitialized, pathname]);
+
+  // Which call to action was chosen (landing clarity M1): a link marked `data-cta` sends its name and the redacted path,
+  // and nothing about the person or what they typed.
+  useEffect(() => {
+    if (!isInitialized) return;
+    const onClick = (event: MouseEvent) => {
+      const target = event.target instanceof Element ? event.target.closest("[data-cta]") : null;
+      const id = target?.getAttribute("data-cta") ?? "";
+      if (!CTA_ID.test(id)) return;
+      (window as Window & { gtag?: Gtag }).gtag?.("event", "cta_click", { cta_id: id, page_path: redactPath(window.location.pathname) });
+    };
+    document.addEventListener("click", onClick, { capture: true });
+    return () => document.removeEventListener("click", onClick, { capture: true });
+  }, [isInitialized]);
 
   return (
     <>
