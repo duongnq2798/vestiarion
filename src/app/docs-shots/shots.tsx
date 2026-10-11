@@ -38,10 +38,14 @@ import { invoiceDecision, milestoneDecision } from "@/components/vx/map";
 import type { NavKey } from "@/components/vx/nav";
 import { Hash } from "@/components/vx/Primitives";
 import { ReportLists, ReportReadiness, ReportSummary } from "@/components/vx/WorkspaceReport";
+import ReportBaselineControl from "@/components/ReportBaselineControl";
+import { ReportShareButton, ReportShareLinks, type LiveLink } from "@/components/ReportShareControl";
+import { ReportValue } from "@/components/vx/ReportValue";
+import { SharedDecisions, SharedReportFigures, SharedReportHead } from "@/components/vx/SharedReport";
 import { StatusChipRow, StatusPanel } from "@/components/vx/WorkspaceHeader";
 import { statusChips, statusRows, type PageStatus, type PlatformStatus } from "@/components/vx/workspace-status";
 import { ActualsBills, ActualsSummary } from "@/components/vx/ActualsComparison";
-import { compareActuals, type ActualRecord } from "@/lib/actual-payments-compare";
+import { compareActuals, type ActualRecord, type ActualsFacts } from "@/lib/actual-payments-compare";
 import type { WaitingPayable } from "@/lib/agent/approvals";
 import { waitingHint } from "@/lib/added-details";
 import { heldReason } from "@/lib/agent/milestone-decisions";
@@ -50,6 +54,9 @@ import type { PayeeLinkStatus } from "@/lib/payee-journey";
 import type { GoLiveStatus } from "@/lib/platform/go-live";
 import { gettingStarted } from "@/lib/getting-started";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow } from "@/lib/queries";
+import type { SharedReportShown } from "@/lib/platform/shared-report";
+import { reportValue, type BaselineState } from "@/lib/report-value";
+import { buildSharedReport } from "@/lib/shared-report";
 import { buildReport, type ReportBill, type ReportDecision, type ReportFacts } from "@/lib/workspace-report";
 import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
 
@@ -621,7 +628,8 @@ const REPORT_FACTS: ReportFacts = {
     reportBill("22", "Harbor VPS", 24, { discount: { pct: 2, deadline: "2026-10-10T00:00:00Z" }, paidAmount: 23.52 }),
     reportBill("33", "Lumen Hosting", 13.5, { payee: { id: "cp-33", name: "Lumen Hosting", mirror: true, sample: false } }),
     reportBill("44", "Atlas Compute", 61.87, { status: "held", bill: null }),
-    reportBill("55", "Northwind Cloud", 46.41, { status: "rejected", bill: null }),
+    // Northwind Cloud's second bill: the same supplier as its first, so a shared copy gives both one label.
+    reportBill("55", "Northwind Cloud", 46.41, { status: "rejected", bill: null, payee: { id: "cp-11", name: "Northwind Cloud", mirror: false, sample: false } }),
   ],
   decisions: [
     reportDecision(1, "11"),
@@ -665,7 +673,7 @@ const actualRecord = (id: string, over: Partial<ActualRecord>): ActualRecord => 
   recordedAt: "2026-10-12T08:15:00Z",
   ...over,
 });
-const ACTUALS = compareActuals(REPORT_FACTS, {
+const ACTUALS_FACTS: ActualsFacts = {
   records: [
     actualRecord("11", { amount: 46.41, reference: "SEPA-1108" }),
     actualRecord("22", { paidOn: "2026-10-12", amount: 24, method: "card" }),
@@ -684,7 +692,47 @@ const ACTUALS = compareActuals(REPORT_FACTS, {
     [3, 14],
     [5, 15],
   ]),
-});
+};
+const ACTUALS = compareActuals(REPORT_FACTS, ACTUALS_FACTS);
+
+/** The owner's answer about how long a bill took before, and the value it gives (shared report design S8, S9). */
+const REPORT_OWNER = "owner@harbor-books.example";
+const REPORT_BASELINE: BaselineState = {
+  available: true,
+  answer: { id: "00000000-0000-4000-8000-0000000005b1", minutesPerBill: 25, peoplePerBill: 2, answeredBy: ACTUALS_RECORDER, answeredAt: "2026-10-12T08:30:00Z" },
+};
+
+/**
+ * The same business's report as its link shows it (shared report design S4, S6): suppliers as labels, amounts shown,
+ * its name as the title. The signed links are made up, so a signature check here would not verify: no shot runs one.
+ */
+const SHARED_KEY_ID = "0123456789abcdef";
+const SHARED_VIEW: SharedReportShown = (() => {
+  const view = buildSharedReport({
+    facts: REPORT_FACTS,
+    actuals: { available: true, facts: ACTUALS_FACTS },
+    baseline: REPORT_BASELINE,
+    options: { names: "labels", amounts: "shown", title: "workspace" },
+    name: "Harbor Books",
+    sharedAt: "2026-10-12T09:00:00Z",
+    knownNames: ["Northwind Cloud", "Harbor VPS", "Lumen Hosting", "Atlas Compute"],
+    now: "2026-10-13T10:00:00Z",
+  });
+  return {
+    ...view,
+    decisions: view.decisions.map((decision) => ({
+      ...decision,
+      link: { body_hash: "1".repeat(64), signature: "2".repeat(128), prev_hash: "3".repeat(64), hash: "4".repeat(64), signing_key_id: SHARED_KEY_ID },
+    })),
+    publicKeys: { [SHARED_KEY_ID]: "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA\n-----END PUBLIC KEY-----\n" },
+  };
+})();
+
+/** The report's live links: one for the accountant with names, one for an outside reviewer with labels and no amounts. */
+const REPORT_LINKS: LiveLink[] = [
+  { id: "00000000-0000-4000-8000-0000000005e2", shows: "Supplier labels, amounts hidden, a neutral title", by: REPORT_OWNER, createdAt: "2026-10-12T09:20:00Z" },
+  { id: "00000000-0000-4000-8000-0000000005e1", shows: "Supplier names, amounts shown, the workspace's name as its title", by: REPORT_OWNER, createdAt: "2026-10-12T09:00:00Z" },
+];
 
 export const DOCS_SHOTS = {
   "go-live-checklist": {
@@ -1229,6 +1277,41 @@ export const DOCS_SHOTS = {
       />
     ),
   },
+  "report-value": {
+    guide: "report",
+    render: () => (
+      <ReportValue
+        value={reportValue(REPORT, REPORT_BASELINE)}
+        audience="member"
+        answeredBy={REPORT_OWNER}
+        answer={<ReportBaselineControl orgSlug={SLUG} current={{ minutesPerBill: 25, peoplePerBill: 2 }} />}
+      />
+    ),
+  },
+  // The report with Share this report opened by the script, as an owner or admin sees it.
+  "report-share": {
+    guide: "report",
+    page: "report",
+    sub: "What the agent did with this workspace's bills since it opened: what it paid and with what proof, what it stopped and why, and how often a person stepped in.",
+    render: () => (
+      // Room under the button for the dialog, which opens over the frame: the page behind it is dimmed anyway.
+      <div className="flex min-h-176 items-start justify-end">
+        <ReportShareButton orgSlug={SLUG} available />
+      </div>
+    ),
+  },
+  "report-links": { guide: "report", render: () => <ReportShareLinks orgSlug={SLUG} live={REPORT_LINKS} stopped={1} canStop /> },
+  // Where the link opens, with no session: the title, the period, live, and the figures.
+  "report-shared": {
+    guide: "report",
+    render: () => (
+      <div className="space-y-10">
+        <SharedReportHead view={SHARED_VIEW} />
+        <SharedReportFigures view={SHARED_VIEW} />
+      </div>
+    ),
+  },
+  "report-shared-decisions": { guide: "report", render: () => <SharedDecisions view={SHARED_VIEW} /> },
   "workspace-status": {
     guide: "workspace",
     render: function WorkspaceStatusShot() {

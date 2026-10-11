@@ -1,5 +1,13 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-11: A report shared by a link, and the value question
+
+- An owner or admin can share the workspace report by a public link, and stop one; an owner can answer how long one bill took before Vestiarion, which the report's value section estimates from. Its ledger gains three entries, actor `human`, domain `system`, each sent to webhook endpoints as `ledger.appended` and listed by `GET /api/v1/ledger`:
+  - **`report_shared`** `{ by, shareId, options: { names, amounts, title } }`: a link was made. `names` is `labels` or `shown`, `amounts` is `shown` or `hidden`, and `title` is `workspace` or `neutral`. The link itself is never in the entry.
+  - **`report_unshared`** `{ by, shareId }`: the link with that `shareId` was stopped.
+  - **`report_baseline_answered`** `{ by, baselineId, minutesPerBill, peoplePerBill }`: an owner answered, in whole minutes and people. A changed answer is a new entry; the newest is the one the report reads.
+- Nothing else in `/api/v1` changes: sharing and the answer are made in the console only.
+
 ## 2026-10-10: What the business paid outside Vestiarion
 
 - An owner or admin can record how the business paid a payable outside Vestiarion, or that it did not, from the workspace report. Its ledger gains two entries, actor `human`, domain `ap`, each sent to webhook endpoints as `ledger.appended` and listed by `GET /api/v1/ledger`:

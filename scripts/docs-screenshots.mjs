@@ -173,6 +173,14 @@ const SHOTS = {
   "report-lists": async () => {},
   "report-actuals": async () => {},
   "report-actuals-bills": async () => {},
+  "report-value": async () => {},
+  "report-share": async (page) => {
+    await page.click(`[...document.querySelectorAll("[data-docs-shot] button")].find((b) => b.textContent.trim() === "Share this report")`);
+    await page.waitFor(`document.querySelector("[role=dialog]")?.textContent.includes("Make the link")`);
+  },
+  "report-links": async () => {},
+  "report-shared": async () => {},
+  "report-shared-decisions": async () => {},
   "workspace-status": async () => {},
 };
 

@@ -153,6 +153,15 @@ const ACTUAL_CONTROL = "src/components/ActualPaymentControl.tsx";
 const ACTUALS_CSV = "src/components/ActualsCsvImport.tsx";
 const ACTUALS_LIBRARY = "src/lib/actual-payments.ts";
 const ACTUAL_FIELDS = "src/lib/actual-payment-fields.ts";
+const REPORT_VALUE = "src/components/vx/ReportValue.tsx";
+const BASELINE_CONTROL = "src/components/ReportBaselineControl.tsx";
+const BASELINE_LIBRARY = "src/lib/report-baseline.ts";
+const SHARE_CONTROL = "src/components/ReportShareControl.tsx";
+const SHARES_LIBRARY = "src/lib/report-shares.ts";
+const REPORT_COMMANDS = "src/lib/commands/report.ts";
+const SHARED_VIEW = "src/components/vx/SharedReport.tsx";
+const SHARED_PAGE = "src/app/report/[token]/page.tsx";
+const SIGNATURE_CHECK = "src/components/landing/SignatureCheck.tsx";
 
 /** Each guide's quoted UI strings, as `[text, the file it must appear in]`. */
 /**
@@ -1050,6 +1059,60 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Say why it was not paid, in a few words.", ACTUALS_LIBRARY],
     ["actual_payment_recorded", ACTUALS_LIBRARY],
     ["actual_payment_corrected", ACTUALS_LIBRARY],
+    // Value, and the answer it estimates from (shared report S8, S9).
+    ["Three kinds of figures, never added together", REPORT_VALUE],
+    ["Measured", REPORT_VALUE],
+    ["Time to a first decision", REPORT_VALUE],
+    ["Paid on or before the due day", REPORT_VALUE],
+    ["From your answer", REPORT_VALUE],
+    ["Time saved, estimated", REPORT_VALUE],
+    ["A person's verdict still takes time, and it is not taken off.", REPORT_VALUE, "A person&apos;s verdict still takes time, and it is not taken off."],
+    ["People who touched a bill before", REPORT_VALUE],
+    ["Not counted", REPORT_VALUE],
+    ["Bills not paid yet", REPORT_VALUE],
+    ["Flagged, or refused as a repeat", REPORT_VALUE],
+    ["Discounts on offer, not taken", REPORT_VALUE],
+    ["No answer given yet, so nothing is estimated.", REPORT_VALUE],
+    ["From the business's answer", REPORT_VALUE],
+    ["Your answer is not set up on this deployment yet.", REPORT_VALUE],
+    ["Your answer is not set up on this deployment yet.", BASELINE_LIBRARY],
+    ["Answer the question", BASELINE_CONTROL],
+    ["Change your answer", BASELINE_CONTROL],
+    ["Before Vestiarion, how many minutes did one bill take you?", BASELINE_CONTROL],
+    ["How many people touched it?", BASELINE_CONTROL],
+    ["Save your answer", BASELINE_CONTROL],
+    ["Type the minutes one bill took, a whole number from 1 to 6,000.", BASELINE_LIBRARY],
+    ["report_baseline_answered", BASELINE_LIBRARY],
+    // Sharing the report (shared report S2-S6, S10, S14).
+    ["Share this report", SHARE_CONTROL],
+    ["Supplier names", SHARE_CONTROL],
+    ["Labels: Supplier A, Supplier B", SHARE_CONTROL],
+    ["Their names", SHARE_CONTROL],
+    ["Show amounts", SHARE_CONTROL],
+    ["Hide every amount", SHARE_CONTROL],
+    ["This workspace's name", SHARE_CONTROL],
+    ["A business on Vestiarion", SHARE_CONTROL],
+    ["Make the link", SHARE_CONTROL],
+    ["Shared links", SHARE_CONTROL],
+    ["Stop sharing", SHARE_CONTROL],
+    ["Report shared. Copy the link now: it is shown only once.", REPORT_COMMANDS],
+    ["Live: recomputed each time this page opens.", SHARED_VIEW],
+    ["Totals only", SHARED_VIEW],
+    ["Simulated", SHARED_VIEW],
+    ["Check its signature", SIGNATURE_CHECK],
+    ["This report is no longer shared.", SHARED_PAGE],
+    ["This report could not load. Try again in a moment.", SHARED_PAGE],
+    ["Sharing the report is not set up on this deployment yet.", SHARES_LIBRARY],
+    ["Sharing the report is not set up on this deployment yet.", SHARE_CONTROL],
+    [
+      "This workspace has 10 live links to its report. Stop sharing one before you make another.",
+      SHARES_LIBRARY,
+      "`This workspace has ${REPORT_SHARE_LIMIT} live links to its report. Stop sharing one before you make another.`",
+    ],
+    ["The link could not be recorded in the ledger, so it was stopped at once. Try again in a moment.", SHARES_LIBRARY],
+    ["That link was stopped already.", SHARES_LIBRARY],
+    ["report_shared", SHARES_LIBRARY],
+    ["report_unshared", SHARES_LIBRARY],
   ],
   "guides/shadow-mode": [
     ["Run alongside how you pay today (shadow mode)", CREATE_FORM],
