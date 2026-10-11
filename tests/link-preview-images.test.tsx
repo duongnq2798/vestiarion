@@ -5,10 +5,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 /**
- * A link page's own preview card (docs/superpowers/specs/2026-10-06-mainnet-polish-design.md E1): `/pay`, `/payee` and
- * `/receipt` point their Open Graph and X metadata at one card per kind of link, served from `/og/link/<page>`. Like the
- * docs pages' images, each is rendered at build time and skipped by the proxy, so a crawler's fetch costs nothing and
- * never refreshes a session (final review I2). The card names no network beyond Arc, no currency (I1), and reads
+ * A link page's own preview card (docs/superpowers/specs/2026-10-06-mainnet-polish-design.md E1): `/pay`, `/payee`,
+ * `/receipt` and `/report` (a shared report) point their Open Graph and X metadata at one card per kind of link, served
+ * from `/og/link/<page>`. Like the docs pages' images, each is rendered at build time and skipped by the proxy, so a
+ * crawler's fetch costs nothing and never refreshes a session (final review I2). The card names no network beyond Arc, no currency (I1), and reads
  * nothing of the link: no token reaches the image's address. `ImageResponse` is stubbed to keep the element it is given.
  */
 
@@ -28,6 +28,7 @@ const PAGES = [
   ["pay", "Pay an invoice"],
   ["payee", "Your payment"],
   ["receipt", "Payment receipt"],
+  ["report", "Shared report"],
 ] as const;
 const source = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8");
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/\s+/g, " ").trim();
@@ -35,7 +36,7 @@ const card = async (page: string) => (await route.GET(new Request(`https://vesti
 
 describe("a link page's preview card (mainnet polish E1)", () => {
   it("renders one card per kind of link at build time, and no other", () => {
-    expect(route.generateStaticParams()).toEqual([{ page: "pay" }, { page: "payee" }, { page: "receipt" }]);
+    expect(route.generateStaticParams()).toEqual([{ page: "pay" }, { page: "payee" }, { page: "receipt" }, { page: "report" }]);
     expect(route.dynamicParams).toBe(false);
     expect(linkImagePath("pay")).toBe("/og/link/pay");
   });
@@ -68,8 +69,8 @@ describe("a link page's preview card (mainnet polish E1)", () => {
   });
 
   it("reads nothing of any link, and keeps tokens out of the image's address", () => {
-    expect(source("src/app/og/link/[page]/route.ts")).not.toMatch(/pay-links|payee-links|receipts|token/);
-    for (const page of ["pay", "payee", "receipt"]) {
+    expect(source("src/app/og/link/[page]/route.ts")).not.toMatch(/pay-links|payee-links|receipts|report-shares|shared-report|token/);
+    for (const page of ["pay", "payee", "receipt", "report"]) {
       for (const kind of ["opengraph-image", "twitter-image"]) expect(existsSync(path.join(process.cwd(), "src/app", page, "[token]", `${kind}.tsx`))).toBe(false);
     }
   });

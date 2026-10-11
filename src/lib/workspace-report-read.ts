@@ -69,7 +69,8 @@ type PaymentRow = {
   updated_at: string;
 };
 
-export async function readReportFacts(orgDb: OrgDb, network: Network, workspace: { sandbox: boolean }): Promise<ReportFacts> {
+/** `now` is when the facts are read: the day an early-payment discount's last day is measured against. */
+export async function readReportFacts(orgDb: OrgDb, network: Network, workspace: { sandbox: boolean }, now: Date = new Date()): Promise<ReportFacts> {
   const [invoices, decisions, people, verdicts, payments, first, shadow] = await Promise.all([
     allRows<InvoiceRow>((from, to) =>
       orgDb
@@ -138,6 +139,7 @@ export async function readReportFacts(orgDb: OrgDb, network: Network, workspace:
   return {
     network,
     sandbox: workspace.sandbox,
+    now: now.toISOString(),
     openedAt: (unwrap(first) as Array<{ ts: string }>)[0]?.ts ?? null,
     shadow: shadow ? { currency: shadow.currency, startedAt: shadow.startedAt } : null,
     bills,

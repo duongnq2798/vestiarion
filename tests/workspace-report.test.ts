@@ -46,7 +46,7 @@ function payment(invoiceId: string, over: Partial<ReportPayment> = {}): ReportPa
 }
 
 function facts(over: Partial<ReportFacts> = {}): ReportFacts {
-  return { network: "arc-testnet", sandbox: false, openedAt: OPENED, shadow: null, bills: [], decisions: [], personActions: [], verdicts: [], payments: [], ...over };
+  return { network: "arc-testnet", sandbox: false, now: "2026-10-11T12:00:00.000Z", openedAt: OPENED, shadow: null, bills: [], decisions: [], personActions: [], verdicts: [], payments: [], ...over };
 }
 
 describe("buildReport", () => {
@@ -472,8 +472,10 @@ describe("readReportFacts", () => {
 
   it("reads the payables, the agent's decisions, people's approvals, verdicts and confirmed live payments of the workspace", async () => {
     const fake = fakeSupabase(workspace());
-    const read = await runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), () => readReportFacts(db(), "arc-testnet", { sandbox: false }));
+    const read = await runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), () => readReportFacts(db(), "arc-testnet", { sandbox: false }, new Date("2026-10-07T10:00:00Z")));
 
+    // When it was read: the day a discount's last day is measured against.
+    expect(read.now).toBe("2026-10-07T10:00:00.000Z");
     expect(read.openedAt).toBe("2026-10-01T00:00:00Z");
     expect(read.shadow).toEqual({ currency: "USD", startedAt: "2026-10-07T08:00:00Z" });
     expect(read.bills).toEqual([

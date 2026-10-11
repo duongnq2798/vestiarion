@@ -28,6 +28,9 @@ export const PERMISSIONS = {
   "treasury.manage": ["owner", "admin"],
   // Connecting the workspace to Slack, which sends the agent's decisions to a channel, or removing it (Slack design S3).
   "integrations.manage": ["owner", "admin"],
+  // Putting the workspace's report outside it by a public link, or stopping one: a control over every member's data,
+  // as API keys and webhooks are (shared report S3).
+  "report.share": ["owner", "admin"],
   "org.administer": ["owner"],
 } as const satisfies Record<string, readonly OrgRole[]>;
 

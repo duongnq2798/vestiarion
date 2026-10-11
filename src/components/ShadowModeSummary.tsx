@@ -7,6 +7,7 @@ import { orgHref } from "@/lib/auth/org-paths";
 import type { ShadowMode } from "@/lib/shadow-currency";
 import type { TestUsdcWeek } from "@/lib/test-usdc";
 import type { TestUsdcView } from "@/lib/test-usdc-rules";
+import { agreementRate } from "@/lib/verdict-rate";
 
 /** Where a person buys testnet USDC once the week's test USDC is used (test USDC T8). */
 const TESTMINT = "https://testmint.myproceeds.xyz";
@@ -36,7 +37,7 @@ export default function ShadowModeSummary({
   testUsdc?: { view: TestUsdcView | null; latest: TestUsdcWeek["latest"]; operatingAddress: string | null; latestTxUrl: string | null };
 }) {
   const given = summary.agreed + summary.disagreed;
-  const rate = given > 0 ? Math.round((summary.agreed / given) * 100) : null;
+  const rate = agreementRate(summary);
   return (
     <section aria-labelledby="shadow-summary-title">
       <SectionHeader id="shadow-summary-title" title="Shadow mode" meta={`for bills in ${mode.currency}`} />
