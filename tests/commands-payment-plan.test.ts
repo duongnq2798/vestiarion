@@ -59,6 +59,7 @@ const planOf = (fields: Partial<PaymentPlanInput> = {}): PaymentPlan =>
     now: NOW,
     operatingUsdc: 1000,
     reserveUsdc: 0,
+    reserveApy: 0,
     cushion: 0,
     bills: [
       bill({ id: "deal", payee: "Northwind Supply" }),

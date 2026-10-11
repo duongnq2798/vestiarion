@@ -43,7 +43,7 @@ const rows = (fields: Partial<PlanRows> = {}): PlanRows => ({
   milestones: [{ id: "m-1", contractor_id: "c-3", contractor_name: "Ada Lovelace", title: "Design review", amount: 40, status: "verified", escrow_state: null }],
   accounts: [
     { kind: "operating", balance: 300, circle_wallet_id: "w-1", address: "0xop", balance_synced_at: SYNCED },
-    { kind: "reserve", balance: "200", circle_wallet_id: null, address: null, balance_synced_at: null },
+    { kind: "reserve", balance: "200", apy: "0.045", circle_wallet_id: null, address: null, balance_synced_at: null },
   ],
   chainMode: "live",
   walletHost: "hosted",
@@ -57,6 +57,9 @@ describe("paymentPlanInput", () => {
     const input = paymentPlanInput(rows());
     expect(input.operatingUsdc).toBe(300);
     expect(input.reserveUsdc).toBe(200);
+    // The reserve's yield, as the agent reads it, to weigh a discount against holding the cash (P4).
+    expect(input.reserveApy).toBe(0.045);
+    expect(paymentPlanInput(rows({ accounts: [{ kind: "operating", balance: 300 }] })).reserveApy).toBe(0);
     const outlook = cashOutlook({
       now: NOW,
       operatingUsdc: 300,

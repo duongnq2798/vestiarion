@@ -29,7 +29,15 @@ export interface PlanRows {
   counterparties: ReadonlyArray<{ id: string; address: string | null; payment_limit: number | null; risk_level: string }>;
   /** Null when they could not be read. */
   milestones: ReadonlyArray<{ id: string; contractor_id: string; contractor_name: string; title: string; amount: number; status: string; escrow_state?: string | null }> | null;
-  accounts: ReadonlyArray<{ kind: string; balance: number | string; circle_wallet_id?: string | null; address?: string | null; balance_synced_at?: string | null }>;
+  accounts: ReadonlyArray<{
+    kind: string;
+    balance: number | string;
+    /** The reserve's yield, annualised, as a fraction. */
+    apy?: number | string | null;
+    circle_wallet_id?: string | null;
+    address?: string | null;
+    balance_synced_at?: string | null;
+  }>;
   chainMode: "live" | "simulate";
   walletHost: WalletHost | null;
   /** The agent's spending limit and what it paid against it; `unread` when it could not be read. */
@@ -50,7 +58,10 @@ export function paymentPlanInput(rows: PlanRows): PaymentPlanInput {
 
   const operating = rows.accounts.find((account) => account.kind === "operating");
   const operatingUsdc = num(operating?.balance);
-  const reserveUsdc = num(rows.accounts.find((account) => account.kind === "reserve")?.balance);
+  const reserve = rows.accounts.find((account) => account.kind === "reserve");
+  const reserveUsdc = num(reserve?.balance);
+  // As the agent reads it (the cycle's `reserveApy`): a workspace with no reserve earns nothing by waiting.
+  const reserveApy = num(reserve?.apy);
   // The chain's balance when payments are live and the operating account holds a wallet, as the console's balance tile
   // reads it (a workspace paying from its owner's own wallet has the address and no Circle wallet); a sandbox's own
   // figure otherwise.
@@ -122,6 +133,7 @@ export function paymentPlanInput(rows: PlanRows): PaymentPlanInput {
     now: rows.now,
     operatingUsdc,
     reserveUsdc,
+    reserveApy: Number.isFinite(reserveApy) ? reserveApy : 0,
     cushion,
     bills,
     milestones: planMilestones,

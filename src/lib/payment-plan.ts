@@ -64,6 +64,11 @@ export interface PaymentPlanInput {
   operatingUsdc: number;
   /** The USYC reserve's value in USDC, which comes back to the wallet in seconds (P3). */
   reserveUsdc: number;
+  /**
+   * The reserve's yield, annualised, as a fraction (0.045 for 4.5%): the agent pays early for a discount only when the
+   * discount is worth at least the yield of holding the cash to the due date (payment timing), and so does the plan (P4).
+   */
+  reserveApy: number;
   /** Safe to spend's cushion: 15% of what leaves within 7 days and of the open milestones (P3). */
   cushion: number;
   bills: PlanBill[];
@@ -390,12 +395,27 @@ function capsOf(bill: PlanBill, limits: PlanLimits): PlanFlag[] {
   return caps;
 }
 
-function billDraft(bill: PlanBill, today: string, through: string, limits: PlanLimits): Draft | null {
+/**
+ * Whether paying early for the discount is the agent's own choice too (payment timing): the discount is worth at least
+ * the yield of holding the cash from its deadline to the due date, with the agent's own figures. Null when it is.
+ */
+function yieldWins(bill: PlanBill, deadlineOn: string, dueOn: string, reserveApy: number): { yieldValue: number; discountValue: number } | null {
+  const discountValue = Number((bill.amount * (bill.discount!.pct / 100)).toFixed(6));
+  const yieldValue = Number(((bill.amount * reserveApy * daysBetween(deadlineOn, dueOn)) / 365).toFixed(6));
+  return discountValue >= yieldValue ? null : { yieldValue, discountValue };
+}
+
+function billDraft(bill: PlanBill, today: string, through: string, limits: PlanLimits, reserveApy: number): Draft | null {
   if (!LISTED_BILLS.has(bill.status)) return null;
   const dueOn = dayOf(bill.dueDate);
   const agentOn = bill.status === "scheduled" ? dayOf(bill.scheduledFor) : null;
   const discountLive = bill.discount !== null && discountApplies(bill.discount, new Date(`${today}T12:00:00.000Z`));
   const deadlineOn = discountLive ? dayOf(bill.discount!.deadline) : null;
+  // The yield decides only whether to propose paying early: a bill the agent already scheduled on or before the
+  // discount's deadline keeps that day, since the plan never moves a payment later only to earn yield.
+  const earlyByAgent = agentOn !== null && deadlineOn !== null && agentOn <= deadlineOn;
+  const heldForYield =
+    deadlineOn !== null && dueOn !== null && deadlineOn < dueOn && !earlyByAgent ? yieldWins(bill, deadlineOn, dueOn, reserveApy) : null;
   const inView = dueOn === null || dueOn <= through || (agentOn !== null && agentOn <= through) || (deadlineOn !== null && deadlineOn <= through);
   if (!inView) return null;
 
@@ -441,7 +461,7 @@ function billDraft(bill: PlanBill, today: string, through: string, limits: PlanL
   // pending or scheduled: the plan gives it a day.
   const result = draft("planned", "", {
     nowOn: agentOn !== null ? later(agentOn, today) : dueOrToday,
-    deadlineOn: deadlineOn !== null && dueOn !== null && deadlineOn < dueOn ? later(deadlineOn, today) : null,
+    deadlineOn: deadlineOn !== null && dueOn !== null && deadlineOn < dueOn && heldForYield === null ? later(deadlineOn, today) : null,
     agentEligible: true,
     caps: capsOf(bill, limits),
   });
@@ -452,6 +472,8 @@ function billDraft(bill: PlanBill, today: string, through: string, limits: PlanL
     result.line.reason = `Overdue since ${dayWords(dueOn)}: first in line today.`;
   } else if (dueOn === today) {
     result.line.reason = "Due today.";
+  } else if (bill.discount && heldForYield !== null) {
+    result.line.reason = `Pays on its due date, ${dayWords(dueOn)}: the reserve's yield until then (${usdc(heldForYield.yieldValue)}) is worth more than the ${bill.discount.pct}% early-payment discount (${usdc(heldForYield.discountValue)}), as the agent decides.`;
   } else if (bill.discount && deadlineOn !== null && deadlineOn === dueOn) {
     const value = round6(bill.amount - paysOn(bill.amount, bill.discount, dueOn));
     result.line.reason = `Pays on its due date, ${dayWords(dueOn)}, which is also the discount's last day (${bill.discount.pct}%, ${usdc(value)}).`;
@@ -515,7 +537,7 @@ export function planPayments(input: PaymentPlanInput): PaymentPlan {
       }
       continue;
     }
-    const draft = billDraft(bill, today, through, input.limits);
+    const draft = billDraft(bill, today, through, input.limits, input.reserveApy);
     if (draft) drafts.push(draft);
   }
   for (const milestone of input.milestones) {
@@ -677,6 +699,7 @@ export function planPayments(input: PaymentPlanInput): PaymentPlan {
       today,
       round6(input.operatingUsdc),
       round6(input.reserveUsdc),
+      input.reserveApy,
       round6(input.cushion),
       budget ? [budget.dailyUsdc, budget.weeklyUsdc, budget.spentToday, budget.spentThisWeek] : null,
       input.limits.twoApprovalsAbove,

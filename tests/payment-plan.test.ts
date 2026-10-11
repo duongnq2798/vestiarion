@@ -51,6 +51,7 @@ const input = (fields: Partial<PaymentPlanInput> = {}): PaymentPlanInput => ({
   now: NOW,
   operatingUsdc: 1000,
   reserveUsdc: 0,
+  reserveApy: 0,
   cushion: 0,
   bills: [],
   milestones: [],
@@ -184,6 +185,41 @@ describe("each bill's day (P4)", () => {
     expect(line(plan, "b-1").on).toBe("2026-10-11");
     expect(line(plan, "b-1").move).toEqual({ from: "2026-10-20", to: "2026-10-11" });
     expect(line(plan, "b-1").reason).toBe("Pays today, the discount's last day, to take the 1% early-payment discount (1.00 USDC); the balance stays above the cushion.");
+  });
+
+  it("keeps the due date when the reserve's yield until then is worth more than the discount, as the agent decides", () => {
+    // 1,000 USDC at 5% a year for the 9 days from Oct 13 to Oct 22 is 1.232877 USDC; the 0.1% discount is 1 USDC.
+    const plan = planPayments(
+      input({
+        reserveApy: 0.05,
+        bills: [bill({ amount: 1000, dueDate: ISO_DAY("2026-10-22"), scheduledFor: MIDNIGHT("2026-10-22"), discount: { pct: 0.1, deadline: ISO_DAY("2026-10-13") } })],
+      })
+    );
+    const only = line(plan, "b-1");
+    expect(only.on).toBe("2026-10-22");
+    expect(only.move).toBeNull();
+    expect(only.discount).toMatchObject({ taken: false, value: 1 });
+    expect(only.reason).toBe(
+      "Pays on its due date, Oct 22, 2026: the reserve's yield until then (1.232877 USDC) is worth more than the 0.1% early-payment discount (1.00 USDC), as the agent decides."
+    );
+    expect(plan.discountsPlanned).toBe(0);
+  });
+
+  it("tries a discount worth at least the yield, and never moves a bill later only to earn yield", () => {
+    const deal = (scheduledFor: string, pct: number) =>
+      planPayments(
+        input({
+          reserveApy: 0.05,
+          bills: [bill({ amount: 1000, dueDate: ISO_DAY("2026-10-22"), scheduledFor: MIDNIGHT(scheduledFor), discount: { pct, deadline: ISO_DAY("2026-10-13") } })],
+        })
+      );
+    // 2% (20 USDC) beats 1.23 USDC of yield: the plan proposes the deadline.
+    expect(line(deal("2026-10-22", 2), "b-1").move).toEqual({ from: "2026-10-22", to: "2026-10-13" });
+    // The agent already chose the deadline for a smaller discount: the plan keeps it, never moving it later for yield.
+    const kept = line(deal("2026-10-13", 0.1), "b-1");
+    expect(kept.on).toBe("2026-10-13");
+    expect(kept.move).toBeNull();
+    expect(kept.discount).toMatchObject({ taken: true, value: 1 });
   });
 
   it("pays on its due date when the discount lasts until then too", () => {
@@ -447,6 +483,8 @@ describe("fingerprints (P11)", () => {
     const richer = planPayments({ ...base(), operatingUsdc: 2001 });
     expect(richer.lines[0].fingerprint).toBe(first.lines[0].fingerprint);
     expect(richer.fingerprint).not.toBe(first.fingerprint);
+    // The reserve's yield decides which discounts are worth taking: a new rate is a new plan.
+    expect(planPayments({ ...base(), reserveApy: 0.05 }).fingerprint).not.toBe(first.fingerprint);
   });
 
   it("does not change when the balance is only read again", () => {

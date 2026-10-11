@@ -43,6 +43,7 @@ const planOf = (fields: Partial<PaymentPlanInput> = {}) =>
     now: NOW,
     operatingUsdc: 2000,
     reserveUsdc: 0,
+    reserveApy: 0,
     cushion: 150,
     bills: [
       bill({}),
