@@ -107,7 +107,10 @@ names its source, so a person can check it there.
 - A simulated payment reaches no wallet, and says so. A payment is simulated by the mode of its last result
   (`provider_mode`, which every result rewrites), as the receipt reads it; only a row without one falls back to
   `provider`. That column is fixed when the row is created, so a payment the sandbox's simulator refused and a person
-  paid once the workspace went live keeps `simulate` there, and is a live payment.
+  paid once the workspace went live keeps `simulate` there, and is a live payment. Until its live result comes back the
+  row's mode is still the refused attempt's, so a send still running (`submitting`) or one Circle never answered
+  (`MAY_HAVE_BEEN_ACCEPTED`) is never called simulated either: the simulator answers in the call it is sent with, and
+  money may have moved.
 - Nothing says the money is in a bank. Moving USDC to a bank is the payee's own step, which Vestiarion does not see,
   and the step says that.
 - Refunds, reversals, chargebacks and disputes do not exist for a USDC transfer: there is no stage for them. The track

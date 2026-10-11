@@ -185,6 +185,19 @@ function bridgeOf(intent: IntentRecord): BridgeStep | null {
 }
 
 /**
+ * Whether a payment was simulated (L4). By the mode of its last result, as the receipt reads it: `provider` is fixed
+ * when the row is created, so a payment started in a sandbox and paid live once the workspace went live keeps
+ * 'simulate' there. A row from before `provider_mode` (0008) is told by its provider. The simulator answers in the
+ * call it is sent with, so a send still running, or one Circle never answered, is live whatever mode an earlier
+ * attempt the sandbox refused left on the row: its money may have moved.
+ */
+function simulatedIntent(intent: IntentRecord): boolean {
+  if ((intent.provider_mode ?? intent.provider) !== "simulate") return false;
+  if (intent.status === "submitting") return false;
+  return !(intent.last_error?.includes(MAY_HAVE_BEEN_ACCEPTED) ?? false);
+}
+
+/**
  * A payment's lifecycle, from its intent, the entries about its bill and the bill itself (L1-L6). `entriesComplete`
  * false: the entries were read up to a limit that may have left older ones out (L5, L8).
  */
@@ -202,10 +215,7 @@ export function settlementOf(input: {
     books: input.books,
     crossChain: crossChain(intent.destination_chain),
     bridge: bridgeOf(intent),
-    // By the mode of its last result, as the receipt reads it: `provider` is fixed when the row is created, so a payment
-    // started in a sandbox and paid live once the workspace went live keeps 'simulate' there. A row from before
-    // `provider_mode` (0008) is told by its provider.
-    simulated: (intent.provider_mode ?? intent.provider) === "simulate",
+    simulated: simulatedIntent(intent),
     recordingsComplete: input.entriesComplete ?? true,
   });
 }

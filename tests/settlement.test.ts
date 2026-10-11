@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { ageText, paymentsInFlight, reduceSettlement, SETTLEMENT_STAGES, type SettlementBooks, type SettlementFact, type SettlementInput } from "@/lib/settlement";
 import { booksOf, entryFacts, flightRows, intentFacts, settlementOf, settlementsByBill, type IntentRecord } from "@/lib/settlement-facts";
+import { MAY_HAVE_BEEN_ACCEPTED } from "@/lib/circle/settlement";
 
 /**
  * One settlement lifecycle per payment (docs/superpowers/specs/2026-10-11-settlement-lifecycle-design.md): the stages
@@ -606,6 +607,16 @@ describe("settlementOf", () => {
     // A row from before provider_mode (0008) is told by its provider.
     expect(simulated({ provider: "simulate", provider_mode: null })).toBe(true);
     expect(simulated({ provider: "circle", provider_mode: null })).toBe(false);
+  });
+
+  it("never calls a live send still running, or one Circle never answered, simulated, whatever mode the row kept", () => {
+    const simulated = (over: Partial<IntentRecord>) => settlementOf({ intent: intent(over), entries: [], source: { type: "invoice", id: "inv-1" }, books: null, now: NOW }).simulated;
+    // The sandbox refused it, the workspace went live and a person paid it: no result has rewritten the mode yet.
+    const refusedInSandbox = { provider: "simulate", provider_mode: "simulate", provider_tx_id: null, tx_hash: null, confirmed_at: null };
+    expect(simulated({ ...refusedInSandbox, status: "submitting" })).toBe(false);
+    expect(simulated({ ...refusedInSandbox, status: "failed", last_error: `Circle timed out; it ${MAY_HAVE_BEEN_ACCEPTED}` })).toBe(false);
+    // The simulator's own refusal, answered in the same call, stays a simulation.
+    expect(simulated({ ...refusedInSandbox, status: "failed", last_error: "Insufficient balance: account holds 500, tried to send 1200" })).toBe(true);
   });
 
   it("shows Pending from when Circle took the transfer, at its send, however often the cycle reads it again", () => {
