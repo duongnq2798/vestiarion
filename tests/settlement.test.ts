@@ -149,6 +149,39 @@ describe("Gateway's reported failure (L3)", () => {
   });
 });
 
+describe("a CCTP payout's step Circle confirmed on Arc (L3)", () => {
+  const burn = { step: "burn", txHash: OTHER_TX, chain: "BASE-SEPOLIA" } as const;
+  const onArc = (state: string, by: "circle" | "watch" = "circle"): SettlementFact => ({ kind: "pending", at: T(3), attempt: 1, state, by });
+
+  it("is told apart while the payout waits for its mint, with the step's transaction at the pending stage", () => {
+    for (const state of ["CONFIRMED", "COMPLETE"]) {
+      for (const by of ["circle", "watch"] as const) {
+        const settlement = reduceSettlement(input([submitted, onArc(state, by)], { books: openBooks, crossChain: true, bridge: burn }));
+        expect(settlement, `${state} by ${by}`).toMatchObject({ status: "in_flight", stage: "pending", stepConfirmed: burn, stages: { pending: { state, txHash: OTHER_TX } } });
+      }
+    }
+    expect(reduceSettlement(input([submitted, onArc("CONFIRMED")], { books: openBooks, crossChain: true, bridge: { ...burn, step: "approve" } })).stepConfirmed).toEqual({ ...burn, step: "approve" });
+  });
+
+  it("is nothing to tell while Circle has not confirmed the step, once the payout is confirmed, or for a payment on Arc", () => {
+    expect(reduceSettlement(input([submitted, onArc("SENT")], { books: openBooks, crossChain: true, bridge: burn })).stepConfirmed).toBeNull();
+    expect(reduceSettlement(input([submitted, onArc("SENT")], { books: openBooks, crossChain: true, bridge: burn })).stages.pending?.txHash).toBeUndefined();
+    expect(reduceSettlement(input([submitted, onArc("CONFIRMED"), confirmed], { books: openBooks, crossChain: true, bridge: burn })).stepConfirmed).toBeNull();
+    expect(reduceSettlement(input([submitted, onArc("CONFIRMED")], { books: openBooks, crossChain: false, bridge: burn })).stepConfirmed).toBeNull();
+    expect(reduceSettlement(input([submitted, onArc("CONFIRMED")], { books: openBooks, crossChain: true })).stepConfirmed).toBeNull();
+  });
+});
+
+describe("who comes back to the bill (L5, L10)", () => {
+  it("is carried from the books, and is no one without them or when they do not say", () => {
+    const unknown: SettlementFact[] = [submitted, { kind: "unanswered", at: T(1), attempt: 1 }];
+    expect(reduceSettlement(input(unknown, { books: { ...openBooks, followUp: "approvals" } }))).toMatchObject({ status: "unknown", followUp: "approvals" });
+    expect(reduceSettlement(input([submitted, confirmed], { books: { ...openBooks, followUp: "cycle" } }))).toMatchObject({ mismatch: "confirmed_not_marked_paid", followUp: "cycle" });
+    expect(reduceSettlement(input(unknown, { books: openBooks })).followUp).toBeNull();
+    expect(reduceSettlement(input(unknown, { books: null })).followUp).toBeNull();
+  });
+});
+
 describe("what available means (L4)", () => {
   it("is reached for a payout to another chain only once its mint is recorded, named by that chain", () => {
     const bridged = (facts: SettlementFact[]) => reduceSettlement(input(facts, { crossChain: true }));
@@ -561,13 +594,51 @@ describe("settlementOf", () => {
     const simulated = settlementOf({ intent: intent({ provider: "simulate", provider_mode: "simulate", tx_hash: "sim_1" }), entries: [], source: { type: "invoice", id: "inv-1" }, books: null, now: NOW });
     expect(simulated.simulated).toBe(true);
   });
+
+  it("tells a CCTP payout's burn, or its approve, Circle confirmed on Arc from its Circle id, with that step's transaction and the payee's chain", () => {
+    const bridging = (over: Partial<IntentRecord>) =>
+      settlementOf({
+        intent: intent({ status: "pending", provider_state: "CONFIRMED", tx_hash: OTHER_TX, destination_chain: "BASE-SEPOLIA", confirmed_at: null, executed_at: T(1), ...over }),
+        entries: [],
+        source: { type: "invoice", id: "inv-1" },
+        books: null,
+        now: NOW,
+      });
+    expect(bridging({ provider_tx_id: "cctp:burn-1" })).toMatchObject({ status: "in_flight", stepConfirmed: { step: "burn", txHash: OTHER_TX, chain: "BASE-SEPOLIA" } });
+    expect(bridging({ provider_tx_id: "cctp-approve:approve-1" }).stepConfirmed).toEqual({ step: "approve", txHash: OTHER_TX, chain: "BASE-SEPOLIA" });
+    expect(bridging({ provider_tx_id: "cctp:burn-1", provider_state: "SENT" }).stepConfirmed).toBeNull();
+  });
+
+  it("carries who comes back to the bill: a held bill's unknown send waits for a person, never for the cycle", () => {
+    const unknown = intent({ status: "failed", provider_tx_id: null, provider_state: null, tx_hash: null, confirmed_at: null, last_error: "Circle createTransaction may or may not have been accepted", updated_at: T(1) });
+    const of = (books: Parameters<typeof settlementOf>[0]["books"]) => settlementOf({ intent: unknown, entries: [], source: { type: "invoice", id: "inv-1" }, books, now: NOW });
+    expect(of(booksOf({ id: "inv-1", status: "held", tx_ref: null }, "invoice"))).toMatchObject({ status: "unknown", followUp: "approvals" });
+    expect(of(booksOf({ id: "inv-1", status: "matched", tx_ref: null }, "invoice"))).toMatchObject({ status: "unknown", followUp: "cycle" });
+    expect(of(null).followUp).toBeNull();
+  });
 });
 
 describe("booksOf", () => {
   it("reads a bill as paid only from its own status, with its transaction and since when", () => {
-    expect(booksOf({ id: "inv-1", status: "paid", tx_ref: TX, settled_at: T(6) })).toEqual({ paid: true, txRef: TX, at: T(6) });
+    expect(booksOf({ id: "inv-1", status: "paid", tx_ref: TX, settled_at: T(6) }, "invoice")).toEqual({ paid: true, txRef: TX, at: T(6), followUp: null });
     // A transfer in flight leaves the bill matched: not paid yet, whatever its tx_ref says.
-    expect(booksOf({ id: "inv-1", status: "matched", tx_ref: "circle-tx-1" })).toEqual({ paid: false, txRef: "circle-tx-1", at: null });
+    expect(booksOf({ id: "inv-1", status: "matched", tx_ref: "circle-tx-1" }, "invoice")).toEqual({ paid: false, txRef: "circle-tx-1", at: null, followUp: "cycle" });
+  });
+
+  it("says who comes back to the bill next, by its status: the agent's cycle, a person where it waits, or no one", () => {
+    const next = (type: "invoice" | "milestone", status: string) => booksOf({ id: "bill-1", status, tx_ref: null }, type).followUp;
+    // The cycle reads a matched payable's and a verified milestone's payment again each time it runs.
+    expect(next("invoice", "matched")).toBe("cycle");
+    expect(next("milestone", "verified")).toBe("cycle");
+    // Approvals lists these payables; a held milestone is paid with Pay now on Contractors.
+    for (const status of ["held", "flagged", "awaiting_info", "processing"]) expect(next("invoice", status), status).toBe("approvals");
+    expect(next("milestone", "held")).toBe("contractors");
+    // No one comes back to a payment here: nothing is promised.
+    for (const status of ["paid", "rejected", "pending", "scheduled"]) expect(next("invoice", status), status).toBeNull();
+    for (const status of ["paid", "pending", "closed"]) expect(next("milestone", status), status).toBeNull();
+    // A milestone is never matched, nor a payable verified.
+    expect(next("milestone", "matched")).toBeNull();
+    expect(next("invoice", "verified")).toBeNull();
   });
 });
 
@@ -685,6 +756,29 @@ describe("flightRows", () => {
     ]);
     // Thirty days on, it is neither in flight, nor aged, nor added to what is outstanding.
     expect(paymentsInFlight(rows, NOW + 30 * 86_400_000, 15)).toEqual({ inFlight: [], mismatched: [], totals: [], oldestMs: null, late: 0 });
+  });
+
+  it("lists a held bill's confirmed transfer as not matching the books, and its unknown send in flight, each for a person", () => {
+    const rows = flightRows({
+      payments: [
+        payment("invoice", "held-paid", { confirmed_at: T(9), updated_at: T(9) }, 50),
+        payment("invoice", "held-unknown", { status: "failed", provider_tx_id: null, provider_state: null, tx_hash: null, confirmed_at: null, last_error: "it may or may not have been accepted", updated_at: T(1) }, 5000),
+        payment("milestone", "ms-held", { confirmed_at: T(9), updated_at: T(9) }, 40),
+      ],
+      invoices: [
+        { id: "held-paid", status: "held", tx_ref: null, counterparty_name: "Northwind", paid_amount: null },
+        { id: "held-unknown", status: "held", tx_ref: null, counterparty_name: "Harbor VPS", paid_amount: null },
+      ],
+      milestones: [{ id: "ms-held", status: "held", tx_ref: null, contractor_name: "Ana Lima", title: "Design review" }],
+      entries: [],
+      now: NOW,
+    });
+    const summary = paymentsInFlight(rows, NOW, 15);
+    expect(summary.mismatched.map((row) => [row.source.id, row.settlement.mismatch, row.settlement.followUp])).toEqual([
+      ["held-paid", "confirmed_not_marked_paid", "approvals"],
+      ["ms-held", "confirmed_not_marked_paid", "contractors"],
+    ]);
+    expect(summary.inFlight.map((row) => [row.source.id, row.settlement.status, row.settlement.followUp])).toEqual([["held-unknown", "unknown", "approvals"]]);
   });
 
   it("passes on whether the entries were read in full", () => {

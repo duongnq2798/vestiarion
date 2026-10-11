@@ -4,10 +4,11 @@ import { Card } from "@/components/ui/Card";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { orgHref } from "@/lib/auth/org-paths";
 import { plural } from "@/lib/copy";
+import type { Network } from "@/lib/network";
 import { ageText, paymentsInFlight, type PaymentsInFlight as Summary } from "@/lib/settlement";
 import type { FlightRow } from "@/lib/settlement-facts";
 import { fmt, Money } from "./Primitives";
-import { MISMATCH_SENTENCE, settlementAnchor, settlementSummary, unknownOutcome } from "./SettlementTrack";
+import { mismatchSentence, settlementAnchor, settlementSummary, stepConfirmedLine, unknownOutcome } from "./SettlementTrack";
 
 /**
  * Treasury's "Payments in flight" (docs/superpowers/specs/2026-10-11-settlement-lifecycle-design.md L7): every payment
@@ -50,7 +51,20 @@ function Row({ row, orgSlug, children }: { row: FlightRow; orgSlug: string; chil
   );
 }
 
-export function PaymentsInFlight({ payments, now, stuckAfterMinutes, orgSlug }: { payments: readonly FlightRow[]; now: number; stuckAfterMinutes: number; orgSlug: string }) {
+export function PaymentsInFlight({
+  payments,
+  now,
+  stuckAfterMinutes,
+  orgSlug,
+  network,
+}: {
+  payments: readonly FlightRow[];
+  now: number;
+  stuckAfterMinutes: number;
+  orgSlug: string;
+  /** The workspace's network, which a CCTP payout's step Circle confirmed is named on. */
+  network: Network;
+}) {
   const summary = paymentsInFlight(payments, now, stuckAfterMinutes);
   // A payment in flight whose books disagree says so on its own row; the rest are listed under the books.
   const booksOnly = summary.mismatched.filter((row) => row.settlement.inFlightSince === null);
@@ -65,12 +79,15 @@ export function PaymentsInFlight({ payments, now, stuckAfterMinutes, orgSlug }: 
         {summary.inFlight.length > 0 && (
           <ul className="divide-y divide-line border-t border-line">
             {summary.inFlight.map((row) => {
-              const state = row.settlement.stages.pending?.state;
+              const pending = row.settlement.stages.pending;
+              const step = row.settlement.stepConfirmed;
+              // Circle's word, or, for a CCTP payout's burn or approve it confirmed, which step it is about (L3).
+              const circle = pending && step ? ` · ${stepConfirmedLine(step, pending, network)}` : pending?.state ? ` · Circle: ${pending.state}` : "";
               return (
                 <Row key={`${row.source.type}:${row.source.id}`} row={row} orgSlug={orgSlug}>
                   <p className="mt-0.5 text-xs tabular-nums text-ink-3">
                     {settlementSummary(row.settlement, now)}
-                    {state ? ` · Circle: ${state}` : ""}
+                    {circle}
                     {row.late && <span className="font-medium text-held">{` · past the ${stuckAfterMinutes} min wait`}</span>}
                   </p>
                   {row.settlement.status === "unknown" && <p className="mt-0.5 text-xs text-ink-2">{unknownOutcome(row.settlement)}</p>}
@@ -85,7 +102,7 @@ export function PaymentsInFlight({ payments, now, stuckAfterMinutes, orgSlug }: 
             <ul className="divide-y divide-line">
               {booksOnly.map((row) => (
                 <Row key={`${row.source.type}:${row.source.id}`} row={row} orgSlug={orgSlug}>
-                  <p className="mt-0.5 text-xs text-ink-2">{row.settlement.mismatch ? MISMATCH_SENTENCE[row.settlement.mismatch] : null}</p>
+                  <p className="mt-0.5 text-xs text-ink-2">{mismatchSentence(row.settlement)}</p>
                 </Row>
               ))}
             </ul>

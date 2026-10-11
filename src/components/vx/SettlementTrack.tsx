@@ -6,7 +6,17 @@ import { orgHref } from "@/lib/auth/org-paths";
 import { utcMinute } from "@/lib/copy";
 import { networkProfile, type Network } from "@/lib/network";
 import { chainById, txUrl } from "@/lib/payee-chains";
-import { ageText, GATEWAY_FAILED, SETTLEMENT_STAGES, type Settlement, type SettlementConflict, type SettlementMismatch, type SettlementStage, type StageMark } from "@/lib/settlement";
+import {
+  ageText,
+  GATEWAY_FAILED,
+  SETTLEMENT_STAGES,
+  type BridgeStep,
+  type Settlement,
+  type SettlementConflict,
+  type SettlementMismatch,
+  type SettlementStage,
+  type StageMark,
+} from "@/lib/settlement";
 import { Hash } from "./Primitives";
 
 /**
@@ -40,12 +50,26 @@ const MISMATCH_SHORT: Record<SettlementMismatch, string> = {
 };
 
 /** How the books disagree, in a sentence under the stages (L5). */
-export const MISMATCH_SENTENCE: Record<SettlementMismatch, string> = {
-  confirmed_not_marked_paid: "Confirmed, but the bill is not marked paid yet: the agent's next cycle marks it.",
+const MISMATCH_SENTENCE: Record<SettlementMismatch, string> = {
+  confirmed_not_marked_paid: "Confirmed, but the bill is not marked paid yet.",
   marked_paid_not_confirmed: "The bill is marked paid, but Circle has not confirmed this transfer.",
   marked_paid_other_transaction: "The bill is marked paid with another transaction than this one.",
   no_signed_entry: "The bill is marked paid with this transaction, but no signed entry names it.",
 };
+
+/** Who marks a confirmed transfer's bill paid: whoever comes back to the bill (L5, L10). No one: nothing is promised. */
+const MARKS_PAID = {
+  cycle: "Confirmed, but the bill is not marked paid yet: the agent's next cycle marks it.",
+  approvals: "Confirmed, but the bill is not marked paid yet: Approve and pay in Approvals records it.",
+  contractors: "Confirmed, but the bill is not marked paid yet: Pay now on Contractors records it.",
+} as const;
+
+/** How this payment's books disagree, in a sentence under the stages and on Treasury (L5). */
+export function mismatchSentence(settlement: Pick<Settlement, "mismatch" | "followUp">): string | null {
+  if (!settlement.mismatch) return null;
+  if (settlement.mismatch === "confirmed_not_marked_paid" && settlement.followUp) return MARKS_PAID[settlement.followUp];
+  return MISMATCH_SENTENCE[settlement.mismatch];
+}
 
 /** What a send Circle never answered means, and what Vestiarion does about it (I18, payment safety R4). */
 export const UNKNOWN_OUTCOME =
@@ -55,10 +79,27 @@ export const UNKNOWN_OUTCOME =
 export const UNKNOWN_OUTCOME_ACROSS =
   "Outcome unknown: Circle did not answer when this payment was sent, so it may have taken the transfer. A payout to another chain is asked for again under the same payment key, which Circle takes only once, so it is never sent twice.";
 
-/** What an unknown outcome means for this payment, without its "Outcome unknown: " lead. */
-export function unknownOutcome(settlement: Pick<Settlement, "crossChain">): string {
-  return (settlement.crossChain ? UNKNOWN_OUTCOME_ACROSS : UNKNOWN_OUTCOME).replace(/^Outcome unknown: /, "");
+/**
+ * Who an unknown send waits for, once the agent's cycle no longer comes back to its bill (L10): nothing looks for it
+ * until a person's Approve and pay, or Pay now on a held milestone, which looks for it first and sends nothing twice.
+ */
+const WAITS_FOR_PERSON = {
+  approvals: "Nothing checks it on its own now: it waits for a person's Approve and pay in Approvals.",
+  contractors: "Nothing checks it on its own now: it waits for a person's Pay now on Contractors.",
+} as const;
+
+/** What an unknown outcome means for this payment, without its "Outcome unknown: " lead, and whom it waits for. */
+export function unknownOutcome(settlement: Pick<Settlement, "crossChain" | "followUp">): string {
+  const meaning = (settlement.crossChain ? UNKNOWN_OUTCOME_ACROSS : UNKNOWN_OUTCOME).replace(/^Outcome unknown: /, "");
+  return settlement.followUp && settlement.followUp !== "cycle" ? `${meaning} ${WAITS_FOR_PERSON[settlement.followUp]}` : meaning;
 }
+
+/** Who looks for an unknown send now, in the summary: the cycle checks it with Circle; a held bill waits for a person (L10). */
+const UNKNOWN_SHORT = {
+  cycle: " · checking with Circle",
+  approvals: " · waiting for a person in Approvals",
+  contractors: " · waiting for a person on Contractors",
+} as const;
 
 /** Where the payment is now, in a few words: the track's summary, and Treasury's row. */
 export function settlementSummary(settlement: Settlement, now: number): string {
@@ -73,7 +114,8 @@ export function settlementSummary(settlement: Settlement, now: number): string {
     case "in_flight":
       return `${settlement.stage === "pending" ? "Pending" : "Submitted"}${sent}${books}${attempt}`;
     case "unknown":
-      return `Outcome unknown · checking with Circle${sent}${attempt}`;
+      // Said to be checked only while the agent's cycle comes back to the bill; promised to no one when no one does.
+      return `Outcome unknown${settlement.followUp ? UNKNOWN_SHORT[settlement.followUp] : ""}${sent}${attempt}`;
     // Not in flight: nothing watches it any more, so no age counts (L3).
     case "gateway_failed":
       return `Gateway reported it failed${books}${attempt}`;
@@ -101,6 +143,18 @@ function payeeChain(chain: string): { label: string; explorerTx: string | null }
 /** Circle's state word, said as it is. */
 const circleWord = (state: string | null | undefined) => (state ? ` (Circle: ${state})` : "");
 
+/**
+ * What Circle's word for a CCTP payout means when it is about the payout's step on the network, not the payout (L3): its
+ * burn is confirmed and the mint is not recorded yet, or its approve is confirmed and the burn is not sent yet. The
+ * transfer watch's read is said as the watch's. The pending stage says it as a sentence, and Treasury's row in its line.
+ */
+export function stepConfirmedLine(step: BridgeStep, mark: Pick<StageMark, "by" | "state">, network: Network): string {
+  const on = `the ${step.step} on ${networkProfile(network).label}`;
+  const confirmed = mark.by === "watch" ? `When the transfer watch asked, Circle had confirmed ${on}` : `Circle confirmed ${on}`;
+  const toCome = step.step === "approve" ? "the burn that pays the payee has not been sent yet" : `the mint on ${step.chain ? payeeChain(step.chain).label : "the payee's chain"} is not recorded yet`;
+  return `${confirmed}; ${toCome}${circleWord(mark.state)}`;
+}
+
 /** What a reached stage says, from its source (L2, L4). */
 function reachedLine(stage: SettlementStage, mark: StageMark, settlement: Settlement, network: Network): string {
   const label = networkProfile(network).label;
@@ -122,6 +176,8 @@ function reachedLine(stage: SettlementStage, mark: StageMark, settlement: Settle
       if (mark.state === GATEWAY_FAILED) {
         return "Gateway reported it failed, but it may still be minted on the payee's chain, so nothing is sent again (Circle: GATEWAY_FAILED). Nothing checks it on its own: check with Circle whether it was minted.";
       }
+      // A CCTP payout's burn (or approve) Circle confirmed: Circle's word is the step's, never the payout's (L3).
+      if (settlement.stepConfirmed) return `${stepConfirmedLine(settlement.stepConfirmed, mark, network)}.`;
       // The watch names Circle's word only when Circle answered it; otherwise it told the payment from its age alone.
       if (mark.by === "watch") return mark.state ? `Not confirmed when the transfer watch asked Circle${circleWord(mark.state)}.` : "Not confirmed when the transfer watch checked it.";
       return `Circle took it and had not confirmed it yet${circleWord(mark.state)}.`;
@@ -291,7 +347,7 @@ export function SettlementTrack({
         )}
         {(settlement.mismatch || settlement.conflicts.length > 0) && (
           <ul className="space-y-0.5 text-xs text-held">
-            {settlement.mismatch && <li>{MISMATCH_SENTENCE[settlement.mismatch]}</li>}
+            {settlement.mismatch && <li>{mismatchSentence(settlement)}</li>}
             {settlement.conflicts.map((conflict) => (
               <li key={`${conflict.kind}-${conflict.at}`}>{conflictLine(conflict)}</li>
             ))}

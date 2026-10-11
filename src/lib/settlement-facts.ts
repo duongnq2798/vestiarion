@@ -1,6 +1,6 @@
 import { FAILED_STATES, MAY_HAVE_BEEN_ACCEPTED } from "./circle/settlement";
 import { paidAcrossChains } from "./payee-chains";
-import { GATEWAY_FAILED, reduceSettlement, type Settlement, type SettlementBooks, type SettlementFact } from "./settlement";
+import { GATEWAY_FAILED, reduceSettlement, type BridgeStep, type FollowUp, type Settlement, type SettlementBooks, type SettlementFact } from "./settlement";
 
 /**
  * The facts a payment's lifecycle is read from (docs/superpowers/specs/2026-10-11-settlement-lifecycle-design.md L2,
@@ -173,6 +173,16 @@ function crossChain(destination: string | null): boolean {
 }
 
 /**
+ * The CCTP step the current attempt's Circle id names (the live provider's `cctp-approve:` and `cctp:`), with the
+ * transaction the intent keeps for it; null for any other payment (L3).
+ */
+function bridgeOf(intent: IntentRecord): BridgeStep | null {
+  const id = intent.provider_tx_id ?? "";
+  const step = id.startsWith("cctp-approve:") ? "approve" : id.startsWith("cctp:") ? "burn" : null;
+  return step ? { step, txHash: intent.tx_hash, chain: intent.destination_chain } : null;
+}
+
+/**
  * A payment's lifecycle, from its intent, the entries about its bill and the bill itself (L1-L6). `entriesComplete`
  * false: the entries were read up to a limit that may have left older ones out (L5, L8).
  */
@@ -189,6 +199,7 @@ export function settlementOf(input: {
     facts: [...intentFacts(intent, input.now), ...entryFacts(input.entries, input.source)],
     books: input.books,
     crossChain: crossChain(intent.destination_chain),
+    bridge: bridgeOf(intent),
     simulated: intent.provider === "simulate" || intent.provider_mode === "simulate",
     recordingsComplete: input.entriesComplete ?? true,
   });
@@ -202,9 +213,22 @@ export interface BillBooks {
   settled_at?: string | null;
 }
 
+/** The payables Approvals lists for a person to decide (`listWaitingPayables`). */
+const IN_APPROVALS = new Set(["held", "flagged", "awaiting_info", "processing"]);
+
+/**
+ * Who comes back to a bill next, by its status (L5, L10): the agent's cycle for a `matched` payable or a `verified`
+ * milestone, whose payment each cycle reads again; a person in Approvals for a payable waiting there, or on Contractors
+ * for a held milestone; else no one (paid, rejected, closed, or not decided yet), and nothing is promised.
+ */
+export function followUpOf(type: "invoice" | "milestone", status: string): FollowUp | null {
+  if (type === "invoice") return status === "matched" ? "cycle" : IN_APPROVALS.has(status) ? "approvals" : null;
+  return status === "verified" ? "cycle" : status === "held" ? "contractors" : null;
+}
+
 /** The books of a bill, as the lifecycle compares them with its transfer: `paid` is the bill's own status (L5). */
-export function booksOf(bill: BillBooks): SettlementBooks {
-  return { paid: bill.status === "paid", txRef: bill.tx_ref, at: bill.settled_at ?? null };
+export function booksOf(bill: BillBooks, type: "invoice" | "milestone"): SettlementBooks {
+  return { paid: bill.status === "paid", txRef: bill.tx_ref, at: bill.settled_at ?? null, followUp: followUpOf(type, bill.status) };
 }
 
 /** A payment intent with the bill it pays. */
@@ -248,7 +272,7 @@ export function billSettlements<P extends BillPayment, B extends BillBooks>(inpu
       intent: payment,
       entries: entriesOf.get(key) ?? [],
       source: { type: payment.source_type, id: payment.source_id },
-      books: booksOf(bill),
+      books: booksOf(bill, payment.source_type),
       entriesComplete: input.entriesComplete ?? true,
       now: input.now,
     });

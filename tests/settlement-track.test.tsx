@@ -7,7 +7,7 @@ import { invoiceDecision } from "@/components/vx/map";
 import { settlementAnchor, settlementSummary, SettlementTrack, UNKNOWN_OUTCOME } from "@/components/vx/SettlementTrack";
 import type { LedgerEntry } from "@/lib/ledger";
 import type { InvoiceRow } from "@/lib/queries";
-import { reduceSettlement, type Settlement, type SettlementBooks, type SettlementFact } from "@/lib/settlement";
+import { reduceSettlement, type Settlement, type SettlementBooks, type SettlementFact, type SettlementInput } from "@/lib/settlement";
 
 /**
  * Where a payment is, on a payable's card (settlement lifecycle L7): each stage with when, from which source, and its
@@ -31,8 +31,8 @@ const pending: SettlementFact = { kind: "pending", at: T(2), attempt: 1, state: 
 const confirmed: SettlementFact = { kind: "confirmed", at: T(5), attempt: 1, refs: [TX], txHash: TX };
 const recorded: SettlementFact = { kind: "recorded", at: T(6), seq: 42, txRef: TX };
 
-const lifecycle = (facts: SettlementFact[], books: SettlementBooks | null = paid, over: { crossChain?: boolean; simulated?: boolean } = {}): Settlement =>
-  reduceSettlement({ facts, books, crossChain: over.crossChain ?? false, simulated: over.simulated ?? false });
+const lifecycle = (facts: SettlementFact[], books: SettlementBooks | null = paid, over: { crossChain?: boolean; simulated?: boolean; bridge?: SettlementInput["bridge"] } = {}): Settlement =>
+  reduceSettlement({ facts, books, crossChain: over.crossChain ?? false, simulated: over.simulated ?? false, bridge: over.bridge ?? null });
 
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/\s+/g, " ");
 const render = (settlement: Settlement, network: "arc-testnet" | "arc-mainnet" = "arc-testnet") =>
@@ -105,8 +105,8 @@ describe("the track in flight", () => {
     expect(text(render(lifecycle([...decided, { ...pending, state: "QUEUED", by: "watch" }], open)))).toContain("Not confirmed when the transfer watch asked Circle (Circle: QUEUED).");
   });
 
-  it("says an unknown outcome is being checked with Circle, and that nothing new is sent until Circle answers (I18)", () => {
-    const settlement = lifecycle([...decided, { kind: "unanswered", at: T(3), attempt: 1 }], open);
+  it("says an unknown outcome is being checked with Circle while the agent's cycle comes back to the bill, and that nothing new is sent until Circle answers (I18)", () => {
+    const settlement = lifecycle([...decided, { kind: "unanswered", at: T(3), attempt: 1 }], { ...open, followUp: "cycle" });
     expect(settlementSummary(settlement, NOW)).toBe("Outcome unknown · checking with Circle · sent 39 min ago");
     const words = text(render(settlement));
     expect(words).toContain("Outcome unknown");
@@ -125,6 +125,23 @@ describe("the track in flight", () => {
     expect(words).not.toContain("looks for it on Circle");
   });
 
+  it("says an unknown outcome on a bill held for a person waits for them, never that it is being checked (L10)", () => {
+    const unanswered: SettlementFact = { kind: "unanswered", at: T(3), attempt: 1 };
+    const held = lifecycle([...decided, unanswered], { ...open, followUp: "approvals" });
+    expect(settlementSummary(held, NOW)).toBe("Outcome unknown · waiting for a person in Approvals · sent 39 min ago");
+    const words = text(render(held));
+    expect(words).not.toContain("checking with Circle");
+    expect(words).toContain(`${UNKNOWN_OUTCOME.replace(/^Outcome unknown: /, "")} Nothing checks it on its own now: it waits for a person's Approve and pay in Approvals.`);
+    // A held milestone is paid on Contractors.
+    const milestone = lifecycle([...decided, unanswered], { ...open, followUp: "contractors" });
+    expect(settlementSummary(milestone, NOW)).toBe("Outcome unknown · waiting for a person on Contractors · sent 39 min ago");
+    expect(text(render(milestone))).toContain("Nothing checks it on its own now: it waits for a person's Pay now on Contractors.");
+    // No one known to come back to it: nothing is promised.
+    const none = lifecycle([...decided, unanswered], open);
+    expect(settlementSummary(none, NOW)).toBe("Outcome unknown · sent 39 min ago");
+    expect(text(render(none))).not.toMatch(/checking with Circle|waits for a person/);
+  });
+
   it("says Gateway's failure may still be minted, that nothing is sent again, and that nothing checks it on its own (L3)", () => {
     const settlement = lifecycle([...decided, { ...pending, state: "GATEWAY_FAILED" }], open, { crossChain: true });
     // Not in flight: no age, as Treasury does not count it.
@@ -139,6 +156,40 @@ describe("the track in flight", () => {
     expect(words).not.toContain("Circle could not be read just now");
     // Not a failure by colour alone, nor a green line: the summary is told in words, as an end's.
     expect(markup).toMatch(/text-held[^"]*">Gateway reported it failed/);
+  });
+});
+
+describe("a CCTP payout waiting for its mint (L3)", () => {
+  const BURN = `0x${"cd".repeat(32)}`;
+  const bridged = (state: string, by: "circle" | "watch" = "circle", step: "approve" | "burn" = "burn") =>
+    lifecycle([...decided, { ...pending, state, by }], open, { crossChain: true, bridge: { step, txHash: BURN, chain: "BASE-SEPOLIA" } });
+
+  it("says Circle confirmed the burn on Arc and the mint is not recorded yet, linking the burn, never that Circle had not confirmed it", () => {
+    for (const state of ["CONFIRMED", "COMPLETE"]) {
+      const markup = render(bridged(state));
+      const words = text(markup);
+      expect(words, state).toContain(`Circle confirmed the burn on Arc testnet; the mint on Base Sepolia is not recorded yet (Circle: ${state}).`);
+      expect(words, state).not.toContain("had not confirmed it yet");
+      expect(markup, state).toContain(`href="https://explorer.testnet.arc.io/tx/${BURN}"`);
+    }
+    expect(settlementSummary(bridged("CONFIRMED"), NOW)).toBe("Pending · sent 39 min ago");
+  });
+
+  it("says the transfer watch's read of it as the watch's", () => {
+    const words = text(render(bridged("CONFIRMED", "watch")));
+    expect(words).toContain("When the transfer watch asked, Circle had confirmed the burn on Arc testnet; the mint on Base Sepolia is not recorded yet (Circle: CONFIRMED).");
+    expect(words).not.toContain("Not confirmed when the transfer watch asked Circle");
+  });
+
+  it("says an approve Circle confirmed, whose burn was never sent, as that", () => {
+    const words = text(render(bridged("CONFIRMED", "circle", "approve")));
+    expect(words).toContain("Circle confirmed the approve on Arc testnet; the burn that pays the payee has not been sent yet (Circle: CONFIRMED).");
+    expect(words).not.toContain("had not confirmed it yet");
+  });
+
+  it("keeps Circle's word while the burn is not confirmed, and names the network a mainnet workspace pays on", () => {
+    expect(text(render(bridged("SENT")))).toContain("Circle took it and had not confirmed it yet (Circle: SENT).");
+    expect(text(render(bridged("CONFIRMED"), "arc-mainnet"))).toContain("Circle confirmed the burn on Arc mainnet;");
   });
 });
 
@@ -222,10 +273,18 @@ describe("what available means (L4)", () => {
 
 describe("the books", () => {
   it("says what does not match, in the summary and in a sentence", () => {
-    const settlement = lifecycle([...decided, confirmed], open);
+    const settlement = lifecycle([...decided, confirmed], { ...open, followUp: "cycle" });
     expect(settlementSummary(settlement, NOW)).toBe("Confirmed · not yet marked paid");
     expect(text(render(settlement))).toContain("Confirmed, but the bill is not marked paid yet: the agent's next cycle marks it.");
     expect(text(render(lifecycle([...decided, pending])))).toContain("The bill is marked paid, but Circle has not confirmed this transfer.");
+  });
+
+  it("says who records a confirmed transfer the books do not show, and promises no one when no one comes back to the bill", () => {
+    const books = (followUp: SettlementBooks["followUp"]) => text(render(lifecycle([...decided, confirmed], { ...open, followUp })));
+    expect(books("approvals")).toContain("Confirmed, but the bill is not marked paid yet: Approve and pay in Approvals records it.");
+    expect(books("contractors")).toContain("Confirmed, but the bill is not marked paid yet: Pay now on Contractors records it.");
+    expect(books(null)).toContain("Confirmed, but the bill is not marked paid yet.");
+    expect(books(null)).not.toContain("next cycle");
   });
 
   it("says the entry was not among those read, rather than a mismatch, when the read was cut short", () => {

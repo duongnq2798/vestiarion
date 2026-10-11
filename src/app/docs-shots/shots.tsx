@@ -949,7 +949,8 @@ const SHOT_SETTLEMENT = reduceSettlement({
   simulated: false,
 });
 
-const flight = (id: string, name: string, amount: number, facts: SettlementFact[], books: SettlementBooks = { paid: false, txRef: null, at: null }): FlightRow => ({
+/** Each a payable the agent paid and its cycle comes back to (`matched`): it checks an unknown send and marks a confirmed one paid. */
+const flight = (id: string, name: string, amount: number, facts: SettlementFact[], books: SettlementBooks = { paid: false, txRef: null, at: null, followUp: "cycle" }): FlightRow => ({
   source: { type: "invoice", id },
   name,
   amount,
@@ -1702,7 +1703,7 @@ export const DOCS_SHOTS = {
   "where-a-payment-is-in-flight": {
     guide: "where-a-payment-is",
     page: "treasury",
-    render: () => <PaymentsInFlight payments={SHOT_FLIGHT} now={SHOT_NOW} stuckAfterMinutes={15} orgSlug={SLUG} />,
+    render: () => <PaymentsInFlight payments={SHOT_FLIGHT} now={SHOT_NOW} stuckAfterMinutes={15} orgSlug={SLUG} network="arc-testnet" />,
   },
 } satisfies Record<string, DocsShot>;
 

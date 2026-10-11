@@ -39,11 +39,28 @@ export type SettlementFact =
   /** A signed entry names the payment's transaction. */
   | { kind: "recorded"; at: string; seq: number; txRef: string };
 
+/**
+ * Who comes back to a bill next, by its status (L5, L10): the agent's cycle, which reads its payment again each time it
+ * runs; a person in Approvals, whose Approve and pay looks for a send Circle never answered first and records a transfer
+ * already confirmed; or a person on Contractors, whose Pay now on a held milestone does the same.
+ */
+export type FollowUp = "cycle" | "approvals" | "contractors";
+
 /** The bill's own row: whether it is marked paid, with which transaction, and since when. */
 export interface SettlementBooks {
   paid: boolean;
   txRef: string | null;
   at: string | null;
+  /** Who comes back to the bill next; null, or absent, when no one does or it is not known: then nothing is promised. */
+  followUp?: FollowUp | null;
+}
+
+/** A CCTP payout's step on the network, as the current attempt's Circle id names it, with its transaction and the payee's chain. */
+export interface BridgeStep {
+  /** Its approve, whose burn is not sent yet (`cctp-approve:`), or its burn (`cctp:`). */
+  step: "approve" | "burn";
+  txHash: string | null;
+  chain: string | null;
 }
 
 export interface SettlementInput {
@@ -52,6 +69,8 @@ export interface SettlementInput {
   books: SettlementBooks | null;
   /** Paid to another chain (CCTP, Gateway): in the payee's wallet only once minted there (L4). */
   crossChain: boolean;
+  /** For a CCTP payout, the step on the network its current attempt is at; null or absent otherwise. */
+  bridge?: BridgeStep | null;
   /** A sandbox's payment: nothing reached a wallet. */
   simulated: boolean;
   /**
@@ -71,7 +90,7 @@ export interface StageMark {
   seq?: number | null;
   /** Circle's own word, while pending. */
   state?: string | null;
-  /** The transaction: confirmed, minted, or the one the books name. */
+  /** The transaction: confirmed, minted, the one the books name, or a payout's step on the network Circle confirmed. */
   txHash?: string | null;
   /** The chain a payout to another chain was minted on. */
   chain?: string | null;
@@ -124,7 +143,18 @@ export interface Settlement {
   simulated: boolean;
   /** Paid to another chain: an unknown send is asked again under its key there, rather than looked up (I18). */
   crossChain: boolean;
+  /**
+   * A CCTP payout still pending whose step on the network Circle reports confirmed (`CONFIRMED`, `COMPLETE`): its burn,
+   * whose mint is not recorded yet, or its approve, whose burn is not sent yet. Circle's word is the step's, not the
+   * payout's (L3).
+   */
+  stepConfirmed: BridgeStep | null;
+  /** Who comes back to the bill next, from its books; null promises no one (L5, L10). */
+  followUp: FollowUp | null;
 }
+
+/** Circle's words for a transaction it confirmed. */
+const CONFIRMED_STATES = new Set(["CONFIRMED", "COMPLETE"]);
 
 interface AttemptState {
   attempt: number;
@@ -290,8 +320,14 @@ export function reduceSettlement(input: SettlementInput): Settlement {
   if (proposed) stages.proposed = { at: byTheSend(proposed.at), by: proposed.by, seq: proposed.seq };
   if (authorized) stages.authorized = { at: byTheSend(authorized.at), by: authorized.by, seq: authorized.seq };
   if (sentAt) stages.submitted = { at: sentAt, by: "vestiarion" };
-  if (current.pending) stages.pending = { at: current.pending.at, by: current.pending.by, state: current.pending.state };
   const confirmed = current.confirmed;
+  // A CCTP payout's burn (or approve) Circle confirmed on the network, while the payout waits for its mint (or burn): the
+  // pending stage links that step's transaction, and the track says which step Circle's word is about (L3).
+  const stepConfirmed =
+    !confirmed && !current.ended && input.crossChain && input.bridge && current.pending?.state && CONFIRMED_STATES.has(current.pending.state) ? input.bridge : null;
+  if (current.pending) {
+    stages.pending = { at: current.pending.at, by: current.pending.by, state: current.pending.state, ...(stepConfirmed?.txHash ? { txHash: stepConfirmed.txHash } : {}) };
+  }
   if (confirmed) {
     // Gateway's payout is known by its mint, on the payee's chain: its transaction is linked there, never on Arc.
     const onPayeeChain = current.minted && confirmed.txHash && same(confirmed.txHash, current.minted.txHash) ? current.minted.chain : null;
@@ -367,6 +403,8 @@ export function reduceSettlement(input: SettlementInput): Settlement {
     conflicts,
     simulated: input.simulated,
     crossChain: input.crossChain,
+    stepConfirmed: stepConfirmed ? { ...stepConfirmed } : null,
+    followUp: input.books?.followUp ?? null,
   };
 }
 

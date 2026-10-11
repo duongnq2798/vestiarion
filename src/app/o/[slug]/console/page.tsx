@@ -58,7 +58,7 @@ import { networkProfile } from "@/lib/network";
 import { currentOrgConfig } from "@/lib/context";
 import { walletTreasuryAvailable } from "@/lib/config";
 import { shellStatus } from "@/lib/shell-status";
-import { flightRows, type FlightRow } from "@/lib/settlement-facts";
+import { flightRows, followUpOf, type FlightRow } from "@/lib/settlement-facts";
 import { readPaymentsInFlight } from "@/lib/settlement-read";
 
 export const dynamic = "force-dynamic";
@@ -179,13 +179,14 @@ export default async function DashboardPage({
           }),
         ])
       : [null, null];
-    // Payments in flight (settlement lifecycle L7, L8): every payment sent and not confirmed, and the confirmed ones whose
-    // bills the books still show in flight. Best effort: a read that fails is logged and hides only that section.
+    // Payments in flight (settlement lifecycle L7, L8): every payment sent and not confirmed, and the confirmed ones of the
+    // bills someone comes back to, the cycle's and those waiting for a person, whose books may not have caught up. Best
+    // effort: a read that fails is logged and hides only that section.
     const flightNow = Date.now();
     const flight = await (async (): Promise<FlightRow[]> => {
       const payments = await readPaymentsInFlight(db(), [
-        ...invoices.filter((invoice) => invoice.direction === "payable" && invoice.status === "matched").map((invoice) => invoice.id),
-        ...milestones.filter((milestone) => milestone.status === "verified").map((milestone) => milestone.id),
+        ...invoices.filter((invoice) => invoice.direction === "payable" && followUpOf("invoice", invoice.status) !== null).map((invoice) => invoice.id),
+        ...milestones.filter((milestone) => followUpOf("milestone", milestone.status) !== null).map((milestone) => milestone.id),
       ]);
       const milestoneIds = [...new Set(payments.filter((payment) => payment.source_type === "milestone").map((payment) => payment.source_id))];
       const milestoneEntries = milestoneIds.length > 0 ? await listLedgerEntriesForTargets({ milestoneIds }) : [];
@@ -403,7 +404,7 @@ export default async function DashboardPage({
                 </section>
               )}
 
-              <PaymentsInFlight payments={flight} now={flightNow} stuckAfterMinutes={networkProfile(network).stuckAfterMinutes} orgSlug={slug} />
+              <PaymentsInFlight payments={flight} now={flightNow} stuckAfterMinutes={networkProfile(network).stuckAfterMinutes} orgSlug={slug} network={network} />
 
               {scheduledPayments.length > 0 && <ScheduledPayments payments={scheduledPayments} allHref={orgHref(slug, "/invoices")} />}
 

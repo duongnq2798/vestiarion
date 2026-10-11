@@ -9,7 +9,7 @@ import { carriesOrg, fakeSupabase, orgTestContext, type RecordedRequest } from "
 /**
  * The reads behind a payment's lifecycle (docs/superpowers/specs/2026-10-11-settlement-lifecycle-design.md L8): named
  * columns, the workspace's own rows, a page at a time; Treasury's are the payments not confirmed and the confirmed ones
- * of the bills it shows in flight.
+ * of the bills someone comes back to.
  */
 
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-0000000d5e71";
@@ -83,7 +83,7 @@ describe("readInvoicePayments", () => {
 });
 
 describe("readPaymentsInFlight", () => {
-  it("reads every intent not confirmed, and the confirmed ones of the bills shown in flight", async () => {
+  it("reads every intent not confirmed, and the confirmed ones of the bills it is given", async () => {
     const fake = fakeSupabase((request) => {
       if (request.params.get("status") === "neq.confirmed") return { body: [row("inv-1"), row("ms-1", { source_type: "milestone" })] };
       if (request.params.get("status") === "eq.confirmed") return { body: [row("inv-9", { status: "confirmed" })] };

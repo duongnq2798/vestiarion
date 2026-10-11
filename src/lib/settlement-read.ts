@@ -42,22 +42,22 @@ export async function readInvoicePayments(orgDb: OrgDb): Promise<Map<string, Pay
 }
 
 /**
- * Treasury: every payment intent not confirmed yet, and the confirmed intents of the bills its own rows show in flight
- * (`matched` invoices, `verified` milestones with a transaction), whose books may not have caught up (L8).
+ * Treasury: every payment intent not confirmed yet, and the confirmed intents of the bills someone comes back to (the
+ * agent's cycle, or a person in Approvals or on Contractors: `followUpOf`), whose books may not have caught up (L8).
  */
-export async function readPaymentsInFlight(orgDb: OrgDb, shownInFlight: readonly string[]): Promise<PaymentRecord[]> {
+export async function readPaymentsInFlight(orgDb: OrgDb, followedUp: readonly string[]): Promise<PaymentRecord[]> {
   const [open, confirmed] = await Promise.all([
     allRows((from, to) =>
       orgDb.from("payment_intents").select(INTENT_COLUMNS).neq("status", "confirmed").order("source_type", { ascending: true }).order("source_id", { ascending: true }).range(from, to)
     ),
-    shownInFlight.length === 0
+    followedUp.length === 0
       ? Promise.resolve([])
       : allRows((from, to) =>
           orgDb
             .from("payment_intents")
             .select(INTENT_COLUMNS)
             .eq("status", "confirmed")
-            .in("source_id", [...new Set(shownInFlight)])
+            .in("source_id", [...new Set(followedUp)])
             .order("source_type", { ascending: true })
             .order("source_id", { ascending: true })
             .range(from, to)

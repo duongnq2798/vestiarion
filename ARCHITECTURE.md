@@ -238,16 +238,21 @@ record; it writes nothing and nothing that moves money imports it (`tests/settle
   stage, then ledger sequence, so the answer is the same in any order and with duplicates; confirmed is never undone, a
   pending read never undoes Circle's end, and only a new attempt (`begin_payment_retry`) moves on from an ended one.
   Gateway's `GATEWAY_FAILED` is its own status, neither in flight nor an end: nothing watches it, and Treasury does not
-  count it. Proposed and Authorized are shown by the send at the latest, since their entry is signed after it.
-  "In the payee's wallet" is the confirmation itself on Arc, the recorded mint for a payout to another chain, and never
-  for a simulated payment; no stage names a bank, a refund or a chargeback, which this rail does not have;
+  count it. Proposed and Authorized are shown by the send at the latest, since their entry is signed after it. A CCTP
+  payout pending with its burn's (or approve's) `CONFIRMED` is told by its Circle id as that step confirmed on Arc,
+  never as the payout. "In the payee's wallet" is the confirmation itself on Arc, the recorded mint for a payout to
+  another chain, and never for a simulated payment; no stage names a bank, a refund or a chargeback, which this rail
+  does not have;
 - reconciled means the bill is `paid` with one of the transfer's references and a signed entry names it; anything else
   after a confirmation, or a bill marked paid without one, is the payment's one mismatch. The entries come from
   `ledger_entries_for_targets` in one request, newest first: a read cut at `max_rows` (`ledgerReadMayBeCut`) makes a
   missing entry unknown, never a mismatch;
+- who comes back to the bill (`followUpOf`, by its status) decides what an unknown send and a confirmed transfer the
+  books miss promise: the agent's cycle for a `matched` payable or a `verified` milestone ("checking with Circle", "the
+  agent's next cycle marks it"), a person in Approvals or on Contractors for a bill held for them, no one otherwise;
 - Bills & receivables reads the workspace's invoice payment intents, a page at a time, and folds the stages into each
-  payable's card; Treasury reads every intent not confirmed and the confirmed ones of bills its rows show in flight, and
-  lists them as **Payments in flight**, aged against the network's `stuckAfterMinutes`. Both reads are best effort, in
+  payable's card; Treasury reads every intent not confirmed and the confirmed ones of the bills someone comes back to,
+  and lists them as **Payments in flight**, aged against the network's `stuckAfterMinutes`. Both reads are best effort, in
   the page's organization scope: one that fails hides only these parts. The shared receipt says Reconciled only when its
   own three checks pass, and Confirmed with the reason otherwise (`src/lib/receipts/status.ts`).
 

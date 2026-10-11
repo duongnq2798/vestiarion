@@ -77,6 +77,15 @@ names its source, so a person can check it there.
   reads it again. It has its own status, `gateway_failed` ("Gateway reported it failed"), with no age, and Treasury
   neither lists, counts nor ages it; its track says "Nothing checks it on its own: check with Circle whether it was
   minted." A later confirmation (the mint after all) makes it Confirmed.
+- A CCTP payout is burned on Arc and minted on the payee's chain. The live provider records it `pending` with the burn's
+  own state (`CONFIRMED`, `COMPLETE`) until its mint is recorded, which takes the next cycle when the 20 s mint wait runs
+  out; a `cctp-approve:` row keeps its approve's state while its burn is not sent. That word is the step's, never the
+  payout's, so "had not confirmed it yet (Circle: CONFIRMED)" would contradict itself. The read model tells the step
+  from the Circle id (`stepConfirmed`), and Pending says "Circle confirmed the burn on Arc testnet; the mint on Base
+  Sepolia is not recorded yet (Circle: CONFIRMED)." (an approve: "…; the burn that pays the payee has not been sent
+  yet"), linking that step's transaction on Arc; the transfer watch's read says "When the transfer watch asked, Circle
+  had confirmed the burn …". Treasury's row says the same in place of Circle's word alone. It stays Pending and in
+  flight: the payee has nothing until the mint.
 - Copy for Failed and Cancelled says the payee was not paid; it never says "no money moved", since a transaction that
   failed on chain still spent its gas.
 - Cost if wrong: a failure shown for a transfer that may still move invites paying it again by hand; these rules follow
@@ -105,8 +114,16 @@ names its source, so a person can check it there.
 - Amounts are not compared with the intent's: the intent keeps its first attempt's amount, and a resend after a
   discount's deadline sends the full one (workspace report R3).
 - When the confirmed transfer and the books disagree, the payment carries one **mismatch**: confirmed but not yet
-  marked paid (the agent's next cycle marks it); marked paid but not confirmed; marked paid with another transaction;
-  marked paid with no signed entry naming the transaction.
+  marked paid; marked paid but not confirmed; marked paid with another transaction; marked paid with no signed entry
+  naming the transaction.
+- Confirmed but not yet marked paid says who marks it, from **who comes back to the bill** (`followUpOf`, by the
+  bill's status): the agent's cycle, which reads the payment again each time it runs, for a `matched` payable or a
+  `verified` milestone ("the agent's next cycle marks it"); a person in Approvals for a payable `held`, `flagged`,
+  `awaiting_info` or `processing` ("Approve and pay in Approvals records it", as only Approve and pay records a
+  transfer already sent there); a person on Contractors for a `held` milestone ("Pay now on Contractors records it").
+  Any other status, or no bill read, promises no one: "Confirmed, but the bill is not marked paid yet." A promise
+  nothing keeps is worse than none, so the rule is the conservative one: no follow-up is named unless the bill's status
+  makes it certain who looks next.
 - The entries are read with `ledger_entries_for_targets` in one request, newest first, which PostgREST cuts at
   `max_rows` (1000). A read that came back full (`ledgerReadMayBeCut`) may hold no entry for an older paid bill: there,
   "no signed entry" is unknown, not a mismatch; the payment is Confirmed with no mismatch, and its Reconciled stage says
@@ -139,8 +156,9 @@ names its source, so a person can check it there.
   unknown" …), with how long a payment in flight has been sent; opened, the seven stages each say when (UTC), from
   which source, and link their entry or transaction. `#settlement-<id>` opens it.
 - **Treasury**: **Payments in flight**: every payment sent and not confirmed (not a `GATEWAY_FAILED` one, L3), oldest first, with how long ago it was
-  sent, where it is and Circle's word for it, and, under "Not matching the books", every other payment whose books do
-  not match. Its line gives how many, the sum per currency, the oldest's age, how many are past the network's
+  sent, where it is and Circle's word for it (for a CCTP payout's burn or approve Circle confirmed, which step that word
+  is about, L3), and, under "Not matching the books", every other payment whose books do not match, a bill held for a
+  person included. Its line gives how many, the sum per currency, the oldest's age, how many are past the network's
   `stuckAfterMinutes` (the transfer watch's threshold) and how many do not match. A payment past it says so in words, not
   by colour alone. The amount is the invoice's `paid_amount` (written with the transfer that carries it, 0038), else the
   intent's. A payable's name opens its card's track; a milestone's opens Contractors. Hidden when there is nothing to
@@ -154,8 +172,13 @@ names its source, so a person can check it there.
 **L8. The reads.**
 - Bills & receivables reads the workspace's invoice payment intents, a page at a time (as the report reads them),
   inside the organization scope, best effort: a read that fails is logged and the cards show no track; the page renders.
-- Treasury reads every intent not yet confirmed, and the confirmed intents of the bills its own rows show in flight
-  (`matched` payables, `verified` milestones), best effort as well, with the entries about the milestones among them.
+- Treasury reads every intent not yet confirmed, and the confirmed intents of the bills someone comes back to (L5:
+  `matched`, `held`, `flagged`, `awaiting_info` and `processing` payables, `verified` and `held` milestones), best effort
+  as well, with the entries about the milestones among them. A held bill whose transfer a person's Reject or Return
+  found confirmed (`refuseIfPaymentSent` records it and refuses) stays `held`, and is listed under "Not matching the
+  books" until Approve and pay records it. Paid, rejected and closed bills are not read: a paid one is in the books, and
+  a person cannot reject or close a bill whose payment may have been sent. Nor are bills not decided yet, which have a
+  payment only when a cycle stopped between its send and the bill's update.
 - Named columns only, all of them present since 0080 (and 0057 for batches).
 - Cost if wrong: one more query on each page; a read that fails hides only the new parts.
 
@@ -198,10 +221,20 @@ names its source, so a person can check it there.
   sent again under the same idempotency key, which Circle takes once, and a Gateway payout only with the same spec. Its
   track says so instead: "A payout to another chain is asked for again under the same payment key, which Circle takes
   only once, so it is never sent twice."
-- While the agent runs, each cycle goes back to every `matched` payable, and `executePayment` looks for an unknown send
-  there before anything is sent, so it is looked for again without a person; Treasury and the card say "checking with
-  Circle" for it. One the cycle holds instead (a payee no longer fit to pay) waits in Approvals, whose Approve and pay
-  looks for it first.
+- While the agent runs, each cycle goes back to every `matched` payable and `verified` milestone, and `executePayment`
+  looks for an unknown send there before anything is sent, so it is looked for again without a person; only there do
+  Treasury and the card say "Outcome unknown · checking with Circle".
+- One the cycle holds instead, without looking it up (a payee now high risk, an address not confirmed, a payment now
+  above the two-approvals figure, the spending limit on Arc), is no longer the cycle's, nor is any payable waiting in
+  Approvals: nothing looks for it on its own, since the transfer watch never looks up a send without a Circle id. It
+  says "Outcome unknown · waiting for a person in Approvals" (a held milestone: "on Contractors"), and under the stage
+  "Nothing checks it on its own now: it waits for a person's Approve and pay in Approvals." (or "Pay now on
+  Contractors"), whose action looks for it first and sends nothing twice. Any other status names no one: "Outcome
+  unknown".
+- Accepted, each said elsewhere: while the agent is paused no cycle runs, and a `matched` payable still says "checking
+  with Circle"; every workspace page then says "Agent paused", and the guide says the check is each cycle's. A
+  `verified` milestone whose contractor's new address is not confirmed stays `verified` and is looked for only once
+  someone confirms it, as the cycle's own line says.
 
 ## Not now
 
@@ -217,11 +250,14 @@ names its source, so a person can check it there.
 - `tests/settlement.test.ts`: the reducer over hand-made facts: every stage and end, failed and cancelled apart,
   not sent reopened by a later send and by Circle's answer, outcome unknown and its ends, a new attempt after a terminal
   failure, late facts about an earlier attempt, confirmed never undone, every permutation of a fact list giving the same
-  result, duplicates, the books' mismatches, in-flight totals per currency and pending age past the threshold. The
-  facts built from intent rows and ledger entries. The pin of L1.
+  result, duplicates, the books' mismatches, in-flight totals per currency and pending age past the threshold, a CCTP
+  payout's step Circle confirmed, and who comes back to a bill by its status. The facts built from intent rows and
+  ledger entries. The pin of L1.
 - `tests/settlement-read.test.ts`: the reads, with a fake Supabase: named columns, paging, the Treasury filter.
 - `tests/settlement-track.test.tsx` and `tests/payments-in-flight.test.tsx`: what the track and the Treasury section
-  say, with words for every state (never colour alone), and the pages' wiring as source pins.
+  say, with words for every state (never colour alone): an unknown outcome and a confirmed transfer the books miss
+  for each one who comes back to the bill, and a CCTP payout's burn or approve Circle confirmed; and the pages' wiring
+  as source pins.
 - `tests/receipts-status.test.ts`: the receipt's Status row for each combination of checks.
 - `tests/decision-trail.test.tsx`, `tests/evidence-chain.test.ts` and `tests/reasoning-copy.test.ts`: the approval step,
   the evidence page's People step and the note by status.
