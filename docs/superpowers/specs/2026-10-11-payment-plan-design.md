@@ -51,7 +51,9 @@ bill to the plan's day. It never pays anything itself.
   on. Never earlier for any reason but a discount, except a day the agent chose after the due date (a due date edited
   since): that is brought back to the due date when the checks below hold on their own (the cash covers it, no other
   bill is left short, nothing goes past the agent's limit), whatever the cushion; otherwise the agent's day stays, and
-  the line says why.
+  the line says why. Such bills are brought back one at a time, in order of that day, each weighed against the plan
+  with the ones brought back before it as well as on its own, so two are never brought back to days they do not fit
+  together.
 - Earlier only to take an early-payment discount that still applies, on its deadline (today when the deadline is
   today), for a bill the agent has not already scheduled on or before that deadline, and only when, with that bill
   paid then:
@@ -61,7 +63,11 @@ bill to the plan's day. It never pays anything itself.
     without the discount and less would be left owed with it: that would offer a move that leaves a covered bill short,
     possibly one whose own discount the agent would take;
   - the agent's spending limit has room for its billed amount that day without taking the room a payment already
-    fitting there had (P7);
+    fitting there had (P7), even when the bill had no room on its own day either: the first version only refused a
+    move that left a line newly past the limit, so a bill already past it on the agent's day could be offered a day
+    whose room another move had freed, and approved alone it waited for a person on its discount's last day. Now a
+    move the agent could not pay on its own is never offered, so what the plan shows for that day is what the agent
+    does, and no discount is counted that the agent would not take on its own;
   - the balance stays at or above the cushion on every day from the deadline to the day before the bill would
     otherwise pay, or is at least no lower there than without the discount. The cushion is weighed only on those days:
     from then on, the discount leaves more cash, never less, so a balance that goes under the cushion later in the
@@ -86,10 +92,11 @@ bill to the plan's day. It never pays anything itself.
 - A taken discount's line says the balance stays above the cushion, or until which day when it goes under it later
   in the window, or, when paying early is what lets the cash cover the bill, that the cash would not cover it on the
   day it would otherwise pay, so the sentence is true of the plan shown.
-- Cost if wrong: a discount missed (one that would have needed another bill left short), a person asked to approve
-  the agent's own discount day where a later day's limit had room, the agent's early payment kept while the balance
-  sits under the cushion for a few days, or a bill kept on a day the agent chose a few days before its due date. All
-  are estimates; the bill is still paid by its due date, and the agent decides again on the day.
+- Cost if wrong: a discount missed (one that would have needed another bill left short, or one on a bill the agent's
+  limit has no room for on either day, which waits for a person on the agent's day), a person asked to approve the
+  agent's own discount day where a later day's limit had room, the agent's early payment kept while the balance sits
+  under the cushion for a few days, or a bill kept on a day the agent chose a few days before its due date. All are
+  estimates; the bill is still paid by its due date, and the agent decides again on the day.
 
 **P5. Ordered by cash.**
 - Within a day: a payment already on its way first, then milestones, then overdue bills (oldest first), then by due
@@ -149,7 +156,9 @@ bill to the plan's day. It never pays anything itself.
   the due date when the agent's day is after it), inside the 14 days shown. Never later than the agent's day, never out
   of the window, never for a bill whose day already takes a discount, and only when the line's checks hold on their own,
   as the bills are scheduled now, as well as together with every other line shown (P4): approving one line never relies
-  on another being approved.
+  on another being approved. Two lines can still each hold on their own, and all the lines together, yet not the two
+  without a third that frees the room both need: the plan weighs each move alone and all of them together, never every
+  subset, so the command weighs again the moves a press actually makes (P10).
 - It writes `scheduled_for`, compare-and-set on the status, the day shown, the amount, the payee and the due date, and
   appends a signed `payment_rescheduled` entry (domain `ap`): who, from, to, the facts the line showed and the plan's
   fingerprint. The bill's decision trail shows it.
@@ -166,17 +175,33 @@ bill to the plan's day. It never pays anything itself.
 - `approval.decide` (owner, admin, approver), through the command `payment_plan.approve`, from the console only.
 - Nobody approves the day of a bill they created, unless they are the workspace's only approver; then the entry says
   so (`soleApprover: true`), as Approvals does.
-- "Approve all shown" sends every line it shows as approvable; the server checks each line on its own and moves only
-  those that pass, and says which did not and why.
-- Cost if wrong: a refusal a person did not expect, which names the reason.
+- "Approve all shown" sends every line it shows as approvable (less the person's own bills). The server reads the rows
+  again and builds the plan from them; then, in the plan's order whatever order the lines came in, it checks each line
+  on its own and weighs its move against the schedule as it stands with the moves this press has already made
+  (`moveObjection`, the plan's own checks: no other bill newly short or past the agent's limit, the bill itself covered
+  and within the limit, a discount's cushion). A line that fails is not moved, and says "Together with the moves just
+  made, it would ...", so the moves made always hold together, whichever lines a press approves or refuses. A single
+  line passes as the plan showed it, since the plan offered it only when its checks held on their own. Only lines that
+  pass move, and the message says which did not and why.
+- A write that fails (the database or the network) stops the press there: it may or may not have landed, so no later
+  line can be weighed against the schedule as it stands. The lines already moved stay moved, a move to today still
+  raises its cycle (P9), the line that failed and those after it say "That did not work. Try again in a moment.", and
+  the answer refreshes the page (`changed` when nothing moved).
+- Cost if wrong: a refusal a person did not expect, which names the reason, or a line the plan showed as approvable
+  refused at approval because the line that freed its room was not approved; the page then shows the plan as it is.
 
 **P11. A stale plan is refused.**
 - The plan has a fingerprint (today, the cash, the cushion, the limits and every line's) and each line its own (the
-  bill's amount, currency, payee and its address, due day, status, scheduled day, discount, who created it, and the
-  plan's day for it).
+  bill's amount, currency, payee and its address, due day, status, scheduled day, discount, who created it, the
+  payee's payment limit and screening, and the plan's day for it). A milestone's carries its contractor's limit and
+  screening too: whether the agent may release it decides whose room it uses.
 - The server reads everything again and rebuilds the plan. A plan fingerprint that differs refuses the whole request; a
   line whose own fingerprint differs is refused. A change of payee, amount, balance or due date therefore invalidates
-  what was shown.
+  what was shown, and so does a payee screened high risk or a payment limit changed since: the line's Approve is not
+  left on screen to be refused again. Since the plan's fingerprint covers every line's, a change to one bill reads as
+  a changed plan; a line refused for its own fingerprint is a request the console does not send. A bill that changes
+  between the read and the write loses the compare-and-set (P9): "This bill changed a moment ago. Look at the new
+  plan."
 - Such a refusal, and a stale balance's (P12), carries `changed`, so the console refreshes the page: the person sees
   the new plan, or the stale warning with Refresh balance, instead of the old plan's buttons refused again.
 - Cost if wrong: a person asked to approve again after an unrelated change (a payment elsewhere changed the balance).
@@ -222,15 +247,18 @@ appear in `GET /api/v1/ledger` and as `ledger.appended`, a moved bill's `schedul
 - `tests/payment-plan.test.ts`: the pure planner over hand-made rows: overdue first, due date by default, the agent's
   earlier day kept, a discount taken only when the cushion holds until the bill would otherwise pay (or the cash covers
   the bill only that way), the agent's own discount day kept whatever its day holds, no move out of the window, later
-  than the agent's day or relying on another move, a scheduled bill whose day has come placed by the agent's rule,
+  than the agent's day or relying on another move (a bill already past the agent's limit on its own day among them),
+  bills brought back to their due dates one at a time, a scheduled bill whose day has come placed by the agent's rule,
   short lines not spent and counted in full as still owed, each obligation once (flagged, escrow, in flight, bill and
   milestone alike), the per-line checks on the billed amount, a capped milestone outside the agent's room, the 7-day
-  window, moves only for scheduled bills, fingerprints that change with payee, amount, balance and due date,
-  freshness, and a fixture plan that never spends more than the cash or pays the agent past its limit.
+  window, moves only for scheduled bills, fingerprints that change with payee, amount, balance, due date, payment
+  limit and screening, freshness, and a fixture plan that never spends more than the cash or pays the agent past its
+  limit.
 - `tests/payment-plan-apply.test.ts`: the write is a compare-and-set with the shown facts and appends the signed entry.
-- `tests/commands-payment-plan.test.ts`: the gate, a running cycle, stale balance, changed plan (both marked
-  `changed`, so the page refreshes), a line's own checks, the creator refused unless sole approver, a batch applying
-  only the passing lines, and a cycle raised for today.
+- `tests/commands-payment-plan.test.ts`: the gate, a running cycle, stale balance, changed plan (a payee screened
+  high risk or its limit lowered among them; both marked `changed`, so the page refreshes), a line's own checks, the
+  creator refused unless sole approver, a batch applying only the passing lines, each weighed in the plan's order with
+  the moves made before it, a write failing part way, and a cycle raised for today.
 - `tests/payment-plan-ui.test.tsx`: the section's words, the stale warning with approving off, the viewer without
   Approve, the projected figures labelled, and the struck amount and a balance under the cushion said in words.
 - `tests/payment-plan-input.test.ts`: the rows turned into the planner's input as the page and the command both read

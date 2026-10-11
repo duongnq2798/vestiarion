@@ -1204,23 +1204,27 @@ day only when the discount is worth at least the reserve's yield to the due
 date, the cash covers the bill then, no other line falls short, the spending
 limit has room for the billed amount and the balance stays at or above the
 cushion until the bill would otherwise pay, each check holding against the plan
-and against the schedule with only that bill moved; a discount day the agent
-chose itself is kept whatever it holds, and a scheduled bill whose day has come
-goes where the agent's own rule puts it at its next cycle, unmovable), walks
+and against the schedule with only that bill moved, the bill itself within the
+limit on its new day; bills the agent scheduled after their due dates are
+brought back one at a time; a discount day the agent chose itself is kept
+whatever it holds, and a scheduled bill whose day has come goes where the
+agent's own rule puts it at its next cycle, unmovable), walks
 the days in the cash's order, marks a line the balance cannot cover as short
 without spending it, counting it in full as still owed, and previews each
 line's checks (payment limit, two approvals, screening, the daily and 7-day
 limit on the billed amount), a verified milestone's included. A move is only
 ever to an earlier day inside the 14 days. `paymentPlanInput` (`src/lib/payment-plan-input.ts`) turns the
-rows into that input, and `readPaymentPlan` (`src/lib/payment-plan-read.ts`)
-reads them in the workspace's scope; the page and the command both go through
-it, so they build the same plan. The page reads it best effort: a plan that
-cannot be read says so in its section and nothing else on the page changes.
+rows into that input, and `readPaymentPlanInput` (`src/lib/payment-plan-read.ts`)
+reads them in the workspace's scope; the page builds the plan from it
+(`readPaymentPlan`) and so does the command, so they build the same plan. The
+page reads it best effort: a plan that cannot be read says so in its section
+and nothing else on the page changes.
 
 **Fingerprints and freshness.** The plan carries a fingerprint over today, the
 cash, the reserve's rate, the cushion, the limits and every line's own
 fingerprint (the bill's status, amount, currency, payee and its address, due
-day, scheduled day, discount, creator and the plan's day for it). `planFreshness`
+day, scheduled day, discount, creator, the payee's payment limit and screening,
+and the plan's day for it). `planFreshness`
 turns approving off while a live workspace's chain balance
 (`accounts.balance_synced_at`) is older than 10 minutes or was never read, or a
 limit or the milestones could not be read; the section keeps the plan on screen
@@ -1235,9 +1239,14 @@ stale balance or a plan fingerprint other than the one shown, with `changed` so
 the console refreshes the page to the plan as it is now. Each line is then
 checked on its own: its fingerprint, a move to offer, its blocking flags, and
 maker-checker (whoever created the bill approves its day only as the
-workspace's only approver, `isSoleApprover`). `moveScheduledPayment`
-(`src/lib/payment-plan-apply.ts`) writes `scheduled_for` with a compare-and-set
-on the status, the day shown, the counterparty, the amount and the due day, and
+workspace's only approver, `isSoleApprover`). In the plan's order, each move is
+then weighed by `moveObjection` (`src/lib/payment-plan.ts`, the planner's own
+checks) against the schedule as it stands with the moves the same request made
+before it, so the moves made hold together whichever lines pass; a write that
+throws stops the request there, since it may or may not have landed.
+`moveScheduledPayment` (`src/lib/payment-plan-apply.ts`) writes `scheduled_for`
+with a compare-and-set on the status, the day shown, the counterparty, the
+amount and the due day, and
 appends a signed `payment_rescheduled` entry (actor `human`, domain `ap`) with
 who moved it, the days, the line's facts and both fingerprints. The AP stage
 then decides the bill again on its new day like any scheduled bill

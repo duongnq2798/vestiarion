@@ -512,6 +512,49 @@ describe("each bill's day (P4)", () => {
     expect(flagCodes(line(short, "zeta"))).toEqual([]);
   });
 
+  it("brings bills back to their due dates one at a time, so two that each fit alone are not both moved when together they do not", () => {
+    // The agent may pay 1,000 a day on its own: either 600 fits Oct 15 alone, both do not.
+    const limits = { budget: { dailyUsdc: 1000, weeklyUsdc: null, spentToday: 0, spentThisWeek: 0 }, twoApprovalsAbove: null };
+    const plan = planPayments(
+      input({
+        operatingUsdc: 5000,
+        limits,
+        bills: [
+          bill({ id: "xeno", payee: "Xeno Labs", amount: 600, dueDate: ISO_DAY("2026-10-15"), scheduledFor: MIDNIGHT("2026-10-18") }),
+          bill({ id: "yara", payee: "Yara Print", counterpartyId: "c-2", amount: 600, dueDate: ISO_DAY("2026-10-15"), scheduledFor: MIDNIGHT("2026-10-19") }),
+        ],
+      })
+    );
+    expect(line(plan, "xeno")).toMatchObject({ on: "2026-10-15", move: { from: "2026-10-18", to: "2026-10-15" }, approvable: true, flags: [] });
+    expect(line(plan, "yara")).toMatchObject({ on: "2026-10-19", move: null, agentPays: true, flags: [] });
+    expect(line(plan, "yara").reason).toBe(
+      "Pays on Oct 19, 2026, as the agent scheduled it: paying on its due date, Oct 15, 2026, would be above what the agent may pay on its own on Oct 15, 2026."
+    );
+  });
+
+  it("offers no move whose bill fits the agent's limit on its new day only once another move is approved", () => {
+    // Already above the limit on the agent's day (Oct 16, after Coastal's 500), Beta fits Oct 15 only once Alpha has
+    // left it for Oct 12: approved alone, it would wait for a person on its discount's last day.
+    const limits = { budget: { dailyUsdc: 1000, weeklyUsdc: null, spentToday: 0, spentThisWeek: 0 }, twoApprovalsAbove: null };
+    const plan = planPayments(
+      input({
+        operatingUsdc: 5000,
+        limits,
+        bills: [
+          bill({ id: "alpha", payee: "Alpha Freight", amount: 600, dueDate: ISO_DAY("2026-10-15"), scheduledFor: MIDNIGHT("2026-10-15"), discount: { pct: 2, deadline: ISO_DAY("2026-10-12") } }),
+          bill({ id: "beta", payee: "Beta Hosting", counterpartyId: "c-2", amount: 700, dueDate: ISO_DAY("2026-10-20"), scheduledFor: MIDNIGHT("2026-10-16"), discount: { pct: 2, deadline: ISO_DAY("2026-10-15") } }),
+          bill({ id: "coastal", payee: "Coastal Freight", counterpartyId: "c-3", amount: 500, dueDate: ISO_DAY("2026-10-16"), scheduledFor: MIDNIGHT("2026-10-16") }),
+        ],
+      })
+    );
+    expect(line(plan, "alpha")).toMatchObject({ on: "2026-10-12", move: { from: "2026-10-15", to: "2026-10-12" }, approvable: true });
+    expect(line(plan, "beta")).toMatchObject({ on: "2026-10-16", pays: 700, move: null, approvable: false });
+    expect(flagCodes(line(plan, "beta"))).toEqual(["over_agent_limit"]);
+    expect(line(plan, "beta").reason).toBe(
+      "Pays on Oct 16, 2026, as the agent scheduled it: paying on Oct 15, 2026 for the 2% discount (14.00 USDC) would be above what the agent may pay on its own on Oct 15, 2026, as the bills are scheduled now."
+    );
+  });
+
   it("pays on its due date when the discount lasts until then too", () => {
     const plan = planPayments(input({ bills: [bill({ discount: { pct: 3, deadline: ISO_DAY("2026-10-20") } })] }));
     expect(line(plan, "b-1").on).toBe("2026-10-20");
@@ -729,11 +772,15 @@ describe("each line's checks (P7)", () => {
   it("weighs the agent's limit against the billed amount, as its guardrail does, and counts what leaves against the room", () => {
     const daily = (dailyUsdc: number) => ({ budget: { dailyUsdc, weeklyUsdc: null, spentToday: 0, spentThisWeek: 0 }, twoApprovalsAbove: null });
     const discount = { pct: 2, deadline: ISO_DAY("2026-10-15") };
-    // The guardrail weighs the 1,000 billed, not the 980 paid: 990 a day holds it for a person on either day.
+    // The guardrail weighs the 1,000 billed, not the 980 paid: 990 a day holds it for a person on either day, so the
+    // plan takes no discount the agent would not pay on its own, and keeps the bill's day.
     const plan = planPayments(input({ operatingUsdc: 5000, limits: daily(990), bills: [bill({ amount: 1000, discount })] }));
     const only = line(plan, "b-1");
-    expect(only).toMatchObject({ on: "2026-10-15", pays: 980, agentPays: false, approvable: false });
+    expect(only).toMatchObject({ on: "2026-10-20", pays: 1000, agentPays: false, move: null, approvable: false });
     expect(flagCodes(only)).toEqual(["over_agent_limit"]);
+    expect(only.reason).toBe(
+      "Pays on its due date, Oct 20, 2026: paying on Oct 15, 2026 for the 2% discount (20.00 USDC) would be above what the agent may pay on its own on Oct 15, 2026."
+    );
     // With 15 paid that day too, the 1,000 billed no longer fits a 1,000 day, though 980 would; on its due date it does.
     const crowded = planPayments(
       input({
@@ -888,6 +935,19 @@ describe("fingerprints (P11)", () => {
     expect(richer.fingerprint).not.toBe(first.fingerprint);
     // The reserve's yield decides which discounts are worth taking: a new rate is a new plan.
     expect(planPayments({ ...base(), reserveApy: 0.05 }).fingerprint).not.toBe(first.fingerprint);
+  });
+
+  it("change with the payee's payment limit or screening, a milestone's contractor's too, so an Approve they stop is not left on screen", () => {
+    const first = planPayments(base());
+    for (const fields of [{ paymentLimit: 500 }, { riskLevel: "high" }]) {
+      const plan = planPayments({ ...base(), bills: [{ ...base().bills[0], ...fields }] });
+      expect(plan.lines[0].fingerprint, JSON.stringify(fields)).not.toBe(first.lines[0].fingerprint);
+      expect(plan.fingerprint, JSON.stringify(fields)).not.toBe(first.fingerprint);
+    }
+    // A verified milestone the agent may release on its own uses its room, which the bills' checks count on.
+    const withMilestone = (fields: Partial<PlanMilestone>) => planPayments({ ...base(), milestones: [milestone(fields)] });
+    expect(withMilestone({ riskLevel: "high" }).fingerprint).not.toBe(withMilestone({}).fingerprint);
+    expect(withMilestone({ paymentLimit: 10 }).fingerprint).not.toBe(withMilestone({}).fingerprint);
   });
 
   it("does not change when the balance is only read again", () => {

@@ -9,20 +9,21 @@ import { fakeSupabase, orgTestContext } from "./support/fake-supabase";
 
 /**
  * Approving payment plan lines (docs/superpowers/specs/2026-10-11-payment-plan-design.md P9–P13): the gate, then the
- * plan read again and compared with the one shown, then each line's own checks, the maker-checker rule among them, and
- * only then the move. The read, the move and the sole-approver answer are stand-ins; the planner is the real one.
+ * plan read again and compared with the one shown, then each line's own checks, the maker-checker rule among them, its
+ * move weighed with the moves made before it, and only then the move. The rows read, the move and the sole-approver
+ * answer are stand-ins; the planner is the real one.
  */
 
 const { mocks } = vi.hoisted(() => ({
   mocks: {
-    readPaymentPlan: vi.fn(),
+    readPaymentPlanInput: vi.fn(),
     moveScheduledPayment: vi.fn(),
     hasRunningCycle: vi.fn(),
     isSoleApprover: vi.fn(),
     runCycleSoon: vi.fn(),
   },
 }));
-vi.mock("@/lib/payment-plan-read", () => ({ readPaymentPlan: mocks.readPaymentPlan }));
+vi.mock("@/lib/payment-plan-read", () => ({ readPaymentPlanInput: mocks.readPaymentPlanInput }));
 vi.mock("@/lib/payment-plan-apply", () => ({ moveScheduledPayment: mocks.moveScheduledPayment }));
 vi.mock("@/lib/agent/cycle-running", () => ({ hasRunningCycle: mocks.hasRunningCycle }));
 vi.mock("@/lib/agent/sole-approver", () => ({ isSoleApprover: mocks.isSoleApprover }));
@@ -31,6 +32,7 @@ vi.mock("@/lib/agent/cycle-soon", () => ({ runCycleSoon: mocks.runCycleSoon }));
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000c31";
 const USER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000c6";
 const OTHER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000c7";
+const THIRD = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000c8";
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
 const NOW = Date.UTC(2026, 9, 11, 9, 0);
 
@@ -54,25 +56,27 @@ const bill = (fields: Partial<PlanBill>): PlanBill => ({
   ...fields,
 });
 
-const planOf = (fields: Partial<PaymentPlanInput> = {}): PaymentPlan =>
-  planPayments({
-    now: NOW,
-    operatingUsdc: 1000,
-    reserveUsdc: 0,
-    reserveApy: 0,
-    cushion: 0,
-    bills: [
-      bill({ id: "deal", payee: "Northwind Supply" }),
-      bill({ id: "mine", payee: "Harbor Office Supply", counterpartyId: "c-2", createdBy: USER }),
-      bill({ id: "today", payee: "Atlas Compute", counterpartyId: "c-3", discount: { pct: 1, deadline: "2026-10-11T12:00:00.000Z" } }),
-      bill({ id: "capped", payee: "Big Vendor", counterpartyId: "c-4", paymentLimit: 50 }),
-    ],
-    milestones: [],
-    limits: { budget: null, twoApprovalsAbove: null },
-    balance: { kind: "simulated" },
-    unread: [],
-    ...fields,
-  });
+const inputOf = (fields: Partial<PaymentPlanInput> = {}): PaymentPlanInput => ({
+  now: NOW,
+  operatingUsdc: 1000,
+  reserveUsdc: 0,
+  reserveApy: 0,
+  cushion: 0,
+  bills: [
+    bill({ id: "deal", payee: "Northwind Supply" }),
+    bill({ id: "mine", payee: "Harbor Office Supply", counterpartyId: "c-2", createdBy: USER }),
+    bill({ id: "today", payee: "Atlas Compute", counterpartyId: "c-3", discount: { pct: 1, deadline: "2026-10-11T12:00:00.000Z" } }),
+    bill({ id: "capped", payee: "Big Vendor", counterpartyId: "c-4", paymentLimit: 50 }),
+  ],
+  milestones: [],
+  limits: { budget: null, twoApprovalsAbove: null },
+  balance: { kind: "simulated" },
+  unread: [],
+  ...fields,
+});
+const planOf = (fields: Partial<PaymentPlanInput> = {}): PaymentPlan => planPayments(inputOf(fields));
+/** The same rows, with one bill's facts changed. */
+const withBill = (id: string, fields: Partial<PlanBill>): Partial<PaymentPlanInput> => ({ bills: inputOf().bills.map((row) => (row.id === id ? { ...row, ...fields } : row)) });
 
 const request = (plan: PaymentPlan, ids: string[]) => ({
   planFingerprint: plan.fingerprint,
@@ -95,14 +99,14 @@ describe("the command", () => {
   it("refuses a viewer before reading anything", async () => {
     const outcome = await run(() => approvePlanLines(approver({ role: "viewer" }), { planFingerprint: "x", lines: [{ invoiceId: "deal", fingerprint: "y" }] }));
     expect(outcome).toMatchObject({ ok: false, code: "forbidden" });
-    expect(mocks.readPaymentPlan).not.toHaveBeenCalled();
+    expect(mocks.readPaymentPlanInput).not.toHaveBeenCalled();
   });
 });
 
 describe("approvePlanLines", () => {
   it("moves a line whose checks pass, and says the agent checks it again on its day", async () => {
     const plan = planOf();
-    mocks.readPaymentPlan.mockResolvedValueOnce(plan);
+    mocks.readPaymentPlanInput.mockResolvedValueOnce(inputOf());
     const outcome = await run(() => approvePlanLines(approver(), request(plan, ["deal"])));
     expect(outcome).toEqual({
       ok: true,
@@ -121,18 +125,27 @@ describe("approvePlanLines", () => {
   });
 
   it("refuses a plan whose balance is stale, with the reason, moves nothing, and has the page show the plan as stale (I20)", async () => {
-    const stale = planOf({ balance: { kind: "chain", syncedAt: new Date(NOW - 30 * 60_000).toISOString() } });
-    mocks.readPaymentPlan.mockResolvedValueOnce(stale);
+    const staleInput = inputOf({ balance: { kind: "chain", syncedAt: new Date(NOW - 30 * 60_000).toISOString() } });
+    const stale = planPayments(staleInput);
+    mocks.readPaymentPlanInput.mockResolvedValueOnce(staleInput);
     const outcome = await run(() => approvePlanLines(approver(), request(stale, ["deal"])));
     // `changed`: the console refreshes the page, which then turns approving off and offers Refresh balance.
     expect(outcome).toEqual({ ok: false, code: "stale", message: "The balance was read from the chain 30 minutes ago. Refresh it to approve the plan.", changed: true });
     expect(mocks.moveScheduledPayment).not.toHaveBeenCalled();
   });
 
-  it("refuses a plan that changed since it was shown: the balance, an amount, a payee", async () => {
+  it("refuses a plan that changed since it was shown: the balance, an amount, a payee, its payment limit or screening", async () => {
     const shown = planOf();
-    for (const changed of [planOf({ operatingUsdc: 999 }), planOf({ bills: [bill({ id: "deal", amount: 101 })] }), planOf({ bills: [bill({ id: "deal", payeeAddress: "0xnew" })] })]) {
-      mocks.readPaymentPlan.mockResolvedValueOnce(changed);
+    const changes = [
+      inputOf({ operatingUsdc: 999 }),
+      inputOf(withBill("deal", { amount: 101 })),
+      inputOf(withBill("deal", { payeeAddress: "0xnew" })),
+      // Screened high risk, or a payment limit lowered under the bill, after the plan was shown: its Approve goes too.
+      inputOf(withBill("deal", { riskLevel: "high" })),
+      inputOf(withBill("deal", { paymentLimit: 50 })),
+    ];
+    for (const changed of changes) {
+      mocks.readPaymentPlanInput.mockResolvedValueOnce(changed);
       const outcome = await run(() => approvePlanLines(approver(), request(shown, ["deal"])));
       // `changed`: the console refreshes the page, so the new plan is the one on screen.
       expect(outcome).toEqual({ ok: false, code: "plan_changed", message: "The plan changed since it was shown. Look at the new plan, then approve again.", changed: true });
@@ -142,7 +155,7 @@ describe("approvePlanLines", () => {
 
   it("never lets a person approve the day of a bill they created, unless they are the only approver (I21)", async () => {
     const plan = planOf();
-    mocks.readPaymentPlan.mockResolvedValueOnce(plan);
+    mocks.readPaymentPlanInput.mockResolvedValueOnce(inputOf());
     const refusedOutcome = await run(() => approvePlanLines(approver(), request(plan, ["mine"])));
     expect(refusedOutcome).toEqual({
       ok: false,
@@ -151,7 +164,7 @@ describe("approvePlanLines", () => {
     });
     expect(mocks.moveScheduledPayment).not.toHaveBeenCalled();
 
-    mocks.readPaymentPlan.mockResolvedValueOnce(plan);
+    mocks.readPaymentPlanInput.mockResolvedValueOnce(inputOf());
     mocks.isSoleApprover.mockResolvedValueOnce(true);
     const sole = await run(() => approvePlanLines(approver(), request(plan, ["mine"])));
     expect(sole.ok).toBe(true);
@@ -160,7 +173,7 @@ describe("approvePlanLines", () => {
 
   it("applies a batch line by line: only the lines whose own checks pass move, and the rest say why (I21)", async () => {
     const plan = planOf();
-    mocks.readPaymentPlan.mockResolvedValueOnce(plan);
+    mocks.readPaymentPlanInput.mockResolvedValueOnce(inputOf());
     const outcome = await run(() => approvePlanLines(approver(), request(plan, ["deal", "mine", "capped", "today"])));
     expect(outcome.ok).toBe(true);
     if (!outcome.ok) return;
@@ -180,7 +193,7 @@ describe("approvePlanLines", () => {
 
   it("refuses a line whose own fingerprint is not the one shown, or that has nothing to move", async () => {
     const plan = planOf();
-    mocks.readPaymentPlan.mockResolvedValueOnce(plan);
+    mocks.readPaymentPlanInput.mockResolvedValueOnce(inputOf());
     const outcome = await run(() =>
       approvePlanLines(approver(), {
         planFingerprint: plan.fingerprint,
@@ -200,7 +213,7 @@ describe("approvePlanLines", () => {
 
   it("refreshes nothing when a refusal leaves the plan on screen as it is", async () => {
     const plan = planOf();
-    mocks.readPaymentPlan.mockResolvedValueOnce(plan);
+    mocks.readPaymentPlanInput.mockResolvedValueOnce(inputOf());
     const outcome = await run(() => approvePlanLines(approver(), request(plan, ["mine", "capped"])));
     expect(outcome.ok).toBe(false);
     expect(outcome).not.toHaveProperty("changed");
@@ -208,10 +221,91 @@ describe("approvePlanLines", () => {
 
   it("says when a bill changed between the read and the move", async () => {
     const plan = planOf();
-    mocks.readPaymentPlan.mockResolvedValueOnce(plan);
+    mocks.readPaymentPlanInput.mockResolvedValueOnce(inputOf());
     mocks.moveScheduledPayment.mockResolvedValueOnce(false);
     const outcome = await run(() => approvePlanLines(approver(), request(plan, ["deal"])));
     expect(outcome).toMatchObject({ ok: false, code: "not_moved", message: "Nothing was moved. Northwind Supply: This bill changed a moment ago. Look at the new plan.", changed: true });
+  });
+
+  it("weighs each line with the moves the same press made before it, so the moves made hold together (I21)", async () => {
+    // The agent may pay 1,000 a day on its own. Harbor's move to Oct 12 frees 600 of Oct 15's room, which Northwind and
+    // Atlas, each moved to Oct 15, need together; each alone fits beside Harbor's 600.
+    const rows = inputOf({
+      operatingUsdc: 5000,
+      limits: { budget: { dailyUsdc: 1000, weeklyUsdc: null, spentToday: 0, spentThisWeek: 0 }, twoApprovalsAbove: null },
+      bills: [
+        bill({
+          id: "mine",
+          payee: "Harbor Office Supply",
+          counterpartyId: "c-2",
+          amount: 600,
+          dueDate: "2026-10-15T12:00:00.000Z",
+          scheduledFor: "2026-10-15T00:00:00.000Z",
+          discount: { pct: 2, deadline: "2026-10-12T12:00:00.000Z" },
+          createdBy: USER,
+        }),
+        bill({ id: "deal", payee: "Northwind Supply", amount: 300, dueDate: "2026-10-20T12:00:00.000Z", scheduledFor: "2026-10-20T00:00:00.000Z" }),
+        bill({ id: "next", payee: "Atlas Compute", counterpartyId: "c-3", amount: 300, dueDate: "2026-10-21T12:00:00.000Z", scheduledFor: "2026-10-21T00:00:00.000Z" }),
+      ],
+    });
+    const plan = planPayments(rows);
+    expect(plan.lines.map((line) => [line.id, line.move, line.approvable])).toEqual([
+      ["mine", { from: "2026-10-15", to: "2026-10-12" }, true],
+      ["deal", { from: "2026-10-20", to: "2026-10-15" }, true],
+      ["next", { from: "2026-10-21", to: "2026-10-15" }, true],
+    ]);
+
+    // Harbor's creator sees Approve all shown without Harbor: Northwind moves, and Atlas would then take Harbor's room.
+    // The lines are weighed in the plan's order, whatever order they come in.
+    mocks.readPaymentPlanInput.mockResolvedValueOnce(rows);
+    const outcome = await run(() => approvePlanLines(approver(), request(plan, ["next", "deal"])));
+    expect(outcome).toEqual({
+      ok: true,
+      message:
+        "Moved: Northwind Supply pays on Oct 15, 2026. The agent checks it again on that day before it pays. Not moved: Atlas Compute (Together with the moves just made, it would be above what the agent may pay on its own on Oct 15, 2026.).",
+      results: [
+        { invoiceId: "next", payee: "Atlas Compute", ok: false, message: "Together with the moves just made, it would be above what the agent may pay on its own on Oct 15, 2026." },
+        { invoiceId: "deal", payee: "Northwind Supply", ok: true, message: "Moves to Oct 15, 2026." },
+      ],
+    });
+    expect(mocks.moveScheduledPayment).toHaveBeenCalledTimes(1);
+    expect(mocks.moveScheduledPayment).toHaveBeenCalledWith(expect.objectContaining({ line: plan.lines.find((line) => line.id === "deal") }));
+
+    // Someone else approving all three: Harbor moves first, and the three hold together.
+    mocks.moveScheduledPayment.mockClear();
+    mocks.readPaymentPlanInput.mockResolvedValueOnce(rows);
+    const all = await run(() => approvePlanLines(approver({ userId: THIRD }), request(plan, ["mine", "deal", "next"])));
+    expect(all).toMatchObject({ ok: true, message: "Moved 3 payments. The agent checks each again on its day before it pays." });
+    expect(mocks.moveScheduledPayment).toHaveBeenCalledTimes(3);
+  });
+
+  it("stops at a write that fails part way, names what moved and what did not, and still raises the cycle for today", async () => {
+    const rows = inputOf({
+      bills: [...inputOf().bills, bill({ id: "later", payee: "Coastal Freight", counterpartyId: "c-5", discount: { pct: 2, deadline: "2026-10-16T12:00:00.000Z" } })],
+    });
+    const plan = planPayments(rows);
+    mocks.readPaymentPlanInput.mockResolvedValueOnce(rows);
+    // Atlas moves to today; Northwind's write then fails, so Coastal, weighed with it, is not tried.
+    mocks.moveScheduledPayment.mockResolvedValueOnce(true).mockRejectedValueOnce(new Error("connection reset"));
+    const outcome = await run(() => approvePlanLines(approver(), request(plan, ["deal", "today", "later"])));
+    expect(outcome).toEqual({
+      ok: true,
+      message:
+        "Moved: Atlas Compute pays today. The agent checks it again on that day before it pays. Not moved: Northwind Supply (That did not work. Try again in a moment.); Coastal Freight (That did not work. Try again in a moment.).",
+      results: [
+        { invoiceId: "deal", payee: "Northwind Supply", ok: false, message: "That did not work. Try again in a moment." },
+        { invoiceId: "today", payee: "Atlas Compute", ok: true, message: "Moves to today." },
+        { invoiceId: "later", payee: "Coastal Freight", ok: false, message: "That did not work. Try again in a moment." },
+      ],
+    });
+    expect(mocks.moveScheduledPayment).toHaveBeenCalledTimes(2);
+    expect(mocks.runCycleSoon).toHaveBeenCalledWith({ orgId: ORG, userId: USER, sandbox: false, kind: "plan_approved" });
+
+    // Nothing moved: the page still refreshes, since the failed write may have landed.
+    mocks.readPaymentPlanInput.mockResolvedValueOnce(inputOf());
+    mocks.moveScheduledPayment.mockRejectedValueOnce(new Error("connection reset"));
+    const failed = await run(() => approvePlanLines(approver(), request(planOf(), ["deal"])));
+    expect(failed).toEqual({ ok: false, code: "failed", message: "Nothing was moved. Northwind Supply: That did not work. Try again in a moment.", changed: true });
   });
 
   it("refuses an empty request", async () => {
