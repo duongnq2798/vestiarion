@@ -46,8 +46,12 @@ const ENTRIES = [
   decision(14, { action: "ap_pay", counterpartyId: NORTHWIND, amount: 700, ts: "2026-10-09T10:00:00.000Z", rule: "counterparty.payment_limit", sourceId: "inv-3" }),
 ];
 
-function workspace(over: { entries?: (request: RecordedRequest) => unknown[]; policy?: unknown[]; budget?: unknown[] } = {}) {
+function workspace(over: { entries?: (request: RecordedRequest) => unknown[]; policy?: unknown[]; budget?: unknown[]; cycleEnds?: number[]; shadow?: unknown[] } = {}) {
   return (r: RecordedRequest): FakeReply => {
+    if (r.path === "/rest/v1/ledger_entries" && r.params.get("action") === "eq.cycle_complete") {
+      return { body: r.params.get("seq") === "gt.0" ? (over.cycleEnds ?? []).map((seq) => ({ seq })) : [] };
+    }
+    if (r.path === "/rest/v1/shadow_modes") return { body: over.shadow ?? [] };
     if (r.path === "/rest/v1/counterparties") {
       return {
         body: [
@@ -65,7 +69,8 @@ function workspace(over: { entries?: (request: RecordedRequest) => unknown[]; po
   };
 }
 
-const ledgerReads = () => fake.requests.filter((r) => r.path === "/rest/v1/ledger_entries");
+const ledgerReads = () => fake.requests.filter((r) => r.path === "/rest/v1/ledger_entries" && r.params.get("action")?.startsWith("in."));
+const cycleReads = () => fake.requests.filter((r) => r.path === "/rest/v1/ledger_entries" && r.params.get("action") === "eq.cycle_complete");
 
 beforeEach(() => {
   fake = fakeSupabase(workspace());
@@ -109,6 +114,13 @@ describe("ruleReplay for a counterparty's payment limit", () => {
     expect(read.params.get("ts")).toBe("gte.2026-09-04T00:00:00.000Z");
     expect(read.params.get("order")).toBe("seq.asc");
     expect(read.params.get("limit")).toBe("1000");
+    // Where each cycle ended, from the same day on: a contractor stage's decisions never straddle one.
+    const cycles = cycleReads()[0];
+    expect(cycles.params.get("select")).toBe("seq");
+    expect(cycles.params.get("actor")).toBe("eq.system");
+    expect(cycles.params.get("ts")).toBe("gte.2026-09-04T00:00:00.000Z");
+    expect(cycles.params.get("order")).toBe("seq.asc");
+    expect(fake.requests.some((r) => r.path === "/rest/v1/shadow_modes")).toBe(true);
     for (const request of fake.requests) expect(carriesOrg(request, ORG), request.path).toBe(true);
   });
 
@@ -211,6 +223,53 @@ describe("reading the window", () => {
     expect(view.more).toBe(30);
     // An invoice whose row is gone is named by its kind.
     expect(view.rows[1].bill).toBe("Invoice");
+  });
+});
+
+describe("shadow mode and the contractor stage's cycles", () => {
+  const shadowBill = {
+    ...ENTRIES[0],
+    detail: { ...ENTRIES[0].detail, shadow: true, amountPaid: null, execution: { chainMode: "simulate", resultingStatus: "held", heldBecause: "shadow_verdict" } },
+  };
+  const limitedRelease = decision(15, { action: "milestone_release", counterpartyId: KESTREL, amount: 300, ts: "2026-10-09T11:00:00.000Z", rule: "counterparty.payment_limit", sourceId: "ms-1" });
+
+  it("says a payment the checks let through in shadow mode waits for a person to agree", async () => {
+    fake = fakeSupabase(workspace({ entries: (r) => (r.params.get("seq") === "gt.0" ? [shadowBill] : []) }));
+    const view = await run(() => ruleReplay({ rule: "counterparty_limit", counterpartyId: NORTHWIND, values: { paymentLimit: "200" }, days: 30 }, NOW));
+    expect(view.rows.map((row) => [row.before, row.after])).toEqual([["The agent pays it once a person agrees, in shadow mode", "Held: above the payment limit"]]);
+  });
+
+  it("reads since when shadow mode is on for a milestone a rule stopped, whose entry does not say", async () => {
+    const trial = { rule: "counterparty_limit" as const, counterpartyId: KESTREL, values: { paymentLimit: "400" }, days: 30 as const };
+    fake = fakeSupabase(workspace({ entries: (r) => (r.params.get("seq") === "gt.0" ? [limitedRelease] : []), shadow: [{ currency: "USDC", started_at: "2026-10-01T00:00:00.000Z", started_by: null }] }));
+    const on = await run(() => ruleReplay(trial, NOW));
+    expect(on.rows.map((row) => row.after)).toEqual(["The agent releases it once a person agrees, in shadow mode"]);
+
+    fake = fakeSupabase(workspace({ entries: (r) => (r.params.get("seq") === "gt.0" ? [limitedRelease] : []) }));
+    const unknown = await run(() => ruleReplay(trial, NOW));
+    expect(unknown.rows.map((row) => row.after)).toEqual(["The agent releases it, once a person agrees if shadow mode was on"]);
+  });
+
+  it("replays a held milestone and a release apart when a cycle ended between them", async () => {
+    // Kestrel's 300 held by its 200 limit, then the next cycle releases 150 the same day, under a 400 daily limit.
+    const entries = [limitedRelease, decision(17, { action: "milestone_release", counterpartyId: KESTREL, amount: 150, ts: "2026-10-09T17:00:00.000Z", sourceId: "ms-2" })];
+    const trial = { rule: "counterparty_limit" as const, counterpartyId: KESTREL, values: { paymentLimit: "400" }, days: 30 as const };
+    const budget = [{ daily_usdc: "400.000000", weekly_usdc: null }];
+    // Arc mainnet keeps a two-approvals figure: one above both.
+    const policy = [{ two_approvals_above: "1000.000000" }];
+    // On Arc mainnet, where shadow mode never runs, the freed 300 is paid in full.
+    const onMainnet = <T,>(fn: () => Promise<T>) => runWith(orgTestContext({ config: { ...config, network: "arc-mainnet" }, client: fake.client, orgId: ORG }), fn);
+
+    fake = fakeSupabase(workspace({ entries: (r) => (r.params.get("seq") === "gt.0" ? entries : []), budget, policy }));
+    const together = await onMainnet(() => ruleReplay(trial, NOW));
+    expect(together.counts).toMatchObject({ cantTell: 2 });
+
+    fake = fakeSupabase(workspace({ entries: (r) => (r.params.get("seq") === "gt.0" ? entries : []), budget, policy, cycleEnds: [16] }));
+    const apart = await onMainnet(() => ruleReplay(trial, NOW));
+    expect(apart.rows.map((row) => [row.seq, row.change])).toEqual([
+      [15, "now_paid"],
+      [17, "now_held"],
+    ]);
   });
 });
 

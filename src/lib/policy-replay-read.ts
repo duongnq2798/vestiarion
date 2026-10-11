@@ -19,7 +19,9 @@ import {
   type RuleCandidate,
   type RuleFigures,
   type RuleKind,
+  type ShadowHistory,
 } from "./policy-replay";
+import { readShadowMode } from "./shadow-mode";
 import { parseTwoApprovalsForm } from "./two-approvals";
 import { workspaceNetwork } from "./workspace-network";
 
@@ -140,10 +142,20 @@ const CANT_TELL_WORDS: Record<CantTellReason, string> = {
   earlier_unsettled: "an earlier decision on it cannot be told",
 };
 
-function verdictWords(verdict: ReplayVerdict, source: "bill" | "milestone", action: string): string {
+/** What going ahead means: in shadow mode a payment the checks let through waits for a person to agree (P6). */
+function goesAheadWords(source: "bill" | "milestone", action: string, shadow: boolean | null): string {
+  if (source === "bill") {
+    if (action === "ap_schedule") return "The agent schedules it";
+    return shadow ? "The agent pays it once a person agrees, in shadow mode" : "The agent pays it";
+  }
+  if (shadow === null) return "The agent releases it, once a person agrees if shadow mode was on";
+  return shadow ? "The agent releases it once a person agrees, in shadow mode" : "The agent releases it";
+}
+
+function verdictWords(verdict: ReplayVerdict, decision: ReplayedDecision, action: string): string {
   switch (verdict.kind) {
     case "goes_ahead":
-      return source === "milestone" ? "The agent releases it" : action === "ap_schedule" ? "The agent schedules it" : "The agent pays it";
+      return goesAheadWords(decision.source, action, decision.shadow);
     case "paid_earlier":
       return "Paid by an earlier decision";
     case "stopped":
@@ -231,28 +243,63 @@ export function trialSetting(input: RuleTrialInput, current: RuleFigures, names:
   }
 }
 
-/** The agent's decisions from `since` on, oldest first, in pages; refused past `MAX_REPLAY_PAGES` (P9). */
-async function readDecisions(since: string): Promise<ReplayEntry[]> {
-  const entries: ReplayEntry[] = [];
+const TOO_MANY = "This window holds too many decisions to try at once. Try the last 30 days.";
+
+/** Ledger entries from `since` on, oldest first, in pages of 1,000; refused past `MAX_REPLAY_PAGES` (P9). */
+async function readPages<Row extends { seq: number }>(page: (after: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>): Promise<Row[]> {
+  const rows: Row[] = [];
   let after = 0;
-  for (let page = 0; ; page++) {
-    if (page === MAX_REPLAY_PAGES) {
-      throw new RuleReplayError("too_many", "This window holds too many decisions to try at once. Try the last 30 days.");
-    }
-    const rows = unwrap(
-      await db()
-        .from("ledger_entries")
-        .select("seq, ts, action, detail")
-        .eq("actor", "agent")
-        .in("action", [...DECISION_ACTIONS])
-        .gte("ts", since)
-        .gt("seq", after)
-        .order("seq", { ascending: true })
-        .limit(LEDGER_PAGE_SIZE)
-    ) as ReplayEntry[];
-    entries.push(...rows);
-    if (rows.length < LEDGER_PAGE_SIZE) return entries;
-    after = rows[rows.length - 1].seq;
+  for (let read = 0; ; read++) {
+    if (read === MAX_REPLAY_PAGES) throw new RuleReplayError("too_many", TOO_MANY);
+    const next = unwrap(await page(after)) as Row[];
+    rows.push(...next);
+    if (next.length < LEDGER_PAGE_SIZE) return rows;
+    after = next[next.length - 1].seq;
+  }
+}
+
+/** The agent's decisions from `since` on, oldest first. */
+function readDecisions(since: string): Promise<ReplayEntry[]> {
+  return readPages<ReplayEntry>((after) =>
+    db()
+      .from("ledger_entries")
+      .select("seq, ts, action, detail")
+      .eq("actor", "agent")
+      .in("action", [...DECISION_ACTIONS])
+      .gte("ts", since)
+      .gt("seq", after)
+      .order("seq", { ascending: true })
+      .limit(LEDGER_PAGE_SIZE)
+  );
+}
+
+/** Where each cycle ended from `since` on, by ledger sequence: a contractor stage's decisions never straddle one (P6). */
+async function readCycleEnds(since: string): Promise<number[]> {
+  const rows = await readPages<{ seq: number }>((after) =>
+    db()
+      .from("ledger_entries")
+      .select("seq")
+      .eq("actor", "system")
+      .eq("action", "cycle_complete")
+      .gte("ts", since)
+      .gt("seq", after)
+      .order("seq", { ascending: true })
+      .limit(LEDGER_PAGE_SIZE)
+  );
+  return rows.map((row) => row.seq);
+}
+
+/**
+ * What is known of shadow mode (P6), for a milestone a rule stopped, whose entry does not say: since when it is on, if it
+ * is, and whether it may have been on before. It never runs on Arc mainnet. Unread, it is not known.
+ */
+async function readShadowHistory(): Promise<ShadowHistory> {
+  const earlierPossible = workspaceNetwork().id !== "arc-mainnet";
+  try {
+    const mode = await readShadowMode(db());
+    return { onSince: mode?.startedAt ?? null, earlierPossible };
+  } catch {
+    return { onSince: null, earlierPossible };
   }
 }
 
@@ -292,8 +339,9 @@ async function replay(input: RuleTrialInput, now: Date): Promise<Replayed> {
 
   const window = windowSpan(input.days, now);
   // The spending limit's 7 days reach back six UTC days before the window's first day (P6).
-  const entries = await readDecisions(budgetWindows(new Date(window.from)).weekStart);
-  const result = replayDecisions(entries, { windowStart: window.from, current, candidate: withCandidate(current, setting.candidate) });
+  const since = budgetWindows(new Date(window.from)).weekStart;
+  const [entries, cycleEnds, shadow] = await Promise.all([readDecisions(since), readCycleEnds(since), readShadowHistory()]);
+  const result = replayDecisions(entries, { windowStart: window.from, current, candidate: withCandidate(current, setting.candidate), cycleEnds, shadow });
   return { setting, result, entries, names, window };
 }
 
@@ -344,8 +392,8 @@ export function replayView(input: {
         amount: decision.amount,
         currency: decision.currency,
         change: decision.change as Exclude<ReplayChange, "unchanged">,
-        before: verdictWords(decision.before, decision.source, action),
-        after: verdictWords(decision.after, decision.source, action),
+        before: verdictWords(decision.before, decision, action),
+        after: verdictWords(decision.after, decision, action),
       };
     }),
     more,

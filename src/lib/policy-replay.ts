@@ -1,5 +1,6 @@
 import { agentOutflowUsdc, budgetRoom, exceedsBudget, type OutflowBudget } from "./agent/outflow-budget";
 import { paymentLimitForRisk } from "./compliance";
+import { heldForCash, heldForVerdict } from "./next-step";
 import { TWO_APPROVALS_RULE } from "./two-approvals";
 
 /**
@@ -77,10 +78,26 @@ export interface ReplayedDecision {
   currency: "USDC" | "EURC";
   /** What the checks weigh: the amount, or a EURC bill's USDC value. */
   amountUsdc: number | null;
+  /** Decided in shadow mode, where a payment the checks let through waits for a person to agree; null when unknown. */
+  shadow: boolean | null;
   before: ReplayVerdict;
   after: ReplayVerdict;
   change: ReplayChange;
 }
+
+/**
+ * What the reader knows of the workspace's shadow mode (P6), for a milestone whose entry does not say: the contractor
+ * stage names shadow mode on a release it held for a verdict, never on one a rule stopped. A bill's entry always says.
+ */
+export interface ShadowHistory {
+  /** When the shadow mode on now began; null when it is off now. */
+  onSince: string | null;
+  /** Whether it may have been on before then, or at all when it is off now: never where it cannot run (Arc mainnet). */
+  earlierPossible: boolean;
+}
+
+/** Nothing known: a milestone a rule stopped may have been decided in shadow mode or not. */
+const SHADOW_UNKNOWN: ShadowHistory = { onSince: null, earlierPossible: true };
 
 export interface ReplayCounts {
   decisions: number;
@@ -157,6 +174,13 @@ function numeric(value: unknown): number | null {
   return typeof n === "number" && Number.isFinite(n) ? n : null;
 }
 
+/**
+ * Where the contractor stage wrote a milestone's entry (P6): `first`, as it decided it (a hold, a rule's refusal, a
+ * release held for cash or for a verdict); `last`, a release it planned, written once every milestone was decided and
+ * the batch sent; `either` when the entry does not say.
+ */
+type StageOrder = "first" | "last" | "either";
+
 /** What one decision recorded that the checks weigh. */
 interface Facts {
   seq: number;
@@ -181,7 +205,12 @@ interface Facts {
   recordedRule: string | null | undefined;
   /** What it counted against the spending limit, as recorded. */
   paidUsdc: number;
-  shadow: boolean;
+  /** Decided in shadow mode; null when neither the entry nor the workspace's history says. */
+  shadow: boolean | null;
+  /** A schedule's UTC day to pay on; null for anything else, or when the entry has none. */
+  payOnDay: number | null;
+  /** A milestone's place in its contractor stage's entries; `first` for a bill. */
+  order: StageOrder;
   crossChain: boolean;
   live: boolean;
   /** The spending-limit contract's check, as recorded; undefined when none was recorded. */
@@ -193,7 +222,31 @@ interface Facts {
   complete: boolean;
 }
 
-function factsOf(entry: ReplayEntry): Facts | null {
+function stageOrderOf(action: string | null, recordedRule: string | null | undefined, detail: Record<string, unknown>): StageOrder {
+  if (action === null || (action === "release" && recordedRule === undefined)) return "either";
+  if (action !== "release" || recordedRule !== null) return "first";
+  return heldForCash(detail) || heldForVerdict(detail) ? "first" : "last";
+}
+
+/** Whether a decision was made in shadow mode: from its entry where it says, else from the workspace's history. */
+function shadowOf(entry: ReplayEntry, action: string | null, recordedRule: string | null | undefined, history: ShadowHistory): boolean | null {
+  if (entry.detail.shadow === true || heldForVerdict(entry.detail)) return true;
+  // A release no rule stopped went on to be sent, or to wait for cash: shadow mode holds one for a verdict before both.
+  if (entry.action === "milestone_release" && action === "release" && recordedRule === null) return false;
+  if (history.onSince !== null && Date.parse(entry.ts) >= Date.parse(history.onSince)) return true;
+  // The AP stage names shadow mode on every decision it makes in it; the contractor stage only on a verdict's hold.
+  if (entry.action.startsWith("ap_")) return false;
+  return history.earlierPossible ? null : false;
+}
+
+/** A schedule's `payOn` (YYYY-MM-DD, UTC) as a day number; null when it cannot be read. */
+function payOnDayOf(decision: Record<string, unknown> | null): number | null {
+  const payOn = typeof decision?.payOn === "string" ? /^\d{4}-\d{2}-\d{2}/.exec(decision.payOn)?.[0] : undefined;
+  const at = payOn ? Date.parse(`${payOn}T00:00:00.000Z`) : NaN;
+  return Number.isFinite(at) ? Math.floor(at / DAY_MS) : null;
+}
+
+function factsOf(entry: ReplayEntry, history: ShadowHistory): Facts | null {
   const source = entry.action.startsWith("ap_") ? "bill" : entry.action.startsWith("milestone_") ? "milestone" : null;
   if (!source) return null;
   const detail = entry.detail;
@@ -232,7 +285,9 @@ function factsOf(entry: ReplayEntry): Facts | null {
     recordedLimit: observed?.paymentLimit === null ? null : (numeric(observed?.paymentLimit) ?? undefined),
     recordedRule,
     paidUsdc: agentOutflowUsdc({ actor: "agent", action: entry.action, detail }),
-    shadow: detail.shadow === true,
+    shadow: shadowOf(entry, action, recordedRule, history),
+    payOnDay: action === "schedule" ? payOnDayOf(decision) : null,
+    order: source === "milestone" ? stageOrderOf(action, recordedRule, detail) : "first",
     crossChain: record(detail.payout) !== null,
     live: execution?.chainMode === "live",
     contract: record(detail.onChainLimit) ?? undefined,
@@ -240,6 +295,25 @@ function factsOf(entry: ReplayEntry): Facts | null {
     newPayee: newPayee ? { twoParties: newPayee.twoParties === true } : null,
     complete: observed !== null && amount !== null && action !== null,
   };
+}
+
+/** What a decision has the agent paying on one UTC day, as a range: its low and high end (P6). */
+interface Contribution {
+  day: number;
+  low: number;
+  high: number;
+}
+
+/** What the agent has paid on the day of a check and in the 7 days ending it, at the low and the high end. */
+interface SpentRange {
+  low: { today: number; week: number };
+  high: { today: number; week: number };
+}
+
+/** Adds what may have been paid on `paidOn` to `range`, for a check on `day`, at the high end only (P6). */
+function addMaybe(range: SpentRange, paidOn: number, amount: number, day: number): void {
+  if (paidOn === day) range.high.today += amount;
+  if (paidOn <= day && paidOn > day - 7) range.high.week += amount;
 }
 
 /** What one column has the agent paying, by UTC day, as a range: its low and high end (P6). */
@@ -255,7 +329,7 @@ class Spend {
   }
 
   /** Today's and the 7 days' totals ending on `day`, at each end. */
-  around(day: number): { low: { today: number; week: number }; high: { today: number; week: number } } {
+  around(day: number): SpentRange {
     const today = this.days.get(day) ?? { low: 0, high: 0 };
     let weekLow = 0;
     let weekHigh = 0;
@@ -316,7 +390,7 @@ function settleFromFacts(stage: string, facts: Facts, figures: RuleFigures): Sta
   return { cantTell: "stage_unsettled" };
 }
 
-function figureAnswer(stage: string, facts: Facts, column: Column): StageAnswer {
+function figureAnswer(stage: string, facts: Facts, column: Column, spentAround: () => SpentRange): StageAnswer {
   const amount = facts.amountUsdc;
   if (amount === null) return { cantTell: "facts_missing" };
   const { figures } = column;
@@ -337,7 +411,7 @@ function figureAnswer(stage: string, facts: Facts, column: Column): StageAnswer 
     return above !== null && amount > above ? "fires" : "passes";
   }
   // The spending limit: what the column has the agent paying that UTC day and in the 7 days ending it, at each end.
-  const spent = column.spend.around(facts.day);
+  const spent = spentAround();
   const atLow = exceedsBudget(amount, budgetRoom(figures.spendingLimit, spent.low));
   const atHigh = exceedsBudget(amount, budgetRoom(figures.spendingLimit, spent.high));
   if (atLow !== atHigh) return { cantTell: "budget_unsettled" };
@@ -348,8 +422,8 @@ function sourceKey(facts: Facts): string | null {
   return facts.sourceId === null ? null : `${facts.source}:${facts.sourceId}`;
 }
 
-/** What code does with one decision in one column. */
-function verdictIn(facts: Facts, column: Column): ReplayVerdict {
+/** What code does with one decision in one column; `spentAround` is what the spending limit weighs it against. */
+function verdictIn(facts: Facts, column: Column, spentAround: () => SpentRange): ReplayVerdict {
   const key = sourceKey(facts);
   if (key !== null && column.paid.has(key)) return { kind: "paid_earlier", seq: column.paid.get(key) as number };
   if (key !== null && column.unsettled.has(key)) return { kind: "cant_tell", because: "earlier_unsettled" };
@@ -364,7 +438,7 @@ function verdictIn(facts: Facts, column: Column): ReplayVerdict {
     const stage = stages[index];
     if (NOW_ONLY.has(stage) && !facts.now) continue;
     let answer: StageAnswer;
-    if (FIGURE_STAGES.has(stage)) answer = figureAnswer(stage, facts, column);
+    if (FIGURE_STAGES.has(stage)) answer = figureAnswer(stage, facts, column, spentAround);
     else if (index < recorded) answer = "passes";
     // The recorded rule fired; a contract refusal is read again, since it can rest on the spending limit's figures.
     else if (index === recorded) answer = stage === CONTRACT && facts.contract ? contractAnswer(stage, facts, column.figures) : "fires";
@@ -372,48 +446,138 @@ function verdictIn(facts: Facts, column: Column): ReplayVerdict {
     if (answer === "fires") return { kind: "stopped", rule: stage };
     if (answer !== "passes") return { kind: "cant_tell", because: answer.cantTell };
   }
+  // A schedule a rule held then is decided again on its day, and may be paid then (P6): with no day, it cannot be placed.
+  if (laterPayment(facts) && facts.payOnDay === null) return { kind: "cant_tell", because: "facts_missing" };
   return { kind: "goes_ahead" };
 }
 
+/** A schedule a rule held then, outside shadow mode: let through, its day's decision is not in the ledger (P6). */
+const laterPayment = (facts: Facts) => facts.action === "schedule" && facts.recordedRule !== null && facts.shadow !== true;
+
 /**
- * What a decision the column let through has the agent paying (P6): what it paid if it paid; nothing if something other
- * than a rule stopped it then, or in shadow mode; its full USDC value if a rule stopped it then.
+ * What a decision the column let through has the agent paying (P6), and on which day: what it paid if it paid; nothing
+ * if something other than a rule stopped it then, or in shadow mode; its full USDC value if a rule stopped it then, from
+ * nothing to that where shadow mode is not known. A schedule a rule held then, from nothing to its full USDC value on
+ * its day, when the agent decides it again.
  */
-function spendOf(facts: Facts): number {
-  if (!facts.now || facts.shadow) return 0;
-  if (facts.paidUsdc > 0) return facts.paidUsdc;
-  if (facts.recordedRule === null) return 0;
-  return facts.amountUsdc ?? Infinity;
+function spendOf(facts: Facts): Contribution | null {
+  if (facts.shadow === true) return null;
+  if (laterPayment(facts)) return facts.payOnDay === null ? null : { day: facts.payOnDay, low: 0, high: facts.amountUsdc ?? Infinity };
+  if (!facts.now) return null;
+  if (facts.paidUsdc > 0) return { day: facts.day, low: facts.paidUsdc, high: facts.paidUsdc };
+  if (facts.recordedRule === null) return null;
+  const amount = facts.amountUsdc ?? Infinity;
+  return { day: facts.day, low: facts.shadow === null ? 0 : amount, high: amount };
 }
 
-/** The most a decision the column cannot tell may have the agent paying. */
-function mostSpendOf(facts: Facts): number {
-  if (facts.paidUsdc > 0) return facts.paidUsdc;
-  if (facts.action !== null && (!facts.now || facts.shadow)) return 0;
-  if (facts.action !== null && facts.recordedRule === null) return 0;
-  return facts.amountUsdc ?? Infinity;
-}
-
-function settle(facts: Facts, verdict: ReplayVerdict, column: Column): void {
-  const key = sourceKey(facts);
-  if (verdict.kind === "goes_ahead") {
-    const spent = spendOf(facts);
-    column.spend.add(facts.day, spent, spent);
-    if (spent > 0 && key !== null) column.paid.set(key, facts.seq);
-  } else if (verdict.kind === "cant_tell") {
-    const most = mostSpendOf(facts);
-    column.spend.add(facts.day, 0, most);
-    if (most > 0 && key !== null) column.unsettled.add(key);
+/** The most a decision the column cannot tell may have the agent paying, and on which day. */
+function mostSpendOf(facts: Facts): Contribution | null {
+  if (facts.paidUsdc > 0) return { day: facts.day, low: 0, high: facts.paidUsdc };
+  if (facts.action !== null) {
+    if (facts.shadow === true || facts.recordedRule === null) return null;
+    if (laterPayment(facts)) return facts.payOnDay === null ? null : { day: facts.payOnDay, low: 0, high: facts.amountUsdc ?? Infinity };
+    if (!facts.now) return null;
   }
+  return { day: facts.day, low: 0, high: facts.amountUsdc ?? Infinity };
+}
+
+/** What a decision has the agent paying in one column, once replayed there. */
+function contributionOf(facts: Facts, verdict: ReplayVerdict): Contribution | null {
+  if (verdict.kind === "goes_ahead") return spendOf(facts);
+  if (verdict.kind === "cant_tell") return mostSpendOf(facts);
+  return null;
+}
+
+/**
+ * What a milestone counts against the spending limit for the rest of its contractor stage: a release the stage planned
+ * counts its amount at once, whatever came of the transfer (the stage's `budget.spend`); anything else what it pays.
+ */
+function stageSpendOf(facts: Facts, verdict: ReplayVerdict): Contribution | null {
+  if (facts.order !== "last") return contributionOf(facts, verdict);
+  const amount = facts.amountUsdc ?? Infinity;
+  if (verdict.kind === "goes_ahead") return { day: facts.day, low: amount, high: amount };
+  if (verdict.kind === "cant_tell") return { day: facts.day, low: 0, high: amount };
+  return null;
+}
+
+/** A bill or milestone the column has surely paid is paid; one it may have paid is unsettled for later decisions on it. */
+function markSource(facts: Facts, verdict: ReplayVerdict, column: Column): void {
+  const key = sourceKey(facts);
+  const part = contributionOf(facts, verdict);
+  if (key === null || part === null) return;
+  if (verdict.kind === "goes_ahead" && part.low > 0) column.paid.set(key, facts.seq);
+  else if (part.high > 0) column.unsettled.add(key);
+}
+
+/**
+ * One contractor stage's milestones, or one bill, in one column (P6). The stage writes what it holds as it decides it,
+ * and the releases it planned once it has sent them, so its entries do not show which it checked first: a held one and
+ * a planned one weigh each other at the high end only, and a spending-limit check that order would decide is can't
+ * tell. Among those written as decided, and among the releases, the ledger's order is the stage's.
+ */
+function replayStage(group: Facts[], column: Column): ReplayVerdict[] {
+  const asDecided = new Spend();
+  const planned = new Spend();
+  const releasedLater = group.flatMap((facts, index) => (facts.order === "first" ? [] : [{ facts, index }]));
+  const verdicts = group.map((facts, index) => {
+    const spentAround = () => {
+      const range = column.spend.around(facts.day);
+      const key = sourceKey(facts);
+      const add = (spend: Spend, orderKnown: boolean) => {
+        const part = spend.around(facts.day);
+        if (orderKnown) {
+          range.low.today += part.low.today;
+          range.low.week += part.low.week;
+        }
+        range.high.today += part.high.today;
+        range.high.week += part.high.week;
+      };
+      if (facts.order === "last") {
+        add(planned, true);
+        add(asDecided, false);
+      } else {
+        add(asDecided, true);
+        add(planned, false);
+        // A release written after this one may have been checked before it, and counted its amount then.
+        for (const later of releasedLater) {
+          if (later.index <= index || (key !== null && sourceKey(later.facts) === key)) continue;
+          addMaybe(range, later.facts.day, later.facts.amountUsdc ?? Infinity, facts.day);
+        }
+      }
+      return range;
+    };
+    const verdict = verdictIn(facts, column, spentAround);
+    markSource(facts, verdict, column);
+    const part = stageSpendOf(facts, verdict);
+    if (part) (facts.order === "last" ? planned : asDecided).add(part.day, part.low, part.high);
+    return verdict;
+  });
+  for (const [index, facts] of group.entries()) {
+    const part = contributionOf(facts, verdicts[index]);
+    if (part) column.spend.add(part.day, part.low, part.high);
+  }
+  return verdicts;
 }
 
 const ahead = (verdict: ReplayVerdict) => verdict.kind === "goes_ahead" || verdict.kind === "paid_earlier";
 
+/** A bill moves a count once (P8): a later decision on one the replay already paid, in either column, is unchanged. */
 function changeOf(before: ReplayVerdict, after: ReplayVerdict): ReplayChange {
   if (before.kind === "cant_tell" || after.kind === "cant_tell") return "cant_tell";
+  if (before.kind === "paid_earlier" || after.kind === "paid_earlier") return "unchanged";
   if (ahead(before) === ahead(after)) return "unchanged";
   if (!ahead(before)) return "now_paid";
   return after.kind === "stopped" && after.rule === TWO_APPROVALS_RULE ? "now_two_people" : "now_held";
+}
+
+export interface ReplayOptions {
+  windowStart: string;
+  current: RuleFigures;
+  candidate: RuleFigures;
+  /** The ledger sequences of `cycle_complete` entries: a contractor stage's entries never straddle one (P6). */
+  cycleEnds?: number[];
+  /** What is known of shadow mode, for a milestone whose entry does not say; nothing by default. */
+  shadow?: ShadowHistory;
 }
 
 /**
@@ -421,8 +585,10 @@ function changeOf(before: ReplayVerdict, after: ReplayVerdict): ReplayChange {
  * the candidate's (P3). Entries before `windowStart` count only what they paid, as recorded, toward the spending limit's
  * running totals (P6); the caller passes the six days before the window for that.
  */
-export function replayDecisions(entries: ReplayEntry[], options: { windowStart: string; current: RuleFigures; candidate: RuleFigures }): ReplayResult {
+export function replayDecisions(entries: ReplayEntry[], options: ReplayOptions): ReplayResult {
   const from = Date.parse(options.windowStart);
+  const history = options.shadow ?? SHADOW_UNKNOWN;
+  const ends = [...(options.cycleEnds ?? [])].sort((a, b) => a - b);
   const column = (figures: RuleFigures): Column => ({ figures, spend: new Spend(), paid: new Map(), unsettled: new Set() });
   const before = column(options.current);
   const after = column(options.candidate);
@@ -436,35 +602,54 @@ export function replayDecisions(entries: ReplayEntry[], options: { windowStart: 
     cant_tell: "cantTell",
   };
 
-  for (const entry of [...entries].sort((a, b) => a.seq - b.seq)) {
-    const facts = factsOf(entry);
-    if (!facts) continue;
-    if (Date.parse(entry.ts) < from) {
+  const all = [...entries]
+    .sort((a, b) => a.seq - b.seq)
+    .map((entry) => factsOf(entry, history))
+    .filter((facts): facts is Facts => facts !== null);
+  let end = 0;
+  /** Whether `next` may be from the same contractor stage as `previous`, the decision just before it. */
+  const sameStage = (previous: Facts, next: Facts) => {
+    if (next.source !== "milestone" || Date.parse(next.ts) < from) return false;
+    // Within a stage, every entry written as decided comes before every release written once sent.
+    if (previous.order === "last" && next.order === "first") return false;
+    while (end < ends.length && ends[end] < previous.seq) end++;
+    return !(end < ends.length && ends[end] < next.seq);
+  };
+
+  for (let index = 0; index < all.length; ) {
+    const facts = all[index];
+    if (Date.parse(facts.ts) < from) {
       // Before the window: what it paid, as recorded, in both columns.
       before.spend.add(facts.day, facts.paidUsdc, facts.paidUsdc);
       after.spend.add(facts.day, facts.paidUsdc, facts.paidUsdc);
+      index += 1;
       continue;
     }
-    const was = verdictIn(facts, before);
-    const would = verdictIn(facts, after);
-    settle(facts, was, before);
-    settle(facts, would, after);
-    const change = changeOf(was, would);
-    counts.decisions += 1;
-    counts[COUNT_KEY[change]] += 1;
-    decisions.push({
-      seq: facts.seq,
-      ts: facts.ts,
-      source: facts.source,
-      sourceId: facts.sourceId,
-      counterpartyId: facts.counterpartyId,
-      amount: facts.amount,
-      currency: facts.currency,
-      amountUsdc: facts.amountUsdc,
-      before: was,
-      after: would,
-      change,
-    });
+    let stop = index + 1;
+    if (facts.source === "milestone") while (stop < all.length && sameStage(all[stop - 1], all[stop])) stop += 1;
+    const group = all.slice(index, stop);
+    const was = replayStage(group, before);
+    const would = replayStage(group, after);
+    for (const [position, decided] of group.entries()) {
+      const change = changeOf(was[position], would[position]);
+      counts.decisions += 1;
+      counts[COUNT_KEY[change]] += 1;
+      decisions.push({
+        seq: decided.seq,
+        ts: decided.ts,
+        source: decided.source,
+        sourceId: decided.sourceId,
+        counterpartyId: decided.counterpartyId,
+        amount: decided.amount,
+        currency: decided.currency,
+        amountUsdc: decided.amountUsdc,
+        shadow: decided.shadow,
+        before: was[position],
+        after: would[position],
+        change,
+      });
+    }
+    index = stop;
   }
   return { decisions, counts };
 }

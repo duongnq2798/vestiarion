@@ -329,13 +329,22 @@ plan, on Arc testnet).
   approvals, and the spending limit against running UTC-day and 7-day totals carried from decision to decision, with the
   six days before the window counted as recorded. Every other check is read from the recorded `guardrailRule`: passed
   before it, fired at it, and settled past it only from the facts (no `payout`, a USDC bill, `observed.newPayee`, a
-  bill's recorded `onChainLimit`); anything else is can't tell. A bill paid earlier in the replay counts once.
+  bill's recorded `onChainLimit`); anything else is can't tell. A bill paid earlier in the replay counts once: a later
+  decision on it, paid in either column, is unchanged.
+- **Running totals:** a decision let through counts what it paid, or its full USDC value if a rule stopped it then; a
+  schedule a rule stopped then counts from nothing to its value on its `payOn` day, when the agent decides it again.
+  The contractor stage writes a milestone it holds at once and a release it planned (and counted against the limit at
+  once) only after the batch is sent, so within one stage, between `cycle_complete` entries, a held milestone and a
+  planned release weigh each other at the high end only. Shadow mode spends nothing: a bill's entry says so, and a
+  milestone's only when held for a verdict; for one a rule stopped, `readShadowMode` and the network (never on Arc
+  mainnet) settle it where they can, and otherwise it counts from nothing to its value.
 - **Can't tell** is counted, never guessed: an entry without an amount, decision or known rule, a missing risk level,
   an unsettled check, a spending-limit check whose low and high running totals disagree, or a contract refusal for want
   of room under other figures.
 - **Reading and the action:** `ruleReplay` (`src/lib/policy-replay-read.ts`) parses the candidate with the setting's own
-  parser and reads the window in pages (at most 20 of 1,000). `tryRuleAction` authorizes the permission that changes
-  the setting (`records.write`, `approval.policy`, `agent.budget`) and changes nothing.
+  parser and reads the window's decisions and cycle ends in pages (at most 20 of 1,000 each), and shadow mode's start.
+  `tryRuleAction` authorizes the permission that changes the setting (`records.write`, `approval.policy`,
+  `agent.budget`) and changes nothing.
 - **Applying it** posts the setting's own form to its own action. `policy-replay-apply.ts` reads the figure tried
   and replays again on the server; `changeCounterpartyLimit`, `changeTwoApprovals` and `changeAgentBudget` refuse
   with `stale` when the figure in force is no longer the one tried, and add `detail.replay` (window and counts) to

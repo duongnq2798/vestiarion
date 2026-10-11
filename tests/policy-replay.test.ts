@@ -5,6 +5,7 @@ import {
   withCandidate,
   type ReplayEntry,
   type RuleFigures,
+  type ShadowHistory,
 } from "@/lib/policy-replay";
 
 /**
@@ -101,9 +102,12 @@ function figures(overrides: Partial<RuleFigures> = {}): RuleFigures {
   };
 }
 
-function run(entries: ReplayEntry[], current: RuleFigures, candidate: RuleFigures) {
-  return replayDecisions(entries, { windowStart: WINDOW_START, current, candidate });
+function run(entries: ReplayEntry[], current: RuleFigures, candidate: RuleFigures, options: { cycleEnds?: number[]; shadow?: ShadowHistory } = {}) {
+  return replayDecisions(entries, { windowStart: WINDOW_START, current, candidate, ...options });
 }
+
+/** What the reader knows on Arc mainnet, where shadow mode cannot run. */
+const NEVER_SHADOW: ShadowHistory = { onSince: null, earlierPossible: false };
 
 const changes = (result: ReturnType<typeof run>) => result.decisions.map((decision) => decision.change);
 
@@ -267,8 +271,44 @@ describe("the spending limit, replayed in recorded order (P6)", () => {
     const result = run(entries, now, withCandidate(now, { kind: "spending_limit", dailyUsdc: 150, weeklyUsdc: null }));
     expect(result.decisions[0].after).toEqual({ kind: "goes_ahead" });
     expect(result.decisions[1].after).toEqual({ kind: "paid_earlier", seq: entries[0].seq });
-    // inv-a was paid on Oct 2, so Oct 3 has room for inv-b's 100.
-    expect(changes(result)).toEqual(["now_paid", "now_paid", "unchanged"]);
+    // inv-a was paid on Oct 2, so Oct 3 has room for inv-b's 100. The bill moves a count once: its Oct 2 decision.
+    expect(changes(result)).toEqual(["now_paid", "unchanged", "unchanged"]);
+    expect(result.counts).toMatchObject({ nowPaid: 1, unchanged: 2 });
+  });
+
+  it("counts a bill once when the figure in force pays it and the candidate holds every decision on it", () => {
+    const now = figures({ spendingLimit: { dailyUsdc: 150, weeklyUsdc: null } });
+    const entries = [
+      bill({ invoiceId: "inv-a", amount: 120, at: "2026-10-02T08:00:00.000Z", rule: "workspace.outflow_budget" }),
+      bill({ invoiceId: "inv-a", amount: 120, at: "2026-10-03T08:00:00.000Z", rule: "workspace.outflow_budget" }),
+    ];
+    const result = run(entries, now, withCandidate(now, { kind: "spending_limit", dailyUsdc: 100, weeklyUsdc: null }));
+    expect(result.decisions[1].before).toEqual({ kind: "paid_earlier", seq: entries[0].seq });
+    expect(result.decisions[1].after).toEqual({ kind: "stopped", rule: "workspace.outflow_budget" });
+    expect(changes(result)).toEqual(["now_held", "unchanged"]);
+  });
+
+  it("counts a schedule the candidate frees as possibly paid on its day, so a payment that day it may crowd out cannot be told", () => {
+    const now = figures({ twoApprovalsAbove: 50, spendingLimit: { dailyUsdc: 100, weeklyUsdc: null } });
+    const scheduled = bill({
+      action: "schedule",
+      amount: 80,
+      rule: "workspace.two_approvals",
+      at: "2026-10-02T09:00:00.000Z",
+      detail: { decision: { action: "schedule", payOn: "2026-10-04", reasoning: "r", confidence: 0.9 } },
+    });
+    const onItsDay = bill({ amount: 40, counterpartyId: BOLT, at: "2026-10-04T09:00:00.000Z" });
+    const dayAfter = bill({ amount: 40, counterpartyId: BOLT, at: "2026-10-05T09:00:00.000Z" });
+    const result = run([scheduled, onItsDay, dayAfter], now, withCandidate(now, { kind: "two_approvals", above: null }));
+    // On Oct 4 the agent decides the schedule again and may pay its 80: 40 more makes 40 or 120 against 100.
+    expect(result.decisions[1].after).toEqual({ kind: "cant_tell", because: "budget_unsettled" });
+    expect(changes(result)).toEqual(["now_paid", "cant_tell", "unchanged"]);
+  });
+
+  it("cannot tell a schedule the candidate frees when its entry has no day to pay it on", () => {
+    const now = figures({ twoApprovalsAbove: 50 });
+    const result = run([bill({ action: "schedule", amount: 80, rule: "workspace.two_approvals" })], now, withCandidate(now, { kind: "two_approvals", above: null }));
+    expect(result.decisions[0].after).toEqual({ kind: "cant_tell", because: "facts_missing" });
   });
 
   it("spends nothing for a payment a pause, cash or a failed transfer stopped, as then", () => {
@@ -281,6 +321,42 @@ describe("the spending limit, replayed in recorded order (P6)", () => {
     const entries = [bill({ amount: 90, paid: false, detail: { shadow: true }, execution: { heldBecause: "shadow_verdict" } }), bill({ amount: 40 })];
     const result = run(entries, figures(), withCandidate(figures(), { kind: "spending_limit", dailyUsdc: 100, weeklyUsdc: null }));
     expect(changes(result)).toEqual(["unchanged", "unchanged"]);
+    expect(result.decisions.map((decision) => decision.shadow)).toEqual([true, false]);
+  });
+
+  describe("a milestone in shadow mode, whose entry names shadow mode only when it held it for a verdict", () => {
+    const now = figures({ twoApprovalsAbove: 50, spendingLimit: { dailyUsdc: 100, weeklyUsdc: null } });
+    const candidate = withCandidate(now, { kind: "two_approvals", above: null });
+    const entries = (shadowBill = true) => [
+      release({ amount: 80, rule: "workspace.two_approvals", at: "2026-10-02T08:00:00.000Z" }),
+      shadowBill
+        ? bill({ amount: 40, paid: false, at: "2026-10-02T15:00:00.000Z", detail: { shadow: true }, execution: { heldBecause: "shadow_verdict" } })
+        : bill({ amount: 40, at: "2026-10-02T15:00:00.000Z" }),
+    ];
+
+    it("spends nothing for one the candidate frees while shadow mode was on", () => {
+      const result = run(entries(), now, candidate, { shadow: { onSince: "2026-09-20T00:00:00.000Z", earlierPossible: true } });
+      expect(result.decisions[0].shadow).toBe(true);
+      expect(changes(result)).toEqual(["now_paid", "unchanged"]);
+      expect(result.counts).toMatchObject({ nowPaid: 1, nowHeld: 0 });
+    });
+
+    it("cannot tell what it spends when shadow mode may have been on", () => {
+      const result = run(entries(), now, candidate);
+      expect(result.decisions[0].shadow).toBeNull();
+      expect(result.decisions[1].after).toEqual({ kind: "cant_tell", because: "budget_unsettled" });
+      expect(changes(result)).toEqual(["now_paid", "cant_tell"]);
+    });
+
+    it("counts its full amount where shadow mode never ran", () => {
+      const result = run(entries(false), now, candidate, { shadow: NEVER_SHADOW });
+      expect(changes(result)).toEqual(["now_paid", "now_held"]);
+    });
+
+    it("reads shadow mode from a milestone held for a verdict, and its absence from one sent", () => {
+      const result = run([release({ paid: false, execution: { heldBecause: "shadow_verdict" } }), release({})], now, candidate);
+      expect(result.decisions.map((decision) => decision.shadow)).toEqual([true, false]);
+    });
   });
 
   it("cannot tell a check whose answer depends on a decision it cannot tell, and can when both ends agree", () => {
@@ -393,6 +469,62 @@ describe("milestone releases", () => {
     const live = release({ amount: 700, rule: "counterparty.payment_limit", execution: { chainMode: "live" } });
     const result = run([live], figures(), withCandidate(figures(), { kind: "counterparty_limit", counterpartyId: BOLT, limit: 800 }));
     expect(result.decisions[0].after).toEqual({ kind: "cant_tell", because: "stage_unsettled" });
+  });
+});
+
+describe("a contractor stage's releases, written once the stage has sent them (P6)", () => {
+  // The contractor stage writes a milestone it holds at once, and one it releases only after every milestone is decided
+  // and the batch is sent, so its entries do not show the order it checked them in.
+  const daily = (dailyUsdc: number, overrides: Partial<RuleFigures> = {}) => figures({ spendingLimit: { dailyUsdc, weeklyUsdc: null }, ...overrides });
+
+  it("cannot tell a spending-limit check whose answer depends on the order the stage checked them in", () => {
+    // The stage released A (100) first and held B (140) at the 150 limit, but wrote B first.
+    const held = release({ amount: 140, rule: "workspace.outflow_budget", at: "2026-10-02T09:00:01.000Z", execution: { heldBecause: "outflow_budget" } });
+    const sent = release({ amount: 100, at: "2026-10-02T09:00:05.000Z" });
+    const result = run([held, sent], daily(150), daily(120), { shadow: NEVER_SHADOW });
+    expect(result.decisions[0].before).toEqual({ kind: "cant_tell", because: "budget_unsettled" });
+    expect(result.decisions[1].before).toEqual({ kind: "cant_tell", because: "budget_unsettled" });
+    expect(result.counts).toMatchObject({ nowHeld: 0, nowPaid: 0, cantTell: 2 });
+  });
+
+  it("replays the stages of different cycles in ledger order", () => {
+    const current = daily(150, { counterpartyLimits: { [ACME]: 50, [BOLT]: 500 } });
+    const candidate = withCandidate(current, { kind: "counterparty_limit", counterpartyId: ACME, limit: 1000 });
+    const limited = release({ counterpartyId: ACME, amount: 100, rule: "counterparty.payment_limit", at: "2026-10-02T09:00:00.000Z" });
+    const cycleEnd = seq++;
+    const sent = release({ amount: 100, at: "2026-10-02T15:00:00.000Z" });
+
+    // With no cycle's end between them, the two may be one stage, checked in either order.
+    expect(changes(run([limited, sent], current, candidate, { shadow: NEVER_SHADOW }))).toEqual(["cant_tell", "cant_tell"]);
+    // A cycle ended between them: the freed 100, then 100 more, past 150.
+    const split = run([limited, sent], current, candidate, { shadow: NEVER_SHADOW, cycleEnds: [cycleEnd] });
+    expect(changes(split)).toEqual(["now_paid", "now_held"]);
+    expect(split.decisions[1].after).toEqual({ kind: "stopped", rule: "workspace.outflow_budget" });
+  });
+
+  it("knows a held milestone written after a release came from a later stage", () => {
+    const current = daily(150, { counterpartyLimits: { [ACME]: 50, [BOLT]: 500 } });
+    const candidate = withCandidate(current, { kind: "counterparty_limit", counterpartyId: ACME, limit: 1000 });
+    const sent = release({ amount: 100, at: "2026-10-02T09:00:00.000Z" });
+    const limited = release({ counterpartyId: ACME, amount: 100, rule: "counterparty.payment_limit", at: "2026-10-02T15:00:00.000Z" });
+    const result = run([sent, limited], current, candidate, { shadow: NEVER_SHADOW });
+    expect(result.decisions[1].after).toEqual({ kind: "stopped", rule: "workspace.outflow_budget" });
+    expect(changes(result)).toEqual(["unchanged", "unchanged"]);
+  });
+
+  it("counts a release the stage planned against the limit at once, for the stage's later releases, even one whose transfer failed", () => {
+    const failed = release({ amount: 100, paid: false, execution: { resultingStatus: "failed" } });
+    const next = release({ amount: 60 });
+    const later = bill({ amount: 100, at: `${DAY1}T15:00:00.000Z` });
+    const result = run([failed, next, later], figures(), daily(150), { shadow: NEVER_SHADOW });
+    // 100 planned, then 60 makes 160. The failed 100 was never paid, so the bill later that day fits.
+    expect(changes(result)).toEqual(["unchanged", "now_held", "unchanged"]);
+  });
+
+  it("replays a stage's releases among themselves in the order it sent them", () => {
+    const entries = [release({ amount: 70 }), release({ amount: 70 })];
+    const result = run(entries, figures(), daily(100), { shadow: NEVER_SHADOW });
+    expect(changes(result)).toEqual(["unchanged", "now_held"]);
   });
 });
 

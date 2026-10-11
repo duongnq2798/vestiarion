@@ -410,6 +410,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Settings", APP_NAV],
     ["Two approvals", TWO_APPROVALS_PANEL],
     ["Payments above (USDC)", TWO_APPROVALS_PANEL],
+    ["Treasury", APP_NAV],
     ["Agent spending limit", BUDGET_PANEL],
     ["Change limit", BUDGET_PANEL],
     ["Per day (USDC)", BUDGET_PANEL],
@@ -436,6 +437,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["To turn it off, choose Turn off.", TWO_APPROVALS_PANEL],
     ["Turn off", TWO_APPROVALS_PANEL],
     ["This window holds too many decisions to try at once. Try the last 30 days.", REPLAY_READ],
+    ["The agent pays it once a person agrees, in shadow mode", REPLAY_READ],
   ],
   "guides/first-payment": [
     ["Add a supplier", GETTING_STARTED],
