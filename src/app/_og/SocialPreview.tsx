@@ -16,7 +16,7 @@ const [geistSemiBold, newsreaderItalic, iconSvg] = await Promise.all([
 const iconSrc = `data:image/svg+xml;base64,${Buffer.from(iconSvg).toString("base64")}`;
 
 export const SOCIAL_IMAGE_SIZE = { width: 1200, height: 630 } as const;
-export const SOCIAL_IMAGE_ALT = "Vestiarion — Money moves. Evidence remains. A signed decision ledger with screened, paid, held, and refused outcomes.";
+export const SOCIAL_IMAGE_ALT = "Vestiarion — Every bill checked. Every decision on record. A signed decision ledger with screened, paid, held, and refused outcomes.";
 
 const LEDGER_CARD_WIDTH = 350;
 const LEDGER_CARD_HORIZONTAL_PADDING = 24;
@@ -38,7 +38,7 @@ const LEDGER_BAR_MAX_WIDTH = Math.min(
 );
 const ledgerBarWidths = [0.78, 1, 0.64].map((ratio) => Math.round(LEDGER_BAR_MAX_WIDTH * ratio));
 
-const SUPPORTING_COPY = "A model proposes each payment, code decides whether it may happen, and every outcome\u00a0— refusals included\u00a0— is signed into a chain you can verify.";
+const SUPPORTING_COPY = "For small teams that pay contractors and suppliers: the agent says pay, wait or stop, and why. Rules in code decide what it may pay, in USDC on Arc.";
 
 const statusChips = [
   { label: "Screened", color: COLOR.proof, background: COLOR.proofSoft, border: COLOR.proofLine },
@@ -143,7 +143,7 @@ export function renderSocialImage({
 /** One static, brand-matched image shared by the Open Graph and X routes. */
 export function socialPreviewImage(): ImageResponse {
   return renderSocialImage({
-    badge: "Autonomous treasury agent",
+    badge: "Accounts payable agent",
     footer: "vestiarion.xyz",
     children: (
       <div style={{ display: "flex", flex: 1, alignItems: "center", marginTop: 26 }}>
@@ -151,12 +151,12 @@ export function socialPreviewImage(): ImageResponse {
           <div
             style={{
               display: "flex",
-              fontSize: 82,
-              lineHeight: 0.94,
-              letterSpacing: -4.6,
+              fontSize: 70,
+              lineHeight: 0.98,
+              letterSpacing: -3.6,
             }}
           >
-            Money moves.
+            Every bill checked.
           </div>
           <div
             style={{
@@ -164,14 +164,14 @@ export function socialPreviewImage(): ImageResponse {
               marginTop: 4,
               color: COLOR.agent,
               fontFamily: "Newsreader",
-              fontSize: 82,
+              fontSize: 70,
               fontStyle: "italic",
               fontWeight: 400,
-              lineHeight: 0.94,
-              letterSpacing: -3.5,
+              lineHeight: 0.98,
+              letterSpacing: -2.8,
             }}
           >
-            Evidence remains.
+            Every decision on record.
           </div>
           <div
             style={{

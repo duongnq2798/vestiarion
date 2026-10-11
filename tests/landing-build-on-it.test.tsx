@@ -83,7 +83,7 @@ describe("BuildOnIt", () => {
           <BuildOnIt />
         </TooltipProvider>
       ));
-    for (const part of ["Build on it", "Runs where you already work.", "API", "SDK", "MCP", "GitHub", "curl https://www.vestiarion.xyz/api/v1/invoices"]) {
+    for (const part of ["For developers", "Runs where you already work.", "API", "SDK", "MCP", "GitHub", "curl https://www.vestiarion.xyz/api/v1/invoices"]) {
       expect(words).toContain(part);
     }
   });

@@ -11,23 +11,45 @@ export function textOf(node: ReactNode): string {
   return "";
 }
 
+/** A numbered step's heading, "1. Sign in": its number and its words, or null for any other heading. */
+export function stepOf(children: ReactNode): { number: string; words: string } | null {
+  if (typeof children !== "string") return null;
+  const match = /^(\d{1,2})\.\s+(\S.*)$/s.exec(children);
+  return match ? { number: match[1], words: match[2] } : null;
+}
+
 /**
  * A `##` or `###` heading with its anchor, and a `#` link to it that shows on
  * hover. The `#` is hidden from assistive technology and the tab order, so it
  * stays out of the heading's accessible name; the table of contents and the
  * URL are the ways to reach a section.
+ *
+ * A numbered `##` ("1. Sign in", as the guides number their steps) draws its number in a badge beside the words
+ * (docs clarity T2); its id, its text in the table of contents and its accessible name ("1. Sign in") are unchanged.
  */
 export function DocsHeading({ depth, id, children }: { depth: 2 | 3; id: string; children: ReactNode }) {
   const Tag = depth === 2 ? "h2" : "h3";
+  const step = depth === 2 ? stepOf(children) : null;
   return (
     <Tag
       id={id}
       className={cn(
-        "group scroll-mt-24 font-semibold tracking-tight text-ink [overflow-wrap:anywhere]",
-        depth === 2 ? "mt-12 mb-4 text-xl first:mt-0" : "mt-8 mb-3 text-base"
+        "group scroll-mt-24 font-semibold text-ink [overflow-wrap:anywhere]",
+        depth === 2 ? "mt-14 mb-4 text-[1.5rem] leading-tight tracking-[-0.02em] first:mt-0" : "mt-10 mb-3 text-[1.1875rem] leading-snug tracking-[-0.01em]",
+        step && "flex items-start gap-3"
       )}
     >
-      {children}
+      {step ? (
+        <>
+          <span className="mt-px inline-grid size-8 shrink-0 place-items-center rounded-full border border-agent-line bg-agent-soft font-mono text-sm font-semibold text-agent">
+            {step.number}
+            <span className="sr-only">.</span>
+          </span>
+          <span className="min-w-0">{step.words}</span>
+        </>
+      ) : (
+        children
+      )}
       <a
         href={`#${id}`}
         aria-hidden="true"

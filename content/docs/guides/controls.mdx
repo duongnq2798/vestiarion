@@ -1,0 +1,78 @@
+Vestiarion's agent decides what to do with each bill, but a decision is not a payment. Before any money moves, rules in Vestiarion's code check the decision, limits cap what the agent may pay on its own, and people decide whatever it may not. This page says what each of those does, what stops the agent, and where money can move at all. Each part links to the guide that goes into it.
+
+## A decision is not a payment
+
+For each bill, the agent decides to pay it now, to pay it on a later day, to hold it for a person, to flag it, or to ask for what is missing, and it writes down why. A model proposes that decision; when no model is configured, a written policy does. Either way:
+
+- **A decision to pay is checked by code before anything is sent.** If a check fails, nothing is sent: the bill is held, flagged or sent back for what is missing, and its card says "Blocked by code, not by the model" and names the rule in words. Nothing the model writes changes these checks.
+- **In shadow mode, nothing is paid until a person agrees.** Each decision asks **Do you agree with the agent?**, and **Agree and pay** pays it through the same checks a person's approval goes through. See [Run alongside how you pay today](/docs/guides/shadow-mode).
+- **A scheduled payment is decided again on its day.** Scheduling sends nothing; on the day, the checks run again.
+
+Every decision, refusal, approval and payment is a signed entry in the workspace's ledger. See [The record](#the-record).
+
+## The checks in code
+
+These checks run on every payment the agent would make, in [`src/lib/agent/guardrails.ts`](https://github.com/duongnq2798/vestiarion/blob/main/src/lib/agent/guardrails.ts). Each names its rule on the card that it stopped.
+
+| The payment is stopped when | What happens |
+| --- | --- |
+| The payee was screened high risk | Flagged. It is never paid, not even by a person's approval. |
+| It repeats a bill already paid | Flagged for a person. |
+| Its purchase order or goods receipt is missing | Sent back for what is missing. |
+| It is above the payee's payment limit | Held for a person. |
+| The payee has not been screened yet, or is a client, who pays the business | Held for a person. |
+| The payee has no payment address, or its address changed and no one confirmed it | Held for a person. |
+| Where payments are real, it is the first payment to a new address and only one person stands behind that address | Held for a second person. |
+| It would pass the agent's spending limit | Held until the limit has room again. |
+| It is above the figure where two people approve | Held for two approvals. |
+
+Payments in EURC and to payees on other chains have checks of their own, such as a cap on the swap's or the transfer's cost.
+
+## Limits
+
+- **Each payee's limit.** Every vendor and contractor has a **Payment limit (USDC)**: the most the agent pays it on one bill without a person. Screening sets how much of it applies: all of it for a payee screened clear, a quarter for medium risk, and none for high risk. See [Changing a payment limit](/docs/guides/first-payment#changing-a-payment-limit).
+- **The agent's spending limit.** On the console, the **Agent spending limit** caps what the agent pays on its own per day and per 7 days. A payment that would pass it waits, and is decided again when the limit has room. A payment a person approves is neither stopped by it nor counted against it. On Arc mainnet a workspace always keeps a figure, starting at 50 USDC a day and 150 USDC in 7 days. See [Cap what the agent pays on its own](/docs/guides/first-payment#cap-what-the-agent-pays-on-its-own).
+- **A limit enforced on Arc.** The spending limit is checked in Vestiarion's code. On Arc testnet, **Enforce on Arc** also puts it in a contract the agent's payments must go through, which refuses anything past it. On Arc mainnet, a treasury in a wallet you hold pays the agent only through a contract your wallet deploys, within the daily and 7-day figures you set in it. See [Enforce the limit on Arc](/docs/guides/first-payment#enforce-the-limit-on-arc) and [Path C: your own wallet](/docs/guides/go-live#path-c-your-own-wallet).
+
+## People
+
+Owners, admins and approvers decide what the agent did not pay, in **Approvals**: **Approve and pay**, reject, or return it to the agent.
+
+- **The person who entered a bill cannot approve it.** The card says "You created this invoice", and another owner, admin or approver decides it. In a workspace with only one person who can approve payments, that person may, and the ledger records that they did.
+- **A first payment to a new address needs two people.** Whoever gave the address cannot approve that first payment: the card says "You gave this payee's address".
+- **Two approvals above a figure.** An owner can make payments above a figure need two people, under **Two approvals** in Settings (**Payments above (USDC)**). The agent never pays above it on its own. On Arc mainnet a workspace starts with two approvals above 100 USDC, and an owner can raise the figure but not turn it off. See [Two approvals above a figure](/docs/guides/first-payment#two-approvals-above-a-figure).
+
+## Stopping it
+
+- **Pause agent**, on the console, stops the agent at once: it runs no cycle and moves no money, and its scheduled runs are skipped. You can give a reason, which every page shows and the ledger keeps. Owners, admins and approvers can pause it; owners and admins start it again with **Resume agent**. People can still pay or reject from **Approvals** while it is paused. See [Go live](/docs/guides/go-live#what-changes-when-you-go-live).
+- **From your own wallet,** on Arc mainnet, **Stop the agent's payments** sets your wallet's approval for its contract to 0, so the contract can move nothing, and pauses the agent.
+- **For every workspace,** whoever runs the deployment can switch payments off. Every page then says "Payments are switched off for every workspace right now."
+
+## Where money can move
+
+| Workspace | What the agent decides on | What a payment does |
+| --- | --- | --- |
+| Sandbox, on Arc testnet | Your bills, or sample data | Simulated: nothing reaches a chain. |
+| Shadow mode, in a sandbox | Your real bills | Waits for your verdict; a payment you agree to is simulated. |
+| Shadow mode, live on Arc testnet | Your real bills | Waits for your verdict; a payment you agree to is made in USDC on Arc testnet, at the bill's amount. |
+| Live on Arc testnet | Your bills | The agent pays in USDC on Arc testnet within its limits; the rest waits for a person. |
+| Live on Arc mainnet | Your bills | The agent pays real USDC within its limits; the rest waits for a person. |
+
+USDC on Arc testnet has no market value: it comes from Circle's faucet or from Vestiarion's float, and lets you try everything, real transactions included. A workspace's network is chosen when it is created and never changes. Some features run on Arc testnet only: payouts to other chains, the USYC reserve, the EURC swap and escrow. See [On Arc mainnet](/docs/guides/go-live#on-arc-mainnet).
+
+<Callout kind="real-money" title="Going live on Arc mainnet moves real USDC">
+From then on the agent's payments, and the ones people approve, move real USDC. Going live asks you to type `mainnet` to confirm.
+</Callout>
+
+## Who holds the keys
+
+- **On Arc testnet**, and on Arc mainnet with your own Circle account, the wallets are developer-controlled wallets in Circle: Circle signs for them on Vestiarion's behalf. A limit enforced on Arc keeps the agent, and the code that pays for it, within the figures; it does not protect against someone who took over Vestiarion's server, who could also sign for the operating wallet.
+- **On Arc mainnet with your own wallet**, in your browser or with a passkey, Vestiarion never holds your USDC. The agent pays from your wallet only through the contract your wallet deployed and approved, within its figures, and your wallet can change the figures or stop it.
+
+## When a payment fails
+
+Vestiarion never sends a second transfer while the first could still settle. A payment that has not confirmed 15 minutes after it was sent is reported to the workspace's people, in the console, in Slack and Telegram, and by email. A failed attempt says why on its card, and approving it again sends a new transfer. See [When a payment does not confirm](/docs/guides/first-payment#when-a-payment-does-not-confirm).
+
+## The record
+
+Every decision, refusal, approval and payment is an entry in the workspace's ledger, signed with Ed25519 and linked to the entry before it, so a change to any entry breaks every link after it. In **Audit log**, **Verify hash chain** checks every signature and link and answers "Chain intact" when they hold. To check it outside Vestiarion, [Verify an audit export](/docs/guides/audit-export). [When the model and the policy disagree](/docs/research/model-vs-policy) reads production decisions, and the payments code refused, from the same record.
