@@ -99,8 +99,6 @@ export interface InvoiceRow {
   status: string;
   agent_reasoning: string | null;
   tx_ref: string | null;
-  /** When it was marked paid (or received); null before. Read with every column, and by a payment's lifecycle (settlement lifecycle L5). */
-  settled_at?: string | null;
   /** The day the agent committed to pay (migration 0038); set only while `status` is `scheduled`. */
   scheduled_for: string | null;
   /** The early-payment discount's percent, when the invoice carries one (numeric(5,2) — a string from PostgREST). */
@@ -120,7 +118,7 @@ export interface InvoiceRow {
   fx_rate?: number | null;
   fx_source?: string | null;
   fx_at?: string | null;
-  /** When a receivable's payment arrived, or a payable's left (0001); null while it is open. */
+  /** When a receivable's payment arrived, or a payable's left (0001); null while it is open. A payment's lifecycle reads it (settlement lifecycle L5). */
   settled_at?: string | null;
   /** The recurring payment that created this invoice, and the period (`YYYY-MM-DD`) it is for (0055). */
   recurring_id?: string | null;
