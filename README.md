@@ -244,6 +244,8 @@ run in production, with its ledger entries and transactions.
   estimated and not-counted figures apart, and an owner or admin can share a live copy by a revocable link, with
   suppliers as labels and amounts hidden if they choose.
 - **Workspaces and members** — per-network workspaces, invitations, four roles, per-member notifications.
+- **Why it was paid** — one page per payment, link by link from the purchase order to the receipt, each fact marked
+  checked by code, verified outside or stated by a person; entries checked again in the browser, and a JSON download.
 - **Audit** — the signed ledger, one-click verification, exports, and signed webhooks.
 
 ## Integrations
@@ -361,7 +363,7 @@ What each one is for, the wallets around them, and the USDC of the chains payees
 | | |
 | --- | --- |
 | **Start** | [See your first decision](https://www.vestiarion.xyz/docs/guides/try-it) · [How payments are controlled](https://www.vestiarion.xyz/docs/guides/controls) · [Go live](https://www.vestiarion.xyz/docs/guides/go-live) · [Your first payment](https://www.vestiarion.xyz/docs/guides/first-payment) · [Shadow mode](https://www.vestiarion.xyz/docs/guides/shadow-mode) |
-| **Guides** | [Workspace report](https://www.vestiarion.xyz/docs/guides/report) · [Try a limit first](https://www.vestiarion.xyz/docs/guides/try-a-rule) · [Pay a contractor](https://www.vestiarion.xyz/docs/guides/pay-a-contractor) · [Get paid](https://www.vestiarion.xyz/docs/guides/get-paid) · [Audit export](https://www.vestiarion.xyz/docs/guides/audit-export) |
+| **Guides** | [Workspace report](https://www.vestiarion.xyz/docs/guides/report) · [Try a limit first](https://www.vestiarion.xyz/docs/guides/try-a-rule) · [Pay a contractor](https://www.vestiarion.xyz/docs/guides/pay-a-contractor) · [Get paid](https://www.vestiarion.xyz/docs/guides/get-paid) · [Why a payment was paid](https://www.vestiarion.xyz/docs/guides/evidence) · [Audit export](https://www.vestiarion.xyz/docs/guides/audit-export) |
 | **Developers** | [Quickstart](https://www.vestiarion.xyz/docs/get-started/quickstart) · [API reference](https://www.vestiarion.xyz/docs/api) · [SDK](https://www.vestiarion.xyz/docs/get-started/sdk) · [Webhooks](https://www.vestiarion.xyz/docs/webhooks) · [MCP](https://www.vestiarion.xyz/docs/ai-integration/mcp) · [Changelog](https://www.vestiarion.xyz/docs/changelog) |
 | **This repository** | [ARCHITECTURE.md](ARCHITECTURE.md) · [Running it yourself](docs/self-hosting.md) · [Feature designs](docs/superpowers/specs) · [Contracts](contracts) · [SDK source](sdk) |
 

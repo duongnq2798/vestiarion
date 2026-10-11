@@ -38,6 +38,7 @@ const SECTIONS: Array<[string, string]> = [
   ["src/components/NotificationsPanel.tsx", "/docs/guides/telegram"],
   ["src/app/o/[slug]/contractors/page.tsx", "/docs/guides/pay-a-contractor"],
   ["src/app/o/[slug]/audit/page.tsx", "/docs/guides/audit-export"],
+  ["src/app/o/[slug]/evidence/[kind]/[id]/page.tsx", "/docs/guides/evidence"],
 ];
 
 describe("DocsLink", () => {
