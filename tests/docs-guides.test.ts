@@ -283,6 +283,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Audit log", APP_NAV],
     ["Verify hash chain", VERIFY_BADGE],
     ["Chain intact", VERIFY_BADGE],
+    ["Why it was paid", EVIDENCE_PATHS],
   ],
   "guides/go-live": [
     ["Add a supplier", GETTING_STARTED],
