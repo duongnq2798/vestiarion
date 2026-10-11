@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
-import { buildEvidenceChain, type EvidenceInput } from "@/lib/evidence-chain";
+import { buildEvidenceChain, EVIDENCE_MEANINGS, type EvidenceInput } from "@/lib/evidence-chain";
 import { EVIDENCE_FORMAT, evidenceDocument, evidenceFileName } from "@/lib/evidence-export";
 import { ledgerKeyId } from "@/lib/ledger-keys";
 import { fakeSupabase } from "./support/fake-supabase";
@@ -151,7 +151,7 @@ describe("the evidence file", () => {
     const agreed = doc.steps[0];
     expect(agreed).toMatchObject({ title: "What was agreed", label: "Stated by a person", kind: "stated" });
     expect(agreed.facts[0]).toMatchObject({ label: "Stated by a person", who: "alice@northstar.test", at: "2026-10-05T09:30:00Z", entries: [20] });
-    expect(doc.labels.missing).toEqual({ words: "Missing", facts: CHAIN.tally.missing });
+    expect(doc.labels.missing).toEqual({ words: "Missing", meaning: EVIDENCE_MEANINGS.missing, facts: CHAIN.tally.missing });
     expect(doc.network).toEqual({ id: "arc-testnet", label: "Arc testnet" });
   });
 

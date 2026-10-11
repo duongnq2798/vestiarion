@@ -29,6 +29,17 @@ export const EVIDENCE_WORDS: Readonly<Record<EvidenceKind, string>> = {
   contradicted: "Does not match",
 };
 
+/** What each word means, in one sentence: the page explains them once, and the download carries them (E3). */
+export const EVIDENCE_MEANINGS: Readonly<Record<EvidenceKind, string>> = {
+  checked: "A rule Vestiarion runs computed it: the three-way match, the guardrails, a signature, the written policy.",
+  verified: "Someone outside Vestiarion answered: the chain's record of the transaction, GitHub, the screening service.",
+  stated: "A member or the payee entered it. The page names who, and when.",
+  inferred: "Read, not recorded: the model's judgement, sample data, or a setting as it is today.",
+  missing: "Nothing records it. Where it can still be added, the page says how.",
+  unreachable: "A check got no answer, or a link was revoked: it never counts as verified.",
+  contradicted: "A check answered, and its answer contradicts the record.",
+};
+
 /** Weakest first: a step reads as the first of these its facts hold, so it is never labelled above its least-supported fact. */
 export const EVIDENCE_ORDER: readonly EvidenceKind[] = ["contradicted", "unreachable", "missing", "inferred", "stated", "checked", "verified"];
 

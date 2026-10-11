@@ -1,4 +1,4 @@
-import { EVIDENCE_WORDS, SIGNED_ENTRY_PROVES, type EvidenceChain, type EvidenceKind } from "./evidence-chain";
+import { EVIDENCE_MEANINGS, EVIDENCE_WORDS, SIGNED_ENTRY_PROVES, type EvidenceChain, type EvidenceKind } from "./evidence-chain";
 import { networkProfile } from "./network";
 
 /**
@@ -36,8 +36,10 @@ export function evidenceDocument(input: {
     workspace: input.workspace,
     network: { id: chain.network, label: networkProfile(chain.network).label },
     subject: chain.subject,
-    /** The seven words, weakest first, and how many facts each holds. */
-    labels: Object.fromEntries(Object.entries(EVIDENCE_WORDS).map(([kind, words]) => [kind, { words, facts: chain.tally[kind as EvidenceKind] }])),
+    /** The seven words, what each means, and how many facts each holds. */
+    labels: Object.fromEntries(
+      Object.entries(EVIDENCE_WORDS).map(([kind, words]) => [kind, { words, meaning: EVIDENCE_MEANINGS[kind as EvidenceKind], facts: chain.tally[kind as EvidenceKind] }])
+    ),
     steps: chain.steps.map((step) => ({
       id: step.id,
       title: step.title,

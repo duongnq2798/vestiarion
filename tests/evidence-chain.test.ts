@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildEvidenceChain,
   chainAnchors,
+  EVIDENCE_MEANINGS,
   EVIDENCE_ORDER,
   EVIDENCE_WORDS,
   SIGNED_ENTRY_PROVES,
@@ -56,6 +57,13 @@ describe("how a fact is known", () => {
     expect(weakest(["verified", "unreachable"])).toBe("unreachable");
     expect(weakest(["checked", "verified"])).toBe("checked");
     expect(weakest([])).toBe("missing");
+  });
+
+  it("explains each word once, in a line that never upgrades a check that got no answer", () => {
+    expect(Object.keys(EVIDENCE_MEANINGS).sort()).toEqual(Object.keys(EVIDENCE_WORDS).sort());
+    for (const meaning of Object.values(EVIDENCE_MEANINGS)) expect(meaning).toMatch(/^[A-Z].*\.$/);
+    expect(EVIDENCE_MEANINGS.unreachable).toContain("never counts as verified");
+    expect(EVIDENCE_MEANINGS.stated).toContain("who, and when");
   });
 });
 
