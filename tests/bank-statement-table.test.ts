@@ -24,6 +24,13 @@ describe("splitRecords", () => {
   it("refuses a quoted field that is never closed", () => {
     expect(() => splitRecords('a,"never closed\nb,c', ",")).toThrow(StatementReadError);
   });
+
+  it("stops after the records it is asked for, reading nothing past them", () => {
+    expect(splitRecords('a,b\n\nc,d\ne,"never closed', ",", 2)).toEqual([
+      { line: 1, cells: ["a", "b"] },
+      { line: 3, cells: ["c", "d"] },
+    ]);
+  });
 });
 
 describe("detectDelimiter", () => {

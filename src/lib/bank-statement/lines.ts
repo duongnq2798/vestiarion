@@ -200,7 +200,8 @@ export function readStatement(source: string, choices: StatementChoices, today: 
   if (source.length > STATEMENT_MAX_BYTES) throw new StatementReadError("Choose a statement smaller than 2 MB.");
   const table = readTable(source, choices.delimiter ?? undefined);
   const records = table.records;
-  const width = Math.max(...records.map((record) => record.cells.length));
+  // Not Math.max(...records): a file of many short rows would overflow the call stack.
+  const width = records.reduce((widest, record) => Math.max(widest, record.cells.length), 0);
   const found = findHeaderRow(records);
   const headerRow = choices.headerRow != null && choices.headerRow >= -1 && choices.headerRow < records.length ? choices.headerRow : found;
   const headers = Array.from({ length: width }, (_, index) => (headerRow >= 0 ? text(records[headerRow].cells[index], 60) : "") || `Column ${index + 1}`);
@@ -216,7 +217,10 @@ export function readStatement(source: string, choices: StatementChoices, today: 
     firstRecords: records.slice(0, 30),
     headerRow,
     headers,
-    example: Array.from({ length: width }, (_, index) => rows.map((row) => cellOf(row, index)).find((cell) => cell !== "") ?? ""),
+    example: Array.from({ length: width }, (_, index) => {
+      const first = rows.find((row) => cellOf(row, index) !== "");
+      return first ? cellOf(first, index) : "";
+    }),
     columns,
     outIs,
     needsCurrency: columns.currency === null || blankCurrency,
@@ -357,6 +361,8 @@ export function readStatement(source: string, choices: StatementChoices, today: 
       reference: text(cellOf(row, columns.reference), REFERENCE_MAX),
       balance,
     });
+    // One line past the limit is enough to refuse the statement: the rest is not read.
+    if (lines.length > STATEMENT_MAX_LINES) break;
   }
   if (lines.length > STATEMENT_MAX_LINES) return stop([], [`The statement has more than ${STATEMENT_MAX_LINES.toLocaleString("en-US")} lines. Import a shorter period.`], { dateOrder, decimalMark });
 
@@ -374,7 +380,11 @@ export function readStatement(source: string, choices: StatementChoices, today: 
 
   const byCurrency = new Map<string, Entry[]>();
   const entries = [...keyed.map((line) => ({ line: line.line, bookedOn: line.bookedOn, minor: line.minor, balance: line.balance, currency: line.currency })), ...checkpoints].sort((a, b) => a.line - b.line);
-  for (const entry of entries) byCurrency.set(entry.currency, [...(byCurrency.get(entry.currency) ?? []), entry]);
+  for (const entry of entries) {
+    const list = byCurrency.get(entry.currency);
+    if (list) list.push(entry);
+    else byCurrency.set(entry.currency, [entry]);
+  }
   const balances = columns.balance === null ? [] : [...byCurrency].flatMap(([currency, list]) => checkBalance(currency, list) ?? []);
 
   const days = keyed.map((line) => line.bookedOn).sort();

@@ -30,13 +30,26 @@ const NAMED_MONTH_FIRST = /^([A-Za-z]{3,9})\.?[\s./-]+(\d{1,2})(?:st|nd|rd|th)?,
 const NUMERIC = /^(\d{1,4})[./-](\d{1,2})[./-](\d{1,4})(?:$|[\sT])/;
 const COMPACT = /^(\d{4})(\d{2})(\d{2})$/;
 
+/** Each value as read in each order: a statement repeats its days, and each date is read several times over. */
+const READ = new Map<string, string | null>();
+const READ_MAX = 5000;
+
 /**
  * The day a value names, read in `order`; null when it is not a real day in that order. A month written in English
  * reads the same in every order. A time after the date is dropped; a two-digit year is 20xx. A date written with dots
  * is day first.
  */
 export function readDate(value: string, order: DateOrder): string | null {
-  const text = value.trim();
+  const key = `${order} ${value}`;
+  const known = READ.get(key);
+  if (known !== undefined) return known;
+  const day = readDateOnce(value.trim(), order);
+  if (READ.size >= READ_MAX) READ.clear();
+  READ.set(key, day);
+  return day;
+}
+
+function readDateOnce(text: string, order: DateOrder): string | null {
   const named = NAMED_DAY_FIRST.exec(text);
   if (named && MONTHS[named[2].toLowerCase()]) return realDay(fullYear(named[3]), MONTHS[named[2].toLowerCase()], Number(named[1]));
   const monthFirst = NAMED_MONTH_FIRST.exec(text);
@@ -134,6 +147,12 @@ export interface ReadAmountResult {
   marked: "out" | "in" | null;
 }
 
+/** A number with the decimal mark, grouped in thousands by the other mark or not grouped at all. */
+const NUMBER_SHAPES: Record<DecimalMark, { grouped: RegExp; plain: RegExp }> = {
+  ".": { grouped: /^\d{1,3}(?:,\d{3})+(?:\.\d+)?$/, plain: /^\d+(?:\.\d+)?$/ },
+  ",": { grouped: /^\d{1,3}(?:\.\d{3})+(?:,\d+)?$/, plain: /^\d+(?:,\d+)?$/ },
+};
+
 const SHAPE = /^([+-])?\s*(?:[A-Za-z]{3}|[A-Za-z]{0,2}\p{Sc})?\s*([+-])?\s*(\d[\d.,]*)\s*(-)?\s*(?:[A-Za-z]{3}|\p{Sc})?$/u;
 
 /**
@@ -161,8 +180,7 @@ export function readAmount(value: string, mark: DecimalMark, digits: 0 | 2): Rea
   if (shape[1] === "-" || shape[2] === "-" || shape[4] === "-") negative = true;
   const number = shape[3];
   const thousands = mark === "." ? "," : ".";
-  const grouped = new RegExp(`^\\d{1,3}(?:\\${thousands}\\d{3})+(?:\\${mark}\\d+)?$`);
-  const plain = new RegExp(`^\\d+(?:\\${mark}\\d+)?$`);
+  const { grouped, plain } = NUMBER_SHAPES[mark];
   if (!grouped.test(number) && !plain.test(number)) return null;
   const [whole, fraction = ""] = number.split(thousands).join("").split(mark);
   if (fraction.length > digits && !/^0*$/.test(fraction.slice(digits))) return null;

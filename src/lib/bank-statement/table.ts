@@ -31,9 +31,10 @@ export class StatementReadError extends Error {
 
 /**
  * The records of a delimited text. A field that starts with a quote may hold the delimiter, a doubled quote or a line
- * break; a quote anywhere else is kept as it is. Records with no text in any cell are left out.
+ * break; a quote anywhere else is kept as it is. Records with no text in any cell are left out. With `limit`, it stops
+ * after that many records, and what follows them is not read.
  */
-export function splitRecords(text: string, delimiter: Delimiter): TableRecord[] {
+export function splitRecords(text: string, delimiter: Delimiter, limit = Infinity): TableRecord[] {
   const records: TableRecord[] = [];
   let cells: string[] = [];
   let field = "";
@@ -76,6 +77,7 @@ export function splitRecords(text: string, delimiter: Delimiter): TableRecord[] 
     } else if (character === "\n" || character === "\r") {
       if (character === "\r" && text[index + 1] === "\n") index += 1;
       endRecord();
+      if (records.length >= limit) return records;
       line += 1;
       recordLine = line;
     } else {
@@ -100,7 +102,8 @@ export function detectDelimiter(text: string): Delimiter {
   for (const delimiter of DELIMITERS) {
     let records: TableRecord[];
     try {
-      records = splitRecords(text, delimiter).slice(0, SAMPLE_RECORDS);
+      // Only the first records are split: a long statement is not read four times over to find its delimiter.
+      records = splitRecords(text, delimiter, SAMPLE_RECORDS);
     } catch {
       continue;
     }

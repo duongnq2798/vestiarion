@@ -152,6 +152,13 @@ describe("readStatement", () => {
     ]);
   });
 
+  it("refuses in words a file of many short rows, within 2 MB, rather than failing on its size", () => {
+    const rows = Array.from({ length: 135_000 }, () => "20261003,A,-1");
+    const text = `Date,Description,Amount\n${rows.join("\n")}`;
+    expect(text.length).toBeLessThan(2_000_000);
+    expect(readStatement(text, { currency: "USD" }, TODAY).problems).toEqual(["The statement has more than 2,000 lines. Import a shorter period."]);
+  });
+
   it("keeps two identical lines as two, marked as looking the same, each with its own place", () => {
     const text = "Date,Description,Amount\n2026-10-03,Card fee,-5.00\n2026-10-03,Card fee,-5.00\n2026-10-04,Card fee,-5.00";
     const lines = readStatement(text, { currency: "USD" }, TODAY).lines;
