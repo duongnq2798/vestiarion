@@ -362,6 +362,10 @@ mainnet plan).
     head, the decision loop step by step, and the claims with the receipts behind them.
   - The questions' answer about Arc mainnet says it is open to anyone only while `MAINNET_ALLOWLIST` holds `*`
     (`mainnetOpenToEveryone`).
+  - Nothing above the proof waits for a read (landing stream S1): `LandingPage` is not async. It starts the reads (both
+    networks' open numbers, the latest decision, the founding workspace's chain modes, the reserve count) and hands
+    them to `Proof` as promises; its latest decision, figures and live legs each stream in behind their own fallback,
+    so the hero arrives with the first bytes. A chain-mode read that fails shows the legs as not live, never as live.
 - **The landing's latest decision** (`docs/superpowers/specs/2026-10-08-landing-owner-hero-design.md`): the newest
   decision the agent made in one of the team's own live workspaces, in the landing's proof (a band of its own on
   /studios).

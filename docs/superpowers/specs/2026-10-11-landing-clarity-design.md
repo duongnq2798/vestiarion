@@ -80,3 +80,12 @@ link, the workspace form opens with shadow mode ticked, and the console's checkl
 
 Payment, approval and guardrail code; onboarding beyond the sign-in note; the legal pages' intros (they still call
 Vestiarion "an autonomous treasury agent on Arc testnet": the partner's to rewrite).
+
+## Streaming the hero (S1, follow-up)
+
+Measured on production after the redesign shipped: LCP 4.2 s at 375 px under Slow 4G and 4x CPU, and the hero's HTML
+arrived only with the proof's figures, because the page awaited every production read (open numbers, the latest
+decision, chain modes, the reserve count) before it returned anything. The page now starts those reads and returns at
+once; the proof section draws its words and links, and streams the latest decision, the figures and the live legs in
+behind fallbacks sized like what they hold. On a local production build, cold, the hero arrived at 0.48 s and the
+figures at 1.2 s; LCP at 375 px under the same throttling was 1.6-1.9 s, CLS 0.
