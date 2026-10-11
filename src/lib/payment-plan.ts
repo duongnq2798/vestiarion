@@ -605,7 +605,9 @@ export function planPayments(input: PaymentPlanInput): PaymentPlan {
   }
 
   const now = simulate(place(chosen, "now"), cash, input.cushion, input.limits, today, days);
-  const lines: Array<PlanLine & { sortDay: string; group: number }> = drafts.map((draft) => {
+  /** Each line's day and group, for the order below: kept beside the lines, never on them. */
+  const sortKey = new Map<string, { day: string; group: number }>();
+  const lines: PlanLine[] = drafts.map((draft) => {
     const id = draft.line.id;
     const on = draft.line.state === "not_counted" ? null : chosen.get(id) ?? draft.defaultOn;
     const inWindow = on !== null && on <= through;
@@ -661,6 +663,7 @@ export function planPayments(input: PaymentPlanInput): PaymentPlan {
         pays,
       ])
     );
+    sortKey.set(id, { day: on ?? "9999-12-31", group: draft.group });
     return {
       ...draft.line,
       on,
@@ -674,19 +677,19 @@ export function planPayments(input: PaymentPlanInput): PaymentPlan {
       move,
       approvable,
       fingerprint,
-      sortDay: on ?? "9999-12-31",
-      group: draft.group,
     };
   });
 
   // In the order the cash goes: by day, then as the simulation pays them; what is not counted last.
   const placementRank = new Map(place(chosen, "plan").sort(placementOrder).map((placement, index) => [placement.draft.line.id, index]));
   lines.sort((a, b) => {
-    if (a.sortDay !== b.sortDay) return a.sortDay < b.sortDay ? -1 : 1;
+    const keyA = sortKey.get(a.id)!;
+    const keyB = sortKey.get(b.id)!;
+    if (keyA.day !== keyB.day) return keyA.day < keyB.day ? -1 : 1;
     const rankA = placementRank.get(a.id) ?? Number.MAX_SAFE_INTEGER;
     const rankB = placementRank.get(b.id) ?? Number.MAX_SAFE_INTEGER;
     if (rankA !== rankB) return rankA - rankB;
-    return a.group - b.group || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+    return keyA.group - keyB.group || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   });
 
   // The days anything is counted on, in the plan or as scheduled now: a day whose only bill is short is one too.
@@ -702,7 +705,6 @@ export function planPayments(input: PaymentPlanInput): PaymentPlan {
     planDays.reduce<{ day: string; balance: number } | null>((low, planDay) => (low === null || pick(planDay) < low.balance ? { day: planDay.day, balance: pick(planDay) } : low), null);
 
   const freshness = planFreshness(input.balance, input.unread, input.now);
-  const finished: PlanLine[] = lines.map(({ sortDay: _sortDay, group: _group, ...planLine }) => planLine);
   const budget = input.limits.budget;
   const fingerprint = planHash(
     JSON.stringify([
@@ -713,7 +715,7 @@ export function planPayments(input: PaymentPlanInput): PaymentPlan {
       round6(input.cushion),
       budget ? [budget.dailyUsdc, budget.weeklyUsdc, budget.spentToday, budget.spentThisWeek] : null,
       input.limits.twoApprovalsAbove,
-      finished.map((planLine) => planLine.fingerprint),
+      lines.map((planLine) => planLine.fingerprint),
     ])
   );
 
@@ -724,17 +726,17 @@ export function planPayments(input: PaymentPlanInput): PaymentPlan {
     operating: round6(input.operatingUsdc),
     reserve: round6(input.reserveUsdc),
     cushion: round6(input.cushion),
-    lines: finished,
+    lines,
     days: planDays,
     lowest: lowestOf((planDay) => planDay.balance),
     lowestNow: lowestOf((planDay) => planDay.balanceNow),
     stillOwed: current.stillOwed,
     stillOwedNow: now.stillOwed,
     discountsPlanned: round6(
-      finished.filter((planLine) => planLine.discount?.taken && planLine.inWindow && !planLine.flags.some((flag) => flag.code === "short")).reduce((sum, planLine) => sum + planLine.discount!.value, 0)
+      lines.filter((planLine) => planLine.discount?.taken && planLine.inWindow && !planLine.flags.some((flag) => flag.code === "short")).reduce((sum, planLine) => sum + planLine.discount!.value, 0)
     ),
     eurc,
-    moves: finished.filter((planLine) => planLine.approvable).length,
+    moves: lines.filter((planLine) => planLine.approvable).length,
     freshness,
     blocked: freshness.blocked,
     fingerprint,
