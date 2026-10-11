@@ -158,7 +158,7 @@ export function currentActuals(records: readonly ActualRecord[]): Map<string, { 
 const decidedToPay = (decision: ReportDecision) =>
   (decision.action === "ap_pay" || decision.action === "ap_schedule") && !decision.guardrailBlocked && !(decision.heldBecause && WAIT_MARKERS.has(decision.heldBecause));
 
-function agentSide(decisions: readonly ReportDecision[], payment: ReportPayment | undefined): AgentSide {
+export function agentSide(decisions: readonly ReportDecision[], payment: ReportPayment | undefined): AgentSide {
   const newest = decisions.at(-1) ?? null;
   const paidOnArc = payment ? { at: payment.at, amount: payment.amount, token: payment.token, txHash: payment.simulated ? null : payment.txHash, simulated: payment.simulated } : null;
 

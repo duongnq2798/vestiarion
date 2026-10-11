@@ -6,6 +6,14 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 - A move is neither a payment nor a decision: the invoice stays `scheduled`, with the new day as its `scheduledFor` in `GET /api/v1/invoices`, and the agent decides it again on that day with an `ap_*` entry, as for any scheduled bill.
 - A move to today starts a cycle, whose `cycle_complete` entry lists the new event kind `plan_approved` in `events`. Nothing else in `/api/v1` changes.
 
+## 2026-10-11: A report shared by a link, and the value question
+
+- An owner or admin can share the workspace report by a public link, and stop one; an owner can answer how long one bill took before Vestiarion, which the report's value section estimates from. Its ledger gains three entries, actor `human`, domain `system`, each sent to webhook endpoints as `ledger.appended` and listed by `GET /api/v1/ledger`:
+  - **`report_shared`** `{ by, shareId, options: { names, amounts, title } }`: a link was made. `names` is `labels` or `shown`, `amounts` is `shown` or `hidden`, and `title` is `workspace` or `neutral`. The link itself is never in the entry.
+  - **`report_unshared`** `{ by, shareId }`: the link with that `shareId` was stopped.
+  - **`report_baseline_answered`** `{ by, baselineId, minutesPerBill, peoplePerBill }`: an owner answered, in whole minutes and people. A changed answer is a new entry; the newest is the one the report reads.
+- Nothing else in `/api/v1` changes: sharing and the answer are made in the console only.
+
 ## 2026-10-11: What the business paid, from its bank statement
 
 - An owner or admin can fill in what the business paid from its bank statement, on the workspace report: each ticked line of money out is recorded against the bill it paid. Each is an `actual_payment_recorded` entry, or `actual_payment_corrected` when the bill had a record, as before, sent to webhook endpoints as `ledger.appended` and listed by `GET /api/v1/ledger`. Such a record is a payment by `bank_transfer` on the line's booking day, for its amount and currency, with its reference, and its entry adds:

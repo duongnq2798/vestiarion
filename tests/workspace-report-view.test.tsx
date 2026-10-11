@@ -16,6 +16,7 @@ function facts(over: Partial<ReportFacts> = {}): ReportFacts {
   return {
     network: "arc-testnet",
     sandbox: false,
+    now: "2026-10-11T12:00:00.000Z",
     openedAt: "2026-10-01T00:00:00.000Z",
     shadow: null,
     bills: [

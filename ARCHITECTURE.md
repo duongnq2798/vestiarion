@@ -879,6 +879,50 @@ USDC included. Each figure links to its source: the decision and the verdict to 
 (`/audit?before=<seq + 1>#seq-<seq>`), the payment to the explorer, the record to its entry with who recorded it and
 when. `npm run traction-digest` adds one line from the same totals.
 
+**Value** (`docs/superpowers/specs/2026-10-10-shared-report-design.md` S8, S9) keeps three kinds of figures apart and
+never sums across them. `reportValue` (`src/lib/report-value.ts`) is pure and takes the built report, the newest answer
+and the bills the business recorded paying outside Vestiarion (`paidOutside`, from 0090's newest records): measured
+(bills handled and decided, the median minutes to a first decision, paid on or before the due day, discounts taken as
+the bill less what its transfer carried); estimated from the owner's answer (the bills the agent took to payment on its
+own, with nothing stopping it, no person stepping in and no verdict disagreeing, times the minutes one bill took
+before, in hours, with the people who touched a bill as context only; over the bills decided in shadow mode, where the
+business paid itself, it is what the agent would have saved); and not counted (bills still to pay, leaving out rejected
+bills, repeats and bills paid outside; bills flagged or refused as a repeat of a paid one; discounts missed, on a bill
+paid without one or past its last day, and apart, discounts still on offer, both from the terms and never a rejected
+bill's or a repeat's). `buildReport` measures a discount's last day against `ReportFacts.now`, when the facts were read.
+The answer is a
+row of `report_baselines` (migration 0095), which the tenant role can only read and add to, and a signed
+`report_baseline_answered` entry; the newest row is read (`src/lib/report-baseline.ts`). The agreement rate the report,
+the console's shadow mode panel and the shared copy show is one function, `agreementRate` (`src/lib/verdict-rate.ts`).
+
+**A shared report** (same spec, S1-S6, S10-S14) is a public, revocable, live copy of the report. A share is a row of
+`report_shares` (0095) holding the SHA-256 of its link's secret (`vxs_` and 43 base64url characters,
+`src/lib/report-share-token.ts`) and what it shows: supplier names or stable labels (A, B, ... in the order each
+supplier's first bill arrived), amounts or not, the workspace's name or a neutral title. The tenant role may insert a
+share and set `revoked_at` and `revoked_by` alone (column grants); a trigger refuses to clear or move a revocation, and
+nothing deletes a share. `shareReport` (`src/lib/report-shares.ts`) checks the signing key, writes the row, then signs
+`report_shared`, and revokes the row at once if the entry fails, so no link stays live without its record; stopping
+revokes first and signs `report_unshared` best effort. At most 10 links are live per workspace. The commands
+`report.share` and `report.unshare` need the `report.share` permission (owners and admins), `report.baseline` needs
+`org.administer`, and all three run from the console only. `/report/[token]` has no session: a malformed token is never
+looked up; a well-formed one is hashed and looked up by the service role's `report_share_by_token` (0095), which
+answers the live share's workspace id, options, mode and network, and the workspace's name only when the share shows
+it. `readSharedReport` (`src/lib/platform/shared-report.ts`) then enters that workspace's own scope (`withOrg`, as the
+API does after a key lookup) and reads the report's facts, the comparison's records, the answer, the supplier names it
+knows and its payables' memos and purchase order references, the chain fields of the decisions shown and the public
+halves of its signing keys; the workspace id goes no further. `buildSharedReport` (`src/lib/shared-report.ts`) is
+pure: it relabels suppliers, hides amounts everywhere when asked (and with them the transaction hashes, since the
+public explorer shows what each transfer carried), and scrubs the agent's reasoning on its whole text before cutting it
+to its first sentence of at most 200 characters, so a name with a full stop in it is replaced whole: names replaced,
+and any email, `0x` address, UUID, quoted purchase order reference or memo, or code from a memo hidden
+(`scrubReasoning`, `referenceWords`). It gives the comparison as totals only and never a person, a memo, a reference or
+an id. Each decision
+carries **Check its signature**, the receipt verifier's half that needs no body, run in the reader's browser. A dead
+link, stopped, unknown or of a deleted workspace, reads one sentence and names no one; the page is `noindex`, has its own
+card, and analytics sees `/report/:token`. Before 0095 runs, reading either table answers `available: false`
+(`PGRST205`, `42P01`), a missing lookup function (`PGRST202`, `42883`) reads as no share, and the commands refuse with
+`not_ready`.
+
 ## Cash outlook and scenarios
 
 Treasury's **Safe to spend today** and **Next 30 days** (spec `2026-10-02-safe-to-spend-design.md`) and its folded
@@ -1085,7 +1129,8 @@ workspace's mode for that action, never from a link, a key or a button. A
 **command** is one function per action — `approvePayable`, `rejectPayable`,
 `returnPayable`, `addPayableDetails`, `payMilestoneNow`, `closeMilestoneUnpaid`,
 `pauseWorkspaceAgent`, `resumeWorkspaceAgent`, `runWorkspaceCycle`,
-`addInvoice`, `importInvoices`, `recordActualPayment`, `importActualPayments`, `approvePlanLines` — whose first statement is
+`addInvoice`, `importInvoices`, `recordActualPayment`, `importActualPayments`, `approvePlanLines`,
+`shareWorkspaceReport`, `stopSharingWorkspaceReport`, `answerReportBaseline` — whose first statement is
 `gate(actor, "<command>")`:
 
 - the scope in force must be the actor's workspace, or it throws
@@ -1640,7 +1685,7 @@ links retain the separate, stricter `siteOrigin()` policy. The proxy excludes
 both metadata image paths and `og/`, so a crawler fetching a preview never
 performs a Supabase session refresh.
 
-The pay, payee and receipt link pages have cards of their own
+The pay, payee, receipt and shared report link pages have cards of their own
 (`docs/superpowers/specs/2026-10-06-mainnet-polish-design.md` E1), so a link
 pasted into a chat does not show the platform's "Arc testnet" card whatever the
 link's network. Like the docs images they are served under `og/`, by

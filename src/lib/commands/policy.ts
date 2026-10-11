@@ -33,6 +33,11 @@ export const COMMAND_PERMISSIONS = {
   "inbox.add": "records.write",
   "inbox.finish": "records.write",
   "inbox.dismiss": "records.write",
+  // A public link to the workspace report, and stopping one; the value question is the business's own figure about
+  // itself, an owner's (shared report S3).
+  "report.share": "report.share",
+  "report.unshare": "report.share",
+  "report.baseline": "org.administer",
 } as const satisfies Record<string, Permission>;
 
 export type CommandName = keyof typeof COMMAND_PERMISSIONS;

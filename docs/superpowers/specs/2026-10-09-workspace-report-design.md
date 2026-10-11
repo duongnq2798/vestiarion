@@ -93,7 +93,8 @@ switches it to real bills only.
 ## Not now
 
 - A public, shareable copy of the report (SM4). It needs a link table (a migration) and the business's consent per
-  link. The report's facts are built so that copy can reuse them with names hidden.
+  link. The report's facts are built so that copy can reuse them with names hidden. Done 2026-10-11: see
+  `2026-10-10-shared-report-design.md`, which also adds the value section (F30).
 - A period picker and CSV export of the report (the audit export already exports every entry).
 - Contractor milestones in the figures.
 

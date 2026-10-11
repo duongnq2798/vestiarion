@@ -101,7 +101,7 @@ export const TENANT_TABLES = [
   "forecasts", "ledger_entries", "payment_intents", "cycle_runs", "cycle_snapshots", "sim_clock", "gateway_signers", "payment_receipts", "escrow_contracts",
   "fx_swaps", "screening_dismissals", "receivable_links", "incoming_transfers", "agent_budgets", "recurring_payables", "policy_proposals",
   "service_purchases", "spending_limit_contracts", "ar_reminders", "inbox_emails", "approval_policies", "payment_approvals",
-  "shadow_modes", "decision_verdicts", "payment_actuals", "bank_statement_lines",
+  "shadow_modes", "decision_verdicts", "payment_actuals", "bank_statement_lines", "report_shares", "report_baselines",
 ] as const;
 
 export interface SeededRows {
@@ -187,6 +187,11 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     "insert into payment_actuals (org_id, invoice_id, outcome, paid_on, amount, currency, method, replaces, source, statement_line_id) values ($1, $2, 'paid', '2026-10-09', 1, 'USDC', 'bank_transfer', $3, 'statement', $4)",
     [orgId, invoiceId, actualId, statementLineId]
   );
+  await db.query(
+    "insert into report_shares (org_id, token_hash) values ($1, encode(sha256(convert_to($2, 'utf8')), 'hex'))",
+    [orgId, `report-${tag}`]
+  );
+  await db.query("insert into report_baselines (org_id, minutes_per_bill, people_per_bill) values ($1, 20, 2)", [orgId]);
   const approver = await one("insert into auth.users (id, email) values (gen_random_uuid(), $1) returning id", [`approver-${tag}-${crypto.randomUUID()}@example.com`]);
   await db.query(
     "insert into payment_approvals (org_id, source_type, source_id, approved_by, amount, currency) values ($1, 'invoice', $2, $3, 1, 'USDC')",

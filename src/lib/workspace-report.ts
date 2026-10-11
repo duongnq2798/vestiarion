@@ -75,6 +75,8 @@ export interface ReportFacts {
   network: Network;
   /** The workspace is a sandbox: its payments are simulated, and only those count. */
   sandbox: boolean;
+  /** When the facts were read (ISO): an early-payment discount whose last day is before its day has lapsed. */
+  now: string;
   /** The workspace's first ledger entry; null when it has none yet. */
   openedAt: string | null;
   shadow: { currency: string; startedAt: string } | null;
@@ -141,7 +143,30 @@ export interface WorkspaceReport {
   stopped: { total: number; byCode: number; waited: number; byAgent: number; notSent: number };
   people: { steppedIn: number };
   verdicts: { agreed: number; disagreed: number; waiting: number } | null;
-  discounts: { captured: { count: number; byCurrency: CurrencyAmount[] }; onOffer: { count: number; byCurrency: CurrencyAmount[] } };
+  /**
+   * Bills the agent flagged (`ap_flag_fraud`), or code refused as a repeat of a bill already paid
+   * (`invoice.duplicate_of_settled`), once each: stopping one is not money saved (shared report S8).
+   */
+  repeats: number;
+  /**
+   * Bills the agent took to payment on its own, the estimate's base (shared report S8): its newest decision pays or
+   * schedules, nothing stopped it, no person stepped in, and no verdict disagreed with it. Split by whether it decided
+   * in shadow mode, where the business paid its bills itself, so the agent only would have saved the time.
+   */
+  carried: { live: number; shadow: number };
+  /** The bills still to pay, by id: not paid on Arc or marked paid, not rejected, and not flagged or refused as a repeat. */
+  unpaid: string[];
+  discounts: {
+    captured: { count: number; byCurrency: CurrencyAmount[] };
+    onOffer: { count: number; byCurrency: CurrencyAmount[] };
+    /**
+     * On offer, from the terms, and missed: its bill was paid without it, or its last day passed. Never a rejected bill's
+     * or a repeat's. An estimate, never counted as saved.
+     */
+    notTaken: { count: number; byCurrency: CurrencyAmount[] };
+    /** On offer, from the terms, on a bill not paid yet whose last day has not passed: not missed, not taken yet. */
+    open: { count: number; byCurrency: CurrencyAmount[] };
+  };
   stoppedList: StoppedRow[];
   paymentList: PaymentRow[];
   readiness: ReadinessStep[] | null;
@@ -307,12 +332,42 @@ export function buildReport(facts: ReportFacts): WorkspaceReport {
     });
   }
 
+  const capturedOn = new Set<string>();
   const captured = payments.flatMap((payment) => {
     const bill = billsById.get(payment.invoiceId)!;
     const off = round6(bill.amount - payment.amount);
-    return bill.discount && payment.token === bill.currency && off > 0 ? [{ currency: bill.currency, amount: off }] : [];
+    if (!(bill.discount && payment.token === bill.currency && off > 0)) return [];
+    capturedOn.add(bill.id);
+    return [{ currency: bill.currency, amount: off }];
   });
-  const onOffer = bills.flatMap((bill) => (bill.discount ? [{ currency: bill.currency, amount: round6((bill.amount * bill.discount.pct) / 100) }] : []));
+  const repeatOf = new Set(
+    [...decisionsOf]
+      .filter(([, list]) => list.some((decision) => decision.action === "ap_flag_fraud" || decision.guardrailRule === "invoice.duplicate_of_settled"))
+      .map(([invoiceId]) => invoiceId)
+  );
+  const isPaid = (bill: ReportBill) => paymentOf.has(bill.id) || bill.status === "paid";
+  // A bill that will never be paid as it stands: rejected, or a repeat of another.
+  const setAside = (bill: ReportBill) => bill.status === "rejected" || repeatOf.has(bill.id);
+  const unpaid = bills.filter((bill) => !isPaid(bill) && !setAside(bill)).map((bill) => bill.id);
+
+  const offerOf = (bill: ReportBill) => ({ currency: bill.currency, amount: round6((bill.amount * bill.discount!.pct) / 100) });
+  const onOffer = bills.filter((bill) => bill.discount).map(offerOf);
+  // A discount's last day is a UTC calendar day (`discount_due_date`): it is still on offer through that day.
+  const today = utcDate(facts.now);
+  const uncaptured = bills.filter((bill) => bill.discount && !capturedOn.has(bill.id) && !setAside(bill));
+  const stillOpen = (bill: ReportBill) => !isPaid(bill) && utcDate(bill.discount!.deadline) >= today;
+  const notTaken = uncaptured.filter((bill) => !stillOpen(bill)).map(offerOf);
+  const open = uncaptured.filter(stillOpen).map(offerOf);
+
+  // The agent took a bill to payment on its own when its newest decision pays or schedules it and nothing stopped it
+  // (a hold for a verdict is no stop), no person stepped in, and no verdict disagreed with it.
+  const carried = { live: 0, shadow: 0 };
+  for (const [invoiceId, list] of decisionsOf) {
+    const newest = list.at(-1)!;
+    const pays = newest.action === "ap_pay" || newest.action === "ap_schedule";
+    if (!pays || stopOf(newest) !== null || steppedIn.has(invoiceId) || verdictBySeq.get(newest.seq) === "disagree") continue;
+    carried[newest.shadow ? "shadow" : "live"] += 1;
+  }
 
   // The bills whose newest decision since shadow mode started waits for a verdict, as the console counts them (S5).
   const waiting = facts.shadow
@@ -351,9 +406,14 @@ export function buildReport(facts: ReportFacts): WorkspaceReport {
     },
     people: { steppedIn: steppedIn.size },
     verdicts: facts.shadow || verdicts.length > 0 ? { agreed, disagreed, waiting } : null,
+    repeats: repeatOf.size,
+    carried,
+    unpaid,
     discounts: {
       captured: { count: captured.length, byCurrency: byCurrency(captured) },
       onOffer: { count: onOffer.length, byCurrency: byCurrency(onOffer) },
+      notTaken: { count: notTaken.length, byCurrency: byCurrency(notTaken) },
+      open: { count: open.length, byCurrency: byCurrency(open) },
     },
     stoppedList: stoppedRows.sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, LIST_LENGTH),
     paymentList: paymentRows.sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, LIST_LENGTH),

@@ -241,7 +241,9 @@ run in production, with its ledger entries and transactions.
   and why, how often a person stepped in, discounts measured from the transfers, and what is left before a live slice.
   Agent vs what really happened lays each bill's decision beside what the business recorded paying outside
   Vestiarion, one bill at a time, from a CSV, or from a bank statement whose lines are matched to the bills they could
-  have paid, each figure linked to its signed entry.
+  have paid, each figure linked to its signed entry. Value keeps measured, estimated and not-counted figures apart, and
+  an owner or admin can share a live copy by a revocable link, with suppliers as labels and amounts hidden if they
+  choose.
 - **Workspaces and members** — per-network workspaces, invitations, four roles, per-member notifications.
 - **Why it was paid** — one page per payment, link by link from the purchase order to the receipt, each fact marked
   checked by code, verified outside or stated by a person; entries checked again in the browser, and a JSON download.
