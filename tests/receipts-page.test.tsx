@@ -79,6 +79,19 @@ describe("a receipt", () => {
     expect(markup).toContain("Block 314579095 holds a transfer of 2 USDC to the payee in this transaction.");
   });
 
+  it("says plainly whether the payment is reconciled or only confirmed, and from which source (settlement lifecycle I17)", () => {
+    const reconciled = text(renderToStaticMarkup(<ReceiptView view={view()} />));
+    expect(reconciled).toContain("Confirmed by Circle: 1 October 2026, 08:28 UTC");
+    expect(reconciled).toContain("Status");
+    expect(reconciled).toContain("Reconciled");
+    expect(reconciled).toContain(
+      "Confirmed by Circle on 1 October 2026, 08:28 UTC, as the paying workspace recorded it. This page found the transfer on Arbitrum Sepolia in block 314579095, and entry #580 in the workspace's signed ledger records it."
+    );
+    const unread = text(renderToStaticMarkup(<ReceiptView view={view({ checks: { signed: { ok: true }, recorded: { ok: true }, onChain: { state: "unreadable" } } })} />));
+    expect(unread).toContain("Not reconciled just now: Arbitrum Sepolia did not answer this page.");
+    expect(unread).not.toContain("Reconciled");
+  });
+
   it("says which check did not pass, and what could not be read", () => {
     const markup = text(
       renderToStaticMarkup(

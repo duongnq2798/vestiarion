@@ -7,6 +7,7 @@ import { awaitsVerdict, heldForCash } from "@/lib/next-step";
 import { verdictView, type VerdictFacts } from "@/lib/verdict-view";
 import { invoiceTrail } from "@/lib/decision-trail";
 import type { LedgerEntry } from "@/lib/ledger";
+import type { Settlement } from "@/lib/settlement";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow, TreasuryActionRow } from "@/lib/queries";
 import type { Decision, Evidence, Guardrail, Outcome } from "./types";
 import { fmt } from "./Primitives";
@@ -243,9 +244,21 @@ export function invoiceDecision(
   invoice: InvoiceRow,
   counterparty: CounterpartyRow | undefined,
   entries: LedgerEntry[],
-  options: { network: Network; deciding?: boolean; verdicts?: VerdictFacts }
+  options: {
+    network: Network;
+    deciding?: boolean;
+    verdicts?: VerdictFacts;
+    /** Each payable's payment lifecycle by invoice id, as of `asOf` (settlement lifecycle L7); none shows no track. */
+    settlements?: ReadonlyMap<string, Settlement>;
+    asOf?: number;
+  }
 ): Decision {
-  const decision: Decision = { ...decideInvoice(invoice, counterparty, entries, options), network: options.network };
+  const lifecycle = invoice.direction === "payable" ? options.settlements?.get(invoice.id) : undefined;
+  const decision: Decision = {
+    ...decideInvoice(invoice, counterparty, entries, options),
+    network: options.network,
+    ...(lifecycle ? { settlement: { lifecycle, asOf: options.asOf ?? Date.now() } } : {}),
+  };
   // A person's verdict on the agent's decision, where the page reads the facts for it (shadow mode S3).
   const payment = { amountUsdc: invoice.amount, payee: invoice.counterparty_name ?? counterparty?.name ?? "the payee", address: counterparty?.address ?? null };
   const verdict = options.verdicts ? verdictView(invoice.id, entries, options.verdicts, decision.heldForVerdict === true, payment) : undefined;

@@ -18,6 +18,8 @@ import VerdictControl from "@/components/VerdictControl";
 import VerifyLedgerBadge from "@/components/VerifyLedgerBadge";
 import { DecisionCard } from "@/components/vx/DecisionCard";
 import { DecisionTrail } from "@/components/vx/DecisionTrail";
+import { PaymentsInFlight } from "@/components/vx/PaymentsInFlight";
+import { SettlementTrack } from "@/components/vx/SettlementTrack";
 import { WaitingPayableAction } from "@/components/WaitingPayableAction";
 import CounterpartyAddress from "@/components/intake/CounterpartyAddressEdit";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
@@ -64,6 +66,8 @@ import type { WaitingPayable } from "@/lib/agent/approvals";
 import { waitingHint } from "@/lib/added-details";
 import { heldReason } from "@/lib/agent/milestone-decisions";
 import type { LedgerEntry } from "@/lib/ledger";
+import { reduceSettlement, type SettlementBooks, type SettlementFact } from "@/lib/settlement";
+import type { FlightRow } from "@/lib/settlement-facts";
 import type { PayeeLinkStatus } from "@/lib/payee-journey";
 import type { GoLiveStatus } from "@/lib/platform/go-live";
 import { gettingStarted } from "@/lib/getting-started";
@@ -101,6 +105,7 @@ export interface DocsShot {
     | "try-it"
     | "go-live"
     | "first-payment"
+    | "where-a-payment-is"
     | "import-bills"
     | "try-a-rule"
     | "pay-a-contractor"
@@ -936,6 +941,61 @@ const FIRST_DECISION: LedgerEntry = {
 /** A sandbox in shadow mode since before the decision, seen by an owner who may give a verdict. */
 const SHADOW_SANDBOX = { shadow: { startedAt: "2026-09-30T11:00:00Z", currency: "USDC" }, given: new Map(), canGive: true, simulated: true };
 
+// ---------------------------------------------------------------------------
+// Where a payment is
+
+/** When the settlement shots are read: their ages count to it. */
+const SHOT_NOW = Date.parse("2026-10-11T10:40:00.000Z");
+const SHOT_TX = `0x${"5e771e".repeat(10)}abcd`;
+const shotAt = (minute: number) => `2026-10-11T10:${String(minute).padStart(2, "0")}:00.000Z`;
+
+/**
+ * A payment the agent made: sent, pending, confirmed on Arc testnet, and marked paid with its transaction. Its ap_pay
+ * entry is signed as it really is, once Circle's first answer is back, after the send: the track shows it by the send.
+ */
+const SHOT_SETTLEMENT = reduceSettlement({
+  facts: [
+    { kind: "proposed", at: "2026-10-11T10:01:30.000Z", by: "agent", seq: 1182 },
+    { kind: "authorized", at: "2026-10-11T10:01:30.000Z", by: "code", seq: 1182 },
+    { kind: "submitted", at: shotAt(1), attempt: 1 },
+    { kind: "pending", at: shotAt(1), attempt: 1, state: "SENT", by: "circle" },
+    { kind: "confirmed", at: shotAt(2), attempt: 1, refs: [SHOT_TX], txHash: SHOT_TX },
+    { kind: "recorded", at: shotAt(3), seq: 1190, txRef: SHOT_TX },
+  ],
+  books: { paid: true, txRef: SHOT_TX, at: shotAt(3) },
+  crossChain: false,
+  simulated: false,
+});
+
+/** Each a payable the agent paid and its cycle comes back to (`matched`): it checks an unknown send and marks a confirmed one paid. */
+const flight = (id: string, name: string, amount: number, facts: SettlementFact[], books: SettlementBooks = { paid: false, txRef: null, at: null, followUp: "cycle" }): FlightRow => ({
+  source: { type: "invoice", id },
+  name,
+  amount,
+  currency: "USDC",
+  settlement: reduceSettlement({ facts, books, crossChain: false, simulated: false }),
+});
+
+/** Treasury's payments in flight: one Circle shows stuck past the wait, one whose send Circle never answered, one just sent, and one confirmed the books have not caught up with. */
+const SHOT_FLIGHT: FlightRow[] = [
+  flight("docs-flight-1", "Northwind Hosting", 120, [
+    { kind: "submitted", at: shotAt(2), attempt: 1 },
+    { kind: "pending", at: shotAt(20), attempt: 1, state: "STUCK", by: "watch" },
+  ]),
+  flight("docs-flight-2", "Harbor Office Supply", 480, [
+    { kind: "submitted", at: shotAt(28), attempt: 1 },
+    { kind: "unanswered", at: shotAt(28), attempt: 1 },
+  ]),
+  flight("docs-flight-3", "Lumen Design Co.", 75.5, [
+    { kind: "submitted", at: shotAt(37), attempt: 1 },
+    { kind: "pending", at: shotAt(37), attempt: 1, state: "QUEUED", by: "circle" },
+  ]),
+  flight("docs-flight-4", "Atlas Cloud", 42, [
+    { kind: "submitted", at: shotAt(30), attempt: 1 },
+    { kind: "confirmed", at: shotAt(33), attempt: 1, refs: [SHOT_TX], txHash: SHOT_TX },
+  ]),
+];
+
 export const DOCS_SHOTS = {
   "try-it-workspace": {
     guide: "try-it",
@@ -1674,6 +1734,24 @@ export const DOCS_SHOTS = {
   "evidence-chain": { guide: "evidence", render: () => <EvidenceShot head ids={["decision", "payment"]} /> },
   "evidence-signatures": { guide: "evidence", render: () => <EvidenceShot ids={["signatures"]} /> },
   "evidence-access": { guide: "evidence", render: () => <EvidenceAccess kind="invoice" receipt="shared" role="owner" canShare /> },
+  "where-a-payment-is-track": {
+    guide: "where-a-payment-is",
+    page: "invoices",
+    render: function SettlementTrackShot() {
+      // Where the payment is, opened, as a payable's card shows it: a payment the agent made, confirmed on Arc testnet and
+      // marked paid with its transaction (settlement lifecycle L7).
+      return (
+        <Card className="overflow-hidden">
+          <SettlementTrack id="docs-settlement" settlement={SHOT_SETTLEMENT} orgSlug={SLUG} network="arc-testnet" now={SHOT_NOW} defaultOpen />
+        </Card>
+      );
+    },
+  },
+  "where-a-payment-is-in-flight": {
+    guide: "where-a-payment-is",
+    page: "treasury",
+    render: () => <PaymentsInFlight payments={SHOT_FLIGHT} now={SHOT_NOW} stuckAfterMinutes={15} orgSlug={SLUG} network="arc-testnet" />,
+  },
 } satisfies Record<string, DocsShot>;
 
 /**

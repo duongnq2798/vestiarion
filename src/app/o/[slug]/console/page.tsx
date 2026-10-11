@@ -14,6 +14,7 @@ import { WaitingPayableAction } from "@/components/WaitingPayableAction";
 import { CycleReport } from "@/components/vx/CycleReport";
 import { DecisionCard } from "@/components/vx/DecisionCard";
 import { GettingStarted } from "@/components/vx/GettingStarted";
+import { PaymentsInFlight } from "@/components/vx/PaymentsInFlight";
 import { invoiceDecision, treasuryActionDecision, treasuryDecisionEntries, treasuryLedgerDecision } from "@/components/vx/map";
 import { Money } from "@/components/vx/Primitives";
 import { CashOutlookPanel, SafeToSpendFigure } from "@/components/vx/CashOutlook";
@@ -40,7 +41,7 @@ import { readServiceBudget } from "@/lib/service-budget";
 import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import { gettingStarted, ownBillCount, ownDecidedCount, ownPayableCount } from "@/lib/getting-started";
-import { listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
+import { ledgerReadMayBeCut, listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { pauseStateOf } from "@/lib/platform/pause";
 import { cashOutlook, type OutlookInput } from "@/lib/cash-outlook";
 import { scenarioBasis } from "@/lib/cash-scenario-basis";
@@ -57,6 +58,8 @@ import { networkProfile } from "@/lib/network";
 import { currentOrgConfig } from "@/lib/context";
 import { walletTreasuryAvailable } from "@/lib/config";
 import { shellStatus } from "@/lib/shell-status";
+import { flightRows, followUpOf, type FlightRow } from "@/lib/settlement-facts";
+import { readPaymentsInFlight } from "@/lib/settlement-read";
 
 export const dynamic = "force-dynamic";
 
@@ -176,6 +179,30 @@ export default async function DashboardPage({
           }),
         ])
       : [null, null];
+    // Payments in flight (settlement lifecycle L7, L8): every payment sent and not confirmed, and the confirmed ones of the
+    // bills someone comes back to, the cycle's and those waiting for a person, whose books may not have caught up. Best
+    // effort: a read that fails is logged and hides only that section.
+    const flightNow = Date.now();
+    const flight = await (async (): Promise<FlightRow[]> => {
+      const payments = await readPaymentsInFlight(db(), [
+        ...invoices.filter((invoice) => invoice.direction === "payable" && followUpOf("invoice", invoice.status) !== null).map((invoice) => invoice.id),
+        ...milestones.filter((milestone) => followUpOf("milestone", milestone.status) !== null).map((milestone) => milestone.id),
+      ]);
+      const milestoneIds = [...new Set(payments.filter((payment) => payment.source_type === "milestone").map((payment) => payment.source_id))];
+      const milestoneEntries = milestoneIds.length > 0 ? await listLedgerEntriesForTargets({ milestoneIds }) : [];
+      // Each read answers in one request, newest first: one cut at its limit may hold no entry for an older payment.
+      return flightRows({
+        payments,
+        invoices,
+        milestones,
+        entries: [...invoiceEntries, ...milestoneEntries],
+        entriesComplete: !ledgerReadMayBeCut(invoiceEntries) && !ledgerReadMayBeCut(milestoneEntries),
+        now: flightNow,
+      });
+    })().catch((error: unknown) => {
+      console.error("console: payments in flight not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
+      return [];
+    });
     const invoiceDecisions = invoices.map((invoice) =>
       invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), invoiceEntries, { network, verdicts })
     );
@@ -376,6 +403,8 @@ export default async function DashboardPage({
                   </div>
                 </section>
               )}
+
+              <PaymentsInFlight payments={flight} now={flightNow} stuckAfterMinutes={networkProfile(network).stuckAfterMinutes} orgSlug={slug} network={network} />
 
               {scheduledPayments.length > 0 && <ScheduledPayments payments={scheduledPayments} allHref={orgHref(slug, "/invoices")} />}
 
