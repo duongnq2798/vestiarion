@@ -3,6 +3,7 @@ import Link from "next/link";
 import { cn } from "@/components/ui/cn";
 import { orgHref } from "@/lib/auth/org-paths";
 import { laterBy, type TrailStep } from "@/lib/decision-trail";
+import { WHOLE_CHAIN } from "@/lib/evidence-paths";
 import { txUrl } from "@/lib/payee-chains";
 import type { Network } from "@/lib/network";
 import { Hash } from "./Primitives";
@@ -31,6 +32,7 @@ export function DecisionTrail({
   orgSlug,
   network,
   defaultOpen = false,
+  chainHref,
 }: {
   id: string;
   steps: TrailStep[];
@@ -39,6 +41,8 @@ export function DecisionTrail({
   network: Network;
   /** Open from the start: for a guide's screenshot. */
   defaultOpen?: boolean;
+  /** The record's evidence page, which the trail's last line links (evidence chain E6). */
+  chainHref?: string;
 }) {
   if (steps.length === 0) return null;
   return (
@@ -84,6 +88,13 @@ export function DecisionTrail({
           );
         })}
       </ol>
+      {chainHref && (
+        <p className="px-4 pb-4 text-xs sm:px-5">
+          <Link href={chainHref} className="font-medium text-agent transition-colors duration-150 ease-standard hover:underline">
+            {WHOLE_CHAIN}
+          </Link>
+        </p>
+      )}
     </details>
   );
 }
