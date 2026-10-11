@@ -92,15 +92,16 @@ describe("recentDecisionView", () => {
     expect(paidLater.txUrl).toContain(TX);
   });
 
-  it("says a flag, a question, a schedule and a payment still confirming in their own words", () => {
+  it("says a flag, a question and a schedule in their own words, and nothing about the bill since", () => {
     expect(view({ action: "ap_flag_fraud", resultingStatus: "flagged", txRef: null })).toMatchObject({
       outcome: { kind: "flagged", label: "Flagged" },
       headline: "Flagged a 0.20 USDC bill as possible fraud.",
-      detail: "It was not paid.",
+      detail: null,
     });
     expect(view({ action: "ap_request_info", resultingStatus: "awaiting_info", txRef: null })).toMatchObject({
       outcome: { kind: "asked", label: "Asked for details" },
-      detail: "It waits for the missing detail.",
+      headline: "Asked for a missing detail on a 0.20 USDC bill.",
+      detail: null,
     });
     expect(view({ action: "ap_schedule", resultingStatus: "scheduled", txRef: null, payOn: "2026-10-14" })).toMatchObject({
       outcome: { kind: "scheduled", label: "Scheduled" },
@@ -108,7 +109,37 @@ describe("recentDecisionView", () => {
       detail: "The written policy agreed; code checks passed.",
       txUrl: null,
     });
-    expect(outcome({ resultingStatus: "matched" }).kind).toBe("confirming");
+  });
+
+  it("never calls a schedule code refused, or something held, scheduled", () => {
+    const refused = view({
+      action: "ap_schedule",
+      resultingStatus: "held",
+      txRef: null,
+      payOn: "2026-10-20",
+      guardrailBlocked: true,
+      guardrailRule: "counterparty.payment_limit",
+    });
+    expect(refused).toMatchObject({
+      outcome: { kind: "refused", label: "Refused by code" },
+      headline: "Decided to schedule a 0.20 USDC bill for Oct 20.",
+      detail: "Code refused it: it is above the payee's payment limit.",
+    });
+    const held = view({ action: "ap_schedule", resultingStatus: "held", txRef: null, payOn: "2026-10-20", heldBecause: "cash_shortfall" });
+    expect(held).toMatchObject({
+      outcome: { kind: "held", label: "Held" },
+      headline: "Decided to schedule a 0.20 USDC bill for Oct 20.",
+      detail: "The operating wallet was short of cash for it.",
+    });
+  });
+
+  it("says what came of a payment still confirming when it was recorded: paid once it confirmed, failed once it failed", () => {
+    const sent = { resultingStatus: "matched", txRef: null };
+    expect(view(sent)).toMatchObject({ outcome: { kind: "confirming", label: "Confirming" }, headline: "Sent a 0.20 USDC bill; Arc testnet is confirming it." });
+    expect(view({ ...sent, paidTxHash: TX })).toMatchObject({ outcome: { kind: "paid" }, headline: "Paid a 0.20 USDC bill." });
+    const failed = view({ ...sent, paymentFailed: true });
+    expect(failed).toMatchObject({ outcome: { kind: "failed", label: "Transfer failed", tone: "refused" }, headline: "Sent a 0.20 USDC bill; the transfer failed." });
+    expect(failed.txUrl).toBeNull();
   });
 
   it("says only what the entry recorded about the checks", () => {

@@ -4,18 +4,24 @@
 -- latest_team_decision() (0087, 0088) gives the landing one decision, so a visitor could not tell whether the agent
 -- had made one or hundreds, or whether it ever holds or refuses. recent_team_decisions() gives the few before it, from
 -- the same workspaces and on the same terms: the founding workspace and those a team member created, live only, never a
--- customer's, never one whose creator left, never a decision about a sample payee.
+-- customer's, never one whose creator left, never a decision about a sample payee. And never one made where payments
+-- are simulated (`execution.chainMode` 'simulate'): its "paid" moved nothing.
 --
 -- One decision per bill or milestone, its newest: the agent decides a held bill again each cycle, and ten "Held" rows
--- for one bill would say nothing new. It looks at the newest 200 of those decisions, so the read stays bounded as the
--- ledger grows, and returns at most p_limit (1 to 12) of them, newest first.
+-- for one bill would say nothing new. It takes the newest 500 of those decisions by seq, which the planner can read
+-- backwards along the primary key (team_decisions is not materialized, so each use plans on its own), and returns at
+-- most p_limit (1 to 12) bills from them, newest first.
 --
 -- Each gives the fields the page may show and nothing else, as 0088 does, without the signed chain fields (only the
 -- latest decision is checked in the browser) and without the workspace's id, which no caller needs: never the entry's
--- summary, the model's reasoning, a person's reason, a name, or an id of a bill or payee.
+-- summary, the model's reasoning, a person's reason, a name, or an id of a bill or payee. For a pay or release decision,
+-- paidTxHash is the bill's confirmed payment, whoever sent it (0088), and paymentFailed says a payment of it failed and
+-- none confirmed, so a transfer that was still confirming when the agent recorded it is never shown as confirming after
+-- it failed.
 --
 -- pastWeek counts the agent's decisions in those workspaces in the last 7 days, each network on its own: a count of
--- decisions, never of money, and never the two networks added together.
+-- decisions, never of money, and never the two networks added together. It reads the week's entries of the team's
+-- workspaces.
 --
 -- Idempotent throughout: scripts/migrate.ts re-runs every migration each time.
 
@@ -25,7 +31,7 @@ stable
 security definer
 set search_path = ''
 as $$
-  with team_decisions as (
+  with team_decisions as not materialized (
     select l.seq, l.ts, l.action, l.detail, l.org_id, o.network
       from public.ledger_entries l
       join public.orgs o on o.id = l.org_id
@@ -38,9 +44,10 @@ as $$
              select 1 from public.counterparties c
               where c.org_id = l.org_id and c.id::text = l.detail->>'counterpartyId' and c.sample
            )
+       and coalesce(l.detail->'execution'->>'chainMode', 'live') <> 'simulate'
   ),
   newest as (
-    select * from team_decisions order by seq desc limit 200
+    select * from team_decisions order by seq desc limit 500
   ),
   one_per_subject as (
     select distinct on (n.org_id, coalesce(n.detail->>'invoiceId', n.detail->>'milestoneId', n.seq::text)) n.*
@@ -75,7 +82,22 @@ as $$
                            and p.source_id::text = coalesce(s.detail->>'invoiceId', s.detail->>'milestoneId')
                            and p.status = 'confirmed'
                          limit 1
-                      ) end
+                      ) end,
+                      'paymentFailed', case when s.action in ('ap_pay', 'milestone_release') then (
+                        exists (
+                          select 1 from public.payment_intents p
+                           where p.org_id = s.org_id
+                             and p.source_type = case when s.action = 'milestone_release' then 'milestone' else 'invoice' end
+                             and p.source_id::text = coalesce(s.detail->>'invoiceId', s.detail->>'milestoneId')
+                             and p.status = 'failed'
+                        ) and not exists (
+                          select 1 from public.payment_intents p
+                           where p.org_id = s.org_id
+                             and p.source_type = case when s.action = 'milestone_release' then 'milestone' else 'invoice' end
+                             and p.source_id::text = coalesce(s.detail->>'invoiceId', s.detail->>'milestoneId')
+                             and p.status = 'confirmed'
+                        )
+                      ) else false end
                     ) order by s.seq desc)
                from shown s
            ), '[]'::jsonb),

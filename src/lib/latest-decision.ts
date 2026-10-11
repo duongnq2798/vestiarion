@@ -36,6 +36,8 @@ export interface DecisionFacts {
    * payment held for a person is sent by them later, so the agent's own entry never records it.
    */
   paidTxHash: string | null;
+  /** A payment of it failed and none confirmed (0100); absent from `latest_team_decision()`, which does not say. */
+  paymentFailed?: boolean;
 }
 
 /** What `latest_team_decision()` (migration 0087) gives the page: never the workspace's id, which the server keeps. */
@@ -103,18 +105,31 @@ function subject(facts: DecisionFacts): string {
   return `a ${activityAmount(facts.amount, facts.currency)} ${thing}`;
 }
 
+/** Whether a schedule decision went ahead: code did not refuse it and nothing held it. */
+function scheduledAsDecided(facts: DecisionFacts): boolean {
+  return !facts.guardrailBlocked && !facts.heldBecause && facts.resultingStatus !== "held";
+}
+
 function headline(facts: DecisionFacts, network: string): string {
   const what = subject(facts);
   switch (facts.action) {
     case "ap_pay":
     case "milestone_release":
       if (facts.resultingStatus === "paid") return `Paid ${what}.`;
-      if (facts.resultingStatus === "matched" || facts.resultingStatus === "verified") return `Sent ${what}; ${network} is confirming it.`;
+      // Sent, still confirming when the agent recorded it: what came of it since, when that is known.
+      if (facts.resultingStatus === "matched" || facts.resultingStatus === "verified") {
+        if (facts.paidTxHash) return `Paid ${what}.`;
+        if (facts.paymentFailed) return `Sent ${what}; the transfer failed.`;
+        return `Sent ${what}; ${network} is confirming it.`;
+      }
       // Held for a person, who then paid it.
       if (facts.paidTxHash) return facts.verdict === "agree" ? `Paid ${what} after a person agreed.` : `Paid ${what} after a person approved it.`;
       return `Decided to pay ${what}.`;
-    case "ap_schedule":
-      return facts.payOn ? `Scheduled ${what} for ${MONTHS[Number(facts.payOn.slice(5, 7)) - 1]} ${Number(facts.payOn.slice(8, 10))}.` : `Scheduled ${what}.`;
+    case "ap_schedule": {
+      const day = facts.payOn ? ` for ${MONTHS[Number(facts.payOn.slice(5, 7)) - 1]} ${Number(facts.payOn.slice(8, 10))}` : "";
+      // Code refused the day the model chose, or something held it: chosen, never scheduled.
+      return scheduledAsDecided(facts) ? `Scheduled ${what}${day}.` : `Decided to schedule ${what}${day}.`;
+    }
     case "ap_request_info":
       return `Asked for a missing detail on ${what}.`;
     case "ap_flag_fraud":
@@ -180,6 +195,7 @@ export function latestDecisionView(facts: LatestDecisionFacts, now: number = Dat
 export type DecisionOutcomeKind =
   | "paid"
   | "confirming"
+  | "failed"
   | "person_agreed"
   | "person_disagreed"
   | "awaiting_person"
@@ -198,6 +214,7 @@ export interface DecisionOutcome {
 const OUTCOMES: Record<DecisionOutcomeKind, Omit<DecisionOutcome, "kind">> = {
   paid: { label: "Paid", tone: "proof" },
   confirming: { label: "Confirming", tone: "neutral" },
+  failed: { label: "Transfer failed", tone: "refused" },
   person_agreed: { label: "Person agreed", tone: "agent" },
   person_disagreed: { label: "Person disagreed", tone: "held" },
   awaiting_person: { label: "Awaiting a person", tone: "held" },
@@ -211,13 +228,14 @@ const OUTCOMES: Record<DecisionOutcomeKind, Omit<DecisionOutcome, "kind">> = {
 function outcomeKind(facts: DecisionFacts): DecisionOutcomeKind {
   const pays = facts.action === "ap_pay" || facts.action === "milestone_release";
   if (pays && (facts.resultingStatus === "paid" || facts.paidTxHash)) return "paid";
-  if (pays && (facts.resultingStatus === "matched" || facts.resultingStatus === "verified")) return "confirming";
+  if (pays && (facts.resultingStatus === "matched" || facts.resultingStatus === "verified")) return facts.paymentFailed ? "failed" : "confirming";
   if (facts.heldBecause === HELD_FOR_VERDICT) {
     return facts.verdict === "agree" ? "person_agreed" : facts.verdict === "disagree" ? "person_disagreed" : "awaiting_person";
   }
   if (facts.guardrailBlocked) return "refused";
+  if (facts.heldBecause) return "held";
   if (facts.action === "ap_flag_fraud") return "flagged";
-  if (facts.action === "ap_schedule") return "scheduled";
+  if (facts.action === "ap_schedule") return scheduledAsDecided(facts) ? "scheduled" : "held";
   if (facts.action === "ap_request_info") return "asked";
   return "held";
 }
@@ -246,13 +264,14 @@ function checksSentence(facts: DecisionFacts): string | null {
   return code ? "Code checks passed." : null;
 }
 
-/** Why, in one sentence: why it did not go out when it did not, else what was checked before it did. */
+/**
+ * Why, in one sentence: why it did not go out when it did not, else what was checked before it did. A flag or a question
+ * says itself in its headline; what became of the bill afterwards is not the decision's to say.
+ */
 function detail(facts: DecisionFacts, outcome: DecisionOutcomeKind): string | null {
   const reason = why(facts);
   if (reason) return reason;
   if (outcome === "paid" || outcome === "confirming" || outcome === "scheduled") return checksSentence(facts);
-  if (outcome === "flagged") return "It was not paid.";
-  if (outcome === "asked") return "It waits for the missing detail.";
   return null;
 }
 

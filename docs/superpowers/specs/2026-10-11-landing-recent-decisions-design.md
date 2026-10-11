@@ -47,20 +47,22 @@ Also decided against:
 `recent_team_decisions(p_limit)` (migration 0100) reads the same rows as `latest_team_decision()`: the agent's decision
 actions (`ap_pay`, `ap_schedule`, `ap_hold`, `ap_request_info`, `ap_flag_fraud`, `milestone_release`, `milestone_hold`)
 in live workspaces that are the founding one or created by a team member, never a customer's, a sandbox's, one whose
-creator left, or one about a sample payee.
+creator left, or one about a sample payee. Never a decision made where payments are simulated (`execution.chainMode`
+'simulate'), whose "paid" moved nothing; none of the team's decisions were simulated on 2026-10-11.
 
 - One row per bill or milestone, its newest decision, so a bill held every cycle shows once.
-- It looks at the newest 200 such decisions, so the read stays bounded; returns at most `p_limit` (1-12), newest first.
+- It takes the newest 500 such decisions by `seq` (the shared CTE is `not materialized`, so the planner can read the
+  primary key backwards), and returns at most `p_limit` (1-12) bills from them, newest first.
 - `pastWeek`: the agent's decisions in those workspaces in the last 7 days, per network. A count of decisions (every
   entry, repeats included), never money, never the two networks added together.
 
-Measured on production data on 2026-10-11 (run as a plain read-only select): 7 ms.
+Measured on production data on 2026-10-11 (run as a plain read-only select): 7-14 ms.
 
 ## D2. What each row carries
 
 The fields of 0088 a page may show (action, amount, currency, network, model, policy agreement, code's verdict and rule,
 why a hold held, the resulting status, the transaction, the pay-on date, a person's verdict, the confirmed payment that
-followed), and nothing else: no summary, reasoning, names, bill or payee ids, no workspace id, no signature. The service
+followed) plus `paymentFailed` (a pay or release decision's payment failed and none confirmed), and nothing else: no summary, reasoning, names, bill or payee ids, no workspace id, no signature. The service
 role alone may run it. `src/lib/platform/recent-decisions.ts` reads it at most once a minute; a failed read, or a
 database without 0100, gives no list and the latest decision stands alone.
 
@@ -69,13 +71,16 @@ database without 0100, gives no list and the latest decision stands alone.
 Three layers, all visible without a click:
 
 1. **What came of it**, a tag with an icon and a word, in a column of its own from a tablet up so the eye runs down it:
-   Paid, Confirming, Scheduled, Person agreed, Person disagreed, Awaiting a person, Refused by code, Flagged, Asked for
-   details, Held. Read from the entry alone, in order: a confirmed payment (whoever sent it), a person's shadow mode
-   verdict, code's refusal, then the model's own action. Never colour alone: every tag has its word.
-2. **What and why**: the latest decision's own sentence ("Decided to pay a 0.50 USDC bill."), then why it did not go out
-   ("Code refused it: the cross-chain fee was above its cap.", the rule in `rule-words.ts`), or, for one that went
-   ahead, what was checked ("The written policy agreed; code checks passed."). Only what the entry recorded; no sentence
-   when it recorded nothing.
+   Paid, Confirming, Transfer failed, Scheduled, Person agreed, Person disagreed, Awaiting a person, Refused by code,
+   Flagged, Asked for details, Held. Read from the entry alone, in order: a confirmed payment (whoever sent it), a
+   transfer still confirming when recorded (failed if its payment failed since), a person's shadow mode verdict, code's
+   refusal, a recorded hold, then the model's own action. A schedule that code refused or something held is never
+   "Scheduled". Never colour alone: every tag has its word.
+2. **What and why**: the latest decision's own sentence ("Decided to pay a 0.50 USDC bill.", "Decided to schedule ..."
+   when it did not go ahead), then why it did not go out ("Code refused it: the cross-chain fee was above its cap.", the
+   rule in `rule-words.ts`), or, for one that went ahead, what was checked ("The written policy agreed; code checks
+   passed."). Only what the entry recorded; a flag or a question says itself in its headline, and what became of the
+   bill afterwards is not the row's to say.
 3. **Where to check**: the network and "real money" (Arc mainnet) or "test money" (Arc testnet), the time ("8 h ago",
    with the UTC minute as its title), and "Transaction" to the network's explorer only when a transaction hash exists.
 
@@ -90,7 +95,8 @@ on your bills", to the landing's one call to action.
 - Phone: tag and time on one line, the sentence, then network and transaction.
 - Tablet: tag column; network and transaction under the sentence.
 - Wide (lg): tag column, sentence, network and transaction at the right.
-- The loading placeholder is as tall as the measured panel with five rows, so nothing below jumps.
+- The loading placeholder is as tall as the measured panel with five rows, so nothing below jumps once 0100 runs (run
+  right after the merge); with fewer rows, or none, the panel is shorter and the content below moves up.
 
 ## D5. Measurement
 

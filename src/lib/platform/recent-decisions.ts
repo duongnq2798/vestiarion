@@ -37,6 +37,10 @@ const decisionSchema = z.object({
   payOn: z.string().nullable(),
   verdict: z.enum(["agree", "disagree"]).nullable(),
   paidTxHash: z.string().nullable(),
+  paymentFailed: z
+    .boolean()
+    .nullish()
+    .transform((value) => value ?? false),
 });
 
 const foundSchema = z.object({

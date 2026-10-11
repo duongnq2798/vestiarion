@@ -27,6 +27,7 @@ interface Decision {
   payOn: string | null;
   verdict: string | null;
   paidTxHash: string | null;
+  paymentFailed: boolean;
 }
 
 interface Recent {
@@ -142,6 +143,7 @@ describe("recent_team_decisions (0100)", () => {
       txRef: TX,
       verdict: null,
       paidTxHash: null,
+      paymentFailed: false,
     });
     // Every decision counts this week, the two holds included; the list shows one row per bill.
     expect(found.pastWeek).toEqual({ "arc-mainnet": 0, "arc-testnet": 4 });
@@ -204,6 +206,29 @@ describe("recent_team_decisions (0100)", () => {
     const found = await recent();
     expect(found.decisions[0]).toMatchObject({ seq: Number(row.seq), heldBecause: "shadow_verdict", verdict: "agree", paidTxHash: `0x${"cd".repeat(32)}` });
     expect(JSON.stringify(found)).not.toContain("ordered from them");
+  });
+
+  it("says a payment failed when one did and none confirmed", async () => {
+    const ours = await org("ours-failed", team);
+    const supplier = await payee(ours, "Failed supplier");
+    const entry = decision(supplier, { execution: { txRef: null, resultingStatus: "matched" } });
+    const row = await appendSignedForOrg(db, ours, entry, privateKey);
+    await db.query(
+      `insert into public.payment_intents (org_id, source_type, source_id, idempotency_key, provider, provider_mode, amount, destination, status, tx_hash, chain)
+       values ($1, 'invoice', $2, gen_random_uuid()::text, 'circle', 'live', 0.35, '0xAAA', 'failed', null, 'ARC-TESTNET')`,
+      [ours, entry.detail.invoiceId]
+    );
+    expect((await recent()).decisions[0]).toMatchObject({ seq: Number(row.seq), resultingStatus: "matched", paymentFailed: true, paidTxHash: null });
+    // Retried, and confirmed: paid, not failed.
+    await db.query("update public.payment_intents set status = 'confirmed', tx_hash = $2 where source_id = $1", [entry.detail.invoiceId, `0x${"ef".repeat(32)}`]);
+    expect((await recent()).decisions[0]).toMatchObject({ seq: Number(row.seq), paymentFailed: false, paidTxHash: `0x${"ef".repeat(32)}` });
+  });
+
+  it("never lists or counts a decision made where payments are simulated", async () => {
+    const before = await recent(12);
+    const ours = await org("ours-simulated", team);
+    await appendSignedForOrg(db, ours, decision(await payee(ours, "Simulated supplier"), { execution: { txRef: "sim_1", chainMode: "simulate" } }), privateKey);
+    expect(await recent(12)).toEqual(before);
   });
 
   it("returns at most the number asked for, between 1 and 12", async () => {

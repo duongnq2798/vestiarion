@@ -4,6 +4,7 @@ import {
   CalendarClock,
   CircleCheck,
   CirclePause,
+  CircleX,
   Clock,
   Flag,
   Hourglass,
@@ -31,6 +32,7 @@ import { TRY_HREF, TRY_LABEL } from "./cta";
 const ICONS: Record<DecisionOutcomeKind, LucideIcon> = {
   paid: CircleCheck,
   confirming: Clock,
+  failed: CircleX,
   person_agreed: UserCheck,
   person_disagreed: UserX,
   awaiting_person: Hourglass,
