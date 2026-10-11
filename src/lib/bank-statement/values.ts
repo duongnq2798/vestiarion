@@ -155,13 +155,16 @@ const NUMBER_SHAPES: Record<DecimalMark, { grouped: RegExp; plain: RegExp }> = {
 
 const SHAPE = /^([+-])?\s*(?:[A-Za-z]{3}|[A-Za-z]{0,2}\p{Sc})?\s*([+-])?\s*(\d[\d.,]*)\s*(-)?\s*(?:[A-Za-z]{3}|\p{Sc})?$/u;
 
+/** The minus sign (U+2212) and the dashes a spreadsheet or a bank writes for one: each is a minus. */
+const MINUS = /[‐-–−﹣－]/g;
+
 /**
  * An amount in minor units, with the decimal mark decided for the file and the currency's digits (0 or 2). Grouping by
  * the other mark, spaces or apostrophes is read; a currency symbol or code beside it is dropped. Decimals beyond the
  * currency's are refused unless they are zeros. Null when it is not an amount.
  */
 export function readAmount(value: string, mark: DecimalMark, digits: 0 | 2): ReadAmountResult | null {
-  let text = value.trim();
+  let text = value.trim().replace(MINUS, "-");
   let marked: ReadAmountResult["marked"] = null;
   // DR or CR after the value, not the end of a word such as a currency code (XDR).
   const side = /(DR|CR)\.?$/i.exec(text);

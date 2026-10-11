@@ -22,6 +22,9 @@ Each decision names what it costs if it turns out wrong.
 - What crosses to the server is the text and the person's choices, never the browser's lines: what is saved is what the
   server read.
 - At most 2,000 lines and 2 MB.
+- A file is read as UTF-8 when it is, else as Windows-1252, which many banks still export in (umlauts, accents, the
+  euro sign); the card then says so, and that pasting the cells is the way out if names look wrong. A file the browser
+  cannot read is said in words.
 - Cost if wrong: a slow device reads a large file slowly; the server does the same work twice.
 
 **B2. The table: delimiter, quotes, header row.**
@@ -43,8 +46,9 @@ Each decision names what it costs if it turns out wrong.
   *Credit, Deposit, Money in, Paid in*; *Reference, Ref*; *Currency, Ccy*; *Balance, Running balance*. Money out and money
   in win over a lone amount when both are there.
 - A signed column says money out as negative by default; the person can say it is positive. A value in parentheses or
-  ending in a minus is negative; `DR` and `CR` after a value say out and in. In two columns, a value's own sign is
-  ignored: the column says the direction.
+  ending in a minus is negative; the minus sign (−) and a dash written for one count as a minus; `DR` and `CR` after a
+  value say out and in. In two columns, a value's own sign is ignored: the column says the direction. A money cell of
+  dashes alone (`-`, `–`, `—`), as some banks write in the column a line leaves empty, is empty.
 - A currency column gives each line its currency; without one, the person types the account's currency (three letters,
   or USDC or EURC, as A2 of the actual-payments design). Currency symbols and codes beside an amount are dropped.
 - Cost if wrong: a role mapped wrongly shows up at once, in the lines read and in the balance check (B5).
@@ -95,8 +99,11 @@ Each decision names what it costs if it turns out wrong.
 **B7. Why a line matched, and one line for one bill.**
 - The line's text is its description, payee and reference. The payee's name is found when all its words are there (legal
   words such as Ltd, Pte, Inc, GmbH left out), or written together; one word of four letters or more is a weaker find.
-  An invoice number is a word of the bill's memo with a digit in it, found whole in the line.
-- Each suggestion lists why: same amount (or how it differs), the day paid against the due day, the name found, the
+  An invoice number is a word of the bill's memo with a digit in it, found whole in the line. A year, a date or a month
+  (2026, 10/2026, 2026-10, 09.10.2026, Oct-2026, 20261009) or an amount (99.00) is not one: a bank's line carries its own
+  dates and amounts. A word of digits alone counts from five digits, since four are as often a card's last digits.
+- Each suggestion lists why: same amount (or how it differs), the day paid against the due day (or before or after the
+  day added, for a bill with none), the name found, the
   invoice number found, and the record it would correct.
 - One to one, in rounds: a line and a bill are paired when each is the other's single best (an exact amount, then the
   most found in the text). Paired bills and lines leave the next round. What is left with more than one best is
@@ -167,12 +174,13 @@ then reads "Recorded by … from a bank statement".
   quotes and line breaks, the header row below a preamble, no header.
 - `tests/bank-statement-columns.test.ts`: header words for each role, money out and in over a lone amount.
 - `tests/bank-statement-values.test.ts`: date orders decided and asked (03/04), month names, two-digit years; decimal
-  marks decided, conflicting and asked (1,500); JPY whole amounts; parentheses, trailing minus, `DR` / `CR`, symbols.
+  marks decided, conflicting and asked (1,500); JPY whole amounts; parentheses, trailing minus, the minus sign and en
+  dash, `DR` / `CR`, symbols.
 - `tests/bank-statement-lines.test.ts`: signed against money out and in columns; the period; refused and skipped rows;
   the balance check (adds up, the first mismatch, the signs turned round, newest first); identical lines kept with their
-  own keys.
+  own keys; dashes in an empty money column; a Windows-1252 file decoded as the card decodes it.
 - `tests/bank-statement-match.test.ts`: exact against near amounts, never across currencies, the date window, names and
-  invoice numbers, one to one in rounds, ties to choose, identical lines, already recorded, already used (an overlapping
+  invoice numbers (never a year, a date or an amount, so a dated line breaks no tie), one to one in rounds, ties to choose, identical lines, already recorded, already used (an overlapping
   re-import), corrections, money in.
 - `tests/bank-statements.test.ts`: the domain over the fake client: preview, keeping a line and reusing an unused one, the
   record with its line and entry detail, the table not there yet.

@@ -22,6 +22,7 @@ import { minorText, type Candidate, type LineMatch } from "@/lib/bank-statement/
 import { DELIMITER_WORDS, DELIMITERS, type Delimiter } from "@/lib/bank-statement/table";
 import type { DateOrder } from "@/lib/bank-statement/values";
 import { billDigits } from "@/lib/bill-amount";
+import { decodeList } from "@/lib/bill-import/table";
 import { plural, utcDay } from "@/lib/copy";
 
 /**
@@ -38,8 +39,12 @@ const NONE = "none";
 const ORDER_WORDS: Record<DateOrder, string> = { ymd: "Year first", dmy: "Day first", mdy: "Month first" };
 const day = (date: string) => utcDay(`${date.slice(0, 10)}T00:00:00Z`);
 
-/** The statement's text, and the file's name; null for cells pasted from a spreadsheet. */
-type Source = { text: string; name: string | null };
+/**
+ * The statement's text, and the file's name; null for cells pasted from a spreadsheet. `legacy`: the file is not UTF-8,
+ * and was read as Windows-1252.
+ */
+type Source = { text: string; name: string | null; legacy?: boolean };
+const STATEMENT_UNREADABLE = "The file could not be read. Choose it again, or paste the cells from a spreadsheet.";
 type Note = { tone: "success" | "error"; text: string } | null;
 /** What the server read and matched: each line of the statement, and its match, in the same order. */
 export type Found = { lines: StatementLine[]; matches: LineMatch[] };
@@ -51,6 +56,8 @@ export interface StatementStart {
   text: string;
   /** The file's name; null for pasted cells. */
   name: string | null;
+  /** The file is not UTF-8, and was read as Windows-1252. */
+  legacy?: boolean;
   account?: string;
   choices?: StatementChoices;
   found?: Found;
@@ -438,7 +445,7 @@ export default function BankStatementImport({ orgSlug, accounts, initial }: { or
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [account, setAccount] = useState(initial?.account ?? accounts[0] ?? "");
-  const [source, setSource] = useState<Source | null>(initial ? { text: initial.text, name: initial.name } : null);
+  const [source, setSource] = useState<Source | null>(initial ? { text: initial.text, name: initial.name, legacy: initial.legacy } : null);
   const [pasted, setPasted] = useState("");
   const [choices, setChoices] = useState<StatementChoices>(initial?.choices ?? {});
   const [found, setFound] = useState<Found | null>(initial?.found ?? null);
@@ -468,14 +475,21 @@ export default function BankStatementImport({ orgSlug, accounts, initial }: { or
     setNote(null);
   };
 
-  function chooseFile(file: File | undefined) {
+  async function chooseFile(file: File | undefined) {
     if (!file) return start(null);
     if (file.size > STATEMENT_MAX_BYTES) {
       start(null);
       setNote({ tone: "error", text: "Choose a statement smaller than 2 MB." });
       return;
     }
-    void file.text().then((text) => start({ text, name: file.name }));
+    // UTF-8 when it is, else Windows-1252: many banks still export in it, umlauts, accents and euro signs included.
+    try {
+      const { text, legacy } = decodeList(await file.arrayBuffer());
+      start({ text, name: file.name, legacy });
+    } catch {
+      start(null);
+      setNote({ tone: "error", text: STATEMENT_UNREADABLE });
+    }
   }
 
   const named = account.trim() !== "" && account.trim().length <= ACCOUNT_MAX;
@@ -530,7 +544,7 @@ export default function BankStatementImport({ orgSlug, accounts, initial }: { or
         label="Choose a statement CSV, or drop one here"
         description="Your bank's CSV export of the account, up to 2,000 lines and 2 MB. Nothing is saved until you tick the lines."
         inputRef={inputRef}
-        onFile={chooseFile}
+        onFile={(file) => void chooseFile(file)}
       />
       <Disclosure summary="Or paste the cells from a spreadsheet">
         <div className="space-y-2">
@@ -543,6 +557,9 @@ export default function BankStatementImport({ orgSlug, accounts, initial }: { or
         </div>
       </Disclosure>
       <FormMessage tone={error ? "error" : (note?.tone ?? "neutral")}>{error ?? note?.text}</FormMessage>
+      {source?.legacy && (
+        <Callout tone="held">This file is not saved as UTF-8, and is read as Windows-1252. If names look wrong below, paste the cells from a spreadsheet instead.</Callout>
+      )}
 
       {read && source && (
         <StatementReadPanel

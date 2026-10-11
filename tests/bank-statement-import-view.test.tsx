@@ -64,6 +64,13 @@ describe("BankStatementImport", () => {
     expect(markup).not.toMatch(/<button[^>]*disabled=""[^>]*>(?:(?!<\/button>).)*Find the bills/);
   });
 
+  it("says when a file is not UTF-8 and was read as Windows-1252, and only then", () => {
+    const legacy = text(html(<BankStatementImport orgSlug="northstar" accounts={[]} initial={{ text: PASTED, name: "umsaetze.csv", legacy: true, choices: { currency: "SGD", dateOrder: "dmy" } }} />));
+    expect(legacy).toContain("This file is not saved as UTF-8, and is read as Windows-1252. If names look wrong below, paste the cells from a spreadsheet instead.");
+    const utf8 = text(html(<BankStatementImport orgSlug="northstar" accounts={[]} initial={{ text: PASTED, name: "statement.csv", choices: { currency: "SGD", dateOrder: "dmy" } }} />));
+    expect(utf8).not.toContain("not saved as UTF-8");
+  });
+
   it("names the first line whose balance does not add up, and what it should have been", () => {
     const broken = PASTED.replace("3,904.50", "3,905.40");
     const words = text(html(<BankStatementImport orgSlug="northstar" accounts={[]} initial={{ text: broken, name: "statement.csv", choices: { currency: "SGD", dateOrder: "dmy" } }} />));

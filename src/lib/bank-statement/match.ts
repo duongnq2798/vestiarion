@@ -97,13 +97,39 @@ export function nameFound(payee: string, lineText: string): { strength: 0 | 1 | 
   return word ? { strength: 1, found: word.written } : { strength: 0, found: null };
 }
 
-/** An invoice number in a line: a word of the bill's memo with a digit in it, four characters or more, found whole. */
+const MONTH_WORDS = new Set([
+  "jan", "january", "feb", "february", "mar", "march", "apr", "april", "may", "jun", "june", "jul", "july", "aug", "august",
+  "sep", "sept", "september", "oct", "october", "nov", "november", "dec", "december",
+]);
+const YEAR = /^(19|20)\d{2}$/;
+/** Decimals (99.00, 1.250,50), or thousands grouped (1.250, 100'000). */
+const AMOUNT = /^\d+(?:[.,']\d{3})*[.,]\d{1,2}$|^\d{1,3}(?:[.,']\d{3})+$/;
+/** A day written without marks, year first: 20261009. */
+const COMPACT_DAY = /^(19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/;
+
+/**
+ * A year, a date or a month (2026, 10/2026, 2026-10, 09.10.2026, Oct-2026), or an amount (99.00): a bank's line
+ * carries its own dates and amounts, so a memo word of this shape names no invoice.
+ */
+function dateOrAmount(word: string): boolean {
+  if (YEAR.test(word) || AMOUNT.test(word) || COMPACT_DAY.test(word)) return true;
+  const parts = word.toLowerCase().split(/[./-]/);
+  if (parts.length < 2 || parts.length > 3 || !parts.some((part) => /^\d+$/.test(part))) return false;
+  const years = parts.filter((part) => YEAR.test(part)).length;
+  return years <= 1 && parts.every((part) => YEAR.test(part) || /^\d{1,2}$/.test(part) || MONTH_WORDS.has(part));
+}
+
+/**
+ * An invoice number in a line: a word of the bill's memo with a digit in it, four characters or more, found whole. A
+ * year, a date or an amount in the memo is not one, and a word of digits alone counts from five digits: four are as
+ * often a card's last digits on the bank's line.
+ */
 export function numberFound(memo: string | null, lineText: string): string | null {
   if (!memo) return null;
   const text = lineText.toLowerCase();
   for (const raw of memo.split(/[\s,;:()[\]]+/)) {
     const number = raw.replace(/^[#.\-/]+|[.\-/]+$/g, "");
-    if (number.length < 4 || !/\d/.test(number)) continue;
+    if (number.length < 4 || !/\d/.test(number) || /^\d{1,4}$/.test(number) || dateOrAmount(number)) continue;
     const at = new RegExp(`(^|[^\\p{L}\\p{N}])${number.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^\\p{L}\\p{N}])`, "u");
     if (at.test(text)) return number;
   }
@@ -132,7 +158,8 @@ function dayWords(line: StatementLine, bill: StatementBill): string {
     return diff === 0 ? "Paid on the due day" : `Paid ${days(Math.abs(diff))} ${diff < 0 ? "before" : "after"} the due day`;
   }
   const since = dayNumber(line.bookedOn) - dayNumber(bill.createdAt);
-  return since <= 0 ? "Paid on the day the bill was added" : `Paid ${days(since)} after the bill was added`;
+  // A day's grace before the bill was added (B6): a business ahead of or behind UTC.
+  return since === 0 ? "Paid on the day the bill was added" : `Paid ${days(Math.abs(since))} ${since < 0 ? "before" : "after"} the bill was added`;
 }
 
 /** The bill as a candidate for the line, or null when it is not one (B6). */

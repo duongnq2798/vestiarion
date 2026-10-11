@@ -797,9 +797,9 @@ disagrees with every decision.
   read two ways rather than guess; `lines.ts` reads each line, signed and in its currency's minor units (`billDigits`), the
   rows it skips with why, the period, and the statement against its own running balance, per currency; `match.ts` pairs
   each money-out line with a bill one to one, in rounds (same currency, a date window, the same amount, or within 5% with
-  the payee's name or an invoice number in the line), leaving ties to the person. The browser reads the statement at once
-  as it is mapped (`BankStatementImport`); what crosses to the server is the text and the person's choices, never the
-  browser's lines, and `src/lib/bank-statements.ts` reads and matches it again against the payables the report counts
+  the payee's name or an invoice number in the line), leaving ties to the person. The browser decodes the file (UTF-8, else
+  Windows-1252, with the bill list import's `decodeList`) and reads the statement at once as it is mapped
+  (`BankStatementImport`); what crosses to the server is the text and the person's choices, never the browser's lines, and `src/lib/bank-statements.ts` reads and matches it again against the payables the report counts
   before it previews or saves. The command `payable.import_statement` (`records.write`, console only) saves only the
   ticked pairs still among their line's candidates, each through `recordActual` with source `statement`, adding
   `via: "statement"` and `statementLine` to the entry. Only the lines used are kept, in `bank_statement_lines`

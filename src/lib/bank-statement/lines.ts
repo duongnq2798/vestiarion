@@ -123,6 +123,12 @@ export function lineIdentity(account: string, line: StatementLine): string {
 
 const text = (value: string | undefined, max: number) => (value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 const cellOf = (record: TableRecord, column: number | null) => (column === null ? "" : (record.cells[column] ?? "").trim());
+/** A cell of dashes alone, as some banks write in the money column a line leaves empty, holds no amount. */
+const NO_AMOUNT = /^[\s\-‐-―−﹣－]+$/;
+const moneyOf = (record: TableRecord, column: number | null) => {
+  const cell = cellOf(record, column);
+  return NO_AMOUNT.test(cell) ? "" : cell;
+};
 const DAY_MS = 86_400_000;
 const nextDay = (day: string) => new Date(Date.parse(`${day}T00:00:00Z`) + DAY_MS).toISOString().slice(0, 10);
 
@@ -218,7 +224,7 @@ export function readStatement(source: string, choices: StatementChoices, today: 
     headerRow,
     headers,
     example: Array.from({ length: width }, (_, index) => {
-      const first = rows.find((row) => cellOf(row, index) !== "");
+      const first = rows.find((row) => moneyOf(row, index) !== "");
       return first ? cellOf(first, index) : "";
     }),
     columns,
@@ -259,7 +265,7 @@ export function readStatement(source: string, choices: StatementChoices, today: 
 
   // The decimal mark: every amount and balance together. A file in currencies with no minor units has no decimals to ask about.
   const currencies = columns.currency === null ? [typedCurrency!] : dated.map((row) => actualCurrency(cellOf(row, columns.currency)) ?? typedCurrency).filter((code): code is string => code !== null);
-  const amountValues = dated.flatMap((row) => [columns.amount, columns.moneyOut, columns.moneyIn, columns.balance].map((column) => cellOf(row, column)));
+  const amountValues = dated.flatMap((row) => [columns.amount, columns.moneyOut, columns.moneyIn, columns.balance].map((column) => moneyOf(row, column)));
   let decimalMark: DecimalMark | null = null;
   const marks = decideDecimalMark(amountValues);
   if ("mark" in marks) decimalMark = marks.mark;
@@ -300,7 +306,7 @@ export function readStatement(source: string, choices: StatementChoices, today: 
     const read = (value: string) => (value === "" ? null : readAmount(value, decimalMark, digits));
     const notAmount = (value: string) => skip(`"${value}" is not an amount in ${currency}.`);
 
-    const balanceCell = cellOf(row, columns.balance);
+    const balanceCell = moneyOf(row, columns.balance);
     const balanceRead = read(balanceCell);
     if (balanceCell !== "" && !balanceRead) {
       notAmount(balanceCell);
@@ -310,7 +316,7 @@ export function readStatement(source: string, choices: StatementChoices, today: 
 
     let minor = 0;
     if (columns.amount !== null) {
-      const cell = cellOf(row, columns.amount);
+      const cell = moneyOf(row, columns.amount);
       const amount = read(cell);
       if (cell !== "" && !amount) {
         notAmount(cell);
@@ -322,8 +328,8 @@ export function readStatement(source: string, choices: StatementChoices, today: 
       }
     } else {
       // Two columns: the column says the direction, and a value's own sign is ignored.
-      const outCell = cellOf(row, columns.moneyOut);
-      const inCell = cellOf(row, columns.moneyIn);
+      const outCell = moneyOf(row, columns.moneyOut);
+      const inCell = moneyOf(row, columns.moneyIn);
       const out = read(outCell);
       const into = read(inCell);
       if (outCell !== "" && !out) {

@@ -49,6 +49,23 @@ describe("nameFound and numberFound", () => {
     expect(numberFound("Q3 support", "Q3 SUPPORT")).toBeNull();
     expect(numberFound(null, "anything")).toBeNull();
   });
+
+  it("never takes a year, a date or an amount in the memo for an invoice number: bank lines carry dates", () => {
+    expect(numberFound("Hosting October 2026", "CARD PAYMENT 03/10/2026 STREAMING")).toBeNull();
+    expect(numberFound("Rent 10/2026", "STANDING ORDER 10/2026")).toBeNull();
+    expect(numberFound("Rent 2026-10", "SEPA 2026-10 RENT")).toBeNull();
+    expect(numberFound("Retainer 09.10.2026", "TRF 09.10.2026")).toBeNull();
+    expect(numberFound("Retainer Oct-2026", "TRF OCT-2026")).toBeNull();
+    expect(numberFound("Plan 99.00 monthly", "CARD 99.00 USD")).toBeNull();
+    expect(numberFound("Rent 20261009", "SEPA 20261009 RENT")).toBeNull();
+    // Four digits alone are as often a card's last digits.
+    expect(numberFound("Invoice 4821", "CARD ****4821 STREAMING")).toBeNull();
+    // Invoice numbers keep being found, digits only or with letters, a year inside them or not.
+    expect(numberFound("Invoice 10442", "ACH ACME 10442")).toBe("10442");
+    expect(numberFound("Invoice R-1042", "TRF R-1042")).toBe("R-1042");
+    expect(numberFound("Invoice INV/2026/0042", "TRF INV/2026/0042")).toBe("INV/2026/0042");
+    expect(numberFound("Invoice 2026-0042", "TRF 2026-0042")).toBe("2026-0042");
+  });
 });
 
 describe("matchStatement", () => {
@@ -102,6 +119,27 @@ describe("matchStatement", () => {
     const [match] = matchStatement([line()], [bill("b1", { payee: "Atlas" }), bill("b2", { payee: "Kestrel" })], [null]);
     expect(match).toMatchObject({ status: "choose" });
     expect(match.status === "choose" && match.candidates.map((candidate) => candidate.invoiceId)).toEqual(["b1", "b2"]);
+  });
+
+  it("leaves a tie to the person when a bill's memo holds a year and the line a date", () => {
+    const card = line({ minor: -9900, currency: "USD", bookedOn: "2026-10-09", description: "CARD 09/10/2026 STREAMING" });
+    const bills = [
+      bill("acme", { payee: "Acme Design", memo: "Logo work", amount: 99, currency: "USD" }),
+      bill("beta", { payee: "Beta Hosting", memo: "Hosting October 2026", amount: 99, currency: "USD" }),
+    ];
+    const [match] = matchStatement([card], bills, [null]);
+    expect(match.status).toBe("choose");
+    expect(match.status === "choose" && match.candidates.every((candidate) => candidate.number === null)).toBe(true);
+    // Nor does the year make a bill within 5% a candidate.
+    expect(statuses(matchStatement([line({ ...card, minor: -9700 })], [bills[1]], [null]))).toEqual(["none"]);
+  });
+
+  it("says a line booked the day before a bill with no due day was added was paid before it", () => {
+    const early = line({ bookedOn: "2026-10-07" });
+    const [match] = matchStatement([early], [bill("b1", { dueDate: null, createdAt: "2026-10-08T10:00:00Z" })], [null]);
+    expect(match.status === "matched" && match.candidate.why).toEqual(["Same amount", "Paid 1 day before the bill was added"]);
+    const [same] = matchStatement([line({ bookedOn: "2026-10-08" })], [bill("b1", { dueDate: null, createdAt: "2026-10-08T10:00:00Z" })], [null]);
+    expect(same.status === "matched" && same.candidate.why[1]).toBe("Paid on the day the bill was added");
   });
 
   it("keeps two identical lines, both competing for one bill", () => {

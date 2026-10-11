@@ -107,6 +107,13 @@ describe("readAmount", () => {
     expect(readAmount("45.00CR", ".", 2)).toEqual({ minor: 4500, marked: "in" });
   });
 
+  it("reads the minus sign and the en dash a spreadsheet writes as a minus, before or after the value", () => {
+    expect(readAmount("−99.00", ".", 2)).toEqual({ minor: -9900, marked: null });
+    expect(readAmount("99.00−", ".", 2)).toEqual({ minor: -9900, marked: null });
+    expect(readAmount("– 1.250,00 €", ",", 2)).toEqual({ minor: -125000, marked: null });
+    expect(readAmount("EUR −45,00", ",", 2)).toEqual({ minor: -4500, marked: null });
+  });
+
   it("refuses decimals a currency does not have, and what is not an amount", () => {
     expect(readAmount("12.5", ".", 0)).toBeNull();
     expect(readAmount("12.345", ".", 2)).toBeNull();

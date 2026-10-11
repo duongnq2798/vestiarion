@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { NO_COLUMNS } from "@/lib/bank-statement/columns";
 import { lineIdentity, readStatement, statementAccount, type StatementLine } from "@/lib/bank-statement/lines";
+import { decodeList } from "@/lib/bill-import/table";
 
 /**
  * A statement's lines (docs/superpowers/specs/2026-10-10-bank-statement-design.md B3-B5, B9): each row read with the
@@ -56,6 +57,41 @@ describe("readStatement", () => {
       ["2026-10-03", "2026-10-04", -125000, "EUR", "Northwind GmbH", 375000],
       ["2026-10-05", "2026-10-05", 20000, "EUR", "Kunde AG", 395000],
     ]);
+  });
+
+  it("reads a cell of dashes alone, as some banks write in the column a line leaves empty, as empty", () => {
+    const text = [
+      "Date,Description,Debit,Credit,Balance",
+      "2026-10-01,Opening,-,-,2000.00",
+      "2026-10-01,Rent,1200.00,-,800.00",
+      "2026-10-02,Salary,–,500.00,1300.00",
+      "2026-10-03,Fee,1.00,—,—",
+      "2026-10-04,Card,−20.00,--,1279.00",
+    ].join("\n");
+    const read = readStatement(text, { currency: "USD" }, TODAY);
+    expect(read.problems).toEqual([]);
+    expect(read.lines.map((line) => [line.description, line.minor, line.balance])).toEqual([
+      ["Rent", -120000, 80000],
+      ["Salary", 50000, 130000],
+      ["Fee", -100, null],
+      ["Card", -2000, 127900],
+    ]);
+    expect(read.skipped).toEqual([{ line: 2, why: "A balance with no amount: used only for the balance check." }]);
+    expect(read.balances).toMatchObject([{ currency: "USD", status: "adds_up" }]);
+  });
+
+  it("reads a statement exported in Windows-1252 as the card decodes its bytes: its headers' umlauts and its names", () => {
+    // A German bank's CSV in Excel's plain "CSV" encoding: ä and ü are single bytes, which UTF-8 cannot read.
+    // (Node reads byte 0x80 as U+0080, not the euro sign a browser reads, so the amount here carries no euro sign.)
+    const bytes = Buffer.from(["Buchungstag;Empfänger;Verwendungszweck;Betrag;Währung", "07.10.2026;Müller GmbH;Rechnung R-1042;-99,00;EUR"].join("\n"), "latin1");
+    const { text, legacy } = decodeList(bytes);
+    expect(legacy).toBe(true);
+    const read = readStatement(text, {}, TODAY);
+    expect(read.problems).toEqual([]);
+    expect(read.columns).toMatchObject({ bookingDate: 0, payee: 1, description: 2, amount: 3, currency: 4 });
+    expect(read.lines.map((line) => [line.bookedOn, line.payee, line.minor, line.currency])).toEqual([["2026-10-07", "Müller GmbH", -9900, "EUR"]]);
+    // A file in UTF-8 is read as it is.
+    expect(decodeList(new TextEncoder().encode("Empfänger;Betrag\nMüller;-99,00 €"))).toEqual({ text: "Empfänger;Betrag\nMüller;-99,00 €", legacy: false });
   });
 
   it("refuses a row with both money out and money in, a value that is not an amount, and a day after tomorrow, row by row", () => {
