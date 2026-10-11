@@ -8,6 +8,7 @@ import { settlementAnchor, settlementSummary, SettlementTrack, UNKNOWN_OUTCOME }
 import type { LedgerEntry } from "@/lib/ledger";
 import type { InvoiceRow } from "@/lib/queries";
 import { reduceSettlement, type Settlement, type SettlementBooks, type SettlementFact, type SettlementInput } from "@/lib/settlement";
+import { settlementOf, type IntentRecord } from "@/lib/settlement-facts";
 
 /**
  * Where a payment is, on a payable's card (settlement lifecycle L7): each stage with when, from which source, and its
@@ -27,7 +28,8 @@ const decided: SettlementFact[] = [
   { kind: "authorized", at: T(0), by: "code", seq: 41 },
   { kind: "submitted", at: T(1), attempt: 1 },
 ];
-const pending: SettlementFact = { kind: "pending", at: T(2), attempt: 1, state: "SENT", by: "circle" };
+/** Circle's answer to the send, in the send's minute: its word needs no time of its own. */
+const pending: SettlementFact = { kind: "pending", at: T(1), attempt: 1, state: "SENT", by: "circle" };
 const confirmed: SettlementFact = { kind: "confirmed", at: T(5), attempt: 1, refs: [TX], txHash: TX };
 const recorded: SettlementFact = { kind: "recorded", at: T(6), seq: 42, txRef: TX };
 
@@ -103,6 +105,20 @@ describe("the track in flight", () => {
   it("says Circle's stuck state as Circle's, and the transfer watch's read as the watch's", () => {
     expect(text(render(lifecycle([...decided, { ...pending, state: "STUCK" }], open)))).toContain("Circle shows it stuck: it was sent and can still be mined (Circle: STUCK).");
     expect(text(render(lifecycle([...decided, { ...pending, state: "QUEUED", by: "watch" }], open)))).toContain("Not confirmed when the transfer watch asked Circle (Circle: QUEUED).");
+  });
+
+  it("shows Pending from the send, when Circle took it, and Circle's latest word with when it was read", () => {
+    // Sent at 10:01 and answered at once; the agent's cycle read it again at 10:25, rewriting the intent's executed_at.
+    const read = text(render(lifecycle([...decided, { ...pending, at: T(25) }], open)));
+    expect(read).toContain("Pending , reached Oct 11, 2026, 10:01 UTC Circle took it and had not confirmed it yet (Circle: SENT, as of Oct 11, 2026, 10:25 UTC).");
+    expect(read).not.toContain("reached Oct 11, 2026, 10:25 UTC");
+    // The transfer watch's read says when the watch asked, and one with no word from Circle says when it checked.
+    expect(text(render(lifecycle([...decided, pending, { ...pending, at: T(20), state: "STUCK", by: "watch" }], open)))).toContain(
+      "Pending , reached Oct 11, 2026, 10:01 UTC Circle shows it stuck: it was sent and can still be mined (Circle: STUCK, as of Oct 11, 2026, 10:20 UTC)."
+    );
+    expect(text(render(lifecycle([...decided, { ...pending, at: T(20), state: null, by: "watch" }], open)))).toContain(
+      "Not confirmed when the transfer watch checked it (as of Oct 11, 2026, 10:20 UTC)."
+    );
   });
 
   it("says an unknown outcome is being checked with Circle while the agent's cycle comes back to the bill, and that nothing new is sent until Circle answers (I18)", () => {
@@ -187,6 +203,13 @@ describe("a CCTP payout waiting for its mint (L3)", () => {
     expect(words).not.toContain("had not confirmed it yet");
   });
 
+  it("says when Circle's word about the burn was read, once that is after the send", () => {
+    const read = lifecycle([...decided, { ...pending, at: T(25), state: "CONFIRMED" }], open, { crossChain: true, bridge: { step: "burn", txHash: BURN, chain: "BASE-SEPOLIA" } });
+    expect(text(render(read))).toContain(
+      "Pending , reached Oct 11, 2026, 10:01 UTC Circle confirmed the burn on Arc testnet; the mint on Base Sepolia is not recorded yet (Circle: CONFIRMED, as of Oct 11, 2026, 10:25 UTC)."
+    );
+  });
+
   it("keeps Circle's word while the burn is not confirmed, and names the network a mainnet workspace pays on", () => {
     expect(text(render(bridged("SENT")))).toContain("Circle took it and had not confirmed it yet (Circle: SENT).");
     expect(text(render(bridged("CONFIRMED"), "arc-mainnet"))).toContain("Circle confirmed the burn on Arc mainnet;");
@@ -202,11 +225,22 @@ describe("the ends", () => {
     expect(text(render(lifecycle([...decided, pending, { kind: "ended", at: T(4), attempt: 1, end: "cancelled", state: "CANCELLED", reason: null }], open)))).toContain(
       "Cancelled: Circle cancelled it. The payee was not paid."
     );
-    const notSent = text(render(lifecycle([...decided, { kind: "ended", at: T(4), attempt: 1, end: "not_sent", state: null, reason: "refused" }], open)));
-    expect(notSent).toContain("Not sent: the send did not reach Circle, so the payee was not paid.");
-    // Started, never said sent to Circle, when it did not reach Circle.
+    const notSent = text(render(lifecycle([...decided, { kind: "ended", at: T(4), attempt: 1, end: "not_sent", state: null, reason: "This workspace has no Gateway balance yet." }], open)));
+    expect(notSent).toContain("Not sent: it stopped before Circle took the transfer (This workspace has no Gateway balance yet). The payee was not paid.");
+    // Started, never said sent to Circle, when Circle never took it.
     expect(notSent).toContain("Vestiarion started sending it.");
     expect(notSent).not.toContain("Vestiarion sent it to Circle");
+  });
+
+  it("says a request Circle refused stopped before Circle took the transfer, never that it did not reach Circle, with Circle's words", () => {
+    // Circle answered the send with a 4xx in its own words: the row keeps them in last_error, with no provider id.
+    const refused = text(render(lifecycle([...decided, { kind: "ended", at: T(4), attempt: 1, end: "not_sent", state: null, reason: "the asset amount owned by the wallet is insufficient" }], open)));
+    expect(refused).toContain("Not sent: it stopped before Circle took the transfer (the asset amount owned by the wallet is insufficient). The payee was not paid.");
+    expect(refused).not.toContain("did not reach Circle");
+    // With no reason recorded, it says so without one.
+    expect(text(render(lifecycle([...decided, { kind: "ended", at: T(4), attempt: 1, end: "not_sent", state: null, reason: null }], open)))).toContain(
+      "Not sent: it stopped before Circle took the transfer. The payee was not paid."
+    );
   });
 
   it("follows a new attempt, and lists the earlier one with how it ended", () => {
@@ -252,6 +286,38 @@ describe("what available means (L4)", () => {
     expect(words).toContain("Simulated in the sandbox: confirmed at once, with nothing on chain.");
     expect(words).toContain("A simulated payment reaches no wallet.");
     expect(words).not.toContain("cannot be charged back");
+  });
+
+  it("says a payment created in a sandbox and paid live once the workspace went live was sent to Circle, as its receipt does", () => {
+    // The simulator refused it in the sandbox; the row keeps provider 'simulate', and the live result wrote 'live'.
+    const intent: IntentRecord = {
+      status: "confirmed",
+      provider: "simulate",
+      provider_mode: "live",
+      provider_tx_id: "circle-tx-1",
+      provider_state: "COMPLETE",
+      failure_reason: null,
+      last_error: null,
+      tx_hash: TX,
+      mint_tx_hash: null,
+      destination_chain: null,
+      transfer_attempt: 1,
+      previous_attempts: [],
+      submitted_at: T(1),
+      executed_at: T(5),
+      confirmed_at: T(5),
+      created_at: T(0),
+      updated_at: T(5),
+      batch_key: null,
+      network: "arc-testnet",
+    };
+    const entries = [{ seq: 42, ts: T(6), action: "approval_paid", detail: { invoiceId: "inv-1", status: "paid", txRef: TX } }];
+    const words = text(render(settlementOf({ intent, entries, source: { type: "invoice", id: "inv-1" }, books: paid, now: NOW })));
+    expect(words).toContain("Vestiarion sent it to Circle.");
+    expect(words).toContain("Circle confirmed it on Arc testnet.");
+    expect(words).toContain("A confirmed transfer on Arc testnet is final: the money is in the payee's wallet there.");
+    expect(words).toContain("A confirmed transfer cannot be charged back or reversed.");
+    expect(words).not.toMatch(/simulated/i);
   });
 
   it("links a reconciled Gateway payout's transaction on the payee's chain, never on Arc's explorer", () => {

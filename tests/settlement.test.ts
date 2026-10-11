@@ -44,7 +44,8 @@ describe("the stages (L2)", () => {
     expect(settlement.stages.proposed).toMatchObject({ at: T(0), by: "agent", seq: 41 });
     expect(settlement.stages.authorized).toMatchObject({ by: "code", seq: 41 });
     expect(settlement.stages.submitted).toMatchObject({ at: T(0, 2), by: "vestiarion" });
-    expect(settlement.stages.pending).toMatchObject({ at: T(0, 3), by: "circle", state: "SENT" });
+    // Circle took it when it was sent; its word was read a second later.
+    expect(settlement.stages.pending).toMatchObject({ at: T(0, 2), stateAt: T(0, 3), by: "circle", state: "SENT" });
     expect(settlement.stages.confirmed).toMatchObject({ at: T(0, 5), by: "circle", txHash: TX });
     // A direct payment on the network's own chain is in the payee's wallet once confirmed: the chain says so (L4).
     expect(settlement.stages.available).toMatchObject({ at: T(0, 5), by: "chain" });
@@ -62,10 +63,11 @@ describe("the stages (L2)", () => {
     expect(reduceSettlement(input([proposed, authorized, submitted, pending], { books: openBooks }))).toMatchObject({ status: "in_flight", stage: "pending", inFlightSince: T(0, 2) });
   });
 
-  it("keeps Circle's latest word while pending, and says when its last read failed", () => {
+  it("keeps Circle's latest word while pending, with when it was read, and says when its last read failed", () => {
     const stuck: SettlementFact = { kind: "pending", at: T(20), attempt: 1, state: "STUCK", by: "watch" };
     const settlement = reduceSettlement(input([submitted, pending, stuck, { kind: "read_failed", at: T(25), attempt: 1 }], { books: openBooks }));
-    expect(settlement.stages.pending).toMatchObject({ at: T(20), state: "STUCK", by: "watch" });
+    // Reached when Circle took it, at the send, however late its latest word: a later read never moves the stage.
+    expect(settlement.stages.pending).toMatchObject({ at: T(0, 2), stateAt: T(20), state: "STUCK", by: "watch" });
     expect(settlement.readFailedAt).toBe(T(25));
     // A later answer from Circle clears it.
     const answered = reduceSettlement(input([submitted, pending, { kind: "read_failed", at: T(25), attempt: 1 }, { ...pending, at: T(26) }], { books: openBooks }));
@@ -593,6 +595,31 @@ describe("settlementOf", () => {
     expect(direct.stages.available).toMatchObject({ by: "chain" });
     const simulated = settlementOf({ intent: intent({ provider: "simulate", provider_mode: "simulate", tx_hash: "sim_1" }), entries: [], source: { type: "invoice", id: "inv-1" }, books: null, now: NOW });
     expect(simulated.simulated).toBe(true);
+  });
+
+  it("knows a simulated payment by its last result's mode, as the receipt does, not by the provider it was created with", () => {
+    const simulated = (over: Partial<IntentRecord>) => settlementOf({ intent: intent(over), entries: [], source: { type: "invoice", id: "inv-1" }, books: null, now: NOW }).simulated;
+    // Created in a sandbox, whose simulator refused it, then paid live once the workspace connected Circle: the row keeps
+    // provider 'simulate' (ensure ignores a duplicate), and the live result wrote provider_mode 'live'.
+    expect(simulated({ provider: "simulate", provider_mode: "live" })).toBe(false);
+    expect(simulated({ provider: "circle", provider_mode: "simulate" })).toBe(true);
+    // A row from before provider_mode (0008) is told by its provider.
+    expect(simulated({ provider: "simulate", provider_mode: null })).toBe(true);
+    expect(simulated({ provider: "circle", provider_mode: null })).toBe(false);
+  });
+
+  it("shows Pending from when Circle took the transfer, at its send, however often the cycle reads it again", () => {
+    // Sent at 10:00 and answered at once; each cycle's read rewrites executed_at, the latest at 10:25.
+    const settlement = settlementOf({
+      intent: intent({ status: "pending", provider_state: "SENT", tx_hash: null, confirmed_at: null, submitted_at: T(0), executed_at: T(25), updated_at: T(25) }),
+      entries: [],
+      source: { type: "invoice", id: "inv-1" },
+      books: null,
+      now: NOW,
+    });
+    expect(settlement.stages.submitted?.at).toBe(T(0));
+    expect(settlement.stages.pending).toMatchObject({ at: T(0), state: "SENT", stateAt: T(25), by: "circle" });
+    expect(settlement.inFlightSince).toBe(T(0));
   });
 
   it("tells a CCTP payout's burn, or its approve, Circle confirmed on Arc from its Circle id, with that step's transaction and the payee's chain", () => {

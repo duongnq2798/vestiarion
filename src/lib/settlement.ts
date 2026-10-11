@@ -24,7 +24,10 @@ export type SettlementFact =
   | { kind: "authorized"; at: string; by: "code" | "person" | "two_people"; seq: number | null }
   /** Vestiarion sent the attempt to Circle. */
   | { kind: "submitted"; at: string; attempt: number }
-  /** Circle has the transfer and has not confirmed it: its own state word, read by the payment or the transfer watch. */
+  /**
+   * Circle has the transfer and has not confirmed it: its own state word, read by the payment or the transfer watch, at
+   * `at`. Circle took it as it was sent, so the stage is reached by the send, whenever its word was read.
+   */
   | { kind: "pending"; at: string; attempt: number; state: string | null; by: "circle" | "watch" }
   /** A read of Vestiarion's failed: it says nothing about the transfer. */
   | { kind: "read_failed"; at: string; attempt: number }
@@ -88,8 +91,10 @@ export interface StageMark {
   by: StageSource;
   /** The signed entry the stage comes from, when one does. */
   seq?: number | null;
-  /** Circle's own word, while pending. */
+  /** Circle's own word, while pending: its latest. */
   state?: string | null;
+  /** When that word was read, by the payment's own read or the transfer watch's; `at` is when Circle took the transfer. */
+  stateAt?: string | null;
   /** The transaction: confirmed, minted, the one the books name, or a payout's step on the network Circle confirmed. */
   txHash?: string | null;
   /** The chain a payout to another chain was minted on. */
@@ -159,7 +164,8 @@ const CONFIRMED_STATES = new Set(["CONFIRMED", "COMPLETE"]);
 interface AttemptState {
   attempt: number;
   submittedAt: string | null;
-  pending: { at: string; state: string | null; by: "circle" | "watch" } | null;
+  /** Circle's latest word, read at `at`, and when the first word about this attempt was read. */
+  pending: { at: string; state: string | null; by: "circle" | "watch"; first: string } | null;
   readFailedAt: string | null;
   unknownSince: string | null;
   confirmed: { at: string; refs: string[]; txHash: string | null } | null;
@@ -242,7 +248,7 @@ function apply(state: AttemptState, fact: Exclude<SettlementFact, { kind: "propo
         state.ended = null;
       }
       state.unknownSince = null;
-      if (!state.pending || !later(state.pending.at, fact.at)) state.pending = { at: fact.at, state: fact.state, by: fact.by };
+      if (!state.pending || !later(state.pending.at, fact.at)) state.pending = { at: fact.at, state: fact.state, by: fact.by, first: state.pending?.first ?? fact.at };
       return;
     case "read_failed":
       if (state.confirmed || state.ended) return;
@@ -326,7 +332,12 @@ export function reduceSettlement(input: SettlementInput): Settlement {
   const stepConfirmed =
     !confirmed && !current.ended && input.crossChain && input.bridge && current.pending?.state && CONFIRMED_STATES.has(current.pending.state) ? input.bridge : null;
   if (current.pending) {
-    stages.pending = { at: current.pending.at, by: current.pending.by, state: current.pending.state, ...(stepConfirmed?.txHash ? { txHash: stepConfirmed.txHash } : {}) };
+    // Reached when Circle took the transfer, as the send reached it: at the send, or at Circle's first word when that is
+    // earlier or no send is recorded. A later read, each cycle's or the transfer watch's, changes Circle's word and when
+    // it was read (`stateAt`), never when the stage was reached (L2).
+    const pending = current.pending;
+    const reached = sentAt && !later(sentAt, pending.first) ? sentAt : pending.first;
+    stages.pending = { at: reached, by: pending.by, state: pending.state, stateAt: pending.at, ...(stepConfirmed?.txHash ? { txHash: stepConfirmed.txHash } : {}) };
   }
   if (confirmed) {
     // Gateway's payout is known by its mint, on the payee's chain: its transaction is linked there, never on Arc.

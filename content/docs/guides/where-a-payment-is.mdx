@@ -14,7 +14,7 @@ On **Bills & receivables**, open a payable the agent or a person has paid or sta
 6. **In the payee's wallet**: a transfer on Arc is final once it is confirmed, so this stage is reached with the confirmation: "Moving it to a bank is the payee's own step, which Vestiarion does not see." A payout to another chain reaches it once its mint there is recorded, and names that chain. A sandbox payment is simulated: "A simulated payment reaches no wallet."
 7. **Reconciled**: "The bill is marked paid with this transaction, and a signed entry records it."
 
-Each reached stage shows when it was reached, in UTC. The signed entry behind Proposed and Authorized is written once the transfer's first answer is back, a little after the send, so these two show the time of the send when their entry is later; the audit log keeps the entry's own time. A stage still to come says "Not yet."; one passed without a record of its own, such as a pending read Circle never needed, says "Not recorded here."
+Each reached stage shows when it was reached, in UTC. Circle takes a transfer as it is sent, so Pending shows the time of the send; the agent's cycle and the transfer watch ask Circle again later, and a word read after the send says when, such as "(Circle: SENT, as of Oct 11, 2026, 10:25 UTC)". The signed entry behind Proposed and Authorized is written once the transfer's first answer is back, a little after the send, so these two show the time of the send when their entry is later; the audit log keeps the entry's own time. A stage still to come says "Not yet."; one passed without a record of its own, such as a pending read Circle never needed, says "Not recorded here."
 
 <Screenshot
   src="/docs/guides/where-a-payment-is-track.png"
@@ -28,7 +28,7 @@ The stages stop where the payment did, and say how it ended:
 
 - **Failed**: Circle ended the transfer, with its reason. "The payee was not paid."
 - **Cancelled**: "Cancelled: Circle cancelled it. The payee was not paid."
-- **Not sent**: "Not sent: the send did not reach Circle, so the payee was not paid." Vestiarion says this when the send stopped before Circle took it, such as a request Circle refused or a check that stopped it, or when Circle listed nothing 15 minutes after a send it never answered.
+- **Not sent**: "Not sent: it stopped before Circle took the transfer", with why, as it was recorded: Circle's own words for a request it refused, the check that stopped it before the send, or that Circle listed no transfer 15 minutes after a send it never answered. "The payee was not paid."
 
 None of them says no money moved: a transaction that failed on chain still paid its network fee. When a person sends it again with **Approve and pay**, the card follows the new attempt, and **Earlier attempts** lists how each one before it ended.
 

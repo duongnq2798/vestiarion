@@ -140,19 +140,33 @@ function payeeChain(chain: string): { label: string; explorerTx: string | null }
   }
 }
 
-/** Circle's state word, said as it is. */
-const circleWord = (state: string | null | undefined) => (state ? ` (Circle: ${state})` : "");
+/** Circle's state word, said as it is, and when it was read (`asOf`) once that is not the stage's own time. */
+const circleWord = (state: string | null | undefined, asOf: string | null = null) => {
+  const when = asOf ? `as of ${asOf}` : "";
+  return state ? ` (Circle: ${state}${when ? `, ${when}` : ""})` : when ? ` (${when})` : "";
+};
+
+/**
+ * When the pending stage's word was read, in UTC, once that is another minute than the stage's: the stage is reached when
+ * Circle took the transfer, and each later read, the agent's cycle's or the transfer watch's, only updates the word (L2).
+ */
+function wordReadAt(mark: Pick<StageMark, "at" | "stateAt">): string | null {
+  if (!mark.stateAt) return null;
+  const read = utcMinute(mark.stateAt);
+  return mark.at && utcMinute(mark.at) === read ? null : read;
+}
 
 /**
  * What Circle's word for a CCTP payout means when it is about the payout's step on the network, not the payout (L3): its
  * burn is confirmed and the mint is not recorded yet, or its approve is confirmed and the burn is not sent yet. The
- * transfer watch's read is said as the watch's. The pending stage says it as a sentence, and Treasury's row in its line.
+ * transfer watch's read is said as the watch's. The pending stage says it as a sentence, with when the word was read
+ * (`asOf`), and Treasury's row in its line.
  */
-export function stepConfirmedLine(step: BridgeStep, mark: Pick<StageMark, "by" | "state">, network: Network): string {
+export function stepConfirmedLine(step: BridgeStep, mark: Pick<StageMark, "by" | "state">, network: Network, asOf: string | null = null): string {
   const on = `the ${step.step} on ${networkProfile(network).label}`;
   const confirmed = mark.by === "watch" ? `When the transfer watch asked, Circle had confirmed ${on}` : `Circle confirmed ${on}`;
   const toCome = step.step === "approve" ? "the burn that pays the payee has not been sent yet" : `the mint on ${step.chain ? payeeChain(step.chain).label : "the payee's chain"} is not recorded yet`;
-  return `${confirmed}; ${toCome}${circleWord(mark.state)}`;
+  return `${confirmed}; ${toCome}${circleWord(mark.state, asOf)}`;
 }
 
 /** What a reached stage says, from its source (L2, L4). */
@@ -165,22 +179,25 @@ function reachedLine(stage: SettlementStage, mark: StageMark, settlement: Settle
       return mark.by === "two_people" ? "Two people approved it." : mark.by === "person" ? "A person approved it." : "Code's checks passed, so the agent could pay it on its own.";
     case "submitted": {
       const which = settlement.attempt > 1 ? `, as attempt ${settlement.attempt}` : "";
-      // A send that never reached Circle was started, not sent: the end below says so (L3). The sandbox never contacts Circle.
+      // A send Circle never took was started, not sent: the end below says so (L3). The sandbox never contacts Circle.
       if (settlement.end?.end === "not_sent") return `Vestiarion started sending it${which}.`;
       return settlement.simulated ? `Vestiarion simulated sending it${which}.` : `Vestiarion sent it to Circle${which}.`;
     }
-    case "pending":
-      if (mark.state === "STUCK") return "Circle shows it stuck: it was sent and can still be mined (Circle: STUCK).";
+    case "pending": {
+      // The stage's time is when Circle took it; Circle's word says when it was read, once that is later (L2).
+      const asOf = wordReadAt(mark);
+      if (mark.state === "STUCK") return `Circle shows it stuck: it was sent and can still be mined${circleWord(mark.state, asOf)}.`;
       // Gateway's failure is not an end: its attestation may still be minted, so nothing is sent again (L3). Neither the
       // transfer watch nor the agent's cycle reads it again: only a person's Approve and pay does.
       if (mark.state === GATEWAY_FAILED) {
-        return "Gateway reported it failed, but it may still be minted on the payee's chain, so nothing is sent again (Circle: GATEWAY_FAILED). Nothing checks it on its own: check with Circle whether it was minted.";
+        return `Gateway reported it failed, but it may still be minted on the payee's chain, so nothing is sent again${circleWord(mark.state, asOf)}. Nothing checks it on its own: check with Circle whether it was minted.`;
       }
       // A CCTP payout's burn (or approve) Circle confirmed: Circle's word is the step's, never the payout's (L3).
-      if (settlement.stepConfirmed) return `${stepConfirmedLine(settlement.stepConfirmed, mark, network)}.`;
+      if (settlement.stepConfirmed) return `${stepConfirmedLine(settlement.stepConfirmed, mark, network, asOf)}.`;
       // The watch names Circle's word only when Circle answered it; otherwise it told the payment from its age alone.
-      if (mark.by === "watch") return mark.state ? `Not confirmed when the transfer watch asked Circle${circleWord(mark.state)}.` : "Not confirmed when the transfer watch checked it.";
-      return `Circle took it and had not confirmed it yet${circleWord(mark.state)}.`;
+      if (mark.by === "watch") return mark.state ? `Not confirmed when the transfer watch asked Circle${circleWord(mark.state, asOf)}.` : `Not confirmed when the transfer watch checked it${circleWord(null, asOf)}.`;
+      return `Circle took it and had not confirmed it yet${circleWord(mark.state, asOf)}.`;
+    }
     case "confirmed":
       if (settlement.simulated) return "Simulated in the sandbox: confirmed at once, with nothing on chain.";
       // A payout to another chain is confirmed once it is minted there, which the next stage names.
@@ -211,7 +228,12 @@ function waitingLine(stage: SettlementStage, settlement: Settlement, ended: bool
 /** How an attempt ended, in a sentence (L3): the payee was not paid, never "no money moved". */
 function endLine(end: { end: "failed" | "cancelled" | "not_sent"; state: string | null; reason: string | null }): string {
   if (end.end === "cancelled") return "Cancelled: Circle cancelled it. The payee was not paid.";
-  if (end.end === "not_sent") return "Not sent: the send did not reach Circle, so the payee was not paid.";
+  if (end.end === "not_sent") {
+    // Circle never took it: Circle refused the request, a check stopped it, the connection was never made, or Circle
+    // listed nothing after a send it never answered. The row does not say which, so the recorded reason does (L3).
+    const reason = end.reason?.trim().replace(/\.$/, "");
+    return `Not sent: it stopped before Circle took the transfer${reason ? ` (${reason})` : ""}. The payee was not paid.`;
+  }
   const why = [end.state, end.reason].filter(Boolean).join(": ");
   return `Failed: Circle ended it${why ? ` (${why})` : ""}. The payee was not paid.`;
 }

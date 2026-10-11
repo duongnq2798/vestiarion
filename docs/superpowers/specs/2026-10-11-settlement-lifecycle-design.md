@@ -48,6 +48,10 @@ Each decision names what it costs if it turns out wrong.
    `created_at`. Never for an intent still `created` (a new attempt not yet sent keeps the last one's `submitted_at`).
 4. **Pending**: Circle took it (a provider id) and has not confirmed it, with Circle's own state word (`INITIATED`,
    `QUEUED`, `SENT`, `STUCK` …), and the transfer watch's `payment_stuck` entries (D5 of the stuck-transfer alert).
+   Circle takes a transfer as it answers the send, so the stage is reached at the send (or at Circle's first word, when
+   that is earlier or no send is recorded). Every reconcile rewrites `executed_at`, the time of Circle's latest word: it
+   is that word's own time (`stateAt`), said with it once it is another minute than the send's ("(Circle: SENT, as of
+   Oct 11, 2026, 10:25 UTC)"), and never moves the stage.
 5. **Confirmed**: Circle reported `CONFIRMED` or `COMPLETE` (intent `confirmed`, `confirmed_at`), with the transaction.
 6. **In the payee's wallet**: what "available" means on this rail (L4).
 7. **Reconciled**: the books agree with the confirmed transfer (L5).
@@ -63,9 +67,11 @@ names its source, so a person can check it there.
 **L3. Ends that are not stages, kept apart.**
 - **Failed**: Circle ended the attempt `FAILED` or `DENIED` (Gateway's expired attestation is recorded `FAILED`).
 - **Cancelled**: Circle ended it `CANCELLED`.
-- **Not sent**: the send never reached Circle: an error of Vestiarion's before Circle answered (a refusal, a check
-  that stopped it, a connection never made), or Circle listing nothing 15 minutes after a send it never answered
-  (`NO_EARLIER_SEND`).
+- **Not sent**: Circle never took the transfer: Circle refused the request (a 4xx, which `sendToCircle` keeps in
+  Circle's own words), a check stopped it before the send, the connection was never made, or Circle listed nothing 15
+  minutes after a send it never answered (`NO_EARLIER_SEND`). The row records no provider id and its `last_error`, but
+  not which of these it was, so the track says what holds for all of them, "Not sent: it stopped before Circle took the
+  transfer", with the recorded reason, and never that the send did not reach Circle.
 - **Outcome unknown**: Circle never answered the send (payment safety R1, R10: `unknownSend`, a send left
   `submitting` past its claim, a batch whose answer was lost). It is in flight, never failed.
 - A read of Vestiarion's that failed on a transfer Circle took (`failed` with a provider id and a state Circle has not
@@ -86,8 +92,8 @@ names its source, so a person can check it there.
   yet"), linking that step's transaction on Arc; the transfer watch's read says "When the transfer watch asked, Circle
   had confirmed the burn …". Treasury's row says the same in place of Circle's word alone. It stays Pending and in
   flight: the payee has nothing until the mint.
-- Copy for Failed and Cancelled says the payee was not paid; it never says "no money moved", since a transaction that
-  failed on chain still spent its gas.
+- Copy for Failed, Cancelled and Not sent says the payee was not paid; it never says "no money moved", since a
+  transaction that failed on chain still spent its gas.
 - Cost if wrong: a failure shown for a transfer that may still move invites paying it again by hand; these rules follow
   `paymentWasSent` and `lastAttemptOf`, which Approvals already applies.
 
@@ -98,7 +104,10 @@ names its source, so a person can check it there.
 - A payout to another chain (CCTP, Gateway) reaches it once its mint on the payee's chain is recorded
   (`mint_tx_hash`), named "Minted on" that chain. The live provider records such a payout `confirmed` only with its
   mint.
-- A simulated payment reaches no wallet, and says so.
+- A simulated payment reaches no wallet, and says so. A payment is simulated by the mode of its last result
+  (`provider_mode`, which every result rewrites), as the receipt reads it; only a row without one falls back to
+  `provider`. That column is fixed when the row is created, so a payment the sandbox's simulator refused and a person
+  paid once the workspace went live keeps `simulate` there, and is a live payment.
 - Nothing says the money is in a bank. Moving USDC to a bank is the payee's own step, which Vestiarion does not see,
   and the step says that.
 - Refunds, reversals, chargebacks and disputes do not exist for a USDC transfer: there is no stage for them. The track
@@ -153,8 +162,9 @@ names its source, so a person can check it there.
 **L7. Where it shows.**
 - **Bills & receivables**: each payable with a payment record shows **Where the payment is** in its card, under "How the
   agent decided", folded like the trail. Its summary says where the payment is now ("Reconciled", "Pending", "Outcome
-  unknown" …), with how long a payment in flight has been sent; opened, the seven stages each say when (UTC), from
-  which source, and link their entry or transaction. `#settlement-<id>` opens it.
+  unknown" …), with how long a payment in flight has been sent; opened, the seven stages each say when they were
+  reached (UTC; Circle's word at Pending says when it was read, once later, L2), from which source, and link their
+  entry or transaction. `#settlement-<id>` opens it.
 - **Treasury**: **Payments in flight**: every payment sent and not confirmed (not a `GATEWAY_FAILED` one, L3), oldest first, with how long ago it was
   sent, where it is and Circle's word for it (for a CCTP payout's burn or approve Circle confirmed, which step that word
   is about, L3), and, under "Not matching the books", every other payment whose books do not match, a bill held for a
@@ -251,13 +261,15 @@ names its source, so a person can check it there.
   not sent reopened by a later send and by Circle's answer, outcome unknown and its ends, a new attempt after a terminal
   failure, late facts about an earlier attempt, confirmed never undone, every permutation of a fact list giving the same
   result, duplicates, the books' mismatches, in-flight totals per currency and pending age past the threshold, a CCTP
-  payout's step Circle confirmed, and who comes back to a bill by its status. The facts built from intent rows and
-  ledger entries. The pin of L1.
+  payout's step Circle confirmed, Pending reached at the send however late Circle's latest word, and who comes back to a
+  bill by its status. The facts built from intent rows and ledger entries, and a payment simulated by its last result's
+  mode, not the provider it was created with. The pin of L1.
 - `tests/settlement-read.test.ts`: the reads, with a fake Supabase: named columns, paging, the Treasury filter.
 - `tests/settlement-track.test.tsx` and `tests/payments-in-flight.test.tsx`: what the track and the Treasury section
   say, with words for every state (never colour alone): an unknown outcome and a confirmed transfer the books miss
-  for each one who comes back to the bill, and a CCTP payout's burn or approve Circle confirmed; and the pages' wiring
-  as source pins.
+  for each one who comes back to the bill, a CCTP payout's burn or approve Circle confirmed, Circle's latest word with
+  when it was read, a request Circle refused with its reason, and a sandbox payment paid live; and the pages' wiring as
+  source pins.
 - `tests/receipts-status.test.ts`: the receipt's Status row for each combination of checks.
 - `tests/decision-trail.test.tsx`, `tests/evidence-chain.test.ts` and `tests/reasoning-copy.test.ts`: the approval step,
   the evidence page's People step and the note by status.

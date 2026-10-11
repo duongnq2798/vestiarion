@@ -66,6 +66,8 @@ export function intentFacts(intent: IntentRecord, now: number): SettlementFact[]
   if (intent.status === "created") return facts;
   const sentAt = intent.submitted_at ?? intent.executed_at ?? intent.created_at;
   facts.push({ kind: "submitted", at: sentAt, attempt });
+  // When Circle's word was last read: every reconcile rewrites `executed_at`. A pending fact carries it as the word's
+  // time; the stage itself is reached when Circle took the transfer, at its send (L2).
   const lastRead = intent.executed_at ?? intent.updated_at;
   switch (intent.status) {
     case "submitting":
@@ -200,7 +202,10 @@ export function settlementOf(input: {
     books: input.books,
     crossChain: crossChain(intent.destination_chain),
     bridge: bridgeOf(intent),
-    simulated: intent.provider === "simulate" || intent.provider_mode === "simulate",
+    // By the mode of its last result, as the receipt reads it: `provider` is fixed when the row is created, so a payment
+    // started in a sandbox and paid live once the workspace went live keeps 'simulate' there. A row from before
+    // `provider_mode` (0008) is told by its provider.
+    simulated: (intent.provider_mode ?? intent.provider) === "simulate",
     recordingsComplete: input.entriesComplete ?? true,
   });
 }
