@@ -1198,15 +1198,20 @@ Bills & receivables opens with the next 14 UTC days of payments
 reserve and its yield, Safe to spend's cushion (`cashOutlook(...).cushion`, so
 the two figures never disagree), the open payables and milestones, the agent's
 spending limit with what it paid, and the figure for two approvals, it gives
-each counted line a day (today when overdue, the due date otherwise, a
-discount's last day only when the discount is worth at least the reserve's
-yield to the due date, the balance stays at or above the cushion until the due
-date, no other line falls short and the spending limit has room; a discount day
-the agent chose itself is kept against the cushion, never moved later for it,
-and a scheduled bill whose day has come goes where the agent's own rule puts it
-at its next cycle, unmovable), walks the days in the cash's order, marks a line
-the balance cannot cover as short without spending it, and previews each line's
-checks (payment limit, two approvals, screening, the daily and 7-day limit). `paymentPlanInput` (`src/lib/payment-plan-input.ts`) turns the
+each counted line a day (today when overdue, the due date otherwise or the
+agent's own earlier day, never later than the agent chose; a discount's last
+day only when the discount is worth at least the reserve's yield to the due
+date, the cash covers the bill then, no other line falls short, the spending
+limit has room for the billed amount and the balance stays at or above the
+cushion until the bill would otherwise pay, each check holding against the plan
+and against the schedule with only that bill moved; a discount day the agent
+chose itself is kept whatever it holds, and a scheduled bill whose day has come
+goes where the agent's own rule puts it at its next cycle, unmovable), walks
+the days in the cash's order, marks a line the balance cannot cover as short
+without spending it, counting it in full as still owed, and previews each
+line's checks (payment limit, two approvals, screening, the daily and 7-day
+limit on the billed amount), a verified milestone's included. A move is only
+ever to an earlier day inside the 14 days. `paymentPlanInput` (`src/lib/payment-plan-input.ts`) turns the
 rows into that input, and `readPaymentPlan` (`src/lib/payment-plan-read.ts`)
 reads them in the workspace's scope; the page and the command both go through
 it, so they build the same plan. The page reads it best effort: a plan that

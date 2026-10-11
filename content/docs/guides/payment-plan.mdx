@@ -20,8 +20,8 @@ At its top, a line says how fresh the balance is: "Sandbox: the balance is simul
 
 ## What it counts
 
-- **Bills to pay in USDC that are still open**: waiting for the agent, scheduled, on their way, held, waiting for details, or being decided in **Approvals**. A bill is in the plan when its due date, the day the agent scheduled it for, or its discount's last day falls within the 14 days. A bill whose day falls after them is listed under "After" the 14th day, and not counted in the days shown.
-- **Open milestones**, counted today: they are paid once their work is verified.
+- **Bills to pay in USDC that are still open**: waiting for the agent, scheduled, on their way, held, waiting for details, or being decided in **Approvals**. A bill is in the plan when its due date, the day the agent scheduled it for, or its discount's last day falls within the 14 days. A bill whose day falls after them is listed under "After" the 14th day, and not counted in the days shown. A bill the agent scheduled within the 14 days keeps that day, even when its due date falls after them.
+- **Open milestones**, counted today: they are paid once their work is verified. A verified milestone the agent may not release on its own, above two approvals or the contractor's payment limit, or to a contractor screened high risk, waits for people and says so.
 - **Each obligation once.** A payment already on its way is that payment. A milestone whose USDC is held in escrow is listed under **Listed, not counted**, since its cash has left the wallet, and so is a bill the agent flagged for review, such as a likely duplicate.
 - **A bill and a milestone for the same payee and amount** may be one payment entered twice. The plan cannot tell, and the agent would pay both, so both are counted and both say **May be the same payment** until one of them is closed.
 - **Bills in EURC** are paid from the EURC balance: the plan names how many there are and what they come to, and never adds them to USDC.
@@ -30,27 +30,29 @@ At its top, a line says how fresh the balance is: "Sandbox: the balance is simul
 ## How each bill gets its day
 
 1. **Overdue or due today**: today, first in line.
-2. **Otherwise its due date.** Never later, and never earlier for any reason but a discount.
+2. **Otherwise its due date, or the earlier day the agent scheduled it for.** The plan never moves a payment later than the agent chose, and never earlier for any reason but a discount. A bill the agent scheduled after its due date, because the due date changed since, is brought back to it only when nothing else is then short or above the agent's spending limit.
 3. **Earlier only for an early-payment discount**, on the discount's last day, and only when all of these hold:
    - the discount is worth at least what holding the cash in the reserve until the due date would earn, which is how the agent decides too;
-   - with that bill paid then, the balance stays at or above the cushion on every day until its due date (from the due date on, paying early leaves more cash, never less);
+   - the cash covers the bill on that day;
+   - with that bill paid then, the balance stays at or above the cushion on every day until it would otherwise be paid (from then on, paying early leaves more cash, never less), unless the cash could not cover the bill on that later day at all;
    - no other bill is left short;
-   - the agent's spending limit has room for it that day, without taking the room another payment had.
+   - the agent's spending limit has room for the billed amount that day, without taking the room another payment had;
+   - each of these holds with no other line approved, so approving one line never depends on another.
 
-   The discounts the agent already chose to take are weighed first, then the others in the order of their last day, the larger first. A bill the agent already scheduled on the discount's last day keeps that day: the plan never moves a payment later only to earn yield or to protect the cushion, and the line says when the balance goes under the cushion. It offers the due date instead only when paying early would leave another bill short or above the agent's spending limit.
+   They are weighed in the order of the discounts' last days, the larger first. A bill the agent already scheduled on or before the discount's last day keeps that day: it takes the discount there, and the plan never moves it later, to earn yield, to protect the cushion or for anything else. Its line says what that day holds: when the balance goes under the cushion, or that the bill is short or above the agent's spending limit.
 
 Within a day, a payment already on its way comes first, then milestones, then overdue bills from the oldest, then by due date and the smaller amount.
 
-Each line says why it is on its day, for instance "Overdue since Oct 9, 2026: first in line today." or "Pays on Oct 14, 2026, the discount's last day, to take the 1% early-payment discount (6.40 USDC); the balance stays above the cushion." When the balance goes under the cushion later in the 14 days, the line says until which day it stays above it. When a discount is not taken, the line says why: it "would take the balance under the cushion", "would leave" another bill short or above the agent's spending limit, or "the reserve's yield until then" is worth more than the discount.
+Each line says why it is on its day, for instance "Overdue since Oct 9, 2026: first in line today." or "Pays on Oct 14, 2026, the discount's last day, to take the 1% early-payment discount (6.40 USDC); the balance stays above the cushion." When the balance goes under the cushion later in the 14 days, the line says until which day it stays above it. When a discount is not taken, the line says why: it "would take the balance under the cushion", "would leave" another bill short or above the agent's spending limit, the bill "would be short of cash" on that day, or "the reserve's yield until then" is worth more than the discount.
 
 ## Reading a line
 
 Each line has the payee, what leaves that day (a discounted amount shows the billed amount struck through beside it), where it stands with the agent, why it is on its day, and **Balance after**. A line can also carry these marks, each with its reason in a sentence beside it:
 
-- **Short of cash**: the balance cannot cover it on its day. It is not taken off the balance, since the agent holds a bill it cannot pay, and it counts in **Not covered by the cash**. The plan never spends cash that is not there.
+- **Short of cash**: the balance cannot cover it on its day. It is not taken off the balance, since the agent holds a bill it cannot pay, and it counts in **Not covered by the cash** at its billed amount: unpaid on its day, it loses any discount ending then. The plan never spends cash that is not there.
 - **Under the cushion**: paid on its day, it leaves the balance under the cushion. An obligation is still paid on its day: it is never delayed to protect the cushion.
-- **Over the agent's limit**: the agent's daily or 7-day spending limit has no room for it that day, so it waits for a person's approval. What the agent paid in the last 7 days counts against each of the first 7 days.
-- **Above payment limit**, **Two approvals** and **High risk**: the checks the agent runs before every payment. Such a bill is not the agent's to pay on its own: people approve it, and a payee screened high risk waits for Compliance.
+- **Over the agent's limit**: the agent's daily or 7-day spending limit has no room for it that day, so it waits for a person's approval. The limit is weighed against the billed amount, as the agent weighs it, and what leaves after a discount is what uses the room. What the agent paid in the last 7 days counts against each of the first 7 days. Bills in EURC use the limit too, at their USDC value, which the plan does not know: on a day the agent pays one, it may have less room than the plan shows.
+- **Above payment limit**, **Two approvals** and **High risk**: the checks the agent runs before every payment and before it releases a verified milestone. Such a bill or milestone is not the agent's to pay on its own: people approve it, and a payee screened high risk waits for Compliance.
 - **May be the same payment** and **Due date unreadable**.
 
 A bill that waits for a person, held or waiting for details, is counted on its due date and says **Waits for a person**, with **Decide in Approvals**. A bill the agent has not decided yet gets a day too, but says "Not decided by the agent yet": the agent decides it first. A bill whose scheduled day has come says "The agent decides it again at its next cycle": it is counted on the day the agent's own rule gives it then, today, a discount's last day or its due date, and nobody moves it.
@@ -65,7 +67,7 @@ A bill that waits for a person, held or waiting for details, is counted on its d
 
 ## Approve a day
 
-Owners, admins and approvers see **Approve** on a line whose plan day differs from the day the agent scheduled the bill for, and **Approve all shown** when there is more than one such line.
+Owners, admins and approvers see **Approve** on a line whose plan day, within the 14 days, is earlier than the day the agent scheduled the bill for, and **Approve all shown** when there is more than one such line.
 
 - **Approving moves the day, nothing else.** The bill is still scheduled; the agent decides it again on the new day, with every check it runs before paying: screening, the payee's payment limit, two approvals, its spending limit, and the cash. A move to today starts a cycle, as adding a bill does, so a discount ending today does not wait for the next scheduled one.
 - **Never your own bill.** Nobody approves the day of a bill they entered: the line says "You created this bill, so someone else must approve its day." The workspace's only approver can, and the audit log says so.

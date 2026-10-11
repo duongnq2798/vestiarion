@@ -112,15 +112,21 @@ export function paymentPlanInput(rows: PlanRows): PaymentPlanInput {
       createdBy: invoice.created_by ?? null,
     };
   });
-  const planMilestones: PlanMilestone[] = milestones.map((milestone) => ({
-    id: milestone.id,
-    counterpartyId: milestone.contractor_id,
-    payee: milestone.contractor_name,
-    title: milestone.title,
-    amount: num(milestone.amount),
-    status: milestone.status,
-    escrowState: milestone.escrow_state ?? null,
-  }));
+  const planMilestones: PlanMilestone[] = milestones.map((milestone) => {
+    // The contractor's limit and screening, which the agent checks before it releases a milestone (P7).
+    const contractor = counterparties.get(milestone.contractor_id);
+    return {
+      id: milestone.id,
+      counterpartyId: milestone.contractor_id,
+      payee: milestone.contractor_name,
+      title: milestone.title,
+      amount: num(milestone.amount),
+      status: milestone.status,
+      escrowState: milestone.escrow_state ?? null,
+      paymentLimit: contractor?.payment_limit == null ? null : num(contractor.payment_limit),
+      riskLevel: contractor?.risk_level ?? null,
+    };
+  });
 
   const status = rows.budget === "unread" ? null : rows.budget;
   const figures = status?.budget ?? null;

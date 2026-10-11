@@ -44,6 +44,8 @@ const milestone = (fields: Partial<PlanMilestone> = {}): PlanMilestone => ({
   amount: 50,
   status: "verified",
   escrowState: null,
+  paymentLimit: null,
+  riskLevel: "clear",
   ...fields,
 });
 
@@ -87,6 +89,39 @@ describe("the window", () => {
     );
     expect(plan.lines.map((planLine) => planLine.id)).toEqual(["deal"]);
     expect(line(plan, "deal").on).toBe("2026-10-14");
+  });
+
+  it("never offers a move out of the 14 days: a bill the agent scheduled inside them, due after them, keeps its day", () => {
+    const plan = planPayments(input({ operatingUsdc: 5000, bills: [bill({ amount: 1000, dueDate: ISO_DAY("2026-10-30"), scheduledFor: MIDNIGHT("2026-10-20") })] }));
+    const only = line(plan, "b-1");
+    expect(only).toMatchObject({ on: "2026-10-20", inWindow: true, pays: 1000, move: null, approvable: false, balanceAfter: 4000 });
+    expect(only.reason).toBe("Pays on Oct 20, 2026, as the agent scheduled it, ahead of its due date, Oct 30, 2026: the plan never moves a payment later than the agent chose.");
+    expect(plan.days).toEqual([{ day: "2026-10-20", out: 1000, balance: 4000, balanceNow: 4000 }]);
+  });
+
+  it("keeps a discount day the agent chose inside the 14 days when the due date falls after them, whatever the limit or the other bills", () => {
+    // 2/10 net 30, and the agent may pay 500 a day on its own: neither 980 on Oct 21 nor 1,000 on Nov 10 is its alone.
+    const alpha = (fields: Partial<PlanBill>) =>
+      bill({ id: "alpha", payee: "Alpha Freight", amount: 1000, dueDate: ISO_DAY("2026-11-10"), scheduledFor: MIDNIGHT("2026-10-21"), discount: { pct: 2, deadline: ISO_DAY("2026-10-21") }, ...fields });
+    const limited = planPayments(input({ operatingUsdc: 5000, limits: { budget: { dailyUsdc: 500, weeklyUsdc: null, spentToday: 0, spentThisWeek: 0 }, twoApprovalsAbove: null }, bills: [alpha({})] }));
+    expect(line(limited, "alpha")).toMatchObject({ on: "2026-10-21", pays: 980, move: null, approvable: false, agentPays: false });
+    expect(line(limited, "alpha").discount).toMatchObject({ taken: true, value: 20 });
+    expect(flagCodes(line(limited, "alpha"))).toEqual(["over_agent_limit"]);
+
+    // The cash covers Alpha or Xeno, not both: moved after the window, Alpha would lose its discount and still be short.
+    const short = planPayments(
+      input({
+        operatingUsdc: 1000,
+        bills: [
+          alpha({ dueDate: ISO_DAY("2026-11-05"), scheduledFor: MIDNIGHT("2026-10-20"), discount: { pct: 2, deadline: ISO_DAY("2026-10-20") } }),
+          bill({ id: "xeno", payee: "Xeno Labs", counterpartyId: "c-2", amount: 100, dueDate: ISO_DAY("2026-10-22"), status: "pending", scheduledFor: null }),
+        ],
+      })
+    );
+    expect(line(short, "alpha")).toMatchObject({ on: "2026-10-20", pays: 980, move: null });
+    expect(flagCodes(line(short, "xeno"))).toEqual(["short"]);
+    expect(short.stillOwed).toBe(100);
+    expect(short.moves).toBe(0);
   });
 });
 
@@ -329,6 +364,154 @@ describe("each bill's day (P4)", () => {
     expect(kept.discount).toMatchObject({ taken: true, value: 1 });
   });
 
+  it("keeps a day the agent chose before the discount's last day, never moving it later for no gain", () => {
+    const plan = (operatingUsdc: number, cushion: number) =>
+      planPayments(
+        input({ operatingUsdc, cushion, bills: [bill({ amount: 1000, scheduledFor: MIDNIGHT("2026-10-13"), discount: { pct: 2, deadline: ISO_DAY("2026-10-15") } })] })
+      );
+    const ample = line(plan(5000, 0), "b-1");
+    expect(ample).toMatchObject({ on: "2026-10-13", pays: 980, move: null, approvable: false });
+    expect(ample.discount).toEqual({ pct: 2, value: 20, until: "2026-10-15", taken: true });
+    expect(ample.reason).toBe(
+      "Pays on Oct 13, 2026, as the agent scheduled it, to take the 2% early-payment discount (20.00 USDC), which lasts until Oct 15, 2026; the balance stays above the cushion."
+    );
+    const tight = line(plan(1100, 200), "b-1");
+    expect(tight).toMatchObject({ on: "2026-10-13", move: null, approvable: false });
+    expect(tight.reason).toBe(
+      "Pays on Oct 13, 2026, as the agent scheduled it, to take the 2% early-payment discount (20.00 USDC), which lasts until Oct 15, 2026. The balance goes under the cushion on Oct 13, 2026; the plan never moves a payment later only to protect the cushion."
+    );
+    // A discount lasting past the 14 days: the agent's day inside them is kept, never moved out of the window.
+    const outside = line(
+      planPayments(input({ operatingUsdc: 5000, bills: [bill({ amount: 1000, dueDate: ISO_DAY("2026-10-30"), scheduledFor: MIDNIGHT("2026-10-20"), discount: { pct: 2, deadline: ISO_DAY("2026-10-26") } })] })),
+      "b-1"
+    );
+    expect(outside).toMatchObject({ on: "2026-10-20", inWindow: true, pays: 980, move: null });
+  });
+
+  it("keeps a day the agent chose before the due date when there is no discount to take", () => {
+    const only = line(planPayments(input({ bills: [bill({ scheduledFor: MIDNIGHT("2026-10-15") })] })), "b-1");
+    expect(only).toMatchObject({ on: "2026-10-15", move: null, approvable: false });
+    expect(only.reason).toBe("Pays on Oct 15, 2026, as the agent scheduled it, ahead of its due date, Oct 20, 2026: the plan never moves a payment later than the agent chose.");
+  });
+
+  it("pays early for a discount when that is what lets the cash cover the bill at all, cushion or not", () => {
+    // 990 covers 980 on Oct 15, not 1,000 on Oct 20.
+    for (const fields of [{ status: "pending", scheduledFor: null }, { scheduledFor: MIDNIGHT("2026-10-20") }]) {
+      const plan = planPayments(input({ operatingUsdc: 990, cushion: 150, bills: [bill({ amount: 1000, discount: { pct: 2, deadline: ISO_DAY("2026-10-15") }, ...fields })] }));
+      const only = line(plan, "b-1");
+      expect(only).toMatchObject({ on: "2026-10-15", pays: 980, balanceAfter: 10 });
+      expect(only.discount).toMatchObject({ taken: true, value: 20 });
+      expect(flagCodes(only)).toEqual(["below_cushion"]);
+      expect(only.reason).toBe(
+        "Pays on Oct 15, 2026, the discount's last day, to take the 2% early-payment discount (20.00 USDC): on its due date, Oct 20, 2026, the cash would not cover it."
+      );
+      expect(plan.stillOwed).toBe(0);
+      expect(plan.stillOwedNow).toBe(1000);
+    }
+    // Scheduled by the agent after the deadline, before the due date: that is the day the cash would not cover.
+    const agentDay = line(
+      planPayments(input({ operatingUsdc: 990, cushion: 150, bills: [bill({ amount: 1000, scheduledFor: MIDNIGHT("2026-10-17"), discount: { pct: 2, deadline: ISO_DAY("2026-10-15") } })] })),
+      "b-1"
+    );
+    expect(agentDay).toMatchObject({ on: "2026-10-15", move: { from: "2026-10-17", to: "2026-10-15" }, approvable: true });
+    expect(agentDay.reason).toBe(
+      "Pays on Oct 15, 2026, the discount's last day, to take the 2% early-payment discount (20.00 USDC): on Oct 17, 2026, as the agent scheduled it, the cash would not cover it."
+    );
+  });
+
+  it("never pays a bill early when that leaves another short, not even one the cash cannot cover on its due date", () => {
+    // Without the discount Xeno takes 100 and the deal's 1,000 is short; with it the deal would take 980 and leave Xeno
+    // short, a bill the cash covers now: the plan does not trade one for the other.
+    const plan = planPayments(
+      input({
+        operatingUsdc: 1000,
+        bills: [
+          bill({ id: "deal", amount: 1000, discount: { pct: 2, deadline: ISO_DAY("2026-10-15") } }),
+          bill({ id: "xeno", payee: "Xeno Labs", counterpartyId: "c-2", amount: 100, dueDate: ISO_DAY("2026-10-18"), scheduledFor: MIDNIGHT("2026-10-18") }),
+        ],
+      })
+    );
+    expect(line(plan, "deal")).toMatchObject({ on: "2026-10-20", move: null });
+    expect(line(plan, "deal").reason).toBe(
+      "Pays on its due date, Oct 20, 2026: paying on Oct 15, 2026 for the 2% discount (20.00 USDC) would leave Xeno Labs short on Oct 18, 2026."
+    );
+    expect(flagCodes(line(plan, "deal"))).toEqual(["short"]);
+    expect(flagCodes(line(plan, "xeno"))).toEqual([]);
+    expect(plan.stillOwed).toBe(1000);
+  });
+
+  it("does not take a discount the cash cannot cover on its last day, and counts a bill short on its day at the full amount", () => {
+    const plan = planPayments(input({ operatingUsdc: 500, bills: [bill({ amount: 1000, discount: { pct: 2, deadline: ISO_DAY("2026-10-15") } })] }));
+    const only = line(plan, "b-1");
+    expect(only).toMatchObject({ on: "2026-10-20", pays: 1000, move: null });
+    expect(only.discount).toMatchObject({ taken: false, value: 20 });
+    expect(only.reason).toBe("Pays on its due date, Oct 20, 2026: paying on Oct 15, 2026 for the 2% discount (20.00 USDC) would be short of cash on Oct 15, 2026.");
+    expect(flagCodes(only)).toEqual(["short"]);
+    expect(plan.stillOwed).toBe(1000);
+
+    // The agent's own discount day is kept, short: once the day passes unpaid, the bill owes its full amount.
+    const kept = planPayments(input({ operatingUsdc: 500, bills: [bill({ amount: 1000, scheduledFor: MIDNIGHT("2026-10-15"), discount: { pct: 2, deadline: ISO_DAY("2026-10-15") } })] }));
+    const agent = line(kept, "b-1");
+    expect(agent).toMatchObject({ on: "2026-10-15", pays: 980, move: null });
+    expect(agent.discount).toMatchObject({ taken: false });
+    expect(flagCodes(agent)).toEqual(["short"]);
+    expect(kept.stillOwed).toBe(1000);
+    expect(kept.discountsPlanned).toBe(0);
+  });
+
+  it("offers no move whose checks hold only with another move approved too", () => {
+    const limits = { budget: { dailyUsdc: 1000, weeklyUsdc: null, spentToday: 0, spentThisWeek: 0 }, twoApprovalsAbove: null };
+    // Alpha leaves Oct 15 for its discount on Oct 12; Beta's discount fits Oct 15's room only once Alpha has left it.
+    const plan = planPayments(
+      input({
+        operatingUsdc: 5000,
+        limits,
+        bills: [
+          bill({ id: "alpha", payee: "Alpha Freight", amount: 800, dueDate: ISO_DAY("2026-10-15"), scheduledFor: MIDNIGHT("2026-10-15"), discount: { pct: 2, deadline: ISO_DAY("2026-10-12") } }),
+          bill({ id: "beta", payee: "Beta Hosting", counterpartyId: "c-2", amount: 500, dueDate: ISO_DAY("2026-10-20"), scheduledFor: MIDNIGHT("2026-10-20"), discount: { pct: 2, deadline: ISO_DAY("2026-10-15") } }),
+        ],
+      })
+    );
+    expect(line(plan, "alpha")).toMatchObject({ on: "2026-10-12", move: { from: "2026-10-15", to: "2026-10-12" }, approvable: true });
+    expect(line(plan, "beta")).toMatchObject({ on: "2026-10-20", move: null });
+    expect(line(plan, "beta").reason).toBe(
+      "Pays on its due date, Oct 20, 2026: paying on Oct 15, 2026 for the 2% discount (10.00 USDC) would be above what the agent may pay on its own on Oct 15, 2026, as the bills are scheduled now."
+    );
+
+    // The agent scheduled Xeno after its due date: brought back to it only if that day's room holds without Yara's move.
+    const late = planPayments(
+      input({
+        operatingUsdc: 5000,
+        limits,
+        bills: [
+          bill({ id: "xeno", payee: "Xeno Labs", amount: 600, dueDate: ISO_DAY("2026-10-15"), scheduledFor: MIDNIGHT("2026-10-18") }),
+          bill({ id: "yara", payee: "Yara Print", counterpartyId: "c-2", amount: 500, dueDate: ISO_DAY("2026-10-15"), scheduledFor: MIDNIGHT("2026-10-15"), discount: { pct: 2, deadline: ISO_DAY("2026-10-13") } }),
+        ],
+      })
+    );
+    expect(line(late, "yara")).toMatchObject({ on: "2026-10-13", move: { from: "2026-10-15", to: "2026-10-13" }, approvable: true });
+    expect(line(late, "xeno")).toMatchObject({ on: "2026-10-18", move: null });
+    expect(line(late, "xeno").reason).toBe(
+      "Pays on Oct 18, 2026, as the agent scheduled it: paying on its due date, Oct 15, 2026, would be above what the agent may pay on its own on Oct 15, 2026, as the bills are scheduled now."
+    );
+
+    // Nor is it brought back when that leaves another bill short that the cash covers now.
+    const short = planPayments(
+      input({
+        operatingUsdc: 1000,
+        bills: [
+          bill({ id: "xeno", payee: "Xeno Labs", amount: 600, dueDate: ISO_DAY("2026-10-13"), scheduledFor: MIDNIGHT("2026-10-20") }),
+          bill({ id: "zeta", payee: "Zeta Freight", counterpartyId: "c-2", amount: 500, dueDate: ISO_DAY("2026-10-15"), scheduledFor: MIDNIGHT("2026-10-15") }),
+        ],
+      })
+    );
+    expect(line(short, "xeno")).toMatchObject({ on: "2026-10-20", move: null });
+    expect(line(short, "xeno").reason).toBe(
+      "Pays on Oct 20, 2026, as the agent scheduled it: paying on its due date, Oct 13, 2026, would leave Zeta Freight short on Oct 15, 2026, as the bills are scheduled now."
+    );
+    expect(flagCodes(line(short, "zeta"))).toEqual([]);
+  });
+
   it("pays on its due date when the discount lasts until then too", () => {
     const plan = planPayments(input({ bills: [bill({ discount: { pct: 3, deadline: ISO_DAY("2026-10-20") } })] }));
     expect(line(plan, "b-1").on).toBe("2026-10-20");
@@ -541,6 +724,73 @@ describe("each line's checks (P7)", () => {
     expect(line(plan, "pending").agentPays).toBe(false);
     expect(line(plan, "pending").reason).toBe("Paid once its work is verified; counted today.");
     expect(flagCodes(line(plan, "b-1"))).toContain("over_agent_limit");
+  });
+
+  it("weighs the agent's limit against the billed amount, as its guardrail does, and counts what leaves against the room", () => {
+    const daily = (dailyUsdc: number) => ({ budget: { dailyUsdc, weeklyUsdc: null, spentToday: 0, spentThisWeek: 0 }, twoApprovalsAbove: null });
+    const discount = { pct: 2, deadline: ISO_DAY("2026-10-15") };
+    // The guardrail weighs the 1,000 billed, not the 980 paid: 990 a day holds it for a person on either day.
+    const plan = planPayments(input({ operatingUsdc: 5000, limits: daily(990), bills: [bill({ amount: 1000, discount })] }));
+    const only = line(plan, "b-1");
+    expect(only).toMatchObject({ on: "2026-10-15", pays: 980, agentPays: false, approvable: false });
+    expect(flagCodes(only)).toEqual(["over_agent_limit"]);
+    // With 15 paid that day too, the 1,000 billed no longer fits a 1,000 day, though 980 would; on its due date it does.
+    const crowded = planPayments(
+      input({
+        operatingUsdc: 5000,
+        limits: daily(1000),
+        bills: [
+          bill({ id: "deal", amount: 1000, discount }),
+          bill({ id: "fee", payee: "Harbor Office Supply", counterpartyId: "c-2", amount: 15, dueDate: ISO_DAY("2026-10-15"), scheduledFor: MIDNIGHT("2026-10-15") }),
+        ],
+      })
+    );
+    expect(line(crowded, "deal")).toMatchObject({ on: "2026-10-20", move: null, agentPays: true });
+    expect(line(crowded, "deal").reason).toBe(
+      "Pays on its due date, Oct 20, 2026: paying on Oct 15, 2026 for the 2% discount (20.00 USDC) would be above what the agent may pay on its own on Oct 15, 2026."
+    );
+    // Within the limit, the 980 that leaves is what uses the day's room: 20 is left for the next payment.
+    const room = planPayments(
+      input({
+        operatingUsdc: 5000,
+        limits: daily(1000),
+        bills: [
+          bill({ id: "deal", amount: 1000, scheduledFor: MIDNIGHT("2026-10-15"), discount: { pct: 2, deadline: ISO_DAY("2026-10-15") } }),
+          bill({ id: "small", payee: "Harbor Office Supply", counterpartyId: "c-2", amount: 20, dueDate: ISO_DAY("2026-10-22"), scheduledFor: MIDNIGHT("2026-10-15") }),
+        ],
+      })
+    );
+    expect(line(room, "deal").agentPays).toBe(true);
+    expect(line(room, "small").agentPays).toBe(true);
+  });
+
+  it("gives a verified milestone the agent's checks: one it may not release on its own uses none of its room", () => {
+    const limits = { budget: { dailyUsdc: 6000, weeklyUsdc: null, spentToday: 0, spentThisWeek: 0 }, twoApprovalsAbove: 5000 };
+    const plan = planPayments(
+      input({
+        operatingUsdc: 20000,
+        limits,
+        milestones: [
+          milestone({ id: "big", amount: 5500 }),
+          milestone({ id: "capped", counterpartyId: "c-8", payee: "Grace Hopper", amount: 300, paymentLimit: 200 }),
+          milestone({ id: "risky", counterpartyId: "c-7", payee: "Mallory Labs", amount: 100, riskLevel: "high" }),
+        ],
+        bills: [
+          bill({ id: "today", amount: 1000, dueDate: ISO_DAY("2026-10-11"), status: "pending", scheduledFor: null }),
+          bill({ id: "deal", payee: "Harbor Office Supply", counterpartyId: "c-2", amount: 1000, discount: { pct: 2, deadline: ISO_DAY("2026-10-11") } }),
+        ],
+      })
+    );
+    const big = line(plan, "big");
+    expect(big).toMatchObject({ state: "waiting", agentPays: false });
+    expect(big.flags).toContainEqual({ code: "two_approvals", blocks: true, text: "Above 5,000.00 USDC: two people approve it on Contractors." });
+    expect(big.reason).toBe("Verified, but not the agent's to release on its own: counted today.");
+    expect(line(plan, "capped").flags).toContainEqual({ code: "payment_limit", blocks: true, text: "Above Grace Hopper's payment limit of 200.00 USDC: a person approves it." });
+    expect(flagCodes(line(plan, "risky"))).toContain("high_risk");
+    for (const id of ["capped", "risky"]) expect(line(plan, id)).toMatchObject({ state: "waiting", agentPays: false });
+    // The bills alone use the agent's 6,000 today.
+    expect(line(plan, "today")).toMatchObject({ agentPays: true, flags: [] });
+    expect(line(plan, "deal")).toMatchObject({ on: "2026-10-11", move: { from: "2026-10-20", to: "2026-10-11" }, approvable: true, agentPays: true });
   });
 });
 

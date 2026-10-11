@@ -78,6 +78,8 @@ describe("the payment plan section", () => {
     expect(words).toContain("Discounts this plan would take");
     expect(words).toContain("An estimate, if paid as planned");
     expect(words).toContain("Nothing here pays a bill.");
+    // The rule as the planner keeps it: never later than a day the agent chose, earlier only for a discount.
+    expect(words).toContain("Each bill is paid on its due date, or on an earlier day the agent chose; the plan proposes an earlier day only for a discount");
     expect(words).not.toMatch(/saved/i);
   });
 

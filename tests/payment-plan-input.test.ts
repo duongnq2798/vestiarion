@@ -39,7 +39,10 @@ const rows = (fields: Partial<PlanRows> = {}): PlanRows => ({
       scheduled_for: null,
     },
   ],
-  counterparties: [{ id: "c-1", address: "0xabc", payment_limit: 1000, risk_level: "clear" }],
+  counterparties: [
+    { id: "c-1", address: "0xabc", payment_limit: 1000, risk_level: "clear" },
+    { id: "c-3", address: "0xada", payment_limit: 30, risk_level: "high" },
+  ],
   milestones: [{ id: "m-1", contractor_id: "c-3", contractor_name: "Ada Lovelace", title: "Design review", amount: 40, status: "verified", escrow_state: null }],
   accounts: [
     { kind: "operating", balance: 300, circle_wallet_id: "w-1", address: "0xop", balance_synced_at: SYNCED },
@@ -72,7 +75,7 @@ describe("paymentPlanInput", () => {
     expect(input.cushion).toBeCloseTo((120 + 40) * 0.15, 6);
   });
 
-  it("takes payables only, with the payee's address, payment limit and screening, the discount and who entered it", () => {
+  it("takes payables only, with the payee's address, payment limit and screening, the discount and who entered it, and milestones with their contractor's", () => {
     const input = paymentPlanInput(rows());
     expect(input.bills).toEqual([
       {
@@ -91,7 +94,10 @@ describe("paymentPlanInput", () => {
         createdBy: "u-maker",
       },
     ]);
-    expect(input.milestones).toEqual([{ id: "m-1", counterpartyId: "c-3", payee: "Ada Lovelace", title: "Design review", amount: 40, status: "verified", escrowState: null }]);
+    // The contractor's payment limit and screening, which the agent checks before it releases a milestone (P7).
+    expect(input.milestones).toEqual([
+      { id: "m-1", counterpartyId: "c-3", payee: "Ada Lovelace", title: "Design review", amount: 40, status: "verified", escrowState: null, paymentLimit: 30, riskLevel: "high" },
+    ]);
   });
 
   it("reads the limits: the agent's figures and what it paid, and the figure for two approvals", () => {

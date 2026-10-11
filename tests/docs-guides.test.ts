@@ -499,6 +499,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Pays on Oct 14, 2026, the discount's last day, to take the 1% early-payment discount (6.40 USDC); the balance stays above the cushion.", PLANNER, "the discount's last day, to take the "],
     ["would take the balance under the cushion", PLANNER],
     ["would leave", PLANNER],
+    ["would be short of cash", PLANNER],
     ["the reserve's yield until then", PLANNER],
     ["Balance after", PAYMENT_PLAN],
     ["Short of cash", PAYMENT_PLAN],

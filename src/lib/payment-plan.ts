@@ -47,6 +47,9 @@ export interface PlanMilestone {
   amount: number;
   status: string;
   escrowState: string | null;
+  /** The contractor's payment limit and screening, which the agent checks before it releases a milestone (P7). */
+  paymentLimit: number | null;
+  riskLevel: string | null;
 }
 
 /** What the agent may pay on its own, and the figure above which two people approve (P7). */
@@ -162,7 +165,7 @@ export interface PaymentPlan {
   days: PlanDay[];
   lowest: { day: string; balance: number } | null;
   lowestNow: { day: string; balance: number } | null;
-  /** What the bills marked short come to: owed, and not paid on their day. */
+  /** What the bills marked short come to: owed in full, and not paid on their day. */
   stillOwed: number;
   stillOwedNow: number;
   /** The discounts the plan's days take, if paid as planned: an estimate (P14). */
@@ -280,15 +283,15 @@ interface Draft {
   bill: PlanBill | null;
   /** The day it counts on as things are scheduled now. */
   nowOn: string | null;
-  /** The plan's day, before any discount is tried: the due date, or today. */
+  /** The plan's day, before any discount is tried: the due date or today, or the agent's own day when that is earlier. */
   defaultOn: string | null;
-  /** A discount's deadline the plan may pay on instead (P4). */
+  /** A discount's deadline the plan may pay on instead (P4): earlier than the day the agent chose, if it chose one. */
   deadlineOn: string | null;
   /**
-   * The agent scheduled it, for a day still to come, on or before that deadline: the plan keeps the discount unless it
-   * leaves another bill short or the agent past its limit, never moving it later only to protect the cushion (P4, P5).
+   * The agent scheduled it, for a day still to come, on or before the discount's deadline: that day takes the discount,
+   * and the plan keeps it, trying no other and never moving it later, whatever the cushion, the cash or the limit (P4).
    */
-  agentTakesDiscount: boolean;
+  keptByAgent: boolean;
   /** Sort order within a day (P5). */
   group: number;
   /** Whether the agent pays it on its own, when nothing stops it (P7). */
@@ -363,7 +366,8 @@ function simulate(placements: Placement[], cash: number, cushion: number, limits
       if (balance + EPSILON < pays) {
         result.short.set(id, round6(pays - balance));
         result.balanceAfter.set(id, round6(balance));
-        result.stillOwed = round6(result.stillOwed + pays);
+        // Owed in full: not paid on its day, a bill also loses a discount ending that day.
+        result.stillOwed = round6(result.stillOwed + draft.line.amount);
         continue;
       }
       balance = round6(balance - pays);
@@ -372,7 +376,8 @@ function simulate(placements: Placement[], cash: number, cushion: number, limits
       if (balance + EPSILON < cushion) result.belowCushion.set(id, round6(cushion - balance));
       if (draft.agentEligible && draft.caps.length === 0) {
         const index = daysBetween(today, day);
-        if (pays > roomFor(index) + EPSILON) result.overLimit.add(id);
+        // The guardrail weighs the billed amount (`enforceApGuardrails`); the limit then counts what left (`countedUsdc`).
+        if (draft.line.amount > roomFor(index) + EPSILON) result.overLimit.add(id);
         else {
           agentSpend[index] = round6(agentSpend[index] + pays);
           result.agentPays.add(id);
@@ -385,17 +390,24 @@ function simulate(placements: Placement[], cash: number, cushion: number, limits
   return result;
 }
 
-/** The checks that stop the agent paying a bill on its own, whatever the day (P7). */
-function capsOf(bill: PlanBill, limits: PlanLimits): PlanFlag[] {
+/**
+ * The checks that stop the agent paying a bill, or releasing a milestone, on its own, whatever the day (P7): its
+ * guardrails', ahead of the spending limit, so such a line uses none of the agent's room.
+ */
+function capsOf(
+  owed: { payee: string; amount: number; paymentLimit: number | null; riskLevel: string | null },
+  limits: PlanLimits,
+  approvedWhere: "in Approvals" | "on Contractors"
+): PlanFlag[] {
   const caps: PlanFlag[] = [];
-  if (bill.paymentLimit !== null && bill.amount > bill.paymentLimit + EPSILON) {
-    caps.push({ code: "payment_limit", blocks: true, text: `Above ${bill.payee}'s payment limit of ${usdc(bill.paymentLimit)}: a person approves it.` });
+  if (owed.paymentLimit !== null && owed.amount > owed.paymentLimit + EPSILON) {
+    caps.push({ code: "payment_limit", blocks: true, text: `Above ${owed.payee}'s payment limit of ${usdc(owed.paymentLimit)}: a person approves it.` });
   }
-  if (limits.twoApprovalsAbove !== null && bill.amount > limits.twoApprovalsAbove + EPSILON) {
-    caps.push({ code: "two_approvals", blocks: true, text: `Above ${usdc(limits.twoApprovalsAbove)}: two people approve it in Approvals.` });
+  if (limits.twoApprovalsAbove !== null && owed.amount > limits.twoApprovalsAbove + EPSILON) {
+    caps.push({ code: "two_approvals", blocks: true, text: `Above ${usdc(limits.twoApprovalsAbove)}: two people approve it ${approvedWhere}.` });
   }
-  if (bill.riskLevel === "high") {
-    caps.push({ code: "high_risk", blocks: true, text: `${bill.payee} is screened high risk: it is not paid until Compliance clears it.` });
+  if (owed.riskLevel === "high") {
+    caps.push({ code: "high_risk", blocks: true, text: `${owed.payee} is screened high risk: it is not paid until Compliance clears it.` });
   }
   return caps;
 }
@@ -419,11 +431,12 @@ function billDraft(bill: PlanBill, today: string, through: string, limits: PlanL
   const decidedNext = agentOn !== null && agentOn <= today;
   const discountLive = bill.discount !== null && discountApplies(bill.discount, new Date(`${today}T12:00:00.000Z`));
   const deadlineOn = discountLive ? dayOf(bill.discount!.deadline) : null;
-  // The yield decides only whether to propose paying early: a bill the agent already scheduled on or before the
-  // discount's deadline keeps that day, since the plan never moves a payment later only to earn yield.
-  const earlyByAgent = !decidedNext && agentOn !== null && deadlineOn !== null && agentOn <= deadlineOn;
+  // A day the agent chose on or before the discount's deadline (and its due date) takes the discount: the plan keeps it,
+  // tries no other and never moves it later, to earn yield, to protect the cushion or for anything else (P4). The yield
+  // decides only whether to propose paying early.
+  const keptByAgent = !decidedNext && agentOn !== null && deadlineOn !== null && dueOn !== null && agentOn <= deadlineOn && agentOn <= dueOn;
   const heldForYield =
-    deadlineOn !== null && dueOn !== null && deadlineOn < dueOn && !earlyByAgent ? yieldWins(bill, deadlineOn, dueOn, reserveApy) : null;
+    deadlineOn !== null && dueOn !== null && deadlineOn < dueOn && !keptByAgent ? yieldWins(bill, deadlineOn, dueOn, reserveApy) : null;
   const inView = dueOn === null || dueOn <= through || (agentOn !== null && agentOn <= through) || (deadlineOn !== null && deadlineOn <= through);
   if (!inView) return null;
 
@@ -449,7 +462,7 @@ function billDraft(bill: PlanBill, today: string, through: string, limits: PlanL
     nowOn: dueOrToday,
     defaultOn: dueOrToday,
     deadlineOn: null,
-    agentTakesDiscount: false,
+    keptByAgent: false,
     group,
     agentEligible: false,
     caps: [],
@@ -468,17 +481,21 @@ function billDraft(bill: PlanBill, today: string, through: string, limits: PlanL
   }
 
   // pending or scheduled: the plan gives it a day.
-  const discountOn = deadlineOn !== null && dueOn !== null && deadlineOn < dueOn && heldForYield === null ? later(deadlineOn, today) : null;
+  const discountOn = !keptByAgent && deadlineOn !== null && dueOn !== null && deadlineOn < dueOn && heldForYield === null ? later(deadlineOn, today) : null;
   // Where the agent's rule puts it at its next cycle (payment timing): today when overdue or due today, a discount
   // worth taking on its deadline, the due date otherwise.
   const agentNext = dueOn === null || dueOn <= today ? today : (discountOn ?? dueOn);
+  // The plan's own day: today or the due date, but never later than a day the agent chose (P4), and the agent's day
+  // when the plan's would fall after the window, since no move is offered out of it (P9).
+  let planOn = decidedNext ? agentNext : dueOrToday;
+  if (!decidedNext && agentOn !== null && (keptByAgent || agentOn < planOn || planOn > through)) planOn = agentOn;
   const result = draft("planned", "", {
     nowOn: decidedNext ? agentNext : agentOn !== null ? agentOn : dueOrToday,
-    defaultOn: decidedNext ? agentNext : dueOrToday,
-    deadlineOn: decidedNext ? null : discountOn,
-    agentTakesDiscount: earlyByAgent && discountOn !== null,
+    defaultOn: planOn,
+    deadlineOn: decidedNext || discountOn === null || (agentOn !== null && discountOn >= agentOn) ? null : discountOn,
+    keptByAgent,
     agentEligible: true,
-    caps: capsOf(bill, limits),
+    caps: capsOf(bill, limits, "in Approvals"),
   });
   if (dueOn === null) {
     result.line.flags.push({ code: "due_unreadable", blocks: true, text: "Its due date cannot be read: counted today." });
@@ -490,11 +507,21 @@ function billDraft(bill: PlanBill, today: string, through: string, limits: PlanL
   } else if (bill.discount && decidedNext && discountOn !== null) {
     const value = round6(bill.amount - paysOn(bill.amount, bill.discount, discountOn));
     result.line.reason = `Pays ${discountOn === today ? "today" : `on ${dayWords(discountOn)}`}, the discount's last day, to take the ${bill.discount.pct}% early-payment discount (${usdc(value)}), as the agent decides at its next cycle.`;
+  } else if (keptByAgent && agentOn !== dueOn) {
+    // The agent's day before the due date: said once the days are walked, with what the cushion does (planPayments).
+  } else if (planOn === agentOn && agentOn !== dueOn) {
+    result.line.reason =
+      agentOn! < dueOn
+        ? `Pays on ${dayWords(agentOn!)}, as the agent scheduled it, ahead of its due date, ${dayWords(dueOn)}: the plan never moves a payment later than the agent chose.`
+        : `Pays on ${dayWords(agentOn!)}, as the agent scheduled it, after its due date, ${dayWords(dueOn)}: both fall after the 14 days shown.`;
   } else if (bill.discount && heldForYield !== null) {
     result.line.reason = `Pays on its due date, ${dayWords(dueOn)}: the reserve's yield until then (${usdc(heldForYield.yieldValue)}) is worth more than the ${bill.discount.pct}% early-payment discount (${usdc(heldForYield.discountValue)}), as the agent decides.`;
-  } else if (bill.discount && deadlineOn !== null && deadlineOn === dueOn) {
+  } else if (bill.discount && deadlineOn !== null && deadlineOn >= dueOn) {
     const value = round6(bill.amount - paysOn(bill.amount, bill.discount, dueOn));
-    result.line.reason = `Pays on its due date, ${dayWords(dueOn)}, which is also the discount's last day (${bill.discount.pct}%, ${usdc(value)}).`;
+    result.line.reason =
+      deadlineOn === dueOn
+        ? `Pays on its due date, ${dayWords(dueOn)}, which is also the discount's last day (${bill.discount.pct}%, ${usdc(value)}).`
+        : `Pays on its due date, ${dayWords(dueOn)}, within its ${bill.discount.pct}% early-payment discount (${usdc(value)}), which lasts until ${dayWords(deadlineOn)}.`;
   } else if (bill.discount && !discountLive) {
     result.line.reason = `Pays on its due date, ${dayWords(dueOn)}; its ${bill.discount.pct}% discount ended ${dayWords(dayOf(bill.discount.deadline) ?? dueOn)}.`;
   } else {
@@ -503,7 +530,7 @@ function billDraft(bill: PlanBill, today: string, through: string, limits: PlanL
   return result;
 }
 
-function milestoneDraft(milestone: PlanMilestone, today: string): Draft | null {
+function milestoneDraft(milestone: PlanMilestone, today: string, limits: PlanLimits): Draft | null {
   if (!OPEN_MILESTONES.has(milestone.status)) return null;
   const base = {
     id: milestone.id,
@@ -524,16 +551,22 @@ function milestoneDraft(milestone: PlanMilestone, today: string): Draft | null {
     nowOn: today,
     defaultOn: today,
     deadlineOn: null,
-    agentTakesDiscount: false,
+    keptByAgent: false,
     group: 1,
     agentEligible: false,
     caps: [],
     ...extra,
   });
   if (milestone.escrowState === "funded") return draft("not_counted", "Its USDC is held in escrow already: not counted again.", { nowOn: null, defaultOn: null });
-  if (milestone.status === "verified") return draft("on_its_way", "Verified: the agent releases it at its next cycle.", { agentEligible: true });
   if (milestone.status === "held") return draft("waiting", "Waits for a person in Contractors; counted today.");
-  return draft("planned", "Paid once its work is verified; counted today.");
+  // The release's own checks (P7): one the agent may not release on its own waits for people and uses none of its room.
+  const caps = capsOf(milestone, limits, "on Contractors");
+  if (milestone.status === "verified") {
+    return caps.length > 0
+      ? draft("waiting", "Verified, but not the agent's to release on its own: counted today.", { caps })
+      : draft("on_its_way", "Verified: the agent releases it at its next cycle.", { agentEligible: true });
+  }
+  return draft("planned", "Paid once its work is verified; counted today.", { caps });
 }
 
 /**
@@ -560,7 +593,7 @@ export function planPayments(input: PaymentPlanInput): PaymentPlan {
     if (draft) drafts.push(draft);
   }
   for (const milestone of input.milestones) {
-    const draft = milestoneDraft(milestone, today);
+    const draft = milestoneDraft(milestone, today, input.limits);
     if (draft) drafts.push(draft);
   }
 
@@ -580,68 +613,112 @@ export function planPayments(input: PaymentPlanInput): PaymentPlan {
   }
 
   const amountOf = (draft: Draft, day: string) => (draft.bill ? paysOn(draft.bill.amount, draft.bill.discount, day) : draft.line.amount);
-  const place = (chosen: Map<string, string>, which: "plan" | "now"): Placement[] =>
+  /** Each counted line on the day `dayOf` gives it, within the window. */
+  const place = (dayOf: (draft: Draft) => string | null): Placement[] =>
     drafts.flatMap((draft) => {
-      const day = which === "now" ? draft.nowOn : chosen.get(draft.line.id) ?? draft.defaultOn;
+      const day = dayOf(draft);
       if (day === null || day > through) return [];
       return [{ draft, day, pays: amountOf(draft, day) }];
     });
-  const run = (chosen: Map<string, string>) => simulate(place(chosen, "plan"), cash, input.cushion, input.limits, today, days);
+  const run = (placements: Placement[]) => simulate(placements, cash, input.cushion, input.limits, today, days);
+  const nowDay = (draft: Draft) => draft.nowOn;
+  const planDay = (chosen: Map<string, string>) => (draft: Draft) => chosen.get(draft.line.id) ?? draft.defaultOn;
+  const now = run(place(nowDay));
 
-  // Discounts, each against the plan as it stands (P4): first those the agent already chose to take, which are part of
-  // the schedule as it stands, then the rest in order of deadline and the larger first.
-  const chosen = new Map<string, string>();
-  /** A discount taken (`kept`: the agent's own choice, kept though the balance goes under the cushion), or why not. */
-  const outcome = new Map<string, { taken: true; kept: boolean } | { taken: false; why: string }>();
-  let current = run(chosen);
   const balanceOn = (simulation: Simulation, day: string) => simulation.dayBalance.get(day) ?? cash;
+  /**
+   * Why paying `draft` on `on` instead of `otherwiseOn`, where `base` has it, would not do; null when it would (P4, P9).
+   * The cash must cover it on that day, no other bill may be left short, and the agent's limit must have room for it
+   * without taking the room another payment had. For a discount (`weighCushion`), the balance must also stay at or above
+   * the cushion on the days paying early costs cash, from the deadline to the day before it would otherwise pay, or at
+   * least no lower there, unless paying early is what lets the cash cover the bill at all: from that day on, the
+   * discount leaves more cash, never less.
+   */
+  const objection = (
+    draft: Draft,
+    on: string,
+    base: Simulation,
+    trial: Placement[],
+    tried: Simulation,
+    otherwiseOn: string | null,
+    weighCushion: boolean
+  ): string | null => {
+    const id = draft.line.id;
+    const dayIn = (which: Draft) => dayWords(trial.find((placement) => placement.draft === which)?.day ?? on);
+    if (tried.short.has(id)) return `would be short of cash on ${dayWords(on)}`;
+    const newlyShort = drafts.find((other) => tried.short.has(other.line.id) && !base.short.has(other.line.id));
+    if (newlyShort) return `would leave ${newlyShort.line.payee} short on ${dayIn(newlyShort)}`;
+    // Within the agent's limits too: a payment the agent could not make on its own that day, or one that would take the
+    // room another payment had, is not worth a person's approval.
+    const newlyOver = drafts.find((other) => tried.overLimit.has(other.line.id) && !base.overLimit.has(other.line.id));
+    if (newlyOver) {
+      return newlyOver === draft
+        ? `would be above what the agent may pay on its own on ${dayIn(newlyOver)}`
+        : `would leave ${newlyOver.line.payee} above what the agent may pay on its own on ${dayIn(newlyOver)}`;
+    }
+    if (!weighCushion || base.short.has(id)) return null;
+    const underDay = days.find(
+      (day) =>
+        day >= on &&
+        (otherwiseOn === null || day < otherwiseOn) &&
+        balanceOn(tried, day) + EPSILON < input.cushion &&
+        balanceOn(tried, day) + EPSILON < balanceOn(base, day)
+    );
+    if (underDay === undefined) return null;
+    // Under it already, without this discount: it would go further under.
+    return balanceOn(base, underDay) + EPSILON < input.cushion
+      ? `would take the balance further under the cushion on ${dayWords(underDay)}`
+      : `would take the balance under the cushion on ${dayWords(underDay)}`;
+  };
+  /** The same, weighed on its own: as the bills are scheduled now, with only this one moved (P9). */
+  const objectionOnItsOwn = (draft: Draft, on: string, weighCushion: boolean): string | null => {
+    const trial = place((other) => (other === draft ? on : other.nowOn));
+    const why = objection(draft, on, now, trial, run(trial), draft.nowOn, weighCushion);
+    return why === null ? null : `${why}, as the bills are scheduled now`;
+  };
+
+  // A bill the agent scheduled after the plan's day for it (its due date, or today when overdue) is brought back to it
+  // only when that passes the checks on its own; otherwise it keeps the agent's day, so no move is offered whose checks
+  // hold only with another one approved too (P9). The cushion never delays it.
+  for (const draft of drafts) {
+    const agentOn = draft.line.agentOn;
+    const on = draft.defaultOn;
+    if (draft.line.state !== "planned" || draft.line.dueOn === null || agentOn === null || agentOn <= today || on === null || on >= agentOn) continue;
+    const why = objectionOnItsOwn(draft, on, false);
+    if (why === null) continue;
+    draft.line.reason = `Pays on ${dayWords(agentOn)}, as the agent scheduled it: paying ${on === today ? "today" : `on its due date, ${dayWords(on)},`} ${why}.`;
+    draft.defaultOn = agentOn;
+  }
+
+  // Discounts the agent did not choose itself, in order of deadline and the larger first (P4). Each is weighed against
+  // the plan as it stands, then against the schedule as it stands now with only it moved, so a move never relies on
+  // another one being approved too (P9).
+  const chosen = new Map<string, string>();
+  /** A discount taken (`freed`: paying early is what lets the cash cover the bill at all), or why not. */
+  const outcome = new Map<string, { taken: true; freed: boolean } | { taken: false; why: string }>();
+  let current = run(place(planDay(chosen)));
   const candidates = drafts
     .filter((draft) => draft.deadlineOn !== null && draft.bill !== null)
     .map((draft) => ({ draft, value: round6(draft.line.amount - amountOf(draft, draft.deadlineOn!)) }))
-    .sort(
-      (a, b) =>
-        Number(b.draft.agentTakesDiscount) - Number(a.draft.agentTakesDiscount) ||
-        (a.draft.deadlineOn! !== b.draft.deadlineOn! ? (a.draft.deadlineOn! < b.draft.deadlineOn! ? -1 : 1) : b.value - a.value || (a.draft.line.id < b.draft.line.id ? -1 : 1))
+    .sort((a, b) =>
+      a.draft.deadlineOn! !== b.draft.deadlineOn! ? (a.draft.deadlineOn! < b.draft.deadlineOn! ? -1 : 1) : b.value - a.value || (a.draft.line.id < b.draft.line.id ? -1 : 1)
     );
   for (const { draft } of candidates) {
+    const id = draft.line.id;
     const on = draft.deadlineOn!;
-    const dueOn = draft.line.dueOn!;
-    const trial = new Map(chosen).set(draft.line.id, on);
-    const tried = run(trial);
-    const newlyShort = drafts.find((other) => tried.short.has(other.line.id) && !current.short.has(other.line.id));
-    // Within the agent's limits too: a discount the agent could not pay on its own that day, or one that would take the
-    // room another payment had, is not worth a person's approval.
-    const newlyOver = drafts.find((other) => tried.overLimit.has(other.line.id) && !current.overLimit.has(other.line.id));
-    // The cushion, only on the days paying early costs cash, from the deadline to the day before the due date, and only
-    // where it leaves less than the plan without it: from the due date on, the discount leaves more cash, never less.
-    const underDay = days.find(
-      (day) => day >= on && day < dueOn && balanceOn(tried, day) + EPSILON < input.cushion && balanceOn(tried, day) + EPSILON < balanceOn(current, day)
-    );
-    const dayIn = (map: Map<string, string>, which: Draft) => place(map, "plan").find((placement) => placement.draft === which)?.day ?? on;
-    if (newlyShort) {
-      outcome.set(draft.line.id, { taken: false, why: `would leave ${newlyShort.line.payee} short on ${dayWords(dayIn(trial, newlyShort))}` });
-    } else if (newlyOver) {
-      const where = dayWords(dayIn(trial, newlyOver));
-      outcome.set(draft.line.id, {
-        taken: false,
-        why: newlyOver === draft ? `would be above what the agent may pay on its own on ${where}` : `would leave ${newlyOver.line.payee} above what the agent may pay on its own on ${where}`,
-      });
-    } else if (underDay && !draft.agentTakesDiscount) {
-      // Under it already, without this discount: it would go further under.
-      const further = balanceOn(current, underDay) + EPSILON < input.cushion;
-      outcome.set(draft.line.id, {
-        taken: false,
-        why: further ? `would take the balance further under the cushion on ${dayWords(underDay)}` : `would take the balance under the cushion on ${dayWords(underDay)}`,
-      });
+    const trial = new Map(chosen).set(id, on);
+    const inPlan = place(planDay(trial));
+    const tried = run(inPlan);
+    const why = objection(draft, on, current, inPlan, tried, draft.defaultOn, true) ?? objectionOnItsOwn(draft, on, true);
+    if (why !== null) {
+      outcome.set(id, { taken: false, why });
     } else {
-      // A day the agent chose is never moved later only to protect the cushion (P5): it is kept, and says so.
-      chosen.set(draft.line.id, on);
+      outcome.set(id, { taken: true, freed: current.short.has(id) });
+      chosen.set(id, on);
       current = tried;
-      outcome.set(draft.line.id, { taken: true, kept: underDay !== undefined });
     }
   }
 
-  const now = simulate(place(chosen, "now"), cash, input.cushion, input.limits, today, days);
   /** Each line's day and group, for the order below: kept beside the lines, never on them. */
   const sortKey = new Map<string, { day: string; group: number }>();
   const lines: PlanLine[] = drafts.map((draft) => {
@@ -652,31 +729,48 @@ export function planPayments(input: PaymentPlanInput): PaymentPlan {
     const flags = [...draft.line.flags];
     let reason = draft.line.reason;
     const bill = draft.bill;
+    const short = on !== null && inWindow ? current.short.get(id) : undefined;
     let discount: PlanLine["discount"] = null;
     if (bill?.discount && draft.line.state === "planned") {
       const until = dayOf(bill.discount.deadline);
       const live = discountApplies(bill.discount, new Date(`${today}T12:00:00.000Z`));
       if (until !== null && live) {
         const value = round6(bill.amount - paysOn(bill.amount, bill.discount, until));
-        discount = { pct: bill.discount.pct, value, until, taken: on !== null && on <= until };
+        // A bill short on its day is not paid then: a discount ending that day is not taken (P5).
+        discount = { pct: bill.discount.pct, value, until, taken: on !== null && on <= until && short === undefined };
       }
     }
     const tried = outcome.get(id);
-    if (bill?.discount && tried && draft.line.dueOn && on !== null) {
-      const value = discount?.value ?? 0;
+    const dueOn = draft.line.dueOn;
+    if (bill?.discount && discount && dueOn && on !== null && (tried || (draft.keptByAgent && on !== dueOn))) {
+      const terms = `the ${bill.discount.pct}% early-payment discount (${usdc(discount.value)})`;
       const when = on === today ? "today" : `on ${dayWords(on)}`;
       // Said of the plan as a whole: the first day from this one that its balance is under the cushion, if any.
       const under = days.find((day) => day >= on && balanceOn(current, day) + EPSILON < input.cushion);
-      if (!tried.taken) {
-        reason = `Pays on its due date, ${dayWords(draft.line.dueOn)}: paying on ${dayWords(draft.deadlineOn!)} for the ${bill.discount.pct}% discount (${usdc(value)}) ${tried.why}.`;
-      } else if (tried.kept && under !== undefined && under < draft.line.dueOn) {
-        reason = `Pays ${when}, the discount's last day, as the agent scheduled it, to take the ${bill.discount.pct}% early-payment discount (${usdc(value)}). The balance goes under the cushion on ${dayWords(under)}; the plan never moves a payment later only to protect the cushion.`;
+      const above = `the balance stays above the cushion${under !== undefined ? ` until ${dayWords(under)}` : ""}`;
+      // The day it pays without the discount: its due date, or the agent's own earlier day.
+      const otherwise = (day: string) => (day === dueOn ? `on its due date, ${dayWords(dueOn)}` : `on ${dayWords(day)}, as the agent scheduled it`);
+      if (tried && !tried.taken) {
+        reason = `Pays ${otherwise(on)}: paying on ${dayWords(draft.deadlineOn!)} for the ${bill.discount.pct}% discount (${usdc(discount.value)}) ${tried.why}.`;
+      } else if (tried?.taken) {
+        reason = tried.freed
+          ? `Pays ${when}, the discount's last day, to take ${terms}: ${otherwise(draft.defaultOn!)}, the cash would not cover it.`
+          : `Pays ${when}, the discount's last day, to take ${terms}; ${above}.`;
       } else {
-        reason = `Pays ${when}, the discount's last day, to take the ${bill.discount.pct}% early-payment discount (${usdc(value)}); the balance stays above the cushion${under !== undefined ? ` until ${dayWords(under)}` : ""}.`;
+        // The agent's own day, kept whatever the cushion: a payment is never moved later only to protect it (P4, P5).
+        const head =
+          on === discount.until
+            ? `Pays ${when}, the discount's last day, as the agent scheduled it, to take ${terms}`
+            : `Pays ${when}, as the agent scheduled it, to take ${terms}, which lasts until ${dayWords(discount.until)}`;
+        reason =
+          short !== undefined
+            ? `${head}.`
+            : under !== undefined && under < dueOn
+              ? `${head}. The balance goes under the cushion on ${dayWords(under)}; the plan never moves a payment later only to protect the cushion.`
+              : `${head}; ${above}.`;
       }
     }
     if (on !== null && inWindow) {
-      const short = current.short.get(id);
       if (short !== undefined) flags.push({ code: "short", blocks: true, text: `Short by ${usdc(short)} on ${dayWords(on)}: the agent holds it until there is cash.` });
       const below = current.belowCushion.get(id);
       if (below !== undefined) flags.push({ code: "below_cushion", blocks: false, text: `Leaves ${usdc(below)} less than the cushion on ${dayWords(on)}.` });
@@ -685,8 +779,16 @@ export function planPayments(input: PaymentPlanInput): PaymentPlan {
       }
     }
     flags.push(...draft.caps);
+    // Never out of the window (P9): a bill whose plan day falls after it keeps the agent's day (billDraft).
     const move =
-      bill !== null && draft.line.state === "planned" && bill.status === "scheduled" && draft.line.agentOn !== null && draft.line.agentOn > today && on !== null && on !== draft.line.agentOn
+      bill !== null &&
+      draft.line.state === "planned" &&
+      bill.status === "scheduled" &&
+      draft.line.agentOn !== null &&
+      draft.line.agentOn > today &&
+      on !== null &&
+      inWindow &&
+      on !== draft.line.agentOn
         ? { from: draft.line.agentOn, to: on }
         : null;
     const approvable = move !== null && !flags.some((flag) => flag.blocks && BLOCKING.has(flag.code));
@@ -725,7 +827,7 @@ export function planPayments(input: PaymentPlanInput): PaymentPlan {
   });
 
   // In the order the cash goes: by day, then as the simulation pays them; what is not counted last.
-  const placementRank = new Map(place(chosen, "plan").sort(placementOrder).map((placement, index) => [placement.draft.line.id, index]));
+  const placementRank = new Map(place(planDay(chosen)).sort(placementOrder).map((placement, index) => [placement.draft.line.id, index]));
   lines.sort((a, b) => {
     const keyA = sortKey.get(a.id)!;
     const keyB = sortKey.get(b.id)!;
@@ -737,7 +839,7 @@ export function planPayments(input: PaymentPlanInput): PaymentPlan {
   });
 
   // The days anything is counted on, in the plan or as scheduled now: a day whose only bill is short is one too.
-  const landing = new Set([...place(chosen, "plan"), ...place(chosen, "now")].map((placement) => placement.day));
+  const landing = new Set([...place(planDay(chosen)), ...place(nowDay)].map((placement) => placement.day));
   const active = days.filter((day) => landing.has(day));
   const planDays: PlanDay[] = active.map((day) => ({
     day,
