@@ -1,0 +1,108 @@
+You know today's balance. The payment plan shows the next 14 days: which bill leaves on which day, in the order your cash allows, what the balance is after each, which early-payment discount is worth taking without eating into your cushion, and which bill your cash cannot cover on its day. Someone who approves payments can then move a bill the agent scheduled to the plan's day. The plan never pays anything itself: on the bill's day, the agent checks it again with every rule before it pays. It works the same in a workspace on Arc testnet and on Arc mainnet.
+
+## Where to find it
+
+Open **Bills & receivables**. **Payment plan** heads the page, above the payables, whenever no status filter is chosen. Every member of the workspace can read it.
+
+At its top are the figures it starts from and ends with:
+
+- **Cash now**: the operating wallet, and the USYC reserve when the workspace has one, as **Safe to spend today** counts it. The agent brings back from the reserve what a day needs before it pays.
+- **Cushion**: "15% of what leaves within 7 days", and of the open milestones: the same cushion **Safe to spend today** keeps, so the two never disagree.
+- **Lowest balance with this plan**, and the day it falls on.
+- **Not covered by the cash**, when a bill is marked short: what those bills come to, still owed.
+- **Discounts this plan would take**: "An estimate, if paid as planned". Nothing in the plan calls a discount saved before it is taken.
+
+Under them, a line says how fresh the balance is: "Sandbox: the balance is simulated." in a sandbox, or how many minutes ago it was read from the chain in a live workspace.
+
+<Screenshot
+  src="/docs/guides/payment-plan.png"
+  alt="The top of the Payment plan section on Bills and receivables, the next 14 days in the order the cash allows. The balance was read from the chain 2 min ago. Cash now 3,900.00 USDC, the operating wallet and the USYC reserve; Cushion 350.00 USDC; Lowest balance with this plan 1,610.40 USDC on Oct 16, 2026; Discounts this plan would take 30.40 USDC, an estimate, if paid as planned. Under the plan's rule, Approve all shown. Oct 14: Harbor Office Supply, 640.00 USDC struck through and 633.60 USDC, scheduled by the agent for Oct 20, paid on the discount's last day to take the 1% discount, balance after 3,086.40 USDC, with Approve. Oct 15: Northwind Hosting, 1,200.00 USDC struck through and 1,176.00 USDC, scheduled by the agent for Oct 23, taking the 2% discount, balance after 1,910.40 USDC, with Approve."
+  caption="Two discounts worth taking while the balance stays above the cushion, each on a day the agent's schedule would move to."
+/>
+
+## What it counts
+
+- **Bills to pay in USDC that are still open**: waiting for the agent, scheduled, on their way, held, waiting for details, or being decided in **Approvals**. A bill is in the plan when its due date, the day the agent scheduled it for, or its discount's last day falls within the 14 days. A bill whose day falls after them is listed under "After" that day and not counted in the days shown.
+- **Open milestones**, counted today: they are paid once their work is verified.
+- **Each obligation once.** A payment already on its way is that payment. A milestone whose USDC is held in escrow is listed under **Listed, not counted**, since its cash has left the wallet, and so is a bill the agent flagged for review, such as a likely duplicate.
+- **A bill and a milestone for the same payee and amount** may be one payment entered twice. The plan cannot tell, and the agent would pay both, so both are counted and both say **May be the same payment** until one of them is closed.
+- **Bills in EURC** are paid from the EURC balance: the plan names how many there are and what they come to, and never adds them to USDC.
+- **Not counted**: money you expect to receive, and a recurring payment's next bill until it has been created.
+
+## How each bill gets its day
+
+1. **Overdue or due today**: today, first in line.
+2. **Otherwise its due date.** Never later, and never earlier for any reason but a discount.
+3. **Earlier only for an early-payment discount**, on the discount's last day, and only when all of these hold:
+   - the discount is worth at least what holding the cash in the reserve until the due date would earn, which is how the agent decides too;
+   - with that bill paid then, the balance stays at or above the cushion on every day after it;
+   - no other bill is left short;
+   - the agent's spending limit has room for it that day, without taking the room another payment had.
+
+   Discounts are tried in the order of their last day, the larger first. A bill the agent already scheduled on the discount's last day keeps that day: the plan never moves a payment later only to earn yield.
+
+Within a day, a payment already on its way comes first, then milestones, then overdue bills from the oldest, then by due date and the smaller amount.
+
+Each line says why it is on its day, for instance "Overdue since Oct 9, 2026: first in line today." or "Pays on Oct 14, 2026, the discount's last day, to take the 1% early-payment discount (6.40 USDC); the balance stays above the cushion." When a discount is not taken, the line says why: it "would take the balance under the cushion", "would leave" another bill short or above the agent's spending limit, or "the reserve's yield until then" is worth more than the discount.
+
+## Reading a line
+
+Each line has the payee, what leaves that day (a discounted amount shows the billed amount struck through beside it), where it stands with the agent, why it is on its day, and **Balance after**. A line can also carry these marks, each with its reason in a sentence beside it:
+
+- **Short of cash**: the balance cannot cover it on its day. It is not taken off the balance, since the agent holds a bill it cannot pay, and it counts in **Not covered by the cash**. The plan never spends cash that is not there.
+- **Under the cushion**: paid on its due date, it leaves the balance under the cushion. An obligation is still paid on its day: it is never delayed to protect the cushion.
+- **Over the agent's limit**: the agent's daily or 7-day spending limit has no room for it that day, so it waits for a person's approval. What the agent paid in the last 7 days counts against each of the first 7 days.
+- **Above payment limit**, **Two approvals** and **High risk**: the checks the agent runs before every payment. Such a bill is paid by people, not by the agent on its own.
+- **May be the same payment** and **Due date unreadable**.
+
+A bill that waits for a person, held or waiting for details, is counted on its due date and says **Waits for a person**, with **Decide in Approvals**. A bill the agent has not decided yet gets a day too, but says "Not decided by the agent yet": the agent decides it first.
+
+**Cash effect** lists each day money leaves: what leaves, the balance **As scheduled now**, and the balance **With this plan**, "Projected, before any receivable arrives." A balance under the cushion is in bold.
+
+<Screenshot
+  src="/docs/guides/payment-plan-cash.png"
+  alt="The foot of the Payment plan section. Cash effect, projected before any receivable arrives: for Oct 12, 14, 15, 16, 20 and 23, 2026, what leaves each day, the balance as scheduled now and the balance with this plan. As scheduled now the balance falls to 1,580.00 USDC on Oct 23; with this plan it ends at 1,610.40 USDC, after paying two bills early for their discounts. Below, Last 30 days, counted from what was paid and recorded, not from a plan: Paid by the due day 8 of 9, Overdue now 1, Discounts taken 18.40 USDC, Days moved by a person 2."
+  caption="With the plan, two bills leave earlier and the balance ends higher, by the discounts."
+/>
+
+## Approve a day
+
+Owners, admins and approvers see **Approve** on a line whose plan day differs from the day the agent scheduled the bill for, and **Approve all shown** when there is more than one such line.
+
+- **Approving moves the day, nothing else.** The bill is still scheduled; the agent decides it again on the new day, with every check it runs before paying: screening, the payee's payment limit, two approvals, its spending limit, and the cash. A move to today starts a cycle, as adding a bill does, so a discount ending today does not wait for the next scheduled one.
+- **Never your own bill.** Nobody approves the day of a bill they entered: the line says "You created this bill, so someone else must approve its day." The workspace's only approver can, and the audit log says so.
+- **A line whose checks do not pass** cannot be approved: it says "Clear what stops it before approving its day."
+- **Each line on its own.** **Approve all shown** sends the lines you were shown. Each is checked again by itself and only those that pass move; the message names those that did not, and why: "Moved 2 payments. The agent checks each again on its day before it pays."
+- **The plan you saw.** The plan is worked out again when you approve. If anything changed since it was shown, the balance, a bill's amount, payee, address or due date, nothing moves: "The plan changed since it was shown. Look at the new plan, then approve again." A single bill that changed says "This bill changed since the plan was shown. Look at the new plan."
+- **Not during a cycle.** While the agent is deciding: "A cycle is running. Try again in a minute, once it has finished."
+
+Each move is a signed entry in the audit log, `payment_rescheduled`, with who moved it, from which day to which, and the facts the line showed. The bill's decision trail reads "A person moved its payment to" the new day "from the payment plan", and the agent's own decision stays the one its card shows.
+
+## When the balance is not fresh
+
+In a live workspace, the plan's cash is the balance read from the chain. When that read is more than 10 minutes old, or has never been made, the plan stays on screen with "The balance is not fresh", how old the figure is, and **Refresh balance**. Approving is off until the balance is read again: "The plan below uses the last figures read. Approving is off until they are fresh." The server refuses an approval on a stale balance too.
+
+<Screenshot
+  src="/docs/guides/payment-plan-stale.png"
+  alt="The top of the Payment plan section with a callout, The balance is not fresh: The balance was read from the chain 40 minutes ago. Refresh it to approve the plan. The plan below uses the last figures read. Approving is off until they are fresh. A Refresh balance button sits in the callout. The figures and Harbor Office Supply's line on Oct 14 stay on screen, its Approve button turned off."
+  caption="The plan stays on screen while the balance is old; approving waits for a fresh read."
+/>
+
+When the agent's spending limit, the figure for two approvals or the open milestones cannot be read, the plan says "Part of the plan could not be read", names what, and approving waits in the same way. A sandbox's balance is its own simulated figure, so it is always current.
+
+## The last 30 days
+
+Under the plan, **Last 30 days** is "Counted from what was paid and recorded, not from a plan.":
+
+- **Paid by the due day**: the bills paid in the last 30 days, and how many of them were paid on or before their due date.
+- **Overdue now**: open bills past their due date.
+- **Discounts taken**: the discounts on bills paid in the last 30 days, as their transfers carried them: each bill's amount less what was paid.
+- **Days moved by a person**: approvals from the plan.
+
+## What the plan does not do
+
+- **Choose another day by hand.** You approve the plan's day, or leave the agent's.
+- **Spread bills over days** to stay within the agent's daily limit: a line over it is marked instead.
+- **Plan EURC**, or count the Gateway balance as cash for payouts sent through it.
+- **Count a recurring payment's next bill** before it has been created.
+- **Stop the agent.** When the agent is paused or payments are switched off, the header says so, and the plan still shows the days it would pay on.

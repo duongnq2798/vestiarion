@@ -194,6 +194,9 @@ const SHOTS = {
   "report-actuals-bills": async () => {},
   "import-bills-columns": async () => {},
   "import-bills-check": async () => {},
+  "payment-plan": async () => {},
+  "payment-plan-cash": async () => {},
+  "payment-plan-stale": async () => {},
   "workspace-status": async () => {},
 };
 
