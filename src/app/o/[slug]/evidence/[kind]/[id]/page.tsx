@@ -65,7 +65,9 @@ export default async function EvidencePage({ params }: EvidencePageProps) {
           </Callout>
         )}
         <EvidenceChainView chain={chain} orgSlug={slug} publicKeys={read.publicKeys} />
-        <EvidenceAccess kind={subject.kind} receipt={read.receipt?.state ?? null} role={access.membership.role} canShare={can(access.membership.role, "records.write")} />
+        <div className="mt-8">
+          <EvidenceAccess kind={subject.kind} receipt={read.receipt?.state ?? null} role={access.membership.role} canShare={can(access.membership.role, "records.write")} />
+        </div>
       </ProductShell>
     );
   });

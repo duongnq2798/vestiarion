@@ -342,7 +342,7 @@ export type ReceiptSharing = "shared" | "stopped" | "none" | null;
  */
 export function EvidenceAccess({ kind, receipt, role, canShare }: { kind: Chain["subject"]["kind"]; receipt: ReceiptSharing; role: string; canShare: boolean }) {
   return (
-    <Card asChild className="mt-8 p-4 sm:p-6">
+    <Card asChild className="p-4 sm:p-6">
       <section aria-labelledby="evidence-access">
         <h2 id="evidence-access" className="text-base font-semibold text-ink">
           Who can see this

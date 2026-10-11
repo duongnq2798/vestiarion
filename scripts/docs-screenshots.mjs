@@ -174,6 +174,13 @@ const SHOTS = {
   "report-actuals": async () => {},
   "report-actuals-bills": async () => {},
   "workspace-status": async () => {},
+  "evidence-chain": async () => {},
+  "evidence-signatures": async (page) => {
+    // Every entry listed, and the entries checked again in the browser: the shot's are signed for real.
+    await page.click(`[...document.querySelectorAll("[data-docs-shot] summary")].find((s) => s.textContent.includes("Every entry, checked here one by one"))`);
+    await page.waitFor(`document.querySelector("[data-docs-shot]").textContent.includes("Checked again in your browser")`);
+  },
+  "evidence-access": async () => {},
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
