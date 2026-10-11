@@ -184,8 +184,11 @@ const score = (candidate: Candidate) => (candidate.exact ? 100 : 0) + (candidate
  */
 export function matchStatement(lines: readonly StatementLine[], bills: readonly StatementBill[], used: ReadonlyArray<UsedLine | null>): LineMatch[] {
   const result: LineMatch[] = lines.map((line) => ({ line: line.line, status: "none" }));
-  // A bill a statement line recorded is that line's: correcting it is done from the bill's row.
-  const taken = new Set(bills.filter((bill) => bill.current?.source === "statement").map((bill) => bill.id));
+  // Bills a line of this statement already stands for: used before, or said by the bill's newest record.
+  const taken = new Set<string>();
+  // A bill a statement line recorded is that line's: it is never offered to another line, and correcting it is done
+  // from the bill's row. A line its record says still reads as already recorded.
+  const fromStatement = new Set(bills.filter((bill) => bill.current?.source === "statement").map((bill) => bill.id));
   const open: number[] = [];
 
   lines.forEach((line, index) => {
@@ -213,7 +216,7 @@ export function matchStatement(lines: readonly StatementLine[], bills: readonly 
 
   const candidates = new Map<number, Candidate[]>();
   for (const index of open) {
-    const found = bills.flatMap((bill) => (taken.has(bill.id) ? [] : (candidateFor(lines[index], bill) ?? [])));
+    const found = bills.flatMap((bill) => (taken.has(bill.id) || fromStatement.has(bill.id) ? [] : (candidateFor(lines[index], bill) ?? [])));
     if (found.length > 0) candidates.set(index, found);
   }
 

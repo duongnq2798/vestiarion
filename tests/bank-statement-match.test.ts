@@ -133,6 +133,14 @@ describe("matchStatement", () => {
     expect(matches[1].status).toBe("none");
   });
 
+  it("says a line is already recorded when a statement's record of the bill says it, read again with other columns", () => {
+    // The same payment, its hash changed by a payee column mapped this time: the record still says it.
+    const fromStatement = { id: "rec-3", outcome: "paid" as const, paidOn: "2026-10-05", amount: 1250, currency: "SGD", source: "statement" as const };
+    expect(matchStatement([line({ payee: "NORTHWIND" })], [bill("b1", { current: fromStatement })], [null])).toEqual([
+      { line: expect.any(Number), status: "recorded", invoiceId: "b1", payee: "Northwind Cloud Pte Ltd" },
+    ]);
+  });
+
   it("keeps the yen whole when it compares amounts", () => {
     expect(statuses(matchStatement([line({ minor: -125000, currency: "JPY" })], [bill("b1", { amount: 125000, currency: "JPY" })], [null]))).toEqual(["matched:b1"]);
   });

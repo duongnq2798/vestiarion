@@ -92,7 +92,7 @@ export interface StatementRead {
   outIs: "negative" | "positive";
   dateOrder: DateOrder | null;
   decimalMark: DecimalMark | null;
-  /** No column gives the currency: the account's is typed. */
+  /** No column gives the currency, or a line leaves it blank: the account's is typed. */
   needsCurrency: boolean;
   /** What must be answered before the lines are read. */
   questions: StatementQuestion[];
@@ -206,6 +206,8 @@ export function readStatement(source: string, choices: StatementChoices, today: 
   const suggested = headerRow >= 0 ? suggestColumns(records[headerRow].cells) : NO_COLUMNS;
   const { columns, problems } = checkColumns(choices.columns ?? suggested, width);
   const outIs = choices.outIs === "positive" ? "positive" : "negative";
+  // A currency column with a blank cell on a dated row needs the account's currency too, for that row.
+  const blankCurrency = columns.currency !== null && rows.some((row) => looksLikeDate(cellOf(row, columns.bookingDate)) && cellOf(row, columns.currency) === "");
 
   const base = {
     delimiter: table.delimiter,
@@ -215,7 +217,7 @@ export function readStatement(source: string, choices: StatementChoices, today: 
     example: rows[0]?.cells ?? [],
     columns,
     outIs,
-    needsCurrency: columns.currency === null,
+    needsCurrency: columns.currency === null || blankCurrency,
   } as const;
   const stop = (questions: StatementQuestion[], more: string[], marks: { dateOrder?: DateOrder | null; decimalMark?: DecimalMark | null } = {}): StatementRead => ({
     ...base,

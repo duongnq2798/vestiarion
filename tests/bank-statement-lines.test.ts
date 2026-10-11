@@ -109,6 +109,16 @@ describe("readStatement", () => {
     ]);
   });
 
+  it("asks the account's currency for a currency column with blank cells, and reads them in it", () => {
+    const text = "Date,Description,Amount,Currency\n2026-10-03,Northwind,-120.00,EUR\n2026-10-04,Atlas,-5.00,";
+    const blank = readStatement(text, {}, TODAY);
+    expect(blank.needsCurrency).toBe(true);
+    expect(blank.lines.map((line) => line.currency)).toEqual(["EUR"]);
+    expect(blank.skipped).toEqual([{ line: 3, why: "No currency: type the account's currency." }]);
+    expect(readStatement(text, { currency: "EUR" }, TODAY).lines.map((line) => line.currency)).toEqual(["EUR", "EUR"]);
+    expect(readStatement("Date,Description,Amount,Currency\n2026-10-03,Northwind,-120.00,EUR", {}, TODAY).needsCurrency).toBe(false);
+  });
+
   it("reads a file with no header row from the columns the person chose", () => {
     const columns = { ...NO_COLUMNS, bookingDate: 0, description: 1, amount: 2 };
     const read = readStatement("2026-10-03,Northwind,-120.00\n2026-10-04,Atlas,-5.00", { currency: "USD", columns }, TODAY);
