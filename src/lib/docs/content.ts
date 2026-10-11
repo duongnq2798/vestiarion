@@ -70,6 +70,7 @@ export const PAGE_LOADERS: Record<string, () => Promise<MdxModule>> = {
   "guides/api-invoices": () => import("../../../content/docs/guides/api-invoices.mdx"),
   "guides/api-milestones": () => import("../../../content/docs/guides/api-milestones.mdx"),
   "guides/github": () => import("../../../content/docs/guides/github.mdx"),
+  "guides/evidence": () => import("../../../content/docs/guides/evidence.mdx"),
   "guides/audit-export": () => import("../../../content/docs/guides/audit-export.mdx"),
   "guides/report": () => import("../../../content/docs/guides/report.mdx"),
   "guides/controls": () => import("../../../content/docs/guides/controls.mdx"),

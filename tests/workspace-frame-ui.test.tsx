@@ -16,8 +16,9 @@ import type { PageStatus, PlatformStatus } from "@/components/vx/workspace-statu
  */
 
 vi.mock("server-only", () => ({}));
+const route = vi.hoisted(() => ({ pathname: "/o/acme/approvals" }));
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/o/acme/approvals",
+  usePathname: () => route.pathname,
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
   useParams: () => ({ slug: "acme" }),
 }));
@@ -58,6 +59,17 @@ describe("the workspace header", () => {
     expect(markup).toMatch(/<li aria-current="page"[^>]*>Approvals<\/li>/);
   });
 
+  it("links the section from a page inside it, which is not the section's own page (evidence chain E1)", () => {
+    route.pathname = "/o/acme/evidence/invoice/5f1e2d3c-0000-4000-8000-000000000001";
+    try {
+      const markup = header();
+      expect(markup).toMatch(/<a[^>]*href="\/o\/acme\/invoices"[^>]*>Bills &amp; receivables<\/a>/);
+      expect(markup).not.toContain('aria-current="page"');
+    } finally {
+      route.pathname = "/o/acme/approvals";
+    }
+  });
+
   it("names the sidebar toggle by what it will do, and ties it to the sidebar", () => {
     expect(header(false)).toMatch(/<button[^>]*aria-label="Collapse sidebar"[^>]*>/);
     expect(header(false)).toContain('aria-controls="workspace-sidebar"');
@@ -88,6 +100,17 @@ describe("the sidebar folded to its icon rail", () => {
     const markup = panel(true);
     for (const item of NAV_ITEMS) expect(markup).toContain(`<span class="sr-only">${item.label.replace("&", "&amp;")}</span>`);
     expect(markup).toMatch(/<a[^>]*aria-current="page"[^>]*href="\/o\/acme\/approvals"|<a[^>]*href="\/o\/acme\/approvals"[^>]*aria-current="page"/);
+  });
+
+  it("marks the section a page sits inside as current, not as the page itself (evidence chain E1)", () => {
+    route.pathname = "/o/acme/evidence/milestone/5f1e2d3c-0000-4000-8000-000000000002";
+    try {
+      const markup = panel(false);
+      expect(markup).toMatch(/<a[^>]*aria-current="true"[^>]*href="\/o\/acme\/contractors"|<a[^>]*href="\/o\/acme\/contractors"[^>]*aria-current="true"/);
+      expect(markup).not.toContain('aria-current="page"');
+    } finally {
+      route.pathname = "/o/acme/approvals";
+    }
   });
 
   it("names its icon-only controls", () => {

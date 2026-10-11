@@ -64,22 +64,34 @@ export function buildReceipt(input: {
   const { invoice, intent } = input;
   if (invoice.direction !== "payable") return refuse("Only a payment the workspace made has a receipt.");
   if (invoice.status !== "paid" || !intent || intent.status !== "confirmed") return refuse("This invoice is not paid yet.");
-  if (intent.provider_mode !== "live") return refuse("A simulated payment has nothing on chain to show.");
+  const stated = intentFacts(intent);
+  if (!stated.ok) return stated;
+
+  const records = recordingEntry({ invoiceId: invoice.id }, input.entries, stated.facts.txHash, stated.facts.sourceTxHash ?? null);
+  if (!records) return refuse("No ledger entry records this payment's transaction.");
+  return { ok: true, facts: stated.facts, records: { seq: records.seq, hash: records.hash } };
+}
+
+/**
+ * The public facts of a confirmed live payment, from its intent alone: the transaction that paid the payee (the
+ * transfer, or the mint on their chain), its route and fee. Shared by the receipt and the evidence chain
+ * (docs/superpowers/specs/2026-10-10-evidence-chain-design.md E4), which reads the same transaction from the chain.
+ */
+export function intentFacts(intent: ReceiptIntent): { ok: true; facts: ReceiptFacts } | { ok: false; reason: string } {
+  if (intent.status !== "confirmed") return { ok: false, reason: "This invoice is not paid yet." };
+  if (intent.provider_mode !== "live") return { ok: false, reason: "A simulated payment has nothing on chain to show." };
 
   // The intent's own network (network threading P1): its home chain is the one a direct payment was made on.
   const own = homeChain(networkOf(intent.network)).id;
   const crossChain = intent.destination_chain !== null && intent.destination_chain !== own;
   const route: ReceiptRoute = intent.payout_route === "gateway" ? "gateway" : crossChain ? "cctp" : "direct";
   // The payee is paid by the mint on their chain, once there is one; a CCTP burn alone is not their payment (R4).
-  if (route === "cctp" && !intent.mint_tx_hash) return refuse("The payee's chain has not minted this payout yet.");
+  if (route === "cctp" && !intent.mint_tx_hash) return { ok: false, reason: "The payee's chain has not minted this payout yet." };
   const txHash = route === "direct" ? intent.tx_hash : (intent.mint_tx_hash ?? intent.tx_hash);
   const sourceTxHash = route === "cctp" ? intent.tx_hash : null;
   if (!txHash || !TX_HASH.test(txHash) || (sourceTxHash !== null && !TX_HASH.test(sourceTxHash)) || !ADDRESS.test(intent.destination)) {
-    return refuse("This payment has no transaction on chain to show.");
+    return { ok: false, reason: "This payment has no transaction on chain to show." };
   }
-
-  const records = recordingEntry(invoice.id, input.entries, txHash, sourceTxHash);
-  if (!records) return refuse("No ledger entry records this payment's transaction.");
 
   const fee = intent.bridge_fee == null ? null : Number(intent.bridge_fee);
   const facts: ReceiptFacts = {
@@ -93,18 +105,27 @@ export function buildReceipt(input: {
     ...(sourceTxHash ? { sourceTxHash } : {}),
     ...(route !== "direct" && fee !== null && Number.isFinite(fee) ? { feeUsdc: fee } : {}),
   };
-  return { ok: true, facts, records: { seq: records.seq, hash: records.hash } };
+  return { ok: true, facts };
 }
 
+/** The entries that record a milestone's transaction: the agent's release, a person's Pay now, a later reconcile. */
+export const MILESTONE_RECORDING_ACTIONS: ReadonlySet<string> = new Set(["milestone_release", "milestone_approval_paid", "milestone_reconcile"]);
+
 /**
- * The newest of the invoice's recording entries whose detail contains the payee's transaction; failing
- * that, the newest that contains the CCTP burn. Hashes are compared without regard to case.
+ * The newest of the record's recording entries whose detail contains the payee's transaction; failing that, the
+ * newest that contains the CCTP burn. Hashes are compared without regard to case. An invoice is recorded by
+ * `RECORDING_ACTIONS`, a milestone by `MILESTONE_RECORDING_ACTIONS` (evidence chain E2).
  */
-function recordingEntry(invoiceId: string, entries: LedgerEntry[], txHash: string, sourceTxHash: string | null): LedgerEntry | null {
-  const recording = entries
-    .filter((entry) => entry.detail.invoiceId === invoiceId && RECORDING_ACTIONS.has(entry.action))
-    .sort((a, b) => b.seq - a.seq);
-  const contains = (entry: LedgerEntry, hash: string) => JSON.stringify(entry.detail).toLowerCase().includes(hash.toLowerCase());
+export function recordingEntry<E extends { seq: number; action: string; detail: Record<string, unknown> }>(
+  record: { invoiceId: string } | { milestoneId: string },
+  entries: readonly E[],
+  txHash: string,
+  sourceTxHash: string | null
+): E | null {
+  const [key, id, actions] =
+    "invoiceId" in record ? (["invoiceId", record.invoiceId, RECORDING_ACTIONS] as const) : (["milestoneId", record.milestoneId, MILESTONE_RECORDING_ACTIONS] as const);
+  const recording = entries.filter((entry) => entry.detail[key] === id && actions.has(entry.action)).sort((a, b) => b.seq - a.seq);
+  const contains = (entry: E, hash: string) => JSON.stringify(entry.detail).toLowerCase().includes(hash.toLowerCase());
   return recording.find((entry) => contains(entry, txHash)) ?? (sourceTxHash ? recording.find((entry) => contains(entry, sourceTxHash)) : undefined) ?? null;
 }
 

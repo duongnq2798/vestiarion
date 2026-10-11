@@ -25,7 +25,7 @@ import { AccountMenu } from "./AccountMenu";
 import { BrandMark } from "./Brand";
 import { useCommandPalette, useShortcutLabel } from "./CommandPalette";
 import { useFrame, WIDE } from "./FrameContext";
-import { DOCS_LINK, NAV_GROUPS, navItemForPathname, sectionPathOf } from "./nav";
+import { DOCS_LINK, insideSection, NAV_GROUPS, navItemForPathname, sectionPathOf } from "./nav";
 import { NAV_ICONS } from "./nav-icons";
 import type { WorkspaceSummary } from "./workspace";
 import { WorkspaceMeta } from "./WorkspaceMeta";
@@ -58,7 +58,10 @@ function RailTip({ collapsed, label, children }: { collapsed: boolean; label: st
  * drawer) has its own `layoutId` group, so the marker never flies between them.
  */
 export function SectionNav({ orgSlug, layoutId, collapsed = false }: { orgSlug: string; layoutId: string; collapsed?: boolean }) {
-  const active = navItemForPathname(usePathname())?.key;
+  const pathname = usePathname();
+  const active = navItemForPathname(pathname)?.key;
+  // A page inside a section, such as a payment's evidence, is in the section without being its page.
+  const currentAs = insideSection(pathname) ? "true" : "page";
   const id = useId();
 
   return (
@@ -81,7 +84,7 @@ export function SectionNav({ orgSlug, layoutId, collapsed = false }: { orgSlug: 
                     <RailTip collapsed={collapsed} label={item.label}>
                       <Link
                         href={orgHref(orgSlug, item.path)}
-                        aria-current={current ? "page" : undefined}
+                        aria-current={current ? currentAs : undefined}
                         className={cn(
                           "relative flex items-center rounded-lg text-sm transition-colors duration-150 ease-standard",
                           // The icon sits 23px from the panel's edge in both widths, so it stays put as the rail folds.
