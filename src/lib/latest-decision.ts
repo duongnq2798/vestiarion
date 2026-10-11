@@ -1,4 +1,5 @@
 import { activityAmount } from "./agent-activity";
+import { utcMinute } from "./copy";
 import { networkProfile, type Network } from "./network";
 import { txUrl } from "./payee-chains";
 import { ruleWords } from "./rule-words";
@@ -10,8 +11,11 @@ import type { SignedLink } from "./receipts/verify";
  * the model's reasoning and every name stay in the workspace; nothing here can name a bill, a payee or a workspace.
  */
 
-/** What `latest_team_decision()` (migration 0087) gives the page: never the workspace's id, which the server keeps. */
-export interface LatestDecisionFacts {
+/**
+ * A decision's facts as the team's decision functions give them (0087, 0100), which name no one: what the page says
+ * about the latest decision and the earlier ones alike.
+ */
+export interface DecisionFacts {
   seq: number;
   ts: string;
   action: string;
@@ -32,6 +36,10 @@ export interface LatestDecisionFacts {
    * payment held for a person is sent by them later, so the agent's own entry never records it.
    */
   paidTxHash: string | null;
+}
+
+/** What `latest_team_decision()` (migration 0087) gives the page: never the workspace's id, which the server keeps. */
+export interface LatestDecisionFacts extends DecisionFacts {
   link: SignedLink;
 }
 
@@ -88,14 +96,14 @@ export function timeAgo(iso: string, now: number): string {
 }
 
 /** What was decided about, with its amount when the entry recorded one: "a 0.35 USDC bill", "a 0.30 USDC contractor milestone". */
-function subject(facts: LatestDecisionFacts): string {
+function subject(facts: DecisionFacts): string {
   const milestone = facts.action.startsWith("milestone_");
   const thing = milestone ? "contractor milestone" : "bill";
   if (facts.amount === null) return milestone ? "a contractor milestone" : "a bill";
   return `a ${activityAmount(facts.amount, facts.currency)} ${thing}`;
 }
 
-function headline(facts: LatestDecisionFacts, network: string): string {
+function headline(facts: DecisionFacts, network: string): string {
   const what = subject(facts);
   switch (facts.action) {
     case "ap_pay":
@@ -117,7 +125,7 @@ function headline(facts: LatestDecisionFacts, network: string): string {
 }
 
 /** Why it did not go out, when it did not: the recorded marker, then the rule code refused it by, then the model's own hold. */
-function why(facts: LatestDecisionFacts): string | null {
+function why(facts: DecisionFacts): string | null {
   // Held for a verdict that was given: never "still waits" once a person answered.
   if (facts.heldBecause === HELD_FOR_VERDICT && facts.verdict === "agree") {
     return facts.paidTxHash ? "In shadow mode, a person agrees before anything is paid." : "A person agreed, in shadow mode; its payment has not confirmed yet.";
@@ -129,7 +137,7 @@ function why(facts: LatestDecisionFacts): string | null {
   return null;
 }
 
-function factsOf(facts: LatestDecisionFacts): LatestDecisionFact[] {
+function factsOf(facts: DecisionFacts): LatestDecisionFact[] {
   const shown: LatestDecisionFact[] = [];
   if (facts.decisionMode) shown.push({ label: "Proposed by", value: MODELS[facts.decisionMode] ?? "A model", tone: "neutral" });
   // The written policy decides beside every model; when it decided itself, there is nothing to compare.
@@ -144,6 +152,11 @@ function factsOf(facts: LatestDecisionFacts): LatestDecisionFact[] {
   return shown;
 }
 
+/** The explorer link of the transaction a decision sent, or of the payment that followed it; null when neither is a transaction hash. */
+function transactionUrl(facts: DecisionFacts): string | null {
+  return [facts.txRef, facts.paidTxHash].map((ref) => (ref && TX_HASH.test(ref) ? txUrl(facts.network, ref) : null)).find(Boolean) ?? null;
+}
+
 export function latestDecisionView(facts: LatestDecisionFacts, now: number = Date.now()): LatestDecisionView {
   const network = networkProfile(facts.network).label;
   return {
@@ -154,7 +167,128 @@ export function latestDecisionView(facts: LatestDecisionFacts, now: number = Dat
     headline: headline(facts, network),
     why: why(facts),
     facts: factsOf(facts),
-    txUrl: [facts.txRef, facts.paidTxHash].map((ref) => (ref && TX_HASH.test(ref) ? txUrl(facts.network, ref) : null)).find(Boolean) ?? null,
+    txUrl: transactionUrl(facts),
     link: facts.link,
+  };
+}
+
+/**
+ * What came of a decision, in words a visitor can scan down a column (landing recent decisions D3): paid, held,
+ * refused by code. Read only from what the entry recorded, in this order: a confirmed payment first, whoever sent it,
+ * then a person's verdict in shadow mode, then code's refusal, then the model's own action.
+ */
+export type DecisionOutcomeKind =
+  | "paid"
+  | "confirming"
+  | "person_agreed"
+  | "person_disagreed"
+  | "awaiting_person"
+  | "refused"
+  | "flagged"
+  | "scheduled"
+  | "asked"
+  | "held";
+
+export interface DecisionOutcome {
+  kind: DecisionOutcomeKind;
+  label: string;
+  tone: "proof" | "agent" | "held" | "refused" | "neutral";
+}
+
+const OUTCOMES: Record<DecisionOutcomeKind, Omit<DecisionOutcome, "kind">> = {
+  paid: { label: "Paid", tone: "proof" },
+  confirming: { label: "Confirming", tone: "neutral" },
+  person_agreed: { label: "Person agreed", tone: "agent" },
+  person_disagreed: { label: "Person disagreed", tone: "held" },
+  awaiting_person: { label: "Awaiting a person", tone: "held" },
+  refused: { label: "Refused by code", tone: "refused" },
+  flagged: { label: "Flagged", tone: "refused" },
+  scheduled: { label: "Scheduled", tone: "agent" },
+  asked: { label: "Asked for details", tone: "held" },
+  held: { label: "Held", tone: "held" },
+};
+
+function outcomeKind(facts: DecisionFacts): DecisionOutcomeKind {
+  const pays = facts.action === "ap_pay" || facts.action === "milestone_release";
+  if (pays && (facts.resultingStatus === "paid" || facts.paidTxHash)) return "paid";
+  if (pays && (facts.resultingStatus === "matched" || facts.resultingStatus === "verified")) return "confirming";
+  if (facts.heldBecause === HELD_FOR_VERDICT) {
+    return facts.verdict === "agree" ? "person_agreed" : facts.verdict === "disagree" ? "person_disagreed" : "awaiting_person";
+  }
+  if (facts.guardrailBlocked) return "refused";
+  if (facts.action === "ap_flag_fraud") return "flagged";
+  if (facts.action === "ap_schedule") return "scheduled";
+  if (facts.action === "ap_request_info") return "asked";
+  return "held";
+}
+
+export function decisionOutcome(facts: DecisionFacts): DecisionOutcome {
+  const kind = outcomeKind(facts);
+  return { kind, ...OUTCOMES[kind] };
+}
+
+/**
+ * What was checked before a decision went ahead, for one that did (paid, sent, scheduled): the written policy's answer
+ * beside the model's, and code's checks. Only what the entry recorded; null when it recorded neither.
+ */
+function checksSentence(facts: DecisionFacts): string | null {
+  const policy =
+    facts.decisionMode === "heuristic"
+      ? "The written policy decided"
+      : facts.agreedWithReference === true
+        ? "The written policy agreed"
+        : facts.agreedWithReference === false
+          ? "The written policy disagreed"
+          : null;
+  const code = facts.guardrailBlocked === false ? "code checks passed" : null;
+  if (policy && code) return `${policy}; ${code}.`;
+  if (policy) return `${policy}.`;
+  return code ? "Code checks passed." : null;
+}
+
+/** Why, in one sentence: why it did not go out when it did not, else what was checked before it did. */
+function detail(facts: DecisionFacts, outcome: DecisionOutcomeKind): string | null {
+  const reason = why(facts);
+  if (reason) return reason;
+  if (outcome === "paid" || outcome === "confirming" || outcome === "scheduled") return checksSentence(facts);
+  if (outcome === "flagged") return "It was not paid.";
+  if (outcome === "asked") return "It waits for the missing detail.";
+  return null;
+}
+
+/** One of the agent's earlier decisions as the landing lists it (landing recent decisions D3): no signature, no badges. */
+export interface RecentDecisionView {
+  seq: number;
+  at: string;
+  /** "8 h ago". */
+  ago: string;
+  /** "Oct 11, 2026, 03:21 UTC", for the time's title. */
+  atUtc: string;
+  network: Network;
+  /** "Arc mainnet". */
+  networkLabel: string;
+  /** Whether the network moves real money: Arc mainnet does; Arc testnet moves test money with no value. */
+  realMoney: boolean;
+  outcome: DecisionOutcome;
+  headline: string;
+  detail: string | null;
+  txUrl: string | null;
+}
+
+export function recentDecisionView(facts: DecisionFacts, now: number = Date.now()): RecentDecisionView {
+  const profile = networkProfile(facts.network);
+  const outcome = decisionOutcome(facts);
+  return {
+    seq: facts.seq,
+    at: facts.ts,
+    ago: timeAgo(facts.ts, now),
+    atUtc: utcMinute(facts.ts),
+    network: facts.network,
+    networkLabel: profile.label,
+    realMoney: facts.network === "arc-mainnet",
+    outcome,
+    headline: headline(facts, profile.label),
+    detail: detail(facts, outcome.kind),
+    txUrl: transactionUrl(facts),
   };
 }
