@@ -118,6 +118,11 @@ export interface InvoiceRow {
   fx_rate?: number | null;
   fx_source?: string | null;
   fx_at?: string | null;
+  /** When a receivable's payment arrived, or a payable's left (0001); null while it is open. */
+  settled_at?: string | null;
+  /** The recurring payment that created this invoice, and the period (`YYYY-MM-DD`) it is for (0055). */
+  recurring_id?: string | null;
+  recurring_period?: string | null;
 }
 
 export async function listInvoices(): Promise<InvoiceRow[]> {

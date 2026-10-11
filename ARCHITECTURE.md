@@ -871,6 +871,37 @@ USDC included. Each figure links to its source: the decision and the verdict to 
 (`/audit?before=<seq + 1>#seq-<seq>`), the payment to the explorer, the record to its entry with who recorded it and
 when. `npm run traction-digest` adds one line from the same totals.
 
+## Cash outlook and scenarios
+
+Treasury's **Safe to spend today** and **Next 30 days** (spec `2026-10-02-safe-to-spend-design.md`) and its folded
+**What if clients pay late?** section (spec `2026-10-11-cash-scenarios-design.md`) are worked out from rows the console
+already reads, with no query or write of their own beyond the recurring schedules.
+
+- **One set of rules.** `outlookMoves(input, windowDays)` (`src/lib/cash-outlook.ts`) dates what is counted: open USDC
+  payables (`OPEN_PAYABLE_STATUSES`, a held one included) on `scheduled_for` or their due day, an overdue one today;
+  open milestones today unless escrowed; open USDC receivables (`pending`, `matched`) on their due day; EURC apart.
+  `cashOutlook` reads it over 30 days; `scenarioBasis` (`src/lib/cash-scenario-basis.ts`) over 90, adding each active
+  recurring payment's periods with no invoice yet (`dueOn` from `next_period`, a billed period found by
+  `recurring_id` and `recurring_period`) and each expected client's record from its received receivables, by the rule
+  the collections stage uses (counts and an average, never a likelihood). `listRecurringPayables` is read best effort:
+  when it fails the basis says so and projects none.
+- **In the browser.** The page hands the basis to `CashScenarios` (`src/components/vx/CashScenarios.tsx`), a client
+  component that runs `cashScenario` (`src/lib/cash-scenarios.ts`, pure) on every render from the basis and the levers
+  a person sets: a 30, 60 or 90 day horizon, days late (0 to 90), each receivable late, on time or never, and a change
+  in bill costs (-50% to 100%) on every bill or on bills written in another currency (`original_currency`). It gives the
+  balance day by day for the base case (every receivable on its due day, named "If clients pay on time", since Next 30
+  days counts none) and the scenario, the first day below zero and below the cushion (15% of what leaves in the 7 days
+  from that day), the bills due while short, up to three suggestions in words (a scheduled bill paid on its due day only
+  when the scenario, worked out again with it moved, runs short later or by less), the three biggest drivers by the
+  short day (a client's receivables grouped by its counterparty id), and the coverage (the weeks of the horizon with a
+  bill on record, what is projected, what is left out). Cash is the
+  operating wallet and the USYC reserve; a receivable adds to the balance only on the day it arrives in that case; deals
+  not invoiced and bank balances are never counted.
+- **Nothing that pays reads it.** No server action, ledger entry or setting: the levers live in component state and
+  are gone with the page. Safe to spend today, the treasury's buffer, cash holds and every guardrail still count no
+  receivable; `tests/cash-scenarios-ui.test.tsx` fails if a file under `src/lib/agent`, `src/lib/commands`,
+  `src/app/actions` or `src/app/api` imports a cash-scenario module.
+
 ## Why it was paid: the evidence chain
 
 `/o/[slug]/evidence/invoice|milestone/<id>` (spec `2026-10-10-evidence-chain-design.md`) gives every member one page
