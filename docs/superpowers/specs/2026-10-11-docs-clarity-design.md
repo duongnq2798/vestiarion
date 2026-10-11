@@ -50,5 +50,11 @@ Vestiarion's behalf, and a wallet-held treasury on Arc mainnet pays only through
 
 - A remembered open or closed state for each sidebar section (P2).
 - A feedback widget, dark mode, search filters (P2). Search, Copy page and Markdown are unchanged and still work.
-- Screenshots for the quickstart's steps: it has none yet. Adding them means a docs-shots state for the counterparty
-  and invoice forms and the shadow-mode checklist, photographed by `npm run docs:screenshots`.
+
+## Quickstart screenshots (Q2, follow-up)
+
+The quickstart shows each step as the app draws it, from the app's own components with made-up data
+(`src/app/docs-shots/shots.tsx`, `try-it-*`): the workspace form with a test workspace and shadow mode ticked, the
+**Get started in shadow mode** checklist, the counterparty form filled for the example supplier (Northwind Hosting, a
+vendor with a 500.00 USDC limit and no purchase orders), the New invoice form for its 120.00 USDC bill, and the bill's
+card waiting for a verdict. The first payment's invoice shot and the quickstart's share one form (`NewInvoice`).
