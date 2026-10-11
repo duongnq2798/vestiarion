@@ -113,6 +113,14 @@ describe("the privacy page", () => {
     for (const role of ORG_ROLES) expect(body.toLowerCase(), role).toContain(role);
   });
 
+  it("says which button choice Google Analytics counts, and the code sends only its name and the redacted path (landing clarity M1)", () => {
+    const analytics = source("src/components/analytics/GoogleAnalytics.tsx");
+    expect(analytics).toContain('"cta_click", { cta_id: id, page_path: redactPath(window.location.pathname) }');
+    for (const phrase of ["cta_click", "hero-try", "Try it on your bills", "Nothing you typed and nothing about you goes with it."]) {
+      expect(body, phrase).toContain(phrase);
+    }
+  });
+
   it("says what Google Analytics is kept from, and the code keeps it from exactly that", () => {
     const analytics = source("src/components/analytics/GoogleAnalytics.tsx");
     expect(analytics).toContain("allow_google_signals: false");

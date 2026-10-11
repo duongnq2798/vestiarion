@@ -21,7 +21,7 @@
 [![Slack](https://img.shields.io/badge/Slack-guide-4A154B?style=flat-square&logo=slack)](https://www.vestiarion.xyz/docs/guides/slack)
 [![Telegram](https://img.shields.io/badge/Telegram-guide-26A5E4?style=flat-square&logo=telegram&logoColor=white)](https://www.vestiarion.xyz/docs/guides/telegram)
 
-**[Open the app](https://www.vestiarion.xyz)** · **[Watch the demo](https://www.youtube.com/watch?v=hIS3THDLtVQ)** · **[Try it in 5 minutes](https://www.vestiarion.xyz/docs/guides/try-it)** · **[Open numbers](https://www.vestiarion.xyz/open)** · **[Docs](https://www.vestiarion.xyz/docs)** · **[@vestiarionhq](https://x.com/vestiarionhq)**
+**[Open the app](https://www.vestiarion.xyz)** · **[Watch the demo](https://www.youtube.com/watch?v=hIS3THDLtVQ)** · **[See your first decision](https://www.vestiarion.xyz/docs/guides/try-it)** · **[Open numbers](https://www.vestiarion.xyz/open)** · **[Docs](https://www.vestiarion.xyz/docs)** · **[@vestiarionhq](https://x.com/vestiarionhq)**
 
 </div>
 
@@ -173,7 +173,7 @@ Each workspace lives on one network, chosen when it is created, and never moves.
 
 | | Arc testnet | Arc mainnet |
 | --- | --- | --- |
-| **Who can use it** | Anyone who signs in | Only people the deployment opens it to (`MAINNET_ALLOWLIST`) |
+| **Who can use it** | Anyone who signs in | Anyone who signs in at vestiarion.xyz; a self-hosted deployment chooses who with `MAINNET_ALLOWLIST` |
 | **Money** | Testnet USDC and EURC from Circle's faucet | Real USDC, sent on Arc or brought from another chain through CCTP |
 | **Treasury** | Hosted wallet, or your own Circle account | Your own wallet or passkey wallet, or your own Circle account |
 | **Spending-limit contract** | Opt-in, deployed through Circle's Smart Contract Platform | Deployed by the owner's wallet on the own-wallet path |
@@ -301,11 +301,11 @@ of why it was made, and shadow mode measures how often people agree with the age
 
 **Use the hosted app** — no wallet or keys needed to start:
 
-1. Sign in at [www.vestiarion.xyz](https://www.vestiarion.xyz) with your email and open a workspace on Arc testnet.
-2. Load sample data, and watch the agent decide within a minute.
-3. Approve a payment yourself, read the **Report** of what the agent did, then verify the signed ledger.
+1. Sign in at [www.vestiarion.xyz](https://www.vestiarion.xyz) with your email and open a workspace on Arc testnet, in shadow mode.
+2. Add a supplier and one of your bills, or load sample data, and watch the agent decide within a minute.
+3. Agree or disagree with its decision, read the **Report** of what the agent did, then verify the signed ledger.
 
-The whole path is in [Try it in 5 minutes](https://www.vestiarion.xyz/docs/guides/try-it). To move testnet USDC,
+The whole path is in [See your first decision](https://www.vestiarion.xyz/docs/guides/try-it). To move testnet USDC,
 follow [Go live](https://www.vestiarion.xyz/docs/guides/go-live) and fund the wallet from
 [Circle's faucet](https://faucet.circle.com).
 
@@ -357,7 +357,7 @@ What each one is for, the wallets around them, and the USDC of the chains payees
 
 | | |
 | --- | --- |
-| **Start** | [Try it in 5 minutes](https://www.vestiarion.xyz/docs/guides/try-it) · [Go live](https://www.vestiarion.xyz/docs/guides/go-live) · [Your first payment](https://www.vestiarion.xyz/docs/guides/first-payment) · [Shadow mode](https://www.vestiarion.xyz/docs/guides/shadow-mode) |
+| **Start** | [See your first decision](https://www.vestiarion.xyz/docs/guides/try-it) · [How payments are controlled](https://www.vestiarion.xyz/docs/guides/controls) · [Go live](https://www.vestiarion.xyz/docs/guides/go-live) · [Your first payment](https://www.vestiarion.xyz/docs/guides/first-payment) · [Shadow mode](https://www.vestiarion.xyz/docs/guides/shadow-mode) |
 | **Guides** | [Workspace report](https://www.vestiarion.xyz/docs/guides/report) · [Pay a contractor](https://www.vestiarion.xyz/docs/guides/pay-a-contractor) · [Get paid](https://www.vestiarion.xyz/docs/guides/get-paid) · [Why a payment was paid](https://www.vestiarion.xyz/docs/guides/evidence) · [Audit export](https://www.vestiarion.xyz/docs/guides/audit-export) |
 | **Developers** | [Quickstart](https://www.vestiarion.xyz/docs/get-started/quickstart) · [API reference](https://www.vestiarion.xyz/docs/api) · [SDK](https://www.vestiarion.xyz/docs/get-started/sdk) · [Webhooks](https://www.vestiarion.xyz/docs/webhooks) · [MCP](https://www.vestiarion.xyz/docs/ai-integration/mcp) · [Changelog](https://www.vestiarion.xyz/docs/changelog) |
 | **This repository** | [ARCHITECTURE.md](ARCHITECTURE.md) · [Running it yourself](docs/self-hosting.md) · [Feature designs](docs/superpowers/specs) · [Contracts](contracts) · [SDK source](sdk) |

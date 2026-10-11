@@ -41,7 +41,7 @@ const GENERATED_SLUGS = new Set(OPERATIONS.map((op) => `api/${op.id}`));
 const OTHER_TARGETS = new Set(["/api/v1/openapi.json", "/llms.txt", "/llms-full.txt", "/tools/verify-ledger-export.mjs"]);
 
 /** Real app pages outside /docs that a docs page may link to. */
-const APP_ROUTES = new Set(["/", "/login", "/signup", "/onboarding", "/terms", "/privacy", "/open", "/studios"]);
+const APP_ROUTES = new Set(["/", "/login", "/signup", "/onboarding", "/terms", "/privacy", "/open", "/studios", "/how-it-decides"]);
 
 /** The source without code: fenced blocks and inline code spans, where a link is an example, not a link. */
 function withoutCode(source: string): string {
@@ -135,7 +135,16 @@ describe("the docs navigation", () => {
   it("lists every page once", () => {
     const slugs = flatPages().map((page) => page.slug);
     expect(new Set(slugs).size).toBe(slugs.length);
-    expect(DOCS_NAV.map((section) => section.title)).toEqual(["Overview", "Guides", "Research", "Get started", "API reference", "Webhooks", "AI integration", "Changelog"]);
+    expect(DOCS_NAV.map((section) => section.title)).toEqual([
+      "Start here",
+      "Everyday work",
+      "Trust and controls",
+      "Connect your tools",
+      "Developers",
+      "API reference",
+      "Webhooks",
+      "Changelog",
+    ]);
   });
 
   it("lists the endpoint overview, then one generated page per operation in table order, titled with its summary", () => {
@@ -149,31 +158,48 @@ describe("the docs navigation", () => {
     );
   });
 
-  it("lists the user guides right after Overview: trying it, finding your way around a workspace, going live, shadow mode, the workspace report, the first payment, paying a contractor, getting paid, Telegram, Slack, adding invoices and paying for pull requests through the API, then why a payment was paid and verifying an export", () => {
-    const section = DOCS_NAV.find((candidate) => candidate.title === "Guides")!;
-    expect(section.pages.map((page) => [page.slug, page.title])).toEqual([
-      ["guides/try-it", "Try it in 5 minutes"],
+  it("groups the pages by what a reader is doing, a business's path first and the developers' after (docs clarity N1)", () => {
+    const pagesOf = (title: string) => DOCS_NAV.find((section) => section.title === title)!.pages.map((page) => [page.slug, page.title]);
+    expect(pagesOf("Start here")).toEqual([
+      ["", "Overview"],
+      ["guides/try-it", "See your first decision"],
       ["guides/workspace", "Find your way around a workspace"],
-      ["guides/go-live", "Go live"],
+    ]);
+    expect(pagesOf("Everyday work")).toEqual([
       ["guides/shadow-mode", "Run alongside how you pay today"],
-      ["guides/report", "Read your workspace report"],
+      ["guides/go-live", "Go live"],
       ["guides/first-payment", "Your first payment"],
       ["guides/pay-a-contractor", "Pay a contractor for delivered work"],
-      ["guides/get-paid", "Get paid as a freelancer"],
-      ["guides/telegram", "Get the agent's decisions in Telegram"],
       ["guides/email-invoices", "Add invoices by email"],
-      ["guides/slack", "Get the agent's decisions in Slack"],
-      ["guides/api-invoices", "Add invoices from your own system"],
-      ["guides/api-milestones", "Pay for merged pull requests"],
-      ["guides/github", "Show payments on GitHub"],
+      ["guides/report", "Read your workspace report"],
+      ["guides/get-paid", "Get paid as a freelancer"],
+    ]);
+    expect(pagesOf("Trust and controls")).toEqual([
+      ["guides/controls", "How payments are controlled"],
       ["guides/evidence", "Why a payment was paid"],
       ["guides/audit-export", "Verify an audit export"],
+      ["research/model-vs-policy", "When the model and the policy disagree"],
+      ["contracts", "Contracts on Arc"],
+    ]);
+    expect(pagesOf("Connect your tools")).toEqual([
+      ["guides/slack", "Get the agent's decisions in Slack"],
+      ["guides/telegram", "Get the agent's decisions in Telegram"],
+      ["guides/github", "Show payments on GitHub"],
+    ]);
+    expect(pagesOf("Developers").slice(0, 3)).toEqual([
+      ["get-started/quickstart", "Developer quickstart"],
+      ["get-started/sdk", "TypeScript SDK"],
+      ["get-started/authentication", "Authentication"],
     ]);
   });
 
+  it("folds only the long reference lists in the sidebar", () => {
+    expect(DOCS_NAV.filter((section) => section.folded).map((section) => section.title)).toEqual(["API reference", "Webhooks"]);
+  });
+
   it("lists the MCP server right after the AI integration page", () => {
-    const section = DOCS_NAV.find((candidate) => candidate.title === "AI integration")!;
-    expect(section.pages.map((page) => [page.slug, page.title])).toEqual([
+    const section = DOCS_NAV.find((candidate) => candidate.title === "Developers")!;
+    expect(section.pages.slice(-2).map((page) => [page.slug, page.title])).toEqual([
       ["ai-integration", "AI integration"],
       ["ai-integration/mcp", "MCP server"],
     ]);
@@ -190,25 +216,18 @@ describe("the docs navigation", () => {
     const pages = flatPages();
     expect(neighbours("").prev).toBeUndefined();
     expect(neighbours("").next?.slug).toBe(pages[1].slug);
-    expect(neighbours("data-delivery").next?.slug).toBe("contracts");
-    expect(neighbours("contracts").next?.slug).toBe("guides/try-it");
+    // The learning order: the first decision, the workspace, shadow mode, going live, then paying.
     expect(neighbours("guides/try-it").next?.slug).toBe("guides/workspace");
-    expect(neighbours("guides/workspace").next?.slug).toBe("guides/go-live");
-    expect(neighbours("guides/go-live").next?.slug).toBe("guides/shadow-mode");
-    expect(neighbours("guides/shadow-mode").next?.slug).toBe("guides/report");
-    expect(neighbours("guides/report").next?.slug).toBe("guides/first-payment");
-    expect(neighbours("guides/first-payment").next?.slug).toBe("guides/pay-a-contractor");
-    expect(neighbours("guides/pay-a-contractor").next?.slug).toBe("guides/get-paid");
-    expect(neighbours("guides/get-paid").next?.slug).toBe("guides/telegram");
-    expect(neighbours("guides/telegram").next?.slug).toBe("guides/email-invoices");
-    expect(neighbours("guides/email-invoices").next?.slug).toBe("guides/slack");
-    expect(neighbours("guides/slack").next?.slug).toBe("guides/api-invoices");
-    expect(neighbours("guides/api-invoices").next?.slug).toBe("guides/api-milestones");
-    expect(neighbours("guides/api-milestones").next?.slug).toBe("guides/github");
-    expect(neighbours("guides/github").next?.slug).toBe("guides/evidence");
+    expect(neighbours("guides/workspace").next?.slug).toBe("guides/shadow-mode");
+    expect(neighbours("guides/shadow-mode").next?.slug).toBe("guides/go-live");
+    expect(neighbours("guides/go-live").next?.slug).toBe("guides/first-payment");
+    expect(neighbours("guides/get-paid").next?.slug).toBe("guides/controls");
+    // How payments are controlled, then why one was paid, then checking the whole ledger.
+    expect(neighbours("guides/controls").next?.slug).toBe("guides/evidence");
     expect(neighbours("guides/evidence").next?.slug).toBe("guides/audit-export");
-    expect(neighbours("guides/audit-export").next?.slug).toBe("research/model-vs-policy");
-    expect(neighbours("research/model-vs-policy").next?.slug).toBe("get-started/quickstart");
+    expect(neighbours("contracts").next?.slug).toBe("guides/slack");
+    expect(neighbours("guides/github").next?.slug).toBe("get-started/quickstart");
+    expect(neighbours("ai-integration/mcp").next?.slug).toBe("api");
     expect(neighbours(pages[pages.length - 1].slug).next).toBeUndefined();
     expect(neighbours("no-such-page")).toEqual({});
   });
@@ -256,13 +275,14 @@ describe("the Errors page", () => {
 });
 
 describe("the sitemap", () => {
-  it("lists the landing page, the open numbers, the page for studios, every published docs page in nav order, then the terms and the privacy page, each as an absolute URL", () => {
+  it("lists the landing page, the open numbers, the page for studios, how the agent decides, every published docs page in nav order, then the terms and the privacy page, each as an absolute URL", () => {
     const origin = publicOrigin();
     const urls = sitemap().map((entry) => entry.url);
     expect(urls).toEqual([
       `${origin}/`,
       `${origin}/open`,
       `${origin}/studios`,
+      `${origin}/how-it-decides`,
       ...publishedPages().map((page) => `${origin}${page.slug ? `/docs/${page.slug}` : "/docs"}`),
       `${origin}/terms`,
       `${origin}/privacy`,

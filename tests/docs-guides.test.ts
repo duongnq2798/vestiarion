@@ -29,7 +29,8 @@ type GuideSlug =
   | "guides/api-milestones"
   | "guides/github"
   | "guides/audit-export"
-  | "guides/evidence";
+  | "guides/evidence"
+  | "guides/controls";
 
 const PANEL = "src/components/GoLivePanel.tsx";
 const WALLET_STEPS = "src/components/treasury/WalletTreasurySteps.tsx";
@@ -104,7 +105,6 @@ const GITHUB_CHECK = "src/lib/milestone-verification.ts";
 const LOGIN_PAGE = "src/app/login/page.tsx";
 const LOGIN_FORM = "src/components/auth/LoginForm.tsx";
 const WORKSPACE_FORM = "src/components/CreateWorkspaceForm.tsx";
-const OPEN_TABLE = "src/components/open/OpenNumbersTable.tsx";
 const APPROVALS_LIST = "src/app/o/[slug]/approvals/page.tsx";
 const API_KEYS_PANEL = "src/components/ApiKeysPanel.tsx";
 const INVOICES_ROUTE = "src/app/api/v1/invoices/route.ts";
@@ -206,41 +206,83 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Go live", "src/components/vx/command-items.ts"],
   ],
   "guides/try-it": [
-    ["Run alongside how you pay today (shadow mode)", CREATE_FORM],
-    ["Add a supplier", GETTING_STARTED],
-    ["Add a bill", GETTING_STARTED],
-    ["See the agent's decision", GETTING_STARTED],
-    ["To pay on Arc", GETTING_STARTED],
-    ["Report", APP_NAV],
-    ["This workspace has no real bill yet, so the report counts its sample data.", "src/components/vx/WorkspaceReport.tsx"],
-    ["Sandbox: payments here are simulated.", "src/components/vx/WorkspaceReport.tsx"],
-    ["Agent vs what really happened", "src/components/vx/ActualsComparison.tsx"],
-    ["Record what you paid", "src/components/ActualPaymentControl.tsx"],
-    ["Safe to spend today", "src/components/vx/CashOutlook.tsx"],
-    ["Next 30 days", "src/components/vx/CashOutlook.tsx"],
     ["Continue with Google", LOGIN_PAGE],
     ["Work email", LOGIN_FORM],
     ["Email me a sign-in link", LOGIN_FORM],
     ["Workspace name", WORKSPACE_FORM],
+    ["Run alongside how you pay today (shadow mode)", CREATE_FORM],
+    ["Try it on your bills", "src/components/landing/cta.ts"],
+    ["Test workspace", WORKSPACE_FORM],
+    ["Production workspace", WORKSPACE_FORM],
     ["Create workspace", WORKSPACE_FORM],
     ["Treasury", APP_NAV],
-    ["Try it with sample data", SAMPLE_PANEL],
-    ["Load sample data", SAMPLE_PANEL],
-    ["Run cycle now", RUN],
+    ["Get started in shadow mode", GETTING_STARTED],
+    ["Add your suppliers", GETTING_STARTED],
+    ["Add your real bills", GETTING_STARTED],
+    ["Give your first verdict", GETTING_STARTED],
+    ["To pay on Arc", GETTING_STARTED],
+    ["Counterparties", APP_NAV],
+    ["Add counterparty", COUNTERPARTIES_PAGE],
+    ["Legal or trading name", COUNTERPARTY_FORM],
+    ["Vendor", COUNTERPARTY_FORM],
+    ["Contractor", COUNTERPARTY_FORM],
+    ["Payment limit (USDC)", COUNTERPARTY_FORM],
+    ["Payment address", COUNTERPARTY_FORM],
+    ["Optional until payment setup", COUNTERPARTY_FORM],
+    ["Does this supplier send you purchase orders?", COUNTERPARTY_FORM],
+    ["Add and screen", COUNTERPARTY_FORM],
+    ["added and screened: clear risk.", "src/app/actions/intake.ts", "added and screened: "],
     ["Bills & receivables", APP_NAV],
+    ["New invoice", INVOICES_PAGE],
+    ["Counterparty", INVOICE_FORM],
+    ["Amount", INVOICE_FORM],
+    ["Currency", INVOICE_FORM],
+    ["Due date", INVOICE_FORM],
+    ["PO reference", INVOICE_FORM],
+    ["Goods or services received", INVOICE_FORM],
+    ["Add invoice", INVOICE_FORM],
+    ["The agent usually decides on a payable within a minute of adding it.", INVOICE_FORM],
+    ["Run cycle now", RUN],
+    ["Waiting for your verdict", "src/components/vx/map.ts"],
     ["Agent’s reasoning", DECISION_CARD],
     ["Blocked by code, not by the model", DECISION_CARD],
+    ["How the agent decided", "src/components/vx/DecisionTrail.tsx"],
+    ["Audit log", APP_NAV],
+    ["Verify hash chain", VERIFY_BADGE],
+    ["Chain intact", VERIFY_BADGE],
+    ["Do you agree with the agent?", VERDICT],
+    ["Agree and pay", VERDICT],
+    ["You agree with the agent, and it is paid now, simulated in this sandbox", VERDICT],
+    ["Disagree", VERDICT],
+    ["Try it with sample data", SAMPLE_PANEL],
+    ["Load sample data", SAMPLE_PANEL],
     ["Approvals", APP_NAV],
     ["Approve and pay", APPROVAL_CARD],
     ["Pay now", APPROVAL_CARD],
     ["Nothing is waiting for a decision.", APPROVALS_LIST],
+    ["Remove sample data", SAMPLE_PANEL],
+    ["Remove the sample data first. It exists only to try the agent with simulated payments.", GO_LIVE_LIBRARY],
+  ],
+  "guides/controls": [
+    ["Blocked by code, not by the model", DECISION_CARD],
+    ["Do you agree with the agent?", VERDICT],
+    ["Agree and pay", VERDICT],
+    ["Payment limit (USDC)", COUNTERPARTY_FORM],
+    ["Agent spending limit", "src/components/AgentBudgetPanel.tsx"],
+    ["Enforce on Arc", "src/components/AgentBudgetPanel.tsx"],
+    ["Approvals", APP_NAV],
+    ["Approve and pay", APPROVAL_CARD],
+    ["You created this invoice", APPROVAL_CARD],
+    ["You gave this payee's address", APPROVAL_CARD],
+    ["Two approvals", "src/components/TwoApprovalsPanel.tsx"],
+    ["Payments above (USDC)", "src/components/TwoApprovalsPanel.tsx"],
+    ["Pause agent", PAUSE],
+    ["Resume agent", PAUSE],
+    ["Stop the agent's payments", "src/components/treasury/TreasuryWalletControls.tsx"],
+    ["Payments are switched off for every workspace right now.", "src/lib/payments-switch.ts"],
     ["Audit log", APP_NAV],
     ["Verify hash chain", VERIFY_BADGE],
     ["Chain intact", VERIFY_BADGE],
-    ["Payments settled", OPEN_TABLE],
-    ["Remove sample data", SAMPLE_PANEL],
-    ["Remove the sample data first. It exists only to try the agent with simulated payments.", GO_LIVE_LIBRARY],
-    ["Get started", CHECKLIST],
   ],
   "guides/go-live": [
     ["Add a supplier", GETTING_STARTED],
@@ -1066,7 +1108,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   ],
   "guides/shadow-mode": [
     ["Run alongside how you pay today (shadow mode)", CREATE_FORM],
-    ["Try it on your bills", "src/components/landing/Hero.tsx"],
+    ["Try it on your bills", "src/components/landing/cta.ts"],
     ["Your workspace is ready, but shadow mode did not turn on.", "src/app/o/[slug]/console/page.tsx"],
     ["To pay on Arc", GETTING_STARTED],
     ["Does this supplier send you purchase orders?", COUNTERPARTY_FORM],
@@ -1273,6 +1315,7 @@ const sourceFile = (file: string) => readFileSync(path.join(process.cwd(), file)
  */
 const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/try-it": 20,
+  "guides/controls": 12,
   "guides/workspace": 20,
   "guides/go-live": 20,
   "guides/shadow-mode": 20,
@@ -1339,7 +1382,7 @@ describe("the Try it guide's sample outcomes", () => {
 
   it("lists the same outcomes as the first-payment guide's sample-data tour", () => {
     const tour = readSource("guides/first-payment").split("## Try it with sample data first")[1]?.split("\n## ")[0] ?? "";
-    const step = readSource("guides/try-it").split("## 3. Load sample data")[1]?.split("\n## ")[0] ?? "";
+    const step = readSource("guides/try-it").split("## Try it with sample data instead")[1]?.split("\n## ")[0] ?? "";
     expect(bullets(tour).length).toBeGreaterThan(4);
     expect(bullets(step)).toEqual(bullets(tour));
   });
