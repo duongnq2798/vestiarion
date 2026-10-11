@@ -147,6 +147,7 @@ describe("the decision trail", () => {
       "A person moved its payment to Oct 15 from the payment plan, as the workspace's only approver."
     );
     expect(trailStep(step(983, "02:47:18", "human", "create_invoice", { document: { kind: "pdf" } }))!.text).toBe("A person added it, read from a document.");
+    expect(trailStep(step(983, "02:47:18", "human", "create_invoice", { via: "import", importRow: 12 }))!.text).toBe("A person added it, imported from a list.");
     expect(trailStep(step(984, "02:47:18", "agent", "ap_schedule", { decisionMode: "heuristic", decision: { payOn: "2026-10-05" } }))!.text).toBe(
       "The written policy decided to pay it on Oct 5."
     );

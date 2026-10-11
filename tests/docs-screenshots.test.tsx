@@ -177,9 +177,17 @@ describe("the Screenshot component", () => {
     expect(readFileSync(path.join(ROOT, "src", "components", "docs", "Screenshot.tsx"), "utf8")).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(|\[(?:#|rgb)/i);
   });
 
+  it("opens larger from a button named after the image, which says it enlarges (docs clarity C3)", () => {
+    const markup = renderToStaticMarkup(<Screenshot src="/docs/guides/go-live-fund.png" alt="Step 3" />);
+    expect(markup).toMatch(/<button type="button" aria-label="Enlarge: Step 3"[^>]*aria-haspopup="dialog"/);
+    expect(markup).toContain("Enlarge");
+  });
+
   it("leaves the size out, rather than fail the page, when the file cannot be read", () => {
     expect(screenshotSize("/docs/guides/nope.png")).toBeNull();
-    expect(renderToStaticMarkup(<Screenshot src="/docs/guides/nope.png" alt="Nope" />)).not.toContain("width=");
+    const image = /<img[^>]*>/.exec(renderToStaticMarkup(<Screenshot src="/docs/guides/nope.png" alt="Nope" />))?.[0] ?? "";
+    expect(image).toContain('alt="Nope"');
+    expect(image).not.toContain("width=");
   });
 
   it("reads a PNG's size from its header, and only from files under public/", () => {

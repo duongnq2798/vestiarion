@@ -42,9 +42,14 @@ export class ShadowBillError extends Error {
 
 export async function shadowBill(
   input: { currency: string; amount: string },
-  deps: { rate?: (currency: string) => Promise<UsdRate> } = {}
+  deps: {
+    rate?: (currency: string) => Promise<UsdRate>;
+    /** Whether the workspace is in shadow mode, when the caller read it already: an import of many bills reads it once. */
+    shadowOn?: boolean;
+  } = {}
 ): Promise<{ usdc: number; original: OriginalBill }> {
-  if (!(await readShadowMode(db()))) throw new ShadowBillError("not_in_shadow");
+  const inShadow = deps.shadowOn ?? (await readShadowMode(db())) !== null;
+  if (!inShadow) throw new ShadowBillError("not_in_shadow");
   const currency = shadowCurrency(input.currency);
   if (!currency) throw new ShadowBillError("invalid_currency");
   const amount = billAmount(input.amount, currency);

@@ -320,6 +320,36 @@ plan, on Arc testnet).
     fewer than two approvers in all, no approval is taken.
   - Reject, Return and Close clear the approvals; a transfer already sent is recorded on one approval.
 
+**Trying a limit on past decisions** (`docs/superpowers/specs/2026-10-10-policy-replay-design.md`).
+- **What it replays** (`replayDecisions`, `src/lib/policy-replay.ts`, pure): the agent's `ap_*` and `milestone_*`
+  decisions in the window, by ledger sequence, twice: under the figures in force (each counterparty's
+  `baseline_payment_limit`, `approval_policies`, `agent_budgets`) and with one candidate swapped in. No model is asked.
+- **The checks:** the stages of `enforceApGuardrails`, and of the contractor stage for a release, in their order. The
+  three figure checks are run again: the payment limit for the risk the decision recorded (`paymentLimitForRisk`), two
+  approvals, and the spending limit against running UTC-day and 7-day totals carried from decision to decision, with the
+  six days before the window counted as recorded. Every other check is read from the recorded `guardrailRule`: passed
+  before it, fired at it, and settled past it only from the facts (no `payout`, a USDC bill, `observed.newPayee`, a
+  bill's recorded `onChainLimit`); anything else is can't tell. A bill paid earlier in the replay counts once: a later
+  decision on it, paid in either column, is unchanged.
+- **Running totals:** a decision let through counts what it paid, or its full USDC value if a rule stopped it then; a
+  schedule a rule stopped then counts from nothing to its value on its `payOn` day, when the agent decides it again.
+  The contractor stage writes a milestone it holds at once and a release it planned (and counted against the limit at
+  once) only after the batch is sent, so within one stage, between `cycle_complete` entries, a held milestone and a
+  planned release weigh each other at the high end only. Shadow mode spends nothing: a bill's entry says so, and a
+  milestone's only when held for a verdict; for one a rule stopped, `readShadowMode` and the network (never on Arc
+  mainnet) settle it where they can, and otherwise it counts from nothing to its value.
+- **Can't tell** is counted, never guessed: an entry without an amount, decision or known rule, a missing risk level,
+  an unsettled check, a spending-limit check whose low and high running totals disagree, or a contract refusal for want
+  of room under other figures.
+- **Reading and the action:** `ruleReplay` (`src/lib/policy-replay-read.ts`) parses the candidate with the setting's own
+  parser and reads the window's decisions and cycle ends in pages (at most 20 of 1,000 each), and shadow mode's start.
+  `tryRuleAction` authorizes the permission that changes the setting (`records.write`, `approval.policy`,
+  `agent.budget`) and changes nothing.
+- **Applying it** posts the setting's own form to its own action. `policy-replay-apply.ts` reads the figure tried
+  and replays again on the server; `changeCounterpartyLimit`, `changeTwoApprovals` and `changeAgentBudget` refuse
+  with `stale` when the figure in force is no longer the one tried, and add `detail.replay` (window and counts) to
+  their signed entry. The contract on Arc, maker and checker and every other protection are unchanged by it.
+
 **A network for every workspace** (`docs/superpowers/specs/2026-10-05-network-foundation-design.md`, phase 1 of the
 mainnet plan).
 - **The column:** `orgs.network` is `arc-testnet` or `arc-mainnet`, Arc testnet by default (migration 0075).
@@ -350,8 +380,25 @@ mainnet plan).
     the workspaces opened in the period and how many reached each step: a real bill, the agent's decision on one, a
     confirmed live payment, payments on two UTC days, a verdict, two people. `npm run numbers` prints it per network
     (`src/lib/platform/funnel.ts`); /open does not show it.
-- **The landing's latest decision** (`docs/superpowers/specs/2026-10-08-landing-owner-hero-design.md`): a band under
-  the hero with the newest decision the agent made in one of the team's own live workspaces.
+- **The landing, for a business owner first** (`docs/superpowers/specs/2026-10-11-landing-clarity-design.md`): the hero
+  says what Vestiarion is and who it is for, beside two sample bills in the product's own words; then how it works in
+  three steps, who it is for (one tab per kind of team, every panel in the HTML), safety and control in plain words,
+  the proof, the developers' way in, the questions and the close.
+  - One call to action everywhere (`src/components/landing/cta.ts`): `/onboarding?shadow=1`, which opens a workspace
+    with shadow mode ticked; the sign-in page says what follows the link when that is where it leads.
+  - Each call to action carries `data-cta`; Google Analytics, where it runs, sends `cta_click` with that name and the
+    redacted path, nothing else. Activation itself is read from the database (`/admin/growth`).
+  - The technical showcase is `/how-it-decides`: the decision receipt replayed in its arch beside the live ledger's
+    head, the decision loop step by step, and the claims with the receipts behind them.
+  - The questions' answer about Arc mainnet says it is open to anyone only while `MAINNET_ALLOWLIST` holds `*`
+    (`mainnetOpenToEveryone`).
+  - Nothing above the proof waits for a read (landing stream S1): `LandingPage` is not async. It starts the reads (both
+    networks' open numbers, the latest decision, the founding workspace's chain modes, the reserve count) and hands
+    them to `Proof` as promises; its latest decision, figures and live legs each stream in behind their own fallback,
+    so the hero arrives with the first bytes. A chain-mode read that fails shows the legs as not live, never as live.
+- **The landing's latest decision** (`docs/superpowers/specs/2026-10-08-landing-owner-hero-design.md`): the newest
+  decision the agent made in one of the team's own live workspaces, in the landing's proof (a band of its own on
+  /studios).
   - `latest_team_decision()` (0087), the service role's alone, looks only where `/open` lists payments from: the
     founding workspace and those a team member created, never a sample payee's decision. It returns facts that name no
     one (action, amount, network, model, policy agreement, code's verdict, why a hold held, a person's verdict, the
@@ -362,23 +409,26 @@ mainnet plan).
     the workspace's id stays there. `src/lib/latest-decision.ts` says it in words.
   - The reader's browser checks the signature and the link to the entry before it with `verifySignedLink`, the
     receipt verifier's half that needs no body. Until 0087 runs, or when the read fails, there is no band.
-- **The landing's proof** (`docs/superpowers/specs/2026-10-08-landing-proof-design.md`): what the hero says runs live,
-  and the measurements, come from every workspace, never from the founding one alone.
-  - The hero's legs (`src/components/landing/provenance.ts`): the USYC reserve is live once any live workspace runs a
+- **The landing's proof** (`docs/superpowers/specs/2026-10-08-landing-proof-design.md`, and landing clarity P1-P3):
+  what the proof section says runs live, and the measurements, come from every workspace, never from the founding one
+  alone.
+  - The live legs (`src/components/landing/provenance.ts`): the USYC reserve is live once any live workspace runs a
     real one (`reserveRunsLive()`, a count over `orgs.usyc_live_at`, never which workspace), and links to the research
     note's section on it. Payments link to the team's latest Arc mainnet payment on the explorer, read from
-    `open_numbers`; the hero's "Live on Arc mainnet" links to /open's mainnet section.
-  - The measurements are the open numbers, all time (`readAllTimeOrNull`): Arc mainnet's panel, then Arc testnet's,
-    customers' figures with the total beside them as /open's headline has them, and the team's latest payment on each
-    network. A network whose numbers cannot be read says so, and the other still shows.
+    `open_numbers`; "Live on Arc mainnet" links to /open's mainnet section.
+  - The measurements are the open numbers, all time (`readAllTimeOrNull`): Arc mainnet's panel, then Arc testnet's.
+    Under "Customers" every figure is customers' own (workspaces, payments, then their verdicts or their on-time
+    share); the team's payments sit on a line of their own under them, with its latest payment on the explorer. No
+    total is shown where it could be read as customers'. A network whose numbers cannot be read says so, and the other
+    still shows.
 - **Motion** (`docs/superpowers/specs/2026-10-08-landing-motion-design.md`): reduced motion removes movement, not every
   change. Under `prefers-reduced-motion: reduce`, `globals.css` keeps transitions for opacity and colours only and cuts
   keyframe animations, except on an element marked `data-calm-motion`; `Reveal` fades without lifting. Each moving
-  piece has a designed reduced state. "How a decision becomes an action" (`src/components/landing/pipeline/`) lights the
-  step crossing the middle of the viewport and its part of a sticky diagram; the server's HTML lights every step.
-  The hero's receipt prints as calm motion under reduce, and publishes a beat (`hero/replay-beat.ts`) with the time
+  piece has a designed reduced state. On /how-it-decides, "How a decision becomes an action"
+  (`src/components/landing/pipeline/`) lights the step crossing the middle of the viewport and its part of a sticky
+  diagram; the server's HTML lights every step. That page's receipt prints as calm motion under reduce, and publishes a beat (`hero/replay-beat.ts`) with the time
   its first line started; `ArchLights` climbs the arch's stones on that clock and rings the keystone in the outcome.
-  The open numbers count up once when first seen (`CountUp`); "Build on it" types each guide's own snippet (API, SDK,
+  The open numbers count up once when first seen (`CountUp`); "For developers" types each guide's own snippet (API, SDK,
   MCP, GitHub, `landing/build/snippets.ts`) over a complete copy a screen reader reads.
 
 **Every module on its workspace's network** (`docs/superpowers/specs/2026-10-05-network-threading-design.md`,
@@ -720,7 +770,8 @@ disagrees with every decision.
   (`src/lib/shadow-bills.ts`) reads the amount as the bill writes it (`src/lib/bill-amount.ts`) and gives its USDC to
   the cent, only in shadow mode; the invoice keeps the bill in `original_*` and its card shows it, linked to the source.
   Settings offers USDC first (`SHADOW_CURRENCIES`, 0085): a workspace in USDC converts nothing. VND is not offered,
-  since crypto is no means of payment in Vietnam.
+  since crypto is no means of payment in Vietnam. An imported bill list's rows in that currency take the same path,
+  with the shadow mode read once for the list (`shadowBill`'s `shadowOn`).
 - **Proof out.** `npm run traction-digest -- <org-slug> --since YYYY-MM-DD` (`src/lib/traction-digest.ts`) prints a
   workspace's shadow decisions since the day, each with its verdict, what it paid and the transaction on the payable's
   newest decision ("Paid later by a person" when that decision was not to pay), and the agreement rate, in ASCII with no blank line for `arc-canteen update-traction`.
@@ -937,7 +988,8 @@ workspace's mode for that action, never from a link, a key or a button. A
 **command** is one function per action — `approvePayable`, `rejectPayable`,
 `returnPayable`, `addPayableDetails`, `payMilestoneNow`, `closeMilestoneUnpaid`,
 `pauseWorkspaceAgent`, `resumeWorkspaceAgent`, `runWorkspaceCycle`,
-`addInvoice`, `recordActualPayment`, `importActualPayments` — whose first statement is `gate(actor, "<command>")`:
+`addInvoice`, `importInvoices`, `recordActualPayment`, `importActualPayments` — whose first statement is
+`gate(actor, "<command>")`:
 
 - the scope in force must be the actor's workspace, or it throws
   (`ActorScopeError`): a surface that entered one workspace cannot act for
@@ -969,9 +1021,32 @@ refresh their pages through `consoleAnswer`
 (`src/app/actions/command-result.ts`); the Telegram bot's **Add** and every
 Slack command and click build theirs with `memberActor`. `tests/commands-gates.test.ts` holds every command to
 its gate. The console's Add milestone and Create link, and the write API's
-milestones and payee links, run `addMilestone` and `issuePayeeLink`; the
-invoice form, the CSV import and the write API's invoices move onto
-`addInvoice` next.
+milestones and payee links, run `addMilestone` and `issuePayeeLink`; a bill
+list's import runs `importInvoices` (`invoice.import`, the console only), which
+adds each row through `addInvoice`; the invoice form and the write API's
+invoices move onto `addInvoice` next.
+
+**A bill list is imported in its own format**
+(docs/superpowers/specs/2026-10-10-import-wizard-design.md). Pure, browser-safe
+modules under `src/lib/bill-import/` read it: `table.ts` (the delimiter, quotes,
+which open a field only as its first character so an inch mark never joins rows,
+and row numbers), `columns.ts` (each field's column, from the names businesses
+give it), `dates.ts` (day, month or a two-digit year first, decided from the
+whole list, or asked, never guessed), `amounts.ts` (the list's decimal mark,
+symbols, thousands or lakh grouping, and decimals by currency, kept as exact
+decimal strings) and `rows.ts` (the person's answers, which count only while
+their question is asked, and each row's fate: added,
+already in the workspace, or why not, and the failed rows as a CSV with the
+reason). The panel on Bills & receivables (`src/components/intake/BillImport.tsx`) asks the
+person to confirm the columns and answer what the list cannot say; the server
+(`checkBillListAction` and `importBillListAction`, `src/app/actions/bill-import.ts`)
+reads the list's text again with `checkBillList` (`src/lib/bill-import/check.ts`),
+which reads the counterparties, the invoices a row could repeat (same
+counterparty, due day, bill amount and invoice number or purchase order, from
+columns invoices already have), shadow mode and each day's rate once. A bill in
+the business's own currency goes through `shadowBill`. Each added row's
+`create_invoice` entry carries `via: "import"`, `importFile` (the list's SHA-256)
+and `importRow`; the invoice number starts the memo. The list itself is not kept.
 
 ## Notifications
 
@@ -1294,7 +1369,13 @@ the webhook verification snippets run against the signing code. The Guides
 pages (`content/docs/guides/`) are for people using the app rather than the
 API; they quote its buttons, fields and messages exactly, and
 `tests/docs-guides.test.ts` checks each quoted string against the source file
-it comes from, so renaming one in the app means updating the guide. Their step screenshots are the app’s own components rendered with sample data by `/docs-shots/<name>` (`src/app/docs-shots/`), which answers only where `DOCS_SCREENSHOTS=1` is set; `npm run docs:screenshots` photographs them into `public/docs/guides/`, and `tests/docs-screenshots.test.tsx` holds every `<Screenshot>` to an existing PNG with alt text, and every PNG to a guide. **A PR that
+it comes from, so renaming one in the app means updating the guide. Their step screenshots are the app’s own components rendered with sample data by `/docs-shots/<name>` (`src/app/docs-shots/`), which answers only where `DOCS_SCREENSHOTS=1` is set; `npm run docs:screenshots` photographs them into `public/docs/guides/`, and `tests/docs-screenshots.test.tsx` holds every `<Screenshot>` to an existing PNG with alt text, and every PNG to a guide. The nav groups pages by what a reader is doing (`docs/superpowers/specs/2026-10-11-docs-clarity-design.md`): Start here,
+Everyday work, Trust and controls, Connect your tools, Developers, then the API reference and webhooks, which the sidebar
+folds (`NavSection.folded`) until opened or holding the page being read; pages keep their addresses whatever their group.
+MDX pages have `<Callout kind="note|tip|important|warning|real-money">`, whose kind is written beside its title on the
+page and in the `.md` view, `<Action href>` for a guide's one next step in the app, and numbered `## 1. …` steps, which
+`DocsHeading` draws with a number badge while keeping their ids. A `<Screenshot>` opens larger in a dialog
+(`ZoomableImage`). **A PR that
 changes `/api/v1` or webhooks adds a changelog entry** to
 `content/docs/changelog.mdx`: dated, newest first, saying what changed for an
 integrator.

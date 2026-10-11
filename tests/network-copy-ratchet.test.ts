@@ -20,9 +20,7 @@ const ALLOWED: Record<string, number> = {
   // wallet in one click, Circle's faucet, what Arc mainnet does not have yet), the docs site's navigation (shadow
   // mode, Arc testnet beside Arc mainnet), the network picker that names both networks, and /open, which counts each
   // network apart.
-  "src/components/landing/FinalCta.tsx": 4,
-  "src/components/landing/Hero.tsx": 4,
-  "src/components/landing/WhatItPays.tsx": 2,
+  "src/components/landing/Faq.tsx": 3,
   "src/lib/docs/nav.ts": 2,
   "src/components/CreateWorkspaceForm.tsx": 1,
   "src/app/open/page.tsx": 4,

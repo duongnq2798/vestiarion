@@ -4,6 +4,7 @@ import { currentOrgId } from "./context";
 import { db, unwrap } from "./dal";
 import { usdcAmountSchema } from "./intake-validation";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
+import { sameFigure, type ReplaySummary } from "./policy-replay";
 
 /**
  * Changing a counterparty's configured payment limit. Every export that
@@ -24,9 +25,13 @@ import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
  * It is refused while a cycle is running: the cycle's compliance sweep
  * rewrites both limits from the row it read when it started, so an edit that
  * landed in the middle would be silently undone.
+ *
+ * Applied after trying it on past decisions (docs/superpowers/specs/2026-10-10-policy-replay-design.md P10), it carries
+ * the limit the replay ran against, `expected`, and is refused when the limit is no longer that one; its signed entry
+ * records the replay's summary.
  */
 
-export type CounterpartyLimitErrorCode = "invalid" | "required" | "unchanged" | "conflict" | "not_found" | "cycle_running";
+export type CounterpartyLimitErrorCode = "invalid" | "required" | "unchanged" | "conflict" | "not_found" | "cycle_running" | "stale";
 
 const MESSAGES: Record<Exclude<CounterpartyLimitErrorCode, "invalid">, string> = {
   required: "A vendor or contractor needs a payment limit: without one, the agent could pay any amount.",
@@ -34,6 +39,7 @@ const MESSAGES: Record<Exclude<CounterpartyLimitErrorCode, "invalid">, string> =
   conflict: "This counterparty changed a moment ago. Check its limit and try again.",
   not_found: "Counterparty not found.",
   cycle_running: "A cycle is running. Try again in a minute, once it has finished.",
+  stale: "This counterparty's limit changed since you tried it. Try it again.",
 };
 
 export class CounterpartyLimitError extends Error {
@@ -61,6 +67,10 @@ export async function changeCounterpartyLimit(input: {
   actorId: string;
   counterpartyId: string;
   raw: string;
+  /** The configured limit a replay ran against; the change is refused when it is no longer the one in force. */
+  expected?: number | null;
+  /** The replay the change is applied after, for its signed entry. */
+  replay?: ReplaySummary;
 }): Promise<{ name: string; from: number | null; to: number | null; current: number | null }> {
   const result = await db()
     .from("counterparties")
@@ -70,6 +80,7 @@ export async function changeCounterpartyLimit(input: {
   if (result.error) throw new Error(result.error.message);
   const row = result.data as { id: string; name: string; role: string; risk_level: string; baseline_payment_limit: string | number | null } | null;
   if (!row) throw new CounterpartyLimitError("not_found");
+  if (input.expected !== undefined && !sameFigure(toNum(row.baseline_payment_limit), input.expected)) throw new CounterpartyLimitError("stale");
 
   const parsed = parseLimitInput(input.raw, row.role);
   if (!parsed.ok) throw new CounterpartyLimitError(parsed.message === MESSAGES.required ? "required" : "invalid", parsed.message);
@@ -105,7 +116,7 @@ export async function changeCounterpartyLimit(input: {
     domain: "compliance",
     action: "counterparty_limit_changed",
     summary: `Changed ${row.name}'s payment limit from ${from ?? "none"} to ${to ?? "none"} USDC`,
-    detail: { by: input.actorId, counterpartyId: row.id, from, to, currentLimit: current },
+    detail: { by: input.actorId, counterpartyId: row.id, from, to, currentLimit: current, ...(input.replay ? { replay: input.replay } : {}) },
   });
 
   return { name: row.name, from, to, current };

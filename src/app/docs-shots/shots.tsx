@@ -12,13 +12,16 @@ import { HeldMilestoneActions } from "@/components/HeldMilestoneActions";
 import { PayLinkControl } from "@/components/PayLinkControl";
 import SlackPanel from "@/components/SlackPanel";
 import { UsycReservePanel } from "@/components/UsycReservePanel";
+import CreateWorkspaceForm from "@/components/CreateWorkspaceForm";
+import VerdictControl from "@/components/VerdictControl";
 import VerifyLedgerBadge from "@/components/VerifyLedgerBadge";
 import { DecisionCard } from "@/components/vx/DecisionCard";
 import { DecisionTrail } from "@/components/vx/DecisionTrail";
 import { WaitingPayableAction } from "@/components/WaitingPayableAction";
 import CounterpartyAddress from "@/components/intake/CounterpartyAddressEdit";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
-import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
+import BillImport from "@/components/intake/BillImport";
+import { BillImportShot } from "./BillImportShot";
 import InvoiceDocumentIntake, { DocumentDraft } from "@/components/intake/InvoiceDocumentIntake";
 import InvoiceIntake from "@/components/intake/InvoiceIntake";
 import PayFreelancerForm, { PaymentLinkReady } from "@/components/intake/PayFreelancerForm";
@@ -32,6 +35,7 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { AuditLedger, pad } from "@/components/vx/AuditLedger";
 import { DecisionRows, RowGroupHeading } from "@/components/vx/DecisionRows";
+import { payableSignals } from "@/components/vx/decision-signals";
 import { IntakeFold } from "@/components/vx/IntakeFold";
 import { GettingStarted } from "@/components/vx/GettingStarted";
 import { invoiceDecision, milestoneDecision } from "@/components/vx/map";
@@ -52,6 +56,11 @@ import { gettingStarted } from "@/lib/getting-started";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow } from "@/lib/queries";
 import { buildReport, type ReportBill, type ReportDecision, type ReportFacts } from "@/lib/workspace-report";
 import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
+import { designRuleReplay } from "../design/replay-fixture";
+import { RuleTrialPanel } from "@/components/RuleTrial";
+import { RULE_TRIAL_COPY } from "@/lib/rule-trial-copy";
+import { Field } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
 
 /**
  * The screenshots in the user guides, one state each, rendered by the app's
@@ -68,7 +77,7 @@ import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
 
 export interface DocsShot {
   /** The guide the picture belongs to. */
-  guide: "go-live" | "first-payment" | "pay-a-contractor" | "get-paid" | "telegram" | "slack" | "email-invoices" | "report" | "workspace";
+  guide: "try-it" | "go-live" | "first-payment" | "import-bills" | "try-a-rule" | "pay-a-contractor" | "get-paid" | "telegram" | "slack" | "email-invoices" | "report" | "workspace";
   /** The workspace page it is on: its title heads the frame. None for a public page, such as a payee's link. */
   page?: NavKey;
   /** The page's line under its title, where the real page has one. */
@@ -686,7 +695,165 @@ const ACTUALS = compareActuals(REPORT_FACTS, {
   ]),
 });
 
+/** The New invoice fold as Bills & receivables opens it on an empty workspace: its four ways in, one bill typed in. */
+function NewInvoice({ counterparty }: { counterparty: CounterpartyRow }) {
+  return (
+        <IntakeFold label="New invoice" meta="typed in, read from a document, imported from a list, or recurring" defaultOpen className="">
+            <Tabs defaultValue="manual">
+              <TabsList aria-label="New invoice">
+                <TabsTrigger value="manual">
+                  <PenLine aria-hidden />
+                  Enter one invoice
+                </TabsTrigger>
+                <TabsTrigger value="document">
+                  <FileText aria-hidden />
+                  From a document
+                </TabsTrigger>
+                <TabsTrigger value="list">
+                  <FileSpreadsheet aria-hidden />
+                  Import a list
+                </TabsTrigger>
+                <TabsTrigger value="recurring">
+                  <Repeat aria-hidden />
+                  Recurring
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="manual" forceMount className="data-[state=inactive]:hidden">
+                <InvoiceIntake orgSlug={SLUG} counterparties={[{ id: counterparty.id, name: counterparty.name, role: counterparty.role }]} />
+              </TabsContent>
+              <TabsContent value="document" forceMount className="data-[state=inactive]:hidden">
+                <InvoiceDocumentIntake orgSlug={SLUG} counterparties={[{ id: counterparty.id, name: counterparty.name, role: counterparty.role }]} />
+              </TabsContent>
+              <TabsContent value="list" forceMount className="data-[state=inactive]:hidden">
+                <BillImport orgSlug={SLUG} workspace={{ shadowOn: false, shadowCurrency: null, network: "arc-testnet" }} />
+              </TabsContent>
+            </Tabs>
+        </IntakeFold>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Quickstart (docs clarity Q2): a new workspace in shadow mode, its first supplier and bill, and the decision
+
+/** The quickstart's example supplier: no address yet, which a sandbox does not need, and no purchase orders. */
+const NORTHWIND: CounterpartyRow = {
+  ...COUNTERPARTY,
+  id: "00000000-0000-4000-8000-0000000000d9",
+  name: "Northwind Hosting",
+  address: null,
+  jurisdiction: null,
+  payment_limit: 500,
+  baseline_payment_limit: 500,
+  purchase_order_required: false,
+};
+
+/** Its first bill, decided: the agent would pay it, and in shadow mode it waits for a person's verdict. */
+const FIRST_BILL: InvoiceRow = {
+  ...INVOICE,
+  id: "00000000-0000-4000-8000-0000000000e7",
+  counterparty_id: NORTHWIND.id,
+  counterparty_name: NORTHWIND.name,
+  amount: 120,
+  memo: "Servers, October",
+  po_reference: null,
+  due_date: "2026-10-15",
+  status: "held",
+  agent_reasoning:
+    "Pay 120.00 USDC to Northwind Hosting: the October servers were received, Northwind Hosting sends no purchase orders and screened clear with a 500.00 USDC limit, and the bill is due on Oct 15. In shadow mode it waits for your verdict.",
+  tx_ref: null,
+  paid_amount: null,
+};
+
+const FIRST_DECISION: LedgerEntry = {
+  ...PAYMENT_ENTRY,
+  id: "docs-first-decision",
+  actor: "agent",
+  action: "ap_pay",
+  summary: "Decided to pay 120.00 USDC to Northwind Hosting",
+  detail: { invoiceId: FIRST_BILL.id, decisionMode: "llm", observed: { riskLevel: "clear", paymentLimit: 500 }, execution: { heldBecause: "shadow_verdict" } },
+};
+
+/** A sandbox in shadow mode since before the decision, seen by an owner who may give a verdict. */
+const SHADOW_SANDBOX = { shadow: { startedAt: "2026-09-30T11:00:00Z", currency: "USDC" }, given: new Map(), canGive: true, simulated: true };
+
 export const DOCS_SHOTS = {
+  "try-it-workspace": {
+    guide: "try-it",
+    render: function WorkspaceShot() {
+      // As the workspaces page shows it to someone with none yet, coming from the landing page's call to action.
+      return (
+        <div className="mx-auto max-w-[34rem]">
+          <h1 className="text-[1.75rem] font-semibold tracking-[-0.025em] text-ink">Welcome to Vestiarion</h1>
+          <p className="mt-3 text-[0.9375rem] leading-relaxed text-ink-2">
+            Create your first workspace, then add one of your bills and see what the agent decides. A teammate can also invite you to theirs.
+          </p>
+          <div className="mt-6">
+            <CreateWorkspaceForm mainnetOffered shadowChosen />
+          </div>
+        </div>
+      );
+    },
+  },
+  "try-it-checklist": {
+    guide: "try-it",
+    page: "treasury",
+    render: function ShadowChecklistShot() {
+      const checklist = gettingStarted({
+        mode: "sandbox",
+        accounts: [],
+        counterparties: [],
+        payableCount: 0,
+        onchainPayments: 0,
+        waitingCount: 0,
+        network: "arc-testnet",
+        shadow: { currency: "USDC", verdictsGiven: 0, billCount: 0 },
+      });
+      return <GettingStarted slug={SLUG} checklist={checklist} isOwner />;
+    },
+  },
+  "try-it-supplier": {
+    guide: "try-it",
+    page: "counterparties",
+    render: function SupplierShot() {
+      return (
+        <IntakeFold label="Add counterparty" meta="human-entered · screened on submission" defaultOpen className="">
+          <CounterpartyIntake orgSlug={SLUG} framed={false} network="arc-testnet" askPurchaseOrders />
+        </IntakeFold>
+      );
+    },
+  },
+  "try-it-bill": {
+    guide: "try-it",
+    page: "invoices",
+    render: function BillShot() {
+      return <NewInvoice counterparty={NORTHWIND} />;
+    },
+  },
+  "try-it-verdict": {
+    guide: "try-it",
+    page: "invoices",
+    render: function VerdictShot() {
+      const decision = invoiceDecision(FIRST_BILL, NORTHWIND, [...EARLIER, FIRST_DECISION], { network: "arc-testnet", verdicts: SHADOW_SANDBOX });
+      return (
+        <section>
+          <SectionHeader title="Payables" meta="1 invoice · open one for the agent's reasoning" />
+          <RowGroupHeading title="Needs you" count={1} />
+          <DecisionRows
+            orgSlug={SLUG}
+            items={[
+              {
+                decision,
+                date: { label: "Due Oct 15, 2026" },
+                open: true,
+                signals: payableSignals(decision),
+                footerAction: decision.verdict ? <VerdictControl orgSlug={SLUG} view={decision.verdict} /> : null,
+              },
+            ]}
+          />
+        </section>
+      );
+    },
+  },
   "go-live-checklist": {
     guide: "go-live",
     page: "treasury",
@@ -784,39 +951,7 @@ export const DOCS_SHOTS = {
     guide: "first-payment",
     page: "invoices",
     render: function InvoiceShot() {
-      return (
-        <IntakeFold label="New invoice" meta="typed in, read from a document, imported from a CSV, or recurring" defaultOpen className="">
-            <Tabs defaultValue="manual">
-              <TabsList aria-label="New invoice">
-                <TabsTrigger value="manual">
-                  <PenLine aria-hidden />
-                  Enter one invoice
-                </TabsTrigger>
-                <TabsTrigger value="document">
-                  <FileText aria-hidden />
-                  From a document
-                </TabsTrigger>
-                <TabsTrigger value="csv">
-                  <FileSpreadsheet aria-hidden />
-                  Import CSV
-                </TabsTrigger>
-                <TabsTrigger value="recurring">
-                  <Repeat aria-hidden />
-                  Recurring
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="manual" forceMount className="data-[state=inactive]:hidden">
-                <InvoiceIntake orgSlug={SLUG} counterparties={[{ id: COUNTERPARTY.id, name: COUNTERPARTY.name, role: COUNTERPARTY.role }]} />
-              </TabsContent>
-              <TabsContent value="document" forceMount className="data-[state=inactive]:hidden">
-                <InvoiceDocumentIntake orgSlug={SLUG} counterparties={[{ id: COUNTERPARTY.id, name: COUNTERPARTY.name, role: COUNTERPARTY.role }]} />
-              </TabsContent>
-              <TabsContent value="csv" forceMount className="data-[state=inactive]:hidden">
-                <InvoiceCsvImport orgSlug={SLUG} />
-              </TabsContent>
-            </Tabs>
-        </IntakeFold>
-      );
+      return <NewInvoice counterparty={COUNTERPARTY} />;
     },
   },
   "first-payment-document": {
@@ -825,7 +960,7 @@ export const DOCS_SHOTS = {
     render: function DocumentShot() {
       const asked = `0x${"5af3107a".repeat(5)}`;
       return (
-        <IntakeFold label="New invoice" meta="typed in, read from a document, imported from a CSV, or recurring" defaultOpen className="">
+        <IntakeFold label="New invoice" meta="typed in, read from a document, imported from a list, or recurring" defaultOpen className="">
             <DocumentDraft
               orgSlug={SLUG}
               counterparties={[{ id: COUNTERPARTY.id, name: COUNTERPARTY.name, role: COUNTERPARTY.role }]}
@@ -1207,6 +1342,32 @@ export const DOCS_SHOTS = {
   },
   "report-readiness": { guide: "report", render: () => <ReportReadiness steps={REPORT.readiness ?? []} /> },
   "report-lists": { guide: "report", render: () => <ReportLists slug={SLUG} report={REPORT} /> },
+  "try-a-rule-result": {
+    guide: "try-a-rule",
+    page: "counterparties",
+    render: function TryARuleShot() {
+      // Edit limit's dialog once Try it on past decisions answered, laid flat: the sample data's Harbor Office Supply,
+      // its 500 USDC limit tried at 1,500 USDC over the last 30 days (src/app/design/replay-fixture.ts).
+      return (
+        <Card className="mx-auto grid max-w-lg gap-5 p-6">
+          <div>
+            <h2 className="text-lg font-semibold tracking-[-0.01em] text-ink">Harbor Office Supply&apos;s payment limit</h2>
+            <p className="mt-1 text-sm text-ink-2">
+              The most the agent pays this counterparty in one payment on its own. Anything above it waits for a person to approve. Screening can lower it for risk.
+            </p>
+          </div>
+          <Field id="shot-limit" label="Payment limit (USDC)" description="A vendor or contractor always has a limit.">
+            <Input name="paymentLimit" inputMode="decimal" defaultValue="1500" readOnly />
+          </Field>
+          <RuleTrialPanel orgSlug={SLUG} days={30} view={designRuleReplay("1500")} />
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary">Cancel</Button>
+            <Button>{RULE_TRIAL_COPY.apply}</Button>
+          </div>
+        </Card>
+      );
+    },
+  },
   "report-actuals": {
     guide: "report",
     render: () => (
@@ -1229,6 +1390,8 @@ export const DOCS_SHOTS = {
       />
     ),
   },
+  "import-bills-columns": { guide: "import-bills", page: "invoices", render: () => <BillImportShot step="columns" /> },
+  "import-bills-check": { guide: "import-bills", page: "invoices", render: () => <BillImportShot step="check" /> },
   "workspace-status": {
     guide: "workspace",
     render: function WorkspaceStatusShot() {

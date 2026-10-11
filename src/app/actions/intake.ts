@@ -7,13 +7,9 @@ import { z } from "zod";
 import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
-import { db, unwrap } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import {
   counterpartyInputSchema,
-  csvBatchMessage,
-  csvInvoiceInputSchema,
-  dueDateIso,
   firstZodMessage,
   invoiceFormRefusal,
   invoiceInputSchema,
@@ -29,11 +25,12 @@ import {
   CounterpartyAddressError,
 } from "@/lib/counterparty-address";
 import { changeCounterpartyLimit, CounterpartyLimitError } from "@/lib/counterparty-limit";
+import { limitApplied } from "@/lib/policy-replay-apply";
+import { RuleReplayError } from "@/lib/policy-replay-read";
 import { changeCounterpartyPurchaseOrders, CounterpartyPurchaseOrdersError } from "@/lib/counterparty-purchase-orders";
 import { documentProvenance } from "@/lib/invoice-document/provenance";
 import { createCounterparty } from "@/lib/counterparties/create";
 import { createInvoice } from "@/lib/invoices/create";
-import { appendLedgerEntry } from "@/lib/ledger";
 import { workspaceNetwork } from "@/lib/workspace-network";
 import { FxRateError } from "@/lib/fx/usd-rates";
 import { shadowBill, ShadowBillError, type OriginalBill } from "@/lib/shadow-bills";
@@ -108,7 +105,12 @@ const counterpartyIdSchema = z.string().uuid();
  * show; anything else stays in the server log.
  */
 function addressFailure(error: unknown, what: string): IntakeActionResult {
-  if (error instanceof CounterpartyAddressError || error instanceof CounterpartyLimitError || error instanceof CounterpartyPurchaseOrdersError) {
+  if (
+    error instanceof CounterpartyAddressError ||
+    error instanceof CounterpartyLimitError ||
+    error instanceof CounterpartyPurchaseOrdersError ||
+    error instanceof RuleReplayError
+  ) {
     return { ok: false, message: error.message };
   }
   console.error(what, error instanceof Error ? error.message : "unknown error");
@@ -141,7 +143,11 @@ export async function updateCounterpartyAddressAction(
   });
 }
 
-/** Changes a counterparty's configured payment limit, and with it the current one screening derives. */
+/**
+ * Changes a counterparty's configured payment limit, and with it the current one screening derives. Applied after trying
+ * it on past decisions, the form carries the limit tried and the window, and the change is refused once the limit is no
+ * longer that one (policy replay P10).
+ */
 export async function updateCounterpartyLimitAction(
   _previous: IntakeActionResult,
   formData: FormData
@@ -152,7 +158,13 @@ export async function updateCounterpartyLimitAction(
     const id = counterpartyIdSchema.safeParse(formString(formData, "counterpartyId"));
     if (!id.success) return { ok: false, message: "Counterparty not found." };
     try {
-      const result = await changeCounterpartyLimit({ actorId: auth.user.id, counterpartyId: id.data, raw: formString(formData, "paymentLimit") });
+      const applied = await limitApplied(formData);
+      const result = await changeCounterpartyLimit({
+        actorId: auth.user.id,
+        counterpartyId: id.data,
+        raw: formString(formData, "paymentLimit"),
+        ...(applied ? { expected: applied.expected, replay: applied.replay } : {}),
+      });
       revalidateOrgPages();
       // A higher limit can unblock a payment held over the old one, so the agent looks again within a minute
       // (follow-up reopens it). A lower one, or one screening allows none of, unblocks nothing.
@@ -324,94 +336,6 @@ export async function createInvoiceAction(
     } catch (error) {
       console.error("invoice intake failed", error);
       return { ok: false, message: error instanceof Error ? error.message : "Invoice could not be added." };
-    }
-  });
-}
-
-const csvBatchSchema = z.array(csvInvoiceInputSchema).min(1, "CSV contains no invoices").max(200, "Import at most 200 invoices at a time");
-
-export async function importInvoicesAction(
-  _previous: IntakeActionResult,
-  formData: FormData
-): Promise<IntakeActionResult> {
-  const auth = await authorize(formData.get("orgSlug"), "records.write");
-  if (!auth.ok) return { ok: false, message: auth.message };
-  return inOrg(auth, async () => {
-    const rowsJson = formString(formData, "rowsJson");
-    let decoded: unknown;
-    try {
-      decoded = JSON.parse(rowsJson);
-    } catch {
-      return { ok: false, message: "CSV preview is invalid. Choose the file again." };
-    }
-    const parsed = csvBatchSchema.safeParse(decoded);
-    if (!parsed.success) return { ok: false, message: csvBatchMessage(parsed.error) };
-
-    try {
-      const counterparties = unwrap(
-        await db().from("counterparties").select("id, name")
-      ) as Array<{ id: string; name: string }>;
-      const byName = new Map<string, Array<{ id: string; name: string }>>();
-      for (const counterparty of counterparties) {
-        const key = counterparty.name.trim().toLocaleLowerCase("en-US");
-        byName.set(key, [...(byName.get(key) ?? []), counterparty]);
-      }
-
-      const resolved = parsed.data.map((row, index) => {
-        const matches = byName.get(row.counterparty.toLocaleLowerCase("en-US")) ?? [];
-        if (matches.length === 0) throw new Error(`Row ${index + 1}: counterparty “${row.counterparty}” was not found.`);
-        if (matches.length > 1) throw new Error(`Row ${index + 1}: counterparty “${row.counterparty}” is ambiguous.`);
-        return { row, counterparty: matches[0] };
-      });
-
-      const inserted = unwrap(
-        await db()
-          .from("invoices")
-          .insert(resolved.map(({ row, counterparty }) => ({
-            direction: row.direction,
-            counterparty_id: counterparty.id,
-            amount: row.amount,
-            currency: row.currency,
-            memo: row.memo,
-            po_reference: row.po_reference,
-            goods_received: row.goods_received,
-            due_date: dueDateIso(row.due_date),
-            early_pay_discount_pct: row.early_pay_discount_pct,
-            discount_due_date: row.discount_deadline ? dueDateIso(row.discount_deadline) : null,
-            created_by: auth.user.id,
-          })))
-          .select("id")
-      ) as Array<{ id: string }>;
-
-      for (let index = 0; index < inserted.length; index += 1) {
-        const { row, counterparty } = resolved[index];
-        await appendLedgerEntry({
-          actor: "human",
-          domain: row.direction === "payable" ? "ap" : "ar",
-          action: "import_invoice",
-          summary: `Imported ${row.direction} invoice for ${counterparty.name}: ${row.amount} ${row.currency}`,
-          detail: {
-            by: auth.user.id,
-            invoiceId: inserted[index].id,
-            importMethod: "csv_preview_confirm",
-            counterpartyId: counterparty.id,
-            counterpartyName: counterparty.name,
-            amount: row.amount,
-            currency: row.currency,
-            dueDate: row.due_date,
-            poReference: row.po_reference,
-            goodsReceived: row.goods_received,
-          },
-        });
-      }
-
-      revalidatePath("/");
-      revalidateOrgPages();
-      if (resolved.some(({ row }) => row.direction === "payable")) raiseCycleEvent(auth, "invoice_added");
-      return { ok: true, created: inserted.length, message: `Imported ${inserted.length} invoice${inserted.length === 1 ? "" : "s"}.` };
-    } catch (error) {
-      console.error("invoice CSV import failed", error);
-      return { ok: false, message: error instanceof Error ? error.message : "Invoices could not be imported." };
     }
   });
 }

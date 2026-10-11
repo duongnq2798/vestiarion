@@ -21,7 +21,7 @@
 [![Slack](https://img.shields.io/badge/Slack-guide-4A154B?style=flat-square&logo=slack)](https://www.vestiarion.xyz/docs/guides/slack)
 [![Telegram](https://img.shields.io/badge/Telegram-guide-26A5E4?style=flat-square&logo=telegram&logoColor=white)](https://www.vestiarion.xyz/docs/guides/telegram)
 
-**[Open the app](https://www.vestiarion.xyz)** · **[Watch the demo](https://www.youtube.com/watch?v=hIS3THDLtVQ)** · **[Try it in 5 minutes](https://www.vestiarion.xyz/docs/guides/try-it)** · **[Open numbers](https://www.vestiarion.xyz/open)** · **[Docs](https://www.vestiarion.xyz/docs)** · **[@vestiarionhq](https://x.com/vestiarionhq)**
+**[Open the app](https://www.vestiarion.xyz)** · **[Watch the demo](https://www.youtube.com/watch?v=hIS3THDLtVQ)** · **[See your first decision](https://www.vestiarion.xyz/docs/guides/try-it)** · **[Open numbers](https://www.vestiarion.xyz/open)** · **[Docs](https://www.vestiarion.xyz/docs)** · **[@vestiarionhq](https://x.com/vestiarionhq)**
 
 </div>
 
@@ -160,6 +160,7 @@ flowchart LR
 | **Two approvals** | Above a figure the owner sets, a payment needs two different people. Arc mainnet workspaces start at 100 USDC, and the owner can raise it but not turn it off there |
 | **Maker and checker** | Roles are owner, admin, approver and viewer. No one approves an invoice they created; only Compliance clears a high-risk counterparty |
 | **Agent spending limit** | A daily and a 7-day figure, checked in code and, where enforced, by the contract. Arc mainnet workspaces start at 50 USDC a day and 150 USDC in 7 days |
+| **Try a limit first** | A new payment limit, two-approvals figure or spending limit can be tried on the agent's past 30 or 90 days of decisions: the code's checks replayed on what each recorded, in order, with no model call. Applying it is the setting's own change, refused if the setting moved since, and its signed entry records the replay |
 | **Exactly once** | A database claim makes one decision exclusive; an idempotency key keyed on the invoice keeps a payment from leaving twice; the contract refuses a repeated `ref` |
 | **Stop switches** | Anyone who can approve can pause the agent for the workspace; an owner's wallet can stop the contract; an operator can stop every payment on every deployment within 10 seconds |
 | **Audit trail** | Every entry is Ed25519-signed and covers the hash of the one before. The verifier names the first entry that breaks; signed webhooks push each entry as it is written |
@@ -173,7 +174,7 @@ Each workspace lives on one network, chosen when it is created, and never moves.
 
 | | Arc testnet | Arc mainnet |
 | --- | --- | --- |
-| **Who can use it** | Anyone who signs in | Only people the deployment opens it to (`MAINNET_ALLOWLIST`) |
+| **Who can use it** | Anyone who signs in | Anyone who signs in at vestiarion.xyz; a self-hosted deployment chooses who with `MAINNET_ALLOWLIST` |
 | **Money** | Testnet USDC and EURC from Circle's faucet | Real USDC, sent on Arc or brought from another chain through CCTP |
 | **Treasury** | Hosted wallet, or your own Circle account | Your own wallet or passkey wallet, or your own Circle account |
 | **Spending-limit contract** | Opt-in, deployed through Circle's Smart Contract Platform | Deployed by the owner's wallet on the own-wallet path |
@@ -223,10 +224,12 @@ run in production, with its ledger entries and transactions.
 
 ## Product capabilities
 
-- **AP automation** — invoices typed in, imported from CSV, read from a PDF, forwarded by email, or sent through the
+- **AP automation** — invoices typed in, imported from a bill list in its own columns, dates and currency, read from a PDF, forwarded by email, or sent through the
   API; recurring payables; early-payment discounts taken when they pay.
 - **Approvals inbox** — approve and pay, reject, or return to the agent; claims keep two people from deciding the
   same row.
+- **Try a limit first** — see which past bills a new payment limit, two-approvals figure or spending limit would have
+  held or let through, then apply it from the result.
 - **Contractor milestones** — verified by a merged pull request or a person; GitHub bounties with `/bounty` and
   `/payto`; a pull request comment once paid.
 - **Payee links** — a payee enters and confirms their own address, or creates a passkey wallet to be paid in.
@@ -299,11 +302,11 @@ of why it was made, and shadow mode measures how often people agree with the age
 
 **Use the hosted app** — no wallet or keys needed to start:
 
-1. Sign in at [www.vestiarion.xyz](https://www.vestiarion.xyz) with your email and open a workspace on Arc testnet.
-2. Load sample data, and watch the agent decide within a minute.
-3. Approve a payment yourself, read the **Report** of what the agent did, then verify the signed ledger.
+1. Sign in at [www.vestiarion.xyz](https://www.vestiarion.xyz) with your email and open a workspace on Arc testnet, in shadow mode.
+2. Add a supplier and one of your bills, or load sample data, and watch the agent decide within a minute.
+3. Agree or disagree with its decision, read the **Report** of what the agent did, then verify the signed ledger.
 
-The whole path is in [Try it in 5 minutes](https://www.vestiarion.xyz/docs/guides/try-it). To move testnet USDC,
+The whole path is in [See your first decision](https://www.vestiarion.xyz/docs/guides/try-it). To move testnet USDC,
 follow [Go live](https://www.vestiarion.xyz/docs/guides/go-live) and fund the wallet from
 [Circle's faucet](https://faucet.circle.com).
 
@@ -355,8 +358,8 @@ What each one is for, the wallets around them, and the USDC of the chains payees
 
 | | |
 | --- | --- |
-| **Start** | [Try it in 5 minutes](https://www.vestiarion.xyz/docs/guides/try-it) · [Go live](https://www.vestiarion.xyz/docs/guides/go-live) · [Your first payment](https://www.vestiarion.xyz/docs/guides/first-payment) · [Shadow mode](https://www.vestiarion.xyz/docs/guides/shadow-mode) |
-| **Guides** | [Workspace report](https://www.vestiarion.xyz/docs/guides/report) · [Pay a contractor](https://www.vestiarion.xyz/docs/guides/pay-a-contractor) · [Get paid](https://www.vestiarion.xyz/docs/guides/get-paid) · [Audit export](https://www.vestiarion.xyz/docs/guides/audit-export) |
+| **Start** | [See your first decision](https://www.vestiarion.xyz/docs/guides/try-it) · [How payments are controlled](https://www.vestiarion.xyz/docs/guides/controls) · [Go live](https://www.vestiarion.xyz/docs/guides/go-live) · [Your first payment](https://www.vestiarion.xyz/docs/guides/first-payment) · [Shadow mode](https://www.vestiarion.xyz/docs/guides/shadow-mode) |
+| **Guides** | [Workspace report](https://www.vestiarion.xyz/docs/guides/report) · [Try a limit first](https://www.vestiarion.xyz/docs/guides/try-a-rule) · [Pay a contractor](https://www.vestiarion.xyz/docs/guides/pay-a-contractor) · [Get paid](https://www.vestiarion.xyz/docs/guides/get-paid) · [Audit export](https://www.vestiarion.xyz/docs/guides/audit-export) |
 | **Developers** | [Quickstart](https://www.vestiarion.xyz/docs/get-started/quickstart) · [API reference](https://www.vestiarion.xyz/docs/api) · [SDK](https://www.vestiarion.xyz/docs/get-started/sdk) · [Webhooks](https://www.vestiarion.xyz/docs/webhooks) · [MCP](https://www.vestiarion.xyz/docs/ai-integration/mcp) · [Changelog](https://www.vestiarion.xyz/docs/changelog) |
 | **This repository** | [ARCHITECTURE.md](ARCHITECTURE.md) · [Running it yourself](docs/self-hosting.md) · [Feature designs](docs/superpowers/specs) · [Contracts](contracts) · [SDK source](sdk) |
 
