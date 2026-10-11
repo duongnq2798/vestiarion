@@ -2,6 +2,7 @@ import { ArrowRight, Download } from "lucide-react";
 import Link from "next/link";
 import ActualPaymentControl from "@/components/ActualPaymentControl";
 import ActualsCsvImport from "@/components/ActualsCsvImport";
+import BankStatementImport from "@/components/BankStatementImport";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
@@ -12,6 +13,7 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Hash } from "@/components/vx/Primitives";
 import { StatTile } from "@/components/vx/StatTile";
 import { METHOD_WORDS } from "@/lib/actual-payment-fields";
+import { STATEMENT_NOT_READY } from "@/lib/bank-statement/lines";
 import type { ActualsComparison as Comparison, ComparisonFlag, ComparisonRow } from "@/lib/actual-payments-compare";
 import { orgHref } from "@/lib/auth/org-paths";
 import { billDigits } from "@/lib/bill-amount";
@@ -25,7 +27,8 @@ import type { CurrencyAmount } from "@/lib/workspace-report";
  * A5, A7, A8): each bill's agent side next to what the business recorded paying, the flags worth a look, and each
  * figure linked to where it comes from: the agent's decision and the verdict to their ledger entries, the payment to its
  * transaction, the business's record to its entry, with who recorded it and when. An owner or admin records or corrects
- * a bill here, or imports a CSV. Presentational: the page reads the facts and `compareActuals` lines them up.
+ * a bill here, imports a CSV, or fills in what was paid from a bank statement (2026-10-10-bank-statement-design.md B12).
+ * Presentational: the page reads the facts and `compareActuals` lines them up.
  */
 
 /** How many bills show before "Show all". */
@@ -318,6 +321,7 @@ export function ActualsComparison({
   canRecord,
   members,
   templateCsv,
+  statement,
   showAll,
 }: {
   slug: string;
@@ -328,6 +332,8 @@ export function ActualsComparison({
   members: Record<string, string>;
   /** The bills not recorded yet, as a CSV to fill in. */
   templateCsv: string | null;
+  /** Whether a bank statement can be imported here (migration 0094), and the accounts named before; null for a viewer. */
+  statement: { available: boolean; accounts: string[] } | null;
   showAll: boolean;
 }) {
   if (!comparison) {
@@ -374,6 +380,19 @@ export function ActualsComparison({
             )}
           </div>
           <ActualsCsvImport orgSlug={slug} />
+        </Card>
+      )}
+
+      {canRecord && statement && (
+        <Card className="space-y-3 p-4 sm:p-5">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-ink">Import a bank statement</p>
+            <p className="text-xs text-ink-3">
+              Each line of money out is matched to the bill it paid, with why, and saved as what your business paid once you tick it. Money in is not matched:
+              receivables are not part of this import.
+            </p>
+          </div>
+          {statement.available ? <BankStatementImport orgSlug={slug} accounts={statement.accounts} /> : <Callout>{STATEMENT_NOT_READY}</Callout>}
         </Card>
       )}
 

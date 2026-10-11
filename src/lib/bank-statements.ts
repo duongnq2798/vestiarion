@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { pages, readNewestRecords, recordActual, rowsOrThrow, type StatementLineDetail } from "./actual-payments";
-import { lineIdentity, readStatement, statementAccount, type StatementChoices, type StatementLine, type StatementRead } from "./bank-statement/lines";
+import { lineIdentity, readStatement, STATEMENT_NOT_READY, statementAccount, type StatementChoices, type StatementLine, type StatementRead } from "./bank-statement/lines";
 import { matchStatement, type LineMatch, type StatementBill, type UsedLine } from "./bank-statement/match";
 import { billDigits } from "./bill-amount";
 import { db, type OrgDb } from "./dal";
@@ -15,8 +15,6 @@ import { assertLedgerCanSign } from "./ledger";
  *
  * Until migration 0094 runs, reading says so and saving refuses with `not_ready`: the report never fails for it.
  */
-
-export const STATEMENT_NOT_READY = "Importing a bank statement is not set up on this deployment yet.";
 
 export type StatementImportErrorCode = "not_ready" | "account";
 

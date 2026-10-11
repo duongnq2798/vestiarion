@@ -15,6 +15,8 @@ import { decideDateOrder, decideDecimalMark, looksLikeDate, readAmount, readDate
 export const STATEMENT_MAX_LINES = 2000;
 export const STATEMENT_MAX_BYTES = 2_000_000;
 export const ACCOUNT_MAX = 80;
+/** What the card and the command say before migration 0094 runs (B11). */
+export const STATEMENT_NOT_READY = "Importing a bank statement is not set up on this deployment yet.";
 const DESCRIPTION_MAX = 500;
 const PAYEE_MAX = 200;
 const REFERENCE_MAX = 140;

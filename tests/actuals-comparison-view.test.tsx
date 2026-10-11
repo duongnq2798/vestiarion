@@ -15,6 +15,7 @@ import type { ReportFacts } from "@/lib/workspace-report";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/app/actions/actual-payments", () => ({ recordActualPaymentAction: vi.fn(), previewActualsCsvAction: vi.fn(), importActualsCsvAction: vi.fn() }));
+vi.mock("@/app/actions/bank-statement", () => ({ previewStatementAction: vi.fn(), importStatementAction: vi.fn() }));
 
 const TX = `0x${"d".repeat(64)}`;
 const OWNER = "a1b2c3d4-0000-4000-8000-0000000000b1";
@@ -85,7 +86,7 @@ const comparison = (input: ReportFacts = facts(), records: ActualRecord[] = [rec
 const html = (node: ReactElement) => renderToStaticMarkup(<TooltipProvider>{node}</TooltipProvider>);
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").replace(/&#x27;/g, "'").replace(/&amp;/g, "&").trim();
 const render = (over: Partial<Parameters<typeof ActualsComparison>[0]> = {}) =>
-  html(<ActualsComparison slug="northstar" comparison={comparison()} canRecord={false} members={{ [OWNER]: "owner@northstar.example" }} templateCsv={null} showAll={false} {...over} />);
+  html(<ActualsComparison slug="northstar" comparison={comparison()} canRecord={false} members={{ [OWNER]: "owner@northstar.example" }} templateCsv={null} statement={null} showAll={false} {...over} />);
 
 describe("ActualsComparison", () => {
   it("lays each bill's agent side next to what the business recorded, and says Not recorded where nothing is", () => {
@@ -138,6 +139,24 @@ describe("ActualsComparison", () => {
     expect(text(owner)).toContain("Import what your business paid from a CSV");
     expect(text(owner)).toContain("Download the bills not recorded yet");
     expect(owner).toContain('download="bills-not-recorded.csv"');
+  });
+
+  it("offers a bank statement's import to someone who may record, under the CSV, and says when it is not set up yet", () => {
+    const owner = text(render({ canRecord: true, statement: { available: true, accounts: ["DBS operating"] } }));
+    expect(owner.indexOf("Import a bank statement")).toBeGreaterThan(owner.indexOf("Import what your business paid from a CSV"));
+    expect(owner).toContain("Money in is not matched: receivables are not part of this import.");
+    expect(owner).toContain("Choose a statement CSV, or drop one here");
+    expect(owner).toContain("Named before: DBS operating");
+    const before = text(render({ canRecord: true, statement: { available: false, accounts: [] } }));
+    expect(before).toContain("Import a bank statement");
+    expect(before).toContain("Importing a bank statement is not set up on this deployment yet.");
+    expect(before).not.toContain("Choose a statement CSV, or drop one here");
+    expect(text(render({ statement: { available: true, accounts: [] } }))).not.toContain("Import a bank statement");
+  });
+
+  it("says a record came from a bank statement", () => {
+    const words = text(render({ comparison: comparison(facts(), [{ ...record, source: "statement" }]) }));
+    expect(words).toContain("Recorded by owner@northstar.example on Oct 6, 2026 from a bank statement");
   });
 
   it("says simulated in a sandbox, with no transaction", () => {
