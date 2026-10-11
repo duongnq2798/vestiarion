@@ -41,7 +41,7 @@ import { readServiceBudget } from "@/lib/service-budget";
 import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import { gettingStarted, ownBillCount, ownDecidedCount, ownPayableCount } from "@/lib/getting-started";
-import { listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
+import { ledgerReadMayBeCut, listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { pauseStateOf } from "@/lib/platform/pause";
 import { cashOutlook, type OutlookInput } from "@/lib/cash-outlook";
 import { scenarioBasis } from "@/lib/cash-scenario-basis";
@@ -189,7 +189,15 @@ export default async function DashboardPage({
       ]);
       const milestoneIds = [...new Set(payments.filter((payment) => payment.source_type === "milestone").map((payment) => payment.source_id))];
       const milestoneEntries = milestoneIds.length > 0 ? await listLedgerEntriesForTargets({ milestoneIds }) : [];
-      return flightRows({ payments, invoices, milestones, entries: [...invoiceEntries, ...milestoneEntries], now: flightNow });
+      // Each read answers in one request, newest first: one cut at its limit may hold no entry for an older payment.
+      return flightRows({
+        payments,
+        invoices,
+        milestones,
+        entries: [...invoiceEntries, ...milestoneEntries],
+        entriesComplete: !ledgerReadMayBeCut(invoiceEntries) && !ledgerReadMayBeCut(milestoneEntries),
+        now: flightNow,
+      });
     })().catch((error: unknown) => {
       console.error("console: payments in flight not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
       return [];

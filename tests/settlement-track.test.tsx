@@ -125,11 +125,20 @@ describe("the track in flight", () => {
     expect(words).not.toContain("looks for it on Circle");
   });
 
-  it("says Gateway's failure may still be minted, and that nothing is sent again (L3)", () => {
-    const words = text(render(lifecycle([...decided, { ...pending, state: "GATEWAY_FAILED" }], open, { crossChain: true })));
-    expect(words).toContain("Pending · sent 39 min ago");
-    expect(words).toContain("Gateway reported it failed, but it may still be minted on the payee's chain, so nothing is sent again (Circle: GATEWAY_FAILED).");
+  it("says Gateway's failure may still be minted, that nothing is sent again, and that nothing checks it on its own (L3)", () => {
+    const settlement = lifecycle([...decided, { ...pending, state: "GATEWAY_FAILED" }], open, { crossChain: true });
+    // Not in flight: no age, as Treasury does not count it.
+    expect(settlementSummary(settlement, NOW)).toBe("Gateway reported it failed");
+    const markup = render(settlement);
+    const words = text(markup);
+    expect(words).toContain("Where the payment is Gateway reported it failed");
+    expect(words).toContain(
+      "Gateway reported it failed, but it may still be minted on the payee's chain, so nothing is sent again (Circle: GATEWAY_FAILED). Nothing checks it on its own: check with Circle whether it was minted."
+    );
+    expect(words).not.toContain("sent 39 min ago");
     expect(words).not.toContain("Circle could not be read just now");
+    // Not a failure by colour alone, nor a green line: the summary is told in words, as an end's.
+    expect(markup).toMatch(/text-held[^"]*">Gateway reported it failed/);
   });
 });
 
@@ -184,11 +193,24 @@ describe("what available means (L4)", () => {
     expect(text(markup)).toContain("Circle confirmed it.");
   });
 
-  it("says a simulated payment reached no wallet", () => {
+  it("says a simulated payment was simulated from its send on, and reached no wallet", () => {
     const words = text(render(lifecycle([...decided, { ...confirmed, refs: ["sim_1"], txHash: "sim_1" }, { ...recorded, txRef: "sim_1" }], { paid: true, txRef: "sim_1", at: T(6) }, { simulated: true })));
+    // The simulator never contacts Circle.
+    expect(words).toContain("Vestiarion simulated sending it.");
+    expect(words).not.toContain("Vestiarion sent it to Circle");
     expect(words).toContain("Simulated in the sandbox: confirmed at once, with nothing on chain.");
     expect(words).toContain("A simulated payment reaches no wallet.");
     expect(words).not.toContain("cannot be charged back");
+  });
+
+  it("links a reconciled Gateway payout's transaction on the payee's chain, never on Arc's explorer", () => {
+    const minted: SettlementFact = { kind: "minted", at: T(6), attempt: 1, chain: "BASE-SEPOLIA", txHash: MINT };
+    const settlement = lifecycle([...decided, { ...confirmed, refs: [MINT, "gateway:x"], txHash: MINT }, minted, { ...recorded, txRef: MINT }], { paid: true, txRef: MINT, at: T(7) }, { crossChain: true });
+    expect(settlement.status).toBe("reconciled");
+    const markup = render(settlement);
+    expect(markup).not.toContain(`explorer.testnet.arc.io/tx/${MINT}`);
+    // Confirmed, in the payee's wallet, and reconciled: all three on the payee's chain.
+    expect(markup.match(/sepolia\.basescan\.org\/tx\//g)).toHaveLength(3);
   });
 
   it("names Arc mainnet on a mainnet workspace, and never Arc testnet", () => {
@@ -204,6 +226,16 @@ describe("the books", () => {
     expect(settlementSummary(settlement, NOW)).toBe("Confirmed · not yet marked paid");
     expect(text(render(settlement))).toContain("Confirmed, but the bill is not marked paid yet: the agent's next cycle marks it.");
     expect(text(render(lifecycle([...decided, pending])))).toContain("The bill is marked paid, but Circle has not confirmed this transfer.");
+  });
+
+  it("says the entry was not among those read, rather than a mismatch, when the read was cut short", () => {
+    const settlement = reduceSettlement({ facts: [...decided, pending, confirmed], books: paid, crossChain: false, simulated: false, recordingsComplete: false });
+    expect(settlementSummary(settlement, NOW)).toBe("Confirmed");
+    const words = text(render(settlement));
+    expect(words).toContain(
+      "Reconciled , not reached The bill is marked paid with this transaction. The signed entry that records it is older than the entries this page reads, so it is not checked here."
+    );
+    expect(words).not.toContain("no signed entry names it");
   });
 
   it("says a stage before the furthest one with nothing recorded is not recorded here, rather than not yet", () => {
@@ -252,7 +284,10 @@ describe("Bills & receivables", () => {
 
   it("reads each payable's payment in the workspace's scope, best effort, and hands the cards their lifecycle (L8)", () => {
     expect(page).toMatch(/return inOrg\(access, async \(\) => \{[\s\S]*readInvoicePayments\(db\(\)\)\.catch\(/);
-    expect(page).toContain("settlementsByBill({ payments: payments.values(), invoices: shown.filter((invoice) => invoice.direction === \"payable\"), entries, now: asOf })");
+    // Entries read up to the read's limit may leave out older ones: the lifecycle is told, so a missing entry is no mismatch.
+    expect(page).toContain(
+      "settlementsByBill({ payments: payments.values(), invoices: shown.filter((invoice) => invoice.direction === \"payable\"), entries, entriesComplete: !ledgerReadMayBeCut(entries), now: asOf })"
+    );
     expect(page).toContain("{ network, deciding, verdicts, settlements, asOf }");
   });
 });

@@ -87,7 +87,8 @@ export function intentFacts(intent: IntentRecord, now: number): SettlementFact[]
         if (terminal(intent.provider_state)) {
           facts.push({ kind: "ended", at: intent.updated_at, attempt, end: circleEnd(intent.provider_state as string), state: intent.provider_state, reason: intent.failure_reason });
         } else if (intent.provider_state === GATEWAY_FAILED) {
-          // Gateway's failure: its attestation may still be minted, so it is in flight with Gateway's own word (L3).
+          // Gateway's failure: its attestation may still be minted, so it keeps Gateway's own word as its last; the
+          // lifecycle tells it apart from a transfer in flight, since nothing watches it any more (L3).
           facts.push({ kind: "pending", at: intent.updated_at, attempt, state: intent.provider_state, by: "circle" });
         } else {
           // Circle took it and has not ended it: a read of ours failed (L3).
@@ -171,12 +172,16 @@ function crossChain(destination: string | null): boolean {
   }
 }
 
-/** A payment's lifecycle, from its intent, the entries about its bill and the bill itself (L1-L6). */
+/**
+ * A payment's lifecycle, from its intent, the entries about its bill and the bill itself (L1-L6). `entriesComplete`
+ * false: the entries were read up to a limit that may have left older ones out (L5, L8).
+ */
 export function settlementOf(input: {
   intent: IntentRecord;
   entries: readonly SettlementEntry[];
   source: { type: "invoice" | "milestone"; id: string };
   books: SettlementBooks | null;
+  entriesComplete?: boolean;
   now: number;
 }): Settlement {
   const { intent } = input;
@@ -185,6 +190,7 @@ export function settlementOf(input: {
     books: input.books,
     crossChain: crossChain(intent.destination_chain),
     simulated: intent.provider === "simulate" || intent.provider_mode === "simulate",
+    recordingsComplete: input.entriesComplete ?? true,
   });
 }
 
@@ -213,6 +219,8 @@ export function billSettlements<P extends BillPayment, B extends BillBooks>(inpu
   invoices?: readonly B[];
   milestones?: readonly B[];
   entries: readonly SettlementEntry[];
+  /** False when the entries were read up to a limit that may have left older ones out. */
+  entriesComplete?: boolean;
   now: number;
 }): Array<{ payment: P; bill: B; settlement: Settlement }> {
   const bills = new Map<string, B>();
@@ -236,7 +244,14 @@ export function billSettlements<P extends BillPayment, B extends BillBooks>(inpu
     const key = `${payment.source_type}:${payment.source_id}`;
     const bill = bills.get(key);
     if (!bill) continue;
-    const settlement = settlementOf({ intent: payment, entries: entriesOf.get(key) ?? [], source: { type: payment.source_type, id: payment.source_id }, books: booksOf(bill), now: input.now });
+    const settlement = settlementOf({
+      intent: payment,
+      entries: entriesOf.get(key) ?? [],
+      source: { type: payment.source_type, id: payment.source_id },
+      books: booksOf(bill),
+      entriesComplete: input.entriesComplete ?? true,
+      now: input.now,
+    });
     found.push({ payment, bill, settlement });
   }
   return found;
@@ -248,6 +263,7 @@ export function settlementsByBill(input: {
   invoices?: readonly BillBooks[];
   milestones?: readonly BillBooks[];
   entries: readonly SettlementEntry[];
+  entriesComplete?: boolean;
   now: number;
 }): Map<string, Settlement> {
   return new Map(billSettlements(input).map(({ payment, settlement }) => [payment.source_id, settlement]));
@@ -276,6 +292,7 @@ export function flightRows(input: {
   invoices: readonly (BillBooks & { counterparty_name: string; paid_amount?: number | null })[];
   milestones: readonly (BillBooks & { contractor_name: string; title: string })[];
   entries: readonly SettlementEntry[];
+  entriesComplete?: boolean;
   now: number;
 }): FlightRow[] {
   const invoices: Named[] = input.invoices.map((invoice) => ({ id: invoice.id, status: invoice.status, tx_ref: invoice.tx_ref, settled_at: invoice.settled_at, name: invoice.counterparty_name, sent: invoice.paid_amount ?? null }));
@@ -287,7 +304,7 @@ export function flightRows(input: {
     name: `${milestone.title} for ${milestone.contractor_name}`,
     sent: null,
   }));
-  return billSettlements({ payments: input.payments, invoices, milestones, entries: input.entries, now: input.now }).map(({ payment, bill, settlement }) => ({
+  return billSettlements({ payments: input.payments, invoices, milestones, entries: input.entries, entriesComplete: input.entriesComplete ?? true, now: input.now }).map(({ payment, bill, settlement }) => ({
     source: { type: payment.source_type, id: payment.source_id },
     name: bill.name,
     amount: bill.sent ?? payment.amount,

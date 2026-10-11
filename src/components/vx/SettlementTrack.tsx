@@ -74,6 +74,9 @@ export function settlementSummary(settlement: Settlement, now: number): string {
       return `${settlement.stage === "pending" ? "Pending" : "Submitted"}${sent}${books}${attempt}`;
     case "unknown":
       return `Outcome unknown · checking with Circle${sent}${attempt}`;
+    // Not in flight: nothing watches it any more, so no age counts (L3).
+    case "gateway_failed":
+      return `Gateway reported it failed${books}${attempt}`;
     case "failed":
       return `Failed${books}${attempt}`;
     case "cancelled":
@@ -108,13 +111,17 @@ function reachedLine(stage: SettlementStage, mark: StageMark, settlement: Settle
       return mark.by === "two_people" ? "Two people approved it." : mark.by === "person" ? "A person approved it." : "Code's checks passed, so the agent could pay it on its own.";
     case "submitted": {
       const which = settlement.attempt > 1 ? `, as attempt ${settlement.attempt}` : "";
-      // A send that never reached Circle was started, not sent: the end below says so (L3).
-      return settlement.end?.end === "not_sent" ? `Vestiarion started sending it${which}.` : `Vestiarion sent it to Circle${which}.`;
+      // A send that never reached Circle was started, not sent: the end below says so (L3). The sandbox never contacts Circle.
+      if (settlement.end?.end === "not_sent") return `Vestiarion started sending it${which}.`;
+      return settlement.simulated ? `Vestiarion simulated sending it${which}.` : `Vestiarion sent it to Circle${which}.`;
     }
     case "pending":
       if (mark.state === "STUCK") return "Circle shows it stuck: it was sent and can still be mined (Circle: STUCK).";
-      // Gateway's failure is not an end: its attestation may still be minted, so nothing is sent again (L3).
-      if (mark.state === GATEWAY_FAILED) return "Gateway reported it failed, but it may still be minted on the payee's chain, so nothing is sent again (Circle: GATEWAY_FAILED).";
+      // Gateway's failure is not an end: its attestation may still be minted, so nothing is sent again (L3). Neither the
+      // transfer watch nor the agent's cycle reads it again: only a person's Approve and pay does.
+      if (mark.state === GATEWAY_FAILED) {
+        return "Gateway reported it failed, but it may still be minted on the payee's chain, so nothing is sent again (Circle: GATEWAY_FAILED). Nothing checks it on its own: check with Circle whether it was minted.";
+      }
       // The watch names Circle's word only when Circle answered it; otherwise it told the payment from its age alone.
       if (mark.by === "watch") return mark.state ? `Not confirmed when the transfer watch asked Circle${circleWord(mark.state)}.` : "Not confirmed when the transfer watch checked it.";
       return `Circle took it and had not confirmed it yet${circleWord(mark.state)}.`;
@@ -132,10 +139,15 @@ function reachedLine(stage: SettlementStage, mark: StageMark, settlement: Settle
   }
 }
 
+/** What the reconciled stage says when the entries were not all read and none read names the transaction (L5). */
+export const RECORDING_UNREAD =
+  "The bill is marked paid with this transaction. The signed entry that records it is older than the entries this page reads, so it is not checked here.";
+
 /** What a stage not reached says. */
 function waitingLine(stage: SettlementStage, settlement: Settlement, ended: boolean, furthest: number): string {
   // Said first: a confirmed payment that reached no wallet says why, even once the books caught up after it.
   if (stage === "available" && settlement.stages.confirmed) return settlement.simulated ? "A simulated payment reaches no wallet." : "Not minted on the payee's chain yet.";
+  if (stage === "reconciled" && settlement.recordingUnread) return RECORDING_UNREAD;
   if (SETTLEMENT_STAGES.indexOf(stage) < furthest) return "Not recorded here.";
   return ended ? "Not reached." : "Not yet.";
 }
@@ -220,6 +232,7 @@ export function SettlementTrack({
 }) {
   const ended = settlement.end !== null;
   const unknown = settlement.status === "unknown";
+  const gatewayFailed = settlement.status === "gateway_failed";
   // The furthest stage reached: stages before it with nothing recorded say so, rather than "not yet".
   const furthest = settlement.stage ? SETTLEMENT_STAGES.indexOf(settlement.stage) : -1;
   // An end, or an unknown outcome, is told where the payment stopped: after the send, or after Circle's last word.
@@ -231,7 +244,7 @@ export function SettlementTrack({
           <ChevronRight aria-hidden className="size-4 text-ink-3 transition-transform duration-200 ease-standard group-open/settlement:rotate-90" />
           Where the payment is
         </span>
-        <span className={cn("text-right text-xs font-normal tabular-nums", settlement.mismatch || ended || unknown ? "text-held" : "text-ink-3")}>{settlementSummary(settlement, now)}</span>
+        <span className={cn("text-right text-xs font-normal tabular-nums", settlement.mismatch || ended || unknown || gatewayFailed ? "text-held" : "text-ink-3")}>{settlementSummary(settlement, now)}</span>
       </summary>
       <div className="space-y-3 px-4 pb-4 pt-1 sm:px-5">
         <ol className="space-y-2.5" aria-label="The payment's stages">

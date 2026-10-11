@@ -40,7 +40,10 @@ Each decision names what it costs if it turns out wrong.
    Source: that signed entry.
 2. **Authorized**: what let it be sent. Code's checks, for an `ap_pay` or `milestone_release` whose transfer went out
    (`execution.resultingStatus` paid or matched, verified for a milestone); a person, for `approval_paid`; two people,
-   for one with `approvals`. The latest one counts, so a person's approval of a second attempt is the one shown.
+   for one with `approvals`. The one that let the current attempt go counts: the first recorded once it was sent (the
+   entry that sent it is written after the send), else the latest before it (a send never taken, sent again later under
+   the same approval). So a person's approval of a second attempt is the one shown, and a person's approval of a
+   transfer already in flight, which sends nothing new, does not replace the code's checks that sent it.
 3. **Submitted**: Vestiarion sent the current attempt to Circle: `submitted_at`, else `executed_at`, else
    `created_at`. Never for an intent still `created` (a new attempt not yet sent keeps the last one's `submitted_at`).
 4. **Pending**: Circle took it (a provider id) and has not confirmed it, with Circle's own state word (`INITIATED`,
@@ -48,6 +51,10 @@ Each decision names what it costs if it turns out wrong.
 5. **Confirmed**: Circle reported `CONFIRMED` or `COMPLETE` (intent `confirmed`, `confirmed_at`), with the transaction.
 6. **In the payee's wallet**: what "available" means on this rail (L4).
 7. **Reconciled**: the books agree with the confirmed transfer (L5).
+
+The entry behind Proposed and Authorized is appended after `executePayment` returns, once the transfer's first answer
+is back (up to the settlement wait), so its time is later than the send's. Those two stages are shown at the send's
+time when their entry is later: what the entry says was so by then. The audit log keeps the entry's own time.
 
 Each source keeps its own word: Circle's `STUCK` is shown as Circle's, the invoice's status is untouched, and the stage
 is only the read model's. Cost if wrong: a stage that merged two sources would hide which one is behind; each step
@@ -62,9 +69,14 @@ names its source, so a person can check it there.
 - **Outcome unknown**: Circle never answered the send (payment safety R1, R10: `unknownSend`, a send left
   `submitting` past its claim, a batch whose answer was lost). It is in flight, never failed.
 - A read of Vestiarion's that failed on a transfer Circle took (`failed` with a provider id and a state Circle has not
-  ended) is not a failure: it stays Pending, with "Circle could not be read just now". So is Gateway's `GATEWAY_FAILED`,
-  whose attestation may still be minted; it keeps Gateway's own word ("Gateway reported it failed, but it may still be
-  minted on the payee's chain, so nothing is sent again"), not a failed read of ours.
+  ended) is not a failure: it stays Pending, with "Circle could not be read just now".
+- Gateway's `GATEWAY_FAILED`, whose attestation may still be minted, is not a failure either; it keeps Gateway's own
+  word at Pending ("Gateway reported it failed, but it may still be minted on the payee's chain, so nothing is sent
+  again"), not a failed read of ours. But it is not in flight: the transfer watch skips it and the cycle does not read
+  it (`paymentWasSent` is false, so a person may reject the bill after checking with Circle), and only Approve and pay
+  reads it again. It has its own status, `gateway_failed` ("Gateway reported it failed"), with no age, and Treasury
+  neither lists, counts nor ages it; its track says "Nothing checks it on its own: check with Circle whether it was
+  minted." A later confirmation (the mint after all) makes it Confirmed.
 - Copy for Failed and Cancelled says the payee was not paid; it never says "no money moved", since a transaction that
   failed on chain still spent its gas.
 - Cost if wrong: a failure shown for a transfer that may still move invites paying it again by hand; these rules follow
@@ -95,6 +107,10 @@ names its source, so a person can check it there.
 - When the confirmed transfer and the books disagree, the payment carries one **mismatch**: confirmed but not yet
   marked paid (the agent's next cycle marks it); marked paid but not confirmed; marked paid with another transaction;
   marked paid with no signed entry naming the transaction.
+- The entries are read with `ledger_entries_for_targets` in one request, newest first, which PostgREST cuts at
+  `max_rows` (1000). A read that came back full (`ledgerReadMayBeCut`) may hold no entry for an older paid bill: there,
+  "no signed entry" is unknown, not a mismatch; the payment is Confirmed with no mismatch, and its Reconciled stage says
+  the entry is older than the entries the page reads.
 - Cost if wrong: a false mismatch makes someone look at a payment that is fine; a missed one hides money the books do
   not show. The mismatch count is a figure finance watches (outstanding mismatch).
 
@@ -122,7 +138,7 @@ names its source, so a person can check it there.
   agent decided", folded like the trail. Its summary says where the payment is now ("Reconciled", "Pending", "Outcome
   unknown" …), with how long a payment in flight has been sent; opened, the seven stages each say when (UTC), from
   which source, and link their entry or transaction. `#settlement-<id>` opens it.
-- **Treasury**: **Payments in flight**: every payment sent and not confirmed, oldest first, with how long ago it was
+- **Treasury**: **Payments in flight**: every payment sent and not confirmed (not a `GATEWAY_FAILED` one, L3), oldest first, with how long ago it was
   sent, where it is and Circle's word for it, and, under "Not matching the books", every other payment whose books do
   not match. Its line gives how many, the sum per currency, the oldest's age, how many are past the network's
   `stuckAfterMinutes` (the transfer watch's threshold) and how many do not match. A payment past it says so in words, not
@@ -146,8 +162,14 @@ names its source, so a person can check it there.
 **L9. Wording that said paid before it was (I17).**
 - The decision trail's `approval_paid` step said "A person approved and paid it." whatever its transfer did. It now
   follows the entry's `status`: `paid` keeps "A person approved and paid it."; `matched` says the payment was sent and
-  the network is confirming it; `held` says the transfer failed; an entry without a status says "A person approved
-  paying it." The sole approver's wording follows the same rule.
+  the network is confirming it; `held` says "the payment was not confirmed, so it was held again", never that the
+  transfer failed, since `held` also follows Gateway's `GATEWAY_FAILED` and a read of ours that threw on a transfer still
+  moving (L3), and the entry does not say which; an entry without a status says "A person approved paying it." The sole
+  approver's wording follows the same rule.
+- The evidence page's People step (`src/lib/evidence-chain.ts`) said "Approved and paid it." for every `approval_paid`,
+  and "Approved and paid it with Pay now" for every `milestone_approval_paid`. Both now follow the same rule (`verified`
+  is a milestone's sent), with where it was done (Slack, Telegram and the rest) said of the approval, before what became
+  of the payment.
 - The reasoning note `[approved and paid by a person]`, which "The transfer failed" or "waiting for Circle to confirm
   it" follows when the transfer did not confirm, now reads "A person approved paying it."
 - Checked and kept, each saying sent or confirming until Circle confirms: the console's and chats' answer to Approve and
@@ -201,7 +223,8 @@ names its source, so a person can check it there.
 - `tests/settlement-track.test.tsx` and `tests/payments-in-flight.test.tsx`: what the track and the Treasury section
   say, with words for every state (never colour alone), and the pages' wiring as source pins.
 - `tests/receipts-status.test.ts`: the receipt's Status row for each combination of checks.
-- `tests/decision-trail.test.tsx` and `tests/reasoning-copy.test.ts`: the approval step and the note by status.
+- `tests/decision-trail.test.tsx`, `tests/evidence-chain.test.ts` and `tests/reasoning-copy.test.ts`: the approval step,
+  the evidence page's People step and the note by status.
 - `tests/docs-guides.test.ts`: the guide quotes the screens as they are.
 
 ## Docs

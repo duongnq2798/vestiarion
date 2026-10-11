@@ -83,6 +83,70 @@ describe("the stages (L2)", () => {
     expect(settlement.stages.proposed).toMatchObject({ by: "agent", seq: 41 });
     expect(settlement.stages.authorized).toMatchObject({ by: "person", seq: 90 });
   });
+
+  it("never shows a payment proposed or authorized after it was sent: their entry is signed once the transfer answered", () => {
+    // The agent's real order: the claim stamps the send at 10:00:40, Circle confirms at 10:01:10, then the invoice and
+    // its ap_pay entry are written at 10:01:12.
+    const settlement = reduceSettlement(
+      input(
+        [
+          { kind: "proposed", at: T(1, 12), by: "agent", seq: 41 },
+          { kind: "authorized", at: T(1, 12), by: "code", seq: 41 },
+          { kind: "submitted", at: T(0, 40), attempt: 1 },
+          { ...confirmed, at: T(1, 10) },
+          { ...recorded, at: T(1, 12) },
+        ],
+        { books: { paid: true, txRef: TX, at: T(1, 12) } }
+      )
+    );
+    expect(settlement.stages.proposed).toMatchObject({ at: T(0, 40), by: "agent", seq: 41 });
+    expect(settlement.stages.authorized).toMatchObject({ at: T(0, 40), by: "code", seq: 41 });
+    const times = SETTLEMENT_STAGES.map((stage) => settlement.stages[stage]?.at).filter((at): at is string => typeof at === "string");
+    expect(times).toEqual([...times].sort());
+  });
+
+  it("takes the authorization that let the current attempt go, not a later approval that only recorded it", () => {
+    // The agent sent it; a person approved it later while it was in flight, which sends nothing new.
+    const later: SettlementFact = { kind: "authorized", at: T(20), by: "person", seq: 90 };
+    const recordedOnly = reduceSettlement(input([{ ...proposed, at: T(0, 4) }, { ...authorized, at: T(0, 4) }, submitted, pending, later], { books: openBooks }));
+    expect(recordedOnly.stages.authorized).toMatchObject({ by: "code", seq: 41, at: T(0, 2) });
+    // A person's approval that sent a second attempt is the one shown, from when that attempt was sent.
+    const retried = reduceSettlement(
+      input(
+        [
+          { ...proposed, at: T(0, 4) },
+          { ...authorized, at: T(0, 4) },
+          submitted,
+          { kind: "ended", at: T(1), attempt: 1, end: "failed", state: "FAILED", reason: null },
+          { kind: "submitted", at: T(30), attempt: 2 },
+          { kind: "authorized", at: T(30, 20), by: "person", seq: 95 },
+        ],
+        { books: openBooks }
+      )
+    );
+    expect(retried.stages.authorized).toMatchObject({ by: "person", seq: 95, at: T(30) });
+    // Sent again later without a new approval (a send never taken, sent again by the cycle): the approval before it counts.
+    const resent = reduceSettlement(input([{ ...authorized, at: T(0, 4), by: "person", seq: 60 }, { kind: "submitted", at: T(25), attempt: 1 }], { books: openBooks }));
+    expect(resent.stages.authorized).toMatchObject({ by: "person", seq: 60, at: T(0, 4) });
+  });
+});
+
+describe("Gateway's reported failure (L3)", () => {
+  const gatewayFailed: SettlementFact = { kind: "pending", at: T(3), attempt: 1, state: "GATEWAY_FAILED", by: "circle" };
+
+  it("is neither in flight nor an end: Gateway reported it failed, and its attestation may still be minted", () => {
+    const settlement = reduceSettlement(input([proposed, authorized, submitted, gatewayFailed], { books: openBooks, crossChain: true }));
+    expect(settlement).toMatchObject({ status: "gateway_failed", stage: "pending", end: null, inFlightSince: null, mismatch: null });
+    expect(settlement.stages.pending).toMatchObject({ state: "GATEWAY_FAILED" });
+    // Minted after all: confirmed, as any transfer.
+    expect(reduceSettlement(input([submitted, gatewayFailed, { ...confirmed, at: T(9) }], { books: openBooks, crossChain: true })).status).toBe("confirmed");
+  });
+
+  it("is never counted in flight, nor aged, however long ago it was sent", () => {
+    const settlement = reduceSettlement(input([submitted, gatewayFailed], { books: openBooks, crossChain: true }));
+    const summary = paymentsInFlight([{ settlement, amount: 30, currency: "USDC" }], Date.parse(T(0)) + 30 * 86_400_000, 15);
+    expect(summary).toEqual({ inFlight: [], mismatched: [], totals: [], oldestMs: null, late: 0 });
+  });
 });
 
 describe("what available means (L4)", () => {
@@ -91,6 +155,18 @@ describe("what available means (L4)", () => {
     expect(bridged([submitted, confirmed]).stages.available).toBeUndefined();
     const minted: SettlementFact = { kind: "minted", at: T(1), attempt: 1, chain: "BASE-SEPOLIA", txHash: MINT };
     expect(bridged([submitted, confirmed, minted]).stages.available).toMatchObject({ at: T(1), by: "circle", chain: "BASE-SEPOLIA", txHash: MINT });
+  });
+
+  it("links a Gateway payout's reconciled transaction on the payee's chain, where its mint is", () => {
+    const minted: SettlementFact = { kind: "minted", at: T(1), attempt: 1, chain: "BASE-SEPOLIA", txHash: MINT };
+    const gateway = reduceSettlement(
+      input([submitted, { ...confirmed, refs: [MINT, "gateway:x"], txHash: MINT }, minted, { ...recorded, txRef: MINT }], { books: { paid: true, txRef: MINT, at: T(2) }, crossChain: true })
+    );
+    expect(gateway.stages.reconciled).toMatchObject({ txHash: MINT, chain: "BASE-SEPOLIA" });
+    // A CCTP payout whose books name its burn on Arc stays on Arc.
+    const burn = reduceSettlement(input([submitted, { ...confirmed, refs: [TX, MINT], txHash: TX }, minted, recorded], { crossChain: true }));
+    expect(burn.stages.reconciled).toMatchObject({ txHash: TX });
+    expect(burn.stages.reconciled?.chain).toBeUndefined();
   });
 
   it("is never reached by a simulated payment, which reaches no wallet", () => {
@@ -205,6 +281,18 @@ describe("the books (L5)", () => {
     const failed: SettlementFact = { kind: "ended", at: T(1), attempt: 1, end: "failed", state: "FAILED", reason: null };
     expect(reduceSettlement(input([submitted, failed], { books: openBooks })).mismatch).toBeNull();
     expect(reduceSettlement(input([submitted, confirmed], { books: null })).mismatch).toBeNull();
+  });
+
+  it("never calls a missing entry a mismatch when the entries read may have been cut short", () => {
+    // Read in full, a bill marked paid with the transaction and no entry naming it does not match.
+    expect(reduceSettlement(input([submitted, confirmed]))).toMatchObject({ mismatch: "no_signed_entry", recordingUnread: false });
+    // Cut at the read's limit, the entry may be among the older ones not read: unknown, never a mismatch.
+    expect(reduceSettlement(input([submitted, confirmed], { recordingsComplete: false }))).toMatchObject({ status: "confirmed", mismatch: null, recordingUnread: true });
+    // Found anyway, it is reconciled.
+    expect(reduceSettlement(input([submitted, confirmed, recorded], { recordingsComplete: false }))).toMatchObject({ status: "reconciled", recordingUnread: false });
+    // The other mismatches do not depend on an entry: they stand.
+    expect(reduceSettlement(input([submitted, confirmed], { books: openBooks, recordingsComplete: false }))).toMatchObject({ mismatch: "confirmed_not_marked_paid", recordingUnread: false });
+    expect(reduceSettlement(input([submitted, confirmed], { books: { paid: true, txRef: OTHER_TX, at: T(1) }, recordingsComplete: false })).mismatch).toBe("marked_paid_other_transaction");
   });
 });
 
@@ -448,6 +536,22 @@ describe("settlementOf", () => {
     expect(settlement.stages.available).toMatchObject({ by: "chain" });
   });
 
+  it("orders the stages as they happened when the decision's entry is written after the transfer confirmed", () => {
+    // executePayment claims (submitted_at), awaits Circle (confirmed_at), and only then is the ap_pay entry appended.
+    const settlement = settlementOf({
+      intent: intent({ submitted_at: T(0, 40), executed_at: T(1, 10), confirmed_at: T(1, 10), updated_at: T(1, 10) }),
+      entries: [{ seq: 41, ts: T(1, 12), action: "ap_pay", detail: { invoiceId: "inv-1", execution: { resultingStatus: "paid", txRef: TX } } }],
+      source: { type: "invoice", id: "inv-1" },
+      books: { paid: true, txRef: TX, at: T(1, 12) },
+      now: NOW,
+    });
+    expect(settlement.status).toBe("reconciled");
+    expect(settlement.stages.proposed?.at).toBe(T(0, 40));
+    expect(settlement.stages.authorized?.at).toBe(T(0, 40));
+    const times = SETTLEMENT_STAGES.map((stage) => settlement.stages[stage]?.at).filter((at): at is string => typeof at === "string");
+    expect(times).toEqual([...times].sort());
+  });
+
   it("knows a payout to another chain from its own chain, and a simulated payment from its provider", () => {
     const bridged = settlementOf({ intent: intent({ destination_chain: "BASE-SEPOLIA", mint_tx_hash: null, status: "pending", confirmed_at: null }), entries: [], source: { type: "invoice", id: "inv-1" }, books: null, now: NOW });
     expect(bridged.stages.available).toBeUndefined();
@@ -508,6 +612,20 @@ describe("settlementsByBill", () => {
     });
     expect(settlements.get("same-id")?.stages.proposed).toBeUndefined();
   });
+
+  it("tells each lifecycle whether the entries were read in full", () => {
+    const read = (entriesComplete?: boolean) =>
+      settlementsByBill({
+        payments: [payment("invoice", "inv-1")],
+        invoices: [{ id: "inv-1", status: "paid", tx_ref: TX, settled_at: T(6) }],
+        entries: [],
+        now: NOW,
+        ...(entriesComplete === undefined ? {} : { entriesComplete }),
+      }).get("inv-1");
+    expect(read()).toMatchObject({ mismatch: "no_signed_entry", recordingUnread: false });
+    expect(read(true)).toMatchObject({ mismatch: "no_signed_entry" });
+    expect(read(false)).toMatchObject({ mismatch: null, recordingUnread: true });
+  });
 });
 
 describe("flightRows", () => {
@@ -547,6 +665,38 @@ describe("flightRows", () => {
       now: NOW,
     });
     expect(rows[0].amount).toBe(12.5);
+  });
+
+  it("leaves a Gateway payout Gateway reported failed out of the payments in flight, whether its bill waits or was rejected", () => {
+    const reported = { status: "failed", provider_tx_id: "gateway:x", provider_state: "GATEWAY_FAILED", destination_chain: "BASE-SEPOLIA", tx_hash: null, confirmed_at: null, updated_at: T(3) };
+    const rows = flightRows({
+      payments: [payment("invoice", "rejected", reported, 30), payment("invoice", "held", reported, 20)],
+      invoices: [
+        { id: "rejected", status: "rejected", tx_ref: null, counterparty_name: "Harbor VPS", paid_amount: null },
+        { id: "held", status: "held", tx_ref: null, counterparty_name: "Lumen Design", paid_amount: null },
+      ],
+      milestones: [],
+      entries: [],
+      now: NOW,
+    });
+    expect(rows.map((row) => [row.source.id, row.settlement.status])).toEqual([
+      ["rejected", "gateway_failed"],
+      ["held", "gateway_failed"],
+    ]);
+    // Thirty days on, it is neither in flight, nor aged, nor added to what is outstanding.
+    expect(paymentsInFlight(rows, NOW + 30 * 86_400_000, 15)).toEqual({ inFlight: [], mismatched: [], totals: [], oldestMs: null, late: 0 });
+  });
+
+  it("passes on whether the entries were read in full", () => {
+    const rows = flightRows({
+      payments: [payment("invoice", "inv-1")],
+      invoices: [{ id: "inv-1", status: "paid", tx_ref: TX, counterparty_name: "Harbor VPS", settled_at: T(6) }],
+      milestones: [],
+      entries: [],
+      entriesComplete: false,
+      now: NOW,
+    });
+    expect(rows[0].settlement).toMatchObject({ mismatch: null, recordingUnread: true });
   });
 });
 

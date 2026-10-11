@@ -518,6 +518,14 @@ export function ledgerPublicKeyPems(keyring: LedgerKeyring = ledgerVerificationK
 export const LEDGER_PAGE_SIZE = 1000;
 
 /**
+ * Whether a read answered in one request, such as `listLedgerEntriesForTargets` (newest first), may have been cut at
+ * `max_rows`: a full page can leave older entries out, so what it does not hold is unknown, not absent.
+ */
+export function ledgerReadMayBeCut(rows: readonly unknown[]): boolean {
+  return rows.length >= LEDGER_PAGE_SIZE;
+}
+
+/**
  * Every entry of the organization in scope, oldest first. Read by `seq` in
  * pages, because one request stops at the project's row cap and a chain past
  * it would otherwise verify, or export, only its first page (audit-export E3).

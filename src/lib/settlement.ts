@@ -54,6 +54,11 @@ export interface SettlementInput {
   crossChain: boolean;
   /** A sandbox's payment: nothing reached a wallet. */
   simulated: boolean;
+  /**
+   * Whether the entries the facts come from were read in full. A read cut at its row limit leaves the oldest out, so an
+   * entry naming the transaction may exist unread: then a missing one is unknown, never a mismatch (L5). True by default.
+   */
+  recordingsComplete?: boolean;
 }
 
 /** Who or what says a stage was reached. */
@@ -72,8 +77,11 @@ export interface StageMark {
   chain?: string | null;
 }
 
-/** Where the payment is now, in one word. */
-export type SettlementStatus = "waiting" | "in_flight" | "unknown" | "confirmed" | "reconciled" | "failed" | "cancelled" | "not_sent";
+/**
+ * Where the payment is now, in one word. `gateway_failed`: Gateway reported the payout failed, though its attestation may
+ * still be minted (L3). Nothing watches it any more and nothing sends it again, so it is not in flight; nor is it an end.
+ */
+export type SettlementStatus = "waiting" | "in_flight" | "unknown" | "gateway_failed" | "confirmed" | "reconciled" | "failed" | "cancelled" | "not_sent";
 
 /** How the books disagree with the transfer (L5). */
 export type SettlementMismatch = "confirmed_not_marked_paid" | "marked_paid_not_confirmed" | "marked_paid_other_transaction" | "no_signed_entry";
@@ -110,6 +118,8 @@ export interface Settlement {
   inFlightSince: string | null;
   earlier: EarlierAttempt[];
   mismatch: SettlementMismatch | null;
+  /** Confirmed and marked paid with its transaction, but the entries were not read in full and none read names it (L5). */
+  recordingUnread: boolean;
   conflicts: SettlementConflict[];
   simulated: boolean;
   /** Paid to another chain: an unknown send is asked again under its key there, rather than looked up (I18). */
@@ -249,13 +259,13 @@ const isRef = (refs: readonly string[], ref: string | null | undefined) => typeo
 /** A payment's lifecycle from its facts (L2-L6). */
 export function reduceSettlement(input: SettlementInput): Settlement {
   let proposed: Extract<SettlementFact, { kind: "proposed" }> | null = null;
-  let authorized: Extract<SettlementFact, { kind: "authorized" }> | null = null;
+  const authorizations: Array<Extract<SettlementFact, { kind: "authorized" }>> = [];
   const recordings: Array<Extract<SettlementFact, { kind: "recorded" }>> = [];
   const attempts = new Map<number, AttemptState>();
   const conflicts: SettlementConflict[] = [];
   for (const fact of ordered(input.facts)) {
     if (fact.kind === "proposed") proposed ??= fact;
-    else if (fact.kind === "authorized") authorized = fact;
+    else if (fact.kind === "authorized") authorizations.push(fact);
     else if (fact.kind === "recorded") recordings.push(fact);
     else {
       const state = attempts.get(fact.attempt) ?? fresh(fact.attempt);
@@ -266,10 +276,20 @@ export function reduceSettlement(input: SettlementInput): Settlement {
 
   const number = attempts.size > 0 ? Math.max(...attempts.keys()) : 1;
   const current = attempts.get(number) ?? fresh(number);
+  const sentAt = current.submittedAt;
+  // The entry that proposes or authorizes a payment is signed once the transfer's first answer is back, so after the send:
+  // what it says was so by the time the payment was sent, and the stage is shown then at the latest (L2).
+  const byTheSend = (at: string) => (sentAt && later(at, sentAt) ? sentAt : at);
+  // What let the current attempt go: the first authorization recorded once it was sent (the entry that sent it), else the
+  // latest before (one sent again later under the same approval). A later approval of a transfer already in flight
+  // records it; it did not let it go.
+  const authorized = sentAt
+    ? (authorizations.find((fact) => !later(sentAt, fact.at)) ?? authorizations.filter((fact) => later(sentAt, fact.at)).at(-1) ?? null)
+    : (authorizations.at(-1) ?? null);
   const stages: Settlement["stages"] = {};
-  if (proposed) stages.proposed = { at: proposed.at, by: proposed.by, seq: proposed.seq };
-  if (authorized) stages.authorized = { at: authorized.at, by: authorized.by, seq: authorized.seq };
-  if (current.submittedAt) stages.submitted = { at: current.submittedAt, by: "vestiarion" };
+  if (proposed) stages.proposed = { at: byTheSend(proposed.at), by: proposed.by, seq: proposed.seq };
+  if (authorized) stages.authorized = { at: byTheSend(authorized.at), by: authorized.by, seq: authorized.seq };
+  if (sentAt) stages.submitted = { at: sentAt, by: "vestiarion" };
   if (current.pending) stages.pending = { at: current.pending.at, by: current.pending.by, state: current.pending.state };
   const confirmed = current.confirmed;
   if (confirmed) {
@@ -289,8 +309,13 @@ export function reduceSettlement(input: SettlementInput): Settlement {
   const recording = confirmed ? recordings.find((fact) => isRef(confirmed.refs, fact.txRef)) : undefined;
   const booksAgree = Boolean(confirmed && books?.paid && isRef(confirmed.refs, books.txRef));
   if (confirmed && booksAgree && recording) {
-    stages.reconciled = { at: books?.at ?? recording.at, by: "books", seq: recording.seq, txHash: books?.txRef ?? recording.txRef };
+    const ref = books?.txRef ?? recording.txRef;
+    // The mint on the payee's chain (a Gateway payout's own transaction) is linked there, as the confirmed stage links it.
+    const onPayeeChain = current.minted && same(ref, current.minted.txHash) ? current.minted.chain : null;
+    stages.reconciled = { at: books?.at ?? recording.at, by: "books", seq: recording.seq, txHash: ref, ...(onPayeeChain ? { chain: onPayeeChain } : {}) };
   }
+  // The books agree and no entry read names the transaction, but the entries were not all read: it may be among the rest.
+  const recordingUnread = Boolean(confirmed && booksAgree && !recording && input.recordingsComplete === false);
 
   const status: SettlementStatus = confirmed
     ? stages.reconciled
@@ -300,9 +325,11 @@ export function reduceSettlement(input: SettlementInput): Settlement {
       ? current.ended.end
       : current.unknownSince
         ? "unknown"
-        : current.pending || current.submittedAt
-          ? "in_flight"
-          : "waiting";
+        : current.pending?.state === GATEWAY_FAILED
+          ? "gateway_failed"
+          : current.pending || current.submittedAt
+            ? "in_flight"
+            : "waiting";
 
   const mismatch: SettlementMismatch | null = !books
     ? null
@@ -313,7 +340,9 @@ export function reduceSettlement(input: SettlementInput): Settlement {
           ? "confirmed_not_marked_paid"
           : !booksAgree
             ? "marked_paid_other_transaction"
-            : "no_signed_entry"
+            : recordingUnread
+              ? null
+              : "no_signed_entry"
       : books.paid
         ? "marked_paid_not_confirmed"
         : null;
@@ -334,6 +363,7 @@ export function reduceSettlement(input: SettlementInput): Settlement {
       .sort((a, b) => a.attempt - b.attempt)
       .map((state) => ({ attempt: state.attempt, end: state.ended?.end ?? null, at: state.ended?.at ?? null, state: state.ended?.state ?? null, reason: state.ended?.reason ?? null })),
     mismatch,
+    recordingUnread,
     conflicts,
     simulated: input.simulated,
     crossChain: input.crossChain,

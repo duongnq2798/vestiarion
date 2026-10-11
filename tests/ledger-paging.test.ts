@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { withOrg } from "@/lib/dal/scope";
-import { LEDGER_PAGE_SIZE, readLedgerRows, verifyLedger, type LedgerEntryInput } from "@/lib/ledger";
+import { LEDGER_PAGE_SIZE, ledgerReadMayBeCut, readLedgerRows, verifyLedger, type LedgerEntryInput } from "@/lib/ledger";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { buildChain } from "./support/ledger-chain";
 import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
@@ -94,5 +94,14 @@ describe("verifyLedger", () => {
     rows[LEDGER_PAGE_SIZE + 1] = { ...rows[LEDGER_PAGE_SIZE + 1], summary: "rewritten" };
     const { run } = ledgerFake(rows);
     await expect(run(() => verifyLedger())).resolves.toMatchObject({ valid: false, brokenAt: LEDGER_PAGE_SIZE + 2 });
+  });
+});
+
+describe("ledgerReadMayBeCut", () => {
+  it("says a read answered with a full page may have left older entries out, and a shorter one did not", () => {
+    // `ledger_entries_for_targets` answers newest first in one request: a full page may be cut at max_rows.
+    expect(ledgerReadMayBeCut(Array.from({ length: LEDGER_PAGE_SIZE }))).toBe(true);
+    expect(ledgerReadMayBeCut(Array.from({ length: LEDGER_PAGE_SIZE - 1 }))).toBe(false);
+    expect(ledgerReadMayBeCut([])).toBe(false);
   });
 });

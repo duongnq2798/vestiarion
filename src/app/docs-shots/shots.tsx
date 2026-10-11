@@ -827,11 +827,14 @@ const SHOT_NOW = Date.parse("2026-10-11T10:40:00.000Z");
 const SHOT_TX = `0x${"5e771e".repeat(10)}abcd`;
 const shotAt = (minute: number) => `2026-10-11T10:${String(minute).padStart(2, "0")}:00.000Z`;
 
-/** A payment the agent made: sent, pending, confirmed on Arc testnet, and marked paid with its transaction. */
+/**
+ * A payment the agent made: sent, pending, confirmed on Arc testnet, and marked paid with its transaction. Its ap_pay
+ * entry is signed as it really is, once Circle's first answer is back, after the send: the track shows it by the send.
+ */
 const SHOT_SETTLEMENT = reduceSettlement({
   facts: [
-    { kind: "proposed", at: shotAt(0), by: "agent", seq: 1182 },
-    { kind: "authorized", at: shotAt(0), by: "code", seq: 1182 },
+    { kind: "proposed", at: "2026-10-11T10:01:30.000Z", by: "agent", seq: 1182 },
+    { kind: "authorized", at: "2026-10-11T10:01:30.000Z", by: "code", seq: 1182 },
     { kind: "submitted", at: shotAt(1), attempt: 1 },
     { kind: "pending", at: shotAt(1), attempt: 1, state: "SENT", by: "circle" },
     { kind: "confirmed", at: shotAt(2), attempt: 1, refs: [SHOT_TX], txHash: SHOT_TX },

@@ -7,14 +7,14 @@ Nothing on these screens sends, holds or retries a payment. They read what is al
 On **Bills & receivables**, open a payable the agent or a person has paid or started to pay. Under **How the agent decided**, its card folds **Where the payment is**. The line beside it says where the payment is now, such as "Reconciled", "Pending · sent 12 min ago" or "Outcome unknown · checking with Circle". Open it for the stages, in order:
 
 1. **Proposed**: "The agent decided to pay it." or "A person chose to pay it.", with a link to the entry in the audit log.
-2. **Authorized**: what let it be sent: "Code's checks passed, so the agent could pay it on its own.", "A person approved it." or "Two people approved it." When a person approved a later attempt, theirs is the one shown.
-3. **Submitted**: "Vestiarion sent it to Circle." A later attempt says which one it is.
+2. **Authorized**: what let it be sent: "Code's checks passed, so the agent could pay it on its own.", "A person approved it." or "Two people approved it." When a person approved a later attempt, theirs is the one shown. A person who approved a transfer already on its way sent nothing new, so the authorization that sent it stays.
+3. **Submitted**: "Vestiarion sent it to Circle." A later attempt says which one it is. In a sandbox, nothing reaches Circle: "Vestiarion simulated sending it."
 4. **Pending**: Circle took the transfer and has not confirmed it yet, with Circle's own word for where it is, such as SENT, QUEUED or STUCK. When the transfer watch asked Circle about a slow payment, its answer shows here too.
 5. **Confirmed**: Circle confirmed the transfer on the workspace's network, with a link to the transaction on the explorer. A payout to another chain is confirmed once it is minted there, and the next stage links the mint on that chain's explorer.
 6. **In the payee's wallet**: a transfer on Arc is final once it is confirmed, so this stage is reached with the confirmation: "Moving it to a bank is the payee's own step, which Vestiarion does not see." A payout to another chain reaches it once its mint there is recorded, and names that chain. A sandbox payment is simulated: "A simulated payment reaches no wallet."
 7. **Reconciled**: "The bill is marked paid with this transaction, and a signed entry records it."
 
-Each reached stage shows when it was reached, in UTC. A stage still to come says "Not yet."; one passed without a record of its own, such as a pending read Circle never needed, says "Not recorded here."
+Each reached stage shows when it was reached, in UTC. The signed entry behind Proposed and Authorized is written once the transfer's first answer is back, a little after the send, so these two show the time of the send when their entry is later; the audit log keeps the entry's own time. A stage still to come says "Not yet."; one passed without a record of its own, such as a pending read Circle never needed, says "Not recorded here."
 
 <Screenshot
   src="/docs/guides/where-a-payment-is-track.png"
@@ -38,6 +38,8 @@ Sometimes Circle does not answer a send at all, so the payment may or may not ha
 
 When Circle took a transfer but could not be read the last time it was asked, the payment stays pending: "Circle could not be read just now; nothing is sent again until it answers."
 
+A payout through Circle Gateway that Gateway reported failed says "Gateway reported it failed". It is not counted as failed: its attestation may still be minted on the payee's chain, so nothing is sent again. Neither the agent nor the transfer watch looks at it again: "Nothing checks it on its own: check with Circle whether it was minted." **Approvals** shows it too, where a person decides the bill.
+
 What keeps a payment from being paid twice:
 
 - A transfer Circle has taken is only ever read again, by the agent's cycle and by the transfer watch.
@@ -53,11 +55,13 @@ The payment's transfer and its bill are compared. When they disagree, the line a
 - "The bill is marked paid with another transaction than this one."
 - "The bill is marked paid with this transaction, but no signed entry names it."
 
+When a workspace has more entries about the bills a page shows than one read returns, the page reads the newest. A paid bill whose entry is older than those is not counted as a mismatch; its Reconciled stage says "The signed entry that records it is older than the entries this page reads, so it is not checked here."
+
 A record that arrives late never moves a payment back. A failure recorded after Circle confirmed the transfer is ignored and listed under the stages, since a confirmed transfer stays confirmed.
 
 ## Payments in flight, on Treasury
 
-On **Treasury**, **Payments in flight** lists every payment "Sent and not confirmed by Circle yet, the oldest first." Its line gives how many there are, what they add up to in each currency, how long ago the oldest was sent, and how many are past the network's wait, the 15 minutes after which the transfer watch asks Circle about a payment. Each row names the payee and the amount, where the payment is and how long ago it was sent, Circle's word for it, and "past the 15 min wait" when it is.
+On **Treasury**, **Payments in flight** lists every payment "Sent and not confirmed by Circle yet, the oldest first." Its line gives how many there are, what they add up to in each currency, how long ago the oldest was sent, and how many are past the network's wait, the 15 minutes after which the transfer watch asks Circle about a payment. Each row names the payee and the amount, where the payment is and how long ago it was sent, Circle's word for it, and "past the 15 min wait" when it is. A Gateway payout Gateway reported failed is not listed, counted or aged here, since nothing watches it any more; its card says where it is.
 
 Under **Not matching the books** are the payments whose transfer and bill disagree, such as one Circle confirmed whose bill is not marked paid yet, each with why. A payable's name opens its card's stages on **Bills & receivables**; a milestone's opens **Contractors**. The section is not there when nothing is in flight and the books match.
 

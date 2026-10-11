@@ -37,7 +37,7 @@ import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import { inboxEmailsToDecide } from "@/lib/email-inbox/list";
 import { inboxSettingsFromEnv } from "@/lib/email-inbox/settings";
-import { listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
+import { ledgerReadMayBeCut, listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { listCounterparties, listInvoices, stats, type InvoiceRow } from "@/lib/queries";
 import { plural, utcDay } from "@/lib/copy";
 import { payLinkStates, type PayLinkState } from "@/lib/platform/pay-links";
@@ -119,7 +119,8 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       console.error("invoices: payment intents not read", error instanceof Error ? error.message : error);
       return new Map<string, PaymentRecord>();
     });
-    const settlements = settlementsByBill({ payments: payments.values(), invoices: shown.filter((invoice) => invoice.direction === "payable"), entries, now: asOf });
+    // The entries answer in one request, newest first: one cut at its limit may hold no entry for an older payable.
+    const settlements = settlementsByBill({ payments: payments.values(), invoices: shown.filter((invoice) => invoice.direction === "payable"), entries, entriesComplete: !ledgerReadMayBeCut(entries), now: asOf });
     const decisions = shown.map((invoice) => invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), entries, { network, deciding, verdicts, settlements, asOf }));
     const payables = decisions.filter((decision) => decision.domain === "ap");
     const receivables = decisions.filter((decision) => decision.domain === "ar");

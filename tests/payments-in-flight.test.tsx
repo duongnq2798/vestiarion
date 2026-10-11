@@ -92,6 +92,12 @@ describe("Payments in flight", () => {
     expect(render([done])).toBe("");
     expect(render([])).toBe("");
   });
+
+  it("leaves out a Gateway payout Gateway reported failed: nothing watches it, and it is not counted or aged (L3)", () => {
+    const reported = row("g", [sent(1), { kind: "pending", at: T(2), attempt: 1, state: "GATEWAY_FAILED", by: "circle" }], { amount: 500 }, open, true);
+    expect(render([reported])).toBe("");
+    expect(flightLine(paymentsInFlight([fresh, reported], NOW, 15), 15)).toBe("1 in flight · 2.25 USDC · oldest sent 5 min ago");
+  });
 });
 
 describe("Treasury", () => {
@@ -102,6 +108,8 @@ describe("Treasury", () => {
     expect(page).toContain('invoice.direction === "payable" && invoice.status === "matched"');
     expect(page).toContain('milestone.status === "verified"');
     expect(page).toMatch(/\}\)\(\)\.catch\(\(error: unknown\) => \{\s*console\.error\("console: payments in flight not loaded"/);
+    // Entries read up to the read's limit may leave out older ones: a missing entry is then no mismatch.
+    expect(page).toContain("entriesComplete: !ledgerReadMayBeCut(invoiceEntries) && !ledgerReadMayBeCut(milestoneEntries)");
     expect(page).toContain("<PaymentsInFlight payments={flight} now={flightNow} stuckAfterMinutes={networkProfile(network).stuckAfterMinutes} orgSlug={slug} />");
   });
 });
