@@ -200,7 +200,9 @@ describe("the overview's card grid", () => {
     expect(open).toBeGreaterThan(-1);
     expect(grid.startsWith("<a ")).toBe(true);
     expect(grid).not.toMatch(/<p[^>]*><a /);
-    expect(grid.match(/<a [^>]*href="\/docs[^"]*"/g)).toHaveLength(8);
+    // The first grid is the four ways in; a callout may follow it before the next heading.
+    const cards = (grid.match(/<a [^>]*>/g) ?? []).filter((tag) => tag.includes('href="/docs') && tag.includes("rounded-2xl"));
+    expect(cards).toHaveLength(4);
   });
 });
 
