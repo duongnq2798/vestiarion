@@ -143,10 +143,12 @@ function candidateFor(line: StatementLine, bill: StatementBill): Candidate | nul
   const paid = -line.minor;
   const owed = minorOf(bill.amount, bill.currency);
   const exact = paid === owed;
+  // The amount first: the text is searched only for a bill whose amount could be the line's.
+  if (!exact && Math.abs(paid - owed) > owed * NEAR) return null;
   const text = lineText(line);
   const name = nameFound(bill.payee, text);
   const number = numberFound(bill.memo, text);
-  if (!exact && !(Math.abs(paid - owed) <= owed * NEAR && (name.strength > 0 || number))) return null;
+  if (!exact && !(name.strength > 0 || number)) return null;
 
   const current = bill.current;
   const why = [
