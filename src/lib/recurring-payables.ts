@@ -38,6 +38,14 @@ export interface RecurringPayableView {
   status: "active" | "stopped" | "ended";
 }
 
+/** A recurring payment with its schedule, so the cash scenarios project the periods not billed yet (cash scenarios C4). */
+export interface RecurringScheduleView extends RecurringPayableView {
+  startsOn: string;
+  everyCount: number;
+  everyUnit: RecurringUnit;
+  nextPeriod: number;
+}
+
 interface Row {
   id: string;
   amount: string;
@@ -53,14 +61,14 @@ interface Row {
 }
 
 /** The workspace's recurring payments, the running ones first, each with its next due date. */
-export async function listRecurringPayables(): Promise<RecurringPayableView[]> {
+export async function listRecurringPayables(): Promise<RecurringScheduleView[]> {
   const rows = unwrap(
     await db()
       .from("recurring_payables")
       .select("id, amount, currency, memo, every_count, every_unit, starts_on, ends_on, next_period, status, counterparties(name)")
       .order("created_at", { ascending: false })
   ) as unknown as Row[];
-  const views = rows.map((row): RecurringPayableView => {
+  const views = rows.map((row): RecurringScheduleView => {
     const next = row.status === "active" ? dueOn({ startsOn: row.starts_on, everyCount: row.every_count, everyUnit: row.every_unit }, row.next_period) : null;
     return {
       id: row.id,
@@ -72,6 +80,10 @@ export async function listRecurringPayables(): Promise<RecurringPayableView[]> {
       nextDueOn: next && (!row.ends_on || next <= row.ends_on) ? next : null,
       endsOn: row.ends_on,
       status: row.status,
+      startsOn: row.starts_on,
+      everyCount: row.every_count,
+      everyUnit: row.every_unit,
+      nextPeriod: row.next_period,
     };
   });
   return [...views.filter((view) => view.status === "active"), ...views.filter((view) => view.status !== "active")];

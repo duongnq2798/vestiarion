@@ -45,6 +45,8 @@ import { ReportLists, ReportReadiness, ReportSummary } from "@/components/vx/Wor
 import { StatusChipRow, StatusPanel } from "@/components/vx/WorkspaceHeader";
 import { statusChips, statusRows, type PageStatus, type PlatformStatus } from "@/components/vx/workspace-status";
 import { ActualsBills, ActualsSummary } from "@/components/vx/ActualsComparison";
+import { CashScenarios, CoverageList, ScenarioCases, ScenarioFindings } from "@/components/vx/CashScenarios";
+import { cashScenario, DEFAULT_LEVERS, type ScenarioBasis } from "@/lib/cash-scenarios";
 import { EvidenceAccess, EvidenceStepCard, evidenceSub } from "@/components/vx/EvidenceChain";
 import { PageHead } from "@/components/vx/Shell";
 import { evidenceLinkLabel, evidencePath } from "@/lib/evidence-paths";
@@ -83,7 +85,7 @@ import { Input } from "@/components/ui/Input";
 
 export interface DocsShot {
   /** The guide the picture belongs to. */
-  guide: "try-it" | "go-live" | "first-payment" | "import-bills" | "try-a-rule" | "pay-a-contractor" | "get-paid" | "telegram" | "slack" | "email-invoices" | "report" | "workspace" | "evidence";
+  guide: "try-it" | "go-live" | "first-payment" | "import-bills" | "try-a-rule" | "pay-a-contractor" | "get-paid" | "telegram" | "slack" | "email-invoices" | "report" | "workspace" | "cash-scenarios" | "evidence";
   /** The workspace page it is on: its title heads the frame. None for a public page, such as a payee's link. */
   page?: NavKey;
   /** The page's line under its title, where the real page has one. */
@@ -700,6 +702,37 @@ const ACTUALS = compareActuals(REPORT_FACTS, {
     [5, 15],
   ]),
 });
+
+/**
+ * A studio's next 60 days for the What if section (cash scenarios guide): a retainer not billed yet, four bills, a
+ * verified milestone, and two receivables, the first from a client that has paid before. Northwind Cloud is scheduled
+ * for day 5 and due on day 25, after Acme Studio's late receivable arrives, so paying it on its due day shrinks the gap.
+ */
+const SCENARIO_BASIS: ScenarioBasis = {
+  today: "2026-10-12",
+  cash: 1840.5,
+  reserve: 3200,
+  outflows: [
+    { id: "m-landing", kind: "milestone", label: "Minh Pham: Landing page", amount: 600, day: 0, note: "verified", foreign: false },
+    { id: "rec-linh:2026-10-15", kind: "recurring", label: "Linh Design", amount: 1500, day: 3, note: "recurring, not billed yet", foreign: false },
+    { id: "inv-northwind", kind: "bill", label: "Northwind Cloud", amount: 860, day: 5, note: "scheduled", foreign: false, dueDay: 25 },
+    { id: "inv-atlas", kind: "bill", label: "Atlas Compute", amount: 1240, day: 8, note: "due", foreign: false },
+    { id: "inv-harbor", kind: "bill", label: "Harbor Print", amount: 2150, day: 18, note: "due", foreign: false },
+    { id: "inv-kestrel", kind: "bill", label: "Kestrel Legal", amount: 950, day: 27, note: "due", foreign: true },
+    { id: "rec-linh:2026-11-15", kind: "recurring", label: "Linh Design", amount: 1500, day: 34, note: "recurring, not billed yet", foreign: false },
+  ],
+  receivables: [
+    { id: "ar-acme", label: "Acme Studio", amount: 3400, day: 9, overdue: false, client: "client-acme" },
+    { id: "ar-beacon", label: "Beacon Labs", amount: 1800, day: 16, overdue: false, client: "client-beacon" },
+  ],
+  clients: { "client-acme": { paidOnTime: 3, paidLate: 2, averageDaysLate: 11 } },
+  eurc: [],
+  recurringRead: true,
+};
+/** That studio's scenario as the section opens on it: 60 days, every client 14 days late. */
+const SCENARIO = cashScenario(SCENARIO_BASIS, DEFAULT_LEVERS);
+/** The open section's card, for a part of its outcome shown alone. */
+const SCENARIO_CARD = "rounded-2xl border border-line bg-surface p-5 shadow-surface";
 
 /** The New invoice fold as Bills & receivables opens it on an empty workspace: its four ways in, one bill typed in. */
 function NewInvoice({ counterparty }: { counterparty: CounterpartyRow }) {
@@ -1394,6 +1427,38 @@ export const DOCS_SHOTS = {
         canRecord
         members={{ [ACTUALS_RECORDER]: "ops@harbor-books.example" }}
       />
+    ),
+  },
+  "cash-scenarios": {
+    guide: "cash-scenarios",
+    page: "treasury",
+    render: () => <CashScenarios basis={SCENARIO_BASIS} defaultOpen outcome={false} />,
+  },
+  "cash-scenarios-cases": {
+    guide: "cash-scenarios",
+    page: "treasury",
+    render: () => (
+      <div className={SCENARIO_CARD}>
+        <ScenarioCases result={SCENARIO} />
+      </div>
+    ),
+  },
+  "cash-scenarios-findings": {
+    guide: "cash-scenarios",
+    page: "treasury",
+    render: () => (
+      <div className={SCENARIO_CARD}>
+        <ScenarioFindings result={SCENARIO} />
+      </div>
+    ),
+  },
+  "cash-scenarios-coverage": {
+    guide: "cash-scenarios",
+    page: "treasury",
+    render: () => (
+      <div className={SCENARIO_CARD}>
+        <CoverageList result={SCENARIO} />
+      </div>
     ),
   },
   "import-bills-columns": { guide: "import-bills", page: "invoices", render: () => <BillImportShot step="columns" /> },

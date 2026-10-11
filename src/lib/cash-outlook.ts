@@ -14,7 +14,8 @@ import { OPEN_PAYABLE_STATUSES } from "./agent/obligations";
  * 1.15 buffer). Receivables are only expected: they are shown, never counted as cash. EURC payables are
  * paid from the EURC balance, so they are left out of this USDC figure and counted apart.
  *
- * Pure: the console passes the rows it already loaded.
+ * Pure: the console passes the rows it already loaded. The cash scenarios read the same rules over 90 days through
+ * `outlookMoves` (docs/superpowers/specs/2026-10-11-cash-scenarios-design.md C2).
  */
 
 export interface OutlookInput {
@@ -22,9 +23,33 @@ export interface OutlookInput {
   operatingUsdc: number;
   /** The USYC reserve's value in USDC; 0 without one. */
   reserveUsdc?: number;
-  payables: Array<{ id: string; counterparty: string; amount: number; currency: string | null; due_date: string; status: string; scheduled_for: string | null }>;
+  payables: Array<{
+    id: string;
+    counterparty: string;
+    amount: number;
+    currency: string | null;
+    due_date: string;
+    status: string;
+    scheduled_for: string | null;
+    /** The currency the bill was written in, when its USDC amount was worked out at a rate (0084, shadow mode S6). */
+    original_currency?: string | null;
+    /** The recurring payment it was created for, and that payment's period (`YYYY-MM-DD`), when it was. */
+    recurring_id?: string | null;
+    recurring_period?: string | null;
+  }>;
   milestones: Array<{ id: string; title: string; contractor: string; amount: number; status: string; escrow_state?: string | null }>;
-  receivables: Array<{ id: string; counterparty: string; amount: number; currency: string | null; due_date: string; status: string }>;
+  receivables: Array<{
+    id: string;
+    counterparty: string;
+    amount: number;
+    currency: string | null;
+    due_date: string;
+    status: string;
+    /** The client: its earlier receivables say how it paid (cash scenarios C8). */
+    counterparty_id?: string | null;
+    /** When a received receivable arrived. */
+    settled_at?: string | null;
+  }>;
 }
 
 export interface OutlookItem {
@@ -73,25 +98,55 @@ const OPEN_MILESTONE = new Set(["pending", "verified"]);
 
 const round = (value: number) => Math.round(value * 1e6) / 1e6;
 const utcDayOf = (at: number) => new Date(at).toISOString().slice(0, 10);
+/** Midnight UTC of the day `at` falls on. */
+const utcMidnight = (at: number) => Date.UTC(new Date(at).getUTCFullYear(), new Date(at).getUTCMonth(), new Date(at).getUTCDate());
 
-export function cashOutlook(input: OutlookInput): CashOutlook {
-  const today = Date.UTC(new Date(input.now).getUTCFullYear(), new Date(input.now).getUTCMonth(), new Date(input.now).getUTCDate());
-  const lastDay = today + (WINDOW_DAYS - 1) * DAY_MS;
-  const bufferEnd = today + (BUFFER_DAYS - 1) * DAY_MS;
-  // The day money leaves: a past day is today; null when it falls outside the window.
+/** One amount the outlook counts, on the day it moves. */
+export interface OutlookMove {
+  /** The payable's, milestone's or receivable's id. */
+  id: string;
+  /** Midnight UTC of the day it moves: a past day is today. */
+  at: number;
+  /** Its own day was before today. */
+  overdue: boolean;
+  item: OutlookItem;
+  /** A scheduled payable's own due day, `YYYY-MM-DD`: it leaves on `at`, the day it was scheduled for. */
+  dueDay?: string;
+  /** A payable written in another currency, whose USDC amount was worked out at a rate. */
+  foreign?: boolean;
+  /** A receivable's client. */
+  counterpartyId?: string | null;
+  /** A milestone's contractor, whom it pays: its label also names the milestone. */
+  payee?: string;
+}
+
+export interface OutlookMoves {
+  /** Midnight UTC today. */
+  today: number;
+  /** Payables in their order, then milestones, then receivables. */
+  moves: OutlookMove[];
+  /** EURC moving within the window, each on its day: paid from and into the EURC balance, so left out of every USDC figure. */
+  eurc: Array<{ kind: "out" | "in"; at: number; amount: number }>;
+}
+
+/**
+ * What the outlook counts within `windowDays` from today, each on its day (cash scenarios C2): every open USDC
+ * payable, a held one included (a scheduled one on the day it is scheduled for, any other on its due day, an overdue
+ * one today), every open milestone today unless its USDC is locked in escrow, every open USDC receivable on its due day
+ * (an overdue one today), and EURC apart. `cashOutlook` reads it over 30 days, the cash scenarios over 90.
+ */
+export function outlookMoves(input: OutlookInput, windowDays: number): OutlookMoves {
+  const today = utcMidnight(input.now);
+  const lastDay = today + (windowDays - 1) * DAY_MS;
+  // The day money moves: a past day is today; null when it falls outside the window.
   const dayOf = (iso: string): { at: number; overdue: boolean } | null => {
-    const parsed = Date.parse(iso);
-    const at = Date.UTC(new Date(parsed).getUTCFullYear(), new Date(parsed).getUTCMonth(), new Date(parsed).getUTCDate());
+    const at = utcMidnight(Date.parse(iso));
     if (at > lastDay) return null;
     return { at: Math.max(at, today), overdue: at < today };
   };
 
-  const byDay = new Map<number, OutlookItem[]>();
-  const add = (at: number, item: OutlookItem) => byDay.set(at, [...(byDay.get(at) ?? []), item]);
-  let dueIn30d = 0;
-  let dueCount = 0;
-  let dueIn7d = 0;
-  let eurcLeftOut = 0;
+  const moves: OutlookMove[] = [];
+  const eurc: OutlookMoves["eurc"] = [];
 
   for (const payable of input.payables) {
     if (!(OPEN_PAYABLE_STATUSES as readonly string[]).includes(payable.status)) continue;
@@ -99,37 +154,81 @@ export function cashOutlook(input: OutlookInput): CashOutlook {
     const when = dayOf(scheduled ? (payable.scheduled_for as string) : payable.due_date);
     if (!when) continue;
     if ((payable.currency ?? "USDC") !== "USDC") {
-      eurcLeftOut += payable.amount;
+      eurc.push({ kind: "out", at: when.at, amount: payable.amount });
       continue;
     }
-    dueIn30d += payable.amount;
-    dueCount += 1;
-    if (when.at <= bufferEnd) dueIn7d += payable.amount;
     const note: OutlookItem["note"] = scheduled ? "scheduled" : payable.status === "held" ? "held" : when.overdue ? "overdue" : "due";
-    add(when.at, { kind: "out", label: payable.counterparty, amount: payable.amount, note });
-  }
-
-  let milestonesOpen = 0;
-  let milestoneCount = 0;
-  for (const milestone of input.milestones) {
-    if (!OPEN_MILESTONE.has(milestone.status) || milestone.escrow_state === "funded") continue;
-    milestonesOpen += milestone.amount;
-    milestoneCount += 1;
-    add(today, {
-      kind: "milestone",
-      label: `${milestone.contractor}: ${milestone.title}`,
-      amount: milestone.amount,
-      note: milestone.status === "verified" ? "verified" : "payable once verified",
+    moves.push({
+      id: payable.id,
+      at: when.at,
+      overdue: when.overdue,
+      item: { kind: "out", label: payable.counterparty, amount: payable.amount, note },
+      ...(scheduled ? { dueDay: utcDayOf(utcMidnight(Date.parse(payable.due_date))) } : {}),
+      foreign: Boolean(payable.original_currency) && payable.original_currency !== "USDC",
     });
   }
 
-  let expectedIn30d = 0;
+  for (const milestone of input.milestones) {
+    if (!OPEN_MILESTONE.has(milestone.status) || milestone.escrow_state === "funded") continue;
+    moves.push({
+      id: milestone.id,
+      at: today,
+      overdue: false,
+      item: {
+        kind: "milestone",
+        label: `${milestone.contractor}: ${milestone.title}`,
+        amount: milestone.amount,
+        note: milestone.status === "verified" ? "verified" : "payable once verified",
+      },
+      payee: milestone.contractor,
+    });
+  }
+
   for (const receivable of input.receivables) {
-    if (!OPEN_RECEIVABLE.has(receivable.status) || (receivable.currency ?? "USDC") !== "USDC") continue;
+    if (!OPEN_RECEIVABLE.has(receivable.status)) continue;
     const when = dayOf(receivable.due_date);
+    if ((receivable.currency ?? "USDC") !== "USDC") {
+      if (when) eurc.push({ kind: "in", at: when.at, amount: receivable.amount });
+      continue;
+    }
     if (!when) continue;
-    expectedIn30d += receivable.amount;
-    add(when.at, { kind: "in", label: receivable.counterparty, amount: receivable.amount, note: "expected" });
+    moves.push({
+      id: receivable.id,
+      at: when.at,
+      overdue: when.overdue,
+      item: { kind: "in", label: receivable.counterparty, amount: receivable.amount, note: "expected" },
+      counterpartyId: receivable.counterparty_id ?? null,
+    });
+  }
+
+  return { today, moves, eurc };
+}
+
+export function cashOutlook(input: OutlookInput): CashOutlook {
+  const { today, moves, eurc } = outlookMoves(input, WINDOW_DAYS);
+  const bufferEnd = today + (BUFFER_DAYS - 1) * DAY_MS;
+
+  const byDay = new Map<number, OutlookItem[]>();
+  const add = (at: number, item: OutlookItem) => byDay.set(at, [...(byDay.get(at) ?? []), item]);
+  let dueIn30d = 0;
+  let dueCount = 0;
+  let dueIn7d = 0;
+  let milestonesOpen = 0;
+  let milestoneCount = 0;
+  let expectedIn30d = 0;
+
+  for (const move of moves) {
+    if (move.item.kind === "out") {
+      dueIn30d += move.item.amount;
+      dueCount += 1;
+      if (move.at <= bufferEnd) dueIn7d += move.item.amount;
+    } else if (move.item.kind === "milestone") {
+      milestonesOpen += move.item.amount;
+      milestoneCount += 1;
+    } else {
+      expectedIn30d += move.item.amount;
+    }
+    add(move.at, move.item);
   }
 
   const order: Record<OutlookItem["kind"], number> = { out: 0, milestone: 1, in: 2 };
@@ -165,7 +264,7 @@ export function cashOutlook(input: OutlookInput): CashOutlook {
     milestoneCount,
     cushion,
     expectedIn30d: round(expectedIn30d),
-    eurcLeftOut: round(eurcLeftOut),
+    eurcLeftOut: round(eurc.reduce((sum, move) => (move.kind === "out" ? sum + move.amount : sum), 0)),
     shortOn,
     days,
   };
