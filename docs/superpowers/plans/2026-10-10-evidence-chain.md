@@ -2,8 +2,9 @@
 
 Spec: `docs/superpowers/specs/2026-10-10-evidence-chain-design.md`. Branch `feat/evidence-chain`. No migration.
 
-Status 2026-10-11: tasks 1 to 8 built on the branch; 9 is the checks (`npm run typecheck`, `npm run lint`, `npm test`). The
-guide has two screenshots, `evidence-chain` and `evidence-signatures`, rather than one.
+Status 2026-10-11: tasks 1 to 9 done on the branch (typecheck, lint and the full test suite green; no PR from here). The
+guide has three screenshots, `evidence-chain`, `evidence-signatures` and `evidence-access`, rather than one, and sits in
+the docs' Trust and controls section.
 
 ## Tasks
 

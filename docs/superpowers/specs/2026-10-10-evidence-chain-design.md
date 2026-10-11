@@ -167,18 +167,26 @@ see this":
   section rather than its own page. The seven words carry a one-line meaning each (`EVIDENCE_MEANINGS`), shown once on
   the page and carried in the download's `labels`. A sample payee's address with no entry of its own is Inferred, as
   sample data's other facts are, not Missing. The page lays itself out by its own width (a container query), the labels
-  and the subject beside the steps where it is wide. The guide shows the page in two pictures, three links with the head
-  and the last link with "Who can see this", from `/docs-shots`, whose entries are signed for real so the browser's check
-  verifies them.
+  and the subject beside the steps where it is wide. The guide shows the page in three pictures from `/docs-shots`: the
+  head with two links (the decision and the payment), the signatures link, and "Who can see this". The pictures' entries
+  are signed for real, in the format the ledger writes them, so the browser's check verifies them.
+- The I28 panel tells a bill with no payment on chain (not paid yet, or simulated) that it has no receipt to share, rather
+  than offering an owner Share receipt for it; `readEvidence` decides the receipt's state, `unavailable` among them.
+- On the page, the sidebar marks the record's section `aria-current="true"`, not `"page"`: the page is inside the
+  section, not the section's own page, as the header's link back says (`insideSection`).
+- The guide sits in the docs' Trust and controls section (docs clarity, PR #307), between How payments are controlled,
+  which now points to it, and Verify an audit export.
 
 ## Testing
 
 - The builder: a payable paid with full evidence; paid with no purchase order; a milestone with GitHub evidence; a
   delivery a person stated; an unreachable link (Arc did not answer, a revoked receipt, GitHub unavailable); an open
   bill; a rejected bill; labels never upgraded (a signed entry leaves a stated fact stated; a step takes its weakest
-  fact); sample data; members not read.
+  fact); sample data; members not read; a payable paid in shadow mode (mirror address, verdict, mirrored payment); a
+  workspace on Arc mainnet.
 - The reader: reads only through `db()` in scope, asks for the screening check at the decision's time, finds the
-  receipt's entries, and a receivable, a malformed or an unknown id is not found.
+  receipt's entries, says a bill with no payment on chain has no receipt to share, and a receivable, a malformed or an
+  unknown id is not found.
 - The route: session, membership 404, cross-site 403, bad kind 400, the JSON's shape and file name.
 - The page: rendered markup of a built chain (labels in words, links' states, the trail link, the I28 panel by role),
   and the source pins every workspace page has (params, then `requireMembership`, `inOrg`, the shell's status).
