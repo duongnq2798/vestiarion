@@ -69,7 +69,7 @@ export function landingFaq(mainnetForEveryone: boolean): ReadonlyArray<{ questio
 export function Faq({ mainnetForEveryone }: { mainnetForEveryone: boolean }) {
   return (
     <section id="faq" aria-labelledby="faq-title" className="scroll-mt-16 border-b border-line bg-surface">
-      <div className="mx-auto grid max-w-6xl gap-8 px-4 py-14 sm:px-6 sm:py-20 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)] lg:gap-14">
+      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 px-4 py-14 sm:px-6 sm:py-20 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)] lg:gap-14">
         <div className="max-w-md">
           <Eyebrow className="text-agent">Questions</Eyebrow>
           <h2 id="faq-title" className="mt-3 text-balance text-3xl font-semibold leading-tight tracking-[-0.04em] text-ink sm:text-4xl">

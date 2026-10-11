@@ -80,7 +80,7 @@ export function Steps() {
           </div>
         </Reveal>
         <Reveal delay={60} className="mt-10">
-          <ol className="grid gap-4 md:grid-cols-3">
+          <ol className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {STEPS.map((step, index) => (
               <li key={step.title} className="flex min-w-0 flex-col rounded-2xl border border-line bg-ground/60 p-5 sm:p-6">
                 <span className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-agent">Step {index + 1}</span>

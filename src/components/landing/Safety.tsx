@@ -143,7 +143,7 @@ export function Safety() {
           </p>
         </Reveal>
 
-        <Reveal delay={60} className="mt-10 grid gap-6 sm:mt-12">
+        <Reveal delay={60} className="mt-10 grid grid-cols-1 gap-6 sm:mt-12">
           {LANES.map((lane) => (
             <Lane key={lane.label} label={lane.label} nodes={lane.nodes} />
           ))}
@@ -151,7 +151,7 @@ export function Safety() {
 
         <div className="mt-10 border-t border-ground/15 pt-8 sm:mt-16 sm:pt-10">
           <h3 className="text-2xl font-semibold tracking-tight text-surface sm:text-3xl">Who controls what</h3>
-          <dl className="mt-6 grid gap-x-8 gap-y-6 sm:mt-8 sm:gap-y-8 md:grid-cols-2 lg:grid-cols-3">
+          <dl className="mt-6 grid grid-cols-1 gap-x-8 gap-y-6 sm:mt-8 sm:gap-y-8 md:grid-cols-2 lg:grid-cols-3">
             {QUESTIONS.map((item) => (
               <div key={item.question} className="min-w-0">
                 <dt className="text-base font-semibold text-surface">{item.question}</dt>

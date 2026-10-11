@@ -71,7 +71,7 @@ export function BillPreview() {
             The checkout flow was delivered and its pull request merged. The amount matches the milestone you agreed, and it is due in four days.
           </p>
 
-          <ul aria-label="Checked before deciding" className="mt-3 grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
+          <ul aria-label="Checked before deciding" className="mt-3 grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-2">
             {CHECKS.map((check) => (
               <li key={check} className="flex items-start gap-1.5 text-xs leading-snug text-ink-2">
                 <Check aria-hidden className="mt-px size-3.5 shrink-0 text-proof" strokeWidth={3} />

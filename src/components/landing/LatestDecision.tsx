@@ -28,7 +28,7 @@ export function LatestDecision({ decision }: { decision: LatestDecisionShown | n
 export function LatestDecisionCard({ decision, headingLevel = 2 }: { decision: LatestDecisionShown; headingLevel?: 2 | 3 }) {
   const Heading = headingLevel === 2 ? "h2" : "h3";
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start lg:gap-12">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start lg:gap-12">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span aria-hidden className="size-2 shrink-0 rounded-full bg-proof motion-safe:animate-pulse" />

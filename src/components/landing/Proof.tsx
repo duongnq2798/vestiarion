@@ -60,7 +60,7 @@ export function Proof({
           </Suspense>
         </div>
 
-        <div className="mt-8 grid gap-6 border-t border-line pt-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-12">
+        <div className="mt-8 grid grid-cols-1 gap-6 border-t border-line pt-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-12">
           <div className="min-w-0">
             <p className="mb-2.5 font-mono text-xs uppercase tracking-[0.14em] text-ink-3">
               What runs live right now ·{" "}

@@ -132,7 +132,7 @@ export function UseCases() {
           </TabsList>
           {USE_CASES.map((useCase) => (
             <TabsContent key={useCase.id} value={useCase.id} forceMount className="min-w-0 data-[state=inactive]:hidden">
-              <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-center lg:gap-12">
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-center lg:gap-12">
                 <div className="min-w-0">
                   <p className="text-pretty font-serif text-2xl leading-snug text-ink sm:text-3xl">{useCase.situation}</p>
                   <ol className="mt-5 grid gap-3">
