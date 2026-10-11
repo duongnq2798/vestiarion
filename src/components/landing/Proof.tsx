@@ -24,15 +24,17 @@ const CHECK_IT = [
   { href: GITHUB_URL, label: "The source code, MIT licensed", external: true },
 ] as const;
 
-export function Proof({
-  numbers,
-  latest,
-  provenance,
-}: {
-  numbers: Promise<LandingNumbers>;
+/** What the proof reads besides the open numbers: the team's latest decision, and which legs run live. */
+export interface ProofFacts {
   latest: LatestDecisionShown | null;
   provenance: ProvenanceLeg[];
-}) {
+}
+
+/**
+ * The section's words and links are drawn at once; each part read from production streams in behind its own fallback
+ * (landing stream S1), so no read holds back the page above it, the hero included.
+ */
+export function Proof({ numbers, facts }: { numbers: Promise<LandingNumbers>; facts: Promise<ProofFacts> }) {
   return (
     <section id="proof" aria-labelledby="proof-title" className="scroll-mt-16 border-b border-line bg-ground">
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
@@ -48,11 +50,9 @@ export function Proof({
           </div>
         </Reveal>
 
-        {latest && (
-          <div className="mt-10 rounded-2xl border border-line bg-surface p-5 shadow-surface sm:p-6">
-            <LatestDecisionCard decision={latest} headingLevel={3} />
-          </div>
-        )}
+        <Suspense fallback={<DecisionFallback />}>
+          <Latest source={facts} />
+        </Suspense>
 
         <div className="mt-5">
           <Suspense fallback={<NumbersFallback />}>
@@ -68,7 +68,9 @@ export function Proof({
                 Live on Arc mainnet
               </Link>
             </p>
-            <ProvenanceBar legs={provenance} />
+            <Suspense fallback={<Skeleton className="h-20 rounded-2xl sm:h-[4.75rem]" />}>
+              <Live source={facts} />
+            </Suspense>
           </div>
           <div className="min-w-0">
             <p className="mb-2.5 font-mono text-xs uppercase tracking-[0.14em] text-ink-3">Check it without us</p>
@@ -102,9 +104,38 @@ export function Proof({
   );
 }
 
+/** The team's latest decision, or nothing when there is none to show. */
+export function LatestPanel({ latest }: { latest: LatestDecisionShown | null }) {
+  if (!latest) return null;
+  return (
+    <div className="mt-10 rounded-2xl border border-line bg-surface p-5 shadow-surface sm:p-6">
+      <LatestDecisionCard decision={latest} headingLevel={3} />
+    </div>
+  );
+}
+
+async function Latest({ source }: { source: Promise<ProofFacts> }) {
+  const { latest } = await source;
+  return <LatestPanel latest={latest} />;
+}
+
+async function Live({ source }: { source: Promise<ProofFacts> }) {
+  const { provenance } = await source;
+  return <ProvenanceBar legs={provenance} />;
+}
+
 async function Figures({ source }: { source: Promise<LandingNumbers> }) {
   const { mainnet, testnet } = await source;
   return <NetworkPanels mainnet={mainnet} testnet={testnet} />;
+}
+
+function DecisionFallback() {
+  return (
+    <div aria-busy="true" className="mt-10">
+      <p className="sr-only">Loading the agent&apos;s latest decision</p>
+      <Skeleton className="h-[30rem] rounded-2xl sm:h-[17rem] lg:h-[12.5rem]" />
+    </div>
+  );
 }
 
 function NumbersFallback() {

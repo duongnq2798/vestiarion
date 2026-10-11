@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { LiveProof, NetworkPanels } from "@/components/landing/LiveProof";
-import { Proof } from "@/components/landing/Proof";
+import { LatestPanel, Proof } from "@/components/landing/Proof";
 import { landingProvenance, RESERVE_PROOF_HREF } from "@/components/landing/provenance";
 import { ProvenanceBar } from "@/components/vx/Provenance";
 import type { OpenNumbers, SideNumbers } from "@/lib/platform/open-numbers";
@@ -180,9 +180,18 @@ describe("the hero's live legs", () => {
   });
 
   it("sit in the landing's proof, with the Arc mainnet claim linked to the mainnet numbers (landing clarity P3)", () => {
-    const markup = renderToStaticMarkup(<Proof numbers={new Promise(() => {})} latest={null} provenance={landingProvenance(base)} />);
+    // Every read still pending: the section's words and links are drawn, each read waits behind its own fallback.
+    const markup = renderToStaticMarkup(<Proof numbers={new Promise(() => {})} facts={new Promise(() => {})} />);
     expect(markup).toMatch(/<a[^>]*href="\/open#mainnet"[^>]*>Live on Arc mainnet<\/a>/);
     expect(text(markup)).toContain("What runs live right now · Live on Arc mainnet");
-    expect(text(markup)).toContain("See the latest payment on Arc mainnet");
+    expect(text(markup)).toContain("Don't take our word for it.");
+    expect(text(markup)).toContain("Loading the agent's latest decision");
+    expect(text(markup)).toContain("Loading the open numbers");
+    expect(markup).toMatch(/<a[^>]*href="\/docs\/guides\/audit-export"/);
+    expect(text(renderToStaticMarkup(<ProvenanceBar legs={landingProvenance(base)} />))).toContain("See the latest payment on Arc mainnet");
+  });
+
+  it("show the team's latest decision when there is one, and nothing when there is none", () => {
+    expect(renderToStaticMarkup(<LatestPanel latest={null} />)).toBe("");
   });
 });
