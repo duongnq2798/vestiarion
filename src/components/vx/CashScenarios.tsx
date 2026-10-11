@@ -318,7 +318,7 @@ export function ScenarioChart({ result }: { result: ScenarioResult }) {
         {shortIndex >= 0 && (
           <span className="inline-flex items-center gap-1.5">
             <svg aria-hidden width="4" height="12" className="overflow-visible">
-              <line x1="2" y1="0" x2="2" y2="12" stroke="var(--color-held)" strokeWidth="1.5" />
+              <line x1="2" y1="0" x2="2" y2="12" stroke="var(--color-held)" strokeWidth="1.5" strokeDasharray="3 3" />
             </svg>
             First short day
           </span>
@@ -327,9 +327,9 @@ export function ScenarioChart({ result }: { result: ScenarioResult }) {
       <div className="relative h-40 touch-pan-y select-none" onPointerMove={move} onPointerLeave={() => setHover(null)} role="img" aria-label={description}>
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden className="absolute inset-0 size-full overflow-visible">
           <line x1="0" y1={y(0)} x2="100" y2={y(0)} stroke="var(--color-line-strong)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-          {shortIndex >= 0 && <line x1={x(shortIndex)} y1={CHART.top} x2={x(shortIndex)} y2={CHART.bottom} stroke="var(--color-held)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />}
           <path d={steps((index) => result.days[index].base)} fill="none" stroke="var(--color-ink-3)" strokeWidth="2" strokeDasharray="4 3" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
           <path d={steps((index) => result.days[index].scenario)} fill="none" stroke="var(--color-agent)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+          {shortIndex >= 0 && <line x1={x(shortIndex)} y1={CHART.top} x2={x(shortIndex)} y2={CHART.bottom} stroke="var(--color-held)" strokeWidth="1.5" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />}
           {hover !== null && <line x1={x(hover)} y1="0" x2={x(hover)} y2="100" stroke="var(--color-ink-3)" strokeWidth="1" vectorEffect="non-scaling-stroke" />}
         </svg>
         <span className="absolute left-0 -translate-y-1/2 bg-surface/80 pr-1 text-[0.6875rem] text-ink-3 tabular-nums" style={{ top: `${y(0)}%` }}>
