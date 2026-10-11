@@ -13,7 +13,7 @@ Open **Bills & receivables**, open **New invoice** and choose **Import a list**.
 - **Choose a CSV file, or drop one here.** Excel's "CSV UTF-8" keeps names in any language. A file saved as plain "CSV" is read too; if its names look wrong, the panel says "This file is not saved as UTF-8." Save it as "CSV UTF-8", or paste the rows instead.
 - **Or paste rows from Excel or Google Sheets.** Select the rows with their column names, copy them, paste them, and choose **Read the pasted rows**.
 
-A comma, semicolon or tab between columns is found by itself, and so are quoted fields. Starting from nothing? **Copy a CSV template** gives Vestiarion's own column names and one sample row.
+A comma, semicolon or tab between columns is found by itself, and so are quoted fields. A quote inside a cell, such as the inch mark in 12" pipe, is kept as written. Starting from nothing? **Copy a CSV template** gives Vestiarion's own column names and one sample row.
 
 ## 2. Check the columns
 
@@ -32,10 +32,12 @@ The panel lists each part of an invoice with the column it found for it, and the
 Then answer what only you can say. Each question appears only when the list needs it:
 
 - **These rows are**: **Bills to pay** or **Invoices to collect**, when the list has no direction column. Nothing is chosen for you.
-- **Day first (15/10/2026)** or **Month first (10/15/2026)**, when no date in the list settles it. A date such as 25/10/2026 settles it; a list of dates like 03/04/2026 does not, and Vestiarion never guesses.
+- **Day first (15/10/2026)** or **Month first (10/15/2026)**, when no date in the list settles it. A date such as 25/10/2026 settles it; a list of dates like 03/04/2026 does not, and Vestiarion never guesses. When the list writes its years with two digits, the year could come first or last, so **Year first (26/10/15)** is offered too: 26.10.15 is 15 October 2026 written year first, and 26 October 2015 written day first. A date with a four-digit year, or one that only one order fits, such as 10/15/26, settles where the year is. Only the ways the list's dates can be written are offered.
 - **1,234.50** or **1.234,50**, when no amount settles how the list writes its numbers.
 - The currency of the bills, or of the rows that leave it blank.
 - **The goods or services on every bill were received**, when the list has no column that says so. Tick it only if they all were: the agent waits for goods to be marked received before it pays a bill.
+
+An answer counts only while its question is shown. If you choose another column and the list's own dates or amounts then settle it, the question goes, and they are read as the list writes them.
 
 Then choose **Check 6 rows**. The button counts your bills.
 
@@ -77,8 +79,8 @@ Outside shadow mode, Vestiarion takes bills in USDC or EURC. A row in another cu
 
 ## How dates, amounts and currencies are read
 
-- **Dates**: 2026-10-15, 2026/10/15, 2026年10月15日, 15/10/2026 or 10/15/2026 as the list writes them, 15.10.26, 15 Oct 2026, Oct 15, 2026, and Excel's own date numbers, such as 46310.
-- **Amounts**: 1,234.50, 1.234,50, 1 234,50 or 1'234.50, as the list writes them, read exactly. A minus sign or brackets is a credit note, which is not a bill.
+- **Dates**: 2026-10-15, 2026/10/15, 2026年10月15日, 15/10/2026 or 10/15/2026 as the list writes them, 15.10.26 or 26.10.15 with a two-digit year last or first, 15 Oct 2026, Oct 15, 2026, and Excel's own date numbers, such as 46310.
+- **Amounts**: 1,234.50, 1.234,50, 1 234,50 or 1'234.50, as the list writes them, and 1,23,456.50 in lakhs and crores, read exactly. A minus sign or brackets is a credit note, which is not a bill.
 - **Decimals by currency**: USDC and EURC take up to 6. The yen and the won take none: "Amount “¥1,500.5” has decimals, and JPY amounts are whole numbers." Other currencies take up to 2.
 - **Currency**: a code in the currency column, or a symbol beside the amount when it names one currency: ₩ is KRW, ₱ PHP, RM MYR, S$ SGD, € EUR. A $ or a ¥ could be several currencies, so it only fits the currency the row or the list names: $ with USDC, ¥ with JPY.
 
@@ -97,7 +99,7 @@ The list itself is not kept. A payable's decision trail says "A person added it,
 
 | Message | What to do |
 | --- | --- |
-| A quoted field is never closed. Check the list's quotes, then try again. | A cell opens a quote it never closes. Fix it in the spreadsheet, or paste the rows instead. |
+| A quoted field is never closed. Check the list's quotes, then try again. | A cell starts with a quote that nothing closes. Close the quote or remove it in the spreadsheet, then give the list again. |
 | The list must be smaller than 1 MB. | Split the list. |
 | Import at most 200 bills at a time. Split the list. | Import the list in parts. |
 | Choose whether the list's dates are day first or month first. | Answer the question about dates. |

@@ -21,7 +21,7 @@ import { toast } from "@/components/ui/Toaster";
 import { AGENT_EXPECTED_EVENT } from "@/lib/agent-activity";
 import { currencyDigits, splitCurrency } from "@/lib/bill-import/amounts";
 import { billRows, columnLetter, columnNames, detectMapping, FIELD_LABELS, IMPORT_FIELDS, REQUIRED_FIELDS, sampleValues, type ImportField } from "@/lib/bill-import/columns";
-import { readDate } from "@/lib/bill-import/dates";
+import { DATE_ORDERS, readDate, type DateOrder } from "@/lib/bill-import/dates";
 import {
   acceptedCurrencies,
   failedRowsCsv,
@@ -157,6 +157,13 @@ export function ListStep({ onList, error }: { onList: (text: string, source: str
 
 const NONE = "none";
 
+/** Each way a list can write its dates, offered when the list's dates can be in it. */
+const DATE_ORDER_OPTIONS: ReadonlyArray<{ value: DateOrder; label: string }> = [
+  { value: "dmy", label: "Day first (15/10/2026)" },
+  { value: "mdy", label: "Month first (10/15/2026)" },
+  { value: "ymd", label: "Year first (26/10/15)" },
+];
+
 /** The first value of a column that reads two ways, to ask about in the list's own words. */
 function twoWayDate(list: ImportList, settings: ImportSettings): string | null {
   const column = settings.mapping.dueDate;
@@ -164,7 +171,7 @@ function twoWayDate(list: ImportList, settings: ImportSettings): string | null {
   for (const row of billRows(list.table, settings.hasHeader)) {
     const cell = row.cells[column] ?? "";
     const read = readDate(cell, null);
-    if (!read.ok && read.reason.startsWith("could be read two ways")) return cell;
+    if (!read.ok && read.reason.startsWith("could be read")) return cell;
   }
   return null;
 }
@@ -290,13 +297,14 @@ export function ColumnsStep({
       )}
       {questions.dateOrder.ask && (
         <RadioGroup
-          legend={questions.dateOrder.mixed ? "The list writes dates both ways. Which way is right?" : `Dates like ${dateSample ?? "03/04/2026"} are written`}
-          value={settings.dateOrder ?? ""}
-          onValueChange={(value) => set({ dateOrder: value === "mdy" ? "mdy" : "dmy" })}
-          options={[
-            { value: "dmy", label: "Day first (15/10/2026)" },
-            { value: "mdy", label: "Month first (10/15/2026)" },
-          ]}
+          legend={
+            questions.dateOrder.mixed
+              ? `The list writes dates ${questions.dateOrder.orders.length > 2 ? "more than one way" : "both ways"}. Which way is right?`
+              : `Dates like ${dateSample ?? "03/04/2026"} are written`
+          }
+          value={settings.dateOrder !== null && questions.dateOrder.orders.includes(settings.dateOrder) ? settings.dateOrder : ""}
+          onValueChange={(value) => set({ dateOrder: DATE_ORDERS.find((order) => order === value) ?? null })}
+          options={DATE_ORDER_OPTIONS.filter((option) => questions.dateOrder.orders.includes(option.value))}
         />
       )}
       {questions.decimalMark.ask && (

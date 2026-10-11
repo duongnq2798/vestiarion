@@ -32,6 +32,11 @@ anything is written, and adds the rows through the same command as an invoice ty
   inside its amounts.
 - Quoted fields with doubled quotes, delimiters and line breaks inside them; a byte-order mark is dropped; a field
   left open is refused for the whole list ("A quoted field is never closed").
+- A quote opens a quoted field only as a field's first character, and closes it only before a delimiter, a line break
+  or the end. Any other quote is a character: an inch mark (`Pipe 12" PVC`, `Bolt 6"`) never joins rows, as a quote
+  that toggled quoting anywhere would. A spreadsheet pastes a cell as it is, quoting only one with a line break, so a
+  pasted cell that only starts with a quote (`"Rush" order`) is read as written; in a CSV file, a quote its writer
+  forgot to double inside a quoted field is kept when the field closes later on its line.
 - Blank rows are skipped but counted, so each row keeps the number the spreadsheet shows it under: with a header,
   the first bill is row 2.
 - At most 200 bills per import, as before. More is refused for the whole list: "Import at most 200 bills at a time.
@@ -75,12 +80,21 @@ anything is written, and adds the rows through the same command as an invoice ty
 
 **B5. Dates: read, never guessed.** (`src/lib/bill-import/dates.ts`)
 - Accepted: ISO (2026-10-15, also with a time), year first (2026/10/15, 2026.10.15, 2026. 10. 15., 2026年10月15日),
-  day or month first with a four- or two-digit year (15/10/2026, 10/15/2026, 15-10-26, 15.10.2026), a month in
+  day or month first with a four- or two-digit year (15/10/2026, 10/15/2026, 15-10-26, 15.10.2026), a two-digit
+  year first (26.10.15, 26/10/15, as Korean and Japanese lists write them), a month in
   words (10 Oct 2026, 10-Oct-2026, Oct 10, 2026, October 10 2026), and Excel serial numbers (46310 is 2026-10-15).
 - Day or month first is decided for the whole list from its dates: a first part above 12 anywhere means day first, a
   second part above 12 anywhere means month first. When no date settles it, and at least one could be read both ways
   (03/04/2026, not 03/03/2026), the person is asked: **Day first (15/10/2026)** or **Month first (10/15/2026)**.
   When the list holds both kinds, they are asked too, and the rows that do not fit their answer are error rows.
+- A two-digit year could be first or last: 26.10.15 is 2026-10-15 year first, 2015-10-26 day first. The list's order is
+  the one every date in numbers can be in: a day above 12 rules month first out, a month above 12 rules day first out
+  and year first with it when that part would be the month, a four-digit year last or a part above 31 rules out the
+  places a two-digit year is not. When more than one order is left and a date reads differently in them, the person
+  is asked, offered only those orders, **Year first (26/10/15)** among them; when none is left, they are offered every
+  order a date can be in.
+- An answer counts only while its question is asked. A list that settles the order itself, say after another column
+  is chosen, is read in its own order, never in an answer the panel no longer shows. The decimal mark (B6) likewise.
 - A date that is not a real day (31/02/2026) is an error row. The discount deadline is read the same way.
 - Cost if wrong: one question for a list whose dates fall on the first twelve days of the month.
 
@@ -92,6 +106,8 @@ anything is written, and adds the rows through the same command as an invoice ty
   (1.234.567). Spaces, non-breaking spaces and apostrophes always group thousands.
 - In a currency without decimals, such as JPY or KRW, a mark followed by three digits groups thousands, so ¥12,000
   says the comma groups.
+- Commas may also group lakhs and crores, as Excel writes amounts in India (1,23,456.50, 12,34,56,789), in any
+  currency: grouping never changes a digit.
 - When no cell settles it, and one could be read both ways (1,234 or 1.234), the person is asked: **1,234.50** or
   **1.234,50**. When cells disagree, they are asked, and the rows that do not fit are error rows.
 - Decimals per currency (I07): USDC and EURC take at most 6; JPY, KRW and the other currencies without minor units

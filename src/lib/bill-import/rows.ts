@@ -7,7 +7,7 @@ import type { OriginalBill } from "../shadow-bills";
 import { SHADOW_CURRENCIES } from "../shadow-currency";
 import { decimalKey, decimalMarkOf, isCurrencyCode, readAmount, splitCurrency, symbolFits, type DecimalMark } from "./amounts";
 import { billRows, columnNames, columnCount, detectMapping, FIELD_LABELS, IMPORT_FIELDS, looksLikeHeader, REQUIRED_FIELDS, type ColumnMapping, type ImportField } from "./columns";
-import { dateOrderOf, readDate, type DateOrder } from "./dates";
+import { dateOrderOf, orderWords, readDate, type DateOrder, type DateOrderQuestion } from "./dates";
 import type { Table, TableRow } from "./table";
 
 /**
@@ -27,7 +27,7 @@ export const importSettingsSchema = z.object({
   hasHeader: z.boolean(),
   mapping: z.partialRecord(z.enum(IMPORT_FIELDS), z.number().int().min(0).max(500)),
   direction: z.enum(["payable", "receivable"]).nullable(),
-  dateOrder: z.enum(["dmy", "mdy"]).nullable(),
+  dateOrder: z.enum(["dmy", "mdy", "ymd"]).nullable(),
   decimalMark: z.enum([".", ","]).nullable(),
   currency: z.string().regex(/^[A-Z]{3,4}$/).nullable(),
   goodsReceived: z.boolean(),
@@ -142,7 +142,7 @@ export interface ImportQuestions {
   missing: ImportField[];
   /** The list has no direction column: the person says bills to pay or invoices to collect. */
   direction: boolean;
-  dateOrder: { order: DateOrder | null; ask: boolean; mixed: boolean };
+  dateOrder: DateOrderQuestion;
   decimalMark: { mark: DecimalMark | null; ask: boolean; mixed: boolean };
   /** The list has a currency column: the list's currency is only for its blank cells. */
   currencyColumn: boolean;
@@ -169,6 +169,12 @@ export function questionsFor(table: Table, settings: ImportSettings, workspace: 
   };
 }
 
+/** The person's answer about dates, while the list asks it and offers that order; null otherwise. */
+function answeredOrder(questions: ImportQuestions, settings: ImportSettings): DateOrder | null {
+  const { dateOrder } = settings;
+  return questions.dateOrder.ask && dateOrder !== null && questions.dateOrder.orders.includes(dateOrder) ? dateOrder : null;
+}
+
 const listOf = (words: string[]) => (words.length <= 1 ? words.join("") : `${words.slice(0, -1).join(", ")} and ${words.at(-1)}`);
 
 /** What the person still has to answer before the rows can be checked, in words; null when nothing. */
@@ -179,7 +185,7 @@ export function unanswered(questions: ImportQuestions, settings: ImportSettings)
   const columns = Object.values(settings.mapping);
   if (new Set(columns).size !== columns.length) return "Choose a different column for each field.";
   if (questions.direction && settings.direction === null) return "Choose whether the list holds bills to pay or invoices to collect.";
-  if (questions.dateOrder.ask && settings.dateOrder === null) return "Choose whether the list's dates are day first or month first.";
+  if (questions.dateOrder.ask && answeredOrder(questions, settings) === null) return `Choose whether the list's dates are ${orderWords(questions.dateOrder.orders)}.`;
   if (questions.decimalMark.ask && settings.decimalMark === null) return "Choose how the list writes its amounts: 1,234.50 or 1.234,50.";
   if (settings.currency === null) return "Choose the list's currency.";
   return null;
@@ -227,8 +233,10 @@ function hasWord(text: string, needle: string): boolean {
 
 export function readRows(table: Table, settings: ImportSettings, workspace: ImportWorkspace): ReadRow[] {
   const questions = questionsFor(table, settings, workspace);
-  const order = settings.dateOrder ?? questions.dateOrder.order;
-  const mark = settings.decimalMark ?? questions.decimalMark.mark;
+  // An answer counts only while its question is asked: once the list settles it, say after another column is chosen,
+  // the list's own order and mark read the rows, never an answer the panel no longer shows.
+  const order = questions.dateOrder.ask ? answeredOrder(questions, settings) : questions.dateOrder.order;
+  const mark = questions.decimalMark.ask ? settings.decimalMark : questions.decimalMark.mark;
   return billRows(table, settings.hasHeader).map((row) => {
     const cell = (field: ImportField) => cellOf(row, settings.mapping, field);
     const problems: string[] = [];

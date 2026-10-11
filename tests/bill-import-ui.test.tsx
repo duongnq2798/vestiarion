@@ -66,8 +66,25 @@ describe("the columns step", () => {
     expect(markup).toContain("Dates like 03/04/2026 are written");
     expect(markup).toContain("Day first (15/10/2026)");
     expect(markup).toContain("Month first (10/15/2026)");
+    expect(markup).not.toContain("Year first");
     expect(markup).toContain("Amounts like 1,234 are written");
     expect(markup).toContain("A comma before the cents.");
+  });
+
+  it("offers year first, and only the ways the list's dates can be written, for a list whose years have two digits", () => {
+    const yearFirst = readTable("Vendor\tAmount\tDue\nKanto Paper\t1200\t26.10.15\n");
+    const plain = { shadowOn: false, shadowCurrency: null, network: "arc-testnet" as const };
+    const settings = { ...startingSettings(yearFirst, plain), direction: "payable" as const };
+    const markup = decode(
+      renderToStaticMarkup(
+        <ColumnsStep list={{ ...list, table: yearFirst }} settings={settings} workspace={plain} onChange={noop} onCheck={noop} onRestart={noop} pending={false} error="" />
+      )
+    );
+    expect(markup).toContain("Dates like 26.10.15 are written");
+    expect(markup).toContain("Day first (15/10/2026)");
+    expect(markup).toContain("Year first (26/10/15)");
+    expect(markup).not.toContain("Month first");
+    expect(markup).toContain("Choose whether the list's dates are day first or year first.");
   });
 });
 

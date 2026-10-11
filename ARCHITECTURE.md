@@ -978,11 +978,14 @@ invoices move onto `addInvoice` next.
 
 **A bill list is imported in its own format**
 (docs/superpowers/specs/2026-10-10-import-wizard-design.md). Pure, browser-safe
-modules under `src/lib/bill-import/` read it: `table.ts` (the delimiter, quotes
+modules under `src/lib/bill-import/` read it: `table.ts` (the delimiter, quotes,
+which open a field only as its first character so an inch mark never joins rows,
 and row numbers), `columns.ts` (each field's column, from the names businesses
-give it), `dates.ts` (day or month first decided from the whole list, or asked,
-never guessed), `amounts.ts` (the list's decimal mark, symbols, and decimals by
-currency, kept as exact decimal strings) and `rows.ts` (each row's fate: added,
+give it), `dates.ts` (day, month or a two-digit year first, decided from the
+whole list, or asked, never guessed), `amounts.ts` (the list's decimal mark,
+symbols, thousands or lakh grouping, and decimals by currency, kept as exact
+decimal strings) and `rows.ts` (the person's answers, which count only while
+their question is asked, and each row's fate: added,
 already in the workspace, or why not, and the failed rows as a CSV with the
 reason). The panel on Bills & receivables (`src/components/intake/BillImport.tsx`) asks the
 person to confirm the columns and answer what the list cannot say; the server

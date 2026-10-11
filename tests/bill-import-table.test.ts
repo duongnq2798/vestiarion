@@ -60,6 +60,57 @@ describe("readTable", () => {
     expect(readTable('"a,b,c";d\n1;2').delimiter).toBe(";");
   });
 
+  it("keeps an inch mark in rows pasted from a spreadsheet, which never quotes such a cell, and merges no rows", () => {
+    const pasted = [
+      "Supplier\tDescription\tTotal\tDue date",
+      "Acme\tPipe 12\" PVC\t100.00\t2026-11-01",
+      "Beta\tElbows\t200.00\t2026-11-02",
+      "Gamma\tValves\t300.00\t2026-11-03",
+      "Delta\tBolt 6\" steel\t400.00\t2026-11-04",
+      "Echo\tWasher\t500.00\t2026-11-05",
+    ].join("\r\n");
+    const table = readTable(pasted);
+    expect(table.delimiter).toBe("\t");
+    expect(table.rows.map((row) => [row.line, ...row.cells])).toEqual([
+      [1, "Supplier", "Description", "Total", "Due date"],
+      [2, "Acme", "Pipe 12\" PVC", "100.00", "2026-11-01"],
+      [3, "Beta", "Elbows", "200.00", "2026-11-02"],
+      [4, "Gamma", "Valves", "300.00", "2026-11-03"],
+      [5, "Delta", "Bolt 6\" steel", "400.00", "2026-11-04"],
+      [6, "Echo", "Washer", "500.00", "2026-11-05"],
+    ]);
+  });
+
+  it("keeps an inch mark in a comma list's unquoted cell, even last in its cell", () => {
+    expect(cells('Supplier,Size,Total\nAcme,12" pipe,100\nBeta,6",200\nGamma,ok,300\n')).toEqual([
+      ["Supplier", "Size", "Total"],
+      ["Acme", '12" pipe', "100"],
+      ["Beta", '6"', "200"],
+      ["Gamma", "ok", "300"],
+    ]);
+  });
+
+  it("reads a pasted cell that only starts with a quoted word as it is written", () => {
+    expect(cells('Supplier\tMemo\tTotal\nAcme\t"Rush" order\t100\nBeta\tBolt 6"\t200\n')).toEqual([
+      ["Supplier", "Memo", "Total"],
+      ["Acme", '"Rush" order', "100"],
+      ["Beta", 'Bolt 6"', "200"],
+    ]);
+    expect(cells('Supplier,Memo,Total\nAcme,"Rush" order,100\n')[1]).toEqual(["Acme", '"Rush" order', "100"]);
+  });
+
+  it("keeps a quote a CSV writer forgot to double inside a quoted field", () => {
+    expect(cells('Supplier,Memo,Total\nAcme,"Pipe 12" PVC, grey",100\n')[1]).toEqual(["Acme", 'Pipe 12" PVC, grey', "100"]);
+  });
+
+  it("reads an empty quoted field and one that is only a doubled quote", () => {
+    expect(cells('a,b,c\n"",x,""""\n')[1]).toEqual(["", "x", '"']);
+  });
+
+  it("counts no delimiter that a mid-cell quote seems to hide or show when choosing one", () => {
+    expect(readTable('Name\tSize 12"\tQty\tNote "a,b,c,d"\nA\t1\t2\t3').delimiter).toBe("\t");
+  });
+
   it("refuses a quoted field that is never closed", () => {
     expect(() => readTable('Supplier,Memo\nA,"open')).toThrow(TableError);
     expect(() => readTable('Supplier,Memo\nA,"open')).toThrow("A quoted field is never closed");

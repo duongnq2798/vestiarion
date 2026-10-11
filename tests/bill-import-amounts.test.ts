@@ -104,6 +104,24 @@ describe("readAmount", () => {
     expect(value("1,234", null, "USDC")).toBe("could be read two ways: say how the list writes its amounts");
   });
 
+  it("reads lakh and crore grouping, as Excel writes amounts in India, exactly", () => {
+    expect(value("1,23,456.00", ".", "INR")).toBe("123456");
+    expect(value("12,34,567.00", ".", "INR")).toBe("1234567");
+    expect(value("12,34,56,789", ".", "INR")).toBe("123456789");
+    expect(value("1,00,000", null, "INR")).toBe("100000");
+    expect(value(splitCurrency("₹1,23,456.50").number, null, "INR")).toBe("123456.5");
+    // A sheet set up for India groups every amount so, its USDC too.
+    expect(value("1,23,456.789", ".", "USDC")).toBe("123456.789");
+    expect(decimalMarkOf([{ text: "₹1,23,456.00", currency: "INR" }, { text: "₹12,34,56,789", currency: "INR" }])).toEqual({ mark: ".", ask: false, mixed: false });
+  });
+
+  it("still refuses grouping that is neither the usual kind nor lakh and crore", () => {
+    expect(value("1,234,56,789", ".", "INR")).toBe("is not a number");
+    expect(value("123,45,678", ".", "INR")).toBe("is not a number");
+    expect(value("1,2,345", ".", "INR")).toBe("is not a number");
+    expect(value("1.23.456,00", ",", "INR")).toBe("is not a number");
+  });
+
   it("refuses a cell that does not fit the list's mark", () => {
     expect(value("1.234,50", ".", "USDC")).toBe("does not fit the list's amounts, written like 1,234.50");
     expect(value("1,234.50", ",", "USDC")).toBe("does not fit the list's amounts, written like 1.234,50");

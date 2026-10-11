@@ -241,10 +241,23 @@ describe("a list's questions", () => {
     const table = readTable("Vendor,Amount,Due date\nKanto Paper,10,03/04/2026\nKanto Paper,11,05/06/2026\n");
     const settings = startingSettings(table, PLAIN);
     const questions = questionsFor(table, settings, PLAIN);
-    expect(questions.dateOrder).toEqual({ order: null, ask: true, mixed: false });
+    expect(questions.dateOrder).toEqual({ order: null, ask: true, mixed: false, orders: ["dmy", "mdy"] });
+    expect(unanswered(questions, { ...settings, direction: "payable" })).toBe("Choose whether the list's dates are day first or month first.");
     const rows = (order: "dmy" | "mdy") => readRows(table, { ...settings, direction: "payable", dateOrder: order }, PLAIN).map((row) => row.dueDate);
     expect(rows("dmy")).toEqual(["2026-04-03", "2026-06-05"]);
     expect(rows("mdy")).toEqual(["2026-03-04", "2026-05-06"]);
+  });
+
+  it("asks whether a list's two-digit years come first, and reads its dates as answered", () => {
+    const table = readTable("Vendor,Amount,Due\nKanto Paper,10,26.10.15\nKanto Paper,11,26.11.30\n");
+    const settings: ImportSettings = { ...startingSettings(table, PLAIN), direction: "payable" };
+    const questions = questionsFor(table, settings, PLAIN);
+    expect(questions.dateOrder).toEqual({ order: null, ask: true, mixed: false, orders: ["dmy", "ymd"] });
+    expect(unanswered(questions, settings)).toBe("Choose whether the list's dates are day first or year first.");
+    // An answer the question does not offer is no answer.
+    expect(unanswered(questions, { ...settings, dateOrder: "mdy" })).toBe("Choose whether the list's dates are day first or year first.");
+    expect(unanswered(questions, { ...settings, dateOrder: "ymd" })).toBeNull();
+    expect(readRows(table, { ...settings, dateOrder: "ymd" }, PLAIN).map((row) => row.dueDate)).toEqual(["2026-10-15", "2026-11-30"]);
   });
 
   it("asks how amounts are written when 1,234 reads both ways", () => {
@@ -255,6 +268,62 @@ describe("a list's questions", () => {
     const read = (mark: "." | ",") => readRows(table, { ...settings, direction: "payable", decimalMark: mark }, PLAIN)[0].amount;
     expect(read(".")).toBe("1234");
     expect(read(",")).toBe("1.234");
+  });
+
+  it("reads amounts as the list settles them once their question is gone, whatever was answered before", () => {
+    const table = readTable("Vendor\tNet\tGross\tDue\nKanto Paper\t1,234\t1,234\t2026-10-15\nKanto Paper\t2,500\t2,500.50\t2026-10-16\n");
+    const asked: ImportSettings = { ...startingSettings(table, PLAIN), mapping: { counterparty: 0, amount: 1, dueDate: 3 }, direction: "payable" };
+    expect(questionsFor(table, asked, PLAIN).decimalMark.ask).toBe(true);
+    const answered: ImportSettings = { ...asked, decimalMark: "," };
+    expect(readRows(table, answered, PLAIN).map((row) => row.amount)).toEqual(["1.234", "2.5"]);
+    // Gross settles the mark itself: the answer about Net, no longer asked, decides nothing.
+    const remapped: ImportSettings = { ...answered, mapping: { counterparty: 0, amount: 2, dueDate: 3 } };
+    const questions = questionsFor(table, remapped, PLAIN);
+    expect(questions.decimalMark).toEqual({ mark: ".", ask: false, mixed: false });
+    expect(unanswered(questions, remapped)).toBeNull();
+    expect(readRows(table, remapped, PLAIN).map((row) => [row.amount, row.problems])).toEqual([
+      ["1234", []],
+      ["2500.5", []],
+    ]);
+  });
+
+  it("reads dates as the list settles them once their question is gone, whatever was answered before", () => {
+    const table = readTable("Vendor\tAmount\tIssued\tDue\nKanto Paper\t10\t03/04/2026\t03/04/2026\nKanto Paper\t11\t05/06/2026\t10/15/2026\n");
+    const answered: ImportSettings = {
+      ...startingSettings(table, PLAIN),
+      mapping: { counterparty: 0, amount: 1, dueDate: 2 },
+      direction: "payable",
+      dateOrder: "dmy",
+    };
+    expect(questionsFor(table, answered, PLAIN).dateOrder.ask).toBe(true);
+    expect(readRows(table, answered, PLAIN).map((row) => row.dueDate)).toEqual(["2026-04-03", "2026-06-05"]);
+    // Due settles month first: the answer about Issued, no longer asked, decides nothing.
+    const remapped: ImportSettings = { ...answered, mapping: { counterparty: 0, amount: 1, dueDate: 3 } };
+    expect(questionsFor(table, remapped, PLAIN).dateOrder).toMatchObject({ order: "mdy", ask: false });
+    expect(readRows(table, remapped, PLAIN).map((row) => [row.dueDate, row.problems])).toEqual([
+      ["2026-03-04", []],
+      ["2026-10-15", []],
+    ]);
+  });
+
+  it("reads a pasted list with inch marks row by row, each bill with its own amount and due date", () => {
+    const pasted = [
+      "Supplier\tDescription\tTotal\tDue date",
+      "Acme\tPipe 12\" PVC\t100.00\t2026-11-01",
+      "Beta\tElbows\t200.00\t2026-11-02",
+      "Gamma\tValves\t300.00\t2026-11-03",
+      "Delta\tBolt 6\" steel\t400.00\t2026-11-04",
+      "Echo\tWasher\t500.00\t2026-11-05",
+    ].join("\r\n");
+    const table = readTable(pasted);
+    const rows = readRows(table, { ...startingSettings(table, PLAIN), direction: "payable" }, PLAIN);
+    expect(rows.map((row) => [row.line, row.counterparty, row.memo, row.amount, row.dueDate, row.problems])).toEqual([
+      [2, "Acme", "Pipe 12\" PVC", "100", "2026-11-01", []],
+      [3, "Beta", "Elbows", "200", "2026-11-02", []],
+      [4, "Gamma", "Valves", "300", "2026-11-03", []],
+      [5, "Delta", "Bolt 6\" steel", "400", "2026-11-04", []],
+      [6, "Echo", "Washer", "500", "2026-11-05", []],
+    ]);
   });
 
   it("names the columns a row cannot be added without", () => {

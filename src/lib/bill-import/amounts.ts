@@ -121,6 +121,12 @@ export function decimalKey(value: string | number): string {
   return canonical(whole, fraction);
 }
 
+/**
+ * Thousands, then lakhs and crores, grouped by commas as Excel writes amounts in India: 1,23,456 and 12,34,56,789.
+ * Grouping never changes a digit, so an amount in any currency may be grouped so.
+ */
+const LAKH_GROUPED = /^\d{1,2}(?:,\d{2})*,\d{3}$/;
+
 /** The most digits before the decimal mark an invoice's amount holds (`numeric(20, 6)`). */
 const MAX_WHOLE_DIGITS = 14;
 
@@ -146,7 +152,9 @@ export function readAmount(number: string, listMark: DecimalMark | null, currenc
   const [whole, fraction = "", extra] = plain.split(mark);
   if (extra !== undefined || !/^\d*$/.test(fraction)) return { ok: false, reason: "is not a number" };
   const grouped = new RegExp(`^\\d{1,3}(?:\\${group}\\d{3})+$`);
-  if (!/^\d+$/.test(whole) && !grouped.test(whole)) return { ok: false, reason: "is not a number" };
+  if (!/^\d+$/.test(whole) && !grouped.test(whole) && !(group === "," && LAKH_GROUPED.test(whole))) {
+    return { ok: false, reason: "is not a number" };
+  }
   const integer = whole.split(group).join("");
   if (integer.replace(/^0+/, "").length > MAX_WHOLE_DIGITS) return { ok: false, reason: "is too large" };
   const decimals = fraction.replace(/0+$/, "");
