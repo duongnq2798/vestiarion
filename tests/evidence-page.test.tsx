@@ -36,11 +36,22 @@ vi.mock("@/components/vx/Shell", async (importOriginal) => ({
 }));
 
 import EvidencePage, { metadata } from "@/app/o/[slug]/evidence/[kind]/[id]/page";
-import { EvidenceAccess, EvidenceChainView, LINK_STATE } from "@/components/vx/EvidenceChain";
+import { EvidenceAccess, EvidenceChainView, evidenceStatus, evidenceSub, LINK_STATE } from "@/components/vx/EvidenceChain";
 
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, " ").trim();
 const view = (chain: EvidenceChain) => renderToStaticMarkup(<EvidenceChainView chain={chain} orgSlug="northstar" publicKeys={{}} />);
 const PAID = buildEvidenceChain(paidInFull());
+const BILL = (paidInFull().subject as { invoice: object }).invoice;
+/** The paid bill, its transfer simulated: nothing moved on chain. */
+const SIMULATED = buildEvidenceChain(
+  paidInFull({
+    subject: { kind: "invoice", invoice: { ...BILL, tx_ref: "sim_abc" } as never },
+    payment: { ...paidInFull().payment!, provider: "simulated", provider_mode: "simulated", tx_hash: null },
+    receipt: null,
+  })
+);
+/** The paid bill, paid early: 12.25 of its 12.50 USDC, the early-payment discount taking the rest. */
+const DISCOUNTED = buildEvidenceChain(paidInFull({ subject: { kind: "invoice", invoice: { ...BILL, paid_amount: 12.25 } as never }, payment: { ...paidInFull().payment!, amount: "12.250000" } }));
 
 describe("a payable's chain, as the page draws it", () => {
   const markup = view(PAID);
@@ -86,6 +97,19 @@ describe("a payable's chain, as the page draws it", () => {
   it("names the record and where it lives", () => {
     expect(text(markup)).toContain("October design retainer Payee Northstar Studio Amount 12.50 USDC Status Paid Record A bill on Bills & receivables");
     expect(markup).toContain('href="/o/northstar/invoices"');
+  });
+});
+
+describe("what the record says it paid", () => {
+  it("says a simulated payment was simulated, where the record's status is", () => {
+    expect(text(view(SIMULATED))).toContain("Amount 12.50 USDC Status Paid in a simulation Record A bill");
+    expect(evidenceStatus(SIMULATED.subject)).toBe("Paid in a simulation");
+  });
+
+  it("shows what a bill paid early carried beside the bill, and says why it is less", () => {
+    expect(text(view(DISCOUNTED))).toContain("Amount 12.50 USDC Paid 12.25 USDC , less the early-payment discount Status Paid");
+    expect(evidenceSub(DISCOUNTED.subject)).toBe("October design retainer: 12.25 USDC to Northstar Studio, for a 12.50 USDC bill less its early-payment discount. Each link says how it is known, and where it came from.");
+    expect(evidenceSub(PAID.subject)).toBe("October design retainer: 12.50 USDC to Northstar Studio. Each link says how it is known, and where it came from.");
   });
 });
 
@@ -142,10 +166,20 @@ describe("who can see this (E10)", () => {
     expect(words).toContain("Nothing on this page shares or changes anything: Download evidence is its only action.");
   });
 
-  it("says whether the receipt is shared now, was stopped, or is not shared", () => {
-    expect(access({ kind: "invoice", receipt: "shared", role: "owner", canShare: true })).toContain("Only the receipt, which is shared now");
-    expect(access({ kind: "invoice", receipt: "stopped", role: "owner", canShare: true })).toContain("the receipt was shared, then its link was stopped");
-    expect(access({ kind: "invoice", receipt: "none", role: "owner", canShare: true })).toContain("the receipt is not shared");
+  it("says whether the receipt is shared now, was stopped, or is not shared: what this page can share", () => {
+    expect(access({ kind: "invoice", receipt: "shared", role: "owner", canShare: true })).toContain("From this page, only the receipt, which is shared now: anyone with its link can open it.");
+    expect(access({ kind: "invoice", receipt: "stopped", role: "owner", canShare: true })).toContain("From this page, nothing now: the receipt was shared, then its link was stopped");
+    expect(access({ kind: "invoice", receipt: "none", role: "owner", canShare: true })).toContain("From this page, only the receipt, and it is not shared.");
+  });
+
+  it("says the workspace's webhooks, API keys and chats carry its ledger and decisions outside, for a payable and a milestone alike", () => {
+    for (const props of [{ kind: "invoice" as const, receipt: "shared" as const }, { kind: "milestone" as const, receipt: null }]) {
+      const words = access({ ...props, role: "viewer", canShare: false });
+      expect(words).toContain(
+        "Webhooks and API keys, which an owner or admin sets up in Settings, also carry the ledger outside: a webhook receives each entry written while it is set up, and an API key can read every entry, these included."
+      );
+      expect(words).toContain("A connected Slack channel and each member's own Telegram chat are told the agent's decisions.");
+    }
   });
 
   it("tells an owner or admin they may share it, and anyone else to ask one", () => {
@@ -155,14 +189,15 @@ describe("who can see this (E10)", () => {
 
   it("offers no one a receipt for a payment with nothing on chain, which has none to share", () => {
     const words = access({ kind: "invoice", receipt: "unavailable", role: "owner", canShare: true });
-    expect(words).toContain("Nothing: only a payment Vestiarion made on chain has a receipt, and this bill has none.");
+    expect(words).toContain("From this page, nothing: only a payment Vestiarion made on chain has a receipt, and this bill has none.");
     expect(words).not.toContain("you can share it");
     expect(words).not.toContain("cannot share it");
   });
 
-  it("says nothing of a milestone leaves the workspace", () => {
+  it("says a milestone has no receipt to share from this page, never that none of it leaves the workspace", () => {
     const words = access({ kind: "milestone", receipt: null, role: "owner", canShare: true });
-    expect(words).toContain("a milestone has no receipt, so none of this leaves the workspace");
+    expect(words).toContain("From this page, nothing: a milestone has no receipt.");
+    expect(words).not.toContain("none of this leaves the workspace");
     expect(words).not.toContain("Share receipt");
   });
 });
@@ -208,8 +243,23 @@ describe("the page", () => {
     const markup = await page();
     expect(markup).toMatch(/<h1[^>]*>Evidence so far<\/h1>/);
     expect(text(markup)).toContain("Not paid yet. This is the chain so far, read-only: nothing on this page pays, approves or changes anything.");
-    expect(text(markup)).toContain("Nothing: only a payment Vestiarion made on chain has a receipt, and this bill has none.");
+    expect(text(markup)).toContain("From this page, nothing: only a payment Vestiarion made on chain has a receipt, and this bill has none.");
     expect(text(markup)).not.toContain("you can share it");
+  });
+
+  it("says at the top that a simulated payment moved nothing", async () => {
+    readEvidenceMock.mockResolvedValue(read(SIMULATED, { state: "unavailable" }));
+    const markup = await page();
+    expect(markup).toMatch(/<h1[^>]*>Why it was paid<\/h1>/);
+    expect(text(markup)).toContain("Paid in a simulation: nothing moved on chain. This is its evidence as it stands.");
+    expect(text(markup)).not.toContain("Not paid yet");
+  });
+
+  it("heads a bill paid early with what was paid", async () => {
+    readEvidenceMock.mockResolvedValue(read(DISCOUNTED));
+    const markup = await page();
+    expect(text(markup)).toContain("October design retainer: 12.25 USDC to Northstar Studio, for a 12.50 USDC bill less its early-payment discount.");
+    expect(text(markup)).not.toContain("in a simulation");
   });
 
   it("says a rejected bill was not paid", async () => {

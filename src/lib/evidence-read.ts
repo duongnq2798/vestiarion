@@ -89,6 +89,7 @@ function invoiceOf(row: Row): EvidenceInvoice {
     due_date: String(row.due_date),
     status: String(row.status),
     tx_ref: str(row.tx_ref),
+    paid_amount: row.paid_amount == null ? null : num(row.paid_amount),
   };
 }
 

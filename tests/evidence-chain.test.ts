@@ -636,3 +636,172 @@ describe("a workspace on Arc mainnet (E9)", () => {
     expect(JSON.stringify(chain)).not.toMatch(/testnet/i);
   });
 });
+
+describe("a cross-chain payout's shared receipt (CCTP)", () => {
+  // Approve and pay on a payee on another chain, the mint landing within the provider's wait: the approval records the
+  // burn on Arc, and no entry records the mint. The receipt names that approval, as the public receipt page accepts.
+  const MINT = `0x${"8a".repeat(32)}`;
+  const base = paidInFull();
+  const paid = entry(42, "12:00:00", "human", "approval_paid", { by: CAROL, invoiceId: INVOICE, counterpartyId: CP, txRef: TX, status: "paid" });
+  const shared = entry(43, "12:30:00", "human", "receipt_shared", { receipt: { txHash: MINT, sourceTxHash: TX }, records: { seq: 42, hash: paid.hash } });
+  const entries = [ADDRESS_GIVEN, ADDRESS_CONFIRMED, base.entries.find((row) => row.seq === 20)!, paid, shared];
+  const input: EvidenceInput = {
+    ...base,
+    entries,
+    payment: { ...base.payment!, destination_chain: "BASE-SEPOLIA", mint_tx_hash: MINT },
+    receipt: { ...base.receipt!, entry_seq: 43 },
+    checks: { entries: okChecks(entries), onChain: { state: "matches", block: 12 } },
+  };
+  const chain = buildEvidenceChain(input);
+
+  it("checks the receipt against the burn its entry records, as the public receipt page does", () => {
+    const receipt = step(chain, "receipt");
+    expect(receipt.kind).toBe("checked");
+    expect(receipt.facts[0]).toMatchObject({ kind: "checked", seqs: [43, 42] });
+    expect(receipt.facts[0].warn).toBeUndefined();
+    expect(chain.tally.contradicted).toBe(0);
+  });
+
+  it("names the same entry as the one that records the transaction", () => {
+    expect(step(chain, "payment").facts[1]).toMatchObject({ kind: "checked", text: "Entry #0042 records this transaction.", seqs: [42] });
+  });
+
+  it("still does not match when the entry it names records neither the mint nor the burn", () => {
+    const other = entry(42, "12:00:00", "human", "approval_paid", { by: CAROL, invoiceId: INVOICE, counterpartyId: CP, txRef: `0x${"12".repeat(32)}`, status: "paid" });
+    const rows = [...entries.filter((row) => row.seq !== 42), other];
+    const receipt = step(buildEvidenceChain({ ...input, entries: rows, checks: { ...input.checks, entries: okChecks(rows) } }), "receipt");
+    expect(receipt.kind).toBe("contradicted");
+  });
+});
+
+describe("a payable paid in a simulation", () => {
+  it("says so in its subject, which the page's head and the download carry", () => {
+    const base = paidInFull();
+    const chain = buildEvidenceChain({
+      ...base,
+      subject: { kind: "invoice", invoice: { ...(base.subject as { invoice: object }).invoice, tx_ref: "sim_abc" } as never },
+      payment: { ...base.payment!, provider: "simulated", provider_mode: "simulated", tx_hash: null },
+      receipt: null,
+      checks: { entries: okChecks(base.entries), onChain: null },
+    });
+    expect(chain.subject).toMatchObject({ paid: true, simulated: true, onChain: false });
+    expect(buildEvidenceChain(paidInFull()).subject.simulated).toBe(false);
+  });
+
+  it("is not simulated while it is not paid", () => {
+    const base = paidInFull();
+    const chain = buildEvidenceChain({
+      ...base,
+      subject: { kind: "invoice", invoice: { ...(base.subject as { invoice: object }).invoice, status: "matched", tx_ref: null } as never },
+      payment: { ...base.payment!, provider: "simulated", provider_mode: "simulated", tx_hash: null },
+      receipt: null,
+    });
+    expect(chain.subject).toMatchObject({ paid: false, simulated: false });
+  });
+});
+
+describe("a bill written in another currency, in shadow mode (shadow mode S6)", () => {
+  const ORIGINAL = { currency: "EUR", amount: 125, perUsd: 0.9246, source: "ExchangeRate-API", at: "2026-10-05T00:00:01Z" };
+  const added = entry(20, "09:30:00", "human", "create_invoice", {
+    by: ALICE,
+    invoiceId: INVOICE,
+    counterpartyId: CP,
+    amount: 135.19,
+    currency: "USDC",
+    poReference: "PO-2207",
+    goodsReceived: true,
+    bill: ORIGINAL,
+  });
+  const base = paidInFull();
+  const entries = [ADDRESS_GIVEN, ADDRESS_CONFIRMED, added];
+  const chain = buildEvidenceChain({ ...base, entries, payment: null, receipt: null, checks: { entries: okChecks(entries), onChain: null } });
+  const bill = step(chain, "bill");
+
+  it("states the bill's own amount and currency as the person's fact", () => {
+    expect(bill.facts[0]).toMatchObject({ kind: "stated", who: "alice@northstar.test", seqs: [20], text: "125 EUR, added in the invoice form on Bills & receivables." });
+    expect(bill.facts[0].text).not.toContain("USDC");
+  });
+
+  it("says code converted it to USDC at a named rate, its source and its day, never as a person's fact", () => {
+    expect(bill.facts[1]).toMatchObject({
+      kind: "checked",
+      text: "Converted to 135.19 USDC at 0.92 EUR to the US dollar, the rate ExchangeRate-API published on Oct 5, 2026.",
+      seqs: [20],
+      link: { href: "https://www.exchangerate-api.com", label: "ExchangeRate-API", state: "checked" },
+    });
+    expect(bill.kind).toBe("stated");
+  });
+
+  it("converts a bill in US dollars one for one, naming no rate service", () => {
+    const usd = entry(20, "09:30:00", "human", "create_invoice", { ...added.detail, amount: 125, bill: { currency: "USD", amount: 125, perUsd: 1, source: "USD = USDC", at: "2026-10-05T09:30:00Z" } });
+    const facts = step(buildEvidenceChain({ ...base, entries: [usd], payment: null, receipt: null, checks: { entries: okChecks([usd]), onChain: null } }), "bill").facts;
+    expect(facts.map((fact) => fact.text)).toEqual(["125 USD, added in the invoice form on Bills & receivables.", "Converted to 125.00 USDC at 1 USD = 1 USDC."]);
+    expect(facts[1].link).toBeUndefined();
+  });
+});
+
+describe("a bill imported from a list (import design B12)", () => {
+  it("says it was imported, from which row, and keeps the list's hash, not the list", () => {
+    const base = paidInFull();
+    const imported = entry(20, "09:30:00", "human", "create_invoice", {
+      by: ALICE,
+      invoiceId: INVOICE,
+      counterpartyId: CP,
+      amount: 12.5,
+      currency: "USDC",
+      poReference: "PO-2207",
+      goodsReceived: true,
+      via: "import",
+      importFile: "cd".repeat(32),
+      importRow: 4,
+    });
+    const chain = buildEvidenceChain({ ...base, entries: [imported], payment: null, receipt: null, checks: { entries: okChecks([imported]), onChain: null } });
+    expect(step(chain, "bill").facts[0]).toMatchObject({
+      kind: "stated",
+      text: "12.50 USDC, imported with Import a list on Bills & receivables, from row 4 of the list.",
+      notes: [`The list's SHA-256 is ${"cd".repeat(32)}; the list itself is not kept.`],
+    });
+    expect(step(chain, "agreed").facts[0].text).toBe("Purchase order PO-2207 is on the bill from an imported list.");
+    expect(step(chain, "delivered").facts[0].text).toBe("The goods or services are marked received from an imported list.");
+  });
+});
+
+describe("a payable paid with its early-payment discount", () => {
+  const base = paidInFull();
+  const discounted = entry(22, "10:02:40", "agent", "ap_pay", { ...AGENT_PAID.detail, amountPaid: 12.25, discountTaken: 0.25 });
+  const entries = [...base.entries.filter((row) => row.seq !== 22), discounted];
+  const input: EvidenceInput = {
+    ...base,
+    subject: { kind: "invoice", invoice: { ...(base.subject as { invoice: object }).invoice, paid_amount: 12.25 } as never },
+    entries,
+    payment: { ...base.payment!, amount: "12.250000" },
+    checks: { ...base.checks, entries: okChecks(entries) },
+  };
+  const chain = buildEvidenceChain(input);
+
+  it("carries what was paid beside the bill's amount", () => {
+    expect(chain.subject).toMatchObject({ amount: 12.5, paidAmount: 12.25 });
+    expect(buildEvidenceChain(paidInFull()).subject.paidAmount).toBeNull();
+  });
+
+  it("says what the discount took off the bill, citing the entry that recorded it", () => {
+    const payment = step(chain, "payment");
+    expect(payment.facts[0].text).toBe("Paid 12.25 USDC to 0x221B…1bc3 on Arc testnet.");
+    expect(payment.facts[1]).toMatchObject({ kind: "checked", text: "The early-payment discount took 0.25 USDC off the 12.50 USDC bill, so 12.25 USDC was paid.", at: at("10:02:40"), seqs: [22] });
+    expect(payment.facts[2]).toMatchObject({ kind: "checked", text: "Entry #0022 records this transaction." });
+  });
+
+  it("reads the discount from the bill's record when no entry records it, as inferred", () => {
+    const rows = [...base.entries.filter((row) => row.seq !== 22), AGENT_PAID];
+    const payment = step(buildEvidenceChain({ ...input, entries: rows, checks: { ...input.checks, entries: okChecks(rows) } }), "payment");
+    expect(payment.facts[1]).toMatchObject({ kind: "inferred", seqs: [] });
+    expect(payment.facts[1].text).toBe("The bill's record says 12.25 USDC was paid, 0.25 USDC less than the bill; no entry records the early-payment discount.");
+  });
+
+  it("has no paid amount of its own when the whole bill was paid, or it is not paid", () => {
+    const invoice = (base.subject as { invoice: object }).invoice;
+    expect(buildEvidenceChain({ ...input, subject: { kind: "invoice", invoice: { ...invoice, paid_amount: 12.5 } as never } }).subject.paidAmount).toBeNull();
+    const held = buildEvidenceChain({ ...input, subject: { kind: "invoice", invoice: { ...invoice, status: "held", tx_ref: null, paid_amount: 12.25 } as never }, payment: null, receipt: null });
+    expect(held.subject.paidAmount).toBeNull();
+  });
+});

@@ -146,7 +146,11 @@ see this":
   transactions, and no names. The panel says whether the receipt is shared now, was shared and stopped, or is not
   shared, and whether the person reading may share it (their role) or must ask an owner or admin. A payable with no
   payment on chain (simulated, or not paid yet) has no receipt to share, and the panel says so instead.
-- A milestone has no receipt: the panel says nothing of it leaves the workspace.
+- A milestone has no receipt: the panel says nothing about it can be shared from the page.
+- The workspace's other ways out, for a payable and a milestone alike: webhooks receive each ledger entry written while
+  they are set up, and API keys read every entry, once an owner or admin sets them up in Settings; Slack and each
+  member's own Telegram chat are told the agent's decisions. The panel says so, so it never reads as if the receipt
+  were all that leaves.
 - Nothing on the page shares, unshares or exports anything by itself besides the download link. Cost if wrong: one
   line of copy, since the permissions themselves are the existing ones.
 
@@ -176,6 +180,12 @@ see this":
   section, not the section's own page, as the header's link back says (`insideSection`).
 - The guide sits in the docs' Trust and controls section (docs clarity, PR #307), between How payments are controlled,
   which now points to it, and Verify an audit export.
+- After review: the receipt's named entry may record a CCTP payout's burn rather than the mint, as the public receipt
+  page accepts (`recordsTransaction` with both); the subject carries `simulated` and `paidAmount`, the page saying
+  "Paid in a simulation" and naming what a bill paid early carried, and the payment step what its discount took off; a
+  bill in another currency in shadow mode states its own figure as the person's and its conversion as code's; a bill
+  imported with Import a list (main's bill list import) names its row and the list's hash; the I28 panel speaks of what
+  the page shares, and names webhooks, API keys, Slack and Telegram as the workspace's other ways out.
 
 ## Testing
 
@@ -183,7 +193,8 @@ see this":
   delivery a person stated; an unreachable link (Arc did not answer, a revoked receipt, GitHub unavailable); an open
   bill; a rejected bill; labels never upgraded (a signed entry leaves a stated fact stated; a step takes its weakest
   fact); sample data; members not read; a payable paid in shadow mode (mirror address, verdict, mirrored payment); a
-  workspace on Arc mainnet.
+  workspace on Arc mainnet; a CCTP payout's receipt whose entry records only the burn; a simulated payment; a bill in
+  another currency; a bill imported from a list; a bill paid with its early-payment discount.
 - The reader: reads only through `db()` in scope, asks for the screening check at the decision's time, finds the
   receipt's entries, says a bill with no payment on chain has no receipt to share, and a receivable, a malformed or an
   unknown id is not found.

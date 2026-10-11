@@ -236,9 +236,16 @@ describe("reading a paid payable's evidence", () => {
     const simulated = await database({ invoice: { ...INVOICE_ROW, tx_ref: "sim_1" }, intent: { ...INTENT, provider: "sim", provider_mode: "simulate", tx_hash: null }, receipt: null }).run(() =>
       readEvidence("invoice", INVOICE)
     );
-    expect(simulated!.chain.subject).toMatchObject({ paid: true, onChain: false });
+    expect(simulated!.chain.subject).toMatchObject({ paid: true, simulated: true, onChain: false });
     expect(simulated!.receipt).toEqual({ state: "unavailable" });
     expect(arcFetch).not.toHaveBeenCalled();
+  });
+
+  it("reads what a bill paid early carried, as a figure, beside the bill's amount", async () => {
+    const read = await database({ invoice: { ...INVOICE_ROW, paid_amount: "12.250000" } }).run(() => readEvidence("invoice", INVOICE, { fetch: arcFetch as unknown as typeof fetch }));
+    expect(read!.chain.subject).toMatchObject({ amount: 12.5, paidAmount: 12.25 });
+    const whole = await database({ invoice: { ...INVOICE_ROW, paid_amount: null } }).run(() => readEvidence("invoice", INVOICE, { fetch: arcFetch as unknown as typeof fetch }));
+    expect(whole!.chain.subject.paidAmount).toBeNull();
   });
 
   it("names a person a member, not a former one, when the members cannot be read", async () => {

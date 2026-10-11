@@ -7,14 +7,14 @@
  * stay "Stated by a person" though their entry is signed. A step reads as its weakest fact.
  */
 
-import { utcMinute } from "./copy";
+import { utcDay, utcMinute } from "./copy";
 import { deciderName, decisionChecks, trailStep } from "./decision-trail";
 import { MIRROR, PAYEE, addressProvenance } from "./new-payee";
 import { networkOf, networkProfile, type Network } from "./network";
 import { chainById, homeChain } from "./payee-chains";
 import { intentFacts, recordingEntry, RECORDING_ACTIONS, type ReceiptFacts, type ReceiptIntent } from "./receipts/facts";
 import type { OnChainCheck } from "./receipts/onchain";
-import type { EntryCheck, PublicLedgerRow } from "./receipts/verify";
+import { recordsTransaction, type EntryCheck, type PublicLedgerRow } from "./receipts/verify";
 
 /** How a fact is known: five ways of knowing, and two outcomes of a check we make (E3). */
 export type EvidenceKind = "checked" | "verified" | "stated" | "inferred" | "missing" | "unreachable" | "contradicted";
@@ -104,6 +104,8 @@ export interface EvidenceInvoice {
   due_date: string;
   status: string;
   tx_ref: string | null;
+  /** What left when it was paid (0038): less than `amount` when the early-payment discount took part of it off. */
+  paid_amount?: number | null;
 }
 
 export interface EvidenceMilestone {
@@ -188,12 +190,20 @@ export interface EvidenceChain {
     id: string;
     title: string;
     payee: string;
+    /** The bill's or the milestone's amount. */
     amount: number;
+    /**
+     * What was paid, when the early-payment discount took part of the bill off: less than `amount`. Null when the whole
+     * amount was paid, and for anything not paid.
+     */
+    paidAmount: number | null;
     currency: string;
     status: string;
     paid: boolean;
     /** Rejected by a person (a payable) or closed without paying (a milestone): it will not be paid. */
     closed: boolean;
+    /** Marked paid by a simulated transfer: nothing moved on chain. */
+    simulated: boolean;
     /** Paid by a transaction on chain the chain shows: the only payment a receipt can be shared for. */
     onChain: boolean;
   };
@@ -232,6 +242,8 @@ function via(detail: Record<string, unknown>): string {
       return " on GitHub";
     case "email":
       return " from an emailed invoice";
+    case "import":
+      return " from an imported list";
     default:
       return "";
   }
@@ -299,6 +311,11 @@ interface Context {
   paid: boolean;
   /** Rejected or closed: it will not be paid. */
   closed: boolean;
+  /** The record's amount and its currency. */
+  amount: number;
+  currency: string;
+  /** What was paid, when the early-payment discount took part of the bill off; null otherwise. */
+  paidAmount: number | null;
   /** The entries about the record, oldest first. */
   own: EvidenceEntry[];
   /** The counterparty's entries up to the payment, newest first. */
@@ -469,23 +486,70 @@ function billStep(ctx: Context, invoice: EvidenceInvoice): EvidenceStep {
     if (ctx.input.counterparty?.sample) return step("bill", title, [{ kind: "inferred", text: "Loaded with the sample data; it has no ledger entry of its own.", seqs: [] }]);
     return step("bill", title, [{ kind: "missing", text: "No entry records who added this bill.", fill: "A bill added on Bills & receivables, by email, from a chat or through the API records it.", seqs: [] }]);
   }
-  const amount = typeof created.detail.amount === "number" ? money(created.detail.amount, text(created.detail.currency) ?? currency) : money(invoice.amount, currency);
+  const usdc = typeof created.detail.amount === "number" ? money(created.detail.amount, text(created.detail.currency) ?? currency) : money(invoice.amount, currency);
   if (created.action === "recurring_invoice_created") {
-    return step("bill", title, [{ kind: "stated", text: `${amount}, made on its due day by a recurring payment a person set up.`, who: null, at: created.ts, seqs: [created.seq] }]);
+    return step("bill", title, [{ kind: "stated", text: `${usdc}, made on its due day by a recurring payment a person set up.`, who: null, at: created.ts, seqs: [created.seq] }]);
   }
-  if (created.action === "import_invoice") return step("bill", title, [stated(ctx, `${amount}, imported from a CSV file on Bills & receivables.`, created)]);
+  if (created.action === "import_invoice") return step("bill", title, [stated(ctx, `${usdc}, imported from a CSV file on Bills & receivables.`, created)]);
+  // A bill written in the business's own currency in shadow mode (shadow mode S6): the person stated that figure, and
+  // code worked out the USDC at a published rate.
+  const original = originalBill(created.detail.bill);
+  const amount = original ? writtenAmount(original.amount, original.currency) : usdc;
   const document = record(created.detail.document);
+  const row = typeof created.detail.importRow === "number" ? created.detail.importRow : null;
   const source = document
     ? `read from ${DOCUMENT_KIND[text(document.kind) ?? ""] ?? "a document"} by ${READER[text(document.reader) ?? ""] ?? "a model"}, then added${via(created.detail) || " on Bills & receivables"} by the person who checked it`
     : created.detail.via === "api"
       ? "sent through the API with a workspace key"
       : created.detail.via === "email"
         ? "arrived by email and added on Bills & receivables"
-        : created.detail.via
-          ? `added${via(created.detail)}`
-          : "added in the invoice form on Bills & receivables";
-  const notes = document && text(document.sha256) ? [`The document's SHA-256 is ${text(document.sha256)}; the document itself is not kept.`] : [];
-  return step("bill", title, [stated(ctx, `${amount}, ${source}.`, created, notes.length > 0 ? { notes } : {})]);
+        : created.detail.via === "import"
+          ? `imported with Import a list on Bills & receivables${row !== null ? `, from row ${row} of the list` : ""}`
+          : created.detail.via
+            ? `added${via(created.detail)}`
+            : "added in the invoice form on Bills & receivables";
+  const notes =
+    document && text(document.sha256)
+      ? [`The document's SHA-256 is ${text(document.sha256)}; the document itself is not kept.`]
+      : created.detail.via === "import" && text(created.detail.importFile)
+        ? [`The list's SHA-256 is ${text(created.detail.importFile)}; the list itself is not kept.`]
+        : [];
+  const facts = [stated(ctx, `${amount}, ${source}.`, created, notes.length > 0 ? { notes } : {})];
+  if (original) facts.push(conversionFact(original, usdc, created));
+  return step("bill", title, facts);
+}
+
+/** The bill as it was written and the rate its USDC was worked out at (`create_invoice`'s `bill`); null for any other. */
+function originalBill(value: unknown): { currency: string; amount: number; perUsd: number; source: string; at: string } | null {
+  const bill = record(value);
+  if (!bill) return null;
+  const currency = text(bill.currency);
+  const source = text(bill.source);
+  const at = text(bill.at);
+  const { amount, perUsd } = bill;
+  if (!currency || !source || !at || typeof amount !== "number" || typeof perUsd !== "number") return null;
+  return { currency, amount, perUsd, source, at };
+}
+
+/** A bill's own figure as the card shows it: whole when it is whole, else to the cent. */
+function writtenAmount(amount: number, currency: string): string {
+  const digits = Number.isInteger(amount) ? 0 : 2;
+  return `${amount.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits })} ${currency}`;
+}
+
+/** Where the rates for bills in another currency come from: ExchangeRate-API asks to be named and linked where they are shown. */
+const RATES_HOME = "https://www.exchangerate-api.com";
+
+/** Code's conversion of a bill in another currency to the USDC it is paid in: computed, never a person's figure. */
+function conversionFact(original: NonNullable<ReturnType<typeof originalBill>>, usdc: string, created: EvidenceEntry): EvidenceFact {
+  const base = { kind: "checked" as const, at: created.ts, seqs: [created.seq] };
+  if (original.currency === "USD") return { ...base, text: `Converted to ${usdc} at 1 USD = 1 USDC.` };
+  const rate = original.perUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return {
+    ...base,
+    text: `Converted to ${usdc} at ${rate} ${original.currency} to the US dollar, the rate ${original.source} published on ${utcDay(original.at)}.`,
+    ...(original.source === "ExchangeRate-API" ? { link: { href: RATES_HOME, label: original.source, state: "checked" as const } } : {}),
+  };
 }
 
 const DOCUMENT_KIND: Record<string, string> = { pdf: "a PDF", email: "an email", text: "a text file" };
@@ -672,6 +736,7 @@ function paymentStep(ctx: Context, onChain: OnChainCheck | null): EvidenceStep {
           link: { href, label: "The transaction", state: read.link },
           ...(read.kind === "contradicted" ? { warn: true } : {}),
         },
+        ...discountFacts(ctx, view.recording),
         recordingFact(view.recording),
       ]);
     }
@@ -683,10 +748,11 @@ function paymentStep(ctx: Context, onChain: OnChainCheck | null): EvidenceStep {
           seqs: [],
           link: { href: `${homeChain(ctx.input.network).explorerTx}${view.txHash}`, label: "The transaction", state: "not_opened" },
         },
+        ...discountFacts(ctx, view.recording),
         recordingFact(view.recording),
       ]);
     case "simulated":
-      return step("payment", title, [{ kind: "missing", text: "Simulated: nothing moved on chain.", fill: live, seqs: [] }]);
+      return step("payment", title, [{ kind: "missing", text: "Simulated: nothing moved on chain.", fill: live, seqs: [] }, ...discountFacts(ctx, null)]);
     case "in_flight":
       return step("payment", title, [{ kind: "missing", text: "Sent, not confirmed yet.", fill: "The agent confirms it with Circle, usually within a minute.", seqs: [] }]);
     case "failed":
@@ -701,6 +767,29 @@ function paymentStep(ctx: Context, onChain: OnChainCheck | null): EvidenceStep {
       }
       return step("payment", title, [{ kind: "missing", text: "Not paid yet.", fill: `Paid on ${ctx.networkLabel} when the agent or a person pays it.`, seqs: [] }]);
   }
+}
+
+/**
+ * What the early-payment discount took off a bill paid early (payment timing, 0038): the entry that recorded it, the
+ * payment's own or the newest that did; read from the bill's record alone when no entry did. None for a bill paid whole.
+ */
+function discountFacts(ctx: Context, recording: EvidenceEntry | null): EvidenceFact[] {
+  const { paidAmount, amount, currency } = ctx;
+  if (paidAmount === null) return [];
+  const discount = Math.round((amount - paidAmount) * 1e6) / 1e6;
+  const records = (entry: EvidenceEntry) => RECORDING_ACTIONS.has(entry.action) && typeof entry.detail.discountTaken === "number" && entry.detail.discountTaken > 0;
+  const recorded = recording && records(recording) ? recording : newest(ctx.own, records);
+  if (!recorded) {
+    return [{ kind: "inferred", text: `The bill's record says ${money(paidAmount, currency)} was paid, ${money(discount, currency)} less than the bill; no entry records the early-payment discount.`, seqs: [] }];
+  }
+  return [
+    {
+      kind: "checked",
+      text: `The early-payment discount took ${money(discount, currency)} off the ${money(amount, currency)} bill, so ${money(paidAmount, currency)} was paid.`,
+      at: recorded.ts,
+      seqs: [recorded.seq],
+    },
+  ];
 }
 
 function recordingFact(recording: EvidenceEntry | null): EvidenceFact {
@@ -739,18 +828,19 @@ function receiptStep(ctx: Context): EvidenceStep {
   const check = ctx.input.checks.entries.get(shared.seq);
   if (check?.ok === false) return step("receipt", title, [{ kind: "contradicted", text: `The receipt's entry does not verify: ${check.reason}`, ...base, seqs: [shared.seq], warn: true }]);
   if (!check || check.ok === null) return step("receipt", title, [{ kind: "unreachable", text: `The receipt's entry could not be checked here${check ? `: ${check.reason}` : "."}`, ...base, seqs: [shared.seq] }]);
-  // As the public receipt page checks it (payment receipts P5): the entry it names, by seq and by hash, written before
-  // it, records a payment of this transaction.
+  // As the public receipt page checks it (payment receipts P5, `recordsTransaction`): the entry it names, by seq and by
+  // hash, written before it, records a payment of this transaction — the payee's, or a CCTP payout's burn on Arc, which
+  // is all a person's Approve and pay records when the mint lands within the provider's wait.
   const names = record(shared.detail.records);
   const named = ctx.own.find((entry) => entry.seq === names?.seq) ?? null;
-  const tx = view.state === "chain" ? view.facts.txHash.toLowerCase() : null;
+  const transactions = view.state === "chain" ? [view.facts.txHash, ...(view.facts.sourceTxHash ? [view.facts.sourceTxHash] : [])] : [];
   const records =
     named !== null &&
-    tx !== null &&
-    named.hash === names?.hash &&
+    transactions.length > 0 &&
+    typeof names?.hash === "string" &&
     named.seq < shared.seq &&
     RECORDING_ACTIONS.has(named.action) &&
-    JSON.stringify(named.detail).toLowerCase().includes(tx);
+    recordsTransaction(named, names.hash, transactions);
   if (!records) return step("receipt", title, [{ kind: "contradicted", text: "The receipt names an entry that does not record this transaction.", ...base, seqs: [shared.seq], warn: true }]);
   return step("receipt", title, [
     {
@@ -828,6 +918,13 @@ function anchorsOf(own: EvidenceEntry[], payment: PaymentView): ChainAnchors {
 /** Rejected by a person, or closed without paying: it will not be paid. */
 const CLOSED = new Set(["rejected", "closed"]);
 
+/** What a paid bill's transfer carried (`paid_amount`), when the early-payment discount made it less than the bill. */
+function discountedPaid(invoice: EvidenceInvoice): number | null {
+  const paid = invoice.paid_amount;
+  if (invoice.status !== "paid" || typeof paid !== "number" || !Number.isFinite(paid) || paid < 0 || paid >= invoice.amount) return null;
+  return paid;
+}
+
 export function buildEvidenceChain(input: EvidenceInput): EvidenceChain {
   const { invoice, milestone, row, key, ref } = subjectOf(input);
   const { id, status } = row;
@@ -837,6 +934,7 @@ export function buildEvidenceChain(input: EvidenceInput): EvidenceChain {
   const cutoff = recording?.seq ?? Number.POSITIVE_INFINITY;
   const counterpartyId = input.counterparty?.id ?? null;
   const people = input.people;
+  const currency = invoice ? (invoice.currency ?? "USDC") : "USDC";
   const ctx: Context = {
     input,
     key,
@@ -844,6 +942,9 @@ export function buildEvidenceChain(input: EvidenceInput): EvidenceChain {
     name: input.counterparty?.name ?? "The payee",
     paid: status === "paid",
     closed: CLOSED.has(status),
+    amount: row.amount,
+    currency,
+    paidAmount: invoice ? discountedPaid(invoice) : null,
     own,
     counterparty: input.entries
       .filter((entry) => counterpartyId !== null && entry.domain === "compliance" && entry.detail.counterpartyId === counterpartyId && entry.seq <= cutoff)
@@ -877,10 +978,12 @@ export function buildEvidenceChain(input: EvidenceInput): EvidenceChain {
       title: invoice ? (invoice.memo ?? "A bill") : milestone!.title,
       payee: ctx.name,
       amount: row.amount,
-      currency: invoice ? (invoice.currency ?? "USDC") : "USDC",
+      paidAmount: ctx.paidAmount,
+      currency,
       status,
       paid: ctx.paid,
       closed: ctx.closed,
+      simulated: ctx.paid && payment.state === "simulated",
       onChain: ctx.paid && payment.state === "chain",
     },
     network: input.network,

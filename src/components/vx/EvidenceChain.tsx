@@ -74,14 +74,21 @@ export function EvidenceLabel({ kind, prefix, className }: { kind: EvidenceKind;
   );
 }
 
-/** The page's line under its title: what was paid, or is to be, and to whom. */
+/**
+ * The page's line under its title: what was paid, or is to be, and to whom. A bill paid early names what left, and the
+ * bill it was less than.
+ */
 export function evidenceSub(subject: Chain["subject"]): string {
-  return `${subject.title}: ${fmt(subject.amount)} ${subject.currency} to ${subject.payee}. Each link says how it is known, and where it came from.`;
+  const what =
+    subject.paidAmount !== null
+      ? `${fmt(subject.paidAmount)} ${subject.currency} to ${subject.payee}, for a ${fmt(subject.amount)} ${subject.currency} bill less its early-payment discount`
+      : `${fmt(subject.amount)} ${subject.currency} to ${subject.payee}`;
+  return `${subject.title}: ${what}. Each link says how it is known, and where it came from.`;
 }
 
-/** Where the record stands: paid, not paid yet, or not to be paid. */
+/** Where the record stands: paid, paid in a simulation, not paid yet, or not to be paid. */
 export function evidenceStatus(subject: Chain["subject"]): string {
-  if (subject.paid) return "Paid";
+  if (subject.paid) return subject.simulated ? "Paid in a simulation" : "Paid";
   if (subject.closed) return subject.kind === "invoice" ? "Rejected, not paid" : "Closed without paying";
   return "Not paid yet";
 }
@@ -121,8 +128,16 @@ function EvidenceSubject({ chain, orgSlug }: { chain: Chain; orgSlug: string }) 
         <dd className="min-w-0 text-ink [overflow-wrap:anywhere]">{subject.payee}</dd>
         <dt className="text-ink-3">Amount</dt>
         <dd>
-          <Money value={subject.amount} token={subject.currency} className="text-ink" />
+          <Money value={subject.amount} token={subject.currency} simulated={subject.simulated} className="text-ink" />
         </dd>
+        {subject.paidAmount !== null && (
+          <>
+            <dt className="text-ink-3">Paid</dt>
+            <dd className="text-ink-2">
+              <Money value={subject.paidAmount} token={subject.currency} simulated={subject.simulated} className="text-ink" />, less the early-payment discount
+            </dd>
+          </>
+        )}
         <dt className="text-ink-3">Status</dt>
         <dd className="text-ink">{evidenceStatus(subject)}</dd>
         <dt className="text-ink-3">Record</dt>
@@ -341,7 +356,8 @@ export type ReceiptSharing = "shared" | "stopped" | "none" | "unavailable" | nul
 
 /**
  * Who may see, download and share this evidence (E10, roadmap I28), said where the evidence is shown: the existing
- * permissions, in words. Nothing here shares, unshares or exports anything.
+ * permissions, in words, and the workspace's other ways out — webhooks, API keys, Slack and Telegram — which carry its
+ * ledger and decisions whatever this page shares. Nothing here shares, unshares or exports anything.
  */
 export function EvidenceAccess({ kind, receipt, role, canShare }: { kind: Chain["subject"]["kind"]; receipt: ReceiptSharing; role: string; canShare: boolean }) {
   return (
@@ -364,7 +380,7 @@ export function EvidenceAccess({ kind, receipt, role, canShare }: { kind: Chain[
           </dt>
           <dd className="space-y-1.5 text-ink-2">
             {kind === "milestone" ? (
-              <p>Nothing: a milestone has no receipt, so none of this leaves the workspace.</p>
+              <p>From this page, nothing: a milestone has no receipt.</p>
             ) : (
               <>
                 <p>{RECEIPT_WORDS[receipt ?? "none"]}</p>
@@ -378,6 +394,8 @@ export function EvidenceAccess({ kind, receipt, role, canShare }: { kind: Chain[
                 )}
               </>
             )}
+            <p>{WAYS_OUT}</p>
+            <p>{"A connected Slack channel and each member's own Telegram chat are told the agent's decisions."}</p>
           </dd>
         </dl>
         <p className="mt-4 border-t border-line pt-3 text-xs text-ink-3">Nothing on this page shares or changes anything: Download evidence is its only action.</p>
@@ -386,9 +404,14 @@ export function EvidenceAccess({ kind, receipt, role, canShare }: { kind: Chain[
   );
 }
 
+/** The workspace's own ways out for its ledger, whatever this page shares: webhooks (0028) and API keys (0027). */
+const WAYS_OUT =
+  "Webhooks and API keys, which an owner or admin sets up in Settings, also carry the ledger outside: a webhook receives each entry written while it is set up, and an API key can read every entry, these included.";
+
+/** What this page can share outside the workspace: the receipt alone, in the state it is in. */
 const RECEIPT_WORDS: Record<NonNullable<ReceiptSharing>, string> = {
-  shared: "Only the receipt, which is shared now: anyone with its link can open it.",
-  stopped: "Nothing now: the receipt was shared, then its link was stopped, so it no longer opens.",
-  none: "Nothing: the receipt is not shared.",
-  unavailable: "Nothing: only a payment Vestiarion made on chain has a receipt, and this bill has none.",
+  shared: "From this page, only the receipt, which is shared now: anyone with its link can open it.",
+  stopped: "From this page, nothing now: the receipt was shared, then its link was stopped, so it no longer opens.",
+  none: "From this page, only the receipt, and it is not shared.",
+  unavailable: "From this page, nothing: only a payment Vestiarion made on chain has a receipt, and this bill has none.",
 };

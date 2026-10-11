@@ -64,6 +64,7 @@ export default async function EvidencePage({ params }: EvidencePageProps) {
               : "Not paid yet. This is the chain so far, read-only: nothing on this page pays, approves or changes anything."}
           </Callout>
         )}
+        {subject.simulated && <Callout className="mb-6">Paid in a simulation: nothing moved on chain. This is its evidence as it stands.</Callout>}
         <EvidenceChainView chain={chain} orgSlug={slug} publicKeys={read.publicKeys} />
         <div className="mt-8">
           <EvidenceAccess kind={subject.kind} receipt={read.receipt?.state ?? null} role={access.membership.role} canShare={can(access.membership.role, "records.write")} />

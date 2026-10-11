@@ -844,15 +844,22 @@ does the decision trail's last line.
   reader's browser (`EvidenceBrowserCheck`); the transaction with `readOnChain` against the chain's public RPC. A URL a
   person or a payee typed is shown, marked not opened, and never fetched. `intentFacts` and `recordingEntry`
   (`src/lib/receipts/facts.ts`) are shared with the payment receipts, so both read the same transaction and the same
-  recording entry; `decisionChecks` is shared with the decision trail.
+  recording entry, and the receipt's named entry is matched with `recordsTransaction`, as the public receipt page
+  matches it: the payee's transaction or a CCTP payout's burn. `decisionChecks` is shared with the decision trail.
+- **What was paid.** The subject carries `simulated` (marked paid by a simulated transfer; the page says so above the
+  chain) and `paidAmount` (`invoices.paid_amount`, when the early-payment discount made it less than the bill; the
+  payment step cites the entry whose `discountTaken` recorded it). A bill taken in another currency in shadow mode
+  states its own figure as the person's fact and its conversion (`create_invoice`'s `bill`) as code's.
 - **Download.** `GET /api/evidence?org=&kind=&id=` answers `vestiarion-evidence/1` (`src/lib/evidence-export.ts`):
   every step and fact with its label, every entry in full with the server's check, and the workspace's public keys.
   The audit export's gate: a session (401), membership (404), cross-site refused (403), a bad kind or id 400. It writes
   nothing, the ledger included.
 - **Who can see it** (`EvidenceAccess`) says the existing permissions in words: every member reads and downloads it;
-  only a shared receipt leaves the workspace, shared by an owner or admin (`records.write`). `readEvidence` gives the
-  receipt's state: shared, stopped, not shared, or `unavailable` for a bill with no payment on chain, which has no
-  receipt to share. No migration.
+  from the page, only a shared receipt leaves the workspace, shared by an owner or admin (`records.write`), and the
+  panel names the workspace's other ways out for the same entries: webhooks and API keys (owner or admin, in
+  Settings), and the Slack and Telegram notices of the agent's decisions. `readEvidence` gives the receipt's state:
+  shared, stopped, not shared, or `unavailable` for a bill with no payment on chain, which has no receipt to share. No
+  migration.
 
 ## Approvals and the pause switch
 

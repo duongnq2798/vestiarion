@@ -155,6 +155,14 @@ describe("the evidence file", () => {
     expect(doc.network).toEqual({ id: "arc-testnet", label: "Arc testnet" });
   });
 
+  it("says in its subject whether the payment was simulated, and what a bill paid early carried", () => {
+    expect(doc.subject).toMatchObject({ paid: false, simulated: false, paidAmount: null });
+    const invoice = (INPUT.subject as { invoice: object }).invoice;
+    const simulated = buildEvidenceChain({ ...INPUT, subject: { kind: "invoice", invoice: { ...invoice, status: "paid", tx_ref: "sim_1", paid_amount: 12.25 } as never } });
+    const file = evidenceDocument({ chain: simulated, workspace: { slug: "northstar", name: "Northstar Studio" }, keys: [], now: new Date("2026-10-11T00:00:00Z") });
+    expect(file.subject).toMatchObject({ status: "paid", paid: true, simulated: true, amount: 12.5, paidAmount: 12.25 });
+  });
+
   it("carries each entry in full, with the fields the audit export carries and the server's check", () => {
     expect(doc.entries).toEqual([{ ...ENTRY, check: { ok: true } }]);
     expect(doc.checkAnEntry).toHaveLength(3);
