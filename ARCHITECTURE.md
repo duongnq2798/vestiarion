@@ -852,6 +852,76 @@ USDC included. Each figure links to its source: the decision and the verdict to 
 (`/audit?before=<seq + 1>#seq-<seq>`), the payment to the explorer, the record to its entry with who recorded it and
 when. `npm run traction-digest` adds one line from the same totals.
 
+## Cash outlook and scenarios
+
+Treasury's **Safe to spend today** and **Next 30 days** (spec `2026-10-02-safe-to-spend-design.md`) and its folded
+**What if clients pay late?** section (spec `2026-10-11-cash-scenarios-design.md`) are worked out from rows the console
+already reads, with no query or write of their own beyond the recurring schedules.
+
+- **One set of rules.** `outlookMoves(input, windowDays)` (`src/lib/cash-outlook.ts`) dates what is counted: open USDC
+  payables (`OPEN_PAYABLE_STATUSES`, a held one included) on `scheduled_for` or their due day, an overdue one today;
+  open milestones today unless escrowed; open USDC receivables (`pending`, `matched`) on their due day; EURC apart.
+  `cashOutlook` reads it over 30 days; `scenarioBasis` (`src/lib/cash-scenario-basis.ts`) over 90, adding each active
+  recurring payment's periods with no invoice yet (`dueOn` from `next_period`, a billed period found by
+  `recurring_id` and `recurring_period`) and each expected client's record from its received receivables, by the rule
+  the collections stage uses (counts and an average, never a likelihood). `listRecurringPayables` is read best effort:
+  when it fails the basis says so and projects none.
+- **In the browser.** The page hands the basis to `CashScenarios` (`src/components/vx/CashScenarios.tsx`), a client
+  component that runs `cashScenario` (`src/lib/cash-scenarios.ts`, pure) on every render from the basis and the levers
+  a person sets: a 30, 60 or 90 day horizon, days late (0 to 90), each receivable late, on time or never, and a change
+  in bill costs (-50% to 100%) on every bill or on bills written in another currency (`original_currency`). It gives the
+  balance day by day for the base case (every receivable on its due day, named "If clients pay on time", since Next 30
+  days counts none) and the scenario, the first day below zero and below the cushion (15% of what leaves in the 7 days
+  from that day), the bills due while short, up to three suggestions in words (a scheduled bill paid on its due day only
+  when the scenario, worked out again with it moved, runs short later or by less), the three biggest drivers by the
+  short day (a client's receivables grouped by its counterparty id), and the coverage (the weeks of the horizon with a
+  bill on record, what is projected, what is left out). Cash is the
+  operating wallet and the USYC reserve; a receivable adds to the balance only on the day it arrives in that case; deals
+  not invoiced and bank balances are never counted.
+- **Nothing that pays reads it.** No server action, ledger entry or setting: the levers live in component state and
+  are gone with the page. Safe to spend today, the treasury's buffer, cash holds and every guardrail still count no
+  receivable; `tests/cash-scenarios-ui.test.tsx` fails if a file under `src/lib/agent`, `src/lib/commands`,
+  `src/app/actions` or `src/app/api` imports a cash-scenario module.
+
+## Why it was paid: the evidence chain
+
+`/o/[slug]/evidence/invoice|milestone/<id>` (spec `2026-10-10-evidence-chain-design.md`) gives every member one page
+per payable or contractor milestone: what was agreed, what was delivered, the bill, the payee, the decision, the people,
+the payment, the receipt and the signatures. `navItemForPathname` files it under its record's section (Bills &
+receivables, or Contractors), and the header's breadcrumb links back there. Every payable's and milestone's card footer
+links it (`Decision.chain`, set by `invoiceDecision` and `milestoneDecision`; `src/lib/evidence-paths.ts`), and so
+does the decision trail's last line.
+
+- **Pure, then read.** `buildEvidenceChain` (`src/lib/evidence-chain.ts`) is pure: it takes the record, its
+  counterparty, the entries, the screening check, the payment intent, the receipt, the members' emails and the checks'
+  results, and labels each fact by where it came from (Checked by code, Verified outside, Stated by a person, Inferred,
+  Missing, Could not open, Does not match); a step reads as its weakest fact, and a signed entry never upgrades a fact
+  a person stated. `chainAnchors` names the decision the chain rests on, so `readEvidence`
+  (`src/lib/evidence-read.ts`) asks for the newest complete screening check at that time. The reader goes through
+  `db()` in the organization's scope only: the record (a receivable, a malformed or an unknown id is null, and the page
+  is the workspace's not-found), `ledger_entries_for_targets`, verdicts by `subjectId`, the counterparty's compliance
+  entries, the intent, the receipt and its entries (by its seq and by `receiptId`), and the members, best effort.
+- **Checks.** Each entry alone with `verifyEntry` (`src/lib/receipts/verify.ts`) on the server, and again in the
+  reader's browser (`EvidenceBrowserCheck`); the transaction with `readOnChain` against the chain's public RPC. A URL a
+  person or a payee typed is shown, marked not opened, and never fetched. `intentFacts` and `recordingEntry`
+  (`src/lib/receipts/facts.ts`) are shared with the payment receipts, so both read the same transaction and the same
+  recording entry, and the receipt's named entry is matched with `recordsTransaction`, as the public receipt page
+  matches it: the payee's transaction or a CCTP payout's burn. `decisionChecks` is shared with the decision trail.
+- **What was paid.** The subject carries `simulated` (marked paid by a simulated transfer; the page says so above the
+  chain) and `paidAmount` (`invoices.paid_amount`, when the early-payment discount made it less than the bill; the
+  payment step cites the entry whose `discountTaken` recorded it). A bill taken in another currency in shadow mode
+  states its own figure as the person's fact and its conversion (`create_invoice`'s `bill`) as code's.
+- **Download.** `GET /api/evidence?org=&kind=&id=` answers `vestiarion-evidence/1` (`src/lib/evidence-export.ts`):
+  every step and fact with its label, every entry in full with the server's check, and the workspace's public keys.
+  The audit export's gate: a session (401), membership (404), cross-site refused (403), a bad kind or id 400. It writes
+  nothing, the ledger included.
+- **Who can see it** (`EvidenceAccess`) says the existing permissions in words: every member reads and downloads it;
+  from the page, only a shared receipt leaves the workspace, shared by an owner or admin (`records.write`), and the
+  panel names the workspace's other ways out for the same entries: webhooks and API keys (owner or admin, in
+  Settings), and the Slack and Telegram notices of the agent's decisions. `readEvidence` gives the receipt's state:
+  shared, stopped, not shared, or `unavailable` for a bill with no payment on chain, which has no receipt to share. No
+  migration.
+
 ## Approvals and the pause switch
 
 **The approval inbox** (`/o/[slug]/approvals`, spec §5) lists every payable a

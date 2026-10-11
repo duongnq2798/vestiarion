@@ -115,4 +115,11 @@ describe("listRecurringPayables", () => {
       ["old", "stopped", "every week", null],
     ]);
   });
+
+  it("carries the schedule itself, for the cash scenarios to project the periods not billed yet", async () => {
+    const row = { amount: "25.000000", currency: "USDC", memo: "Weekly retainer", every_count: 2, every_unit: "week", starts_on: "2026-10-05", ends_on: "2026-12-28", counterparties: { name: "Linh Design" } };
+    fake = fakeSupabase(workspace({ list: [{ ...row, id: "rec-1", next_period: 2, status: "active" }] }));
+    const [view] = await run(() => listRecurringPayables());
+    expect(view).toMatchObject({ startsOn: "2026-10-05", everyCount: 2, everyUnit: "week", nextPeriod: 2, endsOn: "2026-12-28" });
+  });
 });

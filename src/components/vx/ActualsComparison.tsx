@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { SectionHeader } from "@/components/ui/SectionHeader";
+import { entryHref } from "@/components/vx/AuditLedger";
 import { Hash } from "@/components/vx/Primitives";
 import { StatTile } from "@/components/vx/StatTile";
 import { METHOD_WORDS } from "@/lib/actual-payment-fields";
@@ -32,9 +33,7 @@ import type { CurrencyAmount } from "@/lib/workspace-report";
 export const ROWS_SHOWN = 20;
 
 /** An entry in the audit log, on the page that starts with it. */
-export function entryHref(slug: string, seq: number): string {
-  return orgHref(slug, `/audit?before=${seq + 1}#seq-${seq}`);
-}
+export { entryHref };
 
 export function amountText(amount: number, currency: string): string {
   const digits = billDigits(currency);

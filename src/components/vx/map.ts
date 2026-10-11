@@ -362,6 +362,8 @@ function decideInvoice(
     auditSeq: entry?.seq,
     at: entry?.ts ?? invoice.due_date,
     trail: invoiceTrail(entries, invoice.id, options.network),
+    // Why it was paid, or the evidence so far (evidence chain E6).
+    chain: { kind: "invoice", paid: invoice.status === "paid" },
   };
 }
 
@@ -653,6 +655,8 @@ function decideMilestone(milestone: MilestoneRow, entries: LedgerEntry[], contex
     txHash: milestone.tx_ref?.startsWith("0x") ? milestone.tx_ref : null,
     auditSeq: entry?.seq,
     at: entry?.ts ?? new Date().toISOString(),
+    // Why it was paid, or the evidence so far (evidence chain E6).
+    chain: { kind: "milestone", paid: milestone.status === "paid" },
   };
 }
 

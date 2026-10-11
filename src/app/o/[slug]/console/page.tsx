@@ -17,6 +17,7 @@ import { GettingStarted } from "@/components/vx/GettingStarted";
 import { invoiceDecision, treasuryActionDecision, treasuryDecisionEntries, treasuryLedgerDecision } from "@/components/vx/map";
 import { Money } from "@/components/vx/Primitives";
 import { CashOutlookPanel, SafeToSpendFigure } from "@/components/vx/CashOutlook";
+import { CashScenarios } from "@/components/vx/CashScenarios";
 import { ScheduledPayments, scheduledPaymentRows } from "@/components/vx/ScheduledPayments";
 import { Callout } from "@/components/ui/Callout";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -41,7 +42,9 @@ import { inOrg } from "@/lib/dal/scope";
 import { gettingStarted, ownBillCount, ownDecidedCount, ownPayableCount } from "@/lib/getting-started";
 import { listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { pauseStateOf } from "@/lib/platform/pause";
-import { cashOutlook } from "@/lib/cash-outlook";
+import { cashOutlook, type OutlookInput } from "@/lib/cash-outlook";
+import { scenarioBasis } from "@/lib/cash-scenario-basis";
+import { listRecurringPayables } from "@/lib/recurring-payables";
 import { latestForecast, listAccounts, listCounterparties, listInvoices, listMilestones, listTreasuryActions, stats } from "@/lib/queries";
 import { readShadowMode, SHADOW_NOT_STARTED } from "@/lib/shadow-mode";
 import { readShadowSummary, verdictFacts } from "@/lib/verdicts";
@@ -71,7 +74,7 @@ export default async function DashboardPage({
   return inOrg(access, async () => {
     const network = workspaceNetwork().id;
     const query = await searchParams;
-    const [accountsRows, actionRows, forecastRow, dashboardStats, invoices, counterparties, headEntries, waiting, pause, milestones, budget, onChainLimit] = await Promise.all([
+    const [accountsRows, actionRows, forecastRow, dashboardStats, invoices, counterparties, headEntries, waiting, pause, milestones, budget, onChainLimit, recurring] = await Promise.all([
       listAccounts(),
       listTreasuryActions(),
       latestForecast(),
@@ -97,6 +100,12 @@ export default async function DashboardPage({
       // enforces it either way; one that cannot be read shows as not set up here.
       spendingLimitStatus().catch((error: unknown) => {
         console.error("console: spending limit on Arc not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
+        return null;
+      }),
+      // The recurring payments, for the cash scenarios to count the periods not billed yet (cash scenarios C4). Best
+      // effort: unread, the section says so and projects none.
+      listRecurringPayables().catch((error: unknown) => {
+        console.error("console: recurring payments not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
         return null;
       }),
     ]);
@@ -215,7 +224,7 @@ export default async function DashboardPage({
     const scheduledPayments = scheduledPaymentRows(invoices);
     // Safe to spend today and the next 30 days (safe to spend design), from the rows already loaded: the
     // operating wallet's USDC and the USYC reserve's, less what the agent counts as owed.
-    const outlook = cashOutlook({
+    const outlookInput: OutlookInput = {
       now: Date.now(),
       operatingUsdc: Number(accountsRows.find((account) => account.kind === "operating")?.balance ?? 0),
       reserveUsdc: Number(accountsRows.find((account) => account.kind === "reserve")?.balance ?? 0),
@@ -226,7 +235,11 @@ export default async function DashboardPage({
       receivables: invoices
         .filter((invoice) => invoice.direction === "receivable")
         .map((invoice) => ({ ...invoice, counterparty: invoice.counterparty_name, currency: invoice.currency ?? null })),
-    });
+    };
+    const outlook = cashOutlook(outlookInput);
+    // What the cash scenarios start from (cash scenarios C2-C4): the same rows over 90 days, with the recurring payments
+    // not billed yet. The browser works out each scenario from it; nothing it shows reaches a payment or the agent (C9).
+    const scenarios = scenarioBasis({ ...outlookInput, recurring });
     // What the open bills need beyond the wallet, and for an owner or admin the test USDC to cover it (test USDC T8).
     const operatingAccount = accountsRows.find((account) => account.kind === "operating");
     const testUsdc = testUsdcWeek
@@ -367,6 +380,7 @@ export default async function DashboardPage({
               {scheduledPayments.length > 0 && <ScheduledPayments payments={scheduledPayments} allHref={orgHref(slug, "/invoices")} />}
 
               <CashOutlookPanel outlook={outlook} />
+              <CashScenarios basis={scenarios} />
 
               <section>
                 <SectionHeader

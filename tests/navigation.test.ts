@@ -99,6 +99,19 @@ describe("navItemForPathname — which section the current URL is in", () => {
   it.each(["/o/acme", "/o/acme/", "/audit", "/o/acme/consoles", "/onboarding", "/"])("%s is no section", (pathname) => {
     expect(navItemForPathname(pathname)).toBeUndefined();
   });
+
+  // A payment's evidence is part of the section its record lives in (evidence chain E1).
+  it.each([
+    ["/o/acme/evidence/invoice/5f1e2d3c-0000-4000-8000-000000000001", "invoices", "/invoices"],
+    ["/o/acme/evidence/milestone/5f1e2d3c-0000-4000-8000-000000000002", "contractors", "/contractors"],
+  ])("%s → %s", (pathname, key, path) => {
+    expect(navItemForPathname(pathname)?.key).toBe(key);
+    expect(sectionPathOf(pathname)).toBe(path);
+  });
+
+  it.each(["/o/acme/evidence", "/o/acme/evidence/receivable/5f1e2d3c-0000-4000-8000-000000000001", "/o/acme/evidences/invoice/x"])("%s is no section", (pathname) => {
+    expect(navItemForPathname(pathname)).toBeUndefined();
+  });
 });
 
 describe("sectionPathOf", () => {

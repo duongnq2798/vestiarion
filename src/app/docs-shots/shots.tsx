@@ -45,6 +45,13 @@ import { ReportLists, ReportReadiness, ReportSummary } from "@/components/vx/Wor
 import { StatusChipRow, StatusPanel } from "@/components/vx/WorkspaceHeader";
 import { statusChips, statusRows, type PageStatus, type PlatformStatus } from "@/components/vx/workspace-status";
 import { ActualsBills, ActualsSummary } from "@/components/vx/ActualsComparison";
+import { CashScenarios, CoverageList, ScenarioCases, ScenarioFindings } from "@/components/vx/CashScenarios";
+import { cashScenario, DEFAULT_LEVERS, type ScenarioBasis } from "@/lib/cash-scenarios";
+import { EvidenceAccess, EvidenceStepCard, evidenceSub } from "@/components/vx/EvidenceChain";
+import { PageHead } from "@/components/vx/Shell";
+import { evidenceLinkLabel, evidencePath } from "@/lib/evidence-paths";
+import { orgHref } from "@/lib/auth/org-paths";
+import type { EvidenceStep } from "@/lib/evidence-chain";
 import { compareActuals, type ActualRecord } from "@/lib/actual-payments-compare";
 import type { WaitingPayable } from "@/lib/agent/approvals";
 import { waitingHint } from "@/lib/added-details";
@@ -56,6 +63,7 @@ import { gettingStarted } from "@/lib/getting-started";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow } from "@/lib/queries";
 import { buildReport, type ReportBill, type ReportDecision, type ReportFacts } from "@/lib/workspace-report";
 import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
+import { evidenceShot } from "./evidence-fixture";
 import { designRuleReplay } from "../design/replay-fixture";
 import { RuleTrialPanel } from "@/components/RuleTrial";
 import { PaymentPlanSection, PlanCashEffect, PlanOutcomesStrip } from "@/components/vx/PaymentPlan";
@@ -92,7 +100,9 @@ export interface DocsShot {
     | "email-invoices"
     | "payment-plan"
     | "report"
-    | "workspace";
+    | "workspace"
+    | "cash-scenarios"
+    | "evidence";
   /** The workspace page it is on: its title heads the frame. None for a public page, such as a payee's link. */
   page?: NavKey;
   /** The page's line under its title, where the real page has one. */
@@ -710,6 +720,37 @@ const ACTUALS = compareActuals(REPORT_FACTS, {
   ]),
 });
 
+/**
+ * A studio's next 60 days for the What if section (cash scenarios guide): a retainer not billed yet, four bills, a
+ * verified milestone, and two receivables, the first from a client that has paid before. Northwind Cloud is scheduled
+ * for day 5 and due on day 25, after Acme Studio's late receivable arrives, so paying it on its due day shrinks the gap.
+ */
+const SCENARIO_BASIS: ScenarioBasis = {
+  today: "2026-10-12",
+  cash: 1840.5,
+  reserve: 3200,
+  outflows: [
+    { id: "m-landing", kind: "milestone", label: "Minh Pham: Landing page", amount: 600, day: 0, note: "verified", foreign: false },
+    { id: "rec-linh:2026-10-15", kind: "recurring", label: "Linh Design", amount: 1500, day: 3, note: "recurring, not billed yet", foreign: false },
+    { id: "inv-northwind", kind: "bill", label: "Northwind Cloud", amount: 860, day: 5, note: "scheduled", foreign: false, dueDay: 25 },
+    { id: "inv-atlas", kind: "bill", label: "Atlas Compute", amount: 1240, day: 8, note: "due", foreign: false },
+    { id: "inv-harbor", kind: "bill", label: "Harbor Print", amount: 2150, day: 18, note: "due", foreign: false },
+    { id: "inv-kestrel", kind: "bill", label: "Kestrel Legal", amount: 950, day: 27, note: "due", foreign: true },
+    { id: "rec-linh:2026-11-15", kind: "recurring", label: "Linh Design", amount: 1500, day: 34, note: "recurring, not billed yet", foreign: false },
+  ],
+  receivables: [
+    { id: "ar-acme", label: "Acme Studio", amount: 3400, day: 9, overdue: false, client: "client-acme" },
+    { id: "ar-beacon", label: "Beacon Labs", amount: 1800, day: 16, overdue: false, client: "client-beacon" },
+  ],
+  clients: { "client-acme": { paidOnTime: 3, paidLate: 2, averageDaysLate: 11 } },
+  eurc: [],
+  recurringRead: true,
+};
+/** That studio's scenario as the section opens on it: 60 days, every client 14 days late. */
+const SCENARIO = cashScenario(SCENARIO_BASIS, DEFAULT_LEVERS);
+/** The open section's card, for a part of its outcome shown alone. */
+const SCENARIO_CARD = "rounded-2xl border border-line bg-surface p-5 shadow-surface";
+
 /** The New invoice fold as Bills & receivables opens it on an empty workspace: its four ways in, one bill typed in. */
 function NewInvoice({ counterparty }: { counterparty: CounterpartyRow }) {
   return (
@@ -1030,7 +1071,7 @@ export const DOCS_SHOTS = {
       const decision = invoiceDecision(TRAIL_INVOICE, COUNTERPARTY, TRAIL_ENTRIES, { network: "arc-testnet" });
       return (
         <Card className="overflow-hidden">
-          <DecisionTrail id={decision.id} steps={decision.trail ?? []} orgSlug={SLUG} network="arc-testnet" defaultOpen />
+          <DecisionTrail id={decision.id} steps={decision.trail ?? []} orgSlug={SLUG} network="arc-testnet" defaultOpen chainHref={orgHref(SLUG, evidencePath("invoice", decision.id))} />
         </Card>
       );
     },
@@ -1405,6 +1446,38 @@ export const DOCS_SHOTS = {
       />
     ),
   },
+  "cash-scenarios": {
+    guide: "cash-scenarios",
+    page: "treasury",
+    render: () => <CashScenarios basis={SCENARIO_BASIS} defaultOpen outcome={false} />,
+  },
+  "cash-scenarios-cases": {
+    guide: "cash-scenarios",
+    page: "treasury",
+    render: () => (
+      <div className={SCENARIO_CARD}>
+        <ScenarioCases result={SCENARIO} />
+      </div>
+    ),
+  },
+  "cash-scenarios-findings": {
+    guide: "cash-scenarios",
+    page: "treasury",
+    render: () => (
+      <div className={SCENARIO_CARD}>
+        <ScenarioFindings result={SCENARIO} />
+      </div>
+    ),
+  },
+  "cash-scenarios-coverage": {
+    guide: "cash-scenarios",
+    page: "treasury",
+    render: () => (
+      <div className={SCENARIO_CARD}>
+        <CoverageList result={SCENARIO} />
+      </div>
+    ),
+  },
   "import-bills-columns": { guide: "import-bills", page: "invoices", render: () => <BillImportShot step="columns" /> },
   "import-bills-check": { guide: "import-bills", page: "invoices", render: () => <BillImportShot step="check" /> },
   "payment-plan": {
@@ -1454,7 +1527,32 @@ export const DOCS_SHOTS = {
       );
     },
   },
+  "evidence-chain": { guide: "evidence", render: () => <EvidenceShot head ids={["decision", "payment"]} /> },
+  "evidence-signatures": { guide: "evidence", render: () => <EvidenceShot ids={["signatures"]} /> },
+  "evidence-access": { guide: "evidence", render: () => <EvidenceAccess kind="invoice" receipt="shared" role="owner" canShare /> },
 } satisfies Record<string, DocsShot>;
+
+/**
+ * Some links of the evidence guide's chain, numbered as the page numbers them, with the page's head above the first
+ * picture. The page is long: each picture shows a part of it.
+ */
+function EvidenceShot({ ids, head = false }: { ids: EvidenceStep["id"][]; head?: boolean }) {
+  const { chain, publicKeys } = evidenceShot();
+  return (
+    <>
+      {head && <PageHead title={evidenceLinkLabel(chain.subject.paid)} sub={evidenceSub(chain.subject)} />}
+      <ol className="space-y-4">
+        {chain.steps.map((step, index) =>
+          ids.includes(step.id) ? (
+            <li key={step.id}>
+              <EvidenceStepCard step={step} number={index + 1} chain={chain} orgSlug={SLUG} publicKeys={publicKeys} />
+            </li>
+          ) : null
+        )}
+      </ol>
+    </>
+  );
+}
 
 export type DocsShotName = keyof typeof DOCS_SHOTS;
 

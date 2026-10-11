@@ -1,4 +1,4 @@
-import { ArrowUpRight, Check, ShieldX, X } from "lucide-react";
+import { ArrowUpRight, Check, ScrollText, ShieldX, X } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/Badge";
@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { orgHref } from "@/lib/auth/org-paths";
+import { evidenceLinkLabel, evidencePath } from "@/lib/evidence-paths";
 import { txUrl } from "@/lib/payee-chains";
 import { ruleLabel } from "@/lib/rule-words";
 import { CollapsibleReasoning } from "./CollapsibleReasoning";
@@ -43,7 +44,9 @@ export function DecisionCard({
     minute: "2-digit",
     timeZone: "UTC",
   });
-  const hasFacts = decision.evidence.length > 0 || Boolean(decision.txHash) || decision.auditSeq != null;
+  // A payable's or milestone's evidence, link by link (evidence chain E6).
+  const chainHref = decision.chain ? orgHref(orgSlug, evidencePath(decision.chain.kind, decision.id)) : null;
+  const hasFacts = decision.evidence.length > 0 || Boolean(decision.txHash) || decision.auditSeq != null || chainHref !== null;
   const hasFooter = hasFacts || Boolean(footerAction);
 
   return (
@@ -111,7 +114,9 @@ export function DecisionCard({
         </div>
 
         {/* How it was decided, step by step from the signed entries: folded until opened (decision trail R2). */}
-        {decision.trail && decision.trail.length > 0 && <DecisionTrail id={decision.id} steps={decision.trail} orgSlug={orgSlug} network={decision.network} />}
+        {decision.trail && decision.trail.length > 0 && (
+          <DecisionTrail id={decision.id} steps={decision.trail} orgSlug={orgSlug} network={decision.network} chainHref={chainHref ?? undefined} />
+        )}
 
         {hasFooter && (
           <footer className="border-t border-line bg-ground/40">
@@ -119,6 +124,15 @@ export function DecisionCard({
               <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                 <EvidenceRow items={decision.evidence} className="@4xl:hidden" />
                 <div className="flex shrink-0 flex-wrap items-center gap-4">
+                  {chainHref && decision.chain && (
+                    <Link
+                      href={chainHref}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-agent transition-colors duration-150 ease-standard hover:underline"
+                    >
+                      <ScrollText aria-hidden className="size-3.5" />
+                      {evidenceLinkLabel(decision.chain.paid)}
+                    </Link>
+                  )}
                   {decision.auditSeq != null && (
                     <Link
                       href={orgHref(orgSlug, `/audit#seq-${decision.auditSeq}`)}
