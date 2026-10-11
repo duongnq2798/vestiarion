@@ -3,11 +3,11 @@ import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { isValidElement, type ComponentProps, type ReactNode } from "react";
 import { CodeBlock } from "@/components/docs/CodeBlock";
+import { Action, DocsCallout } from "@/components/docs/DocsCallout";
 import { DocsHeading, textOf } from "@/components/docs/DocsHeading";
 import { EndpointTable } from "@/components/docs/EndpointTable";
 import { McpToolTable } from "@/components/docs/McpToolTable";
 import { Screenshot } from "@/components/docs/Screenshot";
-import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/components/ui/cn";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
@@ -82,11 +82,11 @@ const components: MDXComponents = {
       {children}
     </DocsHeading>
   ),
-  p: ({ children }) => <p className="my-4 leading-7 text-ink-2 [overflow-wrap:anywhere]">{children}</p>,
+  p: ({ children }) => <p className="my-4 text-[1rem] leading-[1.75] text-ink-2 [overflow-wrap:anywhere]">{children}</p>,
   a: Anchor,
   strong: ({ children }) => <strong className="font-semibold text-ink">{children}</strong>,
-  ul: ({ children }) => <ul className="my-4 list-disc space-y-2 pl-6 leading-7 text-ink-2 marker:text-ink-3">{children}</ul>,
-  ol: ({ children }) => <ol className="my-4 list-decimal space-y-2 pl-6 leading-7 text-ink-2 marker:text-ink-3">{children}</ol>,
+  ul: ({ children }) => <ul className="my-4 list-disc space-y-2 pl-6 text-[1rem] leading-[1.75] text-ink-2 marker:text-ink-3">{children}</ul>,
+  ol: ({ children }) => <ol className="my-4 list-decimal space-y-2 pl-6 text-[1rem] leading-[1.75] text-ink-2 marker:font-mono marker:text-sm marker:text-ink-3">{children}</ol>,
   li: ({ children }) => <li className="pl-1 [overflow-wrap:anywhere] [&>p]:my-2">{children}</li>,
   blockquote: ({ children }) => <blockquote className="my-6 border-l-2 border-line-strong pl-4 text-ink-2 [&>p]:my-2">{children}</blockquote>,
   hr: () => <hr className="my-10 border-line" />,
@@ -109,7 +109,8 @@ const components: MDXComponents = {
   Cards,
   Card: DocsCard,
   Screenshot,
-  Callout: (props: ComponentProps<typeof Callout>) => <Callout {...props} className={cn("my-6 [&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0", props.className)} />,
+  Callout: DocsCallout,
+  Action,
 };
 
 export function useMDXComponents(): MDXComponents {

@@ -39,11 +39,12 @@ describe("the full footer's columns", () => {
     expect(FOOTER_COLUMNS.map((column) => column.title)).toEqual(["Product", "Developers", "Resources", "Legal"]);
   });
 
-  it("put the landing sections, sign-in and the console under Product", () => {
+  it("put the landing sections, how the agent decides, sign-in and the call to action under Product", () => {
     expect(FOOTER_COLUMNS[0].links).toEqual([
       ...LANDING_SECTIONS,
+      { href: "/how-it-decides", label: "How it decides" },
       { href: "/login", label: "Sign in" },
-      { href: "/onboarding", label: "Open console" },
+      { href: "/onboarding?shadow=1", label: "Get started" },
     ]);
   });
 

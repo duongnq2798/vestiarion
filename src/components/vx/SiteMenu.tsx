@@ -3,6 +3,7 @@
 import { Menu } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { START_LABEL, TRY_HREF } from "@/components/landing/cta";
 import { Button } from "@/components/ui/Button";
 import { Sheet, SheetClose, SheetContent, SheetTrigger } from "@/components/ui/Sheet";
 
@@ -62,7 +63,9 @@ export function SiteMenu({ links }: { links: ReadonlyArray<{ href: string; label
             </SheetClose>
             <SheetClose asChild>
               <Button asChild>
-                <Link href="/onboarding">Open console</Link>
+                <Link href={TRY_HREF} data-cta="menu-start">
+                  {START_LABEL}
+                </Link>
               </Button>
             </SheetClose>
           </div>

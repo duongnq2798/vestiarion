@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { currentConfig, runWithConfig } from "@/lib/context";
-import { MAINNET_NOT_LIVE, MAINNET_OFF, mayUseMainnet, networkHold } from "@/lib/mainnet";
+import { MAINNET_NOT_LIVE, MAINNET_OFF, mainnetOpenToEveryone, mayUseMainnet, networkHold } from "@/lib/mainnet";
 
 /**
  * Arc mainnet behind a switch (docs/superpowers/specs/2026-10-06-mainnet-go-live-design.md M1, M4): the deployment's
@@ -37,6 +37,15 @@ describe("MAINNET_ALLOWLIST (M1)", () => {
 
   it("keeps *, which opens Arc mainnet to everyone, as it is", () => {
     expect(configFromEnv({ ...env, MAINNET_ALLOWLIST: " * " }).mainnetAllowlist).toEqual(["*"]);
+  });
+});
+
+describe("mainnetOpenToEveryone (landing clarity F1)", () => {
+  it("is true only while Arc mainnet is on and its allowlist holds *", () => {
+    expect(mainnetOpenToEveryone({ mainnetEnabled: true, mainnetAllowlist: ["*"] })).toBe(true);
+    expect(mainnetOpenToEveryone({ mainnetEnabled: true, mainnetAllowlist: ["owner@acme.test"] })).toBe(false);
+    expect(mainnetOpenToEveryone({ mainnetEnabled: false, mainnetAllowlist: ["*"] })).toBe(false);
+    expect(mainnetOpenToEveryone({ mainnetEnabled: true })).toBe(false);
   });
 });
 

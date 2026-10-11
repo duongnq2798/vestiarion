@@ -7,6 +7,7 @@ const WAYS_IN = [
   { href: "/docs/api", label: "API reference" },
   { href: "/docs/ai-integration/mcp", label: "MCP server" },
   { href: "/docs/guides/github", label: "GitHub app" },
+  { href: "/docs/webhooks", label: "Webhooks" },
 ] as const;
 
 /**
@@ -18,12 +19,14 @@ export function BuildOnIt() {
     <section id="build" aria-labelledby="build-title" className="scroll-mt-16 border-t border-line bg-surface/60">
       <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-center lg:gap-14">
         <Reveal>
-          <Eyebrow className="text-xs">Build on it</Eyebrow>
+          <Eyebrow className="text-xs">For developers</Eyebrow>
           <h2 id="build-title" className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-ink sm:text-5xl">
             Runs where you already work.
           </h2>
           <p className="mt-4 max-w-md text-[0.9375rem] leading-relaxed text-ink-2">
-            Send bills from your own system, ask your AI assistant what the agent held and why, or pay for a pull request from a comment. A record that comes in this way is decided like one typed into the console, with every guardrail.
+            Send bills from your own system through the REST API or the TypeScript SDK, ask your AI assistant what the agent held and why, or pay
+            for a pull request from a comment. Decisions reach your webhooks, Slack and Telegram. A bill that comes in this way gets every check one
+            typed into the console gets.
           </p>
           <ul className="mt-6 flex flex-wrap gap-x-5 gap-y-2">
             {WAYS_IN.map((way) => (
