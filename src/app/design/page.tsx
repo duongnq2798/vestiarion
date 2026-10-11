@@ -22,7 +22,6 @@ import { Spinner } from "@/components/ui/Spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
 import { Tooltip } from "@/components/ui/Tooltip";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
-import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
 import InvoiceIntake from "@/components/intake/InvoiceIntake";
 import MilestoneIntake from "@/components/intake/MilestoneIntake";
 import AgentControlsClient from "@/components/AgentControlsClient";
@@ -56,8 +55,10 @@ import { ServiceBudgetPanel } from "@/components/ServiceBudgetPanel";
 import { AccountsList, BalanceTile, ForecastPanel, StatTile } from "@/components/vx/Treasury";
 import { derivePerformanceScore } from "@/lib/agent/counterparty-history";
 import { PageHead } from "@/components/vx/Shell";
+import { BillImportSample } from "./BillImportSample";
 import { ACCOUNTS, COUNTERPARTIES, DECISIONS, DESIGN_SLUG, FORECAST, HISTORY, INSIGHTS, INVITATIONS, LEDGER, MEMBERS, OUTLOOK, PROVENANCE } from "./fixtures";
-import { FeedbackDemo, FormLab, OverlayDemo, TabsDemo } from "./Demos";
+import { FeedbackDemo, FormLab, OverlayDemo, RuleTrialDemo, TabsDemo } from "./Demos";
+import { designRuleReplay } from "./replay-fixture";
 import { FrameDemo } from "./Screens";
 
 export const metadata: Metadata = {
@@ -464,6 +465,7 @@ export default function DesignPage() {
               />
               <AgentBudgetPanel network="arc-testnet" orgSlug={DESIGN_SLUG} canEdit view={{ dailyUsdc: 500, weeklyUsdc: 2000, spentToday: 320, spentThisWeek: 1240.5, remaining: 180 }} />
               <AgentBudgetPanel network="arc-testnet" orgSlug={DESIGN_SLUG} canEdit view={{ dailyUsdc: null, weeklyUsdc: null, spentToday: 12.5, spentThisWeek: 40, remaining: null }} />
+              <RuleTrialDemo views={{ "1500": designRuleReplay("1500"), "300": designRuleReplay("300") }} />
               <ProposalCard
                 orgSlug={DESIGN_SLUG}
                 canDecide
@@ -562,16 +564,16 @@ export default function DesignPage() {
                     <PenLine aria-hidden />
                     Enter one invoice
                   </TabsTrigger>
-                  <TabsTrigger value="csv">
+                  <TabsTrigger value="list">
                     <FileSpreadsheet aria-hidden />
-                    Import CSV
+                    Import a list
                   </TabsTrigger>
                 </TabsList>
                 <TabsContent value="manual" forceMount className="data-[state=inactive]:hidden">
                   <InvoiceIntake orgSlug={DESIGN_SLUG} counterparties={COUNTERPARTIES} />
                 </TabsContent>
-                <TabsContent value="csv" forceMount className="data-[state=inactive]:hidden">
-                  <InvoiceCsvImport orgSlug={DESIGN_SLUG} />
+                <TabsContent value="list" forceMount className="data-[state=inactive]:hidden">
+                  <BillImportSample />
                 </TabsContent>
               </Tabs>
             </Card>

@@ -342,9 +342,11 @@ Everything the agent reasons about lives in five tables (`accounts`, `counterpar
   organization starts as "Vestiarion workspace"; `BUSINESS_NAME` no longer changes it). Add
   vendors, contractors, and clients on `/counterparties`. Their configured payment limit is stored
   separately from the authority derived by screening.
-- Add payables or receivables on `/invoices`, or import up to 200 rows from CSV after inspecting a
-  local preview. Amounts that cannot fit exact six-decimal USDC precision are rejected rather than
-  rounded. Every accepted record is written to the signed ledger as a human action.
+- Add payables or receivables on `/invoices`, or import up to 200 rows from a CSV file or rows
+  pasted from a spreadsheet, in its own columns, dates and number format, after checking every
+  row's fate on the server. Amounts are kept exact, never rounded: an amount with more decimals than
+  its currency takes is refused. Every accepted record is written to the signed ledger as a human
+  action.
 - Insert milestones with a real `verification_source` (a Git PR merge, a Kimai/Frappe timesheet
   entry, a client sign-off) and flip `verified` when that source confirms the work.
 - Take the workspace live from **Settings → Go live** once real accounts exist, and fund the

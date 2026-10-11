@@ -1,18 +1,128 @@
-In five minutes, with no wallet and no keys, you can watch Vestiarion's agent decide a small business's payables, make one decision yourself, and check that every decision is signed. Ten minutes more takes the same workspace to real payments on Arc testnet.
+Add one of your bills, let Vestiarion's agent decide on it, and read why, before any money moves. You need an email address and one bill you have received: no wallet, no USDC and no API key. It takes about five minutes.
+
+<Callout kind="tip" title="Start in shadow mode">
+In shadow mode you keep paying the way you do today. The agent decides on the same bills, and nothing it decides is paid until a person agrees. In a new workspace on Arc testnet, with no wallet, a payment you agree to is simulated.
+</Callout>
+
+<Action href="/onboarding?shadow=1">Try it with your bills</Action>
 
 ## 1. Sign in
 
-Open [www.vestiarion.xyz/login](https://www.vestiarion.xyz/login). Choose **Continue with Google**, or enter a **Work email** and choose **Email me a sign-in link**, then open the link it sends.
+Open [www.vestiarion.xyz/login](https://www.vestiarion.xyz/login). Choose **Continue with Google**, or enter a **Work email** and choose **Email me a sign-in link**, then open the link it sends. There is no password, and the same link creates your account the first time.
 
-## 2. Create a workspace
+## 2. Create a workspace in shadow mode
 
-Under **Workspace name**, type any name and choose **Create workspace**. The workspace starts as a sandbox: its payments are simulated, and nothing reaches a chain until you take it live. You land on **Treasury**, the console.
+A workspace holds one business's suppliers, bills, decisions and payments. Under **Workspace name**, type your business's name.
 
-To try the agent on your own bills instead, beside how you pay them today, tick **Run alongside how you pay today (shadow mode)** before you create it: see [Shadow mode](/docs/guides/shadow-mode). Either way, the console's **Get started** checklist starts with your own first bill, such as **Add a supplier**, **Add a bill** and **See the agent's decision**, and lists the wallet after it, under **To pay on Arc**.
+- Keep **Run alongside how you pay today (shadow mode)** ticked. It is ticked already when you come from **Try it on your bills** on the home page.
+- If you are asked which kind of workspace, choose **Test workspace**, on Arc testnet. A **Production workspace** is on Arc mainnet and moves real USDC once an owner takes it live; it has no shadow mode.
 
-## 3. Load sample data
+Choose **Create workspace**. The workspace starts as a sandbox: nothing reaches a chain until you take it live. You land on **Treasury**, the console, where the **Get started in shadow mode** checklist lists **Add your suppliers**, **Add your real bills** and **Give your first verdict**, and the wallet after them, under **To pay on Arc**.
 
-The console offers **Try it with sample data**. Choose **Load sample data**. It adds six example counterparties with invoices and milestones, chosen so that one cycle shows every outcome. Within about a minute the agent runs that cycle on its own, without anyone pressing **Run cycle now**. The console then shows what it decided:
+<Screenshot
+  src="/docs/guides/try-it-workspace.png"
+  alt="The workspaces page, Welcome to Vestiarion, with the form to create a workspace: Workspace name filled in as Northwind Studio; under Network, Test workspace on Arc testnet chosen and marked Recommended, and Production workspace on Arc mainnet marked Real funds; Run alongside how you pay today (shadow mode) ticked; and the Create workspace button, above the line Creating a workspace moves no money."
+  caption="A test workspace in shadow mode, as the form opens from Try it on your bills."
+/>
+
+<Screenshot
+  src="/docs/guides/try-it-checklist.png"
+  alt="The console's Get started in shadow mode checklist, 0 of 6 done: Add your suppliers, highlighted with a Start button; Add your real bills; Give your first verdict; then, under To pay on Arc, Add a wallet, Fund it with USDC and Go live."
+  caption="The first three steps need no wallet; the wallet comes after them, under To pay on Arc."
+/>
+
+
+## 3. Add a supplier
+
+Open **Counterparties**. The **Add counterparty** form is open on an empty workspace.
+
+- **Legal or trading name**: the supplier as it appears on its bills.
+- **Role**: **Vendor** for a supplier, **Contractor** for a person you pay for work.
+- **Payment limit (USDC)**: the most the agent may pay this supplier on one bill without a person. A bill above it is held for you.
+- **Payment address**: leave it empty. It reads **Optional until payment setup**: a sandbox simulates the payment.
+- **Does this supplier send you purchase orders?** **Yes** means a bill waits until its purchase order is on file; **No** means it does not, though the goods or services still need to be marked received.
+
+Choose **Add and screen**. The supplier is screened as soon as it is saved, and a message gives the result, such as "Northwind Hosting added and screened: clear risk."
+
+For example, a hosting supplier called Northwind Hosting, a **Vendor** with a limit of 500.00 USDC, that sends no purchase orders. The name and the figures are an example; use your own.
+
+<Screenshot
+  src="/docs/guides/try-it-supplier.png"
+  alt="The Add counterparty form on Counterparties, filled in for the example: Legal or trading name Northwind Hosting, Role Vendor, Payment limit (USDC) 500.00, Chain Arc testnet, Payment address left empty with the note Optional until payment setup, and under Does this supplier send you purchase orders?, No chosen. The button reads Add and screen."
+  caption="The example supplier: a vendor with a 500.00 USDC limit, no address yet and no purchase orders."
+/>
+
+
+## 4. Add one of your bills
+
+Open **Bills & receivables**. On an empty workspace the **New invoice** form is open.
+
+- **Counterparty**: the supplier you just added.
+- **Amount** and **Currency**: as on the bill. A new shadow workspace takes bills in USDC; for bills in your own currency, see [Run alongside how you pay today](/docs/guides/shadow-mode#1-turn-it-on).
+- **Due date**: the bill's due date.
+- **PO reference**: the purchase order's number, if the supplier sends them.
+- Tick **Goods or services received** once they have arrived.
+
+Choose **Add invoice**. As the form says: "The agent usually decides on a payable within a minute of adding it." You can also drop in a PDF, import a CSV or forward the bill by email: see [Your first payment](/docs/guides/first-payment#read-an-invoice-from-a-document) and [Add invoices by email](/docs/guides/email-invoices).
+
+<Screenshot
+  src="/docs/guides/try-it-bill.png"
+  alt="The New invoice form on Bills & receivables, on its Enter one invoice tab: Direction Payable, Counterparty Northwind Hosting, Amount 120.00, Currency USDC, Due date 10/15/2026, Memo Servers, October, PO reference left empty, and Goods or services received ticked, with the Add invoice button and the line The agent usually decides on a payable within a minute of adding it."
+  caption="One bill from the example supplier: 120.00 USDC for October's servers, received."
+/>
+
+
+## 5. See what the agent decided
+
+The bill's card in **Bills & receivables** shows the decision once the agent has run, usually within a minute; an owner or admin can also choose **Run cycle now** on the console. The agent can:
+
+- decide to pay it now, which in shadow mode waits for your verdict: its card reads **Waiting for your verdict**;
+- schedule it for a later day, such as an early-payment discount's last day or the due date;
+- hold it for a person, when a check in code stops it, such as a bill above the supplier's limit;
+- flag it, when it repeats a bill already paid;
+- or ask for what is missing, such as a purchase order or the goods received.
+
+A decision to pay is not a payment. In shadow mode nothing is paid until a person agrees, and in any workspace every payment passes the checks in [How payments are controlled](/docs/guides/controls) first.
+
+## 6. Read why
+
+On the card, **Agent’s reasoning** says why, citing the facts the agent was given: the amount, the due date, the purchase order, the supplier's risk and limit. Below it are the evidence it checked and its ledger entry. When the model wanted to pay and a rule in code stopped it, the card says "Blocked by code, not by the model" and names the rule in words. **How the agent decided** opens the decision step by step, from the signed entries.
+
+Every decision is an entry in the workspace's **Audit log**, signed and linked to the one before it. Choose **Verify hash chain** there: when every signature and link holds, it answers "Chain intact".
+
+## 7. Agree or disagree
+
+A decision in shadow mode asks **Do you agree with the agent?**
+
+- **Agree and pay** confirms "You agree with the agent, and it is paid now, simulated in this sandbox". Your verdict and the simulated payment are recorded.
+- **Disagree** asks why, in a few words, and the bill is not paid: the agent decides it again later, or you reject it.
+
+Keep paying the bill the way you do today. Over time, the console's **Shadow mode** section shows how often you agreed with the agent.
+
+<Screenshot
+  src="/docs/guides/try-it-verdict.png"
+  alt="Bills & receivables, under Needs you: the Northwind Hosting bill for 120.00 USDC, due Oct 15, 2026, marked Waiting for your verdict, with No PO needed, Goods received, Screened clear and Within its limit. Opened, its card reads Pay Northwind Hosting, with the agent's reasoning, How the agent decided, the facts it checked and its audit entry, then Do you agree with the agent? Pays 120 USDC to Northwind Hosting, with the buttons Agree and pay and Disagree."
+  caption="The agent's decision on the example bill, its reasons, and the verdict it waits for."
+/>
+
+
+## What to do next
+
+### Keep running in shadow mode
+
+Add each bill as it arrives and give your verdict on each decision. Nothing is paid from your accounts. When you want each payment you agree to made in USDC on Arc testnet, at the bill's amount, take the workspace live on Arc testnet: [Run alongside how you pay today](/docs/guides/shadow-mode) shows how, with test USDC for your real amounts.
+
+### Prepare to go live
+
+<Callout kind="real-money" title="Live payments move USDC">
+Once a workspace is live, the agent pays bills that pass every check on its own, within the limits you set, and holds the rest for a person. On Arc mainnet that is real USDC. Read [How payments are controlled](/docs/guides/controls) before you take a workspace live.
+</Callout>
+
+[Go live](/docs/guides/go-live) creates the workspace's wallets and funds them. On Arc testnet a wallet is one click away and USDC comes from Circle's faucet; on Arc mainnet the treasury can be a wallet you hold. Then [Your first payment](/docs/guides/first-payment) follows a payment to the explorer.
+
+## Try it with sample data instead
+
+No bill at hand? In an empty sandbox the console offers **Try it with sample data**. Choose **Load sample data**. It adds six example counterparties with invoices and milestones, chosen so that one cycle shows every outcome. Within about a minute the agent runs that cycle on its own. The console then shows what it decided:
 
 - a hosting invoice with a purchase order and goods received is paid;
 - an annual support plan with a 2% early-payment discount is scheduled for its discount deadline;
@@ -21,39 +131,6 @@ The console offers **Try it with sample data**. Choose **Load sample data**. It 
 - a print run billed again under a purchase order that was already paid is flagged;
 - a verified contractor milestone is released, and an unverified one waits.
 
-**Safe to spend today**, at the top of the console, starts from the operating wallet and the USYC reserve, which comes back to the wallet within seconds and which the agent brings back itself before it pays, and takes off what the agent already counts as owed: what is due within 30 days, every open milestone, and a 15% cushion on the next 7 days. Receivables are shown as expected, not counted. **Next 30 days**, further down, shows how that figure is reached, lists each day money is due or expected with the balance after it, and says on which day the wallet would run short.
+In **Approvals**, the held and flagged ones wait for a person: choose **Approve and pay**, then **Pay now**, on the held one. In a sandbox the payment is simulated, and the ledger records that you approved it. When the list is empty it reads "Nothing is waiting for a decision."
 
-## 4. Read why
-
-Open **Bills & receivables**. Each decision is a card. **Agent’s reasoning** says why, citing the facts the agent was given: the amount, the purchase order, the risk level, the limit and the balance. Below it are the evidence it checked and its ledger entry. When the model wanted to pay and a guardrail in code stopped it, the card says "Blocked by code, not by the model" and names the rule.
-
-
-## 5. Decide one yourself
-
-Open **Approvals**. The held and flagged payables wait there for a person. On the held one, choose **Approve and pay**, then **Pay now**. In a sandbox the payment is simulated, and the ledger records that you approved it. When the list is empty it reads "Nothing is waiting for a decision."
-
-## 6. Read the report
-
-Open **Report**. It counts what the agent did with the sample bills: how many it handled and how fast it decided, what it paid, what it stopped and why, and how often a person stepped in. The box says "This workspace has no real bill yet, so the report counts its sample data." and, in a sandbox, "Sandbox: payments here are simulated." Under **Agent vs what really happened**, choose **Record what you paid** on a sample bill to see how what a business paid from its bank is set beside the agent's decision. See [Read your workspace report](/docs/guides/report).
-
-## 7. Check the ledger
-
-Open **Audit log** and choose **Verify hash chain**. Every entry is signed with Ed25519 and linked to the one before it. When every signature and link holds, it answers "Chain intact". To check a workspace's ledger outside the app, see [Verify an audit export](/docs/guides/audit-export).
-
-
-## 8. See it on Arc testnet
-
-[www.vestiarion.xyz/open](https://www.vestiarion.xyz/open) shows the platform's own numbers, read from the production database, with Arc mainnet and Arc testnet counted apart: **Payments settled**, USDC paid, payees, decisions, and how quickly workspaces reach a first payment. It also lists our own workspaces' latest payments, each linked to the Arc testnet explorer. Among them:
-
-- a payment in EURC, weighed against its counterparty's USDC limit at a rate quoted by Circle;
-- a payout to a vendor on Base Sepolia, listed by its burn on Arc testnet. Circle forwarded the mint to the vendor on Base Sepolia.
-
-## Go further: a real payment on Arc testnet
-
-About ten minutes more takes your workspace from simulated payments to real ones on Arc testnet:
-
-1. On the console, choose **Remove sample data**. A workspace with sample data loaded cannot connect Circle: "Remove the sample data first. It exists only to try the agent with simulated payments."
-2. Follow [Go live](/docs/guides/go-live): create a hosted wallet in one click, get testnet USDC from Circle's faucet for its address, and go live. The console's **Get started** checklist walks you through it.
-3. Follow [Your first payment](/docs/guides/first-payment): add a payee with an address you control, and add a payable due today. The agent decides on it within a minute. Its card links the payment on the Arc testnet explorer.
-
-A payee can also be paid in EURC, or on Base, Arbitrum or Ethereum Sepolia. Your first payment explains both.
+When you are done, choose **Remove sample data** on the console. A workspace with sample data loaded cannot connect Circle: "Remove the sample data first. It exists only to try the agent with simulated payments."

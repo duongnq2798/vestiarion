@@ -32,7 +32,7 @@ export function DocsShell({ searchIndex, children }: { searchIndex: SearchEntry[
           <DocsMobileNav sections={DOCS_NAV} />
         </SiteHeader>
         <div className="mx-auto flex w-full max-w-[88rem] flex-1">
-          <aside className="sticky top-16 hidden h-[calc(100dvh-4rem)] w-64 shrink-0 overflow-y-auto overscroll-contain border-r border-line/80 lg:block">
+          <aside className="sticky top-16 hidden h-[calc(100dvh-4rem)] w-[16.5rem] shrink-0 overflow-y-auto overscroll-contain border-r border-line/80 lg:block">
             <DocsSidebar sections={DOCS_NAV} />
           </aside>
           <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-4 outline-none sm:px-6 lg:px-10">
@@ -76,12 +76,12 @@ export function DocsPage({
             {markdown !== null && <CopyPage slug={slug} markdown={markdown} />}
           </div>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight text-ink [overflow-wrap:anywhere] sm:text-[2.125rem]">{title}</h1>
-          {description && <p className="mt-3 text-base leading-relaxed text-ink-2">{description}</p>}
+          {description && <p className="mt-3 text-[1.0625rem] leading-relaxed text-ink-2">{description}</p>}
         </header>
         {children}
         <DocsPager slug={slug} />
       </article>
-      <aside className="sticky top-16 hidden max-h-[calc(100dvh-4rem)] w-52 shrink-0 self-start overflow-y-auto py-10 xl:block">
+      <aside className="sticky top-16 hidden max-h-[calc(100dvh-4rem)] w-56 shrink-0 self-start overflow-y-auto py-10 xl:block">
         <DocsToc headings={headings} />
       </aside>
     </div>

@@ -31,6 +31,12 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <div className="w-full max-w-sm">
           <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Sign in to Vestiarion</h1>
           <p className="mt-2 text-sm text-ink-3">We email you a link. No password to remember or leak.</p>
+          {/* Coming from the landing page's call to action (shadow mode ticked): say what follows the link, so signing in reads as a step. */}
+          {next.startsWith("/onboarding?") && new URLSearchParams(next.slice(next.indexOf("?") + 1)).get("shadow") === "1" && (
+            <p className="mt-3 rounded-xl border border-agent-line/60 bg-agent-soft/50 px-3.5 py-2.5 text-sm leading-relaxed text-ink-2">
+              Next, you name your workspace and add one of your bills to see what the agent decides. No wallet or funds needed to start.
+            </p>
+          )}
           {error && (
             <Callout tone="refused" role="alert" className="mt-4">
               {error}

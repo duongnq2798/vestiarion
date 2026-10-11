@@ -35,11 +35,11 @@ const serif = Newsreader({
 export const metadata: Metadata = {
   metadataBase: new URL(publicOrigin()),
   title: {
-    default: "Vestiarion — Autonomous Treasury Agent",
+    default: "Vestiarion — Accounts payable agent for small teams",
     template: "%s · Vestiarion",
   },
   description:
-    "An autonomous treasury agent that screens, pays, allocates, and signs every decision into a verifiable audit chain.",
+    "An accounts payable agent for small teams: it checks every bill before it is paid, pays in USDC within the limits you set, and signs every decision into a record you can verify.",
   openGraph: {
     siteName: "Vestiarion",
     type: "website",

@@ -70,7 +70,7 @@ export function CredentialChecks({ screeningMode }: { screeningMode: "live" | "s
         <Credential
           badge="Signed"
           body="Ed25519 entries link to the previous SHA-256 hash; members can run the verifier."
-          href="/onboarding"
+          href="/docs/guides/audit-export"
           label="Evidence chain"
           tone="proof"
         />

@@ -113,35 +113,49 @@ function NetworkPanel({ id, profile, money, numbers }: { id: string; profile: Ne
   );
 }
 
+/**
+ * One network's figures, customers' first and large, the team's own on a line of its own under them (landing clarity
+ * P2): a figure that counts the team never stands where a reader takes it for customers'.
+ */
 function PanelFigures({ numbers, profile }: { numbers: OpenNumbers; profile: NetworkProfile }) {
-  const { customers, total } = numbers.sides;
+  const { customers, ours } = numbers.sides;
   const latest = numbers.ourPayments[0];
   const latestUrl = latestOwnPaymentUrl(numbers, profile);
   return (
     <>
-      <dl className="grid flex-1 grid-cols-1 gap-px border-t border-line bg-line sm:grid-cols-3">
-        <Figure label="Customer workspaces" value={customers.workspacesOpened === 0 ? "Not yet" : formatFigure(customers.workspacesOpened, "count")}>
+      <p className="border-t border-line px-5 pb-1 pt-4 font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.11em] text-ink-3 sm:px-6">Customers</p>
+      <dl className="grid flex-1 grid-cols-1 gap-px bg-line sm:grid-cols-3">
+        <Figure label="Workspaces" value={customers.workspacesOpened === 0 ? "Not yet" : formatFigure(customers.workspacesOpened, "count")}>
           {customers.workspacesOpened === 0
             ? "None opened by anyone outside the team yet"
             : `${formatFigure(customers.liveWorkspaces, "count")} live now, ${formatFigure(customers.firstPayments, "count")} made a first payment`}
         </Figure>
-        <Figure label="Payments settled" value={formatFigure(total.payments, "count")}>
-          {`${customers.payments === 0 ? "None" : formatFigure(customers.payments, "count")} by customers, ${formatFigure(total.usdcPaid, "usdc")} USDC in all`}
+        <Figure label="Payments settled" value={customers.payments === 0 ? "None yet" : formatFigure(customers.payments, "count")}>
+          {customers.payments === 0 ? "No customer has paid through it here yet" : `${formatFigure(customers.usdcPaid, "usdc")} USDC paid by customers`}
         </Figure>
         <Judgement numbers={numbers} />
       </dl>
-      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-line px-5 py-3.5 text-sm text-ink-2 sm:px-6">
-        {latest && latestUrl ? (
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-line bg-ground/50 px-5 py-3.5 text-sm text-ink-2 sm:px-6">
+        <span className="basis-full font-medium text-ink sm:basis-auto">Vestiarion team</span>
+        <span aria-hidden className="hidden sm:inline">
+          ·
+        </span>
+        <span>
+          {ours.payments === 0
+            ? "No payment by our own workspaces yet."
+            : `${formatFigure(ours.payments, "count")} ${ours.payments === 1 ? "payment" : "payments"}, ${formatFigure(ours.usdcPaid, "usdc")} USDC, from our own workspaces`}
+        </span>
+        {latest && latestUrl && (
           <>
-            <span>Our latest payment</span>
-            <span aria-hidden>·</span>
+            <span aria-hidden className="hidden sm:inline">
+              ·
+            </span>
+            <span>latest</span>
             <time dateTime={latest.at} className="font-mono text-xs text-ink-3">
               {utcMinute(latest.at)}
             </time>
             <Hash value={latest.txHash} href={latestUrl} className="text-sm" />
           </>
-        ) : (
-          <span>No payment by our own workspaces yet.</span>
         )}
       </p>
     </>
@@ -149,46 +163,50 @@ function PanelFigures({ numbers, profile }: { numbers: OpenNumbers; profile: Net
 }
 
 /**
- * How the agent's calls held up: in shadow mode, how often customers agreed with them, once any customer gave a
- * verdict; otherwise the share of invoices paid on time, every workspace's, as /open says it.
+ * How the agent's calls held up for customers, as the third of their figures: in shadow mode, how many of its decisions
+ * customers agreed with, as a count out of the verdicts given; else the share of customers' invoices paid on time; else
+ * that no customer has given a verdict yet. Never the team's own figures, which sit under "Customers" too.
  */
 function Judgement({ numbers }: { numbers: OpenNumbers }) {
-  const { customers, total } = numbers.sides;
+  const { customers } = numbers.sides;
   const given = customers.verdictsGiven;
   const agreed = customers.verdictsAgreed;
   if (given !== null && agreed !== null && given > 0) {
     return (
-      <Figure label="Customers agreed with the agent" value={formatPercent(agreed, given)}>
-        {`${formatRatio(agreed, given)} decisions, in shadow mode`}
+      <Figure label="Agreed with the agent" value={formatRatio(agreed, given)}>
+        {`decisions, in shadow mode (${formatPercent(agreed, given)})`}
       </Figure>
     );
   }
-  const onTime = total.invoicesPaidOnTime;
-  const paid = total.invoicesPaidOnArc;
+  const onTime = customers.invoicesPaidOnTime;
+  const paid = customers.invoicesPaidOnArc;
   if (onTime !== null && paid !== null && paid > 0) {
     return (
       <Figure label="Invoices paid on time" value={formatPercent(onTime, paid)}>
-        {`${formatRatio(onTime, paid)}, every workspace`}
+        {`customers' invoices, ${formatRatio(onTime, paid)}`}
       </Figure>
     );
   }
   return (
-    <Figure label="Invoices paid on time" value="—">
-      Nothing to measure yet
+    <Figure label="Agreed with the agent" value="None yet">
+      No customer has given a verdict in shadow mode yet
     </Figure>
   );
 }
 
-/** One figure: its value large above its label, then what it means. The label comes first for a screen reader. */
+/**
+ * One figure: its value large above its label, then what it means. The label comes first for a screen reader. On a
+ * phone the value sits at the right of its label, as a row, so three figures do not stand three screens tall.
+ */
 function Figure({ label, value, children }: { label: string; value: string; children: ReactNode }) {
   return (
-    <div className="flex min-w-0 flex-col bg-surface px-5 py-5 sm:px-6">
-      <dt className="order-2 mt-2.5 text-sm font-semibold text-ink">{label}</dt>
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 bg-surface px-5 py-4 sm:flex sm:flex-col sm:items-stretch sm:px-6 sm:py-5">
+      <dt className="text-sm font-semibold text-ink sm:order-2 sm:mt-2.5">{label}</dt>
       {/* Kept to one line: three figures share half the page's width beside the other network from lg up. */}
-      <dd className="order-1 whitespace-nowrap font-mono text-3xl font-semibold leading-none tracking-[-0.04em] text-ink tabular-nums lg:text-[1.75rem]">
+      <dd className="row-span-2 whitespace-nowrap text-right font-mono text-2xl font-semibold leading-none tracking-[-0.04em] text-ink tabular-nums sm:order-1 sm:text-left sm:text-3xl lg:text-[1.75rem]">
         <CountUp value={value} />
       </dd>
-      <dd className="order-3 mt-1 text-sm leading-6 text-ink-2">{children}</dd>
+      <dd className="mt-0.5 text-sm leading-6 text-ink-2 sm:order-3 sm:mt-1">{children}</dd>
     </div>
   );
 }

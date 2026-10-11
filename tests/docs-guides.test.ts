@@ -20,6 +20,8 @@ type GuideSlug =
   | "guides/shadow-mode"
   | "guides/report"
   | "guides/first-payment"
+  | "guides/try-a-rule"
+  | "guides/import-bills"
   | "guides/pay-a-contractor"
   | "guides/get-paid"
   | "guides/telegram"
@@ -28,7 +30,8 @@ type GuideSlug =
   | "guides/api-invoices"
   | "guides/api-milestones"
   | "guides/github"
-  | "guides/audit-export";
+  | "guides/audit-export"
+  | "guides/controls";
 
 const PANEL = "src/components/GoLivePanel.tsx";
 const WALLET_STEPS = "src/components/treasury/WalletTreasurySteps.tsx";
@@ -103,7 +106,6 @@ const GITHUB_CHECK = "src/lib/milestone-verification.ts";
 const LOGIN_PAGE = "src/app/login/page.tsx";
 const LOGIN_FORM = "src/components/auth/LoginForm.tsx";
 const WORKSPACE_FORM = "src/components/CreateWorkspaceForm.tsx";
-const OPEN_TABLE = "src/components/open/OpenNumbersTable.tsx";
 const APPROVALS_LIST = "src/app/o/[slug]/approvals/page.tsx";
 const API_KEYS_PANEL = "src/components/ApiKeysPanel.tsx";
 const INVOICES_ROUTE = "src/app/api/v1/invoices/route.ts";
@@ -145,6 +147,12 @@ const TEST_USDC_ACTION = "src/app/actions/test-usdc.ts";
 const TEST_USDC_LIBRARY = "src/lib/test-usdc.ts";
 const VERDICT = "src/components/VerdictControl.tsx";
 const REPORT = "src/components/vx/WorkspaceReport.tsx";
+const RULE_TRIAL = "src/components/RuleTrial.tsx";
+const RULE_TRIAL_COPY = "src/lib/rule-trial-copy.ts";
+const LIMIT_EDIT = "src/components/intake/CounterpartyLimitEdit.tsx";
+const TWO_APPROVALS_PANEL = "src/components/TwoApprovalsPanel.tsx";
+const BUDGET_PANEL = "src/components/AgentBudgetPanel.tsx";
+const REPLAY_READ = "src/lib/policy-replay-read.ts";
 const VERDICTS = "src/lib/verdicts.ts";
 const GETTING_STARTED = "src/lib/getting-started.ts";
 const CREATE_FORM = "src/components/CreateWorkspaceForm.tsx";
@@ -199,41 +207,83 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Go live", "src/components/vx/command-items.ts"],
   ],
   "guides/try-it": [
-    ["Run alongside how you pay today (shadow mode)", CREATE_FORM],
-    ["Add a supplier", GETTING_STARTED],
-    ["Add a bill", GETTING_STARTED],
-    ["See the agent's decision", GETTING_STARTED],
-    ["To pay on Arc", GETTING_STARTED],
-    ["Report", APP_NAV],
-    ["This workspace has no real bill yet, so the report counts its sample data.", "src/components/vx/WorkspaceReport.tsx"],
-    ["Sandbox: payments here are simulated.", "src/components/vx/WorkspaceReport.tsx"],
-    ["Agent vs what really happened", "src/components/vx/ActualsComparison.tsx"],
-    ["Record what you paid", "src/components/ActualPaymentControl.tsx"],
-    ["Safe to spend today", "src/components/vx/CashOutlook.tsx"],
-    ["Next 30 days", "src/components/vx/CashOutlook.tsx"],
     ["Continue with Google", LOGIN_PAGE],
     ["Work email", LOGIN_FORM],
     ["Email me a sign-in link", LOGIN_FORM],
     ["Workspace name", WORKSPACE_FORM],
+    ["Run alongside how you pay today (shadow mode)", CREATE_FORM],
+    ["Try it on your bills", "src/components/landing/cta.ts"],
+    ["Test workspace", WORKSPACE_FORM],
+    ["Production workspace", WORKSPACE_FORM],
     ["Create workspace", WORKSPACE_FORM],
     ["Treasury", APP_NAV],
-    ["Try it with sample data", SAMPLE_PANEL],
-    ["Load sample data", SAMPLE_PANEL],
-    ["Run cycle now", RUN],
+    ["Get started in shadow mode", GETTING_STARTED],
+    ["Add your suppliers", GETTING_STARTED],
+    ["Add your real bills", GETTING_STARTED],
+    ["Give your first verdict", GETTING_STARTED],
+    ["To pay on Arc", GETTING_STARTED],
+    ["Counterparties", APP_NAV],
+    ["Add counterparty", COUNTERPARTIES_PAGE],
+    ["Legal or trading name", COUNTERPARTY_FORM],
+    ["Vendor", COUNTERPARTY_FORM],
+    ["Contractor", COUNTERPARTY_FORM],
+    ["Payment limit (USDC)", COUNTERPARTY_FORM],
+    ["Payment address", COUNTERPARTY_FORM],
+    ["Optional until payment setup", COUNTERPARTY_FORM],
+    ["Does this supplier send you purchase orders?", COUNTERPARTY_FORM],
+    ["Add and screen", COUNTERPARTY_FORM],
+    ["added and screened: clear risk.", "src/app/actions/intake.ts", "added and screened: "],
     ["Bills & receivables", APP_NAV],
+    ["New invoice", INVOICES_PAGE],
+    ["Counterparty", INVOICE_FORM],
+    ["Amount", INVOICE_FORM],
+    ["Currency", INVOICE_FORM],
+    ["Due date", INVOICE_FORM],
+    ["PO reference", INVOICE_FORM],
+    ["Goods or services received", INVOICE_FORM],
+    ["Add invoice", INVOICE_FORM],
+    ["The agent usually decides on a payable within a minute of adding it.", INVOICE_FORM],
+    ["Run cycle now", RUN],
+    ["Waiting for your verdict", "src/components/vx/map.ts"],
     ["Agent’s reasoning", DECISION_CARD],
     ["Blocked by code, not by the model", DECISION_CARD],
+    ["How the agent decided", "src/components/vx/DecisionTrail.tsx"],
+    ["Audit log", APP_NAV],
+    ["Verify hash chain", VERIFY_BADGE],
+    ["Chain intact", VERIFY_BADGE],
+    ["Do you agree with the agent?", VERDICT],
+    ["Agree and pay", VERDICT],
+    ["You agree with the agent, and it is paid now, simulated in this sandbox", VERDICT],
+    ["Disagree", VERDICT],
+    ["Try it with sample data", SAMPLE_PANEL],
+    ["Load sample data", SAMPLE_PANEL],
     ["Approvals", APP_NAV],
     ["Approve and pay", APPROVAL_CARD],
     ["Pay now", APPROVAL_CARD],
     ["Nothing is waiting for a decision.", APPROVALS_LIST],
+    ["Remove sample data", SAMPLE_PANEL],
+    ["Remove the sample data first. It exists only to try the agent with simulated payments.", GO_LIVE_LIBRARY],
+  ],
+  "guides/controls": [
+    ["Blocked by code, not by the model", DECISION_CARD],
+    ["Do you agree with the agent?", VERDICT],
+    ["Agree and pay", VERDICT],
+    ["Payment limit (USDC)", COUNTERPARTY_FORM],
+    ["Agent spending limit", "src/components/AgentBudgetPanel.tsx"],
+    ["Enforce on Arc", "src/components/AgentBudgetPanel.tsx"],
+    ["Approvals", APP_NAV],
+    ["Approve and pay", APPROVAL_CARD],
+    ["You created this invoice", APPROVAL_CARD],
+    ["You gave this payee's address", APPROVAL_CARD],
+    ["Two approvals", "src/components/TwoApprovalsPanel.tsx"],
+    ["Payments above (USDC)", "src/components/TwoApprovalsPanel.tsx"],
+    ["Pause agent", PAUSE],
+    ["Resume agent", PAUSE],
+    ["Stop the agent's payments", "src/components/treasury/TreasuryWalletControls.tsx"],
+    ["Payments are switched off for every workspace right now.", "src/lib/payments-switch.ts"],
     ["Audit log", APP_NAV],
     ["Verify hash chain", VERIFY_BADGE],
     ["Chain intact", VERIFY_BADGE],
-    ["Payments settled", OPEN_TABLE],
-    ["Remove sample data", SAMPLE_PANEL],
-    ["Remove the sample data first. It exists only to try the agent with simulated payments.", GO_LIVE_LIBRARY],
-    ["Get started", CHECKLIST],
   ],
   "guides/go-live": [
     ["Add a supplier", GETTING_STARTED],
@@ -279,11 +329,13 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Going live cannot be undone from here; pausing the agent stops it paying.", PANEL],
     ["Take this workspace live?", PANEL],
     ["Real testnet USDC moves when the agent pays.", PANEL],
+    ["Real USDC moves when the agent pays.", PANEL],
     ["The agent runs every 6 hours on its own.", PANEL],
     ["The workspace is no longer deleted when inactive.", PANEL],
     ["To stop it later, pause the agent from the console.", PANEL],
     ["This workspace is live.", GO_LIVE_ACTIONS],
     ["Live · paying on Arc testnet", PANEL],
+    ["Live · paying on Arc mainnet", PANEL],
     ["Live · hosted testnet wallet on Arc", PANEL],
     ["Connect your own Circle account instead", PANEL],
     ["To use your own Circle account, start a new workspace.", PANEL],
@@ -395,6 +447,43 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Your wallet holds no ETH on Base to pay its gas. Add a little ETH there, then choose Review again.", "src/lib/inbound-usdc.ts", " to pay its gas. Add a little "],
     ["Your wallet does not hold enough ETH on Base for the gas. Add a little ETH there, then send again.", "src/lib/inbound-usdc.ts", " for the gas. Add a little "],
   ],
+  "guides/try-a-rule": [
+    ["Try it on past decisions", RULE_TRIAL_COPY],
+    ["Counterparties", APP_NAV],
+    ["Edit limit", LIMIT_EDIT],
+    ["Payment limit (USDC)", LIMIT_EDIT],
+    ["Settings", APP_NAV],
+    ["Two approvals", TWO_APPROVALS_PANEL],
+    ["Payments above (USDC)", TWO_APPROVALS_PANEL],
+    ["Treasury", APP_NAV],
+    ["Agent spending limit", BUDGET_PANEL],
+    ["Change limit", BUDGET_PANEL],
+    ["Per day (USDC)", BUDGET_PANEL],
+    ["Per 7 days (USDC)", BUDGET_PANEL],
+    ["Past decisions from", RULE_TRIAL_COPY],
+    ["Last 30 days", RULE_TRIAL, "Last {days} days"],
+    ["Last 90 days", RULE_TRIAL, "Last {days} days"],
+    ["In force now", RULE_TRIAL],
+    ["Trying", RULE_TRIAL],
+    ["Unchanged", RULE_TRIAL_COPY],
+    ["Would now be paid", RULE_TRIAL_COPY],
+    ["Would now be held", RULE_TRIAL_COPY],
+    ["Would now need two people", RULE_TRIAL_COPY],
+    ["Can't tell", RULE_TRIAL_COPY],
+    ["Apply this figure", RULE_TRIAL_COPY],
+    ["Save limit", LIMIT_EDIT],
+    ["Save", TWO_APPROVALS_PANEL],
+    ["This counterparty's limit changed since you tried it. Try it again.", "src/lib/counterparty-limit.ts"],
+    ["The figure for two approvals changed since you tried it. Try it again.", "src/lib/approval-policy.ts"],
+    ["The agent's spending limit changed since you tried it. Try it again.", "src/lib/agent-budget.ts"],
+    ["counterparty_limit_changed", "src/lib/counterparty-limit.ts"],
+    ["approval_policy_changed", "src/lib/approval-policy.ts"],
+    ["agent_budget_changed", "src/lib/agent-budget.ts"],
+    ["To turn it off, choose Turn off.", TWO_APPROVALS_PANEL],
+    ["Turn off", TWO_APPROVALS_PANEL],
+    ["This window holds too many decisions to try at once. Try the last 30 days.", REPLAY_READ],
+    ["The agent pays it once a person agrees, in shadow mode", REPLAY_READ],
+  ],
   "guides/first-payment": [
     ["Add a supplier", GETTING_STARTED],
     ["See the agent's decision", GETTING_STARTED],
@@ -490,6 +579,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Legal or trading name", COUNTERPARTY_FORM],
     ["Payment limit (USDC)", COUNTERPARTY_FORM],
     ["Another chain is paid from Arc through CCTP, for a fee", COUNTERPARTY_FORM],
+    ["Arc mainnet pays on its own chain only", COUNTERPARTY_FORM, " pays on its own chain only"],
     ["Payment address", COUNTERPARTY_FORM],
     ["Optional until payment setup", COUNTERPARTY_FORM],
     ["Jurisdiction", COUNTERPARTY_FORM],
@@ -502,7 +592,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Upcoming", INVOICES_PAGE],
     ["Paid and closed", INVOICES_PAGE],
     ["Enter one invoice", INVOICES_PAGE],
-    ["Import CSV", INVOICES_PAGE],
+    ["Import a list", INVOICES_PAGE],
     ["From a document", INVOICES_PAGE],
     ["Or paste the invoice's text", DOCUMENT_TAB],
     ["Read invoice", DOCUMENT_TAB],
@@ -597,6 +687,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Add billing email", PAY_LINK_CONTROL],
     ["Turn off reminders", PAY_LINK_CONTROL],
     ["Pay on Arc testnet", "src/lib/email/receivable-reminder.ts", "Pay on ${label}"],
+    ["Pay on Arc mainnet", "src/lib/email/receivable-reminder.ts", "Pay on ${label}"],
     ["ar_reminder_sent", "src/lib/agent/collections.ts"],
     ["ar_reminder_deferred", "src/lib/agent/collections.ts"],
     ["ar_reminders_on", "src/lib/platform/pay-links.ts"],
@@ -709,6 +800,56 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Already made one here? Use my passkey wallet", "src/components/payee/PasskeyWalletOption.tsx"],
     ["Your passkey wallet", PAYEE_FORM],
     ["Refresh", "src/components/wallet/PasskeyWallet.tsx"],
+    ["Your wallet address on Arc mainnet", PAYEE_FORM, "Your wallet address on ${chainLabel}"],
+    ["Your wallet address on Arc testnet", PAYEE_FORM, "Your wallet address on ${chainLabel}"],
+  ],
+  "guides/import-bills": [
+    ["Bills & receivables", APP_NAV],
+    ["New invoice", INVOICES_PAGE],
+    ["Import a list", INVOICES_PAGE],
+    ["Only an owner or admin of this workspace can add or import invoices.", INVOICES_PAGE],
+    ["Choose a CSV file, or drop one here", "src/components/intake/BillImport.tsx"],
+    ["This file is not saved as UTF-8.", "src/components/intake/BillImport.tsx"],
+    ["Or paste rows from Excel or Google Sheets", "src/components/intake/BillImport.tsx"],
+    ["Read the pasted rows", "src/components/intake/BillImport.tsx"],
+    ["Copy a CSV template", "src/components/intake/BillImport.tsx"],
+    ["Not in the list", "src/components/intake/BillImport.tsx"],
+    ["The first row holds column names", "src/components/intake/BillImport.tsx"],
+    ["These rows are", "src/components/intake/BillImport.tsx"],
+    ["Bills to pay", "src/components/intake/BillImport.tsx"],
+    ["Invoices to collect", "src/components/intake/BillImport.tsx"],
+    ["Day first (15/10/2026)", "src/components/intake/BillImport.tsx"],
+    ["Month first (10/15/2026)", "src/components/intake/BillImport.tsx"],
+    ["Year first (26/10/15)", "src/components/intake/BillImport.tsx"],
+    ["The goods or services on every bill were received", "src/components/intake/BillImport.tsx"],
+    ["Check 6 rows", "src/components/intake/BillImport.tsx", "`Check ${bills}"],
+    ["To add", "src/components/intake/BillImport.tsx"],
+    ["Already in Vestiarion", "src/components/intake/BillImport.tsx"],
+    ["Can't add", "src/components/intake/BillImport.tsx"],
+    ["Change columns", "src/components/intake/BillImport.tsx"],
+    ["Add 3 bills", "src/components/intake/BillImport.tsx", "`Add ${counts.add}"],
+    ["Import another list", "src/components/intake/BillImport.tsx"],
+    ["Download the rows that can't be added", "src/components/intake/BillImport.tsx", "Download the rows that can&apos;t be added"],
+    ["Why it can't be added", "src/lib/bill-import/rows.ts"],
+    ["Same as row 4 of this list.", "src/lib/bill-import/rows.ts", "`Same as row ${earlier.line} of this list.`"],
+    ["Added 84 bills. 3 were already in Vestiarion. 13 can't be added.", "src/lib/bill-import/rows.ts", "already in Vestiarion."],
+    ["Due date “31/02/2026” is not a real day.", "src/lib/bill-import/dates.ts", "is not a real day"],
+    ["has decimals, and JPY amounts are whole numbers", "src/lib/bill-import/amounts.ts", "has decimals, and ${code} amounts are whole numbers"],
+    ["is negative: a credit note is not a bill.", "src/lib/bill-import/amounts.ts", "is negative: a credit note is not a bill"],
+    ["Bills in JPY are taken in shadow mode only. Turn it on for JPY in Settings, or convert the amount to USDC.", "src/lib/bill-import/rows.ts", "are taken in shadow mode only. Turn it on for ${currency} in Settings, or convert the amount to USDC."],
+    ["Vestiarion takes bills in USDC or EURC. Convert the amount to USDC.", "src/lib/bill-import/rows.ts"],
+    ["XYZ is not a currency code.", "src/lib/bill-import/rows.ts", "is not a currency code."],
+    ["Add it in Counterparties, then import this row again.", "src/lib/bill-import/rows.ts"],
+    ["matches more than one counterparty in this workspace. Add this bill with the invoice form.", "src/lib/bill-import/rows.ts"],
+    ["Choose whether the list's dates are day first or month first.", "src/lib/bill-import/rows.ts", "Choose whether the list's dates are ${orderWords(questions.dateOrder.orders)}."],
+    ["Import at most 200 bills at a time. Split the list.", "src/lib/bill-import/rows.ts", "bills at a time. Split the list."],
+    ["A quoted field is never closed. Check the list's quotes, then try again.", "src/lib/bill-import/table.ts"],
+    ["The list must be smaller than 1 MB.", "src/lib/bill-import/check.ts"],
+    ["The day's rate could not be read. Try again in a moment.", "src/lib/bill-import/rows.ts"],
+    ['via: "import"', "src/lib/commands/invoices.ts"],
+    ["importFile", "src/lib/invoices/create.ts"],
+    ["importRow", "src/lib/invoices/create.ts"],
+    ["A person added it, imported from a list.", "src/lib/decision-trail.ts", ", imported from a list"],
   ],
   "guides/pay-a-contractor": [
     ["Pay a freelancer", "src/app/o/[slug]/contractors/page.tsx"],
@@ -881,6 +1022,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Approve and pay?", SLACK_BLOCKS],
     ["Reject", SLACK_BLOCKS],
     ["Return to the agent", SLACK_BLOCKS],
+    ["It is on Arc mainnet, where payments are approved in Vestiarion.", CHAT_DECISIONS],
     ["Approve it in Vestiarion:", SLACK_BLOCKS],
     ["Approve and pay", APPROVAL_CARD],
     ["This payable changed after this message was posted. Open Vestiarion to see it as it is now.", CHAT_DECISIONS],
@@ -963,6 +1105,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["verify_milestone_github", GITHUB_CHECK],
     ["Paid:", GITHUB_COMMENTS],
     ["on Arc testnet", GITHUB_COMMENTS],
+    ["on Arc mainnet", GITHUB_COMMENTS, "on ${networkProfile(input.network).label}"],
     ["for this pull request, by", GITHUB_COMMENTS],
     ["pull_request_commented", GITHUB_COMMENTS],
   ],
@@ -1053,7 +1196,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   ],
   "guides/shadow-mode": [
     ["Run alongside how you pay today (shadow mode)", CREATE_FORM],
-    ["Try it on your bills", "src/components/landing/Hero.tsx"],
+    ["Try it on your bills", "src/components/landing/cta.ts"],
     ["Your workspace is ready, but shadow mode did not turn on.", "src/app/o/[slug]/console/page.tsx"],
     ["To pay on Arc", GETTING_STARTED],
     ["Does this supplier send you purchase orders?", COUNTERPARTY_FORM],
@@ -1202,11 +1345,14 @@ const sourceFile = (file: string) => readFileSync(path.join(process.cwd(), file)
  */
 const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/try-it": 20,
+  "guides/controls": 12,
   "guides/workspace": 20,
   "guides/go-live": 20,
   "guides/shadow-mode": 20,
   "guides/report": 20,
   "guides/first-payment": 20,
+  "guides/try-a-rule": 20,
+  "guides/import-bills": 20,
   "guides/pay-a-contractor": 20,
   "guides/get-paid": 20,
   "guides/telegram": 20,
@@ -1267,7 +1413,7 @@ describe("the Try it guide's sample outcomes", () => {
 
   it("lists the same outcomes as the first-payment guide's sample-data tour", () => {
     const tour = readSource("guides/first-payment").split("## Try it with sample data first")[1]?.split("\n## ")[0] ?? "";
-    const step = readSource("guides/try-it").split("## 3. Load sample data")[1]?.split("\n## ")[0] ?? "";
+    const step = readSource("guides/try-it").split("## Try it with sample data instead")[1]?.split("\n## ")[0] ?? "";
     expect(bullets(tour).length).toBeGreaterThan(4);
     expect(bullets(step)).toEqual(bullets(tour));
   });

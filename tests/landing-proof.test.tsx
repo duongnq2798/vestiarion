@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { Hero } from "@/components/landing/Hero";
 import { LiveProof, NetworkPanels } from "@/components/landing/LiveProof";
+import { LatestPanel, Proof } from "@/components/landing/Proof";
 import { landingProvenance, RESERVE_PROOF_HREF } from "@/components/landing/provenance";
 import { ProvenanceBar } from "@/components/vx/Provenance";
 import type { OpenNumbers, SideNumbers } from "@/lib/platform/open-numbers";
@@ -72,24 +72,32 @@ const TESTNET: OpenNumbers = {
 };
 
 describe("the landing's open numbers", () => {
-  it("show Arc mainnet first, then Arc testnet, customers' figures with the team's beside them", () => {
+  it("show Arc mainnet first, then Arc testnet, customers' figures large and the team's on a line of their own (landing clarity P2)", () => {
     const markup = renderToStaticMarkup(<NetworkPanels mainnet={MAINNET} testnet={TESTNET} />);
     const words = text(markup);
     expect(words.indexOf("Arc mainnet")).toBeLessThan(words.indexOf("Arc testnet"));
     for (const part of [
       "Real money",
       "Test money",
-      "Customer workspaces Not yet",
+      "Customers Workspaces Not yet",
       "None opened by anyone outside the team yet",
-      "Customer workspaces 5",
+      "Payments settled None yet",
+      "No customer has paid through it here yet",
+      "Vestiarion team · 1 payment, 0.10 USDC, from our own workspaces",
+      "Customers Workspaces 5",
       "3 live now, 2 made a first payment",
-      "Payments settled 91",
-      "2 by customers, 144.26 USDC in all",
-      "Payments settled 1",
-      "None by customers, 0.10 USDC in all",
+      "Payments settled 2",
+      "22.00 USDC paid by customers",
+      "Vestiarion team · 89 payments, 122.26 USDC, from our own workspaces",
     ]) {
       expect(words).toContain(part);
     }
+  });
+
+  it("never show a total that counts the team as a customer figure", () => {
+    const words = text(renderToStaticMarkup(<NetworkPanels mainnet={MAINNET} testnet={TESTNET} />));
+    expect(words).not.toContain("Payments settled 91");
+    expect(words).not.toContain("144.26");
   });
 
   it("never add Arc mainnet to Arc testnet", () => {
@@ -105,17 +113,27 @@ describe("the landing's open numbers", () => {
     expect(markup).toContain(`href="https://explorer.testnet.arc.io/tx/${TESTNET_TX}"`);
   });
 
-  it("say how often customers agreed with the agent in shadow mode, and the on-time share where there is no verdict", () => {
+  it("say how often customers agreed with the agent in shadow mode, else customers' on-time share, never the team's", () => {
     const words = text(renderToStaticMarkup(<NetworkPanels mainnet={MAINNET} testnet={TESTNET} />));
-    expect(words).toContain("Customers agreed with the agent 75%");
-    expect(words).toContain("3 of 4 decisions, in shadow mode");
-    expect(words).toContain("Invoices paid on time 100%");
+    expect(words).toContain("Agreed with the agent 3 of 4");
+    expect(words).toContain("decisions, in shadow mode (75%)");
+    // Arc mainnet: the team's one invoice paid on time is not a customer's, so it is not shown under Customers.
+    expect(words).toContain("Agreed with the agent None yet");
+    expect(words).toContain("No customer has given a verdict in shadow mode yet");
+    expect(words).not.toContain("Invoices paid on time 100%");
+    const onTime: OpenNumbers = {
+      ...MAINNET,
+      sides: { ...MAINNET.sides, customers: side({ workspacesOpened: 2, payments: 4, usdcPaid: 8, invoicesPaidOnArc: 4, invoicesPaidOnTime: 3 }) },
+    };
+    const customersOnly = text(renderToStaticMarkup(<NetworkPanels mainnet={onTime} testnet={null} />));
+    expect(customersOnly).toContain("Invoices paid on time 75%");
+    expect(customersOnly).toContain("customers' invoices, 3 of 4");
   });
 
   it("say when a network's numbers could not be read, and still show the other", () => {
     const words = text(renderToStaticMarkup(<NetworkPanels mainnet={null} testnet={TESTNET} />));
     expect(words).toContain("The Arc mainnet numbers could not be read right now.");
-    expect(words).toContain("Customer workspaces 5");
+    expect(words).toContain("Workspaces 5");
   });
 
   it("name their scope and link to the open numbers and the research note", () => {
@@ -161,9 +179,19 @@ describe("the hero's live legs", () => {
     expect(plain).not.toContain("<a");
   });
 
-  it("link the hero's Arc mainnet claim to the mainnet numbers", () => {
-    const markup = renderToStaticMarkup(<Hero provenance={landingProvenance(base)} head={[]} hostedAvailable />);
+  it("sit in the landing's proof, with the Arc mainnet claim linked to the mainnet numbers (landing clarity P3)", () => {
+    // Every read still pending: the section's words and links are drawn, each read waits behind its own fallback.
+    const markup = renderToStaticMarkup(<Proof numbers={new Promise(() => {})} facts={new Promise(() => {})} />);
     expect(markup).toMatch(/<a[^>]*href="\/open#mainnet"[^>]*>Live on Arc mainnet<\/a>/);
-    expect(text(markup)).toContain("An agent for your bills · Live on Arc mainnet");
+    expect(text(markup)).toContain("What runs live right now · Live on Arc mainnet");
+    expect(text(markup)).toContain("Don't take our word for it.");
+    expect(text(markup)).toContain("Loading the agent's latest decision");
+    expect(text(markup)).toContain("Loading the open numbers");
+    expect(markup).toMatch(/<a[^>]*href="\/docs\/guides\/audit-export"/);
+    expect(text(renderToStaticMarkup(<ProvenanceBar legs={landingProvenance(base)} />))).toContain("See the latest payment on Arc mainnet");
+  });
+
+  it("show the team's latest decision when there is one, and nothing when there is none", () => {
+    expect(renderToStaticMarkup(<LatestPanel latest={null} />)).toBe("");
   });
 });
