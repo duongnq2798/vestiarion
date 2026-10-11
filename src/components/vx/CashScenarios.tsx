@@ -60,7 +60,11 @@ const typed = (text: string) => {
   return text.trim() === "" || !Number.isFinite(value) ? 0 : value;
 };
 
-export function CashScenarios({ basis, defaultOpen = false }: { basis: ScenarioBasis; defaultOpen?: boolean }) {
+/**
+ * The section. `outcome={false}` draws the levers alone, for the guide's picture of them; the parts of the outcome
+ * (`ScenarioCases`, `ScenarioFindings`, `CoverageList`) have their own pictures.
+ */
+export function CashScenarios({ basis, defaultOpen = false, outcome = true }: { basis: ScenarioBasis; defaultOpen?: boolean; outcome?: boolean }) {
   const id = useId();
   const [horizon, setHorizon] = useState<Horizon>(DEFAULT_LEVERS.horizon);
   const [lateText, setLateText] = useState(String(DEFAULT_LEVERS.lateDays));
@@ -157,7 +161,7 @@ export function CashScenarios({ basis, defaultOpen = false }: { basis: ScenarioB
           )}
         </div>
 
-        <ScenarioOutcome result={result} />
+        {outcome && <ScenarioOutcome result={result} />}
       </Disclosure>
     </section>
   );
@@ -170,6 +174,22 @@ function dayOf(today: string, offset: number): string {
 
 /** Everything worked out for one set of levers: the two cases, the chart, the bills touched, advice, drivers, coverage. */
 export function ScenarioOutcome({ result }: { result: ScenarioResult }) {
+  return (
+    <div className="space-y-6">
+      <ScenarioCases result={result} />
+      <ScenarioFindings result={result} />
+      <CoverageList result={result} />
+      <DayByDay result={result} />
+      <p className="text-xs leading-5 text-ink-3">
+        A what-if from the bills and receivables on record, not a forecast. Nothing here is saved, changes a payment or reaches the agent: Safe to spend today and
+        every payment still count no receivable.
+      </p>
+    </div>
+  );
+}
+
+/** The two cases side by side, the buckets in words, and the chart. */
+export function ScenarioCases({ result }: { result: ScenarioResult }) {
   return (
     <div className="space-y-6">
       {/* One short line for a screen reader as the levers change, not the whole section. */}
@@ -189,15 +209,18 @@ export function ScenarioOutcome({ result }: { result: ScenarioResult }) {
         {result.horizon} days. Deals not invoiced yet are not counted.
       </p>
       <ScenarioChart result={result} />
+    </div>
+  );
+}
+
+/** What a short scenario touches, advice in words, and what moves it most; nothing when there is none of it. */
+export function ScenarioFindings({ result }: { result: ScenarioResult }) {
+  if (result.affected.length === 0 && result.suggestions.length === 0 && result.drivers.length === 0) return null;
+  return (
+    <div className="space-y-6">
       {result.affected.length > 0 && <AffectedBills result={result} />}
       {result.suggestions.length > 0 && <Suggestions result={result} />}
       {result.drivers.length > 0 && <Drivers result={result} />}
-      <CoverageList result={result} />
-      <DayByDay result={result} />
-      <p className="text-xs leading-5 text-ink-3">
-        A what-if from the bills and receivables on record, not a forecast. Nothing here is saved, changes a payment or reaches the agent: Safe to spend today and
-        every payment still count no receivable.
-      </p>
     </div>
   );
 }
@@ -343,7 +366,7 @@ function AffectedBills({ result }: { result: ScenarioResult }) {
         {result.affected.map((bill) => (
           <li key={bill.id} className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
             <span className="min-w-0 text-ink">
-              <span className="font-mono text-xs text-ink-3">{dayLabel(bill.day)}</span> {bill.label} <span className="text-xs text-ink-3">{bill.note}</span>
+              <span className="text-xs text-ink-3 tabular-nums">{dayLabel(bill.day)}</span> {bill.label} <span className="text-xs text-ink-3">{bill.note}</span>
             </span>
             <Money value={bill.amount} sign="−" className="shrink-0 text-ink" />
           </li>
@@ -447,7 +470,8 @@ function Drivers({ result }: { result: ScenarioResult }) {
   );
 }
 
-function CoverageList({ result }: { result: ScenarioResult }) {
+/** What the figure is built from (I19): how far bills are known, what is projected, client records and what is left out. */
+export function CoverageList({ result }: { result: ScenarioResult }) {
   const { coverage } = result;
   const thin = coverage.billsKnownDays < coverage.horizon / 2;
   return (
@@ -534,7 +558,7 @@ function DayByDay({ result }: { result: ScenarioResult }) {
         <TableBody>
           {rows.map((day) => (
             <TableRow key={day.day}>
-              <TableCell className="py-2 font-mono text-xs text-ink-3">{dayLabel(day.day)}</TableCell>
+              <TableCell className="py-2 text-xs text-ink-3 tabular-nums">{dayLabel(day.day)}</TableCell>
               <TableCell className="py-2 text-right">
                 <Balance value={day.base} />
               </TableCell>

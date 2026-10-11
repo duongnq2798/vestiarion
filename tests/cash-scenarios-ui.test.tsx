@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { CashScenarios, ScenarioOutcome } from "@/components/vx/CashScenarios";
+import { CashScenarios, CoverageList, ScenarioCases, ScenarioFindings, ScenarioOutcome } from "@/components/vx/CashScenarios";
 import { cashScenario, DEFAULT_LEVERS, type ScenarioBasis, type ScenarioLevers } from "@/lib/cash-scenarios";
 
 /**
@@ -147,6 +147,37 @@ describe("CashScenarios", () => {
     expect(shown).toContain("Receivables due in the next 60 days");
     expect(markup).toContain('aria-label="When Acme pays"');
     expect(shown).toMatch(/Acme 70\.00 USDC due Oct 12, 2026/);
+  });
+
+  it("works out the outcome inside the section, and draws the levers alone when asked, for the guide's picture", () => {
+    expect(shown).toContain("As things stand");
+    expect(shown).toContain("What this is built from");
+    const leversOnly = text(renderToStaticMarkup(<CashScenarios basis={BASIS} defaultOpen outcome={false} />));
+    expect(leversOnly).toContain("Clients pay late by (days)");
+    expect(leversOnly).not.toContain("As things stand");
+    expect(leversOnly).not.toContain("What this is built from");
+  });
+});
+
+describe("the outcome's parts", () => {
+  const result = cashScenario(BASIS, levers());
+
+  it("are the cases and chart, the findings, and the coverage, which together make the outcome", () => {
+    const cases = text(renderToStaticMarkup(<ScenarioCases result={result} />));
+    expect(cases).toContain("Runs short on Oct 14, 2026");
+    expect(cases).toContain("No bank balance is counted.");
+    expect(cases).not.toContain("What could help");
+    const findings = text(renderToStaticMarkup(<ScenarioFindings result={result} />));
+    expect(findings).toContain("Due while the balance is short");
+    expect(findings).toContain("What could help");
+    expect(findings).toContain("What moves it most");
+    expect(findings).not.toContain("What this is built from");
+    expect(text(renderToStaticMarkup(<CoverageList result={result} />))).toContain("Bills known for 13 of 30 days");
+  });
+
+  it("draw no findings when nothing leaves and nothing runs short", () => {
+    const quiet = cashScenario({ ...BASIS, outflows: [] }, levers());
+    expect(renderToStaticMarkup(<ScenarioFindings result={quiet} />)).toBe("");
   });
 });
 
