@@ -169,7 +169,19 @@ describe("what available means (L4)", () => {
     const markup = render(lifecycle([...decided, { ...confirmed, refs: [MINT], txHash: MINT }, minted], null, { crossChain: true }));
     expect(text(markup)).toContain("Minted on Base Sepolia: the money is in the payee's wallet there.");
     expect(markup).toContain(`href="https://sepolia.basescan.org/tx/${MINT}"`);
+    // Gateway's transaction is its mint: linked on the payee's chain at both stages, never on Arc's explorer.
+    expect(markup).not.toContain(`explorer.testnet.arc.io/tx/${MINT}`);
+    expect(markup.match(/sepolia\.basescan\.org\/tx\//g)).toHaveLength(2);
     expect(text(render(lifecycle([...decided, confirmed], null, { crossChain: true })))).toContain("Not minted on the payee's chain yet.");
+  });
+
+  it("names a chain no network lists by its own id, unlinked, rather than failing the page", () => {
+    const minted: SettlementFact = { kind: "minted", at: T(6), attempt: 1, chain: "NOT-A-CHAIN", txHash: MINT };
+    const markup = render(lifecycle([...decided, { ...confirmed, refs: [MINT], txHash: MINT }, minted], null, { crossChain: true }));
+    expect(text(markup)).toContain("Minted on NOT-A-CHAIN: the money is in the payee's wallet there.");
+    // Known by its mint, on a chain the track cannot link: neither stage links it, and never on Arc's explorer.
+    expect(markup).not.toContain(`/tx/${MINT}`);
+    expect(text(markup)).toContain("Circle confirmed it.");
   });
 
   it("says a simulated payment reached no wallet", () => {

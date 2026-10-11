@@ -273,7 +273,9 @@ export function reduceSettlement(input: SettlementInput): Settlement {
   if (current.pending) stages.pending = { at: current.pending.at, by: current.pending.by, state: current.pending.state };
   const confirmed = current.confirmed;
   if (confirmed) {
-    stages.confirmed = { at: confirmed.at, by: "circle", txHash: confirmed.txHash };
+    // Gateway's payout is known by its mint, on the payee's chain: its transaction is linked there, never on Arc.
+    const onPayeeChain = current.minted && confirmed.txHash && same(confirmed.txHash, current.minted.txHash) ? current.minted.chain : null;
+    stages.confirmed = { at: confirmed.at, by: "circle", txHash: confirmed.txHash, ...(onPayeeChain ? { chain: onPayeeChain } : {}) };
     // In the payee's wallet: on the network's own chain once confirmed; on another chain once minted there; never for a
     // simulated payment (L4).
     if (!input.simulated && !input.crossChain) stages.available = { at: confirmed.at, by: "chain" };

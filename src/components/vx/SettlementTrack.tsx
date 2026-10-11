@@ -85,6 +85,16 @@ export function settlementSummary(settlement: Settlement, now: number): string {
   }
 }
 
+/** A payee chain as the track names it; one no network lists (a row from before it was refused) by its own id, unlinked. */
+function payeeChain(chain: string): { label: string; explorerTx: string | null } {
+  try {
+    const entry = chainById(chain);
+    return { label: entry.label, explorerTx: entry.explorerTx };
+  } catch {
+    return { label: chain, explorerTx: null };
+  }
+}
+
 /** Circle's state word, said as it is. */
 const circleWord = (state: string | null | undefined) => (state ? ` (Circle: ${state})` : "");
 
@@ -109,11 +119,13 @@ function reachedLine(stage: SettlementStage, mark: StageMark, settlement: Settle
       if (mark.by === "watch") return mark.state ? `Not confirmed when the transfer watch asked Circle${circleWord(mark.state)}.` : "Not confirmed when the transfer watch checked it.";
       return `Circle took it and had not confirmed it yet${circleWord(mark.state)}.`;
     case "confirmed":
-      return settlement.simulated ? "Simulated in the sandbox: confirmed at once, with nothing on chain." : `Circle confirmed it on ${label}.`;
+      if (settlement.simulated) return "Simulated in the sandbox: confirmed at once, with nothing on chain.";
+      // A payout to another chain is confirmed once it is minted there, which the next stage names.
+      return settlement.crossChain ? "Circle confirmed it." : `Circle confirmed it on ${label}.`;
     case "available":
       // Said of the transfer, whatever its token (USDC or EURC); never of a bank, which Vestiarion does not see (L4).
       return mark.chain
-        ? `Minted on ${chainById(mark.chain).label}: the money is in the payee's wallet there.`
+        ? `Minted on ${payeeChain(mark.chain).label}: the money is in the payee's wallet there.`
         : `A confirmed transfer on ${label} is final: the money is in the payee's wallet there. Moving it to a bank is the payee's own step, which Vestiarion does not see.`;
     case "reconciled":
       return "The bill is marked paid with this transaction, and a signed entry records it.";
@@ -171,6 +183,9 @@ function StageRow({ kind, title, at, children }: { kind: keyof typeof ICON; titl
   );
 }
 
+/** A transaction on a payee chain's explorer, when the chain has one the track knows. */
+const linkOn = (explorerTx: string | null, tx: string) => (explorerTx ? `${explorerTx}${tx}` : undefined);
+
 function Refs({ mark, orgSlug, network }: { mark: StageMark; orgSlug: string; network: Network }) {
   const tx = mark.txHash && /^0x[0-9a-fA-F]{64}$/.test(mark.txHash) ? mark.txHash : null;
   if (mark.seq == null && !tx) return null;
@@ -181,7 +196,7 @@ function Refs({ mark, orgSlug, network }: { mark: StageMark; orgSlug: string; ne
           #{String(mark.seq).padStart(4, "0")}
         </Link>
       )}
-      {tx && <Hash value={tx} href={mark.chain ? `${chainById(mark.chain).explorerTx}${tx}` : txUrl(network, tx)} />}
+      {tx && <Hash value={tx} href={mark.chain ? linkOn(payeeChain(mark.chain).explorerTx, tx) : txUrl(network, tx)} />}
     </span>
   );
 }
