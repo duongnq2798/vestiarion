@@ -19,6 +19,7 @@ Each decision names what it costs if it turns out wrong.
 - No new page, route, server action, write or migration. It is on the Treasury page (`/o/<slug>/console`), right under
   the Next 30 days card, folded until someone opens it. Every member who can read Treasury can use it.
 - It is computed in the browser from rows the page already passed, so changing a lever never calls the server.
+- No migration: 0096, reserved for this feature, stays unused.
 - Cost if wrong: one more card on Treasury, closed by default.
 
 **C2. One set of rules: the outlook's own.**
@@ -36,7 +37,8 @@ Each decision names what it costs if it turns out wrong.
   in that case, and are shown as their own figure.
 - **Pipeline**: deals not invoiced yet. The workspace keeps no record of them, so this version counts none and never
   makes one up; the section says only invoiced receivables are counted.
-- Bank balances: Vestiarion holds none, so nothing from a bank is ever added to or taken from a USDC figure. EURC bills
+- Bank balances: Vestiarion holds none, so nothing from a bank is ever added to or taken from a USDC figure, and the
+  section says "No bank balance is counted." beside the cash it counts. EURC bills
   and receivables are paid from and into the EURC balance: listed as left out, never converted, never summed with USDC.
 - Cost if wrong: money expected reads as money held.
 
@@ -68,7 +70,8 @@ Each decision names what it costs if it turns out wrong.
   bills, recurring payments and milestones on their days, plus receivables on the day they arrive in that case.
 - The first short day (the balance below zero), the first day below the cushion, the lowest balance and its day, for
   both cases. The cushion on a day is 15% of what leaves in the 7 days from it: the treasury's 1.15 buffer. On today it is
-  exactly Safe to spend today's cushion.
+  exactly Safe to spend today's cushion, unless a recurring period not billed yet falls within those 7 days (its bill
+  is created up to 7 days before, so only one created late does).
 - The bills that fall due while the scenario's balance is below zero, and how much is missing at its lowest.
 - Cost if wrong: a wrong day; the engine is pure and tested day by day, including a single due day moved.
 
@@ -126,5 +129,7 @@ Each decision names what it costs if it turns out wrong.
   coverage; no receivable counted before it arrives.
 - `tests/cash-scenarios-ui.test.tsx`: the section's words and states; its copy has no instruction to borrow or invest;
   no module that moves money imports the scenario modules; the console renders it under Next 30 days.
-- The guide `content/docs/guides/cash-scenarios.mdx`, with its quotes pinned in `tests/docs-guides.test.ts`, and a
-  screenshot from `/docs-shots/cash-scenarios`.
+- The guide `content/docs/guides/cash-scenarios.mdx`, with its quotes pinned in `tests/docs-guides.test.ts`, and four
+  screenshots from `/docs-shots`: `cash-scenarios` (the levers, drawn with `outcome={false}`), `cash-scenarios-cases`
+  (`ScenarioCases`), `cash-scenarios-findings` (`ScenarioFindings`) and `cash-scenarios-coverage` (`CoverageList`).
+  One picture of the whole open section is too large for the guides' 250 KB limit.

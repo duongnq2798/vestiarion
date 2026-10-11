@@ -173,6 +173,10 @@ const SHOTS = {
   "report-lists": async () => {},
   "report-actuals": async () => {},
   "report-actuals-bills": async () => {},
+  "cash-scenarios": async () => {},
+  "cash-scenarios-cases": async () => {},
+  "cash-scenarios-findings": async () => {},
+  "cash-scenarios-coverage": async () => {},
   "workspace-status": async () => {},
 };
 

@@ -19,6 +19,7 @@ type GuideSlug =
   | "guides/go-live"
   | "guides/shadow-mode"
   | "guides/report"
+  | "guides/cash-scenarios"
   | "guides/first-payment"
   | "guides/pay-a-contractor"
   | "guides/get-paid"
@@ -153,6 +154,8 @@ const ACTUAL_CONTROL = "src/components/ActualPaymentControl.tsx";
 const ACTUALS_CSV = "src/components/ActualsCsvImport.tsx";
 const ACTUALS_LIBRARY = "src/lib/actual-payments.ts";
 const ACTUAL_FIELDS = "src/lib/actual-payment-fields.ts";
+const SCENARIOS = "src/components/vx/CashScenarios.tsx";
+const OUTLOOK = "src/components/vx/CashOutlook.tsx";
 
 /** Each guide's quoted UI strings, as `[text, the file it must appear in]`. */
 /**
@@ -1051,6 +1054,42 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["actual_payment_recorded", ACTUALS_LIBRARY],
     ["actual_payment_corrected", ACTUALS_LIBRARY],
   ],
+  // Cash scenarios (cash scenarios design C1-C10).
+  "guides/cash-scenarios": [
+    ["Treasury", APP_NAV],
+    ["Next 30 days", OUTLOOK],
+    ["Safe to spend today", OUTLOOK],
+    ["What if clients pay late?", SCENARIOS],
+    ["Nothing here is saved or paid.", SCENARIOS],
+    ["No bank balance is counted.", SCENARIOS],
+    ["Deals not invoiced yet are not counted.", SCENARIOS],
+    ["recurring, not billed yet", "src/lib/cash-scenario-basis.ts"],
+    ["Look ahead", SCENARIOS],
+    ["Clients pay late by (days)", SCENARIOS],
+    ["Change in bill costs (%)", SCENARIOS],
+    ["10 is 10% more, -10 is 10% less.", SCENARIOS],
+    ["The change applies to", SCENARIOS],
+    ["Every bill", SCENARIOS],
+    ["Bills written in another currency", SCENARIOS],
+    ["Receivables due in the next 60 days", SCENARIOS, "Receivables due in the next {horizon} days"],
+    ["On time", SCENARIOS],
+    ["Never arrives", SCENARIOS],
+    ["As things stand", SCENARIOS],
+    ["In this scenario", SCENARIOS],
+    ["Runs short on", SCENARIOS],
+    ["Never short in the next 60 days", SCENARIOS, "Never short in the next ${horizon} days"],
+    ["Below the cushion from", SCENARIOS],
+    ["Day by day", SCENARIOS],
+    ["Due while the balance is short", SCENARIOS],
+    ["What could help", SCENARIOS],
+    ["advice only: nothing here changes a payment", SCENARIOS],
+    ["What moves it most", SCENARIOS],
+    ["What this is built from", SCENARIOS],
+    ["Bills known for 28 of 60 days", SCENARIOS, "Bills known for ${coverage.billsKnownDays} of ${coverage.horizon} days"],
+    ["Recurring payments could not be read, so none is counted.", SCENARIOS],
+    ["Client records are counts, not a prediction.", SCENARIOS],
+    ["A what-if from the bills and receivables on record, not a forecast.", SCENARIOS],
+  ],
   "guides/shadow-mode": [
     ["Run alongside how you pay today (shadow mode)", CREATE_FORM],
     ["Try it on your bills", "src/components/landing/Hero.tsx"],
@@ -1206,6 +1245,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/go-live": 20,
   "guides/shadow-mode": 20,
   "guides/report": 20,
+  "guides/cash-scenarios": 20,
   "guides/first-payment": 20,
   "guides/pay-a-contractor": 20,
   "guides/get-paid": 20,
