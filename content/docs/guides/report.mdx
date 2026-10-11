@@ -143,7 +143,7 @@ Choose **Find the bills**. Each line of money out is matched against the bills t
 <Screenshot
   src="/docs/guides/report-bank-statement-matches.png"
   alt="The lines of money out of the statement. Line 5, 46.41 USD on Oct 2, 2026, Already used for Northwind Cloud. Line 7, a transfer to savings: No bill matches. Lines 8, 9 and 10, ticked: Northwind Cloud, Harbor VPS and Lumen Hosting, each the same amount, paid 11 days before the due day, the payee's name found, Northwind Cloud's invoice number INV-1108 found, and Lumen Hosting's correcting a record of not paid. Line 11, not ticked: Atlas Compute, marked Amount differs, 61.25 USD paid against a bill of 61.87 USD, its name and invoice number found. Line 12, a card payment of 15.00 USD that fits two bills: Choose the bill. Below, 1 line of money in is not matched, and Save 3 payments."
-  caption="Each line of money out with the bill it paid and why: the exact matches ticked, the rest for you to decide."
+  caption="Each line of money out with the bill it could have paid and why: the exact matches ticked, the rest for you to decide."
 />
 
 **Save N payments** saves the ticked lines. The server reads the statement again and matches it again first, and saves a line only while its bill is still one it could have paid. Each is recorded as paid by bank transfer on the booking day, for the line's amount and currency, with its reference, correcting the bill's record when it has one, as its own signed entry. The bill's record then reads **from a bank statement**. A line used once is kept, so the same or an overlapping statement imported again shows it as **Already used**. The rest of the statement is never stored.

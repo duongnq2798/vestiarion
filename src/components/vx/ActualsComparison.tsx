@@ -325,7 +325,7 @@ function BankStatementCard({ slug, statement }: { slug: string; statement: { ava
       <div className="space-y-1">
         <p className="text-sm font-medium text-ink">Import a bank statement</p>
         <p className="text-xs text-ink-3">
-          Each line of money out is matched to the bill it paid, with why, and saved as what your business paid once you tick it. Money in is not matched:
+          Each line of money out is matched to the bill it could have paid, with why, and saved as what your business paid once you tick it. Money in is not matched:
           receivables are not part of this import.
         </p>
       </div>
