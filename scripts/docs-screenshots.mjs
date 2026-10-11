@@ -195,6 +195,8 @@ const SHOTS = {
   "cash-scenarios-cases": async () => {},
   "cash-scenarios-findings": async () => {},
   "cash-scenarios-coverage": async () => {},
+  "import-bills-columns": async () => {},
+  "import-bills-check": async () => {},
   "workspace-status": async () => {},
 };
 

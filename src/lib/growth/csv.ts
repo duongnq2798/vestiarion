@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { rowsFromCsv } from "../invoice-csv";
+import { rowsFromCsv } from "../csv-rows";
 import { CAMPAIGN_ID, CONFIDENCES, CONTACT_CHANNELS, SEGMENTS, SOURCES, type Stage } from "./fields";
 
 /**
