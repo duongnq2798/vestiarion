@@ -988,7 +988,7 @@ workspace's mode for that action, never from a link, a key or a button. A
 **command** is one function per action — `approvePayable`, `rejectPayable`,
 `returnPayable`, `addPayableDetails`, `payMilestoneNow`, `closeMilestoneUnpaid`,
 `pauseWorkspaceAgent`, `resumeWorkspaceAgent`, `runWorkspaceCycle`,
-`addInvoice`, `importInvoices`, `recordActualPayment`, `importActualPayments` — whose first statement is
+`addInvoice`, `importInvoices`, `recordActualPayment`, `importActualPayments`, `approvePlanLines` — whose first statement is
 `gate(actor, "<command>")`:
 
 - the scope in force must be the actor's workspace, or it throws
@@ -1047,6 +1047,60 @@ columns invoices already have), shadow mode and each day's rate once. A bill in
 the business's own currency goes through `shadowBill`. Each added row's
 `create_invoice` entry carries `via: "import"`, `importFile` (the list's SHA-256)
 and `importRow`; the invoice number starts the memo. The list itself is not kept.
+
+## The payment plan
+
+Bills & receivables opens with the next 14 UTC days of payments
+(docs/superpowers/specs/2026-10-11-payment-plan-design.md). `planPayments`
+(`src/lib/payment-plan.ts`) is pure: from the operating wallet, the USYC
+reserve and its yield, Safe to spend's cushion (`cashOutlook(...).cushion`, so
+the two figures never disagree), the open payables and milestones, the agent's
+spending limit with what it paid, and the figure for two approvals, it gives
+each counted line a day (today when overdue, the due date otherwise, a
+discount's last day only when the discount is worth at least the reserve's
+yield to the due date, the balance stays at or above the cushion, no other
+line falls short and the spending limit has room), walks the days in the cash's
+order, marks a line the balance cannot cover as short without spending it, and
+previews each line's checks (payment limit, two approvals, screening, the daily
+and 7-day limit). `paymentPlanInput` (`src/lib/payment-plan-input.ts`) turns the
+rows into that input, and `readPaymentPlan` (`src/lib/payment-plan-read.ts`)
+reads them in the workspace's scope; the page and the command both go through
+it, so they build the same plan. The page reads it best effort: a plan that
+cannot be read says so in its section and nothing else on the page changes.
+
+**Fingerprints and freshness.** The plan carries a fingerprint over today, the
+cash, the reserve's rate, the cushion, the limits and every line's own
+fingerprint (the bill's status, amount, currency, payee and its address, due
+day, scheduled day, discount, creator and the plan's day for it). `planFreshness`
+turns approving off while a live workspace's chain balance
+(`accounts.balance_synced_at`) is older than 10 minutes or was never read, or a
+limit or the milestones could not be read; the section keeps the plan on screen
+and offers the console's own balance read (`refreshOnChainBalanceAction`).
+
+**Approving a line moves a day, never money.** `approvePlanAction`
+(`src/app/actions/payment-plan.ts`) authorizes `approval.decide`, then runs
+`approvePlanLines` (`src/lib/commands/payment-plan.ts`, `payment_plan.approve`,
+the console only). The command refuses while a cycle runs (the AP stage writes a
+decided bill without a compare-and-set), reads the plan again, and refuses a
+stale balance or a plan fingerprint other than the one shown. Each line is then
+checked on its own: its fingerprint, a move to offer, its blocking flags, and
+maker-checker (whoever created the bill approves its day only as the
+workspace's only approver, `isSoleApprover`). `moveScheduledPayment`
+(`src/lib/payment-plan-apply.ts`) writes `scheduled_for` with a compare-and-set
+on the status, the day shown, the counterparty, the amount and the due day, and
+appends a signed `payment_rescheduled` entry (actor `human`, domain `ap`) with
+who moved it, the days, the line's facts and both fingerprints. The AP stage
+then decides the bill again on its new day like any scheduled bill
+(`dueForDecision`), with every guardrail; a move to today raises a
+`plan_approved` cycle event. The decision card skips `payment_rescheduled`
+when it looks for the agent's decision (`matchingEntry` in
+`src/components/vx/map.ts`), and the decision trail shows it as a person's step.
+
+**Measured, not projected.** `planOutcomes` (`src/lib/payment-plan-outcomes.ts`)
+counts the last 30 days from what happened: bills paid by their due day,
+discounts the transfers carried (amount less `paid_amount`), and
+`payment_rescheduled` entries. The plan's own discounts are labelled an
+estimate.
 
 ## Notifications
 

@@ -18,8 +18,9 @@ bill to the plan's day. It never pays anything itself.
 ## Decisions
 
 **P1. A section on Bills & receivables, not a new page.**
-- "Payment plan" heads the sections of `/o/<slug>/invoices`, under the figures. Every member reads it; only someone with
-  `approval.decide` sees its Approve buttons.
+- "Payment plan" heads the sections of `/o/<slug>/invoices`, under the figures, over the whole list: under a status
+  filter it is neither shown nor read. Every member reads it; only someone with `approval.decide` sees its Approve
+  buttons.
 - Cost if wrong: a longer page. The section is one component and moves without touching its logic.
 
 **P2. What it covers.**
@@ -45,8 +46,14 @@ bill to the plan's day. It never pays anything itself.
 - Otherwise the due date. Never later, never earlier for any reason but a discount.
 - Earlier only to take an early-payment discount that still applies, on its deadline (today when the deadline is
   today), and only when, with that bill paid then, the balance stays at or above the cushion on every day from then to
-  the end of the window and no other bill is left short. Discounts are tried in order of deadline, then larger discount
+  the end of the window, no other bill is left short, and the agent's spending limit has room for it that day without
+  taking the room a payment already fitting there had. Discounts are tried in order of deadline, then larger discount
   first, each against the plan as it stands.
+- The discount must also be worth at least the yield of holding the cash in the reserve from its deadline to the due
+  date, with the reserve's own rate (`accounts.apy`): the agent's own rule (payment timing), so a day the plan proposes
+  is one the agent pays on when it decides the bill again, and a move is never undone by the agent's next decision.
+  The yield only decides whether to propose paying early: a bill the agent already scheduled on or before the
+  discount's deadline keeps that day, since the plan never moves a payment later only to earn yield.
 - Cost if wrong: a discount missed, or one taken that the cushion could have spared. Both are estimates; the bill is
   still paid by its due date, and the agent decides again on the day.
 
@@ -134,8 +141,12 @@ refused while a cycle is running ("try again in a minute"), as changing the spen
   feature's three measures: overdue avoided, discount captured, manual reschedules.
 - Nothing on the plan says "saved" about a discount not yet taken.
 
-**P15. No migration, no API change.** Every column exists (`invoices.scheduled_for`, `created_by`, `paid_amount`,
-`accounts.balance_synced_at`). Nothing under `/api/v1` or the webhooks changes.
+**P15. No migration; one new ledger action.** Every column exists (`invoices.scheduled_for`, `created_by`,
+`paid_amount`, `accounts.balance_synced_at`, `accounts.apy`), so the migration number reserved for this feature (0097)
+is left unused. No endpoint changes, but the ledger is part of the integration surface: `payment_rescheduled` entries
+appear in `GET /api/v1/ledger` and as `ledger.appended`, a moved bill's `scheduledFor` changes in
+`GET /api/v1/invoices`, and an event cycle's `events` can name `plan_approved`. `content/docs/changelog.mdx` says so
+(2026-10-11).
 
 ## Not now
 
@@ -158,5 +169,9 @@ refused while a cycle is running ("try again in a minute"), as changing the spen
 - `tests/commands-payment-plan.test.ts`: the gate, a running cycle, stale balance, changed plan, a line's own checks, the
   creator refused unless sole approver, a batch applying only the passing lines, and a cycle raised for today.
 - `tests/payment-plan-ui.test.tsx`: the section's words, the stale warning with approving off, the viewer without
-  Approve, and the projected figures labelled.
-- The docs tests pin the guide's quotes, and the decision trail test the new step.
+  Approve, the projected figures labelled, and the struck amount and a balance under the cushion said in words.
+- `tests/payment-plan-input.test.ts`: the rows turned into the planner's input as the page and the command both read
+  them, the reserve's rate among them; `tests/payment-plan-outcomes.test.ts`: the three measures.
+- The guide (`content/docs/guides/payment-plan.mdx`, Everyday work) with its screenshot (`payment-plan`, from
+  `src/app/docs-shots/payment-plan-fixture.ts`); the docs tests pin its quotes and its place, and the decision trail
+  test the new step.
