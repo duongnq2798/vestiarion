@@ -88,12 +88,8 @@ function LineRow({
             </span>
           </div>
           {note && <p className="mt-0.5 text-xs text-ink-3">{note}</p>}
+          {/* A discount the day takes is in the reason, with its value: never a second line saying it again. */}
           <p className="mt-1 text-[0.8125rem] leading-snug text-ink-2">{line.reason}</p>
-          {line.discount?.taken && counted && !short && (
-            <p className="mt-1 text-xs text-ink-2">
-              Takes the {line.discount.pct}% discount, <Money value={line.discount.value} />, if paid on this day.
-            </p>
-          )}
           {line.flags.length > 0 && (
             <ul className="mt-2 space-y-1">
               {line.flags.map((flag) => (
@@ -157,8 +153,8 @@ function LineGroup({ title, lines, ...rest }: { title: string; lines: PlanLine[]
 /** The figures the plan starts from and ends with. */
 function PlanSummary({ plan }: { plan: PaymentPlan }) {
   const rows: Array<{ label: string; value: ReactNode; note?: string; tone?: "held" }> = [
-    { label: "Cash now", value: <Money value={plan.cash} />, note: plan.reserve > 0 ? "The operating wallet and the USYC reserve" : "The operating wallet" },
-    { label: "Cushion", value: <Money value={plan.cushion} />, note: "15% of what leaves within 7 days, as Safe to spend keeps" },
+    { label: "Cash now", value: <Money value={plan.cash} />, note: plan.reserve > 0 ? "Operating wallet and USYC reserve" : "Operating wallet" },
+    { label: "Cushion", value: <Money value={plan.cushion} />, note: "15% of what leaves within 7 days" },
     ...(plan.lowest ? [{ label: "Lowest balance with this plan", value: <Money value={plan.lowest.balance} />, note: dayLabel(plan.lowest.day) }] : []),
     ...(plan.stillOwed > 0 ? [{ label: "Not covered by the cash", value: <Money value={plan.stillOwed} />, note: "Bills marked short, still owed", tone: "held" as const }] : []),
     { label: "Discounts this plan would take", value: <Money value={plan.discountsPlanned} />, note: "An estimate, if paid as planned" },
@@ -218,7 +214,7 @@ export function PlanCashEffect({ plan }: { plan: PaymentPlan }) {
 }
 
 /** The plan's three measures over the last 30 days, all counted from what happened. */
-function PlanOutcomesStrip({ outcomes }: { outcomes: PlanOutcomes }) {
+export function PlanOutcomesStrip({ outcomes }: { outcomes: PlanOutcomes }) {
   const rows: Array<{ label: string; value: ReactNode }> = [
     { label: "Paid by the due day", value: <span className="tabular-nums">{`${outcomes.paidOnTime} of ${outcomes.paid}`}</span> },
     { label: "Overdue now", value: <span className="tabular-nums">{outcomes.overdueNow}</span> },
@@ -309,9 +305,9 @@ export function PaymentPlanSection({
           )}
           <PlanSummary plan={plan} />
           <p className="text-[0.8125rem] leading-relaxed text-ink-2">
-            Each bill is paid on its due date, or earlier only to take an early-payment discount worth at least what the cash would earn until then, while the
-            balance stays above the cushion. Approving a line moves the day the agent pays a scheduled bill; on that day the agent checks the bill again, with
-            every rule, before it pays. Nothing here pays a bill.
+            Each bill is paid on its due date, or earlier only for a discount worth at least what the cash would earn until then, while the balance stays
+            above the cushion. Approving a line moves the day the agent pays a scheduled bill; on that day the agent checks it again with every rule. Nothing
+            here pays a bill.
           </p>
           {canDecide
             ? approvable.length > 1 && (

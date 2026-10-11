@@ -71,7 +71,9 @@ describe("the payment plan section", () => {
     expect(words).toContain("Oct 15, 2026");
     expect(words).toContain("Pays on Oct 15, 2026, the discount's last day, to take the 2% early-payment discount (20.00 USDC); the balance stays above the cushion.");
     expect(words).toContain("The agent scheduled it for Oct 22, 2026");
-    expect(words).toContain("Takes the 2% discount, 20.00 USDC , if paid on this day.");
+    // Each of the two lines says its discount once, in its reason, with its value.
+    expect(words.match(/2% early-payment discount/g)).toHaveLength(2);
+    expect(words).not.toContain("if paid on this day");
     expect(words).toContain("Balance after: 1,800.00 USDC");
     expect(words).toContain("Discounts this plan would take");
     expect(words).toContain("An estimate, if paid as planned");

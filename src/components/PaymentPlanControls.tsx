@@ -59,7 +59,10 @@ export function ApprovePlanLine({
       <SubmitButton size="sm" variant="secondary" disabled={disabled} aria-label={label} aria-describedby={describedBy} pendingLabel="Approving…">
         Approve
       </SubmitButton>
-      {failed && <FormMessage tone="error" className="max-w-xs text-right text-xs">{form.state.message}</FormMessage>}
+      {/* The live region is there from the start, taking no room until it has something to say. */}
+      <FormMessage tone="error" className="max-w-xs text-right text-xs empty:min-h-0">
+        {failed ? form.state.message : null}
+      </FormMessage>
     </form>
   );
 }
@@ -87,7 +90,9 @@ export function ApproveAllShown({
           Approve all shown
         </SubmitButton>
       </div>
-      <FormMessage tone={form.state.ok ? "success" : "error"}>{form.state.message}</FormMessage>
+      <FormMessage tone={form.state.ok ? "success" : "error"} className="empty:min-h-0">
+        {form.state.message || null}
+      </FormMessage>
     </form>
   );
 }
@@ -108,7 +113,7 @@ export function RefreshPlanBalance({ orgSlug }: { orgSlug: string }) {
       <Button size="sm" variant="secondary" icon={<RefreshCw aria-hidden />} loading={pending} onClick={refresh}>
         Refresh balance
       </Button>
-      <FormMessage tone="error" className="text-xs">
+      <FormMessage tone="error" className="text-xs empty:min-h-0">
         {message}
       </FormMessage>
     </div>
