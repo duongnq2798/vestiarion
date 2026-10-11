@@ -80,6 +80,9 @@ Each decision names what it costs if it turns out wrong.
 - The bills are the workspace's payables the report counts: the real ones, or the sample data while there is none.
 - A bill is a candidate while it has no record, or its newest record differs from what the line would record (a
   different day, amount or currency, or **Not paid**): that match would be a correction (A1).
+- A bill whose newest record came from a statement line is that line's: it is never offered to another line, and is
+  corrected from the bill's row. A line its record says still reads **Already recorded** (B7), even when a re-import
+  maps the columns otherwise and the line's hash differs.
 - Same currency only: the line's currency is the bill's own (`original_currency` when it was written in one, else the
   invoice's). USD never matches USDC.
 - Date window: the booking day is no earlier than the day before the bill was added (UTC, a day's grace for a business
@@ -178,4 +181,7 @@ then reads "Recorded by … from a bank statement".
 - `tests/bank-statement-migration.test.ts`: 0094 on PGlite: checks, the unique hash, one record per line, the source check,
   composite keys, tenant isolation, append-only, re-runnable.
 - `tests/bank-statement-import-view.test.tsx`: the card reads a pasted statement, asks about dates, and shows the balance
-  check.
+  check (adds up, the first line that does not, the signs turned round); the matches, ticked only when unique and exact;
+  already used and already recorded.
+- The report guide shows the card in two screenshots (`report-bank-statement`, `report-bank-statement-matches`),
+  rendered by `StatementReadPanel` and `StatementMatches` from a statement read and matched by the same functions.

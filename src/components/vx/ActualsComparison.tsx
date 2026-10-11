@@ -319,7 +319,7 @@ export function ActualsBills({
  * Import a bank statement (docs/superpowers/specs/2026-10-10-bank-statement-design.md B11, B12), for someone who may
  * record: the import, or before migration 0094 runs, a plain message.
  */
-export function BankStatementCard({ slug, statement }: { slug: string; statement: { available: boolean; accounts: string[] } }) {
+function BankStatementCard({ slug, statement }: { slug: string; statement: { available: boolean; accounts: string[] } }) {
   return (
     <Card className="space-y-3 p-4 sm:p-5">
       <div className="space-y-1">

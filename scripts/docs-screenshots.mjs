@@ -173,6 +173,8 @@ const SHOTS = {
   "report-lists": async () => {},
   "report-actuals": async () => {},
   "report-actuals-bills": async () => {},
+  "report-bank-statement": async () => {},
+  "report-bank-statement-matches": async () => {},
   "workspace-status": async () => {},
 };
 

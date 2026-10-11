@@ -1,5 +1,12 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-11: What the business paid, from its bank statement
+
+- An owner or admin can fill in what the business paid from its bank statement, on the workspace report: each ticked line of money out is recorded against the bill it paid. Each is an `actual_payment_recorded` entry, or `actual_payment_corrected` when the bill had a record, as before, sent to webhook endpoints as `ledger.appended` and listed by `GET /api/v1/ledger`. Such a record is a payment by `bank_transfer` on the line's booking day, for its amount and currency, with its reference, and its entry adds:
+  - **`via: "statement"`**.
+  - **`statementLine`** `{ id, account, line, bookedOn, valueOn, amount, currency, description, payee, reference, balance }`: the kept line's id, the account as the person named it, the line of the file, the booking day and the value day (YYYY-MM-DD, `valueOn` null when the statement has none), the amount as the statement says it (money out negative) in `currency`, the bank's description, and the payee, the reference and the running balance after the line, each null when the statement has none.
+- Entries without these fields are unchanged. Nothing else in `/api/v1` changes.
+
 ## 2026-10-10: What the business paid outside Vestiarion
 
 - An owner or admin can record how the business paid a payable outside Vestiarion, or that it did not, from the workspace report. Its ledger gains two entries, actor `human`, domain `ap`, each sent to webhook endpoints as `ledger.appended` and listed by `GET /api/v1/ledger`:

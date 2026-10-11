@@ -153,6 +153,12 @@ const ACTUAL_CONTROL = "src/components/ActualPaymentControl.tsx";
 const ACTUALS_CSV = "src/components/ActualsCsvImport.tsx";
 const ACTUALS_LIBRARY = "src/lib/actual-payments.ts";
 const ACTUAL_FIELDS = "src/lib/actual-payment-fields.ts";
+const STATEMENT = "src/components/BankStatementImport.tsx";
+const STATEMENT_COLUMNS = "src/lib/bank-statement/columns.ts";
+const STATEMENT_LINES = "src/lib/bank-statement/lines.ts";
+const STATEMENT_MATCH = "src/lib/bank-statement/match.ts";
+const STATEMENT_LIBRARY = "src/lib/bank-statements.ts";
+const STATEMENT_COMMAND = "src/lib/commands/statements.ts";
 
 /** Each guide's quoted UI strings, as `[text, the file it must appear in]`. */
 /**
@@ -209,6 +215,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Sandbox: payments here are simulated.", "src/components/vx/WorkspaceReport.tsx"],
     ["Agent vs what really happened", "src/components/vx/ActualsComparison.tsx"],
     ["Record what you paid", "src/components/ActualPaymentControl.tsx"],
+    ["Import a bank statement", "src/components/vx/ActualsComparison.tsx"],
     ["Safe to spend today", "src/components/vx/CashOutlook.tsx"],
     ["Next 30 days", "src/components/vx/CashOutlook.tsx"],
     ["Continue with Google", LOGIN_PAGE],
@@ -1050,6 +1057,60 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Say why it was not paid, in a few words.", ACTUALS_LIBRARY],
     ["actual_payment_recorded", ACTUALS_LIBRARY],
     ["actual_payment_corrected", ACTUALS_LIBRARY],
+    // From a bank statement (bank statement design B1-B12).
+    ["Import a bank statement", ACTUALS],
+    ["from a bank statement", ACTUALS],
+    ["Account", STATEMENT],
+    ["Named before:", STATEMENT],
+    ["Choose a statement CSV, or drop one here", STATEMENT],
+    ["Or paste the cells from a spreadsheet", STATEMENT],
+    ["Read the pasted cells", STATEMENT],
+    ["How statement-october.csv is read", STATEMENT, "How {name} is read"],
+    ["Separator", STATEMENT],
+    ["Header row", STATEMENT],
+    ["No header row", STATEMENT],
+    ["Booking date", STATEMENT_COLUMNS],
+    ["Value date", STATEMENT_COLUMNS],
+    ["Description", STATEMENT_COLUMNS],
+    ["Payee", STATEMENT_COLUMNS],
+    ["Amount", STATEMENT_COLUMNS],
+    ["Money out", STATEMENT_COLUMNS],
+    ["Money in", STATEMENT_COLUMNS],
+    ["Reference", STATEMENT_COLUMNS],
+    ["Currency", STATEMENT_COLUMNS],
+    ["Balance", STATEMENT_COLUMNS],
+    ["Not in this statement", STATEMENT],
+    ["In the amount column, money out is written", STATEMENT],
+    ["As a negative amount, such as -120.00", STATEMENT],
+    ["As a positive amount, such as 120.00", STATEMENT],
+    ["Currency of the account", STATEMENT],
+    ["How are the dates written?", STATEMENT],
+    ["Before the lines can be read", STATEMENT],
+    ["The statement's balance adds up", STATEMENT],
+    ["does not add up", STATEMENT],
+    ["A statement cut from a longer one can start mid-day", STATEMENT],
+    ["the agent never counts or spends this money", STATEMENT],
+    ["Find the bills", STATEMENT],
+    ["Same amount", STATEMENT_MATCH],
+    ["Amount differs", STATEMENT],
+    ["Choose the bill", STATEMENT],
+    ["Already used", STATEMENT],
+    ["Already recorded", STATEMENT],
+    ["No bill matches", STATEMENT],
+    ["receivables are not part of this import", STATEMENT],
+    ["Looks the same as another line", STATEMENT],
+    ["Save N payments", STATEMENT, "Save ${toSave} ${toSave === 1 ? \"payment\" : \"payments\"}"],
+    ["Importing a bank statement is not set up on this deployment yet.", STATEMENT_LINES],
+    ["Name the account the statement is from, in at most 80 characters.", STATEMENT_LIBRARY],
+    ["Choose a statement smaller than 2 MB.", STATEMENT_LINES],
+    ["The statement has more than 2,000 lines. Import a shorter period.", STATEMENT_LINES, "lines. Import a shorter period."],
+    ["Choose the column with the booking date.", STATEMENT_LINES],
+    ["is not a date in the order the other dates are written.", STATEMENT_LINES],
+    ["are written with different decimal marks.", STATEMENT_LINES],
+    ["That bill is not one this line could have paid. Read the statement again.", STATEMENT_COMMAND],
+    ["This line recorded a payment already, for", STATEMENT_COMMAND],
+    ['via: "statement"', ACTUALS_LIBRARY],
+    ["statementLine", ACTUALS_LIBRARY],
   ],
   "guides/shadow-mode": [
     ["Run alongside how you pay today (shadow mode)", CREATE_FORM],
@@ -1136,8 +1197,10 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Agent vs what really happened", ACTUALS],
     ["Record what you paid", ACTUAL_CONTROL],
     ["Download the bills not recorded yet", ACTUALS],
+    ["Import a bank statement", ACTUALS],
     ["actual_payment_recorded", ACTUALS_LIBRARY],
     ["actual_payment_corrected", ACTUALS_LIBRARY],
+    ['via: "statement"', ACTUALS_LIBRARY],
   ],
   "guides/audit-export": [
     ["Audit log", APP_NAV],
