@@ -22,6 +22,8 @@ export interface BasisOutflow {
   kind: "bill" | "milestone" | "recurring";
   /** Who is paid: a bill's or a recurring payment's counterparty, or "contractor: milestone". */
   label: string;
+  /** A milestone's contractor: what moves it most groups by it, beside the contractor's bills. */
+  payee?: string;
   amount: number;
   /** Days from today: 0 is today, an overdue bill and an open milestone included. */
   day: number;
@@ -300,12 +302,13 @@ export function cashScenario(basis: ScenarioBasis, levers: ScenarioLevers): Scen
   const payees = new Map<string, Extract<Driver, { kind: "payee" }>>();
   let costs = 0;
   for (const outflow of inHorizon.filter((candidate) => candidate.day <= on)) {
-    const payee = payees.get(outflow.label) ?? { kind: "payee", label: outflow.label, amount: 0, bills: 0, recurring: 0, milestones: 0 };
+    const name = outflow.payee ?? outflow.label;
+    const payee = payees.get(name) ?? { kind: "payee", label: name, amount: 0, bills: 0, recurring: 0, milestones: 0 };
     payee.amount = round(payee.amount + outflow.amount);
     if (outflow.kind === "bill") payee.bills += 1;
     else if (outflow.kind === "recurring") payee.recurring += 1;
     else payee.milestones += 1;
-    payees.set(outflow.label, payee);
+    payees.set(name, payee);
     costs += scenarioAmount(outflow) - outflow.amount;
   }
   const late = new Map<string, Extract<Driver, { kind: "receivable" }>>();

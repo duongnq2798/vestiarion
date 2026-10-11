@@ -92,7 +92,7 @@ describe("scenarioBasis", () => {
       { id: "held", kind: "bill", label: "Vendor held", amount: 6, day: 10, note: "held", foreign: false },
       { id: "sched", kind: "bill", label: "Vendor sched", amount: 7, day: 20, note: "scheduled", foreign: false, dueDay: 40 },
       { id: "fx", kind: "bill", label: "Vendor fx", amount: 10, day: 12, note: "due", foreign: true },
-      { id: "m1", kind: "milestone", label: "Linh: Thumbnails", amount: 4, day: 0, note: "verified", foreign: false },
+      { id: "m1", kind: "milestone", label: "Linh: Thumbnails", payee: "Linh", amount: 4, day: 0, note: "verified", foreign: false },
     ]);
     expect(basis.receivables).toEqual([
       { id: "r1", label: "Client r1", amount: 30, day: 0, overdue: true, client: "client-r1" },

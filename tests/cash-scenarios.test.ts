@@ -266,6 +266,25 @@ describe("cashScenario: what moves it most", () => {
     expect(result.drivers.map((driver) => driver.kind === "costs" ? "costs" : driver.label)).toEqual(["Harbor", "Atlas"]);
   });
 
+  it("groups a contractor's milestones with its bills, under the contractor's name", () => {
+    const result = cashScenario(
+      basis({
+        cash: 500,
+        outflows: [
+          bill("Linh: Logo", 100, 0, { kind: "milestone", note: "verified", id: "m1", payee: "Linh" }),
+          bill("Linh: Icons", 80, 0, { kind: "milestone", note: "payable once verified", id: "m2", payee: "Linh" }),
+          bill("Linh", 90, 4),
+          bill("Harbor", 200, 5),
+        ],
+      }),
+      levers({ lateDays: 0 })
+    );
+    expect(result.drivers).toEqual([
+      { kind: "payee", label: "Linh", amount: 270, bills: 1, recurring: 0, milestones: 2 },
+      { kind: "payee", label: "Harbor", amount: 200, bills: 1, recurring: 0, milestones: 0 },
+    ]);
+  });
+
   it("is empty when nothing leaves", () => {
     expect(cashScenario(basis(), levers()).drivers).toEqual([]);
   });

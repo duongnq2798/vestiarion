@@ -7,7 +7,8 @@ import { dueOn, type RecurringUnit } from "./recurring";
  * Treasury from the rows it already loaded and handed to the browser, where `cashScenario` works out each scenario.
  *
  * - The outlook's own rules (`outlookMoves`) over 90 days: open USDC bills on their day (a scheduled one on the day it
- *   is scheduled for, an overdue or held one today), open milestones today, open USDC receivables on their due day.
+ *   is scheduled for, any other on its due day, an overdue one today), open milestones today, open USDC receivables
+ *   on their due day.
  * - Each running recurring payment's periods that have no invoice yet, on their due day (one already due today): their
  *   amount and day are known, their invoice comes up to 7 days before.
  * - Each expected client's record from its received receivables, by the rule collections uses.
@@ -63,6 +64,7 @@ export function scenarioBasis(input: ScenarioBasisInput): ScenarioBasis {
       id: move.id,
       kind: item.kind === "milestone" ? "milestone" : "bill",
       label: item.label,
+      ...(move.payee ? { payee: move.payee } : {}),
       amount: item.amount,
       day: offset(move.at),
       // Only a receivable is "expected", and receivables were taken above.

@@ -116,6 +116,8 @@ export interface OutlookMove {
   foreign?: boolean;
   /** A receivable's client. */
   counterpartyId?: string | null;
+  /** A milestone's contractor, whom it pays: its label also names the milestone. */
+  payee?: string;
 }
 
 export interface OutlookMoves {
@@ -129,9 +131,9 @@ export interface OutlookMoves {
 
 /**
  * What the outlook counts within `windowDays` from today, each on its day (cash scenarios C2): every open USDC
- * payable (a scheduled one on its day, an overdue or held one today), every open milestone today unless its USDC is
- * locked in escrow, every open USDC receivable on its due day (an overdue one today), and EURC apart. `cashOutlook`
- * reads it over 30 days, the cash scenarios over 90.
+ * payable, a held one included (a scheduled one on the day it is scheduled for, any other on its due day, an overdue
+ * one today), every open milestone today unless its USDC is locked in escrow, every open USDC receivable on its due day
+ * (an overdue one today), and EURC apart. `cashOutlook` reads it over 30 days, the cash scenarios over 90.
  */
 export function outlookMoves(input: OutlookInput, windowDays: number): OutlookMoves {
   const today = utcMidnight(input.now);
@@ -178,6 +180,7 @@ export function outlookMoves(input: OutlookInput, windowDays: number): OutlookMo
         amount: milestone.amount,
         note: milestone.status === "verified" ? "verified" : "payable once verified",
       },
+      payee: milestone.contractor,
     });
   }
 

@@ -7,7 +7,7 @@ Its line under the title says "Nothing here is saved or paid." It is worked out 
 The section counts what **Next 30 days** counts, by the same rules, over up to 90 days:
 
 - **Cash** is the operating wallet's USDC and the USYC reserve's, which comes back to the wallet within seconds. It is the only money counted as held. No bank balance is counted.
-- **Bills** you owe that are still open, each on its day: a scheduled bill on the day it is scheduled for, an overdue or held one today.
+- **Bills** you owe that are still open, each on its day: a scheduled bill on the day it is scheduled for, any other on its due day, or today when it is overdue. A bill held for a person counts too.
 - **Open milestones**, today: a milestone has no payment day, so it is counted as if paid now, unless its USDC is locked in escrow.
 - **Recurring payments not billed yet**: the periods of each running recurring payment that have no bill yet, each on its due day (one already due, today). A period's bill is created up to 7 days before its due day, so over 60 or 90 days most periods are not billed yet. Each is marked "recurring, not billed yet". This is the one way the section differs from **Next 30 days**, which counts only bills already created.
 - **Receivables**: your open receivables in USDC, already invoiced. Each adds to the balance only on the day it arrives in that case: as things stand, on its due day, or today when it is overdue.
@@ -44,8 +44,8 @@ Below them, one line gives the cash today, says "No bank balance is counted.", g
 
 - **The chart** draws the balance every day, as things stand (grey, dashed) and in this scenario (solid), with the first short day marked. Point at a day to read both balances. **Day by day** opens the same figures as a table: today, then each day either balance changes.
 - **Due while the balance is short** lists the bills, recurring payments and milestones that leave on a day the balance in this scenario is below zero, with their day and amount.
-- **What could help**, "advice only: nothing here changes a payment", shows only when the scenario runs short, with at most three points: how much more USDC the wallet would need, by the first short day, to pay every bill on its day; a bill scheduled before its due day and paid before the short day, which paid on its due day instead would stay in the wallet past it, losing any early-payment discount it was scheduled for; and, of the receivables that would have arrived by the short day but do not in this scenario, the largest.
-- **What moves it most** names, by the first short day (or by the lowest day when the balance never runs short), the three sources that pull the balance down most: a payee, with its bills, recurring payments and milestones paid by then together; a client whose receivable this scenario makes late past that day or drops; and a rise in bill costs, as one source.
+- **What could help**, "advice only: nothing here changes a payment", shows only when the scenario runs short, with at most three points: how much more USDC the wallet would need, by the first short day, to pay every bill on its day; the largest bill scheduled for a day before its due day and no later than the short day, whose due day comes after it: paid on its due day instead, it would stay in the wallet past the short day, and any early-payment discount it was scheduled for would be lost; and, of the receivables that would have arrived by the short day but do not in this scenario, the largest.
+- **What moves it most** names, by the first short day (or by the lowest day when the balance never runs short), the three sources that pull the balance down most: a payee, with its bills, recurring payments and milestones leaving by then together (a milestone counts for its contractor); a client whose receivable this scenario makes late past that day or drops; and a rise in bill costs, as one source.
 
 <Screenshot
   src="/docs/guides/cash-scenarios-findings.png"
