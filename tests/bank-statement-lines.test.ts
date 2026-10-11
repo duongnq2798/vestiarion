@@ -119,6 +119,11 @@ describe("readStatement", () => {
     expect(readStatement("Date,Description,Amount,Currency\n2026-10-03,Northwind,-120.00,EUR", {}, TODAY).needsCurrency).toBe(false);
   });
 
+  it("shows each column's first value under the header, so a column is known by what it holds", () => {
+    const text = "Date,Description,Money out,Money in,Balance\n2026-10-01,Opening balance,,,100.00\n2026-10-02,Northwind,40.00,,60.00\n2026-10-03,Refund,,5.00,65.00";
+    expect(readStatement(text, { currency: "USD" }, TODAY).example).toEqual(["2026-10-01", "Opening balance", "40.00", "5.00", "100.00"]);
+  });
+
   it("reads a file with no header row from the columns the person chose", () => {
     const columns = { ...NO_COLUMNS, bookingDate: 0, description: 1, amount: 2 };
     const read = readStatement("2026-10-03,Northwind,-120.00\n2026-10-04,Atlas,-5.00", { currency: "USD", columns }, TODAY);

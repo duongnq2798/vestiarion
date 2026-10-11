@@ -88,7 +88,7 @@ export interface StatementRead {
   headerRow: number;
   /** Each column's name: its header, or "Column N" with no header row. */
   headers: string[];
-  /** The first row read under the header, for recognising each column. */
+  /** Each column's first value under the header, for recognising it; blank when the column has none. */
   example: string[];
   columns: ColumnMapping;
   outIs: "negative" | "positive";
@@ -216,7 +216,7 @@ export function readStatement(source: string, choices: StatementChoices, today: 
     firstRecords: records.slice(0, 30),
     headerRow,
     headers,
-    example: rows[0]?.cells ?? [],
+    example: Array.from({ length: width }, (_, index) => rows.map((row) => cellOf(row, index)).find((cell) => cell !== "") ?? ""),
     columns,
     outIs,
     needsCurrency: columns.currency === null || blankCurrency,
