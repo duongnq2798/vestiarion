@@ -38,7 +38,8 @@ const NONE = "none";
 const ORDER_WORDS: Record<DateOrder, string> = { ymd: "Year first", dmy: "Day first", mdy: "Month first" };
 const day = (date: string) => utcDay(`${date.slice(0, 10)}T00:00:00Z`);
 
-type Source = { text: string; name: string };
+/** The statement's text, and the file's name; null for cells pasted from a spreadsheet. */
+type Source = { text: string; name: string | null };
 type Note = { tone: "success" | "error"; text: string } | null;
 /** What the server read and matched: each line of the statement, and its match, in the same order. */
 export type Found = { lines: StatementLine[]; matches: LineMatch[] };
@@ -48,7 +49,8 @@ type Ticks = Record<number, string>;
 /** Where the card starts: empty, or, for a test, a statement read with its choices and its matches. */
 export interface StatementStart {
   text: string;
-  name: string;
+  /** The file's name; null for pasted cells. */
+  name: string | null;
   account?: string;
   choices?: StatementChoices;
   found?: Found;
@@ -121,7 +123,8 @@ export function StatementReadPanel({
   busy = false,
   onFind,
 }: {
-  name: string;
+  /** The file's name; null for pasted cells. */
+  name: string | null;
   read: StatementRead;
   choices: StatementChoices;
   onChoose?: (change: Partial<StatementChoices>) => void;
@@ -159,7 +162,7 @@ export function StatementReadPanel({
 
   return (
     <div className="space-y-4 rounded-xl border border-line p-4">
-      <p className="text-sm font-medium text-ink">How {name} is read</p>
+      <p className="text-sm font-medium text-ink">{name === null ? "How the pasted cells are read" : `How ${name} is read`}</p>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field id="statement-delimiter" label="Separator">
           <Select value={read.delimiter} onValueChange={(next) => choose({ delimiter: DELIMITERS.find((item) => item === next) as Delimiter, headerRow: null, columns: null })}>
@@ -534,7 +537,7 @@ export default function BankStatementImport({ orgSlug, accounts, initial }: { or
           <Field id="statement-paste" label="Cells, header row included">
             <Textarea rows={5} value={pasted} onChange={(event) => setPasted(event.target.value)} className="font-mono text-xs" />
           </Field>
-          <Button size="sm" variant="secondary" disabled={pasted.trim() === ""} onClick={() => start({ text: pasted, name: "Pasted cells" })}>
+          <Button size="sm" variant="secondary" disabled={pasted.trim() === ""} onClick={() => start({ text: pasted, name: null })}>
             Read the pasted cells
           </Button>
         </div>

@@ -39,8 +39,8 @@ const BILLS: StatementBill[] = [
 
 describe("BankStatementImport", () => {
   it("reads pasted cells at once and asks how the dates are written when they read two ways", () => {
-    const words = text(html(<BankStatementImport orgSlug="northstar" accounts={[]} initial={{ text: PASTED, name: "Pasted cells", choices: { currency: "SGD" } }} />));
-    expect(words).toContain("How Pasted cells is read");
+    const words = text(html(<BankStatementImport orgSlug="northstar" accounts={[]} initial={{ text: PASTED, name: null, choices: { currency: "SGD" } }} />));
+    expect(words).toContain("How the pasted cells are read");
     expect(words).toContain("How are the dates written? 03/04/2026 reads two ways.");
     expect(words).toContain("Day first: 03/04/2026 is Apr 3, 2026");
     expect(words).toContain("Month first: 03/04/2026 is Mar 4, 2026");
@@ -51,7 +51,7 @@ describe("BankStatementImport", () => {
 
   it("shows the lines read, the period and the statement's own balance check, labelled as the bank's money", () => {
     const markup = html(
-      <BankStatementImport orgSlug="northstar" accounts={["DBS operating"]} initial={{ text: PASTED, name: "Pasted cells", account: "DBS operating", choices: { currency: "SGD", dateOrder: "dmy" } }} />
+      <BankStatementImport orgSlug="northstar" accounts={["DBS operating"]} initial={{ text: PASTED, name: null, account: "DBS operating", choices: { currency: "SGD", dateOrder: "dmy" } }} />
     );
     const words = text(markup);
     expect(words).toContain("4 lines read, from Apr 3, 2026 to Apr 10, 2026: 3 money out, 1 money in. Money in is never matched to bills.");
@@ -74,7 +74,7 @@ describe("BankStatementImport", () => {
 
   it("says when money in and out read the wrong way round", () => {
     const columns = { bookingDate: 0, valueDate: null, description: 1, payee: null, amount: null, moneyOut: 3, moneyIn: 2, reference: null, currency: null, balance: 4 };
-    const words = text(html(<BankStatementImport orgSlug="northstar" accounts={[]} initial={{ text: PASTED, name: "Pasted cells", choices: { currency: "SGD", dateOrder: "dmy", columns } }} />));
+    const words = text(html(<BankStatementImport orgSlug="northstar" accounts={[]} initial={{ text: PASTED, name: null, choices: { currency: "SGD", dateOrder: "dmy", columns } }} />));
     expect(words).toContain("The statement's balance adds up only with money in and money out swapped, in SGD");
   });
 
@@ -83,7 +83,7 @@ describe("BankStatementImport", () => {
     const lines = readStatement(PASTED, choices, "2026-10-11").lines;
     const matches = matchStatement(lines, BILLS, lines.map(() => null));
     const markup = html(
-      <BankStatementImport orgSlug="northstar" accounts={[]} initial={{ text: PASTED, name: "Pasted cells", account: "DBS operating", choices, found: { lines, matches } }} />
+      <BankStatementImport orgSlug="northstar" accounts={[]} initial={{ text: PASTED, name: null, account: "DBS operating", choices, found: { lines, matches } }} />
     );
     const words = text(markup);
     expect(words).toContain("Northwind Cloud Pte Ltd, 1,250.00 SGD, due Apr 15, 2026");
@@ -103,7 +103,7 @@ describe("BankStatementImport", () => {
     const lines = readStatement(PASTED, choices, "2026-10-11").lines;
     const recorded = { ...BILLS[1], current: { id: "rec-1", outcome: "paid" as const, paidOn: "2026-04-09", amount: 45.5, currency: "SGD", source: "form" as const } };
     const matches = matchStatement(lines, [BILLS[0], recorded], [{ invoiceId: BILLS[0].id, payee: BILLS[0].payee }, null, null, null]);
-    const words = text(html(<BankStatementImport orgSlug="northstar" accounts={[]} initial={{ text: PASTED, name: "Pasted cells", choices, found: { lines, matches } }} />));
+    const words = text(html(<BankStatementImport orgSlug="northstar" accounts={[]} initial={{ text: PASTED, name: null, choices, found: { lines, matches } }} />));
     expect(words).toContain("Already used for Northwind Cloud Pte Ltd");
     expect(words).toContain("Already recorded for Atlas Compute");
     expect(words).toContain("No bill matches");
