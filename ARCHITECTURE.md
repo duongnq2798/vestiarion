@@ -1203,12 +1203,13 @@ agent's own earlier day, never later than the agent chose; a discount's last
 day only when the discount is worth at least the reserve's yield to the due
 date, the cash covers the bill then, no other line falls short, the spending
 limit has room for the billed amount and the balance stays at or above the
-cushion until the bill would otherwise pay, each check holding against the plan
+cushion until the bill would otherwise pay (not weighed when the cash would not
+cover the bill on that later day at all), each check holding against the plan
 and against the schedule with only that bill moved, the bill itself within the
 limit on its new day; bills the agent scheduled after their due dates are
-brought back one at a time; a discount day the agent chose itself is kept
-whatever it holds, and a scheduled bill whose day has come goes where the
-agent's own rule puts it at its next cycle, unmovable), walks
+brought back one at a time, whatever the cushion; a discount day the agent
+chose itself is kept whatever it holds, and a scheduled bill whose day has come
+goes where the agent's own rule puts it at its next cycle, unmovable), walks
 the days in the cash's order, marks a line the balance cannot cover as short
 without spending it, counting it in full as still owed, and previews each
 line's checks (payment limit, two approvals, screening, the daily and 7-day

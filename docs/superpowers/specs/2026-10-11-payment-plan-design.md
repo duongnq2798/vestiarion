@@ -92,6 +92,13 @@ bill to the plan's day. It never pays anything itself.
 - A taken discount's line says the balance stays above the cushion, or until which day when it goes under it later
   in the window, or, when paying early is what lets the cash cover the bill, that the cash would not cover it on the
   day it would otherwise pay, so the sentence is true of the plan shown.
+- The section states above its lines only what holds of every move it offers: "Each bill is paid on its due date, or
+  on an earlier day the agent chose. The plan proposes paying before that only for a discount worth at least what the
+  cash would earn until then; each line says why it is on its day." A day the agent chose after the due date is
+  brought back to the due date, not before it, so the rule's "only" holds of that move too. The cushion is left to
+  each line's reason and its Under the cushion mark: the first version added "while the balance stays above the
+  cushion", which the Approve beside a discount day the cash needed, or a bill brought back to its due date, under the
+  cushion both, contradicted. Saying each exception there made the sentence longer than the rule it summed up.
 - Cost if wrong: a discount missed (one that would have needed another bill left short, or one on a bill the agent's
   limit has no room for on either day, which waits for a person on the agent's day), a person asked to approve the
   agent's own discount day where a later day's limit had room, the agent's early payment kept while the balance sits
@@ -259,8 +266,9 @@ appear in `GET /api/v1/ledger` and as `ledger.appended`, a moved bill's `schedul
   high risk or its limit lowered among them; both marked `changed`, so the page refreshes), a line's own checks, the
   creator refused unless sole approver, a batch applying only the passing lines, each weighed in the plan's order with
   the moves made before it, a write failing part way, and a cycle raised for today.
-- `tests/payment-plan-ui.test.tsx`: the section's words, the stale warning with approving off, the viewer without
-  Approve, the projected figures labelled, and the struck amount and a balance under the cushion said in words.
+- `tests/payment-plan-ui.test.tsx`: the section's words, its rule true beside the moves that go under the cushion (a
+  discount day the cash needs, a bill brought back to its due date), the stale warning with approving off, the viewer
+  without Approve, the projected figures labelled, and the struck amount and a balance under the cushion said in words.
 - `tests/payment-plan-input.test.ts`: the rows turned into the planner's input as the page and the command both read
   them, the reserve's rate and a milestone's contractor limit and screening among them; `tests/payment-plan-outcomes.test.ts`: the three measures.
 - The guide (`content/docs/guides/payment-plan.mdx`, Everyday work) with its screenshot (`payment-plan`, from

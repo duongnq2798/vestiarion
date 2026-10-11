@@ -58,6 +58,15 @@ const planOf = (fields: Partial<PaymentPlanInput> = {}) =>
     ...fields,
   });
 
+/**
+ * The section's rule: only what holds of every move it offers (P4). The cushion is left to each line's reason, since a
+ * bill brought back to its due date, and a discount day that is the only way the cash covers the bill, are moved
+ * whatever the cushion.
+ */
+const RULE =
+  "Each bill is paid on its due date, or on an earlier day the agent chose. The plan proposes paying before that only for a discount worth at least " +
+  "what the cash would earn until then; each line says why it is on its day.";
+
 const OUTCOMES: PlanOutcomes = { paid: 6, paidOnTime: 5, overdueNow: 1, discountsTaken: 12.5, moves: 2 };
 
 const render = (props: Partial<Parameters<typeof PaymentPlanSection>[0]> = {}) =>
@@ -79,8 +88,35 @@ describe("the payment plan section", () => {
     expect(words).toContain("An estimate, if paid as planned");
     expect(words).toContain("Nothing here pays a bill.");
     // The rule as the planner keeps it: never later than a day the agent chose, earlier only for a discount.
-    expect(words).toContain("Each bill is paid on its due date, or on an earlier day the agent chose; the plan proposes an earlier day only for a discount");
+    expect(words).toContain(RULE);
     expect(words).not.toMatch(/saved/i);
+  });
+
+  it("states only a rule every Approve it shows keeps, and leaves the cushion to each line: some moves go under it (P4)", () => {
+    // Paying early is the only way the cash covers the bill: the discount day is proposed whatever the cushion.
+    const freed = planOf({
+      operatingUsdc: 1000,
+      cushion: 500,
+      bills: [bill({ amount: 1010, dueDate: "2026-10-20T12:00:00.000Z", scheduledFor: "2026-10-20T00:00:00.000Z" })],
+    });
+    const freedMarkup = render({ plan: freed });
+    const freedWords = text(freedMarkup);
+    expect(freedWords).toContain("on its due date, Oct 20, 2026, the cash would not cover it.");
+    expect(freedWords).toContain("Leaves 489.80 USDC less than the cushion on Oct 15, 2026.");
+    expect(freedMarkup).toContain('aria-label="Approve paying Northwind Supply on Oct 15, 2026"');
+    // A day the agent chose after the due date is brought back to the due date whatever the cushion: not a day before it.
+    const back = planOf({
+      operatingUsdc: 1000,
+      cushion: 500,
+      bills: [bill({ amount: 900, discount: null, dueDate: "2026-10-13T12:00:00.000Z", scheduledFor: "2026-10-18T00:00:00.000Z" })],
+    });
+    const backMarkup = render({ plan: back });
+    expect(text(backMarkup)).toContain("Leaves 400.00 USDC less than the cushion on Oct 13, 2026.");
+    expect(backMarkup).toContain('aria-label="Approve paying Northwind Supply on Oct 13, 2026"');
+    for (const words of [freedWords, text(backMarkup)]) {
+      expect(words).toContain(RULE);
+      expect(words).not.toContain("while the balance stays above the cushion");
+    }
   });
 
   it("says a bill whose scheduled day has come is decided again by the agent, on the day its rule gives, with nothing to approve", () => {

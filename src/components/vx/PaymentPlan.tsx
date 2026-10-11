@@ -305,9 +305,12 @@ export function PaymentPlanSection({
           )}
           <PlanSummary plan={plan} />
           <p className="text-[0.8125rem] leading-relaxed text-ink-2">
-            Each bill is paid on its due date, or on an earlier day the agent chose; the plan proposes an earlier day only for a discount worth at least
-            what the cash would earn until then, while the balance stays above the cushion. Approving a line moves the day the agent pays a scheduled bill;
-            on that day the agent checks it again with every rule. Nothing here pays a bill.
+            {/* P4: only what holds of every move offered. A day the agent chose after the due date is brought back to the
+                due date, not before it; the cushion is left to each line, since it is not weighed for that, nor for a
+                discount day that is the only way the cash covers the bill. */}
+            Each bill is paid on its due date, or on an earlier day the agent chose. The plan proposes paying before that only for a discount worth at least
+            what the cash would earn until then; each line says why it is on its day. Approving a line moves the day the agent pays a scheduled bill; on that
+            day the agent checks it again with every rule. Nothing here pays a bill.
           </p>
           {canDecide
             ? approvable.length > 1 && (
