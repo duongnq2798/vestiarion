@@ -16,8 +16,9 @@ import type { PageStatus, PlatformStatus } from "@/components/vx/workspace-statu
  */
 
 vi.mock("server-only", () => ({}));
+const route = vi.hoisted(() => ({ pathname: "/o/acme/approvals" }));
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/o/acme/approvals",
+  usePathname: () => route.pathname,
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
   useParams: () => ({ slug: "acme" }),
 }));
@@ -56,6 +57,17 @@ describe("the workspace header", () => {
     expect(markup).toContain('aria-label="Breadcrumb"');
     expect(markup).toContain('href="/o/acme/console"');
     expect(markup).toMatch(/<li aria-current="page"[^>]*>Approvals<\/li>/);
+  });
+
+  it("links the section from a page inside it, which is not the section's own page (evidence chain E1)", () => {
+    route.pathname = "/o/acme/evidence/invoice/5f1e2d3c-0000-4000-8000-000000000001";
+    try {
+      const markup = header();
+      expect(markup).toMatch(/<a[^>]*href="\/o\/acme\/invoices"[^>]*>Bills &amp; receivables<\/a>/);
+      expect(markup).not.toContain('aria-current="page"');
+    } finally {
+      route.pathname = "/o/acme/approvals";
+    }
   });
 
   it("names the sidebar toggle by what it will do, and ties it to the sidebar", () => {

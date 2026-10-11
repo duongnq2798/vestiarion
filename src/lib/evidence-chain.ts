@@ -75,7 +75,7 @@ export interface EvidenceStep {
   title: string;
   kind: EvidenceKind;
   facts: EvidenceFact[];
-  /** The decision step's way into the decision trail on AP / AR; null for a milestone, which has no trail. */
+  /** The decision step's way into the decision trail on Bills & receivables; null for a milestone, which has no trail. */
   trail?: { invoiceId: string } | null;
   /** The signatures step's plain line. */
   caveat?: string;

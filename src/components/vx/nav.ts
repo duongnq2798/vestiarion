@@ -69,8 +69,19 @@ export const DOCS_LINK = { href: "/docs", label: "Docs" } as const;
 /** Where a workspace opens: its first section. */
 export const HOME_PATH = NAV_ITEMS[0].path;
 
-/** The section a workspace pathname is in: `/o/acme/audit` → Audit log. */
+/**
+ * Pages that sit inside a section without starting with its path: a payable's evidence is part of Bills & receivables,
+ * a milestone's of Contractors (evidence chain E1).
+ */
+const NESTED: ReadonlyArray<readonly [RegExp, NavKey]> = [
+  [/^\/o\/[^/]+\/evidence\/invoice(?:\/|$)/, "invoices"],
+  [/^\/o\/[^/]+\/evidence\/milestone(?:\/|$)/, "contractors"],
+];
+
+/** The section a workspace pathname is in: `/o/acme/audit` → Audit log, `/o/acme/evidence/invoice/<id>` → Bills & receivables. */
 export function navItemForPathname(pathname: string): NavItem | undefined {
+  const nested = NESTED.find(([pattern]) => pattern.test(pathname))?.[1];
+  if (nested) return NAV_ITEMS.find((item) => item.key === nested);
   const section = /^\/o\/[^/]+(\/[^/]+)/.exec(pathname)?.[1];
   return NAV_ITEMS.find((item) => item.path === section);
 }

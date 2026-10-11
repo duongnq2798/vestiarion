@@ -25,7 +25,12 @@ import { statusChips, statusRows, statusSummary, type PageStatus, type StatusChi
  */
 export function WorkspaceHeader({ page, activity }: { page?: PageStatus; activity?: ReactNode }) {
   const { workspace, platform, sidebarCollapsed, toggleSidebar } = useFrame();
-  const section = navItemForPathname(usePathname());
+  const pathname = usePathname();
+  const section = navItemForPathname(pathname);
+  // A page inside a section without being under its path, such as a payment's evidence (evidence chain E1): the
+  // section is the way back to it, not the current page.
+  const sectionHref = section ? orgHref(workspace.slug, section.path) : null;
+  const inside = sectionHref !== null && pathname !== sectionHref && !pathname.startsWith(`${sectionHref}/`);
   const chips = statusChips(platform, page);
   const rows = statusRows(platform, page);
 
@@ -66,9 +71,17 @@ export function WorkspaceHeader({ page, activity }: { page?: PageStatus; activit
                   <li aria-hidden className="text-line-strong">
                     <ChevronRight className="size-3.5" />
                   </li>
-                  <li aria-current="page" className="shrink-0 font-medium text-ink">
-                    {section.label}
-                  </li>
+                  {inside ? (
+                    <li className="shrink-0">
+                      <Link href={sectionHref} className="rounded-md font-medium text-ink-2 transition-colors duration-150 ease-standard hover:text-ink">
+                        {section.label}
+                      </Link>
+                    </li>
+                  ) : (
+                    <li aria-current="page" className="shrink-0 font-medium text-ink">
+                      {section.label}
+                    </li>
+                  )}
                 </>
               )}
             </ol>
