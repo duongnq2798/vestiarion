@@ -19,6 +19,19 @@ A workspace holds one business's suppliers, bills, decisions and payments. Under
 
 Choose **Create workspace**. The workspace starts as a sandbox: nothing reaches a chain until you take it live. You land on **Treasury**, the console, where the **Get started in shadow mode** checklist lists **Add your suppliers**, **Add your real bills** and **Give your first verdict**, and the wallet after them, under **To pay on Arc**.
 
+<Screenshot
+  src="/docs/guides/try-it-workspace.png"
+  alt="The workspaces page, Welcome to Vestiarion, with the form to create a workspace: Workspace name filled in as Northwind Studio; under Network, Test workspace on Arc testnet chosen and marked Recommended, and Production workspace on Arc mainnet marked Real funds; Run alongside how you pay today (shadow mode) ticked; and the Create workspace button, above the line Creating a workspace moves no money."
+  caption="A test workspace in shadow mode, as the form opens from Try it on your bills."
+/>
+
+<Screenshot
+  src="/docs/guides/try-it-checklist.png"
+  alt="The console's Get started in shadow mode checklist, 0 of 6 done: Add your suppliers, highlighted with a Start button; Add your real bills; Give your first verdict; then, under To pay on Arc, Add a wallet, Fund it with USDC and Go live."
+  caption="The first three steps need no wallet; the wallet comes after them, under To pay on Arc."
+/>
+
+
 ## 3. Add a supplier
 
 Open **Counterparties**. The **Add counterparty** form is open on an empty workspace.
@@ -33,6 +46,13 @@ Choose **Add and screen**. The supplier is screened as soon as it is saved, and 
 
 For example, a hosting supplier called Northwind Hosting, a **Vendor** with a limit of 500.00 USDC, that sends no purchase orders. The name and the figures are an example; use your own.
 
+<Screenshot
+  src="/docs/guides/try-it-supplier.png"
+  alt="The Add counterparty form on Counterparties, filled in for the example: Legal or trading name Northwind Hosting, Role Vendor, Payment limit (USDC) 500.00, Chain Arc testnet, Payment address left empty with the note Optional until payment setup, and under Does this supplier send you purchase orders?, No chosen. The button reads Add and screen."
+  caption="The example supplier: a vendor with a 500.00 USDC limit, no address yet and no purchase orders."
+/>
+
+
 ## 4. Add one of your bills
 
 Open **Bills & receivables**. On an empty workspace the **New invoice** form is open.
@@ -44,6 +64,13 @@ Open **Bills & receivables**. On an empty workspace the **New invoice** form is 
 - Tick **Goods or services received** once they have arrived.
 
 Choose **Add invoice**. As the form says: "The agent usually decides on a payable within a minute of adding it." You can also drop in a PDF, import a CSV or forward the bill by email: see [Your first payment](/docs/guides/first-payment#read-an-invoice-from-a-document) and [Add invoices by email](/docs/guides/email-invoices).
+
+<Screenshot
+  src="/docs/guides/try-it-bill.png"
+  alt="The New invoice form on Bills & receivables, on its Enter one invoice tab: Direction Payable, Counterparty Northwind Hosting, Amount 120.00, Currency USDC, Due date 10/15/2026, Memo Servers, October, PO reference left empty, and Goods or services received ticked, with the Add invoice button and the line The agent usually decides on a payable within a minute of adding it."
+  caption="One bill from the example supplier: 120.00 USDC for October's servers, received."
+/>
+
 
 ## 5. See what the agent decided
 
@@ -71,6 +98,13 @@ A decision in shadow mode asks **Do you agree with the agent?**
 - **Disagree** asks why, in a few words, and the bill is not paid: the agent decides it again later, or you reject it.
 
 Keep paying the bill the way you do today. Over time, the console's **Shadow mode** section shows how often you agreed with the agent.
+
+<Screenshot
+  src="/docs/guides/try-it-verdict.png"
+  alt="Bills & receivables, under Needs you: the Northwind Hosting bill for 120.00 USDC, due Oct 15, 2026, marked Waiting for your verdict, with No PO needed, Goods received, Screened clear and Within its limit. Opened, its card reads Pay Northwind Hosting, with the agent's reasoning, How the agent decided, the facts it checked and its audit entry, then Do you agree with the agent? Pays 120 USDC to Northwind Hosting, with the buttons Agree and pay and Disagree."
+  caption="The agent's decision on the example bill, its reasons, and the verdict it waits for."
+/>
+
 
 ## What to do next
 
