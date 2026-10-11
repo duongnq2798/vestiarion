@@ -18,6 +18,7 @@ import { mainnetOpenToEveryone } from "@/lib/mainnet";
 import { ARC_MAINNET } from "@/lib/network";
 import { readLatestDecision } from "@/lib/platform/latest-decision";
 import { readAllTimeOrNull, type OpenNumbers } from "@/lib/platform/open-numbers";
+import { readRecentDecisions } from "@/lib/platform/recent-decisions";
 import { reserveRunsLive } from "@/lib/platform/usyc-reserve";
 import { publicOrigin } from "@/lib/public-origin";
 import { X_HANDLE } from "@/lib/site-links";
@@ -78,7 +79,7 @@ async function reserveLiveAnywhere(): Promise<boolean> {
 }
 
 /**
- * What the proof shows besides the open numbers: the team's latest decision, and which legs run live, the payments leg
+ * What the proof shows besides the open numbers: the team's latest decision and the ones before it, and which legs run live, the payments leg
  * linking to the team's latest Arc mainnet payment (landing proof P2). The founding organization is named explicitly: a
  * sandbox organization's demo data must never inflate its "live" figures. A read that fails says a leg is not live,
  * never that it is.
@@ -88,9 +89,16 @@ async function proofFacts(mainnet: Promise<OpenNumbers | null>): Promise<ProofFa
     console.error("landing: chain modes not read", error instanceof Error ? error.message : error);
     return { mode: "simulate", earnMode: "simulate" } as const;
   });
-  const [current, latest, reserveLive, mainnetNumbers] = await Promise.all([modes, readLatestDecision(), reserveLiveAnywhere(), mainnet]);
+  const [current, latest, recent, reserveLive, mainnetNumbers] = await Promise.all([
+    modes,
+    readLatestDecision(),
+    readRecentDecisions(),
+    reserveLiveAnywhere(),
+    mainnet,
+  ]);
   return {
     latest,
+    recent,
     provenance: landingProvenance({
       paymentsLive: current.mode === "live",
       foundingReserveLive: current.earnMode === "live",

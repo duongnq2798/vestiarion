@@ -409,6 +409,14 @@ mainnet plan).
     the workspace's id stays there. `src/lib/latest-decision.ts` says it in words.
   - The reader's browser checks the signature and the link to the entry before it with `verifySignedLink`, the
     receipt verifier's half that needs no body. Until 0087 runs, or when the read fails, there is no band.
+  - Under it in the proof, the decisions before it (`docs/superpowers/specs/2026-10-11-landing-recent-decisions-design.md`):
+    `recent_team_decisions()` (0100), the service role's alone, reads the same workspaces on the same terms (and never
+    a simulated payment's decision), one decision per bill (its newest) out of the newest 500, and counts each
+    network's decisions in the past 7 days apart.
+    Its rows carry no signature and no workspace id. `src/lib/platform/recent-decisions.ts` reads it at most once a
+    minute; `recentDecisionView` says what came of each (paid, held, refused by code...) and why, and links a
+    transaction only when one went out. The list shows rows strictly older than the latest decision. Until 0100 runs,
+    or when the read fails, the latest decision stands alone.
 - **The landing's proof** (`docs/superpowers/specs/2026-10-08-landing-proof-design.md`, and landing clarity P1-P3):
   what the proof section says runs live, and the measurements, come from every workspace, never from the founding one
   alone.
@@ -819,6 +827,25 @@ disagrees with every decision.
   carries as a whole word, and is previewed before it is saved, then matched again on the server. Until migration 0090
   runs, reading answers `available: false` (`PGRST205` or `42P01`) and recording refuses with `not_ready`, so the report
   never fails for it.
+- **From a bank statement** (`docs/superpowers/specs/2026-10-10-bank-statement-design.md`). The same people fill in
+  those records from the business's own bank statement, a CSV or cells pasted from a spreadsheet. `src/lib/bank-statement/`
+  is pure and browser-safe: `table.ts` finds the delimiter (or a `sep=` line) and reads quoted fields with their line of
+  the file; `columns.ts` finds the header row below the bank's own lines and suggests each column's role from its words;
+  `values.ts` decides the date order and the decimal mark from every value of the file together, and asks when the values
+  read two ways rather than guess; `lines.ts` reads each line, signed and in its currency's minor units (`billDigits`), the
+  rows it skips with why, the period, and the statement against its own running balance, per currency; `match.ts` pairs
+  each money-out line with a bill one to one, in rounds (same currency, a date window, the same amount, or within 5% with
+  the payee's name or an invoice number in the line), leaving ties to the person. The browser decodes the file (UTF-8, else
+  Windows-1252, with the bill list import's `decodeList`) and reads the statement at once as it is mapped
+  (`BankStatementImport`); what crosses to the server is the text and the person's choices, never the browser's lines, and `src/lib/bank-statements.ts` reads and matches it again against the payables the report counts
+  before it previews or saves. The command `payable.import_statement` (`records.write`, console only) saves only the
+  ticked pairs still among their line's candidates, each through `recordActual` with source `statement`, adding
+  `via: "statement"` and `statementLine` to the entry. Only the lines used are kept, in `bank_statement_lines`
+  (migration 0094: the tenant role reads and adds, never changes), with a `line_hash` unique per workspace (SHA-256 of the
+  account, the day, the amount, the currency, the text, the balance and the line's place among identical ones), so a
+  re-import finds them; `payment_actuals.statement_line_id` names a record's line, one record per line, and a check
+  ties it to the source `statement`. A line kept whose record failed is used again by the next save. Until 0094 runs,
+  the report's card says so (`PGRST205`, `PGRST204`, `42P01`, `42703`) and the command refuses with `not_ready`.
 
 ## The workspace report
 

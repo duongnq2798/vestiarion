@@ -36,7 +36,7 @@ export function SignatureCheck({ link, publicKeys, describedBy }: { link: Signed
   const Icon = check?.ok === true ? ShieldCheck : check?.ok === false ? ShieldX : CircleDashed;
   return (
     <div className="grid gap-2.5">
-      <Button size="sm" variant="secondary" className="justify-self-start" icon={<ShieldCheck />} loading={checking} onClick={run} aria-describedby={describedBy}>
+      <Button size="sm" variant="secondary" className="justify-self-start" icon={<ShieldCheck />} loading={checking} onClick={run} aria-describedby={describedBy} data-cta="proof-signature">
         {check ? "Check it again" : "Check its signature"}
       </Button>
       <p aria-live="polite" className="min-h-0 text-xs leading-relaxed">

@@ -101,7 +101,7 @@ export const TENANT_TABLES = [
   "forecasts", "ledger_entries", "payment_intents", "cycle_runs", "cycle_snapshots", "sim_clock", "gateway_signers", "payment_receipts", "escrow_contracts",
   "fx_swaps", "screening_dismissals", "receivable_links", "incoming_transfers", "agent_budgets", "recurring_payables", "policy_proposals",
   "service_purchases", "spending_limit_contracts", "ar_reminders", "inbox_emails", "approval_policies", "payment_approvals",
-  "shadow_modes", "decision_verdicts", "payment_actuals", "report_shares", "report_baselines",
+  "shadow_modes", "decision_verdicts", "payment_actuals", "bank_statement_lines", "report_shares", "report_baselines",
 ] as const;
 
 export interface SeededRows {
@@ -174,9 +174,18 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     "insert into decision_verdicts (org_id, entry_seq, subject, subject_id, agent_action, verdict) values ($1, 1, 'invoice', $2, 'ap_pay', 'agree')",
     [orgId, invoiceId]
   );
-  await db.query(
-    "insert into payment_actuals (org_id, invoice_id, outcome, paid_on, amount, currency, method) values ($1, $2, 'paid', '2026-10-09', 1, 'USDC', 'bank_transfer')",
+  const actualId = await one(
+    "insert into payment_actuals (org_id, invoice_id, outcome, paid_on, amount, currency, method) values ($1, $2, 'paid', '2026-10-09', 1, 'USDC', 'bank_transfer') returning id",
     [orgId, invoiceId]
+  );
+  // A statement line, and the correction it recorded (0094).
+  const statementLineId = await one(
+    "insert into bank_statement_lines (org_id, account, booked_on, amount, currency, description, file_line, line_hash) values ($1, 'Main account', '2026-10-09', -1, 'USDC', $2, 2, encode(sha256(convert_to($2, 'utf8')), 'hex')) returning id",
+    [orgId, `line-${tag}`]
+  );
+  await db.query(
+    "insert into payment_actuals (org_id, invoice_id, outcome, paid_on, amount, currency, method, replaces, source, statement_line_id) values ($1, $2, 'paid', '2026-10-09', 1, 'USDC', 'bank_transfer', $3, 'statement', $4)",
+    [orgId, invoiceId, actualId, statementLineId]
   );
   await db.query(
     "insert into report_shares (org_id, token_hash) values ($1, encode(sha256(convert_to($2, 'utf8')), 'hex'))",
