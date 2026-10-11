@@ -183,7 +183,8 @@ export function ScenarioOutcome({ result }: { result: ScenarioResult }) {
         <CaseBox title="In this scenario" summary={result.scenario} horizon={result.horizon} changes={<ScenarioChanges result={result} />} />
       </div>
       <p className="text-xs leading-5 text-ink-3">
-        Cash today: <Money value={result.cash + result.reserve} />, in the operating wallet and the USYC reserve. Receivables due in the next {result.horizon} days:{" "}
+        Cash today: <Money value={result.cash + result.reserve} />, in the operating wallet{result.reserve > 0 ? " and the USYC reserve" : ""}. No bank balance is counted.
+        Receivables due in the next {result.horizon} days:{" "}
         <Money value={result.receivables.base} />, counted only on the day they arrive; in this scenario <Money value={result.receivables.scenario} /> arrives within the{" "}
         {result.horizon} days. Deals not invoiced yet are not counted.
       </p>

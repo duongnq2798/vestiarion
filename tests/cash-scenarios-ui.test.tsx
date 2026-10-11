@@ -51,10 +51,13 @@ describe("ScenarioOutcome", () => {
     expect(short).toContain("1 receivable 14 days late");
   });
 
-  it("keeps cash and receivables apart, and counts no deal not invoiced", () => {
-    expect(short).toMatch(/Cash today: 100\.00 USDC, in the operating wallet and the USYC reserve\./);
+  it("keeps cash, bank money, receivables and deals not invoiced apart", () => {
+    expect(short).toMatch(/Cash today: 100\.00 USDC, in the operating wallet and the USYC reserve\. No bank balance is counted\./);
     expect(short).toContain("counted only on the day they arrive");
     expect(short).toContain("Deals not invoiced yet are not counted.");
+    // Without a reserve, cash is the wallet alone.
+    const walletOnly = text(renderToStaticMarkup(<ScenarioOutcome result={cashScenario({ ...BASIS, reserve: 0 }, levers())} />));
+    expect(walletOnly).toMatch(/Cash today: 60\.00 USDC, in the operating wallet\. No bank balance is counted\./);
   });
 
   it("lists what falls due while the balance is short", () => {
@@ -152,7 +155,7 @@ describe("the copy", () => {
 
   it("never tells anyone to borrow or invest, and never talks the money down", () => {
     for (const source of sources) {
-      expect(source).not.toMatch(/\b(?:borrow|loan|credit line|line of credit|invest|sweep)\w*/i);
+      expect(source).not.toMatch(/\b(?:borrow|loan|credit|invest|sweep)\w*/i);
       expect(source).not.toMatch(/no real money|play money|\bfake\b/i);
     }
   });
