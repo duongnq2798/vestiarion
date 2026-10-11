@@ -63,7 +63,8 @@ names its source, so a person can check it there.
   `submitting` past its claim, a batch whose answer was lost). It is in flight, never failed.
 - A read of Vestiarion's that failed on a transfer Circle took (`failed` with a provider id and a state Circle has not
   ended) is not a failure: it stays Pending, with "Circle could not be read just now". So is Gateway's `GATEWAY_FAILED`,
-  whose attestation may still be minted.
+  whose attestation may still be minted; it keeps Gateway's own word ("Gateway reported it failed, but it may still be
+  minted on the payee's chain, so nothing is sent again"), not a failed read of ours.
 - Copy for Failed and Cancelled says the payee was not paid; it never says "no money moved", since a transaction that
   failed on chain still spent its gas.
 - Cost if wrong: a failure shown for a transfer that may still move invites paying it again by hand; these rules follow
@@ -122,9 +123,12 @@ names its source, so a person can check it there.
   unknown" …), with how long a payment in flight has been sent; opened, the seven stages each say when (UTC), from
   which source, and link their entry or transaction. `#settlement-<id>` opens it.
 - **Treasury**: **Payments in flight**: every payment sent and not confirmed, oldest first, with how long ago it was
-  sent and where it is, and every payment whose books do not match. Its line gives how many, the sum per currency, the
-  oldest's age and how many are past the network's `stuckAfterMinutes` (the transfer watch's threshold). A payment past
-  it says so in words, not by colour alone. Hidden when there is nothing to show.
+  sent, where it is and Circle's word for it, and, under "Not matching the books", every other payment whose books do
+  not match. Its line gives how many, the sum per currency, the oldest's age, how many are past the network's
+  `stuckAfterMinutes` (the transfer watch's threshold) and how many do not match. A payment past it says so in words, not
+  by colour alone. The amount is the invoice's `paid_amount` (written with the transfer that carries it, 0038), else the
+  intent's. A payable's name opens its card's track; a milestone's opens Contractors. Hidden when there is nothing to
+  show.
 - **The receipt (I17)**: a **Status** row says plainly whether the payment is Reconciled (confirmed by Circle, found on
   the chain by this page, and named by the workspace's signed entry) or only Confirmed by Circle, and why it is not
   reconciled just now. The date under the amount says it is when Circle confirmed it.
@@ -135,7 +139,7 @@ names its source, so a person can check it there.
 - Bills & receivables reads the workspace's invoice payment intents, a page at a time (as the report reads them),
   inside the organization scope, best effort: a read that fails is logged and the cards show no track; the page renders.
 - Treasury reads every intent not yet confirmed, and the confirmed intents of the bills its own rows show in flight
-  (`matched` invoices, `verified` milestones with a transaction), best effort as well.
+  (`matched` payables, `verified` milestones), best effort as well, with the entries about the milestones among them.
 - Named columns only, all of them present since 0080 (and 0057 for batches).
 - Cost if wrong: one more query on each page; a read that fails hides only the new parts.
 
@@ -168,6 +172,14 @@ names its source, so a person can check it there.
   first. The new track says the same wherever the payment is shown: "Circle did not answer when this payment was sent,
   so it may have taken the transfer. Vestiarion looks for it on Circle before anything else is sent, and sends a new
   transfer only once Circle shows none."
+- A payout to another chain is not looked up that way (`lookForUnknownSend` returns null for Gateway and CCTP): it is
+  sent again under the same idempotency key, which Circle takes once, and a Gateway payout only with the same spec. Its
+  track says so instead: "A payout to another chain is asked for again under the same payment key, which Circle takes
+  only once, so it is never sent twice."
+- While the agent runs, each cycle goes back to every `matched` payable, and `executePayment` looks for an unknown send
+  there before anything is sent, so it is looked for again without a person; Treasury and the card say "checking with
+  Circle" for it. One the cycle holds instead (a payee no longer fit to pay) waits in Approvals, whose Approve and pay
+  looks for it first.
 
 ## Not now
 
@@ -191,3 +203,12 @@ names its source, so a person can check it there.
 - `tests/receipts-status.test.ts`: the receipt's Status row for each combination of checks.
 - `tests/decision-trail.test.tsx` and `tests/reasoning-copy.test.ts`: the approval step and the note by status.
 - `tests/docs-guides.test.ts`: the guide quotes the screens as they are.
+
+## Docs
+
+- The guide **Know where a payment is** (`content/docs/guides/where-a-payment-is.mdx`), under Everyday work after Your
+  first payment: the stages and their sources, the ends, an outcome not known yet and what keeps a payment from being
+  paid twice, the books' mismatches, Payments in flight, a receipt's Status, and what it does not show. Two pictures:
+  `where-a-payment-is-track` and `where-a-payment-is-in-flight`.
+- `ARCHITECTURE.md` describes the read model beside the transfer watch. No `/api/v1` or webhook change, so no changelog
+  entry.

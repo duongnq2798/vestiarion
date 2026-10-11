@@ -21,6 +21,7 @@ type GuideSlug =
   | "guides/report"
   | "guides/first-payment"
   | "guides/try-a-rule"
+  | "guides/where-a-payment-is"
   | "guides/import-bills"
   | "guides/pay-a-contractor"
   | "guides/get-paid"
@@ -161,6 +162,9 @@ const ACTUAL_CONTROL = "src/components/ActualPaymentControl.tsx";
 const ACTUALS_CSV = "src/components/ActualsCsvImport.tsx";
 const ACTUALS_LIBRARY = "src/lib/actual-payments.ts";
 const ACTUAL_FIELDS = "src/lib/actual-payment-fields.ts";
+const SETTLEMENT_TRACK = "src/components/vx/SettlementTrack.tsx";
+const IN_FLIGHT = "src/components/vx/PaymentsInFlight.tsx";
+const RECEIPT_STATUS = "src/lib/receipts/status.ts";
 
 /** Each guide's quoted UI strings, as `[text, the file it must appear in]`. */
 /**
@@ -446,6 +450,60 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["refused the transfer. Your USDC did not leave your wallet.", "src/lib/inbound-usdc.ts"],
     ["Your wallet holds no ETH on Base to pay its gas. Add a little ETH there, then choose Review again.", "src/lib/inbound-usdc.ts", " to pay its gas. Add a little "],
     ["Your wallet does not hold enough ETH on Base for the gas. Add a little ETH there, then send again.", "src/lib/inbound-usdc.ts", " for the gas. Add a little "],
+  ],
+  // Where a payment is (settlement lifecycle L7): the card's stages, Treasury's payments in flight, a receipt's status.
+  "guides/where-a-payment-is": [
+    ["Bills & receivables", APP_NAV],
+    ["How the agent decided", "src/components/vx/DecisionTrail.tsx"],
+    ["Where the payment is", SETTLEMENT_TRACK],
+    ["Proposed", SETTLEMENT_TRACK],
+    ["The agent decided to pay it.", SETTLEMENT_TRACK],
+    ["A person chose to pay it.", SETTLEMENT_TRACK],
+    ["Authorized", SETTLEMENT_TRACK],
+    ["Code's checks passed, so the agent could pay it on its own.", SETTLEMENT_TRACK],
+    ["A person approved it.", SETTLEMENT_TRACK],
+    ["Two people approved it.", SETTLEMENT_TRACK],
+    ["Submitted", SETTLEMENT_TRACK],
+    ["Vestiarion sent it to Circle.", SETTLEMENT_TRACK, "Vestiarion sent it to Circle${which}."],
+    ["Pending", SETTLEMENT_TRACK],
+    ["Confirmed", SETTLEMENT_TRACK],
+    ["In the payee's wallet", SETTLEMENT_TRACK],
+    ["Moving it to a bank is the payee's own step, which Vestiarion does not see.", SETTLEMENT_TRACK],
+    ["A simulated payment reaches no wallet.", SETTLEMENT_TRACK],
+    ["Reconciled", SETTLEMENT_TRACK],
+    ["The bill is marked paid with this transaction, and a signed entry records it.", SETTLEMENT_TRACK],
+    ["Not yet.", SETTLEMENT_TRACK],
+    ["Not recorded here.", SETTLEMENT_TRACK],
+    ["The payee was not paid.", SETTLEMENT_TRACK],
+    ["Cancelled: Circle cancelled it. The payee was not paid.", SETTLEMENT_TRACK],
+    ["Not sent: the send did not reach Circle, so the payee was not paid.", SETTLEMENT_TRACK],
+    ["Approve and pay", APPROVAL_CARD],
+    ["Pay now", HELD_ACTIONS],
+    ["Earlier attempts", SETTLEMENT_TRACK],
+    ["Outcome unknown", SETTLEMENT_TRACK],
+    [
+      "Circle did not answer when this payment was sent, so it may have taken the transfer. Vestiarion looks for it on Circle before anything else is sent, and sends a new transfer only once Circle shows none.",
+      SETTLEMENT_TRACK,
+    ],
+    ["is asked for again under the same payment key, which Circle takes only once, so it is never sent twice.", SETTLEMENT_TRACK],
+    ["Circle could not be read just now; nothing is sent again until it answers.", SETTLEMENT_TRACK],
+    ["Confirmed, but the bill is not marked paid yet: the agent's next cycle marks it.", SETTLEMENT_TRACK],
+    ["The bill is marked paid, but Circle has not confirmed this transfer.", SETTLEMENT_TRACK],
+    ["The bill is marked paid with another transaction than this one.", SETTLEMENT_TRACK],
+    ["The bill is marked paid with this transaction, but no signed entry names it.", SETTLEMENT_TRACK],
+    ["A confirmed transfer cannot be charged back or reversed. A refund would be a new transfer back, a separate payment.", SETTLEMENT_TRACK],
+    ["Treasury", APP_NAV],
+    ["Payments in flight", IN_FLIGHT],
+    ["Sent and not confirmed by Circle yet, the oldest first.", IN_FLIGHT],
+    ["past the 15 min wait", IN_FLIGHT, " · past the ${stuckAfterMinutes} min wait"],
+    ["Not matching the books", IN_FLIGHT],
+    ["Contractors", APP_NAV],
+    ["Status", RECEIPT_VIEW],
+    ["Confirmed by Circle:", RECEIPT_VIEW],
+    ["Not reconciled just now:", RECEIPT_STATUS],
+    ["Not reconciled", RECEIPT_STATUS],
+    ["A check below does not pass, so it is not reconciled.", RECEIPT_STATUS],
+    ["Agent vs what really happened", ACTUALS],
   ],
   "guides/try-a-rule": [
     ["Try it on past decisions", RULE_TRIAL_COPY],
@@ -1352,6 +1410,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/report": 20,
   "guides/first-payment": 20,
   "guides/try-a-rule": 20,
+  "guides/where-a-payment-is": 20,
   "guides/import-bills": 20,
   "guides/pay-a-contractor": 20,
   "guides/get-paid": 20,

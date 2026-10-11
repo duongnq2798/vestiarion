@@ -195,6 +195,8 @@ const SHOTS = {
   "import-bills-columns": async () => {},
   "import-bills-check": async () => {},
   "workspace-status": async () => {},
+  "where-a-payment-is-track": async () => {},
+  "where-a-payment-is-in-flight": async () => {},
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

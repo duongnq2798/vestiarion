@@ -227,6 +227,26 @@ instead of at the next cycle, on a subscribed account while the agent runs:
   logging only a label of a failure. `npm run circle:subscribe` makes it for the platform's hosted account and for
   accounts connected before; the operator runs it once the deployment is live, as Circle tests the endpoint first.
 
+**Where a payment is** (`src/lib/settlement.ts`, `src/lib/settlement-facts.ts`, `src/lib/settlement-read.ts`,
+`docs/superpowers/specs/2026-10-11-settlement-lifecycle-design.md`) is a read model over what the rows above already
+record; it writes nothing and nothing that moves money imports it (`tests/settlement.test.ts` pins that):
+- `settlement-facts` turns a payment intent (its status, Circle's `provider_state`, `submitted_at`, `confirmed_at`,
+  `previous_attempts`), the signed entries about its bill (the decision, a person's approval, `payment_stuck`, the
+  recording entries) and the bill's own status and `tx_ref` into facts, each with its source and time;
+- `reduceSettlement` replays them into seven stages, proposed, authorized, submitted, pending, confirmed, in the payee's
+  wallet and reconciled, with failed, cancelled, not sent and outcome unknown kept apart. Facts are ordered by time, then
+  stage, then ledger sequence, so the answer is the same in any order and with duplicates; confirmed is never undone, a
+  pending read never undoes Circle's end, and only a new attempt (`begin_payment_retry`) moves on from an ended one.
+  "In the payee's wallet" is the confirmation itself on Arc, the recorded mint for a payout to another chain, and never
+  for a simulated payment; no stage names a bank, a refund or a chargeback, which this rail does not have;
+- reconciled means the bill is `paid` with one of the transfer's references and a signed entry names it; anything else
+  after a confirmation, or a bill marked paid without one, is the payment's one mismatch;
+- Bills & receivables reads the workspace's invoice payment intents, a page at a time, and folds the stages into each
+  payable's card; Treasury reads every intent not confirmed and the confirmed ones of bills its rows show in flight, and
+  lists them as **Payments in flight**, aged against the network's `stuckAfterMinutes`. Both reads are best effort, in
+  the page's organization scope: one that fails hides only these parts. The shared receipt says Reconciled only when its
+  own three checks pass, and Confirmed with the reason otherwise (`src/lib/receipts/status.ts`).
+
 **The FX watch** (`POST /api/agent/fx-watch`, `src/lib/agent/fx-watch.ts`,
 `docs/superpowers/specs/2026-10-05-fx-reevaluation-design.md`) runs every 5 minutes from Supabase Cron, with the same
 bearer token, and by hand from `.github/workflows/fx-watch.yml`. It decides again, without a person, a EURC payable a
