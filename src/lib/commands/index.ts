@@ -9,3 +9,4 @@ export { addInvoice } from "./invoices";
 export { importInvoices, type ImportOutcome } from "./imports";
 export { issuePayeeLink } from "./payee-links";
 export { importActualPayments, recordActualPayment } from "./actuals";
+export { importBankStatement } from "./statements";
