@@ -199,11 +199,18 @@ describe("money safety", () => {
       return statSync(full).isDirectory() ? walk(full) : /\.tsx?$/.test(name) ? [full] : [];
     });
   const payers = ["src/lib/agent", "src/lib/commands", "src/app/actions", "src/app/api"].flatMap((dir) => walk(path.join(ROOT, dir)));
+  const imports = (file: string) => /from\s+["'][^"']*cash-scenario/.test(readFileSync(file, "utf8"));
 
   it("leaves the scenarios out of everything that pays, decides or answers the API", () => {
     expect(payers.length).toBeGreaterThan(50);
-    const importers = payers.filter((file) => /from\s+["'][^"']*cash-scenario/.test(readFileSync(file, "utf8")));
-    expect(importers).toEqual([]);
+    expect(payers.filter(imports)).toEqual([]);
+  });
+
+  it("is read by no library module but its own basis: only Treasury and its section use it", () => {
+    const library = walk(path.join(ROOT, "src", "lib")).filter(imports).map((file) => path.relative(ROOT, file).split(path.sep).join("/"));
+    expect(library).toEqual(["src/lib/cash-scenario-basis.ts"]);
+    const app = walk(path.join(ROOT, "src", "app")).filter(imports).map((file) => path.relative(ROOT, file).split(path.sep).join("/"));
+    expect(app.sort()).toEqual(["src/app/docs-shots/shots.tsx", "src/app/o/[slug]/console/page.tsx"]);
   });
 });
 
