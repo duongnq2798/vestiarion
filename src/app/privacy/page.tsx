@@ -18,7 +18,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy"
-      updated="2026-10-10"
+      updated="2026-10-11"
       intro="Vestiarion is an autonomous treasury agent on Arc testnet. This page describes what the service stores and sends, as its code does it today. The code is public, so every statement here can be checked against it."
     >
       <LegalSection id="signing-in" title="Signing in">
@@ -85,6 +85,13 @@ export default function PrivacyPage() {
           An owner or admin can share one paid payment&apos;s receipt as a link. Anyone with the link sees that payment&apos;s amount, the payee&apos;s
           chain and address, its transactions and its signed ledger entry, which already sit on a public chain or in the workspace&apos;s own ledger. It
           shows no names. The link stops working when they stop sharing it or make a new one.
+        </p>
+        <p>
+          An owner or admin can also share the workspace&apos;s report as a link, choosing whether it shows suppliers&apos; names or labels, amounts or
+          not, and the workspace&apos;s name or a neutral title. Anyone with the link sees a live copy: the figures, the agent&apos;s decisions with the
+          first sentence of its reasoning, and the payments with their transactions, which are not linked when amounts are hidden. It never shows memos, notes, references, invoice ids, or the names
+          and emails of the workspace&apos;s members, and it hides any purchase order reference or memo the agent&apos;s sentence quotes. The link stops working when they stop sharing it, and the workspace&apos;s members see every live
+          link.
         </p>
       </LegalSection>
 
@@ -238,7 +245,7 @@ export default function PrivacyPage() {
         <ul>
           <li>
             an invitation address becomes <code>/invite/:token</code>, a payee link <code>/payee/:token</code>, a client&apos;s pay link{" "}
-            <code>/pay/:token</code> and a receipt link <code>/receipt/:token</code>, and a workspace address has the workspace&apos;s slug
+            <code>/pay/:token</code>, a receipt link <code>/receipt/:token</code> and a shared report <code>/report/:token</code>, and a workspace address has the workspace&apos;s slug
             replaced, as <code>/o/:org</code>;
           </li>
           <li>only the path is sent, never the query string or anything after a #;</li>
