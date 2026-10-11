@@ -66,7 +66,7 @@ After **Add**, the bot says the payable was added. The agent usually decides wit
 
 The bot does not read photos: it asks you to Send the invoice as a PDF, or paste its text. When it cannot add an invoice from the chat, because no counterparty in the workspace matches its vendor or it has no amount or due date, it says what is missing and links to Bills & receivables, where you can add it by hand. An approver or a viewer who sends an invoice is told "Only an owner or admin can add invoices."
 
-The invoice is added exactly as one added on Bills & receivables: the ledger's `create_invoice` entry names you, and adds `via: "telegram"` and the hash of the document. The document itself is not stored. Its USDC moves on Arc testnet only when the agent pays it, under every check it applies to any payable.
+The invoice is added exactly as one added on Bills & receivables: the ledger's `create_invoice` entry names you, and adds `via: "telegram"` and the hash of the document. The document itself is not stored. Its USDC moves on Arc, on the workspace's network, only when the agent pays it, under every check it applies to any payable.
 
 ## 5. More than one workspace
 
