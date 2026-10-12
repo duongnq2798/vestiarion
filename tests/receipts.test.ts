@@ -298,5 +298,40 @@ describe("recordIncomingTransfers", () => {
       expect(ledgerMock).not.toHaveBeenCalled();
       expect(result.matched).toBe(0);
     });
+
+    // A part-paid receivable's pay link asks for what is still owed: an open receivable of that same amount makes a
+    // transfer from an unknown address ambiguous, either way round (R1).
+    describe("an amount alone, beside an open receivable of the same amount", () => {
+      const BEACON = { ...OPEN[0], id: "inv-2", counterparty_id: "cp-2", amount: "7.500000", counterparties: { name: "Beacon", address: null } };
+      const both = (links: string[], from: string = OTHER) => {
+        const base = workspace({ allocations: { body: [allocation()] }, unmatched: [{ ...UNMATCHED[0], from_address: from, amount: "7.500000" }], open: [OPEN[0], BEACON] });
+        return (r: RecordedRequest): FakeReply =>
+          r.path === "/rest/v1/receivable_links" && r.method === "GET" ? { body: links.map((id) => ({ invoice_id: id })) } : base(r);
+      };
+
+      it("leaves it for a person when both clients were sent their pay link", async () => {
+        fake = fakeSupabase(both(["inv-1", "inv-2"]));
+        const result = await run(() => recordIncomingTransfers(db(), provider([transfer({ from: OTHER, amount: 7.5 })]), "operating"));
+        expect(patches("/rest/v1/incoming_transfers")).toHaveLength(0);
+        expect(posts()).toHaveLength(0);
+        expect(result.matched).toBe(0);
+      });
+
+      it("leaves it for a person when only the part-paid one was sent its pay link", async () => {
+        fake = fakeSupabase(both(["inv-1"]));
+        const result = await run(() => recordIncomingTransfers(db(), provider([transfer({ from: OTHER, amount: 7.5 })]), "operating"));
+        expect(patches("/rest/v1/incoming_transfers")).toHaveLength(0);
+        expect(posts()).toHaveLength(0);
+        expect(result.matched).toBe(0);
+      });
+
+      it("still applies the rest from the client's own address", async () => {
+        fake = fakeSupabase(both(["inv-1", "inv-2"], CLIENT));
+        const result = await run(() => recordIncomingTransfers(db(), provider([transfer({ amount: 7.5 })]), "operating"));
+        expect(patches("/rest/v1/incoming_transfers")).toHaveLength(0);
+        expect(posts()[0].body).toMatchObject({ invoice_id: "inv-1", basis: "sender" });
+        expect(result.matched).toBe(1);
+      });
+    });
   });
 });

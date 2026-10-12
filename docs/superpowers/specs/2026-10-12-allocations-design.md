@@ -53,8 +53,10 @@ Each decision names what it costs if it turns out wrong.
   every receivable with one, and the database refuses either way (L5).
 - The cycle also applies, by itself, a transfer that is exactly what is still owed on a part-paid receivable, by the
   same two rules a whole match trusts (the client's address on file; or the only such receivable, whose client was sent
-  its pay link). It writes a `payment` row with basis `sender` or `amount` and no person, and signs
-  `ar_payment_applied`. This keeps the pay link's promise once the page asks for what is still owed (L11).
+  its pay link). Open receivables, by their amount, and part-paid ones, by what is still owed, are one pool for both
+  rules: an open receivable of the same amount as a part-paid one's rest makes an amount alone ambiguous, and the
+  client's own address decides between them. It writes a `payment` row with basis `sender` or `amount` and no person,
+  and signs `ar_payment_applied`. This keeps the pay link's promise once the page asks for what is still owed (L11).
 - Cost if wrong: a whole match the agent got wrong is still fixed outside the product, as today; an automatic
   application of the rest can be reversed (L8).
 

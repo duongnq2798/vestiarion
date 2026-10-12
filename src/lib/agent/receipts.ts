@@ -211,15 +211,16 @@ export async function recordIncomingTransfers(
       chain: provider.network.circleBlockchain,
       receivedAt: row.received_at,
     };
-    const match = matchTransfer(transfer, open);
-    if (!match) {
-      const rest = partPaid.length > 0 ? matchTransfer(transfer, partPaid) : null;
-      if (!rest) continue;
-      const receivable = partPaid.find((candidate) => candidate.id === rest.invoiceId) as OpenReceivable;
-      if (await applyRest(orgDb, provider, row.id, transfer, receivable, rest.matchedBy)) {
-        partPaid = partPaid.filter((candidate) => candidate.id !== receivable.id);
+    // One pool: a part-paid receivable is asked for what is still owed, so an open one of that same amount makes an
+    // amount alone ambiguous, and the client's own address decides either way (R1).
+    const match = matchTransfer(transfer, [...open, ...partPaid]);
+    if (!match) continue;
+    const rest = partPaid.find((candidate) => candidate.id === match.invoiceId);
+    if (rest) {
+      if (await applyRest(orgDb, provider, row.id, transfer, rest, match.matchedBy)) {
+        partPaid = partPaid.filter((candidate) => candidate.id !== rest.id);
         matched += 1;
-        lines.push({ domain: "ar", message: `Received ${transfer.amount} ${transfer.token} from ${receivable.clientName} on ${provider.network.label}, what was still owed (matched by ${rest.matchedBy})` });
+        lines.push({ domain: "ar", message: `Received ${transfer.amount} ${transfer.token} from ${rest.clientName} on ${provider.network.label}, what was still owed (matched by ${match.matchedBy})` });
       }
       continue;
     }
