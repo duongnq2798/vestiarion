@@ -49,6 +49,12 @@ describe("the address of a view", () => {
     expect(view({ tab: "plan" })).toMatchObject({ tab: "plan", filter: null });
   });
 
+  it("lists everything, or a schedule's bills, open first", () => {
+    expect(view({ tab: "bills", filter: "all" }).sort).toBe("open");
+    expect(view({ tab: "bills", filter: "recurring" }).sort).toBe("open");
+    expect(view({ tab: "receivables", filter: "all" }).sort).toBe("open");
+  });
+
   it("lists settled bills and received money latest first unless a sort is named", () => {
     expect(view({ tab: "bills", filter: "paid" }).sort).toBe("recent");
     expect(view({ tab: "receivables", filter: "received" }).sort).toBe("recent");
@@ -88,7 +94,7 @@ describe("every address the page answered before", () => {
   });
 
   it("?q=…: the search, on the tab where it finds something", () => {
-    expect(view({ q: "acme" }, { searchHits: { payables: 2, receivables: 1 } })).toMatchObject({ tab: "bills", q: "acme", filter: "all" });
+    expect(view({ q: "acme" }, { searchHits: { payables: 2, receivables: 1 } })).toMatchObject({ tab: "bills", q: "acme", filter: "all", sort: "open" });
     expect(view({ q: "0xabc" }, { searchHits: { payables: 0, receivables: 1 } })).toMatchObject({ tab: "receivables", q: "0xabc", filter: "all" });
     expect(view({ q: "nothing" }, { searchHits: { payables: 0, receivables: 0 } })).toMatchObject({ tab: "bills", filter: "all" });
   });
@@ -176,6 +182,7 @@ describe("sorting and pages", () => {
 
   it("by the day that matters, latest first, newest added, largest amount, or by name", () => {
     expect(ids(sortRows(rows, "due"))).toEqual(["b", "c", "a"]);
+    expect(ids(sortRows(rows, "open"))).toEqual(["b", "a", "c"]);
     expect(ids(sortRows(rows, "recent"))).toEqual(["c", "b", "a"]);
     expect(ids(sortRows(rows, "added"))).toEqual(["b", "a", "c"]);
     expect(ids(sortRows(rows, "amount"))).toEqual(["b", "a", "c"]);

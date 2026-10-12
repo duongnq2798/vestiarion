@@ -31,12 +31,12 @@ const bill = (fields: Partial<PlanBill> & Pick<PlanBill, "id" | "payee" | "amoun
   ...fields,
 });
 
-/** The plan, with the balance read 2 minutes before, or 40 when `stale`. */
-export function paymentPlanShot(options: { stale?: boolean } = {}): PaymentPlan {
+/** The plan, with the balance read 2 minutes before, or 40 when `stale`; `short`, with too little cash for every bill. */
+export function paymentPlanShot(options: { stale?: boolean; short?: boolean } = {}): PaymentPlan {
   return planPayments({
     now: NOW,
-    operatingUsdc: 2400,
-    reserveUsdc: 1500,
+    operatingUsdc: options.short ? 1100 : 2400,
+    reserveUsdc: options.short ? 0 : 1500,
     reserveApy: 0.045,
     cushion: 350,
     bills: [

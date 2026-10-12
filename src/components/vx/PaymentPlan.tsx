@@ -360,8 +360,9 @@ export function PaymentPlanSection({
   const days = [...new Set(inWindow.map((line) => line.on as string))];
   const approvable = plan.lines.filter((line) => line.approvable && !(line.createdBy !== null && line.createdBy === viewerId && !soleApprover));
   const balanceStale = plan.freshness.state === "stale" || plan.freshness.state === "unread";
-  // Each day's balance once its payments leave, as the plan worked it out (its cash effect's "With this plan").
-  const balanceAfter = new Map(plan.days.map((day) => [day.day, day.balance] as const));
+  // Each day's balance once its payments leave, as the plan worked it out (its cash effect's "With this plan"); none on
+  // a day nothing leaves, such as one whose bills the cash cannot cover.
+  const balanceAfter = new Map(plan.days.filter((day) => day.out > 0).map((day) => [day.day, day.balance] as const));
 
   return (
     <section id="payment-plan" aria-labelledby="payment-plan-title" className="scroll-mt-6">

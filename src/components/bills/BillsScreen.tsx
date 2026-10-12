@@ -3,7 +3,8 @@ import { BILLS_TABS, type BillsTab, type ReviewPanel } from "@/lib/bills-view";
 import { BillsList } from "./BillsList";
 import { DetailPanel, LegacyHashRedirect, ReviewPanels, type PanelContent } from "./BillsPanels";
 import { BillsSummary, ReviewStrip, type SummaryData, type WaitingItem } from "./BillsSummary";
-import { BillsTabs, panelId, tabId, type BillsTabLink } from "./BillsTabs";
+import { BillsTabs, type BillsTabLink } from "./BillsTabs";
+import { panelId, tabId } from "./tab-keys";
 import type { ListData } from "./types";
 
 export interface BillsScreenProps {

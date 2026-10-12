@@ -149,7 +149,7 @@ describe("the summary and Waiting for review", () => {
       ],
     });
     expect(markup).toMatch(/role="region" aria-label="Waiting for review"/);
-    expect(text(markup)).toContain("Waiting for review 6 from Xero · 1 to book in Xero · 1 won deal in HubSpot");
+    expect(text(markup)).toContain("Waiting for review 6 from Xero 1 to book in Xero 1 won deal in HubSpot");
     expect(markup).toMatch(/<button[^>]*aria-haspopup="dialog"[^>]*>6 from Xero<\/button>/);
     expect(markup).toContain('href="/o/acme/invoices?tab=receivables#from-hubspot"');
   });

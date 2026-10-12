@@ -41,7 +41,7 @@ export function TotalsLine({ totals }: { totals: Totals }) {
 export function BillsSummary({ data }: { data: SummaryData }) {
   const { needsYou, dueSoon, overdue, receivables } = data;
   return (
-    <div className="mb-4 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 xl:grid-cols-4">
+    <div className="mb-4 grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 xl:grid-cols-4">
       <StatTile label="Needs you" tone={needsYou.count > 0 ? "held" : "default"} href={needsYou.href} sub={needsYou.count > 0 ? "Bills waiting for a person" : "Nothing waiting"}>
         <span className="tabular-nums">{needsYou.count}</span>
       </StatTile>
@@ -81,16 +81,11 @@ export interface WaitingItem {
 export function ReviewStrip({ items }: { items: WaitingItem[] }): ReactNode {
   if (items.length === 0) return null;
   return (
-    <div role="region" aria-label="Waiting for review" className="mb-5 flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-xl border border-line bg-surface/70 px-4 py-2.5 text-[0.8125rem]">
+    <div role="region" aria-label="Waiting for review" className="mb-5 flex flex-wrap items-baseline gap-x-4 gap-y-1 rounded-xl border border-line bg-surface/70 px-4 py-2.5 text-[0.8125rem]">
       <span className="font-semibold text-ink">Waiting for review</span>
-      <ul className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        {items.map((item, index) => (
-          <li key={item.key} className="flex items-baseline gap-2">
-            {index > 0 && (
-              <span aria-hidden className="text-ink-3">
-                ·
-              </span>
-            )}
+      <ul className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        {items.map((item) => (
+          <li key={item.key}>
             {item.review ? (
               <ReviewButton review={item.review}>{item.label}</ReviewButton>
             ) : (

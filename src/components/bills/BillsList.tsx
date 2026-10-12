@@ -43,7 +43,7 @@ export function BillsList({ list, slugHref, above, below }: { list: ListData; sl
             defaultValue={list.q ?? ""}
             maxLength={100}
             aria-label="Search by invoice number, id, purchase order, counterparty, amount or transaction"
-            placeholder="Invoice number, id, PO, counterparty, amount or transaction"
+            placeholder="Invoice number, PO, counterparty or amount"
             className="min-w-0 flex-1 sm:max-w-md"
           />
           <Button type="submit" variant="secondary" icon={<Search />}>
@@ -148,30 +148,28 @@ function NextAction({ row, slugHref }: { row: BillRowItem; slugHref: (path: stri
     </>
   );
   if (next.tone === "muted") return <span className={cn("relative text-xs", tone)}>{words}</span>;
-  const className = cn("relative z-10 inline-flex items-center gap-0.5 text-xs font-medium underline-offset-2 hover:underline", tone);
+  const className = cn("relative z-10 text-xs font-medium underline-offset-2 hover:underline", tone);
   if (next.href) {
     return (
       <Link href={slugHref(next.href)} className={className}>
         {words}
-        <ChevronRight aria-hidden className="size-3.5" />
+        <ChevronRight aria-hidden className="ml-0.5 inline size-3.5 align-[-0.2em]" />
       </Link>
     );
   }
   return (
     <RowLink id={row.id} href={row.href} className={className}>
       {words}
-      <ChevronRight aria-hidden className="size-3.5" />
+      <ChevronRight aria-hidden className="ml-0.5 inline size-3.5 align-[-0.2em]" />
     </RowLink>
   );
 }
 
 /** One row: on a phone, stacked; from 768 px, columns for the date, the amount and where it stands. */
 function Row({ row, slugHref }: { row: BillRowItem; slugHref: (path: string) => string }) {
-  const amount = row.amount != null && <Money value={row.amount} token={row.token} struck={row.struck} className={cn("text-sm font-semibold", row.struck ? "text-ink-3" : "text-ink")} />;
-  const date = row.date && <span className={cn("whitespace-nowrap font-mono text-xs", row.date.tone === "held" ? "text-held" : "text-ink-2")}>{row.date.label}</span>;
   const below = row.blockers.length > 0 ? null : row.why;
   return (
-    <div className="relative grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 px-4 py-3 transition-colors duration-150 ease-standard hover:bg-ground/50 sm:px-5 md:grid-cols-[minmax(0,1fr)_7.5rem_8.5rem_minmax(0,14rem)] md:items-start">
+    <div className="relative grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5 px-4 py-3 transition-colors duration-150 ease-standard hover:bg-ground/50 sm:px-5 md:grid-cols-[minmax(0,1fr)_7.5rem_8.5rem_minmax(0,14rem)] md:items-start">
       <div className="min-w-0">
         <p className="flex min-w-0 items-baseline gap-2">
           <RowLink id={row.id} href={row.href} stretched className="min-w-0 truncate text-sm font-medium text-ink outline-offset-2 hover:underline">
@@ -180,10 +178,8 @@ function Row({ row, slugHref }: { row: BillRowItem; slugHref: (path: string) => 
           </RowLink>
           {row.justAdded && <span className="shrink-0 text-xs font-medium text-agent">Just added</span>}
         </p>
-        <p className="truncate text-xs text-ink-3">
-          {row.reference ?? "No reference"}
-          {row.date && <span className={cn("md:hidden", row.date.tone === "held" && "text-held")}> · {row.date.label}</span>}
-        </p>
+        <p className="truncate text-xs text-ink-3">{row.reference ?? "No reference"}</p>
+        {row.date && <p className={cn("font-mono text-xs md:hidden", row.date.tone === "held" ? "text-held" : "text-ink-2")}>{row.date.label}</p>}
         {row.context && <p className="truncate text-xs text-agent">{row.context}</p>}
         {row.note && <p className="text-xs text-ink-2">{row.note}</p>}
         {row.blockers.length > 0 && (
@@ -196,17 +192,14 @@ function Row({ row, slugHref }: { row: BillRowItem; slugHref: (path: string) => 
         {below && <p className="mt-1 text-xs leading-5 text-ink-2">{below}</p>}
         {row.collection && <p className="mt-0.5 text-xs text-ink-2">{row.collection}</p>}
       </div>
-      <div className="hidden md:block md:pt-0.5">{date}</div>
-      <div className="flex flex-col items-end gap-1 md:pt-0.5">
-        {amount}
-        <span className="md:hidden">
-          <OutcomeBadge outcome={row.outcome} label={row.outcomeLabel} />
-        </span>
+      <div className="hidden md:block md:pt-0.5">
+        {row.date && <span className={cn("whitespace-nowrap font-mono text-xs", row.date.tone === "held" ? "text-held" : "text-ink-2")}>{row.date.label}</span>}
+      </div>
+      <div className="text-right md:pt-0.5">
+        {row.amount != null && <Money value={row.amount} token={row.token} struck={row.struck} className={cn("text-sm font-semibold", row.struck ? "text-ink-3" : "text-ink")} />}
       </div>
       <div className="col-span-2 flex flex-wrap items-center gap-x-3 gap-y-1 md:col-span-1 md:flex-col md:items-start">
-        <span className="hidden md:inline-flex">
-          <OutcomeBadge outcome={row.outcome} label={row.outcomeLabel} />
-        </span>
+        <OutcomeBadge outcome={row.outcome} label={row.outcomeLabel} />
         <NextAction row={row} slugHref={slugHref} />
       </div>
     </div>

@@ -17,7 +17,7 @@ export type BillFilter = (typeof BILL_FILTERS)[number] | (typeof BILL_CARD_FILTE
 export const RECEIVABLE_FILTERS = ["outstanding", "overdue", "received", "all"] as const;
 export type ReceivableFilter = (typeof RECEIVABLE_FILTERS)[number];
 
-export const LIST_SORTS = ["due", "recent", "added", "amount", "name"] as const;
+export const LIST_SORTS = ["due", "open", "recent", "added", "amount", "name"] as const;
 export type ListSort = (typeof LIST_SORTS)[number];
 
 /** The review lists the Waiting for review strip opens over the page. */
@@ -50,6 +50,7 @@ export const RECEIVABLE_FILTER_LABELS: Record<ReceivableFilter, string> = {
 
 export const SORT_LABELS: Record<ListSort, string> = {
   due: "Due date",
+  open: "Open first",
   recent: "Latest first",
   added: "Newest added",
   amount: "Largest amount",
@@ -139,6 +140,8 @@ function legacyStatus(status: string): { tab: BillsTab; filter: BillFilter | Rec
 }
 
 const SETTLED_FILTERS: ReadonlySet<string> = new Set(["paid", "received"]);
+/** Lists that hold settled bills beside open ones: the open ones first, the work before the history. */
+const MIXED_FILTERS: ReadonlySet<string> = new Set(["all", "recurring"]);
 
 export function resolveBillsView(query: BillsQuery, facts: BillsFacts): BillsView {
   const openDirection = query.open ? facts.directionOf(query.open) : null;
@@ -180,7 +183,7 @@ export function resolveBillsView(query: BillsQuery, facts: BillsFacts): BillsVie
     filter,
     q: query.q,
     page: query.page,
-    sort: query.sort ?? (filter !== null && SETTLED_FILTERS.has(filter) ? "recent" : "due"),
+    sort: query.sort ?? (filter !== null && SETTLED_FILTERS.has(filter) ? "recent" : filter !== null && MIXED_FILTERS.has(filter) ? "open" : "due"),
     open,
     review: query.review,
     new: query.new,
@@ -271,6 +274,13 @@ export function receivableFilterMatches(filter: ReceivableFilter, row: ListRow, 
 
 const COMPARE: Record<ListSort, (a: ListRow, b: ListRow) => number> = {
   due: (a, b) => a.due.localeCompare(b.due),
+  // Open (or still owed) by the day that matters, then the settled, latest due first.
+  open: (a, b) => {
+    const openA = OPEN_STATUSES.has(a.status);
+    const openB = OPEN_STATUSES.has(b.status);
+    if (openA !== openB) return openA ? -1 : 1;
+    return openA ? a.due.localeCompare(b.due) : b.due.localeCompare(a.due);
+  },
   recent: (a, b) => b.at.localeCompare(a.at),
   added: (a, b) => b.added.localeCompare(a.added),
   amount: (a, b) => b.amount - a.amount,

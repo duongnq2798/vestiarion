@@ -22,7 +22,8 @@ export function SortSelect({ value, options }: { value: string; options: SortOpt
         }}
       >
         <SelectTrigger id={id} size="sm" className="w-auto min-w-[10.5rem]">
-          <SelectValue />
+          {/* Named here as well: the item's own text is in the list, which is not on the page until it opens. */}
+          <SelectValue>{options.find((option) => option.value === value)?.label}</SelectValue>
         </SelectTrigger>
         <SelectContent>
           {options.map((option) => (

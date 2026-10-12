@@ -1,3 +1,9 @@
+import type { BillsTab } from "@/lib/bills-view";
+
+/** A tab's id and its panel's: each names the other (`aria-controls`, `aria-labelledby`). */
+export const tabId = (key: BillsTab) => `bills-tab-${key}`;
+export const panelId = (key: BillsTab) => `bills-panel-${key}`;
+
 /**
  * Where focus goes in a tab list on a key (WAI-ARIA tabs, manual activation): Left and Right move to the tab beside,
  * wrapping at the ends; Home and End go to the first and the last. Any other key leaves focus where it is (null).

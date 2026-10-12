@@ -5,7 +5,7 @@ import { useRef, type KeyboardEvent } from "react";
 import { cn } from "@/components/ui/cn";
 import { Spinner } from "@/components/ui/Spinner";
 import type { BillsTab } from "@/lib/bills-view";
-import { nextTabIndex } from "./tab-keys";
+import { nextTabIndex, panelId, tabId } from "./tab-keys";
 
 export interface BillsTabLink {
   key: BillsTab;
@@ -14,9 +14,6 @@ export interface BillsTabLink {
   /** A number beside the label, such as what needs a person. */
   count?: number;
 }
-
-export const tabId = (key: BillsTab) => `bills-tab-${key}`;
-export const panelId = (key: BillsTab) => `bills-panel-${key}`;
 
 /** A small mark while the tab's content is read from the server. */
 function Pending() {
@@ -68,7 +65,7 @@ export function BillsTabs({ tabs, active, label = "Bills and receivables" }: { t
             tabIndex={selected ? 0 : -1}
             onKeyDown={(event) => onKeyDown(event, index)}
             className={cn(
-              "relative inline-flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 text-sm font-medium transition-colors duration-150 ease-standard focus-visible:outline-offset-1 sm:flex-none",
+              "relative inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-sm sm:gap-2 sm:px-3 font-medium transition-colors duration-150 ease-standard focus-visible:outline-offset-1 sm:flex-none",
               selected ? "border border-line bg-surface text-ink shadow-control" : "border border-transparent text-ink-2 hover:text-ink"
             )}
           >
