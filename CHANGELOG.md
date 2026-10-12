@@ -1,0 +1,104 @@
+# Changelog
+
+What changed in Vestiarion from one release to the next, for the people who run a business on it. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html); [docs/RELEASING.md](docs/RELEASING.md) says how both are
+used here.
+
+Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by entry, in the
+[API changelog](https://www.vestiarion.xyz/docs/changelog) ([source](content/docs/changelog.mdx)). The TypeScript SDK,
+[`@vestiarion/sdk`](https://www.npmjs.com/package/@vestiarion/sdk), has its own version line.
+
+## [Unreleased]
+
+## [0.1.0-beta.1] - 2026-10-12
+
+The first tagged release: everything merged from September 24 to October 12, 2026 (pull requests #1 to #325). A
+public beta, on Arc testnet and Arc mainnet. Release notes:
+[docs/releases/v0.1.0-beta.1.md](docs/releases/v0.1.0-beta.1.md).
+
+### Added
+
+- **The agent cycle.** One decision loop reads payables, contractors, receivables, compliance and the treasury, and
+  proposes pay, schedule, hold, request info or flag as fraud for each bill, with its reasoning. It chooses the day to
+  pay around due dates and early-payment discounts. Anthropic, OpenAI or DeepSeek proposes; with no model key, a
+  written rule-based policy decides.
+- **Guardrails in code.** Duplicate, risk, payment-limit, three-way-match, new-payee and liquidity rules run after the
+  model and before any money moves; a first payment to a new address needs two people; payments above a figure the
+  owner sets need two approvals; the agent has a daily and a 7-day spending limit, enforced on Arc by a contract only
+  the owner's wallet can change or stop.
+- **The signed ledger.** Every decision, refusal and human action is an Ed25519-signed, hash-chained entry, verified in
+  one click, exported for offline verification and pushed to signed webhooks; signing keys can be rotated.
+- **Shadow mode.** The agent decides a business's real bills while the business keeps paying them its own way; a person
+  agrees or disagrees with each decision, agreed payments settle on Arc testnet at the real amount, and the agreement
+  rate is counted.
+- **Two networks.** Each workspace lives on Arc testnet or Arc mainnet. On Arc mainnet a workspace pays from its owner's
+  own wallet or a passkey wallet, through its spending-limit contract, with two approvals above 100 USDC from the
+  start.
+- **Paying bills.** Bills typed in, imported from a bill list, read from a PDF, forwarded by email or sent through the
+  API; recurring payments; EURC invoices and swaps; payouts to other chains through CCTP and Gateway; an approvals inbox
+  and a pause switch; a 14-day payment plan; and where each payment is, from the decision to the books.
+- **Contractors.** Milestones verified by a merged GitHub pull request or a person, GitHub bounties, milestone escrow,
+  several milestones paid in one transaction, and payee links where a payee confirms their own address or creates a
+  passkey wallet.
+- **Getting paid.** Pay links, money received matched to what was owed, reminders, payments applied to several
+  invoices or part of one with fees and reversals kept apart, and signed deals turned into collection schedules.
+- **Treasury.** Safe to spend today, a USYC reserve on Arc testnet with cash brought back for payments, cash scenarios
+  for clients paying late, and USDC added from another chain.
+- **Reports.** A workspace report of what the agent did, compared bill by bill with what the business really paid
+  (from a CSV or a bank statement) and shared by a revocable link; an evidence chain for each payment; and new limits
+  tried on past decisions before they are applied.
+- **Connected tools.** Bills from Xero and QuickBooks Online, payments booked back into Xero after a person approves
+  them, customers and won deals from HubSpot, Slack, Telegram, email, a GitHub App, the REST API, the TypeScript SDK and
+  an MCP server for AI agents.
+- **Open numbers.** A public page of workspaces, payments and decisions per network, read from production on every
+  load.
+
+### Improved
+
+- The workspace frame: a grouped, foldable sidebar, a status header and a command palette (Ctrl K or ⌘K).
+- Lists ordered by what needs someone first, on Bills & receivables, Contractors and Counterparties, with the reason
+  each row waits.
+- Payments recorded within seconds of Circle settling them, and scheduled jobs run from Supabase Cron at the minute
+  they are due.
+- A first bill before the wallet when a workspace is created, with shadow mode offered from the start.
+- Documentation led by a business's first decision and how payments are controlled, with screenshots of the app as it
+  is.
+- Text contrast that meets WCAG AA, keyboard focus visible on every control, and calm motion under reduced motion.
+
+### Fixed
+
+- A transfer is called failed only after Circle's answer is read, and every Circle request has a deadline.
+- A second agent cycle cannot start while one is running.
+- A payment to a counterparty never screened, or to a payee with no address, is held before anything is sent.
+- A milestone release the wallet cannot cover is held.
+- A payment approved in shadow mode goes to the address the card showed, and test USDC is never granted twice.
+- HubSpot deal changes are recorded once, and its sync reads past HubSpot's search limit.
+
+### Security & safety
+
+- Row-level security under a dedicated tenant role, behind a per-workspace data access layer.
+- A stop switch every deployment obeys, checked addresses, and screening that fails closed.
+- Tighter payment integrity: one claim per decision, approver counts enforced, and the ledger chain checked as each
+  entry is written.
+- Four roles, owner, admin, approver and viewer, decide who may approve, pay or change settings.
+- A member's API keys end with their membership, and pay-link tokens are kept out of analytics.
+
+### Database & migrations
+
+- 100 migrations, `0001_init.sql` to `0106_accounting_postings.sql` (numbers 0091 to 0093 and 0096 to 0098 are
+  unused). They are idempotent and applied in filename order with `npm run db:migrate`; a release never runs them.
+
+### Known limitations
+
+- A beta: features and screens change often. The spending-limit and escrow contracts have not been audited.
+- Arc mainnet supports USDC on Arc only. EURC, the USYC reserve, escrow, cross-chain payouts, x402 and shadow mode are
+  Arc testnet only; Slack approves only on Arc testnet, and Telegram never approves.
+- The USYC reserve needs Circle to allowlist a workspace's wallets.
+- QuickBooks Online connects to sandbox companies until Intuit's app assessment is complete, and is read-only.
+- Xero bookings wait for a person's approval; Arc testnet and shadow-mode payments are booked only into a Xero demo
+  company.
+- HubSpot is read-only, polled every 15 minutes, and its app is not yet verified by HubSpot.
+
+[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.1...HEAD
+[0.1.0-beta.1]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.1

@@ -1989,6 +1989,11 @@ npm publish public/sdk/vestiarion-sdk-<version>.tgz --access public
 Both installs then get the same bytes. The next version's `sdk/README.md` should name `npm install @vestiarion/sdk`
 first; 0.1.0's README, inside its immutable tarball, names the site's URL.
 
+The SDK's version is its own. The product's version is a git tag, `vX.Y.Z` or `vX.Y.Z-beta.N`, published as a GitHub
+Release by `.github/workflows/release.yml`, which a maintainer starts by hand once the tag is pushed; `CHANGELOG.md`
+says what each release changed for the people using it. A tag deploys nothing: Vercel deploys `main`. How to release,
+sign a tag and fix a wrong release is in `docs/RELEASING.md`.
+
 ## Growth tracking for the team
 
 Migration `0099` adds what the team records about its own growth, apart from any workspace: `growth_campaigns`,

@@ -1,0 +1,37 @@
+# How GitHub groups the release notes it generates from merged pull requests (docs/RELEASING.md).
+#
+# A pull request lands in the first category whose label it carries. One with no label, or with labels no category
+# names, lands in "Other changes": nothing merged is ever left out. Only a pull request labelled ignore-for-release is.
+#
+# Labels that exist on the repository: enhancement, bug, accessibility, documentation.
+# Labels to create before using them (a category whose label does not exist is simply empty):
+#   breaking-change, security, database, ignore-for-release.
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+  categories:
+    - title: Breaking changes
+      labels:
+        - breaking-change
+    - title: Security and payment safety
+      labels:
+        - security
+    - title: Database and migrations
+      labels:
+        - database
+    - title: New features
+      labels:
+        - enhancement
+    - title: Fixes
+      labels:
+        - bug
+    - title: Accessibility
+      labels:
+        - accessibility
+    - title: Documentation
+      labels:
+        - documentation
+    - title: Other changes
+      labels:
+        - "*"
