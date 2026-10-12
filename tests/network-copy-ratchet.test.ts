@@ -26,9 +26,10 @@ const ALLOWED: Record<string, number> = {
   "src/app/open/page.tsx": 4,
   // The page for studios: shadow mode and its mirror addresses, both only on Arc testnet, in its FAQ.
   "src/components/studios/StudiosSections.tsx": 2,
-  // Terms and privacy: the partner rewrites them before a deployment switches Arc mainnet on (C5).
-  "src/app/terms/page.tsx": 8,
-  "src/app/privacy/page.tsx": 3,
+  // Terms and privacy, which name both networks and say what runs on Arc testnet only: hosted wallets, Circle's faucet,
+  // shadow mode, the USYC reserve, escrow, the EURC swap, payouts to other chains and the agent's payee history.
+  "src/app/terms/page.tsx": 9,
+  "src/app/privacy/page.tsx": 5,
   // Demo data, which exists on Arc testnet: the design page's fixtures, and the research replay's default for decisions
   // recorded before payouts were.
   "src/app/design/fixtures.ts": 1,

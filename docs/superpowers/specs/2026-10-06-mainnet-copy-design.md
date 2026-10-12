@@ -188,7 +188,9 @@ Date: 2026-10-06. Status: designed on `feat/mainnet-copy`. Designed under the st
 - No migration.
 - Production does not change on merge: `MAINNET_ENABLED` is unset, and every workspace is on Arc testnet.
 - **Before the partner switches Arc mainnet on (phase 3):**
-  - terms and privacy name Arc mainnet, in the partner's words;
+  - terms and privacy name Arc mainnet, in the partner's words (done 2026-10-12, at the partner's request: both pages
+    name both networks, the treasury choices and what runs on Arc testnet only, held to the code by
+    `tests/legal-pages.test.tsx`);
   - the partner's dry run with a live Circle key;
   - SDK 0.3.2 published;
   - a read-only check that no mainnet workspace lacks a figure (2b's read-side default covers one anyway).
