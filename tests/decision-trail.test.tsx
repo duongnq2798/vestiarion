@@ -186,6 +186,9 @@ describe("the decision trail", () => {
     expect(trailStep(step(983, "02:47:18", "human", "create_invoice", { via: "xero", xero: { tenantId: "t", billId: "b", contactId: "c", invoiceNumber: "PD-4471" } }))!.text).toBe(
       "A person added it, brought in from Xero."
     );
+    expect(trailStep(step(983, "02:47:18", "human", "create_invoice", { via: "quickbooks", quickbooks: { tenantId: "9341455327810551", billId: "146", contactId: "56", invoiceNumber: "PD-4471" } }))!.text).toBe(
+      "A person added it, brought in from QuickBooks."
+    );
     expect(trailStep(step(984, "02:47:18", "agent", "ap_schedule", { decisionMode: "heuristic", decision: { payOn: "2026-10-05" } }))!.text).toBe(
       "The written policy decided to pay it on Oct 5."
     );

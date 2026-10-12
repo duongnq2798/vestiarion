@@ -17,19 +17,36 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quick
  * unused before the provider stops taking it (Xero's refresh token lives 60 days, QuickBooks' 100).
  */
 export interface ProviderWords {
+  /** "Xero's", "QuickBooks'". */
+  possessive: string;
   organisation: string;
   contacts: string;
+  /** What is read to choose the account payments will be booked to: Xero's whole chart, QuickBooks' bank accounts. */
+  accounts: string;
   idleDays: number;
+  /** The bills that come in: Xero's approved ones, QuickBooks' open ones. */
+  bills: string;
   /** What a bill being in the tool does not mean, under the review list. */
   approval: string;
 }
 
 export const PROVIDER_WORDS: Record<ProviderId, ProviderWords> = {
-  xero: { organisation: "organisation", contacts: "suppliers", idleDays: 60, approval: "Xero approving a bill does not approve its payment: the agent decides it." },
+  xero: {
+    possessive: "Xero's",
+    organisation: "organisation",
+    contacts: "suppliers",
+    accounts: "chart of accounts",
+    idleDays: 60,
+    bills: "approved bills",
+    approval: "Xero approving a bill does not approve its payment: the agent decides it.",
+  },
   quickbooks: {
+    possessive: "QuickBooks'",
     organisation: "company",
     contacts: "vendors",
+    accounts: "bank accounts",
     idleDays: 100,
+    bills: "open bills",
     approval: "A bill being open in QuickBooks does not approve its payment: the agent decides it.",
   },
 };

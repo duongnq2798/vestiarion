@@ -63,7 +63,7 @@ export function syncErrorWords(kind: SyncErrorKind, label: string, nextAt: strin
     case "unavailable":
       return `${label} did not answer. Vestiarion tries again at ${when}.`;
     case "bad_response":
-      return `${label}'s answer could not be read. Vestiarion tries again at ${when}.`;
+      return `${providerWords(label).possessive} answer could not be read. Vestiarion tries again at ${when}.`;
     case "failed":
       return `The sync stopped on an error. Vestiarion tries again at ${when}.`;
   }
@@ -90,6 +90,6 @@ export function connectionStatus(facts: ConnectionFacts, nowMs: number): StatusV
     return { tone: "error", title: `The last sync with ${label} failed`, detail: [facts.lastError, synced ?? "Not synced yet."], reconnect: false };
   }
   const detail = [synced ?? "Not synced yet. The first sync starts in a moment."];
-  if (facts.syncing) detail.push(`Syncing: ${facts.syncing.pagesRead} of ${label}'s pages read so far.`);
+  if (facts.syncing) detail.push(`Syncing: ${facts.syncing.pagesRead} of ${providerWords(label).possessive} pages read so far.`);
   return { tone: "ok", title: `Connected to ${name}`, detail, reconnect: false };
 }
