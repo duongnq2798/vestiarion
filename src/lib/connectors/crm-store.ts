@@ -1,7 +1,8 @@
+import { createHash } from "node:crypto";
 import { currentOrgId } from "../context";
 import { db, unwrap } from "../dal";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
-import { crmChanges, flagDecision, readFacts, type CrmChange, type CrmFacts, type CrmProvider, type ExternalDeal, type StagedCrmDeal, type StageState } from "./crm";
+import { changesText, crmChanges, flagDecision, readFacts, type CrmChange, type CrmFacts, type CrmProvider, type ExternalDeal, type StagedCrmDeal, type StageState } from "./crm";
 import { syncCrmConnection, type CrmSyncDb, type CrmSyncResult } from "./crm-sync";
 import { PROVIDER_LABELS } from "./provider";
 import { syncStore } from "./sync-store";
@@ -58,6 +59,14 @@ export function rowFacts(row: Pick<CrmDealRow, "amount" | "currency" | "close_on
 /** What changed in the CRM since the row's deal was planned or its changes last reviewed. */
 export function rowChanges(row: CrmDealRow, dealStatus: "active" | "cancelled"): CrmChange[] {
   return crmChanges(readFacts(row.baseline), { ...rowFacts(row), deleted: row.source_status === "deleted" }, dealStatus);
+}
+
+/**
+ * The changes a page showed, as the form sends them back (H12): Keep the deal as it is and Change deal act on exactly
+ * these, never on a set the CRM made since. A digest, so no amount or currency travels in the form.
+ */
+export function changesKey(changes: readonly CrmChange[]): string {
+  return createHash("sha256").update(changesText(changes)).digest("hex");
 }
 
 function dealFacts(deal: ExternalDeal) {

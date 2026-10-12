@@ -188,8 +188,12 @@ ago stays out until someone changes it. Lost deals are kept only once they had a
   a reason naming the changes. Saving it is the revise path (`revise_deal`); the version's `deal_revised` entry says
   `via: "hubspot"`, and the changes count as reviewed (the baseline becomes HubSpot's facts now).
 - **Keep the deal as it is** reviews them without a version, with a signed `crm_deal_change_kept`.
+- Both act only on the changes the page showed: the page sends back their key (`changesKey`, a SHA-256 of the set),
+  and a set HubSpot changed since is refused ("HubSpot changed this deal again since this page was opened") before
+  anything is written, so no change is marked as seen that no one was shown.
 - The sync records a new set of changes once, in a signed `crm_deal_changed` (actor `system`): what changed, from and
-  to; the same set is not recorded again (`flagged`).
+  to; the same set is not recorded again (`flagged`, compared with its keys sorted, since a jsonb column hands keys
+  back in Postgres' own order).
 - Cost if wrong: the person reviews a change they did not need to; never a receivable changed behind them.
 
 **H13. Customers.** A company is linked to the counterparty its deal was planned for, by HubSpot id

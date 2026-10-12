@@ -84,6 +84,8 @@ The ledger records each new set of changes once, as `crm_deal_changed`. Then cho
 - **Change deal**, which opens the deal's Change deal form filled in: HubSpot's new amount as the new total, a correction proposed for the lines not invoiced yet, and the changes as the reason. Check it and save it as a new version. Lines already released, and their receivables, stay as they are. The version is signed as `deal_revised` with `via: "hubspot"`.
 - **Keep the deal as it is**, when the deal is right as it stands. The changes are marked as seen, and the ledger records `crm_deal_change_kept`.
 
+Both act on the changes the page showed you. If HubSpot changed the deal again since you opened the page, nothing is saved: reload the page to see what changed now.
+
 A deal marked lost in HubSpot is only flagged. To stop its lines, use **Cancel deal** on its page.
 
 <Screenshot

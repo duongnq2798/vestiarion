@@ -1,8 +1,11 @@
 import { NotSetUpError } from "../connectors/connections";
 import { crmRowForDeal, reviewChanges, sourceOf } from "../connectors/crm-actions";
+import { changesKey, rowChanges } from "../connectors/crm-store";
+import { PROVIDER_LABELS } from "../connectors/provider";
 import type { ChangeDraft, DealDraft } from "../deals/input";
 import { changeDeal as writeChange, confirmDeal, DealError, releaseDealLine as writeRelease, switchDealAutoRelease } from "../deals/write";
 import type { Actor } from "./actor";
+import { changedAgain } from "./crm";
 import { done, refused, TRY_AGAIN, type CommandOutcome, type Refused } from "./outcome";
 import { gate } from "./policy";
 
@@ -51,13 +54,19 @@ async function crmOrigin(dealId: string) {
 
 /**
  * Changes, cancels or reopens a deal: its next version, which never rewrites a released line (D7-D9). Made from the
- * changes a CRM brought (`fromCrm`, HubSpot connector H12), its entry says so, and those changes count as reviewed.
+ * changes a CRM brought (`fromCrm`, HubSpot connector H12), its entry says so, and those changes count as reviewed: only
+ * the changes the form was filled in from (`seen`, their `changesKey`). A set the CRM made since refuses the change
+ * before anything is written, so it is never marked as seen behind the person.
  */
-export async function changeDeal(actor: Actor, input: { change: ChangeDraft; fromCrm?: boolean }): Promise<CommandOutcome<{ version: number }>> {
+export async function changeDeal(actor: Actor, input: { change: ChangeDraft; fromCrm?: { seen: string } }): Promise<CommandOutcome<{ version: number }>> {
   const refusal = gate(actor, "deal.change");
   if (refusal) return refusal;
   try {
     const origin = input.fromCrm ? await crmOrigin(input.change.dealId) : null;
+    if (origin && input.fromCrm) {
+      const changes = rowChanges(origin.row, "active");
+      if (changes.length > 0 && changesKey(changes) !== input.fromCrm.seen) return changedAgain(PROVIDER_LABELS[origin.connection.provider]);
+    }
     const result = await writeChange({ actorId: actor.userId, change: input.change, ...(origin ? { source: sourceOf(origin) } : {}) });
     if (origin && result.created) await reviewChanges(origin, actor.userId);
     if (!result.created) return done(`That change was saved already, as version ${result.version}.`, { version: result.version });

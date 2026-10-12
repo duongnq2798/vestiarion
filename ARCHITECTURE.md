@@ -1813,7 +1813,8 @@ reads in `api.ts`, `hubspotProvider`), wired in `src/lib/crm-providers.ts`. It i
   none for a cancelled deal. The sync records a new set once (`crm_deal_changed`, `flagDecision`). The deal's page says
   **Changed in HubSpot**; **Change deal** opens the Change deal form filled in (`changePrefill`), and saving it is the
   revise path with `via: "hubspot"`, marking the changes reviewed; **Keep the deal as it is** (`crm.keep_change`)
-  records `crm_deal_change_kept`. Nothing is revised or cancelled automatically.
+  records `crm_deal_change_kept`. Both send back the key of the changes the page showed (`changesKey`) and are refused
+  when HubSpot changed the deal again since. Nothing is revised or cancelled automatically.
 - **Billing emails.** `crm.fill_email` sets a linked customer's empty billing email from its company's main contact,
   only when a person presses **Use this email**.
 

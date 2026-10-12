@@ -185,14 +185,16 @@ describe("CrmDealChanges", () => {
   it("says what changed, that nothing in Vestiarion did, and offers Change deal and Keep the deal as it is", () => {
     const markup = decode(
       renderToStaticMarkup(
-        <CrmDealChanges orgSlug="acme" dealId="deal-1" label="HubSpot" words={["Marked lost in HubSpot (Closed Lost). Nothing is cancelled: cancel the deal if it is off."]} canWrite active />
+        <CrmDealChanges orgSlug="acme" dealId="deal-1" label="HubSpot" words={["Marked lost in HubSpot (Closed Lost). Nothing is cancelled: cancel the deal if it is off."]} seen={"ab".repeat(32)} canWrite active />
       )
     );
     expect(markup).toContain("Changed in HubSpot");
     expect(markup).toContain("Marked lost in HubSpot (Closed Lost). Nothing is cancelled: cancel the deal if it is off.");
     expect(markup).toContain('href="/o/acme/invoices/deals/deal-1?from=hubspot#change"');
     expect(markup).toContain("Keep the deal as it is");
-    const viewer = decode(renderToStaticMarkup(<CrmDealChanges orgSlug="acme" dealId="deal-1" label="HubSpot" words={["x"]} canWrite={false} active />));
+    // Keep sends back the changes it was shown, and keeps those alone.
+    expect(markup).toContain(`name="seen" value="${"ab".repeat(32)}"`);
+    const viewer = decode(renderToStaticMarkup(<CrmDealChanges orgSlug="acme" dealId="deal-1" label="HubSpot" words={["x"]} seen="" canWrite={false} active />));
     expect(viewer).not.toContain("Keep the deal as it is");
   });
 });

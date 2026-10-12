@@ -22,6 +22,7 @@ export function CrmDealChanges({
   dealId,
   label,
   words,
+  seen,
   canWrite,
   active,
 }: {
@@ -29,6 +30,8 @@ export function CrmDealChanges({
   dealId: string;
   label: string;
   words: string[];
+  /** The key of the changes shown: Keep the deal as it is keeps these alone. */
+  seen: string;
   canWrite: boolean;
   active: boolean;
 }) {
@@ -52,6 +55,7 @@ export function CrmDealChanges({
           <form {...formProps} className="flex flex-wrap items-center gap-2">
             <input type="hidden" name="orgSlug" value={orgSlug} />
             <input type="hidden" name="dealId" value={dealId} />
+            <input type="hidden" name="seen" value={seen} />
             <SubmitButton size="sm" variant="secondary" pendingLabel="Saving…" icon={<Check aria-hidden />}>
               Keep the deal as it is
             </SubmitButton>

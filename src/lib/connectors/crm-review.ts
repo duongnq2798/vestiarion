@@ -2,7 +2,7 @@ import { db, unwrap } from "../dal";
 import { connectionById, connectionFor, isNotSetUp, NotSetUpError, type Connection } from "./connections";
 import { crmChangeWords, moneyWords, plannable, type CrmChange } from "./crm";
 import { changePrefill, dealPrefill, type ChangePrefill, type DealPrefill } from "./crm-prefill";
-import { amountText, CRM_DEAL_COLUMNS, rowChanges, type CrmDealRow } from "./crm-store";
+import { amountText, changesKey, CRM_DEAL_COLUMNS, rowChanges, type CrmDealRow } from "./crm-store";
 import { pagesRead, type SyncCursor } from "./cursors";
 import { PROVIDER_LABELS, type ProviderId } from "./provider";
 import { connectionStatus, type StatusView } from "./status";
@@ -202,6 +202,8 @@ export interface CrmDealChanges {
   changes: CrmChange[];
   words: string[];
   prefill: ChangePrefill;
+  /** These changes' `changesKey`, sent back by Keep the deal as it is and Change deal, which act on them alone. */
+  seen: string;
 }
 
 export async function crmChangesFor(deal: { id: string; status: "active" | "cancelled"; currency: string }): Promise<CrmDealChanges | null> {
@@ -217,7 +219,14 @@ export async function crmChangesFor(deal: { id: string; status: "active" | "canc
   const label = PROVIDER_LABELS[connection.provider];
   const changes = rowChanges(row, deal.status);
   if (changes.length === 0) return null;
-  return { rowId: row.id, label, changes, words: changes.map((change) => crmChangeWords(change, label)), prefill: changePrefill(changes, { currency: deal.currency }, label) };
+  return {
+    rowId: row.id,
+    label,
+    changes,
+    words: changes.map((change) => crmChangeWords(change, label)),
+    prefill: changePrefill(changes, { currency: deal.currency }, label),
+    seen: changesKey(changes),
+  };
 }
 
 /** A deal of the list as the New deal form, prefilled (H11); or why it cannot be planned now. */

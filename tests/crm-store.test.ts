@@ -84,7 +84,8 @@ describe("flagChanges", () => {
     expect(await run(() => crmStore.flagChanges(connection, ["30117482911"]))).toBe(0);
     expect(fake.requests.some((sent) => sent.method === "PATCH")).toBe(false);
     expect(mocks.ledger).not.toHaveBeenCalled();
-  });
+    // A database started for one query: slower than the rest when the suite runs in parallel.
+  }, 60_000);
 
   it("records a won deal moved to lost and a deal deleted, and nothing for a cancelled deal or an unchanged one", async () => {
     const lost = world([row({ stage_state: "lost", stage_label: "Closed Lost" })]);

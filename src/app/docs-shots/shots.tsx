@@ -2174,6 +2174,7 @@ export const DOCS_SHOTS = {
         dealId="00000000-0000-4000-8000-0000000000d6"
         label="HubSpot"
         words={["Amount: 12,000 USD to 15,000 USD.", "Close date: Sep 20, 2026 to Sep 30, 2026."]}
+        seen={"0".repeat(64)}
         canWrite
         active
       />

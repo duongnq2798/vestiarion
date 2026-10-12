@@ -1,7 +1,7 @@
 import { NotSetUpError } from "../connectors/connections";
 import { plannable } from "../connectors/crm";
 import { crmRow, crmRowForDeal, emailToFill, keepChanges, linkPlanned, sourceOf } from "../connectors/crm-actions";
-import { amountText } from "../connectors/crm-store";
+import { amountText, changesKey, rowChanges } from "../connectors/crm-store";
 import { PROVIDER_LABELS } from "../connectors/provider";
 import type { DealDraft } from "../deals/input";
 import { readDeal } from "../deals/read";
@@ -56,15 +56,24 @@ export async function planCrmDeal(actor: Actor, input: { rowId: string; draft: D
   }
 }
 
-/** Keeps a deal as it is although it changed in the CRM: its changes count as reviewed, with a signed entry (H12). */
-export async function keepCrmChange(actor: Actor, input: { dealId: string }): Promise<CommandOutcome> {
+/** The words for changes made in the CRM after the page that acts on them was shown (H12). */
+export const changedAgain = (label: string) =>
+  refused("changed", `${label} changed this deal again since this page was opened. Reload the page to see what changed now.`, { changed: true });
+
+/**
+ * Keeps a deal as it is although it changed in the CRM: its changes count as reviewed, with a signed entry (H12). Only
+ * the changes the page showed (`seen`, their `changesKey`): a set the CRM made since is refused, never marked as seen.
+ */
+export async function keepCrmChange(actor: Actor, input: { dealId: string; seen: string }): Promise<CommandOutcome> {
   const refusal = gate(actor, "crm.keep_change");
   if (refusal) return refusal;
   try {
     const [read, deal] = await Promise.all([crmRowForDeal(input.dealId), readDeal(input.dealId)]);
     if (!deal.available || !deal.deal || !read) return refused("not_found", "That deal was not found.");
-    const kept = await keepChanges(read, { id: deal.deal.facts.id, title: deal.deal.title, status: deal.deal.facts.status }, actor.userId);
     const label = PROVIDER_LABELS[read.connection.provider];
+    const changes = rowChanges(read.row, deal.deal.facts.status);
+    if (changes.length > 0 && changesKey(changes) !== input.seen) return changedAgain(label);
+    const kept = await keepChanges(read, { id: deal.deal.facts.id, title: deal.deal.title, status: deal.deal.facts.status }, actor.userId);
     return done(kept === null ? `Nothing changed in ${label} since.` : `${deal.deal.title} stays as it is. ${label}'s changes are marked as seen.`);
   } catch (error) {
     if (error instanceof NotSetUpError) return refused("not_ready", NOT_SET_UP);

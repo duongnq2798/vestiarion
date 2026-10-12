@@ -127,7 +127,7 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
         </div>
 
         <div className="space-y-8">
-          {crm && <CrmDealChanges orgSlug={slug} dealId={facts.id} label={crm.label} words={crm.words} canWrite={canWrite} active={facts.status === "active"} />}
+          {crm && <CrmDealChanges orgSlug={slug} dealId={facts.id} label={crm.label} words={crm.words} seen={crm.seen} canWrite={canWrite} active={facts.status === "active"} />}
           <DealSchedule orgSlug={slug} deal={deal} today={today} canWrite={canWrite} />
 
           {canWrite ? (
@@ -173,7 +173,7 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
                         today={today}
                         idempotencyKey={randomUUID()}
                         mode="revised"
-                        {...(changeFromCrm ? { fromCrm: crm.prefill } : {})}
+                        {...(changeFromCrm ? { fromCrm: { ...crm.prefill, seen: crm.seen } } : {})}
                       />
                     </IntakeFold>
                   </div>
