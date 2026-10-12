@@ -166,6 +166,47 @@ describe("pending choices", () => {
     expect(await runUsed(() => attachPending(ORG, "tok-p", CONNECTION, NOW))).toBe(false);
   });
 
+  it("keeps the grant attached when the same pick is sent twice at once", async () => {
+    // accounting_tokens as PostgREST would answer it: filters on eq, neq, is.null and gt, one row per connection.
+    let rows: Array<Record<string, unknown>> = [
+      { id: "tok-old", org_id: ORG, connection_id: CONNECTION, choose_until: null },
+      { id: "tok-p", org_id: ORG, connection_id: null, choose_until: "2026-10-12T08:10:00.000Z" },
+    ];
+    const matches = (row: Record<string, unknown>, params: URLSearchParams) =>
+      [...params].every(([column, filter]) => {
+        if (column === "select" || column === "limit") return true;
+        const [op, ...rest] = filter.split(".");
+        const value = rest.join(".");
+        const cell = row[column] === null || row[column] === undefined ? null : String(row[column]);
+        if (op === "eq") return cell === value;
+        if (op === "neq") return cell !== value;
+        if (op === "is") return value === "null" ? cell === null : false;
+        if (op === "gt") return cell !== null && cell > value;
+        throw new Error(`filter ${filter} is not modelled`);
+      });
+    const { run } = world((sent) => {
+      if (sent.path !== "/rest/v1/accounting_tokens") return undefined;
+      const hit = rows.filter((row) => matches(row, sent.params));
+      if (sent.method === "DELETE") {
+        rows = rows.filter((row) => !hit.includes(row));
+        return { body: hit.map(({ id }) => ({ id })) };
+      }
+      if (sent.method === "PATCH") {
+        const patch = sent.body as Record<string, unknown>;
+        if (hit.length > 0 && patch.connection_id && rows.some((row) => row.connection_id === patch.connection_id && !hit.includes(row))) {
+          return { status: 409, body: { code: "23505", message: 'duplicate key value violates unique constraint "accounting_tokens_connection_key"' } };
+        }
+        for (const row of hit) Object.assign(row, patch);
+        return { body: hit.map(({ id }) => ({ id })) };
+      }
+      return { body: hit };
+    });
+    // Two submits of the pick: both read the pending grant before either attached it; the second attaches after the first.
+    expect(await run(() => attachPending(ORG, "tok-p", CONNECTION, NOW))).toBe(true);
+    expect(await run(() => attachPending(ORG, "tok-p", CONNECTION, NOW))).toBe(true);
+    expect(rows).toEqual([{ id: "tok-p", org_id: ORG, connection_id: CONNECTION, choose_until: null, choices: null }]);
+  });
+
   it("lists the pending grants past their deadline across workspaces", async () => {
     const fake = fakeSupabase(() => ({ body: [{ id: "tok-p", org_id: ORG, provider: "xero" }] }));
     const listed = await runWith({ config, db: fake.client }, () => expiredPendingGrants(NOW));

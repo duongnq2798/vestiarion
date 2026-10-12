@@ -143,10 +143,14 @@ export async function pendingChoice(orgId: string, tokenId: string, userId: stri
   return { id: row.id, provider: row.provider, choices: choicesOf(held.organisations), consent: consentOf(held.consent), scopes: row.scopes ?? [], chooseUntil: row.choose_until };
 }
 
-/** Gives a pending grant to the connection picked: once, before its deadline. False when it was used or ran out. */
+/**
+ * Gives a pending grant to the connection picked: once, before its deadline. False when it ran out or went to another
+ * connection. The same pick sent twice at once finds the grant already this connection's, and keeps it: the
+ * connection's earlier tokens are deleted, never the grant being attached.
+ */
 export async function attachPending(orgId: string, tokenId: string, connectionId: string, nowMs: number = Date.now()): Promise<boolean> {
   requireScope(orgId);
-  unwrap(await platformDb().from("accounting_tokens").delete().eq("org_id", orgId).eq("connection_id", connectionId).select("id"));
+  unwrap(await platformDb().from("accounting_tokens").delete().eq("org_id", orgId).eq("connection_id", connectionId).neq("id", tokenId).select("id"));
   const rows = unwrap(
     await platformDb()
       .from("accounting_tokens")
@@ -157,7 +161,11 @@ export async function attachPending(orgId: string, tokenId: string, connectionId
       .gt("choose_until", new Date(nowMs).toISOString())
       .select("id")
   ) as Array<{ id: string }>;
-  return rows.length === 1;
+  if (rows.length === 1) return true;
+  const attached = unwrap(
+    await platformDb().from("accounting_tokens").select("id").eq("id", tokenId).eq("org_id", orgId).eq("connection_id", connectionId).limit(1)
+  ) as Array<{ id: string }>;
+  return attached.length === 1;
 }
 
 /** The refresh token of a row, opened, to revoke it; null when there is none. */
