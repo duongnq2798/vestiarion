@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Work only in `E:\APP2028\hackathon-project-ui`, branch `feat/component-reading` (from `7e7e85d`, main after #27). Never run commands in `E:\APP2028\hackathon-project`. Never open or print `.env.local`.
+- Work only in a separate git worktree, branch `feat/component-reading` (from `7e7e85d`, main after #27). Never run commands in the main checkout. Never open or print `.env.local`.
 - Read the relevant guide in `node_modules/next/dist/docs/` before writing Next code (`AGENTS.md`). Every `/o/[slug]` page keeps awaiting `params`, calling `requireMembership`, `export const dynamic = "force-dynamic"`, loading inside `inOrg`, and rendering `<PageHead title={sectionTitle("<key>")}` (pinned by `tests/access-gates.test.ts` and `tests/navigation.test.ts`).
 - No new dependencies. `npm run verify` is green at every commit.
 - Import primitives directly from `@/components/ui/<Name>`. Outside `src/components/ui/`, render no raw `<button>`, `<select>`, `<textarea>`, or non-hidden `<input>`.

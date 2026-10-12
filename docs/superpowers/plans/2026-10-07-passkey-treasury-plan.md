@@ -21,7 +21,7 @@
 - Env:
   - `NEXT_PUBLIC_MODULAR_WALLETS_MAINNET_CLIENT_KEY`;
   - `NEXT_PUBLIC_MODULAR_WALLETS_MAINNET_CLIENT_URL`, optional, default `https://modular-sdk.circle.com/v1/rpc/w3s/buidl`.
-- Migration `0083_passkey_treasury.sql` is idempotent and run by the partner with `npm --prefix E:/APP2028/hackathon-project-writeapi2 run db:migrate`.
+- Migration `0083_passkey_treasury.sql` is idempotent and run by the partner with `npm run db:migrate`.
 - Every server action awaits `authorize(orgSlug, "org.administer")` first and returns `inOrg(auth, async () => …)` (tests/access-gates.test.ts).
 - Nothing secret reaches the browser. The recovery words never leave it.
 - Copy names the network from the profile `label`.
