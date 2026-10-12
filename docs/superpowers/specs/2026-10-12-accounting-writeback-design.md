@@ -146,7 +146,10 @@ Cost if wrong: a few cents a payment the accountant books by hand.
 2. Claim the row (`sending`, with the account, the fingerprint, who and when, the organisation's answer).
 3. **Look first**: a payment on this bill with this reference. One there (`AUTHORISED`) is adopted: the booking is
    `sent` with its id, `adopted: true`, and nothing is written. One there but `DELETED` refuses the booking
-   (`deleted_in_provider`): someone reversed it in Xero, and Vestiarion never books it again on its own.
+   (`deleted_in_provider`): someone reversed it in Xero, and Vestiarion never books it again on its own. When Xero
+   refuses the `where` filter, the bill's own payments are read instead, and they list only those still standing: for
+   a booking claimed from `failed` or from a send past its lease (an earlier send may have reached Xero), finding none
+   there is no answer (`deletedMatters`), so the send stops, nothing is written, and it goes back to `failed`.
 4. **The bill now**: gone, voided or deleted refuses (`bill_closed`); paid, or nothing due, refuses (`already_paid`,
    "Already paid in Xero"); another currency refuses (`currency`); an amount due other than the one shown is stale
    (back to the state it was, "Xero now says … is due on this bill. Sync now, then look again.").

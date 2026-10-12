@@ -69,13 +69,18 @@ export async function bill(request: OrgRequest & { billId: string }, deps: XeroH
 
 /**
  * The payment on this bill with this reference: by `where=Reference=="…"`, which lists deleted payments too; when Xero
- * will not take that filter (a 400), from the payments its bill lists, which are the ones still standing.
+ * will not take that filter (a 400), from the payments its bill lists, which are the ones still standing: then, when
+ * a deleted one matters and none stands, it cannot say there is none, and throws.
  */
-export async function findPayment(request: OrgRequest & { billId: string; reference: string }, deps: XeroHttp = {}): Promise<ExternalPayment | null> {
+export async function findPayment(request: OrgRequest & { billId: string; reference: string; deletedMatters?: boolean }, deps: XeroHttp = {}): Promise<ExternalPayment | null> {
   const url = new URL(`${XERO_ACCOUNTING}/Payments`);
   url.searchParams.set("where", referenceFilter(request.reference));
   const response = await get(url, request, "payments", deps);
-  if (response.status === 400) return paymentOnBill((await readBill(request, deps)).payments, request.billId, request.reference);
+  if (response.status === 400) {
+    const standing = paymentOnBill((await readBill(request, deps)).payments, request.billId, request.reference);
+    if (!standing && request.deletedMatters) throw new ProviderError("unavailable", "Xero payments: the reference filter was refused, so a deleted payment cannot be ruled out");
+    return standing;
+  }
   if (!response.ok) throw failureOf(response, "payments", (deps.now ?? Date.now)());
   return paymentOnBill(mapPayments(await jsonOf(response, "payments")), request.billId, request.reference);
 }

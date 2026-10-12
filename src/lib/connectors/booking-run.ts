@@ -428,10 +428,12 @@ export async function approvePosting(input: {
   });
 
   const org = { accessToken, externalOrgId: deps.connection.externalOrgId };
-  // 3. Look first: a payment with this reference on this bill is the one an earlier send made.
+  // 3. Look first: a payment with this reference on this bill is the one an earlier send made. A draft never reached
+  // the provider (a send goes back to draft only before booking); a failed booking, or a send past its lease, may have,
+  // and a payment it made may since have been deleted there, so that look must see deleted payments too.
   let existing: ExternalPayment | null;
   try {
-    existing = await deps.booking.findPayment({ ...org, billId: posting.billExternalId, reference: posting.reference });
+    existing = await deps.booking.findPayment({ ...org, billId: posting.billExternalId, reference: posting.reference, deletedMatters: claimedFrom !== "draft" });
   } catch (error) {
     await release(deps, claimed, claimedFrom);
     return { postingId: posting.id, outcome: "unavailable", message: unavailableWords(error, label) };

@@ -149,6 +149,15 @@ describe("the calls", () => {
     expect(sent.map((call) => call.url.pathname)).toEqual(["/api.xro/2.0/Payments", `/api.xro/2.0/Invoices/${BILL}`]);
   });
 
+  it("does not answer none from the bill's own payments when a deleted one matters: they list only those still standing", async () => {
+    const { deps } = recorder((call) => (call.url.pathname.endsWith("/Payments") ? new Response("{}", { status: 400 }) : json(fixture("invoice-one.json"))));
+    expect(await findPayment({ ...request, billId: BILL, reference: HASH }, deps)).toBeNull();
+    await expect(findPayment({ ...request, billId: BILL, reference: HASH, deletedMatters: true }, deps)).rejects.toThrow(ProviderError);
+    // With the filter, a deleted payment is seen, and none is an answer.
+    const filtered = recorder(() => json({ Payments: [] }));
+    expect(await findPayment({ ...request, billId: BILL, reference: HASH, deletedMatters: true }, filtered.deps)).toBeNull();
+  });
+
   it("books with PUT and an Idempotency-Key, and reads the payment Xero made", async () => {
     const { sent, deps } = recorder(() => json(fixture("payment-created.json")));
     const outcome = await bookPayment(

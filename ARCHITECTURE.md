@@ -1723,7 +1723,8 @@ the provider.
     must be chosen, and the ledger must sign.
   - **Sending** (`approvePosting`): claim the row (a compare-and-set over its state and attempts), look first for a
     payment with this reference on this bill (`findPayment`, deleted ones included: one there is adopted, a deleted
-    one refuses), check the bill now (`billCheck`: closed, already paid in Xero, another currency, or an amount due
+    one refuses; when Xero refuses the reference filter, the bill's own list shows only payments still standing, so
+    for a booking an earlier send may have reached, `deletedMatters`, finding none there stops the send), check the bill now (`billCheck`: closed, already paid in Xero, another currency, or an amount due
     other than the one shown, which is stale), book it with an `Idempotency-Key` derived from the booking and its
     fingerprint, and on a timeout or a 5xx read back by reference before anything else. Then read the payment back once
     (`GET /Payments/{id}`): the same bill, amount, reference and account confirm it. Each transition appends

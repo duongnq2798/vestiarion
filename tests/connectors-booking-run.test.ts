@@ -381,6 +381,22 @@ describe("approvePosting (W6, W7)", () => {
     expect(rows.get(row.id)).toMatchObject({ state: "confirmed", attempts: 2 });
   });
 
+  it("asks the first look of a send that may have reached Xero before to see deleted payments too", async () => {
+    const { row, store, rows, entries, xero } = await drafted();
+    xero.booking.bookPayment = vi.fn(async () => Promise.reject(new ProviderError("unavailable", "Xero payment: 504")));
+    await approve({ store, rows, entries }, xero.booking, row);
+    // A first send never reached Xero before: none of its payments can have been deleted there.
+    expect(vi.mocked(xero.booking.findPayment).mock.calls[0][0]).toMatchObject({ deletedMatters: false });
+    expect(rows.get(row.id)).toMatchObject({ state: "failed", reason: "no_answer" });
+    // Approved again: the first look must rule out a payment someone deleted in Xero, or nothing is written.
+    xero.booking.findPayment = vi.fn(async () => Promise.reject(new ProviderError("unavailable", "Xero payments: a deleted payment cannot be ruled out")));
+    xero.booking.bookPayment = vi.fn(async () => ({ ok: true as const, payment: made() }));
+    expect(await approve({ store, rows, entries }, xero.booking, row)).toMatchObject({ outcome: "unavailable" });
+    expect(vi.mocked(xero.booking.findPayment).mock.calls[0][0]).toMatchObject({ deletedMatters: true });
+    expect(xero.booking.bookPayment).not.toHaveBeenCalled();
+    expect(rows.get(row.id)).toMatchObject({ state: "failed" });
+  });
+
   it("fails a refusal in Xero's words, to approve again once fixed", async () => {
     const { row, store, rows, entries, xero } = await drafted();
     xero.booking.bookPayment = vi.fn(async () => ({ ok: false as const, message: "The document date cannot be before the period lock date" }));

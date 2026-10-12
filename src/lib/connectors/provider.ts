@@ -278,8 +278,12 @@ export interface BookingProvider {
   organisation(input: OrgRequest): Promise<OrganisationFacts>;
   /** One bill as it is now; null when the provider no longer has it. */
   bill(input: OrgRequest & { billId: string }): Promise<ExternalBill | null>;
-  /** A payment on this bill carrying this reference, deleted ones included; null when there is none. */
-  findPayment(input: OrgRequest & { billId: string; reference: string }): Promise<ExternalPayment | null>;
+  /**
+   * A payment on this bill carrying this reference, deleted ones included; null when there is none. With
+   * `deletedMatters` (an earlier send may have reached the provider), a lookup that cannot see deleted payments throws
+   * rather than answer none, so a payment someone deleted there is never booked again.
+   */
+  findPayment(input: OrgRequest & { billId: string; reference: string; deletedMatters?: boolean }): Promise<ExternalPayment | null>;
   /** Books one payment. The key makes the same booking the same request to the provider. */
   bookPayment(input: OrgRequest & { payment: PaymentToBook; idempotencyKey: string }): Promise<BookOutcome>;
   /** Reads one payment back by its id; null when the provider has none. */
