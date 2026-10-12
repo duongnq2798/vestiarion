@@ -34,11 +34,19 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const FINGERPRINT = /^[0-9a-f]{64}$/;
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-/** What the person reads back: how many were booked, and what stopped the rest. */
+/**
+ * What the person reads back: how many were booked (read back from the tool), how many the tool took and has not been
+ * read back yet, and what stopped the rest. Booked is said only of what the tool answered the read-back for (W10).
+ */
 export function bookingMessage(label: string, results: readonly LineResult[]): string {
-  const booked = results.filter((result) => result.outcome === "booked" || result.outcome === "sent").length;
+  const booked = results.filter((result) => result.outcome === "booked").length;
+  const sent = results.filter((result) => result.outcome === "sent").length;
   const others = results.filter((result) => result.outcome !== "booked" && result.outcome !== "sent");
-  const head = booked > 0 ? `Booked ${plural(booked, "payment", "payments")} in ${label}.` : `Booked nothing in ${label}.`;
+  const parts = [
+    ...(booked > 0 ? [`Booked ${plural(booked, "payment", "payments")} in ${label}.`] : []),
+    ...(sent > 0 ? [`Sent ${plural(sent, "payment", "payments")} to ${label}, not read back yet: Vestiarion confirms ${sent === 1 ? "it" : "them"} at the next sync.`] : []),
+  ];
+  const head = parts.length > 0 ? parts.join(" ") : `Booked nothing in ${label}.`;
   if (others.length === 0) return head;
   const reasons = [...new Set(others.map((result) => result.message))];
   return `${head} ${reasons.join(" ")}`;

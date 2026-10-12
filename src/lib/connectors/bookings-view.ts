@@ -78,7 +78,7 @@ export function postingWords(posting: Pick<PostingRow, "state" | "message" | "ex
     case "sending":
       return `Being booked in ${label} now`;
     case "sent":
-      return `Booked in ${label}; confirming it`;
+      return `Sent to ${label}; confirming it`;
     case "confirmed":
       return `Booked in ${label}`;
     case "failed":

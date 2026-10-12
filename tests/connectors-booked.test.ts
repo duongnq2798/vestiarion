@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { bookedBadge, bookedLine, bookingFromEntries } from "@/lib/connectors/booked";
 import type { PostingRow } from "@/lib/connectors/booking-run";
-import { bookingRows } from "@/lib/connectors/bookings-view";
+import { bookingRows, postingWords } from "@/lib/connectors/bookings-view";
 import { postingFingerprint, REALITY_REFUSAL } from "@/lib/connectors/posting";
 import type { SourceStatus } from "@/lib/connectors/provider";
 import { buildEvidenceChain } from "@/lib/evidence-chain";
@@ -23,6 +23,13 @@ const APPROVED = entry(71, "10:05:00", "human", "accounting_payment_approved", {
 const SENT = entry(72, "10:05:01", "system", "accounting_payment_sent", { ...base, paymentId: PAYMENT, adopted: false });
 const CONFIRMED = entry(73, "10:05:02", "system", "accounting_payment_confirmed", { ...base, paymentId: PAYMENT, amount: "12.50", currency: "USD", account: ACCOUNT });
 const REFUSED = entry(74, "10:00:00", "system", "accounting_payment_refused", { ...base, reason: "reality", message: REALITY_REFUSAL });
+
+describe("postingWords (W10)", () => {
+  it("says booked only once the tool answered the read-back, as the card and the trail do", () => {
+    expect(postingWords({ state: "sent", message: null, externalPaymentId: PAYMENT }, "Xero")).toBe("Sent to Xero; confirming it");
+    expect(postingWords({ state: "confirmed", message: null, externalPaymentId: PAYMENT }, "Xero")).toBe("Booked in Xero");
+  });
+});
 
 describe("bookingFromEntries (W10)", () => {
   it("is none for a payable no booking entry is about", () => {

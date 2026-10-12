@@ -308,7 +308,7 @@ async function markSent(deps: BookingDeps, posting: PostingRow, payment: Externa
     action: "accounting_payment_sent",
     summary: adopted
       ? `${deps.label} already held this payment (${payment.externalId}): Vestiarion took it as the booking, and wrote nothing new`
-      : `Booked in ${deps.label}: payment ${payment.externalId}, to be read back`,
+      : `Sent to ${deps.label}: payment ${payment.externalId}, to be read back`,
     detail: { ...base(deps, posting), paymentId: payment.externalId, adopted },
   });
   return moved;
@@ -323,10 +323,10 @@ async function readBack(deps: BookingDeps, accessToken: string, posting: Posting
   try {
     held = await deps.booking.payment({ accessToken, externalOrgId: deps.connection.externalOrgId, paymentId });
   } catch {
-    return { postingId: posting.id, outcome: "sent", paymentId, message: `Booked in ${deps.label}. Vestiarion reads it back at the next sync to confirm it.` };
+    return { postingId: posting.id, outcome: "sent", paymentId, message: `Sent to ${deps.label}. Vestiarion reads it back at the next sync to confirm it.` };
   }
   if (!held) {
-    if (!options.goneMeansDeleted) return { postingId: posting.id, outcome: "sent", paymentId, message: `Booked in ${deps.label}. Vestiarion reads it back at the next sync to confirm it.` };
+    if (!options.goneMeansDeleted) return { postingId: posting.id, outcome: "sent", paymentId, message: `Sent to ${deps.label}. Vestiarion reads it back at the next sync to confirm it.` };
     held = { externalId: paymentId, billExternalId: posting.billExternalId, accountExternalId: null, amount: posting.amount, currency: posting.currency, date: null, reference: posting.reference, status: "deleted" };
   }
   const expected = paymentToBook(posting, account);
@@ -356,7 +356,7 @@ async function readBack(deps: BookingDeps, accessToken: string, posting: Posting
 function settled(posting: PostingRow, label: string): LineResult | null {
   if (posting.state === "confirmed") return { postingId: posting.id, outcome: "booked", paymentId: posting.externalPaymentId ?? undefined, message: `Already booked in ${label}.` };
   if (posting.state === "refused") return { postingId: posting.id, outcome: "refused", message: posting.message ?? "Not booked." };
-  if (posting.state === "sent") return { postingId: posting.id, outcome: "sent", paymentId: posting.externalPaymentId ?? undefined, message: `Booked in ${label}; Vestiarion is confirming it.` };
+  if (posting.state === "sent") return { postingId: posting.id, outcome: "sent", paymentId: posting.externalPaymentId ?? undefined, message: `Sent to ${label}; Vestiarion is confirming it.` };
   return null;
 }
 
@@ -502,7 +502,7 @@ export async function approvePosting(input: {
     return { postingId: posting.id, outcome: "failed", message };
   }
   const sent = await markSent(deps, claimed, booked.payment, false, iso(now()));
-  return sent ? readBack(deps, accessToken, sent, { goneMeansDeleted: false }) : { postingId: posting.id, outcome: "sent", paymentId: booked.payment.externalId, message: `Booked in ${label}.` };
+  return sent ? readBack(deps, accessToken, sent, { goneMeansDeleted: false }) : { postingId: posting.id, outcome: "sent", paymentId: booked.payment.externalId, message: `Sent to ${label}.` };
 }
 
 function unavailableWords(error: unknown, label: string): string {

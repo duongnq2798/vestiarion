@@ -224,4 +224,16 @@ describe("bookingMessage", () => {
       ])
     ).toBe("Booked 1 payment in Xero. Already paid in Xero.");
   });
+
+  it("says booked only of those read back: one Xero took and has not confirmed yet is sent", () => {
+    expect(
+      bookingMessage("Xero", [
+        { postingId: "a", outcome: "booked", message: "Booked in Xero." },
+        { postingId: "b", outcome: "sent", message: "Sent to Xero. Vestiarion reads it back at the next sync to confirm it." },
+      ])
+    ).toBe("Booked 1 payment in Xero. Sent 1 payment to Xero, not read back yet: Vestiarion confirms it at the next sync.");
+    expect(bookingMessage("Xero", [{ postingId: "b", outcome: "sent", message: "Sent to Xero." }])).toBe(
+      "Sent 1 payment to Xero, not read back yet: Vestiarion confirms it at the next sync."
+    );
+  });
 });

@@ -404,8 +404,11 @@ describe("approvePosting (W6, W7)", () => {
   it("leaves a booking sent when the read-back gets no answer, for the next run to confirm", async () => {
     const { row, store, rows, entries, xero } = await drafted();
     xero.booking.payment = vi.fn(async () => Promise.reject(new ProviderError("unavailable", "Xero payment read: 502")));
-    expect(await approve({ store, rows, entries }, xero.booking, row)).toMatchObject({ outcome: "sent" });
+    // Not called booked before Xero answered the read-back.
+    expect(await approve({ store, rows, entries }, xero.booking, row)).toMatchObject({ outcome: "sent", message: "Sent to Xero. Vestiarion reads it back at the next sync to confirm it." });
     expect(rows.get(row.id)?.state).toBe("sent");
+    expect(entries.find((entry) => entry.action === "accounting_payment_sent")?.summary).toMatch(/^Sent to Xero: payment /);
+    expect(await approve({ store, rows, entries }, xero.booking, rows.get(row.id) as PostingRow)).toMatchObject({ outcome: "sent", message: "Sent to Xero; Vestiarion is confirming it." });
     xero.booking.payment = vi.fn(async () => made());
     expect(await confirmInFlight(deps(store, xero.booking))).toEqual({ confirmed: 1, checked: 1 });
     expect(rows.get(row.id)?.state).toBe("confirmed");
