@@ -11,6 +11,52 @@ export type ProviderId = (typeof PROVIDERS)[number];
 /** A provider's name in copy. */
 export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quickbooks: "QuickBooks" };
 
+/**
+ * A provider's own words for what the core names alike (docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md
+ * Q15): Xero has organisations and suppliers, QuickBooks companies and vendors; and how long a connection may sit
+ * unused before the provider stops taking it (Xero's refresh token lives 60 days, QuickBooks' 100).
+ */
+export interface ProviderWords {
+  /** "Xero's", "QuickBooks'". */
+  possessive: string;
+  organisation: string;
+  contacts: string;
+  /** What is read to choose the account payments will be booked to: Xero's whole chart, QuickBooks' bank accounts. */
+  accounts: string;
+  idleDays: number;
+  /** The bills that come in: Xero's approved ones, QuickBooks' open ones. */
+  bills: string;
+  /** What a bill being in the tool does not mean, under the review list. */
+  approval: string;
+}
+
+export const PROVIDER_WORDS: Record<ProviderId, ProviderWords> = {
+  xero: {
+    possessive: "Xero's",
+    organisation: "organisation",
+    contacts: "suppliers",
+    accounts: "chart of accounts",
+    idleDays: 60,
+    bills: "approved bills",
+    approval: "Xero approving a bill does not approve its payment: the agent decides it.",
+  },
+  quickbooks: {
+    possessive: "QuickBooks'",
+    organisation: "company",
+    contacts: "vendors",
+    accounts: "bank accounts",
+    idleDays: 100,
+    bills: "open bills",
+    approval: "A bill being open in QuickBooks does not approve its payment: the agent decides it.",
+  },
+};
+
+/** The words of a provider named by its id or its label; Xero's for a name neither is. */
+export function providerWords(provider: string): ProviderWords {
+  const id = PROVIDERS.find((candidate) => candidate === provider || PROVIDER_LABELS[candidate] === provider);
+  return PROVIDER_WORDS[id ?? "xero"];
+}
+
 export interface ProviderTokens {
   accessToken: string;
   refreshToken: string;
@@ -50,6 +96,12 @@ export interface ExternalBill {
   issuedOn: string | null;
   dueOn: string | null;
   status: SourceStatus;
+  /**
+   * False for a bill the provider says only was deleted: QuickBooks' change feed keeps its id and time, and none of its
+   * facts (docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q8). Its row then keeps the facts it has,
+   * and only its status and version change. Absent means true.
+   */
+  factsKnown?: boolean;
 }
 
 export interface ExternalContact {
@@ -96,6 +148,11 @@ export interface PageRequest {
   phase: "backfill" | "incremental";
   /** ISO time: only records changed since then. Null in a backfill. */
   since: string | null;
+  /**
+   * The connection's first day (`YYYY-MM-DD`, X9): a provider that can bound its backfill there does (QuickBooks, Q7);
+   * the core applies the window to every bill either way.
+   */
+  windowFrom?: string;
 }
 
 export type ProviderFailure = "rate_limited" | "unauthorized" | "forbidden" | "unavailable" | "bad_response";
@@ -129,12 +186,26 @@ export type RefreshOutcome =
 export interface AccountingProvider {
   id: ProviderId;
   label: string;
-  /** The scopes asked for: read-only, in this version. */
+  /** The scopes asked for: read-only where the provider has such scopes (Xero), in this version. */
   scopes: readonly string[];
+  /**
+   * The query parameter the provider's callback names the one organisation of the grant in (QuickBooks' `realmId`,
+   * docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q4). The callback then fails without it, and passes
+   * it to `organisations`, which confirms the new token reads it.
+   */
+  callbackOrganisationParam?: string;
+  /**
+   * One workspace per organisation at a time (QuickBooks, Q5): revoking or disconnecting the app there ends every grant
+   * for the organisation, so two workspaces would cut each other off. Xero lets several share one (X4).
+   */
+  exclusive?: boolean;
   authorizeUrl(input: { state: string; redirectUri: string }): string;
   exchangeCode(input: { code: string; redirectUri: string }): Promise<ExchangeOutcome>;
-  /** The organisations a fresh token reaches, those of this authorization first where the provider says which. */
-  organisations(tokens: ProviderTokens, authEventId: string | null): Promise<ExternalOrganisation[]>;
+  /**
+   * The organisations a fresh token reaches, those of this authorization first where the provider says which; with
+   * `named`, the one the callback named, once the token is shown to read it.
+   */
+  organisations(tokens: ProviderTokens, authEventId: string | null, named?: string): Promise<ExternalOrganisation[]>;
   refresh(refreshToken: string): Promise<RefreshOutcome>;
   /** Ends the access the refresh token grants. True when the provider confirmed it. */
   revoke(refreshToken: string): Promise<boolean>;

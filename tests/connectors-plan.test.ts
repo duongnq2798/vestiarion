@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inWindow, planBill, type StagedBill } from "@/lib/connectors/bills";
+import { inWindow, planBill, withKeptFacts, type StagedBill } from "@/lib/connectors/bills";
 import { afterPage, NEW_CURSOR, nextRequest, pagesRead, type SyncCursor } from "@/lib/connectors/cursors";
 import type { ExternalBill } from "@/lib/connectors/provider";
 
@@ -162,5 +162,27 @@ describe("the cursor", () => {
   it("moves on after one page whatever changed during it: a single page cannot skip a row", () => {
     const started = nextRequest(NEW_CURSOR, T0).cursor;
     expect(afterPage(started, { page: 1, last: true, updatedAts: ["2026-10-12T07:01:00.000Z"] }, T0).phase).toBe("incremental");
+  });
+});
+
+describe("a bill the provider names by its id alone (docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q8)", () => {
+  const deleted = bill({ version: "2026-10-12T09:00:00.000Z#deleted", updatedAt: "2026-10-12T09:00:00.000Z", contactName: "Unnamed vendor", number: null, status: "deleted", factsKnown: false });
+  const quickbooksVersion = "2026-10-12T09:00:00.000Z#00000004";
+
+  it("closes an added bill once it is deleted, even in the same second as its last change", () => {
+    expect(planBill(staged({ reviewState: "added", externalVersion: quickbooksVersion }), deleted, WINDOW)).toEqual({ kind: "update", closedAfterAdded: true });
+    expect(planBill(null, deleted, WINDOW)).toEqual({ kind: "ignore", reason: "closed" });
+    expect(planBill(staged({ externalVersion: deleted.version, sourceStatus: "deleted" }), deleted, WINDOW)).toEqual({ kind: "ignore", reason: "older" });
+  });
+
+  it("orders two changes in the same second by their sync token", () => {
+    expect(planBill(staged({ externalVersion: "2026-10-12T09:00:00.000Z#00000003" }), bill({ version: quickbooksVersion }), WINDOW)).toEqual({ kind: "update", closedAfterAdded: false });
+    expect(planBill(staged({ externalVersion: "2026-10-12T09:00:00.000Z#00000010" }), bill({ version: quickbooksVersion }), WINDOW)).toEqual({ kind: "ignore", reason: "older" });
+  });
+
+  it("takes the supplier and number its row kept", () => {
+    expect(withKeptFacts(deleted, staged({ contactName: "PowerDirect", number: "PD-4471" }))).toMatchObject({ contactName: "PowerDirect", number: "PD-4471", status: "deleted" });
+    expect(withKeptFacts(bill(), staged({ contactName: "Someone else" })).contactName).toBe("PowerDirect");
+    expect(withKeptFacts(deleted, null)).toBe(deleted);
   });
 });

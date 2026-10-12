@@ -80,8 +80,8 @@ import { buildSharedReport } from "@/lib/shared-report";
 import { buildReport, type ReportBill, type ReportDecision, type ReportFacts } from "@/lib/workspace-report";
 import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
 import { evidenceShot } from "./evidence-fixture";
-import XeroPanel from "@/components/XeroPanel";
-import { XeroBillsReview } from "@/components/XeroBillsReview";
+import AccountingPanel from "@/components/AccountingPanel";
+import { AccountingBillsReview } from "@/components/AccountingBillsReview";
 import { APPLY_PAYMENTS, PART_PAID, PART_PAID_VIEW, PART_PAID_VIEWS } from "./allocations-fixture";
 import { designRuleReplay } from "../design/replay-fixture";
 import { RuleTrialPanel } from "@/components/RuleTrial";
@@ -123,6 +123,7 @@ export interface DocsShot {
     | "slack"
     | "email-invoices"
     | "xero"
+    | "quickbooks"
     | "payment-plan"
     | "report"
     | "workspace"
@@ -1769,7 +1770,8 @@ export const DOCS_SHOTS = {
     page: "settings",
     sub: SETTINGS_SUB,
     render: () => (
-      <XeroPanel
+      <AccountingPanel
+        provider="xero"
         orgSlug={SLUG}
         view={{
           state: "connection",
@@ -1793,7 +1795,8 @@ export const DOCS_SHOTS = {
     page: "invoices",
     sub: "Your bills, what the agent decided on each, and why.",
     render: () => (
-      <XeroBillsReview
+      <AccountingBillsReview
+        provider="xero"
         orgSlug={SLUG}
         connectionId="00000000-0000-4000-8000-0000000000a2"
         organisation="Demo Company (Global)"
@@ -1813,6 +1816,63 @@ export const DOCS_SHOTS = {
             dueOn: "2026-09-20",
             status: "duplicate",
             reason: "Already in Vestiarion: same counterparty, amount, due date and reference.",
+          },
+        ]}
+      />
+    ),
+  },
+  "quickbooks-settings": {
+    guide: "quickbooks",
+    page: "settings",
+    sub: SETTINGS_SUB,
+    render: () => (
+      <AccountingPanel
+        provider="quickbooks"
+        orgSlug={SLUG}
+        view={{
+          state: "connection",
+          connectionId: "00000000-0000-4000-8000-0000000000c1",
+          status: { tone: "ok", title: "Connected to Sandbox Company_US_1", detail: ["Last synced 5 minutes ago."], reconnect: false },
+          connected: true,
+          revoked: false,
+          organisation: "Sandbox Company_US_1",
+          waiting: 3,
+          closedAfterAdded: 0,
+          paymentAccount: { id: "92", code: "1090", name: "Arc USDC wallet", currency: "USD" },
+          sample: { supplier: "PowerDirect", number: "PD-4471", amount: "1250", currency: "USD" },
+        }}
+        canManage
+        notice={null}
+      />
+    ),
+  },
+  "quickbooks-review": {
+    guide: "quickbooks",
+    page: "invoices",
+    sub: "Your bills, what the agent decided on each, and why.",
+    render: () => (
+      <AccountingBillsReview
+        provider="quickbooks"
+        orgSlug={SLUG}
+        connectionId="00000000-0000-4000-8000-0000000000c2"
+        organisation="Sandbox Company_US_1"
+        canAdd
+        closed={[{ id: "00000000-0000-4000-8000-0000000000d4", supplier: "Hicks Hardware", number: "HH-301", sourceStatus: "deleted" }]}
+        items={[
+          { id: "00000000-0000-4000-8000-0000000000d1", supplier: "PowerDirect Ltd", supplierNew: false, number: "PD-4471", amount: "1250", total: "1250", currency: "USD", usdc: "1250", dueOn: "2026-10-28", status: "add", reason: null },
+          { id: "00000000-0000-4000-8000-0000000000d2", supplier: "Norton Lumber and Building Materials", supplierNew: true, number: "NL-2210", amount: "400", total: "1000", currency: "USD", usdc: "400", dueOn: "2026-10-20", status: "add", reason: null },
+          {
+            id: "00000000-0000-4000-8000-0000000000d3",
+            supplier: "Akiba Parts K.K.",
+            supplierNew: true,
+            number: "AK-77",
+            amount: "98000",
+            total: "98000",
+            currency: "JPY",
+            usdc: null,
+            dueOn: "2026-10-31",
+            status: "error",
+            reason: "This workspace's shadow mode takes bills in USD. Convert the amount to USD or USDC.",
           },
         ]}
       />

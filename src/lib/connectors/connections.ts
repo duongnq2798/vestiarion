@@ -1,4 +1,4 @@
-import { db } from "../dal";
+import { db, platformDb } from "../dal";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { PROVIDER_LABELS, type ExternalOrganisation, type ProviderId } from "./provider";
 import type { Consent } from "./state";
@@ -167,7 +167,9 @@ export const WINDOW_DAYS = 90;
 
 export type SaveConnection =
   | { ok: true; connection: Connection; reconnected: boolean }
-  | { ok: false; reason: "other_organisation"; name: string | null };
+  | { ok: false; reason: "other_organisation"; name: string | null }
+  /** Another workspace connected the same QuickBooks company a moment before (migration 0102's index, Q5). */
+  | { ok: false; reason: "other_workspace"; name: null };
 
 /**
  * Connects the workspace to an organisation of a provider (X4): a new connection, or the same organisation's own row
@@ -217,7 +219,10 @@ export async function saveConnection(input: {
           window_from: new Date(nowMs - WINDOW_DAYS * DAY_MS).toISOString().slice(0, 10),
         })
         .select(CONNECTION_COLUMNS);
-  if (saved.error) raise(saved.error);
+  if (saved.error) {
+    if (saved.error.code === "23505" && /one_workspace/.test(saved.error.message)) return { ok: false, reason: "other_workspace", name: null };
+    raise(saved.error);
+  }
   const connection = toConnection(((saved.data ?? []) as unknown as ConnectionRow[])[0]);
   const label = PROVIDER_LABELS[input.provider];
   await appendLedgerEntryBestEffort(connection.orgId, {
@@ -242,20 +247,27 @@ export async function saveConnection(input: {
 /**
  * Disconnects (X13): the refresh token is revoked at the provider first (best effort, outside any write), then the
  * tokens are deleted and the connection marked revoked, keeping its history. Records `accounting_disconnected`.
+ *
+ * With `atProvider`, the provider has said the connection no longer works because it was disconnected there
+ * (docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q12): nothing is revoked, the rest is the same, and
+ * the entry says so. Then a connection another request revoked first is left as it is, with no second entry.
  */
 export async function disconnectConnection(input: {
   connection: Connection;
   by: string;
   revoke: (refreshToken: string) => Promise<boolean>;
   nowMs?: number;
+  atProvider?: boolean;
 }): Promise<{ revokedAtProvider: boolean }> {
   const { connection } = input;
-  let revokedAtProvider = false;
-  try {
-    const refreshToken = await refreshTokenOf(connection.orgId, { connectionId: connection.id });
-    if (refreshToken) revokedAtProvider = await input.revoke(refreshToken);
-  } catch (error) {
-    console.error("connector: revoking at the provider failed", connection.id, error instanceof Error ? error.message : "unknown error");
+  let revokedAtProvider = input.atProvider === true;
+  if (!input.atProvider) {
+    try {
+      const refreshToken = await refreshTokenOf(connection.orgId, { connectionId: connection.id });
+      if (refreshToken) revokedAtProvider = await input.revoke(refreshToken);
+    } catch (error) {
+      console.error("connector: revoking at the provider failed", connection.id, error instanceof Error ? error.message : "unknown error");
+    }
   }
   await deleteTokens(connection.orgId, { connectionId: connection.id });
   const updated = await db()
@@ -265,14 +277,52 @@ export async function disconnectConnection(input: {
     .neq("status", "revoked")
     .select("id");
   if (updated.error) raise(updated.error);
+  if (input.atProvider && (updated.data ?? []).length === 0) return { revokedAtProvider };
+  const label = PROVIDER_LABELS[connection.provider];
+  const name = connection.externalOrgName ?? connection.externalOrgId;
   await appendLedgerEntryBestEffort(connection.orgId, {
     actor: "human",
     domain: "system",
     action: "accounting_disconnected",
-    summary: `Disconnected ${PROVIDER_LABELS[connection.provider]}: ${connection.externalOrgName ?? connection.externalOrgId}`,
-    detail: { by: input.by, provider: connection.provider, connectionId: connection.id, externalOrgId: connection.externalOrgId, revokedAtProvider },
+    summary: input.atProvider ? `${label} says it was disconnected there: ${name}` : `Disconnected ${label}: ${name}`,
+    detail: {
+      by: input.by,
+      provider: connection.provider,
+      connectionId: connection.id,
+      externalOrgId: connection.externalOrgId,
+      revokedAtProvider,
+      ...(input.atProvider ? { atProvider: true } : {}),
+    },
   });
   return { revokedAtProvider };
+}
+
+/** A connection found by the provider's own organisation id, across workspaces: ids, a status and a time, nothing else. */
+export interface ExternalMatch {
+  orgId: string;
+  connectionId: string;
+  externalOrgId: string;
+  status: ConnectionState;
+  nextSyncAfter: string | null;
+}
+
+/**
+ * The connections, not revoked, of these organisations of a provider in every workspace (migration 0102's
+ * `accounting_connections_by_external`, the service role's): for QuickBooks' webhook, which names a company and no
+ * workspace (docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q11), and the connect flow's check (Q5).
+ */
+export async function connectionsByExternal(provider: ProviderId, externalOrgIds: readonly string[]): Promise<ExternalMatch[]> {
+  if (externalOrgIds.length === 0) return [];
+  const result = await platformDb().rpc("accounting_connections_by_external", { p_provider: provider, p_external_org_ids: [...externalOrgIds] });
+  if (result.error) raise(result.error);
+  return ((result.data ?? []) as Array<{ org_id: string; connection_id: string; external_org_id: string; status: ConnectionState; next_sync_after: string | null }>).map(
+    (row) => ({ orgId: row.org_id, connectionId: row.connection_id, externalOrgId: row.external_org_id, status: row.status, nextSyncAfter: row.next_sync_after })
+  );
+}
+
+/** Whether another workspace holds a connection, not revoked, to this organisation (Q5): yes or no, never which. */
+export async function connectedElsewhere(provider: ProviderId, externalOrgId: string, orgId: string): Promise<boolean> {
+  return (await connectionsByExternal(provider, [externalOrgId])).some((match) => match.orgId !== orgId);
 }
 
 /** Keeps the account payments made on Arc will be booked to (I14), and records `accounting_payment_account_chosen`. */

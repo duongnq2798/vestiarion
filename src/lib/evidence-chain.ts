@@ -246,14 +246,16 @@ function via(detail: Record<string, unknown>): string {
       return " from an imported list";
     case "xero":
       return " in the review of bills from Xero";
+    case "quickbooks":
+      return " in the review of bills from QuickBooks";
     default:
       return "";
   }
 }
 
-/** " as bill PD-4471", the number Xero gave the bill, when the entry kept one. */
-function xeroNumber(detail: Record<string, unknown>): string {
-  const ids = record(detail.xero);
+/** " as bill PD-4471", the number the accounting tool gave the bill (Xero's, QuickBooks'), when the entry kept one. */
+function toolNumber(detail: Record<string, unknown>, tool: "xero" | "quickbooks"): string {
+  const ids = record(detail[tool]);
   const number = ids ? text(ids.invoiceNumber) : null;
   return number ? ` as bill ${number}` : "";
 }
@@ -515,7 +517,9 @@ function billStep(ctx: Context, invoice: EvidenceInvoice): EvidenceStep {
         : created.detail.via === "import"
           ? `imported with Import a list on Bills & receivables${row !== null ? `, from row ${row} of the list` : ""}`
           : created.detail.via === "xero"
-            ? `brought in from Xero${xeroNumber(created.detail)}, and added on Bills & receivables by the person who reviewed it`
+            ? `brought in from Xero${toolNumber(created.detail, "xero")}, and added on Bills & receivables by the person who reviewed it`
+          : created.detail.via === "quickbooks"
+            ? `brought in from QuickBooks${toolNumber(created.detail, "quickbooks")}, and added on Bills & receivables by the person who reviewed it`
           : created.detail.via
             ? `added${via(created.detail)}`
             : "added in the invoice form on Bills & receivables";

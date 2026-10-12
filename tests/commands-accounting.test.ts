@@ -54,14 +54,14 @@ const BILLS = [
 
 const actor = (role: Actor["role"] = "owner"): Actor => ({ orgId: ORG, userId: USER, role, mode: "sandbox", surface: { kind: "console" } });
 
-function world(options: { claim?: boolean; connection?: FakeReply } = {}) {
+function world(options: { claim?: boolean; connection?: FakeReply; bills?: Array<ReturnType<typeof billRow>> } = {}) {
   const respond = (sent: RecordedRequest): FakeReply => {
     if (sent.path === "/rest/v1/orgs") return { body: { id: ORG, slug: "acme", name: "Acme", mode: "sandbox", ledger_signing_key_enc: null, circle_api_key_enc: null, circle_entity_secret_enc: null } };
     if (sent.path === "/rest/v1/accounting_connections") return options.connection ?? { body: [CONNECTION_ROW] };
     if (sent.path === "/rest/v1/shadow_modes") return { body: [{ currency: "USD", started_at: "2026-10-07T00:00:00Z", started_by: USER }] };
     if (sent.path === "/rest/v1/accounting_bills" && sent.method === "GET") {
       const ids = sent.params.get("id")?.replace(/^in\.\(|\)$/g, "").split(",") ?? null;
-      return { body: BILLS.filter((bill) => !ids || ids.includes(bill.id)) };
+      return { body: (options.bills ?? BILLS).filter((bill) => !ids || ids.includes(bill.id)) };
     }
     if (sent.path === "/rest/v1/accounting_bills" && sent.method === "PATCH") {
       const id = sent.params.get("id")?.replace(/^eq\./, "");
@@ -130,6 +130,22 @@ describe("addAccountingBills", () => {
     const contactLink = sent(fake, "/rest/v1/external_links", "POST").map((request) => request.body as Record<string, unknown>).find((body) => body.object_type === "contact");
     expect(contactLink).toMatchObject({ external_id: "contact-9", local_id: NEW_CP, label: "Akiba Parts K.K." });
     expect(JSON.stringify(sent(fake, "/rest/v1/invoices", "POST"))).not.toContain(placeholderId("Akiba Parts K.K."));
+  });
+
+  it("adds a bill partly paid in QuickBooks at what is left, naming QuickBooks' ids (QuickBooks connector Q9, Q16)", async () => {
+    const realm = "9341455327810551";
+    const { fake, run } = world({
+      connection: { body: [{ ...CONNECTION_ROW, provider: "quickbooks", external_org_id: realm, external_org_name: "Sandbox Company_US_1", consent_version: "quickbooks-2026-10-12" }] },
+      bills: [billRow(LINKED_BILL, { external_id: "147", contact_external_id: "contact-1", number: "NL-2210", total: 1000, amount_due: 400 })],
+    });
+    const outcome = await run(() => addAccountingBills(actor(), { connectionId: CONNECTION, billIds: [LINKED_BILL], goodsReceived: true }));
+    expect(outcome).toMatchObject({ ok: true, message: "Added 1 bill from QuickBooks.", counts: { added: 1 } });
+    expect(sent(fake, "/rest/v1/invoices", "POST")[0].body).toMatchObject({ amount: "400", currency: "USDC", original_currency: "USD", original_amount: 400 });
+    const created = entries().find((entry) => entry.action === "create_invoice");
+    expect(created?.detail).toMatchObject({ via: "quickbooks", quickbooks: { tenantId: realm, billId: "147", contactId: "contact-1", invoiceNumber: "NL-2210" } });
+    expect(created?.detail).not.toHaveProperty("xero");
+    const links = sent(fake, "/rest/v1/external_links", "POST").map((request) => request.body as Record<string, unknown>);
+    expect(links).toEqual([expect.objectContaining({ provider: "quickbooks", external_org_id: realm, object_type: "bill", external_id: "147" })]);
   });
 
   it("adds nothing for a bill someone else took first", async () => {

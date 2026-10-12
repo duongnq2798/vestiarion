@@ -157,6 +157,35 @@ describe("syncConnection", () => {
     expect(memory.closed).toHaveLength(1);
   });
 
+  it("closes a bill already added that the provider says only was deleted, naming it as its row does (QuickBooks Q8)", async () => {
+    const memory = memoryDb();
+    await run(memory.db, provider({ bills: backfill }).provider);
+    const id = "0f4c1f4e-1d7a-4e0f-9a9d-6c2d3c1a0001";
+    const added = memory.bills.get(id) as StagedBill & { bill: ExternalBill };
+    memory.bills.set(id, { ...added, reviewState: "added", contactName: "PowerDirect", number: "PD-4471" });
+    const tombstone: ExternalBill = {
+      externalId: id, version: "2026-10-12T10:30:00.000Z#deleted", updatedAt: "2026-10-12T10:30:00.000Z", contactExternalId: null, contactName: "Unnamed vendor",
+      number: null, reference: null, currency: "USD", total: "0", amountDue: "0", issuedOn: null, dueOn: null, status: "deleted", factsKnown: false,
+    };
+    const later = provider({ bills: (request) => ({ items: [tombstone], page: request.page, last: true }) });
+    const sinceBefore = memory.cursors.get("bill")?.since;
+    expect(await run(memory.db, later.provider)).toMatchObject({ outcome: "synced", closed: 1 });
+    // The change feed's time is not how far the read got: the next run starts where this one's read ended.
+    expect(memory.cursors.get("bill")?.since).toBe(sinceBefore);
+    expect(memory.closed).toEqual([expect.objectContaining({ externalId: id, status: "deleted", contactName: "PowerDirect", number: "PD-4471" })]);
+    expect(memory.bills.get(id)).toMatchObject({ reviewState: "added", sourceStatus: "deleted" });
+    // A deleted bill Vestiarion never had is not kept.
+    const other = provider({ bills: (request) => ({ items: [{ ...tombstone, externalId: "never-seen" }], page: request.page, last: true }) });
+    await run(memory.db, other.provider);
+    expect(memory.bills.has("never-seen")).toBe(false);
+  });
+
+  it("gives the provider the connection's first day, to bound its backfill", async () => {
+    const { provider: p, calls } = provider({ bills: backfill });
+    await run(memoryDb().db, p);
+    expect(calls.find((call) => call.kind === "bills")?.request.windowFrom).toBe("2026-07-14");
+  });
+
   it("waits out a short rate limit inside the run, once", async () => {
     const memory = memoryDb();
     const sleep = vi.fn(async () => undefined);

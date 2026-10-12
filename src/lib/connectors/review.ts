@@ -211,7 +211,10 @@ export interface ReviewRowView {
   /** The supplier is added as a new counterparty with the bill. */
   supplierNew: boolean;
   number: string | null;
+  /** What is left to pay: the amount it is added at, in its own currency. */
   amount: string;
+  /** The bill's whole total: more than `amount` when it was partly paid in the tool (QuickBooks Q9). Absent: `amount`. */
+  total?: string;
   currency: string;
   /** The USDC it is added at, for a bill in the business's own currency. */
   usdc: string | null;
@@ -228,9 +231,31 @@ export interface ClosedRowView {
   sourceStatus: SourceStatus;
 }
 
+/**
+ * A bill already added whose amount due at the provider fell below the figure it was added at: partly paid there since
+ * (docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q9). `left` is what the provider says is due now,
+ * `added` the invoice's own figure, both in the bill's currency.
+ */
+export interface PartlyPaidRowView {
+  id: string;
+  supplier: string;
+  number: string | null;
+  currency: string;
+  left: string;
+  added: string;
+}
+
 export type ReviewView =
   | { state: "hidden" }
-  | { state: "list"; connectionId: string; label: string; organisation: string | null; items: ReviewRowView[]; closed: ClosedRowView[] };
+  | {
+      state: "list";
+      connectionId: string;
+      label: string;
+      organisation: string | null;
+      items: ReviewRowView[];
+      closed: ClosedRowView[];
+      partlyPaid: PartlyPaidRowView[];
+    };
 
 export function reviewRowView(item: ReviewItem): ReviewRowView {
   return {
@@ -239,6 +264,7 @@ export function reviewRowView(item: ReviewItem): ReviewRowView {
     supplierNew: item.supplier.kind === "new",
     number: item.bill.number,
     amount: item.bill.amountDue,
+    total: item.bill.total,
     currency: item.bill.currency,
     usdc: item.fate.usdc,
     dueOn: item.bill.dueOn,
@@ -247,10 +273,84 @@ export function reviewRowView(item: ReviewItem): ReviewRowView {
   };
 }
 
+/** An invoice a bill became, with the figure it was added at. */
+export interface AddedInvoice {
+  id: string;
+  amount: number | string;
+  currency: string;
+  original_amount: number | string | null;
+  original_currency: string | null;
+  status: string;
+}
+
+/** An added bill still open at the provider, with what it says is due now. */
+export interface AddedBill {
+  id: string;
+  external_id: string;
+  contact_name: string;
+  number: string | null;
+  currency: string;
+  total: number | string;
+  amount_due: number | string;
+}
+
+/** The figure an invoice was added at, in the bill's own currency: its original in shadow mode, else its amount. */
+function addedFigure(invoice: AddedInvoice, currency: string): number | null {
+  if (invoice.original_currency === currency && invoice.original_amount !== null) return Number(invoice.original_amount);
+  return invoice.currency === currency ? Number(invoice.amount) : null;
+}
+
+/**
+ * The added bills partly paid at the provider since (Q9): an invoice not yet paid or rejected, added at more than the
+ * provider says is due now. Pure.
+ */
+export function partlyPaidSince(bills: readonly AddedBill[], invoiceOf: ReadonlyMap<string, AddedInvoice>): PartlyPaidRowView[] {
+  return bills.flatMap((bill): PartlyPaidRowView[] => {
+    const invoice = invoiceOf.get(bill.external_id);
+    if (!invoice || invoice.status === "paid" || invoice.status === "rejected") return [];
+    const added = addedFigure(invoice, bill.currency);
+    const left = Number(bill.amount_due);
+    // Within a millionth: the amounts are exact decimals of at most six places.
+    if (added === null || !(left < added - 1e-7)) return [];
+    return [{ id: bill.id, supplier: bill.contact_name, number: bill.number, currency: bill.currency, left: String(left), added: String(added) }];
+  });
+}
+
+/** The added bills still open at the provider that it says were partly paid since they were added. */
+async function readPartlyPaid(connection: Connection): Promise<PartlyPaidRowView[]> {
+  const added = (unwrap(
+    await db()
+      .from("accounting_bills")
+      .select("id, external_id, contact_name, number, currency, total, amount_due")
+      .eq("connection_id", connection.id)
+      .eq("review_state", "added")
+      .eq("source_status", "open")
+      .order("changed_at", { ascending: false })
+      .limit(50)
+  ) as AddedBill[]).filter((bill) => Number(bill.amount_due) < Number(bill.total));
+  if (added.length === 0) return [];
+  const links = unwrap(
+    await db()
+      .from("external_links")
+      .select("external_id, local_id")
+      .eq("connection_id", connection.id)
+      .eq("object_type", "bill")
+      .in("external_id", added.map((bill) => bill.external_id))
+      .not("local_id", "is", null)
+  ) as Array<{ external_id: string; local_id: string }>;
+  if (links.length === 0) return [];
+  const invoices = unwrap(
+    await db().from("invoices").select("id, amount, currency, original_amount, original_currency, status").in("id", links.map((link) => link.local_id))
+  ) as AddedInvoice[];
+  const byId = new Map(invoices.map((invoice) => [invoice.id, invoice]));
+  const invoiceOf = new Map(links.flatMap((link) => (byId.has(link.local_id) ? [[link.external_id, byId.get(link.local_id) as AddedInvoice]] : [])));
+  return partlyPaidSince(added, invoiceOf);
+}
+
 /** The review list on Bills & receivables: hidden before migration 0101, without a connection, or once disconnected. */
 export async function accountingReview(connection: Connection | null): Promise<ReviewView> {
   if (!connection || connection.status === "revoked") return { state: "hidden" };
-  const [items, closed] = await Promise.all([
+  const [items, closed, partlyPaid] = await Promise.all([
     readReview(connection),
     db()
       .from("accounting_bills")
@@ -260,6 +360,7 @@ export async function accountingReview(connection: Connection | null): Promise<R
       .in("source_status", ["paid", "voided", "deleted"])
       .order("changed_at", { ascending: false })
       .limit(20),
+    readPartlyPaid(connection),
   ]);
   const closedRows = (unwrap(closed) as Array<{ id: string; contact_name: string; number: string | null; source_status: SourceStatus }>).map((row) => ({
     id: row.id,
@@ -274,5 +375,6 @@ export async function accountingReview(connection: Connection | null): Promise<R
     organisation: connection.externalOrgName,
     items: items.map(reviewRowView),
     closed: closedRows,
+    partlyPaid,
   };
 }

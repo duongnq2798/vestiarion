@@ -116,12 +116,23 @@ export const syncStore: SyncDb = {
     const rows = unwrap(
       await db()
         .from("accounting_bills")
-        .select("id, external_id, external_version, source_status, review_state")
+        .select("id, external_id, external_version, source_status, review_state, contact_name, number")
         .eq("connection_id", connectionId)
         .in("external_id", externalIds)
-    ) as Array<{ id: string; external_id: string; external_version: string | null; source_status: StagedBill["sourceStatus"]; review_state: StagedBill["reviewState"] }>;
+    ) as Array<{
+      id: string;
+      external_id: string;
+      external_version: string | null;
+      source_status: StagedBill["sourceStatus"];
+      review_state: StagedBill["reviewState"];
+      contact_name: string;
+      number: string | null;
+    }>;
     return new Map(
-      rows.map((row) => [row.external_id, { id: row.id, externalVersion: row.external_version, sourceStatus: row.source_status, reviewState: row.review_state }])
+      rows.map((row) => [
+        row.external_id,
+        { id: row.id, externalVersion: row.external_version, sourceStatus: row.source_status, reviewState: row.review_state, contactName: row.contact_name, number: row.number },
+      ])
     );
   },
 
@@ -136,7 +147,13 @@ export const syncStore: SyncDb = {
   },
 
   async updateBill(_connection, staged, bill) {
-    unwrap(await db().from("accounting_bills").update({ ...billFacts(bill), changed_at: new Date().toISOString() }).eq("id", staged.id).select("id"));
+    // A bill the provider names by its id alone (deleted, Q8) keeps the facts its row has: only what the provider says
+    // of it, and its version, change.
+    const values =
+      bill.factsKnown === false
+        ? { source_status: bill.status, external_version: bill.version, external_updated_at: bill.updatedAt }
+        : billFacts(bill);
+    unwrap(await db().from("accounting_bills").update({ ...values, changed_at: new Date().toISOString() }).eq("id", staged.id).select("id"));
   },
 
   async billClosed(connection, bill) {

@@ -1,0 +1,68 @@
+{
+  "QueryResponse": {
+    "Bill": [
+      {
+        "SyncToken": "0",
+        "domain": "QBO",
+        "APAccountRef": { "name": "Accounts Payable (A/P)", "value": "33" },
+        "VendorRef": { "name": "PowerDirect", "value": "56" },
+        "TxnDate": "2026-10-03",
+        "TotalAmt": 1250.0,
+        "CurrencyRef": { "name": "United States Dollar", "value": "USD" },
+        "SalesTermRef": { "value": "3" },
+        "DueDate": "2026-10-28",
+        "sparse": false,
+        "Line": [
+          {
+            "DetailType": "AccountBasedExpenseLineDetail",
+            "Amount": 1250.0,
+            "Id": "1",
+            "AccountBasedExpenseLineDetail": { "AccountRef": { "name": "Utilities:Gas and Electric", "value": "76" }, "BillableStatus": "NotBillable" },
+            "Description": "Electricity, September"
+          }
+        ],
+        "Balance": 1250.0,
+        "Id": "146",
+        "DocNumber": "PD-4471",
+        "PrivateNote": "Electricity, September",
+        "MetaData": { "CreateTime": "2026-10-03T09:12:40-07:00", "LastUpdatedTime": "2026-10-11T23:15:22-07:00" }
+      },
+      {
+        "SyncToken": "3",
+        "domain": "QBO",
+        "APAccountRef": { "name": "Accounts Payable (A/P)", "value": "33" },
+        "VendorRef": { "name": "Norton Lumber and Building Materials", "value": "46" },
+        "TxnDate": "2026-09-20",
+        "TotalAmt": 1000.0,
+        "CurrencyRef": { "name": "United States Dollar", "value": "USD" },
+        "LinkedTxn": [{ "TxnId": "151", "TxnType": "BillPaymentCheck" }],
+        "DueDate": "2026-10-20",
+        "sparse": false,
+        "Line": [],
+        "Balance": 400.0,
+        "Id": "147",
+        "DocNumber": "NL-2210",
+        "MetaData": { "CreateTime": "2026-09-20T10:00:00-07:00", "LastUpdatedTime": "2026-10-12T00:05:00-07:00" }
+      },
+      {
+        "SyncToken": "1",
+        "domain": "QBO",
+        "VendorRef": { "name": "Akiba Parts K.K.", "value": "61" },
+        "TxnDate": "2026-10-01",
+        "TotalAmt": 98000,
+        "CurrencyRef": { "name": "Japanese Yen", "value": "JPY" },
+        "ExchangeRate": 0.0067,
+        "DueDate": "2026-10-31",
+        "sparse": false,
+        "Line": [],
+        "Balance": 98000,
+        "Id": "148",
+        "DocNumber": "AK-77",
+        "MetaData": { "CreateTime": "2026-10-01T08:00:00-07:00", "LastUpdatedTime": "2026-10-12T00:10:30-07:00" }
+      }
+    ],
+    "startPosition": 1,
+    "maxResults": 3
+  },
+  "time": "2026-10-12T03:00:00.000-07:00"
+}

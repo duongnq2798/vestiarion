@@ -35,6 +35,7 @@ type GuideSlug =
   | "guides/api-milestones"
   | "guides/github"
   | "guides/xero"
+  | "guides/quickbooks"
   | "guides/audit-export"
   | "guides/evidence"
   | "guides/controls"
@@ -131,13 +132,15 @@ const HELD_ACTIONS = "src/components/HeldMilestoneActions.tsx";
 const MILESTONE_DECISIONS = "src/lib/agent/milestone-decisions.ts";
 const SLACK_PANEL = "src/components/SlackPanel.tsx";
 const SLACK_CONNECT_PAGE = "src/app/integrations/slack/connect/page.tsx";
-const XERO_PANEL = "src/components/XeroPanel.tsx";
-const XERO_PICKER = "src/components/XeroAccountPicker.tsx";
-const XERO_REVIEW = "src/components/XeroBillsReview.tsx";
-const XERO_CONNECT_PAGE = "src/app/integrations/xero/connect/page.tsx";
-const XERO_CONSENT = "src/lib/connectors/consent.ts";
-const XERO_CONNECTIONS = "src/lib/connectors/connections.ts";
-const XERO_STATUS = "src/lib/connectors/status.ts";
+// Xero's and QuickBooks' cards, connect page and review list are one set of components, given the tool.
+const ACCOUNTING_PANEL = "src/components/AccountingPanel.tsx";
+const ACCOUNTING_PICKER = "src/components/AccountingAccountPicker.tsx";
+const ACCOUNTING_REVIEW = "src/components/AccountingBillsReview.tsx";
+const ACCOUNTING_CONNECT_PAGE = "src/app/integrations/_accounting/AccountingConnect.tsx";
+const ACCOUNTING_CONSENT = "src/lib/connectors/consent.ts";
+const ACCOUNTING_CONNECTIONS = "src/lib/connectors/connections.ts";
+const ACCOUNTING_STATUS = "src/lib/connectors/status.ts";
+const ACCOUNTING_WORDS = "src/lib/connectors/provider.ts";
 const SLACK_CONNECT_FORM = "src/components/SlackConnectForm.tsx";
 const SLACK_ACTIONS = "src/app/actions/slack.ts";
 const SLACK_BLOCKS = "src/lib/slack/blocks.ts";
@@ -1368,21 +1371,21 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Verify manually", MILESTONE_CHECK],
   ],
   "guides/xero": [
-    ["Connect Xero", XERO_PANEL],
-    ["An owner or admin connects Xero.", XERO_PANEL],
-    ["I agree", XERO_CONSENT],
-    ["may not train on them", XERO_CONSENT],
-    ["Vestiarion never uses Xero data to train or improve any AI model", XERO_CONSENT, "data to train or improve any AI model"],
-    ["Continue to Xero", XERO_CONNECT_PAGE],
-    ["Pick the Xero organisation", XERO_CONNECT_PAGE],
-    ["Connect this organisation", XERO_CONNECT_PAGE],
-    ["Xero is connected. Its open bills are coming in for review on Bills & receivables.", XERO_PANEL],
-    ["accounting_connected", XERO_CONNECTIONS],
-    ["Sync now", XERO_PANEL],
-    ["Closed in Xero after they were added", XERO_REVIEW],
+    ["Connect Xero", ACCOUNTING_PANEL, "`Connect ${label}`"],
+    ["An owner or admin connects Xero.", ACCOUNTING_PANEL, "An owner or admin connects {label}."],
+    ["I agree", ACCOUNTING_CONSENT],
+    ["may not train on them", ACCOUNTING_CONSENT],
+    ["Vestiarion never uses Xero data to train or improve any AI model", ACCOUNTING_CONSENT, "data to train or improve any AI model"],
+    ["Continue to Xero", ACCOUNTING_CONNECT_PAGE, "Continue to {label}"],
+    ["Pick the Xero organisation", ACCOUNTING_CONNECT_PAGE, "Pick the {label} {organisation}"],
+    ["Connect this organisation", ACCOUNTING_CONNECT_PAGE, "Connect this {organisation}"],
+    ["Xero is connected. Its open bills are coming in for review on Bills & receivables.", ACCOUNTING_PANEL, "is connected. Its open bills are coming in for review on Bills & receivables."],
+    ["accounting_connected", ACCOUNTING_CONNECTIONS],
+    ["Sync now", ACCOUNTING_PANEL],
+    ["Closed in Xero after they were added", ACCOUNTING_REVIEW, "Closed in {label} after they were added"],
     ["accounting_bill_closed", "src/lib/connectors/sync-store.ts"],
-    ["From Xero: 3 bills to add", XERO_REVIEW, "`From Xero: ${items.length} bills to add`"],
-    ["Ready to add", XERO_REVIEW],
+    ["From Xero: 3 bills to add", ACCOUNTING_REVIEW, "`From ${label}: ${items.length} bills to add`"],
+    ["Ready to add", ACCOUNTING_REVIEW],
     ["Already in Vestiarion: same counterparty, amount, due date and reference.", "src/lib/bill-import/rows.ts"],
     ["Same as bill PD-4471 from Xero.", "src/lib/connectors/review.ts", "`Same as bill ${earlier?.number"],
     [
@@ -1390,26 +1393,74 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
       "src/lib/bill-import/rows.ts",
       "are taken in shadow mode only. Turn it on for ${currency} in Settings, or convert the amount to USDC.",
     ],
-    ["Add, goods received", XERO_REVIEW],
-    ["Add, not received yet", XERO_REVIEW],
-    ["Dismiss", XERO_REVIEW],
-    ["New counterparty", XERO_REVIEW],
-    ["Xero approving a bill does not approve its payment", XERO_REVIEW],
+    ["Add, goods received", ACCOUNTING_REVIEW],
+    ["Add, not received yet", ACCOUNTING_REVIEW],
+    ["Dismiss", ACCOUNTING_REVIEW],
+    ["New counterparty", ACCOUNTING_REVIEW],
+    ["Xero approving a bill does not approve its payment", ACCOUNTING_WORDS],
     ["A person added it, brought in from Xero.", "src/lib/decision-trail.ts", ", brought in from Xero"],
     ["accounting_bills_dismissed", "src/lib/commands/accounting.ts"],
-    ["Where payments made on Arc will be booked", XERO_PANEL],
-    ["Choose the account", XERO_PICKER],
-    ["Use this account", XERO_PICKER],
+    ["Where payments made on Arc will be booked", ACCOUNTING_PANEL],
+    ["Choose the account", ACCOUNTING_PICKER],
+    ["Use this account", ACCOUNTING_PICKER],
     ["The network fee is booked apart, never to this account.", "src/lib/connectors/booking.ts"],
-    ["accounting_payment_account_chosen", XERO_CONNECTIONS],
-    ["Not chosen yet. Nothing is booked to an account nobody chose.", XERO_PANEL],
-    ["The last sync with Xero failed", XERO_STATUS, "`The last sync with ${label} failed`"],
-    ["Xero asked Vestiarion to slow down. Syncing again at", XERO_STATUS, "asked Vestiarion to slow down. Syncing again at"],
-    ["Xero needs you to reconnect", XERO_STATUS, "needs you to reconnect"],
-    ["Reconnect Xero", XERO_PANEL],
-    ["Xero is not set up on this deployment yet.", XERO_PANEL],
-    ["Disconnect Xero", XERO_PANEL],
-    ["accounting_disconnected", XERO_CONNECTIONS],
+    ["accounting_payment_account_chosen", ACCOUNTING_CONNECTIONS],
+    ["Not chosen yet. Nothing is booked to an account nobody chose.", ACCOUNTING_PANEL],
+    ["The last sync with Xero failed", ACCOUNTING_STATUS, "`The last sync with ${label} failed`"],
+    ["Xero asked Vestiarion to slow down. Syncing again at", ACCOUNTING_STATUS, "asked Vestiarion to slow down. Syncing again at"],
+    ["Xero needs you to reconnect", ACCOUNTING_STATUS, "needs you to reconnect"],
+    ["Reconnect Xero", ACCOUNTING_PANEL, "`Reconnect ${label}`"],
+    ["Xero is not set up on this deployment yet.", ACCOUNTING_PANEL, "{label} is not set up on this deployment yet."],
+    ["Disconnect Xero", ACCOUNTING_PANEL, "Disconnect {PROVIDER_LABELS[provider]}"],
+    ["accounting_disconnected", ACCOUNTING_CONNECTIONS],
+  ],
+  "guides/quickbooks": [
+    ["Connect QuickBooks", ACCOUNTING_PANEL, "`Connect ${label}`"],
+    ["An owner or admin connects QuickBooks.", ACCOUNTING_PANEL, "An owner or admin connects {label}."],
+    ["Vestiarion reads the bills, vendors and bank accounts of the QuickBooks company you connect. It writes nothing to QuickBooks.", ACCOUNTING_CONSENT],
+    ["I agree", ACCOUNTING_CONSENT],
+    ["may not train on them", ACCOUNTING_CONSENT],
+    ["Vestiarion never uses QuickBooks data to train or improve any AI model", ACCOUNTING_CONSENT, "data to train or improve any AI model"],
+    ["Continue to QuickBooks", ACCOUNTING_CONNECT_PAGE, "Continue to {label}"],
+    ["QuickBooks asks you to sign in and pick the company to connect. A company connects to one Vestiarion workspace at a time.", ACCOUNTING_CONNECT_PAGE],
+    ["QuickBooks is connected. Its open bills are coming in for review on Bills & receivables.", ACCOUNTING_PANEL, "is connected. Its open bills are coming in for review on Bills & receivables."],
+    [
+      "This QuickBooks company is connected to another Vestiarion workspace. Disconnect it there first, or connect another company.",
+      ACCOUNTING_PANEL,
+      "is connected to another Vestiarion workspace. Disconnect it there first, or connect another",
+    ],
+    ["accounting_connected", ACCOUNTING_CONNECTIONS],
+    ["Sync now", ACCOUNTING_PANEL],
+    ["Partly paid in QuickBooks", ACCOUNTING_REVIEW, "Partly paid in {label}"],
+    ["Closed in QuickBooks after they were added", ACCOUNTING_REVIEW, "Closed in {label} after they were added"],
+    ["Partly paid in QuickBooks after they were added", ACCOUNTING_REVIEW, "Partly paid in {label} after they were added"],
+    ["accounting_bill_closed", "src/lib/connectors/sync-store.ts"],
+    ["From QuickBooks: 3 bills to add", ACCOUNTING_REVIEW, "`From ${label}: ${items.length} bills to add`"],
+    ["Ready to add", ACCOUNTING_REVIEW],
+    ["Already in Vestiarion: same counterparty, amount, due date and reference.", "src/lib/bill-import/rows.ts"],
+    ["Add, goods received", ACCOUNTING_REVIEW],
+    ["Add, not received yet", ACCOUNTING_REVIEW],
+    ["Dismiss", ACCOUNTING_REVIEW],
+    ["New counterparty", ACCOUNTING_REVIEW],
+    ["A bill being open in QuickBooks does not approve its payment: the agent decides it.", ACCOUNTING_WORDS],
+    ["A person added it, brought in from QuickBooks.", "src/lib/decision-trail.ts", ", brought in from QuickBooks"],
+    ["accounting_bills_dismissed", "src/lib/commands/accounting.ts"],
+    ["Where payments made on Arc will be booked", ACCOUNTING_PANEL],
+    ["Choose the account", ACCOUNTING_PICKER],
+    ["Use this account", ACCOUNTING_PICKER],
+    ["The network fee is booked apart, never to this account.", "src/lib/connectors/booking.ts"],
+    ["accounting_payment_account_chosen", ACCOUNTING_CONNECTIONS],
+    ["Not chosen yet. Nothing is booked to an account nobody chose.", ACCOUNTING_PANEL],
+    ["The last sync with QuickBooks failed", ACCOUNTING_STATUS, "`The last sync with ${label} failed`"],
+    ["QuickBooks asked Vestiarion to slow down. Syncing again at", ACCOUNTING_STATUS, "asked Vestiarion to slow down. Syncing again at"],
+    ["QuickBooks needs you to reconnect", ACCOUNTING_STATUS, "needs you to reconnect"],
+    ["Reconnect QuickBooks", ACCOUNTING_PANEL, "`Reconnect ${label}`"],
+    ["QuickBooks is not set up on this deployment yet.", ACCOUNTING_PANEL, "{label} is not set up on this deployment yet."],
+    ["Disconnect QuickBooks", ACCOUNTING_PANEL, "Disconnect {PROVIDER_LABELS[provider]}"],
+    ["accounting_disconnected", ACCOUNTING_CONNECTIONS],
+    ["QuickBooks is disconnected", "src/app/integrations/quickbooks/disconnected/page.tsx"],
+    ["QuickBooks is still connected", "src/app/integrations/quickbooks/disconnected/page.tsx"],
+    ["QuickBooks says it was disconnected there", ACCOUNTING_CONNECTIONS, "says it was disconnected there"],
   ],
   "guides/github": [
     ["Settings", APP_NAV],
@@ -1913,6 +1964,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/api-milestones": 10,
   "guides/github": 10,
   "guides/xero": 20,
+  "guides/quickbooks": 20,
   "guides/audit-export": 5,
   "guides/evidence": 20,
   "guides/apply-payments": 20,
