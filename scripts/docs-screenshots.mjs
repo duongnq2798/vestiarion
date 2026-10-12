@@ -223,6 +223,7 @@ const SHOTS = {
   "where-a-payment-is-in-flight": async () => {},
   "xero-settings": async () => {},
   "xero-review": async () => {},
+  "xero-bookings": async () => {},
   "apply-payments-list": async () => {},
   "apply-payments-part-paid": async () => {},
   "deals-new": async (page) => {

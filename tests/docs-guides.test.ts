@@ -138,6 +138,9 @@ const XERO_CONNECT_PAGE = "src/app/integrations/xero/connect/page.tsx";
 const XERO_CONSENT = "src/lib/connectors/consent.ts";
 const XERO_CONNECTIONS = "src/lib/connectors/connections.ts";
 const XERO_STATUS = "src/lib/connectors/status.ts";
+const BOOKINGS = "src/components/AccountingBookings.tsx";
+const BOOKING_RUN = "src/lib/connectors/booking-run.ts";
+const POSTING = "src/lib/connectors/posting.ts";
 const SLACK_CONNECT_FORM = "src/components/SlackConnectForm.tsx";
 const SLACK_ACTIONS = "src/app/actions/slack.ts";
 const SLACK_BLOCKS = "src/lib/slack/blocks.ts";
@@ -1410,6 +1413,30 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Xero is not set up on this deployment yet.", XERO_PANEL],
     ["Disconnect Xero", XERO_PANEL],
     ["accounting_disconnected", XERO_CONNECTIONS],
+    // Booking payments made on Arc (accounting write-back W1, W6, W7, W8, W9).
+    [
+      "It writes to Xero only the payments an owner or admin approves: each payment made on Arc for a bill brought in from Xero, booked against that bill.",
+      XERO_CONSENT,
+      "It writes to ${label} only the payments an owner or admin approves: each payment made on Arc for a bill brought in from ${label}, booked against that bill.",
+    ],
+    ["Not booked: payments in shadow mode and on Arc testnet are never booked into your real books.", POSTING],
+    ["Allow Vestiarion to book payments", XERO_PANEL],
+    ["Allow Vestiarion to book payments", BOOKINGS],
+    ["To book in Xero: 1 payment", BOOKINGS, "`To book in ${label}: 1 payment`"],
+    ["Awaiting payment", BOOKINGS],
+    ["Approve and book", BOOKINGS],
+    ["This booking changed since you saw it. Look at it again, then approve.", BOOKING_RUN],
+    ["Already paid in Xero.", POSTING, "`Already paid in ${label}.`"],
+    ["Booked in Xero", "src/lib/connectors/booked.ts", "`Booked in ${mark.label}`"],
+    ["stated by Xero when Vestiarion read it back", "src/lib/connectors/booked.ts", "stated by ${mark.label} when Vestiarion read it back"],
+    ["Xero did not answer, and no payment with this reference is there.", BOOKING_RUN, "${label} did not answer, and no payment with this reference is there."],
+    ["Xero refused the payment", BOOKING_RUN, "${label} refused the payment"],
+    ["accounting_payment_drafted", BOOKING_RUN],
+    ["accounting_payment_approved", BOOKING_RUN],
+    ["accounting_payment_sent", BOOKING_RUN],
+    ["accounting_payment_confirmed", BOOKING_RUN],
+    ["accounting_payment_failed", BOOKING_RUN],
+    ["accounting_payment_refused", BOOKING_RUN],
   ],
   "guides/github": [
     ["Settings", APP_NAV],

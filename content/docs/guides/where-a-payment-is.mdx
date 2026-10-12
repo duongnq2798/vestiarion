@@ -14,6 +14,8 @@ On **Bills & receivables**, open a payable the agent or a person has paid or sta
 6. **In the payee's wallet**: a transfer on Arc is final once it is confirmed, so this stage is reached with the confirmation: "Moving it to a bank is the payee's own step, which Vestiarion does not see." A payout to another chain reaches it once its mint there is recorded, and names that chain. A sandbox payment is simulated: "A simulated payment reaches no wallet."
 7. **Reconciled**: "The bill is marked paid with this transaction, and a signed entry records it."
 
+A bill brought in from Xero has one more line after the stages, about its books: **Booked in Xero**, with the payment's id in Xero, once an owner or admin approved the booking and Xero answered when Vestiarion read it back; otherwise why it is not booked yet, or never will be. See [Book payments in Xero](/docs/guides/xero#5-book-payments-in-xero).
+
 Each reached stage shows when it was reached, in UTC. Circle takes a transfer as it is sent, so Pending shows the time of the send; the agent's cycle and the transfer watch ask Circle again later, and a word read after the send says when, such as "(Circle: SENT, as of Oct 11, 2026, 10:25 UTC)". The signed entry behind Proposed and Authorized is written once the transfer's first answer is back, a little after the send, so these two show the time of the send when their entry is later; the audit log keeps the entry's own time. A stage still to come says "Not yet."; one passed without a record of its own, such as a pending read Circle never needed, says "Not recorded here."
 
 <Screenshot

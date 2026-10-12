@@ -1685,8 +1685,49 @@ and `XERO_CLIENT_SECRET` (a Xero "Web app"); otherwise its card and routes are n
   `addInvoice` with `via: "xero"` and Xero's ids, and link the bill and the supplier.
 - **The payment account** (I14): an owner or admin reads the chart of accounts from Xero, picks a bank account (or one
   Xero lets take payments; never revenue or expense), sees a preview (`booking.ts`), and keeps it on the connection
-  (`accounting_payment_account_chosen`). Nothing is written to Xero in this version.
-- **Before migration 0101** a missing table or function (`PGRST205`, `PGRST202`, `42P01`, `42883`) reads as
+  (`accounting_payment_account_chosen`). Payments are booked to it only as below.
+- **Booking payments made on Arc** (docs/superpowers/specs/2026-10-12-accounting-writeback-design.md). A payment is
+  only ever booked into a ledger of the same reality: one on Arc mainnet outside shadow mode into any organisation, one
+  on Arc testnet or in shadow mode only into an organisation the provider says is a demo company (Xero's
+  `IsDemoCompany`, or `Class: "DEMO"`; a trial is real books). `bookingReality` (`posting.ts`, pure) decides it
+  when a booking is drafted, when it is shown and right before it is sent, with the organisation read again; migration
+  `0106`'s check refuses any row reaching `sending`, `sent` or `confirmed` otherwise.
+  - **Schema (migration `0106`).** `accounting_postings`, a tenant table (RLS, the restrictive guard, composite
+    foreign keys to its connection and its invoice; read, insert and update, never delete): one booking per payable and
+    provider (`unique (org_id, invoice_id, provider)`) and one per provider payment. What it writes (the bill, the
+    amount and currency in the bill's currency, the day, the Arc transaction hash as reference) and the payment it
+    mirrors (network, shadow, what left, the network fee) are fixed when drafted; `accounting_postings_guard` inserts
+    only drafts or refusals, keeps the facts, and moves the state along `draft`/`failed` → `sending` → `sent` →
+    `confirmed`, with `refused` and `confirmed` final. History is the ledger's.
+  - **Drafting** (`booking-run.ts`, `booking-store.ts`, `booking-sync.ts`) rides on every sync (`syncInScope`: the
+    sweeper, **Sync now**, the first sync): payables linked to a bill (`external_links`), `paid`, with a payment
+    intent `confirmed` live, and no booking yet. `postingFacts` books USDC as USD and EURC as EUR at what left, a
+    shadow bill at its own amount (less a discount's share); another currency than the bill's is refused. One
+    `Organisation` read decides the rule for the run; when it fails, those payments wait. Drafts whose bill the last
+    sync saw paid, voided or deleted are refused. The same step reads back bookings `sent`, and a `sending` one past
+    its two-minute lease, by reference. It never sends: only a person's approval does.
+  - **Review** (I10): `accounting.book_payments` (permission `accounting.book`, owner and admin, console only) from
+    **To book in Xero** on Bills & receivables (`AccountingBookings`, read by `bookings-view.ts`), at most 10 at once.
+    Each line carries `postingFingerprint` of exactly what was shown (the bill as last synced, the amount, currency,
+    account, day and reference); the server works it out again, and a different one is refused as stale with nothing
+    sent. The connection must hold the provider's write scopes (Xero: `accounting.payments`, asked for by new
+    connections; an older one shows **Allow Vestiarion to book payments**, which reconnects the same row), an account
+    must be chosen, and the ledger must sign.
+  - **Sending** (`approvePosting`): claim the row (a compare-and-set over its state and attempts), look first for a
+    payment with this reference on this bill (`findPayment`, deleted ones included: one there is adopted, a deleted
+    one refuses), check the bill now (`billCheck`: closed, already paid in Xero, another currency, or an amount due
+    other than the one shown, which is stale), book it with an `Idempotency-Key` derived from the booking and its
+    fingerprint, and on a timeout or a 5xx read back by reference before anything else. Then read the payment back once
+    (`GET /Payments/{id}`): the same bill, amount, reference and account confirm it. Each transition appends
+    `accounting_payment_drafted`, `_approved`, `_sent`, `_confirmed`, `_failed` or `_refused` (domain `ap`,
+    `invoiceId`), which webhooks carry. The network fee is shown apart and never booked.
+  - **The seam.** `AccountingProvider.booking?: BookingProvider` (`provider.ts`): `writeScopes`, `organisation`,
+    `bill`, `findPayment`, `bookPayment`, `payment`, each mapped to the core's shapes; Xero's in
+    `src/lib/xero/payments.ts` (pure) and `payments-api.ts`. A provider without it never books.
+  - **Where it shows**: **Booked in Xero** on the paid bill's card, a last row in **Where the payment is**, and a step,
+    The books, in **Why it was paid**, all from the signed entries (`bookingFromEntries`, `booked.ts`). The card's own
+    entry (`matchingEntry`) skips `accounting_` entries.
+- **Before migration 0106** the bookings list is hidden and the sync's booking step has nothing to do; **before migration 0101** a missing table or function (`PGRST205`, `PGRST202`, `42P01`, `42883`) reads as
   `NotSetUpError`: the card says Xero is not set up yet, the review list is not shown, and the sweeper has nothing to do.
 
 ## API
