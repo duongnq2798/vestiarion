@@ -125,6 +125,8 @@ export interface InvoiceRow {
   /** The recurring payment that created this invoice, and the period (`YYYY-MM-DD`) it is for (0055). */
   recurring_id?: string | null;
   recurring_period?: string | null;
+  /** When it was added (0001; `select("*")` reads it): Bills & receivables' Newest added order. */
+  created_at?: string;
 }
 
 export async function listInvoices(): Promise<InvoiceRow[]> {

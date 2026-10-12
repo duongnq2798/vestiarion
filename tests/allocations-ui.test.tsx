@@ -243,7 +243,8 @@ describe("the actions", () => {
     expect(page).toContain("readAllocationBook(db())");
     expect(page).toContain("<ApplyPayments orgSlug={slug} network={network} payments={toApply} canWrite={canWrite} />");
     expect(page).toContain("Applying payments is not set up on this deployment yet.");
-    expect(page).toContain('<form method="get" role="search"');
+    // The search is the list's, on each tab, in the address (Bills & receivables tabs B8).
+    expect(readFileSync(path.join(process.cwd(), "src", "components", "bills", "BillsList.tsx"), "utf8")).toContain('<form method="get" role="search"');
     expect(page).toContain("invoiceMatch(search, invoice, ");
   });
 

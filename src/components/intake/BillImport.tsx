@@ -492,9 +492,12 @@ export default function BillImport({
   orgSlug,
   workspace,
   actions = SERVER_ACTIONS,
+  onImported,
 }: {
   orgSlug: string;
   workspace: ImportWorkspace;
+  /** After a list added at least one bill: New ▾ points to them. */
+  onImported?: () => void;
   /** The server's check and import; a stand-in on the design page. */
   actions?: BillImportActions;
 }) {
@@ -561,6 +564,7 @@ export default function BillImport({
         toast.success(imported.message);
         // The agent has payables to decide within seconds: the page watches it closely for a while.
         window.dispatchEvent(new Event(AGENT_EXPECTED_EVENT));
+        onImported?.();
       }
     });
   }

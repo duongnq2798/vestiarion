@@ -113,7 +113,16 @@ export function DocumentDraft({
 }
 
 /** A PDF, an email or pasted text, read by the model into the invoice form (invoice from a document D1). */
-export default function InvoiceDocumentIntake({ counterparties, orgSlug }: { counterparties: IntakeCounterparty[]; orgSlug: string }) {
+export default function InvoiceDocumentIntake({
+  counterparties,
+  orgSlug,
+  onAdded,
+}: {
+  counterparties: IntakeCounterparty[];
+  orgSlug: string;
+  /** After the invoice read is added: New ▾ says so and points to it. */
+  onAdded?: () => void;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [fileProblem, setFileProblem] = useState("");
@@ -183,6 +192,7 @@ export default function InvoiceDocumentIntake({ counterparties, orgSlug }: { cou
             onAdded={() => {
               setAdded(state.nonce ?? null);
               letGo();
+              onAdded?.();
             }}
           />
         </div>

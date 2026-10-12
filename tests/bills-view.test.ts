@@ -122,7 +122,7 @@ describe("every address the page answered before", () => {
 describe("filters", () => {
   const today = "2026-10-12";
   const inAWeek = "2026-10-19";
-  const bill = (over: Partial<ListRow> = {}): ListRow => ({ id: "b", status: "pending", refused: false, due: "2026-10-30", at: "2026-10-01T00:00:00Z", added: "2026-10-01T00:00:00Z", amount: 10, name: "Acme", recurring: false, ...over });
+  const bill = (over: Partial<ListRow> = {}): ListRow => ({ id: "b", status: "pending", refused: false, due: "2026-10-30", dueDate: "2026-10-30", at: "2026-10-01T00:00:00Z", added: "2026-10-01T00:00:00Z", amount: 10, name: "Acme", recurring: false, ...over });
 
   it("Needs you: waiting for a person, or refused by a rule", () => {
     expect(billFilterMatches("needs-you", bill({ status: "held" }), today, inAWeek)).toBe(true);
@@ -142,11 +142,13 @@ describe("filters", () => {
   });
 
   it("Due in 7 days and Overdue count every open bill, as the cards above do", () => {
-    expect(billFilterMatches("due-7", bill({ due: "2026-10-12" }), today, inAWeek)).toBe(true);
-    expect(billFilterMatches("due-7", bill({ due: "2026-10-19", status: "held" }), today, inAWeek)).toBe(true);
-    expect(billFilterMatches("due-7", bill({ due: "2026-10-20" }), today, inAWeek)).toBe(false);
-    expect(billFilterMatches("overdue", bill({ due: "2026-10-11" }), today, inAWeek)).toBe(true);
-    expect(billFilterMatches("overdue", bill({ due: "2026-10-11", status: "paid" }), today, inAWeek)).toBe(false);
+    expect(billFilterMatches("due-7", bill({ dueDate: "2026-10-12" }), today, inAWeek)).toBe(true);
+    // A bill scheduled for later still counts by its due date.
+    expect(billFilterMatches("due-7", bill({ dueDate: "2026-10-14", due: "2026-10-25", status: "scheduled" }), today, inAWeek)).toBe(true);
+    expect(billFilterMatches("due-7", bill({ dueDate: "2026-10-19", status: "held" }), today, inAWeek)).toBe(true);
+    expect(billFilterMatches("due-7", bill({ dueDate: "2026-10-20" }), today, inAWeek)).toBe(false);
+    expect(billFilterMatches("overdue", bill({ dueDate: "2026-10-11" }), today, inAWeek)).toBe(true);
+    expect(billFilterMatches("overdue", bill({ dueDate: "2026-10-11", status: "paid" }), today, inAWeek)).toBe(false);
   });
 
   it("Recurring: made by a recurring schedule; All: everything", () => {
@@ -157,8 +159,8 @@ describe("filters", () => {
 
   it("Receivables: outstanding until paid, overdue past its date, received once closed", () => {
     expect(receivableFilterMatches("outstanding", bill({ status: "matched" }), today)).toBe(true);
-    expect(receivableFilterMatches("overdue", bill({ due: "2026-10-01" }), today)).toBe(true);
-    expect(receivableFilterMatches("overdue", bill({ due: "2026-10-01", status: "received" }), today)).toBe(false);
+    expect(receivableFilterMatches("overdue", bill({ dueDate: "2026-10-01" }), today)).toBe(true);
+    expect(receivableFilterMatches("overdue", bill({ dueDate: "2026-10-01", status: "received" }), today)).toBe(false);
     expect(receivableFilterMatches("received", bill({ status: "received" }), today)).toBe(true);
     expect(receivableFilterMatches("all", bill({ status: "rejected" }), today)).toBe(true);
   });
@@ -166,9 +168,9 @@ describe("filters", () => {
 
 describe("sorting and pages", () => {
   const rows: ListRow[] = [
-    { id: "a", status: "pending", refused: false, due: "2026-10-20", at: "2026-10-03T00:00:00Z", added: "2026-10-01T00:00:00Z", amount: 50, name: "beta", recurring: false },
-    { id: "b", status: "scheduled", refused: false, due: "2026-10-14", at: "2026-10-05T00:00:00Z", added: "2026-10-04T00:00:00Z", amount: 900, name: "Alpha", recurring: false },
-    { id: "c", status: "paid", refused: false, due: "2026-10-16", at: "2026-10-09T00:00:00Z", added: "2026-09-30T00:00:00Z", amount: 50, name: "gamma", recurring: false },
+    { id: "a", status: "pending", refused: false, due: "2026-10-20", dueDate: "2026-10-20", at: "2026-10-03T00:00:00Z", added: "2026-10-01T00:00:00Z", amount: 50, name: "beta", recurring: false },
+    { id: "b", status: "scheduled", refused: false, due: "2026-10-14", dueDate: "2026-10-14", at: "2026-10-05T00:00:00Z", added: "2026-10-04T00:00:00Z", amount: 900, name: "Alpha", recurring: false },
+    { id: "c", status: "paid", refused: false, due: "2026-10-16", dueDate: "2026-10-16", at: "2026-10-09T00:00:00Z", added: "2026-09-30T00:00:00Z", amount: 50, name: "gamma", recurring: false },
   ];
   const ids = (list: ListRow[]) => list.map((row) => row.id);
 

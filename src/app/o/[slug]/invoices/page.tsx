@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { FileSpreadsheet, FileText, Handshake, ListFilter, PenLine, Repeat, Search } from "lucide-react";
+import { Handshake } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import InboxEmails from "@/components/InboxEmails";
 import { AccountingBillsReview } from "@/components/AccountingBillsReview";
@@ -9,35 +10,58 @@ import { AccountingBookings } from "@/components/AccountingBookings";
 import AgentControls from "@/components/AgentControls";
 import { AllocationLines } from "@/components/AllocationLines";
 import { ApplyPayments } from "@/components/ApplyPayments";
-import BillImport from "@/components/intake/BillImport";
-import InvoiceDocumentIntake from "@/components/intake/InvoiceDocumentIntake";
-import InvoiceIntake from "@/components/intake/InvoiceIntake";
-import RecurringPayableIntake from "@/components/intake/RecurringPayableIntake";
+import { BillsScreen } from "@/components/bills/BillsScreen";
+import type { PanelContent } from "@/components/bills/BillsPanels";
+import type { SummaryData, Totals, WaitingItem } from "@/components/bills/BillsSummary";
+import { NewButton, NewMenu } from "@/components/bills/NewMenu";
+import type { BillRowItem, ListData } from "@/components/bills/types";
 import { PayLinkControl } from "@/components/PayLinkControl";
 import { ReceiptControl } from "@/components/ReceiptControl";
 import VerdictControl from "@/components/VerdictControl";
 import { WaitingPayableAction } from "@/components/WaitingPayableAction";
 import { Callout } from "@/components/ui/Callout";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
-import { DecisionRows, RowGroupHeading, type DecisionRowItem } from "@/components/vx/DecisionRows";
+import { DecisionCard } from "@/components/vx/DecisionCard";
 import { IntakeFold } from "@/components/vx/IntakeFold";
-import { Money } from "@/components/vx/Primitives";
-import { StatTile } from "@/components/vx/StatTile";
 import { invoiceDecision } from "@/components/vx/map";
-import { payableSignals, stoppedWhy } from "@/components/vx/decision-signals";
+import { billBlockers, billNextStep, collectionState } from "@/components/vx/bill-next-step";
+import { stoppedWhy } from "@/components/vx/decision-signals";
 import { RecurringSummary } from "@/components/vx/RecurringSummary";
 import { PaymentPlanSection } from "@/components/vx/PaymentPlan";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { SectionHeader } from "@/components/ui/SectionHeader";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
-import { addedSince, latestDecision, recordedFacts, waitingHint } from "@/lib/added-details";
+import type { Decision } from "@/components/vx/types";
+import { addedSince, latestDecision, recordedFacts } from "@/lib/added-details";
 import { readAllocationBook, stillOwed, toReceivableIn } from "@/lib/allocations/book";
 import { toMicros, type PaymentIn } from "@/lib/allocations/model";
 import { receivableLabel } from "@/lib/allocations/suggest";
 import { applyPaymentsView, paymentsByReceivable, receivableViews, type ReceivableView } from "@/lib/allocations/view";
+import {
+  BILL_CARD_FILTERS,
+  BILL_FILTER_LABELS,
+  BILL_FILTERS,
+  billFilterMatches,
+  billsHref,
+  LIST_SORTS,
+  OPEN_STATUSES,
+  OUTSTANDING_STATUSES,
+  PAGE_SIZE,
+  pageOf,
+  readBillsQuery,
+  RECEIVABLE_FILTER_LABELS,
+  RECEIVABLE_FILTERS,
+  receivableFilterMatches,
+  resolveBillsView,
+  SORT_LABELS,
+  sortRows,
+  WAITING_STATUSES,
+  type BillFilter,
+  type BillsTab,
+  type BillsView,
+  type ListRow,
+  type ReceivableFilter,
+  type ReviewPanel,
+} from "@/lib/bills-view";
 import { invoiceMatch, parseSearch } from "@/lib/invoice-search";
 import { CASH_SHORTFALL, SHADOW_VERDICT } from "@/lib/next-step";
 import { hasRunningCycle } from "@/lib/agent/cycle-running";
@@ -84,29 +108,19 @@ export const maxDuration = 300;
 
 export const metadata: Metadata = { title: sectionTitle("invoices") };
 
-type InvoiceSearchParams = Promise<{
-  status?: string | string[];
-  /** `all` shows every settled invoice; otherwise the latest ten. */
-  history?: string | string[];
-  /** Present: the new invoice form opens, as the command palette's "Add a bill" asks (workspace shell design S9). */
-  add?: string | string[];
-  /** A search: an id, an invoice number, a purchase order, a counterparty, an amount, or a payment's reference (I09). */
-  q?: string | string[];
-  /** A HubSpot deal of the list: the New deal form opens filled in from it (HubSpot connector H11). */
-  hubspot?: string | string[];
-}>;
-
-/** Payables still to be paid: decided or not, held or scheduled. */
-const OPEN = new Set(["pending", "matched", "scheduled", "held", "flagged", "awaiting_info"]);
-/** Payables waiting for a person (Approvals). */
-const WAITING = new Set(["held", "flagged", "awaiting_info"]);
-/** Settled rows shown before "Show all": history, kept short so the work leads. */
-const HISTORY_SHOWN = 5;
-
 type InvoicePageProps = {
   params: Promise<{ slug: string }>;
-  searchParams: InvoiceSearchParams;
+  /**
+   * The view (docs/superpowers/specs/2026-10-12-bills-tabs-design.md B3, B4): `tab`, `filter`, `q` (a search by id, invoice
+   * number, purchase order, counterparty, amount or a payment's reference, I09), `sort`, `page`, `open` (a bill's
+   * detail), `review` (a review list over the page), `new` and the palette's `add` (a New form), `hubspot` (a HubSpot
+   * deal to plan, H11); and, from before the tabs, `history=all` and `status`, read by `readBillsQuery`.
+   */
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
+
+/** Rows marked "Just added" while the list shows the newest first. */
+const JUST_ADDED_MS = 10 * 60_000;
 
 /**
  * The bills an accounting tool brought in, waiting for a person (Xero connector X11, X19; QuickBooks connector Q19), on
@@ -141,7 +155,9 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
     const network = workspaceNetwork().id;
-    const query = await searchParams;
+    const raw = await searchParams;
+    const query = readBillsQuery(raw);
+    // Every tab: what the figures, the strip and the New forms need (B5).
     const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, schedules, deciding, emailed, fromXero, fromQuickBooks, dealsRead, fromHubSpot] = await Promise.all([
       listInvoices(),
       listCounterparties(),
@@ -193,8 +209,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     const [toBook, canBook] = await Promise.all([Promise.all(PROVIDERS.map(toBookIn)), viewerCan(slug, "accounting.book")]);
     // Each receivable a deal line became names its deal (deal schedule).
     const dealLinks = Array.isArray(deals) ? dealLinksOf(deals) : new Map<string, DealLink>();
-    const filter = typeof query.status === "string" ? query.status : undefined;
-    const search = parseSearch(typeof query.q === "string" ? query.q : undefined);
+    const search = parseSearch(query.q ?? undefined);
     // The payments applied to receivables (allocations L11). Best effort: a read that fails shows receivables as before.
     const book = await readAllocationBook(db()).catch((error: unknown) => {
       console.error("invoices: payments applied not read", error instanceof Error ? error.message : error);
@@ -203,89 +218,112 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     const receivablesIn = invoices.filter((invoice) => invoice.direction === "receivable").map(toReceivableIn);
     const allocations = book ? receivableViews(book, receivablesIn) : new Map<string, ReceivableView>();
     const appliedPayments = book ? paymentsByReceivable(book) : new Map<string, PaymentIn[]>();
-    const [entries, paymentPlan] = await Promise.all([
-      listLedgerEntriesForTargets({ invoiceIds: invoices.map((invoice) => invoice.id) }),
-      // The next 14 days of payments, in the order the cash allows (payment plan design P1), from the invoices and
-      // counterparties read above, shown over the whole list only. Best effort: a plan that cannot be read says so in
-      // its section, and nothing else changes.
-      filter
-        ? null
-        : readPaymentPlan({
-            invoices,
-            counterparties,
-            // Deal lines not invoiced yet, listed apart from the plan's balances (deal schedule D14).
-            planned: Array.isArray(deals) ? plannedLinesOf(deals) : deals === "not_ready" ? [] : null,
-            // A part-paid receivable, a released deal line among them, is expected for what is still owed (allocations L11).
-            owed: new Map(
-              invoices.filter((invoice) => invoice.direction === "receivable").map((invoice) => [invoice.id, stillOwed(invoice, book?.rows ?? [])] as const)
-            ),
-          }).catch((error: unknown) => {
-            console.error("invoices: payment plan not read", error instanceof Error ? error.message : error);
-            return null;
-          }),
-    ]);
-    const paymentOutcomes = planOutcomes({ now: Date.now(), invoices, entries });
-    // Whoever entered a bill approves its day only as the workspace's only approver (payment plan P10); asked only then.
-    const soleApprover =
-      canDecide && paymentPlan?.lines.some((line) => line.move !== null && line.createdBy === access.user.id) ? await isSoleApprover(access.user.id) : false;
+    // One read of the entries about every invoice, as before: Needs you counts the bills code refused, which only the
+    // entries say, and the cards' verdicts come from them.
+    const entries = await listLedgerEntriesForTargets({ invoiceIds: invoices.map((invoice) => invoice.id) });
     // In shadow mode, each card carries a person's verdict on the agent's decision, given or to give (shadow mode S3).
     const verdicts = await verdictFacts(db(), entries, canDecide);
-    // The workspace's customers, as the New deal form offers them.
-    const customers = counterparties
-      .filter((counterparty) => counterparty.role === "client")
-      .map(({ id, name }) => ({ id, name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-    const dealCurrencies = ["USDC", "EURC", ...(billCurrencyOf(verdicts.shadow) ? [billCurrencyOf(verdicts.shadow) as string] : [])];
-    // A HubSpot deal picked to plan: the New deal form filled in from it (HubSpot connector H11). Read again on confirm.
-    const planFromHubSpot: CrmPrefillRead | null =
-      typeof query.hubspot === "string" && canWrite && fromHubSpot.state === "list" && Array.isArray(deals)
-        ? await crmPrefillFor({ rowId: query.hubspot, customers, workspace: { shadowOn: verdicts.shadow !== null }, today: new Date().toISOString().slice(0, 10) }).catch(
-            (error: unknown): CrmPrefillRead => {
-              console.error("invoices: a HubSpot deal was not read to plan", error instanceof Error ? error.message : error);
-              return { ok: false, message: "That deal could not be read. Reload the page in a moment." };
-            }
-          )
-        : null;
-    const byStatus = filter ? invoices.filter((invoice) => invoice.status === filter) : invoices;
+    const counterpartiesById = new Map(counterparties.map((counterparty) => [counterparty.id, counterparty]));
+    const invoicesById = new Map(invoices.map((invoice) => [invoice.id, invoice]));
+    const asOf = Date.now();
+    const today = new Date(asOf).toISOString().slice(0, 10);
+    const inAWeek = new Date(asOf + 7 * 86_400_000).toISOString().slice(0, 10);
+
+    // Every invoice's decision, without its payment's track: what the filters, counts and rows read. The rows shown get
+    // their track below, from the payments read for them alone.
+    const decided = new Map(invoices.map((invoice) => [invoice.id, invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), entries, { network, deciding, verdicts, asOf, allocations })]));
+    const listRowOf = (invoice: InvoiceRow): ListRow => {
+      const decision = decided.get(invoice.id) as Decision;
+      return {
+        id: invoice.id,
+        status: invoice.status,
+        refused: decision.outcome === "refused",
+        due: dueOf(invoice),
+        dueDate: invoice.due_date.slice(0, 10),
+        at: decision.at,
+        added: invoice.created_at ?? decision.at,
+        amount: Number(invoice.amount),
+        name: invoice.counterparty_name,
+        recurring: Boolean(invoice.recurring_id),
+      };
+    };
     // A search keeps what it finds (I09): by id, invoice number, purchase order, counterparty, amount or a payment applied.
-    const shown = search
-      ? byStatus.filter((invoice) => {
-          const owed = allocations.get(invoice.id);
-          return invoiceMatch(search, invoice, { outstanding: owed ? toMicros(owed.outstanding) : undefined, payments: appliedPayments.get(invoice.id) }) !== null;
-        })
-      : byStatus;
+    const matches = (invoice: InvoiceRow) => {
+      if (!search) return true;
+      const owed = allocations.get(invoice.id);
+      return invoiceMatch(search, invoice, { outstanding: owed ? toMicros(owed.outstanding) : undefined, payments: appliedPayments.get(invoice.id) }) !== null;
+    };
+    const payableRows = invoices.filter((invoice) => invoice.direction === "payable").map(listRowOf);
+    const receivableRows = invoices.filter((invoice) => invoice.direction === "receivable").map(listRowOf);
+    const foundPayables = search ? payableRows.filter((row) => matches(invoicesById.get(row.id) as InvoiceRow)) : payableRows;
+    const foundReceivables = search ? receivableRows.filter((row) => matches(invoicesById.get(row.id) as InvoiceRow)) : receivableRows;
     // Money received on Arc not applied in full, with suggestions; a search keeps the payments it finds.
     const toApply = book?.available ? applyPaymentsView(book, receivablesIn, counterparties.map(({ id, name, address }) => ({ id, name, address })), { query: search }) : [];
-    const counterpartiesById = new Map(counterparties.map((counterparty) => [counterparty.id, counterparty]));
-    // Where each payable's payment is, from its payment intent, the entries about it and the bill (settlement lifecycle
-    // L7, L8). Best effort: a read that fails is logged and the cards show no track.
-    const asOf = Date.now();
-    const payments = await readInvoicePayments(db()).catch((error: unknown) => {
-      console.error("invoices: payment intents not read", error instanceof Error ? error.message : error);
-      return new Map<string, PaymentRecord>();
+
+    const countBills = (rows: ListRow[]) =>
+      Object.fromEntries([...BILL_FILTERS, ...BILL_CARD_FILTERS].map((filter) => [filter, rows.filter((row) => billFilterMatches(filter, row, today, inAWeek)).length])) as Record<BillFilter, number>;
+    const countReceivables = (rows: ListRow[]) =>
+      Object.fromEntries(RECEIVABLE_FILTERS.map((filter) => [filter, rows.filter((row) => receivableFilterMatches(filter, row, today)).length])) as Record<ReceivableFilter, number>;
+    const billCounts = countBills(foundPayables);
+    const receivableCounts = countReceivables(foundReceivables);
+    const view: BillsView = resolveBillsView(query, {
+      directionOf: (id) => {
+        const direction = invoicesById.get(id)?.direction;
+        return direction === "payable" || direction === "receivable" ? direction : null;
+      },
+      homeOf: (id) => {
+        const invoice = invoicesById.get(id);
+        if (!invoice) return null;
+        const row = listRowOf(invoice);
+        if (invoice.direction === "receivable") return receivableFilterMatches("outstanding", row, today) ? "outstanding" : "received";
+        return billFilterMatches("needs-you", row, today, inAWeek) ? "needs-you" : billFilterMatches("upcoming", row, today, inAWeek) ? "upcoming" : "paid";
+      },
+      billCounts,
+      receivableCounts,
+      searchHits: { payables: foundPayables.length, receivables: foundReceivables.length + toApply.length },
     });
+
+    // The list the tab shows: its filter, its order, and the page holding an open bill when no page was asked.
+    const listed: ListRow[] =
+      view.tab === "bills"
+        ? sortRows(foundPayables.filter((row) => billFilterMatches(view.filter as BillFilter, row, today, inAWeek)), view.sort)
+        : view.tab === "receivables"
+          ? sortRows(foundReceivables.filter((row) => receivableFilterMatches(view.filter as ReceivableFilter, row, today)), view.sort)
+          : [];
+    const openAt = view.open && raw.page === undefined ? listed.findIndex((row) => row.id === view.open) : -1;
+    const page = pageOf(listed, openAt >= 0 ? Math.floor(openAt / PAGE_SIZE) + 1 : view.page);
+    // The cards opened from here: the rows on the page, and a bill the address opens wherever it is.
+    const detailIds = [...new Set([...page.rows.map((row) => row.id), ...(view.open ? [view.open] : [])])];
+    const detailInvoices = detailIds.map((id) => invoicesById.get(id)).filter((invoice): invoice is InvoiceRow => invoice !== undefined);
+
+    // Where each payable shown is in its payment, from its payment intent, the entries about it and the bill (settlement
+    // lifecycle L7, L8). Read only with a payable to show. Best effort: a read that fails is logged and the cards show no track.
+    const payments = detailInvoices.some((invoice) => invoice.direction === "payable")
+      ? await readInvoicePayments(db()).catch((error: unknown) => {
+          console.error("invoices: payment intents not read", error instanceof Error ? error.message : error);
+          return new Map<string, PaymentRecord>();
+        })
+      : new Map<string, PaymentRecord>();
     // The entries answer in one request, newest first: one cut at its limit may hold no entry for an older payable.
-    const settlements = settlementsByBill({ payments: payments.values(), invoices: shown.filter((invoice) => invoice.direction === "payable"), entries, entriesComplete: !ledgerReadMayBeCut(entries), now: asOf });
-    const decisions = shown.map((invoice) => invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), entries, { network, deciding, verdicts, settlements, asOf, allocations }));
-    const payables = decisions.filter((decision) => decision.domain === "ap");
-    const receivables = decisions.filter((decision) => decision.domain === "ar");
-    const ordinaryPayables = payables.filter((decision) => decision.outcome !== "refused");
+    const settlements = settlementsByBill({ payments: payments.values(), invoices: detailInvoices.filter((invoice) => invoice.direction === "payable"), entries, entriesComplete: !ledgerReadMayBeCut(entries), now: asOf });
+    const decisionOf = (invoice: InvoiceRow) => invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), entries, { network, deciding, verdicts, settlements, asOf, allocations });
+    const shownDecisions = new Map(detailInvoices.map((invoice) => [invoice.id, decisionOf(invoice)]));
+
     // A paid payable with a transaction on chain offers its receipt to an owner or admin (payment receipts P6).
-    const invoicesById = new Map(shown.map((invoice) => [invoice.id, invoice]));
     const shareable = canWrite
-      ? new Set(ordinaryPayables.filter((decision) => {
-          const invoice = invoicesById.get(decision.id);
-          return invoice !== undefined && receiptShareable(invoice, decision);
-        }).map((decision) => decision.id))
+      ? new Set(
+          detailInvoices
+            .filter((invoice) => invoice.direction === "payable" && receiptShareable(invoice, shownDecisions.get(invoice.id) as Decision))
+            .map((invoice) => invoice.id)
+        )
       : new Set<string>();
     const shared = await sharedReceipts([...shareable]);
-    const receiptFor = (decision: ReturnType<typeof invoiceDecision>) =>
-      shareable.has(decision.id) ? <ReceiptControl orgSlug={slug} invoiceId={decision.id} shared={shared.has(decision.id)} /> : undefined;
+    const receiptFor = (decision: Decision) => (shareable.has(decision.id) ? <ReceiptControl orgSlug={slug} invoiceId={decision.id} shared={shared.has(decision.id)} /> : undefined);
     // An open receivable in a live workspace offers a pay link for its client (receivables on Arc §2);
     // a sandbox has no real wallet to be paid into (R4).
     const payLinkable = new Set(
       canWrite && access.membership.mode === "live"
-        ? shown.filter((invoice) => invoice.direction === "receivable" && (invoice.status === "pending" || invoice.status === "matched")).map((invoice) => invoice.id)
+        ? detailInvoices.filter((invoice) => invoice.direction === "receivable" && (invoice.status === "pending" || invoice.status === "matched")).map((invoice) => invoice.id)
         : []
     );
     // Its link, kept so it can be copied again, and the agent's reminders to the client (collections R1, R2). Best effort.
@@ -293,11 +331,11 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       console.error("invoices: pay links not read", error instanceof Error ? error.message : error);
       return new Map<string, PayLinkState>();
     });
-    const dealContext = (decision: ReturnType<typeof invoiceDecision>) => {
+    const dealContext = (decision: Decision) => {
       const link = dealLinks.get(decision.id);
       return link ? `Deal · ${link.title} · ${link.line}` : undefined;
     };
-    const payLinkFor = (decision: ReturnType<typeof invoiceDecision>) => {
+    const payLinkFor = (decision: Decision) => {
       const invoice = invoicesById.get(decision.id);
       if (!payLinkable.has(decision.id) || !invoice) return undefined;
       const client = counterpartiesById.get(invoice.counterparty_id);
@@ -314,13 +352,13 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     };
 
     // A receivable's payments applied, above its pay link (allocations L11): what was received, what is owed, and Reverse.
-    const appliedAndPayLink = (decision: ReturnType<typeof invoiceDecision>) => {
-      const view = allocations.get(decision.id);
+    const appliedAndPayLink = (decision: Decision) => {
+      const allocation = allocations.get(decision.id);
       const invoice = invoicesById.get(decision.id);
       const link = payLinkFor(decision);
-      if (!view || view.lines.length === 0 || !invoice) return link;
+      if (!allocation || allocation.lines.length === 0 || !invoice) return link;
       const lines = (
-        <AllocationLines orgSlug={slug} network={network} view={view} label={receivableLabel({ memo: invoice.memo, dueDate: invoice.due_date })} canWrite={canWrite} />
+        <AllocationLines orgSlug={slug} network={network} view={allocation} label={receivableLabel({ memo: invoice.memo, dueDate: invoice.due_date })} canWrite={canWrite} />
       );
       return link ? (
         <div className="space-y-4">
@@ -332,7 +370,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       );
     };
     // A receivable made from a deal line opens its deal, above its payments applied and its pay link.
-    const receivableFooter = (decision: ReturnType<typeof invoiceDecision>) => {
+    const receivableFooter = (decision: Decision) => {
       const link = dealLinks.get(decision.id);
       const below = appliedAndPayLink(decision);
       if (!link) return below;
@@ -352,19 +390,19 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         </div>
       );
     };
-    const owedNote = (decision: ReturnType<typeof invoiceDecision>): Pick<DecisionRowItem, "note"> => {
-      const view = allocations.get(decision.id);
-      if (!view || view.state !== "part_paid") return {};
-      const money = (value: number) => `${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} ${view.currency}`;
-      return { note: `Part paid · ${money(view.outstanding)} still owed` };
+    const owedNote = (decision: Decision): string | null => {
+      const allocation = allocations.get(decision.id);
+      if (!allocation || allocation.state !== "part_paid") return null;
+      const money = (value: number) => `${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} ${allocation.currency}`;
+      return `Part paid · ${money(allocation.outstanding)} still owed`;
     };
 
     // A payable waiting for a person: the purchase order and goods receipt on file, and what a person added since
     // the agent's decision. Its row says what it needs; its card lets an owner or admin add it, and opens it in
     // Approvals (complete held invoice).
     const waiting = new Map(
-      shown
-        .filter((invoice) => invoice.direction === "payable" && WAITING.has(invoice.status))
+      invoices
+        .filter((invoice) => invoice.direction === "payable" && WAITING_STATUSES.has(invoice.status))
         .map((invoice) => {
           const onFile = {
             poReference: invoice.po_reference ?? null,
@@ -375,7 +413,8 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
           return [invoice.id, { onFile, added: addedSince(recordedFacts(latestDecision(entries, invoice.id)), onFile) }] as const;
         })
     );
-    const needsYouFor = (decision: ReturnType<typeof invoiceDecision>) => {
+    const ruleOf = (decision: Decision) => decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : decision.heldForVerdict ? SHADOW_VERDICT : null);
+    const needsYouFor = (decision: Decision) => {
       const invoice = invoicesById.get(decision.id);
       const facts = waiting.get(decision.id);
       if (!invoice || !facts) return receiptFor(decision);
@@ -387,19 +426,15 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
           // A transfer recorded against it is approved in Approvals, never completed here (R3).
           canAddDetails={canWrite && invoice.tx_ref === null}
           canDecide={canDecide}
-          rule={decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : decision.heldForVerdict ? SHADOW_VERDICT : null)}
+          rule={ruleOf(decision)}
           canFix={canWrite}
         />
       );
     };
-
-    // The work, not the documents (Bills & receivables layout): what waits for a person, what is coming, what is settled.
-    const today = new Date().toISOString().slice(0, 10);
-    const inAWeek = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
     // The verdict first: a payment held for it asks for nothing else; any other card keeps its own footer below it.
     const withVerdict =
-      (footerFor?: (decision: ReturnType<typeof invoiceDecision>) => React.ReactNode) =>
-      function verdictFirst(decision: ReturnType<typeof invoiceDecision>): React.ReactNode {
+      (footerFor?: (decision: Decision) => ReactNode) =>
+      function verdictFirst(decision: Decision): ReactNode {
         const footer = footerFor?.(decision);
         if (!decision.verdict) return footer;
         const verdict = <VerdictControl orgSlug={slug} view={decision.verdict} />;
@@ -413,358 +448,360 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
           verdict
         );
       };
-    const row = (
-      decision: ReturnType<typeof invoiceDecision>,
-      footerFor?: (decision: ReturnType<typeof invoiceDecision>) => React.ReactNode,
-      extra: Pick<DecisionRowItem, "signals" | "why" | "note"> = {}
-    ): DecisionRowItem => {
-      const invoice = invoicesById.get(decision.id) as InvoiceRow;
-      const facts = waiting.get(decision.id);
-      const hint = facts ? waitingHint(facts.onFile, facts.added) : undefined;
-      // A row that says what it needs says why already: the why line is for the rest.
-      return { decision, date: rowDate(invoice, today), footerAction: footerFor?.(decision), hint, ...extra, why: hint ? undefined : extra.why };
+    // A payable's card keeps the footer it always had: its verdict, then what a waiting bill needs or its receipt.
+    const payableFooter = withVerdict(needsYouFor);
+
+    // Each card shown, in the detail panel (B7): the decision card, with its footer, as it always was.
+    const details: Record<string, PanelContent> = Object.fromEntries(
+      detailInvoices.map((invoice) => {
+        const decision = shownDecisions.get(invoice.id) as Decision;
+        const footer = invoice.direction === "payable" ? payableFooter(decision) : receivableFooter(decision);
+        return [invoice.id, { title: `${decision.action} ${decision.subject}`, node: <DecisionCard decision={decision} orgSlug={slug} footerAction={footer} /> }];
+      })
+    );
+
+    // The address of this view with something changed: every link on the page is written from it.
+    const sortAsked = query.sort;
+    const here = (change: Partial<Pick<BillsView, "tab" | "filter" | "q" | "sort" | "page" | "open">>) =>
+      orgHref(
+        slug,
+        billsHref({ tab: view.tab, filter: view.filter, q: view.q, sort: sortAsked, ...change } as Parameters<typeof billsHref>[0])
+      );
+
+    // A row before it is opened (B6): who, what, when, how much, where it stands, what is in its way, what to do next.
+    const rowItem = (row: ListRow): BillRowItem => {
+      const invoice = invoicesById.get(row.id) as InvoiceRow;
+      const decision = shownDecisions.get(row.id) as Decision;
+      const payable = invoice.direction === "payable";
+      const facts = waiting.get(row.id);
+      const needsYou = payable && billFilterMatches("needs-you", row, today, inAWeek);
+      return {
+        id: row.id,
+        name: invoice.counterparty_name,
+        reference: invoice.memo,
+        amount: decision.amount ?? null,
+        token: decision.token ?? "USDC",
+        struck: decision.outcome === "refused",
+        date: rowDate(invoice, today),
+        outcome: decision.outcome,
+        outcomeLabel: decision.outcomeLabel,
+        blockers: needsYou ? billBlockers(decision) : [],
+        why: needsYou ? stoppedWhy(decision) : null,
+        note: payable ? null : owedNote(decision),
+        context: payable ? null : (dealContext(decision) ?? null),
+        next: payable
+          ? billNextStep(decision, {
+              status: invoice.status,
+              waiting: facts,
+              rule: ruleOf(decision),
+              canWrite: canWrite && invoice.tx_ref === null,
+              canDecide,
+              counterparty: { id: invoice.counterparty_id, name: invoice.counterparty_name },
+            })
+          : null,
+        collection: payable ? null : collectionState(linkStates.get(row.id), today),
+        justAdded: view.sort === "added" && Boolean(invoice.created_at) && asOf - Date.parse(invoice.created_at as string) < JUST_ADDED_MS,
+        href: here({ open: row.id }),
+      };
     };
-    const statusOf = (decision: ReturnType<typeof invoiceDecision>) => invoicesById.get(decision.id)?.status ?? "";
-    const byDue = (a: ReturnType<typeof invoiceDecision>, b: ReturnType<typeof invoiceDecision>) => dueOf(invoicesById.get(a.id)).localeCompare(dueOf(invoicesById.get(b.id)));
-    const latestFirst = (a: ReturnType<typeof invoiceDecision>, b: ReturnType<typeof invoiceDecision>) => b.at.localeCompare(a.at);
-    const needsYou = payables.filter((decision) => decision.outcome === "refused" || WAITING.has(statusOf(decision))).sort(byDue);
-    const upcoming = payables.filter((decision) => decision.outcome !== "refused" && OPEN.has(statusOf(decision)) && !WAITING.has(statusOf(decision))).sort(byDue);
-    const settled = payables.filter((decision) => decision.outcome !== "refused" && !OPEN.has(statusOf(decision))).sort(latestFirst);
-    const openReceivables = receivables.filter((decision) => ["pending", "matched"].includes(statusOf(decision))).sort(byDue);
-    const settledReceivables = receivables.filter((decision) => !["pending", "matched"].includes(statusOf(decision))).sort(latestFirst);
-    const showAllHistory = query.history === "all";
 
-    // The tiles count every open payable, whatever the status filter shows.
-    const openPayables = invoices.filter((invoice) => invoice.direction === "payable" && OPEN.has(invoice.status));
-    const dueSoon = openPayables.filter((invoice) => invoice.due_date.slice(0, 10) >= today && invoice.due_date.slice(0, 10) <= inAWeek);
-    const overdue = openPayables.filter((invoice) => invoice.due_date.slice(0, 10) < today);
-    const waitingCount = openPayables.filter((invoice) => WAITING.has(invoice.status)).length;
+    const listData = (tab: Exclude<BillsTab, "plan">): ListData => {
+      const bills = tab === "bills";
+      const keys: readonly string[] = bills ? [...BILL_FILTERS, ...(BILL_CARD_FILTERS as readonly string[]).filter((key) => key === view.filter)] : RECEIVABLE_FILTERS;
+      const counts: Record<string, number> = bills ? billCounts : receivableCounts;
+      const labels: Record<string, string> = bills ? BILL_FILTER_LABELS : RECEIVABLE_FILTER_LABELS;
+      const other = bills ? foundReceivables.length : foundPayables.length;
+      const filterLabel = labels[view.filter as string].toLowerCase();
+      return {
+        label: bills ? "Bills" : "Receivables",
+        filters: keys.map((key) => ({ key, label: labels[key], count: counts[key], href: here({ filter: key as BillFilter, page: 1 }), current: key === view.filter })),
+        q: view.q,
+        keep: { tab, filter: view.filter as string, ...(sortAsked ? { sort: sortAsked } : {}) },
+        clearSearchHref: here({ q: null, page: 1 }),
+        sort: view.sort,
+        sorts: LIST_SORTS.map((value) => ({ value, label: SORT_LABELS[value], href: here({ sort: value, page: 1 }) })),
+        page: { ...page, rows: page.rows.map(rowItem) },
+        previousHref: page.page > 1 ? here({ page: page.page - 1 }) : null,
+        nextHref: page.page < page.pages ? here({ page: page.page + 1 }) : null,
+        elsewhere:
+          view.q && other > 0
+            ? {
+                text: bills ? `${other} ${plural(other, "receivable matches", "receivables match")} too` : `${other} ${plural(other, "bill matches", "bills match")} too`,
+                href: orgHref(slug, billsHref({ tab: bills ? "receivables" : "bills", q: view.q })),
+              }
+            : null,
+        empty: view.q
+          ? { title: "Nothing matches", body: `No ${bills ? "bill" : "receivable"} under ${labels[view.filter as string]} matches this search.` }
+          : bills && payableRows.length === 0
+            ? {
+                title: "No bills yet",
+                body: canWrite
+                  ? "Add a bill, have one read from a document, or import a list. The agent decides each one at its next cycle."
+                  : "An owner or admin of this workspace adds the bills.",
+                action: canWrite ? (
+                  <div className="flex flex-wrap gap-2">
+                    <NewButton kind="bill">Add a bill</NewButton>
+                    <NewButton kind="import" variant="secondary">
+                      Import a list
+                    </NewButton>
+                  </div>
+                ) : undefined,
+              }
+            : !bills && receivableRows.length === 0
+              ? {
+                  title: "No receivables yet",
+                  body: "An invoice to a customer, or a deal's line once released, is listed here until it is paid.",
+                  action: canWrite ? <NewButton kind="invoice">Invoice a customer</NewButton> : undefined,
+                }
+              : { title: `Nothing ${filterLabel === "all" ? "here" : `under ${labels[view.filter as string]}`}`, body: `No ${bills ? "bill" : "receivable"} is ${filterLabel === "all" ? "listed" : "in this list"} now.` },
+      };
+    };
 
+    // The figures above the tabs count every bill and receivable, whatever the tab, filter or search shows (B10).
+    const totals = (rows: ListRow[], amountOf: (invoice: InvoiceRow) => number = (invoice) => Number(invoice.amount)): Totals =>
+      rows.reduce(
+        (sum, row) => {
+          const invoice = invoicesById.get(row.id) as InvoiceRow;
+          return invoice.currency === "EURC" ? { ...sum, eurc: sum.eurc + amountOf(invoice) } : { ...sum, usdc: sum.usdc + amountOf(invoice) };
+        },
+        { usdc: 0, eurc: 0 }
+      );
+    const allBillCounts = countBills(payableRows);
+    const dueSoonRows = payableRows.filter((row) => billFilterMatches("due-7", row, today, inAWeek));
+    const overdueRows = payableRows.filter((row) => billFilterMatches("overdue", row, today, inAWeek));
+    const outstandingRows = receivableRows.filter((row) => OUTSTANDING_STATUSES.has(row.status));
+    const summary: SummaryData = {
+      needsYou: { count: allBillCounts["needs-you"], href: orgHref(slug, billsHref({ tab: "bills", filter: "needs-you" })) },
+      dueSoon: { count: dueSoonRows.length, totals: totals(dueSoonRows), href: orgHref(slug, billsHref({ tab: "bills", filter: "due-7" })) },
+      overdue: { count: overdueRows.length, totals: totals(overdueRows), href: orgHref(slug, billsHref({ tab: "bills", filter: "overdue" })) },
+      receivables: {
+        open: outstandingRows.length,
+        overdue: outstandingRows.filter((row) => row.dueDate < today).length,
+        // What is still owed, part payments applied taken off (allocations L11): money owed, never cash.
+        owed: totals(outstandingRows, (invoice) => stillOwed(invoice, book?.rows ?? [])),
+        href: orgHref(slug, billsHref({ tab: "receivables", filter: "outstanding" })),
+      },
+    };
+
+    // What waits for a person to review, each opening its existing review (B11).
+    const waitingItems: WaitingItem[] = [];
+    const reviews: Partial<Record<ReviewPanel, PanelContent>> = {};
+    for (const [provider, review] of [
+      ["xero", fromXero],
+      ["quickbooks", fromQuickBooks],
+    ] as const) {
+      if (review.state !== "list") continue;
+      const changed = review.closed.length + review.partlyPaid.length;
+      if (review.items.length === 0 && changed === 0) continue;
+      const label = PROVIDER_LABELS[provider];
+      waitingItems.push({ key: provider, review: provider, label: review.items.length > 0 ? `${review.items.length} from ${label}` : `${changed} changed in ${label}` });
+      reviews[provider] = {
+        title: `From ${label}`,
+        node: (
+          <AccountingBillsReview
+            provider={provider}
+            orgSlug={slug}
+            connectionId={review.connectionId}
+            organisation={review.organisation}
+            items={review.items}
+            closed={review.closed}
+            partlyPaidSince={review.partlyPaid}
+            canAdd={canWrite}
+          />
+        ),
+      };
+    }
+    for (const booking of toBook) {
+      if (booking.state !== "list" || (booking.toReview.length === 0 && booking.done.length === 0)) continue;
+      const key = `book-${booking.provider}` as ReviewPanel;
+      if (booking.toReview.length > 0) waitingItems.push({ key, review: key, label: `${booking.toReview.length} to book in ${PROVIDER_LABELS[booking.provider]}` });
+      reviews[key] = {
+        title: `To book in ${PROVIDER_LABELS[booking.provider]}`,
+        node: (
+          <AccountingBookings
+            provider={booking.provider}
+            orgSlug={slug}
+            connectionId={booking.connectionId}
+            organisation={booking.organisation}
+            scopeMissing={booking.scopeMissing}
+            accountChosen={booking.accountChosen}
+            toReview={booking.toReview}
+            done={booking.done}
+            canBook={canBook}
+          />
+        ),
+      };
+    }
+    if (emailed.length > 0) {
+      waitingItems.push({ key: "email", review: "email", label: `${emailed.length} by email` });
+      reviews.email = {
+        title: "From email",
+        node: <InboxEmails orgSlug={slug} emails={emailed} canAdd={canWrite} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} />,
+      };
+    }
+    if (fromHubSpot.state === "list") {
+      const toPlan = fromHubSpot.won.filter((row) => row.linkedDeal === null && row.plan.ok).length;
+      const changed = fromHubSpot.won.filter((row) => row.changes.length > 0).length;
+      const href = orgHref(slug, `${billsHref({ tab: "receivables" })}#from-hubspot`);
+      if (toPlan > 0) waitingItems.push({ key: "hubspot", href, label: `${toPlan} won ${plural(toPlan, "deal", "deals")} in HubSpot` });
+      else if (changed > 0) waitingItems.push({ key: "hubspot", href, label: `${changed} changed in HubSpot` });
+    }
+
+    // The customers, as the New deal form offers them; and the currencies a deal may be in.
+    const customers = counterparties
+      .filter((counterparty) => counterparty.role === "client")
+      .map(({ id, name }) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const dealCurrencies = ["USDC", "EURC", ...(billCurrencyOf(verdicts.shadow) ? [billCurrencyOf(verdicts.shadow) as string] : [])];
+
+    // The tab shown, and only it, is read and built (B5).
+    let tabContent: Pick<Parameters<typeof BillsScreen>[0], "bills" | "plan" | "receivables"> = {};
+    if (view.tab === "bills") {
+      tabContent = {
+        bills: { list: listData("bills"), below: schedules.length > 0 ? <RecurringSummary schedules={schedules} orgSlug={slug} canWrite={canWrite} /> : undefined },
+      };
+    } else if (view.tab === "plan") {
+      // The next 14 days of payments, in the order the cash allows (payment plan design P1), from the invoices and
+      // counterparties read above, over every open bill. Best effort: a plan that cannot be read says so, and nothing else changes.
+      const paymentPlan = await readPaymentPlan({
+        invoices,
+        counterparties,
+        // Deal lines not invoiced yet, listed apart from the plan's balances (deal schedule D14).
+        planned: Array.isArray(deals) ? plannedLinesOf(deals) : deals === "not_ready" ? [] : null,
+        // A part-paid receivable, a released deal line among them, is expected for what is still owed (allocations L11).
+        owed: new Map(invoices.filter((invoice) => invoice.direction === "receivable").map((invoice) => [invoice.id, stillOwed(invoice, book?.rows ?? [])] as const)),
+      }).catch((error: unknown) => {
+        console.error("invoices: payment plan not read", error instanceof Error ? error.message : error);
+        return null;
+      });
+      const paymentOutcomes = planOutcomes({ now: asOf, invoices, entries });
+      // Whoever entered a bill approves its day only as the workspace's only approver (payment plan P10); asked only then.
+      const soleApprover =
+        canDecide && paymentPlan?.lines.some((line) => line.move !== null && line.createdBy === access.user.id) ? await isSoleApprover(access.user.id) : false;
+      tabContent = {
+        plan: <PaymentPlanSection plan={paymentPlan} outcomes={paymentOutcomes} orgSlug={slug} canDecide={canDecide} viewerId={access.user.id} soleApprover={soleApprover} />,
+      };
+    } else {
+      // A HubSpot deal picked to plan: the New deal form filled in from it (HubSpot connector H11). Read again on confirm.
+      const planFromHubSpot: CrmPrefillRead | null =
+        view.hubspot !== null && canWrite && fromHubSpot.state === "list" && Array.isArray(deals)
+          ? await crmPrefillFor({ rowId: view.hubspot, customers, workspace: { shadowOn: verdicts.shadow !== null }, today }).catch((error: unknown): CrmPrefillRead => {
+              console.error("invoices: a HubSpot deal was not read to plan", error instanceof Error ? error.message : error);
+              return { ok: false, message: "That deal could not be read. Reload the page in a moment." };
+            })
+          : null;
+      tabContent = {
+        receivables: {
+          list: listData("receivables"),
+          above: (
+            <>
+              {/* Before migration 0103 runs, receivables show as before, and say applying payments waits for it (allocations L11). */}
+              {book && !book.available && receivableRows.length > 0 && <p className="text-xs text-ink-3">Applying payments is not set up on this deployment yet.</p>}
+              {toApply.length > 0 && receivableRows.length > 0 && <ApplyPayments orgSlug={slug} network={network} payments={toApply} canWrite={canWrite} />}
+            </>
+          ),
+          below: (
+            <div className="pt-6">
+              <DealsSection
+                deals={deals}
+                orgSlug={slug}
+                today={today}
+                fromCrm={
+                  fromHubSpot.state === "list" ? (
+                    <>
+                      {planFromHubSpot && (
+                        <div id="plan-from-hubspot" className="scroll-mt-6">
+                          {planFromHubSpot.ok ? (
+                            <IntakeFold label={`Plan collections: ${planFromHubSpot.name}`} meta={`from ${planFromHubSpot.label}: pick how it is billed, check the rest, and confirm`} defaultOpen>
+                              <DealForm
+                                orgSlug={slug}
+                                customers={customers}
+                                currencies={dealCurrencies.includes(planFromHubSpot.prefill.currency) ? dealCurrencies : [...dealCurrencies, planFromHubSpot.prefill.currency]}
+                                idempotencyKey={randomUUID()}
+                                today={today}
+                                prefill={{ crmRowId: planFromHubSpot.rowId, label: planFromHubSpot.label, ...planFromHubSpot.prefill }}
+                              />
+                            </IntakeFold>
+                          ) : (
+                            <Callout tone="held" className="mb-6">
+                              {planFromHubSpot.message}
+                            </Callout>
+                          )}
+                        </div>
+                      )}
+                      <HubSpotDeals orgSlug={slug} organisation={fromHubSpot.organisation} won={fromHubSpot.won} open={fromHubSpot.open} emails={fromHubSpot.emails} canWrite={canWrite} />
+                    </>
+                  ) : undefined
+                }
+              />
+            </div>
+          ),
+        },
+      };
+    }
+
+    const needsYouCount = allBillCounts["needs-you"];
     return (
       <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()} status={await shellStatus()}>
         <PageHead
           title={sectionTitle("invoices")}
           sub="Your bills, what the agent decided on each, and why."
-          right={<AgentControls orgSlug={slug} nextDay={dashboardStats.day + 1} headSeq={headEntries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
+          right={
+            <AgentControls
+              orgSlug={slug}
+              nextDay={dashboardStats.day + 1}
+              headSeq={headEntries[0]?.seq ?? 0}
+              clockMode={dashboardStats.clockMode}
+              leading={
+                canWrite ? (
+                  // New ▾: every way to add something, each the form it always was (B13).
+                  <NewMenu
+                    orgSlug={slug}
+                    counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))}
+                    billCurrency={billCurrencyOf(verdicts.shadow)}
+                    importWorkspace={{ shadowOn: verdicts.shadow !== null, shadowCurrency: billCurrencyOf(verdicts.shadow) ?? null, network }}
+                    deal={Array.isArray(deals) ? { customers, currencies: dealCurrencies, idempotencyKey: randomUUID(), today } : null}
+                  />
+                ) : (
+                  <p className="max-w-56 text-xs text-ink-3">Only an owner or admin of this workspace can add or import invoices.</p>
+                )
+              }
+            />
+          }
         />
         {/* The agent decides within a minute of an event (an invoice added, a payable returned): the page
             re-reads its data every 20 s, and at once on return to the tab, so the decision appears without a reload. */}
         <AutoRefresh intervalMs={20_000} />
 
-        {/* Search Bills & receivables by more than a name (I09): an address, so a search can be linked. */}
-        <form method="get" role="search" aria-label="Search bills and receivables" className="mb-4 flex flex-wrap items-center gap-2">
-          {filter && <input type="hidden" name="status" value={filter} />}
-          <Input
-            name="q"
-            type="search"
-            defaultValue={search?.text ?? ""}
-            maxLength={100}
-            aria-label="Search by invoice number, id, purchase order, counterparty, amount or transaction"
-            placeholder="Invoice number, id, PO, counterparty, amount or transaction"
-            className="min-w-0 flex-1 sm:max-w-md"
-          />
-          <Button type="submit" variant="secondary" icon={<Search />}>
-            Search
-          </Button>
-        </form>
-        {search && (
-          <Callout icon={<Search />} className="mb-6">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span>
-                Showing what matches <span className="font-mono">{search.text}</span>: {shown.length} {plural(shown.length, "invoice", "invoices")}
-                {toApply.length > 0 ? `, ${toApply.length} ${plural(toApply.length, "payment", "payments")} to apply` : ""}
-              </span>
-              <Button asChild variant="link" className="ml-auto">
-                <Link href={orgHref(slug, filter ? `/invoices?status=${encodeURIComponent(filter)}` : "/invoices")}>Clear search</Link>
-              </Button>
-            </div>
-          </Callout>
-        )}
-
-        {filter && (
-          <Callout tone="held" icon={<ListFilter />} className="mb-6">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span>
-                Showing status: <span className="font-mono">{filter}</span>
-              </span>
-              <Button asChild variant="link" className="ml-auto">
-                <Link href={orgHref(slug, "/invoices")}>Clear filter</Link>
-              </Button>
-            </div>
-          </Callout>
-        )}
-
-        <div className="mb-6 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 xl:grid-cols-4">
-          <StatTile label="Needs you" tone={waitingCount > 0 ? "held" : "default"} href={orgHref(slug, "/approvals")} sub={waitingCount > 0 ? "Payables waiting for a person" : "Nothing waiting"}>
-            <span className="tabular-nums">{waitingCount}</span>
-          </StatTile>
-          <StatTile label="Due within 7 days" sub={<Totals invoices={dueSoon} />}>
-            <span className="tabular-nums">{dueSoon.length}</span>
-          </StatTile>
-          <StatTile label="Overdue" tone={overdue.length > 0 ? "held" : "default"} sub={overdue.length > 0 ? <Totals invoices={overdue} /> : "Nothing past its due date"}>
-            <span className="tabular-nums">{overdue.length}</span>
-          </StatTile>
-          <StatTile label="Open payables" sub={`${openPayables.length} ${openPayables.length === 1 ? "invoice" : "invoices"} not yet paid`}>
-            <Totals invoices={openPayables} />
-          </StatTile>
-        </div>
-
-        <InboxEmails orgSlug={slug} emails={emailed} canAdd={canWrite} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} />
-
-        {fromXero.state === "list" && (
-          <AccountingBillsReview
-            provider="xero"
-            orgSlug={slug}
-            connectionId={fromXero.connectionId}
-            organisation={fromXero.organisation}
-            items={fromXero.items}
-            closed={fromXero.closed}
-            partlyPaidSince={fromXero.partlyPaid}
-            canAdd={canWrite}
-          />
-        )}
-
-        {fromQuickBooks.state === "list" && (
-          <AccountingBillsReview
-            provider="quickbooks"
-            orgSlug={slug}
-            connectionId={fromQuickBooks.connectionId}
-            organisation={fromQuickBooks.organisation}
-            items={fromQuickBooks.items}
-            closed={fromQuickBooks.closed}
-            partlyPaidSince={fromQuickBooks.partlyPaid}
-            canAdd={canWrite}
-          />
-        )}
-
-        {toBook.map((view) =>
-          view.state === "list" ? (
-            <AccountingBookings
-              key={view.provider}
-              provider={view.provider}
-              orgSlug={slug}
-              connectionId={view.connectionId}
-              organisation={view.organisation}
-              scopeMissing={view.scopeMissing}
-              accountChosen={view.accountChosen}
-              toReview={view.toReview}
-              done={view.done}
-              canBook={canBook}
-            />
-          ) : null
-        )}
-
-        {canWrite ? (
-          // Folded until it is needed; open on a workspace with no invoice yet, where adding one is the next step.
-          <IntakeFold label="New invoice" meta="typed in, read from a document, imported from a list, or recurring" defaultOpen={invoices.length === 0 || query.add !== undefined}>
-            <Tabs defaultValue="manual">
-              <TabsList aria-label="New invoice">
-                <TabsTrigger value="manual">
-                  <PenLine aria-hidden />
-                  Enter one invoice
-                </TabsTrigger>
-                <TabsTrigger value="document">
-                  <FileText aria-hidden />
-                  From a document
-                </TabsTrigger>
-                <TabsTrigger value="list">
-                  <FileSpreadsheet aria-hidden />
-                  Import a list
-                </TabsTrigger>
-                <TabsTrigger value="recurring">
-                  <Repeat aria-hidden />
-                  Recurring
-                </TabsTrigger>
-              </TabsList>
-              {/* Both stay mounted, so switching tabs never loses what was typed. */}
-              <TabsContent value="manual" forceMount className="data-[state=inactive]:hidden">
-                <InvoiceIntake orgSlug={slug} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} billCurrency={billCurrencyOf(verdicts.shadow)} />
-              </TabsContent>
-              <TabsContent value="document" forceMount className="data-[state=inactive]:hidden">
-                <InvoiceDocumentIntake orgSlug={slug} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} />
-              </TabsContent>
-              <TabsContent value="list" forceMount className="data-[state=inactive]:hidden">
-                <BillImport
-                  orgSlug={slug}
-                  workspace={{ shadowOn: verdicts.shadow !== null, shadowCurrency: billCurrencyOf(verdicts.shadow) ?? null, network }}
-                />
-              </TabsContent>
-              <TabsContent value="recurring" forceMount className="data-[state=inactive]:hidden">
-                <RecurringPayableIntake orgSlug={slug} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} />
-              </TabsContent>
-            </Tabs>
-          </IntakeFold>
-        ) : (
-          <Callout className="mb-8">Only an owner or admin of this workspace can add or import invoices.</Callout>
-        )}
-
-        <div className="space-y-10">
-          {/* The plan covers every open bill, so it is shown over the whole list, not over a status filter. */}
-          {!filter && (
-            <PaymentPlanSection plan={paymentPlan} outcomes={paymentOutcomes} orgSlug={slug} canDecide={canDecide} viewerId={access.user.id} soleApprover={soleApprover} />
-          )}
-
-          <section>
-            <SectionHeader title="Payables" meta={`${payables.length} ${plural(payables.length, "invoice", "invoices")} · open any to see why the agent decided as it did`} />
-            {payables.length === 0 ? (
-              <EmptyState compact title="No payables here" body="There are no records in this view." />
-            ) : (
-              <>
-                {needsYou.length > 0 && (
-                  <>
-                    <RowGroupHeading
-                      title="Needs you"
-                      count={needsYou.length}
-                      action={
-                        <Button asChild variant="link" className="text-[0.8125rem]">
-                          <Link href={orgHref(slug, "/approvals")}>Decide in Approvals</Link>
-                        </Button>
-                      }
-                    />
-                    {/* Closed, so many fit: each says what the agent checked and why it waits; opening it shows the card and its actions. */}
-                    <DecisionRows
-                      orgSlug={slug}
-                      items={needsYou.map((decision) => row(decision, withVerdict(needsYouFor), { signals: payableSignals(decision), why: stoppedWhy(decision) }))}
-                    />
-                  </>
-                )}
-                {upcoming.length > 0 && (
-                  <>
-                    <RowGroupHeading title="Upcoming" count={upcoming.length} />
-                    <DecisionRows orgSlug={slug} items={upcoming.map((decision) => row(decision, withVerdict(receiptFor), { signals: payableSignals(decision) }))} />
-                  </>
-                )}
-                {settled.length > 0 && (
-                  <>
-                    <RowGroupHeading
-                      title="Paid and closed"
-                      count={settled.length}
-                      action={
-                        settled.length > HISTORY_SHOWN ? (
-                          <Button asChild variant="link" className="text-[0.8125rem]">
-                            <Link href={orgHref(slug, showAllHistory ? "/invoices" : "/invoices?history=all")} scroll={false}>
-                              {showAllHistory ? `Show the latest ${HISTORY_SHOWN}` : `Show all ${settled.length}`}
-                            </Link>
-                          </Button>
-                        ) : undefined
-                      }
-                    />
-                    <DecisionRows orgSlug={slug} items={(showAllHistory ? settled : settled.slice(0, HISTORY_SHOWN)).map((decision) => row(decision, withVerdict(receiptFor)))} />
-                  </>
-                )}
-              </>
-            )}
-          </section>
-
-          {schedules.length > 0 && <RecurringSummary schedules={schedules} orgSlug={slug} canWrite={canWrite} />}
-
-          <section>
-            <SectionHeader title="Receivables" meta={`${receivables.length} ${plural(receivables.length, "invoice", "invoices")}`} />
-            {/* Before migration 0103 runs, receivables show as before, and say applying payments waits for it (allocations L11). */}
-            {book && !book.available && receivables.length > 0 && <p className="mb-3 text-xs text-ink-3">Applying payments is not set up on this deployment yet.</p>}
-            {toApply.length > 0 && receivables.length > 0 && <ApplyPayments orgSlug={slug} network={network} payments={toApply} canWrite={canWrite} />}
-            {receivables.length === 0 ? (
-              <EmptyState compact title="No receivables here" body="There are no records in this view." />
-            ) : (
-              <>
-                {openReceivables.length > 0 && (
-                  <>
-                    <RowGroupHeading title="Open" count={openReceivables.length} />
-                    <DecisionRows orgSlug={slug} items={openReceivables.map((decision) => ({ ...row(decision, receivableFooter, owedNote(decision)), context: dealContext(decision) }))} />
-                  </>
-                )}
-                {settledReceivables.length > 0 && (
-                  <>
-                    <RowGroupHeading title="Received and closed" count={settledReceivables.length} />
-                    <DecisionRows
-                      orgSlug={slug}
-                      items={settledReceivables.slice(0, showAllHistory ? undefined : HISTORY_SHOWN).map((decision) => ({ ...row(decision, receivableFooter), context: dealContext(decision) }))}
-                    />
-                  </>
-                )}
-              </>
-            )}
-          </section>
-
-          <DealsSection
-            deals={deals}
-            orgSlug={slug}
-            today={today}
-            fromCrm={
-              fromHubSpot.state === "list" ? (
-                <>
-                  {planFromHubSpot && (
-                    <div id="plan-from-hubspot" className="scroll-mt-6">
-                      {planFromHubSpot.ok ? (
-                        <IntakeFold label={`Plan collections: ${planFromHubSpot.name}`} meta={`from ${planFromHubSpot.label}: pick how it is billed, check the rest, and confirm`} defaultOpen>
-                          <DealForm
-                            orgSlug={slug}
-                            customers={customers}
-                            currencies={dealCurrencies.includes(planFromHubSpot.prefill.currency) ? dealCurrencies : [...dealCurrencies, planFromHubSpot.prefill.currency]}
-                            idempotencyKey={randomUUID()}
-                            today={today}
-                            prefill={{ crmRowId: planFromHubSpot.rowId, label: planFromHubSpot.label, ...planFromHubSpot.prefill }}
-                          />
-                        </IntakeFold>
-                      ) : (
-                        <Callout tone="held" className="mb-6">
-                          {planFromHubSpot.message}
-                        </Callout>
-                      )}
-                    </div>
-                  )}
-                  <HubSpotDeals orgSlug={slug} organisation={fromHubSpot.organisation} won={fromHubSpot.won} open={fromHubSpot.open} emails={fromHubSpot.emails} canWrite={canWrite} />
-                </>
-              ) : undefined
-            }
-            newDeal={
-              canWrite && Array.isArray(deals) ? (
-                <IntakeFold label="New deal" meta="a signed deal and its collection schedule: a deposit, milestones, a retainer or your own lines" defaultOpen={deals.length === 0 && query.add === "deal"}>
-                  <DealForm
-                    orgSlug={slug}
-                    customers={customers}
-                    currencies={dealCurrencies}
-                    idempotencyKey={randomUUID()}
-                    today={today}
-                  />
-                </IntakeFold>
-              ) : undefined
-            }
-          />
-        </div>
+        <BillsScreen
+          slugHref={(path) => orgHref(slug, path)}
+          tab={view.tab}
+          tabs={[
+            { key: "bills", label: "Bills", href: orgHref(slug, billsHref({ tab: "bills" })), count: needsYouCount },
+            { key: "plan", label: "Payment plan", href: orgHref(slug, billsHref({ tab: "plan" })) },
+            { key: "receivables", label: "Receivables", href: orgHref(slug, billsHref({ tab: "receivables" })) },
+          ]}
+          summary={summary}
+          waiting={waitingItems}
+          reviews={reviews}
+          details={details}
+          {...tabContent}
+        />
       </ProductShell>
     );
   });
 }
 
 /** The date a row leads with: the day it is scheduled for, its due date (marked once past), or when it was paid. */
-function rowDate(invoice: InvoiceRow | undefined, today: string): DecisionRowItem["date"] {
+function rowDate(invoice: InvoiceRow | undefined, today: string): BillRowItem["date"] {
   if (!invoice) return null;
   if (invoice.status === "scheduled" && invoice.scheduled_for) return { label: `Pays ${utcDay(`${invoice.scheduled_for.slice(0, 10)}T00:00:00Z`)}` };
-  if (!OPEN.has(invoice.status)) return { label: `Due ${utcDay(`${invoice.due_date.slice(0, 10)}T00:00:00Z`)}` };
+  if (!OPEN_STATUSES.has(invoice.status)) return { label: `Due ${utcDay(`${invoice.due_date.slice(0, 10)}T00:00:00Z`)}` };
   const due = invoice.due_date.slice(0, 10);
   return due < today ? { label: `Overdue ${utcDay(`${due}T00:00:00Z`)}`, tone: "held" } : { label: `Due ${utcDay(`${due}T00:00:00Z`)}` };
 }
 
 /** Sorts by the day that matters: the scheduled day, else the due date. */
-function dueOf(invoice: InvoiceRow | undefined): string {
-  if (!invoice) return "";
+function dueOf(invoice: InvoiceRow): string {
   return (invoice.status === "scheduled" && invoice.scheduled_for ? invoice.scheduled_for : invoice.due_date).slice(0, 10);
-}
-
-/** The total of some invoices, in USDC, with any EURC beside it: the two are never added together. */
-function Totals({ invoices }: { invoices: InvoiceRow[] }) {
-  const usdc = invoices.filter((invoice) => (invoice.currency ?? "USDC") === "USDC").reduce((sum, invoice) => sum + Number(invoice.amount), 0);
-  const eurc = invoices.filter((invoice) => invoice.currency === "EURC").reduce((sum, invoice) => sum + Number(invoice.amount), 0);
-  return (
-    <>
-      <Money value={usdc} />
-      {eurc > 0 && (
-        <>
-          {" "}
-          + <Money value={eurc} token="EURC" />
-        </>
-      )}
-    </>
-  );
 }

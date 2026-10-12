@@ -92,6 +92,7 @@ export default function InvoiceIntake({
   onAdded,
   idPrefix = "invoice",
   billCurrency,
+  initialDirection,
 }: {
   counterparties: IntakeCounterparty[];
   orgSlug: string;
@@ -105,6 +106,8 @@ export default function InvoiceIntake({
   idPrefix?: string;
   /** The business's own currency, in shadow mode: a bill in it is paid in USDC at the day's rate (shadow mode S6). */
   billCurrency?: string;
+  /** The direction it starts in before a counterparty is chosen: New ▾'s Bill to pay or Invoice to a customer. */
+  initialDirection?: Direction;
 }) {
   const { state, formProps } = useActionForm(action, INITIAL, { resetOnSuccess: true, toastOnSuccess: true, onSuccess: onAdded });
   const fromDocument = !!document || !!inboxEmailId;
@@ -131,8 +134,9 @@ export default function InvoiceIntake({
   // paid (client payables R2). A person can still choose otherwise, and the form says what that means.
   const roleOf = (counterpartyId: string | null | undefined) => counterparties.find((counterparty) => counterparty.id === counterpartyId);
   const directionFor = (counterpartyId: string | null | undefined): Direction => (roleOf(counterpartyId)?.role === "client" ? "receivable" : "payable");
+  const startingDirection = (): Direction => (initial?.counterpartyId ? directionFor(initial.counterpartyId) : (initialDirection ?? directionFor(null)));
   const [chosen, setChosen] = useState<string | null>(initial?.counterpartyId ?? null);
-  const [direction, setDirection] = useState<Direction>(directionFor(initial?.counterpartyId));
+  const [direction, setDirection] = useState<Direction>(startingDirection);
   const chosenParty = roleOf(chosen);
 
   function resetDiscount() {
@@ -141,7 +145,7 @@ export default function InvoiceIntake({
     setDueDate(initial?.dueDate ?? "");
     setAmount(initial?.amount ?? "");
     setChosen(initial?.counterpartyId ?? null);
-    setDirection(directionFor(initial?.counterpartyId));
+    setDirection(startingDirection());
   }
 
   return (

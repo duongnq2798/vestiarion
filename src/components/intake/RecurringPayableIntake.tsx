@@ -24,9 +24,25 @@ const INITIAL: RecurringActionResult = { ok: false, message: "" };
  * much, what for, how often and from when. Each period's invoice is created as it comes near and
  * decided by the agent like any other.
  */
-export default function RecurringPayableIntake({ counterparties, orgSlug }: { counterparties: IntakeCounterparty[]; orgSlug: string }) {
+export default function RecurringPayableIntake({
+  counterparties,
+  orgSlug,
+  onSaved,
+}: {
+  counterparties: IntakeCounterparty[];
+  orgSlug: string;
+  /** After a schedule is set up: New ▾ points to it. */
+  onSaved?: () => void;
+}) {
   const [summary, setSummary] = useState<string | null>(null);
-  const { state, formProps } = useActionForm(createRecurringPayableAction, INITIAL, { resetOnSuccess: true, toastOnSuccess: true, onSuccess: () => setSummary(null) });
+  const { state, formProps } = useActionForm(createRecurringPayableAction, INITIAL, {
+    resetOnSuccess: true,
+    toastOnSuccess: true,
+    onSuccess: () => {
+      setSummary(null);
+      onSaved?.();
+    },
+  });
   const payees = counterparties.filter((counterparty) => counterparty.role !== "client");
   const none = payees.length === 0;
   // Read back on every change, so the schedule is in words before it is set up.

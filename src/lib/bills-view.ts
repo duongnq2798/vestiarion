@@ -211,8 +211,10 @@ export interface ListRow {
   status: string;
   /** Code refused it (a guardrail), whatever its status. */
   refused: boolean;
-  /** The day that matters, `YYYY-MM-DD`: the day it is scheduled for, else its due date. */
+  /** The day that matters, `YYYY-MM-DD`: the day it is scheduled for, else its due date. The list sorts by it. */
   due: string;
+  /** Its due date, `YYYY-MM-DD`: what Due in 7 days and Overdue count, as the cards above the tabs always did. */
+  dueDate: string;
   /** When the agent last decided it, or when it was added. */
   at: string;
   /** When it was added. */
@@ -247,9 +249,9 @@ export function billFilterMatches(filter: BillFilter, row: ListRow, today: strin
     case "recurring":
       return row.recurring;
     case "due-7":
-      return open && row.due >= today && row.due <= inAWeek;
+      return open && row.dueDate >= today && row.dueDate <= inAWeek;
     case "overdue":
-      return open && row.due < today;
+      return open && row.dueDate < today;
   }
 }
 
@@ -259,7 +261,7 @@ export function receivableFilterMatches(filter: ReceivableFilter, row: ListRow, 
     case "outstanding":
       return outstanding;
     case "overdue":
-      return outstanding && row.due < today;
+      return outstanding && row.dueDate < today;
     case "received":
       return !outstanding;
     case "all":

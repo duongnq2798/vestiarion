@@ -205,9 +205,20 @@ describe("the payment plan section", () => {
     expect(empty).toContain("No bill or milestone is due by Oct 24, 2026.");
   });
 
-  it("heads Bills & receivables, over the whole list rather than a status filter", () => {
+  it("is Bills & receivables' Payment plan tab, over every open bill, read only when that tab is shown", () => {
     const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "invoices", "page.tsx"), "utf8");
-    expect(page).toContain("{!filter && (\n            <PaymentPlanSection");
-    expect(page.indexOf("<PaymentPlanSection")).toBeLessThan(page.indexOf('<SectionHeader title="Payables"'));
+    const from = page.indexOf('} else if (view.tab === "plan") {');
+    const planTab = page.slice(from, page.indexOf("} else {", from));
+    expect(planTab).toContain("const paymentPlan = await readPaymentPlan({");
+    expect(planTab).toContain("<PaymentPlanSection plan={paymentPlan} outcomes={paymentOutcomes}");
+    expect(page.match(/readPaymentPlan\(/g)).toHaveLength(1);
+  });
+
+  it("groups each day's payments under the day, with the balance after it, and folds each line's reasons and Approve", () => {
+    const markup = render();
+    expect(markup).toMatch(/<h3[^>]*><span[^>]*>Oct 15, 2026<\/span><span[^>]*>Balance after: /);
+    expect(markup).toMatch(/<details[^>]*><summary[\s\S]*?Northwind Supply[\s\S]*?<\/summary>[\s\S]*?Approve paying Northwind Supply/);
+    expect(text(markup)).toContain("Moves from Oct 22, 2026");
+    expect(text(markup)).toContain("How the plan chooses days");
   });
 });
