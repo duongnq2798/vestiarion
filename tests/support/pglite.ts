@@ -101,7 +101,7 @@ export const TENANT_TABLES = [
   "forecasts", "ledger_entries", "payment_intents", "cycle_runs", "cycle_snapshots", "sim_clock", "gateway_signers", "payment_receipts", "escrow_contracts",
   "fx_swaps", "screening_dismissals", "receivable_links", "incoming_transfers", "agent_budgets", "recurring_payables", "policy_proposals",
   "service_purchases", "spending_limit_contracts", "ar_reminders", "inbox_emails", "approval_policies", "payment_approvals",
-  "shadow_modes", "decision_verdicts", "payment_actuals", "bank_statement_lines", "report_shares", "report_baselines",
+  "shadow_modes", "decision_verdicts", "payment_actuals", "bank_statement_lines", "report_shares", "report_baselines", "receivable_allocations",
   "accounting_connections", "external_links", "accounting_bills", "accounting_sync_cursors",
 ] as const;
 
@@ -208,6 +208,19 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     [orgId, connectionId, `bill-${tag}`, `cp-${tag}`]
   );
   await db.query("insert into accounting_sync_cursors (org_id, connection_id, object_type) values ($1, $2, 'bill')", [orgId, connectionId]);
+  // A receivable part paid from a payment received on Arc (0103).
+  const receivableId = await one(
+    "insert into invoices (org_id, direction, counterparty_id, amount, due_date) values ($1, 'receivable', $2, 2, now()) returning id",
+    [orgId, counterpartyId]
+  );
+  const paymentId = await one(
+    "insert into incoming_transfers (org_id, circle_tx_id, amount, token, chain, received_at) values ($1, $2, 1, 'USDC', 'ARC-TESTNET', now()) returning id",
+    [orgId, `circle-applied-${tag}`]
+  );
+  await db.query(
+    "insert into receivable_allocations (org_id, kind, invoice_id, transfer_id, amount, currency, basis) values ($1, 'payment', $2, $3, 1, 'USDC', 'person')",
+    [orgId, receivableId, paymentId]
+  );
   const approver = await one("insert into auth.users (id, email) values (gen_random_uuid(), $1) returning id", [`approver-${tag}-${crypto.randomUUID()}@example.com`]);
   await db.query(
     "insert into payment_approvals (org_id, source_type, source_id, approved_by, amount, currency) values ($1, 'invoice', $2, $3, 1, 'USDC')",

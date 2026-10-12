@@ -76,6 +76,7 @@ export const PAGE_LOADERS: Record<string, () => Promise<MdxModule>> = {
   "guides/audit-export": () => import("../../../content/docs/guides/audit-export.mdx"),
   "guides/report": () => import("../../../content/docs/guides/report.mdx"),
   "guides/cash-scenarios": () => import("../../../content/docs/guides/cash-scenarios.mdx"),
+  "guides/apply-payments": () => import("../../../content/docs/guides/apply-payments.mdx"),
   "guides/controls": () => import("../../../content/docs/guides/controls.mdx"),
   "research/model-vs-policy": () => import("../../../content/docs/research/model-vs-policy.mdx"),
   "get-started/quickstart": () => import("../../../content/docs/get-started/quickstart.mdx"),

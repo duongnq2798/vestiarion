@@ -44,6 +44,19 @@ const arcTx = (value: unknown) => (typeof value === "string" && /^0x[0-9a-fA-F]{
 const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 const usdc = (value: number) => `${AMOUNT.format(value)} USDC`;
 
+/** An amount and its currency, as an entry about money received records them. */
+const coins = (amount: unknown, currency: unknown) => `${AMOUNT.format(number(amount) ?? 0)} ${text(currency) ?? "USDC"}`;
+
+/** What an application left: owed on the invoice, and of the payment. */
+function owedNotes(detail: Record<string, unknown>): string[] {
+  const owed = number(detail.outstandingAfter);
+  const left = number(detail.unappliedAfter);
+  return [
+    ...(owed === null ? [] : owed === 0 ? ["✓ Nothing is owed on it now"] : [`· ${coins(owed, detail.currency)} still owed`]),
+    ...(left !== null && left > 0 ? [`· ${coins(left, detail.currency)} of the payment left to apply`] : []),
+  ];
+}
+
 /** Who decided, as a person reads it: the model by its name, or the written policy when no model answered. */
 export function deciderName(decisionMode: unknown): string {
   switch (decisionMode) {
@@ -250,6 +263,31 @@ export function trailStep(entry: TrailEntry, network: Network = "arc-testnet"): 
     }
     case "ar_received":
       return { ...base, who: "agent", tone: "done", text: `The agent matched the payment received on ${label}.`, txHash: arcTx(detail.txHash) };
+    // A payment applied, a fee and a reversal (allocations L12): one step per row.
+    case "ar_payment_applied": {
+      const money = coins(detail.amount, detail.currency);
+      const byAgent = entry.actor === "agent";
+      return {
+        ...base,
+        who: byAgent ? "agent" : "person",
+        tone: "done",
+        text: byAgent
+          ? `The agent applied ${money} received on ${label}: what was still owed.`
+          : `A person applied ${money} received on ${label}${record(detail.suggestion) ? ", as the agent suggested" : ""}.`,
+        notes: owedNotes(detail),
+        txHash: arcTx(detail.txHash),
+      };
+    }
+    case "ar_fee_recorded":
+      return { ...base, who: "person", tone: "neutral", text: `A person recorded ${coins(detail.amount, detail.currency)} as a fee: ${text(detail.reason) ?? "no reason given"}.`, notes: owedNotes(detail) };
+    case "ar_allocation_reversed":
+      return {
+        ...base,
+        who: "person",
+        tone: "stopped",
+        text: `A person reversed ${coins(detail.amount, detail.currency)} ${detail.reversedKind === "fee" ? "recorded as a fee" : "applied"}: ${text(detail.reason) ?? "no reason given"}.`,
+        notes: owedNotes(detail),
+      };
     case "ar_reminders_on":
       return { ...base, who: "person", tone: "neutral", text: "A person turned on the agent's reminders to the client." };
     case "ar_reminders_off":

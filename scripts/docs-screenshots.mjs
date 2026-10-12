@@ -223,6 +223,8 @@ const SHOTS = {
   "where-a-payment-is-in-flight": async () => {},
   "xero-settings": async () => {},
   "xero-review": async () => {},
+  "apply-payments-list": async () => {},
+  "apply-payments-part-paid": async () => {},
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

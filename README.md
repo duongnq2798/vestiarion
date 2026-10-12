@@ -65,7 +65,7 @@ reads the whole book each time it runs:
 | **Payables** | Three-way match (purchase order, goods received, invoice), duplicate and risk checks, then **pay**, **schedule**, **hold**, **request info** or **flag as fraud**, with its reasoning attached |
 | **Contractors** | Releases a milestone once its evidence is verified, such as a merged GitHub pull request; on Arc testnet the milestone's USDC can sit in an escrow contract until then |
 | **Compliance** | Re-screens every counterparty each cycle (OpenSanctions where configured) and tiers its payment limit down on a hit, reversibly |
-| **Receivables** | A client pays through a link; the agent matches the transfer to what was owed and, when turned on, sends reminders within bounds code sets |
+| **Receivables** | A client pays through a link; the agent matches the transfer to what was owed, suggests how to apply a payment that covers several invoices, part of one or falls a fee short, and, when turned on, sends reminders for what is still owed within bounds code sets |
 | **Treasury** | On Arc testnet, sweeps idle cash above a 7-day buffer into Circle's USYC only when the yield beats the round-trip fee, and redeems ahead of what falls due |
 | **Audit** | Appends every decision, human action and system event to an Ed25519-signed, hash-chained ledger, exportable and verifiable in one click |
 
@@ -233,7 +233,9 @@ run in production, with its ledger entries and transactions.
 - **Contractor milestones** — verified by a merged pull request or a person; GitHub bounties with `/bounty` and
   `/payto`; a pull request comment once paid.
 - **Payee links** — a payee enters and confirms their own address, or creates a passkey wallet to be paid in.
-- **Receivables** — pay links on Arc, matched receipts, reminders the agent times within bounds.
+- **Receivables** — pay links on Arc, matched receipts, payments applied to several invoices or part of one with the
+  agent's suggestions, credit and fees kept apart, reversals appended, reminders for what is still owed, and a search
+  by invoice number, id, purchase order, amount or transaction.
 - **Treasury** — safe-to-spend today, cash outlook, USYC reserve with **Bring cash back** (Arc testnet).
 - **Cross-currency and cross-chain** — EURC invoices and swaps, CCTP and Gateway payouts (Arc testnet).
 - **Shadow mode** — try the agent on real bills, paid in the business's own way, before it pays anything itself.
