@@ -47,3 +47,8 @@ and `/open` tests check the mark beside each name.
 - **2026-10-07.** One-ink marks replaced by the owners' own files in their colours, after reading the owners'
   guidelines: Slack forbids recolouring beyond black or white, Circle names its colours, and Arc's logo is used unchanged,
   so the traced Arc symbol gave way to Arc's app icon. The npm trademark notice was added.
+- **2026-10-12.** Xero, QuickBooks Online and HubSpot added, with their connectors: Xero's midnight wordmark, Intuit's
+  QuickBooks lockup and its green "qb" circle, HubSpot's sprocket, on the landing strip (now eight services, four to a
+  row), their Settings cards, and their connect and launch pages. Decisions, including the one derived file (the
+  QuickBooks circle, taken from the lockup's own paths) and why no dark variants ship, in
+  `docs/superpowers/specs/2026-10-12-integration-marks-design.md`.
