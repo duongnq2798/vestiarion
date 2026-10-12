@@ -78,8 +78,15 @@ describe("recordIncomingTransfers", () => {
     counterparties: { name: "Acme", address: CLIENT },
   }];
 
-  function workspace(over: { latest?: unknown[]; unmatched?: unknown[]; open?: unknown[]; invoicePatch?: unknown[]; grants?: unknown[] } = {}) {
+  function workspace(
+    over: { latest?: unknown[]; unmatched?: unknown[]; open?: unknown[]; invoicePatch?: unknown[]; grants?: unknown[]; allocations?: FakeReply; applied?: FakeReply; claim?: FakeReply } = {}
+  ) {
     return (r: RecordedRequest): FakeReply => {
+      if (r.path === "/rest/v1/receivable_allocations" && r.method === "GET") return over.allocations ?? { body: [] };
+      if (r.path === "/rest/v1/receivable_allocations" && r.method === "POST") {
+        return over.applied ?? { status: 201, body: { id: "alloc-1", created_at: "2026-10-01T15:01:00Z", reverses: null, reason: null, payment_seq: 1, ...(r.body as object) } };
+      }
+      if (r.path === "/rest/v1/incoming_transfers" && r.method === "PATCH" && over.claim && r.params.get("select")) return over.claim;
       if (r.path === "/rest/v1/ledger_entries" && r.params.get("action") === "eq.test_usdc_added") return { body: over.grants ?? [] };
       if (r.path === "/rest/v1/incoming_transfers" && r.method === "GET") {
         return r.params.has("invoice_id") ? { body: over.unmatched ?? UNMATCHED } : { body: over.latest ?? [] };
@@ -210,5 +217,86 @@ describe("recordIncomingTransfers", () => {
     const result = await run(() => recordIncomingTransfers(db(), provider([transfer({ from: OTHER })]), "operating"));
     expect(patches("/rest/v1/incoming_transfers")).toHaveLength(0);
     expect(result).toMatchObject({ recorded: 1, matched: 0 });
+  });
+
+  describe("beside payments a person applied (allocations L3)", () => {
+    const MISSING = { status: 404, body: { code: "PGRST205", message: "Could not find the table 'public.receivable_allocations' in the schema cache" } };
+    const allocation = (over: Record<string, unknown> = {}) => ({
+      id: "earlier",
+      kind: "payment",
+      invoice_id: "inv-1",
+      transfer_id: "row-0",
+      amount: "5.000000",
+      currency: "USDC",
+      reverses: null,
+      reason: null,
+      basis: "person",
+      payment_seq: 1,
+      created_by: "person-1",
+      created_at: "2026-10-01T10:00:00Z",
+      ...over,
+    });
+    const posts = () => fake.requests.filter((r) => r.path === "/rest/v1/receivable_allocations" && r.method === "POST");
+
+    it("matches whole as before when migration 0103 has not run", async () => {
+      fake = fakeSupabase(workspace({ allocations: MISSING }));
+      const result = await run(() => recordIncomingTransfers(db(), provider([transfer()]), "operating"));
+      expect(patches("/rest/v1/incoming_transfers")[0].body).toEqual({ invoice_id: "inv-1", matched_by: "sender" });
+      expect(result.matched).toBe(1);
+    });
+
+    it("leaves a transfer a person applied to them", async () => {
+      fake = fakeSupabase(workspace({ allocations: { body: [allocation({ transfer_id: "row-1" })] } }));
+      const result = await run(() => recordIncomingTransfers(db(), provider([transfer()]), "operating"));
+      expect(patches("/rest/v1/incoming_transfers")).toHaveLength(0);
+      expect(posts()).toHaveLength(0);
+      expect(result.matched).toBe(0);
+    });
+
+    it("never matches a part-paid receivable by its full amount", async () => {
+      fake = fakeSupabase(workspace({ allocations: { body: [allocation()] } }));
+      const result = await run(() => recordIncomingTransfers(db(), provider([transfer()]), "operating"));
+      expect(patches("/rest/v1/incoming_transfers")).toHaveLength(0);
+      expect(posts()).toHaveLength(0);
+      expect(result.matched).toBe(0);
+    });
+
+    it("applies a transfer that is exactly what is still owed, from the client's address, and signs it", async () => {
+      fake = fakeSupabase(workspace({ allocations: { body: [allocation()] }, unmatched: [{ ...UNMATCHED[0], amount: "7.500000" }] }));
+      const result = await run(() => recordIncomingTransfers(db(), provider([transfer({ amount: 7.5 })]), "operating"));
+      expect(patches("/rest/v1/incoming_transfers")).toHaveLength(0);
+      expect(posts()[0].body).toEqual({ org_id: ORG, kind: "payment", invoice_id: "inv-1", transfer_id: "row-1", amount: 7.5, currency: "USDC", basis: "sender", created_by: null });
+      expect(ledgerMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actor: "agent",
+          domain: "ar",
+          action: "ar_payment_applied",
+          summary: "Received 7.5 USDC from Acme on Arc testnet, what was still owed, and applied it",
+          detail: expect.objectContaining({ by: null, allocationId: "alloc-1", invoiceId: "inv-1", transferId: "row-1", amount: 7.5, basis: "sender", outstandingAfter: 0, txHash: "0xabc" }),
+        })
+      );
+      expect(result).toEqual({ recorded: 1, matched: 1, lines: [{ domain: "ar", message: "Received 7.5 USDC from Acme on Arc testnet, what was still owed (matched by sender)" }] });
+    });
+
+    it("leaves it to the person when the database refuses the application", async () => {
+      fake = fakeSupabase(
+        workspace({
+          allocations: { body: [allocation()] },
+          unmatched: [{ ...UNMATCHED[0], amount: "7.500000" }],
+          applied: { status: 400, body: { code: "P0001", message: "allocation_exceeds_receivable: more than the receivable owes" } },
+        })
+      );
+      const result = await run(() => recordIncomingTransfers(db(), provider([transfer({ amount: 7.5 })]), "operating"));
+      expect(ledgerMock).not.toHaveBeenCalled();
+      expect(result.matched).toBe(0);
+    });
+
+    it("leaves a whole match the database refuses, because a person applied a payment a moment before", async () => {
+      fake = fakeSupabase(workspace({ claim: { status: 400, body: { code: "P0001", message: "receivable_partly_paid: payments are applied to this receivable" } } }));
+      const result = await run(() => recordIncomingTransfers(db(), provider([transfer()]), "operating"));
+      expect(patches("/rest/v1/invoices")).toHaveLength(0);
+      expect(ledgerMock).not.toHaveBeenCalled();
+      expect(result.matched).toBe(0);
+    });
   });
 });
