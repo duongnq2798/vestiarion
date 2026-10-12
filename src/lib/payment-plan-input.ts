@@ -29,6 +29,11 @@ export interface PlanRows {
   }>;
   /** Deal lines not invoiced yet (deal schedule D14); null when they could not be read, absent where not read. */
   planned?: ReadonlyArray<{ id: string; label: string; line: string; amount: number; currency: string; dueOn: string }> | null;
+  /**
+   * What is still owed on each receivable a payment was applied to, by id (allocations L11, `stillOwed`): a part-paid
+   * one, a deal's released line among them, is expected for that alone. One not listed counts in full.
+   */
+  owed?: ReadonlyMap<string, number>;
   counterparties: ReadonlyArray<{ id: string; address: string | null; payment_limit: number | null; risk_level: string }>;
   /** Null when they could not be read. */
   milestones: ReadonlyArray<{ id: string; contractor_id: string; contractor_name: string; title: string; amount: number; status: string; escrow_state?: string | null }> | null;
@@ -146,7 +151,8 @@ export function paymentPlanInput(rows: PlanRows): PaymentPlanInput {
         id: invoice.id,
         from: invoice.counterparty_name,
         what: invoice.memo ?? null,
-        amount: num(invoice.amount),
+        // A part-paid receivable for what is still owed: what arrived is in the wallet already (allocations L11).
+        amount: rows.owed?.get(invoice.id) ?? num(invoice.amount),
         currency: invoice.currency ?? "USDC",
         // An unreadable due date is no day: the plan leaves it out of what it lists.
         dueOn: Number.isNaN(Date.parse(invoice.due_date)) ? "" : new Date(Date.parse(invoice.due_date)).toISOString().slice(0, 10),

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
-import { checkPayLink, createPayLink, PayLinkError, payLinkHash, payLinkStates, payLinkToken, previewPayLink, setReminders } from "@/lib/platform/pay-links";
+import { checkPayLink, createPayLink, PayLinkError, payLinkBalance, payLinkHash, payLinkStates, payLinkToken, previewPayLink, setReminders } from "@/lib/platform/pay-links";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
@@ -239,5 +239,34 @@ describe("checkPayLink", () => {
     for (let i = 0; i < 5; i++) answers.push((await platform(() => checkPayLink(TOKEN, at))).outcome);
     expect(answers.filter((a) => a === "wait").length).toBeGreaterThan(0);
     expect(recordMock.mock.calls.length).toBeLessThanOrEqual(3);
+  });
+});
+
+describe("payLinkBalance (allocations L11)", () => {
+  const row = (amount: string) => ({
+    id: `alloc-${amount}`, kind: "payment", invoice_id: INVOICE, transfer_id: "transfer-1", amount, currency: "USDC", reverses: null, reason: null,
+    basis: "person", payment_seq: 1, created_by: USER, created_at: "2026-10-09T09:00:00Z",
+  });
+
+  it("reads, in the workspace, what is still owed once a payment was applied", async () => {
+    fake = fakeSupabase((r) => (r.path === "/rest/v1/receivable_allocations" ? { body: [row("5.000000")] } : { body: [] }));
+    expect(await platform(() => payLinkBalance({ ...PREVIEW, status: "open", currency: "USDC" }))).toEqual({ owed: 7.5, received: 5 });
+    expect(withOrgMock).toHaveBeenCalledWith(ORG, expect.any(Function));
+    const read = fake.requests.find((r) => r.path === "/rest/v1/receivable_allocations")!;
+    expect(read.params.get("invoice_id")).toBe(`in.(${INVOICE})`);
+    expect(read.params.get("org_id")).toBe(`eq.${ORG}`);
+  });
+
+  it("counts as received only what the client paid, never a fee recorded beside it", async () => {
+    const fee = { ...row("0.500000"), id: "alloc-fee", kind: "fee", transfer_id: null, reason: "Transfer fee", basis: null, payment_seq: null };
+    fake = fakeSupabase((r) => (r.path === "/rest/v1/receivable_allocations" ? { body: [row("5.000000"), fee] } : { body: [] }));
+    expect(await platform(() => payLinkBalance({ ...PREVIEW, status: "open", currency: "USDC" }))).toEqual({ owed: 7, received: 5 });
+  });
+
+  it("is null with nothing applied, and before migration 0103 runs", async () => {
+    fake = fakeSupabase(() => ({ body: [] }));
+    expect(await platform(() => payLinkBalance({ ...PREVIEW, status: "open", currency: "USDC" }))).toBeNull();
+    fake = fakeSupabase(() => ({ status: 404, body: { code: "PGRST205", message: "Could not find the table 'public.receivable_allocations' in the schema cache" } }));
+    expect(await platform(() => payLinkBalance({ ...PREVIEW, status: "open", currency: "USDC" }))).toBeNull();
   });
 });

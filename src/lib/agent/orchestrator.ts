@@ -59,7 +59,8 @@ import {
   type MilestoneDecisionFacts,
   twoApprovalsHeldValue,
 } from "./follow-up";
-import { OPEN_PAYABLE_STATUSES, summarizePayableObligations, sumUsdcAmounts } from "./obligations";
+import { OPEN_PAYABLE_STATUSES, summarizePayableObligations } from "./obligations";
+import { projectedReceivableInflow } from "../allocations/book";
 import { quoteEurcInUsdc, type EurcQuote } from "../fx/quote";
 import { quoteUsdcForEurc, sizeSwap, SWAP_COST_CAP_PERCENT, SWAP_NOT_QUOTED, type SwapOffer, type SwapQuote } from "../fx/swap-service";
 import { resumeOpenSwaps, swapForPayment, type SwapOutcome, type SwapSweep } from "../fx/swap";
@@ -4002,11 +4003,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
 
   await stage("forecast", async () => {
   // ------------------------------------------------------------------ 5. forecast
-  const receivables = unwrap(
-    await db.from("invoices").select("amount, currency").eq("direction", "receivable").in("status", ["pending", "matched"])
-  ) as Array<{ amount: string; currency: string | null }>;
-  // USDC only: the forecast is set against USDC balances (EURC invoices design R3).
-  projectedInflow = sumUsdcAmounts(receivables);
+  projectedInflow = await projectedReceivableInflow(db);
 
   const forecast = await db.from("forecasts").insert({
     as_of: new Date().toISOString(),

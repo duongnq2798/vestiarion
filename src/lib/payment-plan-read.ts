@@ -13,6 +13,8 @@ type ReadOptions = {
   counterparties?: CounterpartyRow[];
   /** The deal lines not invoiced yet the page read, listed apart (deal schedule D14); null when they could not be read. */
   planned?: PlanRows["planned"];
+  /** What is still owed on each part-paid receivable, from the payments applied the page read (allocations L11). */
+  owed?: PlanRows["owed"];
 };
 
 /**
@@ -57,5 +59,6 @@ export async function readPaymentPlanInput(options: ReadOptions = {}): Promise<P
     budget,
     twoApprovalsAbove,
     ...(options.planned !== undefined ? { planned: options.planned } : {}),
+    ...(options.owed !== undefined ? { owed: options.owed } : {}),
   });
 }

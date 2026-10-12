@@ -61,6 +61,7 @@ import { shellStatus } from "@/lib/shell-status";
 import { flightRows, followUpOf, type FlightRow } from "@/lib/settlement-facts";
 import { readPaymentsInFlight } from "@/lib/settlement-read";
 import { readPlannedDealLines } from "@/lib/deals/read";
+import { readAllocationRows, stillOwed } from "@/lib/allocations/book";
 
 export const dynamic = "force-dynamic";
 
@@ -253,6 +254,17 @@ export default async function DashboardPage({
     // What the agent will pay next, soonest first (payment timing design §1):
     // derived from the invoices already loaded above, no extra query.
     const scheduledPayments = scheduledPaymentRows(invoices);
+    // A part-paid receivable is expected for what is still owed: what was received is in the wallet already
+    // (allocations L11), a deal's released line among them, its planned lines apart (deal schedule D14). Best effort:
+    // before migration 0103, or on a failed read, each counts in full, as before.
+    const receivableIds = invoices.filter((invoice) => invoice.direction === "receivable").map((invoice) => invoice.id);
+    const applied =
+      (receivableIds.length > 0
+        ? await readAllocationRows(db(), { invoiceIds: receivableIds }).catch((error: unknown) => {
+            console.error("console: payments applied not read", error instanceof Error ? error.message : error);
+            return null;
+          })
+        : null) ?? [];
     // Safe to spend today and the next 30 days (safe to spend design), from the rows already loaded: the
     // operating wallet's USDC and the USYC reserve's, less what the agent counts as owed.
     const outlookInput: OutlookInput = {
@@ -265,7 +277,7 @@ export default async function DashboardPage({
       milestones: milestones.map((milestone) => ({ ...milestone, contractor: milestone.contractor_name })),
       receivables: invoices
         .filter((invoice) => invoice.direction === "receivable")
-        .map((invoice) => ({ ...invoice, counterparty: invoice.counterparty_name, currency: invoice.currency ?? null })),
+        .map((invoice) => ({ ...invoice, amount: stillOwed(invoice, applied), counterparty: invoice.counterparty_name, currency: invoice.currency ?? null })),
       planned,
     };
     const outlook = cashOutlook(outlookInput);

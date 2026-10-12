@@ -413,6 +413,6 @@ describe("Bills & receivables", () => {
     expect(page).toContain(
       "settlementsByBill({ payments: payments.values(), invoices: shown.filter((invoice) => invoice.direction === \"payable\"), entries, entriesComplete: !ledgerReadMayBeCut(entries), now: asOf })"
     );
-    expect(page).toContain("{ network, deciding, verdicts, settlements, asOf }");
+    expect(page).toContain("{ network, deciding, verdicts, settlements, asOf, allocations }");
   });
 });

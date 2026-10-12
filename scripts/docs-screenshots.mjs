@@ -221,6 +221,8 @@ const SHOTS = {
   "evidence-access": async () => {},
   "where-a-payment-is-track": async () => {},
   "where-a-payment-is-in-flight": async () => {},
+  "apply-payments-list": async () => {},
+  "apply-payments-part-paid": async () => {},
   "deals-new": async (page) => {
     await page.fill({ "deal-title": "Website rebuild", "deal-total": "10,000.01", "deal-delivery": "2026-12-01" });
     await page.waitFor(`document.querySelector("[data-docs-shot]").textContent.includes("Includes 0.01 from rounding")`);

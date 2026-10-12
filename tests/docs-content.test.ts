@@ -176,6 +176,7 @@ describe("the docs navigation", () => {
       ["guides/payment-plan", "Plan the next two weeks of payments"],
       ["guides/report", "Read your workspace report"],
       ["guides/cash-scenarios", "Plan for clients paying late"],
+      ["guides/apply-payments", "Apply money received to invoices"],
       ["guides/deals", "Turn a signed deal into a collection schedule"],
       ["guides/get-paid", "Get paid as a freelancer"],
     ]);
@@ -241,7 +242,8 @@ describe("the docs navigation", () => {
     expect(neighbours("guides/github").next?.slug).toBe("get-started/quickstart");
     expect(neighbours("ai-integration/mcp").next?.slug).toBe("api");
     expect(neighbours("guides/report").next?.slug).toBe("guides/cash-scenarios");
-    expect(neighbours("guides/cash-scenarios").next?.slug).toBe("guides/deals");
+    expect(neighbours("guides/cash-scenarios").next?.slug).toBe("guides/apply-payments");
+    expect(neighbours("guides/apply-payments").next?.slug).toBe("guides/deals");
     expect(neighbours("guides/deals").next?.slug).toBe("guides/get-paid");
     expect(neighbours(pages[pages.length - 1].slug).next).toBeUndefined();
     expect(neighbours("no-such-page")).toEqual({});
