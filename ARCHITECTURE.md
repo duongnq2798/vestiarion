@@ -253,8 +253,8 @@ record; it writes nothing and nothing that moves money imports it (`tests/settle
 - who comes back to the bill (`followUpOf`, by its status) decides what an unknown send and a confirmed transfer the
   books miss promise: the agent's cycle for a `matched` payable or a `verified` milestone ("checking with Circle", "the
   agent's next cycle marks it"), a person in Approvals or on Contractors for a bill held for them, no one otherwise;
-- Bills & receivables reads the workspace's invoice payment intents, a page at a time, and folds the stages into each
-  payable's card; Treasury reads every intent not confirmed and the confirmed ones of the bills someone comes back to,
+- Bills & receivables reads the workspace's invoice payment intents, a page at a time, when its Bills tab shows a
+  payable, and folds the stages into the cards of the bills shown; Treasury reads every intent not confirmed and the confirmed ones of the bills someone comes back to,
   and lists them as **Payments in flight**, aged against the network's `stuckAfterMinutes`. Both reads are best effort, in
   the page's organization scope: one that fails hides only these parts. The shared receipt says Reconciled only when its
   own three checks pass, and Confirmed with the reason otherwise (`src/lib/receipts/status.ts`).
@@ -1083,7 +1083,7 @@ add up to the total exactly.
   a failure there is a log line and the next cycle tries again.
 - **Commands.** `deal.create`, `deal.change`, `deal.release` and `deal.auto_release` need `records.write`, as
   `invoice.add` does, and run from the console only (`src/lib/commands/deals.ts`, `src/app/actions/deals.ts`).
-- **Where it shows.** Bills & receivables has **Deals** under Receivables (`DealsSection`, New deal with `DealForm`),
+- **Where it shows.** Bills & receivables has **Deals** on its Receivables tab (`DealsSection`; New ▾ › Deal opens `DealForm`),
   `/o/[slug]/invoices/deals/[id]` each deal's schedule, controls and versions, and each receivable a line became names
   its deal (`dealLinksOf`). Treasury and the payment plan read the planned lines best effort (`readPlannedDealLines`,
   `plannedLinesOf`). Before 0104 runs every read answers not set up (`dealsNotReady`), the section says so, the
@@ -1317,7 +1317,7 @@ symbols, thousands or lakh grouping, and decimals by currency, kept as exact
 decimal strings) and `rows.ts` (the person's answers, which count only while
 their question is asked, and each row's fate: added,
 already in the workspace, or why not, and the failed rows as a CSV with the
-reason). The panel on Bills & receivables (`src/components/intake/BillImport.tsx`) asks the
+reason). The panel New ▾ › Import a list opens on Bills & receivables (`src/components/intake/BillImport.tsx`) asks the
 person to confirm the columns and answer what the list cannot say; the server
 (`checkBillListAction` and `importBillListAction`, `src/app/actions/bill-import.ts`)
 reads the list's text again with `checkBillList` (`src/lib/bill-import/check.ts`),
@@ -1328,10 +1328,36 @@ the business's own currency goes through `shadowBill`. Each added row's
 `create_invoice` entry carries `via: "import"`, `importFile` (the list's SHA-256)
 and `importRow`; the invoice number starts the memo. The list itself is not kept.
 
+## Bills & receivables: a summary, three tabs and one New menu
+
+`/o/[slug]/invoices` (docs/superpowers/specs/2026-10-12-bills-tabs-design.md) keeps four figures above three tabs:
+Needs you, Due in 7 days, Overdue and Receivables (what customers still owe, never called cash), each a link to the tab
+and filter behind it; **Waiting for review** only when something does (bills from Xero or QuickBooks, payments to book,
+invoices by email, HubSpot won deals); then **Bills**, **Payment plan** and **Receivables**.
+
+- **The address holds the view** (`src/lib/bills-view.ts`). `tab`, `filter`, `q`, `sort`, `page`, `open` (a bill's
+  detail), `review` (a review list over the page) and `new` are read by `readBillsQuery` and resolved against the
+  workspace by `resolveBillsView`; every link on the page is written by `billsHref`. Addresses from before the tabs land
+  where they meant: `?history=all`, `?status=…`, `?add`, `?hubspot=…`, `?q=…` on the server, and fragments
+  (`#trail-<id>`, `#settlement-<id>`, `#from-xero`, `#deals`, …) by `legacyHashHref` in the page, since a fragment never
+  reaches the server. The app's own links use the new form (`invoiceHref`).
+- **Only the tab shown is built.** The figures, the strip and the New forms read on every tab, with one
+  `ledger_entries_for_targets` call for every invoice as before; the plan (and the chain balance it reads) only on its
+  tab; payment intents, shared receipts and pay links only for the 25 rows on the page and an open detail.
+- **Rows and cards** (`src/components/bills/`, `build.tsx`). The tabs are WAI-ARIA tabs that are links, with manual
+  activation. A list has quick filters (`billFilterMatches`, `receivableFilterMatches`, which the figures count with
+  too), the search, an order and 25 rows a page (`pageOf`). A row names what stands in a bill's way and the next
+  action (`bill-next-step.ts`, in the order `WaitingPayableAction` offers them); its name opens the existing
+  `DecisionCard`, with the footer it always had, in a panel (`BillsPanels.tsx`, `open=` pushed onto the history).
+- **New ▾** (`NewMenu.tsx`) opens each existing form in a sheet: Bill to pay, Invoice to a customer, From a document,
+  Import a list, Recurring and Deal, with their own actions and checks; closing with something typed asks first.
+- `/docs-shots/bills/<state>` renders the page's states with sample data through the same builders, behind
+  `DOCS_SCREENSHOTS=1` as /docs-shots is.
+
 ## The payment plan
 
-Bills & receivables opens with the next 14 UTC days of payments
-(docs/superpowers/specs/2026-10-11-payment-plan-design.md). `planPayments`
+Bills & receivables' Payment plan tab shows the next 14 UTC days of payments
+(docs/superpowers/specs/2026-10-11-payment-plan-design.md), read only when that tab is shown. `planPayments`
 (`src/lib/payment-plan.ts`) is pure: from the operating wallet, the USYC
 reserve and its yield, Safe to spend's cushion (`cashOutlook(...).cushion`, so
 the two figures never disagree), the open payables and milestones, the agent's
@@ -1684,7 +1710,8 @@ the provider.
   `.github/workflows/accounting-sync.yml` by hand) runs each connection due (`accounting_connections_due`) for at most
   240 seconds, each under its five-minute sync lease and in its own workspace's scope, then revokes and deletes pending
   grants past their deadline. **Sync now** runs one in its action.
-- **Adding bills** (`review.ts`, `src/lib/commands/accounting.ts`). The review list on Bills & receivables reads each bill
+- **Adding bills** (`review.ts`, `src/lib/commands/accounting.ts`). The review list Bills & receivables opens from Waiting
+  for review (every bill unticked to start, with Select all) reads each bill
   in review as a row of a bill list and gives it its fate with `fatesOf` and `checkBillList`'s own facts, so duplicates,
   currencies (shadow mode for anything but USDC and EURC, never VND), decimals and the form's schema are the import's.
   The supplier is the counterparty its contact is linked to, else the one with its name, else a new one added with the
@@ -1807,9 +1834,10 @@ reads in `api.ts`, `hubspotProvider`), wired in `src/lib/crm-providers.ts`. It i
   again by id each run; one HubSpot no longer has is `deleted`. `planCrmDeal` keeps each deal once by its version. The
   sweeper runs a CRM connection with this runner (`sweepAccounting({ crm })`).
 - **Planning** (`crm-prefill.ts`, `crm-review.ts`, `src/lib/commands/crm.ts`). Bills & receivables lists the won deals
-  under Deals; **Plan collections** opens the New deal form filled in by `dealPrefill`: the customer by its company's
-  link, else its name (never a customer linked to another of the account's companies), else a new one; dollars as
-  USDC and euros as EURC at par, another currency only in shadow mode,
+  under Deals, on its Receivables tab (a deal planned already shows the deal it became, `crmPlanState`); **Plan
+  collections** opens the New deal form filled in by `dealPrefill`: the customer by its company's link, else its name
+  (never a customer linked to another of the account's companies), else a new one; dollars as USDC and euros as EURC at
+  par, another currency only in shadow mode,
   never VND; the close day as the start; HubSpot's deal id as the reference. `crm.plan_deal` (`records.write`) reads the
   row again, forces the reference, confirms through `confirmDeal` (`create_deal`, whose unique `external_ref` refuses a
   second plan), links the row (`deal_id`, `baseline`) and the company to the customer (`external_links`), and the

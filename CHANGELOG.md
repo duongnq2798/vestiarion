@@ -17,6 +17,21 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   beside Arc, Circle, Slack, Telegram and npm, each with its mark, what it does and its guide; their Settings cards and
   connect pages show their marks beside their names.
 
+### Changed
+
+- **Bills & receivables in three tabs.** The page keeps its four figures (Needs you, Due in 7 days, Overdue, and what
+  customers owe), shows Waiting for review only when something waits, and puts the work under Bills, Payment plan and
+  Receivables. Bills is one list with quick filters, search, an order and 25 rows a page; each row says what stands in
+  a bill's way and the next action, and its name opens the card it always had in a panel. One New menu opens each form:
+  Bill to pay, Invoice to a customer, From a document, Import a list, Recurring and Deal. Every link into the page,
+  old ones included, still lands where it meant.
+
+### Fixed
+
+- **Bills from Xero and QuickBooks start unticked**, with Select all: one click on Add no longer adds the whole list.
+- **A HubSpot deal planned already** shows the deal it became, with Open the deal, instead of saying it cannot be
+  planned; right after Plan collections the page goes on to the new deal.
+
 ## [0.1.0-beta.1] - 2026-10-12
 
 The first tagged release: everything merged from September 24 to October 12, 2026 (pull requests #1 to #325). A

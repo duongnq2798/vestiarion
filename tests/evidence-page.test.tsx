@@ -83,7 +83,7 @@ describe("a payable's chain, as the page draws it", () => {
   it("links the transaction as checked against the chain's own record, and the decision into its trail", () => {
     expect(markup).toContain(`href="${txUrl("arc-testnet", TX)}"`);
     expect(text(markup)).toContain(`The transaction (opens in a new tab) · ${LINK_STATE.checked}`);
-    expect(markup).toContain(`href="/o/northstar/invoices?history=all#trail-${INVOICE}"`);
+    expect(markup).toContain(`href="/o/northstar/invoices?open=${INVOICE}#trail-${INVOICE}"`);
     expect(text(markup)).toContain("How the agent decided, step by step");
   });
 

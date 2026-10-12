@@ -12,6 +12,7 @@ import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { BrandMark } from "@/components/vx/BrandMarks";
 import type { CrmPanelView } from "@/lib/connectors/crm-review";
+import { billsHref } from "@/lib/bills-view";
 
 const INITIAL: HubSpotActionResult = { ok: false, message: "" };
 
@@ -75,7 +76,7 @@ function ConnectButton({ orgSlug, label }: { orgSlug: string; label: string }) {
  */
 export default function HubSpotPanel({ orgSlug, view, canManage, notice }: { orgSlug: string; view: CrmPanelView; canManage: boolean; notice: string | null }) {
   const told = notice ? HUBSPOT_NOTICES[notice] : undefined;
-  const deals = `/o/${orgSlug}/invoices#from-hubspot`;
+  const deals = `/o/${orgSlug}${billsHref({ tab: "receivables" })}#from-hubspot`;
   return (
     <section aria-labelledby="hubspot-title" id="hubspot">
       <SectionHeader

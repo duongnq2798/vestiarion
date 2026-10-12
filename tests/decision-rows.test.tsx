@@ -94,36 +94,39 @@ describe("DecisionRows", () => {
 
 describe("the Bills & receivables page", () => {
   const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "invoices", "page.tsx"), "utf8");
+  const summary = readFileSync(path.join(process.cwd(), "src", "components", "bills", "BillsSummary.tsx"), "utf8");
+  const view = readFileSync(path.join(process.cwd(), "src", "lib", "bills-view.ts"), "utf8");
+  const build = readFileSync(path.join(process.cwd(), "src", "components", "bills", "build.tsx"), "utf8");
 
-  it("leads with what needs a person, what is due within 7 days, what is overdue and what is still to pay", () => {
-    for (const label of ["Needs you", "Due within 7 days", "Overdue", "Open payables"]) expect(page).toContain(`label="${label}"`);
+  it("leads with what needs a person, what is due within 7 days, what is overdue and what customers owe, each opening its list", () => {
+    for (const label of ["Needs you", "Due in 7 days", "Overdue", "Receivables"]) expect(summary).toContain(`label="${label}"`);
+    expect(build).toContain('needsYou: { count: needsYou.length, href: slugHref(billsHref({ tab: "bills", filter: "needs-you" })) }');
+    expect(page).toContain("const summary = summaryData({ payableRows, receivableRows, invoicesById, today, inAWeek,");
   });
 
-  it("folds New invoice, open only for a workspace with no invoice yet, or when asked to add one (?add, the palette's Add a bill)", () => {
-    expect(page).toMatch(/<IntakeFold label="New invoice"[^>]*defaultOpen=\{invoices\.length === 0 \|\| query\.add !== undefined\}>/);
+  it("puts every way to add something under New ▾, with no form open on the page (the palette's ?add opens one)", () => {
+    expect(page).not.toContain("<IntakeFold label=\"New invoice\"");
+    expect(page).toContain("<NewMenu");
+    expect(view).toContain('new: oneOf(NEW_KINDS, first(raw.new)) ?? (add === undefined ? null : add === "deal" ? "deal" : "bill")');
   });
 
-  it("groups payables into Needs you, Upcoming, and Paid and closed, the latest five of those until Show all", () => {
-    const payables = page.slice(page.indexOf('title="Payables"'), page.indexOf('title="Receivables"'));
-    const order = ['title="Needs you"', 'title="Upcoming"', 'title="Paid and closed"'].map((title) => payables.indexOf(title));
-    expect(order.every((at) => at >= 0)).toBe(true);
-    expect([...order].sort((a, b) => a - b)).toEqual(order);
-    expect(page).toContain("const HISTORY_SHOWN = 5;");
-    expect(payables).toContain("settled.slice(0, HISTORY_SHOWN)");
+  it("filters bills into Needs you, Upcoming, Scheduled, Paid and closed, All and Recurring, 25 to a page", () => {
+    expect(view).toContain('export const BILL_FILTERS = ["needs-you", "upcoming", "scheduled", "paid", "all", "recurring"] as const;');
+    expect(view).toContain("export const PAGE_SIZE = 25;");
+    expect(page).toContain("const page = pageOf(listed, openAt >= 0 ? Math.floor(openAt / PAGE_SIZE) + 1 : view.page);");
   });
 
-  it("keeps the rows that need a person closed, each with what the agent checked and why it waits", () => {
-    const needsYou = page.slice(page.indexOf('title="Needs you"'), page.indexOf('title="Upcoming"'));
-    expect(needsYou).not.toMatch(/open: /);
-    expect(needsYou).toContain("{ signals: payableSignals(decision), why: stoppedWhy(decision) }");
-    // A row whose hint says what it needs needs no why line besides.
-    expect(page).toContain("why: hint ? undefined : extra.why");
-    expect(page).toContain("row(decision, withVerdict(receiptFor), { signals: payableSignals(decision) })");
+  it("says on each row what is in the way and what to do next, and why it waits when no check says", () => {
+    expect(build).toContain("blockers: needsYou ? billBlockers(decision) : [],");
+    expect(build).toContain("why: needsYou ? stoppedWhy(decision) : null,");
+    expect(build).toContain("next: payable\n      ? billNextStep(decision, {");
+    expect(page).toContain("waiting: waiting.get(row.id),");
+    // Every payable's card keeps the footer it had: the verdict first, then what a waiting bill needs or its receipt.
+    expect(page).toContain("const payableFooter = withVerdict(needsYouFor);");
   });
 
-  it("folds the recurring schedules to one line under the payables they create", () => {
-    expect(page.indexOf("<RecurringSummary")).toBeGreaterThan(page.indexOf('title="Payables"'));
-    expect(page.indexOf("<RecurringSummary")).toBeLessThan(page.indexOf('title="Receivables"'));
+  it("folds the recurring schedules to one line under the bills they create", () => {
+    expect(page).toContain("below: schedules.length > 0 ? <RecurringSummary schedules={schedules} orgSlug={slug} canWrite={canWrite} /> : undefined");
   });
 });
 

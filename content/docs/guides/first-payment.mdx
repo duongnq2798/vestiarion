@@ -97,7 +97,7 @@ Anyone who may not add records sees "Only an owner or admin of this workspace ca
 
 ## 2. Add an invoice
 
-Open **Bills & receivables** and open **New invoice**. Choose **Enter one invoice**, **From a document** to have the model read it from a PDF or an email (see [Read an invoice from a document](#read-an-invoice-from-a-document)), or **Import a list** to add many from a spreadsheet, in its own columns, dates and currency (see [Import your bill list](/docs/guides/import-bills)).
+Open **Bills & receivables**, choose **New**, then **Bill to pay**. **New** also offers **From a document**, to have the model read it from a PDF or an email (see [Read an invoice from a document](#read-an-invoice-from-a-document)), and **Import a list**, to add many from a spreadsheet, in its own columns, dates and currency (see [Import your bill list](/docs/guides/import-bills)).
 
 - **Direction**: **Payable**, for an invoice you pay. Choosing a counterparty sets it: **Receivable** for a client, which pays you, and **Payable** for anyone else; the line under it says which it is. A payable to a client is never paid by the agent: it waits for a person, who pays it in **Approvals** if it is a refund.
 - **Counterparty**: the one you just added. With none yet, the form says "Add a counterparty first — every invoice is against one." and links to **Add counterparty**.
@@ -110,7 +110,7 @@ Open **Bills & receivables** and open **New invoice**. Choose **Enter one invoic
 
 <Screenshot
   src="/docs/guides/first-payment-invoice.png"
-  alt="The New invoice form on the Bills & receivables page, on the Enter one invoice tab, filled in: Direction Payable with the line Money you owe Northstar Studio, Counterparty Northstar Studio · vendor, Amount 12.50, Currency USDC, Due date 10/15/2026, Early-payment discount and Discount deadline left blank, Memo October design retainer, PO reference PO-2207, and Goods or services received ticked. The Add invoice button is below."
+  alt="New bill to pay on the Bills & receivables page, the form New opens, filled in: Direction Payable with the line Money you owe Northstar Studio, Counterparty Northstar Studio · vendor, Amount 12.50, Currency USDC, Due date 10/15/2026, Early-payment discount and Discount deadline left blank, Memo October design retainer, PO reference PO-2207, and Goods or services received ticked. The Add invoice button is below."
   caption="A payable within the counterparty's limit, with its PO reference and the goods received."
 />
 
@@ -118,11 +118,11 @@ Choose **Add invoice**. The page confirms with "Invoice added for *Name*. The ag
 
 ### Read an invoice from a document
 
-Instead of typing an invoice in, choose **From a document**. Choose a PDF or an email, or paste the invoice's text under **Or paste the invoice's text**, then choose **Read invoice**. The workspace's model reads the vendor, the amount, the currency, the due date, the purchase order, any early-payment discount and the address the invoice asks to be paid to. It fills in the invoice form below with them. Nothing is added until you check the form and choose **Add invoice**.
+Instead of typing an invoice in, choose **New**, then **From a document**. Choose a PDF or an email, or paste the invoice's text under **Or paste the invoice's text**, then choose **Read invoice**. The workspace's model reads the vendor, the amount, the currency, the due date, the purchase order, any early-payment discount and the address the invoice asks to be paid to. It fills in the invoice form below with them. Nothing is added until you check the form and choose **Add invoice**.
 
 <Screenshot
   src="/docs/guides/first-payment-document.png"
-  alt="An invoice from Northstar Studio read from a PDF by DeepSeek, under New invoice on the Bills & receivables page. A callout asks for every field to be checked and warns that the invoice asks to be paid to a different address than the one on file. Below it, the invoice form is filled in: Counterparty Northstar Studio · vendor, Amount 12.50, Currency USDC, Due date 10/15/2026, Early-payment discount and Discount deadline left blank, Memo October design retainer, PO reference PO-2207, and Goods or services received left unticked."
+  alt="An invoice from Northstar Studio read from a PDF by DeepSeek, in New invoice from a document on the Bills & receivables page. A callout asks for every field to be checked and warns that the invoice asks to be paid to a different address than the one on file. Below it, the invoice form is filled in: Counterparty Northstar Studio · vendor, Amount 12.50, Currency USDC, Due date 10/15/2026, Early-payment discount and Discount deadline left blank, Memo October design retainer, PO reference PO-2207, and Goods or services received left unticked."
   caption="An invoice read from a PDF, with its address checked against the one on file. Nothing is added until you choose Add invoice."
 />
 
@@ -202,7 +202,7 @@ A page tells what happens while it is open: a cycle started by your own action, 
 
 ## 4. Read the decision and its reasoning
 
-On **Bills & receivables**, the tiles at the top count what needs you, what is due within 7 days, what is overdue, and what is still to pay. Under **Payables**, each invoice is one row, in three groups: **Needs you** (held, or refused by code), **Upcoming** (not yet paid, with the day it pays or falls due) and **Paid and closed** (the latest five; **Show all** lists every one). Under its title, a row in **Needs you** or **Upcoming** lists what the agent checked: the purchase order, the goods received, the screening and the limit, each marked as passed or in the way, such as "PO on file · Goods received · Screened clear · Within its limit". A row in **Needs you** also says why it waits, after **Why**: the rule, when code stopped it, such as "Code stopped it: the payout fee is above 10% of the invoice.", or else the first sentence of the agent's reasoning. In shadow mode, a payment that passed every check and waits for your verdict says "Shadow mode: it waits for a person to agree." Open a row to see its decision as a card. The console's **Stopped** section also shows the latest decisions the agent stopped. A card shows:
+On **Bills & receivables**, the figures at the top count what needs you, what is due in 7 days, what is overdue, and what customers still owe you; each opens the list behind it. When something waits for review, such as bills an accounting tool or email brought in, **Waiting for review** says so under them. The **Bills** tab lists your bills, 25 to a page, with the search and an order: **Needs you** (held, or refused by code), **Upcoming** (not yet paid, with the day it pays or falls due), **Scheduled**, **Paid and closed**, **All** and **Recurring**, each with how many it holds. A row says who and what, the date that matters, the amount and the agent's decision in a few words. A row that needs you also says what stands in its way, such as "No PO · Not received", and its next action, such as "Add the purchase order" or "Decide in Approvals". When no check names the reason, it says why it waits: the rule, when code stopped it, such as "Code stopped it: the payout fee is above 10% of the invoice.", or else the first sentence of the agent's reasoning. In shadow mode, a payment that passed every check and waits for your verdict says "Shadow mode: it waits for a person to agree." The name of a row opens its decision as a card, in a panel beside the list (the whole screen on a phone); the panel's address can be shared, and Back closes it. The console's **Stopped** section also shows the latest decisions the agent stopped. A card shows:
 
 - the outcome: "Settled on Arc", "Scheduled for *date*", "Held for you" or "Refused by guardrail";
 - the amount and the counterparty;
@@ -212,7 +212,7 @@ On **Bills & receivables**, the tiles at the top count what needs you, what is d
 
 <Screenshot
   src="/docs/guides/first-payment-decision.png"
-  alt="The Payables list on Bills & receivables, its Paid and closed group holding one row: Northstar Studio, October design retainer, Due Oct 15, 2026, 12.50 USDC, Settled on Arc. The row is open on its decision card: Pay Northstar Studio, 12.50 USDC, marked Settled on Arc. The agent's reasoning reads: Paid 12.50 USDC to Northstar Studio: PO-2207 matches and the work was received, Northstar Studio screened clear with a 50.00 USDC limit, and the operating wallet holds 20.00 USDC. Below are How the agent decided, folded, the evidence chips PO, Goods received, Risk, Limit and Due, then Why it was paid, the link to ledger entry 5 and the transaction hash."
+  alt="A row on Bills & receivables, under Paid and closed: Northstar Studio, October design retainer, Due Oct 15, 2026, 12.50 USDC, Settled on Arc. Below, the card its name opens: Pay Northstar Studio, 12.50 USDC, marked Settled on Arc. The agent's reasoning reads: Paid 12.50 USDC to Northstar Studio: PO-2207 matches and the work was received, Northstar Studio screened clear with a 50.00 USDC limit, and the operating wallet holds 20.00 USDC. Below are How the agent decided, folded, the evidence chips PO, Goods received, Risk, Limit and Due, then Why it was paid, the link to ledger entry 5 and the transaction hash."
   caption="A settled payment: the agent's reasoning, the evidence it checked, the ledger entry and the transaction."
 />
 
@@ -261,7 +261,7 @@ An invoice with an early-payment discount shows its terms on its card as "*pct*%
 
 ### Pay something every period
 
-A retainer, a subscription or a monthly fee does not need a new invoice each time. Under **New invoice**, open **Recurring** and fill in the form:
+A retainer, a subscription or a monthly fee does not need a new invoice each time. Choose **New**, then **Recurring**, and fill in the form:
 
 - **Pay**: a vendor or contractor.
 - **For**: what it is for.
@@ -272,11 +272,11 @@ A retainer, a subscription or a monthly fee does not need a new invoice each tim
 
 Above the button, the form reads the schedule back as you fill it in, for example "Pays Jiren 0.3 USDC every day, from Oct 2, 2026 to Oct 3, 2026: 2 payments.". Check the period and the number of payments there before you go on. Choose **Set up recurring payment**. The setup is signed in the audit log as `recurring_payable_created`.
 
-- **Each period becomes an invoice as it comes near.** At most a week before its due date, a cycle creates it: a daily one on its day, a weekly one 6 days ahead, a monthly one 7 days ahead. The agent then decides it like any other: when to pay, within every guardrail. Each one is signed as `recurring_invoice_created` and appears under **Payables**, named after the period.
+- **Each period becomes an invoice as it comes near.** At most a week before its due date, a cycle creates it: a daily one on its day, a weekly one 6 days ahead, a monthly one 7 days ahead. The agent then decides it like any other: when to pay, within every guardrail. Each one is signed as `recurring_invoice_created` and appears on the **Bills** tab, named after the period; the **Recurring** filter lists the bills the schedules made.
 - **Months are counted from the first due date.** A payment due on the 31st falls on the last day of a shorter month and goes back to the 31st after.
 - **Periods of one schedule are never taken for duplicates of each other.** The same retainer billed every week is not refused as a repeat bill. An invoice typed by hand that repeats one of them still is.
 - **Delivered every period** is ticked by default: you confirm the work or service continues, so each period's invoice counts as received. Untick it to confirm each period yourself.
-- **Stopping.** **Recurring payments**, a folded line under **Payables**, says how many schedules run and which period falls due next. Open it to list each schedule with its next due date and status. **Stop** ends it, signed as `recurring_payable_stopped`; invoices it already created stay as they are.
+- **Stopping.** **Recurring payments**, a folded line under the list on the **Bills** tab, says how many schedules run and which period falls due next. Open it to list each schedule with its next due date and status. **Stop** ends it, signed as `recurring_payable_stopped`; invoices it already created stay as they are.
 
 ### Cap what the agent pays on its own
 
@@ -416,11 +416,11 @@ Owners and admins choose **Add details** on the card. The dialog offers only wha
   caption="Adding the purchase order and the goods receipt the agent asked for."
 />
 
-On **Bills & receivables**, the payable waits under **Needs you**, and its row says what it needs: "Needs a purchase order and goods received", "Needs a purchase order" or "Needs goods received". A counterparty paid without purchase orders is never asked for one. Open the row: under the agent's reasoning, its card asks for what is missing and offers **Add details** there too, beside **Decide in Approvals**, which opens Approvals at that payable's card. Once you have added details, the row reads "Details added · the agent decides it again" until it does.
+On **Bills & receivables**, the payable waits under **Needs you**. Its row says what stands in its way, "No PO" and "Not received", and what to do: "Add the purchase order and goods receipt", "Add the purchase order" or "Confirm the goods were received". A counterparty paid without purchase orders is never asked for one. That next action opens the bill's card: under the agent's reasoning, it asks for what is missing and offers **Add details** there too, beside **Decide in Approvals**, which opens Approvals at that payable's card. Once you have added details, the row reads "Details added · the agent decides it again" until it does.
 
 <Screenshot
   src="/docs/guides/first-payment-needs-you.png"
-  alt="Bills & receivables, under Payables, Needs you: one row for Northstar Studio, November design retainer, Needs a purchase order and goods received, due Oct 15, 2026, 12.50 USDC, marked Awaiting info. Opened, its card shows the agent's reasoning, the evidence PO none and Goods received no, How the agent decided, folded, Evidence so far, and at the bottom: Add the purchase order and confirm the goods or services were received, and the agent decides it again, with the buttons Add details and Decide in Approvals."
+  alt="Bills & receivables, under Needs you: one row for Northstar Studio, November design retainer, due Oct 15, 2026, 12.50 USDC, marked Awaiting info, with No PO and Not received, and Next: Add the purchase order and goods receipt. Below, the card it opens: the agent's reasoning, the evidence PO none and Goods received no, How the agent decided, folded, Evidence so far, and at the bottom: Add the purchase order and confirm the goods or services were received, and the agent decides it again, with the buttons Add details and Decide in Approvals."
   caption="A payable waiting for its purchase order, on Bills & receivables."
 />
 
@@ -470,7 +470,7 @@ To check a signature yourself, see [Verifying signatures](/docs/webhooks/verify)
 
 A payee, an accountant or anyone else can check a payment without an account: share its receipt.
 
-- **Sharing it.** On **Bills & receivables**, open a paid payable's row: one with a transaction on chain shows **Share receipt** to an owner or admin. It makes a link to a public page. Copy the link then: it is shown only once.
+- **Sharing it.** On **Bills & receivables**, under **Paid and closed**, open a paid bill: one with a transaction on chain shows **Share receipt** to an owner or admin. It makes a link to a public page. Copy the link then: it is shown only once.
 - **What the page shows.** The amount, the payee's chain and address, and how it was paid, with the fee. It also shows the transaction, linked to its explorer; for a CCTP payout, the burn on Arc testnet as well.
 - **The three checks the page makes.**
   - **Signed by the paying workspace.** The receipt is a ledger entry the workspace signed when it was shared. Its signature, body hash and chain hash are checked, and checked again in the reader's browser.
@@ -488,7 +488,7 @@ A payee, an accountant or anyone else can check a payment without an account: sh
 
 A receivable is money a client owes the business. In a live workspace, an owner or admin can send the client a link to pay it on Arc, on the workspace's network:
 
-1. **Make the link.** On **Bills & receivables**, under **Receivables**, open the invoice's row and choose **Get paid on Arc**, then **Copy link** and send it. A new link replaces the old one.
+1. **Make the link.** On **Bills & receivables**, on the **Receivables** tab, open the invoice and choose **Get paid on Arc**, then **Copy link** and send it. A new link replaces the old one.
 2. **The client pays.** The link opens a page with the amount, the due date, what it is for, the network, Arc testnet or Arc mainnet, and the workspace's address there. The client sends exactly that amount from any wallet on that network and can choose **I have paid**, which only asks Vestiarion to look now.
 3. **The agent matches it.** Every cycle, and on **I have paid**, Vestiarion reads the transfers that arrived in the operating wallet from Circle. A transfer of the same currency and amount as an open receivable, arriving after the receivable was added, settles it: from the client's own address on file, or, from any address, when it is the only such receivable and its client was sent the link. The receivable becomes received with its transaction, and the ledger records `ar_received`. Two open receivables of the same amount, with nothing to tell them apart, stay open for a person.
 4. **Anything else, a person applies.** One transfer for several invoices, part of an invoice now, or a payment a few cents short waits under **Apply payments**, with the agent's suggestions: see [Apply money received to invoices](/docs/guides/apply-payments). A part-paid invoice's link then asks for what is still owed, and the agent applies exactly that rest by itself, by the same two rules. An open invoice of that same amount counts as another such receivable: from an address not on file, neither is matched, and a person applies it.
@@ -499,7 +499,7 @@ The link stays on the invoice's row: **Copy link** copies it again at any time. 
 
 ### Let the agent remind the client
 
-A client who forgets to pay can be reminded by the agent, by email, with the pay link. On **Bills & receivables**, under the open receivable, choose **Remind the client by email** (owners and admins, in a live workspace). It needs the client's **Billing email**: without one, the row offers **Add billing email**, which opens the client's row on **Counterparties**.
+A client who forgets to pay can be reminded by the agent, by email, with the pay link. On **Bills & receivables**, on the **Receivables** tab, open the receivable and choose **Remind the client by email** (owners and admins, in a live workspace). It needs the client's **Billing email**: without one, the row offers **Add billing email**, which opens the client's row on **Counterparties**.
 
 From then on, each cycle, the agent decides whether to send a reminder now or to wait, and how firmly. Code sets the bounds:
 
@@ -511,7 +511,7 @@ From then on, each cycle, the agent decides whether to send a reminder now or to
 
 <Screenshot
   src="/docs/guides/first-payment-reminders.png"
-  alt="Bills & receivables, under Receivables, Open: a row for Acme Retail, October retainer, INV-1042, 12.50 USDC, due Oct 10, 2026. Under it the pay link with Copy link and Make a new link, then Reminders: Reminders are on. Sent: Oct 7, 2026 (friendly), Oct 10, 2026 (friendly), and a Turn off reminders button."
+  alt="Bills & receivables, on the Receivables tab: a row for Acme Retail, October retainer, INV-1042, 12.50 USDC, due Oct 10, 2026, Reminder 2 sent Oct 10, 2026. Below, the card it opens, with the pay link, Copy link and Make a new link, then Reminders: Reminders are on. Sent: Oct 7, 2026 (friendly), Oct 10, 2026 (friendly), and a Turn off reminders button."
   caption="A receivable whose reminders are on: the link, and the two reminders the agent sent."
 />
 

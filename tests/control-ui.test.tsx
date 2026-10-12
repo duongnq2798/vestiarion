@@ -517,8 +517,10 @@ describe("the new control screens, as source", () => {
 
   it("Invoices tells a waiting payable's row what it needs, and gives its card what a person can do about it", () => {
     const invoices = read("src/app/o/[slug]/invoices/page.tsx");
-    expect(invoices).toContain("const hint = facts ? waitingHint(facts.onFile, facts.added) : undefined;");
-    expect(invoices).toContain("needsYou.map((decision) => row(decision, withVerdict(needsYouFor), ");
+    // Its row names what it needs, from the same facts its card offers to add (Bills & receivables tabs B6).
+    expect(read("src/components/vx/bill-next-step.ts")).toContain("waitingHint(facts.waiting.onFile, facts.waiting.added)");
+    expect(invoices).toContain("waiting: waiting.get(row.id),");
+    expect(invoices).toContain("const payableFooter = withVerdict(needsYouFor);");
     expect(invoices).toContain("<WaitingPayableAction");
     // A counterparty paid without purchase orders is never asked for one (three-way match design M2).
     expect(invoices).toContain("purchaseOrderRequired: counterpartiesById.get(invoice.counterparty_id)?.purchase_order_required !== false");
@@ -532,7 +534,9 @@ describe("the new control screens, as source", () => {
       expect(page).toContain("if (decision.verdict.heldForVerdict && decision.verdict.open) return verdict;");
     }
     const invoices = read("src/app/o/[slug]/invoices/page.tsx");
-    expect(invoices).toContain("upcoming.map((decision) => row(decision, withVerdict(receiptFor), ");
+    // Every payable's card: the verdict first, then what a waiting bill needs or its receipt.
+    expect(invoices).toContain("const payableFooter = withVerdict(needsYouFor);");
+    expect(invoices).toContain("if (!invoice || !facts) return receiptFor(decision);");
     // In shadow mode in a currency other than USDC, a bill is typed in that currency (shadow mode S6); in USDC, as typed.
     expect(invoices).toContain("billCurrency={billCurrencyOf(verdicts.shadow)}");
     // With the test USDC its open bills need, beside it (test USDC T8).
@@ -544,7 +548,8 @@ describe("the new control screens, as source", () => {
     expect(console_).toContain("footerAction={nextStepFor(decision)}");
     // A hold for want of cash is no guardrail rule, but is explained like one (reserve cash back R4).
     expect(console_).toContain("rule={decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : decision.heldForVerdict ? SHADOW_VERDICT : null)}");
-    expect(read("src/app/o/[slug]/invoices/page.tsx")).toContain("rule={decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : decision.heldForVerdict ? SHADOW_VERDICT : null)}");
+    expect(read("src/app/o/[slug]/invoices/page.tsx")).toContain("const ruleOf = (decision: Decision) => decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : decision.heldForVerdict ? SHADOW_VERDICT : null);");
+    expect(read("src/app/o/[slug]/invoices/page.tsx")).toContain("rule={ruleOf(decision)}");
     // A counterparty paid without purchase orders is never asked for one there either (three-way match design M2).
     expect(console_).toContain("purchaseOrderRequired: counterpartiesById.get(invoice.counterparty_id)?.purchase_order_required !== false");
   });

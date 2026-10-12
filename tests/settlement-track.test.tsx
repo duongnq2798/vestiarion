@@ -407,11 +407,11 @@ describe("a payable's card", () => {
 describe("Bills & receivables", () => {
   const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "invoices", "page.tsx"), "utf8");
 
-  it("reads each payable's payment in the workspace's scope, best effort, and hands the cards their lifecycle (L8)", () => {
+  it("reads each payable's payment in the workspace's scope, best effort, for the cards shown, and hands them their lifecycle (L8)", () => {
     expect(page).toMatch(/return inOrg\(access, async \(\) => \{[\s\S]*readInvoicePayments\(db\(\)\)\.catch\(/);
     // Entries read up to the read's limit may leave out older ones: the lifecycle is told, so a missing entry is no mismatch.
     expect(page).toContain(
-      "settlementsByBill({ payments: payments.values(), invoices: shown.filter((invoice) => invoice.direction === \"payable\"), entries, entriesComplete: !ledgerReadMayBeCut(entries), now: asOf })"
+      "settlementsByBill({ payments: payments.values(), invoices: detailInvoices.filter((invoice) => invoice.direction === \"payable\"), entries, entriesComplete: !ledgerReadMayBeCut(entries), now: asOf })"
     );
     expect(page).toContain("{ network, deciding, verdicts, settlements, asOf, allocations }");
   });
