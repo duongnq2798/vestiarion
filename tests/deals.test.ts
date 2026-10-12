@@ -92,6 +92,21 @@ describe("confirmDeal", () => {
     expect(bestEffort).toHaveBeenCalledTimes(1);
   });
 
+  it("refuses a key sent again with another deal, rather than answer the deal the key made as if it were this one", async () => {
+    await signed();
+    // A New deal form kept from before (the browser's Back), filled in for a second deal: its key is the first deal's.
+    const other = draft({
+      title: "Brand refresh",
+      totalMinor: 500_000,
+      template: "custom",
+      lines: [{ position: 1, kind: "charge", label: "All", invoiceOn: "2026-10-20", dueOn: "2026-11-03", amountMinor: 500_000, roundingMinor: 0 }],
+    });
+    await expect(run(() => confirmDeal({ actorId: PERSON, draft: other }))).rejects.toMatchObject({ code: "key_reused" });
+    expect(store.deals).toHaveLength(1);
+    // The same deal sent again is still answered.
+    expect(await signed()).toMatchObject({ created: false });
+  });
+
   it("signs a version a request that died left unsigned, when the same confirm comes a minute later", async () => {
     const first = await signed();
     bestEffort.mockClear();
@@ -153,6 +168,32 @@ describe("changeDeal", () => {
       summary: "Changed the deal Website rebuild with Acme Studio (version 2): 10,000.00 USDC to 12,000.00 USDC",
       detail: { version: 2, kind: "revised", fromTotal: "10000.00", toTotal: "12000.00", difference: "2000.00", reason: "Extra page", ended: [] },
     });
+  });
+
+  it("refuses a change key sent again with another change, rather than answer that the other change was saved", async () => {
+    const { dealId } = await signed();
+    const [deposit, balance] = store.deal_lines;
+    const kept = [
+      { id: deposit.id as string, kind: "charge" as const, label: "Deposit (30%)", invoiceOn: "2026-10-12", amountMinor: 300_000 },
+      { id: balance.id as string, kind: "charge" as const, label: "Balance on delivery", invoiceOn: "2026-12-01", amountMinor: 700_000 },
+    ];
+    const change = {
+      dealId,
+      baseVersion: 1,
+      kind: "revised" as const,
+      totalMinor: 1_200_000,
+      reason: null,
+      idempotencyKey: "rev-0000-0000-4000-8000-000000000009",
+      lines: [...kept, { kind: "charge" as const, label: "Price change", invoiceOn: "2026-12-01", amountMinor: 200_000 }],
+    };
+    await run(() => changeDeal({ actorId: PERSON, change }));
+    // The same change again is answered as made.
+    expect(await run(() => changeDeal({ actorId: PERSON, change }))).toMatchObject({ version: 2, created: false });
+    // The same form, kept, sent with another price: it was not saved.
+    const other = { ...change, totalMinor: 1_500_000, lines: [...kept, { kind: "charge" as const, label: "Price change", invoiceOn: "2026-12-01", amountMinor: 500_000 }] };
+    await expect(run(() => changeDeal({ actorId: PERSON, change: other }))).rejects.toMatchObject({ code: "key_reused" });
+    expect(store.deal_versions).toHaveLength(2);
+    expect(store.deals[0].total_minor).toBe(1_200_000);
   });
 
   it("answers a change repeated with the same key without a second version, and refuses a stale one", async () => {

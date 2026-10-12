@@ -28,7 +28,17 @@ export const DEAL_ACTIONS = {
   autoRelease: "deal_auto_release_changed",
 } as const;
 
-export type DealErrorCode = "not_ready" | "not_found" | "customer_not_found" | "external_ref_taken" | "changed" | "line_not_found" | "shadow" | ReleaseRefusal | RevisionProblemCode;
+export type DealErrorCode =
+  | "not_ready"
+  | "not_found"
+  | "customer_not_found"
+  | "external_ref_taken"
+  | "changed"
+  | "key_reused"
+  | "line_not_found"
+  | "shadow"
+  | ReleaseRefusal
+  | RevisionProblemCode;
 
 const MESSAGES: Partial<Record<DealErrorCode, string>> = {
   not_ready: "Deals are not set up on this deployment yet.",
@@ -36,6 +46,7 @@ const MESSAGES: Partial<Record<DealErrorCode, string>> = {
   customer_not_found: "That customer was not found. Choose another, or add a new customer.",
   external_ref_taken: "Another deal of this workspace has that external reference.",
   changed: "This deal changed since you opened it. Reload the page to see it as it is now.",
+  key_reused: "This form was sent already, with other details. Reload the page and try again.",
   line_not_found: "That line is not on this deal.",
   ended: "A later version of the deal replaced or cancelled that line.",
   credit: "A credit is owed to the customer: it is never invoiced.",
@@ -148,6 +159,55 @@ export function versionEntry(record: DealRecord, version: number, by: string | n
   };
 }
 
+const lineKey = (line: { kind: string; label: string; invoiceOn: string; amountMinor: number }) => `${line.kind}|${line.label.trim()}|${line.invoiceOn}|${line.amountMinor}`;
+
+/**
+ * Whether the deal a key made is the one this draft confirms (D12): a key sent again with other details (a form kept
+ * from before, filled in for another deal) is no repeat, and is never answered with the deal the key made.
+ */
+function sameDeal(record: DealRecord, draft: DealDraft, customerId: string): boolean {
+  const signed = record.versions.find((row) => row.version === 1);
+  const lines = record.facts.lines.filter((line) => line.addedIn === 1).sort((a, b) => a.position - b.position);
+  return (
+    record.customer.id === customerId &&
+    record.title === draft.title.trim() &&
+    record.facts.currency === draft.currency &&
+    record.digits === draft.digits &&
+    signed?.totalMinor === draft.totalMinor &&
+    record.facts.startsOn === draft.startsOn &&
+    record.facts.termsDays === draft.termsDays &&
+    record.externalRef === (draft.externalRef?.trim() || null) &&
+    record.template === draft.template &&
+    lines.length === draft.lines.length &&
+    draft.lines.every((line, index) => lines[index].position === line.position && lines[index].dueOn === line.dueOn && lineKey(lines[index]) === lineKey(line))
+  );
+}
+
+/**
+ * Whether the version a key made is the change this one asks for (D12): the same kind from the same version, the same
+ * total, and the same lines added (each new line, and each planned line changed). Lines never change, so the lines the
+ * proposal names are still there to compare with.
+ */
+function sameChange(record: DealRecord, version: number, change: ChangeDraft): boolean {
+  const row = record.versions.find((candidate) => candidate.version === version);
+  if (!row || row.kind !== change.kind || version !== change.baseVersion + 1) return false;
+  if (change.kind === "cancelled") return true;
+  if (row.totalMinor !== change.totalMinor) return false;
+  const byId = new Map(record.facts.lines.map((line) => [line.id, line]));
+  const asked = change.lines
+    .filter((proposed) => {
+      const was = proposed.id === undefined ? undefined : byId.get(proposed.id);
+      return !was || lineKey(was) !== lineKey(proposed);
+    })
+    .map(lineKey)
+    .sort();
+  const added = record.facts.lines
+    .filter((line) => line.addedIn === version)
+    .map(lineKey)
+    .sort();
+  return asked.length === added.length && asked.every((key, index) => key === added[index]);
+}
+
 /** Reads a deal that must exist now: one just written. */
 async function stored(dealId: string): Promise<DealRecord> {
   const read = await readDeal(dealId);
@@ -227,6 +287,7 @@ export async function confirmDeal(input: { actorId: string; draft: DealDraft }):
   if (result.error) throw writeError(result.error);
   const { id, created } = result.data as { id: string; created: boolean };
   const record = await stored(id);
+  if (!created && !sameDeal(record, draft, customer.id)) throw new DealError("key_reused");
   if (created) await appendLedgerEntryBestEffort(currentOrgId(), versionEntry(record, 1, actorId));
   else await healEntry(record, 1, actorId);
   return { dealId: id, created, title: record.title, customerName: record.customer.name };
@@ -253,6 +314,7 @@ export async function changeDeal(input: { actorId: string; change: ChangeDraft }
     await db().from("deal_versions").select("version").eq("deal_id", change.dealId).eq("idempotency_key", change.idempotencyKey).limit(1)
   ) as Array<{ version: number }>;
   if (repeated[0]) {
+    if (!sameChange(read.deal, repeated[0].version, change)) throw new DealError("key_reused");
     await healEntry(read.deal, repeated[0].version, actorId);
     return { version: repeated[0].version, created: false, title: read.deal.title, kind: change.kind };
   }
@@ -280,6 +342,7 @@ export async function changeDeal(input: { actorId: string; change: ChangeDraft }
   if (result.error) throw writeError(result.error);
   const { version, created } = result.data as { version: number; created: boolean };
   const record = await stored(change.dealId);
+  if (!created && !sameChange(record, version, change)) throw new DealError("key_reused");
   if (created) await appendLedgerEntryBestEffort(currentOrgId(), versionEntry(record, version, actorId));
   else await healEntry(record, version, actorId);
   return { version, created, title: record.title, kind: plan.revision.kind };

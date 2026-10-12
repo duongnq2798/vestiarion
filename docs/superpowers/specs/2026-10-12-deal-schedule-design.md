@@ -109,6 +109,11 @@ was invoiced or paid.
 - The deal form carries a key made when the page is drawn. `deals` is unique on it per workspace, and `create_deal`
   answers the same deal for the same key: a double click, a retry or a slow network make one deal.
 - A change carries its own key (unique per workspace on `deal_versions`) and the version it was made from.
+- A key sent again with other details (a form kept from before, as the browser's Back restores it, filled in for
+  another deal or another change) is refused (`key_reused`, "This form was sent already, with other details."), and
+  the page is drawn again with a new key. It is never answered with the deal or the version the key made, as if this
+  one were confirmed. A deal compares its customer, title, currency, start, terms, reference, template, version 1's
+  total and lines; a change its kind, the version it was made from, its total and the lines it added.
 - A new customer typed into the form is looked up by name among the workspace's clients first, so a repeated confirm
   does not add the customer twice.
 

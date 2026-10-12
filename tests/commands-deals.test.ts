@@ -93,6 +93,16 @@ describe("changeDeal", () => {
     mocks.changeDeal.mockRejectedValue(new DealError("changed"));
     expect(await run(() => changeDeal(actor(), { change }))).toMatchObject({ ok: false, code: "changed", changed: true });
   });
+
+  it("refreshes the page for a form sent again with other details, so the next try carries a new key", async () => {
+    mocks.changeDeal.mockRejectedValue(new DealError("key_reused"));
+    expect(await run(() => changeDeal(actor(), { change }))).toMatchObject({
+      ok: false,
+      code: "key_reused",
+      changed: true,
+      message: "This form was sent already, with other details. Reload the page and try again.",
+    });
+  });
 });
 
 describe("releaseDealLine", () => {

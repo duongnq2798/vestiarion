@@ -10,9 +10,12 @@ import { gate } from "./policy";
  * its day. Each needs `records.write`, as adding a receivable does; the console runs them.
  */
 
-/** A refusal in the deal's own words; anything else is logged and said as a failure no one can act on. */
+/**
+ * A refusal in the deal's own words; anything else is logged and said as a failure no one can act on. A deal changed
+ * since the page was drawn, or a form sent again with other details, refreshes the page: the deal as it is, and a new key.
+ */
 function refusalOf(error: unknown, what: string, actor: Actor): Refused {
-  if (error instanceof DealError) return refused(error.code, error.message, error.code === "changed" ? { changed: true } : {});
+  if (error instanceof DealError) return refused(error.code, error.message, error.code === "changed" || error.code === "key_reused" ? { changed: true } : {});
   console.error(what, actor.orgId, error instanceof Error ? error.message : "unknown error");
   return refused("failed", TRY_AGAIN);
 }
