@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import type { Connection } from "@/lib/connectors/connections";
-import { crmPrefillFor, crmReview } from "@/lib/connectors/crm-review";
+import { crmPanelView, crmPrefillFor, crmReview } from "@/lib/connectors/crm-review";
 import { fakeSupabase, orgTestContext } from "./support/fake-supabase";
 
 /**
@@ -59,5 +59,28 @@ describe("crmPrefillFor", () => {
       crmPrefillFor({ rowId: "a", customers: [{ id: CUSTOMER, name: "Northwind Labs" }], workspace: { shadowOn: false }, today: "2026-10-12" })
     );
     expect(read.ok && read.prefill.customerId).toBe("");
+  });
+});
+
+describe("crmPanelView", () => {
+  it("counts no change for a planned deal cancelled since, even before the next sync clears its record", async () => {
+    const CANCELLED = "dddddddd-0000-4000-8000-0000000000c1";
+    const ACTIVE = "dddddddd-0000-4000-8000-0000000000c2";
+    const fake = fakeSupabase((sent) => {
+      if (sent.path === "/rest/v1/accounting_connections") {
+        return {
+          body: [{ id: "conn-1", org_id: ORG, provider: "hubspot", external_org_id: "48291736", external_org_name: "northstar-studio.example", status: "connected", scopes: [], connected_by: null, connected_at: "2026-10-12T08:00:00Z", consent_version: "hubspot-2026-10-12", consented_at: "2026-10-12T08:00:00Z", revoked_at: null, window_from: "2026-07-14", last_synced_at: null, last_error: null, last_error_at: null, failures: 0, next_sync_after: null, sync_lease_until: null, payment_account: null, payment_account_at: null }],
+        };
+      }
+      // Two planned deals with changes recorded; one was cancelled in Vestiarion since.
+      if (sent.path === "/rest/v1/crm_deals" && sent.params.get("flagged") === "not.is.null") {
+        return { body: [{ deal_id: CANCELLED }, { deal_id: ACTIVE }], headers: { "content-range": "0-1/2" } };
+      }
+      if (sent.path === "/rest/v1/crm_deals") return { body: [], headers: { "content-range": "*/0" } };
+      if (sent.path === "/rest/v1/deals") return { body: [{ id: CANCELLED, status: "cancelled" }, { id: ACTIVE, status: "active" }] };
+      return { body: [] };
+    });
+    const view = await runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), () => crmPanelView("hubspot", Date.parse("2026-10-12T10:00:00Z")));
+    expect(view.state === "connection" ? view.changed : null).toBe(1);
   });
 });

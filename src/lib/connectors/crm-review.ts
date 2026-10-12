@@ -149,6 +149,19 @@ export type CrmPanelView =
       changed: number;
     };
 
+/**
+ * Planned deals with changes recorded, whose Vestiarion deal is not cancelled (H12): a deal cancelled since shows none,
+ * though its record is cleared only at the next sync.
+ */
+async function changedPlanned(connectionId: string): Promise<number> {
+  const flagged = unwrap(
+    await db().from("crm_deals").select("deal_id").eq("connection_id", connectionId).not("deal_id", "is", null).not("flagged", "is", null).limit(MAX_LISTED)
+  ) as Array<{ deal_id: string }>;
+  if (flagged.length === 0) return 0;
+  const deals = unwrap(await db().from("deals").select("id, status").in("id", flagged.map((row) => row.deal_id))) as Array<{ id: string; status: string }>;
+  return deals.filter((deal) => deal.status !== "cancelled").length;
+}
+
 /** The CRM's card in Settings (H16, H17). */
 export async function crmPanelView(provider: ProviderId, nowMs: number = Date.now()): Promise<CrmPanelView> {
   let connection;
@@ -176,9 +189,7 @@ export async function crmPanelView(provider: ProviderId, nowMs: number = Date.no
           .gt("amount", 0)
           .not("company_external_id", "is", null)
           .then(count),
-    revoked
-      ? 0
-      : db().from("crm_deals").select("id", { count: "exact", head: true }).eq("connection_id", connection.id).not("deal_id", "is", null).not("flagged", "is", null).then(count),
+    revoked ? 0 : changedPlanned(connection.id),
     db().from("accounting_sync_cursors").select("page").eq("connection_id", connection.id).not("page", "is", null),
   ]);
   const read = ((cursors.data ?? []) as Array<{ page: number }>).reduce((sum, row) => sum + pagesRead({ page: row.page } as SyncCursor), 0);
