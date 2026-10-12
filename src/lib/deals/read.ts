@@ -269,11 +269,11 @@ export function plannedLinesOf(deals: DealRecord[]): PlannedDealLine[] {
     .sort((a, b) => a.dueOn.localeCompare(b.dueOn));
 }
 
-/** The planned lines of the workspace's deals; null when they could not be read or deals are not set up. Best effort. */
+/** The planned lines of the workspace's deals: none before 0104 runs, null when they could not be read. Best effort. */
 export async function readPlannedDealLines(orgDb: OrgDb = db()): Promise<PlannedDealLine[] | null> {
   try {
     const read = await readDeals(orgDb);
-    return read.available ? plannedLinesOf(read.deals) : null;
+    return read.available ? plannedLinesOf(read.deals) : [];
   } catch (error) {
     console.error("deals: planned lines not read", error instanceof Error ? error.message : error);
     return null;

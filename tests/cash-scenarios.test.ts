@@ -407,6 +407,8 @@ describe("cashScenario: what it is built from", () => {
       eurc: { bills: { count: 1, amount: 9 }, receivables: { count: 0, amount: 0 } },
       // Weeks from today: days 0-6, 7-13, 14-20, 21-27 and 28-29. A, R and B fall in the first three.
       weeks: { total: 5, withBills: 3 },
+      // No deal lines here.
+      planned: { count: 0, amount: 0, other: [], read: true },
     });
     expect(cashScenario(start, levers({ horizon: 90 })).coverage).toMatchObject({
       bills: { count: 3, amount: 60, lastDay: ymd(50) },
@@ -443,5 +445,28 @@ describe("cashScenario: what it is built from", () => {
 describe("the default levers", () => {
   it("look 60 days ahead with every client 14 days late and bill costs unchanged", () => {
     expect(DEFAULT_LEVERS).toEqual({ horizon: 60, lateDays: 14, choices: {}, costPct: 0, costScope: "all" });
+  });
+});
+
+describe("deal lines not invoiced yet (docs/superpowers/specs/2026-10-12-deal-schedule-design.md D14)", () => {
+  it("are in what the figure is built from, within the horizon, and in no balance", () => {
+    const withPlanned = basis({
+      outflows: [bill("Rent", 80, 5)],
+      planned: [
+        { id: "p1", label: "Acme Studio: Website rebuild", line: "Balance", amount: 700, currency: "USDC", day: 10 },
+        { id: "p2", label: "Acme Studio: Website rebuild", line: "Later", amount: 300, currency: "USDC", day: 45 },
+        { id: "p3", label: "Kobe Ltd: Retainer", line: "March", amount: 100_000, currency: "JPY", day: 12 },
+      ],
+      plannedRead: true,
+    });
+    const result = cashScenario(withPlanned, levers({ horizon: 30 }));
+    const without = cashScenario(basis({ outflows: [bill("Rent", 80, 5)] }), levers({ horizon: 30 }));
+    expect(result.days).toEqual(without.days);
+    expect(result.coverage.planned).toEqual({ count: 1, amount: 700, other: [{ currency: "JPY", amount: 100_000, count: 1 }], read: true });
+    expect(cashScenario(withPlanned, levers({ horizon: 60 })).coverage.planned).toMatchObject({ count: 2, amount: 1000 });
+  });
+
+  it("is none for a basis without deals", () => {
+    expect(cashScenario(basis(), levers()).coverage.planned).toEqual({ count: 0, amount: 0, other: [], read: true });
   });
 });

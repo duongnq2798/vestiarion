@@ -123,3 +123,18 @@ describe("paymentPlanInput", () => {
     expect(input.milestones).toEqual([]);
   });
 });
+
+describe("money expected in (docs/superpowers/specs/2026-10-12-deal-schedule-design.md D14)", () => {
+  it("takes the open receivables and the deal lines not invoiced yet, for the plan to list apart", () => {
+    const input = paymentPlanInput(
+      rows({
+        planned: [{ id: "p-1", label: "Client: Website rebuild", line: "Balance", dueOn: "2026-10-29", amount: 700, currency: "USDC" }],
+      })
+    );
+    expect(input.incoming).toEqual({
+      receivables: [{ id: "i-2", from: "Client", what: null, amount: 500, currency: "USDC", dueOn: "2026-10-13" }],
+      planned: [{ id: "p-1", from: "Client: Website rebuild", what: "Balance", amount: 700, currency: "USDC", dueOn: "2026-10-29" }],
+    });
+    expect(paymentPlanInput(rows({ planned: null })).incoming?.planned).toBeNull();
+  });
+});
