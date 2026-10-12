@@ -1,0 +1,71 @@
+A services business signs a deal, such as a 30% deposit and 70% on delivery, a monthly retainer or three milestones, and then has to work out when to invoice each part and chase it. In Vestiarion a deal holds that schedule. You confirm it once; each line becomes a receivable when it is time to invoice it, linked back to the deal; and a change after signing is a new version that never rewrites what was already invoiced or paid. It works the same in a workspace on Arc testnet and on Arc mainnet.
+
+## Before you start
+
+- **A workspace you can add receivables to**, as an owner or admin. Every member reads deals; anyone else sees "Only an owner or admin of this workspace can release, change or cancel a deal."
+- **The customer**, as a client in **Counterparties**, or typed as a new customer on the form: it is added as a client and screened as every counterparty is. A new customer with the name of a client you already have is that client.
+- **The deal is set up on your deployment.** Until it is, **Deals** says "Deals are not set up on this deployment yet." and everything else on **Bills & receivables** works as before.
+
+## 1. Confirm a deal
+
+Open **Bills & receivables**. **Deals** sits under **Receivables**. Open **New deal**.
+
+- **Customer**, and **Deal**: what the deal is called, such as Website rebuild. Each receivable's memo starts with it.
+- **Total** and **Currency**: USDC or EURC, which are paid on Arc. In shadow mode the form also offers your business's own currency; each line is then taken at its USDC amount at the day's rate when it is released, as a bill in that currency is.
+- **Start date**: no line is invoiced before it.
+- **Payment terms (days)**: each line is due this many days after its invoice day. It starts at 14.
+- **External reference**, optional: your CRM's id for the deal, for instance. Two deals of a workspace never share one.
+
+Then choose **How it is billed**:
+
+- **Deposit and balance**: **Deposit (%)** on the start date, up to two decimals, and the rest on the **Delivery date**, as **Deposit (30%)** and **Balance on delivery**.
+- **Equal milestones**: 2 to 24 equal parts, each with its invoice day and an optional name.
+- **Monthly retainer**: the total in equal months, on a **Day of the month**. The first month is the first such day on or after the start date. "31 is each month's last day when it is shorter.", so 31 is Feb 28 (or 29) and Apr 30.
+- **Custom lines**: each line with its own name, invoice day and amount.
+
+**Schedule** reads the lines back as you type: each line's invoice day, due day and amount. The lines always add up to the total exactly. When a total does not split evenly, each line takes its share rounded down and the last line takes the rest, and says so, such as "Includes 0.01 from rounding". A currency with no cents, such as the yen, is split in whole units.
+
+To change a line, choose **Edit lines**: every name, day and amount can then be edited, and **Add a line** adds one. Lines that do not add up are refused with what is missing, such as "The lines add up to 9,000.00 USDC; the deal is 10,000.00 USDC: 1,000.00 USDC short." **Back to the template** drops your edits.
+
+Tick **Release each line on its invoice day** to let the agent invoice each line on its day (see step 2). Then choose **Confirm deal**. The deal is signed as version 1, with every line planned, and its page opens. Pressing **Confirm deal** twice, or again after a slow answer, makes one deal, not two.
+
+## 2. Release each line
+
+A line not released yet is a plan, not an invoice: no client sees it, no reminder is sent, and no figure counts it as money expected. Releasing it makes it a receivable, through the same path as a receivable you type in, with the same signed entry, linked to the deal and its line.
+
+- **Release now** on the deal's page releases a line, on its invoice day or before it.
+- With **Release each line on its invoice day** on, the agent releases each line whose invoice day has come, at its first cycle that day. An owner or admin turns it on or off on the deal's page; **Stop releasing on invoice days** turns it off. Each switch is signed with who set it.
+
+The receivable is then like any other on **Bills & receivables**: open its card for its pay link and reminders, in a live workspace. Its row names the deal and the line, such as "Deal · Website rebuild · Balance on delivery", and **Open the deal** goes back to it.
+
+If a release is interrupted before its receivable is made, the line says **Receivable not made** and offers **Release again**. A line is never made into two receivables.
+
+## 3. Read the deal
+
+**Deals** lists each deal with its total, what was **Released**, **Paid**, is **Outstanding** and is **Planned**, and its next line. A deal whose lines are all paid says **Paid in full**.
+
+The deal's page shows the same figures, then its **Schedule**: each line with its state, **Planned**, **Released**, **Overdue**, **Paid**, or **Credit owed**. Lines a later version replaced or cancelled are folded under **Replaced and cancelled lines**. **Versions** lists every version, newest first, with its total, the difference from the one before, its reason and what it changed.
+
+## 4. Change a deal after signing
+
+Prices change, a milestone moves, a deal is stopped or picked up again. Each is a new version, and none rewrites a line already released: its receivable, paid or not, stays as it is.
+
+Open **Change deal** on the deal's page. **Lines not invoiced yet** lists the lines you can change; released lines are not in it.
+
+- **A new price.** Type the new total and choose **Propose a correction**. A higher price adds a **Price change** line for the difference, on the last planned line's invoice day, or today when none is left. A lower price takes the difference off the planned lines, from the last; what the released lines already exceed becomes **Credit for price change**, a credit owed to the customer, which is never invoiced and never counted as money.
+- **A moved, renamed or changed line.** Edit its invoice day, name or amount. The version replaces it with a new line, and the old one is kept under **Replaced and cancelled lines**.
+- **A line added or removed.** **Add a line**, or remove one.
+
+Under the lines, the version is worked out as you type: the old and new totals, the difference, and each change in words. "Lines already released, and their receivables, stay as they are." Choose **Save as version 2** (or the next number). A change to a released line is refused: "A released line stays as it is. Change the lines not invoiced yet, or add a correcting line." If someone changed or released a line since you opened the page, the change is refused and the page shows the deal as it is now.
+
+**Cancel deal** asks first, then stops every line not invoiced yet. The receivables already made stay, and nothing more is invoiced from the deal. **Reopen deal**, on a cancelled deal, takes the lines still to invoice and a new total, as a new version.
+
+## Where deals show in your cash
+
+- **A released line not paid yet** is a receivable: **Next 30 days** on **Treasury** and **What if clients pay late?** count it as money expected on its due day, never as cash, as any receivable. **Safe to spend today** and the agent's checks still count no receivable.
+- **A line not released yet** is planned. **Next 30 days** names what the lines due in the next 30 days come to, apart; **What if clients pay late?** names them under what the figure is built from; neither counts them in any balance.
+- **The payment plan** on **Bills & receivables** lists, under **Money expected in**, the receivables due in its 14 days and the deal lines planned for them, apart from its balances.
+
+## What is signed
+
+Each version is a signed entry in the workspace's ledger, which the audit log shows and webhooks deliver: `deal_signed` for version 1, `deal_revised` for a change or a reopen, `deal_cancelled` for a cancel, and `deal_auto_release_changed` for the switch. Each release is the receivable's own `create_invoice` entry, which names the deal and the line, and says whether a person or the agent released it.

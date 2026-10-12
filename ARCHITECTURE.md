@@ -979,12 +979,60 @@ already reads, with no query or write of their own beyond the recurring schedule
   when the scenario, worked out again with it moved, runs short later or by less), the three biggest drivers by the
   short day (a client's receivables grouped by its counterparty id), and the coverage (the weeks of the horizon with a
   bill on record, what is projected, what is left out). Cash is the
-  operating wallet and the USYC reserve; a receivable adds to the balance only on the day it arrives in that case; deals
-  not invoiced and bank balances are never counted.
+  operating wallet and the USYC reserve; a receivable adds to the balance only on the day it arrives in that case; bank
+  balances are never counted, and neither are a deal's lines not released yet: `outlookMoves` takes them as `planned`
+  (`OutlookInput.planned`), Next 30 days names what they come to apart (`plannedIn30d`, other currencies apart) and the
+  scenarios' coverage names them, in no balance (below, Deals). A released line is a receivable and counts as one.
 - **Nothing that pays reads it.** No server action, ledger entry or setting: the levers live in component state and
   are gone with the page. Safe to spend today, the treasury's buffer, cash holds and every guardrail still count no
   receivable; `tests/cash-scenarios-ui.test.tsx` fails if a file under `src/lib/agent`, `src/lib/commands`,
   `src/app/actions` or `src/app/api` imports a cash-scenario module.
+
+## Deals: a signed deal as a collection schedule
+
+A deal (`docs/superpowers/specs/2026-10-12-deal-schedule-design.md`) is the agreement on the receivables side: a
+customer, a total, a currency, a start date, payment terms, an optional external reference, and a schedule of lines that
+add up to the total exactly.
+
+- **Pure, then written.** `src/lib/deals/` holds the browser-safe modules the form, the page, the server and the cycle
+  share: `money.ts` (minor units: cents for USDC, EURC and two-decimal currencies, whole units for `billDigits`'s
+  zero-decimal ones; the deal currencies, USDC or EURC anywhere, another three-letter code in shadow mode only, never
+  VND), `schedule.ts` (the four templates, deposit and balance, equal milestones, a monthly retainer with month-end
+  days, custom lines; each line the floor of its share in `BigInt`, the remainder on the last line as
+  `roundingMinor`; due day = invoice day + terms), `input.ts` (both forms, read the same in the browser and on the
+  server), `revision.ts` (`proposeCorrection`, `planRevision`, `planCancel`) and `lines.ts` (each line's state,
+  `releaseRefusal`, `dueForRelease`, `dealSummary`). `read.ts` and `write.ts` are the server's.
+- **Migration 0104.** `deals`, `deal_versions` and `deal_lines` are tenant tables with row level security as 0090 and
+  every foreign key composite with `org_id`. A line not released yet is a `planned` deal line, never an invoice, so no
+  reader of receivables sees it. `create_deal` and `revise_deal` (security invoker, for the tenant role) write a version
+  whole: `create_deal` answers the deal already made for the same `idempotency_key` (unique per workspace), and
+  `revise_deal` locks the deal and refuses a change from a version that is no longer current (`deal_changed`) or that
+  ends a line released since (`deal_line_not_planned`). A deferred constraint trigger checks at commit that the lines in
+  force at every version add up to its total and that the deal names its latest version. The tenant role may update a
+  line's status and release only (column grants), and `deal_lines_guard` allows `planned` to `released`, `superseded` or
+  `cancelled`, and `released` back to `planned` only while no receivable names the line: a released line never changes.
+  `invoices.deal_id` and `deal_line_id` link a receivable to its line, both or neither, a receivable only, one invoice
+  per line, never moved once set.
+- **Versions.** A change ends planned lines and adds new ones (a moved or changed line `replaces` the old one); a
+  higher price adds a correcting line, a lower one reduces planned lines from the last and turns what released lines
+  already exceed into a credit line owed to the customer, never released or counted as money. Cancel ends the planned
+  charges; reopen adds lines to a cancelled deal. Each version is a signed `deal_signed`, `deal_revised` or
+  `deal_cancelled` entry, built from the stored deal (`versionEntry`), written best effort after `assertLedgerCanSign`,
+  and written by the same confirm or change when it comes again a minute later without one.
+- **Release.** `releaseDealLine` claims the line (compare-and-set on `planned`), then adds the receivable through
+  `createInvoice` with `deal: { dealId, lineId, version, title, line, releasedBy }`, which its `create_invoice` entry
+  carries with `via: "deal"`; a line in another currency goes through `shadowBill` first. A failed insert undoes the
+  claim; a line left released without a receivable is released again, and the unique index makes the second insert
+  find the first. With a deal's `auto_release` on (an owner or admin's switch, signed `deal_auto_release_changed`), the
+  cycle's recurring stage calls `releaseDueDealLines`, which releases each line whose invoice day came as the agent;
+  a failure there is a log line and the next cycle tries again.
+- **Commands.** `deal.create`, `deal.change`, `deal.release` and `deal.auto_release` need `records.write`, as
+  `invoice.add` does, and run from the console only (`src/lib/commands/deals.ts`, `src/app/actions/deals.ts`).
+- **Where it shows.** Bills & receivables has **Deals** under Receivables (`DealsSection`, New deal with `DealForm`),
+  `/o/[slug]/invoices/deals/[id]` each deal's schedule, controls and versions, and each receivable a line became names
+  its deal (`dealLinksOf`). Treasury and the payment plan read the planned lines best effort (`readPlannedDealLines`,
+  `plannedLinesOf`). Before 0104 runs every read answers not set up (`dealsNotReady`), the section says so, the
+  commands refuse with `not_ready` and the cycle releases nothing.
 
 ## Why it was paid: the evidence chain
 
@@ -1162,7 +1210,8 @@ workspace's mode for that action, never from a link, a key or a button. A
 `returnPayable`, `addPayableDetails`, `payMilestoneNow`, `closeMilestoneUnpaid`,
 `pauseWorkspaceAgent`, `resumeWorkspaceAgent`, `runWorkspaceCycle`,
 `addInvoice`, `importInvoices`, `recordActualPayment`, `importActualPayments`, `approvePlanLines`,
-`shareWorkspaceReport`, `stopSharingWorkspaceReport`, `answerReportBaseline` — whose first statement is
+`shareWorkspaceReport`, `stopSharingWorkspaceReport`, `answerReportBaseline`, `addDeal`, `changeDeal`, `releaseDealLine`,
+`setDealAutoRelease` — whose first statement is
 `gate(actor, "<command>")`:
 
 - the scope in force must be the actor's workspace, or it throws
@@ -1287,6 +1336,12 @@ then decides the bill again on its new day like any scheduled bill
 `plan_approved` cycle event. The decision card skips `payment_rescheduled`
 when it looks for the agent's decision (`matchingEntry` in
 `src/components/vx/map.ts`), and the decision trail shows it as a person's step.
+
+**Money expected in, apart.** `PaymentPlanInput.incoming` carries the open receivables (a deal's released lines among
+them) and the deal lines planned (`PlanRows.planned`, read by the page only), and the plan lists those due in its
+window as `incoming.expected` and `incoming.planned`, each on its due day (today when past). Neither enters a day's
+balance, a flag or a fingerprint, so approving a line never depends on money expected
+(`docs/superpowers/specs/2026-10-12-deal-schedule-design.md` D14).
 
 **Measured, not projected.** `planOutcomes` (`src/lib/payment-plan-outcomes.ts`)
 counts the last 30 days from what happened: bills paid by their due day,
