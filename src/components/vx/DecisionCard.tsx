@@ -1,4 +1,4 @@
-import { ArrowUpRight, Check, ScrollText, ShieldX, X } from "lucide-react";
+import { ArrowUpRight, BookCheck, Check, ScrollText, ShieldX, X } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/Badge";
@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { orgHref } from "@/lib/auth/org-paths";
+import { bookedBadge } from "@/lib/connectors/booked";
 import { evidenceLinkLabel, evidencePath } from "@/lib/evidence-paths";
 import { txUrl } from "@/lib/payee-chains";
 import { ruleLabel } from "@/lib/rule-words";
@@ -85,6 +86,12 @@ export function DecisionCard({
               />
             )}
             <OutcomeBadge outcome={decision.outcome} label={decision.outcomeLabel} />
+            {/* Its payment booked in the accounting tool, read back (accounting write-back W10). */}
+            {bookedBadge(decision.booked) && (
+              <Badge size="sm" tone={decision.booked?.state === "confirmed" ? "proof" : "neutral"} icon={<BookCheck aria-hidden />}>
+                {bookedBadge(decision.booked)}
+              </Badge>
+            )}
           </div>
         </header>
 
@@ -121,7 +128,14 @@ export function DecisionCard({
 
         {/* Where its payment is, stage by stage, each from its own source: folded until opened (settlement lifecycle L7). */}
         {decision.settlement && (
-          <SettlementTrack id={decision.id} settlement={decision.settlement.lifecycle} orgSlug={orgSlug} network={decision.network} now={decision.settlement.asOf} />
+          <SettlementTrack
+            id={decision.id}
+            settlement={decision.settlement.lifecycle}
+            orgSlug={orgSlug}
+            network={decision.network}
+            now={decision.settlement.asOf}
+            booking={decision.booked ?? null}
+          />
         )}
 
         {hasFooter && (

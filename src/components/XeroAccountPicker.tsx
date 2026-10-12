@@ -17,7 +17,7 @@ const CHOOSE_INITIAL: XeroActionResult = { ok: false, message: "" };
  * Where payments made on Arc will be booked in Xero (docs/superpowers/specs/2026-10-12-xero-connector-design.md X14,
  * I14): an owner or admin reads Xero's chart of accounts, sees the accounts a payment can be booked to (never a revenue
  * or expense account, and none picked for them), previews how a payment would be booked to the one they pick, and uses
- * it. Nothing is written to Xero in this version.
+ * it. Each payment is booked there only after an owner or admin approves it (accounting write-back W6).
  */
 export function XeroAccountPicker({ orgSlug, current, sample }: { orgSlug: string; current: PaymentAccount | null; sample: BookingSample | null }) {
   const load = useActionForm(loadXeroAccountsAction, LOAD_INITIAL);

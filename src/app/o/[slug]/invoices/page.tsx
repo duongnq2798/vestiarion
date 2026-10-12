@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import InboxEmails from "@/components/InboxEmails";
 import { XeroBillsReview } from "@/components/XeroBillsReview";
+import { AccountingBookings } from "@/components/AccountingBookings";
 import AgentControls from "@/components/AgentControls";
 import { AllocationLines } from "@/components/AllocationLines";
 import { ApplyPayments } from "@/components/ApplyPayments";
@@ -52,6 +53,8 @@ import { inboxSettingsFromEnv } from "@/lib/email-inbox/settings";
 import { connectionFor, NotSetUpError } from "@/lib/connectors/connections";
 import { accountingReview, type ReviewView } from "@/lib/connectors/review";
 import { xeroSettingsFromEnv } from "@/lib/xero/settings";
+import { accountingProvider } from "@/lib/accounting-providers";
+import { accountingBookings, type BookingsView } from "@/lib/connectors/bookings-view";
 import { ledgerReadMayBeCut, listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { listCounterparties, listInvoices, stats, type InvoiceRow } from "@/lib/queries";
 import { plural, utcDay } from "@/lib/copy";
@@ -145,6 +148,19 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       }),
     ]);
     const deals = dealsRead === "unread" ? "unread" : dealsRead.available ? dealsRead.deals : "not_ready";
+    // The payments made on Arc to book in Xero, each for a person to review (accounting write-back W6, W10). Best
+    // effort: hidden before migration 0106, without a connection, and when it cannot be read.
+    const [toBook, canBook] = await Promise.all([
+      xeroSettingsFromEnv()
+        ? connectionFor("xero")
+            .then((connection) => accountingBookings(connection, accountingProvider("xero")))
+            .catch((error: unknown): BookingsView => {
+              if (!(error instanceof NotSetUpError)) console.error("invoices: bookings in Xero not loaded", error instanceof Error ? error.message : error);
+              return { state: "hidden" };
+            })
+        : ({ state: "hidden" } as BookingsView),
+      viewerCan(slug, "accounting.book"),
+    ]);
     // Each receivable a deal line became names its deal (deal schedule).
     const dealLinks = Array.isArray(deals) ? dealLinksOf(deals) : new Map<string, DealLink>();
     const filter = typeof query.status === "string" ? query.status : undefined;
@@ -457,6 +473,21 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
             items={fromXero.items}
             closed={fromXero.closed}
             canAdd={canWrite}
+          />
+        )}
+
+        {toBook.state === "list" && (
+          <AccountingBookings
+            orgSlug={slug}
+            connectionId={toBook.connectionId}
+            label={toBook.label}
+            organisation={toBook.organisation}
+            scopeMissing={toBook.scopeMissing}
+            accountChosen={toBook.accountChosen}
+            toReview={toBook.toReview}
+            done={toBook.done}
+            canBook={canBook}
+            connectHref={`/integrations/xero/connect?org=${slug}`}
           />
         )}
 

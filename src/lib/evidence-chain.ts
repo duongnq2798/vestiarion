@@ -7,6 +7,7 @@
  * stay "Stated by a person" though their entry is signed. A step reads as its weakest fact.
  */
 
+import { bookingFromEntries } from "./connectors/booked";
 import { utcDay, utcMinute } from "./copy";
 import { deciderName, decisionChecks, PAYMENT_HELD_AGAIN, PAYMENT_SENT, trailStep } from "./decision-trail";
 import { MIRROR, PAYEE, addressProvenance } from "./new-payee";
@@ -79,7 +80,7 @@ export interface EvidenceFact {
   warn?: boolean;
 }
 
-export type EvidenceStepId = "agreed" | "delivered" | "bill" | "payee" | "decision" | "people" | "payment" | "receipt" | "signatures";
+export type EvidenceStepId = "agreed" | "delivered" | "bill" | "payee" | "decision" | "people" | "payment" | "books" | "receipt" | "signatures";
 
 export interface EvidenceStep {
   id: EvidenceStepId;
@@ -826,6 +827,60 @@ function recordingFact(recording: EvidenceEntry | null): EvidenceFact {
     : { kind: "missing", text: "No ledger entry records this transaction.", seqs: [] };
 }
 
+/**
+ * 7b. The books (accounting write-back W10): the payment booked in the accounting tool it came from, as the tool stated
+ * it when Vestiarion read it back. Only for a payable brought in from one whose payment was drafted for booking; the
+ * page never opens the tool again, so a booking read back is labelled by that read.
+ */
+function booksStep(ctx: Context): EvidenceStep | null {
+  if (ctx.key !== "invoiceId") return null;
+  const mark = bookingFromEntries(ctx.own, ctx.id);
+  if (!mark) return null;
+  const title = "The books";
+  const label = mark.label;
+  const approved = mark.approvedSeq !== null ? [mark.approvedSeq] : [];
+  const seqs = [...new Set([...approved, mark.seq])];
+  const amount = mark.amount && mark.currency ? ` of ${AMOUNT.format(Number(mark.amount))} ${mark.currency}` : "";
+  const by = mark.approvedBy ? ctx.who(mark.approvedBy) : null;
+  const approvedNote = by ? [`Approved by ${by} before it was sent.`] : [];
+  switch (mark.state) {
+    case "confirmed":
+      return step("books", title, [
+        {
+          kind: "verified",
+          text: `Booked in ${label} as payment ${mark.paymentId ?? ""}${amount}${mark.account ? ` from ${mark.account}` : ""}: stated by ${label} when Vestiarion read it back.`.replace("payment :", "payment:"),
+          at: mark.at,
+          notes: [...approvedNote, `The Arc transaction is its reference in ${label}. This page does not open ${label} again.`],
+          seqs,
+        },
+      ]);
+    case "sent":
+    case "approved":
+      return step("books", title, [
+        {
+          kind: "unreachable",
+          text: mark.state === "sent" ? `Sent to ${label}${mark.paymentId ? ` as payment ${mark.paymentId}` : ""}, not read back yet.` : `Approved to be booked in ${label}; ${label} has not answered yet.`,
+          at: mark.at,
+          notes: [...approvedNote, "Vestiarion reads it back at the next sync."],
+          seqs,
+        },
+      ]);
+    case "drafted":
+      return step("books", title, [
+        { kind: "missing", text: `Not booked in ${label} yet.`, fill: `An owner or admin reviews it under To book in ${label} on Bills & receivables, then approves it.`, seqs },
+      ]);
+    case "failed":
+      return step("books", title, [
+        { kind: "missing", text: mark.message ?? `Not booked in ${label} yet.`, fill: `Approve it again under To book in ${label} on Bills & receivables.`, at: mark.at, seqs },
+      ]);
+    case "refused": {
+      // The reality rule and a currency are Vestiarion's own checks; a bill paid, closed or a payment deleted is what the tool said.
+      const ours = mark.reason === "reality" || mark.reason === "currency";
+      return step("books", title, [{ kind: ours ? "checked" : "verified", text: mark.message ?? `Not booked in ${label}.`, at: mark.at, seqs }]);
+    }
+  }
+}
+
 /** 8. The receipt: shared or not, its signed entry, and whether its link still opens. */
 function receiptStep(ctx: Context): EvidenceStep {
   const title = "The receipt";
@@ -985,7 +1040,17 @@ export function buildEvidenceChain(input: EvidenceInput): EvidenceChain {
   };
 
   const steps: EvidenceStep[] = invoice
-    ? [agreedInvoice(ctx, invoice), deliveredInvoice(ctx, invoice), billStep(ctx, invoice), payeeStep(ctx), decisionStep(ctx), peopleStep(ctx), paymentStep(ctx, input.checks.onChain), receiptStep(ctx)]
+    ? [
+        agreedInvoice(ctx, invoice),
+        deliveredInvoice(ctx, invoice),
+        billStep(ctx, invoice),
+        payeeStep(ctx),
+        decisionStep(ctx),
+        peopleStep(ctx),
+        paymentStep(ctx, input.checks.onChain),
+        ...[booksStep(ctx)].filter((one): one is EvidenceStep => one !== null),
+        receiptStep(ctx),
+      ]
     : [agreedMilestone(ctx, milestone!), deliveredMilestone(ctx, milestone!), payeeStep(ctx), decisionStep(ctx), peopleStep(ctx), paymentStep(ctx, input.checks.onChain)];
   // Every entry about the record, and every other entry a fact rests on.
   const cited = new Set(steps.flatMap((s) => s.facts.flatMap((fact) => fact.seqs)));

@@ -139,6 +139,16 @@ export default function XeroPanel({
                 {canManage && view.connected && <XeroAccountPicker orgSlug={orgSlug} current={view.paymentAccount} sample={view.sample} />}
               </div>
             )}
+            {/* A connection made before booking was asked for (accounting write-back W8): connecting again grants it. */}
+            {view.connected && view.bookingAllowed === false && (
+              <div className="space-y-2 border-t border-line pt-4">
+                <p className="text-sm font-medium text-ink">Booking payments in Xero</p>
+                <p className="max-w-prose text-sm text-ink-2">
+                  Xero has not allowed Vestiarion to book payments yet. Connecting again asks Xero for it; the bills, links and the account chosen are kept.
+                </p>
+                {canManage ? <ConnectButton orgSlug={orgSlug} label="Allow Vestiarion to book payments" /> : <p className="text-sm text-ink-3">An owner or admin allows it.</p>}
+              </div>
+            )}
             {canManage ? (
               <div className="flex flex-wrap items-start gap-3 border-t border-line pt-4">
                 {view.status.reconnect && <ConnectButton orgSlug={orgSlug} label="Reconnect Xero" />}

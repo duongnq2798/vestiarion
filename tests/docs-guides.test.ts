@@ -1400,7 +1400,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Where payments made on Arc will be booked", XERO_PANEL],
     ["Choose the account", XERO_PICKER],
     ["Use this account", XERO_PICKER],
-    ["The network fee is booked apart, never to this account.", "src/lib/connectors/booking.ts"],
+    ["The network fee is shown apart and not booked to this account.", "src/lib/connectors/booking.ts"],
     ["accounting_payment_account_chosen", XERO_CONNECTIONS],
     ["Not chosen yet. Nothing is booked to an account nobody chose.", XERO_PANEL],
     ["The last sync with Xero failed", XERO_STATUS, "`The last sync with ${label} failed`"],

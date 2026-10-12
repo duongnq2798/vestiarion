@@ -40,6 +40,7 @@ import { linkFor as telegramLinkFor } from "@/lib/telegram/links";
 import { telegramSettingsFromEnv } from "@/lib/telegram/settings";
 import { networkProfile } from "@/lib/network";
 import { readShadowMode } from "@/lib/shadow-mode";
+import { accountingProvider } from "@/lib/accounting-providers";
 import { shellStatus } from "@/lib/shell-status";
 
 export const dynamic = "force-dynamic";
@@ -125,7 +126,7 @@ export default async function SettingsPage({
       // Only on a deployment where Xero is configured (Xero connector X16); best effort, like Slack's. Before migration
       // 0101 the card says Xero is not set up yet.
       xeroSettingsFromEnv()
-        ? accountingPanelView("xero").catch((error: unknown) => {
+        ? accountingPanelView("xero", Date.now(), { writeScopes: accountingProvider("xero")?.booking?.writeScopes }).catch((error: unknown) => {
             console.error("settings: Xero status not loaded", error instanceof Error ? error.message : error);
             return null;
           })
