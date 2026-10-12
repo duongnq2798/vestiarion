@@ -12,3 +12,4 @@ export { importActualPayments, recordActualPayment } from "./actuals";
 export { approvePlanLines, type PlanLineResult } from "./payment-plan";
 export { answerReportBaseline, shareWorkspaceReport, stopSharingWorkspaceReport } from "./report";
 export { importBankStatement } from "./statements";
+export { addAccountingBills, dismissAccountingBills, type BroughtInBill, type BroughtInCounts } from "./accounting";

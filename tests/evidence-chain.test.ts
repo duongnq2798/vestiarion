@@ -799,6 +799,29 @@ describe("a bill imported from a list (import design B12)", () => {
   });
 });
 
+describe("a bill brought in from Xero (Xero connector X11)", () => {
+  it("says where it came from, by the number Xero gave it, and who marked its goods received", () => {
+    const base = paidInFull();
+    const fromXero = entry(20, "09:30:00", "human", "create_invoice", {
+      by: ALICE,
+      invoiceId: INVOICE,
+      counterpartyId: CP,
+      amount: 12.5,
+      currency: "USDC",
+      poReference: null,
+      goodsReceived: true,
+      via: "xero",
+      xero: { tenantId: "tenant-1", billId: "bill-1", contactId: "contact-1", invoiceNumber: "PD-4471" },
+    });
+    const chain = buildEvidenceChain({ ...base, entries: [fromXero], payment: null, receipt: null, checks: { entries: okChecks([fromXero]), onChain: null } });
+    expect(step(chain, "bill").facts[0]).toMatchObject({
+      kind: "stated",
+      text: "12.50 USDC, brought in from Xero as bill PD-4471, and added on Bills & receivables by the person who reviewed it.",
+    });
+    expect(step(chain, "delivered").facts[0].text).toBe("The goods or services are marked received in the review of bills from Xero.");
+  });
+});
+
 describe("a payable paid with its early-payment discount", () => {
   const base = paidInFull();
   const discounted = entry(22, "10:02:40", "agent", "ap_pay", { ...AGENT_PAID.detail, amountPaid: 12.25, discountTaken: 0.25 });
