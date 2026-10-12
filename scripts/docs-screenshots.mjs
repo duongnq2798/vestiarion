@@ -221,6 +221,8 @@ const SHOTS = {
   "evidence-access": async () => {},
   "where-a-payment-is-track": async () => {},
   "where-a-payment-is-in-flight": async () => {},
+  "xero-settings": async () => {},
+  "xero-review": async () => {},
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

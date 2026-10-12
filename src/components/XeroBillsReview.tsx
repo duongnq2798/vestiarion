@@ -115,7 +115,7 @@ export function XeroBillsReview({
         {items.length > 0 && (
           <ul className="divide-y divide-line rounded-lg border border-line">
             {items.map((row) => (
-              <li key={row.id} className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
+              <li key={row.id} className="space-y-1.5 px-4 py-3">
                 <div className="min-w-0">
                   {canAdd ? (
                     <Checkbox
@@ -148,7 +148,8 @@ export function XeroBillsReview({
                     </div>
                   )}
                 </div>
-                <div className="flex max-w-md flex-col items-end gap-1 text-right">
+                {/* Under the bill, level with its label: what will happen to it. */}
+                <div className={canAdd ? "flex flex-wrap items-center gap-2 pl-8" : "flex flex-wrap items-center gap-2"}>
                   {row.supplierNew && row.status === "add" && (
                     <Badge size="sm" tone="agent">
                       New counterparty

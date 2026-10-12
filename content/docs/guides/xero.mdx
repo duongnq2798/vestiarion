@@ -1,0 +1,95 @@
+Connect Xero, and the bills you approve there come into Vestiarion for you to review, without retyping them. Each bill goes through the same check as a bill list: duplicates, currency, the supplier. It becomes a payable only when you add it, and the agent then decides it as any other bill, with every guardrail.
+
+Vestiarion reads from Xero and writes nothing to it. Approving a bill in Xero does not approve its payment in Vestiarion.
+
+## Before you start
+
+- **An owner or admin** of the workspace connects Xero. Anyone else sees "An owner or admin connects Xero."
+- **A Xero organisation** with bills: bills you approved in Xero, with an amount due. The Xero Demo Company works for a first try.
+- **The bills' currency.** Outside shadow mode, Vestiarion pays bills in USDC or EURC, and Xero bills are in your own currency. In a workspace in [shadow mode](/docs/guides/shadow-mode) on Arc testnet, a bill in the business's own currency is added at its USDC amount at the day's rate, as a bill typed into the form is.
+
+## 1. Connect Xero
+
+Open **Settings**. Under **Xero**, choose **Connect Xero**.
+
+The connect page names the workspace (or lets you pick one, if you manage several) and says what Vestiarion does with Xero's data:
+
+- It reads the bills, suppliers and chart of accounts of the Xero organisation you pick. It writes nothing to Xero.
+- The bills you add are shown to the workspace's members and to its agent. The agent's model provider sees each bill's facts to decide on it, and may not train on them.
+- Vestiarion never uses Xero data to train or improve any AI model, and never passes it to anyone else without your workspace's say.
+
+Tick **I agree**, then choose **Continue to Xero**. Your agreement, with its date, is kept on the connection and in the workspace's signed ledger.
+
+Xero asks you to sign in and to allow access. If you allow more than one organisation, Vestiarion then asks you to **Pick the Xero organisation**: choose one and **Connect this organisation**. The others stay authorised in Xero until you remove them there.
+
+Back in Settings, the card says "Xero is connected. Its open bills are coming in for review on Bills & receivables." The ledger records `accounting_connected`.
+
+<Screenshot
+  src="/docs/guides/xero-settings.png"
+  alt="The Xero card in Settings: Connected to Demo Company (Global), last synced 5 minutes ago, a link saying 3 bills waiting for review, where payments made on Arc will be booked, Arc USDC wallet (091) in USD, with Change the account, and the Sync now and Disconnect Xero buttons."
+  caption="Connected, with bills waiting and the account payments will be booked to."
+/>
+
+## 2. Which bills come in
+
+The first sync starts as soon as you connect. It brings in the bills Xero says are approved and still have an amount due, due or dated in the last 90 days or later. Older open bills stay in Xero; add one with the invoice form if you need it. After that, Vestiarion asks Xero every 15 minutes for what changed, and **Sync now** asks at once.
+
+- **Drafts and bills awaiting approval** in Xero never come in.
+- **A bill paid, voided or deleted in Xero** before you added it leaves the list.
+- **A bill paid, voided or deleted in Xero after you added it** stays in Vestiarion, and is listed under "Closed in Xero after they were added", so you can reject it before the agent pays it. The ledger records `accounting_bill_closed`.
+- **A bill is never added twice.** Each one is kept once by its id in Xero, and checked against the invoices already in Vestiarion.
+
+## 3. Add the bills
+
+Open **Bills & receivables**. The bills Xero brought in wait at the top, under "From Xero: 3 bills to add", with the supplier, the bill's number, its amount due, its due day and what will happen to it:
+
+- **Ready to add**, with its USDC amount for a bill in your own currency.
+- **Already in Vestiarion: same counterparty, amount, due date and reference.**, or "Same as bill PD-4471 from Xero." when Xero lists it twice.
+- **Can't be added**, and why, in the same words as a bill list: for instance "Bills in USD are taken in shadow mode only. Turn it on for USD in Settings, or convert the amount to USDC."
+
+<Screenshot
+  src="/docs/guides/xero-review.png"
+  alt="From Xero: 3 bills to add on Bills & receivables. PowerDirect Ltd, bill PD-4471, 1,250.00 USD due Oct 28, ready to add at 1,250.00 USDC; Akiba Parts K.K., bill AK-77, ready to add as a new counterparty; SMART Agency, already in Vestiarion. Below, the Add, goods received, Add, not received yet and Dismiss buttons."
+  caption="Each bill with its fate, ticked when it can be added."
+/>
+
+The bills that can be added are ticked. Then choose:
+
+- **Add, goods received**, when the goods or services on the ticked bills were received;
+- **Add, not received yet**, when they were not: the agent waits for them to be marked received before it pays;
+- **Dismiss**, for bills you pay another way. They stay in Xero.
+
+Each bill is added as one typed into the invoice form: the same checks, and a signed `create_invoice` entry that says `via: "xero"` with the Xero ids of the organisation, the bill and the supplier. Its decision trail says "A person added it, brought in from Xero." Dismissing records `accounting_bills_dismissed`.
+
+**The supplier.** A bill goes to the counterparty its Xero supplier was linked to the first time, else to the one counterparty with its name (without regard to case, punctuation or a legal suffix). A supplier no counterparty has yet is added with the bill, marked **New counterparty**: a vendor with no payment address yet, a payment limit of its largest bill being added, and purchase orders needed, which you change on **Counterparties**. Add its payment address there before the agent can pay it.
+
+**The approval.** Xero approving a bill does not approve its payment: the agent decides it, and a person decides what the agent stops.
+
+## 4. Choose where payments will be booked
+
+An owner or admin chooses the account in Xero that payments made on Arc will be booked to. Under **Where payments made on Arc will be booked**, choose **Choose the account**. Vestiarion reads your chart of accounts and offers the active bank accounts, and the accounts Xero lets take a payment; never a revenue or expense account.
+
+Pick one to see how a payment would be booked: "A payment of 1,250.00 USDC to PowerDirect for bill PD-4471 will be booked in Xero as a payment of 1,250.00 USD from Arc USDC wallet (091), with the Arc transaction as its reference." USDC is booked as USD and EURC as EUR, so an account in USD fits best. The network fee is booked apart, never to this account. Then **Use this account**. The ledger records `accounting_payment_account_chosen`.
+
+Until someone chooses, the card says "Not chosen yet. Nothing is booked to an account nobody chose." Nothing is written to Xero yet: this keeps the choice for when Vestiarion books its payments there.
+
+## 5. When something goes wrong
+
+The card says what happened, in words, and never "connected" while the last sync failed:
+
+| The card says | What it means |
+| --- | --- |
+| The last sync with Xero failed | Xero did not answer, or its answer could not be read. The card says when Vestiarion tries again: a minute later, then longer after each failure, at most an hour. Nothing read so far is lost; the next sync goes on from where this one stopped. |
+| Xero asked Vestiarion to slow down. Syncing again at 14:05 UTC. | Xero limits how often an app may ask, per minute and per day. The next sync starts at the time Xero gave, from where this one stopped. |
+| Xero needs you to reconnect | Xero no longer accepts the connection: it was disconnected in Xero, or not used for 60 days. Choose **Reconnect Xero**: the bills, links and review list are kept. |
+| Xero is not set up on this deployment yet. | The deployment has not finished setting up Xero. Nothing is read. |
+
+## 6. Disconnect
+
+An owner or admin chooses **Disconnect Xero**. Vestiarion asks Xero to end its access, deletes its tokens, and reads nothing more. Bills already added stay in Vestiarion, with their history. The ledger records `accounting_disconnected`. To connect again, choose **Connect Xero**.
+
+## Your data
+
+- Xero's tokens are kept encrypted, readable only by the server, and never shown in the browser, a log, a model's prompt or a webhook.
+- A bill's facts (supplier, number, amount, days) are shown to the workspace's members and to the agent, whose model provider may not train on them.
+- Vestiarion never uses Xero data to train or improve any AI model. See the [privacy page](/privacy).

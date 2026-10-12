@@ -162,7 +162,8 @@ Writing payments back to Xero is the next feature; this one stores the account t
   past its `next_sync_after`, not leased) until 240 seconds have gone, and revokes and deletes pending rows past
   their deadline.
 - One run per connection at a time: a run takes the connection's sync lease (five minutes) with a compare-and-set
-  update, and lets it go at the end. A run reads contacts, then bills, at most 20 pages each.
+  update, and lets it go at the end. A run reads contacts, then bills: at most 20 pages of each from the sweeper, 10 on
+  the first sync after connecting, 5 on **Sync now**; the next run goes on from there.
 - External calls and database writes are separate steps: a page is read, then written, then the next is read; no
   call to Xero happens inside a transaction.
 - Cost if wrong: a run that waits for the next one.
@@ -270,8 +271,10 @@ status code and the workspace id, never a token, a body or a URL with a code. Le
 amounts. Model prompts carry a bill's facts as any bill's; webhooks carry the entries.
 
 **X18. The ledger.** New entries, domain `system`: `accounting_connected` (actor `human`), `accounting_disconnected`
-(`human`), `accounting_payment_account_chosen` (`human`), `accounting_bill_closed` (`system`). `create_invoice` and
-`create_counterparty` gain `via: "xero"` and `xero`. They reach webhooks, so the changelog lists them.
+(`human`), `accounting_payment_account_chosen` (`human`), `accounting_bill_closed` (`system`); and, domain `ap`,
+`accounting_bills_dismissed` (`human`), as an emailed invoice's dismissal is recorded. `create_invoice` and
+`create_counterparty` gain `via: "xero"` and `xero`. They reach webhooks, so the changelog lists them. Syncs themselves
+write no entry: they would flood the ledger every 15 minutes, and the card says how the last one went.
 
 **X19. Where it shows.**
 - Settings, Integrations, **Xero** (`XeroPanel`): the status, **Connect Xero**, **Sync now**, **Disconnect Xero**, the

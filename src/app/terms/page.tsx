@@ -17,7 +17,7 @@ export default function TermsPage() {
   return (
     <LegalPage
       title="Terms of use"
-      updated="2026-09-30"
+      updated="2026-10-12"
       intro="These terms cover your use of Vestiarion, an autonomous treasury agent that pays invoices and contractors in USDC and EURC on Arc testnet. By using it, you accept them."
     >
       <LegalSection id="arc-testnet" title="Arc testnet only">
@@ -47,8 +47,22 @@ export default function TermsPage() {
           <li>the Circle credentials you connect: they are your own, so keep them safe, and rotate them if they leak;</li>
           <li>your counterparties&apos; wallet addresses: the agent pays the address recorded for a counterparty, and a transfer on chain cannot be taken back;</li>
           <li>your workspace&apos;s guardrails: the payment limits you set decide what the agent may pay on its own, and what it holds for a person;</li>
-          <li>who you invite to your workspace, and the role you give them.</li>
+          <li>who you invite to your workspace, and the role you give them;</li>
+          <li>the accounting tool you connect, such as a Xero organisation: connect only one you may give a workspace access to.</li>
         </ul>
+      </LegalSection>
+
+      <LegalSection id="accounting-tools" title="Connected accounting tools">
+        <p>
+          When an owner or admin connects Xero to a workspace, they agree, for the workspace, that Vestiarion reads the bills, suppliers and chart of
+          accounts of the Xero organisation they pick. It writes nothing to Xero. The bills a person adds are shown to the workspace&apos;s members and
+          to its agent; the agent&apos;s model provider sees each bill&apos;s facts to decide on it, and may not train on them.
+        </p>
+        <p>
+          Vestiarion never uses Xero data to train or improve any AI model, and never passes it to anyone else without the workspace&apos;s say. A bill
+          approved in Xero is not a payment approved in Vestiarion: the agent decides it within the workspace&apos;s guardrails, as any other.
+          Disconnecting stops the reading at once; the bills already added stay with the workspace.
+        </p>
       </LegalSection>
 
       <LegalSection id="the-agent" title="How the agent decides">

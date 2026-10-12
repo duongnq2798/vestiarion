@@ -14,6 +14,7 @@ import { verifySession } from "@/lib/auth/session";
 import { CONSENT_LABEL, consentStatement } from "@/lib/connectors/consent";
 import { pendingChoice } from "@/lib/connectors/token-store";
 import { withOrg } from "@/lib/dal/scope";
+import { networkProfile } from "@/lib/network";
 import { xeroSettingsFromEnv } from "@/lib/xero/settings";
 
 export const metadata: Metadata = { title: "Connect Xero" };
@@ -136,7 +137,7 @@ export default async function XeroConnectPage({ searchParams }: ConnectPageProps
                     options={workspaces.map((membership) => ({
                       value: membership.slug,
                       label: membership.name,
-                      description: membership.network === "arc-mainnet" ? "Arc mainnet" : "Arc testnet",
+                      description: networkProfile(membership.network).label,
                     }))}
                   />
                 )}
