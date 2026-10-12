@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { NativeCheckbox, NativeRadioGroup } from "@/components/ui/NativeChoice";
+import { BrandMark, PROVIDER_MARKS } from "@/components/vx/BrandMarks";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { accountingProviderOn } from "@/lib/accounting-providers";
 import { membershipsOf } from "@/lib/auth/membership";
@@ -68,6 +69,8 @@ export async function AccountingConnect({ provider, searchParams }: { provider: 
       ? await withOrg(chosen.orgId, () => pendingChoice(chosen.orgId, choose, user.id), { userId: user.id }).catch(() => null)
       : null;
   const atTheTool = AT_THE_TOOL[provider];
+  // The tool's mark beside the heading, decoration beside its written name (integration marks design).
+  const mark = PROVIDER_MARKS[provider];
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -100,8 +103,13 @@ export async function AccountingConnect({ provider, searchParams }: { provider: 
             />
           ) : pending && chosen ? (
             <>
-              <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">
-                Pick the {label} {organisation}
+              <h1 className="flex items-start gap-3 text-2xl font-semibold tracking-[-0.02em] text-ink">
+                <span className="flex h-8 shrink-0 items-center">
+                  <BrandMark brand={mark} size={24} />
+                </span>
+                <span>
+                  Pick the {label} {organisation}
+                </span>
               </h1>
               <p className="mt-3 text-sm text-ink-2">
                 {label} gave access to more than one {organisation}. Pick the one whose bills come into{" "}
@@ -129,7 +137,12 @@ export async function AccountingConnect({ provider, searchParams }: { provider: 
             </>
           ) : (
             <>
-              <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Connect {label}</h1>
+              <h1 className="flex items-start gap-3 text-2xl font-semibold tracking-[-0.02em] text-ink">
+                <span className="flex h-8 shrink-0 items-center">
+                  <BrandMark brand={mark} size={24} />
+                </span>
+                <span>Connect {label}</span>
+              </h1>
               <p className="mt-3 text-sm text-ink-2">{INTRO[provider]}</p>
               {error && (
                 <p role="alert" className="mt-4 text-sm text-refused">

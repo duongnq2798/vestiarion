@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { BrandName, PROVIDER_MARKS } from "@/components/vx/BrandMarks";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { accountingProviderOn } from "@/lib/accounting-providers";
 import { membershipsOf } from "@/lib/auth/membership";
@@ -41,7 +42,9 @@ export async function AccountingLaunch({ provider }: { provider: ProviderId }) {
             />
           ) : (
             <>
-              <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">{label}</h1>
+              <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">
+                <BrandName brand={PROVIDER_MARKS[provider]} name={label} size={24} className="gap-3" />
+              </h1>
               <p className="mt-3 text-sm text-ink-2">Pick the workspace whose {label} settings you want.</p>
               <ul className="mt-6 divide-y divide-line rounded-lg border border-line">
                 {memberships.map((membership) => (

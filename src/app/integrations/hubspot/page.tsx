@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { BrandName } from "@/components/vx/BrandMarks";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { membershipsOf } from "@/lib/auth/membership";
 import { verifySession } from "@/lib/auth/session";
@@ -42,7 +43,9 @@ export default async function HubSpotIntegrationPage() {
             />
           ) : (
             <>
-              <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">HubSpot</h1>
+              <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">
+                <BrandName brand="hubspot" name="HubSpot" size={24} className="gap-3" />
+              </h1>
               <p className="mt-3 text-sm text-ink-2">Pick the workspace whose HubSpot settings you want.</p>
               <ul className="mt-6 divide-y divide-line rounded-lg border border-line">
                 {memberships.map((membership) => (

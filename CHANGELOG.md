@@ -11,6 +11,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+### Added
+
+- **Xero, QuickBooks Online and HubSpot on the landing page and in Settings.** "Built on, and works with" lists them
+  beside Arc, Circle, Slack, Telegram and npm, each with its mark, what it does and its guide; their Settings cards and
+  connect pages show their marks beside their names.
+
 ### Changed
 
 - **Bills & receivables in three tabs.** The page keeps its four figures (Needs you, Due in 7 days, Overdue, and what
