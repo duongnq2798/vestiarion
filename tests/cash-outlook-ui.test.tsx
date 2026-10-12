@@ -22,6 +22,10 @@ const OUTLOOK: CashOutlook = {
   expectedIn30d: 40,
   eurcLeftOut: 0,
   shortOn: null,
+  plannedIn30d: 0,
+  plannedCount: 0,
+  plannedOther: [],
+  plannedRead: true,
   days: [
     { day: "2026-10-02", items: [{ kind: "milestone", label: "Linh: Thumbnails", amount: 10, note: "verified" }], balance: 90, balanceWithExpected: 90 },
     {

@@ -196,3 +196,29 @@ describe("scenarioBasis", () => {
     });
   });
 });
+
+describe("deal lines not invoiced yet (docs/superpowers/specs/2026-10-12-deal-schedule-design.md D14)", () => {
+  it("are listed apart on their due day, never as a receivable, other currencies apart", () => {
+    const built = scenarioBasis(
+      base({
+        planned: [
+          { id: "p1", label: "Acme Studio: Website rebuild", line: "Balance on delivery", amount: 700, currency: "USDC", dueOn: ymd(20) },
+          { id: "p2", label: "Acme Studio: Website rebuild", line: "Late", amount: 50, currency: "USDC", dueOn: ymd(-3) },
+          { id: "p3", label: "Kobe Ltd: Retainer", line: "March", amount: 100_000, currency: "JPY", dueOn: ymd(40) },
+          { id: "p4", label: "Acme Studio: Website rebuild", line: "Far", amount: 1, currency: "USDC", dueOn: ymd(120) },
+        ],
+      })
+    );
+    expect(built.receivables).toEqual([]);
+    expect(built.planned).toEqual([
+      { id: "p2", label: "Acme Studio: Website rebuild", line: "Late", amount: 50, currency: "USDC", day: 0 },
+      { id: "p1", label: "Acme Studio: Website rebuild", line: "Balance on delivery", amount: 700, currency: "USDC", day: 20 },
+      { id: "p3", label: "Kobe Ltd: Retainer", line: "March", amount: 100_000, currency: "JPY", day: 40 },
+    ]);
+    expect(built.plannedRead).toBe(true);
+  });
+
+  it("says when they could not be read", () => {
+    expect(scenarioBasis(base({ planned: null })).plannedRead).toBe(false);
+  });
+});

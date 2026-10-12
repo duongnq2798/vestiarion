@@ -80,6 +80,51 @@ export interface PaymentPlanInput {
   balance: PlanBalanceSource;
   /** What could not be read, in words ("the agent's spending limit"): approving waits until it can be (P12). */
   unread: string[];
+  /**
+   * Money expected in: the open receivables, a deal's released lines included, and the deal lines not invoiced yet
+   * (docs/superpowers/specs/2026-10-12-deal-schedule-design.md D14). Listed apart; never cash, never in a balance.
+   */
+  incoming?: PlanIncomingInput;
+}
+
+/** One amount expected in, as the rows give it. */
+export interface IncomingInput {
+  id: string;
+  /** The client, or "Client: deal title" for a planned deal line. */
+  from: string;
+  /** The receivable's memo, or the deal line's name. */
+  what: string | null;
+  amount: number;
+  currency: string;
+  /** `YYYY-MM-DD`. */
+  dueOn: string;
+}
+
+export interface PlanIncomingInput {
+  receivables: IncomingInput[];
+  /** Null when the deal lines could not be read. */
+  planned: IncomingInput[] | null;
+}
+
+/** One amount expected in within the window, on its due day (today when past). */
+export interface IncomingLine {
+  id: string;
+  from: string;
+  what: string | null;
+  amount: number;
+  currency: string;
+  on: string;
+  overdue: boolean;
+}
+
+export interface PlanIncoming {
+  /** Open receivables due within the window: money expected, never cash. */
+  expected: IncomingLine[];
+  /** Deal lines not invoiced yet, due within the window. */
+  planned: IncomingLine[];
+  expectedUsdc: number;
+  plannedUsdc: number;
+  plannedRead: boolean;
 }
 
 export type PlanFlagCode = "short" | "below_cushion" | "over_agent_limit" | "two_approvals" | "payment_limit" | "high_risk" | "same_as_milestone" | "due_unreadable";
@@ -177,6 +222,8 @@ export interface PaymentPlan {
   /** Why approving is off for the whole plan, or null (P12). */
   blocked: string | null;
   fingerprint: string;
+  /** Listed apart from the days: in no balance, flag or fingerprint (deal schedule D14). */
+  incoming: PlanIncoming;
 }
 
 const DAY_MS = 86_400_000;
@@ -938,5 +985,19 @@ export function planPayments(input: PaymentPlanInput): PaymentPlan {
     freshness,
     blocked: freshness.blocked,
     fingerprint,
+    incoming: incomingOf(input.incoming, today, through),
   };
+}
+
+/** What is expected in within the window, each on its due day, today when past; nothing else of the plan reads it. */
+function incomingOf(incoming: PlanIncomingInput | undefined, today: string, through: string): PlanIncoming {
+  const within = (rows: IncomingInput[]): IncomingLine[] =>
+    rows
+      .filter((row) => /^\d{4}-\d{2}-\d{2}$/.test(row.dueOn) && row.dueOn <= through && row.amount > 0)
+      .map((row) => ({ id: row.id, from: row.from, what: row.what, amount: row.amount, currency: row.currency, on: later(row.dueOn, today), overdue: row.dueOn < today }))
+      .sort((a, b) => (a.on !== b.on ? (a.on < b.on ? -1 : 1) : a.id < b.id ? -1 : 1));
+  const expected = within(incoming?.receivables ?? []);
+  const planned = within(incoming?.planned ?? []);
+  const usdcOf = (lines: IncomingLine[]) => round6(lines.filter((line) => line.currency === "USDC").reduce((sum, line) => sum + line.amount, 0));
+  return { expected, planned, expectedUsdc: usdcOf(expected), plannedUsdc: usdcOf(planned), plannedRead: incoming?.planned !== null };
 }

@@ -16,7 +16,22 @@ import { OPEN_PAYABLE_STATUSES } from "./agent/obligations";
  *
  * Pure: the console passes the rows it already loaded. The cash scenarios read the same rules over 90 days through
  * `outlookMoves` (docs/superpowers/specs/2026-10-11-cash-scenarios-design.md C2).
+ *
+ * A deal's lines (docs/superpowers/specs/2026-10-12-deal-schedule-design.md D14): a released line is a receivable, so it
+ * is expected money like any other; a line not invoiced yet is planned, named apart, and moves no balance.
  */
+
+/** A deal's line not invoiced yet, on its due day, in the deal's currency. */
+export interface PlannedInput {
+  id: string;
+  /** "Customer: deal title". */
+  label: string;
+  line: string;
+  amount: number;
+  currency: string;
+  /** `YYYY-MM-DD`. */
+  dueOn: string;
+}
 
 export interface OutlookInput {
   now: number;
@@ -50,6 +65,8 @@ export interface OutlookInput {
     /** When a received receivable arrived. */
     settled_at?: string | null;
   }>;
+  /** Deal lines not invoiced yet (D14); null when they could not be read, absent where deals are not read. */
+  planned?: PlannedInput[] | null;
 }
 
 export interface OutlookItem {
@@ -86,6 +103,13 @@ export interface CashOutlook {
   /** The first day the wallet would run short before any receivable arrives; null when it never does. */
   shortOn: string | null;
   days: OutlookDay[];
+  /** USDC deal lines not invoiced yet, due within 30 days: planned, in no balance and not expected money (D14). */
+  plannedIn30d: number;
+  plannedCount: number;
+  /** The same in other currencies, each apart. */
+  plannedOther: Array<{ currency: string; amount: number; count: number }>;
+  /** False when the deal lines could not be read. */
+  plannedRead: boolean;
 }
 
 const DAY_MS = 86_400_000;
@@ -127,6 +151,8 @@ export interface OutlookMoves {
   moves: OutlookMove[];
   /** EURC moving within the window, each on its day: paid from and into the EURC balance, so left out of every USDC figure. */
   eurc: Array<{ kind: "out" | "in"; at: number; amount: number }>;
+  /** Deal lines not invoiced yet, due within the window, each on its due day (today when past): never in a balance. */
+  planned: Array<{ id: string; label: string; line: string; at: number; overdue: boolean; amount: number; currency: string }>;
 }
 
 /**
@@ -201,11 +227,18 @@ export function outlookMoves(input: OutlookInput, windowDays: number): OutlookMo
     });
   }
 
-  return { today, moves, eurc };
+  const planned: OutlookMoves["planned"] = [];
+  for (const line of input.planned ?? []) {
+    const when = dayOf(`${line.dueOn}T00:00:00Z`);
+    if (!when || !(line.amount > 0)) continue;
+    planned.push({ id: line.id, label: line.label, line: line.line, at: when.at, overdue: when.overdue, amount: line.amount, currency: line.currency });
+  }
+
+  return { today, moves, eurc, planned };
 }
 
 export function cashOutlook(input: OutlookInput): CashOutlook {
-  const { today, moves, eurc } = outlookMoves(input, WINDOW_DAYS);
+  const { today, moves, eurc, planned } = outlookMoves(input, WINDOW_DAYS);
   const bufferEnd = today + (BUFFER_DAYS - 1) * DAY_MS;
 
   const byDay = new Map<number, OutlookItem[]>();
@@ -267,5 +300,24 @@ export function cashOutlook(input: OutlookInput): CashOutlook {
     eurcLeftOut: round(eurc.reduce((sum, move) => (move.kind === "out" ? sum + move.amount : sum), 0)),
     shortOn,
     days,
+    ...plannedFigures(planned),
+    plannedRead: input.planned !== null,
+  };
+}
+
+/** The planned lines as figures: USDC on its own, every other currency apart (D14). */
+function plannedFigures(planned: OutlookMoves["planned"]): Pick<CashOutlook, "plannedIn30d" | "plannedCount" | "plannedOther"> {
+  const usdc = planned.filter((line) => line.currency === "USDC");
+  const other = new Map<string, { currency: string; amount: number; count: number }>();
+  for (const line of planned.filter((candidate) => candidate.currency !== "USDC")) {
+    const entry = other.get(line.currency) ?? { currency: line.currency, amount: 0, count: 0 };
+    entry.amount = round(entry.amount + line.amount);
+    entry.count += 1;
+    other.set(line.currency, entry);
+  }
+  return {
+    plannedIn30d: round(usdc.reduce((sum, line) => sum + line.amount, 0)),
+    plannedCount: usdc.length,
+    plannedOther: [...other.values()].sort((a, b) => a.currency.localeCompare(b.currency)),
   };
 }

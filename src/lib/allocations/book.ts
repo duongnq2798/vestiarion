@@ -1,6 +1,18 @@
 import { sumUsdcAmounts } from "../agent/obligations";
 import { unwrap, type OrgDb } from "../dal";
-import { allocationErrorFromDb, fromMicros, liveRows, toMicros, type AllocationBasis, type AllocationKind, type AllocationRow, type Coin, type PaymentIn, type ReceivableIn } from "./model";
+import {
+  allocationErrorFromDb,
+  fromMicros,
+  liveRows,
+  receivableBalance,
+  toMicros,
+  type AllocationBasis,
+  type AllocationKind,
+  type AllocationRow,
+  type Coin,
+  type PaymentIn,
+  type ReceivableIn,
+} from "./model";
 
 /**
  * Reading what was applied (docs/superpowers/specs/2026-10-12-allocations-design.md L11): the rows of
@@ -101,7 +113,18 @@ export function toReceivableIn(invoice: {
   };
 }
 
-export const RECEIVABLE_COLUMNS = "id, counterparty_id, amount, currency, status, due_date, created_at, memo, po_reference, direction, counterparties(name)";
+/**
+ * What a receivable is still expected to bring in, from the rows applied to it (L11): a part-paid one what is still
+ * owed, since what arrived is in the wallet already; one no row names, its whole amount. Treasury's cash outlook, its
+ * cash scenarios and the payment plan's money expected in each count a receivable by this, a deal's released lines
+ * among them, while a deal line not released yet is no receivable and is listed apart (deal schedule D14): a part-paid
+ * line is counted once, for what it still owes.
+ */
+export function stillOwed(invoice: Parameters<typeof toReceivableIn>[0], rows: readonly AllocationRow[]): number {
+  return rows.some((row) => row.invoiceId === invoice.id) ? fromMicros(receivableBalance(toReceivableIn(invoice), rows, false).outstanding) : Number(invoice.amount);
+}
+
+export const RECEIVABLE_COLUMNS ="id, counterparty_id, amount, currency, status, due_date, created_at, memo, po_reference, direction, counterparties(name)";
 
 /**
  * The rows about some receivables or payments, or every row (to `ROWS_READ`); null before migration 0103 runs. A

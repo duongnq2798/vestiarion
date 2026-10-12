@@ -47,7 +47,7 @@ const midnight = (at: number) => Date.UTC(new Date(at).getUTCFullYear(), new Dat
 const round = (value: number) => Math.round(value * 1e6) / 1e6;
 
 export function scenarioBasis(input: ScenarioBasisInput): ScenarioBasis {
-  const { today, moves, eurc } = outlookMoves(input, BASIS_DAYS);
+  const { today, moves, eurc, planned } = outlookMoves(input, BASIS_DAYS);
   const offset = (at: number) => Math.max(0, Math.round((at - today) / DAY_MS));
   const lastDay = today + (BASIS_DAYS - 1) * DAY_MS;
 
@@ -140,5 +140,10 @@ export function scenarioBasis(input: ScenarioBasisInput): ScenarioBasis {
     clients,
     eurc: eurcMoves,
     recurringRead: input.recurring !== null,
+    // Deal lines not invoiced yet: named in what the figure is built from, never in a balance (deal schedule D14).
+    planned: planned
+      .map((line) => ({ id: line.id, label: line.label, line: line.line, amount: line.amount, currency: line.currency, day: offset(line.at) }))
+      .sort((a, b) => a.day - b.day || a.id.localeCompare(b.id)),
+    plannedRead: input.planned !== null,
   };
 }

@@ -10,8 +10,8 @@ The section counts what **Next 30 days** counts, by the same rules, over up to 9
 - **Bills** you owe that are still open, each on its day: a scheduled bill on the day it is scheduled for, any other on its due day, or today when it is overdue. A bill held for a person counts too.
 - **Open milestones**, today: a milestone has no payment day, so it is counted as if paid now, unless its USDC is locked in escrow.
 - **Recurring payments not billed yet**: the periods of each running recurring payment that have no bill yet, each on its due day (one already due, today). A period's bill is created up to 7 days before its due day, so over 60 or 90 days most periods are not billed yet. Each is marked "recurring, not billed yet". This is the one way the section differs from **Next 30 days**, which counts only bills already created.
-- **Receivables**: your open receivables in USDC, already invoiced; a part-paid one for what is still owed, since what arrived is in the wallet already. Each adds to the balance only on the day it arrives in that case: if clients pay on time, on its due day, or today when it is overdue.
-- **Deals not invoiced yet are not counted.** The workspace keeps no record of them, so nothing is made up for them.
+- **Receivables**: your open receivables in USDC, already invoiced, a deal's released lines among them; a part-paid one for what is still owed, since what arrived is in the wallet already. Each adds to the balance only on the day it arrives in that case: if clients pay on time, on its due day, or today when it is overdue.
+- **Deals not invoiced yet are not counted.** A deal's lines not released yet are named under **What this is built from**, with what they come to, and add to no balance: a line counts as a receivable once it is released. See [Turn a signed deal into a collection schedule](/docs/guides/deals).
 - **EURC** bills and receivables are paid from and into the EURC balance. They are listed as left out, never converted and never added to a USDC figure.
 
 ## Set a scenario
@@ -75,7 +75,8 @@ The list gives:
 - the open milestones, counted today;
 - the receivables: how many, their total, and how many come from clients who have paid before;
 - for each such client, its record: how many receivables it paid on time and how many late, and how many days late on average. A payment is on time when it arrived on or before its due day (UTC), as the agent counts it before it reminds a client to pay. "Client records are counts, not a prediction.";
-- what is left out: EURC bills and receivables.
+- what is left out: EURC bills and receivables;
+- the deal lines not invoiced yet, due within the days you look ahead: how many and what they come to, in USDC and in any other currency apart, "Planned from deals, not invoiced yet and in no balance".
 
 The section ends with "A what-if from the bills and receivables on record, not a forecast."
 
@@ -83,4 +84,4 @@ The section ends with "A what-if from the bills and receivables on record, not a
 
 Treasury reads its rows again every 20 seconds, and the section works out its figures again from them each time, keeping what you set: a bill whose due day moves moves on the chart, a new bill is counted, and a receivable that is paid or removed leaves the list. Closing the page forgets the scenario; nothing is kept.
 
-Not in this version: deals not invoiced yet, a lateness of its own for each client, and saving or sharing a scenario. Telegram's `/today` and Slack's `/vestiarion today` still answer for the next 30 days.
+Not in this version: counting a deal line before it is released, a lateness of its own for each client, and saving or sharing a scenario. Telegram's `/today` and Slack's `/vestiarion today` still answer for the next 30 days.

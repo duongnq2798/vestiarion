@@ -63,6 +63,7 @@ export const DOCS_NAV: NavSection[] = [
       { slug: "guides/report", title: "Read your workspace report", description: "What the agent did with your real bills: what it paid and with what proof, what it stopped and why, how often a person stepped in, what it was worth, and sharing a live copy by a link." },
       { slug: "guides/cash-scenarios", title: "Plan for clients paying late", description: "Treasury's What if section: look 30, 60 or 90 days ahead, make receivables late or missing, change what bills cost, and see the first short day, the bills it touches and what the figure is built from." },
       { slug: "guides/apply-payments", title: "Apply money received to invoices", description: "One payment for several invoices, part payments, a few cents lost to a fee: apply each payment received on Arc to the right invoices, with the agent's suggestions, keep the rest as credit, and undo a mistake." },
+      { slug: "guides/deals", title: "Turn a signed deal into a collection schedule", description: "Confirm a deal's schedule from a deposit, milestones, a retainer or your own lines, release each line as a receivable on its day, and change the deal later without rewriting what was invoiced or paid." },
       { slug: "guides/get-paid", title: "Get paid as a freelancer", description: "For the person being paid: add your wallet address through the link a business sent, follow each step, and check the payment on Arc." },
     ],
   },

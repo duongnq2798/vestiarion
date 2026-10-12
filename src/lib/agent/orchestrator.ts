@@ -44,6 +44,7 @@ import {
 import { milestoneVerification } from "./milestone-evidence";
 import { recordIncomingTransfers } from "./receipts";
 import { createRecurringInvoices } from "./recurring";
+import { releaseDueDealLines } from "../deals/write";
 import { proposeLimitChanges } from "./proposals";
 import { sendReceivableReminders } from "./collections";
 import { buyPayeeHistories, type AddressHistoryFact } from "./services";
@@ -3313,6 +3314,14 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   // Each recurring payment's period, as it comes near, becomes an invoice the
   // AP stage below decides like any other (recurring payments R1–R5).
   lines.push(...(await createRecurringInvoices(db)));
+  // Each deal whose owner or admin let the agent release its lines: the lines whose invoice day came become receivables,
+  // as the agent (deal schedule D10). Best effort: a line not released is tried again at the next cycle.
+  try {
+    lines.push(...(await releaseDueDealLines(db)));
+  } catch (error) {
+    console.error("deal lines not released", db.orgId, error instanceof Error ? error.message : error);
+    lines.push({ domain: "ar", message: "The deal lines due today could not be read. The next cycle tries again." });
+  }
   });
 
   // ------------------------------------------------------------------ shared state

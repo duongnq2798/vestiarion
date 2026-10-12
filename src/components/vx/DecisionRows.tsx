@@ -34,6 +34,8 @@ export interface DecisionRowItem {
   signals?: DecisionSignal[];
   /** Why it waits for a person, in one line under the title (`stoppedWhy`); the card, once opened, has the whole. */
   why?: string | null;
+  /** What it belongs to, in one line under the title: the deal a receivable was released from. */
+  context?: string;
 }
 
 export function DecisionRows({ items, orgSlug, className }: { items: DecisionRowItem[]; orgSlug: string; className?: string }) {
@@ -66,6 +68,7 @@ function DecisionRow({ item, orgSlug }: { item: DecisionRowItem; orgSlug: string
               {decision.memo ?? decision.action}
               {date && <span className={cn("sm:hidden", date.tone === "held" && "text-held")}> · {date.label}</span>}
             </span>
+            {item.context && <span className="block truncate text-xs text-agent">{item.context}</span>}
             {item.hint && <span className="block text-xs font-medium text-held">{item.hint}</span>}
             {item.note && <span className="block text-xs text-ink-2">{item.note}</span>}
             {item.signals && item.signals.length > 0 && <Signals signals={item.signals} />}
