@@ -31,7 +31,9 @@ import { currentContext, currentOrgId } from "../context";
  *
  * An accounting connection's tokens (migration 0101) are a platform table as Slack's bot token is: only
  * `src/lib/connectors/token-store.ts` reads or writes them, always naming the workspace in scope, and the service-role
- * functions that serialize a refresh and list the connections due a sync go with them.
+ * functions that serialize a refresh and list the connections due a sync go with them. So does the one that finds a
+ * connection by the provider's own organisation id across workspaces (migration 0102), for QuickBooks' webhook, which
+ * names a company and no workspace; it answers ids and a status, nothing else.
  *
  * One read reaches past those tables: the dispatcher embeds a delivery's own
  * ledger entry (`webhook_deliveries` → `ledger_entries` by foreign key), so it
@@ -79,6 +81,7 @@ export const PLATFORM_RPCS = [
   "telegram_claim_code", "telegram_activate", "slack_link_member",
   "growth_team_member", "growth_workspaces", "growth_update_lead", "growth_import_leads", "record_org_attribution",
   "accounting_token_lease", "accounting_token_store", "accounting_token_release", "accounting_connections_due",
+  "accounting_connections_by_external",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 

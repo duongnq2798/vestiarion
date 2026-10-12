@@ -6,7 +6,8 @@
 Xero's, a person adds them through the bill list's check, an owner picks the bank account payments will be booked to,
 and QuickBooks' webhooks bring changes in sooner than the sweeper.
 
-**Architecture:** No migration: 0101's tables take `provider = 'quickbooks'`. `src/lib/quickbooks/` is the provider
+**Architecture:** 0101's tables take `provider = 'quickbooks'`; migration 0102 adds a partial unique index (one
+workspace per QuickBooks company) and a service-role function that finds connections by company across workspaces. `src/lib/quickbooks/` is the provider
 (settings, HTTP, OAuth, pure mapping, reads, webhook). The core (`src/lib/connectors/`) gains optional pieces only
 where QuickBooks differs: the company named in the callback, one workspace per company, a deleted bill without facts,
 a bounded backfill, provider words, a disconnect confirmed at the provider, partly paid bills. The Xero-only cards,
@@ -16,7 +17,8 @@ actions and pages become provider-generic.
 
 ## Global Constraints
 
-- No migration, no SQL against any remote database, no Supabase MCP, no live call to Intuit from a test.
+- Migration 0102 only (an index and a service-role function); additive, re-runnable; never run against a remote
+  database; no Supabase MCP; no live call to Intuit from a test.
 - Xero's tests stay green; where a Xero component moves, its test follows the move with the same assertions.
 - Tenant data through `db()` in the workspace's scope; tokens only through `token-store.ts`.
 - No token, body, query or realm record in a log, an entry or a response.
@@ -25,6 +27,11 @@ actions and pages become provider-generic.
 - Commits neutral, each ending with the Co-Authored-By line. Single files: `npx vitest run tests/<file>`.
 
 ---
+
+### Task 0: Migration 0102
+**Files:** `supabase/migrations/0102_quickbooks_connections.sql`, `src/lib/dal/index.ts`, `tests/quickbooks-migration.test.ts`.
+- [ ] One workspace per QuickBooks company (Xero still shared); `accounting_connections_by_external` for the service
+  role only; a second run. Commit.
 
 ### Task 1: Core extensions (pure parts first)
 **Files:** `src/lib/connectors/provider.ts`, `status.ts`, `consent.ts`, `bills.ts`, `sync.ts`, `sync-store.ts`,

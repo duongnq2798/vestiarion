@@ -123,9 +123,11 @@ BillPayment, Customer, Invoice, Payment and Vendor. Env: `QUICKBOOKS_CLIENT_ID`,
   workspace is refused: back to Settings with `?quickbooks=other_workspace` ("This QuickBooks company is connected to
   another Vestiarion workspace. Disconnect it there first."). The other workspace is not named. The new tokens are
   neither stored nor revoked: revoking them would disconnect the other workspace.
-- The check reads `accounting_connections` across workspaces with the service role, by provider and company id only;
-  a second workspace connecting the same company in the same second is not prevented (no cross-workspace index:
-  that needs a migration this does not warrant).
+- The check asks migration 0102's `accounting_connections_by_external` (the service role's: the DAL keeps tenant
+  tables away from the platform client, so a cross-workspace read is a function, as `accounting_connections_due` is),
+  by provider and company id only. Two workspaces connecting the same company in the same second are held apart by
+  0102's partial unique index on `(provider, external_org_id)` for QuickBooks connections not revoked: the second
+  insert fails, and reads as `other_workspace` too.
 - Xero keeps its own rule: several workspaces may share an organisation (X4).
 - Cost if wrong: the same business's Arc testnet and Arc mainnet workspaces cannot both read one company; one
   disconnects, the other connects.
@@ -192,17 +194,17 @@ from the sweeper, which runs QuickBooks and Xero connections alike from `account
   `intuitaccountid` are kept: the entity (`bill`, `billpayment` and `vendor` bear on bills; `account`, `customer`,
   `invoice` and `payment` do not) and the realm. The record's id, the time and `data` are not used: the sync reads
   the canonical records itself.
-- The realms whose bills or vendors changed are matched to their connections (service role, by provider and company
-  id). A realm no workspace has connected is answered `200` with nothing done, as is a connection that is not
+- The realms whose bills or vendors changed are matched to their connections with 0102's
+  `accounting_connections_by_external` (by provider and company id). A realm no workspace has connected is answered `200` with nothing done, as is a connection that is not
   connected, or backing off (`next_sync_after` in the future: a rate limit or an outage is not overridden).
 - The answer goes at once (`200 {"received": n}`); then, after it (`after()`), each matched connection runs one sync
   in its own workspace's scope with the **Sync now** budget (5 pages), one after another, for at most 60 seconds; the
   rest wait for the sweeper (15 minutes). The sync lease (X7) keeps two notifications from running one connection
   twice: the second is `busy` and does nothing.
 - Replayed and duplicated notifications are harmless: a sync re-reads what changed and the version check (X10) keeps
-  what it has. Nothing is stored per notification: no migration. A log line names the counts and the matched
+  what it has. Nothing is stored per notification: no receipts table. A log line names the counts and the matched
   connection ids, never a realm's records.
-- Cost if wrong: a change waits up to 15 minutes for the sweeper; a receipts table later is additive (0102).
+- Cost if wrong: a change waits up to 15 minutes for the sweeper; a receipts table later is additive.
 
 **Q12. The Disconnect URL confirms before it records.** (`/integrations/quickbooks/disconnected`)
 - QuickBooks sends a person there after they disconnect the app on its side. The page needs a signed-in person (else
@@ -246,9 +248,11 @@ said it was disconnected there (Q12). The changelog lists them.
 **Q17. What never leaves.** As X17: tokens only in `token-store.ts` and to Intuit; logs carry labels, statuses and
 ids; the webhook's body is never logged.
 
-**Q18. Before the migration, and without the variables.** As X16: the card says QuickBooks is not set up yet, the
-review list is hidden, the webhook answers `200` with nothing done, and the sweeper has nothing to do. No migration:
-0101's tables already take `provider = 'quickbooks'`.
+**Q18. The migration, and before it runs.** 0101's tables already take `provider = 'quickbooks'`; migration 0102 adds
+only the index and the function of Q5 and Q11 (additive, re-runnable, the service role's). Before 0101 or 0102 has
+run, as X16: the card says QuickBooks is not set up yet, connecting says so, the review list is hidden, the webhook
+answers `200` with nothing done, and the sweeper has nothing to do (`PGRST202` for the missing function reads as not
+set up).
 
 **Q19. Where it shows.** Settings, Integrations, **QuickBooks** (`AccountingPanel`, `#quickbooks`), below Xero; Bills &
 receivables, **From QuickBooks: N bills to add** (`AccountingBillsReview`, `#from-quickbooks`), below Xero's.

@@ -1,8 +1,11 @@
 /**
  * A connection's status in business words (docs/superpowers/specs/2026-10-12-xero-connector-design.md X15), from its
  * row alone. Never "connected" while the last sync failed: a failure newer than the last success turns the title to
- * the failure. Pure and browser-safe.
+ * the failure. In the provider's own words (docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q15).
+ * Pure and browser-safe.
  */
+
+import { providerWords } from "./provider";
 
 export type ConnectionState = "connected" | "needs_reconnect" | "revoked";
 
@@ -46,7 +49,7 @@ function clock(iso: string, nowMs: number): string {
 }
 
 const reconnectWords = (label: string) =>
-  `${label} no longer accepts this connection: it was disconnected in ${label}, or not used for 60 days. Reconnect ${label} to go on bringing its bills in.`;
+  `${label} no longer accepts this connection: it was disconnected in ${label}, or not used for ${providerWords(label).idleDays} days. Reconnect ${label} to go on bringing its bills in.`;
 
 export type SyncErrorKind = "rate_limited" | "unavailable" | "bad_response" | "failed" | "reconnect";
 
@@ -68,7 +71,7 @@ export function syncErrorWords(kind: SyncErrorKind, label: string, nextAt: strin
 
 export function connectionStatus(facts: ConnectionFacts, nowMs: number): StatusView {
   const label = facts.providerLabel;
-  const name = facts.externalOrgName ?? `your ${label} organisation`;
+  const name = facts.externalOrgName ?? `your ${label} ${providerWords(label).organisation}`;
   if (facts.status === "revoked") {
     return { tone: "off", title: `Disconnected from ${name}`, detail: [`Bills already added stay in Vestiarion. Nothing more is read from ${label}.`], reconnect: false };
   }
