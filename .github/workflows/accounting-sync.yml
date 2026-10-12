@@ -1,0 +1,31 @@
+name: Vestiarion accounting sync
+
+# Brings bills in from the accounting tools workspaces connected (Xero), and clears connections nobody finished
+# (docs/superpowers/specs/2026-10-12-xero-connector-design.md X7). Supabase Cron calls the route every 15 minutes
+# (supabase/cron/watches.sql); this workflow is its manual run.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: accounting-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger the protected accounting sync
+        env:
+          VESTIARION_URL: ${{ secrets.VESTIARION_URL }}
+          AGENT_API_TOKEN: ${{ secrets.AGENT_API_TOKEN }}
+        run: |
+          test -n "$VESTIARION_URL"
+          test -n "$AGENT_API_TOKEN"
+          curl --fail-with-body --silent --show-error \
+            --max-time 330 \
+            --request POST \
+            --header "Authorization: Bearer $AGENT_API_TOKEN" \
+            "${VESTIARION_URL%/}/api/platform/accounting-sync"

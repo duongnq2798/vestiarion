@@ -63,18 +63,35 @@ export function nextRequest(cursor: SyncCursor, nowIso: string): { cursor: SyncC
   return { cursor: running, request: { phase: running.phase, since: running.phase === "backfill" ? null : running.since, page: running.page as number } };
 }
 
-/** The cursor once a page was read and written. */
-export function afterPage(cursor: SyncCursor, read: { page: number; last: boolean; updatedAts: readonly string[] }, nowIso: string): SyncCursor {
+export interface PageRead {
+  page: number;
+  last: boolean;
+  updatedAts: readonly string[];
+}
+
+/**
+ * The cursor once a page was read and written, and whether the run goes on (`more`), reached its end (`done`), or
+ * starts over from page 1 because paging may have skipped a row (`restart`).
+ */
+export function pageOutcome(cursor: SyncCursor, read: PageRead, nowIso: string): { cursor: SyncCursor; run: "more" | "done" | "restart" } {
   const highWater = read.updatedAts.reduce<string | null>((max, at) => latest(max, at), cursor.highWater);
   const runStart = cursor.runStartedAt ?? nowIso;
   const changedInRun = cursor.changedInRun || read.updatedAts.some((at) => at >= minus(runStart, CLOCK_MARGIN_MS));
-  if (!read.last) return { ...cursor, page: read.page + 1, highWater, changedInRun };
+  if (!read.last) return { cursor: { ...cursor, page: read.page + 1, highWater, changedInRun }, run: "more" };
   const idle = { page: null, highWater: null, runStartedAt: null, changedInRun: false } as const;
-  if (read.page > 1 && changedInRun) return { ...cursor, ...idle };
+  if (read.page > 1 && changedInRun) return { cursor: { ...cursor, ...idle }, run: "restart" };
   if (cursor.phase === "backfill") {
-    return { ...cursor, ...idle, phase: "incremental", since: minus(cursor.backfillStartedAt ?? runStart, CLOCK_MARGIN_MS), completedAt: nowIso };
+    return {
+      cursor: { ...cursor, ...idle, phase: "incremental", since: minus(cursor.backfillStartedAt ?? runStart, CLOCK_MARGIN_MS), completedAt: nowIso },
+      run: "done",
+    };
   }
-  return { ...cursor, ...idle, since: highWater ?? cursor.since, completedAt: nowIso };
+  return { cursor: { ...cursor, ...idle, since: highWater ?? cursor.since, completedAt: nowIso }, run: "done" };
+}
+
+/** The cursor once a page was read and written. */
+export function afterPage(cursor: SyncCursor, read: PageRead, nowIso: string): SyncCursor {
+  return pageOutcome(cursor, read, nowIso).cursor;
 }
 
 /** How many pages the run under way has read: for "Syncing: 2 of Xero's pages read so far". */

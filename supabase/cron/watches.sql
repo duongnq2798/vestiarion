@@ -55,3 +55,12 @@ select cron.schedule('vestiarion-agent-tick', '17 */6 * * *', $$
       where name = 'agent_api_token')),
     timeout_milliseconds := 330000)
 $$);
+-- The accounting sync: bills from the Xero organisations workspaces connected, every 15 minutes (at most 300 seconds).
+select cron.schedule('vestiarion-accounting-sync', '*/15 * * * *', $$
+  select net.http_post(
+    url := 'https://www.vestiarion.xyz/api/platform/accounting-sync',
+    headers := jsonb_build_object('Authorization', 'Bearer ' || (
+      select decrypted_secret from vault.decrypted_secrets
+      where name = 'agent_api_token')),
+    timeout_milliseconds := 330000)
+$$);
