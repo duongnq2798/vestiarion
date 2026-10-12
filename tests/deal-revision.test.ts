@@ -61,6 +61,25 @@ describe("a price change after the deposit was paid", () => {
     expect(kept(proposeCorrection(credited, 250_000, TODAY))).toEqual([{ id: "credit", kind: "credit", label: "Credit for price change", invoiceOn: TODAY, amountMinor: -50_000 }]);
     expect(kept(proposeCorrection(credited, 400_000, TODAY))).toEqual([{ id: undefined, kind: "charge", label: "Price change", invoiceOn: TODAY, amountMinor: 100_000 }]);
   });
+
+  it("goes by invoice day, not by the order lines were added, once a line was moved", () => {
+    // The deposit moved from Oct 12 to Oct 20 (version 2): its new line comes after the balance, yet is invoiced first.
+    const moved = deal(
+      [
+        line({ id: "deposit", amountMinor: 300_000, status: "superseded", endedIn: 2 }),
+        line({ id: "balance", position: 2, label: "Balance on delivery", invoiceOn: "2026-12-01", dueOn: "2026-12-15", amountMinor: 700_000 }),
+        line({ id: "deposit-2", position: 3, invoiceOn: "2026-10-20", dueOn: "2026-11-03", amountMinor: 300_000, addedIn: 2, replaces: "deposit" }),
+      ],
+      { version: 2 }
+    );
+    // A higher price is invoiced with the last line, on delivery, not with the deposit.
+    expect(kept(proposeCorrection(moved, 1_200_000, "2026-10-13")).at(-1)).toEqual({ id: undefined, kind: "charge", label: "Price change", invoiceOn: "2026-12-01", amountMinor: 200_000 });
+    // A lower price comes off the last line invoiced, the balance, before the deposit.
+    expect(kept(proposeCorrection(moved, 900_000, "2026-10-13"))).toEqual([
+      { id: "balance", kind: "charge", label: "Balance on delivery", invoiceOn: "2026-12-01", amountMinor: 600_000 },
+      { id: "deposit-2", kind: "charge", label: "Deposit (30%)", invoiceOn: "2026-10-20", amountMinor: 300_000 },
+    ]);
+  });
 });
 
 describe("planRevision", () => {

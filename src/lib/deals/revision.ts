@@ -63,13 +63,15 @@ const byPosition = (a: DealLine, b: DealLine) => a.position - b.position;
 /**
  * The planned lines after the price changes to `totalMinor` (D8). Up: credits owed back are taken back first, from the
  * last, then one correcting line for the rest, on the last planned charge's invoice day, or today when none is left. Down:
- * planned charges are reduced from the last backwards (one reduced to nothing is dropped), and what the released lines
- * already exceed becomes a credit owed to the customer. Lines keep their ids, so the version shows each change.
+ * planned charges are reduced from the last invoiced backwards (one reduced to nothing is dropped), and what the released
+ * lines already exceed becomes a credit owed to the customer. Lines keep their ids, so the version shows each change.
  */
 export function proposeCorrection(deal: DealFacts, totalMinor: number, today: string): ProposedLine[] {
   const planned = inForce(deal.lines).filter((line) => line.status === "planned").sort(byPosition);
   const proposal: ProposedLine[] = planned.map(({ id, kind, label, invoiceOn, amountMinor }) => ({ id, kind, label, invoiceOn, amountMinor }));
-  const charges = proposal.filter((line) => line.kind === "charge");
+  // The last charge is the last invoiced, not the last added: a moved line is added after lines it is invoiced before.
+  // Sorted from a copy in position order, so lines on the same day keep the later one last.
+  const charges = proposal.filter((line) => line.kind === "charge").sort((a, b) => a.invoiceOn.localeCompare(b.invoiceOn));
   const credits = proposal.filter((line) => line.kind === "credit");
   const day = latest(today, deal.startsOn);
   let delta = totalMinor - deal.totalMinor;

@@ -71,8 +71,9 @@ was invoiced or paid.
 
 **D8. A price change proposes a correction.**
 - Higher: one correcting line for the difference, on the last planned line's invoice day, or today when none is left.
-- Lower: planned lines are reduced from the last backwards (a line reduced to nothing is cancelled); what released
-  lines already exceed becomes a credit line owed to the customer: never released, never counted as money in or out.
+- Lower: planned lines are reduced from the last invoiced backwards (a line reduced to nothing is cancelled); what
+  released lines already exceed becomes a credit line owed to the customer: never released, never counted as money in
+  or out. "Last" is by invoice day: a moved line is added after lines it may be invoiced before.
 - A credit is only for money already invoiced: the released lines and the credits together never go below zero.
 - The person can edit the proposal before saving it; the version shows the difference either way.
 - Cost if wrong: a credit is settled outside Vestiarion (a refund or a credit note); the deal records that it is owed.
