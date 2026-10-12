@@ -15,6 +15,7 @@ import { useActionForm } from "@/components/ui/useActionForm";
 import { shortPaymentId } from "@/lib/connectors/booked";
 import type { BookingRowView } from "@/lib/connectors/bookings-view";
 import { utcDay } from "@/lib/copy";
+import { PROVIDER_LABELS, type ProviderId } from "@/lib/connectors/provider";
 import { networkProfile } from "@/lib/network";
 
 const INITIAL: BookingActionResult = { ok: false, message: "" };
@@ -93,29 +94,29 @@ function ArcLine({ row }: { row: BookingRowView }) {
  * server refuses it as stale if anything changed since. Below, the bookings done, and those never booked, with why.
  */
 export function AccountingBookings({
+  provider,
   orgSlug,
   connectionId,
-  label,
   organisation,
   scopeMissing,
   accountChosen,
   toReview,
   done,
   canBook,
-  connectHref,
 }: {
+  provider: ProviderId;
   orgSlug: string;
   connectionId: string;
-  label: string;
   organisation: string | null;
   scopeMissing: boolean;
   accountChosen: boolean;
   toReview: BookingRowView[];
   done: BookingRowView[];
   canBook: boolean;
-  /** Where Allow Vestiarion to book payments goes: the connect page again, which keeps the connection's bills and links. */
-  connectHref: string;
 }) {
+  const label = PROVIDER_LABELS[provider];
+  // Allow Vestiarion to book payments goes through the connect page again, which keeps the connection's bills and links.
+  const connectHref = `/integrations/${provider}/connect?org=${orgSlug}`;
   const approvable = toReview.filter((row) => row.fingerprint !== null).map((row) => row.id);
   const [selected, setSelected] = useState<Set<string>>(() => new Set(approvable.slice(0, MAX)));
   const ticked = toReview.filter((row) => row.fingerprint !== null && selected.has(row.id)).slice(0, MAX);
@@ -124,8 +125,8 @@ export function AccountingBookings({
   const title = toReview.length === 1 ? `To book in ${label}: 1 payment` : `To book in ${label}: ${toReview.length} payments`;
 
   return (
-    <section aria-labelledby="to-book-title" id="to-book" className="mb-8">
-      <SectionHeader id="to-book-title" title={title} meta={`${organisation ? `${organisation} · ` : ""}nothing is written to ${label} until you approve it`} />
+    <section aria-labelledby={`to-book-${provider}-title`} id={`to-book-${provider}`} className="mb-8">
+      <SectionHeader id={`to-book-${provider}-title`} title={title} meta={`${organisation ? `${organisation} · ` : ""}nothing is written to ${label} until you approve it`} />
       <Card className="space-y-4 p-5">
         {scopeMissing && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-held-line bg-held-soft px-4 py-3">
@@ -145,7 +146,7 @@ export function AccountingBookings({
         {!accountChosen && (
           <p className="text-sm text-held">
             Choose where payments are booked, under {label} in{" "}
-            <Link className="font-medium underline underline-offset-4" href={`/o/${orgSlug}/settings#xero`}>
+            <Link className="font-medium underline underline-offset-4" href={`/o/${orgSlug}/settings#${provider}`}>
               Settings
             </Link>
             , before approving these.

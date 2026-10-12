@@ -1,0 +1,97 @@
+Connect QuickBooks Online, and the open bills in your QuickBooks company come into Vestiarion for you to review, without retyping them. Each bill goes through the same check as a bill list: duplicates, currency, the supplier. It becomes a payable only when you add it, and the agent then decides it as any other bill, with every guardrail.
+
+Vestiarion reads from QuickBooks and writes nothing to it. A bill being open in QuickBooks does not approve its payment in Vestiarion.
+
+## Before you start
+
+- **An owner or admin** of the workspace connects QuickBooks. Anyone else sees "An owner or admin connects QuickBooks."
+- **A QuickBooks Online company** with bills: bills entered in QuickBooks with a balance left to pay. A QuickBooks sandbox company works for a first try.
+- **One workspace per company.** A QuickBooks company connects to one Vestiarion workspace at a time: disconnecting the app on either side ends its access to the company for every workspace, so two would cut each other off.
+- **The bills' currency.** Outside shadow mode, Vestiarion pays bills in USDC or EURC, and QuickBooks bills are in your own currency. In a workspace in [shadow mode](/docs/guides/shadow-mode) on Arc testnet, a bill in the business's own currency is added at its USDC amount at the day's rate, as a bill typed into the form is.
+
+## 1. Connect QuickBooks
+
+Open **Settings**. Under **QuickBooks**, choose **Connect QuickBooks**. You can also start from QuickBooks: opening Vestiarion from its apps takes a signed-in owner or admin to the same place.
+
+The connect page names the workspace (or lets you pick one, if you manage several) and says what Vestiarion does with QuickBooks' data:
+
+- Vestiarion reads the bills, vendors and bank accounts of the QuickBooks company you connect. It writes nothing to QuickBooks.
+- The bills you add are shown to the workspace's members and to its agent. The agent's model provider sees each bill's facts to decide on it, and may not train on them.
+- Vestiarion never uses QuickBooks data to train or improve any AI model, and never passes it to anyone else without your workspace's say.
+
+Tick **I agree**, then choose **Continue to QuickBooks**. QuickBooks asks you to sign in and pick the company to connect. A company connects to one Vestiarion workspace at a time. Your agreement, with its date, is kept on the connection and in the workspace's signed ledger.
+
+Back in Settings, the card says "QuickBooks is connected. Its open bills are coming in for review on Bills & receivables." The ledger records `accounting_connected`. If another workspace already holds the company, the card says "This QuickBooks company is connected to another Vestiarion workspace. Disconnect it there first, or connect another company." and nothing is kept.
+
+<Screenshot
+  src="/docs/guides/quickbooks-settings.png"
+  alt="The QuickBooks card in Settings: Connected to Sandbox Company_US_1, last synced 5 minutes ago, a link saying 3 bills waiting for review, where payments made on Arc will be booked, Arc USDC wallet (1090) in USD, with Change the account, and the Sync now and Disconnect QuickBooks buttons."
+  caption="Connected, with bills waiting and the bank account payments will be booked to."
+/>
+
+## 2. Which bills come in
+
+The first sync starts as soon as you connect. It brings in the bills with a balance left to pay, due in the last 90 days or later. Older open bills stay in QuickBooks; add one with the invoice form if you need it. After that, Vestiarion asks QuickBooks every 15 minutes for what changed, and sooner when QuickBooks says a bill, a bill payment or a vendor changed. **Sync now** asks at once.
+
+- **A bill partly paid in QuickBooks** comes in at what is left to pay, marked "Partly paid in QuickBooks".
+- **A bill paid, voided or deleted in QuickBooks** before you added it leaves the list.
+- **A bill paid, voided or deleted in QuickBooks after you added it** stays in Vestiarion, and is listed under "Closed in QuickBooks after they were added", so you can reject it before the agent pays it. The ledger records `accounting_bill_closed`.
+- **A bill partly paid in QuickBooks after you added it** is listed under "Partly paid in QuickBooks after they were added", with what is left to pay there.
+- **A bill is never added twice.** Each one is kept once by its id in QuickBooks, and checked against the invoices already in Vestiarion.
+
+## 3. Add the bills
+
+Open **Bills & receivables**. The bills QuickBooks brought in wait at the top, under "From QuickBooks: 3 bills to add", with the vendor, the bill's number, its amount due, its due day and what will happen to it:
+
+- **Ready to add**, with its USDC amount for a bill in your own currency.
+- **Already in Vestiarion: same counterparty, amount, due date and reference.**
+- **Can't be added**, and why, in the same words as a bill list.
+
+<Screenshot
+  src="/docs/guides/quickbooks-review.png"
+  alt="From QuickBooks: 3 bills to add on Bills & receivables. PowerDirect Ltd, bill PD-4471, 1,250.00 USD due Oct 28, ready to add at 1,250.00 USDC; Norton Lumber and Building Materials, bill NL-2210, 400.00 USD left of 1,000.00, partly paid in QuickBooks, ready to add as a new counterparty; Akiba Parts K.K., a bill in JPY that shadow mode in USD does not take. Below, the Add, goods received, Add, not received yet and Dismiss buttons, and a bill deleted in QuickBooks after it was added."
+  caption="Each bill with its fate, ticked when it can be added."
+/>
+
+The bills that can be added are ticked. Then choose:
+
+- **Add, goods received**, when the goods or services on the ticked bills were received;
+- **Add, not received yet**, when they were not: the agent waits for them to be marked received before it pays;
+- **Dismiss**, for bills you pay another way. They stay in QuickBooks.
+
+Each bill is added as one typed into the invoice form: the same checks, and a signed `create_invoice` entry that says `via: "quickbooks"` with the QuickBooks ids of the company, the bill and the vendor. Its decision trail says "A person added it, brought in from QuickBooks." Dismissing records `accounting_bills_dismissed`.
+
+**The vendor.** A bill goes to the counterparty its QuickBooks vendor was linked to the first time, else to the one counterparty with its name (without regard to case, punctuation or a legal suffix). A vendor no counterparty has yet is added with the bill, marked **New counterparty**: a vendor with no payment address yet, a payment limit of its largest bill being added, and purchase orders needed, which you change on **Counterparties**. Add its payment address there before the agent can pay it.
+
+**The approval.** A bill being open in QuickBooks does not approve its payment: the agent decides it. A person decides what the agent stops.
+
+## 4. Choose where payments will be booked
+
+An owner or admin chooses the bank account in QuickBooks that payments made on Arc will be booked to. Under **Where payments made on Arc will be booked**, choose **Choose the account**. Vestiarion reads the company's active bank accounts; never an income or expense account.
+
+Pick one to see how a payment would be booked: "A payment of 1,250.00 USDC to PowerDirect for bill PD-4471 will be booked in QuickBooks as a payment of 1,250.00 USD from Arc USDC wallet (1090), with the Arc transaction as its reference." USDC is booked as USD and EURC as EUR, so an account in USD fits best. The network fee is shown apart and not booked to this account. Then **Use this account**. The ledger records `accounting_payment_account_chosen`.
+
+Until someone chooses, the card says "Not chosen yet. Nothing is booked to an account nobody chose." Nothing is written to QuickBooks yet: this keeps the choice for when Vestiarion books its payments there.
+
+## 5. When something goes wrong
+
+The card says what happened, in words, and never "connected" while the last sync failed:
+
+| The card says | What it means |
+| --- | --- |
+| The last sync with QuickBooks failed | QuickBooks did not answer, or its answer could not be read. The card says when Vestiarion tries again: a minute later, then longer after each failure, at most an hour. Nothing read so far is lost; the next sync goes on from where this one stopped. |
+| QuickBooks asked Vestiarion to slow down. Syncing again at 14:05 UTC. | QuickBooks limits how often an app may ask, per minute and per company. The next sync starts a minute later, or at the time QuickBooks gave, from where this one stopped. |
+| QuickBooks needs you to reconnect | QuickBooks no longer accepts the connection: it was disconnected in QuickBooks, or not used for 100 days. Choose **Reconnect QuickBooks**: the bills, links and review list are kept. |
+| QuickBooks is not set up on this deployment yet. | The deployment has not finished setting up QuickBooks. Nothing is read. |
+
+## 6. Disconnect
+
+An owner or admin chooses **Disconnect QuickBooks**. Vestiarion asks QuickBooks to end its access, which disconnects the app from the company, deletes its tokens, and reads nothing more. Bills already added stay in Vestiarion, with their history. The ledger records `accounting_disconnected`. To connect again, choose **Connect QuickBooks**.
+
+Disconnecting Vestiarion from QuickBooks' own apps page works too. QuickBooks then sends you to Vestiarion, which asks QuickBooks about each workspace you manage that was connected to it, and marks a connection disconnected only once QuickBooks confirms it no longer accepts it: the page says "QuickBooks is disconnected", and the entry says "QuickBooks says it was disconnected there" with `atProvider: true`. If QuickBooks still accepts it, the page says "QuickBooks is still connected" and changes nothing.
+
+## Your data
+
+- QuickBooks' tokens are kept encrypted, readable only by the server, and never shown in the browser, a log, a model's prompt or a webhook.
+- A bill's facts (vendor, number, amount, days) are shown to the workspace's members and to the agent, whose model provider may not train on them.
+- Vestiarion never uses QuickBooks data to train or improve any AI model. See the [privacy page](/privacy).

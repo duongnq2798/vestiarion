@@ -120,6 +120,30 @@ describe("syncStore", () => {
     });
   });
 
+  it("keeps a row's facts for a bill the provider names by its id alone, changing only its status and version (QuickBooks Q8)", async () => {
+    const { fake, run } = world();
+    const deleted: ExternalBill = {
+      ...BILL, version: "2026-10-12T09:00:00.000Z#deleted", updatedAt: "2026-10-12T09:00:00.000Z", contactExternalId: null, contactName: "Unnamed vendor",
+      number: null, currency: "USD", total: "0", amountDue: "0", issuedOn: null, dueOn: null, status: "deleted", factsKnown: false,
+    };
+    await run(() => syncStore.updateBill(connection, { id: "row-1", externalVersion: BILL.version, sourceStatus: "open", reviewState: "added" }, deleted));
+    const patch = fake.requests.find((sent) => sent.path === "/rest/v1/accounting_bills" && sent.method === "PATCH");
+    expect(patch?.params.get("id")).toBe("eq.row-1");
+    expect(Object.keys(patch?.body as object).sort()).toEqual(["changed_at", "external_updated_at", "external_version", "source_status"]);
+    expect(patch?.body).toMatchObject({ source_status: "deleted", external_version: "2026-10-12T09:00:00.000Z#deleted" });
+  });
+
+  it("reads the supplier and number kept with each bill, to name a bill deleted at the source", async () => {
+    const { fake, run } = world((sent) =>
+      sent.path === "/rest/v1/accounting_bills" && sent.method === "GET"
+        ? { body: [{ id: "row-1", external_id: "bill-1", external_version: "v1", source_status: "open", review_state: "added", contact_name: "PowerDirect", number: "PD-4471" }] }
+        : undefined
+    );
+    const staged = await run(() => syncStore.stagedBills(CONNECTION, ["bill-1"]));
+    expect(staged.get("bill-1")).toEqual({ id: "row-1", externalVersion: "v1", sourceStatus: "open", reviewState: "added", contactName: "PowerDirect", number: "PD-4471" });
+    expect(fake.requests.find((sent) => sent.path === "/rest/v1/accounting_bills")?.params.get("select")).toMatch(/contact_name,\s*number/);
+  });
+
   it("records how a run ended and lets the lease go", async () => {
     const ended = async (outcome: Parameters<typeof syncStore.finish>[1]) => {
       const { fake, run } = world();

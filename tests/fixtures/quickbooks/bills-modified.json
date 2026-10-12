@@ -1,0 +1,50 @@
+{
+  "QueryResponse": {
+    "Bill": [
+      {
+        "SyncToken": "2",
+        "domain": "QBO",
+        "VendorRef": { "name": "PowerDirect", "value": "56" },
+        "TxnDate": "2026-10-03",
+        "TotalAmt": 1250.0,
+        "CurrencyRef": { "name": "United States Dollar", "value": "USD" },
+        "LinkedTxn": [{ "TxnId": "160", "TxnType": "BillPaymentCheck" }],
+        "DueDate": "2026-10-28",
+        "Balance": 0,
+        "Id": "146",
+        "DocNumber": "PD-4471",
+        "PrivateNote": "Electricity, September",
+        "MetaData": { "CreateTime": "2026-10-03T09:12:40-07:00", "LastUpdatedTime": "2026-10-12T02:30:00-07:00" }
+      },
+      {
+        "SyncToken": "5",
+        "domain": "QBO",
+        "VendorRef": { "name": "SMART Agency", "value": "58" },
+        "TxnDate": "2026-09-02",
+        "TotalAmt": 0,
+        "CurrencyRef": { "name": "United States Dollar", "value": "USD" },
+        "DueDate": "2026-09-20",
+        "Balance": 0,
+        "Id": "139",
+        "DocNumber": "SMC-0902",
+        "PrivateNote": "Voided",
+        "MetaData": { "CreateTime": "2026-09-02T11:00:00-07:00", "LastUpdatedTime": "2026-10-12T02:31:00-07:00" }
+      },
+      {
+        "SyncToken": "0",
+        "domain": "QBO",
+        "VendorRef": { "name": "Hicks Hardware", "value": "41" },
+        "TxnDate": "2026-10-10",
+        "TotalAmt": 210.55,
+        "DueDate": "2026-11-09",
+        "Balance": 210.55,
+        "Id": "152",
+        "DocNumber": "HH-301",
+        "MetaData": { "CreateTime": "2026-10-12T02:32:00-07:00", "LastUpdatedTime": "2026-10-12T02:32:00-07:00" }
+      }
+    ],
+    "startPosition": 1,
+    "maxResults": 3
+  },
+  "time": "2026-10-12T03:00:00.000-07:00"
+}

@@ -1,0 +1,44 @@
+{
+  "QueryResponse": {
+    "Account": [
+      {
+        "Name": "Checking",
+        "SubAccount": false,
+        "FullyQualifiedName": "Checking",
+        "Active": true,
+        "Classification": "Asset",
+        "AccountType": "Bank",
+        "AccountSubType": "Checking",
+        "CurrentBalance": 1201.0,
+        "CurrencyRef": { "value": "USD", "name": "United States Dollar" },
+        "domain": "QBO",
+        "Id": "35",
+        "SyncToken": "0"
+      },
+      {
+        "Name": "Arc USDC wallet",
+        "AcctNum": "1090",
+        "Active": true,
+        "Classification": "Asset",
+        "AccountType": "Bank",
+        "AccountSubType": "CashOnHand",
+        "CurrencyRef": { "value": "USD", "name": "United States Dollar" },
+        "domain": "QBO",
+        "Id": "92",
+        "SyncToken": "0"
+      },
+      {
+        "Name": "Old savings",
+        "Active": false,
+        "AccountType": "Bank",
+        "CurrencyRef": { "value": "USD" },
+        "Id": "36",
+        "SyncToken": "1"
+      },
+      { "Name": "Utilities", "Active": true, "AccountType": "Expense", "Classification": "Expense", "Id": "76" }
+    ],
+    "startPosition": 1,
+    "maxResults": 4
+  },
+  "time": "2026-10-12T03:00:00.000-07:00"
+}

@@ -2,18 +2,18 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/app/actions/accounting-bookings", () => ({ approveBookingsAction: vi.fn() }));
-vi.mock("@/app/actions/xero", () => ({
-  syncXeroNowAction: vi.fn(),
-  disconnectXeroAction: vi.fn(),
-  loadXeroAccountsAction: vi.fn(),
-  chooseXeroAccountAction: vi.fn(),
-  addXeroBillsAction: vi.fn(),
-  dismissXeroBillsAction: vi.fn(),
+vi.mock("@/app/actions/accounting", () => ({
+  syncAccountingNowAction: vi.fn(),
+  disconnectAccountingAction: vi.fn(),
+  loadAccountingAccountsAction: vi.fn(),
+  chooseAccountingAccountAction: vi.fn(),
+  addAccountingBillsAction: vi.fn(),
+  dismissAccountingBillsAction: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
 import { AccountingBookings } from "@/components/AccountingBookings";
-import XeroPanel from "@/components/XeroPanel";
+import AccountingPanel from "@/components/AccountingPanel";
 import { DecisionCard } from "@/components/vx/DecisionCard";
 import { SettlementTrack } from "@/components/vx/SettlementTrack";
 import { invoiceDecision } from "@/components/vx/map";
@@ -63,16 +63,15 @@ const row = (fields: Partial<BookingRowView> = {}): BookingRowView => ({
 const bookings = (fields: Partial<Parameters<typeof AccountingBookings>[0]> = {}) =>
   renderToStaticMarkup(
     <AccountingBookings
+      provider="xero"
       orgSlug="acme"
       connectionId="conn-1"
-      label="Xero"
       organisation="Demo Company (Global)"
       scopeMissing={false}
       accountChosen
       toReview={[row()]}
       done={[]}
       canBook
-      connectHref="/integrations/xero/connect?org=acme"
       {...fields}
     />
   );
@@ -136,11 +135,11 @@ const connected: Extract<AccountingPanelView, { state: "connection" }> = {
 
 describe("the Settings card (W8)", () => {
   it("asks an owner or admin to allow booking on a connection made without the write scope, through the connect page", () => {
-    const words = text(renderToStaticMarkup(<XeroPanel orgSlug="acme" view={{ ...connected, bookingAllowed: false }} canManage notice={null} />));
+    const words = text(renderToStaticMarkup(<AccountingPanel provider="xero" orgSlug="acme" view={{ ...connected, bookingAllowed: false }} canManage notice={null} />));
     expect(words).toContain("Xero has not allowed Vestiarion to book payments yet.");
     expect(words).toContain("Allow Vestiarion to book payments");
-    expect(text(renderToStaticMarkup(<XeroPanel orgSlug="acme" view={{ ...connected, bookingAllowed: true }} canManage notice={null} />))).not.toContain("Allow Vestiarion to book payments");
-    expect(text(renderToStaticMarkup(<XeroPanel orgSlug="acme" view={{ ...connected, bookingAllowed: false }} canManage={false} notice={null} />))).toContain("An owner or admin allows it.");
+    expect(text(renderToStaticMarkup(<AccountingPanel provider="xero" orgSlug="acme" view={{ ...connected, bookingAllowed: true }} canManage notice={null} />))).not.toContain("Allow Vestiarion to book payments");
+    expect(text(renderToStaticMarkup(<AccountingPanel provider="xero" orgSlug="acme" view={{ ...connected, bookingAllowed: false }} canManage={false} notice={null} />))).toContain("An owner or admin allows it.");
   });
 });
 

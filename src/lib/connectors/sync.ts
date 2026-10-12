@@ -1,5 +1,5 @@
 import { failureDelayMs, waitInRun } from "./backoff";
-import { planBill, type StagedBill } from "./bills";
+import { planBill, withKeptFacts, type StagedBill } from "./bills";
 import type { Connection } from "./connections";
 import { nextRequest, pageOutcome, type SyncCursor } from "./cursors";
 import { PROVIDER_LABELS, ProviderError, type AccountingProvider, type ExternalBill, type ExternalContact, type Page, type PageRequest } from "./provider";
@@ -105,7 +105,7 @@ export async function syncConnection(input: {
       let refreshed = false;
       for (;;) {
         try {
-          return await read({ ...asked, accessToken, externalOrgId: connection!.externalOrgId });
+          return await read({ ...asked, accessToken, externalOrgId: connection!.externalOrgId, windowFrom: connection!.windowFrom });
         } catch (error) {
           if (!(error instanceof ProviderError)) throw error;
           if (error.failure === "rate_limited" && !waited && waitInRun(error.retryAfterMs)) {
@@ -145,7 +145,9 @@ export async function syncConnection(input: {
         } else {
           const read = await readPage(provider.bills, started.request);
           await applyBills(db, connection, read.items, result);
-          updatedAts = read.items.map((bill) => bill.updatedAt);
+          // A bill named by its id alone comes from the provider's change feed, not this read: its time is not how far the
+          // read got, so it never moves the next run's start past a change the read has not seen (QuickBooks Q8).
+          updatedAts = read.items.filter((bill) => bill.factsKnown !== false).map((bill) => bill.updatedAt);
           page = read;
         }
         result.pages += 1;
@@ -197,7 +199,8 @@ async function applyBills(db: SyncDb, connection: Connection, bills: ExternalBil
       await db.updateBill(connection, row, bill);
       staged.set(bill.externalId, { ...row, externalVersion: bill.version, sourceStatus: bill.status });
       if (plan.closedAfterAdded) {
-        await db.billClosed(connection, bill);
+        // A bill deleted at the provider may come without its facts: the ledger names it as its row does.
+        await db.billClosed(connection, withKeptFacts(bill, row));
         result.closed += 1;
       }
     }

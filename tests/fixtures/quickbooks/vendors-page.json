@@ -1,0 +1,39 @@
+{
+  "QueryResponse": {
+    "Vendor": [
+      {
+        "Balance": 1650.0,
+        "Vendor1099": false,
+        "CurrencyRef": { "name": "United States Dollar", "value": "USD" },
+        "domain": "QBO",
+        "sparse": false,
+        "Id": "56",
+        "SyncToken": "0",
+        "MetaData": { "CreateTime": "2026-09-01T10:00:00-07:00", "LastUpdatedTime": "2026-10-01T10:00:00-07:00" },
+        "CompanyName": "PowerDirect Ltd",
+        "DisplayName": "PowerDirect",
+        "PrintOnCheckName": "PowerDirect Ltd",
+        "Active": true
+      },
+      {
+        "Balance": 0,
+        "domain": "QBO",
+        "Id": "42",
+        "SyncToken": "2",
+        "MetaData": { "CreateTime": "2026-08-01T10:00:00-07:00", "LastUpdatedTime": "2026-10-05T10:00:00-07:00" },
+        "DisplayName": "Old Courier Co",
+        "Active": false
+      },
+      {
+        "domain": "QBO",
+        "Id": "",
+        "SyncToken": "0",
+        "MetaData": { "LastUpdatedTime": "2026-10-05T10:00:00-07:00" },
+        "DisplayName": "Broken"
+      }
+    ],
+    "startPosition": 1,
+    "maxResults": 3
+  },
+  "time": "2026-10-12T03:00:00.000-07:00"
+}

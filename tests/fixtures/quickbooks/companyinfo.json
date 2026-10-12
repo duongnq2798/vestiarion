@@ -1,0 +1,13 @@
+{
+  "CompanyInfo": {
+    "CompanyName": "Sandbox Company_US_1",
+    "LegalName": "Sandbox Company_US_1",
+    "Country": "US",
+    "SupportedLanguages": "en",
+    "domain": "QBO",
+    "Id": "1",
+    "SyncToken": "4",
+    "MetaData": { "CreateTime": "2026-10-01T05:00:00-07:00", "LastUpdatedTime": "2026-10-01T05:00:00-07:00" }
+  },
+  "time": "2026-10-12T03:00:00.000-07:00"
+}

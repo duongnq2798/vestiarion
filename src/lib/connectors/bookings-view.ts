@@ -4,7 +4,7 @@ import type { PostingRow } from "./booking-run";
 import { billsByExternalId, postingsOf } from "./booking-store";
 import type { Connection } from "./connections";
 import { alreadyPaid, hasScopes, postingFingerprint, type PostingState } from "./posting";
-import { PROVIDER_LABELS, type AccountingProvider, type SourceStatus } from "./provider";
+import { PROVIDER_LABELS, type AccountingProvider, type ProviderId, type SourceStatus } from "./provider";
 
 /**
  * The bookings on Bills & receivables, **To book in Xero** (docs/superpowers/specs/2026-10-12-accounting-writeback-design.md
@@ -45,6 +45,7 @@ export type BookingsView =
   | { state: "hidden" }
   | {
       state: "list";
+      provider: ProviderId;
       connectionId: string;
       label: string;
       organisation: string | null;
@@ -168,6 +169,7 @@ export async function accountingBookings(connection: Connection | null, provider
   const { toReview, done } = bookingRows({ postings, bills, connection, writeScopes: provider.booking.writeScopes, label });
   return {
     state: "list",
+    provider: connection.provider,
     connectionId: connection.id,
     label,
     organisation: connection.externalOrgName,

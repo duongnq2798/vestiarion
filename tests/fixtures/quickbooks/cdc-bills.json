@@ -1,0 +1,35 @@
+{
+  "CDCResponse": [
+    {
+      "QueryResponse": [
+        {
+          "Bill": [
+            {
+              "SyncToken": "2",
+              "domain": "QBO",
+              "VendorRef": { "name": "PowerDirect", "value": "56" },
+              "TxnDate": "2026-10-03",
+              "TotalAmt": 1250.0,
+              "CurrencyRef": { "name": "United States Dollar", "value": "USD" },
+              "DueDate": "2026-10-28",
+              "Balance": 0,
+              "Id": "146",
+              "DocNumber": "PD-4471",
+              "MetaData": { "CreateTime": "2026-10-03T09:12:40-07:00", "LastUpdatedTime": "2026-10-12T02:30:00-07:00" }
+            },
+            {
+              "domain": "QBO",
+              "status": "Deleted",
+              "Id": "148",
+              "MetaData": { "LastUpdatedTime": "2026-10-12T02:40:00-07:00" }
+            }
+          ],
+          "startPosition": 1,
+          "maxResults": 2,
+          "totalCount": 2
+        }
+      ]
+    }
+  ],
+  "time": "2026-10-12T03:00:00.000-07:00"
+}

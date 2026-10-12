@@ -27,7 +27,8 @@ export const PERMISSIONS = {
   // Moving treasury cash between the workspace's own wallets, such as into its Gateway balance.
   "treasury.manage": ["owner", "admin"],
   // Connecting the workspace to Slack, which sends the agent's decisions to a channel, or removing it (Slack design S3); to
-  // GitHub; and to Xero, whose bills it reads, with the account payments will be booked to (Xero connector X3).
+  // GitHub; and to Xero or QuickBooks, whose bills it reads, with the account payments will be booked to (Xero
+  // connector X3, QuickBooks connector Q1).
   "integrations.manage": ["owner", "admin"],
   // Writing a payment made on Arc into the business's own books, after reviewing exactly what is written (accounting
   // write-back W6): its own act, apart from adding records and from deciding payments, so an accountant role, when
