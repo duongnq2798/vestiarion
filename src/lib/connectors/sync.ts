@@ -170,7 +170,7 @@ export async function syncConnection(input: {
         await db.finish(connection.id, { kind: "released", at: iso(now()) });
         return { ...result, outcome: "busy" };
       }
-      return fail("unavailable", outcome.retryAfterMs);
+      return fail("unavailable", outcome.reason === "unavailable" ? outcome.retryAfterMs : null);
     }
     if (error instanceof ProviderError) {
       if (error.failure === "forbidden" || error.failure === "unauthorized") return reconnect();
