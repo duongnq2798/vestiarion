@@ -1,0 +1,36 @@
+{
+  "count": { "QueryResponse": { "totalCount": 3 }, "time": "2026-10-12T03:00:00.112-07:00" },
+  "empty": { "QueryResponse": {}, "time": "2026-10-12T03:00:00.000-07:00" },
+  "cdcEmpty": { "CDCResponse": [{ "QueryResponse": [{}] }], "time": "2026-10-12T03:00:00.000-07:00" },
+  "preferences": {
+    "Preferences": {
+      "CurrencyPrefs": { "MultiCurrencyEnabled": false, "HomeCurrency": { "value": "USD" } },
+      "domain": "QBO",
+      "Id": "1",
+      "SyncToken": "2"
+    },
+    "time": "2026-10-12T03:00:00.000-07:00"
+  },
+  "token": {
+    "token_type": "bearer",
+    "access_token": "eyJlbmMiOiJBMTI4Q0JDLUhTMjU2IiwiYWxnIjoiZGlyIn0..fixture-access",
+    "refresh_token": "AB11799999999fixturerefresh",
+    "expires_in": 3600,
+    "x_refresh_token_expires_in": 8726400
+  },
+  "fault": {
+    "Fault": {
+      "Error": [{ "Message": "Error parsing query", "Detail": "QueryParserError: Encountered an unexpected token at line 1, column 32.", "code": "4000" }],
+      "type": "ValidationFault"
+    },
+    "time": "2026-10-12T03:00:00.000-07:00"
+  },
+  "authFault": {
+    "Fault": { "Error": [{ "Message": "message=AuthenticationFailed; errorCode=003200; statusCode=401", "code": "3200" }], "type": "AUTHENTICATION" },
+    "time": "2026-10-12T03:00:00.000-07:00"
+  },
+  "throttleFault": {
+    "Fault": { "Error": [{ "Message": "message=ThrottleExceeded; errorCode=003001; statusCode=429", "Detail": "The request limit was reached.", "code": "003001" }], "type": "SERVICE" },
+    "time": "2026-10-12T03:00:00.000-07:00"
+  }
+}
