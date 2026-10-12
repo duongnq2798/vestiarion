@@ -230,6 +230,15 @@ describe("a part-paid receivable (allocations L11)", () => {
     );
   });
 
+  it("never tells the client a fee arrived from them: what arrived is what they paid", async () => {
+    const fee = { ...applied("0.500000"), id: "alloc-fee", kind: "fee", transfer_id: null, reason: "Transfer fee", basis: null, payment_seq: null, created_at: "2026-10-09T09:01:00Z" };
+    await run(world({ allocations: { body: [applied("5.000000"), fee] } }));
+    const asked = JSON.parse((decideMock.mock.calls[0][0] as DecideParams<unknown>).userPrompt) as Record<string, unknown>;
+    expect(asked).toMatchObject({ receivable: { amount: 7, partPaid: { invoiced: 12.5, alreadyReceived: 5 } } });
+    expect(sendMock.mock.calls[0][0].text).toContain("5.00 USDC of the 12.50 USDC invoiced has arrived. What is still owed is 7.00 USDC.");
+    expect(ledgerMock).toHaveBeenCalledWith(expect.objectContaining({ action: "ar_reminder_sent", detail: expect.objectContaining({ amount: 7, partPaid: { invoiced: 12.5, received: 5 } }) }));
+  });
+
   it("is not reminded once nothing is owed", async () => {
     const lines = await run(world({ allocations: { body: [applied("12.500000")] } }));
     expect(decideMock).not.toHaveBeenCalled();

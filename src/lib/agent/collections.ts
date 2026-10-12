@@ -181,7 +181,8 @@ export async function sendReceivableReminders(
     const currency = invoice.currency === "EURC" ? "EURC" : "USDC";
     // What is still owed: the whole invoice, or the rest of a part-paid one.
     const owed = balance && balance.applied > 0 ? fromMicros(balance.outstanding) : Number(invoice.amount);
-    const partPaid = balance && balance.applied > 0 ? { invoiced: Number(invoice.amount), received: fromMicros(balance.applied) } : null;
+    // What arrived from the client: its payments, never a fee a person recorded beside them.
+    const partPaid = balance && balance.applied > 0 ? { invoiced: Number(invoice.amount), received: fromMicros(balance.paid) } : null;
     const amount = AMOUNT.format(owed);
     const dueOn = utcDay(invoice.due_date);
 

@@ -311,6 +311,7 @@ export async function payLinkBalance(preview: PayLinkPreview): Promise<{ owed: n
       rows,
       false
     );
-    return balance.applied > 0 ? { owed: fromMicros(balance.outstanding), received: fromMicros(balance.applied) } : null;
+    // Received is what the client paid; a fee recorded beside it lowers what is owed, and never arrived from them.
+    return balance.applied > 0 ? { owed: fromMicros(balance.outstanding), received: fromMicros(balance.paid) } : null;
   });
 }

@@ -257,6 +257,12 @@ describe("payLinkBalance (allocations L11)", () => {
     expect(read.params.get("org_id")).toBe(`eq.${ORG}`);
   });
 
+  it("counts as received only what the client paid, never a fee recorded beside it", async () => {
+    const fee = { ...row("0.500000"), id: "alloc-fee", kind: "fee", transfer_id: null, reason: "Transfer fee", basis: null, payment_seq: null };
+    fake = fakeSupabase((r) => (r.path === "/rest/v1/receivable_allocations" ? { body: [row("5.000000"), fee] } : { body: [] }));
+    expect(await platform(() => payLinkBalance({ ...PREVIEW, status: "open", currency: "USDC" }))).toEqual({ owed: 7, received: 5 });
+  });
+
   it("is null with nothing applied, and before migration 0103 runs", async () => {
     fake = fakeSupabase(() => ({ body: [] }));
     expect(await platform(() => payLinkBalance({ ...PREVIEW, status: "open", currency: "USDC" }))).toBeNull();
