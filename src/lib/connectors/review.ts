@@ -203,3 +203,76 @@ export async function readReview(connection: Connection, options: { ids?: readon
   });
   return reviewItems(bills, suppliers, fates, label);
 }
+
+/** A bill of the review list, as the browser shows it: no id of the provider's, no token. */
+export interface ReviewRowView {
+  id: string;
+  supplier: string;
+  /** The supplier is added as a new counterparty with the bill. */
+  supplierNew: boolean;
+  number: string | null;
+  amount: string;
+  currency: string;
+  /** The USDC it is added at, for a bill in the business's own currency. */
+  usdc: string | null;
+  dueOn: string | null;
+  status: RowFate["status"];
+  reason: string | null;
+}
+
+/** A bill already added that the provider since says was paid, voided or deleted (X10). */
+export interface ClosedRowView {
+  id: string;
+  supplier: string;
+  number: string | null;
+  sourceStatus: SourceStatus;
+}
+
+export type ReviewView =
+  | { state: "hidden" }
+  | { state: "list"; connectionId: string; label: string; organisation: string | null; items: ReviewRowView[]; closed: ClosedRowView[] };
+
+export function reviewRowView(item: ReviewItem): ReviewRowView {
+  return {
+    id: item.bill.id,
+    supplier: item.supplier.name,
+    supplierNew: item.supplier.kind === "new",
+    number: item.bill.number,
+    amount: item.bill.amountDue,
+    currency: item.bill.currency,
+    usdc: item.fate.usdc,
+    dueOn: item.bill.dueOn,
+    status: item.fate.status,
+    reason: item.fate.status === "add" ? null : item.fate.reason,
+  };
+}
+
+/** The review list on Bills & receivables: hidden before migration 0101, without a connection, or once disconnected. */
+export async function accountingReview(connection: Connection | null): Promise<ReviewView> {
+  if (!connection || connection.status === "revoked") return { state: "hidden" };
+  const [items, closed] = await Promise.all([
+    readReview(connection),
+    db()
+      .from("accounting_bills")
+      .select("id, contact_name, number, source_status")
+      .eq("connection_id", connection.id)
+      .eq("review_state", "added")
+      .in("source_status", ["paid", "voided", "deleted"])
+      .order("changed_at", { ascending: false })
+      .limit(20),
+  ]);
+  const closedRows = (unwrap(closed) as Array<{ id: string; contact_name: string; number: string | null; source_status: SourceStatus }>).map((row) => ({
+    id: row.id,
+    supplier: row.contact_name,
+    number: row.number,
+    sourceStatus: row.source_status,
+  }));
+  return {
+    state: "list",
+    connectionId: connection.id,
+    label: PROVIDER_LABELS[connection.provider],
+    organisation: connection.externalOrgName,
+    items: items.map(reviewRowView),
+    closed: closedRows,
+  };
+}
