@@ -380,8 +380,8 @@ waiting. Supabase Cron runs them from the database instead:
   was sent is told to the workspace's people, once per attempt, in the console, Slack, Telegram,
   webhooks and by email. It sends nothing.
 - `POST /api/platform/webhooks`, every 10 minutes: webhook retries and anything still queued.
-- `POST /api/platform/accounting-sync`, every 15 minutes: bills from the Xero organisations workspaces connected,
-  and the connections nobody finished choosing an organisation for, revoked and deleted.
+- `POST /api/platform/accounting-sync`, every 15 minutes: bills from the Xero organisations and QuickBooks companies
+  workspaces connected, and the connections nobody finished choosing an organisation for, revoked and deleted.
 
 To set them up, run `supabase/cron/watches.sql` once in the Supabase SQL editor, with your
 deployment's origin in place of `https://www.vestiarion.xyz`. Its header lists what comes first:
@@ -426,6 +426,20 @@ bill list, and become payables only when a person adds them. The app asks Xero f
 needs migration 0101; before it runs, the Xero card says Xero is not set up yet. Its tokens are kept encrypted under
 `VESTIARION_MASTER_KEYS`, in a table only the service role reads. The sync runs every 15 minutes (above), and
 **Sync now** runs one at once. See [Bring bills in from Xero](https://www.vestiarion.xyz/docs/guides/xero).
+
+With `QUICKBOOKS_CLIENT_ID` and `QUICKBOOKS_CLIENT_SECRET` set, from an Intuit app with the scope
+`com.intuit.quickbooks.accounting` and the redirect URI `<origin>/api/integrations/quickbooks/callback` (and
+`http://localhost:3000/api/integrations/quickbooks/callback` to try it locally), an owner or admin connects a
+workspace to one QuickBooks Online company the same way, and its open bills come in for review beside Xero's. A
+company connects to one workspace at a time: disconnecting the app ends its access for every grant. Set the app's
+Launch URL to `<origin>/integrations/quickbooks`, its Connect/Reconnect URL to `<origin>/integrations/quickbooks/connect`
+and its Disconnect URL to `<origin>/integrations/quickbooks/disconnected`, which marks a connection disconnected only
+once QuickBooks confirms it no longer accepts it. `QUICKBOOKS_ENVIRONMENT` is `sandbox` (the default) for Development
+keys and sandbox companies, or `production` for Production keys, which need Intuit's app assessment first. With
+`QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN` set, Intuit's webhook at `<origin>/api/integrations/quickbooks/webhook` (CloudEvents
+payload format, subscribed to Bill, BillPayment and Vendor at least) starts a sync of the company's connection within
+a minute of a change; without it, changes come in with the 15-minute sync alone. The connection needs migrations 0101
+and 0102. See [Bring bills in from QuickBooks Online](https://www.vestiarion.xyz/docs/guides/quickbooks).
 
 ### Measurement provenance
 
