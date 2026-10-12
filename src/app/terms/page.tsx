@@ -87,6 +87,7 @@ export default function TermsPage() {
           </li>
           <li>who you invite to your workspace, and the role you give them;</li>
           <li>the accounting tool you connect, such as a Xero organisation: connect only one you may give a workspace access to;</li>
+          <li>the CRM you connect, such as a HubSpot account: connect only one you may give a workspace access to;</li>
           <li>using the service lawfully where you and the people you pay are, including any rules on paying in stablecoins.</li>
         </ul>
       </LegalSection>
@@ -101,6 +102,15 @@ export default function TermsPage() {
           Vestiarion never uses Xero data to train or improve any AI model, and never passes it to anyone else without the workspace&apos;s say. A bill
           approved in Xero is not a payment approved in Vestiarion: the agent decides it within the workspace&apos;s guardrails, as any other.
           Disconnecting stops the reading at once; the bills already added stay with the workspace.
+        </p>
+        <p>
+          When an owner or admin connects HubSpot to a workspace, they agree, for the workspace, that Vestiarion reads the companies, contacts and deals
+          of the HubSpot account they connect: names, amounts, close dates, pipeline stages and each company&apos;s main contact email. It writes nothing
+          to HubSpot. They are shown to the workspace&apos;s members and to its agent; the agent&apos;s model provider may see a deal&apos;s facts to
+          decide on its collections, and may not train on them. Vestiarion never uses HubSpot data to train or improve any AI model, and never passes
+          it to anyone else without the workspace&apos;s say. A deal won in HubSpot becomes a deal in Vestiarion only when a person plans it, and a
+          change made in HubSpot afterwards changes nothing in Vestiarion until a person does. One HubSpot account connects to one workspace at a
+          time. Disconnecting stops the reading at once; the deals already planned stay with the workspace.
         </p>
       </LegalSection>
 

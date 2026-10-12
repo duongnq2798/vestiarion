@@ -84,6 +84,7 @@ export const DOCS_NAV: NavSection[] = [
       { slug: "guides/slack", title: "Get the agent's decisions in Slack", description: "Connect a workspace to a Slack channel: the agent's decisions as it makes them, /vestiarion for what is safe to spend and waiting, and stopped payments decided from Slack when an owner allows it." },
       { slug: "guides/telegram", title: "Get the agent's decisions in Telegram", description: "Connect your own Telegram chat to a workspace: the agent's decisions as it makes them, what is safe to spend and waiting, and invoices sent to the bot." },
       { slug: "guides/xero", title: "Bring bills in from Xero", description: "Connect a Xero organisation: its approved bills come in for review on Bills & receivables, go through the same check as a bill list, and become payables only when you add them. Choose the account payments made on Arc will be booked to." },
+      { slug: "guides/hubspot", title: "Bring deals in from HubSpot", description: "Connect a HubSpot account: its won deals come in with their customers under Deals on Bills & receivables, Plan collections fills in the New deal form, and a deal changed in HubSpot afterwards says so for you to act on." },
       { slug: "guides/github", title: "Show payments on GitHub", description: "Connect GitHub so a milestone paid for a pull request gets a comment on it, pull requests in private repositories verify, and a maintainer attaches a bounty with a comment." },
     ],
   },

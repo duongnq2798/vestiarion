@@ -282,6 +282,7 @@ run in production, with its ledger entries and transactions.
 | **[Webhooks](https://www.vestiarion.xyz/docs/webhooks)** | Up to 5 HTTPS endpoints per workspace receive every ledger entry, signed, with retries |
 | **[GitHub](https://www.vestiarion.xyz/docs/guides/github)** | Milestone verification from merged pull requests, bounties, and payment comments |
 | **[Email](https://www.vestiarion.xyz/docs/guides/email-invoices)** | A workspace address that reads forwarded invoices into drafts a person adds |
+| **[HubSpot](https://www.vestiarion.xyz/docs/guides/hubspot)** | Won deals come in with their customers every 15 minutes; Plan collections fills in the New deal form, and a deal changed in HubSpot afterwards is flagged on its deal for a person to change or keep; read-only, one account per workspace |
 | **[Xero](https://www.vestiarion.xyz/docs/guides/xero)** | Bills approved in Xero come in for review every 15 minutes, through the same check as a bill list, and become payables when a person adds them; read-only, with the account payments will be booked to chosen ahead |
 
 There is no standalone CLI; operators run the repository's scripts (`npm run cycle`, `npm run status`, …), listed in
@@ -403,7 +404,7 @@ simulated.
 
 ## License
 
-[MIT](LICENSE). Arc, Circle, Slack, Telegram, Xero and npm are trademarks of their respective owners; their names show what
+[MIT](LICENSE). Arc, Circle, Slack, Telegram, Xero, HubSpot and npm are trademarks of their respective owners; their names show what
 Vestiarion is built on and connects to, not an endorsement.
 
 <a href="https://www.producthunt.com/products/vestiarion?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-vestiarion"><img alt="Vestiarion on Product Hunt" width="200" height="43" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1269583&theme=light"></a>

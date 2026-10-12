@@ -16,6 +16,8 @@ Open **Bills & receivables**. **Deals** sits under **Receivables**. Open **New d
 - **Payment terms (days)**: each line is due this many days after its invoice day. It starts at 14.
 - **External reference**, optional: your CRM's id for the deal, for instance. Two deals of a workspace never share one.
 
+A deal won in HubSpot does not need typing: with HubSpot connected, it is listed under **Deals** with **Plan collections**, which opens this form filled in from it, with HubSpot's deal id as its reference. A deal changed in HubSpot after you planned it says **Changed in HubSpot** on its page. See [Bring deals in from HubSpot](/docs/guides/hubspot).
+
 Then choose **How it is billed**:
 
 - **Deposit and balance**: **Deposit (%)** on the start date, up to two decimals, and the rest on the **Delivery date**, as **Deposit (30%)** and **Balance on delivery**.
@@ -92,4 +94,4 @@ Under the lines, the version is worked out as you type: the old and new totals, 
 
 ## What is signed
 
-Each version is a signed entry in the workspace's ledger, which the audit log shows and webhooks deliver: `deal_signed` for version 1, `deal_revised` for a change or a reopen, `deal_cancelled` for a cancel, and `deal_auto_release_changed` for the switch. Each release is the receivable's own `create_invoice` entry, which names the deal and the line, and says whether a person or the agent released it.
+Each version is a signed entry in the workspace's ledger, which the audit log shows and webhooks deliver: `deal_signed` for version 1, `deal_revised` for a change or a reopen, `deal_cancelled` for a cancel, and `deal_auto_release_changed` for the switch. A deal planned from HubSpot, and a change saved from what HubSpot changed, say `via: "hubspot"` with the deal's ids in HubSpot. Each release is the receivable's own `create_invoice` entry, which names the deal and the line, and says whether a person or the agent released it.
