@@ -27,6 +27,12 @@ Then choose **How it is billed**:
 
 To change a line, choose **Edit lines**: every name, day and amount can then be edited, and **Add a line** adds one. Lines that do not add up are refused with what is missing, such as "The lines add up to 9,000.00 USDC; the deal is 10,000.00 USDC: 1,000.00 USDC short." **Back to the template** drops your edits.
 
+<Screenshot
+  src="/docs/guides/deals-new.png"
+  alt="The New deal form on Bills and receivables. Customer Acme Studio, Deal Website rebuild, Total 10,000.01 USDC, Start date Oct 12, 2026, payment terms 14 days. How it is billed: Deposit and balance chosen, with Deposit 30% and Delivery date Dec 1, 2026. The schedule reads back two lines: Deposit (30%), invoiced Oct 12, 2026 and due Oct 26, 2026, 3,000.00 USDC; Balance on delivery, invoiced Dec 1, 2026 and due Dec 15, 2026, 7,000.01 USDC, which includes 0.01 from rounding. Below, Release each line on its invoice day, and Confirm deal."
+  caption="A 30% deposit and the balance on delivery: the balance carries the cent the split leaves, and says so."
+/>
+
 Tick **Release each line on its invoice day** to let the agent invoice each line on its day (see step 2). Then choose **Confirm deal**. The deal is signed as version 1, with every line planned, and its page opens. Pressing **Confirm deal** twice, or again after a slow answer, makes one deal, not two.
 
 ## 2. Release each line
@@ -46,6 +52,12 @@ If a release is interrupted before its receivable is made, the line says **Recei
 
 The deal's page shows the same figures, then its **Schedule**: each line with its state, **Planned**, **Released**, **Overdue**, **Paid**, or **Credit owed**. Lines a later version replaced or cancelled are folded under **Replaced and cancelled lines**. **Versions** lists every version, newest first, with its total, the difference from the one before, its reason and what it changed.
 
+<Screenshot
+  src="/docs/guides/deals-schedule.png"
+  alt="A deal's Schedule. Deposit (30%), invoiced Oct 12, 2026, due Oct 26, 2026, 3,000.00 USDC, Paid. Balance on delivery, invoiced Dec 1, 2026, due Dec 15, 2026, 7,000.01 USDC, including 0.01 from rounding, Planned, which the agent releases on Dec 1, 2026, with Release now. Price change, 2,000.00 USDC, Planned, also with Release now. Under the table, a note that a released line is a receivable and money expected, never cash, and that a line not released yet is counted in no balance."
+  caption="The deposit was paid; the balance and the price change wait for their day."
+/>
+
 ## 4. Change a deal after signing
 
 Prices change, a milestone moves, a deal is stopped or picked up again. Each is a new version, and none rewrites a line already released: its receivable, paid or not, stays as it is.
@@ -59,6 +71,18 @@ Open **Change deal** on the deal's page. **Lines not invoiced yet** lists the li
 Under the lines, the version is worked out as you type: the old and new totals, the difference, and each change in words. "Lines already released, and their receivables, stay as they are." Choose **Save as version 2** (or the next number). A change to a released line is refused: "A released line stays as it is. Change the lines not invoiced yet, or add a correcting line." If someone changed or released a line since you opened the page, the change is refused and the page shows the deal as it is now.
 
 **Cancel deal** asks first, then stops every line not invoiced yet. The receivables already made stay, and nothing more is invoiced from the deal. **Reopen deal**, on a cancelled deal, takes the lines still to invoice and a new total, as a new version.
+
+<Screenshot
+  src="/docs/guides/deals-change.png"
+  alt="Change deal after the deposit was paid. New total 12,000.01 USDC, with a reason. Lines not invoiced yet: Balance on delivery, Dec 1, 2026, 7,000.01, and a proposed Price change line, Dec 1, 2026, 2,000.00. Under them: Version 2, 10,000.01 USDC to 12,000.01 USDC, difference plus 2,000.00 USDC; it adds Price change, 2,000.00 USDC, invoiced Dec 1, 2026; lines already released, and their receivables, stay as they are. Save as version 2."
+  caption="A higher price adds a correcting line: the paid deposit is not in the form, and the version says so."
+/>
+
+<Screenshot
+  src="/docs/guides/deals-versions.png"
+  alt="A deal's Versions, newest first. Version 2, Changed, Oct 30, 2026: total 12,000.01 USDC, difference plus 2,000.00 USDC, reason Extra landing page agreed on Oct 30, adds Price change, 2,000.00 USDC, invoiced Dec 1, 2026. Version 1, Signed, Oct 12, 2026: total 10,000.01 USDC."
+  caption="Every version with what it changed: each one is a signed entry in the audit log."
+/>
 
 ## Where deals show in your cash
 

@@ -82,6 +82,10 @@ import { designRuleReplay } from "../design/replay-fixture";
 import { RuleTrialPanel } from "@/components/RuleTrial";
 import { PaymentPlanSection, PlanCashEffect, PlanOutcomesStrip } from "@/components/vx/PaymentPlan";
 import { PAYMENT_PLAN_OUTCOMES, PAYMENT_PLAN_VIEWER, paymentPlanShot, planPart } from "./payment-plan-fixture";
+import { DealChangeForm } from "@/components/deals/DealChangeForm";
+import { DealForm } from "@/components/deals/DealForm";
+import { DealSchedule, DealVersions } from "@/components/deals/DealSchedule";
+import { DEALS_SHOT_TODAY, dealShot } from "./deals-fixture";
 import { RULE_TRIAL_COPY } from "@/lib/rule-trial-copy";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
@@ -117,7 +121,8 @@ export interface DocsShot {
     | "report"
     | "workspace"
     | "cash-scenarios"
-    | "evidence";
+    | "evidence"
+    | "deals";
   /** The workspace page it is on: its title heads the frame. None for a public page, such as a payee's link. */
   page?: NavKey;
   /** The page's line under its title, where the real page has one. */
@@ -1751,6 +1756,49 @@ export const DOCS_SHOTS = {
     guide: "where-a-payment-is",
     page: "treasury",
     render: () => <PaymentsInFlight payments={SHOT_FLIGHT} now={SHOT_NOW} stuckAfterMinutes={15} orgSlug={SLUG} network="arc-testnet" />,
+  },
+  "deals-new": {
+    guide: "deals",
+    page: "invoices",
+    render: () => (
+      // New deal, opened under Deals, as an owner fills it in: a 30% deposit and the balance on delivery, with the
+      // rounding the balance carries (the script types the deal, the total and the delivery date).
+      <Card className="p-5">
+        <DealForm
+          orgSlug={SLUG}
+          customers={[{ id: "c1c1c1c1-0000-4000-8000-0000000000c1", name: "Acme Studio" }]}
+          currencies={["USDC", "EURC"]}
+          idempotencyKey="docs-shot-key-0001"
+          today="2026-10-12"
+          initialCustomerId="c1c1c1c1-0000-4000-8000-0000000000c1"
+        />
+      </Card>
+    ),
+  },
+  "deals-schedule": {
+    guide: "deals",
+    // A deal's page below its figures: the deposit paid, the balance and a price change planned, released by the agent.
+    render: () => <DealSchedule orgSlug={SLUG} deal={dealShot()} today={DEALS_SHOT_TODAY} canWrite />,
+  },
+  "deals-change": {
+    guide: "deals",
+    render: () => (
+      // Change deal, after the deposit was paid: the script types a new total and asks for a correction.
+      <Card className="p-5">
+        <DealChangeForm
+          orgSlug={SLUG}
+          facts={{ ...dealShot().facts, version: 1, totalMinor: 1_000_001, lines: dealShot().facts.lines.slice(0, 2) }}
+          digits={2}
+          today={DEALS_SHOT_TODAY}
+          idempotencyKey="docs-shot-key-0002"
+          mode="revised"
+        />
+      </Card>
+    ),
+  },
+  "deals-versions": {
+    guide: "deals",
+    render: () => <DealVersions deal={dealShot()} />,
   },
 } satisfies Record<string, DocsShot>;
 

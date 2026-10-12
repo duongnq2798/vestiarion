@@ -51,6 +51,7 @@ export function DealForm({
   currencies,
   idempotencyKey,
   today,
+  initialCustomerId,
 }: {
   orgSlug: string;
   customers: Array<{ id: string; name: string }>;
@@ -58,9 +59,11 @@ export function DealForm({
   currencies: string[];
   idempotencyKey: string;
   today: string;
+  /** The customer chosen to start with: a guide's screenshot. */
+  initialCustomerId?: string;
 }) {
   const router = useRouter();
-  const [customerId, setCustomerId] = useState(customers.length === 0 ? "new" : "");
+  const [customerId, setCustomerId] = useState(initialCustomerId ?? (customers.length === 0 ? "new" : ""));
   const [currency, setCurrency] = useState(currencies[0] ?? "USDC");
   const [total, setTotal] = useState("");
   const [startsOn, setStartsOn] = useState(today);
