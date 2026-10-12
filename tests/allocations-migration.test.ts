@@ -305,6 +305,25 @@ describe("receivable_allocations (0103): two people at once", () => {
       await db.exec("set session_replication_role = origin");
     }
   });
+
+  // Every write takes the payment before the receivable. A reversal of a payment with its fee starts with the fee's row,
+  // which names no payment: it takes the receivable's payments first, or it would hold the receivable while waiting on the
+  // payment, and a person applying that payment to the same receivable would wait on it the other way round (deadlock).
+  it("locks the payments applied to a receivable before the receivable when a fee is reversed", async () => {
+    const { orgId, acme } = await workspace("alloc-lock-order");
+    const invoice = await receivable(orgId, acme, 100);
+    const paid = await transfer(orgId, 200);
+    const [, fee] = await allocate(orgId, { invoice, transfer: paid, amount: 90 }, { kind: "fee", invoice, amount: 1, reason: "Transfer fee" });
+    // A row this transaction locked carries its id as xmax.
+    const lockedBy = await db.transaction(async (tx) => {
+      const { sql, params } = values(orgId, [{ kind: "reversal", invoice, amount: 1, reverses: fee, reason: "Not a fee", basis: null }]);
+      await tx.query(sql, params);
+      const [row] = (await tx.query<{ locked: boolean }>("select xmax::text = (txid_current() % 4294967296)::text as locked from public.incoming_transfers where id = $1", [paid])).rows;
+      await tx.rollback();
+      return row.locked;
+    });
+    expect(lockedBy).toBe(true);
+  });
 });
 
 describe("incoming_transfers (0103): a whole match", () => {

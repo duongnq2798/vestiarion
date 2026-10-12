@@ -75,7 +75,9 @@ Each decision names what it costs if it turns out wrong.
 **L5. The invariants hold in the database, not only in code.**
 - A trigger before each insert, as the inserting role (so row-level security still applies):
   - locks the payment's `incoming_transfers` row, then the receivable's `invoices` row (`for update`), so two writers
-    of the same payment or the same receivable go one after the other, in one order everywhere;
+    of the same payment or the same receivable go one after the other, in one order everywhere; a fee's reversal names
+    no payment, so it locks the payments applied to the receivable first (by id), since the payment's own reversal
+    follows it in the same insert;
   - refuses a receivable that is not a receivable of the workspace, one not open (`pending`, `matched`) for a payment
     or a fee, one a whole match claimed, a payment a whole match claimed, a currency that is not both the payment's and
     the receivable's, and a payment already applied to another customer's receivables;

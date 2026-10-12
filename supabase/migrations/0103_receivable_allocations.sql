@@ -7,7 +7,8 @@
 --
 -- The invariants hold here, whoever writes:
 -- * receivable_allocations_check (before insert, as the inserting role, so row-level security still applies) locks the
---   payment's incoming_transfers row, then the receivable's invoices row, and refuses: a receivable not open or not a
+--   payment's incoming_transfers row (for a fee's reversal, the receivable's payments), then the receivable's invoices
+--   row, and refuses: a receivable not open or not a
 --   receivable of the workspace; a payment or a receivable a whole match claimed; another currency than both the
 --   payment's and the receivable's; a payment already applied to another customer; more from a payment than it
 --   brought; more on a receivable than it owes; a fee with no payment beside it; a reversal that does not mirror its
@@ -98,6 +99,15 @@ begin
       into v_from_payment
       from public.receivable_allocations a
      where a.org_id = new.org_id and a.transfer_id = new.transfer_id;
+  elsif new.kind = 'reversal' then
+    -- A fee's reversal names no payment, and the payment beside it may be reversed next in the same insert: the payments
+    -- applied to the receivable are locked first, in one order, so this never holds the receivable while waiting on a
+    -- payment that someone applying it holds while waiting on the receivable.
+    perform 1 from public.incoming_transfers t
+     where t.org_id = new.org_id
+       and t.id in (select a.transfer_id from public.receivable_allocations a where a.org_id = new.org_id and a.invoice_id = new.invoice_id and a.kind = 'payment')
+     order by t.id
+       for update;
   end if;
 
   select * into v_invoice from public.invoices where org_id = new.org_id and id = new.invoice_id for update;
