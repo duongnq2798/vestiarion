@@ -5,6 +5,7 @@ import "server-only";
 import { consoleAnswer } from "@/app/actions/command-result";
 import { authorize } from "@/lib/auth/authorize";
 import { consoleActor } from "@/lib/commands/actor";
+import { planCrmDeal } from "@/lib/commands/crm";
 import { addDeal, changeDeal, releaseDealLine, setDealAutoRelease } from "@/lib/commands/deals";
 import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
@@ -57,7 +58,10 @@ function dealFields(formData: FormData): DealFormFields {
   };
 }
 
-/** Confirms a deal from the New deal form. The same form sent twice makes one deal (D12). */
+/**
+ * Confirms a deal from the New deal form. The same form sent twice makes one deal (D12). A form a CRM's won deal filled
+ * names its row (`crmRowId`): the deal is planned from it, with the CRM's deal id as its reference (HubSpot connector H11).
+ */
 export async function createDealAction(_previous: DealActionResult, formData: FormData): Promise<DealActionResult> {
   const auth = await authorize(formData.get("orgSlug"), "records.write");
   if (!auth.ok) return { ok: false, message: auth.message };
@@ -68,12 +72,17 @@ export async function createDealAction(_previous: DealActionResult, formData: Fo
       .catch(() => false);
     const read = readDealForm(dealFields(formData), { shadowOn });
     if (!read.ok) return { ok: false, message: read.message, field: read.field };
-    const outcome = await addDeal(consoleActor(auth), { draft: read.draft });
+    const crmRowId = formString(formData, "crmRowId", 64);
+    if (crmRowId && !UUID.test(crmRowId)) return { ok: false, message: "That deal is no longer in the list. Reload the page." };
+    const outcome = crmRowId ? await planCrmDeal(consoleActor(auth), { rowId: crmRowId, draft: read.draft }) : await addDeal(consoleActor(auth), { draft: read.draft });
     return { ...consoleAnswer(outcome), ...(outcome.ok ? { dealId: outcome.dealId } : {}) };
   });
 }
 
-/** Changes, cancels or reopens a deal from its page, against the version the page showed. */
+/**
+ * Changes, cancels or reopens a deal from its page, against the version the page showed. Made from the changes a CRM
+ * brought (`fromCrm`), the version says so and those changes count as reviewed (HubSpot connector H12).
+ */
 export async function changeDealAction(_previous: DealActionResult, formData: FormData): Promise<DealActionResult> {
   const auth = await authorize(formData.get("orgSlug"), "records.write");
   if (!auth.ok) return { ok: false, message: auth.message };
@@ -97,7 +106,7 @@ export async function changeDealAction(_previous: DealActionResult, formData: Fo
       deal.deal.facts.currency
     );
     if (!read.ok) return { ok: false, message: read.message };
-    return consoleAnswer(await changeDeal(consoleActor(auth), { change: read.change }));
+    return consoleAnswer(await changeDeal(consoleActor(auth), { change: read.change, fromCrm: formString(formData, "fromCrm", 4) === "1" }));
   });
 }
 

@@ -4,6 +4,7 @@ import DeleteWorkspacePanel from "@/components/DeleteWorkspacePanel";
 import EmailInboxPanel from "@/components/EmailInboxPanel";
 import GoLivePanel from "@/components/GoLivePanel";
 import GitHubPanel from "@/components/GitHubPanel";
+import HubSpotPanel from "@/components/HubSpotPanel";
 import LedgerKeyPanel from "@/components/LedgerKeyPanel";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import { SettingsSections, type SettingsGroup } from "@/components/SettingsSections";
@@ -35,6 +36,8 @@ import { githubAppSettingsFromEnv } from "@/lib/github/settings";
 import { slackPanelView } from "@/lib/slack/panel";
 import { slackSettingsFromEnv } from "@/lib/slack/settings";
 import { accountingPanelView } from "@/lib/connectors/panel";
+import { crmPanelView } from "@/lib/connectors/crm-review";
+import { hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
 import { xeroSettingsFromEnv } from "@/lib/xero/settings";
 import { linkFor as telegramLinkFor } from "@/lib/telegram/links";
 import { telegramSettingsFromEnv } from "@/lib/telegram/settings";
@@ -51,7 +54,7 @@ export default async function SettingsPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ slack?: string | string[]; github?: string | string[]; xero?: string | string[] }>;
+  searchParams: Promise<{ slack?: string | string[]; github?: string | string[]; xero?: string | string[]; hubspot?: string | string[] }>;
 }) {
   const { slug } = await params;
   const access = await requireMembership(slug);
@@ -66,9 +69,10 @@ export default async function SettingsPage({
     // How connecting Slack went, from its way back (Slack design S3); only the codes the panel knows are shown.
     // And how connecting GitHub went (GitHub App design G2).
     // And how connecting Xero went (Xero connector X4).
-    const { slack: slackOutcome, github: githubOutcome, xero: xeroOutcome } = await searchParams;
+    // And how connecting HubSpot went (HubSpot connector H4).
+    const { slack: slackOutcome, github: githubOutcome, xero: xeroOutcome, hubspot: hubspotOutcome } = await searchParams;
     const inboxSettings = inboxSettingsFromEnv();
-    const [goLive, apiKeys, webhookEndpoints, ledgerKey, dashboardStats, deletion, usyc, slack, notifySwitch, telegramLink, inbox, github, twoApprovals, shadow, xero] = await Promise.all([
+    const [goLive, apiKeys, webhookEndpoints, ledgerKey, dashboardStats, deletion, usyc, slack, notifySwitch, telegramLink, inbox, github, twoApprovals, shadow, xero, hubspot] = await Promise.all([
       goLiveStatus(membership.orgId),
       listApiKeys(membership.orgId),
       listWebhookEndpoints(membership.orgId),
@@ -127,6 +131,14 @@ export default async function SettingsPage({
       xeroSettingsFromEnv()
         ? accountingPanelView("xero").catch((error: unknown) => {
             console.error("settings: Xero status not loaded", error instanceof Error ? error.message : error);
+            return null;
+          })
+        : null,
+      // Only on a deployment where HubSpot is configured (HubSpot connector H17); best effort, like Xero's. Before migration
+      // 0105 the card says HubSpot is not set up yet.
+      hubspotSettingsFromEnv()
+        ? crmPanelView("hubspot").catch((error: unknown) => {
+            console.error("settings: HubSpot status not loaded", error instanceof Error ? error.message : error);
             return null;
           })
         : null,
@@ -225,6 +237,13 @@ export default async function SettingsPage({
             title: "Xero",
             content: xero ? (
               <XeroPanel orgSlug={slug} view={xero} canManage={canManageIntegrations} notice={typeof xeroOutcome === "string" ? xeroOutcome : null} />
+            ) : null,
+          },
+          {
+            id: "hubspot-title",
+            title: "HubSpot",
+            content: hubspot ? (
+              <HubSpotPanel orgSlug={slug} view={hubspot} canManage={canManageIntegrations} notice={typeof hubspotOutcome === "string" ? hubspotOutcome : null} />
             ) : null,
           },
           {

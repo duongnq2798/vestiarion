@@ -69,7 +69,10 @@ import { workspaceNetwork } from "@/lib/workspace-network";
 import { shellStatus } from "@/lib/shell-status";
 import { DealForm } from "@/components/deals/DealForm";
 import { DealsSection } from "@/components/deals/DealsSection";
+import { HubSpotDeals } from "@/components/HubSpotDeals";
+import { crmPrefillFor, crmReady, crmReview, type CrmPrefillRead, type CrmReviewView } from "@/lib/connectors/crm-review";
 import { dealLinksOf, plannedLinesOf, readDeals, type DealLink } from "@/lib/deals/read";
+import { hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -86,6 +89,8 @@ type InvoiceSearchParams = Promise<{
   add?: string | string[];
   /** A search: an id, an invoice number, a purchase order, a counterparty, an amount, or a payment's reference (I09). */
   q?: string | string[];
+  /** A HubSpot deal of the list: the New deal form opens filled in from it (HubSpot connector H11). */
+  hubspot?: string | string[];
 }>;
 
 /** Payables still to be paid: decided or not, held or scheduled. */
@@ -106,7 +111,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
   return inOrg(access, async () => {
     const network = workspaceNetwork().id;
     const query = await searchParams;
-    const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, schedules, deciding, emailed, fromXero, dealsRead] = await Promise.all([
+    const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, schedules, deciding, emailed, fromXero, dealsRead, fromHubSpot] = await Promise.all([
       listInvoices(),
       listCounterparties(),
       listLedgerEntries(1),
@@ -143,6 +148,19 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         console.error("invoices: deals not loaded", error instanceof Error ? error.message : error);
         return "unread" as const;
       }),
+      // HubSpot's won deals, to plan collections from (HubSpot connector H20), on a deployment where HubSpot is set up;
+      // hidden before migration 0105, without a connection, and when they cannot be read.
+      hubspotSettingsFromEnv()
+        ? connectionFor("hubspot")
+            .then(async (connection) => {
+              await crmReady();
+              return crmReview(connection);
+            })
+            .catch((error: unknown): CrmReviewView => {
+              if (!(error instanceof NotSetUpError)) console.error("invoices: deals from HubSpot not loaded", error instanceof Error ? error.message : error);
+              return { state: "hidden" };
+            })
+        : ({ state: "hidden" } as CrmReviewView),
     ]);
     const deals = dealsRead === "unread" ? "unread" : dealsRead.available ? dealsRead.deals : "not_ready";
     // Each receivable a deal line became names its deal (deal schedule).
@@ -184,6 +202,22 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       canDecide && paymentPlan?.lines.some((line) => line.move !== null && line.createdBy === access.user.id) ? await isSoleApprover(access.user.id) : false;
     // In shadow mode, each card carries a person's verdict on the agent's decision, given or to give (shadow mode S3).
     const verdicts = await verdictFacts(db(), entries, canDecide);
+    // The workspace's customers, as the New deal form offers them.
+    const customers = counterparties
+      .filter((counterparty) => counterparty.role === "client")
+      .map(({ id, name }) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const dealCurrencies = ["USDC", "EURC", ...(billCurrencyOf(verdicts.shadow) ? [billCurrencyOf(verdicts.shadow) as string] : [])];
+    // A HubSpot deal picked to plan: the New deal form filled in from it (HubSpot connector H11). Read again on confirm.
+    const planFromHubSpot: CrmPrefillRead | null =
+      typeof query.hubspot === "string" && canWrite && fromHubSpot.state === "list" && Array.isArray(deals)
+        ? await crmPrefillFor({ rowId: query.hubspot, customers, workspace: { shadowOn: verdicts.shadow !== null }, today: new Date().toISOString().slice(0, 10) }).catch(
+            (error: unknown): CrmPrefillRead => {
+              console.error("invoices: a HubSpot deal was not read to plan", error instanceof Error ? error.message : error);
+              return { ok: false, message: "That deal could not be read. Reload the page in a moment." };
+            }
+          )
+        : null;
     const byStatus = filter ? invoices.filter((invoice) => invoice.status === filter) : invoices;
     // A search keeps what it finds (I09): by id, invoice number, purchase order, counterparty, amount or a payment applied.
     const shown = search
@@ -596,16 +630,40 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
             deals={deals}
             orgSlug={slug}
             today={today}
+            fromCrm={
+              fromHubSpot.state === "list" ? (
+                <>
+                  {planFromHubSpot && (
+                    <div id="plan-from-hubspot" className="scroll-mt-6">
+                      {planFromHubSpot.ok ? (
+                        <IntakeFold label={`Plan collections: ${planFromHubSpot.name}`} meta={`from ${planFromHubSpot.label}: pick how it is billed, check the rest, and confirm`} defaultOpen>
+                          <DealForm
+                            orgSlug={slug}
+                            customers={customers}
+                            currencies={dealCurrencies.includes(planFromHubSpot.prefill.currency) ? dealCurrencies : [...dealCurrencies, planFromHubSpot.prefill.currency]}
+                            idempotencyKey={randomUUID()}
+                            today={today}
+                            prefill={{ crmRowId: planFromHubSpot.rowId, label: planFromHubSpot.label, ...planFromHubSpot.prefill }}
+                          />
+                        </IntakeFold>
+                      ) : (
+                        <Callout tone="held" className="mb-6">
+                          {planFromHubSpot.message}
+                        </Callout>
+                      )}
+                    </div>
+                  )}
+                  <HubSpotDeals orgSlug={slug} organisation={fromHubSpot.organisation} won={fromHubSpot.won} open={fromHubSpot.open} emails={fromHubSpot.emails} canWrite={canWrite} />
+                </>
+              ) : undefined
+            }
             newDeal={
               canWrite && Array.isArray(deals) ? (
                 <IntakeFold label="New deal" meta="a signed deal and its collection schedule: a deposit, milestones, a retainer or your own lines" defaultOpen={deals.length === 0 && query.add === "deal"}>
                   <DealForm
                     orgSlug={slug}
-                    customers={counterparties
-                      .filter((counterparty) => counterparty.role === "client")
-                      .map(({ id, name }) => ({ id, name }))
-                      .sort((a, b) => a.name.localeCompare(b.name))}
-                    currencies={["USDC", "EURC", ...(billCurrencyOf(verdicts.shadow) ? [billCurrencyOf(verdicts.shadow) as string] : [])]}
+                    customers={customers}
+                    currencies={dealCurrencies}
                     idempotencyKey={randomUUID()}
                     today={today}
                   />

@@ -1,7 +1,6 @@
 import { currentOrgId } from "../context";
 import { db, unwrap } from "../dal";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
-import type { Connection } from "./connections";
 import { crmChanges, flagDecision, readFacts, type CrmChange, type CrmFacts, type CrmProvider, type ExternalDeal, type StagedCrmDeal, type StageState } from "./crm";
 import { syncCrmConnection, type CrmSyncDb, type CrmSyncResult } from "./crm-sync";
 import { PROVIDER_LABELS } from "./provider";
