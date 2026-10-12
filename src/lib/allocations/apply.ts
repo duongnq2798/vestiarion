@@ -81,7 +81,7 @@ async function readPayment(paymentId: string): Promise<PaymentIn> {
 
 async function readReceivables(ids: readonly string[]): Promise<ReceivableIn[]> {
   if (ids.length === 0) return [];
-  const rows = unwrap(await db().from("invoices").select(RECEIVABLE_COLUMNS).in("id", [...ids])) as Array<Parameters<typeof toReceivableIn>[0] & { direction: string }>;
+  const rows = unwrap(await db().from("invoices").select(RECEIVABLE_COLUMNS).in("id", [...ids])) as unknown as Array<Parameters<typeof toReceivableIn>[0] & { direction: string }>;
   return rows.filter((row) => row.direction === "receivable").map(toReceivableIn);
 }
 
