@@ -76,6 +76,8 @@ export const HOME_PATH = NAV_ITEMS[0].path;
 const NESTED: ReadonlyArray<readonly [RegExp, NavKey]> = [
   [/^\/o\/[^/]+\/evidence\/invoice(?:\/|$)/, "invoices"],
   [/^\/o\/[^/]+\/evidence\/milestone(?:\/|$)/, "contractors"],
+  // A deal's page sits inside Bills & receivables, where its Deals are listed (deal schedule).
+  [/^\/o\/[^/]+\/invoices\/deals(?:\/|$)/, "invoices"],
 ];
 
 /** The section a workspace pathname is in: `/o/acme/audit` → Audit log, `/o/acme/evidence/invoice/<id>` → Bills & receivables. */

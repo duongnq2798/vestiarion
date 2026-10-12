@@ -53,6 +53,21 @@ function SafeToSpendBreakdown({ outlook, columns = false }: { outlook: CashOutlo
             <Money value={outlook.eurcLeftOut} token="EURC" /> due in EURC is paid from the EURC balance, so it is left out.
           </>
         )}
+        {/* Deal lines not invoiced yet: planned, never expected money until released, never cash (deal schedule D14). */}
+        {(outlook.plannedCount > 0 || outlook.plannedOther.length > 0) && (
+          <>
+            {" "}
+            Planned from deals, not invoiced yet:{" "}
+            {outlook.plannedCount > 0 && <Money value={outlook.plannedIn30d} />}
+            {outlook.plannedOther.map((other, index) => (
+              <span key={other.currency}>
+                {outlook.plannedCount > 0 || index > 0 ? ", " : ""}
+                <Money value={other.amount} token={other.currency} />
+              </span>
+            ))}
+            , counted nowhere until each line is released.
+          </>
+        )}
       </p>
       {outlook.shortOn && (
         <Callout tone="held" title={`The wallet runs short on ${dayLabel(outlook.shortOn)}`} className="mt-4">

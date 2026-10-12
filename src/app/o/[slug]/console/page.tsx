@@ -60,6 +60,7 @@ import { walletTreasuryAvailable } from "@/lib/config";
 import { shellStatus } from "@/lib/shell-status";
 import { flightRows, followUpOf, type FlightRow } from "@/lib/settlement-facts";
 import { readPaymentsInFlight } from "@/lib/settlement-read";
+import { readPlannedDealLines } from "@/lib/deals/read";
 
 export const dynamic = "force-dynamic";
 
@@ -77,7 +78,7 @@ export default async function DashboardPage({
   return inOrg(access, async () => {
     const network = workspaceNetwork().id;
     const query = await searchParams;
-    const [accountsRows, actionRows, forecastRow, dashboardStats, invoices, counterparties, headEntries, waiting, pause, milestones, budget, onChainLimit, recurring] = await Promise.all([
+    const [accountsRows, actionRows, forecastRow, dashboardStats, invoices, counterparties, headEntries, waiting, pause, milestones, budget, onChainLimit, recurring, planned] = await Promise.all([
       listAccounts(),
       listTreasuryActions(),
       latestForecast(),
@@ -111,6 +112,9 @@ export default async function DashboardPage({
         console.error("console: recurring payments not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
         return null;
       }),
+      // Deal lines not invoiced yet, named apart in Next 30 days and the cash scenarios, never in a balance (deal
+      // schedule D14). Best effort: none before migration 0104 runs, null when unread.
+      readPlannedDealLines(),
     ]);
     // Modes, not the provider: the page must still render when the
     // organization's Circle credentials cannot be read (R12).
@@ -262,6 +266,7 @@ export default async function DashboardPage({
       receivables: invoices
         .filter((invoice) => invoice.direction === "receivable")
         .map((invoice) => ({ ...invoice, counterparty: invoice.counterparty_name, currency: invoice.currency ?? null })),
+      planned,
     };
     const outlook = cashOutlook(outlookInput);
     // What the cash scenarios start from (cash scenarios C2-C4): the same rows over 90 days, with the recurring payments
