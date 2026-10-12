@@ -18,8 +18,8 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy"
-      updated="2026-10-11"
-      intro="Vestiarion is an autonomous treasury agent on Arc testnet. This page describes what the service stores and sends, as its code does it today. The code is public, so every statement here can be checked against it."
+      updated="2026-10-12"
+      intro="Vestiarion is an autonomous treasury agent on Arc mainnet and Arc testnet. This page describes what the service stores and sends, as its code does it today. The code is public, so every statement here can be checked against it."
     >
       <LegalSection id="signing-in" title="Signing in">
         <p>
@@ -106,14 +106,33 @@ export default function PrivacyPage() {
 
       <LegalSection id="wallets" title="Wallets and payments">
         <p>
-          Payments are USDC or EURC transfers on Arc testnet through Circle Developer-Controlled Wallets. A workspace that connects its own Circle account keeps its
-          wallets in that account. A workspace that chooses hosted wallets has them created in Vestiarion&apos;s own Circle testnet account, so Vestiarion
-          holds them; you fund them from Circle&apos;s faucet.
+          Each workspace pays on one network, Arc mainnet or Arc testnet, chosen when it is created. Payments are USDC transfers on that network, and on Arc
+          testnet EURC too, sent through Circle Developer-Controlled Wallets. A workspace that connects its own Circle account keeps its wallets in that account.
+          A workspace on Arc testnet that chooses hosted wallets has them created in Vestiarion&apos;s own Circle testnet account, so Vestiarion holds them;
+          you fund them from Circle&apos;s faucet.
+        </p>
+        <p>
+          On Arc mainnet, an owner can make a wallet they hold the workspace&apos;s treasury instead: a wallet in their browser, such as MetaMask, or a passkey
+          wallet. Vestiarion holds no key to it. It keeps the wallet&apos;s address and whether a passkey signs for it, the spending limit contract the wallet
+          deployed, and the transactions that set it up and changed it. To make a browser wallet the treasury, the owner signs a message that names the
+          workspace, Arc mainnet and the wallet&apos;s address, and the signed ledger keeps the message and the signature. For a passkey wallet, Vestiarion
+          keeps the recovery address registered for it, or when the owner chose to go without one. The twelve words of a recovery phrase are made in the
+          browser and never sent to Vestiarion. The agent&apos;s own wallet, which pays through the contract and holds only its gas, is created in
+          Vestiarion&apos;s Circle account.
+        </p>
+        <p>
+          While you set up or change such a treasury, your browser keeps, for the workspace, each transaction it sent, by its hash, until Vestiarion records
+          it, so a reload does not send it twice; and for a passkey wallet, the public part of its passkey (its credential id and public key).
+        </p>
+        <p>
+          When you bring USDC from another chain, your browser wallet burns it there through Circle&apos;s CCTP, and Circle&apos;s Forwarding Service mints it on
+          Arc to the workspace&apos;s wallet. Vestiarion&apos;s server takes no part: your browser keeps the chain, the amount, the burn&apos;s hash and when it
+          was sent until the USDC arrives, and asks Circle about that hash.
         </p>
         <p>
           Payee history: anyone who pays for it over x402 can ask, for one Arc address, how many workspaces here have paid it with live payments, how many such
-          payments were confirmed, and when the first and the last were made. The answer names no workspace and no amount. A workspace&apos;s agent can buy the
-          same answer before its first payment to an address, from a service budget a person gives it.
+          payments were confirmed, and when the first and the last were made. The answer names no workspace and no amount. On Arc testnet, a workspace&apos;s agent can
+          buy the same answer before its first payment to an address, from a service budget a person gives it.
         </p>
       </LegalSection>
 
@@ -130,6 +149,9 @@ export default function PrivacyPage() {
             For a payee who creates a wallet with a passkey on a payee link, Circle&apos;s Modular Wallets receive the passkey&apos;s public key, its
             credential id and the name it is saved under, and later the wallet&apos;s transfers, whose gas Circle&apos;s Gas Station pays. The passkey&apos;s
             private key stays on the payee&apos;s device or in their password manager and is never sent anywhere. Vestiarion keeps nothing of it.
+            For an owner who makes a passkey wallet the treasury of a workspace on Arc mainnet, Modular Wallets receive the same of that passkey, the
+            recovery address registered for the wallet, and the wallet&apos;s setup and later changes, whose network fees come from the wallet&apos;s own
+            USDC. That passkey&apos;s private key stays on the owner&apos;s device or in their password manager too.
           </li>
           <li>
             <strong>Resend</strong> sends transactional email: invitations to a workspace, digests of the payments waiting for a decision, the link a payee
@@ -307,8 +329,8 @@ export default function PrivacyPage() {
       <LegalSection id="retention" title="How long data is kept">
         <ul>
           <li>
-            A sandbox workspace with no activity for 60 days is deleted by a daily cleanup. A sandbox is kept if Circle credentials are connected to it, or if
-            it holds a hosted wallet.
+            A sandbox workspace with no activity for 60 days is deleted by a daily cleanup. A sandbox is kept if Circle credentials are connected to it, if
+            it holds a hosted wallet, or if its owner&apos;s own wallet deployed its contract.
           </li>
           <li>A webhook delivery is deleted 30 days after it is delivered; one that failed, 30 days after it was created.</li>
           <li>Everything else in a workspace is kept until the workspace is deleted.</li>
@@ -327,7 +349,8 @@ export default function PrivacyPage() {
         </p>
         <p>
           The workspace&apos;s wallets stay in the Circle account that holds them, with any USDC in them. For hosted wallets, that is Vestiarion&apos;s testnet
-          account.
+          account. A treasury in an owner&apos;s own wallet on Arc mainnet stays theirs, and its approval for the contract stays as it was until that wallet
+          changes it, so stop the agent&apos;s payments from it before deleting the workspace.
         </p>
       </LegalSection>
 

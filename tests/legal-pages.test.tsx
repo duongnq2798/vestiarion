@@ -6,6 +6,8 @@ import PrivacyPage, { metadata as privacyMetadata } from "@/app/privacy/page";
 import sitemap from "@/app/sitemap";
 import TermsPage, { metadata as termsMetadata } from "@/app/terms/page";
 import { ORG_ROLES } from "@/lib/auth/roles";
+import { MAINNET_STARTING_TWO_APPROVALS } from "@/lib/mainnet";
+import { ARC_MAINNET, ARC_TESTNET } from "@/lib/network";
 import { loginRedirectFor, requiresSession } from "@/lib/auth/routes";
 import { FIRST_TOUCH_COOKIE, FIRST_TOUCH_DAYS, TAG_KEYS, TAG_MAX } from "@/lib/growth/attribution";
 import { CONSENT, MESSAGE_MAX } from "@/lib/growth/guided-setup";
@@ -31,8 +33,8 @@ const text = (markup: string) =>
 const source = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8");
 
 const PAGES = [
-  { path: "/terms", file: "src/app/terms/page.tsx", Page: TermsPage, metadata: termsMetadata, heading: "Terms of use", updated: "2026-09-30" },
-  { path: "/privacy", file: "src/app/privacy/page.tsx", Page: PrivacyPage, metadata: privacyMetadata, heading: "Privacy", updated: "2026-10-11" },
+  { path: "/terms", file: "src/app/terms/page.tsx", Page: TermsPage, metadata: termsMetadata, heading: "Terms of use", updated: "2026-10-12" },
+  { path: "/privacy", file: "src/app/privacy/page.tsx", Page: PrivacyPage, metadata: privacyMetadata, heading: "Privacy", updated: "2026-10-12" },
 ] as const;
 
 describe.each(PAGES)("$path", ({ path: route, file, Page, metadata, heading, updated }) => {
@@ -53,8 +55,11 @@ describe.each(PAGES)("$path", ({ path: route, file, Page, metadata, heading, upd
     expect(markup).toContain('href="/terms"');
   });
 
-  it("names Arc testnet, and points questions at GitHub Issues", () => {
+  it("names Arc mainnet and Arc testnet, and points questions at GitHub Issues", () => {
+    expect(text(markup)).toContain("Arc mainnet");
     expect(text(markup)).toContain("Arc testnet");
+    expect(text(markup)).not.toMatch(/Vestiarion runs on Arc testnet|every payment it makes is a transfer on Arc testnet/);
+    expect(markup).not.toContain(">Arc testnet only<");
     expect(markup).toMatch(new RegExp(`<a [^>]*href="${ISSUES_URL}"[^>]*target="_blank"[^>]*rel="noopener noreferrer"`));
   });
 
@@ -87,8 +92,38 @@ describe("the terms", () => {
     "faucet",
     "another workspace",
     "approve",
+    "real USDC",
+    "cannot be taken back",
+    "your own wallet or passkey wallet",
+    "spending limit contract",
+    "recovery phrase",
+    "not been audited",
+    "lawfully",
   ])("cover %s", (phrase) => {
     expect(body.toLowerCase()).toContain(phrase.toLowerCase());
+  });
+
+  it("states the starting figures of a workspace on Arc mainnet as the code writes them", () => {
+    const workspace = source("src/lib/platform/workspace.ts");
+    const budget = workspace.match(/MAINNET_STARTING_BUDGET = \{ dailyUsdc: (\d+), weeklyUsdc: (\d+) \}/);
+    expect(budget).not.toBeNull();
+    expect(body).toContain(`two approvals above ${MAINNET_STARTING_TWO_APPROVALS} USDC`);
+    expect(body).toContain(`${budget?.[1]} USDC a day and ${budget?.[2]} USDC in 7 days`);
+  });
+
+  it("names the features that run on Arc testnet only, as the network profiles have them", () => {
+    expect(ARC_MAINNET.hostedWallets).toBe(false);
+    expect(ARC_TESTNET.hostedWallets).toBe(true);
+    expect(ARC_MAINNET.usyc).toBeNull();
+    expect(ARC_MAINNET.escrow).toBe(false);
+    expect(ARC_MAINNET.swapAdapter).toBeNull();
+    expect(ARC_MAINNET.cctp).toBeNull();
+    expect(ARC_MAINNET.faucet).toBeNull();
+    expect(ARC_MAINNET.walletTreasury).toBe(true);
+    const testnet = text(renderToStaticMarkup(<TermsPage />).split('id="networks"')[1]?.split('id="custody"')[0] ?? "");
+    for (const feature of ["hosted wallets", "the USYC reserve", "milestone escrow", "the EURC swap", "payouts to other chains", "Circle's faucet"]) {
+      expect(testnet, feature).toContain(feature);
+    }
   });
 });
 
@@ -185,6 +220,28 @@ describe("the privacy page", () => {
     expect(form).toContain('href="/privacy#guided-setup"');
     // Resend's entry names the note.
     expect(text(markup.split("<strong>Resend</strong>")[1] ?? "")).toContain("a short note about each new guided setup request");
+  });
+
+  it("describes a treasury in the owner's own wallet on Arc mainnet as the code keeps it: no key, the proof in the ledger, the words never sent", () => {
+    const section = text(renderToStaticMarkup(<PrivacyPage />).split('id="wallets"')[1]?.split('id="services"')[0] ?? "");
+    for (const phrase of [
+      "Arc mainnet or Arc testnet",
+      "Vestiarion holds no key to it",
+      "the signed ledger keeps the message and the signature",
+      "never sent to Vestiarion",
+      "created in Vestiarion's Circle account",
+      "Vestiarion's server takes no part",
+    ]) {
+      expect(section, phrase).toContain(phrase);
+    }
+    // The proof goes into the ledger entry, the twelve words are made in the browser, and only public parts are kept there.
+    expect(source("src/lib/treasury/wallet-treasury.ts")).toMatch(/detail: \{ by: input\.actorId, address, message: input\.message, signature: input\.signature/);
+    expect(source("src/components/treasury/PasskeyTreasurySteps.tsx")).toContain("generateMnemonic(english)");
+    expect(source("supabase/migrations/0083_passkey_treasury.sql")).toContain("add column if not exists recovery_address text");
+    expect(source("src/lib/inbound-usdc.ts")).toContain("It all runs in the browser");
+    // A sandbox whose owner's wallet deployed its contract is kept by the cleanup, as the retention section says.
+    expect(source("src/lib/platform/cleanup.ts")).toContain("kept abandoned sandbox with its wallet's contract");
+    expect(body).toContain("or if its owner's own wallet deployed its contract");
   });
 
   it("says API keys are kept only as a SHA-256 hash, as the code keeps them", () => {
