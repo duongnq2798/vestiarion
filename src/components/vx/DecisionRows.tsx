@@ -22,6 +22,8 @@ export interface DecisionRowItem {
   footerAction?: ReactNode;
   /** What the row waits for, in a few words, under its title: a held milestone's reason. */
   hint?: string;
+  /** A plain fact under its title, such as what a part-paid receivable still owes. */
+  note?: string;
   /** What a person decides, above the card: a held milestone's reason and its actions. */
   before?: ReactNode;
   /** A form under the card, such as a milestone's verification. */
@@ -65,6 +67,7 @@ function DecisionRow({ item, orgSlug }: { item: DecisionRowItem; orgSlug: string
               {date && <span className={cn("sm:hidden", date.tone === "held" && "text-held")}> · {date.label}</span>}
             </span>
             {item.hint && <span className="block text-xs font-medium text-held">{item.hint}</span>}
+            {item.note && <span className="block text-xs text-ink-2">{item.note}</span>}
             {item.signals && item.signals.length > 0 && <Signals signals={item.signals} />}
             {item.why && (
               <span className="mt-1 block text-xs leading-5 text-ink-2">

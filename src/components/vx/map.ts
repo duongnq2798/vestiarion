@@ -7,6 +7,7 @@ import { awaitsVerdict, heldForCash } from "@/lib/next-step";
 import { verdictView, type VerdictFacts } from "@/lib/verdict-view";
 import { invoiceTrail } from "@/lib/decision-trail";
 import type { LedgerEntry } from "@/lib/ledger";
+import type { ReceivableView } from "@/lib/allocations/view";
 import type { Settlement } from "@/lib/settlement";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow, TreasuryActionRow } from "@/lib/queries";
 import type { Decision, Evidence, Guardrail, Outcome } from "./types";
@@ -183,9 +184,10 @@ const shortAddress = (address: string) => (address.length > 12 ? `${address.slic
  * A receivable's card (receivables on Arc): money a client owes the business. It shows none of a payable's
  * facts (purchase order, goods received, payment limit, the payee's chain); while open it waits on the
  * client, and once a transfer settled it, it says who sent it and how the agent matched it, from the signed
- * `ar_received` entry, with the transaction.
+ * `ar_received` entry, with the transaction. Payments a person applied (allocations L11) make it part paid, with what
+ * was received and what is still owed, or paid by those payments.
  */
-function receivableDecision(invoice: InvoiceRow, entries: LedgerEntry[], network: Network): Omit<Decision, "network"> {
+function receivableDecision(invoice: InvoiceRow, entries: LedgerEntry[], network: Network, applied?: ReceivableView): Omit<Decision, "network"> {
   // The viewed workspace's network, old entries included: this reasoning is rebuilt on every view (mainnet copy C4).
   const { label } = networkProfile(network);
   const received = entries.find((entry) => entry.action === "ar_received" && entry.detail.invoiceId === invoice.id);
@@ -195,8 +197,19 @@ function receivableDecision(invoice: InvoiceRow, entries: LedgerEntry[], network
   const matchedBy = stringValue(detail?.matchedBy);
   const onArc = invoice.tx_ref?.startsWith("0x") ?? false;
   const settled = invoice.status === "received" || invoice.status === "paid";
+  // Payments applied to it, rather than one transfer matched whole.
+  const byPayments = !received && applied !== undefined && applied.lines.length > 0 ? applied : undefined;
+  const partPaid = byPayments?.state === "part_paid";
+  const paymentCount = byPayments ? byPayments.lines.filter((line) => line.kind === "payment").length : 0;
+  const feeWords = byPayments && byPayments.fees > 0 ? `, and ${fmt(byPayments.fees)} ${currency} recorded as ${byPayments.lines.filter((line) => line.kind === "fee").length === 1 ? "a fee" : "fees"}` : "";
 
-  const reasoning = received
+  const reasoning = byPayments
+    ? partPaid
+      ? `Part paid: ${fmt(byPayments.paid)} of ${fmt(invoice.amount)} ${currency} received from ${paymentCount === 1 ? "one payment" : `${paymentCount} payments`}${feeWords}. ${fmt(byPayments.outstanding)} ${currency} is still owed. When exactly that arrives in the operating wallet on ${label}, the agent applies it to this invoice; another amount waits under Apply payments.`
+      : settled
+        ? `Paid by ${paymentCount === 1 ? "one payment" : `${paymentCount} payments`} received on ${label} and applied to this invoice, ${fmt(byPayments.paid)} ${currency}${feeWords}.`
+        : presentReasoning(invoice.agent_reasoning) || "Closed."
+    : received
     ? `Received ${fmt(numberValue(detail?.amount) ?? invoice.amount)} ${stringValue(detail?.currency) ?? currency}${from ? ` from ${shortAddress(from)}` : ""} on ${label}` +
       `${stringValue(detail?.receivedAt) ? ` on ${utcDay(stringValue(detail?.receivedAt) as string)}` : ""}, and matched it to this invoice: ` +
       (matchedBy === "sender"
@@ -211,6 +224,11 @@ function receivableDecision(invoice: InvoiceRow, entries: LedgerEntry[], network
   const evidence: Evidence[] = [{ label: "Due", value: new Date(invoice.due_date).toLocaleDateString("en-US"), state: "neutral" }];
   if (from) evidence.push({ label: "Received from", value: shortAddress(from), state: "ok" });
   if (matchedBy) evidence.push({ label: "Matched by", value: matchedBy === "sender" ? "the client's address" : "amount, through the pay link", state: "ok" });
+  if (byPayments) {
+    evidence.push({ label: "Received", value: `${fmt(byPayments.paid)} of ${fmt(invoice.amount)} ${currency}`, state: "ok" });
+    if (byPayments.fees > 0) evidence.push({ label: "Fees", value: `${fmt(byPayments.fees)} ${currency}`, state: "neutral" });
+    if (byPayments.outstanding > 0) evidence.push({ label: "Still owed", value: `${fmt(byPayments.outstanding)} ${currency}`, state: "missing" });
+  }
 
   return {
     id: invoice.id,
@@ -221,7 +239,7 @@ function receivableDecision(invoice: InvoiceRow, entries: LedgerEntry[], network
     amount: invoice.amount,
     token: currency,
     outcome: settled && onArc ? "settled" : statusOutcome(invoice.status, invoice.tx_ref, false),
-    outcomeLabel: settled ? (onArc ? "Received on Arc" : "Received") : invoiceOutcomeLabel(invoice, false),
+    outcomeLabel: settled ? (onArc ? "Received on Arc" : "Received") : partPaid ? "Part paid" : invoiceOutcomeLabel(invoice, false),
     reasoning,
     evidence,
     guardrail: null,
@@ -229,7 +247,7 @@ function receivableDecision(invoice: InvoiceRow, entries: LedgerEntry[], network
     txHash: onArc ? invoice.tx_ref : null,
     mint: null,
     auditSeq: received?.seq,
-    at: received?.ts ?? invoice.due_date,
+    at: received?.ts ?? byPayments?.lines[byPayments.lines.length - 1]?.at ?? invoice.due_date,
     // The agent's reminders and the payment it matched, step by step (collections R8).
     trail: invoiceTrail(entries, invoice.id, network),
   };
@@ -251,6 +269,8 @@ export function invoiceDecision(
     /** Each payable's payment lifecycle by invoice id, as of `asOf` (settlement lifecycle L7); none shows no track. */
     settlements?: ReadonlyMap<string, Settlement>;
     asOf?: number;
+    /** The payments applied to each receivable, by invoice id (allocations L11); none shows it as before. */
+    allocations?: ReadonlyMap<string, ReceivableView>;
   }
 ): Decision {
   const lifecycle = invoice.direction === "payable" ? options.settlements?.get(invoice.id) : undefined;
@@ -287,9 +307,9 @@ function decideInvoice(
   invoice: InvoiceRow,
   counterparty: CounterpartyRow | undefined,
   entries: LedgerEntry[],
-  options: { network: Network; deciding?: boolean }
+  options: { network: Network; deciding?: boolean; allocations?: ReadonlyMap<string, ReceivableView> }
 ): Omit<Decision, "network"> {
-  if (invoice.direction === "receivable") return receivableDecision(invoice, entries, options.network);
+  if (invoice.direction === "receivable") return receivableDecision(invoice, entries, options.network, options.allocations?.get(invoice.id));
   // A payable not yet decided while a cycle runs is being decided now (decision trail R1).
   const deciding = options.deciding === true && invoice.status === "pending";
   const entry = matchingEntry(entries, "invoiceId", invoice.id);

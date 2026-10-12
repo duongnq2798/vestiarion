@@ -53,7 +53,7 @@ describe("a link to another organization's row", () => {
 
 describe("a link within the organization", () => {
   it("is accepted, as every seeded row already shows", async () => {
-    const n = (await db.query<{ n: number }>("select count(*)::int as n from invoices where org_id = $1 and counterparty_id = $2", [A, rowsA.counterpartyId])).rows[0].n;
+    const n = (await db.query<{ n: number }>("select count(*)::int as n from invoices where org_id = $1 and counterparty_id = $2 and direction = 'payable'", [A, rowsA.counterpartyId])).rows[0].n;
     expect(n).toBe(1);
   });
 });
