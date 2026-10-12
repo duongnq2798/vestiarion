@@ -103,6 +103,7 @@ export const TENANT_TABLES = [
   "service_purchases", "spending_limit_contracts", "ar_reminders", "inbox_emails", "approval_policies", "payment_approvals",
   "shadow_modes", "decision_verdicts", "payment_actuals", "bank_statement_lines", "report_shares", "report_baselines", "receivable_allocations",
   "accounting_connections", "external_links", "accounting_bills", "accounting_sync_cursors",
+  "deals", "deal_versions", "deal_lines",
 ] as const;
 
 export interface SeededRows {
@@ -193,6 +194,13 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     [orgId, `report-${tag}`]
   );
   await db.query("insert into report_baselines (org_id, minutes_per_bill, people_per_bill) values ($1, 20, 2)", [orgId]);
+  // A deal, its signed version and its one line (0104), written whole as create_deal writes it.
+  await db.query(
+    `select public.create_deal($1, jsonb_build_object('counterpartyId', $2::text, 'title', $3::text, 'currency', 'USDC', 'minorDigits', 2, 'totalMinor', 100,
+       'startsOn', '2026-10-12', 'termsDays', 14, 'template', 'custom', 'idempotencyKey', $4::text),
+       '[{"position": 1, "label": "All", "invoiceOn": "2026-10-12", "dueOn": "2026-10-26", "amountMinor": 100}]'::jsonb)`,
+    [orgId, counterpartyId, `deal-${tag}`, `deal-key-${tag}`]
+  );
   // An accounting connection, a link, a bill to review and a cursor (0101).
   const connectionId = await one(
     `insert into accounting_connections (org_id, provider, external_org_id, consent_version, consented_at, window_from)

@@ -141,3 +141,30 @@ describe("cashOutlook: the next 30 days", () => {
     ]);
   });
 });
+
+describe("deal lines not invoiced yet (docs/superpowers/specs/2026-10-12-deal-schedule-design.md D14)", () => {
+  const planned = (id: string, amount: number, dueOn: string, currency = "USDC") => ({ id, label: `Acme Studio: Website rebuild`, line: `Line ${id}`, amount, currency, dueOn });
+
+  it("names the planned lines due within 30 days apart, in no balance and not as money expected", () => {
+    const outlook = cashOutlook(
+      base({
+        receivables: [{ id: "r1", counterparty: "Acme Studio", amount: 300, currency: "USDC", due_date: day(3), status: "pending" }],
+        planned: [planned("p1", 700, day(10).slice(0, 10)), planned("p2", 50, day(-2).slice(0, 10)), planned("p3", 900, day(45).slice(0, 10)), planned("p4", 10_000, day(5).slice(0, 10), "JPY")],
+      })
+    );
+    // A released line is a receivable: money expected, never cash.
+    expect(outlook.expectedIn30d).toBe(300);
+    expect(outlook.safeToSpend).toBe(100);
+    expect(outlook.plannedIn30d).toBe(750);
+    expect(outlook.plannedCount).toBe(2);
+    expect(outlook.plannedOther).toEqual([{ currency: "JPY", amount: 10_000, count: 1 }]);
+    // Not on any day's balance: only the receivable moves the balance with expected money.
+    expect(outlook.days.at(-1)?.balanceWithExpected).toBe(400);
+    expect(outlook.days.flatMap((d) => d.items).some((item) => item.label.includes("Website rebuild"))).toBe(false);
+  });
+
+  it("is nothing when there are none, or they could not be read", () => {
+    expect(cashOutlook(base())).toMatchObject({ plannedIn30d: 0, plannedCount: 0, plannedOther: [] });
+    expect(cashOutlook(base({ planned: null }))).toMatchObject({ plannedIn30d: 0, plannedCount: 0, plannedRead: false });
+  });
+});

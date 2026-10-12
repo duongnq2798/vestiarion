@@ -1,4 +1,5 @@
-import { FileSpreadsheet, FileText, ListFilter, PenLine, Repeat, Search } from "lucide-react";
+import { randomUUID } from "node:crypto";
+import { FileSpreadsheet, FileText, Handshake, ListFilter, PenLine, Repeat, Search } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AutoRefresh } from "@/components/AutoRefresh";
@@ -32,7 +33,7 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import { addedSince, latestDecision, recordedFacts, waitingHint } from "@/lib/added-details";
-import { readAllocationBook, toReceivableIn } from "@/lib/allocations/book";
+import { readAllocationBook, stillOwed, toReceivableIn } from "@/lib/allocations/book";
 import { toMicros, type PaymentIn } from "@/lib/allocations/model";
 import { receivableLabel } from "@/lib/allocations/suggest";
 import { applyPaymentsView, paymentsByReceivable, receivableViews, type ReceivableView } from "@/lib/allocations/view";
@@ -66,6 +67,9 @@ import { settlementsByBill } from "@/lib/settlement-facts";
 import { readInvoicePayments, type PaymentRecord } from "@/lib/settlement-read";
 import { workspaceNetwork } from "@/lib/workspace-network";
 import { shellStatus } from "@/lib/shell-status";
+import { DealForm } from "@/components/deals/DealForm";
+import { DealsSection } from "@/components/deals/DealsSection";
+import { dealLinksOf, plannedLinesOf, readDeals, type DealLink } from "@/lib/deals/read";
 
 export const dynamic = "force-dynamic";
 
@@ -102,7 +106,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
   return inOrg(access, async () => {
     const network = workspaceNetwork().id;
     const query = await searchParams;
-    const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, schedules, deciding, emailed, fromXero] = await Promise.all([
+    const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, schedules, deciding, emailed, fromXero, dealsRead] = await Promise.all([
       listInvoices(),
       listCounterparties(),
       listLedgerEntries(1),
@@ -133,7 +137,16 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
               return { state: "hidden" };
             })
         : ({ state: "hidden" } as ReviewView),
+      // The workspace's deals and their schedules (deal schedule). Best effort: before migration 0104 runs the section
+      // says deals are not set up, and a read that fails hides only the section.
+      readDeals().catch((error: unknown) => {
+        console.error("invoices: deals not loaded", error instanceof Error ? error.message : error);
+        return "unread" as const;
+      }),
     ]);
+    const deals = dealsRead === "unread" ? "unread" : dealsRead.available ? dealsRead.deals : "not_ready";
+    // Each receivable a deal line became names its deal (deal schedule).
+    const dealLinks = Array.isArray(deals) ? dealLinksOf(deals) : new Map<string, DealLink>();
     const filter = typeof query.status === "string" ? query.status : undefined;
     const search = parseSearch(typeof query.q === "string" ? query.q : undefined);
     // The payments applied to receivables (allocations L11). Best effort: a read that fails shows receivables as before.
@@ -151,7 +164,16 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       // its section, and nothing else changes.
       filter
         ? null
-        : readPaymentPlan({ invoices, counterparties }).catch((error: unknown) => {
+        : readPaymentPlan({
+            invoices,
+            counterparties,
+            // Deal lines not invoiced yet, listed apart from the plan's balances (deal schedule D14).
+            planned: Array.isArray(deals) ? plannedLinesOf(deals) : deals === "not_ready" ? [] : null,
+            // A part-paid receivable, a released deal line among them, is expected for what is still owed (allocations L11).
+            owed: new Map(
+              invoices.filter((invoice) => invoice.direction === "receivable").map((invoice) => [invoice.id, stillOwed(invoice, book?.rows ?? [])] as const)
+            ),
+          }).catch((error: unknown) => {
             console.error("invoices: payment plan not read", error instanceof Error ? error.message : error);
             return null;
           }),
@@ -209,6 +231,10 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       console.error("invoices: pay links not read", error instanceof Error ? error.message : error);
       return new Map<string, PayLinkState>();
     });
+    const dealContext = (decision: ReturnType<typeof invoiceDecision>) => {
+      const link = dealLinks.get(decision.id);
+      return link ? `Deal · ${link.title} · ${link.line}` : undefined;
+    };
     const payLinkFor = (decision: ReturnType<typeof invoiceDecision>) => {
       const invoice = invoicesById.get(decision.id);
       if (!payLinkable.has(decision.id) || !invoice) return undefined;
@@ -226,7 +252,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     };
 
     // A receivable's payments applied, above its pay link (allocations L11): what was received, what is owed, and Reverse.
-    const receivableFooter = (decision: ReturnType<typeof invoiceDecision>) => {
+    const appliedAndPayLink = (decision: ReturnType<typeof invoiceDecision>) => {
       const view = allocations.get(decision.id);
       const invoice = invoicesById.get(decision.id);
       const link = payLinkFor(decision);
@@ -241,6 +267,27 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         </div>
       ) : (
         lines
+      );
+    };
+    // A receivable made from a deal line opens its deal, above its payments applied and its pay link.
+    const receivableFooter = (decision: ReturnType<typeof invoiceDecision>) => {
+      const link = dealLinks.get(decision.id);
+      const below = appliedAndPayLink(decision);
+      if (!link) return below;
+      return (
+        <div className="space-y-3">
+          <p className="flex flex-wrap items-center gap-x-2 text-[0.8125rem] text-ink-2">
+            <Handshake aria-hidden className="size-4 text-agent" />
+            <span>
+              {link.line} of the deal {link.title}
+              {link.index > 0 ? `, line ${link.index} of ${link.count}` : ""}.
+            </span>
+            <Button asChild variant="link" className="text-[0.8125rem]">
+              <Link href={orgHref(slug, `/invoices/deals/${link.dealId}`)}>Open the deal</Link>
+            </Button>
+          </p>
+          {below}
+        </div>
       );
     };
     const owedNote = (decision: ReturnType<typeof invoiceDecision>): Pick<DecisionRowItem, "note"> => {
@@ -529,18 +576,43 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
                 {openReceivables.length > 0 && (
                   <>
                     <RowGroupHeading title="Open" count={openReceivables.length} />
-                    <DecisionRows orgSlug={slug} items={openReceivables.map((decision) => row(decision, receivableFooter, owedNote(decision)))} />
+                    <DecisionRows orgSlug={slug} items={openReceivables.map((decision) => ({ ...row(decision, receivableFooter, owedNote(decision)), context: dealContext(decision) }))} />
                   </>
                 )}
                 {settledReceivables.length > 0 && (
                   <>
                     <RowGroupHeading title="Received and closed" count={settledReceivables.length} />
-                    <DecisionRows orgSlug={slug} items={settledReceivables.slice(0, showAllHistory ? undefined : HISTORY_SHOWN).map((decision) => row(decision, receivableFooter))} />
+                    <DecisionRows
+                      orgSlug={slug}
+                      items={settledReceivables.slice(0, showAllHistory ? undefined : HISTORY_SHOWN).map((decision) => ({ ...row(decision, receivableFooter), context: dealContext(decision) }))}
+                    />
                   </>
                 )}
               </>
             )}
           </section>
+
+          <DealsSection
+            deals={deals}
+            orgSlug={slug}
+            today={today}
+            newDeal={
+              canWrite && Array.isArray(deals) ? (
+                <IntakeFold label="New deal" meta="a signed deal and its collection schedule: a deposit, milestones, a retainer or your own lines" defaultOpen={deals.length === 0 && query.add === "deal"}>
+                  <DealForm
+                    orgSlug={slug}
+                    customers={counterparties
+                      .filter((counterparty) => counterparty.role === "client")
+                      .map(({ id, name }) => ({ id, name }))
+                      .sort((a, b) => a.name.localeCompare(b.name))}
+                    currencies={["USDC", "EURC", ...(billCurrencyOf(verdicts.shadow) ? [billCurrencyOf(verdicts.shadow) as string] : [])]}
+                    idempotencyKey={randomUUID()}
+                    today={today}
+                  />
+                </IntakeFold>
+              ) : undefined
+            }
+          />
         </div>
       </ProductShell>
     );

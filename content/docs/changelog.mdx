@@ -1,5 +1,15 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-12: Deals, their versions and the receivables released from them
+
+- An owner or admin can confirm a deal on Bills & receivables: a customer, a total and a schedule of lines that add up to it, each line released as a receivable when it is time to invoice it. Its ledger gains four entries, actor `human`, domain `ar`, each listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:
+  - **`deal_signed`** `{ by, dealId, version, counterpartyId, counterpartyName, title, currency, digits, total, totalMinor, startsOn, termsDays, externalRef, template, autoRelease, lines }` for version 1. `currency` is `USDC`, `EURC`, or a three-letter code in shadow mode; `digits` is 2, or 0 for a currency without cents such as `JPY`; `total` is a decimal string and `totalMinor` the same in minor units. `template` is `deposit`, `milestones`, `retainer` or `custom`; `externalRef` is null or the reference given, such as a CRM deal id. Each of `lines` is `{ lineId, position, kind, label, invoiceOn, dueOn, amount, amountMinor, roundingMinor, replaces }`, days as YYYY-MM-DD; `roundingMinor` is how much of the last line's amount is the rounding remainder.
+  - **`deal_revised`**, the same deal fields plus `{ kind, fromTotal, toTotal, difference, fromTotalMinor, toTotalMinor, reason, ended, added, changes }`, for a change (`kind: "revised"`) or a reopen (`kind: "reopened"`). `ended` lists `{ lineId, status }` for each planned line it ended (`superseded` or `cancelled`); `added` lists new lines as in `deal_signed`, a line that `replaces` another naming it. A credit owed to the customer is a line with `kind: "credit"` and a negative amount. A line already released is never in `ended`.
+  - **`deal_cancelled`**, the same fields as `deal_revised`, with `kind: "cancelled"`.
+  - **`deal_auto_release_changed`** `{ by, dealId, title, on }`: whether the agent releases each line on its invoice day.
+- Releasing a line is a **`create_invoice`** entry, domain `ar`, as for any receivable, with `via: "deal"` and `deal: { dealId, lineId, version, title, line, releasedBy }`. `releasedBy` is `person`, or `schedule` when the agent's cycle released it on its day, in which case the entry's actor is `agent` and `by` is null.
+- Nothing else in `/api/v1` changes: a deal line not released yet is not an invoice, and `GET /api/v1/invoices` returns the receivable a line became like any other.
+
 ## 2026-10-12: Bills brought in from Xero
 
 - An owner or admin can connect a workspace to a Xero organisation, and a person adds the bills it brings in from Bills & receivables. Its ledger gains five entries, each sent to webhook endpoints as `ledger.appended` and listed by `GET /api/v1/ledger`:

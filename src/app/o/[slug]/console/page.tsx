@@ -60,8 +60,8 @@ import { walletTreasuryAvailable } from "@/lib/config";
 import { shellStatus } from "@/lib/shell-status";
 import { flightRows, followUpOf, type FlightRow } from "@/lib/settlement-facts";
 import { readPaymentsInFlight } from "@/lib/settlement-read";
-import { readAllocationRows, toReceivableIn } from "@/lib/allocations/book";
-import { fromMicros, receivableBalance } from "@/lib/allocations/model";
+import { readPlannedDealLines } from "@/lib/deals/read";
+import { readAllocationRows, stillOwed } from "@/lib/allocations/book";
 
 export const dynamic = "force-dynamic";
 
@@ -79,7 +79,7 @@ export default async function DashboardPage({
   return inOrg(access, async () => {
     const network = workspaceNetwork().id;
     const query = await searchParams;
-    const [accountsRows, actionRows, forecastRow, dashboardStats, invoices, counterparties, headEntries, waiting, pause, milestones, budget, onChainLimit, recurring] = await Promise.all([
+    const [accountsRows, actionRows, forecastRow, dashboardStats, invoices, counterparties, headEntries, waiting, pause, milestones, budget, onChainLimit, recurring, planned] = await Promise.all([
       listAccounts(),
       listTreasuryActions(),
       latestForecast(),
@@ -113,6 +113,9 @@ export default async function DashboardPage({
         console.error("console: recurring payments not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
         return null;
       }),
+      // Deal lines not invoiced yet, named apart in Next 30 days and the cash scenarios, never in a balance (deal
+      // schedule D14). Best effort: none before migration 0104 runs, null when unread.
+      readPlannedDealLines(),
     ]);
     // Modes, not the provider: the page must still render when the
     // organization's Circle credentials cannot be read (R12).
@@ -252,7 +255,8 @@ export default async function DashboardPage({
     // derived from the invoices already loaded above, no extra query.
     const scheduledPayments = scheduledPaymentRows(invoices);
     // A part-paid receivable is expected for what is still owed: what was received is in the wallet already
-    // (allocations L11). Best effort: before migration 0103, or on a failed read, each counts in full, as before.
+    // (allocations L11), a deal's released line among them, its planned lines apart (deal schedule D14). Best effort:
+    // before migration 0103, or on a failed read, each counts in full, as before.
     const receivableIds = invoices.filter((invoice) => invoice.direction === "receivable").map((invoice) => invoice.id);
     const applied =
       (receivableIds.length > 0
@@ -261,8 +265,6 @@ export default async function DashboardPage({
             return null;
           })
         : null) ?? [];
-    const stillOwed = (invoice: (typeof invoices)[number]) =>
-      applied.some((row) => row.invoiceId === invoice.id) ? fromMicros(receivableBalance(toReceivableIn(invoice), applied, false).outstanding) : invoice.amount;
     // Safe to spend today and the next 30 days (safe to spend design), from the rows already loaded: the
     // operating wallet's USDC and the USYC reserve's, less what the agent counts as owed.
     const outlookInput: OutlookInput = {
@@ -275,7 +277,8 @@ export default async function DashboardPage({
       milestones: milestones.map((milestone) => ({ ...milestone, contractor: milestone.contractor_name })),
       receivables: invoices
         .filter((invoice) => invoice.direction === "receivable")
-        .map((invoice) => ({ ...invoice, amount: stillOwed(invoice), counterparty: invoice.counterparty_name, currency: invoice.currency ?? null })),
+        .map((invoice) => ({ ...invoice, amount: stillOwed(invoice, applied), counterparty: invoice.counterparty_name, currency: invoice.currency ?? null })),
+      planned,
     };
     const outlook = cashOutlook(outlookInput);
     // What the cash scenarios start from (cash scenarios C2-C4): the same rows over 90 days, with the recurring payments

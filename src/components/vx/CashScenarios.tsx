@@ -590,6 +590,24 @@ export function CoverageList({ result }: { result: ScenarioResult }) {
             <Money value={coverage.eurc.receivables.amount} token="EURC" /> in receivables.
           </li>
         )}
+        {/* Deal lines not invoiced yet: named, never in a balance (deal schedule D14). */}
+        {(coverage.planned.count > 0 || coverage.planned.other.length > 0) && (
+          <li>
+            Planned from deals, not invoiced yet and in no balance: {plural(coverage.planned.count + coverage.planned.other.reduce((sum, other) => sum + other.count, 0), "line")}
+            {coverage.planned.count > 0 && (
+              <>
+                , <Money value={coverage.planned.amount} />
+              </>
+            )}
+            {coverage.planned.other.map((other) => (
+              <span key={other.currency}>
+                , <Money value={other.amount} token={other.currency} />
+              </span>
+            ))}
+            . Each counts as a receivable once it is released.
+          </li>
+        )}
+        {!coverage.planned.read && <li>The deal lines could not be read.</li>}
       </ul>
       <p className="mt-2 text-xs leading-5 text-ink-3">
         {withBills === 0

@@ -250,6 +250,11 @@ describe("the actions", () => {
   it("count a part-paid receivable on Treasury at what is still owed, the rest being in the wallet already", () => {
     const treasury = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "console", "page.tsx"), "utf8");
     expect(treasury).toContain("readAllocationRows(db(), { invoiceIds: receivableIds }).catch(");
-    expect(treasury).toContain("amount: stillOwed(invoice), counterparty: invoice.counterparty_name");
+    expect(treasury).toContain("amount: stillOwed(invoice, applied), counterparty: invoice.counterparty_name");
+  });
+
+  it("count a part-paid receivable in the payment plan's money expected in at what is still owed", () => {
+    const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "invoices", "page.tsx"), "utf8");
+    expect(page).toContain("[invoice.id, stillOwed(invoice, book?.rows ?? [])]");
   });
 });

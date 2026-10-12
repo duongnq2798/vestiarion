@@ -8,6 +8,20 @@ import type { OriginalBill } from "../shadow-bills";
 /** An invoice as the form's schema accepts it. */
 export type InvoiceInput = z.output<typeof invoiceInputSchema>;
 
+/**
+ * The deal line a receivable is released from (docs/superpowers/specs/2026-10-12-deal-schedule-design.md D10, D11): the
+ * deal, the line and the version it was released under, the deal's title and the line's name, and who released it: a
+ * person, or the agent's cycle on the line's invoice day.
+ */
+export interface DealRelease {
+  dealId: string;
+  lineId: string;
+  version: number;
+  title: string;
+  line: string;
+  releasedBy: "person" | "schedule";
+}
+
 /** Where an imported invoice came from (import design B12): the list's SHA-256, its row number, and the bill's invoice number. */
 export interface ImportedRow {
   file: string;
@@ -50,10 +64,12 @@ export async function createInvoice(input: {
   original?: OriginalBill;
   /** The list it was imported from, by the SHA-256 of its text, its row there, and the bill's invoice number (import design B12). */
   imported?: ImportedRow;
+  /** The deal line it is released from: a receivable only, one per line (deal schedule D10). */
+  deal?: DealRelease;
   /** The accounting tool's bill it was brought in from (Xero connector X11): `via` is the provider's name. */
   external?: ExternalSource;
 }): Promise<{ id: string; counterpartyName: string } | null> {
-  const { actorId, invoice, document, via, apiKeyId, linkId, inboxEmailId, original, imported, external } = input;
+  const { actorId, invoice, document, via, apiKeyId, linkId, inboxEmailId, original, imported, deal, external } = input;
   const lookup = await db()
     .from("counterparties")
     .select("id, name")
@@ -82,16 +98,19 @@ export async function createInvoice(input: {
         ...(original
           ? { original_currency: original.currency, original_amount: original.amount, fx_rate: original.perUsd, fx_source: original.source, fx_at: original.at }
           : {}),
+        // Only a released deal line names one: before migration 0104 the columns are not there to name.
+        ...(deal ? { deal_id: deal.dealId, deal_line_id: deal.lineId } : {}),
       })
       .select("id")
       .single<{ id: string }>()
   );
 
   await appendLedgerEntry({
-    actor: "human",
+    // The agent's cycle releases a deal's line on its day when the deal says so; a person adds every other invoice.
+    actor: deal?.releasedBy === "schedule" ? "agent" : "human",
     domain: invoice.direction === "payable" ? "ap" : "ar",
     action: "create_invoice",
-    summary: `Added ${invoice.direction} invoice for ${counterparty.name}: ${invoice.amount} ${invoice.currency}${original ? ` (${original.amount} ${original.currency})` : ""}`,
+    summary: `Added ${invoice.direction} invoice for ${counterparty.name}: ${invoice.amount} ${invoice.currency}${original ? ` (${original.amount} ${original.currency})` : ""}${deal ? `, ${deal.line} of the deal ${deal.title}` : ""}`,
     detail: {
       by: actorId,
       invoiceId: row.id,
@@ -109,6 +128,7 @@ export async function createInvoice(input: {
       ...(inboxEmailId ? { inboxEmailId } : {}),
       ...(original ? { bill: original } : {}),
       ...(imported ? { importFile: imported.file, importRow: imported.row, ...(imported.invoiceNumber ? { invoiceNumber: imported.invoiceNumber } : {}) } : {}),
+      ...(deal ? { via: "deal", deal } : {}),
       ...(external ? { via: external.provider, [external.provider]: external.ids } : {}),
     },
   });

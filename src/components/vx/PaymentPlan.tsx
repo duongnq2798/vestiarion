@@ -213,6 +213,44 @@ export function PlanCashEffect({ plan }: { plan: PaymentPlan }) {
   );
 }
 
+/**
+ * Money expected in during the 14 days, apart from every balance above (docs/superpowers/specs/2026-10-12-deal-schedule-
+ * design.md D14): the open receivables, a deal's released lines among them, and the deal lines not invoiced yet.
+ */
+export function PlanIncomingList({ incoming }: { incoming: PaymentPlan["incoming"] }) {
+  if (incoming.expected.length === 0 && incoming.planned.length === 0 && incoming.plannedRead) return null;
+  const group = (title: string, note: string, lines: PaymentPlan["incoming"]["expected"]) =>
+    lines.length > 0 && (
+      <div className="mt-3">
+        <h4 className="text-xs font-semibold text-ink-2">{title}</h4>
+        <p className="text-xs text-ink-3">{note}</p>
+        <ul className="mt-1 divide-y divide-line">
+          {lines.map((line) => (
+            <li key={line.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-1.5 text-[0.8125rem]">
+              <span className="min-w-0 text-ink">
+                {line.from}
+                {line.what && <span className="text-ink-3"> · {line.what}</span>}
+              </span>
+              <span className="flex items-baseline gap-3">
+                <span className={cn("font-mono text-xs", line.overdue ? "text-held" : "text-ink-2")}>{line.overdue ? `Overdue, ${dayLabel(line.on)}` : dayLabel(line.on)}</span>
+                <Money value={line.amount} token={line.currency} className="text-ink" />
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  return (
+    <div className="border-t border-line px-4 py-4 sm:px-5">
+      <h3 className="text-sm font-semibold text-ink">Money expected in</h3>
+      <p className="text-xs text-ink-3">Not counted in any balance above: money expected is not cash until it arrives.</p>
+      {group("Receivables due", "Invoiced, a deal's released lines included.", incoming.expected)}
+      {group("Planned from deals", "Deal lines not invoiced yet, by their due day.", incoming.planned)}
+      {!incoming.plannedRead && <p className="mt-2 text-xs text-ink-3">The deal lines could not be read.</p>}
+    </div>
+  );
+}
+
 /** The plan's three measures over the last 30 days, all counted from what happened. */
 export function PlanOutcomesStrip({ outcomes }: { outcomes: PlanOutcomes }) {
   const rows: Array<{ label: string; value: ReactNode }> = [
@@ -345,6 +383,7 @@ export function PaymentPlanSection({
         )}
 
         <PlanCashEffect plan={plan} />
+        <PlanIncomingList incoming={plan.incoming} />
         {plan.eurc.count > 0 && (
           <p className="border-t border-line px-4 py-3 text-xs text-ink-3 sm:px-5">
             {plan.eurc.count} {plan.eurc.count === 1 ? "bill" : "bills"} in EURC (<Money value={plan.eurc.amount} token="EURC" />) {plan.eurc.count === 1 ? "is" : "are"} paid from the EURC balance and{" "}

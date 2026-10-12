@@ -225,6 +225,17 @@ const SHOTS = {
   "xero-review": async () => {},
   "apply-payments-list": async () => {},
   "apply-payments-part-paid": async () => {},
+  "deals-new": async (page) => {
+    await page.fill({ "deal-title": "Website rebuild", "deal-total": "10,000.01", "deal-delivery": "2026-12-01" });
+    await page.waitFor(`document.querySelector("[data-docs-shot]").textContent.includes("Includes 0.01 from rounding")`);
+  },
+  "deals-schedule": async () => {},
+  "deals-change": async (page) => {
+    await page.fill({ "deal-change-total": "12,000.01", "deal-change-reason": "Extra landing page agreed on Oct 30" });
+    await page.click(`[...document.querySelectorAll("[data-docs-shot] button")].find((b) => b.textContent.includes("Propose a correction"))`);
+    await page.waitFor(`document.querySelector("[data-docs-shot]").textContent.includes("Adds Price change")`);
+  },
+  "deals-versions": async () => {},
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

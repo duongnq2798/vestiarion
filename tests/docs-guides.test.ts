@@ -25,6 +25,7 @@ type GuideSlug =
   | "guides/where-a-payment-is"
   | "guides/import-bills"
   | "guides/payment-plan"
+  | "guides/deals"
   | "guides/pay-a-contractor"
   | "guides/get-paid"
   | "guides/telegram"
@@ -183,6 +184,12 @@ const ACTUAL_FIELDS = "src/lib/actual-payment-fields.ts";
 const PAYMENT_PLAN = "src/components/vx/PaymentPlan.tsx";
 const PLAN_CONTROLS = "src/components/PaymentPlanControls.tsx";
 const PLANNER = "src/lib/payment-plan.ts";
+const DEAL_FORM = "src/components/deals/DealForm.tsx";
+const DEAL_CONTROLS = "src/components/deals/DealControls.tsx";
+const DEAL_CHANGE = "src/components/deals/DealChangeForm.tsx";
+const DEAL_SCHEDULE = "src/components/deals/DealSchedule.tsx";
+const DEALS_SECTION = "src/components/deals/DealsSection.tsx";
+const DEAL_PAGE = "src/app/o/[slug]/invoices/deals/[id]/page.tsx";
 const PLAN_COMMAND = "src/lib/commands/payment-plan.ts";
 const PLAN_APPLY = "src/lib/payment-plan-apply.ts";
 const DECISION_TRAIL = "src/lib/decision-trail.ts";
@@ -533,6 +540,54 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["refused the transfer. Your USDC did not leave your wallet.", "src/lib/inbound-usdc.ts"],
     ["Your wallet holds no ETH on Base to pay its gas. Add a little ETH there, then choose Review again.", "src/lib/inbound-usdc.ts", " to pay its gas. Add a little "],
     ["Your wallet does not hold enough ETH on Base for the gas. Add a little ETH there, then send again.", "src/lib/inbound-usdc.ts", " for the gas. Add a little "],
+  ],
+  // Deals on Bills & receivables (deal schedule design D1-D16).
+  "guides/deals": [
+    ["Bills & receivables", APP_NAV],
+    ["New deal", INVOICES_PAGE],
+    ["Only an owner or admin of this workspace can release, change or cancel a deal.", DEAL_PAGE],
+    ["Deals are not set up on this deployment yet.", DEALS_SECTION],
+    ["Payment terms (days)", DEAL_FORM],
+    ["External reference", DEAL_FORM],
+    ["How it is billed", DEAL_FORM],
+    ["Deposit and balance", DEAL_FORM],
+    ["Deposit (%)", DEAL_FORM],
+    ["Delivery date", DEAL_FORM],
+    ["Deposit (30%)", "src/lib/deals/schedule.ts", "Deposit ("],
+    ["Balance on delivery", "src/lib/deals/schedule.ts"],
+    ["Equal milestones", DEAL_FORM],
+    ["Monthly retainer", DEAL_FORM],
+    ["Day of the month", DEAL_FORM],
+    ["31 is each month's last day when it is shorter.", DEAL_FORM],
+    ["Custom lines", DEAL_FORM],
+    ["Includes 0.01 from rounding", DEAL_FORM, " from rounding"],
+    ["Edit lines", DEAL_FORM],
+    ["Add a line", DEAL_FORM],
+    ["The lines add up to 9,000.00 USDC; the deal is 10,000.00 USDC: 1,000.00 USDC short.", "src/lib/deals/schedule.ts", "The lines add up to "],
+    ["Back to the template", DEAL_FORM],
+    ["Release each line on its invoice day", DEAL_FORM],
+    ["Confirm deal", DEAL_FORM],
+    ["Release now", DEAL_CONTROLS],
+    ["Stop releasing on invoice days", DEAL_CONTROLS],
+    ["Deal · Website rebuild · Balance on delivery", INVOICES_PAGE, "Deal · "],
+    ["Open the deal", INVOICES_PAGE],
+    ["Receivable not made", DEAL_SCHEDULE],
+    ["Release again", DEAL_CONTROLS],
+    ["Paid in full", DEALS_SECTION],
+    ["Credit owed", DEAL_SCHEDULE],
+    ["Replaced and cancelled lines", DEAL_SCHEDULE],
+    ["Change deal", DEAL_PAGE],
+    ["Lines not invoiced yet", DEAL_CHANGE],
+    ["Propose a correction", DEAL_CHANGE],
+    ["Price change", "src/lib/deals/revision.ts"],
+    ["Credit for price change", "src/lib/deals/revision.ts"],
+    ["Lines already released, and their receivables, stay as they are.", DEAL_CHANGE],
+    ["Save as version 2", DEAL_CHANGE, "Save as version "],
+    ["A released line stays as it is. Change the lines not invoiced yet, or add a correcting line.", "src/lib/deals/revision.ts"],
+    ["Cancel deal", DEAL_CONTROLS],
+    ["Reopen deal", DEAL_PAGE],
+    ["Money expected in", PAYMENT_PLAN],
+    ["Safe to spend today", "src/components/vx/CashOutlook.tsx"],
   ],
   // The payment plan on Bills & receivables (payment plan design P1-P14).
   "guides/payment-plan": [
@@ -1848,6 +1903,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/where-a-payment-is": 20,
   "guides/import-bills": 20,
   "guides/payment-plan": 20,
+  "guides/deals": 20,
   "guides/pay-a-contractor": 20,
   "guides/get-paid": 20,
   "guides/telegram": 20,

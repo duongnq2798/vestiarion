@@ -8,7 +8,8 @@ import type { OutlookItem } from "./cash-outlook";
  * sources that move it most, and what the figure is built from.
  *
  * Three buckets stay apart (C3): cash (the wallet and the USYC reserve), receivables (invoiced, counted only on the day
- * they arrive in that case) and a pipeline of deals not invoiced, which this version does not count. Pure, and run in
+ * they arrive in that case) and deal lines not invoiced yet, which the coverage names and no balance counts
+ * (docs/superpowers/specs/2026-10-12-deal-schedule-design.md D14). Pure, and run in
  * the browser: nothing here is saved, signed, or read by the agent, a payment or a guardrail (C9).
  */
 
@@ -73,6 +74,23 @@ export interface ScenarioBasis {
   eurc: Array<{ kind: "bill" | "receivable"; amount: number; day: number }>;
   /** False when the recurring payments could not be read: none is projected. */
   recurringRead: boolean;
+  /**
+   * Deal lines not invoiced yet, within 90 days, on their due day (docs/superpowers/specs/2026-10-12-deal-schedule-design.md
+   * D14): what the figure is built from names them, and no balance counts them. Absent where deals are not read.
+   */
+  planned?: PlannedBasis[];
+  /** False when the deal lines could not be read. */
+  plannedRead?: boolean;
+}
+
+/** A deal's line not invoiced yet, in its deal's currency, on its due day in days from today. */
+export interface PlannedBasis {
+  id: string;
+  label: string;
+  line: string;
+  amount: number;
+  currency: string;
+  day: number;
 }
 
 export type ReceivableChoice = "late" | "on_time" | "never";
@@ -178,6 +196,8 @@ export interface Coverage {
   /** The record of each client with a receivable in the horizon that has one. */
   records: Array<{ label: string } & ClientRecord>;
   eurc: { bills: { count: number; amount: number }; receivables: { count: number; amount: number } };
+  /** Deal lines not invoiced yet, due within the horizon: USDC, and other currencies apart; never in a balance. */
+  planned: { count: number; amount: number; other: Array<{ currency: string; amount: number; count: number }>; read: boolean };
   /**
    * The horizon in weeks from today (the last one may be short), and in how many a bill or recurring payment leaves:
    * one far bill fills one week, not the horizon. An overdue bill is due before today, so it fills none.
@@ -402,6 +422,15 @@ export function cashScenario(basis: ScenarioBasis, levers: ScenarioLevers): Scen
   }
   const records = [...recorded.values()];
   const eurcIn = basis.eurc.filter((move) => move.day < horizon);
+  const plannedIn = (basis.planned ?? []).filter((line) => line.day < horizon);
+  const plannedUsdc = plannedIn.filter((line) => line.currency === "USDC");
+  const plannedOther = new Map<string, { currency: string; amount: number; count: number }>();
+  for (const line of plannedIn.filter((candidate) => candidate.currency !== "USDC")) {
+    const entry = plannedOther.get(line.currency) ?? { currency: line.currency, amount: 0, count: 0 };
+    entry.amount = round(entry.amount + line.amount);
+    entry.count += 1;
+    plannedOther.set(line.currency, entry);
+  }
 
   return {
     horizon,
@@ -434,6 +463,12 @@ export function cashScenario(basis: ScenarioBasis, levers: ScenarioLevers): Scen
         receivables: { count: eurcIn.filter((move) => move.kind === "receivable").length, amount: sum(eurcIn.filter((move) => move.kind === "receivable")) },
       },
       weeks: { total: Math.ceil(horizon / 7), withBills: weeksWithBills.size },
+      planned: {
+        count: plannedUsdc.length,
+        amount: sum(plannedUsdc),
+        other: [...plannedOther.values()].sort((a, b) => a.currency.localeCompare(b.currency)),
+        read: basis.plannedRead !== false,
+      },
     },
   };
 }

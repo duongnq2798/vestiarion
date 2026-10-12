@@ -4,10 +4,18 @@ import { chainModes } from "./circle";
 import { currentOrgConfig } from "./context";
 import { db } from "./dal";
 import { planPayments, type PaymentPlan, type PaymentPlanInput } from "./payment-plan";
-import { paymentPlanInput } from "./payment-plan-input";
+import { paymentPlanInput, type PlanRows } from "./payment-plan-input";
 import { listAccounts, listCounterparties, listInvoices, listMilestones, type CounterpartyRow, type InvoiceRow } from "./queries";
 
-type ReadOptions = { now?: number; invoices?: InvoiceRow[]; counterparties?: CounterpartyRow[] };
+type ReadOptions = {
+  now?: number;
+  invoices?: InvoiceRow[];
+  counterparties?: CounterpartyRow[];
+  /** The deal lines not invoiced yet the page read, listed apart (deal schedule D14); null when they could not be read. */
+  planned?: PlanRows["planned"];
+  /** What is still owed on each part-paid receivable, from the payments applied the page read (allocations L11). */
+  owed?: PlanRows["owed"];
+};
 
 /**
  * The payment plan as the workspace in scope stands now (docs/superpowers/specs/2026-10-11-payment-plan-design.md):
@@ -50,5 +58,7 @@ export async function readPaymentPlanInput(options: ReadOptions = {}): Promise<P
     walletHost: currentOrgConfig().chain.walletHost ?? null,
     budget,
     twoApprovalsAbove,
+    ...(options.planned !== undefined ? { planned: options.planned } : {}),
+    ...(options.owed !== undefined ? { owed: options.owed } : {}),
   });
 }

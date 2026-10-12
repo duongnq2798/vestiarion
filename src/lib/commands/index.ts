@@ -14,3 +14,4 @@ export { answerReportBaseline, shareWorkspaceReport, stopSharingWorkspaceReport 
 export { importBankStatement } from "./statements";
 export { addAccountingBills, dismissAccountingBills, type BroughtInBill, type BroughtInCounts } from "./accounting";
 export { applyReceivedPayment, reverseAppliedPayment } from "./allocations";
+export { addDeal, changeDeal, releaseDealLine, setDealAutoRelease } from "./deals";

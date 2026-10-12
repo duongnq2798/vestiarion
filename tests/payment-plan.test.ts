@@ -998,3 +998,40 @@ describe("fresh data (P12)", () => {
     expect(line(plan, "b-1").approvable).toBe(true);
   });
 });
+
+describe("money expected in, and deal lines not invoiced yet (docs/superpowers/specs/2026-10-12-deal-schedule-design.md D14)", () => {
+  const incoming = {
+    receivables: [
+      { id: "r-1", from: "Acme Studio", what: "Website rebuild: Deposit (30%)", amount: 300, currency: "USDC", dueOn: "2026-10-15" },
+      { id: "r-2", from: "Kobe Ltd", what: null, amount: 80, currency: "USDC", dueOn: "2026-10-02" },
+      { id: "r-3", from: "Later Co", what: null, amount: 999, currency: "USDC", dueOn: "2026-11-30" },
+      { id: "r-4", from: "Euro Co", what: null, amount: 40, currency: "EURC", dueOn: "2026-10-12" },
+    ],
+    planned: [
+      { id: "p-1", from: "Acme Studio", what: "Website rebuild: Balance on delivery", amount: 700, currency: "USDC", dueOn: "2026-10-20" },
+      { id: "p-2", from: "Acme Studio", what: "Website rebuild: Later", amount: 500, currency: "USDC", dueOn: "2026-12-01" },
+    ],
+  };
+
+  it("lists them apart with their days, in no balance, flag or fingerprint", () => {
+    const bills = [bill({ amount: 900, dueDate: ISO_DAY("2026-10-16") })];
+    const plan = planPayments(input({ operatingUsdc: 500, bills, incoming }));
+    const without = planPayments(input({ operatingUsdc: 500, bills }));
+    expect(plan.incoming.expected).toEqual([
+      { id: "r-2", from: "Kobe Ltd", what: null, amount: 80, currency: "USDC", on: "2026-10-11", overdue: true },
+      { id: "r-4", from: "Euro Co", what: null, amount: 40, currency: "EURC", on: "2026-10-12", overdue: false },
+      { id: "r-1", from: "Acme Studio", what: "Website rebuild: Deposit (30%)", amount: 300, currency: "USDC", on: "2026-10-15", overdue: false },
+    ]);
+    expect(plan.incoming.planned).toEqual([{ id: "p-1", from: "Acme Studio", what: "Website rebuild: Balance on delivery", amount: 700, currency: "USDC", on: "2026-10-20", overdue: false }]);
+    expect(plan.incoming).toMatchObject({ expectedUsdc: 380, plannedUsdc: 700, plannedRead: true });
+    // The bill the cash cannot cover stays short: money expected is never cash.
+    expect(plan.days).toEqual(without.days);
+    expect(plan.lines).toEqual(without.lines);
+    expect(plan.fingerprint).toBe(without.fingerprint);
+  });
+
+  it("is empty without them, and says when the deal lines could not be read", () => {
+    expect(planPayments(input()).incoming).toEqual({ expected: [], planned: [], expectedUsdc: 0, plannedUsdc: 0, plannedRead: true });
+    expect(planPayments(input({ incoming: { receivables: [], planned: null } })).incoming.plannedRead).toBe(false);
+  });
+});
