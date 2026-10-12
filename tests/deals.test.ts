@@ -3,7 +3,7 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
 import type { DealDraft } from "@/lib/deals/input";
-import { readDeal } from "@/lib/deals/read";
+import { plannedLinesOf, readDeal, readDeals } from "@/lib/deals/read";
 import { changeDeal, confirmDeal, DealError, releaseDealLine, releaseDueDealLines, switchDealAutoRelease } from "@/lib/deals/write";
 import { dealStoreResponder, emptyStore, type DealStore } from "./support/deal-store";
 import { fakeSupabase, orgTestContext } from "./support/fake-supabase";
@@ -290,6 +290,77 @@ describe("reading a deal", () => {
 
   it("finds no deal for a malformed id", async () => {
     expect(await run(() => readDeal("not-a-uuid"))).toEqual({ available: true, deal: null });
+  });
+
+  it("reads every line once when the workspace's lines take more than one page", async () => {
+    // 18 retainers of 60 months: 1,080 lines, so two pages of 1,000. Every deal has a line at position 1, and so on.
+    const deals = Array.from({ length: 18 }, (_, index) => `dddddddd-0000-4000-8000-${String(index + 1).padStart(12, "0")}`);
+    for (const [index, id] of deals.entries()) {
+      store.deals.push({
+        id,
+        counterparty_id: CLIENT,
+        title: `Retainer ${index + 1}`,
+        currency: "USDC",
+        minor_digits: 2,
+        total_minor: 60 * 100_000,
+        starts_on: "2026-10-01",
+        terms_days: 14,
+        external_ref: null,
+        template: "retainer",
+        status: "active",
+        current_version: 1,
+        auto_release: false,
+        auto_release_by: null,
+        auto_release_at: null,
+        created_by: PERSON,
+        created_at: new Date(Date.UTC(2026, 9, 1, 0, index)).toISOString(),
+      });
+      store.deal_versions.push({ deal_id: id, version: 1, kind: "signed", total_minor: 60 * 100_000, reason: null, changes: [], created_by: PERSON, created_at: "2026-10-01T00:00:00Z" });
+      for (let position = 1; position <= 60; position += 1) {
+        store.deal_lines.push({
+          id: `${String(position).padStart(8, "0")}-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+          deal_id: id,
+          added_in: 1,
+          position,
+          kind: "charge",
+          label: `Month ${position}`,
+          invoice_on: "2026-11-01",
+          due_on: "2026-11-15",
+          amount_minor: 100_000,
+          rounding_minor: 0,
+          replaces: null,
+          status: "planned",
+          ended_in: null,
+          released_at: null,
+          released_via: null,
+        });
+      }
+    }
+    // PostgREST pages as Postgres sorts: rows that tie on every key named come in whatever order the plan gives, which
+    // need not be the same for the first page and the second.
+    const base = dealStoreResponder(store);
+    fake = fakeSupabase((request) => {
+      const reply = base(request);
+      const name = request.path.replace("/rest/v1/", "");
+      if (request.method !== "GET" || (name !== "deal_lines" && name !== "deal_versions")) return reply;
+      const keys = (request.params.get("order") ?? "").split(",").filter(Boolean).map((part) => part.split(".")[0]);
+      const offset = Number(request.params.get("offset") ?? 0);
+      const limit = Number(request.params.get("limit") ?? 1_000_000);
+      const tie = (row: Record<string, unknown>) => [...`${offset}:${String(row.id)}`].reduce((hash, char) => Math.imul(hash ^ char.charCodeAt(0), 16_777_619) >>> 0, 2_166_136_261);
+      const rows = [...(reply.body as Array<Record<string, unknown>>)].sort((a, b) => {
+        for (const key of keys) {
+          const [x, y] = [a[key] as string | number, b[key] as string | number];
+          if (x !== y) return x < y ? -1 : 1;
+        }
+        return tie(a) - tie(b);
+      });
+      return { body: rows.slice(offset, offset + limit) };
+    });
+    const read = await run(() => readDeals());
+    if (!read.available) throw new Error("not read");
+    expect(read.deals).toHaveLength(18);
+    for (const record of read.deals) expect(new Set(record.facts.lines.map((line) => line.id)).size, record.title).toBe(60);
+    expect(plannedLinesOf(read.deals).reduce((sum, line) => sum + line.amount, 0)).toBe(18 * 60 * 1000);
   });
 
   it("is a DealError a person can read", () => {

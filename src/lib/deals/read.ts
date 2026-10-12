@@ -198,9 +198,11 @@ async function readRecords(orgDb: OrgDb, dealId?: string): Promise<DealsRead> {
     all<VersionRow>((from, to) =>
       (dealId ? orgDb.from("deal_versions").select("deal_id, version, kind, total_minor, reason, changes, created_by, created_at").eq("deal_id", dealId) : orgDb.from("deal_versions").select("deal_id, version, kind, total_minor, reason, changes, created_by, created_at"))
         .order("version", { ascending: true })
+        // A unique key last: rows that tie on the version would page in no fixed order, and a line could be read twice or not at all.
+        .order("id", { ascending: true })
         .range(from, to)
     ),
-    all<LineRow>((from, to) => (dealId ? orgDb.from("deal_lines").select(LINE_COLUMNS).eq("deal_id", dealId) : orgDb.from("deal_lines").select(LINE_COLUMNS)).order("position", { ascending: true }).range(from, to)),
+    all<LineRow>((from, to) => (dealId ? orgDb.from("deal_lines").select(LINE_COLUMNS).eq("deal_id", dealId) : orgDb.from("deal_lines").select(LINE_COLUMNS)).order("position", { ascending: true }).order("id", { ascending: true }).range(from, to)),
     all<ReceivableRow>((from, to) =>
       (dealId ? orgDb.from("invoices").select("id, status, due_date, deal_line_id").eq("deal_id", dealId) : orgDb.from("invoices").select("id, status, due_date, deal_line_id").not("deal_line_id", "is", null))
         .order("id", { ascending: true })
