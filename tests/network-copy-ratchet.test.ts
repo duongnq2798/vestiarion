@@ -28,8 +28,12 @@ const ALLOWED: Record<string, number> = {
   "src/components/studios/StudiosSections.tsx": 2,
   // Terms and privacy, which name both networks and say what runs on Arc testnet only: hosted wallets, Circle's faucet,
   // shadow mode, the USYC reserve, escrow, the EURC swap, payouts to other chains and the agent's payee history.
-  "src/app/terms/page.tsx": 9,
-  "src/app/privacy/page.tsx": 5,
+  "src/app/terms/page.tsx": 10,
+  "src/app/privacy/page.tsx": 6,
+  // The rule that books a payment only into books of the same reality, which names Arc testnet on either network: a
+  // payment on Arc testnet or in shadow mode is booked only into a demo company (accounting write-back W1).
+  "src/lib/connectors/posting.ts": 1,
+  "src/components/AccountingBookings.tsx": 1,
   // Demo data, which exists on Arc testnet: the design page's fixtures, and the research replay's default for decisions
   // recorded before payouts were.
   "src/app/design/fixtures.ts": 1,

@@ -420,10 +420,14 @@ With `XERO_CLIENT_ID` and `XERO_CLIENT_SECRET` set, from a Xero app of type "Web
 `<origin>/api/integrations/xero/callback` (and `http://localhost:3000/api/integrations/xero/callback` to try it
 locally), an owner or admin connects a workspace to one Xero organisation from Settings, after agreeing to what
 Vestiarion does with its data. Its approved bills come in for review on Bills & receivables, through the same check as a
-bill list, and become payables only when a person adds them. The app asks Xero for read-only scopes only
-(`offline_access accounting.invoices.read accounting.contacts.read accounting.settings.read`): a Xero app made after
-2 March 2026 has no broad accounting scopes. Xero's free Starter tier holds five connected organisations. The connection
-needs migration 0101; before it runs, the Xero card says Xero is not set up yet. Its tokens are kept encrypted under
+bill list, and become payables only when a person adds them. Once such a bill is paid on Arc, its payment is drafted as
+a booking against the bill, and booked in Xero only after an owner or admin approves it on Bills & receivables; a payment
+on Arc testnet or in shadow mode is booked only into a Xero demo company. The app asks Xero for read scopes and one write
+scope (`offline_access accounting.invoices.read accounting.contacts.read accounting.settings.read accounting.payments`):
+a Xero app made after 2 March 2026 has no broad accounting scopes, and a connection made before `accounting.payments`
+was asked for reconnects from its card to allow booking. Xero's free Starter tier holds five connected organisations.
+The connection needs migration 0101, and booking needs 0106; before they run, the Xero card says Xero is not set up yet,
+and the bookings are not shown. Its tokens are kept encrypted under
 `VESTIARION_MASTER_KEYS`, in a table only the service role reads. The sync runs every 15 minutes (above), and
 **Sync now** runs one at once. See [Bring bills in from Xero](https://www.vestiarion.xyz/docs/guides/xero).
 

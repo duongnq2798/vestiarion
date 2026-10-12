@@ -282,7 +282,7 @@ run in production, with its ledger entries and transactions.
 | **[Webhooks](https://www.vestiarion.xyz/docs/webhooks)** | Up to 5 HTTPS endpoints per workspace receive every ledger entry, signed, with retries |
 | **[GitHub](https://www.vestiarion.xyz/docs/guides/github)** | Milestone verification from merged pull requests, bounties, and payment comments |
 | **[Email](https://www.vestiarion.xyz/docs/guides/email-invoices)** | A workspace address that reads forwarded invoices into drafts a person adds |
-| **[Xero](https://www.vestiarion.xyz/docs/guides/xero)** | Bills approved in Xero come in for review every 15 minutes, through the same check as a bill list, and become payables when a person adds them; read-only, with the account payments will be booked to chosen ahead |
+| **[Xero](https://www.vestiarion.xyz/docs/guides/xero)** | Bills approved in Xero come in for review every 15 minutes, through the same check as a bill list, and become payables when a person adds them; once paid on Arc, each payment is drafted as a booking against its bill, which an owner or admin reviews field by field and approves before anything is written to Xero. A payment on Arc testnet or in shadow mode is booked only into a Xero demo company |
 | **[QuickBooks Online](https://www.vestiarion.xyz/docs/guides/quickbooks)** | Open bills in QuickBooks come in for review every 15 minutes, and sooner when QuickBooks says one changed, through the same check; a bill partly paid there comes in at what is left; read-only, with the bank account payments will be booked to chosen ahead |
 
 There is no standalone CLI; operators run the repository's scripts (`npm run cycle`, `npm run status`, …), listed in

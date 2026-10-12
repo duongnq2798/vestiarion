@@ -56,14 +56,14 @@ describe("settings", () => {
 });
 
 describe("authorizeUrl", () => {
-  it("asks for the code with the read-only granular scopes and offline access, and nothing about the person", () => {
+  it("asks for the code with the read granular scopes, offline access and booking payments (accounting write-back W8), and nothing about the person", () => {
     const url = new URL(authorizeUrl(SETTINGS, { state: "vx1.state", redirectUri: "https://www.vestiarion.xyz/api/integrations/xero/callback" }));
     expect(`${url.origin}${url.pathname}`).toBe("https://login.xero.com/identity/connect/authorize");
     expect(Object.fromEntries(url.searchParams)).toEqual({
       response_type: "code",
       client_id: SETTINGS.clientId,
       redirect_uri: "https://www.vestiarion.xyz/api/integrations/xero/callback",
-      scope: "offline_access accounting.invoices.read accounting.contacts.read accounting.settings.read",
+      scope: "offline_access accounting.invoices.read accounting.contacts.read accounting.settings.read accounting.payments",
       state: "vx1.state",
     });
   });

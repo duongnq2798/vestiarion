@@ -7,11 +7,15 @@ import { PROVIDER_LABELS, type ProviderId } from "./provider";
  * it agreed to. Browser-safe.
  */
 
-export const CONSENT_VERSIONS: Record<ProviderId, string> = { xero: "xero-2026-10-12", quickbooks: "quickbooks-2026-10-12" };
+export const CONSENT_VERSIONS: Record<ProviderId, string> = { xero: "xero-2026-10-12.2", quickbooks: "quickbooks-2026-10-12" };
 
-/** What is read, in each tool's own words: Xero's chart of accounts, QuickBooks' bank accounts only. */
+/**
+ * What is read, in each tool's own words: Xero's chart of accounts, QuickBooks' bank accounts only; and what is written.
+ * Xero's version 2 says it books the payments a person approves (docs/superpowers/specs/2026-10-12-accounting-writeback-design.md
+ * W8, W12); its first version said it writes nothing, and a connection keeps the version it agreed to until it connects again.
+ */
 const WHAT_IS_READ: Record<ProviderId, string> = {
-  xero: "Vestiarion reads the bills, suppliers and chart of accounts of the Xero organisation you pick. It writes nothing to Xero.",
+  xero: "Vestiarion reads the bills, suppliers and chart of accounts of the Xero organisation you pick. It writes to Xero only the payments an owner or admin approves: each payment made on Arc for a bill brought in from Xero, booked against that bill.",
   quickbooks: "Vestiarion reads the bills, vendors and bank accounts of the QuickBooks company you connect. It writes nothing to QuickBooks.",
 };
 

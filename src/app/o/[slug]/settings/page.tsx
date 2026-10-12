@@ -35,7 +35,7 @@ import { githubAppSettingsFromEnv } from "@/lib/github/settings";
 import { slackPanelView } from "@/lib/slack/panel";
 import { slackSettingsFromEnv } from "@/lib/slack/settings";
 import { accountingPanelView } from "@/lib/connectors/panel";
-import { accountingProviderOn } from "@/lib/accounting-providers";
+import { accountingProvider, accountingProviderOn } from "@/lib/accounting-providers";
 import { linkFor as telegramLinkFor } from "@/lib/telegram/links";
 import { telegramSettingsFromEnv } from "@/lib/telegram/settings";
 import { networkProfile } from "@/lib/network";
@@ -125,14 +125,14 @@ export default async function SettingsPage({
       // Only on a deployment where Xero is configured (Xero connector X16); best effort, like Slack's. Before migration
       // 0101 the card says Xero is not set up yet.
       accountingProviderOn("xero")
-        ? accountingPanelView("xero").catch((error: unknown) => {
+        ? accountingPanelView("xero", Date.now(), { writeScopes: accountingProvider("xero")?.booking?.writeScopes }).catch((error: unknown) => {
             console.error("settings: Xero status not loaded", error instanceof Error ? error.message : error);
             return null;
           })
         : null,
       // And QuickBooks, its own card beside Xero's (QuickBooks connector Q19): a workspace may connect either or both.
       accountingProviderOn("quickbooks")
-        ? accountingPanelView("quickbooks").catch((error: unknown) => {
+        ? accountingPanelView("quickbooks", Date.now(), { writeScopes: accountingProvider("quickbooks")?.booking?.writeScopes }).catch((error: unknown) => {
             console.error("settings: QuickBooks status not loaded", error instanceof Error ? error.message : error);
             return null;
           })

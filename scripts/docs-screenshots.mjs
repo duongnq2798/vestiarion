@@ -225,6 +225,7 @@ const SHOTS = {
   "xero-review": async () => {},
   "quickbooks-settings": async () => {},
   "quickbooks-review": async () => {},
+  "xero-bookings": async () => {},
   "apply-payments-list": async () => {},
   "apply-payments-part-paid": async () => {},
   "deals-new": async (page) => {

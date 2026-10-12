@@ -141,6 +141,10 @@ const ACCOUNTING_CONSENT = "src/lib/connectors/consent.ts";
 const ACCOUNTING_CONNECTIONS = "src/lib/connectors/connections.ts";
 const ACCOUNTING_STATUS = "src/lib/connectors/status.ts";
 const ACCOUNTING_WORDS = "src/lib/connectors/provider.ts";
+// Booking payments made on Arc in the tool (accounting write-back).
+const BOOKINGS = "src/components/AccountingBookings.tsx";
+const BOOKING_RUN = "src/lib/connectors/booking-run.ts";
+const POSTING = "src/lib/connectors/posting.ts";
 const SLACK_CONNECT_FORM = "src/components/SlackConnectForm.tsx";
 const SLACK_ACTIONS = "src/app/actions/slack.ts";
 const SLACK_BLOCKS = "src/lib/slack/blocks.ts";
@@ -1403,7 +1407,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Where payments made on Arc will be booked", ACCOUNTING_PANEL],
     ["Choose the account", ACCOUNTING_PICKER],
     ["Use this account", ACCOUNTING_PICKER],
-    ["The network fee is booked apart, never to this account.", "src/lib/connectors/booking.ts"],
+    ["The network fee is shown apart and not booked to this account.", "src/lib/connectors/booking.ts"],
     ["accounting_payment_account_chosen", ACCOUNTING_CONNECTIONS],
     ["Not chosen yet. Nothing is booked to an account nobody chose.", ACCOUNTING_PANEL],
     ["The last sync with Xero failed", ACCOUNTING_STATUS, "`The last sync with ${label} failed`"],
@@ -1413,6 +1417,29 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Xero is not set up on this deployment yet.", ACCOUNTING_PANEL, "{label} is not set up on this deployment yet."],
     ["Disconnect Xero", ACCOUNTING_PANEL, "Disconnect {PROVIDER_LABELS[provider]}"],
     ["accounting_disconnected", ACCOUNTING_CONNECTIONS],
+    // Booking payments made on Arc (accounting write-back W1, W6, W7, W8, W9).
+    [
+      "It writes to Xero only the payments an owner or admin approves: each payment made on Arc for a bill brought in from Xero, booked against that bill.",
+      ACCOUNTING_CONSENT,
+    ],
+    ["Not booked: payments in shadow mode and on Arc testnet are never booked into your real books.", POSTING],
+    ["Allow Vestiarion to book payments", ACCOUNTING_PANEL],
+    ["Allow Vestiarion to book payments", BOOKINGS],
+    ["To book in Xero: 1 payment", BOOKINGS, "`To book in ${label}: 1 payment`"],
+    ["Awaiting payment", BOOKINGS],
+    ["Approve and book", BOOKINGS],
+    ["This booking changed since you saw it. Look at it again, then approve.", BOOKING_RUN],
+    ["Already paid in Xero.", POSTING, "`Already paid in ${label}.`"],
+    ["Booked in Xero", "src/lib/connectors/booked.ts", "`Booked in ${mark.label}`"],
+    ["stated by Xero when Vestiarion read it back", "src/lib/connectors/booked.ts", "stated by ${mark.label} when Vestiarion read it back"],
+    ["Xero did not answer, and no payment with this reference is there.", BOOKING_RUN, "${label} did not answer, and no payment with this reference is there."],
+    ["Xero refused the payment", BOOKING_RUN, "${label} refused the payment"],
+    ["accounting_payment_drafted", BOOKING_RUN],
+    ["accounting_payment_approved", BOOKING_RUN],
+    ["accounting_payment_sent", BOOKING_RUN],
+    ["accounting_payment_confirmed", BOOKING_RUN],
+    ["accounting_payment_failed", BOOKING_RUN],
+    ["accounting_payment_refused", BOOKING_RUN],
   ],
   "guides/quickbooks": [
     ["Connect QuickBooks", ACCOUNTING_PANEL, "`Connect ${label}`"],
@@ -1448,7 +1475,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Where payments made on Arc will be booked", ACCOUNTING_PANEL],
     ["Choose the account", ACCOUNTING_PICKER],
     ["Use this account", ACCOUNTING_PICKER],
-    ["The network fee is booked apart, never to this account.", "src/lib/connectors/booking.ts"],
+    ["The network fee is shown apart and not booked to this account.", "src/lib/connectors/booking.ts"],
     ["accounting_payment_account_chosen", ACCOUNTING_CONNECTIONS],
     ["Not chosen yet. Nothing is booked to an account nobody chose.", ACCOUNTING_PANEL],
     ["The last sync with QuickBooks failed", ACCOUNTING_STATUS, "`The last sync with ${label} failed`"],

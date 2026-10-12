@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import InboxEmails from "@/components/InboxEmails";
 import { AccountingBillsReview } from "@/components/AccountingBillsReview";
+import { AccountingBookings } from "@/components/AccountingBookings";
 import AgentControls from "@/components/AgentControls";
 import { AllocationLines } from "@/components/AllocationLines";
 import { ApplyPayments } from "@/components/ApplyPayments";
@@ -50,9 +51,10 @@ import { inOrg } from "@/lib/dal/scope";
 import { inboxEmailsToDecide } from "@/lib/email-inbox/list";
 import { inboxSettingsFromEnv } from "@/lib/email-inbox/settings";
 import { connectionFor, NotSetUpError } from "@/lib/connectors/connections";
-import { PROVIDER_LABELS, type ProviderId } from "@/lib/connectors/provider";
+import { PROVIDER_LABELS, PROVIDERS, type ProviderId } from "@/lib/connectors/provider";
 import { accountingReview, type ReviewView } from "@/lib/connectors/review";
-import { accountingProviderOn } from "@/lib/accounting-providers";
+import { accountingProvider, accountingProviderOn } from "@/lib/accounting-providers";
+import { accountingBookings, type BookingsView } from "@/lib/connectors/bookings-view";
 import { ledgerReadMayBeCut, listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { listCounterparties, listInvoices, stats, type InvoiceRow } from "@/lib/queries";
 import { plural, utcDay } from "@/lib/copy";
@@ -115,6 +117,20 @@ function broughtIn(provider: ProviderId): Promise<ReviewView> {
     });
 }
 
+/**
+ * The payments made on Arc to book in an accounting tool, each for a person to review (accounting write-back W6, W10),
+ * for a tool that books: hidden before migration 0106, without a connection, and when it cannot be read.
+ */
+function toBookIn(provider: ProviderId): Promise<BookingsView> {
+  if (!accountingProviderOn(provider)) return Promise.resolve({ state: "hidden" });
+  return connectionFor(provider)
+    .then((connection) => accountingBookings(connection, accountingProvider(provider)))
+    .catch((error: unknown): BookingsView => {
+      if (!(error instanceof NotSetUpError)) console.error(`invoices: bookings in ${PROVIDER_LABELS[provider]} not loaded`, error instanceof Error ? error.message : error);
+      return { state: "hidden" };
+    });
+}
+
 export default async function InvoicesPage({ params, searchParams }: InvoicePageProps) {
   const { slug } = await params;
   const access = await requireMembership(slug);
@@ -155,6 +171,8 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       }),
     ]);
     const deals = dealsRead === "unread" ? "unread" : dealsRead.available ? dealsRead.deals : "not_ready";
+    // The payments made on Arc to book in each accounting tool, for a person to review (accounting write-back W6, W10).
+    const [toBook, canBook] = await Promise.all([Promise.all(PROVIDERS.map(toBookIn)), viewerCan(slug, "accounting.book")]);
     // Each receivable a deal line became names its deal (deal schedule).
     const dealLinks = Array.isArray(deals) ? dealLinksOf(deals) : new Map<string, DealLink>();
     const filter = typeof query.status === "string" ? query.status : undefined;
@@ -483,6 +501,23 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
             partlyPaidSince={fromQuickBooks.partlyPaid}
             canAdd={canWrite}
           />
+        )}
+
+        {toBook.map((view) =>
+          view.state === "list" ? (
+            <AccountingBookings
+              key={view.provider}
+              provider={view.provider}
+              orgSlug={slug}
+              connectionId={view.connectionId}
+              organisation={view.organisation}
+              scopeMissing={view.scopeMissing}
+              accountChosen={view.accountChosen}
+              toReview={view.toReview}
+              done={view.done}
+              canBook={canBook}
+            />
+          ) : null
         )}
 
         {canWrite ? (

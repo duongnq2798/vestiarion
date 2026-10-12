@@ -102,7 +102,7 @@ export const TENANT_TABLES = [
   "fx_swaps", "screening_dismissals", "receivable_links", "incoming_transfers", "agent_budgets", "recurring_payables", "policy_proposals",
   "service_purchases", "spending_limit_contracts", "ar_reminders", "inbox_emails", "approval_policies", "payment_approvals",
   "shadow_modes", "decision_verdicts", "payment_actuals", "bank_statement_lines", "report_shares", "report_baselines", "receivable_allocations",
-  "accounting_connections", "external_links", "accounting_bills", "accounting_sync_cursors",
+  "accounting_connections", "external_links", "accounting_bills", "accounting_sync_cursors", "accounting_postings",
   "deals", "deal_versions", "deal_lines",
 ] as const;
 
@@ -216,6 +216,12 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     [orgId, connectionId, `bill-${tag}`, `cp-${tag}`]
   );
   await db.query("insert into accounting_sync_cursors (org_id, connection_id, object_type) values ($1, $2, 'bill')", [orgId, connectionId]);
+  // A payment made on Arc, drafted to be booked against its bill (0106).
+  await db.query(
+    `insert into accounting_postings (org_id, connection_id, provider, external_org_id, invoice_id, bill_external_id, amount, currency, paid_on, reference, network, shadow, paid_amount, paid_token)
+     values ($1, $2, 'xero', $3, $4, $5, 1, 'USD', '2026-10-12', $6, 'arc-testnet', true, 1, 'USDC')`,
+    [orgId, connectionId, `tenant-${tag}`, invoiceId, `bill-${tag}`, `0x${"ab".repeat(32)}`]
+  );
   // A receivable part paid from a payment received on Arc (0103).
   const receivableId = await one(
     "insert into invoices (org_id, direction, counterparty_id, amount, due_date) values ($1, 'receivable', $2, 2, now()) returning id",

@@ -7,7 +7,7 @@ import { FormMessage } from "@/components/ui/FormMessage";
 import { RadioGroup } from "@/components/ui/RadioGroup";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
-import { accountName, bookingPreview, type BookingSample } from "@/lib/connectors/booking";
+import { accountName, bookingPreview, BOOKS_PAYMENTS, type BookingSample } from "@/lib/connectors/booking";
 import type { PaymentAccount } from "@/lib/connectors/connections";
 import { PROVIDER_LABELS, type ProviderId } from "@/lib/connectors/provider";
 
@@ -19,7 +19,7 @@ const CHOOSE_INITIAL: AccountingActionResult = { ok: false, message: "" };
  * X14, I14; docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q6): an owner or admin reads the accounts a
  * payment can be booked to (Xero's bank accounts and accounts that take payments, QuickBooks' bank accounts; never a
  * revenue or expense account, and none picked for them), previews how a payment would be booked to the one they pick,
- * and uses it. Nothing is written to the tool in this version.
+ * and uses it. Each payment is booked there only after an owner or admin approves it (accounting write-back W6).
  */
 export function AccountingAccountPicker({
   provider,
@@ -38,7 +38,7 @@ export function AccountingAccountPicker({
   const [picked, setPicked] = useState<string>("");
   const accounts = load.state.accounts ?? [];
   const account = accounts.find((candidate) => candidate.externalId === picked) ?? null;
-  const preview = account ? bookingPreview(account, sample, label) : null;
+  const preview = account ? bookingPreview(account, sample, label, BOOKS_PAYMENTS[provider]) : null;
 
   return (
     <div className="space-y-3">

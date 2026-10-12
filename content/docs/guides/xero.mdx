@@ -1,6 +1,6 @@
 Connect Xero, and the bills you approve there come into Vestiarion for you to review, without retyping them. Each bill goes through the same check as a bill list: duplicates, currency, the supplier. It becomes a payable only when you add it, and the agent then decides it as any other bill, with every guardrail.
 
-Vestiarion reads from Xero and writes nothing to it. Approving a bill in Xero does not approve its payment in Vestiarion.
+Vestiarion reads from Xero, and writes to it only the payments an owner or admin approves: each payment made on Arc for a bill brought in from Xero, booked against that bill. Approving a bill in Xero does not approve its payment in Vestiarion.
 
 Keeping your bills in QuickBooks Online instead? [Bring them in from QuickBooks](/docs/guides/quickbooks): the same review list and the same check. A workspace can connect both.
 
@@ -16,7 +16,7 @@ Open **Settings**. Under **Xero**, choose **Connect Xero**.
 
 The connect page names the workspace (or lets you pick one, if you manage several) and says what Vestiarion does with Xero's data:
 
-- It reads the bills, suppliers and chart of accounts of the Xero organisation you pick. It writes nothing to Xero.
+- It reads the bills, suppliers and chart of accounts of the Xero organisation you pick. It writes to Xero only the payments an owner or admin approves: each payment made on Arc for a bill brought in from Xero, booked against that bill.
 - The bills you add are shown to the workspace's members and to its agent. The agent's model provider sees each bill's facts to decide on it, and may not train on them.
 - Vestiarion never uses Xero data to train or improve any AI model, and never passes it to anyone else without your workspace's say.
 
@@ -71,11 +71,46 @@ Each bill is added as one typed into the invoice form: the same checks, and a si
 
 An owner or admin chooses the account in Xero that payments made on Arc will be booked to. Under **Where payments made on Arc will be booked**, choose **Choose the account**. Vestiarion reads your chart of accounts and offers the active bank accounts, and the accounts Xero lets take a payment; never a revenue or expense account.
 
-Pick one to see how a payment would be booked: "A payment of 1,250.00 USDC to PowerDirect for bill PD-4471 will be booked in Xero as a payment of 1,250.00 USD from Arc USDC wallet (091), with the Arc transaction as its reference." USDC is booked as USD and EURC as EUR, so an account in USD fits best. The network fee is booked apart, never to this account. Then **Use this account**. The ledger records `accounting_payment_account_chosen`.
+Pick one to see how a payment would be booked: "A payment of 1,250.00 USDC to PowerDirect for bill PD-4471 will be booked in Xero as a payment of 1,250.00 USD from Arc USDC wallet (091), with the Arc transaction as its reference." USDC is booked as USD and EURC as EUR, so an account in USD fits best. The network fee is shown apart and not booked to this account. Then **Use this account**. The ledger records `accounting_payment_account_chosen`.
 
-Until someone chooses, the card says "Not chosen yet. Nothing is booked to an account nobody chose." Nothing is written to Xero yet: this keeps the choice for when Vestiarion books its payments there.
+Until someone chooses, the card says "Not chosen yet. Nothing is booked to an account nobody chose."
 
-## 5. When something goes wrong
+## 5. Book payments in Xero
+
+When a bill you added from Xero is paid on Arc, by the agent or by a person, and the payment is confirmed, Vestiarion drafts its booking in Xero: within 15 minutes, or at once with **Sync now**. Nothing is written to Xero until an owner or admin approves it.
+
+**A payment is only ever booked into books of the same reality.**
+
+- A payment on **Arc mainnet** moved real money. It can be booked into your real Xero organisation.
+- A payment on **Arc testnet**, and every payment in [shadow mode](/docs/guides/shadow-mode), is booked only into an organisation Xero calls a demo company, such as the Xero Demo Company. In shadow mode your business also pays the bill from its bank and books that payment itself, so booking the mirror would book the bill twice. Into any other organisation it is "Not booked: payments in shadow mode and on Arc testnet are never booked into your real books." and nothing is sent.
+
+### Allow Vestiarion to book payments
+
+Booking needs Xero's permission to write payments. A connection made before Vestiarion asked for it shows **Allow Vestiarion to book payments** on the Xero card in Settings and above the bookings. Choose it: Xero asks you to allow access again, and the same organisation reconnects, keeping its bills, links and the account you chose. Vestiarion reads what it read before.
+
+### Review, then approve
+
+Open **Bills & receivables**. Under "To book in Xero: 1 payment", each payment shows what changes in Xero, as it is now and after booking: the bill's amount due and status (for instance 1,250.00 USD and Awaiting payment, then 0.00 USD and Paid), and the payment itself: its amount in the bill's currency, the account it is paid from, the day it was confirmed on Arc, and the Arc transaction as its reference.
+
+USDC is booked as USD and EURC as EUR. A bill kept in your own currency in shadow mode is booked at the bill's own amount. Below each one is the payment on Arc it mirrors, and its network fee, which is shown apart and not booked: book it as a bank fee yourself if you keep fees.
+
+<Screenshot
+  src="/docs/guides/xero-bookings.png"
+  alt="To book in Xero: 1 payment on Bills & receivables. PowerDirect Ltd, bill PD-4471: in Xero the amount due goes from 1,250.00 USD to 0.00 USD and the status from Awaiting payment to Paid; a payment of 1,250.00 USD from Arc USDC wallet (091) on Oct 12, 2026 with the Arc transaction as reference. Paid on Arc testnet in shadow mode, network fee not booked. Below, the Approve and book button, and Akiba Parts booked in Xero and SMART Agency already paid in Xero."
+  caption="Each payment as the change it makes in Xero, approved before anything is written."
+/>
+
+Tick the payments to book, at most 10 at a time, and choose **Approve and book**. Each one is read again before it is sent:
+
+- If anything changed since the page was read, such as the account chosen or the amount Xero says is due, it is not sent: "This booking changed since you saw it. Look at it again, then approve."
+- A bill Xero shows paid already is never booked twice: "Already paid in Xero."
+- Vestiarion first looks in Xero for a payment with the same reference on that bill and takes it if it is there, so a payment is booked once even when Xero did not answer the first time.
+
+Once Xero answers, Vestiarion reads the payment back. The bill's card then says **Booked in Xero**, [where the payment is](/docs/guides/where-a-payment-is) ends with Booked in Xero and its Xero payment id, stated by Xero when Vestiarion read it back, and [why it was paid](/docs/guides/evidence) shows a step, The books. The ledger records `accounting_payment_drafted`, `accounting_payment_approved`, `accounting_payment_sent` and `accounting_payment_confirmed`, or `accounting_payment_failed` or `accounting_payment_refused` when it was not booked.
+
+To undo a booking, delete the payment in Xero. Vestiarion never books it again on its own.
+
+## 6. When something goes wrong
 
 The card says what happened, in words, and never "connected" while the last sync failed:
 
@@ -85,8 +120,10 @@ The card says what happened, in words, and never "connected" while the last sync
 | Xero asked Vestiarion to slow down. Syncing again at 14:05 UTC. | Xero limits how often an app may ask, per minute and per day. The next sync starts at the time Xero gave, from where this one stopped. |
 | Xero needs you to reconnect | Xero no longer accepts the connection: it was disconnected in Xero, or not used for 60 days. Choose **Reconnect Xero**: the bills, links and review list are kept. |
 | Xero is not set up on this deployment yet. | The deployment has not finished setting up Xero. Nothing is read. |
+| Xero did not answer, and no payment with this reference is there. | A booking did not go through. Approve it again: Vestiarion looks for it in Xero first, so it is never booked twice. |
+| Xero refused the payment | Xero said why, in its own words: for instance a lock date before the payment's day. Fix it in Xero, then approve it again. |
 
-## 6. Disconnect
+## 7. Disconnect
 
 An owner or admin chooses **Disconnect Xero**. Vestiarion asks Xero to end its access, deletes its tokens, and reads nothing more. Bills already added stay in Vestiarion, with their history. The ledger records `accounting_disconnected`. To connect again, choose **Connect Xero**.
 
@@ -94,4 +131,5 @@ An owner or admin chooses **Disconnect Xero**. Vestiarion asks Xero to end its a
 
 - Xero's tokens are kept encrypted, readable only by the server, and never shown in the browser, a log, a model's prompt or a webhook.
 - A bill's facts (supplier, number, amount, days) are shown to the workspace's members and to the agent, whose model provider may not train on them.
+- To book a payment you approved, Vestiarion sends Xero the bill's id, the account's id, the day, the amount and the Arc transaction: nothing else.
 - Vestiarion never uses Xero data to train or improve any AI model. See the [privacy page](/privacy).

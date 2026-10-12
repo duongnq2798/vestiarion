@@ -2,6 +2,7 @@ import { db } from "../dal";
 import type { BookingSample } from "./booking";
 import { connectionFor, NotSetUpError, waitingCount, type PaymentAccount } from "./connections";
 import { pagesRead, type SyncCursor } from "./cursors";
+import { hasScopes } from "./posting";
 import { PROVIDER_LABELS, type ProviderId } from "./provider";
 import { connectionStatus, type StatusView } from "./status";
 
@@ -27,9 +28,18 @@ export type AccountingPanelView =
       paymentAccount: PaymentAccount | null;
       /** A bill of the workspace's, to preview how a payment will be booked. */
       sample: BookingSample | null;
+      /**
+       * Whether the connection may book payments (accounting write-back W8): false for one made before the write scope
+       * was asked for, which then offers Allow Vestiarion to book payments. Absent for a provider that does not book.
+       */
+      bookingAllowed?: boolean;
     };
 
-export async function accountingPanelView(provider: ProviderId, nowMs: number = Date.now()): Promise<AccountingPanelView> {
+export async function accountingPanelView(
+  provider: ProviderId,
+  nowMs: number = Date.now(),
+  options: { writeScopes?: readonly string[] } = {}
+): Promise<AccountingPanelView> {
   let connection;
   try {
     connection = await connectionFor(provider);
@@ -82,5 +92,6 @@ export async function accountingPanelView(provider: ProviderId, nowMs: number = 
     closedAfterAdded: closed,
     paymentAccount: connection.paymentAccount,
     sample: bill ? { supplier: bill.contact_name, number: bill.number, amount: String(Number(bill.amount_due)), currency: bill.currency } : null,
+    ...(options.writeScopes ? { bookingAllowed: hasScopes(connection.scopes, options.writeScopes) } : {}),
   };
 }

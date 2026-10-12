@@ -1,0 +1,29 @@
+{
+  "Id": "8a4a9b16-4ae5-4c1d-9d7b-3d1f0e8f1a15",
+  "Status": "OK",
+  "ProviderName": "Vestiarion",
+  "DateTimeUTC": "/Date(1791796700000)/",
+  "Invoices": [
+    {
+      "Type": "ACCPAY",
+      "InvoiceID": "0f4c1f4e-1d7a-4e0f-9a9d-6c2d3c1a0101",
+      "InvoiceNumber": "Inv-2026-10",
+      "Reference": "",
+      "Payments": [],
+      "AmountDue": 31.39,
+      "AmountPaid": 0.0,
+      "AmountCredited": 0.0,
+      "Contact": { "ContactID": "c1a0e2f4-6b1d-4a6c-8f3e-0000000000b1", "Name": "Xero" },
+      "DateString": "2026-10-01T00:00:00",
+      "Date": "/Date(1790812800000+0000)/",
+      "DueDateString": "2026-10-20T00:00:00",
+      "Status": "AUTHORISED",
+      "LineAmountTypes": "Exclusive",
+      "SubTotal": 31.39,
+      "TotalTax": 0.0,
+      "Total": 31.39,
+      "UpdatedDateUTC": "/Date(1791789322093+0000)/",
+      "CurrencyCode": "USD"
+    }
+  ]
+}
