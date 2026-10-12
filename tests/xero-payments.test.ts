@@ -67,6 +67,11 @@ describe("mapOrganisation (W1)", () => {
     expect(mapOrganisation({ Organisations: [{ Name: "Demo-ish", Class: "DEMO" }] }, "t")).toMatchObject({ demo: true });
     expect(() => mapOrganisation({ Organisations: [] }, "t")).toThrow(ProviderError);
   });
+
+  it("never takes an organisation Xero says is not a demo company for one, whatever its class says", () => {
+    expect(mapOrganisation({ Organisations: [{ Name: "Mixed", IsDemoCompany: false, Class: "DEMO" }] }, "t")).toMatchObject({ demo: false });
+    expect(mapOrganisation({ Organisations: [{ Name: "Words", IsDemoCompany: "true", Class: "STANDARD" }] }, "t")).toMatchObject({ demo: false });
+  });
 });
 
 describe("payments in Xero's JSON", () => {

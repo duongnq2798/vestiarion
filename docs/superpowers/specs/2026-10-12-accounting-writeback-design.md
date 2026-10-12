@@ -18,7 +18,8 @@ admin reviews exactly what will be written, and approving it books it in Xero.
 - A payment on **Arc mainnet** moved real money: it may be booked into a real organisation (or a demo one).
 - A payment on **Arc testnet**, and **every payment in shadow mode**, may be booked **only into an organisation the
   provider reports as a demo or test company**: Xero's Demo Company (its `Organisation` says `IsDemoCompany: true`, or
-  `Class: "DEMO"`); for QuickBooks later, a sandbox company. In shadow mode the business also pays the bill from its
+  `Class: "DEMO"` when it gives no `IsDemoCompany`; an explicit `IsDemoCompany: false` is never overruled); for
+  QuickBooks later, a sandbox company. In shadow mode the business also pays the bill from its
   own bank, and books that payment itself: booking the mirror too would book the bill twice.
 - For any other organisation, such a payment is shown as **"Not booked: payments in shadow mode and on Arc testnet are
   never booked into your real books."** and nothing is sent. Never a silent fallback: an organisation whose kind cannot

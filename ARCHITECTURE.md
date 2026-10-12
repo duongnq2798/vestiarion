@@ -1695,7 +1695,7 @@ the provider.
 - **Booking payments made on Arc** (docs/superpowers/specs/2026-10-12-accounting-writeback-design.md). A payment is
   only ever booked into a ledger of the same reality: one on Arc mainnet outside shadow mode into any organisation, one
   on Arc testnet or in shadow mode only into an organisation the provider says is a demo company (Xero's
-  `IsDemoCompany`, or `Class: "DEMO"`; a trial is real books). `bookingReality` (`posting.ts`, pure) decides it
+  `IsDemoCompany`, or `Class: "DEMO"` when it gives no `IsDemoCompany`; a trial is real books). `bookingReality` (`posting.ts`, pure) decides it
   when a booking is drafted, when it is shown and right before it is sent, with the organisation read again; migration
   `0106`'s check refuses any row reaching `sending`, `sent` or `confirmed` otherwise, on a network and shadow flag its
   trigger reads from the payment itself as the booking is drafted (the payable's payment intent, the workspace's

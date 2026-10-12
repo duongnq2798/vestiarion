@@ -16,7 +16,8 @@ const currencyOf = (value: unknown): string | null => (typeof value === "string"
 
 /**
  * `GET /Organisation`: its name, its base currency, and whether Xero says it is a demo company. Only Xero's own word
- * makes it one (`IsDemoCompany: true`, or `Class: "DEMO"`): a trial is a real business trying Xero with its real books.
+ * makes it one (`IsDemoCompany: true`, or `Class: "DEMO"` when it gives no `IsDemoCompany`): a trial is a real
+ * business trying Xero with its real books, and `IsDemoCompany: false` is never overruled by its class.
  */
 export function mapOrganisation(body: unknown, externalOrgId: string): OrganisationFacts {
   const list = isObject(body) && Array.isArray(body.Organisations) ? body.Organisations : null;
@@ -25,7 +26,7 @@ export function mapOrganisation(body: unknown, externalOrgId: string): Organisat
   return {
     externalOrgId,
     name: text(raw.Name)?.slice(0, 200) ?? "Xero organisation",
-    demo: raw.IsDemoCompany === true || raw.Class === "DEMO",
+    demo: raw.IsDemoCompany === true || (raw.IsDemoCompany === undefined && raw.Class === "DEMO"),
     baseCurrency: currencyOf(raw.BaseCurrency),
   };
 }
