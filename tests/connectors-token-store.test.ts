@@ -27,6 +27,7 @@ const config = configFromEnv({
   NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key",
   SUPABASE_JWT_SECRET: "test-request-token-secret-at-least-32-characters",
 });
+const CONSENT = { version: "xero-2026-10-12", at: "2026-10-12T07:59:00.000Z" };
 const TOKENS = { accessToken: "access-1", refreshToken: "refresh-1", expiresAt: NOW + 1_800_000, scopes: ["offline_access", "accounting.invoices.read"] };
 
 function world(respond: (sent: RecordedRequest) => FakeReply | undefined = () => undefined, orgId = ORG) {
@@ -62,9 +63,12 @@ describe("saveTokens", () => {
     const { fake, run } = world();
     const choices = [{ externalOrgId: "t-1", name: "Demo Company (Global)", connectionId: "c-1" }];
     await run(() =>
-      saveTokens({ orgId: ORG, provider: "xero", connectionId: null, authorizedBy: USER, tokens: TOKENS, pending: { choices, chooseUntil: "2026-10-12T08:10:00.000Z" } }, keys)
+      saveTokens(
+        { orgId: ORG, provider: "xero", connectionId: null, authorizedBy: USER, tokens: TOKENS, pending: { choices, chooseUntil: "2026-10-12T08:10:00.000Z", consent: CONSENT } },
+        keys
+      )
     );
-    expect(inserted(fake)).toMatchObject({ connection_id: null, choices, choose_until: "2026-10-12T08:10:00.000Z" });
+    expect(inserted(fake)).toMatchObject({ connection_id: null, choices: { organisations: choices, consent: CONSENT }, choose_until: "2026-10-12T08:10:00.000Z" });
   });
 
   it("refuses to work outside the workspace's own scope", async () => {
@@ -132,7 +136,7 @@ describe("pending choices", () => {
     id: "tok-p",
     provider: "xero",
     authorized_by: USER,
-    choices: [{ externalOrgId: "t-1", name: "Demo Company (Global)", connectionId: "c-1" }, { name: "no id" }],
+    choices: { organisations: [{ externalOrgId: "t-1", name: "Demo Company (Global)", connectionId: "c-1" }, { name: "no id" }], consent: CONSENT },
     choose_until: "2026-10-12T08:10:00.000Z",
     ...fields,
   });
@@ -143,6 +147,8 @@ describe("pending choices", () => {
       id: "tok-p",
       provider: "xero",
       choices: [{ externalOrgId: "t-1", name: "Demo Company (Global)", connectionId: "c-1" }],
+      consent: CONSENT,
+      scopes: [],
       chooseUntil: "2026-10-12T08:10:00.000Z",
     });
     expect(await run(() => pendingChoice(ORG, "tok-p", "someone-else", NOW))).toBeNull();

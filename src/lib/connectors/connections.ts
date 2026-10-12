@@ -1,6 +1,9 @@
 import { db } from "../dal";
-import type { ProviderId } from "./provider";
+import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
+import { PROVIDER_LABELS, type ExternalOrganisation, type ProviderId } from "./provider";
+import type { Consent } from "./state";
 import type { ConnectionState } from "./status";
+import { deleteTokens, refreshTokenOf } from "./token-store";
 
 /**
  * A workspace's connection to an accounting provider (docs/superpowers/specs/2026-10-12-xero-connector-design.md X2,
@@ -156,4 +159,137 @@ export async function waitingCount(connectionId: string): Promise<number> {
     .eq("source_status", "open");
   if (result.error) raise(result.error);
   return result.count ?? 0;
+}
+
+const DAY_MS = 86_400_000;
+/** How far back a first connection brings bills in (X9). */
+export const WINDOW_DAYS = 90;
+
+export type SaveConnection =
+  | { ok: true; connection: Connection; reconnected: boolean }
+  | { ok: false; reason: "other_organisation"; name: string | null };
+
+/**
+ * Connects the workspace to an organisation of a provider (X4): a new connection, or the same organisation's own row
+ * again (one that needs reconnecting, or was disconnected), keeping its links, cursors and review list. A workspace
+ * already connected to another organisation of the provider is refused. Records `accounting_connected`, with the
+ * consent the person gave. Tokens are kept apart, by `token-store.ts`.
+ */
+export async function saveConnection(input: {
+  provider: ProviderId;
+  organisation: ExternalOrganisation;
+  connectedBy: string;
+  scopes: string[];
+  consent: Consent;
+  nowMs?: number;
+}): Promise<SaveConnection> {
+  const nowMs = input.nowMs ?? Date.now();
+  const result = await db().from("accounting_connections").select(CONNECTION_COLUMNS).eq("provider", input.provider);
+  if (result.error) raise(result.error);
+  const rows = (result.data ?? []) as unknown as ConnectionRow[];
+  const active = rows.find((row) => row.status !== "revoked");
+  if (active && active.external_org_id !== input.organisation.externalOrgId) return { ok: false, reason: "other_organisation", name: active.external_org_name };
+  const existing = rows.find((row) => row.external_org_id === input.organisation.externalOrgId);
+  const values = {
+    external_org_name: input.organisation.name,
+    status: "connected",
+    scopes: input.scopes,
+    connected_by: input.connectedBy,
+    connected_at: new Date(nowMs).toISOString(),
+    consent_version: input.consent.version,
+    consented_at: input.consent.at,
+    revoked_at: null,
+    revoked_by: null,
+    last_error: null,
+    last_error_at: null,
+    failures: 0,
+    next_sync_after: null,
+    sync_lease_until: null,
+  };
+  const saved = existing
+    ? await db().from("accounting_connections").update(values).eq("id", existing.id).select(CONNECTION_COLUMNS)
+    : await db()
+        .from("accounting_connections")
+        .insert({
+          ...values,
+          provider: input.provider,
+          external_org_id: input.organisation.externalOrgId,
+          window_from: new Date(nowMs - WINDOW_DAYS * DAY_MS).toISOString().slice(0, 10),
+        })
+        .select(CONNECTION_COLUMNS);
+  if (saved.error) raise(saved.error);
+  const connection = toConnection(((saved.data ?? []) as unknown as ConnectionRow[])[0]);
+  const label = PROVIDER_LABELS[input.provider];
+  await appendLedgerEntryBestEffort(connection.orgId, {
+    actor: "human",
+    domain: "system",
+    action: "accounting_connected",
+    summary: `Connected ${label}: ${input.organisation.name}. Its bills come in for review on Bills & receivables`,
+    detail: {
+      by: input.connectedBy,
+      provider: input.provider,
+      connectionId: connection.id,
+      externalOrgId: input.organisation.externalOrgId,
+      externalOrgName: input.organisation.name,
+      scopes: input.scopes,
+      consent: { version: input.consent.version, at: input.consent.at },
+      reconnected: existing !== undefined,
+    },
+  });
+  return { ok: true, connection, reconnected: existing !== undefined };
+}
+
+/**
+ * Disconnects (X13): the refresh token is revoked at the provider first (best effort, outside any write), then the
+ * tokens are deleted and the connection marked revoked, keeping its history. Records `accounting_disconnected`.
+ */
+export async function disconnectConnection(input: {
+  connection: Connection;
+  by: string;
+  revoke: (refreshToken: string) => Promise<boolean>;
+  nowMs?: number;
+}): Promise<{ revokedAtProvider: boolean }> {
+  const { connection } = input;
+  let revokedAtProvider = false;
+  try {
+    const refreshToken = await refreshTokenOf(connection.orgId, { connectionId: connection.id });
+    if (refreshToken) revokedAtProvider = await input.revoke(refreshToken);
+  } catch (error) {
+    console.error("connector: revoking at the provider failed", connection.id, error instanceof Error ? error.message : "unknown error");
+  }
+  await deleteTokens(connection.orgId, { connectionId: connection.id });
+  const updated = await db()
+    .from("accounting_connections")
+    .update({ status: "revoked", revoked_at: new Date(input.nowMs ?? Date.now()).toISOString(), revoked_by: input.by, sync_lease_until: null, next_sync_after: null })
+    .eq("id", connection.id)
+    .neq("status", "revoked")
+    .select("id");
+  if (updated.error) raise(updated.error);
+  await appendLedgerEntryBestEffort(connection.orgId, {
+    actor: "human",
+    domain: "system",
+    action: "accounting_disconnected",
+    summary: `Disconnected ${PROVIDER_LABELS[connection.provider]}: ${connection.externalOrgName ?? connection.externalOrgId}`,
+    detail: { by: input.by, provider: connection.provider, connectionId: connection.id, externalOrgId: connection.externalOrgId, revokedAtProvider },
+  });
+  return { revokedAtProvider };
+}
+
+/** Keeps the account payments made on Arc will be booked to (I14), and records `accounting_payment_account_chosen`. */
+export async function choosePaymentAccount(input: { connection: Connection; account: PaymentAccount; by: string; nowMs?: number }): Promise<void> {
+  const { connection, account } = input;
+  const updated = await db()
+    .from("accounting_connections")
+    .update({ payment_account: account, payment_account_by: input.by, payment_account_at: new Date(input.nowMs ?? Date.now()).toISOString() })
+    .eq("id", connection.id)
+    .eq("status", "connected")
+    .select("id");
+  if (updated.error) raise(updated.error);
+  await appendLedgerEntryBestEffort(connection.orgId, {
+    actor: "human",
+    domain: "system",
+    action: "accounting_payment_account_chosen",
+    summary: `Chose where payments made on Arc will be booked in ${PROVIDER_LABELS[connection.provider]}: ${account.name}${account.code ? ` (${account.code})` : ""}`,
+    detail: { by: input.by, provider: connection.provider, connectionId: connection.id, account },
+  });
 }

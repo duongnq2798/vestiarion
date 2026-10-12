@@ -3,6 +3,7 @@ import { currentOrgId } from "../context";
 import { platformDb, unwrap } from "../dal";
 import { decryptSecret, encryptSecret, masterKeysFromEnv, type MasterKey, type SecretEnvelope } from "../secrets";
 import type { ExternalOrganisation, ProviderId, ProviderTokens } from "./provider";
+import type { Consent } from "./state";
 import { type StoredTokens, type TokenStore } from "./tokens";
 
 /**
@@ -70,7 +71,7 @@ export async function saveTokens(
     connectionId: string | null;
     authorizedBy: string;
     tokens: ProviderTokens;
-    pending?: { choices: ExternalOrganisation[]; chooseUntil: string };
+    pending?: { choices: ExternalOrganisation[]; chooseUntil: string; consent: Consent };
   },
   keys: MasterKey[] = masterKeysFromEnv()
 ): Promise<string> {
@@ -90,7 +91,8 @@ export async function saveTokens(
         connection_id: input.connectionId,
         authorized_by: input.authorizedBy,
         ...sealed(input.orgId, id, input.tokens, keys),
-        choices: input.pending?.choices ?? null,
+        // The organisations offered, and the consent the person gave before going to the provider.
+        choices: input.pending ? { organisations: input.pending.choices, consent: input.pending.consent } : null,
         choose_until: input.pending?.chooseUntil ?? null,
       })
       .select("id")
@@ -102,7 +104,15 @@ export interface PendingChoice {
   id: string;
   provider: ProviderId;
   choices: ExternalOrganisation[];
+  consent: Consent | null;
+  scopes: string[];
   chooseUntil: string;
+}
+
+function consentOf(value: unknown): Consent | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { version, at } = value as Record<string, unknown>;
+  return typeof version === "string" && typeof at === "string" ? { version, at } : null;
 }
 
 function choicesOf(value: unknown): ExternalOrganisation[] {
@@ -121,15 +131,16 @@ export async function pendingChoice(orgId: string, tokenId: string, userId: stri
   const rows = unwrap(
     await platformDb()
       .from("accounting_tokens")
-      .select("id, provider, choices, choose_until, authorized_by")
+      .select("id, provider, choices, choose_until, authorized_by, scopes")
       .eq("id", tokenId)
       .eq("org_id", orgId)
       .is("connection_id", null)
       .limit(1)
-  ) as Array<Pick<TokenRow, "id" | "provider" | "choices" | "choose_until" | "authorized_by">>;
+  ) as Array<Pick<TokenRow, "id" | "provider" | "choices" | "choose_until" | "authorized_by" | "scopes">>;
   const row = rows[0];
   if (!row || row.authorized_by !== userId || !row.choose_until || Date.parse(row.choose_until) <= nowMs) return null;
-  return { id: row.id, provider: row.provider, choices: choicesOf(row.choices), chooseUntil: row.choose_until };
+  const held = typeof row.choices === "object" && row.choices !== null ? (row.choices as Record<string, unknown>) : {};
+  return { id: row.id, provider: row.provider, choices: choicesOf(held.organisations), consent: consentOf(held.consent), scopes: row.scopes ?? [], chooseUntil: row.choose_until };
 }
 
 /** Gives a pending grant to the connection picked: once, before its deadline. False when it was used or ran out. */
