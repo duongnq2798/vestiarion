@@ -18,7 +18,7 @@ const TX = `0x${"a".repeat(64)}`;
 const item = (fields: Partial<ActivityItem> = {}): ActivityItem => {
   const base = {
   seq: 100, text: "Paid Centronex 0.30 USDC.", detail: "DeepSeek decided to pay it; checks passed.", tone: "done",
-  path: `/invoices#trail-${INVOICE}`, pathLabel: "How it decided", txHash: TX, network: "arc-testnet", ...fields,
+  path: `/invoices?open=${INVOICE}#trail-${INVOICE}`, pathLabel: "How it decided", txHash: TX, network: "arc-testnet", ...fields,
   } as ActivityItem;
   return { ...base, txUrl: fields.txUrl !== undefined ? fields.txUrl : base.txHash ? `https://explorer.testnet.arc.io/tx/${base.txHash}` : null };
 };
@@ -50,7 +50,7 @@ describe("decisionsMessage", () => {
     expect(text).toContain("Paid Centronex 0.30 USDC.");
     expect(text).toContain("DeepSeek decided to pay it");
     expect(text).toContain(`https://explorer.testnet.arc.io/tx/${TX}`);
-    expect(text).toContain(`${ORIGIN}/o/northstar/invoices#trail-${INVOICE}`);
+    expect(text).toContain(`${ORIGIN}/o/northstar/invoices?open=${INVOICE}#trail-${INVOICE}`);
   });
 
   it("gives a stopped payable only its link to Approvals while deciding from Slack is off", () => {

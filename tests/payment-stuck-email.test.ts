@@ -18,7 +18,7 @@ const payment: StuckPayment = {
   sendAnswered: true,
   providerState: "SENT",
   txUrl: `https://explorer.arc.io/tx/${TX}`,
-  link: "https://www.vestiarion.xyz/o/acme/invoices#trail-inv-1",
+  link: "https://www.vestiarion.xyz/o/acme/invoices?open=inv-1#trail-inv-1",
 };
 const email = (payments: StuckPayment[], orgName = "Acme <Ops>") =>
   paymentStuckEmail({ orgName, payments, link: payments.length === 1 ? payments[0].link : "https://www.vestiarion.xyz/o/acme/invoices", origin: "https://www.vestiarion.xyz" });

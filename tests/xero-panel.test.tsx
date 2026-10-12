@@ -64,7 +64,7 @@ describe("XeroPanel", () => {
     const markup = render(connected);
     expect(markup).toContain("Connected to Demo Company (Global)");
     expect(markup).toContain("Last synced 5 minutes ago.");
-    expect(markup).toContain('href="/o/acme/invoices#from-xero"');
+    expect(markup).toContain('href="/o/acme/invoices?review=xero"');
     expect(markup).toContain("3 bills waiting for review");
     expect(markup).toContain("Sync now");
     expect(markup).toContain("Disconnect Xero");

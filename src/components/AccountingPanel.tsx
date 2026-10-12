@@ -12,6 +12,7 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { accountName } from "@/lib/connectors/booking";
+import { billsHref } from "@/lib/bills-view";
 import type { AccountingPanelView } from "@/lib/connectors/panel";
 import { PROVIDER_LABELS, PROVIDER_WORDS, type ProviderId } from "@/lib/connectors/provider";
 
@@ -148,7 +149,7 @@ export default function AccountingPanel({
                   {view.waiting === 0 ? (
                     "No bills waiting for review."
                   ) : (
-                    <Link className="font-medium text-agent underline-offset-4 hover:underline" href={`/o/${orgSlug}/invoices#from-${provider}`}>
+                    <Link className="font-medium text-agent underline-offset-4 hover:underline" href={`/o/${orgSlug}${billsHref({ tab: "bills", review: provider === "hubspot" ? null : provider })}`}>
                       {view.waiting === 1 ? "1 bill waiting for review" : `${view.waiting} bills waiting for review`}
                     </Link>
                   )}

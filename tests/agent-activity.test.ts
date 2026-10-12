@@ -46,7 +46,7 @@ describe("what the agent did, in words", () => {
       text: "Paid Jiren 0.30 USDC.",
       detail: "DeepSeek decided, as the written policy would. Checks passed: purchase order and goods, the 30.00 USDC limit, screening, the spending-limit contract.",
       tone: "done",
-      path: `/invoices#trail-${INVOICE}`,
+      path: `/invoices?open=${INVOICE}#trail-${INVOICE}`,
       pathLabel: "How it decided",
       txHash: TX,
       txUrl: `https://explorer.testnet.arc.io/tx/${TX}`,
@@ -158,7 +158,7 @@ describe("what the agent did, in words", () => {
     expect(activityItem(entry("ap_request_info", {}), refs({ status: "awaiting_info" }))).toMatchObject({
       text: "Asked for details before paying Jiren 0.30 USDC.",
       tone: "stopped",
-      path: "/invoices",
+      path: `/invoices?open=${INVOICE}`,
       pathLabel: "Add details",
     });
     expect(activityItem(entry("ap_flag_fraud", {}), refs({ status: "flagged" }))?.text).toBe("Flagged Jiren 0.30 USDC for you to review.");
@@ -398,7 +398,7 @@ describe("reading the agent's activity", () => {
     const client = fake([{ seq: 972, ts: "2026-10-03T02:20:53Z", action: "ap_pay", detail: { invoiceId: INVOICE, execution: { txRef: TX, resultingStatus: "paid" } } }]);
     const activity = await read(client, 967);
     expect(activity.items).toEqual([
-      { seq: 972, text: "Paid Jiren 0.30 USDC · 28 s after details were added.", detail: null, tone: "done", path: `/invoices#trail-${INVOICE}`, pathLabel: "How it decided", txHash: TX, txUrl: `https://explorer.testnet.arc.io/tx/${TX}`, network: "arc-testnet" },
+      { seq: 972, text: "Paid Jiren 0.30 USDC · 28 s after details were added.", detail: null, tone: "done", path: `/invoices?open=${INVOICE}#trail-${INVOICE}`, pathLabel: "How it decided", txHash: TX, txUrl: `https://explorer.testnet.arc.io/tx/${TX}`, network: "arc-testnet" },
     ]);
     const triggers = client.requests.find((r) => r.path === "/rest/v1/ledger_entries" && (r.params.get("select") ?? "").includes("invoiceId"))!;
     expect(triggers.params.get("actor")).toBe("eq.human");
@@ -443,7 +443,7 @@ describe("a payment that has not confirmed (stuck-transfer alert D6, D7)", () =>
       text: "Payment of 0.30 USDC to Jiren has not confirmed 18 min after it was sent on Arc testnet.",
       detail: "Circle shows it stuck.",
       tone: "stopped",
-      path: `/invoices#trail-${INVOICE}`,
+      path: `/invoices?open=${INVOICE}#trail-${INVOICE}`,
       pathLabel: "How it decided",
       txHash: TX,
       txUrl: `https://explorer.testnet.arc.io/tx/${TX}`,

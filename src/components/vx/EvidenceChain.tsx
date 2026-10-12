@@ -22,6 +22,7 @@ import { cn } from "@/components/ui/cn";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { orgHref } from "@/lib/auth/org-paths";
+import { invoiceHref } from "@/lib/bills-view";
 import { utcMinute } from "@/lib/copy";
 import {
   EVIDENCE_MEANINGS,
@@ -35,7 +36,6 @@ import {
 } from "@/lib/evidence-chain";
 import type { EntryCheck } from "@/lib/receipts/verify";
 import { entryHref, pad } from "./AuditLedger";
-import { trailAnchor } from "./DecisionTrail";
 import { fmt, Money } from "./Primitives";
 
 /**
@@ -206,7 +206,7 @@ export function EvidenceStepCard({ step, number, chain, orgSlug, publicKeys }: {
         </ul>
         {step.trail && (
           <p className="border-t border-line px-4 py-3 text-xs sm:px-5">
-            <Link href={orgHref(orgSlug, `/invoices?history=all#${trailAnchor(step.trail.invoiceId)}`)} className="font-medium text-agent hover:underline">
+            <Link href={orgHref(orgSlug, invoiceHref(step.trail.invoiceId, "trail"))} className="font-medium text-agent hover:underline">
               How the agent decided, step by step
             </Link>
           </p>

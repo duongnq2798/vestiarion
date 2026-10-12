@@ -56,7 +56,7 @@ describe("HubSpotPanel", () => {
     const markup = panel(connected);
     expect(markup).toContain("Connected to northstar-studio.example");
     expect(markup).toContain("2 won deals to plan");
-    expect(markup).toContain('href="/o/acme/invoices#from-hubspot"');
+    expect(markup).toContain('href="/o/acme/invoices?tab=receivables#from-hubspot"');
     expect(markup).toContain("1 planned deal changed in HubSpot since.");
     expect(markup).toContain("Sync now");
     expect(markup).toContain("Disconnect HubSpot");

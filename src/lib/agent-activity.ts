@@ -4,6 +4,7 @@
  * with who decided and what was checked, how long after the person's action, and where to look. Pure: the route reads
  * the rows, this says them, and the page decides how to show them.
  */
+import { invoiceHref } from "./bills-view";
 import { deciderName } from "./decision-trail";
 import { awaitsVerdict, heldForVerdict, ruleInBrief } from "./next-step";
 import { networkProfile, type Network } from "./network";
@@ -222,7 +223,7 @@ function stuckItem(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem,
     text: `Payment of ${amount} to ${payee} has not confirmed ${number(entry.detail.minutes) ?? 0} min after it was sent on ${networkProfile(refs.network).label}.`,
     detail: stuckCircleLine(entry.detail),
     tone: "stopped",
-    path: invoiceId ? `/invoices#trail-${invoiceId}` : "/contractors",
+    path: invoiceId ? invoiceHref(invoiceId, "trail") : "/contractors",
     pathLabel: invoiceId ? "How it decided" : "Contractors",
     txHash: arcTx(text(entry.detail.txHash)),
   };
@@ -246,7 +247,8 @@ function invoiceItem(
   const blocked = entry.detail.guardrailBlocked === true;
   const amount = activityAmount(invoice.amount, invoice.currency);
   const after = DECIDED_AGAIN[text(record(entry.detail.reevaluation)?.trigger) ?? ""] ?? afterTrigger(entry, refs.triggers?.get(id));
-  const how = { path: `/invoices#trail-${id}`, pathLabel: "How it decided" };
+  // The bill's card, opened over Bills & receivables at how it was decided (Bills & receivables tabs B4).
+  const how = { path: invoiceHref(id, "trail"), pathLabel: "How it decided" };
 
   if (entry.action === "ar_received") {
     return { seq: entry.seq, text: `Received ${amount} from ${invoice.name}.`, detail: null, tone: "done", path: "/invoices", pathLabel: "Bills & receivables", txHash: arcTx(text(entry.detail.txHash)) };
@@ -320,7 +322,8 @@ function invoiceItem(
         text: `Asked for details before paying ${invoice.name} ${amount}${after}.`,
         detail: firstSentence(entry.detail),
         tone: "stopped",
-        path: "/invoices",
+        // Its card, where Add details is.
+        path: invoiceHref(id),
         pathLabel: "Add details",
         txHash: null,
       };

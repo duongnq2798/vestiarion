@@ -11,6 +11,7 @@ import { NETWORK_IDS, networkOf, networkProfile } from "../network";
 import { DIGEST_MAX_RECIPIENTS, decidingRecipients } from "../notifications/waiting";
 import { txUrl } from "../payee-chains";
 import { sendSlackDecisions } from "../slack/notify";
+import { invoiceHref } from "../bills-view";
 import { sendAgentDecisions } from "../telegram/notify";
 import { paymentWasSent } from "./approvals";
 
@@ -289,7 +290,7 @@ async function emailTold(told: Told[], deps: WatchDeps): Promise<void> {
         sendAnswered: detail.sendAnswered,
         providerState: detail.providerState,
         txUrl: detail.txHash ? txUrl(network, detail.txHash) : null,
-        link: detail.invoiceId ? `${origin}/o/${org.slug}/invoices#trail-${detail.invoiceId}` : `${origin}/o/${org.slug}/contractors`,
+        link: detail.invoiceId ? `${origin}/o/${org.slug}${invoiceHref(detail.invoiceId, "trail")}` : `${origin}/o/${org.slug}/contractors`,
       };
     });
     const email = paymentStuckEmail({ orgName: org.name, payments, link: payments.length === 1 ? payments[0].link : `${origin}/o/${org.slug}/invoices`, origin });

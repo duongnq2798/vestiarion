@@ -56,7 +56,7 @@ describe("the QuickBooks card", () => {
   it("names the company, the bills waiting, and sends QuickBooks with every control's form", () => {
     const markup = render(connected);
     expect(markup).toContain("Connected to Sandbox Company_US_1");
-    expect(markup).toContain('href="/o/acme/invoices#from-quickbooks"');
+    expect(markup).toContain('href="/o/acme/invoices?review=quickbooks"');
     expect(markup).toContain("2 bills waiting for review");
     expect(markup).toContain("1 bill you added was paid, voided or deleted in QuickBooks since.");
     expect(markup).toContain("Disconnect QuickBooks");
