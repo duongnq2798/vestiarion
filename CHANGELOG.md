@@ -11,6 +11,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+### Added
+
+- **Xero, QuickBooks Online and HubSpot on the landing page and in Settings.** "Built on, and works with" lists them
+  beside Arc, Circle, Slack, Telegram and npm, each with its mark, what it does and its guide; their Settings cards and
+  connect pages show their marks beside their names.
+
 ## [0.1.0-beta.1] - 2026-10-12
 
 The first tagged release: everything merged from September 24 to October 12, 2026 (pull requests #1 to #325). A
