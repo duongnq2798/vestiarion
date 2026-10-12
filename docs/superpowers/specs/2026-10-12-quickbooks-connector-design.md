@@ -129,6 +129,9 @@ BillPayment, Customer, Invoice, Payment and Vendor. Env: `QUICKBOOKS_CLIENT_ID`,
   0102's partial unique index on `(provider, external_org_id)` for QuickBooks connections not revoked: the second
   insert fails, and reads as `other_workspace` too.
 - Xero keeps its own rule: several workspaces may share an organisation (X4).
+- The company is known only on the way back, after Intuit granted the new tokens. This assumes, as Intuit's
+  documentation reads, that a new grant leaves earlier grants for the company working; if it did not, the other
+  workspace would be asked to reconnect, and nothing else would change.
 - Cost if wrong: the same business's Arc testnet and Arc mainnet workspaces cannot both read one company; one
   disconnects, the other connects.
 

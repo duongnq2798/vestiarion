@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { AccountingConnect, type ConnectSearchParams } from "@/components/AccountingConnect";
+import { AccountingConnect, type ConnectSearchParams } from "@/app/integrations/_accounting/AccountingConnect";
 
 export const metadata: Metadata = { title: "Connect QuickBooks" };
 export const dynamic = "force-dynamic";

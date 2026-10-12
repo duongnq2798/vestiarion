@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { AccountingLaunch } from "@/components/AccountingLaunch";
+import { AccountingLaunch } from "@/app/integrations/_accounting/AccountingLaunch";
 
 export const metadata: Metadata = { title: "QuickBooks" };
 export const dynamic = "force-dynamic";
