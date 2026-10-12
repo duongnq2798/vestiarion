@@ -91,6 +91,10 @@ was invoiced or paid.
 - If adding the receivable fails, the claim is undone (allowed only while no receivable names the line). A line left
   released with no receivable (a request that died) is released again by the next press or cycle, which finds the
   receivable by its line when one was made.
+- A receivable names only a line that is `released`: the insert holds the line (`for share`) until it commits, so an
+  undo running at the same time either waits and then finds the receivable (and stays released), or came first and
+  the receivable is refused (`deal_line_not_released`). A planned line never has a receivable beside it, which would
+  count its money twice and let a version end it.
 - Cost if wrong: the cycle runs every six hours, so an automatic release can come up to six hours into its day; a
   sandbox releases automatically only when a member runs a cycle.
 
@@ -153,7 +157,7 @@ was invoiced or paid.
   and due days, `amount_minor`, `rounding_minor`, `replaces`, status, `ended_in`, and the release (`released_at`,
   `released_by`, `released_via`). Insert, and update of status and release fields only.
 - `invoices.deal_id`, `invoices.deal_line_id`: both or neither, a receivable only, one invoice per line, a composite
-  foreign key to the line of that deal.
+  foreign key to the line of that deal, made only while that line is `released` (D10).
 - `create_deal` and `revise_deal`, security invoker, for the tenant role.
 - Row level security as 0090 and 0094; every foreign key composite with `org_id`; additive and safe to re-run.
 

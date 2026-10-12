@@ -19,7 +19,8 @@
 -- total, and that the deal names its latest version and that version's total.
 --
 -- invoices.deal_id, invoices.deal_line_id: the receivable a released line became, both or neither, a receivable only,
--- one per line, in the line's own deal (composite foreign key), never moved to another line once set.
+-- one per line, in the line's own deal (composite foreign key), made only while the line is released, never moved to
+-- another line once set.
 --
 -- create_deal and revise_deal write a deal's first version and each later one whole, in one transaction, as the tenant
 -- (security invoker): create_deal answers the deal already made for the same key; revise_deal refuses a change made
@@ -231,6 +232,36 @@ create trigger invoices_deal_link_fixed
   before update of deal_id, deal_line_id on public.invoices
   for each row execute function public.invoices_deal_link_fixed();
 
+-- A receivable is made only from a released line (D10). The line is held (for share) until the receivable commits, so
+-- a release undone meanwhile (its own receivable failed) waits, then finds this one and stays; and an undo that came
+-- first leaves the line planned, which this refuses. A line never stands planned with a receivable beside it. A line
+-- not found is left to the foreign key.
+create or replace function public.invoices_deal_line_released()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_status text;
+begin
+  select l.status into v_status
+    from public.deal_lines l
+   where l.org_id = new.org_id and l.deal_id = new.deal_id and l.id = new.deal_line_id
+     for share;
+  if found and v_status <> 'released' then
+    raise exception 'deal_line_not_released' using detail = format('A receivable is made from a released deal line; this one is %s.', v_status);
+  end if;
+  return new;
+end;
+$$;
+
+revoke execute on function public.invoices_deal_line_released() from public, anon, authenticated;
+
+drop trigger if exists invoices_deal_line_released on public.invoices;
+create trigger invoices_deal_line_released
+  before insert on public.invoices
+  for each row when (new.deal_line_id is not null) execute function public.invoices_deal_line_released();
+
 -- At commit: every version's total is what its lines in force add up to, and the deal names its latest version and
 -- that version's total (D5, D7).
 create or replace function public.deal_sums_hold()
@@ -426,6 +457,8 @@ notify pgrst, 'reload schema';
 -- Down (by hand, never by migrate.ts):
 -- drop function if exists public.revise_deal(uuid, uuid, integer, jsonb);
 -- drop function if exists public.create_deal(uuid, jsonb, jsonb);
+-- drop trigger if exists invoices_deal_line_released on public.invoices;
+-- drop function if exists public.invoices_deal_line_released();
 -- drop trigger if exists invoices_deal_link_fixed on public.invoices;
 -- drop function if exists public.invoices_deal_link_fixed();
 -- drop index if exists public.invoices_deal_line_key;

@@ -227,12 +227,30 @@ describe("a line is never changed", () => {
 });
 
 describe("the receivable a line became", () => {
+  it("names a released line only, so a planned line never has a receivable beside it", async () => {
+    const orgId = await createOrg(db, "deals-link-released");
+    const cp = await client(orgId);
+    const { id } = await createDeal(orgId, dealJson(cp));
+    const [deposit] = await lineIds(id);
+    // A release whose claim was undone (its receivable failed) while another release of the line was still adding one.
+    await expect(receivable(orgId, cp, id, deposit.id)).rejects.toThrow(/deal_line_not_released/);
+    expect((await db.query("select 1 from public.invoices where deal_line_id = $1", [deposit.id])).rows).toHaveLength(0);
+    await release(orgId, deposit.id);
+    await receivable(orgId, cp, id, deposit.id);
+    // Its receivable exists: the release is never undone.
+    await expect(asTenant(db, orgId, (tx) => tx.query("update public.deal_lines set status = 'planned', released_at = null, released_via = null where id = $1", [deposit.id]))).rejects.toThrow(
+      /deal_line_status/
+    );
+  });
+
   it("is one per line, a receivable only, in the line's own deal, and stays with its line", async () => {
     const orgId = await createOrg(db, "deals-link");
     const cp = await client(orgId);
     const { id } = await createDeal(orgId, dealJson(cp));
     const other = (await createDeal(orgId, dealJson(cp))).id;
     const [deposit, balance] = await lineIds(id);
+    await release(orgId, deposit.id);
+    await release(orgId, balance.id);
     const invoiceId = await receivable(orgId, cp, id, deposit.id);
     await expect(receivable(orgId, cp, id, deposit.id)).rejects.toThrow(/invoices_deal_line_key/);
     await expect(receivable(orgId, cp, id, balance.id, "payable")).rejects.toThrow(/invoices_deal_receivable/);
