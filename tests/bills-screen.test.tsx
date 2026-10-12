@@ -17,7 +17,8 @@ vi.mock("@/app/actions/deals", () => ({ createDealAction: vi.fn() }));
 import { BillsList } from "@/components/bills/BillsList";
 import { BillsScreen, type BillsScreenProps } from "@/components/bills/BillsScreen";
 import { BillsTabs } from "@/components/bills/BillsTabs";
-import { NEW_ITEMS, NewMenu, newItemsFor } from "@/components/bills/NewMenu";
+import { NewMenu } from "@/components/bills/NewMenu";
+import { NEW_ITEMS, newItemsFor } from "@/components/bills/new-items";
 import { nextTabIndex } from "@/components/bills/tab-keys";
 import type { BillRowItem, ListData } from "@/components/bills/types";
 import { pageOf } from "@/lib/bills-view";
@@ -210,6 +211,13 @@ describe("a tab's list", () => {
     const words = text(renderToStaticMarkup(<BillsList list={list({ q: "acme", elsewhere: { text: "1 receivable matches too", href: "/o/acme/invoices?tab=receivables&q=acme" } })} slugHref={slugHref} />));
     expect(words).toContain("Showing what matches acme : 2 invoices · 1 receivable matches too");
     expect(words).toContain("Clear search");
+  });
+
+  it("offers no filter, search or order with nothing to list at all", () => {
+    const markup = renderToStaticMarkup(<BillsList list={list({ page: pageOf([], 1), bare: true, empty: { title: "No bills yet", body: "Add a bill." } })} slugHref={slugHref} />);
+    expect(text(markup)).toBe("No bills yet Add a bill.");
+    expect(markup).not.toContain("<nav");
+    expect(markup).not.toContain('role="search"');
   });
 
   it("says so when a list is empty", () => {

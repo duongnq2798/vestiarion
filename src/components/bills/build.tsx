@@ -118,6 +118,7 @@ export function billRowItem(facts: RowFacts): BillRowItem {
     date: rowDate(invoice, facts.today),
     outcome: decision.outcome,
     outcomeLabel: decision.outcomeLabel,
+    quiet: !payable && invoice.status === "pending",
     blockers: needsYou ? billBlockers(decision) : [],
     why: needsYou ? stoppedWhy(decision) : null,
     note: payable ? null : (facts.owedNote ?? null),
@@ -168,6 +169,7 @@ export function listData({ tab, view, sortAsked, page, counts, slugHref, canWrit
   const noun = bills ? "bill" : "receivable";
   return {
     label: bills ? "Bills" : "Receivables",
+    bare: !view.q && (bills ? totals.payables === 0 : totals.receivables === 0),
     filters: keys.map((key) => ({ key, label: labels[key], count: counts[key] ?? 0, href: here({ filter: key, page: 1, open: null }), current: key === filter })),
     q: view.q,
     keep: { tab, filter, ...(sortAsked ? { sort: sortAsked } : {}) },

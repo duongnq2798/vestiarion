@@ -208,9 +208,16 @@ const SHOTS = {
   "cash-scenarios-coverage": async () => {},
   "import-bills-columns": async () => {},
   "import-bills-check": async () => {},
-  "payment-plan": async () => {},
+  "payment-plan": async (page) => {
+    // Each line folds its reason and Approve (Bills & receivables tabs B14): the picture shows the first opened.
+    await page.evaluate(`document.querySelector("[data-docs-shot] ol > li > details").open = true`);
+    await page.settle();
+  },
   "payment-plan-cash": async () => {},
-  "payment-plan-stale": async () => {},
+  "payment-plan-stale": async (page) => {
+    await page.evaluate(`document.querySelector("[data-docs-shot] ol > li > details").open = true`);
+    await page.settle();
+  },
   "workspace-status": async () => {},
   "evidence-chain": async () => {},
   "evidence-signatures": async (page) => {

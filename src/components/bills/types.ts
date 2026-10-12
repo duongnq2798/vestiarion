@@ -18,6 +18,8 @@ export interface BillRowItem {
   date: { label: string; tone?: "held" } | null;
   outcome: Outcome;
   outcomeLabel?: string;
+  /** No badge: a receivable simply awaiting payment, which its date already says. */
+  quiet?: boolean;
   /** What stands in its way, a word or two each. */
   blockers: string[];
   /** Why it waits, in one line, when no check names it. */
@@ -66,4 +68,6 @@ export interface ListData {
   empty: { title: string; body: string; action?: ReactNode };
   /** Under the search, when it finds something on the other tab too. */
   elsewhere?: { text: string; href: string } | null;
+  /** Nothing to list at all: the list says so, without filters, search or order to choose from. */
+  bare?: boolean;
 }

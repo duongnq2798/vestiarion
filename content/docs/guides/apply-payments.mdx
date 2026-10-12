@@ -2,7 +2,7 @@ Clients do not always pay one invoice with one transfer. One pays three invoices
 
 ## Where to find it
 
-Open **Bills & receivables**. Under **Receivables**, **Apply payments** lists each payment received on Arc that is not applied to invoices in full, newest first: its amount, the day it arrived, who sent it (the client whose address on file sent it, or the address), and its transaction, which opens on the explorer.
+Open **Bills & receivables** and choose the **Receivables** tab. Above the receivables, **Apply payments** lists each payment received on Arc that is not applied to invoices in full, newest first: its amount, the day it arrived, who sent it (the client whose address on file sent it, or the address), and its transaction, which opens on the explorer.
 
 - **Who applies.** Owners and admins, as for adding an invoice. Every other member sees the list without the buttons, and reads "Only an owner or admin of this workspace can apply payments."
 - **What is left.** A payment applied in part says how much is applied and how much is left, and whose credit that is: "left as credit for" the client its applications name.
@@ -69,7 +69,7 @@ These are checked when you apply, and again by the database, however many people
 
 ## Find an invoice
 
-The search box at the top of **Bills & receivables** finds bills and receivables by more than a name: an invoice number or any word of the memo, the Vestiarion id or its first 8 characters, the purchase order, the counterparty, the amount, as `1250` or `1,250.00`, or what is still owed, and a payment's transaction hash, its Circle id or the address that sent it, which finds the invoices it was applied to and the payment under **Apply payments**. The page then says what it is "Showing what matches", and **Clear search** goes back to everything. A search is in the page's address, so it can be shared with a colleague in the same workspace.
+The search box on each tab of **Bills & receivables** finds bills and receivables by more than a name: an invoice number or any word of the memo, the Vestiarion id or its first 8 characters, the purchase order, the counterparty, the amount, as `1250` or `1,250.00`, or what is still owed, and a payment's transaction hash, its Circle id or the address that sent it, which finds the invoices it was applied to and the payment under **Apply payments**. The page then says what it is "Showing what matches", and how many the other tab matches too, and **Clear search** goes back to everything. A search is in the page's address, with its tab and filter, so it can be shared with a colleague in the same workspace.
 
 <Screenshot
   src="/docs/guides/apply-payments-part-paid.png"
@@ -83,4 +83,4 @@ Each payment applied, fee and reversal is a signed entry: `ar_payment_applied`, 
 
 ## Before it is set up
 
-On a deployment where applying payments is not set up yet, **Receivables** says "Applying payments is not set up on this deployment yet." Receivables work as before: the agent matches a payment of exactly one invoice's amount.
+On a deployment where applying payments is not set up yet, the **Receivables** tab says "Applying payments is not set up on this deployment yet." Receivables work as before: the agent matches a payment of exactly one invoice's amount.

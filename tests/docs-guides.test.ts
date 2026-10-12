@@ -238,6 +238,12 @@ const ALLOCATION_LINES = "src/components/AllocationLines.tsx";
 const ALLOCATION_MODEL = "src/lib/allocations/model.ts";
 const ALLOCATION_SUGGEST = "src/lib/allocations/suggest.ts";
 const INVOICES_PAGE_SOURCE = "src/app/o/[slug]/invoices/page.tsx";
+/** Bills & receivables' tabs (docs/superpowers/specs/2026-10-12-bills-tabs-design.md): the list, New ▾, the filters, a row's words. */
+const BILLS_LIST = "src/components/bills/BillsList.tsx";
+const NEW_MENU = "src/components/bills/new-items.ts";
+const BILLS_VIEW = "src/lib/bills-view.ts";
+const BILLS_SUMMARY = "src/components/bills/BillsSummary.tsx";
+const BILL_NEXT_STEP = "src/components/vx/bill-next-step.ts";
 
 const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   "guides/apply-payments": [
@@ -267,8 +273,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["The payment and the invoice are in different currencies. Apply it to an invoice in the same currency.", ALLOCATION_MODEL],
     ["One payment is applied to one customer's invoices.", ALLOCATION_MODEL],
     ["Someone applied this payment a moment ago. Reload the page to see what is left of it.", ALLOCATION_MODEL],
-    ["Showing what matches", INVOICES_PAGE_SOURCE],
-    ["Clear search", INVOICES_PAGE_SOURCE],
+    ["Showing what matches", BILLS_LIST],
+    ["Clear search", BILLS_LIST],
     ["Applying payments is not set up on this deployment yet.", INVOICES_PAGE_SOURCE],
     ["How the agent decided", "src/components/vx/DecisionTrail.tsx"],
     ["ar_payment_applied", "src/lib/allocations/apply.ts"],
@@ -341,7 +347,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Add and screen", COUNTERPARTY_FORM],
     ["added and screened: clear risk.", "src/app/actions/intake.ts", "added and screened: "],
     ["Bills & receivables", APP_NAV],
-    ["New invoice", INVOICES_PAGE],
+    ["Bill to pay", NEW_MENU],
+    ["Add a bill", "src/components/bills/build.tsx"],
     ["Counterparty", INVOICE_FORM],
     ["Amount", INVOICE_FORM],
     ["Currency", INVOICE_FORM],
@@ -558,7 +565,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   // Deals on Bills & receivables (deal schedule design D1-D16).
   "guides/deals": [
     ["Bills & receivables", APP_NAV],
-    ["New deal", INVOICES_PAGE],
+    ["New deal", NEW_MENU],
     ["Only an owner or admin of this workspace can release, change or cancel a deal.", DEAL_PAGE],
     ["Deals are not set up on this deployment yet.", DEALS_SECTION],
     ["Payment terms (days)", DEAL_FORM],
@@ -805,7 +812,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["policy_proposal_made", "src/lib/agent/proposals.ts"],
     ["policy_proposal_accepted", "src/lib/policy-proposals.ts"],
     ["policy_proposal_dismissed", "src/lib/policy-proposals.ts"],
-    ["Recurring", "src/app/o/[slug]/invoices/page.tsx"],
+    ["Recurring", NEW_MENU],
     ["Recurring payments", "src/components/vx/RecurringSummary.tsx"],
     ["Pay", "src/components/intake/RecurringPayableIntake.tsx"],
     ["For", "src/components/intake/RecurringPayableIntake.tsx"],
@@ -875,13 +882,14 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["added and screened:", INTAKE_ACTIONS],
     ["A payment to a counterparty without one is held for review.", PANEL],
     ["Bills & receivables", APP_NAV],
-    ["New invoice", INVOICES_PAGE],
-    ["Needs you", INVOICES_PAGE],
-    ["Upcoming", INVOICES_PAGE],
-    ["Paid and closed", INVOICES_PAGE],
-    ["Enter one invoice", INVOICES_PAGE],
-    ["Import a list", INVOICES_PAGE],
-    ["From a document", INVOICES_PAGE],
+    ["Bill to pay", NEW_MENU],
+    ["Needs you", BILLS_VIEW],
+    ["Upcoming", BILLS_VIEW],
+    ["Scheduled", BILLS_VIEW],
+    ["Paid and closed", BILLS_VIEW],
+    ["Waiting for review", BILLS_SUMMARY],
+    ["Import a list", NEW_MENU],
+    ["From a document", NEW_MENU],
     ["Or paste the invoice's text", DOCUMENT_TAB],
     ["Read invoice", DOCUMENT_TAB],
     ["The amount the model gave is not in the document, so it was left blank.", DOCUMENT_TAB],
@@ -919,7 +927,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Run cycle now", RUN],
     ["Cycle complete at", ORCHESTRATOR],
     ["Stopped", CONSOLE_PAGE],
-    ["Payables", INVOICES_PAGE],
+    ["Bills", "src/app/o/[slug]/invoices/page.tsx", 'label: "Bills"'],
     ["Agent’s reasoning", DECISION_CARD],
     ["Settled on Arc", PRIMITIVES],
     ["Held for you", PRIMITIVES],
@@ -957,9 +965,9 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["invoice_details_added", "src/lib/agent/approvals.ts"],
     ["invoice_reopened", "src/lib/agent/orchestrator.ts"],
     ["Awaiting information", APPROVAL_CARD],
-    ["Needs a purchase order and goods received", "src/lib/added-details.ts"],
-    ["Needs a purchase order", "src/lib/added-details.ts"],
-    ["Needs goods received", "src/lib/added-details.ts"],
+    ["Add the purchase order and goods receipt", BILL_NEXT_STEP],
+    ["Add the purchase order", BILL_NEXT_STEP],
+    ["Confirm the goods were received", BILL_NEXT_STEP],
     ["Details added · the agent decides it again", "src/lib/added-details.ts"],
     ["Decide in Approvals", "src/components/WaitingPayableAction.tsx"],
     ["The agent is working", "src/lib/agent-activity.ts"],
@@ -1093,8 +1101,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   ],
   "guides/import-bills": [
     ["Bills & receivables", APP_NAV],
-    ["New invoice", INVOICES_PAGE],
-    ["Import a list", INVOICES_PAGE],
+    ["Import a list", NEW_MENU],
     ["Only an owner or admin of this workspace can add or import invoices.", INVOICES_PAGE],
     ["Choose a CSV file, or drop one here", "src/components/intake/BillImport.tsx"],
     ["This file is not saved as UTF-8.", "src/components/intake/BillImport.tsx"],
@@ -1225,7 +1232,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["/workspaces", TELEGRAM_MESSAGES],
     ["/disconnect", TELEGRAM_MESSAGES],
     ["Verify hash chain", VERIFY_BADGE],
-    ["From a document", INVOICES_PAGE],
+    ["From a document", NEW_MENU],
     ["Bills & receivables", APP_NAV],
     ["The model's note:", TELEGRAM_MESSAGES],
     ["Add, goods received", TELEGRAM_INTAKE],
@@ -1242,7 +1249,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   "guides/email-invoices": [
     ["Settings", APP_NAV],
     ["Bills & receivables", APP_NAV],
-    ["From a document", INVOICES_PAGE],
+    ["From a document", NEW_MENU],
     ["Invoices by email", INBOX_PANEL],
     ["Turn on", INBOX_PANEL],
     ["Copy the address", INBOX_PANEL],
@@ -1331,7 +1338,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["SLACK_SIGNING_SECRET", SLACK_SETTINGS],
     ["Reconnect Slack", SLACK_PANEL],
     ["Add invoice", "integrations/slack/manifest.yaml"],
-    ["From a document", INVOICES_PAGE],
+    ["From a document", NEW_MENU],
     ["The model's note:", SLACK_BLOCKS],
     ["Add, goods received", SLACK_BLOCKS],
     ["Add, not received yet", SLACK_BLOCKS],

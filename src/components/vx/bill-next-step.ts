@@ -66,14 +66,15 @@ export function billNextStep(decision: Decision, facts: NextStepFacts): NextStep
   return null;
 }
 
-/** What stands in a bill's way, a word or two each, from the checks its card shows: only those marked in the way. */
+/**
+ * What stands in a bill's way, a word or two each, from the checks its card shows: only those marked in the way. A
+ * shadow-mode hold has none: its row says why it waits instead ("Shadow mode: it waits for a person to agree.").
+ */
 export function billBlockers(decision: Decision): string[] {
   if (decision.domain !== "ap") return [];
-  const blockers = payableSignals(decision)
+  return payableSignals(decision)
     .filter((signal) => signal.state === "missing")
     .map((signal) => signal.label);
-  if (blockers.length === 0 && decision.heldForVerdict && !decision.guardrail) return ["Waits for a verdict"];
-  return blockers;
 }
 
 const day = (iso: string) => utcDay(iso);

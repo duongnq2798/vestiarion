@@ -98,8 +98,8 @@ describe("billBlockers", () => {
     expect(billBlockers(decision({ outcome: "scheduled", evidence: [{ label: "PO", value: "PO-1", state: "ok" }] }))).toEqual([]);
   });
 
-  it("names a shadow-mode hold, which no check stopped", () => {
-    expect(billBlockers(decision({ evidence: [], heldForVerdict: true }))).toEqual(["Waits for a verdict"]);
+  it("leaves a shadow-mode hold, which no check stopped, to the row's why line", () => {
+    expect(billBlockers(decision({ evidence: [], heldForVerdict: true }))).toEqual([]);
   });
 
   it("lists nothing for a receivable", () => {

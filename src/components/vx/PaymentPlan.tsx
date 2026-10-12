@@ -71,8 +71,9 @@ function LineRow({
 }) {
   const own = line.createdBy !== null && line.createdBy === viewerId && !soleApprover;
   const note = standing(line, plan.today);
-  // A line the plan would move says so on its row; approving it is in its details, beside the reason (B14).
-  const moves = canDecide && line.move ? `Moves from ${line.move.from === plan.today ? "today" : dayLabel(line.move.from)}` : null;
+  // A line the plan would move to this day says so on its row (its note names the agent's day); approving it is in its
+  // details, beside the reason (B14).
+  const moves = canDecide && line.move ? "The plan moves it here" : null;
   return (
     <li>
       <Disclosure
@@ -184,7 +185,7 @@ function PlanSummary({ plan }: { plan: PaymentPlan }) {
     ...(plan.stillOwed > 0 ? [{ label: "Not covered by the cash", value: <Money value={plan.stillOwed} />, note: "Bills marked short, still owed", tone: "held" as const }] : []),
   ];
   return (
-    <dl className="grid grid-cols-1 gap-x-6 gap-y-3 min-[420px]:grid-cols-2 lg:grid-cols-5">
+    <dl className="grid grid-cols-1 gap-x-6 gap-y-3 min-[340px]:grid-cols-2 lg:grid-cols-5">
       {rows.map((row) => (
         <div key={row.label} className="min-w-0">
           <dt className={cn("text-xs text-ink-3", row.tone === "held" && "text-held")}>{row.label}</dt>

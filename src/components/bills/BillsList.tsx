@@ -20,6 +20,15 @@ import type { BillRowItem, ListData } from "./types";
  */
 export function BillsList({ list, slugHref, above, below }: { list: ListData; slugHref: (path: string) => string; above?: ReactNode; below?: ReactNode }) {
   const { page } = list;
+  if (list.bare) {
+    return (
+      <div className="space-y-4">
+        {above}
+        <EmptyState compact title={list.empty.title} body={list.empty.body} action={list.empty.action} />
+        {below}
+      </div>
+    );
+  }
   return (
     <div className="space-y-4">
       <nav aria-label={`Filter ${list.label.toLowerCase()}`} className="flex flex-wrap gap-1.5">
@@ -81,15 +90,7 @@ export function BillsList({ list, slugHref, above, below }: { list: ListData; sl
       {page.total === 0 ? (
         <EmptyState compact title={list.empty.title} body={list.empty.body} action={list.empty.action} />
       ) : (
-        <Card className="overflow-hidden">
-          <ul aria-label={list.label} className="divide-y divide-line">
-            {page.rows.map((row) => (
-              <li key={row.id}>
-                <Row row={row} slugHref={slugHref} />
-              </li>
-            ))}
-          </ul>
-        </Card>
+        <BillRows label={list.label} rows={page.rows} slugHref={slugHref} />
       )}
 
       {page.total > 0 && (
@@ -111,6 +112,21 @@ export function BillsList({ list, slugHref, above, below }: { list: ListData; sl
 
       {below}
     </div>
+  );
+}
+
+/** The rows of a list, one card: also what the guides' pictures show of it. */
+export function BillRows({ label, rows, slugHref }: { label: string; rows: BillRowItem[]; slugHref: (path: string) => string }) {
+  return (
+    <Card className="@container overflow-hidden">
+      <ul aria-label={label} className="divide-y divide-line">
+        {rows.map((row) => (
+          <li key={row.id}>
+            <Row row={row} slugHref={slugHref} />
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 
@@ -142,8 +158,8 @@ function NextAction({ row, slugHref }: { row: BillRowItem; slugHref: (path: stri
   const tone = next.tone === "held" ? "text-held" : next.tone === "agent" ? "text-agent" : "text-ink-3";
   const words = (
     <>
-      <span className="font-medium md:hidden">Next: </span>
-      <span className="sr-only max-md:hidden">Next: </span>
+      <span className="font-medium @3xl:hidden">Next: </span>
+      <span className="sr-only @max-3xl:hidden">Next: </span>
       {next.text}
     </>
   );
@@ -165,11 +181,11 @@ function NextAction({ row, slugHref }: { row: BillRowItem; slugHref: (path: stri
   );
 }
 
-/** One row: on a phone, stacked; from 768 px, columns for the date, the amount and where it stands. */
+/** One row: in a narrow list, stacked; from a 48rem list, columns for the date, the amount and where it stands. */
 function Row({ row, slugHref }: { row: BillRowItem; slugHref: (path: string) => string }) {
   const below = row.blockers.length > 0 ? null : row.why;
   return (
-    <div className="relative grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5 px-4 py-3 transition-colors duration-150 ease-standard hover:bg-ground/50 sm:px-5 md:grid-cols-[minmax(0,1fr)_7.5rem_8.5rem_minmax(0,14rem)] md:items-start">
+    <div className="relative grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5 px-4 py-3 transition-colors duration-150 ease-standard hover:bg-ground/50 sm:px-5 @3xl:grid-cols-[minmax(0,1fr)_7.5rem_8.5rem_minmax(0,13rem)] @3xl:items-start">
       <div className="min-w-0">
         <p className="flex min-w-0 items-baseline gap-2">
           <RowLink id={row.id} href={row.href} stretched className="min-w-0 truncate text-sm font-medium text-ink outline-offset-2 hover:underline">
@@ -179,7 +195,7 @@ function Row({ row, slugHref }: { row: BillRowItem; slugHref: (path: string) => 
           {row.justAdded && <span className="shrink-0 text-xs font-medium text-agent">Just added</span>}
         </p>
         <p className="truncate text-xs text-ink-3">{row.reference ?? "No reference"}</p>
-        {row.date && <p className={cn("font-mono text-xs md:hidden", row.date.tone === "held" ? "text-held" : "text-ink-2")}>{row.date.label}</p>}
+        {row.date && <p className={cn("font-mono text-xs @3xl:hidden", row.date.tone === "held" ? "text-held" : "text-ink-2")}>{row.date.label}</p>}
         {row.context && <p className="truncate text-xs text-agent">{row.context}</p>}
         {row.note && <p className="text-xs text-ink-2">{row.note}</p>}
         {row.blockers.length > 0 && (
@@ -192,14 +208,14 @@ function Row({ row, slugHref }: { row: BillRowItem; slugHref: (path: string) => 
         {below && <p className="mt-1 text-xs leading-5 text-ink-2">{below}</p>}
         {row.collection && <p className="mt-0.5 text-xs text-ink-2">{row.collection}</p>}
       </div>
-      <div className="hidden md:block md:pt-0.5">
+      <div className="hidden @3xl:block @3xl:pt-0.5">
         {row.date && <span className={cn("whitespace-nowrap font-mono text-xs", row.date.tone === "held" ? "text-held" : "text-ink-2")}>{row.date.label}</span>}
       </div>
-      <div className="text-right md:pt-0.5">
+      <div className="text-right @3xl:pt-0.5">
         {row.amount != null && <Money value={row.amount} token={row.token} struck={row.struck} className={cn("text-sm font-semibold", row.struck ? "text-ink-3" : "text-ink")} />}
       </div>
-      <div className="col-span-2 flex flex-wrap items-center gap-x-3 gap-y-1 md:col-span-1 md:flex-col md:items-start">
-        <OutcomeBadge outcome={row.outcome} label={row.outcomeLabel} />
+      <div className="col-span-2 flex flex-wrap items-center gap-x-3 gap-y-1 @3xl:col-span-1 @3xl:flex-col @3xl:items-start">
+        {!row.quiet && <OutcomeBadge outcome={row.outcome} label={row.outcomeLabel} />}
         <NextAction row={row} slugHref={slugHref} />
       </div>
     </div>

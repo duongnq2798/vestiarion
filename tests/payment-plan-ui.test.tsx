@@ -218,7 +218,7 @@ describe("the payment plan section", () => {
     const markup = render();
     expect(markup).toMatch(/<h3[^>]*><span[^>]*>Oct 15, 2026<\/span><span[^>]*>Balance after: /);
     expect(markup).toMatch(/<details[^>]*><summary[\s\S]*?Northwind Supply[\s\S]*?<\/summary>[\s\S]*?Approve paying Northwind Supply/);
-    expect(text(markup)).toContain("Moves from Oct 22, 2026");
+    expect(text(markup)).toContain("The plan moves it here");
     expect(text(markup)).toContain("How the plan chooses days");
   });
 });
