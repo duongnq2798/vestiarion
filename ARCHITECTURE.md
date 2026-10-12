@@ -1661,10 +1661,12 @@ the provider.
   compare-and-set); a caller that finds the lease taken waits and reads what was stored. `invalid_grant` marks the
   connection needs reconnect.
 - **Connecting.** `/integrations/xero` takes a signed-in person to their workspace's Xero card; `/integrations/xero/connect`
-  lets them pick the workspace, read what Vestiarion does with Xero's data and tick **I agree**. Its form posts, from this
-  origin only, to `POST /api/integrations/xero/connect`, which checks the session, `integrations.manage` and the tick, and
-  sends them to Xero with a state signed under its own HKDF key (ten minutes), carrying the consent and a nonce kept in an
-  HttpOnly cookie. `GET /api/integrations/xero/callback` checks the state, the cookie, the person, their role again and
+  lets them pick the workspace (the card's link names it in `?org=`, and the only one they manage is picked without it),
+  read what Vestiarion does with Xero's data and tick **I agree**: real inputs with labels (`NativeChoice`), so the form
+  works before any JavaScript. Its form posts, from this origin only, to `POST /api/integrations/xero/connect` (a
+  signed-out person signs in and comes back with `?org=` kept), which checks the session, `integrations.manage` and the
+  tick, and sends them to Xero with a state signed under its own HKDF key (ten minutes), carrying the consent and a
+  nonce kept in an HttpOnly cookie. `GET /api/integrations/xero/callback` checks the state, the cookie, the person, their role again and
   the consent before it exchanges the code and reads `/connections`. One organisation is connected at once
   (`saveConnection`, then the tokens, then the first sync in `after()`); several are kept as a pending grant for ten
   minutes and picked on the connect page (`POST /api/integrations/xero/choose`). A workspace connected to another

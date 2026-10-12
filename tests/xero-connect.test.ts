@@ -143,6 +143,19 @@ describe("startConnect", () => {
     expect(location(await run(() => startConnect(form({ org: "acme", consent: "yes" }), deps()))).pathname).toBe("/login");
   });
 
+  it("brings a signed-out person back to the connect page with the workspace still picked", async () => {
+    mocks.session.mockResolvedValue(null);
+    const { run, deps } = world();
+    const to = location(await run(() => startConnect(form({ org: "acme", consent: "yes" }), deps())));
+    expect(to.pathname).toBe("/login");
+    expect(to.searchParams.get("next")).toBe("/integrations/xero/connect?org=acme");
+    // Something that is not a workspace's slug is not carried along.
+    const odd = location(await run(() => startConnect(form({ org: "../settings", consent: "yes" }), deps())));
+    expect(odd.searchParams.get("next")).toBe("/integrations/xero/connect");
+    const picking = location(await run(() => chooseConnect(form({ org: "acme", choice: PENDING, organisation: DEMO.externalOrgId }), deps())));
+    expect(picking.searchParams.get("next")).toBe("/integrations/xero/connect?org=acme");
+  });
+
   it("says Xero is not set up yet before migration 0101 has run", async () => {
     const { run, deps } = world((sent) =>
       sent.path === "/rest/v1/accounting_connections" ? { status: 404, body: { code: "PGRST205", message: "Could not find the table 'public.accounting_connections'" } } : undefined
