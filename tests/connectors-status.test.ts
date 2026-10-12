@@ -101,3 +101,22 @@ describe("syncErrorWords", () => {
     );
   });
 });
+
+describe("a CRM's status words (HubSpot connector H16)", () => {
+  const hubspot: ConnectionFacts = { ...connected, providerLabel: "HubSpot", externalOrgName: "example.com" };
+
+  it("says connected to the HubSpot account, in the same words as an accounting tool", () => {
+    expect(connectionStatus(hubspot, NOW)).toEqual({ tone: "ok", title: "Connected to example.com", detail: ["Last synced 5 minutes ago."], reconnect: false });
+    expect(connectionStatus({ ...hubspot, externalOrgName: null }, NOW).title).toBe("Connected to your HubSpot account");
+  });
+
+  it("speaks of deals, not bills, when disconnected or asked to reconnect", () => {
+    expect(connectionStatus({ ...hubspot, status: "revoked" }, NOW).detail).toEqual(["Deals already planned stay in Vestiarion. Nothing more is read from HubSpot."]);
+    expect(syncErrorWords("reconnect", "HubSpot", null)).toBe(
+      "HubSpot no longer accepts this connection: the app was uninstalled in HubSpot, or its access was removed. Reconnect HubSpot to go on bringing its deals in."
+    );
+    expect(connectionStatus({ ...hubspot, status: "needs_reconnect", lastError: null }, NOW).detail).toEqual([
+      "HubSpot no longer accepts this connection. Reconnect HubSpot to go on bringing its deals in.",
+    ]);
+  });
+});

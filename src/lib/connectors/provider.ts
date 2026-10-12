@@ -5,11 +5,24 @@
  * either. Pure types and one error class: no I/O.
  */
 
-export const PROVIDERS = ["xero", "quickbooks"] as const;
+export const PROVIDERS = ["xero", "quickbooks", "hubspot"] as const;
 export type ProviderId = (typeof PROVIDERS)[number];
 
 /** A provider's name in copy. */
-export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quickbooks: "QuickBooks" };
+export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quickbooks: "QuickBooks", hubspot: "HubSpot" };
+
+/**
+ * What a provider brings in (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H1): an accounting tool its
+ * bills, a CRM its companies and deals. The core's words follow it.
+ */
+export type ProviderKind = "accounting" | "crm";
+export const PROVIDER_KINDS: Record<ProviderId, ProviderKind> = { xero: "accounting", quickbooks: "accounting", hubspot: "crm" };
+
+/** The kind of a provider named by its id or its label; accounting for a name neither is. */
+export function providerKind(provider: string): ProviderKind {
+  const id = PROVIDERS.find((candidate) => candidate === provider || PROVIDER_LABELS[candidate] === provider);
+  return id ? PROVIDER_KINDS[id] : "accounting";
+}
 
 export interface ProviderTokens {
   accessToken: string;
@@ -143,3 +156,12 @@ export interface AccountingProvider {
   /** The chart's accounts a payment can be booked to, read when a person opens the picker. */
   accounts(input: { accessToken: string; externalOrgId: string }): Promise<ExternalAccount[]>;
 }
+
+/**
+ * What connecting, refreshing a token and disconnecting use of any provider, an accounting tool or a CRM
+ * (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H1). `exclusive`: one workspace per organisation at a
+ * time (a HubSpot account, H4), checked before connecting.
+ */
+export type ConnectingProvider = Pick<AccountingProvider, "id" | "label" | "scopes" | "authorizeUrl" | "exchangeCode" | "organisations" | "refresh" | "revoke"> & {
+  exclusive?: boolean;
+};

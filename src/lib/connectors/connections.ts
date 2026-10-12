@@ -1,6 +1,6 @@
-import { db } from "../dal";
+import { db, platformDb } from "../dal";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
-import { PROVIDER_LABELS, type ExternalOrganisation, type ProviderId } from "./provider";
+import { PROVIDER_LABELS, providerKind, type ExternalOrganisation, type ProviderId } from "./provider";
 import type { Consent } from "./state";
 import type { ConnectionState } from "./status";
 import { deleteTokens, refreshTokenOf } from "./token-store";
@@ -167,7 +167,9 @@ export const WINDOW_DAYS = 90;
 
 export type SaveConnection =
   | { ok: true; connection: Connection; reconnected: boolean }
-  | { ok: false; reason: "other_organisation"; name: string | null };
+  | { ok: false; reason: "other_organisation"; name: string | null }
+  /** Another workspace connected the same organisation a moment before (HubSpot connector H4, migration 0105's index). */
+  | { ok: false; reason: "other_workspace"; name: null };
 
 /**
  * Connects the workspace to an organisation of a provider (X4): a new connection, or the same organisation's own row
@@ -217,14 +219,19 @@ export async function saveConnection(input: {
           window_from: new Date(nowMs - WINDOW_DAYS * DAY_MS).toISOString().slice(0, 10),
         })
         .select(CONNECTION_COLUMNS);
-  if (saved.error) raise(saved.error);
+  if (saved.error) {
+    if (saved.error.code === "23505" && /one_workspace/.test(saved.error.message)) return { ok: false, reason: "other_workspace", name: null };
+    raise(saved.error);
+  }
   const connection = toConnection(((saved.data ?? []) as unknown as ConnectionRow[])[0]);
   const label = PROVIDER_LABELS[input.provider];
+  // A CRM's won deals come in to be planned; an accounting tool's bills to be added (HubSpot connector H19).
+  const comesIn = providerKind(input.provider) === "crm" ? "Its won deals come in to plan collections on Bills & receivables" : "Its bills come in for review on Bills & receivables";
   await appendLedgerEntryBestEffort(connection.orgId, {
     actor: "human",
     domain: "system",
     action: "accounting_connected",
-    summary: `Connected ${label}: ${input.organisation.name}. Its bills come in for review on Bills & receivables`,
+    summary: `Connected ${label}: ${input.organisation.name}. ${comesIn}`,
     detail: {
       by: input.connectedBy,
       provider: input.provider,
@@ -273,6 +280,33 @@ export async function disconnectConnection(input: {
     detail: { by: input.by, provider: connection.provider, connectionId: connection.id, externalOrgId: connection.externalOrgId, revokedAtProvider },
   });
   return { revokedAtProvider };
+}
+
+/** A connection found by the provider's own organisation id, across workspaces: ids, a status and a time, nothing else. */
+export interface ExternalMatch {
+  orgId: string;
+  connectionId: string;
+  externalOrgId: string;
+  status: ConnectionState;
+  nextSyncAfter: string | null;
+}
+
+/**
+ * The connections, not revoked, of these organisations of a provider in every workspace (`accounting_connections_by_external`,
+ * the service role's): the connect flow's check that a HubSpot account is no other workspace's (HubSpot connector H4).
+ */
+export async function connectionsByExternal(provider: ProviderId, externalOrgIds: readonly string[]): Promise<ExternalMatch[]> {
+  if (externalOrgIds.length === 0) return [];
+  const result = await platformDb().rpc("accounting_connections_by_external", { p_provider: provider, p_external_org_ids: [...externalOrgIds] });
+  if (result.error) raise(result.error);
+  return ((result.data ?? []) as Array<{ org_id: string; connection_id: string; external_org_id: string; status: ConnectionState; next_sync_after: string | null }>).map(
+    (row) => ({ orgId: row.org_id, connectionId: row.connection_id, externalOrgId: row.external_org_id, status: row.status, nextSyncAfter: row.next_sync_after })
+  );
+}
+
+/** Whether another workspace holds a connection, not revoked, to this organisation: yes or no, never which. */
+export async function connectedElsewhere(provider: ProviderId, externalOrgId: string, orgId: string): Promise<boolean> {
+  return (await connectionsByExternal(provider, [externalOrgId])).some((match) => match.orgId !== orgId);
 }
 
 /** Keeps the account payments made on Arc will be booked to (I14), and records `accounting_payment_account_chosen`. */
