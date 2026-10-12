@@ -86,6 +86,8 @@ import { workspaceNetwork } from "@/lib/workspace-network";
 import { shellStatus } from "@/lib/shell-status";
 import { DealForm } from "@/components/deals/DealForm";
 import { DealsSection } from "@/components/deals/DealsSection";
+import { crmPlanState } from "@/components/deals/crm-plan";
+import { PlanFromCrmForm, PlannedFromCrm } from "@/components/deals/PlannedFromCrm";
 import { HubSpotDeals } from "@/components/HubSpotDeals";
 import { crmPrefillFor, crmReady, crmReview, type CrmPrefillRead, type CrmReviewView } from "@/lib/connectors/crm-review";
 import { dealLinksOf, plannedLinesOf, readDeals, type DealLink } from "@/lib/deals/read";
@@ -568,9 +570,11 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       };
     } else {
       // A HubSpot deal picked to plan: the New deal form filled in from it (HubSpot connector H11). Read again on confirm.
+      // One planned already, right after its Plan collections or from an old link, shows the deal it became instead.
+      const crmPlan = fromHubSpot.state === "list" ? crmPlanState(view.hubspot, fromHubSpot.won) : null;
       const planFromHubSpot: CrmPrefillRead | null =
-        view.hubspot !== null && canWrite && fromHubSpot.state === "list" && Array.isArray(deals)
-          ? await crmPrefillFor({ rowId: view.hubspot, customers, workspace: { shadowOn: verdicts.shadow !== null }, today }).catch((error: unknown): CrmPrefillRead => {
+        crmPlan?.kind === "form" && canWrite && Array.isArray(deals)
+          ? await crmPrefillFor({ rowId: crmPlan.rowId, customers, workspace: { shadowOn: verdicts.shadow !== null }, today }).catch((error: unknown): CrmPrefillRead => {
               console.error("invoices: a HubSpot deal was not read to plan", error instanceof Error ? error.message : error);
               return { ok: false, message: "That deal could not be read. Reload the page in a moment." };
             })
@@ -594,18 +598,25 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
                 fromCrm={
                   fromHubSpot.state === "list" ? (
                     <>
+                      {crmPlan?.kind === "planned" && (
+                        <div id="plan-from-hubspot" className="scroll-mt-6">
+                          <PlannedFromCrm rowId={crmPlan.rowId} title={crmPlan.title} cancelled={crmPlan.cancelled} dealHref={orgHref(slug, `/invoices/deals/${crmPlan.dealId}`)} />
+                        </div>
+                      )}
                       {planFromHubSpot && (
                         <div id="plan-from-hubspot" className="scroll-mt-6">
                           {planFromHubSpot.ok ? (
                             <IntakeFold label={`Plan collections: ${planFromHubSpot.name}`} meta={`from ${planFromHubSpot.label}: pick how it is billed, check the rest, and confirm`} defaultOpen>
-                              <DealForm
-                                orgSlug={slug}
-                                customers={customers}
-                                currencies={dealCurrencies.includes(planFromHubSpot.prefill.currency) ? dealCurrencies : [...dealCurrencies, planFromHubSpot.prefill.currency]}
-                                idempotencyKey={randomUUID()}
-                                today={today}
-                                prefill={{ crmRowId: planFromHubSpot.rowId, label: planFromHubSpot.label, ...planFromHubSpot.prefill }}
-                              />
+                              <PlanFromCrmForm rowId={planFromHubSpot.rowId}>
+                                <DealForm
+                                  orgSlug={slug}
+                                  customers={customers}
+                                  currencies={dealCurrencies.includes(planFromHubSpot.prefill.currency) ? dealCurrencies : [...dealCurrencies, planFromHubSpot.prefill.currency]}
+                                  idempotencyKey={randomUUID()}
+                                  today={today}
+                                  prefill={{ crmRowId: planFromHubSpot.rowId, label: planFromHubSpot.label, ...planFromHubSpot.prefill }}
+                                />
+                              </PlanFromCrmForm>
                             </IntakeFold>
                           ) : (
                             <Callout tone="held" className="mb-6">
