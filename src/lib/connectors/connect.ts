@@ -127,8 +127,9 @@ async function connectOne(
   deps: ConnectDeps,
   input: { orgId: string; userId: string; organisation: ExternalOrganisation; scopes: string[]; consent: Consent } & ({ tokens: ProviderTokens } | { pendingId: string })
 ): Promise<"connected" | "other_organisation" | "other_workspace" | "expired"> {
-  // One workspace per organisation, for a provider whose account two workspaces must not share (HubSpot H4). The tokens
-  // just granted are neither kept nor revoked: the other workspace's connection is left as it is.
+  // One workspace per organisation, for a provider whose disconnect ends every grant (QuickBooks Q5) or whose account two
+  // workspaces must not share (HubSpot H4). The tokens just granted are neither kept nor revoked: revoking them would cut
+  // the other workspace off too.
   if (deps.provider.exclusive && (await connectedElsewhere(deps.provider.id, input.organisation.externalOrgId, input.orgId))) return "other_workspace";
   const saved = await saveConnection({
     provider: deps.provider.id,
@@ -180,6 +181,11 @@ export async function finishConnect(request: Request, deps: ConnectDeps): Promis
   if (!state.consent) return redirect(connectPage(deps, { org: slug, consent: "missing" }), spent, 302);
   const code = params.get("code");
   if (params.get("error") || !code) return back("cancelled");
+  // A provider whose callback names the one organisation of the grant (QuickBooks' realmId, Q4): read only now, after
+  // every check, and confirmed by the provider with the new token before anything is kept.
+  const namedParam = deps.provider.callbackOrganisationParam;
+  const named = namedParam ? params.get(namedParam) : null;
+  if (namedParam && !named) return back("failed");
 
   const exchanged = await deps.provider.exchangeCode({ code, redirectUri: redirectUri(deps) });
   if (!exchanged.ok) return back("failed");
@@ -188,7 +194,9 @@ export async function finishConnect(request: Request, deps: ConnectDeps): Promis
     return await withOrg(
       state.org,
       async () => {
-        const organisations = await deps.provider.organisations(exchanged.tokens, exchanged.authEventId);
+        const organisations = named
+          ? await deps.provider.organisations(exchanged.tokens, exchanged.authEventId, named)
+          : await deps.provider.organisations(exchanged.tokens, exchanged.authEventId);
         if (organisations.length === 1) {
           return back(await connectOne(deps, { orgId: state.org, userId: user.id, organisation: organisations[0], scopes: exchanged.tokens.scopes, consent, tokens: exchanged.tokens }));
         }

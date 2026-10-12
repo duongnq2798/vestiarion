@@ -63,6 +63,49 @@ describe("sweepAccounting", () => {
     expect(fake.requests.find((sent) => sent.path === "/rest/v1/rpc/accounting_connections_due")?.body).toEqual({ p_limit: 50 });
   });
 
+  it("runs Xero and QuickBooks connections alike, each with its own provider in its own workspace (QuickBooks connector Q10)", async () => {
+    const OTHER = "0b6c1c9e-4a4f-4a7e-9b1e-000000000c02";
+    const quickbooks = { id: "quickbooks", revoke } as unknown as AccountingProvider;
+    const { fake, run } = world((sent) => {
+      if (sent.path === "/rest/v1/rpc/accounting_connections_due") {
+        return { body: [{ org_id: ORG, connection_id: "conn-1", provider: "xero" }, { org_id: OTHER, connection_id: "conn-2", provider: "quickbooks" }] };
+      }
+      if (sent.path === "/rest/v1/orgs") return { body: orgs.orgRow((sent.params.get("id") ?? `eq.${ORG}`).slice(3)) };
+      if (sent.path === "/rest/v1/accounting_connections" && sent.method === "PATCH") return { body: [] };
+      return undefined;
+    });
+    const asked: string[] = [];
+    const summary = await run(() =>
+      sweepAccounting({
+        providerFor: (id) => {
+          asked.push(id);
+          return id === "xero" ? xero : quickbooks;
+        },
+      })
+    );
+    expect(asked).toEqual(["xero", "quickbooks"]);
+    expect(summary).toMatchObject({ connections: 2, busy: 2 });
+    const claims = fake.requests.filter((sent) => sent.path === "/rest/v1/accounting_connections" && sent.method === "PATCH");
+    expect(claims.map((sent) => [sent.params.get("org_id"), sent.params.get("id")])).toEqual([
+      [`eq.${ORG}`, "eq.conn-1"],
+      [`eq.${OTHER}`, "eq.conn-2"],
+    ]);
+  });
+
+  it("is given both providers by the deployment when both are set up", async () => {
+    const { accountingProvider } = await import("@/lib/accounting-providers");
+    vi.stubEnv("XERO_CLIENT_ID", "91E5715B1199038080D6D0BBACCD4E60");
+    vi.stubEnv("XERO_CLIENT_SECRET", "s");
+    vi.stubEnv("QUICKBOOKS_CLIENT_ID", "ABcdEFghIJklMNopQRstUVwxYZ0123456789abcdefghijklmn");
+    vi.stubEnv("QUICKBOOKS_CLIENT_SECRET", "s");
+    try {
+      expect(accountingProvider("xero")?.id).toBe("xero");
+      expect(accountingProvider("quickbooks")?.id).toBe("quickbooks");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   describe("pending grants", () => {
     const masterKeys = `t1:${crypto.randomBytes(32).toString("base64")}`;
     let saved: string | undefined;

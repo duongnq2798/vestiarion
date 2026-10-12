@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import InboxEmails from "@/components/InboxEmails";
-import { XeroBillsReview } from "@/components/XeroBillsReview";
+import { AccountingBillsReview } from "@/components/AccountingBillsReview";
 import AgentControls from "@/components/AgentControls";
 import { AllocationLines } from "@/components/AllocationLines";
 import { ApplyPayments } from "@/components/ApplyPayments";
@@ -50,8 +50,9 @@ import { inOrg } from "@/lib/dal/scope";
 import { inboxEmailsToDecide } from "@/lib/email-inbox/list";
 import { inboxSettingsFromEnv } from "@/lib/email-inbox/settings";
 import { connectionFor, NotSetUpError } from "@/lib/connectors/connections";
+import { PROVIDER_LABELS, type ProviderId } from "@/lib/connectors/provider";
 import { accountingReview, type ReviewView } from "@/lib/connectors/review";
-import { xeroSettingsFromEnv } from "@/lib/xero/settings";
+import { accountingProviderOn } from "@/lib/accounting-providers";
 import { ledgerReadMayBeCut, listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { listCounterparties, listInvoices, stats, type InvoiceRow } from "@/lib/queries";
 import { plural, utcDay } from "@/lib/copy";
@@ -105,13 +106,27 @@ type InvoicePageProps = {
   searchParams: InvoiceSearchParams;
 };
 
+/**
+ * The bills an accounting tool brought in, waiting for a person (Xero connector X11, X19; QuickBooks connector Q19), on
+ * a deployment where the tool is set up: hidden before migration 0101, without a connection, and when it cannot be read.
+ */
+function broughtIn(provider: ProviderId): Promise<ReviewView> {
+  if (!accountingProviderOn(provider)) return Promise.resolve({ state: "hidden" });
+  return connectionFor(provider)
+    .then(accountingReview)
+    .catch((error: unknown): ReviewView => {
+      if (!(error instanceof NotSetUpError)) console.error(`invoices: bills from ${PROVIDER_LABELS[provider]} not loaded`, error instanceof Error ? error.message : error);
+      return { state: "hidden" };
+    });
+}
+
 export default async function InvoicesPage({ params, searchParams }: InvoicePageProps) {
   const { slug } = await params;
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
     const network = workspaceNetwork().id;
     const query = await searchParams;
-    const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, schedules, deciding, emailed, fromXero, dealsRead, fromHubSpot] = await Promise.all([
+    const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, schedules, deciding, emailed, fromXero, fromQuickBooks, dealsRead, fromHubSpot] = await Promise.all([
       listInvoices(),
       listCounterparties(),
       listLedgerEntries(1),
@@ -132,16 +147,11 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
             return [];
           })
         : [],
-      // The bills Xero brought in, waiting for a person (Xero connector X11, X19), on a deployment where Xero is set up;
-      // hidden before migration 0101, without a connection, and when it cannot be read.
-      xeroSettingsFromEnv()
-        ? connectionFor("xero")
-            .then(accountingReview)
-            .catch((error: unknown): ReviewView => {
-              if (!(error instanceof NotSetUpError)) console.error("invoices: bills from Xero not loaded", error instanceof Error ? error.message : error);
-              return { state: "hidden" };
-            })
-        : ({ state: "hidden" } as ReviewView),
+      // The bills Xero and QuickBooks brought in, waiting for a person (Xero connector X11, X19; QuickBooks connector
+      // Q19), each on a deployment where it is set up; hidden before migration 0101, without a connection, and when it
+      // cannot be read.
+      broughtIn("xero"),
+      broughtIn("quickbooks"),
       // The workspace's deals and their schedules (deal schedule). Best effort: before migration 0104 runs the section
       // says deals are not set up, and a read that fails hides only the section.
       readDeals().catch((error: unknown) => {
@@ -484,12 +494,27 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         <InboxEmails orgSlug={slug} emails={emailed} canAdd={canWrite} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} />
 
         {fromXero.state === "list" && (
-          <XeroBillsReview
+          <AccountingBillsReview
+            provider="xero"
             orgSlug={slug}
             connectionId={fromXero.connectionId}
             organisation={fromXero.organisation}
             items={fromXero.items}
             closed={fromXero.closed}
+            partlyPaidSince={fromXero.partlyPaid}
+            canAdd={canWrite}
+          />
+        )}
+
+        {fromQuickBooks.state === "list" && (
+          <AccountingBillsReview
+            provider="quickbooks"
+            orgSlug={slug}
+            connectionId={fromQuickBooks.connectionId}
+            organisation={fromQuickBooks.organisation}
+            items={fromQuickBooks.items}
+            closed={fromQuickBooks.closed}
+            partlyPaidSince={fromQuickBooks.partlyPaid}
             canAdd={canWrite}
           />
         )}

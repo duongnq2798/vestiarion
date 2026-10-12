@@ -1627,15 +1627,21 @@ for each connected workspace with a pending milestone on that pull request, as
 the GitHub check reads its link, so the payment follows the merge within a
 minute instead of waiting for the schedule.
 
-## Accounting connectors: Xero
+## Accounting connectors: Xero and QuickBooks Online
 
-A workspace can bring its bills in from Xero (docs/superpowers/specs/2026-10-12-xero-connector-design.md). The core,
+A workspace can bring its bills in from Xero (docs/superpowers/specs/2026-10-12-xero-connector-design.md) and from
+QuickBooks Online (docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md), either or both. The core,
 `src/lib/connectors/`, names no provider: it talks to one through `AccountingProvider` (`provider.ts`: the authorize URL,
 the code exchange, the organisations a token reaches, refresh, revoke, and paged reads of bills, contacts and accounts
-mapped into `ExternalBill`, `ExternalContact` and `ExternalAccount`). Xero is the first provider (`src/lib/xero/`: its
-settings, HTTP, OAuth calls, the pure mapping from its JSON in `map.ts`, and `xeroProvider`); QuickBooks Online joins in
-`src/lib/accounting-providers.ts`, the one place the core is wired to a provider. Xero is on only with `XERO_CLIENT_ID`
-and `XERO_CLIENT_SECRET` (a Xero "Web app"); otherwise its card and routes are not there.
+mapped into `ExternalBill`, `ExternalContact` and `ExternalAccount`), and words each provider's own way through
+`PROVIDER_WORDS` (Xero's organisations and suppliers, QuickBooks' companies and vendors). Each provider has its folder
+(`src/lib/xero/`, `src/lib/quickbooks/`: settings, HTTP, OAuth calls, the pure mapping from its JSON in `map.ts`, and the
+provider object), wired in `src/lib/accounting-providers.ts`, the one place the core meets them. Xero is on only with
+`XERO_CLIENT_ID` and `XERO_CLIENT_SECRET` (a Xero "Web app"), QuickBooks only with `QUICKBOOKS_CLIENT_ID` and
+`QUICKBOOKS_CLIENT_SECRET` (an Intuit app; `QUICKBOOKS_ENVIRONMENT` picks sandbox or production companies); otherwise its
+card and routes are not there. The Settings card (`AccountingPanel`), the review list (`AccountingBillsReview`), the
+account picker, the launch and connect pages and the server actions (`src/app/actions/accounting.ts`) are one set, given
+the provider.
 
 - **Schema (migration `0101`).** Four tenant tables, with row-level security, the restrictive guard and composite
   foreign keys to their connection, which the tenant role reads, inserts and updates and never deletes:
@@ -1688,6 +1694,34 @@ and `XERO_CLIENT_SECRET` (a Xero "Web app"); otherwise its card and routes are n
   (`accounting_payment_account_chosen`). Nothing is written to Xero in this version.
 - **Before migration 0101** a missing table or function (`PGRST205`, `PGRST202`, `42P01`, `42883`) reads as
   `NotSetUpError`: the card says Xero is not set up yet, the review list is not shown, and the sweeper has nothing to do.
+- **QuickBooks Online** differs where Intuit does, through optional parts of the core that leave Xero as it was:
+  - *One company per grant.* The callback names it (`realmId`, the provider's `callbackOrganisationParam`), read only
+    after every check and confirmed by reading `companyinfo/<realmId>` with the new token, so an edited realm id
+    connects nothing. No picker.
+  - *One workspace per company* (`exclusive`): revoking the app's token, or disconnecting it in QuickBooks, ends every
+    grant for the company. Migration `0102` adds a partial unique index on `(provider, external_org_id)` for QuickBooks
+    connections not revoked, and `accounting_connections_by_external`, a service-role function that finds connections
+    by company across workspaces (the DAL keeps tenant tables from the platform client). A company another workspace
+    holds is refused (`?quickbooks=other_workspace`), its new tokens neither kept nor revoked.
+  - *Reads.* Paged queries (`SELECT … ORDERBY MetaData.LastUpdatedTime STARTPOSITION n MAXRESULTS 100`,
+    `minorversion=75`) with a `count(*)` of the same filter on each page, as Xero's `itemCount`. The backfill asks for
+    `Balance > '0' AND DueDate >= window_from` (`PageRequest.windowFrom`); later runs read every bill changed since
+    `since`. A deleted bill never comes back from a query: the last page of each later run asks change data capture
+    (`/cdc`, from five minutes before `since`, at most 30 days back) for deleted bills, which carry only an id and a time
+    (`factsKnown: false`), so their row keeps its facts, only its status changes, and their time does not move the
+    cursor. Versions are the update time and the `SyncToken`, so two changes
+    in one second still order.
+  - *Partly paid.* A bill's `Balance` is its amount due: one partly paid is offered at what is left, and an added bill
+    whose amount due fell below its invoice's figure is listed on the review list (`partlyPaidSince`), for Xero too.
+  - *Webhook* (`POST /api/integrations/quickbooks/webhook`, `src/lib/quickbooks/webhook.ts`): the raw body's
+    `intuit-signature` (base64 HMAC-SHA256 under `QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN`) is checked first; of the
+    CloudEvents array only each event's realm and entity are read; the realms whose bills, bill payments or vendors
+    changed are matched to their connections, and each connected one not backing off runs one sync in `after()`, with
+    **Sync now**'s budget. Unknown realms and replays change nothing a sync would not.
+  - *Disconnect URL* (`/integrations/quickbooks/disconnected`, `src/lib/connectors/disconnected.ts`): for the
+    workspaces where the signed-in person manages integrations, it asks QuickBooks whether each connection still works
+    (a fresh token through the serialized refresh, then one read) and marks it revoked only when QuickBooks refuses it,
+    signing `accounting_disconnected` with `atProvider: true`.
 
 ## Connectors: CRM (HubSpot)
 

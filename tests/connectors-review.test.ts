@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { fatesOf, type Conversion, type ImportWorkspace } from "@/lib/bill-import/rows";
 import { conversionKey } from "@/lib/bill-import/rows";
-import { newSupplierLimit, placeholderId, reviewItems, reviewRow, supplierOf, type StagedBillView, type Supplier } from "@/lib/connectors/review";
+import {
+  newSupplierLimit, partlyPaidSince, placeholderId, reviewItems, reviewRow, reviewRowView, supplierOf, type AddedInvoice, type StagedBillView, type Supplier,
+} from "@/lib/connectors/review";
 
 /**
  * Bills from Xero through the bill list's own check (docs/superpowers/specs/2026-10-12-xero-connector-design.md X11):
@@ -154,5 +156,38 @@ describe("newSupplierLimit", () => {
       { status: "error", reason: "x" },
     ];
     expect(newSupplierLimit(fates as never, placeholder)).toBe("1200.50");
+  });
+});
+
+describe("partly paid bills (docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q9)", () => {
+  it("offers a partly paid bill at what is left, with its whole total beside it", () => {
+    const partly = bill({ total: "1000", amountDue: "400" });
+    const rows = [reviewRow(partly, 0, { kind: "linked", counterpartyId: ACME.id, name: ACME.name }, SHADOW_USD, false, "QuickBooks")];
+    expect(rows[0].amount).toBe("400");
+    const [item] = reviewItems([partly], [{ kind: "linked", counterpartyId: ACME.id, name: ACME.name }], fatesOf(rows, { counterparties: [ACME], existing: [], conversions: new Map([conversion("USD", "400", 400)]) }), "QuickBooks");
+    expect(reviewRowView(item)).toMatchObject({ amount: "400", total: "1000", currency: "USD", usdc: "400", status: "add" });
+  });
+
+  const added = (fields: Partial<{ amount_due: string; total: string; currency: string }> = {}) => ({
+    id: "row-1", external_id: "bill-1", contact_name: "PowerDirect", number: "PD-4471", currency: "USD", total: "1250", amount_due: "400", ...fields,
+  });
+  const invoice = (fields: Partial<AddedInvoice> = {}): AddedInvoice => ({
+    id: "inv-1", amount: "1249.5", currency: "USDC", original_amount: "1250", original_currency: "USD", status: "pending", ...fields,
+  });
+
+  it("flags a bill added at more than the tool says is due now, by the invoice's own figure", () => {
+    expect(partlyPaidSince([added()], new Map([["bill-1", invoice()]]))).toEqual([
+      { id: "row-1", supplier: "PowerDirect", number: "PD-4471", currency: "USD", left: "400", added: "1250" },
+    ]);
+    // Outside shadow mode the invoice's amount is the figure, when it is in the bill's currency.
+    expect(partlyPaidSince([added({ currency: "EURC" })], new Map([["bill-1", invoice({ amount: "1250", currency: "EURC", original_amount: null, original_currency: null })]]))).toHaveLength(1);
+  });
+
+  it("leaves alone a bill added at its balance, one paid or rejected in Vestiarion, and one with no invoice", () => {
+    expect(partlyPaidSince([added()], new Map([["bill-1", invoice({ original_amount: "400" })]]))).toEqual([]);
+    expect(partlyPaidSince([added()], new Map([["bill-1", invoice({ status: "paid" })]]))).toEqual([]);
+    expect(partlyPaidSince([added()], new Map([["bill-1", invoice({ status: "rejected" })]]))).toEqual([]);
+    expect(partlyPaidSince([added()], new Map())).toEqual([]);
+    expect(partlyPaidSince([added({ currency: "JPY" })], new Map([["bill-1", invoice()]]))).toEqual([]);
   });
 });

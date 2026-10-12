@@ -822,6 +822,29 @@ describe("a bill brought in from Xero (Xero connector X11)", () => {
   });
 });
 
+describe("a bill brought in from QuickBooks (QuickBooks connector Q16)", () => {
+  it("says where it came from, by the number QuickBooks gave it", () => {
+    const base = paidInFull();
+    const fromQuickBooks = entry(20, "09:30:00", "human", "create_invoice", {
+      by: ALICE,
+      invoiceId: INVOICE,
+      counterpartyId: CP,
+      amount: 12.5,
+      currency: "USDC",
+      poReference: null,
+      goodsReceived: true,
+      via: "quickbooks",
+      quickbooks: { tenantId: "9341455327810551", billId: "146", contactId: "56", invoiceNumber: "PD-4471" },
+    });
+    const chain = buildEvidenceChain({ ...base, entries: [fromQuickBooks], payment: null, receipt: null, checks: { entries: okChecks([fromQuickBooks]), onChain: null } });
+    expect(step(chain, "bill").facts[0]).toMatchObject({
+      kind: "stated",
+      text: "12.50 USDC, brought in from QuickBooks as bill PD-4471, and added on Bills & receivables by the person who reviewed it.",
+    });
+    expect(step(chain, "delivered").facts[0].text).toBe("The goods or services are marked received in the review of bills from QuickBooks.");
+  });
+});
+
 describe("a payable paid with its early-payment discount", () => {
   const base = paidInFull();
   const discounted = entry(22, "10:02:40", "agent", "ap_pay", { ...AGENT_PAID.detail, amountPaid: 12.25, discountTaken: 0.25 });

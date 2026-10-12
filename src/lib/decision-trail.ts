@@ -174,7 +174,9 @@ export function trailStep(entry: TrailEntry, network: Network = "arc-testnet"): 
           ? ", imported from a list"
           : detail.via === "xero"
             ? ", brought in from Xero"
-            : "";
+            : detail.via === "quickbooks"
+              ? ", brought in from QuickBooks"
+              : "";
       return { ...base, who: "person", tone: "neutral", text: `A person added it${from}.` };
     }
     case "recurring_invoice_created":

@@ -1,26 +1,31 @@
+import type { ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@/app/actions/xero", () => ({
-  syncXeroNowAction: vi.fn(),
-  disconnectXeroAction: vi.fn(),
-  loadXeroAccountsAction: vi.fn(),
-  chooseXeroAccountAction: vi.fn(),
-  addXeroBillsAction: vi.fn(),
-  dismissXeroBillsAction: vi.fn(),
+vi.mock("@/app/actions/accounting", () => ({
+  syncAccountingNowAction: vi.fn(),
+  disconnectAccountingAction: vi.fn(),
+  loadAccountingAccountsAction: vi.fn(),
+  chooseAccountingAccountAction: vi.fn(),
+  addAccountingBillsAction: vi.fn(),
+  dismissAccountingBillsAction: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
-import XeroPanel, { XERO_NOTICES } from "@/components/XeroPanel";
-import { XeroBillsReview } from "@/components/XeroBillsReview";
+import AccountingPanel, { accountingNotices } from "@/components/AccountingPanel";
+import { AccountingBillsReview } from "@/components/AccountingBillsReview";
 import type { AccountingPanelView } from "@/lib/connectors/panel";
 import type { ReviewRowView } from "@/lib/connectors/review";
 
 /**
  * The Xero card in Settings and the review list on Bills & receivables (docs/superpowers/specs/2026-10-12-xero-connector-design.md
  * X15, X16, X19), for each state and role: not set up yet, not connected, connected, failing, needing a reconnect,
- * disconnected; and the bills to add with their fates.
+ * disconnected; and the bills to add with their fates. Both are the accounting cards every tool shares, given Xero.
  */
+
+const XeroPanel = (props: Omit<ComponentProps<typeof AccountingPanel>, "provider">) => <AccountingPanel provider="xero" {...props} />;
+const XeroBillsReview = (props: Omit<ComponentProps<typeof AccountingBillsReview>, "provider">) => <AccountingBillsReview provider="xero" {...props} />;
+const XERO_NOTICES = accountingNotices("xero");
 
 const decode = (markup: string) => markup.replaceAll("&#x27;", "'").replaceAll("&amp;", "&").replaceAll("&quot;", '"');
 

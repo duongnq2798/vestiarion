@@ -27,7 +27,8 @@ export const PERMISSIONS = {
   // Moving treasury cash between the workspace's own wallets, such as into its Gateway balance.
   "treasury.manage": ["owner", "admin"],
   // Connecting the workspace to Slack, which sends the agent's decisions to a channel, or removing it (Slack design S3); to
-  // GitHub; and to Xero, whose bills it reads, with the account payments will be booked to (Xero connector X3).
+  // GitHub; and to Xero or QuickBooks, whose bills it reads, with the account payments will be booked to (Xero
+  // connector X3, QuickBooks connector Q1).
   "integrations.manage": ["owner", "admin"],
   // Putting the workspace's report outside it by a public link, or stopping one: a control over every member's data,
   // as API keys and webhooks are (shared report S3).

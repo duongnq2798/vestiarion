@@ -264,6 +264,18 @@ export default function PrivacyPage() {
             the workspace, and the signed ledger keeps only ids and names.
           </li>
           <li>
+            <strong>QuickBooks Online</strong> (Intuit), for a workspace an owner or admin connects to a QuickBooks company after agreeing to it, is
+            read from and never written to. Vestiarion reads that company&apos;s open bills (the vendor, the bill&apos;s number and memo, its currency,
+            total, balance, dates and status), its vendors&apos; names, and its bank accounts when an owner or admin chooses the account payments will be
+            booked to. It keeps the bills read, the vendors&apos; names, the company&apos;s name and id, the access granted and the agreement given, and
+            the tokens encrypted, readable only by the server and never shown in the browser, a log, a model&apos;s prompt or a webhook. Intuit tells
+            Vestiarion when a bill, a bill payment or a vendor changes, naming only the company and the record; Vestiarion reads the record itself and
+            keeps nothing of the notice. A bill reaches the agent, and so its model provider, only once a person added it as a payable, with the facts
+            any bill has; the provider may not train on them. Vestiarion never uses QuickBooks data to train or improve any AI model, and never passes
+            it to anyone else without the workspace&apos;s say. Disconnecting revokes the app&apos;s access at Intuit and deletes the tokens; the bills
+            already read stay with the workspace, and the signed ledger keeps only ids and names.
+          </li>
+          <li>
             <strong>HubSpot</strong>, for a workspace an owner or admin connects to a HubSpot account after agreeing to it, is read from and never
             written to. Vestiarion reads that account&apos;s open deals and the deals won in the last 90 days, then the deals that change (each
             one&apos;s name, amount, currency, close date, pipeline and stage), each deal&apos;s company (its name) and that company&apos;s main

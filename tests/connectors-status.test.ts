@@ -102,6 +102,27 @@ describe("syncErrorWords", () => {
   });
 });
 
+describe("QuickBooks's words (docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q15)", () => {
+  const quickbooks: ConnectionFacts = { ...connected, providerLabel: "QuickBooks", externalOrgName: "Sandbox Company_US_1" };
+
+  it("names the company, and never says connected while the last sync failed", () => {
+    expect(connectionStatus(quickbooks, NOW).title).toBe("Connected to Sandbox Company_US_1");
+    expect(connectionStatus({ ...quickbooks, externalOrgName: null, status: "revoked" }, NOW).title).toBe("Disconnected from your QuickBooks company");
+    const failed = { ...quickbooks, lastError: syncErrorWords("rate_limited", "QuickBooks", "2026-10-12T14:01:00.000Z"), lastErrorAt: "2026-10-12T13:59:00.000Z" };
+    expect(connectionStatus(failed, NOW)).toMatchObject({
+      tone: "error",
+      title: "The last sync with QuickBooks failed",
+      detail: ["QuickBooks asked Vestiarion to slow down. Syncing again at 14:01 UTC.", "Last synced 5 minutes ago."],
+    });
+  });
+
+  it("asks for a reconnect after QuickBooks' own 100 days", () => {
+    expect(syncErrorWords("reconnect", "QuickBooks", null)).toBe(
+      "QuickBooks no longer accepts this connection: it was disconnected in QuickBooks, or not used for 100 days. Reconnect QuickBooks to go on bringing its bills in."
+    );
+  });
+});
+
 describe("a CRM's status words (HubSpot connector H16)", () => {
   const hubspot: ConnectionFacts = { ...connected, providerLabel: "HubSpot", externalOrgName: "example.com" };
 

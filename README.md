@@ -284,6 +284,7 @@ run in production, with its ledger entries and transactions.
 | **[Email](https://www.vestiarion.xyz/docs/guides/email-invoices)** | A workspace address that reads forwarded invoices into drafts a person adds |
 | **[HubSpot](https://www.vestiarion.xyz/docs/guides/hubspot)** | Won deals come in with their customers every 15 minutes; Plan collections fills in the New deal form, and a deal changed in HubSpot afterwards is flagged on its deal for a person to change or keep; read-only, one account per workspace |
 | **[Xero](https://www.vestiarion.xyz/docs/guides/xero)** | Bills approved in Xero come in for review every 15 minutes, through the same check as a bill list, and become payables when a person adds them; read-only, with the account payments will be booked to chosen ahead |
+| **[QuickBooks Online](https://www.vestiarion.xyz/docs/guides/quickbooks)** | Open bills in QuickBooks come in for review every 15 minutes, and sooner when QuickBooks says one changed, through the same check; a bill partly paid there comes in at what is left; read-only, with the bank account payments will be booked to chosen ahead |
 
 There is no standalone CLI; operators run the repository's scripts (`npm run cycle`, `npm run status`, …), listed in
 [docs/self-hosting.md](docs/self-hosting.md#scripts).
@@ -404,7 +405,7 @@ simulated.
 
 ## License
 
-[MIT](LICENSE). Arc, Circle, Slack, Telegram, Xero, HubSpot and npm are trademarks of their respective owners; their names show what
+[MIT](LICENSE). Arc, Circle, Slack, Telegram, Xero, QuickBooks, HubSpot and npm are trademarks of their respective owners; their names show what
 Vestiarion is built on and connects to, not an endorsement.
 
 <a href="https://www.producthunt.com/products/vestiarion?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-vestiarion"><img alt="Vestiarion on Product Hunt" width="200" height="43" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1269583&theme=light"></a>

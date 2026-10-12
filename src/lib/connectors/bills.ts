@@ -13,6 +13,19 @@ export interface StagedBill {
   externalVersion: string | null;
   sourceStatus: SourceStatus;
   reviewState: ReviewState;
+  /** The supplier and number kept, for a bill the provider later names by its id alone (a deletion, Q8). */
+  contactName?: string;
+  number?: string | null;
+}
+
+/**
+ * A bill as the ledger and the row should name it: a deleted bill the provider sent without its facts
+ * (`factsKnown: false`, docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q8) takes the supplier and
+ * number its row kept.
+ */
+export function withKeptFacts(bill: ExternalBill, row: StagedBill | null): ExternalBill {
+  if (bill.factsKnown !== false || !row) return bill;
+  return { ...bill, contactName: row.contactName ?? bill.contactName, number: row.number ?? bill.number };
 }
 
 export type BillPlan =

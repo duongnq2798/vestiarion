@@ -10,6 +10,13 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 - A billing email filled from HubSpot is a **`counterparty_notice_email_changed`** entry, as one typed in, with `via: "hubspot"` and `hubspot: { hubId, companyId }`; its addresses are masked, as before.
 - Nothing else in `/api/v1` changes: the HubSpot deals not planned are not in the API.
 
+## 2026-10-12: Bills brought in from QuickBooks Online
+
+- An owner or admin can connect a workspace to a QuickBooks Online company, and a person adds the bills it brings in from Bills & receivables. It writes the same five entries as Xero (below), each sent to webhook endpoints as `ledger.appended` and listed by `GET /api/v1/ledger`, with `provider: "quickbooks"`. `externalOrgId` is the QuickBooks company (realm) id, and `billId` and `billIds` are QuickBooks bill ids. `accounting_bill_closed` also comes when a bill already added is deleted in QuickBooks, with `sourceStatus` `deleted`.
+- A bill added from QuickBooks is a **`create_invoice`** entry with `via: "quickbooks"` and `quickbooks: { tenantId, billId, contactId, invoiceNumber }`: the company (realm) id, the bill's id, its vendor's id and its number in QuickBooks. A vendor added with it is a **`create_counterparty`** entry with `via: "quickbooks"` and `quickbooks: { tenantId, contactId }`. A bill partly paid in QuickBooks is added at what is left to pay.
+- **`accounting_disconnected`** gains `atProvider: true` when a QuickBooks connection was disconnected in QuickBooks itself and QuickBooks confirmed it no longer accepts it; then `revokedAtProvider` is `true` and Vestiarion revoked nothing. Without it, the entry is as before.
+- Nothing else in `/api/v1` changes.
+
 ## 2026-10-12: Deals, their versions and the receivables released from them
 
 - An owner or admin can confirm a deal on Bills & receivables: a customer, a total and a schedule of lines that add up to it, each line released as a receivable when it is time to invoice it. Its ledger gains four entries, actor `human`, domain `ar`, each listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:
