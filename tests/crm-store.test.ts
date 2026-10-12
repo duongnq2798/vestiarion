@@ -1,3 +1,4 @@
+import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
@@ -68,6 +69,23 @@ describe("flagChanges", () => {
     expect(again.fake.requests.some((sent) => sent.method === "PATCH")).toBe(false);
     expect(mocks.ledger).not.toHaveBeenCalled();
   });
+
+  it("records the same changes once when the row hands them back in jsonb's own key order", async () => {
+    // Postgres keeps a jsonb object's keys in its own order (shorter first), so `flagged` comes back reordered.
+    const changes = [
+      { what: "amount", from: { amount: "12500", currency: "USD" }, to: { amount: "15000", currency: "USD" } },
+      { what: "stage", from: "won", to: "lost", label: "Closed Lost" },
+    ];
+    const pg = new PGlite();
+    const stored = (await pg.query<{ v: unknown }>("select $1::jsonb as v", [JSON.stringify(changes)])).rows[0].v;
+    await pg.close();
+    expect(JSON.stringify(stored)).not.toBe(JSON.stringify(changes));
+    const { fake, run } = world([row({ amount: 15000, stage_state: "lost", stage_label: "Closed Lost", flagged: stored })]);
+    expect(await run(() => crmStore.flagChanges(connection, ["30117482911"]))).toBe(0);
+    expect(fake.requests.some((sent) => sent.method === "PATCH")).toBe(false);
+    expect(mocks.ledger).not.toHaveBeenCalled();
+    // A database started for one query: slower than the rest when the suite runs in parallel.
+  }, 60_000);
 
   it("records a won deal moved to lost and a deal deleted, and nothing for a cancelled deal or an unchanged one", async () => {
     const lost = world([row({ stage_state: "lost", stage_label: "Closed Lost" })]);

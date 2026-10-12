@@ -1795,14 +1795,17 @@ reads in `api.ts`, `hubspotProvider`), wired in `src/lib/crm-providers.ts`. It i
 - **Syncing** (`crm-sync.ts`, `crm-store.ts`): deals by search, 100 a page in the order of `hs_lastmodifieddate`, `after`
   as the page's offset, so the core's cursor (object type `deal`) and its checkpoints, restarts and backoff work as for
   Xero. A backfill reads open deals and those won since `window_from`; later runs read every deal changed since five
-  minutes before `since`. The page reaching HubSpot's 10,000-result cap ends the run without a restart (`capped`). Each
+  minutes before `since`. The page reaching HubSpot's 10,000-result cap ends the run without a restart (`capped`), and
+  the next run starts at the latest change read itself, not five minutes before it, so a bulk edit of more than 10,000
+  deals is read past rather than again and again (`pageOutcome`). Each
   page reads its companies and their main contacts (associations, batch reads); pipelines and the account's currency
   and time zone once per run. Search never returns a deleted deal, so linked deals and won ones still offered are read
   again by id each run; one HubSpot no longer has is `deleted`. `planCrmDeal` keeps each deal once by its version. The
   sweeper runs a CRM connection with this runner (`sweepAccounting({ crm })`).
 - **Planning** (`crm-prefill.ts`, `crm-review.ts`, `src/lib/commands/crm.ts`). Bills & receivables lists the won deals
   under Deals; **Plan collections** opens the New deal form filled in by `dealPrefill`: the customer by its company's
-  link, else its name, else a new one; dollars as USDC and euros as EURC at par, another currency only in shadow mode,
+  link, else its name (never a customer linked to another of the account's companies), else a new one; dollars as
+  USDC and euros as EURC at par, another currency only in shadow mode,
   never VND; the close day as the start; HubSpot's deal id as the reference. `crm.plan_deal` (`records.write`) reads the
   row again, forces the reference, confirms through `confirmDeal` (`create_deal`, whose unique `external_ref` refuses a
   second plan), links the row (`deal_id`, `baseline`) and the company to the customer (`external_links`), and the
@@ -1811,9 +1814,11 @@ reads in `api.ts`, `hubspotProvider`), wired in `src/lib/crm-providers.ts`. It i
   none for a cancelled deal. The sync records a new set once (`crm_deal_changed`, `flagDecision`). The deal's page says
   **Changed in HubSpot**; **Change deal** opens the Change deal form filled in (`changePrefill`), and saving it is the
   revise path with `via: "hubspot"`, marking the changes reviewed; **Keep the deal as it is** (`crm.keep_change`)
-  records `crm_deal_change_kept`. Nothing is revised or cancelled automatically.
+  records `crm_deal_change_kept`. Both send back the key of the changes the page showed (`changesKey`) and are refused
+  when HubSpot changed the deal again since. Nothing is revised or cancelled automatically.
 - **Billing emails.** `crm.fill_email` sets a linked customer's empty billing email from its company's main contact,
-  only when a person presses **Use this email**.
+  only when a person presses **Use this email**: the email the list showed, written only where the billing email is
+  still empty (`changeCounterpartyNoticeEmail({ onlyIfEmpty })`).
 
 ## API
 

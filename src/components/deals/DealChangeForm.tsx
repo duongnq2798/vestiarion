@@ -53,7 +53,7 @@ export function DealChangeForm({
    * Opened from the changes a CRM brought (HubSpot connector H12): its new total, when it is in the deal's currency, with
    * a correction proposed for the lines; and a reason naming the changes. Saving it marks them as reviewed.
    */
-  fromCrm?: { total: string | null; reason: string };
+  fromCrm?: { total: string | null; reason: string; seen: string };
 }) {
   const planned = inForce(facts.lines)
     .filter((line) => line.status === "planned")
@@ -88,6 +88,7 @@ export function DealChangeForm({
       <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
       <input type="hidden" name="lines" value={JSON.stringify(proposed)} />
       {fromCrm && <input type="hidden" name="fromCrm" value="1" />}
+      {fromCrm && <input type="hidden" name="crmSeen" value={fromCrm.seen} />}
 
       <div className="grid gap-4 sm:grid-cols-[14rem_minmax(0,1fr)]">
         <Field id="deal-change-total" label={`New total (${facts.currency})`}>

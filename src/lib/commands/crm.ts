@@ -1,12 +1,12 @@
 import { NotSetUpError } from "../connectors/connections";
 import { plannable } from "../connectors/crm";
 import { crmRow, crmRowForDeal, emailToFill, keepChanges, linkPlanned, sourceOf } from "../connectors/crm-actions";
-import { amountText } from "../connectors/crm-store";
+import { amountText, changesKey, rowChanges } from "../connectors/crm-store";
 import { PROVIDER_LABELS } from "../connectors/provider";
 import type { DealDraft } from "../deals/input";
 import { readDeal } from "../deals/read";
 import { confirmDeal, DealError } from "../deals/write";
-import { changeCounterpartyNoticeEmail } from "../payment-notices";
+import { changeCounterpartyNoticeEmail, NoticeEmailTaken } from "../payment-notices";
 import type { Actor } from "./actor";
 import { done, refused, TRY_AGAIN, type CommandOutcome } from "./outcome";
 import { gate } from "./policy";
@@ -56,15 +56,24 @@ export async function planCrmDeal(actor: Actor, input: { rowId: string; draft: D
   }
 }
 
-/** Keeps a deal as it is although it changed in the CRM: its changes count as reviewed, with a signed entry (H12). */
-export async function keepCrmChange(actor: Actor, input: { dealId: string }): Promise<CommandOutcome> {
+/** The words for changes made in the CRM after the page that acts on them was shown (H12). */
+export const changedAgain = (label: string) =>
+  refused("changed", `${label} changed this deal again since this page was opened. Reload the page to see what changed now.`, { changed: true });
+
+/**
+ * Keeps a deal as it is although it changed in the CRM: its changes count as reviewed, with a signed entry (H12). Only
+ * the changes the page showed (`seen`, their `changesKey`): a set the CRM made since is refused, never marked as seen.
+ */
+export async function keepCrmChange(actor: Actor, input: { dealId: string; seen: string }): Promise<CommandOutcome> {
   const refusal = gate(actor, "crm.keep_change");
   if (refusal) return refusal;
   try {
     const [read, deal] = await Promise.all([crmRowForDeal(input.dealId), readDeal(input.dealId)]);
     if (!deal.available || !deal.deal || !read) return refused("not_found", "That deal was not found.");
-    const kept = await keepChanges(read, { id: deal.deal.facts.id, title: deal.deal.title, status: deal.deal.facts.status }, actor.userId);
     const label = PROVIDER_LABELS[read.connection.provider];
+    const changes = rowChanges(read.row, deal.deal.facts.status);
+    if (changes.length > 0 && changesKey(changes) !== input.seen) return changedAgain(label);
+    const kept = await keepChanges(read, { id: deal.deal.facts.id, title: deal.deal.title, status: deal.deal.facts.status }, actor.userId);
     return done(kept === null ? `Nothing changed in ${label} since.` : `${deal.deal.title} stays as it is. ${label}'s changes are marked as seen.`);
   } catch (error) {
     if (error instanceof NotSetUpError) return refused("not_ready", NOT_SET_UP);
@@ -73,17 +82,24 @@ export async function keepCrmChange(actor: Actor, input: { dealId: string }): Pr
   }
 }
 
-/** Fills a customer's empty billing email with its company's main contact's email from the CRM (H13). */
-export async function fillCrmEmail(actor: Actor, input: { counterpartyId: string }): Promise<CommandOutcome> {
+/**
+ * Fills a customer's empty billing email with its company's main contact's email from the CRM (H13): only the email the
+ * person was shown and confirmed (`email`), and only while the customer still has none, in the same write.
+ */
+export async function fillCrmEmail(actor: Actor, input: { counterpartyId: string; email: string }): Promise<CommandOutcome> {
   const refusal = gate(actor, "crm.fill_email");
   if (refusal) return refusal;
   try {
     const found = await emailToFill(input.counterpartyId);
     if (!found) return refused("not_found", "That customer has a billing email already, or the CRM has none for it.");
-    await changeCounterpartyNoticeEmail({ actorId: actor.userId, counterpartyId: input.counterpartyId, email: found.email, source: found.source });
+    if (found.email !== input.email.trim().toLowerCase()) {
+      return refused("changed", `${PROVIDER_LABELS[found.source.provider]} has another email for ${found.name} now. Reload the page to see it.`, { changed: true });
+    }
+    await changeCounterpartyNoticeEmail({ actorId: actor.userId, counterpartyId: input.counterpartyId, email: found.email, source: found.source, onlyIfEmpty: true });
     return done(`Reminders to ${found.name} go to ${found.email} once you turn them on for an invoice.`);
   } catch (error) {
     if (error instanceof NotSetUpError) return refused("not_ready", NOT_SET_UP);
+    if (error instanceof NoticeEmailTaken) return refused("taken", "That customer has a billing email already. Reload the page to see it.", { changed: true });
     console.error("filling a billing email from a CRM failed", actor.orgId, error instanceof Error ? error.message : "unknown error");
     return refused("failed", TRY_AGAIN);
   }

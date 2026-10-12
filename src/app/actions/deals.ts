@@ -106,7 +106,9 @@ export async function changeDealAction(_previous: DealActionResult, formData: Fo
       deal.deal.facts.currency
     );
     if (!read.ok) return { ok: false, message: read.message };
-    return consoleAnswer(await changeDeal(consoleActor(auth), { change: read.change, fromCrm: formString(formData, "fromCrm", 4) === "1" }));
+    // Made from a CRM's changes: the ones the form was filled in from (`crmSeen`), checked against the CRM's row again.
+    const fromCrm = formString(formData, "fromCrm", 4) === "1" ? { seen: formString(formData, "crmSeen", 64) } : undefined;
+    return consoleAnswer(await changeDeal(consoleActor(auth), { change: read.change, ...(fromCrm ? { fromCrm } : {}) }));
   });
 }
 

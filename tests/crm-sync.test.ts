@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Connection } from "@/lib/connectors/connections";
 import type { CrmPage, CrmPageRequest, CrmProvider, ExternalDeal, StagedCrmDeal } from "@/lib/connectors/crm";
 import { syncCrmConnection, type CrmSyncDb } from "@/lib/connectors/crm-sync";
-import { NEW_CURSOR, type SyncCursor } from "@/lib/connectors/cursors";
+import { CLOCK_MARGIN_MS, NEW_CURSOR, type SyncCursor } from "@/lib/connectors/cursors";
 import { ProviderError } from "@/lib/connectors/provider";
 import type { SyncFinish } from "@/lib/connectors/sync";
 import type { StoredTokens, TokenStore } from "@/lib/connectors/tokens";
@@ -235,7 +235,50 @@ describe("syncCrmConnection", () => {
           : { items: [deal("2", { version: "2026-10-12T09:59:30.000Z", updatedAt: "2026-10-12T09:59:30.000Z" })], page: 2, last: true, capped: true, total: 12840 },
     });
     expect(await run(p, memory.db)).toMatchObject({ outcome: "synced", pages: 2 });
-    expect(memory.cursor()).toMatchObject({ phase: "incremental", page: null, since: "2026-10-12T09:59:30.000Z" });
+    // HubSpot is asked from five minutes before `since`: the next run starts at the latest change read itself.
+    expect(memory.cursor()).toMatchObject({ phase: "incremental", page: null, since: "2026-10-12T10:04:30.000Z" });
+  });
+
+  /**
+   * A search as HubSpot's answers one (`src/lib/hubspot/api.ts` searchBody): an incremental run asks for every deal
+   * changed since five minutes before `since`, in the order of the last change, `size` a page, and no further than `cap`.
+   */
+  function capped(all: ExternalDeal[], cap: number, size: number): Answer {
+    return (request) => {
+      const from = request.phase === "incremental" && request.since ? Date.parse(request.since) - CLOCK_MARGIN_MS : Number.NEGATIVE_INFINITY;
+      const matching = all
+        .filter((one) => Date.parse(one.updatedAt) >= from)
+        .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt) || a.externalId.localeCompare(b.externalId));
+      const start = (request.page - 1) * size;
+      const end = start + size;
+      const reachesCap = end >= cap && matching.length > end;
+      return { items: matching.slice(start, end), page: request.page, last: end >= matching.length || reachesCap, capped: reachesCap, total: matching.length };
+    };
+  }
+  const at = (id: string, iso: string) => deal(id, { stage: "open", version: iso, updatedAt: iso });
+  const incremental = { ...NEW_CURSOR, phase: "incremental" as const, since: "2026-10-10T00:00:00.000Z", backfillStartedAt: "2026-10-09T00:00:00.000Z", completedAt: "2026-10-09T00:00:00.000Z" };
+
+  it("goes past HubSpot's cap when more deals than it holds changed within the search's margin", async () => {
+    // A bulk edit: six deals changed within a minute, then one more later; the search holds four.
+    const all = ["00", "10", "20", "30", "40", "50"].map((second, index) => at(`b${index + 1}`, `2026-10-11T00:00:${second}.000Z`));
+    all.push(at("later", "2026-10-11T06:00:00.000Z"));
+    const memory = memoryDb();
+    memory.setCursor(incremental);
+    const { provider: p } = provider({ deals: capped(all, 4, 2) });
+    for (let runs = 0; runs < 3; runs += 1) await run(p, memory.db);
+    expect([...memory.rows.keys()].sort()).toEqual(["b1", "b2", "b3", "b4", "b5", "b6", "later"]);
+  });
+
+  it("goes past HubSpot's cap when more deals than it holds share one last change", async () => {
+    // An import: six deals changed at the same instant; a search sorted by that instant cannot reach the last two, but
+    // the sync must not read the same four for ever and miss every change after them.
+    const all = ["b1", "b2", "b3", "b4", "b5", "b6"].map((id) => at(id, "2026-10-11T00:00:00.000Z"));
+    all.push(at("later", "2026-10-11T06:00:00.000Z"));
+    const memory = memoryDb();
+    memory.setCursor(incremental);
+    const { provider: p } = provider({ deals: capped(all, 4, 2) });
+    for (let runs = 0; runs < 3; runs += 1) await run(p, memory.db);
+    expect(memory.rows.has("later")).toBe(true);
   });
 
   it("reads the linked deals and the won ones still offered again by id: a change is written and flagged, a deletion said", async () => {
