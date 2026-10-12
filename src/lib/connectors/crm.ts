@@ -188,11 +188,25 @@ export function crmChangeWords(change: CrmChange, label: string): string {
 }
 
 /**
+ * A set of changes as text, its objects' keys sorted: the same set reads the same whatever order its keys come in, as a
+ * jsonb column hands them back in Postgres' own order, not the order they were written in.
+ */
+export function changesText(changes: unknown): string {
+  const sorted = (value: unknown): unknown =>
+    Array.isArray(value)
+      ? value.map(sorted)
+      : typeof value === "object" && value !== null
+        ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, sorted((value as Record<string, unknown>)[key])]))
+        : value;
+  return JSON.stringify(sorted(changes));
+}
+
+/**
  * Whether a linked deal's changes are recorded now (H12): a new set of changes is, once; the same set again is not; a
  * deal whose changes went (reviewed, or undone in the CRM) has its record cleared, with no entry.
  */
 export function flagDecision(changes: readonly CrmChange[], flagged: unknown): "record" | "clear" | "none" {
-  const before = Array.isArray(flagged) && flagged.length > 0 ? JSON.stringify(flagged) : null;
+  const before = Array.isArray(flagged) && flagged.length > 0 ? changesText(flagged) : null;
   if (changes.length === 0) return before ? "clear" : "none";
-  return JSON.stringify(changes) === before ? "none" : "record";
+  return changesText(changes) === before ? "none" : "record";
 }
