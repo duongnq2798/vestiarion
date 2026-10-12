@@ -56,7 +56,7 @@ describe("the QuickBooks card", () => {
   it("names the company, the bills waiting, and sends QuickBooks with every control's form", () => {
     const markup = render(connected);
     expect(markup).toContain("Connected to Sandbox Company_US_1");
-    expect(markup).toContain('href="/o/acme/invoices#from-quickbooks"');
+    expect(markup).toContain('href="/o/acme/invoices?review=quickbooks"');
     expect(markup).toContain("2 bills waiting for review");
     expect(markup).toContain("1 bill you added was paid, voided or deleted in QuickBooks since.");
     expect(markup).toContain("Disconnect QuickBooks");
@@ -114,9 +114,9 @@ describe("the QuickBooks review list", () => {
       )
     );
     expect(markup).toContain("Closed in QuickBooks after they were added");
-    expect(markup).toContain("Hicks Hardware · HH-301: deleted in QuickBooks. Look at it in Payables before the agent pays it.");
+    expect(markup).toContain("Hicks Hardware · HH-301: deleted in QuickBooks. Look at it in Bills before the agent pays it.");
     expect(markup).toContain("Partly paid in QuickBooks after they were added");
-    expect(markup).toContain("PowerDirect · PD-4471: 400.00 USD left of the 1,250.00 added. Look at it in Payables before the agent pays it.");
+    expect(markup).toContain("PowerDirect · PD-4471: 400.00 USD left of the 1,250.00 added. Look at it in Bills before the agent pays it.");
   });
 
   it("shows nothing with nothing to say", () => {

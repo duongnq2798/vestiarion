@@ -7,8 +7,9 @@ import { plural } from "@/lib/copy";
 import type { Network } from "@/lib/network";
 import { ageText, paymentsInFlight, type PaymentsInFlight as Summary } from "@/lib/settlement";
 import type { FlightRow } from "@/lib/settlement-facts";
+import { invoiceHref } from "@/lib/bills-view";
 import { fmt, Money } from "./Primitives";
-import { mismatchSentence, settlementAnchor, settlementSummary, stepConfirmedLine, unknownOutcome } from "./SettlementTrack";
+import { mismatchSentence, settlementSummary, stepConfirmedLine, unknownOutcome } from "./SettlementTrack";
 
 /**
  * Treasury's "Payments in flight" (docs/superpowers/specs/2026-10-11-settlement-lifecycle-design.md L7): every payment
@@ -34,7 +35,7 @@ export function flightLine(summary: Summary<FlightRow>, stuckAfterMinutes: numbe
 
 /** Where a payment's own card is: its track on Bills & receivables, or a milestone's contractor page. */
 function cardHref(orgSlug: string, row: FlightRow): string {
-  return row.source.type === "invoice" ? orgHref(orgSlug, `/invoices#${settlementAnchor(row.source.id)}`) : orgHref(orgSlug, "/contractors");
+  return row.source.type === "invoice" ? orgHref(orgSlug, invoiceHref(row.source.id, "settlement")) : orgHref(orgSlug, "/contractors");
 }
 
 function Row({ row, orgSlug, children }: { row: FlightRow; orgSlug: string; children: ReactNode }) {

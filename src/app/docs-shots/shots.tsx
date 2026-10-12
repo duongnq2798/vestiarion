@@ -1,5 +1,4 @@
-import { FileSpreadsheet, FileText, ListChecks, PenLine, Repeat, UserPlus } from "lucide-react";
-import Link from "next/link";
+import { ListChecks, UserPlus } from "lucide-react";
 import type { ReactNode } from "react";
 import { AgentBudgetPanel } from "@/components/AgentBudgetPanel";
 import { AllocationLines } from "@/components/AllocationLines";
@@ -25,9 +24,13 @@ import { SettlementTrack } from "@/components/vx/SettlementTrack";
 import { WaitingPayableAction } from "@/components/WaitingPayableAction";
 import CounterpartyAddress from "@/components/intake/CounterpartyAddressEdit";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
-import BillImport from "@/components/intake/BillImport";
 import { BillImportShot } from "./BillImportShot";
-import InvoiceDocumentIntake, { DocumentDraft } from "@/components/intake/InvoiceDocumentIntake";
+import { BillRows } from "@/components/bills/BillsList";
+import { billRowItem, listRowOf } from "@/components/bills/build";
+import { NEW_ITEMS } from "@/components/bills/new-items";
+import type { NewKind } from "@/lib/bills-view";
+import type { Decision } from "@/components/vx/types";
+import { DocumentDraft } from "@/components/intake/InvoiceDocumentIntake";
 import InvoiceIntake from "@/components/intake/InvoiceIntake";
 import PayFreelancerForm, { PaymentLinkReady } from "@/components/intake/PayFreelancerForm";
 import { PayeeJourney } from "@/components/payee/PayeeJourney";
@@ -40,7 +43,6 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { AuditLedger, pad } from "@/components/vx/AuditLedger";
 import { DecisionRows, RowGroupHeading } from "@/components/vx/DecisionRows";
-import { payableSignals } from "@/components/vx/decision-signals";
 import { IntakeFold } from "@/components/vx/IntakeFold";
 import { GettingStarted } from "@/components/vx/GettingStarted";
 import { invoiceDecision, milestoneDecision } from "@/components/vx/map";
@@ -65,7 +67,6 @@ import { compareActuals, type ActualRecord, type ActualsFacts } from "@/lib/actu
 import { readStatement, type StatementChoices } from "@/lib/bank-statement/lines";
 import { matchStatement, type StatementBill } from "@/lib/bank-statement/match";
 import type { WaitingPayable } from "@/lib/agent/approvals";
-import { waitingHint } from "@/lib/added-details";
 import { heldReason } from "@/lib/agent/milestone-decisions";
 import type { LedgerEntry } from "@/lib/ledger";
 import { reduceSettlement, type SettlementBooks, type SettlementFact } from "@/lib/settlement";
@@ -878,40 +879,71 @@ const SCENARIO = cashScenario(SCENARIO_BASIS, DEFAULT_LEVERS);
 /** The open section's card, for a part of its outcome shown alone. */
 const SCENARIO_CARD = "rounded-2xl border border-line bg-surface p-5 shadow-surface";
 
-/** The New invoice fold as Bills & receivables opens it on an empty workspace: its four ways in, one bill typed in. */
+/** One of New ▾'s forms as its sheet opens on Bills & receivables (Bills & receivables tabs B13): its title, its line, the form. */
+function NewSheet({ kind, children }: { kind: NewKind; children: ReactNode }) {
+  const item = NEW_ITEMS.find((entry) => entry.kind === kind) as (typeof NEW_ITEMS)[number];
+  return (
+    <div className="overflow-hidden rounded-2xl border border-line bg-surface">
+      <div className="space-y-1 border-b border-line px-5 py-4">
+        <p className="text-base font-semibold tracking-tight text-ink">{item.title}</p>
+        <p className="text-sm text-ink-2">{item.description}</p>
+      </div>
+      <div className="px-5 py-5">{children}</div>
+    </div>
+  );
+}
+
+/** New ▾, Bill to pay: one bill typed in. */
 function NewInvoice({ counterparty }: { counterparty: CounterpartyRow }) {
   return (
-        <IntakeFold label="New invoice" meta="typed in, read from a document, imported from a list, or recurring" defaultOpen className="">
-            <Tabs defaultValue="manual">
-              <TabsList aria-label="New invoice">
-                <TabsTrigger value="manual">
-                  <PenLine aria-hidden />
-                  Enter one invoice
-                </TabsTrigger>
-                <TabsTrigger value="document">
-                  <FileText aria-hidden />
-                  From a document
-                </TabsTrigger>
-                <TabsTrigger value="list">
-                  <FileSpreadsheet aria-hidden />
-                  Import a list
-                </TabsTrigger>
-                <TabsTrigger value="recurring">
-                  <Repeat aria-hidden />
-                  Recurring
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="manual" forceMount className="data-[state=inactive]:hidden">
-                <InvoiceIntake orgSlug={SLUG} counterparties={[{ id: counterparty.id, name: counterparty.name, role: counterparty.role }]} />
-              </TabsContent>
-              <TabsContent value="document" forceMount className="data-[state=inactive]:hidden">
-                <InvoiceDocumentIntake orgSlug={SLUG} counterparties={[{ id: counterparty.id, name: counterparty.name, role: counterparty.role }]} />
-              </TabsContent>
-              <TabsContent value="list" forceMount className="data-[state=inactive]:hidden">
-                <BillImport orgSlug={SLUG} workspace={{ shadowOn: false, shadowCurrency: null, network: "arc-testnet" }} />
-              </TabsContent>
-            </Tabs>
-        </IntakeFold>
+    <NewSheet kind="bill">
+      <InvoiceIntake orgSlug={SLUG} counterparties={[{ id: counterparty.id, name: counterparty.name, role: counterparty.role }]} initialDirection="payable" />
+    </NewSheet>
+  );
+}
+
+/**
+ * A bill's row as Bills & receivables lists it (Bills & receivables tabs B6), built as the page builds it, and under it
+ * the card its detail panel opens on.
+ */
+function BillRowShot({
+  invoice,
+  decision,
+  today,
+  footer,
+  waiting,
+  rule = null,
+  owedNote = null,
+}: {
+  invoice: InvoiceRow;
+  decision: Decision;
+  today: string;
+  footer?: ReactNode;
+  waiting?: { onFile: { poReference: string | null; goodsReceived: boolean }; added: null };
+  rule?: string | null;
+  owedNote?: string | null;
+}) {
+  const inAWeek = new Date(Date.parse(`${today}T00:00:00Z`) + 7 * 86_400_000).toISOString().slice(0, 10);
+  const item = billRowItem({
+    invoice,
+    decision,
+    row: listRowOf(invoice, decision),
+    today,
+    inAWeek,
+    waiting,
+    rule,
+    canWrite: true,
+    canDecide: true,
+    owedNote,
+    href: orgHref(SLUG, `/invoices?open=${invoice.id}`),
+  });
+  return (
+    <div className="space-y-4">
+      <BillRows label={invoice.direction === "payable" ? "Bills" : "Receivables"} rows={[item]} slugHref={(path) => orgHref(SLUG, path)} />
+      <div className="rounded-2xl border border-line bg-surface p-3 sm:p-4">
+        <DecisionCard decision={decision} orgSlug={SLUG} footerAction={footer} />
+      </div>
+    </div>
   );
 }
 
@@ -1072,24 +1104,7 @@ export const DOCS_SHOTS = {
     page: "invoices",
     render: function VerdictShot() {
       const decision = invoiceDecision(FIRST_BILL, NORTHWIND, [...EARLIER, FIRST_DECISION], { network: "arc-testnet", verdicts: SHADOW_SANDBOX });
-      return (
-        <section>
-          <SectionHeader title="Payables" meta="1 invoice · open one for the agent's reasoning" />
-          <RowGroupHeading title="Needs you" count={1} />
-          <DecisionRows
-            orgSlug={SLUG}
-            items={[
-              {
-                decision,
-                date: { label: "Due Oct 15, 2026" },
-                open: true,
-                signals: payableSignals(decision),
-                footerAction: decision.verdict ? <VerdictControl orgSlug={SLUG} view={decision.verdict} /> : null,
-              },
-            ]}
-          />
-        </section>
-      );
+      return <BillRowShot invoice={FIRST_BILL} decision={decision} today="2026-10-12" footer={decision.verdict ? <VerdictControl orgSlug={SLUG} view={decision.verdict} /> : null} />;
     },
   },
   "go-live-checklist": {
@@ -1198,7 +1213,7 @@ export const DOCS_SHOTS = {
     render: function DocumentShot() {
       const asked = `0x${"5af3107a".repeat(5)}`;
       return (
-        <IntakeFold label="New invoice" meta="typed in, read from a document, imported from a list, or recurring" defaultOpen className="">
+        <NewSheet kind="document">
             <DocumentDraft
               orgSlug={SLUG}
               counterparties={[{ id: COUNTERPARTY.id, name: COUNTERPARTY.name, role: COUNTERPARTY.role }]}
@@ -1228,7 +1243,7 @@ export const DOCS_SHOTS = {
                 nonce: 1,
               }}
             />
-        </IntakeFold>
+        </NewSheet>
       );
     },
   },
@@ -1236,13 +1251,7 @@ export const DOCS_SHOTS = {
     guide: "first-payment",
     page: "invoices",
     render: function DecisionShot() {
-      return (
-        <section>
-          <SectionHeader title="Payables" meta="1 invoice · open one for the agent's reasoning" />
-          <RowGroupHeading title="Paid and closed" count={1} />
-          <DecisionRows orgSlug={SLUG} items={[{ decision: invoiceDecision(INVOICE, COUNTERPARTY, ENTRIES, { network: "arc-testnet" }), date: { label: "Due Oct 15, 2026" }, open: true }]} />
-        </section>
-      );
+      return <BillRowShot invoice={INVOICE} decision={invoiceDecision(INVOICE, COUNTERPARTY, ENTRIES, { network: "arc-testnet" })} today="2026-10-12" />;
     },
   },
   "first-payment-trail": {
@@ -1262,39 +1271,30 @@ export const DOCS_SHOTS = {
     guide: "first-payment",
     page: "invoices",
     render: () => (
-      <section>
-        <SectionHeader title="Receivables" meta="1 invoice" />
-        <RowGroupHeading title="Open" count={1} />
-        <DecisionRows
-          orgSlug={SLUG}
-          items={[
-            {
-              decision: invoiceDecision(OWED, undefined, REMINDER_ENTRIES, { network: "arc-testnet" }),
-              date: { label: "Due Oct 10, 2026" },
-              footerAction: (
-                <PayLinkControl
-                  network="arc-testnet"
-                  orgSlug={SLUG}
-                  invoiceId={OWED.id}
-                  dueDate={OWED.due_date}
-                  client={{ id: OWED.counterparty_id, name: OWED.counterparty_name, hasEmail: true }}
-                  view={{
-                    url: `https://www.vestiarion.xyz/pay/vxr_${"d0c5".repeat(10)}abc`,
-                    legacy: false,
-                    remindersOnAt: "2026-10-06T08:00:00Z",
-                    deferredUntil: null,
-                    sent: [
-                      { number: 1, tone: "friendly", sentAt: "2026-10-07T09:00:05Z" },
-                      { number: 2, tone: "friendly", sentAt: "2026-10-10T09:00:04Z" },
-                    ],
-                  }}
-                />
-              ),
-              open: true,
-            },
-          ]}
-        />
-      </section>
+      <BillRowShot
+        invoice={OWED}
+        decision={invoiceDecision(OWED, undefined, REMINDER_ENTRIES, { network: "arc-testnet" })}
+        today="2026-10-10"
+        footer={
+          <PayLinkControl
+            network="arc-testnet"
+            orgSlug={SLUG}
+            invoiceId={OWED.id}
+            dueDate={OWED.due_date}
+            client={{ id: OWED.counterparty_id, name: OWED.counterparty_name, hasEmail: true }}
+            view={{
+              url: `https://www.vestiarion.xyz/pay/vxr_${"d0c5".repeat(10)}abc`,
+              legacy: false,
+              remindersOnAt: "2026-10-06T08:00:00Z",
+              deferredUntil: null,
+              sent: [
+                { number: 1, tone: "friendly", sentAt: "2026-10-07T09:00:05Z" },
+                { number: 2, tone: "friendly", sentAt: "2026-10-10T09:00:04Z" },
+              ],
+            }}
+          />
+        }
+      />
     ),
   },
   "first-payment-needs-you": {
@@ -1302,39 +1302,23 @@ export const DOCS_SHOTS = {
     page: "invoices",
     render: function NeedsYouShot() {
       const onFile = { poReference: null, goodsReceived: false };
+      const decision = invoiceDecision(ASKED_INVOICE, COUNTERPARTY, [ASK_ENTRY], { network: "arc-testnet" });
       return (
-        <section>
-          <SectionHeader title="Payables" meta="1 invoice · open one for the agent's reasoning" />
-          <RowGroupHeading
-            title="Needs you"
-            count={1}
-            action={
-              <Button asChild variant="link" className="text-[0.8125rem]">
-                <Link href={`/o/${SLUG}/approvals`}>Decide in Approvals</Link>
-              </Button>
-            }
-          />
-          <DecisionRows
-            orgSlug={SLUG}
-            items={[
-              {
-                decision: invoiceDecision(ASKED_INVOICE, COUNTERPARTY, [ASK_ENTRY], { network: "arc-testnet" }),
-                date: { label: "Due Oct 15, 2026" },
-                hint: waitingHint(onFile, null),
-                footerAction: (
-                  <WaitingPayableAction
-                    orgSlug={SLUG}
-                    invoice={{ id: ASKED_INVOICE.id, counterpartyName: ASKED_INVOICE.counterparty_name, ...onFile }}
-                    added={null}
-                    canAddDetails
-                    canDecide
-                  />
-                ),
-                open: true,
-              },
-            ]}
-          />
-        </section>
+        <BillRowShot
+          invoice={ASKED_INVOICE}
+          decision={decision}
+          today="2026-10-03"
+          waiting={{ onFile, added: null }}
+          footer={
+            <WaitingPayableAction
+              orgSlug={SLUG}
+              invoice={{ id: ASKED_INVOICE.id, counterpartyName: ASKED_INVOICE.counterparty_name, ...onFile }}
+              added={null}
+              canAddDetails
+              canDecide
+            />
+          }
+        />
       );
     },
   },
@@ -1982,22 +1966,13 @@ export const DOCS_SHOTS = {
     page: "invoices",
     // A receivable half paid: what arrived, what is still owed, and Reverse and Record a fee, above its pay link.
     render: () => (
-      <section>
-        <SectionHeader title="Receivables" meta="5 invoices" />
-        <RowGroupHeading title="Open" count={1} />
-        <DecisionRows
-          orgSlug={SLUG}
-          items={[
-            {
-              decision: invoiceDecision(PART_PAID, undefined, [], { network: "arc-testnet", allocations: PART_PAID_VIEWS }),
-              date: { label: "Due Oct 20, 2026" },
-              note: "Part paid · 1,200.00 USDC still owed",
-              footerAction: <AllocationLines orgSlug={SLUG} network="arc-testnet" view={PART_PAID_VIEW} label="INV-1051 Website build" canWrite />,
-              open: true,
-            },
-          ]}
-        />
-      </section>
+      <BillRowShot
+        invoice={PART_PAID}
+        decision={invoiceDecision(PART_PAID, undefined, [], { network: "arc-testnet", allocations: PART_PAID_VIEWS })}
+        today="2026-10-12"
+        owedNote="Part paid · 1,200.00 USDC still owed"
+        footer={<AllocationLines orgSlug={SLUG} network="arc-testnet" view={PART_PAID_VIEW} label="INV-1051 Website build" canWrite />}
+      />
     ),
   },
   "deals-new": {

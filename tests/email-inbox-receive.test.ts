@@ -289,6 +289,6 @@ describe("handleInbound", () => {
     const message = JSON.stringify(JSON.parse(String(post?.init.body)));
     expect(message).toContain("New invoice by email");
     expect(message).toContain("Northwind Hosting");
-    expect(message).toContain("https://www.vestiarion.xyz/o/northstar/invoices#email-inbox");
+    expect(message).toContain("https://www.vestiarion.xyz/o/northstar/invoices?review=email");
   });
 });

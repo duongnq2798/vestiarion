@@ -25,6 +25,13 @@ function day(iso: string | null): string {
 
 const money = (amount: string) => AMOUNT.format(Number(amount));
 
+/** Select all's state: every bill that can be added is ticked, some are, or none (Bills & receivables tabs B12). */
+export function reviewSelection(selected: ReadonlySet<string>, addable: readonly string[]): boolean | "indeterminate" {
+  const ticked = addable.filter((id) => selected.has(id)).length;
+  if (ticked === 0) return false;
+  return ticked === addable.length ? true : "indeterminate";
+}
+
 /** Whether the tool says part of the bill was paid already: it is offered at what is left (Q9). */
 const partlyPaid = (row: ReviewRowView) => row.total !== undefined && Number(row.total) > Number(row.amount);
 
@@ -84,7 +91,8 @@ function Act({
  * X11, X19; docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q9, Q19), one list per tool: each with its
  * supplier, number, amount (what is left to pay, for a bill partly paid in the tool), due day and fate under the bill
  * list's own check. Nothing becomes a payable until someone who adds records ticks it and adds it, saying whether its
- * goods or services were received; a bill can be dismissed instead. Below, the bills already added that the tool since
+ * goods or services were received; a bill can be dismissed instead. Every bill starts unticked, with Select all beside the
+ * list (docs/superpowers/specs/2026-10-12-bills-tabs-design.md B12): one click never adds the whole list. Below, the bills already added that the tool since
  * says were paid, voided or deleted, or partly paid.
  */
 export function AccountingBillsReview({
@@ -108,7 +116,8 @@ export function AccountingBillsReview({
 }) {
   const label = PROVIDER_LABELS[provider];
   const addable = items.filter((row) => row.status === "add").map((row) => row.id);
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(addable));
+  // Unticked to start: a person chooses each bill, or all of them with Select all.
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [refusal, setRefusal] = useState<string | null>(null);
   const ticked = items.filter((row) => selected.has(row.id)).map((row) => row.id);
   const toAdd = ticked.filter((id) => addable.includes(id));
@@ -126,6 +135,14 @@ export function AccountingBillsReview({
         meta={organisation ? `${organisation} · nothing is added until you add it` : "Nothing is added until you add it"}
       />
       <Card className="space-y-4 p-5">
+        {canAdd && addable.length > 0 && (
+          <Checkbox
+            checked={reviewSelection(selected, addable)}
+            onCheckedChange={(checked) => setSelected(checked === true ? new Set(addable) : new Set())}
+            label={<span className="font-medium text-ink">Select all</span>}
+            description={addable.length === 1 ? "The 1 bill ready to add" : `The ${addable.length} bills ready to add`}
+          />
+        )}
         {items.length > 0 && (
           <ul className="divide-y divide-line rounded-lg border border-line">
             {items.map((row) => (
@@ -201,7 +218,7 @@ export function AccountingBillsReview({
               {closed.map((row) => (
                 <li key={row.id}>
                   {row.supplier}
-                  {row.number ? ` · ${row.number}` : ""}: {closedWords[row.sourceStatus] ?? row.sourceStatus}. Look at it in Payables before the agent pays it.
+                  {row.number ? ` · ${row.number}` : ""}: {closedWords[row.sourceStatus] ?? row.sourceStatus}. Look at it in Bills before the agent pays it.
                 </li>
               ))}
             </ul>
@@ -214,8 +231,8 @@ export function AccountingBillsReview({
               {partlyPaidSince.map((row) => (
                 <li key={row.id}>
                   {row.supplier}
-                  {row.number ? ` · ${row.number}` : ""}: {money(row.left)} {row.currency} left of the {money(row.added)} added. Look at it in Payables before the agent
-                  pays it.
+                  {row.number ? ` · ${row.number}` : ""}: {money(row.left)} {row.currency} left of the {money(row.added)} added. Look at it in Bills before the agent pays
+                  it.
                 </li>
               ))}
             </ul>

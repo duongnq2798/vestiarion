@@ -82,7 +82,7 @@ describe("Payments in flight", () => {
   });
 
   it("links each payable to its track on Bills & receivables, and a milestone to Contractors", () => {
-    expect(markup).toContain('href="/o/acme/invoices#settlement-a"');
+    expect(markup).toContain('href="/o/acme/invoices?open=a#settlement-a"');
     expect(markup).toContain('href="/o/acme/contractors"');
   });
 

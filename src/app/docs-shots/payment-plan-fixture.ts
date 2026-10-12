@@ -31,12 +31,12 @@ const bill = (fields: Partial<PlanBill> & Pick<PlanBill, "id" | "payee" | "amoun
   ...fields,
 });
 
-/** The plan, with the balance read 2 minutes before, or 40 when `stale`. */
-export function paymentPlanShot(options: { stale?: boolean } = {}): PaymentPlan {
+/** The plan, with the balance read 2 minutes before, or 40 when `stale`; `short`, with too little cash for every bill. */
+export function paymentPlanShot(options: { stale?: boolean; short?: boolean } = {}): PaymentPlan {
   return planPayments({
     now: NOW,
-    operatingUsdc: 2400,
-    reserveUsdc: 1500,
+    operatingUsdc: options.short ? 1100 : 2400,
+    reserveUsdc: options.short ? 0 : 1500,
     reserveApy: 0.045,
     cushion: 350,
     bills: [
@@ -52,9 +52,12 @@ export function paymentPlanShot(options: { stale?: boolean } = {}): PaymentPlan 
   });
 }
 
-/** The part of a plan a picture shows: only these payees' lines, and no cash effect under them. */
+/**
+ * The part of a plan a picture shows: only these payees' lines, under their days' headings with the balance after each;
+ * the cash effect stays folded under them.
+ */
 export function planPart(plan: PaymentPlan, payees: readonly string[]): PaymentPlan {
-  return { ...plan, lines: plan.lines.filter((line) => payees.includes(line.payee)), days: [] };
+  return { ...plan, lines: plan.lines.filter((line) => payees.includes(line.payee)) };
 }
 
 export const PAYMENT_PLAN_OUTCOMES: PlanOutcomes = { paid: 9, paidOnTime: 8, overdueNow: 1, discountsTaken: 18.4, moves: 2 };

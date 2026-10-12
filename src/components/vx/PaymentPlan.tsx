@@ -1,3 +1,4 @@
+import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { DocsLink } from "@/components/DocsLink";
@@ -7,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/components/ui/cn";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
@@ -17,10 +19,11 @@ import type { PlanOutcomes } from "@/lib/payment-plan-outcomes";
 import { Money } from "./Primitives";
 
 /**
- * Bills & receivables' payment plan (docs/superpowers/specs/2026-10-11-payment-plan-design.md): the next 14 days of what
- * leaves the operating wallet, in the order the cash allows, each line with why it is on its day, what would stop it,
- * and the balance after it; the cash effect day by day against the schedule as it stands; and, for someone who
- * approves payments, Approve on a line the plan would move. Every figure is a projection but the last 30 days'.
+ * Bills & receivables' payment plan (docs/superpowers/specs/2026-10-11-payment-plan-design.md), its own tab
+ * (docs/superpowers/specs/2026-10-12-bills-tabs-design.md B14): the figures in one row, then the next 14 days of what
+ * leaves the operating wallet, in the order the cash allows, grouped by day with the balance after each; each line opens
+ * on why it is on its day, what would stop it and, for someone who approves payments, Approve where the plan would move
+ * it. The cash effect and the money expected in are folded below. Every figure is a projection but the last 30 days'.
  */
 
 const dayLabel = (day: string) => utcDay(`${day}T00:00:00.000Z`);
@@ -67,15 +70,29 @@ function LineRow({
   blockedId: string;
 }) {
   const own = line.createdBy !== null && line.createdBy === viewerId && !soleApprover;
-  const counted = line.on !== null && line.inWindow && line.state !== "not_counted";
-  const short = line.flags.some((flag) => flag.code === "short");
   const note = standing(line, plan.today);
+  // A line the plan would move to this day says so on its row (its note names the agent's day); approving it is in its
+  // details, beside the reason (B14).
+  const moves = canDecide && line.move ? "The plan moves it here" : null;
   return (
-    <li className="px-4 py-3 sm:px-5">
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-        <div className="min-w-0 flex-1 basis-64">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-            <span className="min-w-0 text-sm font-medium text-ink">{line.payee}</span>
+    <li>
+      <Disclosure
+        variant="bare"
+        summaryClassName="grid grid-cols-[minmax(0,1fr)_auto_1rem] items-start gap-x-4 gap-y-1 px-4 py-3 transition-colors duration-150 ease-standard hover:bg-ground/50 sm:px-5"
+        summary={
+          <>
+            <span className="min-w-0">
+              <span className="block text-sm font-medium text-ink">{line.payee}</span>
+              <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-3">
+                {note && <span>{note}</span>}
+                {line.flags.map((flag) => (
+                  <Badge key={flag.code} size="sm" tone={FLAG_BADGE[flag.code].tone}>
+                    {FLAG_BADGE[flag.code].label}
+                  </Badge>
+                ))}
+                {moves && <span className="font-medium text-agent">{moves}</span>}
+              </span>
+            </span>
             <span className="flex items-baseline gap-2 text-sm">
               {line.pays !== line.amount && line.on !== null && (
                 <>
@@ -84,63 +101,71 @@ function LineRow({
                   <span className="sr-only">, pays</span>
                 </>
               )}
-              <Money value={line.on === null ? line.amount : line.pays} className="text-ink" />
+              <Money value={line.on === null ? line.amount : line.pays} className="font-semibold text-ink" />
             </span>
-          </div>
-          {note && <p className="mt-0.5 text-xs text-ink-3">{note}</p>}
+            <ChevronRight aria-hidden className="mt-0.5 size-4 text-ink-3 transition-transform duration-200 ease-standard group-open/disclosure:rotate-90" />
+          </>
+        }
+      >
+        <div className="space-y-2 border-t border-line bg-ground/40 px-4 py-3 sm:px-5">
           {/* A discount the day takes is in the reason, with its value: never a second line saying it again. */}
-          <p className="mt-1 text-[0.8125rem] leading-snug text-ink-2">{line.reason}</p>
+          <p className="text-[0.8125rem] leading-snug text-ink-2">{line.reason}</p>
           {line.flags.length > 0 && (
-            <ul className="mt-2 space-y-1">
+            <ul className="space-y-1 text-xs text-ink-2">
               {line.flags.map((flag) => (
-                <li key={flag.code} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-ink-2">
-                  <Badge size="sm" tone={FLAG_BADGE[flag.code].tone}>
-                    {FLAG_BADGE[flag.code].label}
-                  </Badge>
-                  <span>{flag.text}</span>
+                <li key={flag.code}>
+                  <span className="font-medium text-ink">{FLAG_BADGE[flag.code].label}:</span> {flag.text}
                 </li>
               ))}
             </ul>
           )}
           {line.state === "waiting" && line.kind === "bill" && (
-            <Button asChild variant="link" className="mt-1 text-xs">
+            <Button asChild variant="link" className="text-xs">
               <Link href={orgHref(orgSlug, "/approvals")}>Decide in Approvals</Link>
             </Button>
           )}
-          {counted && !short && line.balanceAfter !== null && (
-            <p className="mt-1 text-xs text-ink-3">
-              Balance after: <Money value={line.balanceAfter} />
-            </p>
+          {canDecide && line.move && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2">
+              <p className="text-xs text-ink-2">
+                Move it from {line.move.from === plan.today ? "today" : dayLabel(line.move.from)} to the plan&apos;s day, {dayLabel(line.move.to)}.
+              </p>
+              {line.approvable && !own ? (
+                <ApprovePlanLine
+                  orgSlug={orgSlug}
+                  planFingerprint={plan.fingerprint}
+                  line={{ id: line.id, fingerprint: line.fingerprint }}
+                  label={`Approve paying ${line.payee} on ${dayLabel(line.move.to)}`}
+                  disabled={plan.blocked !== null}
+                  describedBy={plan.blocked !== null ? blockedId : undefined}
+                />
+              ) : own && line.approvable ? (
+                <p className="max-w-[16rem] text-xs text-ink-3">You created this bill, so someone else must approve its day.</p>
+              ) : (
+                <p className="max-w-[16rem] text-xs text-ink-3">Clear what stops it before approving its day.</p>
+              )}
+            </div>
           )}
         </div>
-        {canDecide && line.move && (
-          <div className="flex shrink-0 flex-col items-end gap-1 text-right">
-            {line.approvable && !own ? (
-              <ApprovePlanLine
-                orgSlug={orgSlug}
-                planFingerprint={plan.fingerprint}
-                line={{ id: line.id, fingerprint: line.fingerprint }}
-                label={`Approve paying ${line.payee} on ${dayLabel(line.move.to)}`}
-                disabled={plan.blocked !== null}
-                describedBy={plan.blocked !== null ? blockedId : undefined}
-              />
-            ) : own && line.approvable ? (
-              <p className="max-w-[16rem] text-xs text-ink-3">You created this bill, so someone else must approve its day.</p>
-            ) : (
-              <p className="max-w-[16rem] text-xs text-ink-3">Clear what stops it before approving its day.</p>
-            )}
-          </div>
-        )}
-      </div>
+      </Disclosure>
     </li>
   );
 }
 
-function LineGroup({ title, lines, ...rest }: { title: string; lines: PlanLine[] } & Omit<Parameters<typeof LineRow>[0], "line">) {
+/** A day's payments, headed by the day and the balance after it: the plan's own figure for that day. */
+function LineGroup({ title, lines, balance, ...rest }: { title: string; lines: PlanLine[]; balance?: number | null } & Omit<Parameters<typeof LineRow>[0], "line">) {
   if (lines.length === 0) return null;
+  const under = balance != null && balance < rest.plan.cushion;
   return (
     <div>
-      <h3 className="border-t border-line bg-raised/40 px-4 py-2 font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.11em] text-ink-3 sm:px-5">{title}</h3>
+      <h3 className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-t border-line bg-raised/40 px-4 py-2 sm:px-5">
+        <span className="font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.11em] text-ink-3">{title}</span>
+        {balance != null && (
+          <span className={cn("text-xs font-normal", under ? "font-semibold text-held" : "text-ink-2")}>
+            Balance after: <Money value={balance} />
+            {under && <span className="sr-only">, under the cushion</span>}
+          </span>
+        )}
+      </h3>
       <ol className="divide-y divide-line border-t border-line">
         {lines.map((line) => (
           <LineRow key={line.id} line={line} {...rest} />
@@ -150,21 +175,21 @@ function LineGroup({ title, lines, ...rest }: { title: string; lines: PlanLine[]
   );
 }
 
-/** The figures the plan starts from and ends with. */
+/** The figures the plan starts from and ends with, in one row. */
 function PlanSummary({ plan }: { plan: PaymentPlan }) {
   const rows: Array<{ label: string; value: ReactNode; note?: string; tone?: "held" }> = [
     { label: "Cash now", value: <Money value={plan.cash} />, note: plan.reserve > 0 ? "Operating wallet and USYC reserve" : "Operating wallet" },
     { label: "Cushion", value: <Money value={plan.cushion} />, note: "15% of what leaves within 7 days" },
     ...(plan.lowest ? [{ label: "Lowest balance with this plan", value: <Money value={plan.lowest.balance} />, note: dayLabel(plan.lowest.day) }] : []),
-    ...(plan.stillOwed > 0 ? [{ label: "Not covered by the cash", value: <Money value={plan.stillOwed} />, note: "Bills marked short, still owed", tone: "held" as const }] : []),
     { label: "Discounts this plan would take", value: <Money value={plan.discountsPlanned} />, note: "An estimate, if paid as planned" },
+    ...(plan.stillOwed > 0 ? [{ label: "Not covered by the cash", value: <Money value={plan.stillOwed} />, note: "Bills marked short, still owed", tone: "held" as const }] : []),
   ];
   return (
-    <dl className="grid grid-cols-1 gap-x-6 gap-y-3 min-[420px]:grid-cols-2 lg:grid-cols-3">
+    <dl className="grid grid-cols-1 gap-x-6 gap-y-3 min-[340px]:grid-cols-2 lg:grid-cols-5">
       {rows.map((row) => (
         <div key={row.label} className="min-w-0">
           <dt className={cn("text-xs text-ink-3", row.tone === "held" && "text-held")}>{row.label}</dt>
-          <dd className="mt-0.5 text-base font-semibold text-ink">{row.value}</dd>
+          <dd className={cn("mt-0.5 text-base font-semibold text-ink", row.tone === "held" && "text-held")}>{row.value}</dd>
           {row.note && <dd className="text-xs text-ink-3">{row.note}</dd>}
         </div>
       ))}
@@ -275,6 +300,26 @@ export function PlanOutcomesStrip({ outcomes }: { outcomes: PlanOutcomes }) {
   );
 }
 
+/** A part of the plan folded until opened: the figures behind the days, kept one click away. */
+function PlanFold({ summary, children }: { summary: string; children: ReactNode }) {
+  return (
+    <Disclosure
+      variant="bare"
+      className="border-t border-line"
+      summaryClassName="flex items-center gap-2 px-4 py-3 text-sm font-medium text-ink-2 transition-colors duration-150 ease-standard hover:text-ink sm:px-5"
+      summary={
+        <>
+          <ChevronRight aria-hidden className="size-4 text-ink-3 transition-transform duration-200 ease-standard group-open/disclosure:rotate-90" />
+          {summary}
+        </>
+      }
+      contentClassName="[&>div]:border-t-0 [&>div]:pt-0"
+    >
+      {children}
+    </Disclosure>
+  );
+}
+
 export function PaymentPlanSection({
   plan,
   outcomes,
@@ -316,6 +361,9 @@ export function PaymentPlanSection({
   const days = [...new Set(inWindow.map((line) => line.on as string))];
   const approvable = plan.lines.filter((line) => line.approvable && !(line.createdBy !== null && line.createdBy === viewerId && !soleApprover));
   const balanceStale = plan.freshness.state === "stale" || plan.freshness.state === "unread";
+  // Each day's balance once its payments leave, as the plan worked it out (its cash effect's "With this plan"); none on
+  // a day nothing leaves, such as one whose bills the cash cannot cover.
+  const balanceAfter = new Map(plan.days.filter((day) => day.out > 0).map((day) => [day.day, day.balance] as const));
 
   return (
     <section id="payment-plan" aria-labelledby="payment-plan-title" className="scroll-mt-6">
@@ -343,13 +391,18 @@ export function PaymentPlanSection({
           )}
           <PlanSummary plan={plan} />
           <p className="text-[0.8125rem] leading-relaxed text-ink-2">
-            {/* P4: only what holds of every move offered. A day the agent chose after the due date is brought back to the
-                due date, not before it; the cushion is left to each line, since it is not weighed for that, nor for a
-                discount day that is the only way the cash covers the bill. */}
-            Each bill is paid on its due date, or on an earlier day the agent chose. The plan proposes paying before that only for a discount worth at least
-            what the cash would earn until then; each line says why it is on its day. Approving a line moves the day the agent pays a scheduled bill; on that
-            day the agent checks it again with every rule. Nothing here pays a bill.
+            Nothing here pays a bill. Approving a line moves the day the agent pays a scheduled bill; on that day the agent checks it again with every rule.
           </p>
+          <Disclosure variant="bare" summaryClassName="text-[0.8125rem] font-medium text-agent hover:underline" summary="How the plan chooses days">
+            <p className="mt-2 text-[0.8125rem] leading-relaxed text-ink-2">
+              {/* P4: only what holds of every move offered. A day the agent chose after the due date is brought back to the
+                  due date, not before it; the cushion is left to each line, since it is not weighed for that, nor for a
+                  discount day that is the only way the cash covers the bill. */}
+              Each bill is paid on its due date, or on an earlier day the agent chose. The plan proposes paying before that only for a discount worth at least
+              what the cash would earn until then; each line says why it is on its day. Open a line for its reason, what would stop it and, where the plan
+              moves it, Approve.
+            </p>
+          </Disclosure>
           {canDecide
             ? approvable.length > 1 && (
                 <ApproveAllShown
@@ -374,6 +427,7 @@ export function PaymentPlanSection({
                 key={day}
                 title={day === plan.today ? `Today, ${dayLabel(day)}` : dayLabel(day)}
                 lines={inWindow.filter((line) => line.on === day)}
+                balance={balanceAfter.get(day) ?? null}
                 {...rowProps}
               />
             ))}
@@ -382,8 +436,14 @@ export function PaymentPlanSection({
           </>
         )}
 
-        <PlanCashEffect plan={plan} />
-        <PlanIncomingList incoming={plan.incoming} />
+        <PlanFold summary="Cash effect, day by day">
+          <PlanCashEffect plan={plan} />
+        </PlanFold>
+        {(plan.incoming.expected.length > 0 || plan.incoming.planned.length > 0 || !plan.incoming.plannedRead) && (
+          <PlanFold summary="Money expected in">
+            <PlanIncomingList incoming={plan.incoming} />
+          </PlanFold>
+        )}
         {plan.eurc.count > 0 && (
           <p className="border-t border-line px-4 py-3 text-xs text-ink-3 sm:px-5">
             {plan.eurc.count} {plan.eurc.count === 1 ? "bill" : "bills"} in EURC (<Money value={plan.eurc.amount} token="EURC" />) {plan.eurc.count === 1 ? "is" : "are"} paid from the EURC balance and{" "}

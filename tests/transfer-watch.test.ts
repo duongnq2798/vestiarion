@@ -230,7 +230,7 @@ describe("the email (stuck-transfer alert D6)", () => {
     expect(send.mock.calls.map((call) => (call as unknown as [{ to: string; subject: string; text: string }])[0].to)).toEqual(["owner@acme.test", "approver@acme.test"]);
     const message = (send.mock.calls[0] as unknown as [{ subject: string; text: string }])[0];
     expect(message.subject).toBe("A payment of 12.50 USDC to Jiren has not confirmed");
-    expect(message.text).toContain(`https://www.vestiarion.xyz/o/acme/invoices#trail-${INVOICE}`);
+    expect(message.text).toContain(`https://www.vestiarion.xyz/o/acme/invoices?open=${INVOICE}#trail-${INVOICE}`);
     expect(message.text).toContain(`https://explorer.testnet.arc.io/tx/${TX}`);
   });
 
@@ -327,7 +327,7 @@ describe("one message to each person, however many payments (final review M1)", 
     expect(send).toHaveBeenCalledTimes(2);
     const message = (send.mock.calls[0] as unknown as [{ subject: string; text: string }])[0];
     expect(message.subject).toBe("2 payments have not confirmed");
-    expect(message.text).toContain(`https://www.vestiarion.xyz/o/acme/invoices#trail-${INVOICE}`);
+    expect(message.text).toContain(`https://www.vestiarion.xyz/o/acme/invoices?open=${INVOICE}#trail-${INVOICE}`);
     expect(message.text).toContain("https://www.vestiarion.xyz/o/acme/contractors");
   });
 });

@@ -26,6 +26,7 @@ import { inOrg } from "@/lib/dal/scope";
 import { dealSummary, inForce } from "@/lib/deals/lines";
 import { formatMinor } from "@/lib/deals/money";
 import { readDeal } from "@/lib/deals/read";
+import { billsHref } from "@/lib/bills-view";
 import { stats } from "@/lib/queries";
 import { shellStatus } from "@/lib/shell-status";
 
@@ -53,7 +54,7 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
     const shell = { network: access.membership.network, day: dashboardStats.day, clockMode: dashboardStats.clockMode, lastCycleAt: dashboardStats.lastCycleAt, chainModes: shellModes(), status: await shellStatus() };
     const back = (
       <Button asChild variant="link">
-        <Link href={`${orgHref(slug, "/invoices")}#deals`}>
+        <Link href={`${orgHref(slug, billsHref({ tab: "receivables" }))}#deals`}>
           <ArrowLeft aria-hidden />
           All deals
         </Link>

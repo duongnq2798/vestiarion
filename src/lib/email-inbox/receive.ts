@@ -15,6 +15,7 @@ import { inboxOfCode, type InvoiceInbox } from "./inboxes";
 import type { ShownRead } from "./list";
 import { downloadAttachment, fetchReceivedEmail, type ReceivedAttachment, type ReceivedEmail } from "./resend";
 import { codeOfAddress, type InboxSettings } from "./settings";
+import { billsHref } from "../bills-view";
 import { svixRequestOf, verifySvix } from "./verify";
 
 /**
@@ -216,7 +217,7 @@ async function readInboxEmail(inbox: InvoiceInbox, rowId: string, emailId: strin
     const install = await installFor(inbox.orgId);
     if (install) {
       const workspace = await workspaceOf(inbox.orgId);
-      const url = `${deps.origin}${orgHref(workspace.slug, "/invoices")}#email-inbox`;
+      const url = `${deps.origin}${orgHref(workspace.slug, billsHref({ tab: "bills", review: "email" }))}`;
       await postToWebhook(webhookUrlOf(install), slackMessage(status, from || "an unknown sender", read, reasons, url), deps.fetchImpl);
     }
   } catch (error) {
