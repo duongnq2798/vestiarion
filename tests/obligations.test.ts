@@ -14,8 +14,11 @@ describe("the treasury stage's reads (EURC design R3)", () => {
 
   it("reads each open payable's currency for the buffer, and adds up only USDC receivables for the forecast", () => {
     expect(source).toContain('.select("amount, due_date, status, scheduled_for, currency")');
-    expect(source).toContain('.select("amount, currency").eq("direction", "receivable")');
-    expect(source).toContain("projectedInflow = sumUsdcAmounts(receivables)");
+    // The forecast reads open receivables, less what was already applied to them, in the allocations book.
+    expect(source).toContain("projectedInflow = await projectedReceivableInflow(db)");
+    const book = readFileSync(path.join(process.cwd(), "src", "lib", "allocations", "book.ts"), "utf8");
+    expect(book).toContain('.select("id, amount, currency").eq("direction", "receivable")');
+    expect(book).toContain("return sumUsdcAmounts(owed)");
   });
 });
 

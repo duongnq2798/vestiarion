@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { readAllocationRows, toReceivableIn } from "../allocations/book";
+import { fromMicros, receivableBalance } from "../allocations/model";
 import { siteOrigin } from "../auth/env";
 import { allowedTones, boundTone, boundWaitDays, reminderAllowed, referenceReminder, whenInWords, type ReminderDecision, type ReminderTone, type SentReminder } from "../collections";
 import { currentOrgId } from "../context";
@@ -21,6 +23,9 @@ import { agentPaused } from "./pause";
  * whose reminders a person turned on (R1), where code allows a reminder now (R3), the model decides whether to email
  * the client now or wait, and how firmly (R5), beside the written policy's answer (R4). The email is a template that
  * carries the pay link (R2, R6); each reminder is claimed before it is sent (R7). Live workspaces only (R9).
+ *
+ * A part-paid receivable is reminded of what is still owed, saying what arrived, and a paid one is not reminded at all
+ * (docs/superpowers/specs/2026-10-12-allocations-design.md L11). Before migration 0103 runs, nothing is applied.
  */
 
 /** The most reminders one cycle sends. */
@@ -133,6 +138,11 @@ export async function sendReceivableReminders(
     await orgDb.from("invoices").select("id, counterparty_id, amount, currency, due_date, memo, po_reference, status, direction").in("id", invoiceIds)
   ) as InvoiceRow[]).filter((row) => row.direction === "receivable" && (row.status === "pending" || row.status === "matched"));
   if (invoices.length === 0) return [];
+  // What is still owed on each, from the payments a person applied (0103); none before it runs.
+  const allocations = (await readAllocationRows(orgDb, { invoiceIds: invoices.map((row) => row.id) })) ?? [];
+  const owedBy = new Map(
+    invoices.map((row) => [row.id, receivableBalance(toReceivableIn({ ...row, created_at: null }), allocations, false)] as const)
+  );
   const clientIds = [...new Set(invoices.map((row) => row.counterparty_id))];
   const [clients, reminders, settled] = await Promise.all([
     orgDb.from("counterparties").select("id, name, notice_email").in("id", clientIds),
@@ -159,6 +169,9 @@ export async function sendReceivableReminders(
     const token = payLinkToken(orgId, link.token_enc, options.keys);
     if (!token) continue;
 
+    // Paid by the payments applied to it: nothing to remind.
+    const balance = owedBy.get(invoice.id);
+    if (balance && balance.outstanding === 0) continue;
     const sent = sentBy.get(invoice.id) ?? [];
     const facts = { now, dueDate: invoice.due_date, sent, deferredUntil: link.reminder_deferred_until };
     const allowance = reminderAllowed(facts);
@@ -166,14 +179,26 @@ export async function sendReceivableReminders(
     const reference = referenceReminder(facts, allowance);
     const tones = allowedTones(allowance.daysFromDue, sent.length);
     const currency = invoice.currency === "EURC" ? "EURC" : "USDC";
-    const amount = AMOUNT.format(Number(invoice.amount));
+    // What is still owed: the whole invoice, or the rest of a part-paid one.
+    const owed = balance && balance.applied > 0 ? fromMicros(balance.outstanding) : Number(invoice.amount);
+    // What arrived from the client: its payments, never a fee a person recorded beside them.
+    const partPaid = balance && balance.applied > 0 ? { invoiced: Number(invoice.amount), received: fromMicros(balance.paid) } : null;
+    const amount = AMOUNT.format(owed);
     const dueOn = utcDay(invoice.due_date);
 
     const { value, mode, agreedWithReference } = await decide<ReminderDecision>({
       systemPrompt: SYSTEM_PROMPT,
       userPrompt: JSON.stringify({
         task: "Decide whether to email this client a reminder about the receivable now, or to wait, and in which tone.",
-        receivable: { amount: Number(invoice.amount), currency, dueDate: dueOn, daysFromDueDate: allowance.daysFromDue, when: whenInWords(allowance.daysFromDue), forWhat: invoiceWhat(invoice.memo, invoice.po_reference) },
+        receivable: {
+          amount: owed,
+          currency,
+          dueDate: dueOn,
+          daysFromDueDate: allowance.daysFromDue,
+          when: whenInWords(allowance.daysFromDue),
+          forWhat: invoiceWhat(invoice.memo, invoice.po_reference),
+          ...(partPaid ? { partPaid: { invoiced: partPaid.invoiced, alreadyReceived: partPaid.received } } : {}),
+        },
         client: { name: client.name, earlierReceivables: historyBy.get(invoice.counterparty_id) ?? { paidOnTime: 0, paidLate: 0, averageDaysLate: null } },
         remindersSent: sent.map((reminder) => ({ number: reminder.number, tone: reminder.tone, sentOn: utcDay(reminder.sentAt) })),
         thisWouldBeReminder: allowance.number,
@@ -202,6 +227,7 @@ export async function sendReceivableReminders(
           until,
           daysFromDue: allowance.daysFromDue,
           remindersSent: sent.length,
+          ...(partPaid ? { owed, partPaid } : {}),
           decision: { action: "wait", waitDays, reasoning: value.reasoning },
           referenceDecision,
           decisionMode: mode,
@@ -234,6 +260,7 @@ export async function sendReceivableReminders(
       payUrl: payLinkUrl(token),
       origin,
       network: workspaceNetwork().id,
+      ...(partPaid ? { partPaid: { invoiced: AMOUNT.format(partPaid.invoiced), received: AMOUNT.format(partPaid.received) } } : {}),
     });
     let result: SendResult;
     try {
@@ -266,8 +293,9 @@ export async function sendReceivableReminders(
         number: allowance.number,
         tone: bounded.tone,
         daysFromDue: allowance.daysFromDue,
-        amount: Number(invoice.amount),
+        amount: owed,
         currency,
+        ...(partPaid ? { partPaid } : {}),
         linkId: link.id,
         decision: { action: "send", tone: bounded.tone, reasoning },
         referenceDecision,
