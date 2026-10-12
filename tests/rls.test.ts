@@ -56,6 +56,14 @@ const CRUD_UPDATE: Record<string, { column: string; expr: string }> = {
   shadow_modes: { column: "currency", expr: "'USD'" },
 };
 
+/** The connector tables (0101): updated by their own workspace, never deleted by the tenant role. */
+const KEEP_UPDATE: Record<string, { column: string; expr: string }> = {
+  accounting_connections: { column: "last_error", expr: "'changed'" },
+  external_links: { column: "label", expr: "'changed'" },
+  accounting_bills: { column: "review_state", expr: "'dismissed'" },
+  accounting_sync_cursors: { column: "page", expr: "coalesce(page, 0) + 1" },
+};
+
 beforeAll(async () => {
   db = await createDatabase();
   await applyMigrations(db);
@@ -155,7 +163,7 @@ describe.each(TENANT_TABLES)("%s", (table) => {
   });
 
   it("cannot change or remove another organization's rows", async () => {
-    if (table === "ledger_entries" || table === "cycle_snapshots" || table === "service_purchases" || table === "decision_verdicts" || table === "payment_actuals" || table === "report_baselines" || table === "bank_statement_lines") {
+    if (table === "ledger_entries" || table === "cycle_snapshots" || table === "service_purchases" || table === "decision_verdicts" || table === "payment_actuals" || table === "report_baselines" || table === "bank_statement_lines" || table === "receivable_allocations") {
       // Append-only tables: the tenant role holds no UPDATE/DELETE privilege
       // at all, cross-org or not, so each statement is refused on its own —
       // the first failure would abort the transaction before the second ran.
@@ -171,6 +179,15 @@ describe.each(TENANT_TABLES)("%s", (table) => {
       await expect(asTenant(db, A, (tx) => tx.query(`delete from public.${table} where org_id = $1`, [B]))).rejects.toThrow(/permission denied/);
       return;
     }
+    if (table in KEEP_UPDATE) {
+      // Kept, never deleted (0101): the tenant role updates its own connector rows and deletes none, so another
+      // organization's rows are hidden from the update and the delete is refused outright.
+      const { column, expr } = KEEP_UPDATE[table];
+      const updated = await asTenant(db, A, (tx) => tx.query(`update public.${table} set ${column} = ${expr} where org_id = $1`, [B]));
+      expect(updated.affectedRows ?? 0).toBe(0);
+      await expect(asTenant(db, A, (tx) => tx.query(`delete from public.${table} where org_id = $1`, [B]))).rejects.toThrow(/permission denied/);
+      return;
+    }
     const { column, expr } = CRUD_UPDATE[table];
     const updated = await asTenant(db, A, (tx) => tx.query(`update public.${table} set ${column} = ${expr} where org_id = $1`, [B]));
     expect(updated.affectedRows ?? 0).toBe(0);
@@ -180,7 +197,7 @@ describe.each(TENANT_TABLES)("%s", (table) => {
 });
 
 describe("history is append-only for the tenant role", () => {
-  it.each(["ledger_entries", "cycle_snapshots", "service_purchases", "decision_verdicts", "payment_actuals", "report_baselines", "bank_statement_lines"])("%s refuses UPDATE and DELETE even on the tenant's own rows", async (table) => {
+  it.each(["ledger_entries", "cycle_snapshots", "service_purchases", "decision_verdicts", "payment_actuals", "report_baselines", "bank_statement_lines", "receivable_allocations"])("%s refuses UPDATE and DELETE even on the tenant's own rows", async (table) => {
     await expect(asTenant(db, A, (tx) => tx.query(`update public.${table} set org_id = org_id`))).rejects.toThrow(/permission denied/);
     await expect(asTenant(db, A, (tx) => tx.query(`delete from public.${table}`))).rejects.toThrow(/permission denied/);
   });

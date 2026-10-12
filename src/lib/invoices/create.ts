@@ -16,6 +16,15 @@ export interface ImportedRow {
 }
 
 /**
+ * Where a bill brought in from an accounting tool came from (Xero connector X11): the provider, and its own ids for the
+ * organisation, the bill and the contact, with the bill's number. Its entry names them under the provider's name.
+ */
+export interface ExternalSource {
+  provider: "xero" | "quickbooks";
+  ids: { tenantId: string; billId: string; contactId: string | null; invoiceNumber: string | null };
+}
+
+/**
  * Adds one invoice: the row, and the `create_invoice` entry that says who added it, and where it came from when it
  * was read from a document (invoice from a document D8), added from the Telegram bot (Telegram bot design R10) or from
  * Slack, with the member's link (Slack design S15), from an invoice that arrived by email, with its inbox row (email
@@ -41,8 +50,10 @@ export async function createInvoice(input: {
   original?: OriginalBill;
   /** The list it was imported from, by the SHA-256 of its text, its row there, and the bill's invoice number (import design B12). */
   imported?: ImportedRow;
+  /** The accounting tool's bill it was brought in from (Xero connector X11): `via` is the provider's name. */
+  external?: ExternalSource;
 }): Promise<{ id: string; counterpartyName: string } | null> {
-  const { actorId, invoice, document, via, apiKeyId, linkId, inboxEmailId, original, imported } = input;
+  const { actorId, invoice, document, via, apiKeyId, linkId, inboxEmailId, original, imported, external } = input;
   const lookup = await db()
     .from("counterparties")
     .select("id, name")
@@ -98,6 +109,7 @@ export async function createInvoice(input: {
       ...(inboxEmailId ? { inboxEmailId } : {}),
       ...(original ? { bill: original } : {}),
       ...(imported ? { importFile: imported.file, importRow: imported.row, ...(imported.invoiceNumber ? { invoiceNumber: imported.invoiceNumber } : {}) } : {}),
+      ...(external ? { via: external.provider, [external.provider]: external.ids } : {}),
     },
   });
   return { id: row.id, counterpartyName: counterparty.name };

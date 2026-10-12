@@ -1,0 +1,86 @@
+Clients do not always pay one invoice with one transfer. One pays three invoices at once, another pays half now and half next month, and a third pays a few cents short because a fee was taken on the way. When a payment is exactly one open invoice's amount, the agent matches it by itself, as [Your first payment](/docs/guides/first-payment#9-get-paid-by-a-client) describes. Everything else waits under **Apply payments**, with the agent's suggestions, for a person to apply. It works the same in a workspace on Arc testnet and on Arc mainnet.
+
+## Where to find it
+
+Open **Bills & receivables**. Under **Receivables**, **Apply payments** lists each payment received on Arc that is not applied to invoices in full, newest first: its amount, the day it arrived, who sent it (the client whose address on file sent it, or the address), and its transaction, which opens on the explorer.
+
+- **Who applies.** Owners and admins, as for adding an invoice. Every other member sees the list without the buttons, and reads "Only an owner or admin of this workspace can apply payments."
+- **What is left.** A payment applied in part says how much is applied and how much is left, and whose credit that is: "left as credit for" the client its applications name.
+- **Other money in, with no suggestion.** A payment the agent cannot tie to any invoice, such as a testnet faucet drip, is folded at the bottom. You can still apply it by hand.
+- **Never listed.** A payment the agent already matched to one invoice in full, and test USDC from Vestiarion's float, which no client owes.
+
+<Screenshot
+  src="/docs/guides/apply-payments-list.png"
+  alt="Apply payments on Bills and receivables, 3 payments. A payment of 2,000.00 USDC received Oct 12, 2026 from Acme Retail, not applied to an invoice yet, with one suggestion: from Acme Retail's address on file, it pays INV-1040 Retainer, INV-1041 Photos and INV-1042 Prints exactly, 1,200.00, 450.00 and 350.00 USDC, with Apply, then Apply by hand. A payment of 799.60 USDC from Beacon Labs, 0.40 USDC short of what is owed on INV-1050 Workshop, which may be a fee: a field for why the difference is a fee, Apply and record the fee, and Apply, leave the rest owed. Below, Other money in, with no suggestion (1), folded."
+  caption="One transfer for three invoices, a payment a few cents short, and money in the agent cannot place."
+/>
+
+## Apply a suggestion
+
+Each payment shows up to three suggestions, each with why. The agent looks, in this order, for:
+
+- **The client who sent it.** Its earlier applications name the client, or else a counterparty whose address on file sent it. For that client, it suggests the invoice whose outstanding amount is exactly the payment; or 2 to 4 of its open invoices that add up to it exactly, such as "it pays INV-1040 Retainer, INV-1041 Photos and INV-1042 Prints exactly"; or an invoice the payment is a little short of; and its invoices oldest due first, the last one part paid, or the rest kept as credit.
+- **No client known.** An invoice whose outstanding amount is exactly the payment, saying whether it is "the only open invoice of that amount" or one of several, with "check who sent it"; 2 to 4 invoices of one client that add up to it; or the one invoice it is a little short of.
+- **A reference.** A payment that carries an invoice number or a purchase order is matched to that invoice first. A transfer on Arc carries none, so this applies to no payment today.
+
+The same rows always give the same suggestions. Sums are looked for among a client's 12 oldest due open invoices. Choose **Apply** on the one that is right. Nothing is applied until you do.
+
+## Apply by hand
+
+**Apply by hand** lists the open invoices in the payment's currency: once part of a payment is applied, only that client's. Type how much goes to each. The dialog shows what is left of the payment as you type; what you do not apply stays on the payment as the client's credit. Under **Record a difference as a fee**, choose an invoice, the fee and why it is a fee. Then choose **Apply**.
+
+## Part payments
+
+An invoice with part of its amount applied stays open:
+
+- **Its row** says "Part paid", how much was received and how much is still owed, and its badge says **Part paid**.
+- **Its card** lists, under **Payments applied**, each payment with the day it arrived, who sent it and its transaction, and each fee with its reason.
+- **Its pay link** asks the client for what is still owed, and says what was received: "This is what is still owed."
+- **The rest.** When exactly the rest arrives, from the client's address on file, or as the only such invoice whose client was sent its link, the agent applies it by itself, as it matches a whole invoice. Another amount waits under **Apply payments**.
+- **Reminders** ask the client for what is still owed and say what arrived. They stop once nothing is owed.
+
+An invoice is received once what is applied covers it: the last payment's transaction and day are its own.
+
+## Credit
+
+A payment larger than everything its client owes is never applied beyond what the invoices owe. The rest stays on the payment as the client's credit, shown under **Apply payments**. When the client's next invoice is added, the agent suggests it: "Left from a payment applied to" the client "before, and exactly what is still owed". One payment is applied to one client's invoices.
+
+## Fees
+
+When a payment is a little short of an invoice, by at most 1% and at most 5.00, the agent suggests it may be a fee. Type **Why the difference is a fee**, then **Apply and record the fee**; or **Apply, leave the rest owed** to keep the difference owed.
+
+A fee can also be recorded later: on a part-paid invoice's card, **Record a fee**, up to what is still owed, with why. A fee is applied to the invoice and closes it like a payment, but it is never counted as paid by the client. It stands only beside a payment the client made.
+
+## Undo a mistake
+
+On an invoice's card, **Reverse** undoes one payment or fee, with why. Nothing is deleted: a correction is added, and the audit log keeps both. What it applied is owed again, an invoice it had closed reopens, and the payment can be applied elsewhere. Reversing the last payment on an invoice also reverses the fees recorded beside it.
+
+A payment the agent matched to one invoice in full is not reversed here.
+
+## What always holds
+
+These are checked when you apply, and again by the database, however many people act at once:
+
+- **Never more than the payment brought**, and never more on an invoice than it owes: "That is more than is still owed on the invoice."
+- **Never across currencies.** A USDC payment applies to USDC invoices, and EURC to EURC: "The payment and the invoice are in different currencies. Apply it to an invoice in the same currency."
+- **One client per payment**: "One payment is applied to one customer's invoices."
+- **Two people at once.** When someone applied the same payment a moment before you, yours is refused, and the page shows the payment again as it is: "Someone applied this payment a moment ago. Reload the page to see what is left of it."
+- **Bank statement lines are not applied.** A bank statement is in your bank's currency, and invoices to collect are in USDC or EURC, which are never added together.
+
+## Find an invoice
+
+The search box at the top of **Bills & receivables** finds bills and receivables by more than a name: an invoice number or any word of the memo, the Vestiarion id or its first 8 characters, the purchase order, the counterparty, the amount, as `1250` or `1,250.00`, or what is still owed, and a payment's transaction hash, its Circle id or the address that sent it, which finds the invoices it was applied to and the payment under **Apply payments**. The page then says what it is "Showing what matches", and **Clear search** goes back to everything. A search is in the page's address, so it can be shared with a colleague in the same workspace.
+
+<Screenshot
+  src="/docs/guides/apply-payments-part-paid.png"
+  alt="Receivables, Open: Beacon Labs, INV-1051 Website build, 2,400.00 USDC due Oct 20, 2026, with Part paid and 1,200.00 USDC still owed under its title, and a Part paid badge. Opened, its card: Part paid, 1,200.00 USDC of 2,400.00 USDC received from one payment, and 1,200.00 USDC still owed, with Received 1,200.00 of 2,400.00 USDC and Still owed 1,200.00 USDC beside it. Below, Payments applied: 1,200.00 USDC received Oct 10, 2026 from 0xbea0…bea0 with its transaction and Reverse, then Record a fee."
+  caption="An invoice half paid: what arrived, what is still owed, and the payment with its transaction."
+/>
+
+## In the audit log
+
+Each payment applied, fee and reversal is a signed entry: `ar_payment_applied`, `ar_fee_recorded` and `ar_allocation_reversed`. Each appears under the invoice's **How the agent decided**, with what is still owed after it. Webhook endpoints receive them as `ledger.appended`; [the changelog](/docs/changelog) lists their fields. In `GET /api/v1/invoices`, a part-paid invoice keeps its full amount and the status `pending` until what is applied covers it, then becomes `received`.
+
+## Before it is set up
+
+On a deployment where applying payments is not set up yet, **Receivables** says "Applying payments is not set up on this deployment yet." Receivables work as before: the agent matches a payment of exactly one invoice's amount.

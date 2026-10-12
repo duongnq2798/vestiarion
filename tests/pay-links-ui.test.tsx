@@ -16,7 +16,8 @@ import { PayLinkError } from "@/lib/platform/pay-links";
  * only asks Vestiarion to look (R5). The library is faked; it is tested in tests/pay-links.test.ts.
  */
 
-const { authorizeMock, createMock, checkMock, previewMock, remindersMock, raiseMock } = vi.hoisted(() => ({
+const { authorizeMock, createMock, checkMock, previewMock, remindersMock, raiseMock, balanceMock } = vi.hoisted(() => ({
+  balanceMock: vi.fn(),
   authorizeMock: vi.fn(),
   createMock: vi.fn(),
   checkMock: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock("@/lib/platform/pay-links", async (importOriginal) => ({
   createPayLink: createMock,
   checkPayLink: checkMock,
   previewPayLink: previewMock,
+  payLinkBalance: balanceMock,
   setReminders: remindersMock,
 }));
 
@@ -56,6 +58,7 @@ beforeEach(() => {
   createMock.mockReset().mockResolvedValue({ token: TOKEN, linkId: "l1" });
   checkMock.mockReset();
   previewMock.mockReset();
+  balanceMock.mockReset().mockResolvedValue(null);
   process.env.SITE_URL = "https://www.vestiarion.xyz";
 });
 
@@ -253,5 +256,24 @@ describe("what the reminders did so far", () => {
   it("hands the client to a person after the last reminder", () => {
     const sent = [{ number: 4, tone: "final" as const, sentAt: "2026-10-20T09:00:00Z" }];
     expect(remindersSoFar({ ...VIEW, sent }, "2026-10-10T12:00:00+00:00", "Mai Studio", NOW)).toBe("The agent sent its last reminder on Oct 20, 2026. Follow up with Mai Studio yourself.");
+  });
+});
+
+describe("the pay page of a part-paid invoice (allocations L11)", () => {
+  it("asks for what is still owed, and says what arrived", async () => {
+    previewMock.mockResolvedValue(PREVIEW);
+    balanceMock.mockResolvedValue({ owed: 7.5, received: 5 });
+    const page = text(renderToStaticMarkup(await PayPage({ params: Promise.resolve({ token: TOKEN }) })));
+    expect(page).toContain("Mai Studio asks Acme to pay 7.50 USDC");
+    expect(page).toContain("Received 5.00 of 12.50 USDC. This is what is still owed.");
+    expect(page).toContain("Send exactly 7.50 USDC to");
+    expect(page).not.toContain("12.50 USDC to");
+  });
+
+  it("asks for the whole invoice when the balance cannot be read", async () => {
+    previewMock.mockResolvedValue(PREVIEW);
+    balanceMock.mockRejectedValue(new Error("no table"));
+    const page = text(renderToStaticMarkup(await PayPage({ params: Promise.resolve({ token: TOKEN }) })));
+    expect(page).toContain("Send exactly 12.50 USDC to");
   });
 });

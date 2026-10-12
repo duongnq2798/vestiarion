@@ -126,7 +126,7 @@ function rowCurrency(
 }
 
 /** Why a currency is not taken, and how to add the bill anyway (B7). Never suggests shadow mode for a currency Settings does not offer. */
-function notTaken(currency: string, workspace: ImportWorkspace): string {
+export function notTaken(currency: string, workspace: ImportWorkspace): string {
   if (workspace.shadowOn && workspace.shadowCurrency) {
     return `This workspace's shadow mode takes bills in ${workspace.shadowCurrency}. Convert the amount to ${workspace.shadowCurrency} or USDC.`;
   }
@@ -385,7 +385,7 @@ export function counterpartyIdsOf(rows: readonly ReadRow[], counterparties: Impo
   return [...ids];
 }
 
-function counterpartyFor(name: string, counterparties: ImportFacts["counterparties"]): { id: string; name: string } | string {
+export function counterpartyFor(name: string, counterparties: ImportFacts["counterparties"]): { id: string; name: string } | string {
   const plain = name.trim().toLowerCase();
   let found = counterparties.filter((counterparty) => counterparty.name.trim().toLowerCase() === plain);
   if (found.length === 0) {

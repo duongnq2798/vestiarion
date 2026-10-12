@@ -33,9 +33,11 @@ type GuideSlug =
   | "guides/api-invoices"
   | "guides/api-milestones"
   | "guides/github"
+  | "guides/xero"
   | "guides/audit-export"
   | "guides/evidence"
-  | "guides/controls";
+  | "guides/controls"
+  | "guides/apply-payments";
 
 const PANEL = "src/components/GoLivePanel.tsx";
 const WALLET_STEPS = "src/components/treasury/WalletTreasurySteps.tsx";
@@ -128,6 +130,13 @@ const HELD_ACTIONS = "src/components/HeldMilestoneActions.tsx";
 const MILESTONE_DECISIONS = "src/lib/agent/milestone-decisions.ts";
 const SLACK_PANEL = "src/components/SlackPanel.tsx";
 const SLACK_CONNECT_PAGE = "src/app/integrations/slack/connect/page.tsx";
+const XERO_PANEL = "src/components/XeroPanel.tsx";
+const XERO_PICKER = "src/components/XeroAccountPicker.tsx";
+const XERO_REVIEW = "src/components/XeroBillsReview.tsx";
+const XERO_CONNECT_PAGE = "src/app/integrations/xero/connect/page.tsx";
+const XERO_CONSENT = "src/lib/connectors/consent.ts";
+const XERO_CONNECTIONS = "src/lib/connectors/connections.ts";
+const XERO_STATUS = "src/lib/connectors/status.ts";
 const SLACK_CONNECT_FORM = "src/components/SlackConnectForm.tsx";
 const SLACK_ACTIONS = "src/app/actions/slack.ts";
 const SLACK_BLOCKS = "src/lib/slack/blocks.ts";
@@ -203,7 +212,48 @@ const OUTLOOK = "src/components/vx/CashOutlook.tsx";
  * Each guide's quotes of the app: the text as the guide shows it, the file that says it, and, when that file builds the
  * text from the workspace's network (mainnet copy C1), the text as the file writes it.
  */
+const APPLY_PAYMENTS = "src/components/ApplyPayments.tsx";
+const ALLOCATION_LINES = "src/components/AllocationLines.tsx";
+const ALLOCATION_MODEL = "src/lib/allocations/model.ts";
+const ALLOCATION_SUGGEST = "src/lib/allocations/suggest.ts";
+const INVOICES_PAGE_SOURCE = "src/app/o/[slug]/invoices/page.tsx";
+
 const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
+  "guides/apply-payments": [
+    ["Apply payments", APPLY_PAYMENTS],
+    ["Bills & receivables", APP_NAV],
+    ["Receivables", INVOICES_PAGE_SOURCE],
+    ["Only an owner or admin of this workspace can apply payments.", APPLY_PAYMENTS],
+    ["as credit for", APPLY_PAYMENTS],
+    ["Other money in, with no suggestion", APPLY_PAYMENTS],
+    ["Apply by hand", APPLY_PAYMENTS],
+    ["Record a difference as a fee", APPLY_PAYMENTS],
+    ["Why the difference is a fee", APPLY_PAYMENTS],
+    ["Apply and record the fee", APPLY_PAYMENTS],
+    ["Apply, leave the rest owed", APPLY_PAYMENTS],
+    ["Apply", APPLY_PAYMENTS],
+    ["the only open invoice of that amount", ALLOCATION_SUGGEST],
+    ["check who sent it", ALLOCATION_SUGGEST],
+    ["exactly what is still owed", ALLOCATION_SUGGEST],
+    ["Left from a payment applied to", ALLOCATION_SUGGEST],
+    ["Part paid", "src/components/vx/map.ts"],
+    ["Payments applied", ALLOCATION_LINES],
+    ["Record a fee", ALLOCATION_LINES],
+    ["Reverse", ALLOCATION_LINES],
+    ["Nothing is deleted: a correction is added, and the audit log keeps both.", ALLOCATION_LINES],
+    ["This is what is still owed.", "src/app/pay/[token]/page.tsx"],
+    ["That is more than is still owed on the invoice.", ALLOCATION_MODEL],
+    ["The payment and the invoice are in different currencies. Apply it to an invoice in the same currency.", ALLOCATION_MODEL],
+    ["One payment is applied to one customer's invoices.", ALLOCATION_MODEL],
+    ["Someone applied this payment a moment ago. Reload the page to see what is left of it.", ALLOCATION_MODEL],
+    ["Showing what matches", INVOICES_PAGE_SOURCE],
+    ["Clear search", INVOICES_PAGE_SOURCE],
+    ["Applying payments is not set up on this deployment yet.", INVOICES_PAGE_SOURCE],
+    ["How the agent decided", "src/components/vx/DecisionTrail.tsx"],
+    ["ar_payment_applied", "src/lib/allocations/apply.ts"],
+    ["ar_fee_recorded", "src/lib/allocations/apply.ts"],
+    ["ar_allocation_reversed", "src/lib/allocations/apply.ts"],
+  ],
   // The workspace frame (workspace shell design S1-S5, S9).
   "guides/workspace": [
     ["Treasury", APP_NAV],
@@ -1262,6 +1312,50 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Address to confirm", CONTRACTORS_PAGE],
     ["Verify manually", MILESTONE_CHECK],
   ],
+  "guides/xero": [
+    ["Connect Xero", XERO_PANEL],
+    ["An owner or admin connects Xero.", XERO_PANEL],
+    ["I agree", XERO_CONSENT],
+    ["may not train on them", XERO_CONSENT],
+    ["Vestiarion never uses Xero data to train or improve any AI model", XERO_CONSENT, "data to train or improve any AI model"],
+    ["Continue to Xero", XERO_CONNECT_PAGE],
+    ["Pick the Xero organisation", XERO_CONNECT_PAGE],
+    ["Connect this organisation", XERO_CONNECT_PAGE],
+    ["Xero is connected. Its open bills are coming in for review on Bills & receivables.", XERO_PANEL],
+    ["accounting_connected", XERO_CONNECTIONS],
+    ["Sync now", XERO_PANEL],
+    ["Closed in Xero after they were added", XERO_REVIEW],
+    ["accounting_bill_closed", "src/lib/connectors/sync-store.ts"],
+    ["From Xero: 3 bills to add", XERO_REVIEW, "`From Xero: ${items.length} bills to add`"],
+    ["Ready to add", XERO_REVIEW],
+    ["Already in Vestiarion: same counterparty, amount, due date and reference.", "src/lib/bill-import/rows.ts"],
+    ["Same as bill PD-4471 from Xero.", "src/lib/connectors/review.ts", "`Same as bill ${earlier?.number"],
+    [
+      "Bills in USD are taken in shadow mode only. Turn it on for USD in Settings, or convert the amount to USDC.",
+      "src/lib/bill-import/rows.ts",
+      "are taken in shadow mode only. Turn it on for ${currency} in Settings, or convert the amount to USDC.",
+    ],
+    ["Add, goods received", XERO_REVIEW],
+    ["Add, not received yet", XERO_REVIEW],
+    ["Dismiss", XERO_REVIEW],
+    ["New counterparty", XERO_REVIEW],
+    ["Xero approving a bill does not approve its payment", XERO_REVIEW],
+    ["A person added it, brought in from Xero.", "src/lib/decision-trail.ts", ", brought in from Xero"],
+    ["accounting_bills_dismissed", "src/lib/commands/accounting.ts"],
+    ["Where payments made on Arc will be booked", XERO_PANEL],
+    ["Choose the account", XERO_PICKER],
+    ["Use this account", XERO_PICKER],
+    ["The network fee is booked apart, never to this account.", "src/lib/connectors/booking.ts"],
+    ["accounting_payment_account_chosen", XERO_CONNECTIONS],
+    ["Not chosen yet. Nothing is booked to an account nobody chose.", XERO_PANEL],
+    ["The last sync with Xero failed", XERO_STATUS, "`The last sync with ${label} failed`"],
+    ["Xero asked Vestiarion to slow down. Syncing again at", XERO_STATUS, "asked Vestiarion to slow down. Syncing again at"],
+    ["Xero needs you to reconnect", XERO_STATUS, "needs you to reconnect"],
+    ["Reconnect Xero", XERO_PANEL],
+    ["Xero is not set up on this deployment yet.", XERO_PANEL],
+    ["Disconnect Xero", XERO_PANEL],
+    ["accounting_disconnected", XERO_CONNECTIONS],
+  ],
   "guides/github": [
     ["Settings", APP_NAV],
     ["GitHub", GITHUB_PANEL],
@@ -1762,8 +1856,10 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/api-invoices": 10,
   "guides/api-milestones": 10,
   "guides/github": 10,
+  "guides/xero": 20,
   "guides/audit-export": 5,
   "guides/evidence": 20,
+  "guides/apply-payments": 20,
 };
 
 describe.each(Object.entries(QUOTED) as Array<[GuideSlug, Array<readonly [string, string, string?]>]>)("the %s guide", (slug, quoted) => {

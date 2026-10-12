@@ -62,6 +62,7 @@ export const DOCS_NAV: NavSection[] = [
       { slug: "guides/payment-plan", title: "Plan the next two weeks of payments", description: "See which bill leaves on which day over the next 14 days, in the order your cash allows, with the balance after each and the discounts worth taking, then approve the days the plan would move." },
       { slug: "guides/report", title: "Read your workspace report", description: "What the agent did with your real bills: what it paid and with what proof, what it stopped and why, how often a person stepped in, what it was worth, and sharing a live copy by a link." },
       { slug: "guides/cash-scenarios", title: "Plan for clients paying late", description: "Treasury's What if section: look 30, 60 or 90 days ahead, make receivables late or missing, change what bills cost, and see the first short day, the bills it touches and what the figure is built from." },
+      { slug: "guides/apply-payments", title: "Apply money received to invoices", description: "One payment for several invoices, part payments, a few cents lost to a fee: apply each payment received on Arc to the right invoices, with the agent's suggestions, keep the rest as credit, and undo a mistake." },
       { slug: "guides/get-paid", title: "Get paid as a freelancer", description: "For the person being paid: add your wallet address through the link a business sent, follow each step, and check the payment on Arc." },
     ],
   },
@@ -81,6 +82,7 @@ export const DOCS_NAV: NavSection[] = [
     pages: [
       { slug: "guides/slack", title: "Get the agent's decisions in Slack", description: "Connect a workspace to a Slack channel: the agent's decisions as it makes them, /vestiarion for what is safe to spend and waiting, and stopped payments decided from Slack when an owner allows it." },
       { slug: "guides/telegram", title: "Get the agent's decisions in Telegram", description: "Connect your own Telegram chat to a workspace: the agent's decisions as it makes them, what is safe to spend and waiting, and invoices sent to the bot." },
+      { slug: "guides/xero", title: "Bring bills in from Xero", description: "Connect a Xero organisation: its approved bills come in for review on Bills & receivables, go through the same check as a bill list, and become payables only when you add them. Choose the account payments made on Arc will be booked to." },
       { slug: "guides/github", title: "Show payments on GitHub", description: "Connect GitHub so a milestone paid for a pull request gets a comment on it, pull requests in private repositories verify, and a maintainer attaches a bounty with a comment." },
     ],
   },

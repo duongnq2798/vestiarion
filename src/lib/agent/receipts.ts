@@ -1,3 +1,5 @@
+import { ALLOCATION_COLUMNS, readAllocationRows, toAllocationRow, type AllocationDbRow } from "../allocations/book";
+import { allocationErrorFromDb, fromMicros, receivableBalance, toMicros } from "../allocations/model";
 import type { ChainProvider, InboundTransfer, Stablecoin } from "../circle/types";
 import { sameAddress } from "../counterparty-address";
 import { unwrap, type OrgDb } from "../dal";
@@ -11,9 +13,15 @@ import { floatAddress } from "../test-usdc";
  * (R3). An unmatched one is then matched to an open receivable of the same currency and amount: the
  * client's own address first (oldest due among them), else the only receivable of that amount. Two of
  * the same amount with no sender to tell them apart stay unmatched for a person (R1). A sandbox has no
- * real wallet and reads nothing (R4). Only a matched transfer counts as money received: the wallet also
+ * real wallet and reads nothing (R4). Only a transfer matched or applied counts as money received: the wallet also
  * receives faucet drips and swap proceeds, which owe nothing to a receivable, nor does test USDC from Vestiarion's
  * float (docs/superpowers/specs/2026-10-08-shadow-test-usdc-design.md T6), which is never matched.
+ *
+ * Payments a person applies (docs/superpowers/specs/2026-10-12-allocations-design.md L3) stay theirs: a transfer with an
+ * allocation row, and a receivable with one, are left out of the whole match, as migration 0103 refuses either way. A
+ * transfer that is exactly what is still owed on a part-paid receivable is applied to it by the same two rules a whole
+ * match trusts, as an allocation row the agent writes and signs (ar_payment_applied). Before 0103 runs there are no
+ * such rows, and the match is as it was.
  */
 
 export interface OpenReceivable {
@@ -147,7 +155,11 @@ export async function recordIncomingTransfers(
           await orgDb.from("receivable_links").select("invoice_id").is("revoked_at", null).in("invoice_id", openRows.map((row) => row.id))
         ) as Array<{ invoice_id: string }>).map((link) => link.invoice_id)
   );
-  let open: OpenReceivable[] = openRows.map((row) => ({
+  // What a person applied (0103): null before it runs, so nothing is.
+  const allocations = (await readAllocationRows(orgDb, { invoiceIds: openRows.map((row) => row.id), transferIds: unmatched.map((row) => row.id) })) ?? [];
+  const appliedTransfers = new Set(allocations.flatMap((row) => (row.transferId ? [row.transferId] : [])));
+  const appliedInvoices = new Set(allocations.map((row) => row.invoiceId));
+  const asOpen = (row: (typeof openRows)[number]): OpenReceivable => ({
     id: row.id,
     counterpartyId: row.counterparty_id,
     clientName: row.counterparties.name,
@@ -157,12 +169,39 @@ export async function recordIncomingTransfers(
     clientAddress: row.counterparties.address,
     createdAt: row.created_at,
     hasPayLink: linked.has(row.id),
-  }));
+  });
+  let open: OpenReceivable[] = openRows.filter((row) => !appliedInvoices.has(row.id)).map(asOpen);
+  // A part-paid receivable is matched by what is still owed on it, never by its full amount.
+  let partPaid: OpenReceivable[] = openRows
+    .filter((row) => appliedInvoices.has(row.id))
+    .map((row) => {
+      const receivable = asOpen(row);
+      const { outstanding } = receivableBalance(
+        {
+          id: row.id,
+          counterpartyId: row.counterparty_id,
+          customer: receivable.clientName,
+          amount: toMicros(row.amount),
+          currency: receivable.currency,
+          status: "pending",
+          dueDate: row.due_date,
+          createdAt: row.created_at,
+          memo: null,
+          poReference: null,
+        },
+        allocations,
+        false
+      );
+      return { ...receivable, amount: fromMicros(outstanding) };
+    })
+    .filter((receivable) => receivable.amount > 0);
 
   const lines: ReceiptsResult["lines"] = [];
   let matched = 0;
   for (const row of unmatched) {
     if (row.from_address && fromFloat.has(row.from_address.toLowerCase())) continue;
+    // A payment a person applied is theirs to finish.
+    if (appliedTransfers.has(row.id)) continue;
     const transfer: InboundTransfer = {
       circleTxId: row.circle_tx_id,
       txHash: row.tx_hash,
@@ -172,15 +211,27 @@ export async function recordIncomingTransfers(
       chain: provider.network.circleBlockchain,
       receivedAt: row.received_at,
     };
-    const match = matchTransfer(transfer, open);
+    // One pool: a part-paid receivable is asked for what is still owed, so an open one of that same amount makes an
+    // amount alone ambiguous, and the client's own address decides either way (R1).
+    const match = matchTransfer(transfer, [...open, ...partPaid]);
     if (!match) continue;
+    const rest = partPaid.find((candidate) => candidate.id === match.invoiceId);
+    if (rest) {
+      if (await applyRest(orgDb, provider, row.id, transfer, rest, match.matchedBy)) {
+        partPaid = partPaid.filter((candidate) => candidate.id !== rest.id);
+        matched += 1;
+        lines.push({ domain: "ar", message: `Received ${transfer.amount} ${transfer.token} from ${rest.clientName} on ${provider.network.label}, what was still owed (matched by ${match.matchedBy})` });
+      }
+      continue;
+    }
     const receivable = open.find((candidate) => candidate.id === match.invoiceId) as OpenReceivable;
 
     // Claim the transfer first, then settle the receivable; each a compare-and-set, so a check and a
-    // cycle running together settle it once (R3).
-    const claimed = unwrap(
-      await orgDb.from("incoming_transfers").update({ invoice_id: receivable.id, matched_by: match.matchedBy }).eq("id", row.id).is("invoice_id", null).select("id")
-    ) as Array<{ id: string }>;
+    // cycle running together settle it once (R3). Migration 0103 refuses the claim when a person applied the transfer,
+    // or a payment to the receivable, a moment before: that is left to them.
+    const claim = await orgDb.from("incoming_transfers").update({ invoice_id: receivable.id, matched_by: match.matchedBy }).eq("id", row.id).is("invoice_id", null).select("id");
+    if (claim.error && /^(transfer_partly_applied|receivable_partly_paid):/.test(claim.error.message ?? "")) continue;
+    const claimed = unwrap(claim) as Array<{ id: string }>;
     if (claimed.length === 0) continue;
     const settled = unwrap(
       await orgDb
@@ -218,4 +269,52 @@ export async function recordIncomingTransfers(
     lines.push({ domain: "ar", message: `Received ${transfer.amount} ${transfer.token} from ${receivable.clientName} on ${provider.network.label} (matched by ${match.matchedBy})` });
   }
   return { recorded: transfers.length, matched, lines };
+}
+
+/**
+ * The rest of a part-paid receivable, applied by the agent (allocations L3): one payment row of the whole transfer, which
+ * the trigger of 0103 checks and which settles the receivable, then its signed ar_payment_applied. A refusal of the
+ * database (a person applied it a moment before) leaves it to them.
+ */
+async function applyRest(
+  orgDb: OrgDb,
+  provider: ChainProvider,
+  transferId: string,
+  transfer: InboundTransfer,
+  receivable: OpenReceivable,
+  matchedBy: "sender" | "amount"
+): Promise<boolean> {
+  const write = await orgDb
+    .from("receivable_allocations")
+    .insert({ kind: "payment", invoice_id: receivable.id, transfer_id: transferId, amount: transfer.amount, currency: transfer.token, basis: matchedBy, created_by: null })
+    .select(ALLOCATION_COLUMNS)
+    .single<AllocationDbRow>();
+  if (write.error) {
+    if (allocationErrorFromDb(write.error)) return false;
+    throw new Error(write.error.message);
+  }
+  const row = toAllocationRow(write.data);
+  await appendLedgerEntry({
+    actor: "agent",
+    domain: "ar",
+    action: "ar_payment_applied",
+    summary: `Received ${transfer.amount} ${transfer.token} from ${receivable.clientName} on ${provider.network.label}, what was still owed, and applied it`,
+    detail: {
+      by: null,
+      allocationId: row.id,
+      invoiceId: receivable.id,
+      counterpartyId: receivable.counterpartyId,
+      transferId,
+      amount: transfer.amount,
+      currency: transfer.token,
+      txHash: transfer.txHash,
+      from: transfer.from,
+      basis: matchedBy,
+      outstandingAfter: 0,
+      unappliedAfter: 0,
+      group: row.id,
+      receivedAt: transfer.receivedAt,
+    },
+  });
+  return true;
 }

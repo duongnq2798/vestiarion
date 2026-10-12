@@ -101,8 +101,8 @@ workspace's own API keys — `owner` and `admin` hold it; every other member see
 for adding, testing and removing a workspace's own webhook endpoints — `owner` and `admin` hold it;
 every other member sees the endpoint list with each URL reduced to its host — see
 [Webhooks security](https://www.vestiarion.xyz/docs/webhooks/security#who-sees-what)), and `integrations.manage` (`src/app/actions/slack.ts`,
-`/api/slack/install`, `src/app/actions/github.ts` and `/api/github/install`, for connecting and removing the workspace's Slack and
-GitHub — `owner` and `admin` hold it; the
+`/api/slack/install`, `src/app/actions/github.ts` and `/api/github/install`, `src/app/actions/xero.ts` and
+`/api/integrations/xero/*`, for connecting and removing the workspace's Slack, GitHub and Xero — `owner` and `admin` hold it; the
 limit on deciding payments from Slack takes `org.administer`, an owner's). The remaining permissions — `workspace.read` (beyond
 the leaving case above) and `org.administer` — and `canAssignRole`'s rule that an admin may grant
 `approver` or `viewer` but nothing at its own rank or above while only an owner assigns `admin` or
@@ -258,6 +258,60 @@ record; it writes nothing and nothing that moves money imports it (`tests/settle
   and lists them as **Payments in flight**, aged against the network's `stuckAfterMinutes`. Both reads are best effort, in
   the page's organization scope: one that fails hides only these parts. The shared receipt says Reconciled only when its
   own three checks pass, and Confirmed with the reason otherwise (`src/lib/receipts/status.ts`).
+
+**Money received applied to invoices** (`src/lib/allocations/`, migration 0103,
+`docs/superpowers/specs/2026-10-12-allocations-design.md`) lets a person apply an incoming payment on Arc to one or more
+open receivables, settle one from several payments, keep an overpayment as the client's credit, record a difference as a
+fee, and reverse either:
+- **The rows.** `receivable_allocations` holds a `payment` row (part or all of one `incoming_transfers` row applied to
+  one receivable, with its `basis`: `person`, or `sender`/`amount` for the agent), a `fee` row (a difference on one
+  receivable, with a reason, never paid by the client) or a `reversal` row (naming the row it reverses, with a reason).
+  The tenant role reads and inserts only; composite foreign keys keep every link in the workspace, and
+  `incoming_transfers` gains `unique (org_id, id)` for them. Amounts are `numeric(20,6)`; the code works in whole
+  millionths (`src/lib/allocations/model.ts`), so sums never drift, and never adds across currencies.
+- **The invariants, in the database.** `receivable_allocations_check`, before each insert as the inserting role, locks the
+  payment's row, then the receivable's (`for update`, one order everywhere), and refuses: a receivable not open or not
+  one; a payment or receivable a whole match claimed; another currency than both the payment's and the receivable's; a
+  payment already applied to another client; more from a payment than it brought; more on a receivable than its amount;
+  a fee with no payment beside it; a reversal that does not mirror its row, names a reversal or would leave a fee alone;
+  and a stale `payment_seq`. `payment_seq` numbers one payment's rows 1, 2, 3, ...: a person's application names the
+  next one as they read the payment, so of two people applying the same payment at once one is refused (the second waits
+  on the lock, then sees the number taken; the unique index on `(org_id, transfer_id, payment_seq)` holds it even past
+  the trigger, which `tests/allocations-migration.test.ts` shows with triggers off). One reversal per row is a unique
+  index. `receivable_allocations_settle`, after each insert, makes a receivable `received` once nothing is owed, with
+  the latest applied payment's `received_at` and `tx_hash`, and a reversal that leaves something owed makes a `received`
+  one `pending` again, with neither: in the same transaction. `incoming_transfers_whole_match`, before a whole match's
+  claim of `invoice_id`, locks the receivable and refuses a transfer or receivable with allocations in force.
+- **The whole match is unchanged.** `matchTransfer` and the claim on `incoming_transfers.invoice_id` stay as they were,
+  with `ar_received`; a whole match is all of one transfer for one receivable, and is not reversed here. The receipts
+  stage leaves out of it every transfer and receivable with an allocation row, and applies by itself a transfer that is
+  exactly what is still owed on a part-paid receivable, by the same two rules (`matchTransfer` over the outstanding
+  amounts), as an agent `payment` row and `ar_payment_applied`; a refusal of the trigger leaves it to a person.
+- **Suggestions** (`src/lib/allocations/suggest.ts`) are pure, bounded and deterministic: a payment's reference (Arc
+  transfers carry none); for the client its applications name, or whose address on file sent it, the receivable it pays
+  exactly, 2 to 4 of its 12 oldest due that add up to it, one it is short of by at most 1% and 5.00 (a possible fee), and
+  oldest due first with any rest as credit; with no client known, an exact amount (saying how many share it), sets of one
+  client's receivables, and one within the fee margin. At most 3 per payment, each with why.
+- **Commands.** `receivable.apply_payment` and `receivable.reverse_allocation`, `records.write`, console only
+  (`src/lib/commands/allocations.ts`). `src/lib/allocations/apply.ts` reads what it needs, plans with the pure model so a
+  refusal reads in plain words, checks the signing key, writes every row in one insert (payment rows by receivable id,
+  then fees), maps a trigger's refusal to the same words, then signs one entry per row, best effort:
+  `ar_payment_applied`, `ar_fee_recorded`, `ar_allocation_reversed`, each with `invoiceId`, so the receivable's trail
+  shows it, and a `group` for the rows one press wrote.
+- **Where it shows.** Bills & receivables reads the rows and payments (`readAllocationBook`, best effort): a receivable's
+  card says part paid, what was received and is still owed, and lists each payment and fee, with Reverse and Record a fee
+  (`AllocationLines`); **Apply payments** (`ApplyPayments`, from `applyPaymentsView`) lists each payment not applied in
+  full, its credit, the suggestions and Apply by hand, leaving out test USDC from the float. The pay link's page asks for
+  what is still owed (`payLinkBalance`); the collections stage asks for it too, says what arrived, and sends nothing on
+  a receivable with nothing owed. Treasury's cash outlook and scenarios expect a part-paid receivable for what is still
+  owed. Where a payment is and receipts cover payments the workspace makes, so they are
+  unchanged. `GET /api/v1/invoices` keeps its shape: part paid stays `pending`.
+- **A search** (`src/lib/invoice-search.ts`, `?q=` on Bills & receivables) finds an invoice by id, any part of its memo,
+  purchase order, counterparty, amount or what is still owed, and a payment applied to it by its hash, Circle id or
+  sender.
+- **Before 0103 runs** a read answers `available: false` (`PGRST205`, `42P01`), the commands refuse `not_ready`, the
+  receipts and collections stages read no rows and behave as before, and Receivables says applying payments is not set
+  up yet. Bank statement money-in lines are not applied: a statement's currency is a bank's, receivables are USDC or EURC.
 
 **The FX watch** (`POST /api/agent/fx-watch`, `src/lib/agent/fx-watch.ts`,
 `docs/superpowers/specs/2026-10-05-fx-reevaluation-design.md`) runs every 5 minutes from Supabase Cron, with the same
@@ -1161,8 +1215,10 @@ workspace's mode for that action, never from a link, a key or a button. A
 **command** is one function per action — `approvePayable`, `rejectPayable`,
 `returnPayable`, `addPayableDetails`, `payMilestoneNow`, `closeMilestoneUnpaid`,
 `pauseWorkspaceAgent`, `resumeWorkspaceAgent`, `runWorkspaceCycle`,
-`addInvoice`, `importInvoices`, `recordActualPayment`, `importActualPayments`, `approvePlanLines`,
-`shareWorkspaceReport`, `stopSharingWorkspaceReport`, `answerReportBaseline` — whose first statement is
+`addInvoice`, `importInvoices`, `addAccountingBills`, `dismissAccountingBills`, `recordActualPayment`,
+`importActualPayments`, `approvePlanLines`,
+`shareWorkspaceReport`, `stopSharingWorkspaceReport`, `answerReportBaseline`, `applyReceivedPayment`,
+`reverseAppliedPayment` — whose first statement is
 `gate(actor, "<command>")`:
 
 - the scope in force must be the actor's workspace, or it throws
@@ -1351,7 +1407,9 @@ workspaces; the ledger keeps the address with most of its name hidden.
   and number, before the send, and deleted if it fails. The email is a fixed
   template that carries the pay link, whose token is kept encrypted under the
   platform master key (`receivable_links.token_enc`). Each reminder is
-  `ar_reminder_sent`, each wait `ar_reminder_deferred`.
+  `ar_reminder_sent`, each wait `ar_reminder_deferred`. A part-paid receivable
+  is reminded of what is still owed, saying what arrived (`partPaid` in the
+  entry), and one with nothing owed is not reminded (migration 0103).
 `setNotifyEmailAction` (`src/app/actions/notifications.ts`) is gated on
 `workspace.read`, and writes only the row named by the session's own user id
 — a `userId` field in the form is never read.
@@ -1511,6 +1569,68 @@ merged (`src/lib/github/merges.ts`) starts `runCycleSoon` (`pull_request_merged`
 for each connected workspace with a pending milestone on that pull request, as
 the GitHub check reads its link, so the payment follows the merge within a
 minute instead of waiting for the schedule.
+
+## Accounting connectors: Xero
+
+A workspace can bring its bills in from Xero (docs/superpowers/specs/2026-10-12-xero-connector-design.md). The core,
+`src/lib/connectors/`, names no provider: it talks to one through `AccountingProvider` (`provider.ts`: the authorize URL,
+the code exchange, the organisations a token reaches, refresh, revoke, and paged reads of bills, contacts and accounts
+mapped into `ExternalBill`, `ExternalContact` and `ExternalAccount`). Xero is the first provider (`src/lib/xero/`: its
+settings, HTTP, OAuth calls, the pure mapping from its JSON in `map.ts`, and `xeroProvider`); QuickBooks Online joins in
+`src/lib/accounting-providers.ts`, the one place the core is wired to a provider. Xero is on only with `XERO_CLIENT_ID`
+and `XERO_CLIENT_SECRET` (a Xero "Web app"); otherwise its card and routes are not there.
+
+- **Schema (migration `0101`).** Four tenant tables, with row-level security, the restrictive guard and composite
+  foreign keys to their connection, which the tenant role reads, inserts and updates and never deletes:
+  `accounting_connections` (one per workspace, provider and external organisation; at most one not revoked per
+  workspace and provider; status `connected`, `needs_reconnect` or `revoked`; the consent's version and time; the last
+  sync and the last error in business words; the failures in a row and `next_sync_after`; a sync lease; the payment
+  account), `external_links` (an external contact or bill, once, and the counterparty or invoice it became, with the
+  provider's version), `accounting_bills` (the review list: each bill once, its facts as the provider has them now,
+  `source_status` and `review_state`) and `accounting_sync_cursors` (per connection and object type, the phase, the
+  `since` time and the checkpoint of a run under way). And one platform table, `accounting_tokens`, as `slack_installs`:
+  RLS on, no policy, nothing for the tenant or browser roles. Only `src/lib/connectors/token-store.ts` reads it, in the
+  workspace's own scope; each token is an envelope under the master key bound to the workspace, its column and its row
+  (`accounting_tokens.refresh_token_enc/<id>`).
+- **Tokens.** Xero rotates its refresh token on every use, so a lost update locks a connection out. `freshAccessToken`
+  (`tokens.ts`) refreshes only under the row's lease (`accounting_token_lease`: one holder, 60 seconds, under the row's
+  lock) and stores the new pair only for that holder over the version it read (`accounting_token_store`, a
+  compare-and-set); a caller that finds the lease taken waits and reads what was stored. `invalid_grant` marks the
+  connection needs reconnect.
+- **Connecting.** `/integrations/xero` takes a signed-in person to their workspace's Xero card; `/integrations/xero/connect`
+  lets them pick the workspace, read what Vestiarion does with Xero's data and tick **I agree**. Its form posts, from this
+  origin only, to `POST /api/integrations/xero/connect`, which checks the session, `integrations.manage` and the tick, and
+  sends them to Xero with a state signed under its own HKDF key (ten minutes), carrying the consent and a nonce kept in an
+  HttpOnly cookie. `GET /api/integrations/xero/callback` checks the state, the cookie, the person, their role again and
+  the consent before it exchanges the code and reads `/connections`. One organisation is connected at once
+  (`saveConnection`, then the tokens, then the first sync in `after()`); several are kept as a pending grant for ten
+  minutes and picked on the connect page (`POST /api/integrations/xero/choose`). A workspace connected to another
+  organisation is refused; the same one reconnects its row. `accounting_connected` records the consent.
+- **Syncing** (`sync.ts`, `sync-store.ts`): suppliers, then bills, a page at a time in Xero's update order, each page read,
+  then written, then the cursor moved, so a run stopped anywhere resumes at its page; no call to Xero happens inside a
+  write. The backfill reads approved bills; later runs send `If-Modified-Since` and read every status. A run of several
+  pages that read a change made during it, or saw Xero's count of matching bills (`pagination.itemCount`) fall from one
+  page to the next (a bill paid while a backfill of approved ones runs), starts over from page 1. A `Retry-After` of at most 5 seconds is waited out
+  once; a longer one, an outage or an unreadable answer ends the run and sets `next_sync_after` (Xero's wait, or 1, 2, 4
+  minutes and so on up to an hour); a 401 refreshes once; a refused refresh or a 403 marks needs reconnect. `planBill`
+  keeps each bill once by its version, takes a new open bill only when due or dated from 90 days before the first
+  connection (`window_from`), and signs `accounting_bill_closed` when a bill already added is paid, voided or deleted in
+  Xero. `POST /api/platform/accounting-sync` (the agent's bearer token, Supabase Cron every 15 minutes,
+  `.github/workflows/accounting-sync.yml` by hand) runs each connection due (`accounting_connections_due`) for at most
+  240 seconds, each under its five-minute sync lease and in its own workspace's scope, then revokes and deletes pending
+  grants past their deadline. **Sync now** runs one in its action.
+- **Adding bills** (`review.ts`, `src/lib/commands/accounting.ts`). The review list on Bills & receivables reads each bill
+  in review as a row of a bill list and gives it its fate with `fatesOf` and `checkBillList`'s own facts, so duplicates,
+  currencies (shadow mode for anything but USDC and EURC, never VND), decimals and the form's schema are the import's.
+  The supplier is the counterparty its contact is linked to, else the one with its name, else a new one added with the
+  bill (a vendor, no address, a limit of its largest bill there). `accounting.add_bills` and `accounting.dismiss_bills`
+  (`records.write`, the console only) check the bills again on the server, claim each before adding it, add it through
+  `addInvoice` with `via: "xero"` and Xero's ids, and link the bill and the supplier.
+- **The payment account** (I14): an owner or admin reads the chart of accounts from Xero, picks a bank account (or one
+  Xero lets take payments; never revenue or expense), sees a preview (`booking.ts`), and keeps it on the connection
+  (`accounting_payment_account_chosen`). Nothing is written to Xero in this version.
+- **Before migration 0101** a missing table or function (`PGRST205`, `PGRST202`, `42P01`, `42883`) reads as
+  `NotSetUpError`: the card says Xero is not set up yet, the review list is not shown, and the sweeper has nothing to do.
 
 ## API
 

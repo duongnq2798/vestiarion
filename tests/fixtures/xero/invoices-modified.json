@@ -1,0 +1,89 @@
+{
+  "Id": "8a4a9b16-4ae5-4c1d-9d7b-3d1f0e8f1a03",
+  "Status": "OK",
+  "ProviderName": "Vestiarion",
+  "DateTimeUTC": "/Date(1791795730000)/",
+  "pagination": { "page": 1, "pageSize": 100, "pageCount": 1, "itemCount": 6 },
+  "Invoices": [
+    {
+      "Type": "ACCPAY",
+      "InvoiceID": "0f4c1f4e-1d7a-4e0f-9a9d-6c2d3c1a0001",
+      "InvoiceNumber": "PD-4471",
+      "AmountDue": 0.0,
+      "AmountPaid": 1250.0,
+      "FullyPaidOnDate": "/Date(1791590400000+0000)/",
+      "Contact": { "ContactID": "c1a0e2f4-6b1d-4a6c-8f3e-0000000000a1", "Name": "PowerDirect" },
+      "DateString": "2026-10-03T00:00:00",
+      "DueDateString": "2026-10-28T00:00:00",
+      "Status": "PAID",
+      "Total": 1250.0,
+      "UpdatedDateUTC": "/Date(1791795730000+0000)/",
+      "CurrencyCode": "USD"
+    },
+    {
+      "Type": "ACCPAY",
+      "InvoiceID": "0f4c1f4e-1d7a-4e0f-9a9d-6c2d3c1a0005",
+      "InvoiceNumber": "OLD-1",
+      "AmountDue": 300.0,
+      "Contact": { "ContactID": "c1a0e2f4-6b1d-4a6c-8f3e-0000000000a5", "Name": "Hoyt Productions" },
+      "DateString": "2026-06-01T00:00:00",
+      "DueDateString": "2026-06-30T00:00:00",
+      "Status": "VOIDED",
+      "Total": 300.0,
+      "UpdatedDateUTC": "/Date(1791795730000+0000)/",
+      "CurrencyCode": "USD"
+    },
+    {
+      "Type": "ACCPAY",
+      "InvoiceID": "0f4c1f4e-1d7a-4e0f-9a9d-6c2d3c1a0006",
+      "InvoiceNumber": "DR-9",
+      "AmountDue": 40.0,
+      "Contact": { "ContactID": "c1a0e2f4-6b1d-4a6c-8f3e-0000000000a1", "Name": "PowerDirect" },
+      "DateString": "2026-10-10T00:00:00",
+      "DueDateString": "2026-11-05T00:00:00",
+      "Status": "DRAFT",
+      "Total": 40.0,
+      "UpdatedDateUTC": "/Date(1791795730000+0000)/",
+      "CurrencyCode": "USD"
+    },
+    {
+      "Type": "ACCPAY",
+      "InvoiceID": "0f4c1f4e-1d7a-4e0f-9a9d-6c2d3c1a0007",
+      "InvoiceNumber": "SB-2",
+      "AmountDue": 55.0,
+      "Contact": { "ContactID": "c1a0e2f4-6b1d-4a6c-8f3e-0000000000a1", "Name": "PowerDirect" },
+      "DateString": "2026-10-10T00:00:00",
+      "DueDateString": "2026-11-05T00:00:00",
+      "Status": "SUBMITTED",
+      "Total": 55.0,
+      "UpdatedDateUTC": "/Date(1791795730000+0000)/",
+      "CurrencyCode": "USD"
+    },
+    {
+      "Type": "ACCPAY",
+      "InvoiceID": "0f4c1f4e-1d7a-4e0f-9a9d-6c2d3c1a0008",
+      "InvoiceNumber": "DEL-3",
+      "AmountDue": 12.0,
+      "Contact": { "ContactID": "c1a0e2f4-6b1d-4a6c-8f3e-0000000000a1", "Name": "PowerDirect" },
+      "DateString": "2026-10-10T00:00:00",
+      "DueDateString": "2026-11-05T00:00:00",
+      "Status": "DELETED",
+      "Total": 12.0,
+      "UpdatedDateUTC": "/Date(1791795730000+0000)/",
+      "CurrencyCode": "USD"
+    },
+    {
+      "Type": "ACCREC",
+      "InvoiceID": "0f4c1f4e-1d7a-4e0f-9a9d-6c2d3c1a0009",
+      "InvoiceNumber": "INV-0099",
+      "AmountDue": 500.0,
+      "Contact": { "ContactID": "c1a0e2f4-6b1d-4a6c-8f3e-0000000000b1", "Name": "Ridgeway University" },
+      "DateString": "2026-10-10T00:00:00",
+      "DueDateString": "2026-11-05T00:00:00",
+      "Status": "AUTHORISED",
+      "Total": 500.0,
+      "UpdatedDateUTC": "/Date(1791795730000+0000)/",
+      "CurrencyCode": "USD"
+    }
+  ]
+}

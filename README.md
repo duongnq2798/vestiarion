@@ -65,7 +65,7 @@ reads the whole book each time it runs:
 | **Payables** | Three-way match (purchase order, goods received, invoice), duplicate and risk checks, then **pay**, **schedule**, **hold**, **request info** or **flag as fraud**, with its reasoning attached |
 | **Contractors** | Releases a milestone once its evidence is verified, such as a merged GitHub pull request; on Arc testnet the milestone's USDC can sit in an escrow contract until then |
 | **Compliance** | Re-screens every counterparty each cycle (OpenSanctions where configured) and tiers its payment limit down on a hit, reversibly |
-| **Receivables** | A client pays through a link; the agent matches the transfer to what was owed and, when turned on, sends reminders within bounds code sets |
+| **Receivables** | A client pays through a link; the agent matches the transfer to what was owed, suggests how to apply a payment that covers several invoices, part of one or falls a fee short, and, when turned on, sends reminders for what is still owed within bounds code sets |
 | **Treasury** | On Arc testnet, sweeps idle cash above a 7-day buffer into Circle's USYC only when the yield beats the round-trip fee, and redeems ahead of what falls due |
 | **Audit** | Appends every decision, human action and system event to an Ed25519-signed, hash-chained ledger, exportable and verifiable in one click |
 
@@ -233,7 +233,9 @@ run in production, with its ledger entries and transactions.
 - **Contractor milestones** — verified by a merged pull request or a person; GitHub bounties with `/bounty` and
   `/payto`; a pull request comment once paid.
 - **Payee links** — a payee enters and confirms their own address, or creates a passkey wallet to be paid in.
-- **Receivables** — pay links on Arc, matched receipts, reminders the agent times within bounds.
+- **Receivables** — pay links on Arc, matched receipts, payments applied to several invoices or part of one with the
+  agent's suggestions, credit and fees kept apart, reversals appended, reminders for what is still owed, and a search
+  by invoice number, id, purchase order, amount or transaction.
 - **Treasury** — safe-to-spend today, cash outlook, USYC reserve with **Bring cash back** (Arc testnet).
 - **Cross-currency and cross-chain** — EURC invoices and swaps, CCTP and Gateway payouts (Arc testnet).
 - **Shadow mode** — try the agent on real bills, paid in the business's own way, before it pays anything itself.
@@ -277,6 +279,7 @@ run in production, with its ledger entries and transactions.
 | **[Webhooks](https://www.vestiarion.xyz/docs/webhooks)** | Up to 5 HTTPS endpoints per workspace receive every ledger entry, signed, with retries |
 | **[GitHub](https://www.vestiarion.xyz/docs/guides/github)** | Milestone verification from merged pull requests, bounties, and payment comments |
 | **[Email](https://www.vestiarion.xyz/docs/guides/email-invoices)** | A workspace address that reads forwarded invoices into drafts a person adds |
+| **[Xero](https://www.vestiarion.xyz/docs/guides/xero)** | Bills approved in Xero come in for review every 15 minutes, through the same check as a bill list, and become payables when a person adds them; read-only, with the account payments will be booked to chosen ahead |
 
 There is no standalone CLI; operators run the repository's scripts (`npm run cycle`, `npm run status`, …), listed in
 [docs/self-hosting.md](docs/self-hosting.md#scripts).
@@ -397,7 +400,7 @@ simulated.
 
 ## License
 
-[MIT](LICENSE). Arc, Circle, Slack, Telegram and npm are trademarks of their respective owners; their names show what
+[MIT](LICENSE). Arc, Circle, Slack, Telegram, Xero and npm are trademarks of their respective owners; their names show what
 Vestiarion is built on and connects to, not an endorsement.
 
 <a href="https://www.producthunt.com/products/vestiarion?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-vestiarion"><img alt="Vestiarion on Product Hunt" width="200" height="43" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1269583&theme=light"></a>

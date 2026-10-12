@@ -18,6 +18,9 @@ export const COMMAND_PERMISSIONS = {
   "payable.import_actuals": "records.write",
   // So is filling them in from a bank statement (bank statement B8).
   "payable.import_statement": "records.write",
+  // Applying money received to receivables, a fee and a reversal: records, entered as an invoice is (allocations L10).
+  "receivable.apply_payment": "records.write",
+  "receivable.reverse_allocation": "records.write",
   // Moving a scheduled bill to the payment plan's day: a decision on when the agent pays, never a payment (payment plan P10).
   "payment_plan.approve": "approval.decide",
   "milestone.pay": "approval.decide",
@@ -33,6 +36,9 @@ export const COMMAND_PERMISSIONS = {
   "inbox.add": "records.write",
   "inbox.finish": "records.write",
   "inbox.dismiss": "records.write",
+  // Bills an accounting tool brought in (Xero connector X3, X11): added through the bill list's check, or dismissed.
+  "accounting.add_bills": "records.write",
+  "accounting.dismiss_bills": "records.write",
   // A public link to the workspace report, and stopping one; the value question is the business's own figure about
   // itself, an owner's (shared report S3).
   "report.share": "report.share",

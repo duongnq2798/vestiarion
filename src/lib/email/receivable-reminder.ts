@@ -23,6 +23,8 @@ export function receivableReminderEmail(input: {
   origin: string;
   /** The workspace's network, where the client pays (mainnet copy C1). */
   network: Network;
+  /** A part-paid invoice: what was invoiced and what arrived, as "900.00"; `amount` is then what is still owed. */
+  partPaid?: { invoiced: string; received: string };
 }): { subject: string; html: string; text: string } {
   const { orgName, clientName, amount, token, what, dueOn, daysFromDue, tone, payUrl, origin } = input;
   const { label } = networkProfile(input.network);
@@ -50,6 +52,7 @@ export function receivableReminderEmail(input: {
           ? `${orgName} asked you to pay ${money}${forWhat}, due today, ${dueOn}.`
           : `${orgName} asked you to pay ${money}${forWhat}, which was due ${dueOn}, ${dayWords} ago.`
       : `Your payment of ${money} to ${orgName}${forWhat} was due ${dueOn}, ${dayWords} ago, and has not arrived.`;
+  const part = input.partPaid ? `${input.partPaid.received} ${token} of the ${input.partPaid.invoiced} ${token} invoiced has arrived. What is still owed is ${money}.` : null;
   const how = `Pay it on ${label} from any wallet: the page shows the amount and the address to send it to.`;
   const last = tone === "final" ? `This is the last reminder Vestiarion sends for it. After this, ${orgName} follows up with you directly.` : null;
   const note = `Already paid? It can take a minute to show, and you can ignore this email. You get it because ${orgName} sends its invoices through Vestiarion and asked its agent to remind you. For anything about this invoice, contact ${orgName}.`;
@@ -59,12 +62,12 @@ export function receivableReminderEmail(input: {
     preheader: lead,
     eyebrow: tone === "final" ? "Final reminder" : tone === "firm" ? "Payment overdue" : "Payment reminder",
     heading: tone === "final" ? `Hi ${clientName}, a final reminder` : tone === "firm" ? `Hi ${clientName}, this payment is overdue` : `Hi ${clientName}, a reminder from ${orgName}`,
-    paragraphsHtml: [escapeHtml(lead), escapeHtml(how), ...(last ? [escapeHtml(last)] : [])],
+    paragraphsHtml: [escapeHtml(lead), ...(part ? [escapeHtml(part)] : []), escapeHtml(how), ...(last ? [escapeHtml(last)] : [])],
     button: { label: `Pay on ${label}`, link: payUrl },
     note,
     origin,
   });
 
-  const text = [`Hi ${clientName},`, "", lead, how, ...(last ? [last] : []), "", `Pay on ${label}: ${payUrl}`, "", note].join("\n");
+  const text = [`Hi ${clientName},`, "", lead, ...(part ? [part] : []), how, ...(last ? [last] : []), "", `Pay on ${label}: ${payUrl}`, "", note].join("\n");
   return { subject, html, text };
 }
