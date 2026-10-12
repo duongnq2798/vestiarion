@@ -1,0 +1,66 @@
+{
+  "status": "COMPLETE",
+  "results": [
+    {
+      "from": {
+        "id": "30117482911"
+      },
+      "to": [
+        {
+          "toObjectId": 9100000002,
+          "associationTypes": [
+            {
+              "category": "HUBSPOT_DEFINED",
+              "typeId": 341,
+              "label": null
+            }
+          ]
+        },
+        {
+          "toObjectId": 9100000001,
+          "associationTypes": [
+            {
+              "category": "HUBSPOT_DEFINED",
+              "typeId": 5,
+              "label": "Primary"
+            },
+            {
+              "category": "HUBSPOT_DEFINED",
+              "typeId": 341,
+              "label": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "from": {
+        "id": "30117482912"
+      },
+      "to": [
+        {
+          "toObjectId": 9100000003,
+          "associationTypes": [
+            {
+              "category": "HUBSPOT_DEFINED",
+              "typeId": 341,
+              "label": null
+            }
+          ]
+        },
+        {
+          "toObjectId": 9100000002,
+          "associationTypes": [
+            {
+              "category": "HUBSPOT_DEFINED",
+              "typeId": 341,
+              "label": null
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "startedAt": "2026-10-12T08:00:00.100Z",
+  "completedAt": "2026-10-12T08:00:00.180Z"
+}

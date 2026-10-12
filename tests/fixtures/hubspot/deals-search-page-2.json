@@ -1,0 +1,42 @@
+{
+  "total": 4,
+  "results": [
+    {
+      "id": "30117482913",
+      "properties": {
+        "amount": "",
+        "closedate": "2026-10-05T04:00:00Z",
+        "createdate": "2026-09-20T08:00:00.000Z",
+        "deal_currency_code": "EUR",
+        "dealname": "Monthly retainer, Q4",
+        "dealstage": "160239002",
+        "hs_is_closed": null,
+        "hs_is_closed_won": null,
+        "hs_lastmodifieddate": "2026-10-06T11:00:00.000Z",
+        "pipeline": "84721930",
+        "hs_object_id": "30117482913"
+      },
+      "createdAt": "2026-09-20T08:00:00.000Z",
+      "updatedAt": "2026-10-06T11:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "30117482914",
+      "properties": {
+        "amount": "9000",
+        "closedate": "2026-10-08T03:00:00Z",
+        "deal_currency_code": "GBP",
+        "dealname": "Discovery sprint",
+        "dealstage": "closedlost",
+        "hs_is_closed": "true",
+        "hs_is_closed_won": "false",
+        "hs_lastmodifieddate": "2026-10-09T07:30:00.000Z",
+        "pipeline": "default",
+        "hs_object_id": "30117482914"
+      },
+      "createdAt": "2026-09-25T08:00:00.000Z",
+      "updatedAt": "2026-10-09T07:30:00.000Z",
+      "archived": false
+    }
+  ]
+}

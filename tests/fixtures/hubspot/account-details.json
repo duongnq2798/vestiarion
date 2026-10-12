@@ -1,0 +1,14 @@
+{
+  "portalId": 48291736,
+  "accountType": "DEVELOPER_TEST",
+  "timeZone": "Asia/Singapore",
+  "companyCurrency": "USD",
+  "additionalCurrencies": [
+    "EUR",
+    "SGD"
+  ],
+  "utcOffset": "+08:00",
+  "utcOffsetMilliseconds": 28800000,
+  "uiDomain": "app.hubspot.com",
+  "dataHostingLocation": "na1"
+}

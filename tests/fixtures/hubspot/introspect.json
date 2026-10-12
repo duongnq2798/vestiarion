@@ -1,0 +1,20 @@
+{
+  "active": true,
+  "token": "CNb5recorded-access-token",
+  "hub_id": 48291736,
+  "user_id": 222222,
+  "client_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "app_id": 1234444,
+  "user": "owner@northstar-studio.example",
+  "hub_domain": "northstar-studio.example",
+  "scopes": [
+    "oauth",
+    "crm.objects.companies.read",
+    "crm.objects.contacts.read",
+    "crm.objects.deals.read"
+  ],
+  "expires_in": 1789,
+  "is_private_distribution": false,
+  "token_use": "access_token",
+  "token_type": "Bearer"
+}

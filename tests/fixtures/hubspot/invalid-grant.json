@@ -1,0 +1,6 @@
+{
+  "error": "invalid_grant",
+  "error_description": "refresh token is invalid, expired or revoked",
+  "status": "BAD_REFRESH_TOKEN",
+  "message": "refresh token is invalid, expired or revoked"
+}

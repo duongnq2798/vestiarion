@@ -1,0 +1,49 @@
+{
+  "total": 4,
+  "results": [
+    {
+      "id": "30117482911",
+      "properties": {
+        "amount": "12500",
+        "closedate": "2026-09-30T18:30:00Z",
+        "createdate": "2026-08-14T03:12:45.512Z",
+        "deal_currency_code": "USD",
+        "dealname": "Website rebuild",
+        "dealstage": "closedwon",
+        "hs_is_closed": "true",
+        "hs_is_closed_won": "true",
+        "hs_lastmodifieddate": "2026-10-01T02:04:11.733Z",
+        "pipeline": "default",
+        "hs_object_id": "30117482911"
+      },
+      "createdAt": "2026-08-14T03:12:45.512Z",
+      "updatedAt": "2026-10-01T02:04:11.733Z",
+      "archived": false
+    },
+    {
+      "id": "30117482912",
+      "properties": {
+        "amount": "4800.50",
+        "closedate": "2026-11-15T00:00:00Z",
+        "createdate": "2026-09-02T08:00:00.000Z",
+        "deal_currency_code": null,
+        "dealname": "Brand refresh",
+        "dealstage": "contractsent",
+        "hs_is_closed": "false",
+        "hs_is_closed_won": "false",
+        "hs_lastmodifieddate": "2026-10-03T09:15:00.000Z",
+        "pipeline": "default",
+        "hs_object_id": "30117482912"
+      },
+      "createdAt": "2026-09-02T08:00:00.000Z",
+      "updatedAt": "2026-10-03T09:15:00.000Z",
+      "archived": false
+    }
+  ],
+  "paging": {
+    "next": {
+      "after": "2",
+      "link": "?after=2"
+    }
+  }
+}

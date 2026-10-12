@@ -1,0 +1,13 @@
+{
+  "token_type": "bearer",
+  "access_token": "CNb5recorded-access-token-2",
+  "hub_id": 48291736,
+  "scopes": [
+    "oauth",
+    "crm.objects.companies.read",
+    "crm.objects.contacts.read",
+    "crm.objects.deals.read"
+  ],
+  "expires_in": 1800,
+  "token_use": "access_token"
+}

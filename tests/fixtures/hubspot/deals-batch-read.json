@@ -1,0 +1,38 @@
+{
+  "status": "COMPLETE",
+  "results": [
+    {
+      "id": "30117482911",
+      "properties": {
+        "amount": "15000",
+        "closedate": "2026-10-20T03:00:00Z",
+        "deal_currency_code": "USD",
+        "dealname": "Website rebuild",
+        "dealstage": "closedwon",
+        "hs_is_closed": "true",
+        "hs_is_closed_won": "true",
+        "hs_lastmodifieddate": "2026-10-11T06:00:00.000Z",
+        "pipeline": "default",
+        "hs_object_id": "30117482911"
+      },
+      "createdAt": "2026-08-14T03:12:45.512Z",
+      "updatedAt": "2026-10-11T06:00:00.000Z",
+      "archived": false
+    }
+  ],
+  "numErrors": 1,
+  "errors": [
+    {
+      "status": "error",
+      "category": "OBJECT_NOT_FOUND",
+      "message": "Could not get some DEAL objects, they may be deleted or not exist. Check that ids are valid.",
+      "context": {
+        "ids": [
+          "30117400000"
+        ]
+      }
+    }
+  ],
+  "startedAt": "2026-10-12T08:00:01.000Z",
+  "completedAt": "2026-10-12T08:00:01.080Z"
+}

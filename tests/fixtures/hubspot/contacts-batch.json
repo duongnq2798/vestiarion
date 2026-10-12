@@ -1,0 +1,27 @@
+{
+  "status": "COMPLETE",
+  "results": [
+    {
+      "id": "8200000011",
+      "properties": {
+        "email": "Jane.Ito@Northwind.example ",
+        "hs_object_id": "8200000011"
+      },
+      "createdAt": "2026-01-10T00:00:00.000Z",
+      "updatedAt": "2026-09-01T00:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "8200000020",
+      "properties": {
+        "email": "not an email",
+        "hs_object_id": "8200000020"
+      },
+      "createdAt": "2026-01-10T00:00:00.000Z",
+      "updatedAt": "2026-09-01T00:00:00.000Z",
+      "archived": false
+    }
+  ],
+  "startedAt": "2026-10-12T08:00:00.400Z",
+  "completedAt": "2026-10-12T08:00:00.450Z"
+}
