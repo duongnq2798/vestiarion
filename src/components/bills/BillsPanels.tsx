@@ -138,10 +138,14 @@ export function LegacyHashRedirect() {
   const router = useRouter();
   const pathname = usePathname();
   useEffect(() => {
-    const next = legacyHashHref(window.location.hash, window.location.search);
-    if (next !== null) router.replace(`${pathname}${next}`, { scroll: false });
-    // Once, as the page arrives: a fragment the page writes itself is already in the new form.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const rewrite = () => {
+      const next = legacyHashHref(window.location.hash, window.location.search);
+      if (next !== null) router.replace(`${pathname}${next}`, { scroll: false });
+    };
+    // As the page arrives, and when a link on it changes only the fragment: one the page writes is already in the new form.
+    rewrite();
+    window.addEventListener("hashchange", rewrite);
+    return () => window.removeEventListener("hashchange", rewrite);
+  }, [router, pathname]);
   return null;
 }
