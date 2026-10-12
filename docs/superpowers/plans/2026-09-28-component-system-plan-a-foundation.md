@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Work only in `E:\APP2028\hackathon-project-ui` on branch `feat/component-system`. Never run commands in `E:\APP2028\hackathon-project`: another session uses that checkout.
+- Work only in a separate git worktree on branch `feat/component-system`. Never run commands in the main checkout: another session uses it.
 - Read the relevant guide in `node_modules/next/dist/docs/` before writing Next code (`AGENTS.md`).
 - New dependencies, exactly: `radix-ui@1.6.7 motion@13.4.4 sonner@2.0.8 cmdk@1.1.1 lucide-react@1.48.0 class-variance-authority@0.7.1 clsx@2.1.1 tailwind-merge@3.7.0`, and dev `tw-animate-css@1.4.0`. No others.
 - `npm run verify` (lockfile check, typecheck, lint, tests) is green at every commit.

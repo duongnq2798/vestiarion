@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Work only in `E:\APP2028\hackathon-project-ui`, branch `feat/component-migration` (from `b831b81`). Never run commands in `E:\APP2028\hackathon-project`.
+- Work only in a separate git worktree, branch `feat/component-migration` (from `b831b81`). Never run commands in the main checkout.
 - Read the relevant guide in `node_modules/next/dist/docs/` before writing Next code (`AGENTS.md`). In this Next version a layout is not a gate: every `/o/[slug]` page keeps calling `requireMembership` itself (tests pin it).
 - No new dependencies. `npm run verify` is green at every commit.
 - Import primitives directly from `@/components/ui/<Name>`. Outside `src/components/ui/`, render no raw `<button>`, `<select>`, `<textarea>`, or non-hidden `<input>` (Plan B2's test enforces it; B1 must already comply in every file it touches). `<input type="hidden">`, `<a>`/`Link`, `<form>` and `<label>` are fine.
@@ -3095,7 +3095,7 @@ Co-Authored-By: <implementing model> <noreply@anthropic.com>"
 
 ### Task 7: Browser verification (run by the controller)
 
-- [ ] **Step 1:** Copy `E:\APP2028\hackathon-project\.env.local` into the worktree (it is git-ignored; the landing page reads the founding organization's metrics and `/design`'s forms need auth configuration to refuse politely). Start `npx next dev -p 3150` from the worktree in the background and open it with `preview_start {url}`. Check `requestAnimationFrame` fires; if the pane is hidden, run the DOM-level checks and ask the partner to open the browser pane for the visual ones.
+- [ ] **Step 1:** Copy the main checkout's `.env.local` into the worktree (it is git-ignored; the landing page reads the founding organization's metrics and `/design`'s forms need auth configuration to refuse politely). Start `npx next dev -p 3150` from the worktree in the background and open it with `preview_start {url}`. Check `requestAnimationFrame` fires; if the pane is hidden, run the DOM-level checks and ask the partner to open the browser pane for the visual ones.
 - [ ] **Step 2 (Review Focus 2):** On `/design#screens`: press Ctrl K — the palette opens; type `aud` — “Audit log” is the first match; type `payables` — “AP / AR” matches; Escape closes it and focus returns. The search button's hint reads “Ctrl K” on Windows with no hydration warning in the console.
 - [ ] **Step 3:** The sidebar's workspace switcher opens with the keyboard, lists three workspaces with the current one checked, closes on Escape; the account menu opens upward and shows “Sign out” in red.
 - [ ] **Step 4 (Review Focus 1):** At 375px: the top bar shows; the menu button opens the drawer from the left with focus inside; Escape closes it and focus returns to the menu button; reopen and click the dimmed page — it closes; reopen and resize to 1280px — it closes.

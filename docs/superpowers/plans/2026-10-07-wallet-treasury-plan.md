@@ -16,7 +16,7 @@
 
 - **Network:** Arc mainnet only. `walletTreasury` is true on `ARC_MAINNET`, false on `ARC_TESTNET` (W2).
 - **Env pair:** `MAINNET_AGENT_CIRCLE_API_KEY` must start `LIVE_API_KEY:`. Unset, mistyped or missing its secret, the choice is not offered (W4). `ARC_MAINNET_RPC_URL` is optional.
-- **Migration** `0082_wallet_treasury.sql` is idempotent. The partner runs it with `npm --prefix E:/APP2028/hackathon-project-writeapi2 run db:migrate`.
+- **Migration** `0082_wallet_treasury.sql` is idempotent. The partner runs it with `npm run db:migrate`.
 - **Secrets:** no secret, key, token, password, wallet id or cipher appears in a Go live status or a panel prop (`tests/go-live-panel.test.tsx` L375-391).
 - **Copy:** names the network from its profile `label` only. `tests/network-copy-ratchet.test.ts` counts must be updated when a count moves.
 - **Docs:** every `GoLiveError` code gets a row in the guide's failure table (`tests/docs-guides.test.ts`), and the changelog gets an entry (AGENTS.md).
