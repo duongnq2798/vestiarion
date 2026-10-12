@@ -1690,7 +1690,8 @@ the provider.
   (`records.write`, the console only) check the bills again on the server, claim each before adding it, add it through
   `addInvoice` with `via: "xero"` and Xero's ids, and link the bill and the supplier.
 - **The payment account** (I14): an owner or admin reads the chart of accounts from Xero, picks a bank account (or one
-  Xero lets take payments; never revenue or expense), sees a preview (`booking.ts`: a bill still open in US dollars with
+  Xero lets take payments, kept behind a toggle with a caution, as `accountsToOffer` splits them; never revenue or
+  expense), sees a preview (`booking.ts`: a bill still open in US dollars with
   an amount due, one added first, else a plain example, never 0.00), and keeps it on the connection
   (`accounting_payment_account_chosen`). Payments are booked to it only as below.
 - **Booking payments made on Arc** (docs/superpowers/specs/2026-10-12-accounting-writeback-design.md). A payment is

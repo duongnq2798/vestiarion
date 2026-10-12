@@ -1450,6 +1450,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["accounting_bills_dismissed", "src/lib/commands/accounting.ts"],
     ["Where payments made on Arc will be booked", ACCOUNTING_PANEL],
     ["Choose the account", ACCOUNTING_PICKER],
+    ["Show other accounts that take payments", ACCOUNTING_PICKER],
+    ["These are not bank accounts", ACCOUNTING_PICKER],
     ["Use this account", ACCOUNTING_PICKER],
     ["The network fee is shown apart and not booked to this account.", "src/lib/connectors/booking.ts"],
     ["For example, a payment of 100.00 USDC for a bill", "src/lib/connectors/booking.ts"],

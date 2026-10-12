@@ -37,6 +37,18 @@ export function accountName(account: BookingAccount): string {
   return account.code ? `${account.name} (${account.code})` : account.name;
 }
 
+/**
+ * The accounts the picker lists (X14): the bank accounts, in the tool's order, and only them by default. The other
+ * accounts the tool lets take payments (Xero's clearing, equity or drawings accounts) come after them only when asked
+ * for: a supplier payment booked from an owner's equity or drawings account is almost always wrong. `others` counts
+ * the ones kept back, or shown, so the toggle is there only when there are some.
+ */
+export function accountsToOffer<T extends { bank: boolean }>(accounts: readonly T[], showOthers: boolean): { offered: T[]; others: number } {
+  const banks = accounts.filter((candidate) => candidate.bank);
+  const others = accounts.filter((candidate) => !candidate.bank);
+  return { offered: showOthers ? [...banks, ...others] : banks, others: others.length };
+}
+
 /** A bill the preview can show as it is: in US dollars, paid as that many USDC, with something left to pay. */
 function shownAsItIs(sample: BookingSample | null): sample is BookingSample {
   return sample !== null && sample.currency === "USD" && Number.isFinite(Number(sample.amount)) && Number(sample.amount) > 0;

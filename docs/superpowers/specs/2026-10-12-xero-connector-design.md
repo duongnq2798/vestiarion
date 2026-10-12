@@ -251,10 +251,14 @@ connection's organisation stays in Xero's own list until removed there.
 **X14. The payment account (I14).**
 - An owner or admin opens **Choose the account** on the Xero card: Vestiarion reads the chart of accounts and offers
   the active accounts that can take a payment (bank accounts, and accounts Xero marks as taking payments). Never a
-  revenue or expense account, and never one picked for them: until someone chooses, there is none.
+  revenue or expense account, and never one picked for them: until someone chooses, there is none. The bank accounts
+  come first and alone; the others (clearing, an owner's equity or drawings) only under **Show other accounts that
+  take payments**, with a caution, since a supplier payment booked from them is almost always wrong.
 - Picking one shows a preview: "A payment of 1,250.00 USDC to Acme Supplies for bill INV-0042 will be booked in Xero as
-  a payment of 1,250.00 USD from Arc USDC wallet (090), with the Arc transaction as its reference." A non-USD account
-  says USDC is booked as USD (and EURC as EUR), so a USD account fits. Network fees are not booked to it.
+  a payment of 1,250.00 USD from Arc USDC wallet (090), with the Arc transaction as its reference." The bill is one
+  still open in Xero, in US dollars, with an amount due, one added to Vestiarion first; with none, the line says it is
+  an example ("For example, a payment of 100.00 USDC for a bill will be booked…"), never a payment of 0.00. A non-USD
+  account says USDC is booked as USD (and EURC as EUR), so a USD account fits. Network fees are not booked to it.
 - **Use this account** reads the account again from Xero, keeps its id, code, name and currency on the connection,
   and records `accounting_payment_account_chosen`. Nothing is written to Xero in this version.
 - Cost if wrong: one choice to make again.
