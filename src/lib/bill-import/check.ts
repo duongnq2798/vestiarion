@@ -56,7 +56,7 @@ interface InvoiceRow {
 }
 
 /** The invoices a row could repeat: the rows' counterparties', due within the list's days. Every status counts (B10). */
-async function possibleDuplicates(rows: readonly ReadRow[], counterparties: ImportFacts["counterparties"]): Promise<ExistingInvoice[]> {
+export async function possibleDuplicates(rows: readonly ReadRow[], counterparties: ImportFacts["counterparties"]): Promise<ExistingInvoice[]> {
   const days = rows.flatMap((row) => (row.dueDate ? [row.dueDate] : [])).sort();
   const ids = counterpartyIdsOf(rows, counterparties);
   if (days.length === 0 || ids.length === 0) return [];
@@ -82,7 +82,7 @@ async function possibleDuplicates(rows: readonly ReadRow[], counterparties: Impo
 }
 
 /** Each bill in the business's own currency at its USDC amount, through the shadow path, with each day's rate read once (B15). */
-async function conversions(rows: readonly ReadRow[], workspace: ImportWorkspace): Promise<Map<string, Conversion>> {
+export async function conversions(rows: readonly ReadRow[], workspace: ImportWorkspace): Promise<Map<string, Conversion>> {
   const rates = new Map<string, Promise<UsdRate>>();
   const rate = (currency: string) => {
     if (!rates.has(currency)) rates.set(currency, usdRate(currency));

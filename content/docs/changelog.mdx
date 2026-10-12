@@ -1,5 +1,16 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-12: Bills brought in from Xero
+
+- An owner or admin can connect a workspace to a Xero organisation, and a person adds the bills it brings in from Bills & receivables. Its ledger gains five entries, each sent to webhook endpoints as `ledger.appended` and listed by `GET /api/v1/ledger`:
+  - **`accounting_connected`**, actor `human`, domain `system`: `{ by, provider, connectionId, externalOrgId, externalOrgName, scopes, consent: { version, at }, reconnected }`. `provider` is `xero`; `externalOrgId` is the Xero organisation (tenant) id; `consent` is the version of what the person agreed to and when they ticked it.
+  - **`accounting_disconnected`**, actor `human`, domain `system`: `{ by, provider, connectionId, externalOrgId, revokedAtProvider }`. `revokedAtProvider` is whether Xero confirmed it ended the app's access.
+  - **`accounting_payment_account_chosen`**, actor `human`, domain `system`: `{ by, provider, connectionId, account: { id, code, name, currency } }`, the Xero account payments made on Arc will be booked to. Nothing is written to Xero yet.
+  - **`accounting_bill_closed`**, actor `system`, domain `system`: `{ provider, connectionId, externalOrgId, billId, invoiceId, invoiceNumber, sourceStatus, at }`, when a bill already added is paid, voided or deleted in Xero. `invoiceId` is the invoice it became; `sourceStatus` is `paid`, `voided` or `deleted`. The invoice itself is unchanged.
+  - **`accounting_bills_dismissed`**, actor `human`, domain `ap`: `{ by, provider, connectionId, billIds }`, the Xero bill ids a person chose not to add.
+- A bill added from Xero is a **`create_invoice`** entry, as one typed into the form, with `via: "xero"` and `xero: { tenantId, billId, contactId, invoiceNumber }`, Xero's own ids. A supplier added with it is a **`create_counterparty`** entry with `via: "xero"` and `xero: { tenantId, contactId }`.
+- Nothing else in `/api/v1` changes.
+
 ## 2026-10-12: Money received applied to invoices: part payments, one payment for several invoices, fees
 
 - An owner or admin can apply a payment received on Arc to one or more open receivables of its currency, record a difference as a fee with a reason, and reverse either; the agent applies by itself a payment that is exactly what is still owed on a part-paid receivable. Its ledger gains three entries, domain `ar`, each sent to webhook endpoints as `ledger.appended` and listed by `GET /api/v1/ledger`, one per invoice touched:

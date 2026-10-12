@@ -33,6 +33,7 @@ type GuideSlug =
   | "guides/api-invoices"
   | "guides/api-milestones"
   | "guides/github"
+  | "guides/xero"
   | "guides/audit-export"
   | "guides/evidence"
   | "guides/controls"
@@ -129,6 +130,13 @@ const HELD_ACTIONS = "src/components/HeldMilestoneActions.tsx";
 const MILESTONE_DECISIONS = "src/lib/agent/milestone-decisions.ts";
 const SLACK_PANEL = "src/components/SlackPanel.tsx";
 const SLACK_CONNECT_PAGE = "src/app/integrations/slack/connect/page.tsx";
+const XERO_PANEL = "src/components/XeroPanel.tsx";
+const XERO_PICKER = "src/components/XeroAccountPicker.tsx";
+const XERO_REVIEW = "src/components/XeroBillsReview.tsx";
+const XERO_CONNECT_PAGE = "src/app/integrations/xero/connect/page.tsx";
+const XERO_CONSENT = "src/lib/connectors/consent.ts";
+const XERO_CONNECTIONS = "src/lib/connectors/connections.ts";
+const XERO_STATUS = "src/lib/connectors/status.ts";
 const SLACK_CONNECT_FORM = "src/components/SlackConnectForm.tsx";
 const SLACK_ACTIONS = "src/app/actions/slack.ts";
 const SLACK_BLOCKS = "src/lib/slack/blocks.ts";
@@ -1304,6 +1312,50 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Address to confirm", CONTRACTORS_PAGE],
     ["Verify manually", MILESTONE_CHECK],
   ],
+  "guides/xero": [
+    ["Connect Xero", XERO_PANEL],
+    ["An owner or admin connects Xero.", XERO_PANEL],
+    ["I agree", XERO_CONSENT],
+    ["may not train on them", XERO_CONSENT],
+    ["Vestiarion never uses Xero data to train or improve any AI model", XERO_CONSENT, "data to train or improve any AI model"],
+    ["Continue to Xero", XERO_CONNECT_PAGE],
+    ["Pick the Xero organisation", XERO_CONNECT_PAGE],
+    ["Connect this organisation", XERO_CONNECT_PAGE],
+    ["Xero is connected. Its open bills are coming in for review on Bills & receivables.", XERO_PANEL],
+    ["accounting_connected", XERO_CONNECTIONS],
+    ["Sync now", XERO_PANEL],
+    ["Closed in Xero after they were added", XERO_REVIEW],
+    ["accounting_bill_closed", "src/lib/connectors/sync-store.ts"],
+    ["From Xero: 3 bills to add", XERO_REVIEW, "`From Xero: ${items.length} bills to add`"],
+    ["Ready to add", XERO_REVIEW],
+    ["Already in Vestiarion: same counterparty, amount, due date and reference.", "src/lib/bill-import/rows.ts"],
+    ["Same as bill PD-4471 from Xero.", "src/lib/connectors/review.ts", "`Same as bill ${earlier?.number"],
+    [
+      "Bills in USD are taken in shadow mode only. Turn it on for USD in Settings, or convert the amount to USDC.",
+      "src/lib/bill-import/rows.ts",
+      "are taken in shadow mode only. Turn it on for ${currency} in Settings, or convert the amount to USDC.",
+    ],
+    ["Add, goods received", XERO_REVIEW],
+    ["Add, not received yet", XERO_REVIEW],
+    ["Dismiss", XERO_REVIEW],
+    ["New counterparty", XERO_REVIEW],
+    ["Xero approving a bill does not approve its payment", XERO_REVIEW],
+    ["A person added it, brought in from Xero.", "src/lib/decision-trail.ts", ", brought in from Xero"],
+    ["accounting_bills_dismissed", "src/lib/commands/accounting.ts"],
+    ["Where payments made on Arc will be booked", XERO_PANEL],
+    ["Choose the account", XERO_PICKER],
+    ["Use this account", XERO_PICKER],
+    ["The network fee is booked apart, never to this account.", "src/lib/connectors/booking.ts"],
+    ["accounting_payment_account_chosen", XERO_CONNECTIONS],
+    ["Not chosen yet. Nothing is booked to an account nobody chose.", XERO_PANEL],
+    ["The last sync with Xero failed", XERO_STATUS, "`The last sync with ${label} failed`"],
+    ["Xero asked Vestiarion to slow down. Syncing again at", XERO_STATUS, "asked Vestiarion to slow down. Syncing again at"],
+    ["Xero needs you to reconnect", XERO_STATUS, "needs you to reconnect"],
+    ["Reconnect Xero", XERO_PANEL],
+    ["Xero is not set up on this deployment yet.", XERO_PANEL],
+    ["Disconnect Xero", XERO_PANEL],
+    ["accounting_disconnected", XERO_CONNECTIONS],
+  ],
   "guides/github": [
     ["Settings", APP_NAV],
     ["GitHub", GITHUB_PANEL],
@@ -1804,6 +1856,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/api-invoices": 10,
   "guides/api-milestones": 10,
   "guides/github": 10,
+  "guides/xero": 20,
   "guides/audit-export": 5,
   "guides/evidence": 20,
   "guides/apply-payments": 20,

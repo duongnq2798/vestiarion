@@ -18,7 +18,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy"
-      updated="2026-10-11"
+      updated="2026-10-12"
       intro="Vestiarion is an autonomous treasury agent on Arc testnet. This page describes what the service stores and sends, as its code does it today. The code is public, so every statement here can be checked against it."
     >
       <LegalSection id="signing-in" title="Signing in">
@@ -229,6 +229,17 @@ export default function PrivacyPage() {
             is not kept. GitHub also sends the app the comments on pull requests in those repositories. Only a comment with a line starting
             /bounty or /payto is acted on, and the rest are not kept. For each bounty, the app keeps the pull request, the logins of its author and
             of the person who attached it, the amount and the comment&apos;s link, and asks GitHub whether that person can write to the repository.
+          </li>
+          <li>
+            <strong>Xero</strong>, for a workspace an owner or admin connects to a Xero organisation after agreeing to it, is read from and never
+            written to. Vestiarion reads that organisation&apos;s approved bills (the supplier, the bill&apos;s number and reference, its currency, total,
+            amount due, dates and status) and its suppliers&apos; names, and its chart of accounts when an owner or admin chooses the account payments
+            will be booked to. It keeps the bills read, the suppliers&apos; names, the organisation&apos;s name and id, the access granted and the
+            agreement given, and Xero&apos;s tokens encrypted, readable only by the server and never shown in the browser, a log, a model&apos;s prompt
+            or a webhook. A bill reaches the agent, and so its model provider, only once a person added it as a payable, with the facts any bill has;
+            the provider may not train on them. Vestiarion never uses Xero data to train or improve any AI model, and never passes it to anyone else
+            without the workspace&apos;s say. Disconnecting revokes the app&apos;s access at Xero and deletes the tokens; the bills already read stay with
+            the workspace, and the signed ledger keeps only ids and names.
           </li>
           <li>
             <strong>Google Analytics</strong> receives page views, and which button you chose to get started, as described below.

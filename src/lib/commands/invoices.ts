@@ -1,6 +1,6 @@
 import { runCycleSoon } from "../agent/cycle-soon";
 import type { DocumentProvenance } from "../invoice-document/provenance";
-import { createInvoice, type ImportedRow, type InvoiceInput } from "../invoices/create";
+import { createInvoice, type ExternalSource, type ImportedRow, type InvoiceInput } from "../invoices/create";
 import type { OriginalBill } from "../shadow-bills";
 import { cycleEventOf, type Actor } from "./actor";
 import { done, refused, type CommandOutcome } from "./outcome";
@@ -23,6 +23,8 @@ export async function addInvoice(
     original?: OriginalBill;
     /** The bill list it was imported from, and its row there (import design B12). */
     imported?: ImportedRow;
+    /** The accounting tool's bill it was brought in from (Xero connector X11). */
+    external?: ExternalSource;
   }
 ): Promise<CommandOutcome<{ invoiceId: string; counterpartyName: string }>> {
   const refusal = gate(actor, "invoice.add");
@@ -41,6 +43,8 @@ export async function addInvoice(
       ...(input.original ? { original: input.original } : {}),
       // A row of a bill list a person imported, with the list's hash and its row (import design B12).
       ...(input.imported ? { via: "import" as const, imported: input.imported } : {}),
+      // A bill brought in from an accounting tool, named by the tool's own ids (Xero connector X11).
+      ...(input.external ? { external: input.external } : {}),
     });
   } catch (error) {
     console.error("adding an invoice failed", actor.orgId, error instanceof Error ? error.message : "unknown error");

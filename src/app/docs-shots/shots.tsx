@@ -80,6 +80,8 @@ import { buildSharedReport } from "@/lib/shared-report";
 import { buildReport, type ReportBill, type ReportDecision, type ReportFacts } from "@/lib/workspace-report";
 import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
 import { evidenceShot } from "./evidence-fixture";
+import XeroPanel from "@/components/XeroPanel";
+import { XeroBillsReview } from "@/components/XeroBillsReview";
 import { APPLY_PAYMENTS, PART_PAID, PART_PAID_VIEW, PART_PAID_VIEWS } from "./allocations-fixture";
 import { designRuleReplay } from "../design/replay-fixture";
 import { RuleTrialPanel } from "@/components/RuleTrial";
@@ -116,6 +118,7 @@ export interface DocsShot {
     | "telegram"
     | "slack"
     | "email-invoices"
+    | "xero"
     | "payment-plan"
     | "report"
     | "workspace"
@@ -1755,6 +1758,60 @@ export const DOCS_SHOTS = {
     guide: "where-a-payment-is",
     page: "treasury",
     render: () => <PaymentsInFlight payments={SHOT_FLIGHT} now={SHOT_NOW} stuckAfterMinutes={15} orgSlug={SLUG} network="arc-testnet" />,
+  },
+  "xero-settings": {
+    guide: "xero",
+    page: "settings",
+    sub: SETTINGS_SUB,
+    render: () => (
+      <XeroPanel
+        orgSlug={SLUG}
+        view={{
+          state: "connection",
+          connectionId: "00000000-0000-4000-8000-0000000000a1",
+          status: { tone: "ok", title: "Connected to Demo Company (Global)", detail: ["Last synced 5 minutes ago."], reconnect: false },
+          connected: true,
+          revoked: false,
+          organisation: "Demo Company (Global)",
+          waiting: 3,
+          closedAfterAdded: 0,
+          paymentAccount: { id: "6f7594f2-f059-4d56-9e67-47ac9733bfe9", code: "091", name: "Arc USDC wallet", currency: "USD" },
+          sample: { supplier: "PowerDirect", number: "PD-4471", amount: "1250", currency: "USD" },
+        }}
+        canManage
+        notice={null}
+      />
+    ),
+  },
+  "xero-review": {
+    guide: "xero",
+    page: "invoices",
+    sub: "Your bills, what the agent decided on each, and why.",
+    render: () => (
+      <XeroBillsReview
+        orgSlug={SLUG}
+        connectionId="00000000-0000-4000-8000-0000000000a2"
+        organisation="Demo Company (Global)"
+        canAdd
+        closed={[]}
+        items={[
+          { id: "00000000-0000-4000-8000-0000000000b1", supplier: "PowerDirect Ltd", supplierNew: false, number: "PD-4471", amount: "1250", currency: "USD", usdc: "1250", dueOn: "2026-10-28", status: "add", reason: null },
+          { id: "00000000-0000-4000-8000-0000000000b2", supplier: "Akiba Parts K.K.", supplierNew: true, number: "AK-77", amount: "300", currency: "USD", usdc: "300", dueOn: "2026-10-24", status: "add", reason: null },
+          {
+            id: "00000000-0000-4000-8000-0000000000b3",
+            supplier: "SMART Agency",
+            supplierNew: false,
+            number: "SMC-0902",
+            amount: "820.5",
+            currency: "USD",
+            usdc: "820.5",
+            dueOn: "2026-09-20",
+            status: "duplicate",
+            reason: "Already in Vestiarion: same counterparty, amount, due date and reference.",
+          },
+        ]}
+      />
+    ),
   },
   "apply-payments-list": {
     guide: "apply-payments",

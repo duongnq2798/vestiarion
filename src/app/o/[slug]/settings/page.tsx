@@ -12,6 +12,7 @@ import SlackPanel from "@/components/SlackPanel";
 import TwoApprovalsPanel from "@/components/TwoApprovalsPanel";
 import { UsycReservePanel } from "@/components/UsycReservePanel";
 import WebhooksPanel from "@/components/WebhooksPanel";
+import XeroPanel from "@/components/XeroPanel";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import { twoApprovalsStatus } from "@/lib/approval-policy";
@@ -33,6 +34,8 @@ import { githubInstallations } from "@/lib/github/installs";
 import { githubAppSettingsFromEnv } from "@/lib/github/settings";
 import { slackPanelView } from "@/lib/slack/panel";
 import { slackSettingsFromEnv } from "@/lib/slack/settings";
+import { accountingPanelView } from "@/lib/connectors/panel";
+import { xeroSettingsFromEnv } from "@/lib/xero/settings";
 import { linkFor as telegramLinkFor } from "@/lib/telegram/links";
 import { telegramSettingsFromEnv } from "@/lib/telegram/settings";
 import { networkProfile } from "@/lib/network";
@@ -48,7 +51,7 @@ export default async function SettingsPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ slack?: string | string[]; github?: string | string[] }>;
+  searchParams: Promise<{ slack?: string | string[]; github?: string | string[]; xero?: string | string[] }>;
 }) {
   const { slug } = await params;
   const access = await requireMembership(slug);
@@ -62,9 +65,10 @@ export default async function SettingsPage({
     const telegramOn = telegramSettingsFromEnv() !== null;
     // How connecting Slack went, from its way back (Slack design S3); only the codes the panel knows are shown.
     // And how connecting GitHub went (GitHub App design G2).
-    const { slack: slackOutcome, github: githubOutcome } = await searchParams;
+    // And how connecting Xero went (Xero connector X4).
+    const { slack: slackOutcome, github: githubOutcome, xero: xeroOutcome } = await searchParams;
     const inboxSettings = inboxSettingsFromEnv();
-    const [goLive, apiKeys, webhookEndpoints, ledgerKey, dashboardStats, deletion, usyc, slack, notifySwitch, telegramLink, inbox, github, twoApprovals, shadow] = await Promise.all([
+    const [goLive, apiKeys, webhookEndpoints, ledgerKey, dashboardStats, deletion, usyc, slack, notifySwitch, telegramLink, inbox, github, twoApprovals, shadow, xero] = await Promise.all([
       goLiveStatus(membership.orgId),
       listApiKeys(membership.orgId),
       listWebhookEndpoints(membership.orgId),
@@ -118,6 +122,14 @@ export default async function SettingsPage({
           console.error("settings: shadow mode not loaded", error instanceof Error ? error.message : error);
           return null;
         }),
+      // Only on a deployment where Xero is configured (Xero connector X16); best effort, like Slack's. Before migration
+      // 0101 the card says Xero is not set up yet.
+      xeroSettingsFromEnv()
+        ? accountingPanelView("xero").catch((error: unknown) => {
+            console.error("settings: Xero status not loaded", error instanceof Error ? error.message : error);
+            return null;
+          })
+        : null,
     ]);
     const notifyEmail = notifySwitch ? (unwrap(notifySwitch) as { notify_email: boolean }).notify_email : false;
 
@@ -206,6 +218,13 @@ export default async function SettingsPage({
                 canManage={canManageIntegrations}
                 notice={typeof githubOutcome === "string" ? githubOutcome : null}
               />
+            ) : null,
+          },
+          {
+            id: "xero-title",
+            title: "Xero",
+            content: xero ? (
+              <XeroPanel orgSlug={slug} view={xero} canManage={canManageIntegrations} notice={typeof xeroOutcome === "string" ? xeroOutcome : null} />
             ) : null,
           },
           {

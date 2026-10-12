@@ -367,7 +367,7 @@ for when a cycle ran.
 Sandbox workspaces are never in this list; their cycles run from the console, one **Run cycle**
 click at a time, up to the daily cap above.
 
-Four jobs must run on time, which GitHub's schedules do not do: they started a 5-minute schedule
+Five jobs must run on time, which GitHub's schedules do not do: they started a 5-minute schedule
 only a few times a day, and the six-hourly tick 2 to 4 times a day at uneven hours. A daily
 recurring payment's invoice is made by the first cycle of its due day, so a skipped tick left it
 waiting. Supabase Cron runs them from the database instead:
@@ -380,11 +380,14 @@ waiting. Supabase Cron runs them from the database instead:
   was sent is told to the workspace's people, once per attempt, in the console, Slack, Telegram,
   webhooks and by email. It sends nothing.
 - `POST /api/platform/webhooks`, every 10 minutes: webhook retries and anything still queued.
+- `POST /api/platform/accounting-sync`, every 15 minutes: bills from the Xero organisations workspaces connected,
+  and the connections nobody finished choosing an organisation for, revoked and deleted.
 
 To set them up, run `supabase/cron/watches.sql` once in the Supabase SQL editor, with your
 deployment's origin in place of `https://www.vestiarion.xyz`. Its header lists what comes first:
 enable `pg_cron` and `pg_net`, and add `AGENT_API_TOKEN` to Vault as `agent_api_token`. Each job's
-workflow (`agent-cycle.yml`, `fx-watch.yml`, `transfer-watch.yml`, `webhooks.yml`) stays for a manual run.
+workflow (`agent-cycle.yml`, `fx-watch.yml`, `transfer-watch.yml`, `webhooks.yml`, `accounting-sync.yml`) stays for a
+manual run.
 
 Circle also tells the deployment when a transfer settles, at `POST /api/circle/notifications`. On a
 subscribed account, while the agent runs, a payment confirmed after the agent stopped waiting for it
@@ -412,6 +415,17 @@ app's webhook on and `GITHUB_APP_WEBHOOK_SECRET` set, a maintainer attaches a bo
 request itself with `/bounty 25`, and its author says where to be paid with `/payto 0x…`; the agent
 pays once the pull request is merged and a member has confirmed the address. See
 [Show payments on GitHub](https://www.vestiarion.xyz/docs/guides/github).
+
+With `XERO_CLIENT_ID` and `XERO_CLIENT_SECRET` set, from a Xero app of type "Web app" whose redirect URI is
+`<origin>/api/integrations/xero/callback` (and `http://localhost:3000/api/integrations/xero/callback` to try it
+locally), an owner or admin connects a workspace to one Xero organisation from Settings, after agreeing to what
+Vestiarion does with its data. Its approved bills come in for review on Bills & receivables, through the same check as a
+bill list, and become payables only when a person adds them. The app asks Xero for read-only scopes only
+(`offline_access accounting.invoices.read accounting.contacts.read accounting.settings.read`): a Xero app made after
+2 March 2026 has no broad accounting scopes. Xero's free Starter tier holds five connected organisations. The connection
+needs migration 0101; before it runs, the Xero card says Xero is not set up yet. Its tokens are kept encrypted under
+`VESTIARION_MASTER_KEYS`, in a table only the service role reads. The sync runs every 15 minutes (above), and
+**Sync now** runs one at once. See [Bring bills in from Xero](https://www.vestiarion.xyz/docs/guides/xero).
 
 ### Measurement provenance
 
