@@ -57,11 +57,13 @@ interface World {
   sent?: Array<Record<string, unknown>>;
   history?: Array<Record<string, unknown>>;
   claim?: { status?: number; body: unknown };
+  allocations?: { status?: number; body: unknown };
 }
 
 function world(w: World = {}) {
   return fakeSupabase((request: RecordedRequest) => {
     if (request.path === "/rest/v1/orgs") return { body: { name: "Mai Studio", mode: w.mode ?? "live" } };
+    if (request.path === "/rest/v1/receivable_allocations") return w.allocations ?? { body: [] };
     if (request.path === "/rest/v1/rpc/agent_paused") return { body: w.paused === true };
     if (request.path === "/rest/v1/receivable_links" && request.method === "GET") return { body: w.links ?? [link()] };
     if (request.path === "/rest/v1/invoices" && request.method === "GET") {
@@ -193,5 +195,50 @@ describe("a send that fails", () => {
     expect(released.params.get("id")).toBe("eq.reminder-1");
     expect(ledgerMock).not.toHaveBeenCalled();
     expect(lines).toEqual([{ domain: "ar", message: "Reminder to Acme not sent (resend 500); tried again at the next cycle" }]);
+  });
+});
+
+describe("a part-paid receivable (allocations L11)", () => {
+  const applied = (amount: string) => ({
+    id: "alloc-1",
+    kind: "payment",
+    invoice_id: INVOICE,
+    transfer_id: "transfer-1",
+    amount,
+    currency: "USDC",
+    reverses: null,
+    reason: null,
+    basis: "person",
+    payment_seq: 1,
+    created_by: "person-1",
+    created_at: "2026-10-09T09:00:00Z",
+  });
+
+  it("is reminded of what is still owed, and told what arrived", async () => {
+    await run(world({ allocations: { body: [applied("5.000000")] } }));
+    const asked = JSON.parse((decideMock.mock.calls[0][0] as DecideParams<unknown>).userPrompt) as Record<string, unknown>;
+    expect(asked).toMatchObject({ receivable: { amount: 7.5, partPaid: { invoiced: 12.5, alreadyReceived: 5 } } });
+    const email = sendMock.mock.calls[0][0];
+    expect(email.subject).toBe("Mai Studio: 7.50 USDC due today");
+    expect(email.text).toContain("5.00 USDC of the 12.50 USDC invoiced has arrived. What is still owed is 7.50 USDC.");
+    expect(ledgerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "ar_reminder_sent",
+        summary: "Reminded Acme by email of 7.50 USDC due Oct 10, 2026 (friendly)",
+        detail: expect.objectContaining({ amount: 7.5, partPaid: { invoiced: 12.5, received: 5 } }),
+      })
+    );
+  });
+
+  it("is not reminded once nothing is owed", async () => {
+    const lines = await run(world({ allocations: { body: [applied("12.500000")] } }));
+    expect(decideMock).not.toHaveBeenCalled();
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(lines).toEqual([]);
+  });
+
+  it("is reminded of the whole invoice before migration 0103 runs", async () => {
+    await run(world({ allocations: { status: 404, body: { code: "PGRST205", message: "Could not find the table 'public.receivable_allocations' in the schema cache" } } }));
+    expect(sendMock.mock.calls[0][0].subject).toBe("Mai Studio: 12.50 USDC due today");
   });
 });

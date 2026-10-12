@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { homeChain, networkOfChain } from "@/lib/payee-chains";
-import { previewPayLink, type PayLinkPreview } from "@/lib/platform/pay-links";
+import { payLinkBalance, previewPayLink, type PayLinkPreview } from "@/lib/platform/pay-links";
 import { linkSocialMetadata } from "@/lib/link-previews";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +28,8 @@ const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximu
  * Where a pay link opens (docs/superpowers/specs/2026-10-01-receivables-on-arc-design.md §2). No session:
  * the link is the credential, and it shows only what the client needs to pay (R2): who asks, how much,
  * by when, for what, and the address on Arc testnet. Every unusable link shows the same sentence and
- * names no one. Opening it changes nothing.
+ * names no one. Opening it changes nothing. Once a payment was applied to the invoice, it asks for what is still owed
+ * and says what arrived (docs/superpowers/specs/2026-10-12-allocations-design.md L11).
  */
 export default async function PayPage({ params }: PayPageProps) {
   const { token } = await params;
@@ -40,6 +41,15 @@ export default async function PayPage({ params }: PayPageProps) {
     console.error("pay link preview failed");
     failed = true;
   }
+  // Best effort: a balance that cannot be read asks for the whole invoice, as before.
+  const balance =
+    preview && preview.status === "open"
+      ? await payLinkBalance(preview).catch(() => {
+          console.error("pay link balance not read");
+          return null;
+        })
+      : null;
+  const owed = balance ? balance.owed : (preview?.amount ?? 0);
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -66,9 +76,17 @@ export default async function PayPage({ params }: PayPageProps) {
                 <Eyebrow className="text-agent">Invoice</Eyebrow>
               </p>
               <h1 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-ink">
-                {preview.orgName} asks {preview.clientName} to pay {AMOUNT.format(preview.amount)} {preview.currency}
+                {preview.orgName} asks {preview.clientName} to pay {AMOUNT.format(owed)} {preview.currency}
               </h1>
               <dl className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
+                {balance && (
+                  <>
+                    <dt className="text-ink-3">Received</dt>
+                    <dd className="text-ink">
+                      {AMOUNT.format(balance.received)} of {AMOUNT.format(preview.amount)} {preview.currency}. This is what is still owed.
+                    </dd>
+                  </>
+                )}
                 <dt className="text-ink-3">Due</dt>
                 <dd className="text-ink">{preview.dueDate}</dd>
                 {preview.memo && (
@@ -82,7 +100,7 @@ export default async function PayPage({ params }: PayPageProps) {
               </dl>
               {preview.payTo ? (
                 <div className="mt-5 grid gap-2">
-                  <p className="text-sm font-medium text-ink">Send exactly {AMOUNT.format(preview.amount)} {preview.currency} to</p>
+                  <p className="text-sm font-medium text-ink">Send exactly {AMOUNT.format(owed)} {preview.currency} to</p>
                   <div className="flex items-center gap-2">
                     <code className="min-w-0 flex-1 break-all rounded-lg border border-line bg-ground px-3 py-2 font-mono text-xs text-ink">{preview.payTo}</code>
                     <CopyButton value={preview.payTo} label="Copy address" variant="secondary">

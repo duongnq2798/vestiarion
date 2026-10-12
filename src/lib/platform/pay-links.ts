@@ -1,5 +1,7 @@
 import crypto from "node:crypto";
 import { z } from "zod";
+import { readAllocationRows } from "../allocations/book";
+import { fromMicros, receivableBalance, toMicros } from "../allocations/model";
 import { runCycleSoon } from "../agent/cycle-soon";
 import { recordIncomingTransfers } from "../agent/receipts";
 import { getChainProvider } from "../circle";
@@ -282,4 +284,33 @@ export async function checkPayLink(token: string, now: number = Date.now()): Pro
   // Cash arrived: the agent decides with it within a minute rather than at the next scheduled cycle.
   if (after.createdBy) runCycleSoon({ orgId: after.orgId, userId: after.createdBy, sandbox: false, kind: "payment_received" });
   return { outcome: "received", network };
+}
+
+/**
+ * What is still owed on a link's receivable, and what arrived, once a payment was applied to it
+ * (docs/superpowers/specs/2026-10-12-allocations-design.md L11): the page then asks for the rest. Null when nothing was
+ * applied, and before migration 0103 runs.
+ */
+export async function payLinkBalance(preview: PayLinkPreview): Promise<{ owed: number; received: number } | null> {
+  return withOrg(preview.orgId, async () => {
+    const rows = await readAllocationRows(db(), { invoiceIds: [preview.invoiceId] });
+    if (!rows || rows.length === 0) return null;
+    const balance = receivableBalance(
+      {
+        id: preview.invoiceId,
+        counterpartyId: "",
+        customer: preview.clientName,
+        amount: toMicros(preview.amount),
+        currency: preview.currency,
+        status: "pending",
+        dueDate: preview.dueDate,
+        createdAt: preview.dueDate,
+        memo: preview.memo,
+        poReference: null,
+      },
+      rows,
+      false
+    );
+    return balance.applied > 0 ? { owed: fromMicros(balance.outstanding), received: fromMicros(balance.applied) } : null;
+  });
 }
