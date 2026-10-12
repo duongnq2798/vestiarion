@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { crmChanges, crmChangeWords, factsOf, planCrmDeal, plannable, type CrmFacts, type StagedCrmDeal } from "@/lib/connectors/crm";
+import { crmChanges, crmChangeWords, factsOf, flagDecision, planCrmDeal, plannable, type CrmFacts, type StagedCrmDeal } from "@/lib/connectors/crm";
 import type { ExternalDeal } from "@/lib/connectors/crm";
 
 /**
@@ -122,5 +122,18 @@ describe("crmChangeWords", () => {
 
   it("never names a currency Vestiarion does not take", () => {
     expect(crmChangeWords({ what: "amount", from: { amount: "1", currency: "VND" }, to: { amount: "2", currency: "VND" } }, "HubSpot")).toBe("The amount changed in HubSpot.");
+  });
+});
+
+describe("flagDecision", () => {
+  const changes = [{ what: "amount" as const, from: { amount: "12500", currency: "USD" }, to: { amount: "15000", currency: "USD" } }];
+
+  it("records a new set of changes once, and clears the record when they are gone", () => {
+    expect(flagDecision(changes, null)).toBe("record");
+    expect(flagDecision(changes, JSON.parse(JSON.stringify(changes)))).toBe("none");
+    expect(flagDecision([...changes, { what: "deleted" as const }], changes)).toBe("record");
+    expect(flagDecision([], changes)).toBe("clear");
+    expect(flagDecision([], null)).toBe("none");
+    expect(flagDecision([], [])).toBe("none");
   });
 });

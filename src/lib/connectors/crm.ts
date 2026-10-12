@@ -186,3 +186,13 @@ export function crmChangeWords(change: CrmChange, label: string): string {
       return `Deleted in ${label}. ${NOTHING_CANCELLED}`;
   }
 }
+
+/**
+ * Whether a linked deal's changes are recorded now (H12): a new set of changes is, once; the same set again is not; a
+ * deal whose changes went (reviewed, or undone in the CRM) has its record cleared, with no entry.
+ */
+export function flagDecision(changes: readonly CrmChange[], flagged: unknown): "record" | "clear" | "none" {
+  const before = Array.isArray(flagged) && flagged.length > 0 ? JSON.stringify(flagged) : null;
+  if (changes.length === 0) return before ? "clear" : "none";
+  return JSON.stringify(changes) === before ? "none" : "record";
+}

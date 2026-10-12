@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/platform/accounting-sync/route";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
+import { currentOrgId } from "@/lib/context";
+import type { CrmProvider } from "@/lib/connectors/crm";
 import type { AccountingProvider } from "@/lib/connectors/provider";
 import { sweepAccounting } from "@/lib/connectors/sweep";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
@@ -94,6 +96,22 @@ describe("sweepAccounting", () => {
       const removed = fake.requests.find((sent) => sent.path === "/rest/v1/accounting_tokens" && sent.method === "DELETE");
       expect(removed?.params.get("id")).toBe("eq.tok-p");
     });
+  });
+
+  it("syncs a CRM connection with the CRM runner, in its own workspace (HubSpot connector H7)", async () => {
+    const { run } = world((sent) =>
+      sent.path === "/rest/v1/rpc/accounting_connections_due" ? { body: [{ org_id: ORG, connection_id: "conn-hub", provider: "hubspot" }] } : undefined
+    );
+    const hubspot = { id: "hubspot", kind: "crm" } as unknown as CrmProvider;
+    const seen: Array<{ connectionId: string; org: string }> = [];
+    const sync = vi.fn(async (connectionId: string) => {
+      seen.push({ connectionId, org: currentOrgId() });
+      return { outcome: "synced" as const };
+    });
+    const summary = await run(() => sweepAccounting({ providerFor: () => xero, crm: { providerFor: (id) => (id === "hubspot" ? hubspot : null), sync } }));
+    expect(summary).toMatchObject({ connections: 1, synced: 1 });
+    expect(seen).toEqual([{ connectionId: "conn-hub", org: ORG }]);
+    expect(sync).toHaveBeenCalledWith("conn-hub", hubspot);
   });
 });
 

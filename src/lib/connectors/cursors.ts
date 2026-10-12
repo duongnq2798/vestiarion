@@ -75,6 +75,11 @@ export interface PageRead {
   updatedAts: readonly string[];
   /** How many records the read matches now, where the provider says. */
   total?: number | null;
+  /**
+   * The provider reads no further for this query (HubSpot's search stops at 10,000 results): the page is the run's last,
+   * and the run never starts over, which would read the same pages again (HubSpot connector H6).
+   */
+  capped?: boolean;
 }
 
 /**
@@ -90,7 +95,7 @@ export function pageOutcome(cursor: SyncCursor, read: PageRead, nowIso: string):
   const changedInRun = cursor.changedInRun || shrank || read.updatedAts.some((at) => at >= minus(runStart, CLOCK_MARGIN_MS));
   if (!read.last) return { cursor: { ...cursor, page: read.page + 1, highWater, changedInRun, total: total ?? cursor.total }, run: "more" };
   const idle = { page: null, highWater: null, runStartedAt: null, changedInRun: false, total: null } as const;
-  if (read.page > 1 && changedInRun) return { cursor: { ...cursor, ...idle }, run: "restart" };
+  if (read.page > 1 && changedInRun && !read.capped) return { cursor: { ...cursor, ...idle }, run: "restart" };
   if (cursor.phase === "backfill") {
     return {
       cursor: { ...cursor, ...idle, phase: "incremental", since: minus(cursor.backfillStartedAt ?? runStart, CLOCK_MARGIN_MS), completedAt: nowIso },
