@@ -1,5 +1,6 @@
+import { sumUsdcAmounts } from "../agent/obligations";
 import { unwrap, type OrgDb } from "../dal";
-import { allocationErrorFromDb, toMicros, type AllocationBasis, type AllocationKind, type AllocationRow, type Coin, type PaymentIn, type ReceivableIn } from "./model";
+import { allocationErrorFromDb, fromMicros, liveRows, toMicros, type AllocationBasis, type AllocationKind, type AllocationRow, type Coin, type PaymentIn, type ReceivableIn } from "./model";
 
 /**
  * Reading what was applied (docs/superpowers/specs/2026-10-12-allocations-design.md L11): the rows of
@@ -152,4 +153,27 @@ export async function readAllocationBook(orgDb: OrgDb): Promise<AllocationBook> 
     (unwrap(grants) as Array<{ detail: { from?: unknown } | null }>).flatMap((entry) => (typeof entry.detail?.from === "string" ? [entry.detail.from.toLowerCase()] : []))
   );
   return { available: rows !== null, rows: rows ?? [], payments, floatSenders };
+}
+
+/**
+ * What the open USDC receivables are expected to bring in, as the cycle's forecast records it (`projected_inflow`): a
+ * part-paid one for what is still owed, since what arrived is in the wallet already (L11). Best effort: before migration
+ * 0103 runs, or on a failed read, each counts in full, as before.
+ */
+export async function projectedReceivableInflow(orgDb: OrgDb): Promise<number> {
+  const receivables = unwrap(
+    await orgDb.from("invoices").select("id, amount, currency").eq("direction", "receivable").in("status", ["pending", "matched"])
+  ) as Array<{ id: string; amount: string; currency: string | null }>;
+  const rows =
+    receivables.length > 0
+      ? await readAllocationRows(orgDb, { invoiceIds: receivables.map((row) => row.id) }).catch((error: unknown) => {
+          console.error("forecast: payments applied not read", error instanceof Error ? error.message : error);
+          return null;
+        })
+      : null;
+  const applied = new Map<string, number>();
+  for (const row of liveRows(rows ?? [])) applied.set(row.invoiceId, (applied.get(row.invoiceId) ?? 0) + row.amount);
+  const owed = receivables.map((row) => ({ currency: row.currency, amount: fromMicros(Math.max(0, toMicros(row.amount) - (applied.get(row.id) ?? 0))) }));
+  // USDC only: the forecast is set against USDC balances (EURC invoices design R3).
+  return sumUsdcAmounts(owed);
 }

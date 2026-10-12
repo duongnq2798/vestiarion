@@ -7,6 +7,7 @@ Changes to the API and webhooks that affect an integration, newest first. Change
   - **`ar_fee_recorded`**, actor `human`: the same fields with `reason`, `transferId`, `txHash` and `from` null. A fee is applied to the invoice, never counted as paid by the client.
   - **`ar_allocation_reversed`**, actor `human`: `{ by, allocationId, reverses, reversedKind, invoiceId, counterpartyId, transferId, amount, currency, txHash, reason, outstandingAfter, unappliedAfter, group }`. `reverses` is the `allocationId` reversed and `reversedKind` is `payment` or `fee`. Nothing is edited: what it applied is owed again.
 - `GET /api/v1/invoices` keeps its shape. A part-paid receivable keeps its full `amount` and the status `pending` (or `matched`) until what is applied covers it, then becomes `received`, with `settledAt` and `txHash` from the last payment applied. A reversal that leaves something owed on a received receivable makes it `pending` again, with `settledAt` and `txHash` null. What was applied is in the entries above.
+- `GET /api/v1/treasury` keeps its shape. Its `latestForecast.projectedInflow` counts a part-paid receivable for what is still owed, not its full amount: what arrived is in `liquidBalance` already.
 - A payment matched to one invoice in full is unchanged: one **`ar_received`** entry, as before. Nothing else in `/api/v1` changes.
 
 ## 2026-10-11: A bill moved from the payment plan is a payment_rescheduled entry

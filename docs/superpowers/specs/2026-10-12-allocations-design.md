@@ -146,8 +146,9 @@ Each decision names what it costs if it turns out wrong.
   with why and **Apply**, and **Apply by hand**. Money in with no suggestion is folded under it.
 - **The pay link** asks for what is still owed, and says what was received.
 - **Reminders** stop once a receivable is paid, and ask for what is still owed on a part-paid one, saying what arrived.
-- **Treasury**'s cash outlook and its scenarios expect a part-paid receivable for what is still owed: what arrived is in
-  the wallet already, and counting the whole would count it twice.
+- **Treasury**'s cash outlook and its scenarios, and the cycle's forecast (**Expected in**, `projectedInflow` in
+  `GET /api/v1/treasury`), expect a part-paid receivable for what is still owed: what arrived is in the wallet already,
+  and counting the whole would count it twice.
 - **Where a payment is (2026-10-11) and receipts** cover payments the workspace makes: payables and milestones. A
   receivable has no settlement track and no receipt, so they are unchanged; a receivable's settlement shows on its card.
 - Before migration 0103 runs: Receivables shows today's view, and **Apply payments** says "Applying payments is not set
