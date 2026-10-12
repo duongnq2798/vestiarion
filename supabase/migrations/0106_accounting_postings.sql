@@ -12,6 +12,9 @@
 -- The reality rule is held here too: a booking reaches sending, sent or confirmed only for a payment on Arc mainnet
 -- outside shadow mode, or into an organisation the provider said is a demo one (organisation_demo, written with the
 -- claim from a read made right before it). A payment on Arc testnet or in shadow mode is never booked into real books.
+-- The row's network and shadow are checked against the payment's own facts as it is drafted: Arc mainnet only when the
+-- payable's payment intent was made there, shadow whenever the workspace is in shadow mode or the bill keeps an
+-- original currency. A draft can only be made stricter than the caller asked, never looser.
 --
 -- accounting_postings_guard (before insert and update): a booking is inserted as a draft, or refused at once; its facts
 -- never change; its state moves only along the review's transitions; confirmed and refused are final. History is the
@@ -90,6 +93,21 @@ begin
   if tg_op = 'INSERT' then
     if new.state not in ('draft', 'refused') then
       raise exception 'accounting_posting_insert: a booking is drafted, or refused, before anything is sent' using errcode = 'P0001';
+    end if;
+    -- The reality rule reads the payment's own facts, never only the caller's (W1, W2): Arc mainnet only when the
+    -- payable's payment intent was made there (0075 takes it from the workspace when the intent is inserted), and shadow
+    -- whenever the workspace is in shadow mode or the bill keeps an original currency. Only ever stricter than asked.
+    if new.network = 'arc-mainnet' and not exists (
+      select 1 from public.payment_intents pi
+       where pi.org_id = new.org_id and pi.source_type = 'invoice' and pi.source_id = new.invoice_id and pi.network = 'arc-mainnet'
+    ) then
+      new.network := 'arc-testnet';
+    end if;
+    if not new.shadow and (
+      exists (select 1 from public.shadow_modes s where s.org_id = new.org_id)
+      or exists (select 1 from public.invoices i where i.org_id = new.org_id and i.id = new.invoice_id and i.original_currency is not null)
+    ) then
+      new.shadow := true;
     end if;
     return new;
   end if;

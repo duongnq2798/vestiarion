@@ -1697,7 +1697,9 @@ the provider.
   on Arc testnet or in shadow mode only into an organisation the provider says is a demo company (Xero's
   `IsDemoCompany`, or `Class: "DEMO"`; a trial is real books). `bookingReality` (`posting.ts`, pure) decides it
   when a booking is drafted, when it is shown and right before it is sent, with the organisation read again; migration
-  `0106`'s check refuses any row reaching `sending`, `sent` or `confirmed` otherwise.
+  `0106`'s check refuses any row reaching `sending`, `sent` or `confirmed` otherwise, on a network and shadow flag its
+  trigger reads from the payment itself as the booking is drafted (the payable's payment intent, the workspace's
+  `shadow_modes` row, the bill's original currency), never only from what the insert says.
   - **Schema (migration `0106`).** `accounting_postings`, a tenant table (RLS, the restrictive guard, composite
     foreign keys to its connection and its invoice; read, insert and update, never delete): one booking per payable and
     provider (`unique (org_id, invoice_id, provider)`) and one per provider payment. What it writes (the bill, the

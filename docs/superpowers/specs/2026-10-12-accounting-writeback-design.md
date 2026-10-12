@@ -78,7 +78,10 @@ inserts and updates it and deletes nothing.
   `account` (id, code, name, currency), the `fingerprint` approved, `approved_by`, `approved_at`, `sending_until` (the
   send's lease), `attempts`, `external_payment_id`, `sent_at`, `confirmed_at`.
 - A trigger keeps the facts fixed once drafted, lets the state move only along the transitions of W6, and checks the
-  reality rule on any row going to `sending`, `sent` or `confirmed`. A check keeps `sent` and `confirmed` with a
+  reality rule on any row going to `sending`, `sent` or `confirmed`. As a booking is drafted, it reads the payment's own
+  facts rather than trusting the row: `network` stays `arc-mainnet` only when the payable's payment intent was made on
+  Arc mainnet, and `shadow` is set whenever the workspace has a `shadow_modes` row or the bill keeps an original
+  currency. It only ever makes a draft stricter. A check keeps `sent` and `confirmed` with a
   payment id and `confirmed` with its time.
 - History is ledger-backed: each transition appends a signed entry (W9); the row holds only where the booking is.
 - Added to `TENANT_TABLES`, the PGlite seed, the row-level security and deletion tests.

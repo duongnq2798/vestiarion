@@ -64,6 +64,16 @@ async function draft(w: World, fields: { network?: string; shadow?: boolean; dem
   ).rows[0].id;
 }
 
+/** The payable's payment, confirmed on Arc: on Arc mainnet, the workspace is moved there first (0075 takes an intent's network from it). */
+async function paid(w: World, network: "arc-testnet" | "arc-mainnet" = "arc-testnet", invoiceId = w.invoiceId): Promise<void> {
+  if (network === "arc-mainnet") await db.query("update public.orgs set network = 'arc-mainnet' where id = $1", [w.orgId]);
+  await db.query(
+    `insert into public.payment_intents (org_id, source_type, source_id, idempotency_key, provider, provider_mode, amount, destination, status, tx_hash, confirmed_at)
+     values ($1, 'invoice', $2, gen_random_uuid()::text, 'circle', 'live', 54.13, '0xAAA', 'confirmed', $3, now())`,
+    [w.orgId, invoiceId, HASH]
+  );
+}
+
 const claim = (id: string, demo: boolean | null = null) =>
   db.query(
     `update public.accounting_postings set state = 'sending', account = $2::jsonb, fingerprint = $3, approved_by = $4, approved_at = now(),
@@ -104,6 +114,7 @@ describe("accounting_postings", () => {
 
   it("lets a payment on Arc mainnet outside shadow mode go to any organisation", async () => {
     const w = await world("books-mainnet");
+    await paid(w, "arc-mainnet");
     const id = await draft(w, { network: "arc-mainnet", shadow: false, demo: false });
     await claim(id);
     await db.query("update public.accounting_postings set state = 'sent', external_payment_id = 'pay-1', sent_at = now() where id = $1", [id]);
@@ -113,8 +124,49 @@ describe("accounting_postings", () => {
 
   it("refuses a shadow payment on Arc mainnet into a real organisation too", async () => {
     const w = await world("books-mainnet-shadow");
+    await paid(w, "arc-mainnet");
     const id = await draft(w, { network: "arc-mainnet", shadow: true, demo: false });
     await expect(claim(id)).rejects.toThrow(/accounting_postings_reality_check/);
+  });
+
+  it("takes the payment's network from its own payment on Arc, never from what the draft says", async () => {
+    const onTestnet = await world("books-network-testnet");
+    await paid(onTestnet, "arc-testnet");
+    const claimed = await draft(onTestnet, { network: "arc-mainnet", shadow: false, demo: false });
+    expect((await db.query<{ network: string }>("select network from public.accounting_postings where id = $1", [claimed])).rows[0].network).toBe("arc-testnet");
+    await expect(claim(claimed)).rejects.toThrow(/accounting_postings_reality_check/);
+    // A payable with no payment on Arc mainnet at all is not one either.
+    const unpaid = await world("books-network-none");
+    const none = await draft(unpaid, { network: "arc-mainnet", shadow: false, demo: false });
+    await expect(claim(none)).rejects.toThrow(/accounting_postings_reality_check/);
+    // As the app drafts it, in its workspace's own scope: a payment made on Arc mainnet stays one.
+    const onMainnet = await world("books-network-mainnet-tenant");
+    await paid(onMainnet, "arc-mainnet");
+    const drafted = await asTenant(db, onMainnet.orgId, (tx) =>
+      tx.query<{ network: string; shadow: boolean }>(
+        `insert into public.accounting_postings (org_id, connection_id, provider, external_org_id, invoice_id, bill_external_id, amount, currency, paid_on,
+           reference, network, shadow, paid_amount, paid_token)
+         values ($1, $2, 'xero', 'tenant-1', $3, 'bill-1', 54.13, 'USD', '2026-10-12', $4, 'arc-mainnet', false, 54.13, 'USDC') returning network, shadow`,
+        [onMainnet.orgId, onMainnet.connectionId, onMainnet.invoiceId, HASH]
+      )
+    );
+    expect(drafted.rows[0]).toEqual({ network: "arc-mainnet", shadow: false });
+  });
+
+  it("takes shadow mode from the workspace and the bill, never from what the draft says", async () => {
+    // The workspace is in shadow mode.
+    const inShadow = await world("books-shadow-workspace");
+    await paid(inShadow, "arc-mainnet");
+    await db.query("insert into public.shadow_modes (org_id, currency) values ($1, 'USDC')", [inShadow.orgId]);
+    const fromWorkspace = await draft(inShadow, { network: "arc-mainnet", shadow: false, demo: false });
+    expect((await db.query<{ shadow: boolean }>("select shadow from public.accounting_postings where id = $1", [fromWorkspace])).rows[0].shadow).toBe(true);
+    await expect(claim(fromWorkspace)).rejects.toThrow(/accounting_postings_reality_check/);
+    // The bill keeps an original currency, only ever set in shadow mode.
+    const kept = await world("books-shadow-bill");
+    await paid(kept, "arc-mainnet");
+    await db.query("update public.invoices set original_currency = 'EUR', original_amount = 50, fx_rate = 1.0826, fx_source = 'test', fx_at = now() where id = $1", [kept.invoiceId]);
+    const fromBill = await draft(kept, { network: "arc-mainnet", shadow: false, demo: false });
+    await expect(claim(fromBill)).rejects.toThrow(/accounting_postings_reality_check/);
   });
 
   it("moves only along the review's transitions, and never out of confirmed or refused", async () => {
@@ -141,6 +193,7 @@ describe("accounting_postings", () => {
 
   it("names one provider payment once per connection", async () => {
     const w = await world("books-payment-once");
+    await paid(w, "arc-mainnet");
     const first = await draft(w, { network: "arc-mainnet", shadow: false });
     await claim(first);
     await db.query("update public.accounting_postings set state = 'sent', external_payment_id = 'pay-3', sent_at = now() where id = $1", [first]);
@@ -149,6 +202,7 @@ describe("accounting_postings", () => {
     const secondInvoice = (
       await db.query<{ id: string }>("insert into public.invoices (org_id, direction, counterparty_id, amount, due_date, status) values ($1, 'payable', $2, 5, now(), 'paid') returning id", [w.orgId, counterpartyId])
     ).rows[0].id;
+    await paid(w, "arc-mainnet", secondInvoice);
     const second = await draft({ ...w, invoiceId: secondInvoice }, { network: "arc-mainnet", shadow: false });
     await claim(second);
     await expect(db.query("update public.accounting_postings set state = 'sent', external_payment_id = 'pay-3', sent_at = now() where id = $1", [second])).rejects.toThrow(
@@ -189,6 +243,7 @@ describe("accounting_postings", () => {
 
   it("lets the approver's account go from a final booking", async () => {
     const w = await world("books-approver-gone");
+    await paid(w, "arc-mainnet");
     const id = await draft(w, { network: "arc-mainnet", shadow: false });
     await claim(id);
     await db.query("update public.accounting_postings set state = 'sent', external_payment_id = 'pay-9', sent_at = now() where id = $1", [id]);
