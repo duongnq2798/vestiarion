@@ -92,6 +92,14 @@ function isLast(body: Json, rawCount: number, page: number, pageSize: number): b
   return rawCount < pageSize;
 }
 
+/** How many records the read matches now, by Xero's `pagination.itemCount`; null when it sends none. */
+function totalOf(body: Json): number | null {
+  const pagination = isObject(body.pagination) ? body.pagination : null;
+  return pagination && typeof pagination.itemCount === "number" && Number.isInteger(pagination.itemCount) && pagination.itemCount >= 0
+    ? pagination.itemCount
+    : null;
+}
+
 function listOf(body: unknown, key: string): { body: Json; items: unknown[] } {
   if (!isObject(body) || !Array.isArray(body[key])) throw new ProviderError("bad_response", `Xero's ${key} answer did not read`);
   return { body, items: body[key] as unknown[] };
@@ -100,7 +108,7 @@ function listOf(body: unknown, key: string): { body: Json; items: unknown[] } {
 export function mapBillsPage(body: unknown, page: number, pageSize: number): Page<ExternalBill> {
   const list = listOf(body, "Invoices");
   const items = list.items.map(mapBill).filter((bill): bill is ExternalBill => bill !== null);
-  return { items, page, last: isLast(list.body, list.items.length, page, pageSize) };
+  return { items, page, last: isLast(list.body, list.items.length, page, pageSize), total: totalOf(list.body) };
 }
 
 function mapContact(raw: unknown): ExternalContact | null {
@@ -116,7 +124,7 @@ function mapContact(raw: unknown): ExternalContact | null {
 export function mapContactsPage(body: unknown, page: number, pageSize: number): Page<ExternalContact> {
   const list = listOf(body, "Contacts");
   const items = list.items.map(mapContact).filter((contact): contact is ExternalContact => contact !== null);
-  return { items, page, last: isLast(list.body, list.items.length, page, pageSize) };
+  return { items, page, last: isLast(list.body, list.items.length, page, pageSize), total: totalOf(list.body) };
 }
 
 /** The accounts a payment can be booked to (I14): active bank accounts, and active accounts Xero lets take payments, never revenue or expense. */

@@ -6,7 +6,9 @@
  * Paging in update order has one gap: a row on a page already read that changes during the run moves to the end, and
  * the first row of the next page moves up into the page already read, unseen. So a run of more than one page that read
  * a change made during it starts over from page 1, with the same time; re-reading is harmless, since a version already
- * kept is ignored.
+ * kept is ignored. A row can also leave the read on a page already read (a backfill reads open bills only, and one is
+ * paid), moving the next row up just the same; the provider's count of what the read matches then falls, and the run
+ * starts over too.
  */
 
 export interface SyncCursor {
@@ -19,8 +21,10 @@ export interface SyncCursor {
   highWater: string | null;
   backfillStartedAt: string | null;
   runStartedAt: string | null;
-  /** Whether the run under way read a change made during it. */
+  /** Whether the run under way read a change made during it, or saw fewer records match than before. */
   changedInRun: boolean;
+  /** How many records the read matched on the run's last page read, where the provider says; null otherwise. */
+  total: number | null;
   completedAt: string | null;
 }
 
@@ -32,6 +36,7 @@ export const NEW_CURSOR: SyncCursor = {
   backfillStartedAt: null,
   runStartedAt: null,
   changedInRun: false,
+  total: null,
   completedAt: null,
 };
 
@@ -57,6 +62,7 @@ export function nextRequest(cursor: SyncCursor, nowIso: string): { cursor: SyncC
           highWater: null,
           runStartedAt: nowIso,
           changedInRun: false,
+          total: null,
           backfillStartedAt: cursor.phase === "backfill" ? (cursor.backfillStartedAt ?? nowIso) : cursor.backfillStartedAt,
         }
       : cursor;
@@ -67,6 +73,8 @@ export interface PageRead {
   page: number;
   last: boolean;
   updatedAts: readonly string[];
+  /** How many records the read matches now, where the provider says. */
+  total?: number | null;
 }
 
 /**
@@ -76,9 +84,12 @@ export interface PageRead {
 export function pageOutcome(cursor: SyncCursor, read: PageRead, nowIso: string): { cursor: SyncCursor; run: "more" | "done" | "restart" } {
   const highWater = read.updatedAts.reduce<string | null>((max, at) => latest(max, at), cursor.highWater);
   const runStart = cursor.runStartedAt ?? nowIso;
-  const changedInRun = cursor.changedInRun || read.updatedAts.some((at) => at >= minus(runStart, CLOCK_MARGIN_MS));
-  if (!read.last) return { cursor: { ...cursor, page: read.page + 1, highWater, changedInRun }, run: "more" };
-  const idle = { page: null, highWater: null, runStartedAt: null, changedInRun: false } as const;
+  const total = read.total ?? null;
+  // Fewer records than on the page before: one left the read, and the next moved up into a page already read.
+  const shrank = total !== null && cursor.total !== null && total < cursor.total;
+  const changedInRun = cursor.changedInRun || shrank || read.updatedAts.some((at) => at >= minus(runStart, CLOCK_MARGIN_MS));
+  if (!read.last) return { cursor: { ...cursor, page: read.page + 1, highWater, changedInRun, total: total ?? cursor.total }, run: "more" };
+  const idle = { page: null, highWater: null, runStartedAt: null, changedInRun: false, total: null } as const;
   if (read.page > 1 && changedInRun) return { cursor: { ...cursor, ...idle }, run: "restart" };
   if (cursor.phase === "backfill") {
     return {

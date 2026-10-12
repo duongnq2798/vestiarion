@@ -78,6 +78,11 @@ export interface Page<T> {
   items: T[];
   page: number;
   last: boolean;
+  /**
+   * How many records the read matches now, where the provider says (Xero's `pagination.itemCount`): fewer than on the
+   * page before means one left the read, and the next moved up into a page already read (X8).
+   */
+  total?: number | null;
 }
 
 /**

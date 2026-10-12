@@ -1552,7 +1552,8 @@ and `XERO_CLIENT_SECRET` (a Xero "Web app"); otherwise its card and routes are n
 - **Syncing** (`sync.ts`, `sync-store.ts`): suppliers, then bills, a page at a time in Xero's update order, each page read,
   then written, then the cursor moved, so a run stopped anywhere resumes at its page; no call to Xero happens inside a
   write. The backfill reads approved bills; later runs send `If-Modified-Since` and read every status. A run of several
-  pages that read a change made during it starts over from page 1. A `Retry-After` of at most 5 seconds is waited out
+  pages that read a change made during it, or saw Xero's count of matching bills (`pagination.itemCount`) fall from one
+  page to the next (a bill paid while a backfill of approved ones runs), starts over from page 1. A `Retry-After` of at most 5 seconds is waited out
   once; a longer one, an outage or an unreadable answer ends the run and sets `next_sync_after` (Xero's wait, or 1, 2, 4
   minutes and so on up to an hour); a 401 refreshes once; a refused refresh or a 403 marks needs reconnect. `planBill`
   keeps each bill once by its version, takes a new open bill only when due or dated from 90 days before the first

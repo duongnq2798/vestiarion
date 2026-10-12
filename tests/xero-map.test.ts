@@ -75,6 +75,13 @@ describe("bills", () => {
     expect(page1.items).toHaveLength(3);
   });
 
+  it("says how many bills the read matches, by Xero's count, and nothing without one", () => {
+    expect(page1.total).toBe(104);
+    expect(mapContactsPage(fixture("contacts-page.json"), 1, 100).total).toBe(3);
+    expect(mapBillsPage({ Invoices: [] }, 1, 100).total).toBeNull();
+    expect(mapBillsPage({ Invoices: [], pagination: { itemCount: "104" } }, 1, 100).total).toBeNull();
+  });
+
   it("calls an approved bill with nothing due paid, and ends on the last page", () => {
     const page2 = mapBillsPage(fixture("invoices-backfill-page-2.json"), 2, 100);
     expect(page2.last).toBe(true);

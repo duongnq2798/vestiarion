@@ -163,6 +163,9 @@ create table if not exists public.accounting_sync_cursors (
   -- Whether the run under way read a change made during it: then a run of several pages reads again from page 1,
   -- since a row may have moved up into a page already read.
   changed_in_run       boolean not null default false,
+  -- How many records the read matched on the run's last page read, by the provider's count: fewer on a later page
+  -- means one left the read (a bill paid during a backfill of open ones), and the run reads again from page 1 too.
+  run_total            integer constraint accounting_sync_cursors_run_total_check check (run_total is null or run_total >= 0),
   backfill_started_at  timestamptz,
   completed_at         timestamptz,
   updated_at           timestamptz not null default now(),
@@ -170,6 +173,16 @@ create table if not exists public.accounting_sync_cursors (
   constraint accounting_sync_cursors_connection_fkey foreign key (org_id, connection_id)
     references public.accounting_connections (org_id, id) on delete cascade
 );
+
+-- For a database where an earlier draft of this file created the table without it.
+alter table public.accounting_sync_cursors add column if not exists run_total integer;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'accounting_sync_cursors_run_total_check') then
+    alter table public.accounting_sync_cursors
+      add constraint accounting_sync_cursors_run_total_check check (run_total is null or run_total >= 0);
+  end if;
+end $$;
 
 -- The four tenant tables: their own workspace's rows, read, inserted and updated by the tenant role, never deleted.
 do $$

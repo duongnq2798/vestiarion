@@ -20,6 +20,7 @@ interface CursorRow {
   high_water: string | null;
   run_started_at: string | null;
   changed_in_run: boolean | null;
+  run_total: number | null;
   backfill_started_at: string | null;
   completed_at: string | null;
 }
@@ -35,6 +36,7 @@ function toCursor(row: CursorRow): SyncCursor {
     backfillStartedAt: isoOrNull(row.backfill_started_at),
     runStartedAt: isoOrNull(row.run_started_at),
     changedInRun: row.changed_in_run === true,
+    total: typeof row.run_total === "number" ? row.run_total : null,
     completedAt: isoOrNull(row.completed_at),
   };
 }
@@ -76,7 +78,7 @@ export const syncStore: SyncDb = {
     const rows = unwrap(
       await db()
         .from("accounting_sync_cursors")
-        .select("phase, since, page, high_water, run_started_at, changed_in_run, backfill_started_at, completed_at")
+        .select("phase, since, page, high_water, run_started_at, changed_in_run, run_total, backfill_started_at, completed_at")
         .eq("connection_id", connectionId)
         .eq("object_type", type)
         .limit(1)
@@ -98,6 +100,7 @@ export const syncStore: SyncDb = {
             high_water: cursor.highWater,
             run_started_at: cursor.runStartedAt,
             changed_in_run: cursor.changedInRun,
+            run_total: cursor.total,
             backfill_started_at: cursor.backfillStartedAt,
             completed_at: cursor.completedAt,
             updated_at: new Date().toISOString(),

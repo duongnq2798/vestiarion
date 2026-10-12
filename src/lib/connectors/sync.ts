@@ -149,7 +149,7 @@ export async function syncConnection(input: {
           page = read;
         }
         result.pages += 1;
-        const outcome = pageOutcome(cursor, { page: page.page, last: page.last, updatedAts }, iso(now()));
+        const outcome = pageOutcome(cursor, { page: page.page, last: page.last, updatedAts, total: page.total ?? null }, iso(now()));
         cursor = outcome.cursor;
         await db.writeCursor(connection.id, type, cursor);
         // A restart reads from page 1 again, within the same page budget.

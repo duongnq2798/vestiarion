@@ -261,6 +261,8 @@ describe("accounting_bills and accounting_sync_cursors", () => {
     await cursor();
     await expect(cursor()).rejects.toThrow(/accounting_sync_cursors_key/);
     await expect(db.query("update public.accounting_sync_cursors set page = 0 where org_id = $1", [orgId])).rejects.toThrow(/page_check/);
+    await db.query("update public.accounting_sync_cursors set run_total = 104 where org_id = $1", [orgId]);
+    await expect(db.query("update public.accounting_sync_cursors set run_total = -1 where org_id = $1", [orgId])).rejects.toThrow(/run_total_check/);
   });
 
   it("goes with its workspace: connection, tokens, links, bills and cursors", async () => {

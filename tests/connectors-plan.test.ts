@@ -123,6 +123,7 @@ describe("the cursor", () => {
       backfillStartedAt: T0,
       runStartedAt: null,
       changedInRun: false,
+      total: null,
       completedAt: T1,
     });
     expect(nextRequest(done, T1).request).toEqual({ phase: "incremental", since: "2026-10-12T06:55:00.000Z", page: 1 });
@@ -143,6 +144,19 @@ describe("the cursor", () => {
     const page2 = afterPage(page1, { page: 2, last: true, updatedAts: ["2026-10-12T07:01:00.000Z"] }, T0);
     expect(page2).toMatchObject({ phase: "backfill", page: null, highWater: null, runStartedAt: null, backfillStartedAt: T0 });
     expect(nextRequest(page2, T1).request).toEqual({ phase: "backfill", since: null, page: 1 });
+  });
+
+  it("reads again from page 1 when fewer records match than on the run's last page, since one that left moved the next up into a page already read", () => {
+    const started = nextRequest(NEW_CURSOR, T0).cursor;
+    // Page 1 of three open bills; then one on it is paid in the source, and leaves what a backfill reads.
+    const page1 = afterPage(started, { page: 1, last: false, updatedAts: ["2026-09-01T00:00:00.000Z"], total: 3 }, T0);
+    const resumed = nextRequest(page1, T1).cursor;
+    const page2 = afterPage(resumed, { page: 2, last: true, updatedAts: ["2026-09-03T00:00:00.000Z"], total: 2 }, T1);
+    expect(page2).toMatchObject({ phase: "backfill", page: null, runStartedAt: null, backfillStartedAt: T0 });
+    expect(nextRequest(page2, T1).request).toEqual({ phase: "backfill", since: null, page: 1 });
+    // More records than before is one added at the end, in update order: nothing was skipped.
+    const grown = afterPage(page1, { page: 2, last: true, updatedAts: ["2026-09-03T00:00:00.000Z"], total: 4 }, T1);
+    expect(grown.phase).toBe("incremental");
   });
 
   it("moves on after one page whatever changed during it: a single page cannot skip a row", () => {

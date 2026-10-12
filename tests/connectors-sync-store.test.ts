@@ -69,14 +69,14 @@ describe("syncStore", () => {
   it("reads a cursor, or a new one, and keeps one per connection and type", async () => {
     const { fake, run } = world((sent) =>
       sent.path === "/rest/v1/accounting_sync_cursors" && sent.method === "GET"
-        ? { body: [{ phase: "incremental", since: "2026-10-12T06:55:00+00:00", page: 2, high_water: null, run_started_at: "2026-10-12T07:00:00+00:00", changed_in_run: false, backfill_started_at: "2026-10-12T07:00:00+00:00", completed_at: null }] }
+        ? { body: [{ phase: "incremental", since: "2026-10-12T06:55:00+00:00", page: 2, high_water: null, run_started_at: "2026-10-12T07:00:00+00:00", changed_in_run: false, run_total: 104, backfill_started_at: "2026-10-12T07:00:00+00:00", completed_at: null }] }
         : undefined
     );
-    expect(await run(() => syncStore.readCursor(CONNECTION, "bill"))).toMatchObject({ phase: "incremental", since: "2026-10-12T06:55:00.000Z", page: 2 });
-    await run(() => syncStore.writeCursor(CONNECTION, "contact", { ...NEW_CURSOR, page: 3 }));
+    expect(await run(() => syncStore.readCursor(CONNECTION, "bill"))).toMatchObject({ phase: "incremental", since: "2026-10-12T06:55:00.000Z", page: 2, total: 104 });
+    await run(() => syncStore.writeCursor(CONNECTION, "contact", { ...NEW_CURSOR, page: 3, total: 250 }));
     const upsert = fake.requests.find((sent) => sent.method === "POST" && sent.path === "/rest/v1/accounting_sync_cursors");
     expect(upsert?.params.get("on_conflict")).toBe("org_id,connection_id,object_type");
-    expect(upsert?.body).toMatchObject({ org_id: ORG, connection_id: CONNECTION, object_type: "contact", phase: "backfill", page: 3, changed_in_run: false });
+    expect(upsert?.body).toMatchObject({ org_id: ORG, connection_id: CONNECTION, object_type: "contact", phase: "backfill", page: 3, changed_in_run: false, run_total: 250 });
     const { run: none } = world();
     expect(await none(() => syncStore.readCursor(CONNECTION, "bill"))).toEqual(NEW_CURSOR);
   });

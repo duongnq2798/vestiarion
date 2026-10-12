@@ -274,6 +274,34 @@ describe("syncConnection", () => {
     expect(memory.cursors.get("bill")).toMatchObject({ phase: "incremental", page: null });
   });
 
+  it("still brings in every open bill when one is paid in Xero between two runs of a backfill", async () => {
+    // Xero, a bill a page, in update order: a backfill reads the approved bills only, so a bill paid leaves its pages.
+    const open = (id: string, updatedAt: string, status: ExternalBill["status"] = "open"): ExternalBill => ({
+      externalId: id, version: updatedAt, updatedAt, contactExternalId: null, contactName: "PowerDirect", number: id, reference: null, currency: "USD",
+      total: "10", amountDue: status === "open" ? "10" : "0", issuedOn: "2026-10-01", dueOn: "2026-10-30", status,
+    });
+    const xero = new Map([
+      ["A", open("A", "2026-09-01T00:00:00.000Z")],
+      ["B", open("B", "2026-09-02T00:00:00.000Z")],
+      ["C", open("C", "2026-09-03T00:00:00.000Z")],
+    ]);
+    const bills: Answer<ExternalBill> = (request) => {
+      const all = [...xero.values()].sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
+      const read = request.phase === "backfill" ? all.filter((bill) => bill.status === "open") : all.filter((bill) => bill.updatedAt >= (request.since ?? ""));
+      return { items: read.slice(request.page - 1, request.page), page: request.page, last: request.page >= read.length, total: read.length };
+    };
+    const memory = memoryDb();
+    const { provider: p } = provider({ bills });
+    let at = NOW;
+    expect((await run(memory.db, p, tokenStore(), { maxPages: 1, now: () => at })).outcome).toBe("partial");
+    // A, on the page already read, is paid in Xero before the next run: B moves up into page 1.
+    at += 15 * 60_000;
+    xero.set("A", open("A", new Date(at - 60_000).toISOString(), "paid"));
+    for (let runs = 0; runs < 10 && (await run(memory.db, p, tokenStore(), { maxPages: 1, now: () => at })).outcome === "partial"; runs += 1) at += 15 * 60_000;
+    expect(memory.cursors.get("bill")).toMatchObject({ phase: "incremental" });
+    expect([...memory.bills.keys()].sort()).toEqual(["A", "B", "C"]);
+  });
+
   it("records an unexpected error as a failed sync and keeps going for the next run", async () => {
     const memory = memoryDb();
     const broken = { ...memory.db, insertBill: async () => Promise.reject(new Error("database down")) };

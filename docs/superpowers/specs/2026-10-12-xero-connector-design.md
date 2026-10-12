@@ -183,6 +183,11 @@ Writing payments back to Xero is the next feature; this one stores the account t
 - Paging in update order has one gap: a row on a page already read that changes during the run moves to the end, and
   the first row of the next page moves up, unseen. So a run of more than one page that read a change made during it
   (within five minutes of its start, for the two clocks) reads again from page 1 with the same `since`.
+- A row can also leave the read on a page already read: a backfill reads approved bills only, and one paid or voided in
+  Xero between two of its pages is no longer among them, so the next one moves up unseen just the same, and is never
+  read again (its update time is older than the backfill). Each page carries Xero's count of what the read matches
+  (`pagination.itemCount`), kept on the cursor as `run_total`; a later page of the same run with a smaller count reads
+  again from page 1 too.
 - Cost if wrong: a slower catch-up; no bill is added twice (X10).
 
 **X9. A bounded backfill.** On the first connection, `window_from` is set to 90 days before it, and kept on reconnect.
