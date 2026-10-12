@@ -102,6 +102,16 @@ export function pageOutcome(cursor: SyncCursor, read: PageRead, nowIso: string):
       run: "done",
     };
   }
+  if (read.capped && highWater !== null) {
+    // The provider asks for the changes since `since` less CLOCK_MARGIN_MS (HubSpot's search, H6). Past its cap, the next
+    // run starts at the latest change read, not that margin before it: more changes than the cap within the margin would
+    // be read again, the same ones, run after run, and nothing after them ever. Changes at that very instant are read
+    // again. When every result read shares the instant the run started at, the next starts just after it: a search in
+    // the order of that instant reaches no further.
+    const asked = cursor.since === null ? null : minus(cursor.since, CLOCK_MARGIN_MS);
+    const from = asked !== null && highWater <= asked ? minus(asked, -1) : highWater;
+    return { cursor: { ...cursor, ...idle, since: minus(from, -CLOCK_MARGIN_MS), completedAt: nowIso }, run: "done" };
+  }
   return { cursor: { ...cursor, ...idle, since: highWater ?? cursor.since, completedAt: nowIso }, run: "done" };
 }
 

@@ -115,8 +115,12 @@ reconnect.
   run asks for every deal changed since five minutes before `since`, whatever its stage: search lags a change by a
   few moments, and a deal read twice is ignored by its version.
 - The search caps a query at 10,000 results: the page that reaches it ends the run as the last page read (`capped`),
-  with no restart; a backfill becomes incremental, an incremental run resumes from the latest change it read. Cost if
-  wrong: an account with more than 10,000 open deals brings in the first 10,000 by last change.
+  with no restart; a backfill becomes incremental, an incremental run resumes from the latest change it read, that
+  instant itself and not five minutes before it, or more than 10,000 deals changed within five minutes (a bulk edit)
+  would be read again, the same ones, run after run, and no change after them ever. When every result read shares the
+  instant the run started at, the next run starts a millisecond after it: a search in that order reaches no further.
+  Cost if wrong: an account with more than 10,000 open deals brings in the first 10,000 by last change, and more than
+  10,000 deals changed at one same millisecond are read only as far as the cap.
 - For each page: the deals' companies (associations; the one labelled Primary, else the lowest id), those companies
   (batch read: `name`, `domain`), their contacts (associations; the lowest id of those whose primary company it is,
   else the lowest id) and those contacts' `email`. Up to five calls a page.

@@ -1795,7 +1795,9 @@ reads in `api.ts`, `hubspotProvider`), wired in `src/lib/crm-providers.ts`. It i
 - **Syncing** (`crm-sync.ts`, `crm-store.ts`): deals by search, 100 a page in the order of `hs_lastmodifieddate`, `after`
   as the page's offset, so the core's cursor (object type `deal`) and its checkpoints, restarts and backoff work as for
   Xero. A backfill reads open deals and those won since `window_from`; later runs read every deal changed since five
-  minutes before `since`. The page reaching HubSpot's 10,000-result cap ends the run without a restart (`capped`). Each
+  minutes before `since`. The page reaching HubSpot's 10,000-result cap ends the run without a restart (`capped`), and
+  the next run starts at the latest change read itself, not five minutes before it, so a bulk edit of more than 10,000
+  deals is read past rather than again and again (`pageOutcome`). Each
   page reads its companies and their main contacts (associations, batch reads); pipelines and the account's currency
   and time zone once per run. Search never returns a deleted deal, so linked deals and won ones still offered are read
   again by id each run; one HubSpot no longer has is `deleted`. `planCrmDeal` keeps each deal once by its version. The

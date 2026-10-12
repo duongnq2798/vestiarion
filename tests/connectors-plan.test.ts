@@ -163,7 +163,8 @@ describe("the cursor", () => {
     const cursor: SyncCursor = { ...NEW_CURSOR, phase: "incremental", since: "2026-10-01T00:00:00.000Z", backfillStartedAt: T0, completedAt: T0 };
     const page1 = afterPage(nextRequest(cursor, T0).cursor, { page: 1, last: false, updatedAts: ["2026-10-12T07:01:00.000Z"], total: 12840 }, T0);
     const capped = afterPage(page1, { page: 2, last: true, capped: true, updatedAts: ["2026-10-12T07:02:00.000Z"], total: 12840 }, T0);
-    expect(capped).toMatchObject({ phase: "incremental", page: null, since: "2026-10-12T07:02:00.000Z" });
+    // The provider asks from `since` less the margin: the next run starts at the latest change read itself.
+    expect(capped).toMatchObject({ phase: "incremental", page: null, since: "2026-10-12T07:07:00.000Z" });
     const backfill = afterPage(afterPage(nextRequest(NEW_CURSOR, T0).cursor, { page: 1, last: false, updatedAts: ["2026-10-12T07:01:00.000Z"] }, T0), { page: 2, last: true, capped: true, updatedAts: [] }, T1);
     expect(backfill).toMatchObject({ phase: "incremental", since: "2026-10-12T06:55:00.000Z" });
   });
