@@ -155,11 +155,20 @@ describe.each(TENANT_TABLES)("%s", (table) => {
   });
 
   it("cannot change or remove another organization's rows", async () => {
-    if (table === "ledger_entries" || table === "cycle_snapshots" || table === "service_purchases" || table === "decision_verdicts" || table === "payment_actuals" || table === "report_baselines" || table === "bank_statement_lines") {
+    if (table === "ledger_entries" || table === "cycle_snapshots" || table === "service_purchases" || table === "decision_verdicts" || table === "payment_actuals" || table === "report_baselines" || table === "bank_statement_lines" || table === "deal_versions") {
       // Append-only tables: the tenant role holds no UPDATE/DELETE privilege
       // at all, cross-org or not, so each statement is refused on its own —
       // the first failure would abort the transaction before the second ran.
       await expect(asTenant(db, A, (tx) => tx.query(`update public.${table} set org_id = org_id where org_id = $1`, [B]))).rejects.toThrow(/permission denied/);
+      await expect(asTenant(db, A, (tx) => tx.query(`delete from public.${table} where org_id = $1`, [B]))).rejects.toThrow(/permission denied/);
+      return;
+    }
+    if (table === "deals" || table === "deal_lines") {
+      // Status-only updates (column grants) and no delete: another organization's row is hidden from the update, and
+      // the delete is refused outright.
+      const column = table === "deals" ? "auto_release = not auto_release" : "status = status";
+      const updated = await asTenant(db, A, (tx) => tx.query(`update public.${table} set ${column} where org_id = $1`, [B]));
+      expect(updated.affectedRows ?? 0).toBe(0);
       await expect(asTenant(db, A, (tx) => tx.query(`delete from public.${table} where org_id = $1`, [B]))).rejects.toThrow(/permission denied/);
       return;
     }
@@ -180,7 +189,7 @@ describe.each(TENANT_TABLES)("%s", (table) => {
 });
 
 describe("history is append-only for the tenant role", () => {
-  it.each(["ledger_entries", "cycle_snapshots", "service_purchases", "decision_verdicts", "payment_actuals", "report_baselines", "bank_statement_lines"])("%s refuses UPDATE and DELETE even on the tenant's own rows", async (table) => {
+  it.each(["ledger_entries", "cycle_snapshots", "service_purchases", "decision_verdicts", "payment_actuals", "report_baselines", "bank_statement_lines", "deal_versions"])("%s refuses UPDATE and DELETE even on the tenant's own rows", async (table) => {
     await expect(asTenant(db, A, (tx) => tx.query(`update public.${table} set org_id = org_id`))).rejects.toThrow(/permission denied/);
     await expect(asTenant(db, A, (tx) => tx.query(`delete from public.${table}`))).rejects.toThrow(/permission denied/);
   });

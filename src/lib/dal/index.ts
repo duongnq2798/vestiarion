@@ -42,6 +42,7 @@ export const TENANT_TABLES = [
   "fx_swaps", "screening_dismissals", "receivable_links", "incoming_transfers", "agent_budgets", "recurring_payables", "policy_proposals",
   "service_purchases", "spending_limit_contracts", "ar_reminders", "inbox_emails", "approval_policies", "payment_approvals",
   "shadow_modes", "decision_verdicts", "payment_actuals", "bank_statement_lines", "report_shares", "report_baselines",
+  "deals", "deal_versions", "deal_lines",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
@@ -49,6 +50,7 @@ export const TENANT_RPCS = [
   "append_ledger_entry", "advance_sim_day", "claim_payment_intent", "ledger_entries_for_targets",
   "begin_cycle_run", "agent_paused", "claim_invoice_decision", "begin_payment_retry", "claim_milestone_decision",
   "sole_approver", "approvers_besides", "approvers_among",
+  "create_deal", "revise_deal",
 ] as const;
 export type TenantRpc = (typeof TENANT_RPCS)[number];
 
