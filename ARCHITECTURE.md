@@ -1729,7 +1729,8 @@ the provider.
     `invoiceId`), which webhooks carry. The network fee is shown apart and never booked.
   - **The seam.** `AccountingProvider.booking?: BookingProvider` (`provider.ts`): `writeScopes`, `organisation`,
     `bill`, `findPayment`, `bookPayment`, `payment`, each mapped to the core's shapes; Xero's in
-    `src/lib/xero/payments.ts` (pure) and `payments-api.ts`. A provider without it never books.
+    `src/lib/xero/payments.ts` (pure) and `payments-api.ts`. A provider without it (QuickBooks, for now) never books;
+    one that adds it also sets `BOOKS_PAYMENTS` (`booking.ts`) for the account picker's preview.
   - **Where it shows**: **Booked in Xero** on the paid bill's card, a last row in **Where the payment is**, and a step,
     The books, in **Why it was paid**, all from the signed entries (`bookingFromEntries`, `booked.ts`). The card's own
     entry (`matchingEntry`) skips `accounting_` entries.

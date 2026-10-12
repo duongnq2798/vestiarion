@@ -205,7 +205,11 @@ read them:
 - `payment({ …, paymentId })` → `ExternalPayment | null`.
 QuickBooks implements these with `BillPayment` (`VendorRef`, `PayType: Check`, `CheckPayment.BankAccountRef`,
 `Line[].LinkedTxn` to the bill, `PrivateNote` or `DocNumber` for the reference, a `Query` by it, and `requestid` for
-idempotency); nothing in the core changes.
+idempotency); its `organisation` says `demo: true` for a company reached through the sandbox API base
+(`QUICKBOOKS_ENVIRONMENT=sandbox`), never for production. It adds `com.intuit.quickbooks.accounting`'s write use to
+its consent words, sets `BOOKS_PAYMENTS.quickbooks` (`booking.ts`, the preview's words), and adds `booking` to
+`quickBooksProvider`; the drafting, the review list (one per tool on Bills & receivables), the command, the runs and
+the database are the core's, unchanged.
 
 **W12. What leaves.** To Xero, for a booking a person approved: the bill's id, the account's id, the day, the amount and
 the Arc transaction hash. Nothing about the supplier, the agent's reasoning or the workspace. The privacy page and the
