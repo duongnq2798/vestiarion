@@ -491,8 +491,9 @@ A receivable is money a client owes the business. In a live workspace, an owner 
 1. **Make the link.** On **Bills & receivables**, under **Receivables**, open the invoice's row and choose **Get paid on Arc**, then **Copy link** and send it. A new link replaces the old one.
 2. **The client pays.** The link opens a page with the amount, the due date, what it is for, the network, Arc testnet or Arc mainnet, and the workspace's address there. The client sends exactly that amount from any wallet on that network and can choose **I have paid**, which only asks Vestiarion to look now.
 3. **The agent matches it.** Every cycle, and on **I have paid**, Vestiarion reads the transfers that arrived in the operating wallet from Circle. A transfer of the same currency and amount as an open receivable, arriving after the receivable was added, settles it: from the client's own address on file, or, from any address, when it is the only such receivable and its client was sent the link. The receivable becomes received with its transaction, and the ledger records `ar_received`. Two open receivables of the same amount, with nothing to tell them apart, stay open for a person.
+4. **Anything else, a person applies.** One transfer for several invoices, part of an invoice now, or a payment a few cents short waits under **Apply payments**, with the agent's suggestions: see [Apply money received to invoices](/docs/guides/apply-payments). A part-paid invoice's link then asks for what is still owed, and the agent applies exactly that rest by itself, by the same two rules.
 
-Only a matched transfer counts as money received. Testnet faucet drips and swaps also arrive in the wallet, and they settle nothing.
+Only a payment matched or applied to a receivable counts as money received. Testnet faucet drips and swaps also arrive in the wallet, and they settle nothing.
 
 The link stays on the invoice's row: **Copy link** copies it again at any time. A link made before October 3, 2026 cannot be shown again; **Make a new link** replaces it.
 
@@ -505,7 +506,8 @@ From then on, each cycle, the agent decides whether to send a reminder now or to
 - **When.** From 3 days before the due date to 30 days after it, at most every 3 days, and at most 4 reminders. The written policy sends one 3 days before the due date, one on it, one 3 days after it and the last one 10 days after it; the model may wait up to 3 days at a time, and says why.
 - **How firmly.** Friendly at any time; firm only after the due date; final only 7 days after it, once 2 reminders went out. A firmer tone than allowed goes out as the firmest allowed, and the audit log says so.
 - **What it says.** A fixed text by tone: who asks, how much, what for, when it was due and how late it is, with **Pay on Arc testnet**, or **Pay on Arc mainnet** for a workspace on Arc mainnet, which opens the pay link. Nothing the model writes reaches the client.
-- **When it stops.** Once the agent matches the payment, or a person rejects the receivable, or after the final reminder. The row then says to follow up with the client yourself.
+- **What it asks for.** The whole invoice; for a part-paid one, what is still owed, saying what arrived.
+- **When it stops.** Once nothing is owed on the receivable, whether the agent matched the payment or a person applied payments to it, or a person rejects the receivable, or after the final reminder. The row then says to follow up with the client yourself.
 
 <Screenshot
   src="/docs/guides/first-payment-reminders.png"

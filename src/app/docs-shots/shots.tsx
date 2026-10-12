@@ -2,6 +2,8 @@ import { FileSpreadsheet, FileText, ListChecks, PenLine, Repeat, UserPlus } from
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AgentBudgetPanel } from "@/components/AgentBudgetPanel";
+import { AllocationLines } from "@/components/AllocationLines";
+import { ApplyPayments } from "@/components/ApplyPayments";
 import ApprovalCard from "@/components/ApprovalCard";
 import { CounterpartyRow as CounterpartyRowView } from "@/components/CounterpartyRow";
 import EmailInboxPanel from "@/components/EmailInboxPanel";
@@ -78,6 +80,7 @@ import { buildSharedReport } from "@/lib/shared-report";
 import { buildReport, type ReportBill, type ReportDecision, type ReportFacts } from "@/lib/workspace-report";
 import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
 import { evidenceShot } from "./evidence-fixture";
+import { APPLY_PAYMENTS, PART_PAID, PART_PAID_VIEW, PART_PAID_VIEWS } from "./allocations-fixture";
 import { designRuleReplay } from "../design/replay-fixture";
 import { RuleTrialPanel } from "@/components/RuleTrial";
 import { PaymentPlanSection, PlanCashEffect, PlanOutcomesStrip } from "@/components/vx/PaymentPlan";
@@ -117,7 +120,8 @@ export interface DocsShot {
     | "report"
     | "workspace"
     | "cash-scenarios"
-    | "evidence";
+    | "evidence"
+    | "apply-payments";
   /** The workspace page it is on: its title heads the frame. None for a public page, such as a payee's link. */
   page?: NavKey;
   /** The page's line under its title, where the real page has one. */
@@ -1751,6 +1755,35 @@ export const DOCS_SHOTS = {
     guide: "where-a-payment-is",
     page: "treasury",
     render: () => <PaymentsInFlight payments={SHOT_FLIGHT} now={SHOT_NOW} stuckAfterMinutes={15} orgSlug={SLUG} network="arc-testnet" />,
+  },
+  "apply-payments-list": {
+    guide: "apply-payments",
+    page: "invoices",
+    // Money received on Arc testnet: one transfer for three invoices, one a few cents short, and one with no suggestion.
+    render: () => <ApplyPayments orgSlug={SLUG} network="arc-testnet" payments={APPLY_PAYMENTS} canWrite />,
+  },
+  "apply-payments-part-paid": {
+    guide: "apply-payments",
+    page: "invoices",
+    // A receivable half paid: what arrived, what is still owed, and Reverse and Record a fee, above its pay link.
+    render: () => (
+      <section>
+        <SectionHeader title="Receivables" meta="5 invoices" />
+        <RowGroupHeading title="Open" count={1} />
+        <DecisionRows
+          orgSlug={SLUG}
+          items={[
+            {
+              decision: invoiceDecision(PART_PAID, undefined, [], { network: "arc-testnet", allocations: PART_PAID_VIEWS }),
+              date: { label: "Due Oct 20, 2026" },
+              note: "Part paid · 1,200.00 USDC still owed",
+              footerAction: <AllocationLines orgSlug={SLUG} network="arc-testnet" view={PART_PAID_VIEW} label="INV-1051 Website build" canWrite />,
+              open: true,
+            },
+          ]}
+        />
+      </section>
+    ),
   },
 } satisfies Record<string, DocsShot>;
 

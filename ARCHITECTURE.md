@@ -259,6 +259,60 @@ record; it writes nothing and nothing that moves money imports it (`tests/settle
   the page's organization scope: one that fails hides only these parts. The shared receipt says Reconciled only when its
   own three checks pass, and Confirmed with the reason otherwise (`src/lib/receipts/status.ts`).
 
+**Money received applied to invoices** (`src/lib/allocations/`, migration 0103,
+`docs/superpowers/specs/2026-10-12-allocations-design.md`) lets a person apply an incoming payment on Arc to one or more
+open receivables, settle one from several payments, keep an overpayment as the client's credit, record a difference as a
+fee, and reverse either:
+- **The rows.** `receivable_allocations` holds a `payment` row (part or all of one `incoming_transfers` row applied to
+  one receivable, with its `basis`: `person`, or `sender`/`amount` for the agent), a `fee` row (a difference on one
+  receivable, with a reason, never paid by the client) or a `reversal` row (naming the row it reverses, with a reason).
+  The tenant role reads and inserts only; composite foreign keys keep every link in the workspace, and
+  `incoming_transfers` gains `unique (org_id, id)` for them. Amounts are `numeric(20,6)`; the code works in whole
+  millionths (`src/lib/allocations/model.ts`), so sums never drift, and never adds across currencies.
+- **The invariants, in the database.** `receivable_allocations_check`, before each insert as the inserting role, locks the
+  payment's row, then the receivable's (`for update`, one order everywhere), and refuses: a receivable not open or not
+  one; a payment or receivable a whole match claimed; another currency than both the payment's and the receivable's; a
+  payment already applied to another client; more from a payment than it brought; more on a receivable than its amount;
+  a fee with no payment beside it; a reversal that does not mirror its row, names a reversal or would leave a fee alone;
+  and a stale `payment_seq`. `payment_seq` numbers one payment's rows 1, 2, 3, ...: a person's application names the
+  next one as they read the payment, so of two people applying the same payment at once one is refused (the second waits
+  on the lock, then sees the number taken; the unique index on `(org_id, transfer_id, payment_seq)` holds it even past
+  the trigger, which `tests/allocations-migration.test.ts` shows with triggers off). One reversal per row is a unique
+  index. `receivable_allocations_settle`, after each insert, makes a receivable `received` once nothing is owed, with
+  the latest applied payment's `received_at` and `tx_hash`, and a reversal that leaves something owed makes a `received`
+  one `pending` again, with neither: in the same transaction. `incoming_transfers_whole_match`, before a whole match's
+  claim of `invoice_id`, locks the receivable and refuses a transfer or receivable with allocations in force.
+- **The whole match is unchanged.** `matchTransfer` and the claim on `incoming_transfers.invoice_id` stay as they were,
+  with `ar_received`; a whole match is all of one transfer for one receivable, and is not reversed here. The receipts
+  stage leaves out of it every transfer and receivable with an allocation row, and applies by itself a transfer that is
+  exactly what is still owed on a part-paid receivable, by the same two rules (`matchTransfer` over the outstanding
+  amounts), as an agent `payment` row and `ar_payment_applied`; a refusal of the trigger leaves it to a person.
+- **Suggestions** (`src/lib/allocations/suggest.ts`) are pure, bounded and deterministic: a payment's reference (Arc
+  transfers carry none); for the client its applications name, or whose address on file sent it, the receivable it pays
+  exactly, 2 to 4 of its 12 oldest due that add up to it, one it is short of by at most 1% and 5.00 (a possible fee), and
+  oldest due first with any rest as credit; with no client known, an exact amount (saying how many share it), sets of one
+  client's receivables, and one within the fee margin. At most 3 per payment, each with why.
+- **Commands.** `receivable.apply_payment` and `receivable.reverse_allocation`, `records.write`, console only
+  (`src/lib/commands/allocations.ts`). `src/lib/allocations/apply.ts` reads what it needs, plans with the pure model so a
+  refusal reads in plain words, checks the signing key, writes every row in one insert (payment rows by receivable id,
+  then fees), maps a trigger's refusal to the same words, then signs one entry per row, best effort:
+  `ar_payment_applied`, `ar_fee_recorded`, `ar_allocation_reversed`, each with `invoiceId`, so the receivable's trail
+  shows it, and a `group` for the rows one press wrote.
+- **Where it shows.** Bills & receivables reads the rows and payments (`readAllocationBook`, best effort): a receivable's
+  card says part paid, what was received and is still owed, and lists each payment and fee, with Reverse and Record a fee
+  (`AllocationLines`); **Apply payments** (`ApplyPayments`, from `applyPaymentsView`) lists each payment not applied in
+  full, its credit, the suggestions and Apply by hand, leaving out test USDC from the float. The pay link's page asks for
+  what is still owed (`payLinkBalance`); the collections stage asks for it too, says what arrived, and sends nothing on
+  a receivable with nothing owed. Treasury's cash outlook and scenarios expect a part-paid receivable for what is still
+  owed. Where a payment is and receipts cover payments the workspace makes, so they are
+  unchanged. `GET /api/v1/invoices` keeps its shape: part paid stays `pending`.
+- **A search** (`src/lib/invoice-search.ts`, `?q=` on Bills & receivables) finds an invoice by id, any part of its memo,
+  purchase order, counterparty, amount or what is still owed, and a payment applied to it by its hash, Circle id or
+  sender.
+- **Before 0103 runs** a read answers `available: false` (`PGRST205`, `42P01`), the commands refuse `not_ready`, the
+  receipts and collections stages read no rows and behave as before, and Receivables says applying payments is not set
+  up yet. Bank statement money-in lines are not applied: a statement's currency is a bank's, receivables are USDC or EURC.
+
 **The FX watch** (`POST /api/agent/fx-watch`, `src/lib/agent/fx-watch.ts`,
 `docs/superpowers/specs/2026-10-05-fx-reevaluation-design.md`) runs every 5 minutes from Supabase Cron, with the same
 bearer token, and by hand from `.github/workflows/fx-watch.yml`. It decides again, without a person, a EURC payable a
@@ -1162,7 +1216,8 @@ workspace's mode for that action, never from a link, a key or a button. A
 `returnPayable`, `addPayableDetails`, `payMilestoneNow`, `closeMilestoneUnpaid`,
 `pauseWorkspaceAgent`, `resumeWorkspaceAgent`, `runWorkspaceCycle`,
 `addInvoice`, `importInvoices`, `recordActualPayment`, `importActualPayments`, `approvePlanLines`,
-`shareWorkspaceReport`, `stopSharingWorkspaceReport`, `answerReportBaseline` — whose first statement is
+`shareWorkspaceReport`, `stopSharingWorkspaceReport`, `answerReportBaseline`, `applyReceivedPayment`,
+`reverseAppliedPayment` — whose first statement is
 `gate(actor, "<command>")`:
 
 - the scope in force must be the actor's workspace, or it throws
@@ -1351,7 +1406,9 @@ workspaces; the ledger keeps the address with most of its name hidden.
   and number, before the send, and deleted if it fails. The email is a fixed
   template that carries the pay link, whose token is kept encrypted under the
   platform master key (`receivable_links.token_enc`). Each reminder is
-  `ar_reminder_sent`, each wait `ar_reminder_deferred`.
+  `ar_reminder_sent`, each wait `ar_reminder_deferred`. A part-paid receivable
+  is reminded of what is still owed, saying what arrived (`partPaid` in the
+  entry), and one with nothing owed is not reminded (migration 0103).
 `setNotifyEmailAction` (`src/app/actions/notifications.ts`) is gated on
 `workspace.read`, and writes only the row named by the session's own user id
 — a `userId` field in the form is never read.
