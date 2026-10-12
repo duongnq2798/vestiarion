@@ -14,7 +14,7 @@ Keeping your bills in QuickBooks Online instead? [Bring them in from QuickBooks]
 
 Open **Settings**. Under **Xero**, choose **Connect Xero**.
 
-The connect page names the workspace (or lets you pick one, if you manage several) and says what Vestiarion does with Xero's data:
+The connect page has the workspace you came from already picked (if you manage several, you can pick another) and says what Vestiarion does with Xero's data:
 
 - It reads the bills, suppliers and chart of accounts of the Xero organisation you pick. It writes to Xero only the payments an owner or admin approves: each payment made on Arc for a bill brought in from Xero, booked against that bill.
 - The bills you add are shown to the workspace's members and to its agent. The agent's model provider sees each bill's facts to decide on it, and may not train on them.
@@ -69,9 +69,9 @@ Each bill is added as one typed into the invoice form: the same checks, and a si
 
 ## 4. Choose where payments will be booked
 
-An owner or admin chooses the account in Xero that payments made on Arc will be booked to. Under **Where payments made on Arc will be booked**, choose **Choose the account**. Vestiarion reads your chart of accounts and offers the active bank accounts, and the accounts Xero lets take a payment; never a revenue or expense account.
+An owner or admin chooses the account in Xero that payments made on Arc will be booked to. Under **Where payments made on Arc will be booked**, choose **Choose the account**. Vestiarion reads your chart of accounts and offers its active bank accounts. The other accounts Xero lets take a payment, such as a clearing account or an owner's drawings, wait under **Show other accounts that take payments**, which says "These are not bank accounts": a supplier payment booked from an owner's equity or drawings account is almost always wrong, so check with your accountant first. Never a revenue or expense account.
 
-Pick one to see how a payment would be booked: "A payment of 1,250.00 USDC to PowerDirect for bill PD-4471 will be booked in Xero as a payment of 1,250.00 USD from Arc USDC wallet (091), with the Arc transaction as its reference." USDC is booked as USD and EURC as EUR, so an account in USD fits best. The network fee is shown apart and not booked to this account. Then **Use this account**. The ledger records `accounting_payment_account_chosen`.
+Pick one to see how a payment would be booked: "A payment of 1,250.00 USDC to PowerDirect for bill PD-4471 will be booked in Xero as a payment of 1,250.00 USD from Arc USDC wallet (091), with the Arc transaction as its reference." The bill is one still open in Xero, in US dollars, with an amount due, one you added first. With none, the preview says it is an example: "For example, a payment of 100.00 USDC for a bill will be booked in Xero as a payment of 100.00 USD from Arc USDC wallet (091), with the Arc transaction as its reference." USDC is booked as USD and EURC as EUR, so an account in USD fits best. The network fee is shown apart and not booked to this account. Then **Use this account**. The ledger records `accounting_payment_account_chosen`.
 
 Until someone chooses, the card says "Not chosen yet. Nothing is booked to an account nobody chose."
 

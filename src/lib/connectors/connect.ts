@@ -42,6 +42,9 @@ const cookieName = (deps: ConnectDeps) => `vx_${deps.provider.id}_oauth`;
 const redirectUri = (deps: ConnectDeps) => `${deps.origin}/api/integrations/${deps.provider.id}/callback`;
 const connectPage = (deps: ConnectDeps, query: Record<string, string>) =>
   `${deps.origin}/integrations/${deps.provider.id}/connect?${new URLSearchParams(query).toString()}`;
+/** Signing in first, then back to the connect page with the workspace still picked (a slug, never anything else). */
+const signIn = (deps: ConnectDeps, slug: string) =>
+  `${deps.origin}/login?next=${encodeURIComponent(`/integrations/${deps.provider.id}/connect${isValidSlug(slug) ? `?org=${slug}` : ""}`)}`;
 const settingsUrl = (deps: ConnectDeps, slug: string, outcome: string) =>
   `${deps.origin}/o/${slug}/settings?${deps.provider.id}=${outcome}#${deps.provider.id}`;
 
@@ -96,7 +99,7 @@ export async function startConnect(request: Request, deps: ConnectDeps): Promise
   const form = await request.formData();
   const slug = text(form, "org");
   const user = await getSessionUser();
-  if (!user) return redirect(`${deps.origin}/login?next=${encodeURIComponent(`/integrations/${deps.provider.id}/connect`)}`);
+  if (!user) return redirect(signIn(deps, slug));
   if (!isValidSlug(slug)) return redirect(connectPage(deps, { error: "forbidden" }));
   const membership = await manager(slug, user.id);
   if (!membership) return redirect(connectPage(deps, { org: slug, error: "forbidden" }));
@@ -231,7 +234,7 @@ export async function chooseConnect(request: Request, deps: ConnectDeps): Promis
   const pendingId = text(form, "choice");
   const externalOrgId = text(form, "organisation");
   const user = await getSessionUser();
-  if (!user) return redirect(`${deps.origin}/login?next=${encodeURIComponent(`/integrations/${deps.provider.id}/connect`)}`);
+  if (!user) return redirect(signIn(deps, slug));
   if (!isValidSlug(slug)) return redirect(connectPage(deps, { error: "forbidden" }));
   const membership = await manager(slug, user.id);
   if (!membership) return redirect(connectPage(deps, { org: slug, error: "forbidden" }));

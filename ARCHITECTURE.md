@@ -1661,10 +1661,12 @@ the provider.
   compare-and-set); a caller that finds the lease taken waits and reads what was stored. `invalid_grant` marks the
   connection needs reconnect.
 - **Connecting.** `/integrations/xero` takes a signed-in person to their workspace's Xero card; `/integrations/xero/connect`
-  lets them pick the workspace, read what Vestiarion does with Xero's data and tick **I agree**. Its form posts, from this
-  origin only, to `POST /api/integrations/xero/connect`, which checks the session, `integrations.manage` and the tick, and
-  sends them to Xero with a state signed under its own HKDF key (ten minutes), carrying the consent and a nonce kept in an
-  HttpOnly cookie. `GET /api/integrations/xero/callback` checks the state, the cookie, the person, their role again and
+  lets them pick the workspace (the card's link names it in `?org=`, and the only one they manage is picked without it),
+  read what Vestiarion does with Xero's data and tick **I agree**: real inputs with labels (`NativeChoice`), so the form
+  works before any JavaScript. Its form posts, from this origin only, to `POST /api/integrations/xero/connect` (a
+  signed-out person signs in and comes back with `?org=` kept), which checks the session, `integrations.manage` and the
+  tick, and sends them to Xero with a state signed under its own HKDF key (ten minutes), carrying the consent and a
+  nonce kept in an HttpOnly cookie. `GET /api/integrations/xero/callback` checks the state, the cookie, the person, their role again and
   the consent before it exchanges the code and reads `/connections`. One organisation is connected at once
   (`saveConnection`, then the tokens, then the first sync in `after()`); several are kept as a pending grant for ten
   minutes and picked on the connect page (`POST /api/integrations/xero/choose`). A workspace connected to another
@@ -1690,7 +1692,9 @@ the provider.
   (`records.write`, the console only) check the bills again on the server, claim each before adding it, add it through
   `addInvoice` with `via: "xero"` and Xero's ids, and link the bill and the supplier.
 - **The payment account** (I14): an owner or admin reads the chart of accounts from Xero, picks a bank account (or one
-  Xero lets take payments; never revenue or expense), sees a preview (`booking.ts`), and keeps it on the connection
+  Xero lets take payments, kept behind a toggle with a caution, as `accountsToOffer` splits them; never revenue or
+  expense), sees a preview (`booking.ts`: a bill still open in US dollars with
+  an amount due, one added first, else a plain example, never 0.00), and keeps it on the connection
   (`accounting_payment_account_chosen`). Payments are booked to it only as below.
 - **Booking payments made on Arc** (docs/superpowers/specs/2026-10-12-accounting-writeback-design.md). A payment is
   only ever booked into a ledger of the same reality: one on Arc mainnet outside shadow mode into any organisation, one

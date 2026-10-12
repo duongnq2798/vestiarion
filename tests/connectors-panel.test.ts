@@ -77,6 +77,34 @@ describe("accountingPanelView", () => {
     expect(fake.requests.some((sent) => sent.path.includes("accounting_tokens"))).toBe(false);
   });
 
+  it("previews with a bill still open in US dollars with an amount due, one added to Vestiarion first", async () => {
+    const { fake, run } = world((sent) => {
+      if (sent.path === "/rest/v1/accounting_connections") return { body: [ROW] };
+      if (sent.path === "/rest/v1/accounting_bills" && sent.method === "GET") {
+        return { body: [{ contact_name: "Ridgeway Freight", number: "RF-310", amount_due: "840.500000", currency: "USD" }] };
+      }
+      return undefined;
+    });
+    const view = await run(() => accountingPanelView("xero", NOW));
+    expect(view).toMatchObject({ sample: { supplier: "Ridgeway Freight", number: "RF-310", amount: "840.5", currency: "USD" } });
+    const asked = fake.requests.find((sent) => sent.path === "/rest/v1/accounting_bills" && sent.method === "GET");
+    // Open in the tool, something left to pay, in US dollars (paid one for one in USDC), not dismissed; "added" sorts before "review".
+    expect(asked?.params.get("source_status")).toBe("eq.open");
+    expect(asked?.params.get("amount_due")).toBe("gt.0");
+    expect(asked?.params.get("currency")).toBe("eq.USD");
+    expect(asked?.params.get("review_state")).toBe("in.(added,review)");
+    expect(asked?.params.get("order")).toBe("review_state.asc,changed_at.desc");
+  });
+
+  it("has no bill to preview with when the only one the tool sends back has nothing left to pay", async () => {
+    const { run } = world((sent) => {
+      if (sent.path === "/rest/v1/accounting_connections") return { body: [ROW] };
+      if (sent.path === "/rest/v1/accounting_bills" && sent.method === "GET") return { body: [{ contact_name: "PowerDirect", number: "Rpt", amount_due: 0, currency: "USD" }] };
+      return undefined;
+    });
+    expect(await run(() => accountingPanelView("xero", NOW))).toMatchObject({ sample: null });
+  });
+
   it("shows a revoked connection when there is no other", async () => {
     const { run } = world((sent) =>
       sent.path === "/rest/v1/accounting_connections" ? { body: [{ ...ROW, status: "revoked", revoked_at: "2026-10-12T12:00:00Z" }] } : undefined

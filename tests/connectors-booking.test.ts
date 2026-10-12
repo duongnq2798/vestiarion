@@ -18,11 +18,22 @@ describe("bookingPreview", () => {
     expect(preview.warning).toBeNull();
   });
 
-  it("uses a round figure for a bill in another currency, or with no bill at all", () => {
-    expect(bookingPreview(WALLET, { supplier: "Akiba Parts", number: null, amount: "98000", currency: "JPY" }, "Xero").lines[0]).toContain(
-      "A payment of 1,250.00 USDC to Akiba Parts will be booked"
-    );
-    expect(bookingPreview(WALLET, null, "Xero").lines[0]).toContain("to a supplier for one of its bills");
+  it("says it is an example, with a round figure and no supplier, when there is no open bill in US dollars", () => {
+    const example =
+      "For example, a payment of 100.00 USDC for a bill will be booked in Xero as a payment of 100.00 USD from Arc USDC wallet (091), with the Arc transaction as its reference.";
+    expect(bookingPreview(WALLET, null, "Xero").lines[0]).toBe(example);
+    // A bill in another currency is not paid as that many USDC, so it would only lend its supplier to a made-up amount.
+    expect(bookingPreview(WALLET, { supplier: "Akiba Parts", number: null, amount: "98000", currency: "JPY" }, "Xero").lines[0]).toBe(example);
+  });
+
+  it("never previews a payment of nothing: a bill with no amount due is an example instead", () => {
+    // A bill paid in Xero has 0.00 due (seen live: "A payment of 0.00 USDC to PowerDirect for bill Rpt").
+    for (const amount of ["0", "0.00", "-5", "not a number"]) {
+      const line = bookingPreview(WALLET, { supplier: "PowerDirect", number: "Rpt", amount, currency: "USD" }, "Xero").lines[0];
+      expect(line).not.toContain("0.00 USDC to");
+      expect(line).not.toContain("PowerDirect");
+      expect(line).toMatch(/^For example, a payment of 100\.00 USDC for a bill/);
+    }
   });
 
   it("says a USD account fits best when the one picked holds another currency", () => {
