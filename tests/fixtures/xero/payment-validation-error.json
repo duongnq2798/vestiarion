@@ -1,0 +1,21 @@
+{
+  "ErrorNumber": 10,
+  "Type": "ValidationException",
+  "Message": "A validation exception occurred",
+  "Elements": [
+    {
+      "Date": "/Date(1791763200000+0000)/",
+      "Amount": 31.39,
+      "Reference": "0x3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c",
+      "Status": "AUTHORISED",
+      "HasAccount": false,
+      "Invoice": { "InvoiceID": "0f4c1f4e-1d7a-4e0f-9a9d-6c2d3c1a0101", "Payments": [], "LineItems": [] },
+      "Account": { "AccountID": "6f7594f2-f059-4d56-9e67-47ac9733bfe9" },
+      "HasValidationErrors": true,
+      "ValidationErrors": [
+        { "Message": "Payment amount exceeds the amount outstanding on this document" },
+        { "Message": "Payment amount exceeds the amount outstanding on this document" }
+      ]
+    }
+  ]
+}

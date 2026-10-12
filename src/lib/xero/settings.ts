@@ -29,8 +29,18 @@ export function xeroRedirectUri(origin: string): string {
 }
 
 /**
- * Read-only, and granular: an app created after 2 March 2026 has no broad accounting scopes. Bills
- * (`accounting.invoices.read`), suppliers (`accounting.contacts.read`) and the chart of accounts
+ * Granular scopes: an app created after 2 March 2026 has no broad accounting scopes. Read: bills
+ * (`accounting.invoices.read`), suppliers (`accounting.contacts.read`) and the chart of accounts and the organisation
  * (`accounting.settings.read`), with `offline_access` for a refresh token. Nothing about the Xero user.
  */
-export const XERO_SCOPES = ["offline_access", "accounting.invoices.read", "accounting.contacts.read", "accounting.settings.read"] as const;
+export const XERO_READ_SCOPES = ["offline_access", "accounting.invoices.read", "accounting.contacts.read", "accounting.settings.read"] as const;
+
+/**
+ * Write: booking the payments a person approved against their bills (`accounting.payments`,
+ * docs/superpowers/specs/2026-10-12-accounting-writeback-design.md W8). A connection made before it was asked for
+ * reconnects to grant it.
+ */
+export const XERO_WRITE_SCOPES = ["accounting.payments"] as const;
+
+/** What a connection asks Xero for. */
+export const XERO_SCOPES = [...XERO_READ_SCOPES, ...XERO_WRITE_SCOPES] as const;

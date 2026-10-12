@@ -1,0 +1,22 @@
+{
+  "Id": "8a4a9b16-4ae5-4c1d-9d7b-3d1f0e8f1a11",
+  "Status": "OK",
+  "ProviderName": "Vestiarion",
+  "DateTimeUTC": "/Date(1791796800000)/",
+  "Organisations": [
+    {
+      "OrganisationID": "4f6d2a10-7e3b-4c55-8d1a-2b9e0c7f5d31",
+      "Name": "Northwind Trading Pte Ltd",
+      "LegalName": "Northwind Trading Pte. Ltd.",
+      "PaysTax": true,
+      "Version": "GLOBAL",
+      "OrganisationType": "COMPANY",
+      "BaseCurrency": "SGD",
+      "CountryCode": "SG",
+      "IsDemoCompany": false,
+      "OrganisationStatus": "ACTIVE",
+      "Edition": "BUSINESS",
+      "Class": "STANDARD"
+    }
+  ]
+}

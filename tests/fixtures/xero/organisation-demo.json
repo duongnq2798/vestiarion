@@ -1,0 +1,33 @@
+{
+  "Id": "8a4a9b16-4ae5-4c1d-9d7b-3d1f0e8f1a10",
+  "Status": "OK",
+  "ProviderName": "Vestiarion",
+  "DateTimeUTC": "/Date(1791796800000)/",
+  "Organisations": [
+    {
+      "OrganisationID": "b2c885a9-4bb9-4a00-9b6e-6c2bf60b1a6b",
+      "APIKey": "",
+      "Name": "Demo Company (Global)",
+      "LegalName": "Demo Company (Global)",
+      "PaysTax": true,
+      "Version": "GLOBAL",
+      "OrganisationType": "COMPANY",
+      "BaseCurrency": "USD",
+      "CountryCode": "US",
+      "IsDemoCompany": true,
+      "OrganisationStatus": "ACTIVE",
+      "FinancialYearEndDay": 31,
+      "FinancialYearEndMonth": 12,
+      "SalesTaxBasis": "ACCRUALS",
+      "SalesTaxPeriod": "NONE",
+      "DefaultSalesTax": "Tax Exclusive",
+      "DefaultPurchasesTax": "Tax Exclusive",
+      "CreatedDateUTC": "/Date(1791789300000)/",
+      "OrganisationEntityType": "COMPANY",
+      "Timezone": "EASTERNSTANDARDTIME",
+      "ShortCode": "!t2Jx0",
+      "Edition": "BUSINESS",
+      "Class": "DEMO"
+    }
+  ]
+}
