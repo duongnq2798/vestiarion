@@ -459,6 +459,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         tab,
         view,
         sortAsked,
+        filterAsked: query.filter !== null,
         page: pageItems,
         counts: tab === "bills" ? billCounts : receivableCounts,
         slugHref,

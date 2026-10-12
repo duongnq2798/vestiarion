@@ -160,6 +160,7 @@ export default async function BillsStatePage({ params, searchParams }: Props) {
       tab,
       view,
       sortAsked: query.sort,
+      filterAsked: query.filter !== null,
       page: pageItems,
       counts: tab === "bills" ? billCounts : receivableCounts,
       slugHref,

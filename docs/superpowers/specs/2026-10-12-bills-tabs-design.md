@@ -108,7 +108,8 @@ Waiting for review: 6 from Xero · 2 from QuickBooks · 1 won deal in HubSpot ·
   back. Refresh lands on the same view, panel included.
 - Default filter: Needs you when something needs a person, else Upcoming when something is open, else All. Receivables
   defaults to Outstanding, else All. A search with no filter searches All. Paid and closed and Received sort latest
-  first; everything else by the day that matters (the scheduled day, else the due date), as before.
+  first; All and Recurring open first (the open ones by the day that matters, then the settled, latest first), so page 1
+  is the work, not the history; everything else by the day that matters (the scheduled day, else the due date).
 - Cost if wrong: a person who expects the same list each time sees Upcoming one day and Needs you another; the chips say
   which is shown.
 
@@ -164,12 +165,15 @@ reaches the server: `LegacyHashRedirect` rewrites the address once the page load
   in a few words (the existing `OutcomeBadge`: Held for you, Scheduled for Oct 20, Refused by guardrail, Settled on Arc,
   Waiting for your verdict); the next action.
 - Under the name, only what stands in the way (`billBlockers`: No PO, Not received, Over its limit, High risk, Not
-  screened, Waits for a verdict) — the checks that passed are in the detail. A part-paid receivable says what is still
+  screened) — the checks that passed are in the detail; with none, why it waits ("Code stopped it: …", "Shadow mode: it
+  waits for a person to agree."). A part-paid receivable says what is still
   owed; a receivable made from a deal names it.
 - The next action (`billNextStep`, the order `WaitingPayableAction` offers them): Give your verdict; Add the purchase
   order and/or goods receipt (opens the detail where Add details is); the rule's fix (Edit limit, Add address, Review
   screening …) for an owner or admin; Decide in Approvals; Waits for an owner or approver. A bill on its way has none.
-- Under 640px the row stacks: name and amount, reference and date with the badge, the blockers, then "Next: …".
+- The columns need a list 48rem wide (a container query, so a narrow window beside the sidebar stacks too): below that
+  the row stacks, name and amount, reference, date, what is in the way, then the badge and "Next: …". An open receivable
+  shows no "Awaiting payment" badge: its date says it. A list with nothing at all shows no filters, search or order.
 - Cost if wrong: a person misses a check that passed but matters; the detail is one click away.
 
 **B7. The detail is the existing card, in a panel.**
@@ -225,8 +229,8 @@ it, as before).
   by the cash (only when there is some).
 - Payments grouped by day, each day's heading with the balance after it (the plan's own `days[].balance`, marked when
   under the cushion as the cash-effect table marks it).
-- Each line: payee, amount, where it stands, its flags' short names, and "moves from <day>" when the plan proposes a
-  move. Its reason, each flag's sentence, Decide in Approvals and Approve (move to the plan's day) open on demand.
+- Each line: payee, amount, where it stands, its flags' short names, and "The plan moves it here" when the plan
+  proposes a move (its note already names the agent's day). Its reason, each flag's sentence, Decide in Approvals and Approve (move to the plan's day) open on demand.
 - How the plan chooses days, the cash-effect table, money expected in and the last 30 days stay, folded.
 - No chart: the repo has no generic chart primitive (`ScenarioChart`, `PaymentsChart` are tied to their own data), and
   a new dependency is out of scope.
@@ -242,6 +246,12 @@ is never called cash.
 **B17. Permissions and money are untouched.** Every action is the same component calling the same server action;
 the server still decides. Opening, filtering, previewing or rescheduling a view fires nothing. Approvals keeps its page
 and its decisions.
+
+**B18. A HubSpot deal planned already is its deal, never an error** (found in a live test). After Plan collections
+succeeded, the page came back on `?hubspot=<row>`, read the same deal again and said "… cannot be planned: planned
+already." in the held tone. `crmPlanState` shows "Already planned: <deal>. Open the deal" for a won deal with a linked
+deal, takes `hubspot` out of the address, and, right after its own Plan collections (the form remembers being sent, in
+the session), goes on to the new deal. The deal is created once, by the same action, as before.
 
 ## Components
 
@@ -262,6 +272,7 @@ and its decisions.
 | `InvoiceIntake`, `InvoiceDocumentIntake`, `BillImport`, `RecurringPayableIntake` | changed | an optional starting direction / success callback for the sheet; nothing else |
 | `src/app/o/[slug]/invoices/page.tsx` | changed | reads per B5, builds the rows and details, renders `BillsScreen` |
 | `src/app/docs-shots/bills/[state]/page.tsx` | new, flag-gated | the page's states with sample data, for screenshots |
+| `src/components/deals/crm-plan.ts`, `PlannedFromCrm.tsx` | new | B18 |
 
 ## Regression risks
 

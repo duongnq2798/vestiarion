@@ -20,6 +20,7 @@ import { BillsTabs } from "@/components/bills/BillsTabs";
 import { NewMenu } from "@/components/bills/NewMenu";
 import { NEW_ITEMS, newItemsFor } from "@/components/bills/new-items";
 import { nextTabIndex } from "@/components/bills/tab-keys";
+import { listData } from "@/components/bills/build";
 import type { BillRowItem, ListData } from "@/components/bills/types";
 import { pageOf } from "@/lib/bills-view";
 
@@ -224,6 +225,21 @@ describe("a tab's list", () => {
     const words = text(renderToStaticMarkup(<BillsList list={list({ page: pageOf([], 1) })} slugHref={slugHref} />));
     expect(words).toContain("Nothing needs you");
     expect(words).not.toContain("0–0");
+  });
+});
+
+describe("listData", () => {
+  const view = { tab: "bills" as const, filter: "needs-you" as const, q: null, page: 1, sort: "due" as const, open: null, review: null, new: null, hubspot: null };
+  const input = { tab: "bills" as const, view, sortAsked: null, page: pageOf([], 1), counts: {}, slugHref, canWrite: true, totals: { payables: 3, receivables: 0 }, otherMatches: 0 };
+
+  it("searches everything from the list as it opened, and within a filter someone chose", () => {
+    expect(listData({ ...input, filterAsked: false }).keep).toEqual({ tab: "bills" });
+    expect(listData({ ...input, filterAsked: true }).keep).toEqual({ tab: "bills", filter: "needs-you" });
+  });
+
+  it("writes each filter's link back to page 1, with no detail open", () => {
+    const list = listData({ ...input, filterAsked: false, view: { ...view, page: 3, open: "inv-1" } });
+    expect(list.filters.find((chip) => chip.key === "paid")?.href).toBe("/o/acme/invoices?tab=bills&filter=paid");
   });
 });
 

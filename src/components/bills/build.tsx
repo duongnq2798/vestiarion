@@ -149,6 +149,8 @@ export interface ListInput {
   tab: "bills" | "receivables";
   view: BillsView;
   sortAsked: ListSort | null;
+  /** The filter was named in the address, not chosen by default: a search keeps it; else it searches everything. */
+  filterAsked: boolean;
   page: Page<BillRowItem>;
   counts: Record<string, number>;
   slugHref: (path: string) => string;
@@ -160,7 +162,7 @@ export interface ListInput {
 }
 
 /** A tab's list: its filters and their counts, the search, the order, the page shown and the way to the others. */
-export function listData({ tab, view, sortAsked, page, counts, slugHref, canWrite, totals, otherMatches }: ListInput): ListData {
+export function listData({ tab, view, sortAsked, filterAsked, page, counts, slugHref, canWrite, totals, otherMatches }: ListInput): ListData {
   const bills = tab === "bills";
   const here = viewHref(slugHref, view, sortAsked);
   const filter = view.filter as string;
@@ -172,7 +174,8 @@ export function listData({ tab, view, sortAsked, page, counts, slugHref, canWrit
     bare: !view.q && (bills ? totals.payables === 0 : totals.receivables === 0),
     filters: keys.map((key) => ({ key, label: labels[key], count: counts[key] ?? 0, href: here({ filter: key, page: 1, open: null }), current: key === filter })),
     q: view.q,
-    keep: { tab, filter, ...(sortAsked ? { sort: sortAsked } : {}) },
+    // A search from the list as it opened (Needs you by default) looks through everything, not only what needs you.
+    keep: { tab, ...(filterAsked ? { filter } : {}), ...(sortAsked ? { sort: sortAsked } : {}) },
     clearSearchHref: here({ q: null, page: 1, open: null }),
     sort: view.sort,
     sorts: LIST_SORTS.map((value) => ({ value, label: SORT_LABELS[value], href: here({ sort: value, page: 1, open: null }) })),
