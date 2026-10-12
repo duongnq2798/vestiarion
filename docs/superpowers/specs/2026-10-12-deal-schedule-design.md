@@ -80,7 +80,9 @@ was invoiced or paid.
 **D9. Cancel and reopen.**
 - Cancel ends every planned charge (`cancelled`); released lines and credits stay; the version's total is what was
   invoiced less credits. Nothing more is released from a cancelled deal.
-- Reopen is a new version of a cancelled deal with new lines for what is left, as a change is.
+- Reopen is a new version of a cancelled deal with new lines for what is left, as a change is. The form starts from
+  the cancelled deal's planned lines, which are the credits still owed, so a reopen keeps them unless the person
+  removes one.
 
 **D10. Release.**
 - A person releases a line, before its day or on it; or, where the deal's owner or admin turned on "Release each line

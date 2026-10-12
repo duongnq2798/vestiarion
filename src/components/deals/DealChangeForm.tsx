@@ -55,7 +55,9 @@ export function DealChangeForm({
   const toEditable = (lines: ProposedLine[]): EditableLine[] =>
     lines.map((line) => ({ ...(line.id ? { id: line.id } : {}), kind: line.kind, label: line.label, invoiceOn: line.invoiceOn, amount: minorToDecimal(Math.abs(line.amountMinor), digits) }));
   const [total, setTotal] = useState(minorToDecimal(facts.totalMinor, digits));
-  const [lines, setLines] = useState<EditableLine[]>(mode === "revised" ? toEditable(planned) : []);
+  // A cancelled deal's planned lines are the credits still owed to the customer (a cancel ends only the charges): a
+  // reopen starts from them too, so it never drops money owed back unless the person removes it.
+  const [lines, setLines] = useState<EditableLine[]>(toEditable(planned));
   const { state, formProps } = useActionForm(changeDealAction, INITIAL, { toastOnSuccess: true });
 
   const totalMinor = parseMinor(total, facts.currency);

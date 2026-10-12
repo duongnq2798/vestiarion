@@ -114,6 +114,22 @@ describe("the forms", () => {
     expect(text(markup)).toContain("Save as version 2");
     expect(text(markup)).toContain("Propose a correction");
   });
+
+  it("Reopen deal keeps the credit still owed to the customer, never drops it unasked", () => {
+    // Signed at 10,000.00; the deposit released; the price cut to 2,000.00, so 1,000.00 is owed back; then cancelled.
+    const cancelled = deal(
+      [
+        released({ id: "11111111-0000-4000-8000-000000000001", amountMinor: 300_000 }),
+        line({ id: "11111111-0000-4000-8000-000000000002", position: 2, label: "Balance on delivery", invoiceOn: "2026-12-01", amountMinor: 700_000, status: "cancelled", endedIn: 2 }),
+        line({ id: "11111111-0000-4000-8000-000000000003", position: 3, kind: "credit", label: "Credit for price change", invoiceOn: "2026-10-20", amountMinor: -100_000, addedIn: 2 }),
+      ],
+      { status: "cancelled", version: 3 }
+    );
+    const markup = renderToStaticMarkup(<DealChangeForm orgSlug="acme" facts={cancelled} digits={2} today={TODAY} idempotencyKey="key-12345678" mode="reopened" />);
+    expect(markup).toContain('value="Credit for price change"');
+    expect(markup).not.toContain('value="Deposit (30%)"');
+    expect(text(markup)).toContain("Reopen as version 4");
+  });
 });
 
 describe("money expected in, on the payment plan", () => {
