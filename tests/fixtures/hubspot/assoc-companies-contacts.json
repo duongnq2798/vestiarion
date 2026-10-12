@@ -1,0 +1,56 @@
+{
+  "status": "COMPLETE",
+  "results": [
+    {
+      "from": {
+        "id": "9100000001"
+      },
+      "to": [
+        {
+          "toObjectId": 8200000009,
+          "associationTypes": [
+            {
+              "category": "HUBSPOT_DEFINED",
+              "typeId": 280,
+              "label": null
+            }
+          ]
+        },
+        {
+          "toObjectId": 8200000011,
+          "associationTypes": [
+            {
+              "category": "HUBSPOT_DEFINED",
+              "typeId": 2,
+              "label": null
+            },
+            {
+              "category": "HUBSPOT_DEFINED",
+              "typeId": 280,
+              "label": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "from": {
+        "id": "9100000002"
+      },
+      "to": [
+        {
+          "toObjectId": 8200000020,
+          "associationTypes": [
+            {
+              "category": "HUBSPOT_DEFINED",
+              "typeId": 280,
+              "label": null
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "startedAt": "2026-10-12T08:00:00.300Z",
+  "completedAt": "2026-10-12T08:00:00.350Z"
+}

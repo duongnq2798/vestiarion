@@ -12,7 +12,7 @@ import { membershipsOf } from "@/lib/auth/membership";
 import { can } from "@/lib/auth/roles";
 import { verifySession } from "@/lib/auth/session";
 import { CONSENT_LABEL, consentStatement } from "@/lib/connectors/consent";
-import { PROVIDER_LABELS, PROVIDER_WORDS, type ProviderId } from "@/lib/connectors/provider";
+import { PROVIDER_LABELS, PROVIDER_WORDS, type AccountingProviderId } from "@/lib/connectors/provider";
 import { pendingChoice } from "@/lib/connectors/token-store";
 import { withOrg } from "@/lib/dal/scope";
 import { networkProfile } from "@/lib/network";
@@ -22,13 +22,13 @@ export type ConnectSearchParams = Promise<{ org?: string | string[]; choose?: st
 const one = (value: string | string[] | undefined) => (typeof value === "string" ? value : "");
 
 /** What each tool brings in, at the top of its connect page. */
-const INTRO: Record<ProviderId, string> = {
+const INTRO: Record<AccountingProviderId, string> = {
   xero: "Bring your approved bills in from Xero. Each one waits for you on Bills & receivables and becomes a payable only when you add it.",
   quickbooks: "Bring your open bills in from QuickBooks Online. Each one waits for you on Bills & receivables and becomes a payable only when you add it.",
 };
 
 /** What happens at the tool, for a tool whose grant is for one organisation it asks the person to pick (QuickBooks, Q4, Q5). */
-const AT_THE_TOOL: Partial<Record<ProviderId, string>> = {
+const AT_THE_TOOL: Partial<Record<AccountingProviderId, string>> = {
   quickbooks: "QuickBooks asks you to sign in and pick the company to connect. A company connects to one Vestiarion workspace at a time.",
 };
 
@@ -52,7 +52,7 @@ function errors(label: string, organisation: string): Record<string, string> {
  * all of it again. After a tool that authorized several organisations (Xero), the person picks one here, from the
  * pending grant only they can read.
  */
-export async function AccountingConnect({ provider, searchParams }: { provider: ProviderId; searchParams: ConnectSearchParams }) {
+export async function AccountingConnect({ provider, searchParams }: { provider: AccountingProviderId; searchParams: ConnectSearchParams }) {
   const params = await searchParams;
   const org = one(params.org);
   const choose = one(params.choose);

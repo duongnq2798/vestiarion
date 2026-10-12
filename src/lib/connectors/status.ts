@@ -1,11 +1,12 @@
 /**
  * A connection's status in business words (docs/superpowers/specs/2026-10-12-xero-connector-design.md X15), from its
  * row alone. Never "connected" while the last sync failed: a failure newer than the last success turns the title to
- * the failure. In the provider's own words (docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q15).
- * Pure and browser-safe.
+ * the failure. In the provider's own words (docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q15); a
+ * CRM's words speak of its deals (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H16). Pure and
+ * browser-safe.
  */
 
-import { providerWords } from "./provider";
+import { providerKind, providerWords } from "./provider";
 
 export type ConnectionState = "connected" | "needs_reconnect" | "revoked";
 
@@ -49,7 +50,9 @@ function clock(iso: string, nowMs: number): string {
 }
 
 const reconnectWords = (label: string) =>
-  `${label} no longer accepts this connection: it was disconnected in ${label}, or not used for ${providerWords(label).idleDays} days. Reconnect ${label} to go on bringing its bills in.`;
+  providerKind(label) === "crm"
+    ? `${label} no longer accepts this connection: the app was uninstalled in ${label}, or its access was removed. Reconnect ${label} to go on bringing its deals in.`
+    : `${label} no longer accepts this connection: it was disconnected in ${label}, or not used for ${providerWords(label).idleDays} days. Reconnect ${label} to go on bringing its bills in.`;
 
 export type SyncErrorKind = "rate_limited" | "unavailable" | "bad_response" | "failed" | "reconnect";
 
@@ -71,15 +74,17 @@ export function syncErrorWords(kind: SyncErrorKind, label: string, nextAt: strin
 
 export function connectionStatus(facts: ConnectionFacts, nowMs: number): StatusView {
   const label = facts.providerLabel;
+  const crm = providerKind(label) === "crm";
   const name = facts.externalOrgName ?? `your ${label} ${providerWords(label).organisation}`;
   if (facts.status === "revoked") {
-    return { tone: "off", title: `Disconnected from ${name}`, detail: [`Bills already added stay in Vestiarion. Nothing more is read from ${label}.`], reconnect: false };
+    const kept = crm ? "Deals already planned stay in Vestiarion." : "Bills already added stay in Vestiarion.";
+    return { tone: "off", title: `Disconnected from ${name}`, detail: [`${kept} Nothing more is read from ${label}.`], reconnect: false };
   }
   if (facts.status === "needs_reconnect") {
     return {
       tone: "error",
       title: `${label} needs you to reconnect`,
-      detail: [facts.lastError ?? `${label} no longer accepts this connection. Reconnect ${label} to go on bringing its bills in.`],
+      detail: [facts.lastError ?? `${label} no longer accepts this connection. Reconnect ${label} to go on bringing its ${crm ? "deals" : "bills"} in.`],
       reconnect: true,
     };
   }

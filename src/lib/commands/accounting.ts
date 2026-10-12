@@ -1,5 +1,5 @@
 import { NotSetUpError, connectionById, type Connection } from "../connectors/connections";
-import { PROVIDER_LABELS } from "../connectors/provider";
+import { PROVIDER_LABELS, providerKind } from "../connectors/provider";
 import { MAX_REVIEW, newSupplierLimit, readReview, type ReviewItem } from "../connectors/review";
 import { createCounterparty } from "../counterparties/create";
 import { db, unwrap } from "../dal";
@@ -41,12 +41,21 @@ async function openConnection(connectionId: string): Promise<{ connection: Conne
   if (!UUID.test(connectionId)) return { refusal: refused("not_connected", "That connection is not this workspace's.") };
   try {
     const connection = await connectionById(connectionId);
-    if (!connection || connection.status === "revoked") return { refusal: refused("not_connected", "That accounting tool is not connected to this workspace.") };
+    // A CRM's connection brings no bills in (HubSpot connector H1).
+    if (!connection || connection.status === "revoked" || providerKind(connection.provider) !== "accounting") {
+      return { refusal: refused("not_connected", "That accounting tool is not connected to this workspace.") };
+    }
     return { connection };
   } catch (error) {
     if (error instanceof NotSetUpError) return { refusal: refused("not_set_up", "Bringing bills in from an accounting tool is not set up on this deployment yet.") };
     throw error;
   }
+}
+
+/** The accounting tool a bill came from: never a CRM, which `openConnection` refuses. */
+function accountingProviderOf(connection: Connection): "xero" | "quickbooks" {
+  if (connection.provider === "hubspot") throw new Error("A CRM brings no bills in");
+  return connection.provider;
 }
 
 /** Claims a bill in review for this person: false when someone else added or dismissed it first. */
@@ -97,7 +106,7 @@ async function addSupplier(actor: Actor, connection: Connection, item: ReviewIte
   const created = await createCounterparty({
     actorId: actor.userId,
     counterparty: parsed.data,
-    external: { provider: connection.provider, ids: { tenantId: connection.externalOrgId, contactId: item.bill.contactExternalId } },
+    external: { provider: accountingProviderOf(connection), ids: { tenantId: connection.externalOrgId, contactId: item.bill.contactExternalId } },
   });
   if (item.bill.contactExternalId) await link(connection, { type: "contact", externalId: item.bill.contactExternalId, localId: created.id, label: item.bill.contactName });
   return { ok: true, id: created.id };
@@ -177,7 +186,7 @@ export async function addAccountingBills(
       document: null,
       ...(fate.original ? { original: fate.original } : {}),
       external: {
-        provider: connection.provider,
+        provider: accountingProviderOf(connection),
         ids: { tenantId: connection.externalOrgId, billId: item.bill.externalId, contactId: item.bill.contactExternalId, invoiceNumber: item.bill.number },
       },
     });

@@ -1,0 +1,40 @@
+{
+  "status": "COMPLETE",
+  "results": [
+    {
+      "id": "9100000001",
+      "properties": {
+        "domain": "northwind.example",
+        "hs_object_id": "9100000001",
+        "name": "Northwind Labs"
+      },
+      "createdAt": "2026-01-10T00:00:00.000Z",
+      "updatedAt": "2026-09-01T00:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "9100000002",
+      "properties": {
+        "domain": "contoso.example",
+        "hs_object_id": "9100000002",
+        "name": "Contoso Design"
+      },
+      "createdAt": "2026-01-10T00:00:00.000Z",
+      "updatedAt": "2026-09-01T00:00:00.000Z",
+      "archived": false
+    },
+    {
+      "id": "9100000003",
+      "properties": {
+        "domain": "fabrikam.example",
+        "hs_object_id": "9100000003",
+        "name": ""
+      },
+      "createdAt": "2026-01-10T00:00:00.000Z",
+      "updatedAt": "2026-09-01T00:00:00.000Z",
+      "archived": false
+    }
+  ],
+  "startedAt": "2026-10-12T08:00:00.200Z",
+  "completedAt": "2026-10-12T08:00:00.260Z"
+}

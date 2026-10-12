@@ -24,5 +24,8 @@ export function accountingProvider(id: ProviderId): AccountingProvider | null {
 
 /** Whether a provider is set up on this deployment, without building it. */
 export function accountingProviderOn(id: ProviderId): boolean {
-  return id === "xero" ? xeroSettingsFromEnv() !== null : quickBooksSettingsFromEnv() !== null;
+  if (id === "xero") return xeroSettingsFromEnv() !== null;
+  if (id === "quickbooks") return quickBooksSettingsFromEnv() !== null;
+  // A CRM is not an accounting tool (HubSpot connector H1): `crm-providers.ts` wires it.
+  return false;
 }

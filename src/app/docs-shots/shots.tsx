@@ -82,6 +82,9 @@ import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
 import { evidenceShot } from "./evidence-fixture";
 import AccountingPanel from "@/components/AccountingPanel";
 import { AccountingBillsReview } from "@/components/AccountingBillsReview";
+import HubSpotPanel from "@/components/HubSpotPanel";
+import { HubSpotDeals } from "@/components/HubSpotDeals";
+import { CrmDealChanges } from "@/components/CrmDealChanges";
 import { AccountingBookings } from "@/components/AccountingBookings";
 import { APPLY_PAYMENTS, PART_PAID, PART_PAID_VIEW, PART_PAID_VIEWS } from "./allocations-fixture";
 import { designRuleReplay } from "../design/replay-fixture";
@@ -125,6 +128,7 @@ export interface DocsShot {
     | "email-invoices"
     | "xero"
     | "quickbooks"
+    | "hubspot"
     | "payment-plan"
     | "report"
     | "workspace"
@@ -2038,6 +2042,142 @@ export const DOCS_SHOTS = {
   "deals-versions": {
     guide: "deals",
     render: () => <DealVersions deal={dealShot()} />,
+  },
+  "hubspot-settings": {
+    guide: "hubspot",
+    page: "settings",
+    sub: SETTINGS_SUB,
+    render: () => (
+      <HubSpotPanel
+        orgSlug={SLUG}
+        view={{
+          state: "connection",
+          connectionId: "00000000-0000-4000-8000-0000000000d1",
+          status: { tone: "ok", title: "Connected to northstar-studio.example", detail: ["Last synced 5 minutes ago."], reconnect: false },
+          connected: true,
+          revoked: false,
+          organisation: "northstar-studio.example",
+          toPlan: 2,
+          changed: 1,
+        }}
+        canManage
+        notice={null}
+      />
+    ),
+  },
+  "hubspot-deals": {
+    guide: "hubspot",
+    page: "invoices",
+    // Under Deals: two won deals to plan, one without an amount, one planned that HubSpot changed since.
+    render: () => (
+      <HubSpotDeals
+        orgSlug={SLUG}
+        organisation="northstar-studio.example"
+        canWrite
+        won={[
+          {
+            id: "00000000-0000-4000-8000-0000000000d2",
+            name: "Website rebuild",
+            company: "Northwind Labs",
+            amount: "12,500 USD",
+            closeOn: "2026-10-01",
+            stage: "Closed Won",
+            plan: { ok: true },
+            linkedDeal: null,
+            changes: [],
+          },
+          {
+            id: "00000000-0000-4000-8000-0000000000d3",
+            name: "Brand refresh",
+            company: "Contoso Design",
+            amount: "4,800.50 USD",
+            closeOn: "2026-10-08",
+            stage: "Closed Won",
+            plan: { ok: true },
+            linkedDeal: null,
+            changes: [],
+          },
+          {
+            id: "00000000-0000-4000-8000-0000000000d4",
+            name: "Discovery sprint",
+            company: "Fabrikam",
+            amount: null,
+            closeOn: "2026-10-05",
+            stage: "Closed Won",
+            plan: { ok: false, reason: "No amount in HubSpot" },
+            linkedDeal: null,
+            changes: [],
+          },
+          {
+            id: "00000000-0000-4000-8000-0000000000d5",
+            name: "Monthly retainer, Q4",
+            company: "Acme Studio",
+            amount: "15,000 USD",
+            closeOn: "2026-09-20",
+            stage: "Closed Won",
+            plan: { ok: false, reason: "Planned already" },
+            linkedDeal: { id: "00000000-0000-4000-8000-0000000000d6", title: "Monthly retainer, Q4", status: "active" },
+            changes: ["Amount: 12,000 USD to 15,000 USD."],
+          },
+        ]}
+        open={[
+          {
+            id: "00000000-0000-4000-8000-0000000000d7",
+            name: "Mobile app",
+            company: "Northwind Labs",
+            amount: "30,000 USD",
+            closeOn: "2026-11-15",
+            stage: "Contract Sent",
+            plan: { ok: false, reason: "Not won yet" },
+            linkedDeal: null,
+            changes: [],
+          },
+        ]}
+        emails={[{ counterpartyId: "00000000-0000-4000-8000-0000000000d8", name: "Acme Studio", email: "ap@acme-studio.example" }]}
+      />
+    ),
+  },
+  "hubspot-plan": {
+    guide: "hubspot",
+    page: "invoices",
+    render: () => (
+      // Plan collections on the won deal: the New deal form filled in from it, for the person to pick how it is billed.
+      <Card className="p-5">
+        <DealForm
+          orgSlug={SLUG}
+          customers={[{ id: "c1c1c1c1-0000-4000-8000-0000000000c2", name: "Northwind Labs" }]}
+          currencies={["USDC", "EURC"]}
+          idempotencyKey="docs-shot-key-0003"
+          today="2026-10-12"
+          prefill={{
+            crmRowId: "00000000-0000-4000-8000-0000000000d2",
+            label: "HubSpot",
+            customerId: "c1c1c1c1-0000-4000-8000-0000000000c2",
+            customerName: "",
+            title: "Website rebuild",
+            total: "12500.00",
+            currency: "USDC",
+            startsOn: "2026-10-01",
+            externalRef: "30117482911",
+            notes: ["HubSpot says 12,500 USD: planned as 12,500.00 USDC, one for one."],
+          }}
+        />
+      </Card>
+    ),
+  },
+  "hubspot-changed": {
+    guide: "hubspot",
+    // A planned deal's page: what HubSpot changed since, and what a person can do about it.
+    render: () => (
+      <CrmDealChanges
+        orgSlug={SLUG}
+        dealId="00000000-0000-4000-8000-0000000000d6"
+        label="HubSpot"
+        words={["Amount: 12,000 USD to 15,000 USD.", "Close date: Sep 20, 2026 to Sep 30, 2026."]}
+        canWrite
+        active
+      />
+    ),
   },
 } satisfies Record<string, DocsShot>;
 

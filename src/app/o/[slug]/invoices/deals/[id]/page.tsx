@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { CrmDealChanges } from "@/components/CrmDealChanges";
 import { DocsLink } from "@/components/DocsLink";
 import { DealChangeForm } from "@/components/deals/DealChangeForm";
 import { AutoReleaseSwitch, CancelDealButton } from "@/components/deals/DealControls";
@@ -20,6 +21,7 @@ import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { shellModes } from "@/lib/circle";
 import { utcDay } from "@/lib/copy";
+import { crmChangesFor, type CrmDealChanges as CrmChangesRead } from "@/lib/connectors/crm-review";
 import { inOrg } from "@/lib/dal/scope";
 import { dealSummary, inForce } from "@/lib/deals/lines";
 import { formatMinor } from "@/lib/deals/money";
@@ -33,6 +35,8 @@ export const metadata: Metadata = { title: "Deal" };
 
 type DealPageProps = {
   params: Promise<{ slug: string; id: string }>;
+  /** `from=hubspot`: Change deal opens filled in from HubSpot's changes (HubSpot connector H12). */
+  searchParams: Promise<{ from?: string | string[] }>;
 };
 
 /**
@@ -40,9 +44,10 @@ type DealPageProps = {
  * the agent's release switch, Change deal, Cancel deal and Reopen deal for an owner or admin, and every version with what
  * it changed, for every member. An id the workspace does not hold is the workspace's not-found page.
  */
-export default async function DealPage({ params }: DealPageProps) {
+export default async function DealPage({ params, searchParams }: DealPageProps) {
   const { slug, id } = await params;
   const access = await requireMembership(slug);
+  const { from } = await searchParams;
   return inOrg(access, async () => {
     const [read, dashboardStats, canWrite] = await Promise.all([readDeal(id), stats(), viewerCan(slug, "records.write")]);
     const shell = { network: access.membership.network, day: dashboardStats.day, clockMode: dashboardStats.clockMode, lastCycleAt: dashboardStats.lastCycleAt, chainModes: shellModes(), status: await shellStatus() };
@@ -67,6 +72,12 @@ export default async function DealPage({ params }: DealPageProps) {
 
     const today = new Date().toISOString().slice(0, 10);
     const { facts, digits } = deal;
+    // What HubSpot changed since the deal was planned from it (HubSpot connector H12). Best effort: the page stands without it.
+    const crm: CrmChangesRead | null = await crmChangesFor({ id: facts.id, status: facts.status, currency: facts.currency }).catch((error: unknown) => {
+      console.error("deal: changes from HubSpot not read", error instanceof Error ? error.message : error);
+      return null;
+    });
+    const changeFromCrm = crm !== null && from === "hubspot" && facts.status === "active";
     const summary = dealSummary(facts, today);
     const standing = dealStanding(deal, today);
     const money = (minor: number) => <DealMoney minor={minor} digits={digits} currency={facts.currency} />;
@@ -116,6 +127,7 @@ export default async function DealPage({ params }: DealPageProps) {
         </div>
 
         <div className="space-y-8">
+          {crm && <CrmDealChanges orgSlug={slug} dealId={facts.id} label={crm.label} words={crm.words} canWrite={canWrite} active={facts.status === "active"} />}
           <DealSchedule orgSlug={slug} deal={deal} today={today} canWrite={canWrite} />
 
           {canWrite ? (
@@ -147,9 +159,24 @@ export default async function DealPage({ params }: DealPageProps) {
                       ? "The agent releases each line on its invoice day, at its next cycle that day."
                       : "A person releases each line with Release now."}
                   </p>
-                  <IntakeFold label="Change deal" meta="a new price, a moved or renamed line, a line added or removed: saved as a new version" className="">
-                    <DealChangeForm orgSlug={slug} facts={facts} digits={digits} today={today} idempotencyKey={randomUUID()} mode="revised" />
-                  </IntakeFold>
+                  <div id="change" className="scroll-mt-6">
+                    <IntakeFold
+                      label="Change deal"
+                      meta={changeFromCrm ? `filled in from what ${crm.label} changed: check it, then save it as a new version` : "a new price, a moved or renamed line, a line added or removed: saved as a new version"}
+                      defaultOpen={changeFromCrm}
+                      className=""
+                    >
+                      <DealChangeForm
+                        orgSlug={slug}
+                        facts={facts}
+                        digits={digits}
+                        today={today}
+                        idempotencyKey={randomUUID()}
+                        mode="revised"
+                        {...(changeFromCrm ? { fromCrm: crm.prefill } : {})}
+                      />
+                    </IntakeFold>
+                  </div>
                 </>
               ) : (
                 <IntakeFold label="Reopen deal" meta="new lines for what is left to invoice, saved as a new version" className="">

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createDealAction, type DealActionResult } from "@/app/actions/deals";
 import { Button } from "@/components/ui/Button";
+import { Callout } from "@/components/ui/Callout";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
@@ -40,6 +41,25 @@ interface EditedLine {
 const dayWords = (day: string) => (/^\d{4}-\d{2}-\d{2}$/.test(day) ? utcDay(`${day}T00:00:00.000Z`) : "—");
 
 /**
+ * The form filled in from a CRM's won deal (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H11): the
+ * person picks how it is billed, checks the rest and confirms. Its row travels with the form, and the server reads it
+ * again; the CRM's deal id is the reference, not editable here.
+ */
+export interface DealFormPrefill {
+  crmRowId: string;
+  /** The CRM's name in copy. */
+  label: string;
+  customerId: string;
+  customerName: string;
+  title: string;
+  total: string;
+  currency: string;
+  startsOn: string;
+  externalRef: string;
+  notes: string[];
+}
+
+/**
  * The New deal form (docs/superpowers/specs/2026-10-12-deal-schedule-design.md D4-D6, D12): who the customer is, the
  * deal's terms, and its schedule, built from a template the person picks and can then edit line by line. The schedule
  * is worked out here as it is typed, with the same functions the server checks it with, so what is shown is what is
@@ -52,6 +72,7 @@ export function DealForm({
   idempotencyKey,
   today,
   initialCustomerId,
+  prefill,
 }: {
   orgSlug: string;
   customers: Array<{ id: string; name: string }>;
@@ -61,12 +82,14 @@ export function DealForm({
   today: string;
   /** The customer chosen to start with: a guide's screenshot. */
   initialCustomerId?: string;
+  /** The form filled in from a CRM's won deal (HubSpot connector H11). */
+  prefill?: DealFormPrefill;
 }) {
   const router = useRouter();
-  const [customerId, setCustomerId] = useState(initialCustomerId ?? (customers.length === 0 ? "new" : ""));
-  const [currency, setCurrency] = useState(currencies[0] ?? "USDC");
-  const [total, setTotal] = useState("");
-  const [startsOn, setStartsOn] = useState(today);
+  const [customerId, setCustomerId] = useState(prefill?.customerId || initialCustomerId || (customers.length === 0 ? "new" : ""));
+  const [currency, setCurrency] = useState(prefill?.currency ?? currencies[0] ?? "USDC");
+  const [total, setTotal] = useState(prefill?.total ?? "");
+  const [startsOn, setStartsOn] = useState(prefill?.startsOn ?? today);
   const [termsDays, setTermsDays] = useState(String(DEFAULT_TERMS_DAYS));
   const [template, setTemplate] = useState<(typeof TEMPLATES)[number]["value"]>("deposit");
   const [depositPct, setDepositPct] = useState("30");
@@ -110,6 +133,16 @@ export function DealForm({
     <form {...formProps} className="space-y-5">
       <input type="hidden" name="orgSlug" value={orgSlug} />
       <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
+      {prefill && <input type="hidden" name="crmRowId" value={prefill.crmRowId} />}
+      {prefill && prefill.notes.length > 0 && (
+        <Callout title={`Filled in from ${prefill.label}`}>
+          <ul className="list-disc space-y-1 pl-5">
+            {prefill.notes.map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
+        </Callout>
+      )}
       <input type="hidden" name="customerId" value={customerId} />
       <input type="hidden" name="currency" value={currency} />
       <input type="hidden" name="template" value={template} />
@@ -140,17 +173,23 @@ export function DealForm({
         </Field>
         {customerId === "new" ? (
           <Field id="deal-customer-name" label="New customer's name" error={error("customerName")} description="Added as a client, and screened as every counterparty is.">
-            <Input name="customerName" maxLength={160} placeholder="Northwind Labs" required />
+            <Input name="customerName" maxLength={160} placeholder="Northwind Labs" required defaultValue={prefill?.customerName || undefined} />
           </Field>
         ) : (
           <div className="hidden sm:block" />
         )}
         <Field id="deal-title" label="Deal" error={error("title")}>
-          <Input name="title" maxLength={120} required placeholder="Website rebuild" />
+          <Input name="title" maxLength={120} required placeholder="Website rebuild" defaultValue={prefill?.title} />
         </Field>
-        <Field id="deal-ref" label="External reference" optional description="Your CRM's deal id, for instance. Unique in this workspace." error={error("externalRef")}>
-          <Input name="externalRef" maxLength={200} placeholder="HS-48213" />
-        </Field>
+        {prefill ? (
+          <Field id="deal-ref" label="External reference" description={`${prefill.label}'s deal id: it links this deal to ${prefill.label}.`} error={error("externalRef")}>
+            <Input name="externalRef" readOnly value={prefill.externalRef} />
+          </Field>
+        ) : (
+          <Field id="deal-ref" label="External reference" optional description="Your CRM's deal id, for instance. Unique in this workspace." error={error("externalRef")}>
+            <Input name="externalRef" maxLength={200} placeholder="HS-48213" />
+          </Field>
+        )}
         <div className="grid grid-cols-[minmax(0,1fr)_7rem] gap-3">
           <Field id="deal-total" label="Total" error={error("total")}>
             <Input name="total" inputMode="decimal" required value={total} onChange={(event) => setTotal(event.target.value)} placeholder={digits === 0 ? "1,000,000" : "10,000.00"} />

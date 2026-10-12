@@ -5,11 +5,24 @@
  * either. Pure types and one error class: no I/O.
  */
 
-export const PROVIDERS = ["xero", "quickbooks"] as const;
+export const PROVIDERS = ["xero", "quickbooks", "hubspot"] as const;
 export type ProviderId = (typeof PROVIDERS)[number];
 
 /** A provider's name in copy. */
-export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quickbooks: "QuickBooks" };
+export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quickbooks: "QuickBooks", hubspot: "HubSpot" };
+
+/**
+ * What a provider brings in (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H1): an accounting tool its
+ * bills, a CRM its companies and deals. The core's words follow it.
+ */
+export type ProviderKind = "accounting" | "crm";
+export const PROVIDER_KINDS: Record<ProviderId, ProviderKind> = { xero: "accounting", quickbooks: "accounting", hubspot: "crm" };
+
+/** The kind of a provider named by its id or its label; accounting for a name neither is. */
+export function providerKind(provider: string): ProviderKind {
+  const id = PROVIDERS.find((candidate) => candidate === provider || PROVIDER_LABELS[candidate] === provider);
+  return id ? PROVIDER_KINDS[id] : "accounting";
+}
 
 /**
  * A provider's own words for what the core names alike (docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md
@@ -48,6 +61,17 @@ export const PROVIDER_WORDS: Record<ProviderId, ProviderWords> = {
     idleDays: 100,
     bills: "open bills",
     approval: "A bill being open in QuickBooks does not approve its payment: the agent decides it.",
+  },
+  // A CRM (HubSpot connector H1): an account, its companies, its won deals; no chart, and a refresh token that lasts
+  // until the app is uninstalled, so no idle days. The core's words for a CRM are its own (status.ts).
+  hubspot: {
+    possessive: "HubSpot's",
+    organisation: "account",
+    contacts: "companies",
+    accounts: "no accounts",
+    idleDays: 0,
+    bills: "won deals",
+    approval: "A deal won in HubSpot becomes a deal in Vestiarion only when you plan it.",
   },
 };
 
@@ -289,3 +313,16 @@ export interface BookingProvider {
   /** Reads one payment back by its id; null when the provider has none. */
   payment(input: OrgRequest & { paymentId: string }): Promise<ExternalPayment | null>;
 }
+
+/**
+ * What connecting, refreshing a token and disconnecting use of any provider, an accounting tool or a CRM
+ * (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H1). `exclusive`: one workspace per organisation at a
+ * time (a HubSpot account, H4), checked before connecting.
+ */
+export type ConnectingProvider = Pick<
+  AccountingProvider,
+  "id" | "label" | "scopes" | "authorizeUrl" | "exchangeCode" | "organisations" | "refresh" | "revoke" | "exclusive" | "callbackOrganisationParam"
+>;
+
+/** The accounting tools among the providers: those that bring bills in (HubSpot connector H1). */
+export type AccountingProviderId = Exclude<ProviderId, "hubspot">;

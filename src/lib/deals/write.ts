@@ -88,8 +88,19 @@ function lineDetail(line: DealLine, record: DealRecord) {
   };
 }
 
+/**
+ * Where a deal or its version came from, when a CRM brought it (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md
+ * H11, H12, H19): its entries say `via` and the CRM's ids, as a bill from an accounting tool says its tool's.
+ */
+export interface DealSource {
+  provider: "hubspot";
+  ids: { hubId: string; dealId: string; companyId: string | null };
+}
+
+const sourceDetail = (source: DealSource | undefined) => (source ? { via: source.provider, [source.provider]: source.ids } : {});
+
 /** The signed entry of a version, built from the deal as it is stored, so a missing one can be written later the same. */
-export function versionEntry(record: DealRecord, version: number, by: string | null): LedgerEntryInput {
+export function versionEntry(record: DealRecord, version: number, by: string | null, source?: DealSource): LedgerEntryInput {
   const row = record.versions.find((candidate) => candidate.version === version);
   if (!row) throw new Error(`deal ${record.facts.id} has no version ${version}`);
   const previous = record.versions.find((candidate) => candidate.version === version - 1);
@@ -121,6 +132,7 @@ export function versionEntry(record: DealRecord, version: number, by: string | n
         template: record.template,
         autoRelease: record.facts.autoRelease,
         lines: added.map((line) => lineDetail(line, record)),
+        ...sourceDetail(source),
       },
     };
   }
@@ -137,6 +149,7 @@ export function versionEntry(record: DealRecord, version: number, by: string | n
     ended: ended.map((line) => ({ lineId: line.id, status: line.status })),
     added: added.map((line) => lineDetail(line, record)),
     changes: row.changes,
+    ...sourceDetail(source),
   };
   if (row.kind === "cancelled") {
     return {
@@ -220,7 +233,7 @@ async function stored(dealId: string): Promise<DealRecord> {
  * The entry of a version written by a request that died before signing it: written by the same confirm or change when it
  * comes again, once the version is old enough that the first request cannot still be writing it.
  */
-async function healEntry(record: DealRecord, version: number, by: string | null): Promise<void> {
+async function healEntry(record: DealRecord, version: number, by: string | null, source?: DealSource): Promise<void> {
   const row = record.versions.find((candidate) => candidate.version === version);
   if (!row || Date.now() - Date.parse(row.createdAt) < HEAL_AFTER_MS) return;
   const found = await db()
@@ -231,7 +244,7 @@ async function healEntry(record: DealRecord, version: number, by: string | null)
     .eq("detail->>version", String(version))
     .limit(1);
   if (found.error || (found.data ?? []).length > 0) return;
-  await appendLedgerEntryBestEffort(currentOrgId(), versionEntry(record, version, by));
+  await appendLedgerEntryBestEffort(currentOrgId(), versionEntry(record, version, by, source));
 }
 
 /** Before anything is written: 0104 must have run here (D15). */
@@ -242,7 +255,7 @@ async function ensureReady(): Promise<void> {
 }
 
 /** The customer chosen, or the one typed: a client of the same name is used again, so a repeated confirm adds no second one (D12). */
-async function resolveCustomer(actorId: string, customer: DealDraft["customer"]): Promise<{ id: string; name: string }> {
+async function resolveCustomer(actorId: string, customer: DealDraft["customer"], source?: DealSource): Promise<{ id: string; name: string }> {
   if ("id" in customer) {
     const found = await db().from("counterparties").select("id, name").eq("id", customer.id).maybeSingle<{ id: string; name: string }>();
     if (found.error) throw new Error(found.error.message);
@@ -255,17 +268,23 @@ async function resolveCustomer(actorId: string, customer: DealDraft["customer"])
   const created = await createCounterparty({
     actorId,
     counterparty: counterpartyInputSchema.parse({ name: customer.name, noticeEmail: "", role: "client", address: "", jurisdiction: "", paymentLimit: "" }),
+    // A customer added with a deal a CRM brought in says so, with the CRM's company (HubSpot connector H11).
+    ...(source ? { external: { provider: source.provider, ids: { hubId: source.ids.hubId, companyId: source.ids.companyId } } } : {}),
   });
   return { id: created.id, name: created.name };
 }
 
 /** Confirms a deal: version 1 and its planned lines, once per key (D1, D12). */
-export async function confirmDeal(input: { actorId: string; draft: DealDraft }): Promise<{ dealId: string; created: boolean; title: string; customerName: string }> {
+export async function confirmDeal(input: {
+  actorId: string;
+  draft: DealDraft;
+  source?: DealSource;
+}): Promise<{ dealId: string; created: boolean; title: string; customerName: string; customerId: string }> {
   const { actorId, draft } = input;
   await ensureReady();
   // An unreadable signing key refuses the deal before anything is written, rather than leave a version unsigned.
   assertLedgerCanSign();
-  const customer = await resolveCustomer(actorId, draft.customer);
+  const customer = await resolveCustomer(actorId, draft.customer, input.source);
   const result = await db().rpc("create_deal", {
     p_deal: {
       counterpartyId: customer.id,
@@ -288,9 +307,9 @@ export async function confirmDeal(input: { actorId: string; draft: DealDraft }):
   const { id, created } = result.data as { id: string; created: boolean };
   const record = await stored(id);
   if (!created && !sameDeal(record, draft, customer.id)) throw new DealError("key_reused");
-  if (created) await appendLedgerEntryBestEffort(currentOrgId(), versionEntry(record, 1, actorId));
-  else await healEntry(record, 1, actorId);
-  return { dealId: id, created, title: record.title, customerName: record.customer.name };
+  if (created) await appendLedgerEntryBestEffort(currentOrgId(), versionEntry(record, 1, actorId, input.source));
+  else await healEntry(record, 1, actorId, input.source);
+  return { dealId: id, created, title: record.title, customerName: record.customer.name, customerId: record.customer.id };
 }
 
 function writeError(error: NonNullable<RpcError>): Error {
@@ -304,7 +323,11 @@ function writeError(error: NonNullable<RpcError>): Error {
 }
 
 /** Changes, cancels or reopens a deal: its next version, planned again from the deal as it is now (D7-D9). */
-export async function changeDeal(input: { actorId: string; change: ChangeDraft }): Promise<{ version: number; created: boolean; title: string; kind: ChangeDraft["kind"] }> {
+export async function changeDeal(input: {
+  actorId: string;
+  change: ChangeDraft;
+  source?: DealSource;
+}): Promise<{ version: number; created: boolean; title: string; kind: ChangeDraft["kind"] }> {
   const { actorId, change } = input;
   const read = await readDeal(change.dealId);
   if (!read.available) throw new DealError("not_ready");
@@ -315,7 +338,7 @@ export async function changeDeal(input: { actorId: string; change: ChangeDraft }
   ) as Array<{ version: number }>;
   if (repeated[0]) {
     if (!sameChange(read.deal, repeated[0].version, change)) throw new DealError("key_reused");
-    await healEntry(read.deal, repeated[0].version, actorId);
+    await healEntry(read.deal, repeated[0].version, actorId, input.source);
     return { version: repeated[0].version, created: false, title: read.deal.title, kind: change.kind };
   }
   if (read.deal.facts.version !== change.baseVersion) throw new DealError("changed");
@@ -343,8 +366,8 @@ export async function changeDeal(input: { actorId: string; change: ChangeDraft }
   const { version, created } = result.data as { version: number; created: boolean };
   const record = await stored(change.dealId);
   if (!created && !sameChange(record, version, change)) throw new DealError("key_reused");
-  if (created) await appendLedgerEntryBestEffort(currentOrgId(), versionEntry(record, version, actorId));
-  else await healEntry(record, version, actorId);
+  if (created) await appendLedgerEntryBestEffort(currentOrgId(), versionEntry(record, version, actorId, input.source));
+  else await healEntry(record, version, actorId, input.source);
   return { version, created, title: record.title, kind: plan.revision.kind };
 }
 

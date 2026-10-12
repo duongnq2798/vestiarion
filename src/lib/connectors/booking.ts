@@ -10,9 +10,9 @@ import type { ProviderId } from "./provider";
 /**
  * Which tools book the payments a person approves (docs/superpowers/specs/2026-10-12-accounting-writeback-design.md W11):
  * a provider with `booking` on its `AccountingProvider`. Browser-safe, for the preview; a provider that adds booking sets
- * it here too.
+ * it here too. A CRM books nothing (HubSpot connector H1).
  */
-export const BOOKS_PAYMENTS: Record<ProviderId, boolean> = { xero: true, quickbooks: false };
+export const BOOKS_PAYMENTS: Record<ProviderId, boolean> = { xero: true, quickbooks: false, hubspot: false };
 
 export interface BookingAccount {
   name: string;

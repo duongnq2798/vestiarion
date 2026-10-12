@@ -1,6 +1,6 @@
 import { db, platformDb } from "../dal";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
-import { PROVIDER_LABELS, type ExternalOrganisation, type ProviderId } from "./provider";
+import { PROVIDER_LABELS, providerKind, type ExternalOrganisation, type ProviderId } from "./provider";
 import type { Consent } from "./state";
 import type { ConnectionState } from "./status";
 import { deleteTokens, refreshTokenOf } from "./token-store";
@@ -168,7 +168,7 @@ export const WINDOW_DAYS = 90;
 export type SaveConnection =
   | { ok: true; connection: Connection; reconnected: boolean }
   | { ok: false; reason: "other_organisation"; name: string | null }
-  /** Another workspace connected the same QuickBooks company a moment before (migration 0102's index, Q5). */
+  /** Another workspace connected the same organisation a moment before (migration 0102's index, Q5; 0105's, HubSpot H4). */
   | { ok: false; reason: "other_workspace"; name: null };
 
 /**
@@ -225,11 +225,13 @@ export async function saveConnection(input: {
   }
   const connection = toConnection(((saved.data ?? []) as unknown as ConnectionRow[])[0]);
   const label = PROVIDER_LABELS[input.provider];
+  // A CRM's won deals come in to be planned; an accounting tool's bills to be added (HubSpot connector H19).
+  const comesIn = providerKind(input.provider) === "crm" ? "Its won deals come in to plan collections on Bills & receivables" : "Its bills come in for review on Bills & receivables";
   await appendLedgerEntryBestEffort(connection.orgId, {
     actor: "human",
     domain: "system",
     action: "accounting_connected",
-    summary: `Connected ${label}: ${input.organisation.name}. Its bills come in for review on Bills & receivables`,
+    summary: `Connected ${label}: ${input.organisation.name}. ${comesIn}`,
     detail: {
       by: input.connectedBy,
       provider: input.provider,
@@ -309,7 +311,8 @@ export interface ExternalMatch {
 /**
  * The connections, not revoked, of these organisations of a provider in every workspace (migration 0102's
  * `accounting_connections_by_external`, the service role's): for QuickBooks' webhook, which names a company and no
- * workspace (docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q11), and the connect flow's check (Q5).
+ * workspace (docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q11), and the connect flow's check (Q5;
+ * HubSpot connector H4).
  */
 export async function connectionsByExternal(provider: ProviderId, externalOrgIds: readonly string[]): Promise<ExternalMatch[]> {
   if (externalOrgIds.length === 0) return [];

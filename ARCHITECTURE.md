@@ -1768,6 +1768,53 @@ the provider.
     (a fresh token through the serialized refresh, then one read) and marks it revoked only when QuickBooks refuses it,
     signing `accounting_disconnected` with `atProvider: true`.
 
+## Connectors: CRM (HubSpot)
+
+A workspace can bring its customers and won deals in from HubSpot
+(docs/superpowers/specs/2026-10-12-hubspot-connector-design.md). It runs on the accounting connectors' core, which
+gains a provider kind (`PROVIDER_KINDS`: `accounting` or `crm`) and no HubSpot names: `ConnectingProvider` is what the
+connect flow, the token refresh and disconnecting use of any provider, and `CrmProvider` (`src/lib/connectors/crm.ts`)
+adds a page of deals with their companies (`ExternalDeal`, `ExternalCompany`) and deals read by id. HubSpot is the first
+CRM (`src/lib/hubspot/`: settings, HTTP on the 2026-03 API version named once, OAuth, the pure mapping in `map.ts`, the
+reads in `api.ts`, `hubspotProvider`), wired in `src/lib/crm-providers.ts`. It is on only with `HUBSPOT_CLIENT_ID` and
+`HUBSPOT_CLIENT_SECRET`, from the app whose config is `integrations/hubspot/` (uploaded with `hs project upload`).
+
+- **Schema (migration `0105`).** The checks of 0101 take `hubspot`, linked `company` objects and `deal` cursors, each
+  replaced only while it does not take the value yet. `accounting_connections_hubspot_one_workspace` connects a HubSpot
+  account to one workspace at a time, and `accounting_connections_by_external` (the service role's, word for word as
+  QuickBooks') lets the connect flow ask first. `crm_deals`, a tenant table as 0101's: each deal read, once per
+  connection, with its facts, `stage_state` (`open`, `won`, `lost`), its company and that company's main contact's
+  email, `source_status` (`present`, `deleted`), the Vestiarion deal it became (`deal_id`), the `baseline` it was
+  planned from or last reviewed at, and the changes last recorded (`flagged`).
+- **Connecting.** The core's flow (state, nonce cookie, person, role, consent `hubspot-2026-10-12`), on
+  `/integrations/hubspot`, `/integrations/hubspot/connect`, `POST /api/integrations/hubspot/connect` and
+  `GET /api/integrations/hubspot/callback`. The token answer's `hub_id` is the account, its introspected `hub_domain` its
+  name; one account per grant. `ConnectDeps.ready` probes `crm_deals`, so before 0105 no one is sent to HubSpot. An
+  account another workspace holds is refused (`other_workspace`), and the tokens just granted are neither kept nor
+  revoked. Read-only scopes, exactly the config's required ones.
+- **Syncing** (`crm-sync.ts`, `crm-store.ts`): deals by search, 100 a page in the order of `hs_lastmodifieddate`, `after`
+  as the page's offset, so the core's cursor (object type `deal`) and its checkpoints, restarts and backoff work as for
+  Xero. A backfill reads open deals and those won since `window_from`; later runs read every deal changed since five
+  minutes before `since`. The page reaching HubSpot's 10,000-result cap ends the run without a restart (`capped`). Each
+  page reads its companies and their main contacts (associations, batch reads); pipelines and the account's currency
+  and time zone once per run. Search never returns a deleted deal, so linked deals and won ones still offered are read
+  again by id each run; one HubSpot no longer has is `deleted`. `planCrmDeal` keeps each deal once by its version. The
+  sweeper runs a CRM connection with this runner (`sweepAccounting({ crm })`).
+- **Planning** (`crm-prefill.ts`, `crm-review.ts`, `src/lib/commands/crm.ts`). Bills & receivables lists the won deals
+  under Deals; **Plan collections** opens the New deal form filled in by `dealPrefill`: the customer by its company's
+  link, else its name, else a new one; dollars as USDC and euros as EURC at par, another currency only in shadow mode,
+  never VND; the close day as the start; HubSpot's deal id as the reference. `crm.plan_deal` (`records.write`) reads the
+  row again, forces the reference, confirms through `confirmDeal` (`create_deal`, whose unique `external_ref` refuses a
+  second plan), links the row (`deal_id`, `baseline`) and the company to the customer (`external_links`), and the
+  deal's `deal_signed` says `via: "hubspot"`.
+- **Changes** (`crmChanges`, pure): amount or currency, close day, stage leaving won, deleted, against the baseline;
+  none for a cancelled deal. The sync records a new set once (`crm_deal_changed`, `flagDecision`). The deal's page says
+  **Changed in HubSpot**; **Change deal** opens the Change deal form filled in (`changePrefill`), and saving it is the
+  revise path with `via: "hubspot"`, marking the changes reviewed; **Keep the deal as it is** (`crm.keep_change`)
+  records `crm_deal_change_kept`. Nothing is revised or cancelled automatically.
+- **Billing emails.** `crm.fill_email` sets a linked customer's empty billing email from its company's main contact,
+  only when a person presses **Use this email**.
+
 ## API
 
 The versioned API boundary lives under `src/app/api/v1/`:

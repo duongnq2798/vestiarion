@@ -193,6 +193,7 @@ describe("the docs navigation", () => {
       ["guides/telegram", "Get the agent's decisions in Telegram"],
       ["guides/xero", "Bring bills in from Xero"],
       ["guides/quickbooks", "Bring bills in from QuickBooks Online"],
+      ["guides/hubspot", "Bring deals in from HubSpot"],
       ["guides/github", "Show payments on GitHub"],
     ]);
     expect(pagesOf("Developers").slice(0, 3)).toEqual([

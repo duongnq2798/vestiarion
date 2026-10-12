@@ -36,6 +36,7 @@ type GuideSlug =
   | "guides/github"
   | "guides/xero"
   | "guides/quickbooks"
+  | "guides/hubspot"
   | "guides/audit-export"
   | "guides/evidence"
   | "guides/controls"
@@ -141,6 +142,12 @@ const ACCOUNTING_CONSENT = "src/lib/connectors/consent.ts";
 const ACCOUNTING_CONNECTIONS = "src/lib/connectors/connections.ts";
 const ACCOUNTING_STATUS = "src/lib/connectors/status.ts";
 const ACCOUNTING_WORDS = "src/lib/connectors/provider.ts";
+// HubSpot's card, list and connect page are its own: a CRM's deals are planned, not added (HubSpot connector H20).
+const HUBSPOT_PANEL = "src/components/HubSpotPanel.tsx";
+const HUBSPOT_DEALS = "src/components/HubSpotDeals.tsx";
+const HUBSPOT_CONNECT_PAGE = "src/app/integrations/hubspot/connect/page.tsx";
+const CRM_WORDS = "src/lib/connectors/crm.ts";
+const CRM_CHANGES = "src/components/CrmDealChanges.tsx";
 // Booking payments made on Arc in the tool (accounting write-back).
 const BOOKINGS = "src/components/AccountingBookings.tsx";
 const BOOKING_RUN = "src/lib/connectors/booking-run.ts";
@@ -1374,6 +1381,43 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Address to confirm", CONTRACTORS_PAGE],
     ["Verify manually", MILESTONE_CHECK],
   ],
+  "guides/hubspot": [
+    ["Connect HubSpot", HUBSPOT_PANEL],
+    ["An owner or admin connects HubSpot.", HUBSPOT_PANEL],
+    ["One HubSpot account connects to one Vestiarion workspace at a time.", HUBSPOT_CONNECT_PAGE],
+    ["I agree", ACCOUNTING_CONSENT],
+    ["may not train on them", ACCOUNTING_CONSENT],
+    ["Vestiarion never uses HubSpot data to train or improve any AI model", ACCOUNTING_CONSENT, "data to train or improve any AI model"],
+    ["names, amounts, close dates, pipeline stages and each company's main contact email", ACCOUNTING_CONSENT],
+    ["Continue to HubSpot", HUBSPOT_CONNECT_PAGE],
+    ["HubSpot is connected. Its won deals are coming in on Bills & receivables, under Deals.", HUBSPOT_PANEL],
+    ["This HubSpot account is connected to another Vestiarion workspace.", HUBSPOT_PANEL],
+    ["accounting_connected", ACCOUNTING_CONNECTIONS],
+    ["Sync now", HUBSPOT_PANEL],
+    ["From HubSpot: 4 won deals", HUBSPOT_DEALS, "`From HubSpot: ${won.length} won deals`"],
+    ["Plan collections", HUBSPOT_DEALS],
+    ["No amount in HubSpot", CRM_WORDS, "`No amount in ${label}`"],
+    ["No company in HubSpot", CRM_WORDS, "`No company in ${label}`"],
+    ["Open the deal", HUBSPOT_DEALS],
+    ["Not won yet", HUBSPOT_DEALS],
+    ["HubSpot says 12,500 USD: planned as 12,500.00 USDC, one for one.", "src/lib/connectors/crm-prefill.ts", "says ${theirs}: planned as"],
+    ["Confirm deal", "src/components/deals/DealForm.tsx"],
+    ["Changed in HubSpot", CRM_CHANGES, "Changed in ${label}"],
+    ["Nothing is cancelled: cancel the deal if it is off.", CRM_WORDS],
+    ["Marked lost in HubSpot", CRM_WORDS, "`Marked lost in ${label}"],
+    ["crm_deal_changed", "src/lib/connectors/crm-store.ts"],
+    ["Keep the deal as it is", CRM_CHANGES],
+    ["crm_deal_change_kept", "src/lib/connectors/crm-store.ts"],
+    ["Billing emails from HubSpot", HUBSPOT_DEALS],
+    ["Use this email", HUBSPOT_DEALS],
+    ["counterparty_notice_email_changed", "src/lib/payment-notices.ts"],
+    ["HubSpot needs you to reconnect", ACCOUNTING_STATUS, "needs you to reconnect"],
+    ["Reconnect HubSpot", HUBSPOT_PANEL],
+    ["HubSpot asked Vestiarion to slow down. Syncing again at", ACCOUNTING_STATUS, "asked Vestiarion to slow down. Syncing again at"],
+    ["HubSpot is not set up on this deployment yet.", HUBSPOT_PANEL],
+    ["Disconnect HubSpot", HUBSPOT_PANEL],
+    ["accounting_disconnected", ACCOUNTING_CONNECTIONS],
+  ],
   "guides/xero": [
     ["Connect Xero", ACCOUNTING_PANEL, "`Connect ${label}`"],
     ["An owner or admin connects Xero.", ACCOUNTING_PANEL, "An owner or admin connects {label}."],
@@ -1992,6 +2036,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/github": 10,
   "guides/xero": 20,
   "guides/quickbooks": 20,
+  "guides/hubspot": 20,
   "guides/audit-export": 5,
   "guides/evidence": 20,
   "guides/apply-payments": 20,

@@ -28,7 +28,20 @@ export function dealStanding(deal: DealRecord, today: string): { label: string; 
  * it was released, paid, is still expected and is planned, and its next line; New deal for owners and admins. Before
  * migration 0104 runs it says deals are not set up, and nothing else on the page changes (D15).
  */
-export function DealsSection({ deals, orgSlug, today, newDeal }: { deals: DealRecord[] | "not_ready" | "unread"; orgSlug: string; today: string; newDeal?: ReactNode }) {
+export function DealsSection({
+  deals,
+  orgSlug,
+  today,
+  newDeal,
+  fromCrm,
+}: {
+  deals: DealRecord[] | "not_ready" | "unread";
+  orgSlug: string;
+  today: string;
+  newDeal?: ReactNode;
+  /** A CRM's won deals, and the New deal form filled in from one (HubSpot connector H20). */
+  fromCrm?: ReactNode;
+}) {
   const header = (
     <SectionHeader
       id="deals-title"
@@ -56,6 +69,7 @@ export function DealsSection({ deals, orgSlug, today, newDeal }: { deals: DealRe
   return (
     <section id="deals" aria-labelledby="deals-title" className="scroll-mt-6">
       {header}
+      {fromCrm}
       {newDeal}
       {deals.length === 0 ? (
         <EmptyState compact title="No deals yet" body="Confirm a signed deal and its schedule: each line becomes a receivable when you release it." />

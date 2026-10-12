@@ -381,7 +381,8 @@ waiting. Supabase Cron runs them from the database instead:
   webhooks and by email. It sends nothing.
 - `POST /api/platform/webhooks`, every 10 minutes: webhook retries and anything still queued.
 - `POST /api/platform/accounting-sync`, every 15 minutes: bills from the Xero organisations and QuickBooks companies
-  workspaces connected, and the connections nobody finished choosing an organisation for, revoked and deleted.
+  workspaces connected, deals from the HubSpot accounts they connected, and the connections nobody finished choosing an
+  organisation for, revoked and deleted.
 
 To set them up, run `supabase/cron/watches.sql` once in the Supabase SQL editor, with your
 deployment's origin in place of `https://www.vestiarion.xyz`. Its header lists what comes first:
@@ -444,6 +445,32 @@ keys and sandbox companies, or `production` for Production keys, which need Intu
 payload format, subscribed to Bill, BillPayment and Vendor at least) starts a sync of the company's connection within
 a minute of a change; without it, changes come in with the 15-minute sync alone. The connection needs migrations 0101
 and 0102. See [Bring bills in from QuickBooks Online](https://www.vestiarion.xyz/docs/guides/quickbooks).
+
+With `HUBSPOT_CLIENT_ID` and `HUBSPOT_CLIENT_SECRET` set, from a HubSpot app on the developer platform with OAuth and
+marketplace distribution, an owner or admin connects a workspace to one HubSpot account from Settings, after agreeing to
+what Vestiarion does with its data. Its won deals come in with their customers under Deals on Bills & receivables, and a
+person plans each one's collections from the New deal form filled in from it. One HubSpot account connects to one
+workspace at a time. The app asks for read-only scopes only (`oauth crm.objects.companies.read crm.objects.contacts.read
+crm.objects.deals.read`), exactly the required scopes of its config. The connection needs migration 0105; before it
+runs, the HubSpot card says HubSpot is not set up yet. Its tokens are kept encrypted under `VESTIARION_MASTER_KEYS`, as
+Xero's. See [Bring deals in from HubSpot](https://www.vestiarion.xyz/docs/guides/hubspot).
+
+The app's config is in the repository, under `integrations/hubspot/` (`hsproject.json` and `src/app/app-hsmeta.json`):
+its name, its distribution, its scopes and its redirect URLs (`<origin>/api/integrations/hubspot/callback`, and
+`http://localhost:3000/api/integrations/hubspot/callback` to try it locally). It holds no secret. To create or change the
+app, install the HubSpot CLI and upload the project from that folder:
+
+```sh
+npm install -g @hubspot/cli
+hs account auth            # sign in to the HubSpot developer account that owns the app
+cd integrations/hubspot
+hs project upload          # builds and deploys the app from hsproject.json
+```
+
+Then, in HubSpot's developer account, open the app's **Auth** tab for its client id and secret, and set them as
+`HUBSPOT_CLIENT_ID` and `HUBSPOT_CLIENT_SECRET`. A deployment on another origin edits the redirect URLs in
+`app-hsmeta.json` and uploads again: HubSpot refuses a redirect URL the config does not list, and an authorize URL whose
+scopes differ from the config's required scopes.
 
 ### Measurement provenance
 

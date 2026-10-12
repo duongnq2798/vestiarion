@@ -16,7 +16,8 @@ import { freshAccessToken, type AccessOutcome, type TokenStore } from "./tokens"
  * injected (`sync-store.ts` is the real one), so the runner is tested whole without one.
  */
 
-export type ObjectType = "contact" | "bill";
+/** What a cursor follows: an accounting tool's contacts and bills, a CRM's deals (HubSpot connector H7). */
+export type ObjectType = "contact" | "bill" | "deal";
 
 export type SyncFinish =
   | { kind: "synced"; at: string }

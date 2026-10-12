@@ -1,3 +1,5 @@
+import { NotSetUpError } from "../connectors/connections";
+import { crmRowForDeal, reviewChanges, sourceOf } from "../connectors/crm-actions";
 import type { ChangeDraft, DealDraft } from "../deals/input";
 import { changeDeal as writeChange, confirmDeal, DealError, releaseDealLine as writeRelease, switchDealAutoRelease } from "../deals/write";
 import type { Actor } from "./actor";
@@ -37,12 +39,27 @@ export async function addDeal(actor: Actor, input: { draft: DealDraft }): Promis
   }
 }
 
-/** Changes, cancels or reopens a deal: its next version, which never rewrites a released line (D7-D9). */
-export async function changeDeal(actor: Actor, input: { change: ChangeDraft }): Promise<CommandOutcome<{ version: number }>> {
+/** The CRM row a deal was planned from, when the change was made from its changes; none before migration 0105. */
+async function crmOrigin(dealId: string) {
+  try {
+    return await crmRowForDeal(dealId);
+  } catch (error) {
+    if (error instanceof NotSetUpError) return null;
+    throw error;
+  }
+}
+
+/**
+ * Changes, cancels or reopens a deal: its next version, which never rewrites a released line (D7-D9). Made from the
+ * changes a CRM brought (`fromCrm`, HubSpot connector H12), its entry says so, and those changes count as reviewed.
+ */
+export async function changeDeal(actor: Actor, input: { change: ChangeDraft; fromCrm?: boolean }): Promise<CommandOutcome<{ version: number }>> {
   const refusal = gate(actor, "deal.change");
   if (refusal) return refusal;
   try {
-    const result = await writeChange({ actorId: actor.userId, change: input.change });
+    const origin = input.fromCrm ? await crmOrigin(input.change.dealId) : null;
+    const result = await writeChange({ actorId: actor.userId, change: input.change, ...(origin ? { source: sourceOf(origin) } : {}) });
+    if (origin && result.created) await reviewChanges(origin, actor.userId);
     if (!result.created) return done(`That change was saved already, as version ${result.version}.`, { version: result.version });
     const message =
       result.kind === "cancelled"

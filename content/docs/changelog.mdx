@@ -1,5 +1,15 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-12: Deals brought in from HubSpot
+
+- An owner or admin can connect a workspace to a HubSpot account, and a person plans the collections of the won deals it brings in. Connecting and disconnecting are the **`accounting_connected`** and **`accounting_disconnected`** entries the Xero connector added, with `provider: "hubspot"`; `externalOrgId` is the HubSpot account (hub) id and `externalOrgName` its domain.
+- A deal planned from HubSpot is a **`deal_signed`** entry as any deal, with `via: "hubspot"` and `hubspot: { hubId, dealId, companyId }`, HubSpot's own ids; its `externalRef` is HubSpot's deal id. A change saved from what HubSpot changed is a **`deal_revised`** entry with the same `via` and `hubspot`. A customer added with the deal is a **`create_counterparty`** entry with `via: "hubspot"` and `hubspot: { hubId, companyId }`.
+- Two new entries, domain `ar`, each sent to webhook endpoints as `ledger.appended` and listed by `GET /api/v1/ledger`:
+  - **`crm_deal_changed`**, actor `system`: `{ provider, connectionId, externalOrgId, crmDealId, dealId, changes }`, once for each new set of changes HubSpot made to a planned deal. `crmDealId` is HubSpot's deal id and `dealId` the Vestiarion deal. Each of `changes` is `{ what: "amount", from: { amount, currency }, to: { amount, currency } }`, `{ what: "close", from, to }` (days as YYYY-MM-DD, or null), `{ what: "stage", from, to, label }` (`won`, `open` or `lost`, and HubSpot's stage label), or `{ what: "deleted" }`. Nothing in Vestiarion changes with it.
+  - **`crm_deal_change_kept`**, actor `human`: `{ by, provider, connectionId, crmDealId, dealId, changes }`, when a person kept the deal as it is.
+- A billing email filled from HubSpot is a **`counterparty_notice_email_changed`** entry, as one typed in, with `via: "hubspot"` and `hubspot: { hubId, companyId }`; its addresses are masked, as before.
+- Nothing else in `/api/v1` changes: the HubSpot deals not planned are not in the API.
+
 ## 2026-10-12: Payments made on Arc booked in Xero, after a person reviews them
 
 - When a payable added from a Xero bill is paid on Arc and confirmed, Vestiarion drafts its booking against that bill in Xero; an owner or admin reviews it on Bills & receivables and approves it, and only then is it written to Xero. A payment on Arc testnet, and every payment in shadow mode, is booked only into an organisation Xero calls a demo company. Its ledger gains six entries, domain `ap`, each naming the payable as `invoiceId`, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:

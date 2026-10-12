@@ -1,0 +1,108 @@
+{
+  "results": [
+    {
+      "id": "default",
+      "label": "Sales Pipeline",
+      "displayOrder": 0,
+      "archived": false,
+      "createdAt": "2026-01-05T02:00:00.000Z",
+      "updatedAt": "2026-01-05T02:00:00.000Z",
+      "stages": [
+        {
+          "id": "appointmentscheduled",
+          "label": "Appointment Scheduled",
+          "displayOrder": 0,
+          "archived": false,
+          "metadata": {
+            "isClosed": "false",
+            "probability": "0.2"
+          },
+          "createdAt": "2026-01-05T02:00:00.000Z",
+          "updatedAt": "2026-01-05T02:00:00.000Z"
+        },
+        {
+          "id": "contractsent",
+          "label": "Contract Sent",
+          "displayOrder": 4,
+          "archived": false,
+          "metadata": {
+            "isClosed": "false",
+            "probability": "0.9"
+          },
+          "createdAt": "2026-01-05T02:00:00.000Z",
+          "updatedAt": "2026-01-05T02:00:00.000Z"
+        },
+        {
+          "id": "closedwon",
+          "label": "Closed Won",
+          "displayOrder": 5,
+          "archived": false,
+          "metadata": {
+            "isClosed": "true",
+            "probability": "1.0"
+          },
+          "createdAt": "2026-01-05T02:00:00.000Z",
+          "updatedAt": "2026-01-05T02:00:00.000Z"
+        },
+        {
+          "id": "closedlost",
+          "label": "Closed Lost",
+          "displayOrder": 6,
+          "archived": false,
+          "metadata": {
+            "isClosed": "true",
+            "probability": "0.0"
+          },
+          "createdAt": "2026-01-05T02:00:00.000Z",
+          "updatedAt": "2026-01-05T02:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "84721930",
+      "label": "Retainers",
+      "displayOrder": 1,
+      "archived": false,
+      "createdAt": "2026-03-01T02:00:00.000Z",
+      "updatedAt": "2026-03-01T02:00:00.000Z",
+      "stages": [
+        {
+          "id": "160239001",
+          "label": "Proposal",
+          "displayOrder": 0,
+          "archived": false,
+          "metadata": {
+            "isClosed": "false",
+            "probability": "0.5"
+          },
+          "createdAt": "2026-03-01T02:00:00.000Z",
+          "updatedAt": "2026-03-01T02:00:00.000Z"
+        },
+        {
+          "id": "160239002",
+          "label": "Signed",
+          "displayOrder": 1,
+          "archived": false,
+          "metadata": {
+            "isClosed": "true",
+            "probability": "1.0"
+          },
+          "createdAt": "2026-03-01T02:00:00.000Z",
+          "updatedAt": "2026-03-01T02:00:00.000Z"
+        },
+        {
+          "id": "160239003",
+          "label": "Walked away",
+          "displayOrder": 2,
+          "archived": false,
+          "metadata": {
+            "isClosed": "true",
+            "probability": "0.0"
+          },
+          "createdAt": "2026-03-01T02:00:00.000Z",
+          "updatedAt": "2026-03-01T02:00:00.000Z"
+        }
+      ]
+    }
+  ]
+}

@@ -279,6 +279,19 @@ export default function PrivacyPage() {
             already read stay with the workspace, and the signed ledger keeps only ids and names.
           </li>
           <li>
+            <strong>HubSpot</strong>, for a workspace an owner or admin connects to a HubSpot account after agreeing to it, is read from and never
+            written to. Vestiarion reads that account&apos;s open deals and the deals won in the last 90 days, then the deals that change (each
+            one&apos;s name, amount, currency, close date, pipeline and stage), each deal&apos;s company (its name) and that company&apos;s main
+            contact (its email), and the account&apos;s currency, time zone and domain. It keeps the deals read, the companies&apos; names, the main
+            contacts&apos; emails, the account&apos;s id and domain, the access granted and the agreement given, and HubSpot&apos;s tokens encrypted,
+            readable only by the server and never shown in the browser, a log, a model&apos;s prompt or a webhook. A contact&apos;s email becomes a
+            customer&apos;s billing email only when a person confirms it. The deals are shown to the workspace&apos;s members and its agent; the
+            agent&apos;s model provider may see a deal&apos;s facts to decide on its collections, and may not train on them. Vestiarion never uses
+            HubSpot data to train or improve any AI model, and never passes it to anyone else without the workspace&apos;s say. Disconnecting revokes
+            the app&apos;s access at HubSpot and deletes the tokens; the deals already read stay with the workspace, and the signed ledger keeps only
+            ids, names, amounts and masked emails.
+          </li>
+          <li>
             <strong>Google Analytics</strong> receives page views, and which button you chose to get started, as described below.
           </li>
           <li>

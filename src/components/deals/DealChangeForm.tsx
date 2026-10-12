@@ -41,6 +41,7 @@ export function DealChangeForm({
   today,
   idempotencyKey,
   mode,
+  fromCrm,
 }: {
   orgSlug: string;
   facts: DealFacts;
@@ -48,16 +49,25 @@ export function DealChangeForm({
   today: string;
   idempotencyKey: string;
   mode: "revised" | "reopened";
+  /**
+   * Opened from the changes a CRM brought (HubSpot connector H12): its new total, when it is in the deal's currency, with
+   * a correction proposed for the lines; and a reason naming the changes. Saving it marks them as reviewed.
+   */
+  fromCrm?: { total: string | null; reason: string };
 }) {
   const planned = inForce(facts.lines)
     .filter((line) => line.status === "planned")
     .sort((a, b) => a.position - b.position);
   const toEditable = (lines: ProposedLine[]): EditableLine[] =>
     lines.map((line) => ({ ...(line.id ? { id: line.id } : {}), kind: line.kind, label: line.label, invoiceOn: line.invoiceOn, amount: minorToDecimal(Math.abs(line.amountMinor), digits) }));
-  const [total, setTotal] = useState(minorToDecimal(facts.totalMinor, digits));
+  const crmTotal = fromCrm?.total ? parseMinor(fromCrm.total, facts.currency) : null;
+  const [total, setTotal] = useState(crmTotal !== null && fromCrm?.total ? fromCrm.total : minorToDecimal(facts.totalMinor, digits));
   // A cancelled deal's planned lines are the credits still owed to the customer (a cancel ends only the charges): a
-  // reopen starts from them too, so it never drops money owed back unless the person removes it.
-  const [lines, setLines] = useState<EditableLine[]>(toEditable(planned));
+  // reopen starts from them too, so it never drops money owed back unless the person removes it. A new total from a CRM
+  // starts from the correction it proposes.
+  const [lines, setLines] = useState<EditableLine[]>(
+    crmTotal !== null && crmTotal !== facts.totalMinor && mode === "revised" ? toEditable(proposeCorrection(facts, crmTotal, today)) : toEditable(planned)
+  );
   const { state, formProps } = useActionForm(changeDealAction, INITIAL, { toastOnSuccess: true });
 
   const totalMinor = parseMinor(total, facts.currency);
@@ -77,13 +87,14 @@ export function DealChangeForm({
       <input type="hidden" name="kind" value={mode} />
       <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
       <input type="hidden" name="lines" value={JSON.stringify(proposed)} />
+      {fromCrm && <input type="hidden" name="fromCrm" value="1" />}
 
       <div className="grid gap-4 sm:grid-cols-[14rem_minmax(0,1fr)]">
         <Field id="deal-change-total" label={`New total (${facts.currency})`}>
           <Input name="total" inputMode="decimal" value={total} onChange={(event) => setTotal(event.target.value)} />
         </Field>
         <Field id="deal-change-reason" label="Reason" optional description="Kept with the version and its signed entry.">
-          <Input name="reason" maxLength={280} placeholder="Extra landing page agreed on Oct 12" />
+          <Input name="reason" maxLength={280} placeholder="Extra landing page agreed on Oct 12" defaultValue={fromCrm?.reason} />
         </Field>
       </div>
 

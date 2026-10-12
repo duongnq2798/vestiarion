@@ -239,6 +239,13 @@ const SHOTS = {
     await page.waitFor(`document.querySelector("[data-docs-shot]").textContent.includes("Adds Price change")`);
   },
   "deals-versions": async () => {},
+  "hubspot-settings": async () => {},
+  "hubspot-deals": async (page) => {
+    // The deals not won yet, opened.
+    await page.click(`[...document.querySelectorAll("[data-docs-shot] summary")].find((s) => s.textContent.includes("Not won yet"))`);
+  },
+  "hubspot-plan": async () => {},
+  "hubspot-changed": async () => {},
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

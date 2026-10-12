@@ -8,7 +8,7 @@ import { withOrg } from "../dal/scope";
 import { masterKeysFromEnv, type MasterKey } from "../secrets";
 import { connectedElsewhere, connectionFor, NotSetUpError, saveConnection, type Connection } from "./connections";
 import { CONSENT_VERSIONS } from "./consent";
-import type { AccountingProvider, ExternalOrganisation, ProviderTokens } from "./provider";
+import type { ConnectingProvider, ExternalOrganisation, ProviderTokens } from "./provider";
 import { connectState, newNonce, readConnectState, STATE_TTL_MS, type Consent } from "./state";
 import { attachPending, pendingChoice, saveTokens } from "./token-store";
 
@@ -22,7 +22,12 @@ import { attachPending, pendingChoice, saveTokens } from "./token-store";
  */
 
 export interface ConnectDeps {
-  provider: AccountingProvider;
+  provider: ConnectingProvider;
+  /**
+   * Throws `NotSetUpError` when the provider's own tables are not in this database yet (a CRM's `crm_deals`, migration
+   * 0105; HubSpot connector H4), so no one is sent to the provider for nothing.
+   */
+  ready?: () => Promise<void>;
   /** The deployment's own origin: where the provider sends people back, and the only origin a form may post from. */
   origin: string;
   keys?: MasterKey[];
@@ -97,7 +102,14 @@ export async function startConnect(request: Request, deps: ConnectDeps): Promise
   if (!membership) return redirect(connectPage(deps, { org: slug, error: "forbidden" }));
   if (text(form, "consent") !== "yes") return redirect(connectPage(deps, { org: slug, consent: "missing" }));
   try {
-    await withOrg(membership.orgId, () => connectionFor(deps.provider.id), { userId: user.id });
+    await withOrg(
+      membership.orgId,
+      async () => {
+        await connectionFor(deps.provider.id);
+        await deps.ready?.();
+      },
+      { userId: user.id }
+    );
   } catch (error) {
     if (error instanceof NotSetUpError) return redirect(connectPage(deps, { org: slug, error: "not_set_up" }));
     throw error;
@@ -115,8 +127,9 @@ async function connectOne(
   deps: ConnectDeps,
   input: { orgId: string; userId: string; organisation: ExternalOrganisation; scopes: string[]; consent: Consent } & ({ tokens: ProviderTokens } | { pendingId: string })
 ): Promise<"connected" | "other_organisation" | "other_workspace" | "expired"> {
-  // One workspace per organisation, for a provider whose disconnect ends every grant (QuickBooks Q5). The tokens just
-  // granted are neither kept nor revoked: revoking them would cut the other workspace off too.
+  // One workspace per organisation, for a provider whose disconnect ends every grant (QuickBooks Q5) or whose account two
+  // workspaces must not share (HubSpot H4). The tokens just granted are neither kept nor revoked: revoking them would cut
+  // the other workspace off too.
   if (deps.provider.exclusive && (await connectedElsewhere(deps.provider.id, input.organisation.externalOrgId, input.orgId))) return "other_workspace";
   const saved = await saveConnection({
     provider: deps.provider.id,

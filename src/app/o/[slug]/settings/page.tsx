@@ -4,6 +4,7 @@ import DeleteWorkspacePanel from "@/components/DeleteWorkspacePanel";
 import EmailInboxPanel from "@/components/EmailInboxPanel";
 import GoLivePanel from "@/components/GoLivePanel";
 import GitHubPanel from "@/components/GitHubPanel";
+import HubSpotPanel from "@/components/HubSpotPanel";
 import LedgerKeyPanel from "@/components/LedgerKeyPanel";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import { SettingsSections, type SettingsGroup } from "@/components/SettingsSections";
@@ -36,6 +37,8 @@ import { slackPanelView } from "@/lib/slack/panel";
 import { slackSettingsFromEnv } from "@/lib/slack/settings";
 import { accountingPanelView } from "@/lib/connectors/panel";
 import { accountingProvider, accountingProviderOn } from "@/lib/accounting-providers";
+import { crmPanelView } from "@/lib/connectors/crm-review";
+import { hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
 import { linkFor as telegramLinkFor } from "@/lib/telegram/links";
 import { telegramSettingsFromEnv } from "@/lib/telegram/settings";
 import { networkProfile } from "@/lib/network";
@@ -51,7 +54,7 @@ export default async function SettingsPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ slack?: string | string[]; github?: string | string[]; xero?: string | string[]; quickbooks?: string | string[] }>;
+  searchParams: Promise<{ slack?: string | string[]; github?: string | string[]; xero?: string | string[]; quickbooks?: string | string[]; hubspot?: string | string[] }>;
 }) {
   const { slug } = await params;
   const access = await requireMembership(slug);
@@ -65,10 +68,10 @@ export default async function SettingsPage({
     const telegramOn = telegramSettingsFromEnv() !== null;
     // How connecting Slack went, from its way back (Slack design S3); only the codes the panel knows are shown.
     // And how connecting GitHub went (GitHub App design G2).
-    // And how connecting Xero or QuickBooks went (Xero connector X4; QuickBooks connector Q4).
-    const { slack: slackOutcome, github: githubOutcome, xero: xeroOutcome, quickbooks: quickBooksOutcome } = await searchParams;
+    // And how connecting Xero or QuickBooks went (Xero connector X4; QuickBooks connector Q4), and HubSpot (HubSpot H4).
+    const { slack: slackOutcome, github: githubOutcome, xero: xeroOutcome, quickbooks: quickBooksOutcome, hubspot: hubspotOutcome } = await searchParams;
     const inboxSettings = inboxSettingsFromEnv();
-    const [goLive, apiKeys, webhookEndpoints, ledgerKey, dashboardStats, deletion, usyc, slack, notifySwitch, telegramLink, inbox, github, twoApprovals, shadow, xero, quickBooks] = await Promise.all([
+    const [goLive, apiKeys, webhookEndpoints, ledgerKey, dashboardStats, deletion, usyc, slack, notifySwitch, telegramLink, inbox, github, twoApprovals, shadow, xero, quickBooks, hubspot] = await Promise.all([
       goLiveStatus(membership.orgId),
       listApiKeys(membership.orgId),
       listWebhookEndpoints(membership.orgId),
@@ -134,6 +137,14 @@ export default async function SettingsPage({
       accountingProviderOn("quickbooks")
         ? accountingPanelView("quickbooks", Date.now(), { writeScopes: accountingProvider("quickbooks")?.booking?.writeScopes }).catch((error: unknown) => {
             console.error("settings: QuickBooks status not loaded", error instanceof Error ? error.message : error);
+            return null;
+          })
+        : null,
+      // Only on a deployment where HubSpot is configured (HubSpot connector H17); best effort, like Xero's. Before migration
+      // 0105 the card says HubSpot is not set up yet.
+      hubspotSettingsFromEnv()
+        ? crmPanelView("hubspot").catch((error: unknown) => {
+            console.error("settings: HubSpot status not loaded", error instanceof Error ? error.message : error);
             return null;
           })
         : null,
@@ -245,6 +256,13 @@ export default async function SettingsPage({
                 canManage={canManageIntegrations}
                 notice={typeof quickBooksOutcome === "string" ? quickBooksOutcome : null}
               />
+            ) : null,
+          },
+          {
+            id: "hubspot-title",
+            title: "HubSpot",
+            content: hubspot ? (
+              <HubSpotPanel orgSlug={slug} view={hubspot} canManage={canManageIntegrations} notice={typeof hubspotOutcome === "string" ? hubspotOutcome : null} />
             ) : null,
           },
           {

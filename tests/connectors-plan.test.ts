@@ -159,6 +159,15 @@ describe("the cursor", () => {
     expect(grown.phase).toBe("incremental");
   });
 
+  it("never starts over from a page the provider reads no further than, and moves on from the latest change read (HubSpot H6)", () => {
+    const cursor: SyncCursor = { ...NEW_CURSOR, phase: "incremental", since: "2026-10-01T00:00:00.000Z", backfillStartedAt: T0, completedAt: T0 };
+    const page1 = afterPage(nextRequest(cursor, T0).cursor, { page: 1, last: false, updatedAts: ["2026-10-12T07:01:00.000Z"], total: 12840 }, T0);
+    const capped = afterPage(page1, { page: 2, last: true, capped: true, updatedAts: ["2026-10-12T07:02:00.000Z"], total: 12840 }, T0);
+    expect(capped).toMatchObject({ phase: "incremental", page: null, since: "2026-10-12T07:02:00.000Z" });
+    const backfill = afterPage(afterPage(nextRequest(NEW_CURSOR, T0).cursor, { page: 1, last: false, updatedAts: ["2026-10-12T07:01:00.000Z"] }, T0), { page: 2, last: true, capped: true, updatedAts: [] }, T1);
+    expect(backfill).toMatchObject({ phase: "incremental", since: "2026-10-12T06:55:00.000Z" });
+  });
+
   it("moves on after one page whatever changed during it: a single page cannot skip a row", () => {
     const started = nextRequest(NEW_CURSOR, T0).cursor;
     expect(afterPage(started, { page: 1, last: true, updatedAts: ["2026-10-12T07:01:00.000Z"] }, T0).phase).toBe("incremental");

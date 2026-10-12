@@ -1,0 +1,28 @@
+{
+  "total": 12840,
+  "results": [
+    {
+      "id": "30117499999",
+      "properties": {
+        "amount": "100",
+        "closedate": null,
+        "deal_currency_code": "USD",
+        "dealname": "Bulk import 9999",
+        "dealstage": "appointmentscheduled",
+        "hs_is_closed": "false",
+        "hs_is_closed_won": "false",
+        "hs_lastmodifieddate": "2026-10-10T00:00:00.000Z",
+        "pipeline": "default",
+        "hs_object_id": "30117499999"
+      },
+      "createdAt": "2026-10-10T00:00:00.000Z",
+      "updatedAt": "2026-10-10T00:00:00.000Z",
+      "archived": false
+    }
+  ],
+  "paging": {
+    "next": {
+      "after": "10000"
+    }
+  }
+}
