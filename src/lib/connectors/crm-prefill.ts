@@ -70,6 +70,8 @@ export function dealPrefill(input: {
   linkedCustomerId: string | null;
   /** The workspace's customers (clients), as the form offers them. */
   customers: ReadonlyArray<{ id: string; name: string }>;
+  /** Customers linked to another company of the same CRM account: never this deal's customer by name alone. */
+  linkedElsewhere?: ReadonlySet<string>;
   workspace: { shadowOn: boolean };
   today: string;
   /** The CRM's name in copy. */
@@ -85,8 +87,15 @@ export function dealPrefill(input: {
     customerId = linked.id;
   } else if (deal.company) {
     const match = counterpartyFor(deal.company.name, customers);
-    if (typeof match !== "string") {
+    const plain = (name: string) => name.trim().toLowerCase();
+    if (typeof match !== "string" && input.linkedElsewhere?.has(match.id)) {
+      // The CRM says this is another company than the one the customer was planned for: the person chooses.
+      notes.push(`${match.name} here is linked to another ${input.label} company: choose the customer, or add a new one under another name.`);
+    } else if (typeof match !== "string") {
       customerId = match.id;
+      if (plain(match.name) !== plain(deal.company.name)) {
+        notes.push(`Matched to the customer ${match.name} by its name: check it is the same company as ${deal.company.name} in ${input.label}.`);
+      }
     } else if (/matches more than one/.test(match)) {
       notes.push(`More than one customer is named ${deal.company.name}: choose one.`);
     } else {

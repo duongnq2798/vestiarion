@@ -1804,7 +1804,8 @@ reads in `api.ts`, `hubspotProvider`), wired in `src/lib/crm-providers.ts`. It i
   sweeper runs a CRM connection with this runner (`sweepAccounting({ crm })`).
 - **Planning** (`crm-prefill.ts`, `crm-review.ts`, `src/lib/commands/crm.ts`). Bills & receivables lists the won deals
   under Deals; **Plan collections** opens the New deal form filled in by `dealPrefill`: the customer by its company's
-  link, else its name, else a new one; dollars as USDC and euros as EURC at par, another currency only in shadow mode,
+  link, else its name (never a customer linked to another of the account's companies), else a new one; dollars as
+  USDC and euros as EURC at par, another currency only in shadow mode,
   never VND; the close day as the start; HubSpot's deal id as the reference. `crm.plan_deal` (`records.write`) reads the
   row again, forces the reference, confirms through `confirmDeal` (`create_deal`, whose unique `external_ref` refuses a
   second plan), links the row (`deal_id`, `baseline`) and the company to the customer (`external_links`), and the

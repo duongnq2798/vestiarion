@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import type { Connection } from "@/lib/connectors/connections";
-import { crmReview } from "@/lib/connectors/crm-review";
+import { crmPrefillFor, crmReview } from "@/lib/connectors/crm-review";
 import { fakeSupabase, orgTestContext } from "./support/fake-supabase";
 
 /**
@@ -38,5 +38,26 @@ describe("crmReview's billing emails", () => {
     });
     const view = await runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), () => crmReview(connection));
     expect(view.state === "list" ? view.emails : null).toEqual([{ counterpartyId: CUSTOMER, name: "Northwind Labs", email: "billing@northwind.example" }]);
+  });
+});
+
+describe("crmPrefillFor", () => {
+  it("leaves the customer to the person when the one of the same name is linked to another company of the account", async () => {
+    const won = row("a", { company_external_id: "9100000777", company_name: "Northwind Labs" });
+    const fake = fakeSupabase((sent) => {
+      if (sent.path === "/rest/v1/crm_deals") return { body: [won] };
+      if (sent.path === "/rest/v1/accounting_connections") {
+        return {
+          body: [{ id: "conn-1", org_id: ORG, provider: "hubspot", external_org_id: "48291736", external_org_name: "northstar-studio.example", status: "connected", scopes: [], connected_by: null, connected_at: "2026-10-12T08:00:00Z", consent_version: "hubspot-2026-10-12", consented_at: "2026-10-12T08:00:00Z", revoked_at: null, window_from: "2026-07-14", last_synced_at: null, last_error: null, last_error_at: null, failures: 0, next_sync_after: null, sync_lease_until: null, payment_account: null, payment_account_at: null }],
+        };
+      }
+      // Northwind Labs here was planned from company 9100000001.
+      if (sent.path === "/rest/v1/external_links") return { body: [{ external_id: "9100000001", local_id: CUSTOMER }] };
+      return { body: [] };
+    });
+    const read = await runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), () =>
+      crmPrefillFor({ rowId: "a", customers: [{ id: CUSTOMER, name: "Northwind Labs" }], workspace: { shadowOn: false }, today: "2026-10-12" })
+    );
+    expect(read.ok && read.prefill.customerId).toBe("");
   });
 });

@@ -163,7 +163,9 @@ ago stays out until someone changes it. Lost deals are kept only once they had a
   listed as **Not won yet**, read-only.
 - **Plan collections** opens the New deal form prefilled (`?hubspot=<row>#plan-from-hubspot`): the customer (the
   counterparty the company is linked to by its HubSpot id; else the one client with its name; else a new customer
-  with its name; two clients with the name leave the choice to the person), the title (the deal's name), the total
+  with its name; two clients with the name leave the choice to the person, and so does a client of the name linked
+  to another company of the account, since HubSpot says the two are different companies; a client found by its name
+  written differently, its legal suffix or case, is said in a note to check), the title (the deal's name), the total
   and currency, the start (the close day, else today) and the external reference (the HubSpot deal id, read-only).
   The person picks how it is billed and confirms; nothing is made before.
 - Currency, under today's rules (D3): USDC and EURC as they are; a deal in US dollars is planned in USDC, and one in

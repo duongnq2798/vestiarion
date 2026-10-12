@@ -262,16 +262,17 @@ export async function crmPrefillFor(input: {
   const amount = amountText(row.amount);
   const check = plannable({ stage: row.stage_state, sourceStatus: row.source_status, dealId: row.deal_id, amount, companyExternalId: row.company_external_id }, label);
   if (!check.ok) return { ok: false, message: `${row.name} cannot be planned: ${check.reason.toLowerCase()}.` };
+  // The customers this account's companies are linked to: this company's, and the others', which a name never takes.
   const links = unwrap(
     await db()
       .from("external_links")
-      .select("local_id")
+      .select("external_id, local_id")
       .eq("connection_id", connection.id)
       .eq("object_type", "company")
-      .eq("external_id", row.company_external_id as string)
       .not("local_id", "is", null)
-      .limit(1)
-  ) as Array<{ local_id: string }>;
+      .limit(5000)
+  ) as Array<{ external_id: string; local_id: string }>;
+  const own = links.find((link) => link.external_id === row.company_external_id);
   const prefill = dealPrefill({
     deal: {
       externalId: row.external_id,
@@ -281,8 +282,9 @@ export async function crmPrefillFor(input: {
       closeOn: row.close_on ? String(row.close_on).slice(0, 10) : null,
       company: row.company_external_id ? { externalId: row.company_external_id, name: row.company_name ?? "Unnamed company" } : null,
     },
-    linkedCustomerId: links[0]?.local_id ?? null,
+    linkedCustomerId: own?.local_id ?? null,
     customers: input.customers,
+    linkedElsewhere: new Set(links.filter((link) => link.external_id !== row.company_external_id).map((link) => link.local_id)),
     workspace: input.workspace,
     today: input.today,
     label,
