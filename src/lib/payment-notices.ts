@@ -196,6 +196,8 @@ export async function changeCounterpartyNoticeEmail(input: {
   actorId: string;
   counterpartyId: string;
   email: string | null;
+  /** The CRM the email came from, confirmed by a person (HubSpot connector H13): the entry says so. */
+  source?: { provider: "hubspot"; ids: { hubId: string; companyId: string } };
 }): Promise<{ name: string; email: string | null; role: string }> {
   const orgId = currentOrgId();
   const before = (await db().from("counterparties").select("id, name, role, notice_email").eq("id", input.counterpartyId).maybeSingle()).data as {
@@ -217,6 +219,7 @@ export async function changeCounterpartyNoticeEmail(input: {
       counterpartyId: input.counterpartyId,
       from: before.notice_email ? maskEmail(before.notice_email) : null,
       to: input.email ? maskEmail(input.email) : null,
+      ...(input.source ? { via: input.source.provider, [input.source.provider]: input.source.ids } : {}),
     },
   });
   return { name: before.name, email: input.email, role: before.role };

@@ -45,6 +45,11 @@ export const COMMAND_PERMISSIONS = {
   // Bills an accounting tool brought in (Xero connector X3, X11): added through the bill list's check, or dismissed.
   "accounting.add_bills": "records.write",
   "accounting.dismiss_bills": "records.write",
+  // A CRM's won deal planned as a deal, its changes kept as seen, a customer's billing email filled from it: records,
+  // as a deal is (HubSpot connector H3).
+  "crm.plan_deal": "records.write",
+  "crm.keep_change": "records.write",
+  "crm.fill_email": "records.write",
   // A public link to the workspace report, and stopping one; the value question is the business's own figure about
   // itself, an owner's (shared report S3).
   "report.share": "report.share",
