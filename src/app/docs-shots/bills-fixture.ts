@@ -2,7 +2,6 @@ import type { BookingRowView } from "@/lib/connectors/bookings-view";
 import type { CrmRowView } from "@/lib/connectors/crm-review";
 import type { ReviewRowView } from "@/lib/connectors/review";
 import type { LedgerEntry } from "@/lib/ledger";
-import { ARC_TESTNET } from "@/lib/network";
 import type { PayLinkState } from "@/lib/platform/pay-links";
 import type { CounterpartyRow, InvoiceRow } from "@/lib/queries";
 
@@ -22,7 +21,8 @@ const counterparty = (n: number, name: string, over: Partial<CounterpartyRow> = 
   name,
   role: "vendor",
   address: `0x${"c0ffee00".repeat(5)}`,
-  chain: ARC_TESTNET.circleBlockchain,
+  // The payee is paid on the workspace's own chain: no chain of its own.
+  chain: null,
   jurisdiction: "US",
   risk_level: "clear",
   risk_notes: null,
