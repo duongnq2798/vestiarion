@@ -29,6 +29,10 @@ import { currentContext, currentOrgId } from "../context";
  * The team's growth records (migration 0099) are platform tables too: leads, campaigns, spend and revenue belong to
  * no workspace, and only the founder dashboard (src/lib/growth), behind its own team gate, reads or writes them.
  *
+ * An accounting connection's tokens (migration 0101) are a platform table as Slack's bot token is: only
+ * `src/lib/connectors/token-store.ts` reads or writes them, always naming the workspace in scope, and the service-role
+ * functions that serialize a refresh and list the connections due a sync go with them.
+ *
  * One read reaches past those tables: the dispatcher embeds a delivery's own
  * ledger entry (`webhook_deliveries` → `ledger_entries` by foreign key), so it
  * can only ever see the entry that delivery was queued for.
@@ -42,6 +46,7 @@ export const TENANT_TABLES = [
   "fx_swaps", "screening_dismissals", "receivable_links", "incoming_transfers", "agent_budgets", "recurring_payables", "policy_proposals",
   "service_purchases", "spending_limit_contracts", "ar_reminders", "inbox_emails", "approval_policies", "payment_approvals",
   "shadow_modes", "decision_verdicts", "payment_actuals", "bank_statement_lines", "report_shares", "report_baselines", "receivable_allocations",
+  "accounting_connections", "external_links", "accounting_bills", "accounting_sync_cursors",
   "deals", "deal_versions", "deal_lines",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
@@ -60,6 +65,7 @@ export const PLATFORM_TABLES = [
   "slack_installs", "slack_links", "slack_link_requests", "slack_drafts", "invoice_inboxes", "github_installations", "github_bounties",
   "platform_controls",
   "growth_campaigns", "growth_leads", "growth_lead_events", "growth_spend", "growth_revenue",
+  "accounting_tokens",
 ] as const;
 export type PlatformTable = (typeof PLATFORM_TABLES)[number];
 
@@ -74,6 +80,7 @@ export const PLATFORM_RPCS = [
   "payment_receipt_by_token", "report_share_by_token", "pay_link_preview", "enable_usyc_reserve", "payee_history",
   "telegram_claim_code", "telegram_activate", "slack_link_member",
   "growth_team_member", "growth_workspaces", "growth_update_lead", "growth_import_leads", "record_org_attribution",
+  "accounting_token_lease", "accounting_token_store", "accounting_token_release", "accounting_connections_due",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 

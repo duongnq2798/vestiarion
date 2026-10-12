@@ -244,9 +244,18 @@ function via(detail: Record<string, unknown>): string {
       return " from an emailed invoice";
     case "import":
       return " from an imported list";
+    case "xero":
+      return " in the review of bills from Xero";
     default:
       return "";
   }
+}
+
+/** " as bill PD-4471", the number Xero gave the bill, when the entry kept one. */
+function xeroNumber(detail: Record<string, unknown>): string {
+  const ids = record(detail.xero);
+  const number = ids ? text(ids.invoiceNumber) : null;
+  return number ? ` as bill ${number}` : "";
 }
 
 /** "acme/app#12" for a pull request's URL; the URL itself otherwise. */
@@ -505,6 +514,8 @@ function billStep(ctx: Context, invoice: EvidenceInvoice): EvidenceStep {
         ? "arrived by email and added on Bills & receivables"
         : created.detail.via === "import"
           ? `imported with Import a list on Bills & receivables${row !== null ? `, from row ${row} of the list` : ""}`
+          : created.detail.via === "xero"
+            ? `brought in from Xero${xeroNumber(created.detail)}, and added on Bills & receivables by the person who reviewed it`
           : created.detail.via
             ? `added${via(created.detail)}`
             : "added in the invoice form on Bills & receivables";

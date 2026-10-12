@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import InboxEmails from "@/components/InboxEmails";
+import { XeroBillsReview } from "@/components/XeroBillsReview";
 import AgentControls from "@/components/AgentControls";
 import { AllocationLines } from "@/components/AllocationLines";
 import { ApplyPayments } from "@/components/ApplyPayments";
@@ -48,6 +49,9 @@ import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import { inboxEmailsToDecide } from "@/lib/email-inbox/list";
 import { inboxSettingsFromEnv } from "@/lib/email-inbox/settings";
+import { connectionFor, NotSetUpError } from "@/lib/connectors/connections";
+import { accountingReview, type ReviewView } from "@/lib/connectors/review";
+import { xeroSettingsFromEnv } from "@/lib/xero/settings";
 import { ledgerReadMayBeCut, listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { listCounterparties, listInvoices, stats, type InvoiceRow } from "@/lib/queries";
 import { plural, utcDay } from "@/lib/copy";
@@ -102,7 +106,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
   return inOrg(access, async () => {
     const network = workspaceNetwork().id;
     const query = await searchParams;
-    const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, schedules, deciding, emailed, dealsRead] = await Promise.all([
+    const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, schedules, deciding, emailed, fromXero, dealsRead] = await Promise.all([
       listInvoices(),
       listCounterparties(),
       listLedgerEntries(1),
@@ -123,6 +127,16 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
             return [];
           })
         : [],
+      // The bills Xero brought in, waiting for a person (Xero connector X11, X19), on a deployment where Xero is set up;
+      // hidden before migration 0101, without a connection, and when it cannot be read.
+      xeroSettingsFromEnv()
+        ? connectionFor("xero")
+            .then(accountingReview)
+            .catch((error: unknown): ReviewView => {
+              if (!(error instanceof NotSetUpError)) console.error("invoices: bills from Xero not loaded", error instanceof Error ? error.message : error);
+              return { state: "hidden" };
+            })
+        : ({ state: "hidden" } as ReviewView),
       // The workspace's deals and their schedules (deal schedule). Best effort: before migration 0104 runs the section
       // says deals are not set up, and a read that fails hides only the section.
       readDeals().catch((error: unknown) => {
@@ -434,6 +448,17 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         </div>
 
         <InboxEmails orgSlug={slug} emails={emailed} canAdd={canWrite} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} />
+
+        {fromXero.state === "list" && (
+          <XeroBillsReview
+            orgSlug={slug}
+            connectionId={fromXero.connectionId}
+            organisation={fromXero.organisation}
+            items={fromXero.items}
+            closed={fromXero.closed}
+            canAdd={canWrite}
+          />
+        )}
 
         {canWrite ? (
           // Folded until it is needed; open on a workspace with no invoice yet, where adding one is the next step.

@@ -101,8 +101,8 @@ workspace's own API keys — `owner` and `admin` hold it; every other member see
 for adding, testing and removing a workspace's own webhook endpoints — `owner` and `admin` hold it;
 every other member sees the endpoint list with each URL reduced to its host — see
 [Webhooks security](https://www.vestiarion.xyz/docs/webhooks/security#who-sees-what)), and `integrations.manage` (`src/app/actions/slack.ts`,
-`/api/slack/install`, `src/app/actions/github.ts` and `/api/github/install`, for connecting and removing the workspace's Slack and
-GitHub — `owner` and `admin` hold it; the
+`/api/slack/install`, `src/app/actions/github.ts` and `/api/github/install`, `src/app/actions/xero.ts` and
+`/api/integrations/xero/*`, for connecting and removing the workspace's Slack, GitHub and Xero — `owner` and `admin` hold it; the
 limit on deciding payments from Slack takes `org.administer`, an owner's). The remaining permissions — `workspace.read` (beyond
 the leaving case above) and `org.administer` — and `canAssignRole`'s rule that an admin may grant
 `approver` or `viewer` but nothing at its own rank or above while only an owner assigns `admin` or
@@ -1264,7 +1264,8 @@ workspace's mode for that action, never from a link, a key or a button. A
 **command** is one function per action — `approvePayable`, `rejectPayable`,
 `returnPayable`, `addPayableDetails`, `payMilestoneNow`, `closeMilestoneUnpaid`,
 `pauseWorkspaceAgent`, `resumeWorkspaceAgent`, `runWorkspaceCycle`,
-`addInvoice`, `importInvoices`, `recordActualPayment`, `importActualPayments`, `approvePlanLines`,
+`addInvoice`, `importInvoices`, `addAccountingBills`, `dismissAccountingBills`, `recordActualPayment`,
+`importActualPayments`, `approvePlanLines`,
 `shareWorkspaceReport`, `stopSharingWorkspaceReport`, `answerReportBaseline`, `applyReceivedPayment`,
 `reverseAppliedPayment`, `addDeal`, `changeDeal`, `releaseDealLine`,
 `setDealAutoRelease` — whose first statement is
@@ -1625,6 +1626,68 @@ merged (`src/lib/github/merges.ts`) starts `runCycleSoon` (`pull_request_merged`
 for each connected workspace with a pending milestone on that pull request, as
 the GitHub check reads its link, so the payment follows the merge within a
 minute instead of waiting for the schedule.
+
+## Accounting connectors: Xero
+
+A workspace can bring its bills in from Xero (docs/superpowers/specs/2026-10-12-xero-connector-design.md). The core,
+`src/lib/connectors/`, names no provider: it talks to one through `AccountingProvider` (`provider.ts`: the authorize URL,
+the code exchange, the organisations a token reaches, refresh, revoke, and paged reads of bills, contacts and accounts
+mapped into `ExternalBill`, `ExternalContact` and `ExternalAccount`). Xero is the first provider (`src/lib/xero/`: its
+settings, HTTP, OAuth calls, the pure mapping from its JSON in `map.ts`, and `xeroProvider`); QuickBooks Online joins in
+`src/lib/accounting-providers.ts`, the one place the core is wired to a provider. Xero is on only with `XERO_CLIENT_ID`
+and `XERO_CLIENT_SECRET` (a Xero "Web app"); otherwise its card and routes are not there.
+
+- **Schema (migration `0101`).** Four tenant tables, with row-level security, the restrictive guard and composite
+  foreign keys to their connection, which the tenant role reads, inserts and updates and never deletes:
+  `accounting_connections` (one per workspace, provider and external organisation; at most one not revoked per
+  workspace and provider; status `connected`, `needs_reconnect` or `revoked`; the consent's version and time; the last
+  sync and the last error in business words; the failures in a row and `next_sync_after`; a sync lease; the payment
+  account), `external_links` (an external contact or bill, once, and the counterparty or invoice it became, with the
+  provider's version), `accounting_bills` (the review list: each bill once, its facts as the provider has them now,
+  `source_status` and `review_state`) and `accounting_sync_cursors` (per connection and object type, the phase, the
+  `since` time and the checkpoint of a run under way). And one platform table, `accounting_tokens`, as `slack_installs`:
+  RLS on, no policy, nothing for the tenant or browser roles. Only `src/lib/connectors/token-store.ts` reads it, in the
+  workspace's own scope; each token is an envelope under the master key bound to the workspace, its column and its row
+  (`accounting_tokens.refresh_token_enc/<id>`).
+- **Tokens.** Xero rotates its refresh token on every use, so a lost update locks a connection out. `freshAccessToken`
+  (`tokens.ts`) refreshes only under the row's lease (`accounting_token_lease`: one holder, 60 seconds, under the row's
+  lock) and stores the new pair only for that holder over the version it read (`accounting_token_store`, a
+  compare-and-set); a caller that finds the lease taken waits and reads what was stored. `invalid_grant` marks the
+  connection needs reconnect.
+- **Connecting.** `/integrations/xero` takes a signed-in person to their workspace's Xero card; `/integrations/xero/connect`
+  lets them pick the workspace, read what Vestiarion does with Xero's data and tick **I agree**. Its form posts, from this
+  origin only, to `POST /api/integrations/xero/connect`, which checks the session, `integrations.manage` and the tick, and
+  sends them to Xero with a state signed under its own HKDF key (ten minutes), carrying the consent and a nonce kept in an
+  HttpOnly cookie. `GET /api/integrations/xero/callback` checks the state, the cookie, the person, their role again and
+  the consent before it exchanges the code and reads `/connections`. One organisation is connected at once
+  (`saveConnection`, then the tokens, then the first sync in `after()`); several are kept as a pending grant for ten
+  minutes and picked on the connect page (`POST /api/integrations/xero/choose`). A workspace connected to another
+  organisation is refused; the same one reconnects its row. `accounting_connected` records the consent.
+- **Syncing** (`sync.ts`, `sync-store.ts`): suppliers, then bills, a page at a time in Xero's update order, each page read,
+  then written, then the cursor moved, so a run stopped anywhere resumes at its page; no call to Xero happens inside a
+  write. The backfill reads approved bills; later runs send `If-Modified-Since` and read every status. A run of several
+  pages that read a change made during it, or saw Xero's count of matching bills (`pagination.itemCount`) fall from one
+  page to the next (a bill paid while a backfill of approved ones runs), starts over from page 1. A `Retry-After` of at most 5 seconds is waited out
+  once; a longer one, an outage or an unreadable answer ends the run and sets `next_sync_after` (Xero's wait, or 1, 2, 4
+  minutes and so on up to an hour); a 401 refreshes once; a refused refresh or a 403 marks needs reconnect. `planBill`
+  keeps each bill once by its version, takes a new open bill only when due or dated from 90 days before the first
+  connection (`window_from`), and signs `accounting_bill_closed` when a bill already added is paid, voided or deleted in
+  Xero. `POST /api/platform/accounting-sync` (the agent's bearer token, Supabase Cron every 15 minutes,
+  `.github/workflows/accounting-sync.yml` by hand) runs each connection due (`accounting_connections_due`) for at most
+  240 seconds, each under its five-minute sync lease and in its own workspace's scope, then revokes and deletes pending
+  grants past their deadline. **Sync now** runs one in its action.
+- **Adding bills** (`review.ts`, `src/lib/commands/accounting.ts`). The review list on Bills & receivables reads each bill
+  in review as a row of a bill list and gives it its fate with `fatesOf` and `checkBillList`'s own facts, so duplicates,
+  currencies (shadow mode for anything but USDC and EURC, never VND), decimals and the form's schema are the import's.
+  The supplier is the counterparty its contact is linked to, else the one with its name, else a new one added with the
+  bill (a vendor, no address, a limit of its largest bill there). `accounting.add_bills` and `accounting.dismiss_bills`
+  (`records.write`, the console only) check the bills again on the server, claim each before adding it, add it through
+  `addInvoice` with `via: "xero"` and Xero's ids, and link the bill and the supplier.
+- **The payment account** (I14): an owner or admin reads the chart of accounts from Xero, picks a bank account (or one
+  Xero lets take payments; never revenue or expense), sees a preview (`booking.ts`), and keeps it on the connection
+  (`accounting_payment_account_chosen`). Nothing is written to Xero in this version.
+- **Before migration 0101** a missing table or function (`PGRST205`, `PGRST202`, `42P01`, `42883`) reads as
+  `NotSetUpError`: the card says Xero is not set up yet, the review list is not shown, and the sweeper has nothing to do.
 
 ## API
 

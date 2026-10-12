@@ -37,9 +37,11 @@ export async function createCounterparty(input: {
   purchaseOrderRequired?: boolean;
   /** With `via: "github"`: the installation the comment came through, and the GitHub user who wrote it (bounties B11). */
   github?: { installationId: number; login: string };
+  /** A supplier added with a bill brought in from an accounting tool, by the tool's ids (Xero connector X11). */
+  external?: { provider: "xero" | "quickbooks"; ids: { tenantId: string; contactId: string | null } };
   now?: () => string;
 }): Promise<CreatedCounterparty> {
-  const { actorId, counterparty, via, apiKeyId, github, purchaseOrderRequired } = input;
+  const { actorId, counterparty, via, apiKeyId, github, purchaseOrderRequired, external } = input;
   const purchaseOrders = purchaseOrderRequired === undefined ? {} : { purchaseOrderRequired };
   // The workspace's own chain when none is given; one its network does not pay on is refused here too (network threading P3).
   const chain = chainOn(workspaceNetwork().id, counterparty.chain).id;
@@ -83,6 +85,7 @@ export async function createCounterparty(input: {
       ...purchaseOrders,
       ...(via === "api" ? { via, apiKeyId, addressNeedsConfirmation } : {}),
       ...(via === "github" ? { via, installationId: github?.installationId, login: github?.login, addressNeedsConfirmation } : {}),
+      ...(external ? { via: external.provider, [external.provider]: external.ids } : {}),
     },
   });
 

@@ -56,6 +56,14 @@ const CRUD_UPDATE: Record<string, { column: string; expr: string }> = {
   shadow_modes: { column: "currency", expr: "'USD'" },
 };
 
+/** The connector tables (0101): updated by their own workspace, never deleted by the tenant role. */
+const KEEP_UPDATE: Record<string, { column: string; expr: string }> = {
+  accounting_connections: { column: "last_error", expr: "'changed'" },
+  external_links: { column: "label", expr: "'changed'" },
+  accounting_bills: { column: "review_state", expr: "'dismissed'" },
+  accounting_sync_cursors: { column: "page", expr: "coalesce(page, 0) + 1" },
+};
+
 beforeAll(async () => {
   db = await createDatabase();
   await applyMigrations(db);
@@ -177,6 +185,15 @@ describe.each(TENANT_TABLES)("%s", (table) => {
       // organization's link is hidden from the update and the delete is refused outright.
       const revoked = await asTenant(db, A, (tx) => tx.query(`update public.${table} set revoked_at = now() where org_id = $1`, [B]));
       expect(revoked.affectedRows ?? 0).toBe(0);
+      await expect(asTenant(db, A, (tx) => tx.query(`delete from public.${table} where org_id = $1`, [B]))).rejects.toThrow(/permission denied/);
+      return;
+    }
+    if (table in KEEP_UPDATE) {
+      // Kept, never deleted (0101): the tenant role updates its own connector rows and deletes none, so another
+      // organization's rows are hidden from the update and the delete is refused outright.
+      const { column, expr } = KEEP_UPDATE[table];
+      const updated = await asTenant(db, A, (tx) => tx.query(`update public.${table} set ${column} = ${expr} where org_id = $1`, [B]));
+      expect(updated.affectedRows ?? 0).toBe(0);
       await expect(asTenant(db, A, (tx) => tx.query(`delete from public.${table} where org_id = $1`, [B]))).rejects.toThrow(/permission denied/);
       return;
     }

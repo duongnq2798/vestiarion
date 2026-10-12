@@ -168,7 +168,13 @@ export function trailStep(entry: TrailEntry, network: Network = "arc-testnet"): 
   switch (entry.action) {
     case "create_invoice": {
       const document = record(detail.document);
-      const from = document ? ", read from a document" : detail.via === "import" ? ", imported from a list" : "";
+      const from = document
+        ? ", read from a document"
+        : detail.via === "import"
+          ? ", imported from a list"
+          : detail.via === "xero"
+            ? ", brought in from Xero"
+            : "";
       return { ...base, who: "person", tone: "neutral", text: `A person added it${from}.` };
     }
     case "recurring_invoice_created":

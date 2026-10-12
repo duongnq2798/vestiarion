@@ -1,0 +1,38 @@
+[
+  {
+    "id": "e1eede29-f875-4a5d-8470-17f6a29a88b1",
+    "authEventId": "d99ecdfe-391d-43d2-b834-17636ba90e8d",
+    "tenantId": "70784a63-d24b-46a9-a4db-0e70a274b056",
+    "tenantType": "ORGANISATION",
+    "tenantName": "Demo Company (Global)",
+    "createdDateUtc": "2026-10-12T07:10:01.4561230",
+    "updatedDateUtc": "2026-10-12T07:10:01.4581420"
+  },
+  {
+    "id": "32587c85-a9b3-4306-ac30-b416e8f2c841",
+    "authEventId": "d99ecdfe-391d-43d2-b834-17636ba90e8d",
+    "tenantId": "e0da6937-de07-4a14-adee-37abfac298ce",
+    "tenantType": "ORGANISATION",
+    "tenantName": "Northstar Studio Pte Ltd",
+    "createdDateUtc": "2026-10-12T07:10:01.4561230",
+    "updatedDateUtc": "2026-10-12T07:10:01.4581420"
+  },
+  {
+    "id": "9a0f0e1b-8c7d-4e6f-9a5b-4c3d2e1f0a9b",
+    "authEventId": "0c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+    "tenantId": "11111111-2222-4333-8444-555555555555",
+    "tenantType": "ORGANISATION",
+    "tenantName": "Connected Last Month Ltd",
+    "createdDateUtc": "2026-09-12T07:10:01.4561230",
+    "updatedDateUtc": "2026-09-12T07:10:01.4581420"
+  },
+  {
+    "id": "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e",
+    "authEventId": "d99ecdfe-391d-43d2-b834-17636ba90e8d",
+    "tenantId": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    "tenantType": "PRACTICE",
+    "tenantName": "An Accounting Practice",
+    "createdDateUtc": "2026-10-12T07:10:01.4561230",
+    "updatedDateUtc": "2026-10-12T07:10:01.4581420"
+  }
+]

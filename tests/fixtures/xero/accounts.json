@@ -1,0 +1,74 @@
+{
+  "Id": "8a4a9b16-4ae5-4c1d-9d7b-3d1f0e8f1a05",
+  "Status": "OK",
+  "ProviderName": "Vestiarion",
+  "DateTimeUTC": "/Date(1791790305120)/",
+  "Accounts": [
+    {
+      "AccountID": "13918178-849a-4823-9a31-57b7eac713d7",
+      "Code": "090",
+      "Name": "Business Bank Account",
+      "Status": "ACTIVE",
+      "Type": "BANK",
+      "TaxType": "NONE",
+      "Class": "ASSET",
+      "EnablePaymentsToAccount": false,
+      "ShowInExpenseClaims": false,
+      "BankAccountNumber": "121232434",
+      "BankAccountType": "BANK",
+      "CurrencyCode": "USD",
+      "ReportingCode": "ASS",
+      "HasAttachments": false,
+      "UpdatedDateUTC": "/Date(1791789322093+0000)/",
+      "AddToWatchlist": false
+    },
+    {
+      "AccountID": "6f7594f2-f059-4d56-9e67-47ac9733bfe9",
+      "Code": "091",
+      "Name": "Arc USDC wallet",
+      "Status": "ACTIVE",
+      "Type": "BANK",
+      "Class": "ASSET",
+      "EnablePaymentsToAccount": false,
+      "BankAccountType": "BANK",
+      "CurrencyCode": "USD",
+      "UpdatedDateUTC": "/Date(1791789322093+0000)/"
+    },
+    {
+      "AccountID": "a1b2c3d4-0000-4000-8000-0000000000e1",
+      "Code": "092",
+      "Name": "UK Account",
+      "Status": "ACTIVE",
+      "Type": "BANK",
+      "Class": "ASSET",
+      "EnablePaymentsToAccount": false,
+      "BankAccountType": "BANK",
+      "CurrencyCode": "GBP",
+      "UpdatedDateUTC": "/Date(1791789322093+0000)/"
+    },
+    {
+      "AccountID": "a1b2c3d4-0000-4000-8000-0000000000e2",
+      "Code": "093",
+      "Name": "Old Savings",
+      "Status": "ARCHIVED",
+      "Type": "BANK",
+      "Class": "ASSET",
+      "EnablePaymentsToAccount": false,
+      "BankAccountType": "BANK",
+      "CurrencyCode": "USD"
+    },
+    { "AccountID": "a1b2c3d4-0000-4000-8000-0000000000e3", "Code": "200", "Name": "Sales", "Status": "ACTIVE", "Type": "REVENUE", "Class": "REVENUE", "EnablePaymentsToAccount": false },
+    { "AccountID": "a1b2c3d4-0000-4000-8000-0000000000e4", "Code": "404", "Name": "Bank Fees", "Status": "ACTIVE", "Type": "EXPENSE", "Class": "EXPENSE", "EnablePaymentsToAccount": true },
+    { "AccountID": "a1b2c3d4-0000-4000-8000-0000000000e5", "Code": "610", "Name": "Stablecoin clearing", "Status": "ACTIVE", "Type": "CURRENT", "Class": "ASSET", "EnablePaymentsToAccount": true },
+    {
+      "AccountID": "a1b2c3d4-0000-4000-8000-0000000000e6",
+      "Code": "800",
+      "Name": "Accounts Payable",
+      "Status": "ACTIVE",
+      "Type": "CURRLIAB",
+      "Class": "LIABILITY",
+      "EnablePaymentsToAccount": false,
+      "SystemAccount": "CREDITORS"
+    }
+  ]
+}
