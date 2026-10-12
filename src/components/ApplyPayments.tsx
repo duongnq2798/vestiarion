@@ -175,7 +175,7 @@ function SuggestionRow({
             }}
           >
             <Field id={`fee-reason-${suggestion.lines[0]?.invoiceId}`} label="Why the difference is a fee">
-              <Input value={reason} onChange={(event) => setReason(event.target.value)} maxLength={REASON_MAX} placeholder="Such as a transfer fee the client's bank took" />
+              <Input value={reason} onChange={(event) => setReason(event.target.value)} maxLength={REASON_MAX} placeholder="Such as a bank's transfer fee" />
             </Field>
             <Button type="submit" size="sm" loading={pending} disabled={reason.trim() === ""}>
               Apply and record the fee

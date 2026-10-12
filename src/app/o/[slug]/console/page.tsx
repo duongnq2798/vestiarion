@@ -60,6 +60,8 @@ import { walletTreasuryAvailable } from "@/lib/config";
 import { shellStatus } from "@/lib/shell-status";
 import { flightRows, followUpOf, type FlightRow } from "@/lib/settlement-facts";
 import { readPaymentsInFlight } from "@/lib/settlement-read";
+import { readAllocationRows, toReceivableIn } from "@/lib/allocations/book";
+import { fromMicros, receivableBalance } from "@/lib/allocations/model";
 
 export const dynamic = "force-dynamic";
 
@@ -249,6 +251,18 @@ export default async function DashboardPage({
     // What the agent will pay next, soonest first (payment timing design §1):
     // derived from the invoices already loaded above, no extra query.
     const scheduledPayments = scheduledPaymentRows(invoices);
+    // A part-paid receivable is expected for what is still owed: what was received is in the wallet already
+    // (allocations L11). Best effort: before migration 0103, or on a failed read, each counts in full, as before.
+    const receivableIds = invoices.filter((invoice) => invoice.direction === "receivable").map((invoice) => invoice.id);
+    const applied =
+      (receivableIds.length > 0
+        ? await readAllocationRows(db(), { invoiceIds: receivableIds }).catch((error: unknown) => {
+            console.error("console: payments applied not read", error instanceof Error ? error.message : error);
+            return null;
+          })
+        : null) ?? [];
+    const stillOwed = (invoice: (typeof invoices)[number]) =>
+      applied.some((row) => row.invoiceId === invoice.id) ? fromMicros(receivableBalance(toReceivableIn(invoice), applied, false).outstanding) : invoice.amount;
     // Safe to spend today and the next 30 days (safe to spend design), from the rows already loaded: the
     // operating wallet's USDC and the USYC reserve's, less what the agent counts as owed.
     const outlookInput: OutlookInput = {
@@ -261,7 +275,7 @@ export default async function DashboardPage({
       milestones: milestones.map((milestone) => ({ ...milestone, contractor: milestone.contractor_name })),
       receivables: invoices
         .filter((invoice) => invoice.direction === "receivable")
-        .map((invoice) => ({ ...invoice, counterparty: invoice.counterparty_name, currency: invoice.currency ?? null })),
+        .map((invoice) => ({ ...invoice, amount: stillOwed(invoice), counterparty: invoice.counterparty_name, currency: invoice.currency ?? null })),
     };
     const outlook = cashOutlook(outlookInput);
     // What the cash scenarios start from (cash scenarios C2-C4): the same rows over 90 days, with the recurring payments

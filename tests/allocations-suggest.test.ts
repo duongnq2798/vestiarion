@@ -120,7 +120,7 @@ describe("with no customer known", () => {
     const receivables = [receivable("INV-1", 100), receivable("INV-2", 150, { counterpartyId: "beacon", customer: "Beacon Labs" }), receivable("INV-3", 50, { counterpartyId: "beacon", customer: "Beacon Labs" })];
     const [first] = suggest(payment(200, unknown), receivables);
     expect(first).toMatchObject({ rule: "combination", customerId: "beacon" });
-    expect(first.why).toBe("It pays Beacon Labs's Invoice INV-2 and Invoice INV-3 exactly: 200.00 USDC.");
+    expect(first.why).toBe("It pays Beacon Labs' Invoice INV-2 and Invoice INV-3 exactly: 200.00 USDC.");
   });
 
   it("suggests nothing it cannot tell", () => {

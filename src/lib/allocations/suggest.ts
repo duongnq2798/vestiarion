@@ -62,6 +62,11 @@ export function receivableLabel(receivable: Pick<ReceivableIn, "memo" | "dueDate
   return memo ? memo : `the invoice due ${utcDay(receivable.dueDate)}`;
 }
 
+/** "Acme Corp's", "Beacon Labs'". */
+export function possessive(name: string): string {
+  return /s$/i.test(name) ? `${name}'` : `${name}'s`;
+}
+
 function listWords(words: string[]): string {
   if (words.length <= 1) return words.join("");
   if (words.length === 2) return `${words[0]} and ${words[1]}`;
@@ -149,7 +154,7 @@ export function suggestAllocations(input: { payment: PaymentIn; book: Book; cust
   const senders = payment.from ? customers.filter((customer) => customer.address && sameAddress(customer.address, payment.from as string)) : [];
   const known = state.customerId ?? (senders.length === 1 ? senders[0].id : null);
   if (known) {
-    const from = state.customerId ? `Left from a payment applied to ${nameOf(known)} before` : `From ${nameOf(known)}'s address on file`;
+    const from = state.customerId ? `Left from a payment applied to ${nameOf(known)} before` : `From ${possessive(nameOf(known))} address on file`;
     const pool = open.filter((entry) => entry.receivable.counterpartyId === known);
     const exact = pool.find((entry) => entry.outstanding === left);
     if (exact) found.push(suggestion(known, "exact", [{ invoiceId: exact.receivable.id, amount: left }], `${from}, and exactly what is still owed on ${receivableLabel(exact.receivable)}.`));
@@ -213,7 +218,7 @@ export function suggestAllocations(input: { payment: PaymentIn; book: Book; cust
           customerId,
           "combination",
           set.map((entry) => ({ invoiceId: entry.receivable.id, amount: entry.outstanding })),
-          `It pays ${nameOf(customerId)}'s ${listWords(set.map((entry) => receivableLabel(entry.receivable)))} exactly: ${money(left)}.`
+          `It pays ${possessive(nameOf(customerId))} ${listWords(set.map((entry) => receivableLabel(entry.receivable)))} exactly: ${money(left)}.`
         )
       );
     }
@@ -235,7 +240,8 @@ export function suggestAllocations(input: { payment: PaymentIn; book: Book; cust
   const seen = new Set<string>();
   return found
     .filter((candidate) => {
-      const key = candidate.lines.map((line) => `${line.invoiceId}:${line.amount}`).join("|") + (candidate.fee ? `+fee:${candidate.fee.amount}` : "");
+      // The same lines with or without a fee are one suggestion: a fee's suggestion also offers to leave the rest owed.
+      const key = candidate.lines.map((line) => `${line.invoiceId}:${line.amount}`).join("|");
       if (seen.has(key)) return false;
       seen.add(key);
       return true;

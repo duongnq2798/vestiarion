@@ -233,7 +233,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       const view = allocations.get(decision.id);
       if (!view || view.state !== "part_paid") return {};
       const money = (value: number) => `${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} ${view.currency}`;
-      return { note: `Part paid: ${money(view.paid)} of ${money(view.amount)} received, ${money(view.outstanding)} still owed` };
+      return { note: `Part paid · ${money(view.outstanding)} still owed` };
     };
 
     // A payable waiting for a person: the purchase order and goods receipt on file, and what a person added since

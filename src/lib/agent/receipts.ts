@@ -13,7 +13,7 @@ import { floatAddress } from "../test-usdc";
  * (R3). An unmatched one is then matched to an open receivable of the same currency and amount: the
  * client's own address first (oldest due among them), else the only receivable of that amount. Two of
  * the same amount with no sender to tell them apart stay unmatched for a person (R1). A sandbox has no
- * real wallet and reads nothing (R4). Only a matched transfer counts as money received: the wallet also
+ * real wallet and reads nothing (R4). Only a transfer matched or applied counts as money received: the wallet also
  * receives faucet drips and swap proceeds, which owe nothing to a receivable, nor does test USDC from Vestiarion's
  * float (docs/superpowers/specs/2026-10-08-shadow-test-usdc-design.md T6), which is never matched.
  *

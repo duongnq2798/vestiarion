@@ -110,7 +110,7 @@ describe("a receivable's card", () => {
     const decision = invoiceDecision(invoiceRow(), undefined, [], { network: "arc-testnet", allocations: views });
     expect(decision.outcomeLabel).toBe("Part paid");
     expect(decision.reasoning).toBe(
-      "Part paid: 300.00 of 900.00 USDC received from one payment. 600.00 USDC is still owed. When exactly that arrives in the operating wallet on Arc testnet, the agent applies it to this invoice; another amount waits under Apply payments."
+      "Part paid: 300.00 USDC of 900.00 USDC received from one payment, and 600.00 USDC still owed. When exactly the rest arrives in the operating wallet on Arc testnet, the agent applies it by itself; another amount waits under Apply payments."
     );
     expect(decision.evidence).toEqual(
       expect.arrayContaining([
@@ -125,7 +125,7 @@ describe("a receivable's card", () => {
     const paid = receivableViews(book({ rows }), [receivable(A, 900, { status: "received" })]);
     const decision = invoiceDecision(invoiceRow({ status: "received", tx_ref: TX }), undefined, [], { network: "arc-testnet", allocations: paid });
     expect(decision.outcomeLabel).toBe("Received on Arc");
-    expect(decision.reasoning).toBe("Paid by one payment received on Arc testnet and applied to this invoice, 899.70 USDC, and 0.30 USDC recorded as a fee.");
+    expect(decision.reasoning).toBe("Paid by one payment received on Arc testnet, 899.70 USDC, and 0.30 USDC recorded as a fee.");
   });
 
   it("is as before with nothing applied", () => {
@@ -245,5 +245,11 @@ describe("the actions", () => {
     expect(page).toContain("Applying payments is not set up on this deployment yet.");
     expect(page).toContain('<form method="get" role="search"');
     expect(page).toContain("invoiceMatch(search, invoice, ");
+  });
+
+  it("count a part-paid receivable on Treasury at what is still owed, the rest being in the wallet already", () => {
+    const treasury = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "console", "page.tsx"), "utf8");
+    expect(treasury).toContain("readAllocationRows(db(), { invoiceIds: receivableIds }).catch(");
+    expect(treasury).toContain("amount: stillOwed(invoice), counterparty: invoice.counterparty_name");
   });
 });

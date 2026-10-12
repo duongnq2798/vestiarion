@@ -182,7 +182,7 @@ function RecordFee({ orgSlug, view, label, onDone }: { orgSlug: string; view: Re
             <Input name="amount" required inputMode="decimal" placeholder="0.00" />
           </Field>
           <Field id={`fee-${view.invoiceId}-reason`} label="Why it is a fee">
-            <Input name="reason" required maxLength={REASON_MAX} placeholder="Such as a transfer fee the client's bank took" />
+            <Input name="reason" required maxLength={REASON_MAX} placeholder="Such as a bank's transfer fee" />
           </Field>
           {error && <FormMessage tone="error">{error}</FormMessage>}
           <DialogFooter>

@@ -205,9 +205,9 @@ function receivableDecision(invoice: InvoiceRow, entries: LedgerEntry[], network
 
   const reasoning = byPayments
     ? partPaid
-      ? `Part paid: ${fmt(byPayments.paid)} of ${fmt(invoice.amount)} ${currency} received from ${paymentCount === 1 ? "one payment" : `${paymentCount} payments`}${feeWords}. ${fmt(byPayments.outstanding)} ${currency} is still owed. When exactly that arrives in the operating wallet on ${label}, the agent applies it to this invoice; another amount waits under Apply payments.`
+      ? `Part paid: ${fmt(byPayments.paid)} ${currency} of ${fmt(invoice.amount)} ${currency} received from ${paymentCount === 1 ? "one payment" : `${paymentCount} payments`}${feeWords}, and ${fmt(byPayments.outstanding)} ${currency} still owed. When exactly the rest arrives in the operating wallet on ${label}, the agent applies it by itself; another amount waits under Apply payments.`
       : settled
-        ? `Paid by ${paymentCount === 1 ? "one payment" : `${paymentCount} payments`} received on ${label} and applied to this invoice, ${fmt(byPayments.paid)} ${currency}${feeWords}.`
+        ? `Paid by ${paymentCount === 1 ? "one payment" : `${paymentCount} payments`} received on ${label}, ${fmt(byPayments.paid)} ${currency}${feeWords}.`
         : presentReasoning(invoice.agent_reasoning) || "Closed."
     : received
     ? `Received ${fmt(numberValue(detail?.amount) ?? invoice.amount)} ${stringValue(detail?.currency) ?? currency}${from ? ` from ${shortAddress(from)}` : ""} on ${label}` +
