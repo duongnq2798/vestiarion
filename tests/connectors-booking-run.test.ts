@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   approvePosting,
+  closeDrafts,
   confirmInFlight,
   draftPostings,
   type BookingStore,
@@ -64,6 +65,8 @@ const ALLOWED: Record<PostingState, PostingState[]> = {
 /** The database's rules, in memory. */
 function memoryStore(candidates: Candidate[] = [], shadow = true) {
   const rows = new Map<string, PostingRow>();
+  /** The bills as the last sync left them, by their id in Xero. */
+  const synced = new Map<string, { status: ExternalBill["status"]; amountDue: string }>();
   const entries: LedgerEntryInput[] = [];
   let next = 1;
   const store: BookingStore = {
@@ -114,12 +117,13 @@ function memoryStore(candidates: Candidate[] = [], shadow = true) {
       rows.set(row.id, after);
       return { ...after };
     },
+    drafts: async () => [...rows.values()].filter((row) => row.state === "draft").map((row) => ({ posting: { ...row }, bill: synced.get(row.billExternalId) ?? null })),
     inFlight: async (_connectionId, nowIso) => [...rows.values()].filter((row) => row.state === "sent" || (row.state === "sending" && (row.sendingUntil ?? "") <= nowIso)),
     record: async (entry) => {
       entries.push(entry);
     },
   };
-  return { store, rows, entries };
+  return { store, rows, entries, synced };
 }
 
 const openBill = (fields: Partial<ExternalBill> = {}): ExternalBill => ({
@@ -202,7 +206,7 @@ async function drafted(options: { candidate?: Partial<Candidate>; shadow?: boole
   return { ...world, xero, row };
 }
 
-const approve = (world: ReturnType<typeof memoryStore>, booking: BookingProvider, row: PostingRow, fields: Partial<Parameters<typeof approvePosting>[0]> = {}) =>
+const approve = (world: Pick<ReturnType<typeof memoryStore>, "store" | "rows" | "entries">, booking: BookingProvider, row: PostingRow, fields: Partial<Parameters<typeof approvePosting>[0]> = {}) =>
   approvePosting({
     deps: deps(world.store, booking),
     accessToken: "token",
@@ -425,6 +429,24 @@ describe("approvePosting (W6, W7)", () => {
     await expect(store.move(mainnetShadow, ["draft"], "sending", { organisationDemo: false, sendingUntil: "x", account: ACCOUNT, fingerprint: "f" })).rejects.toThrow(/reality/);
     expect(xero.booking.bookPayment).not.toHaveBeenCalled();
     expect(entries).toHaveLength(1);
+  });
+});
+
+describe("closeDrafts (W3)", () => {
+  it("refuses a draft whose bill the last sync saw paid in Xero, or voided, and leaves an open one", async () => {
+    const world = memoryStore([candidate(), candidate({ invoiceId: "inv-2", billExternalId: "bill-2" }), candidate({ invoiceId: "inv-3", billExternalId: "bill-3" })]);
+    const xero = fakeXero();
+    await draftPostings(deps(world.store, xero.booking));
+    world.synced.set(BILL, { status: "paid", amountDue: "0" });
+    world.synced.set("bill-2", { status: "voided", amountDue: "31.39" });
+    world.synced.set("bill-3", { status: "open", amountDue: "31.39" });
+    expect(await closeDrafts(deps(world.store, xero.booking))).toBe(2);
+    const byBill = new Map([...world.rows.values()].map((row) => [row.billExternalId, row]));
+    expect(byBill.get(BILL)).toMatchObject({ state: "refused", reason: "already_paid", message: "Already paid in Xero." });
+    expect(byBill.get("bill-2")).toMatchObject({ state: "refused", reason: "bill_closed" });
+    expect(byBill.get("bill-3")?.state).toBe("draft");
+    expect(world.entries.filter((entry) => entry.action === "accounting_payment_refused")).toHaveLength(2);
+    expect(xero.booking.bookPayment).not.toHaveBeenCalled();
   });
 });
 

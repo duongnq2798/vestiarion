@@ -45,6 +45,8 @@ export const COMMAND_PERMISSIONS = {
   // Bills an accounting tool brought in (Xero connector X3, X11): added through the bill list's check, or dismissed.
   "accounting.add_bills": "records.write",
   "accounting.dismiss_bills": "records.write",
+  // Booking payments made on Arc in the accounting tool, after a person reviewed each (accounting write-back W6).
+  "accounting.book_payments": "accounting.book",
   // A public link to the workspace report, and stopping one; the value question is the business's own figure about
   // itself, an owner's (shared report S3).
   "report.share": "report.share",

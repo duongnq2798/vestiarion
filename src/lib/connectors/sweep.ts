@@ -1,7 +1,8 @@
 import { currentOrgId } from "../context";
 import { platformDb } from "../dal";
 import { withOrg } from "../dal/scope";
-import { isNotSetUp } from "./connections";
+import { bookingInScope } from "./booking-sync";
+import { isNotSetUp, NotSetUpError } from "./connections";
 import type { AccountingProvider, ProviderId } from "./provider";
 import { syncConnection, type SyncResult } from "./sync";
 import { syncStore } from "./sync-store";
@@ -29,9 +30,22 @@ export interface SweepSummary {
 /** A sweep stops starting syncs after this long; the route may run 300 seconds. */
 export const SWEEP_BUDGET_MS = 240_000;
 
-/** Runs one connection's sync in the workspace already in scope, with the database's stores. */
-export function syncInScope(connectionId: string, provider: AccountingProvider, options: { maxPages?: number } = {}): Promise<SyncResult> {
-  return syncConnection({ connectionId, provider, db: syncStore, tokens: connectionTokenStore(currentOrgId(), connectionId), ...options });
+/**
+ * Runs one connection's sync in the workspace already in scope, with the database's stores; then its bookings
+ * (docs/superpowers/specs/2026-10-12-accounting-writeback-design.md W3): the payments confirmed on Arc since are drafted
+ * for review, and those sent are read back. Best effort: a booking step that fails never fails the sync, and before
+ * migration 0106 it has nothing to do.
+ */
+export async function syncInScope(connectionId: string, provider: AccountingProvider, options: { maxPages?: number } = {}): Promise<SyncResult> {
+  const result = await syncConnection({ connectionId, provider, db: syncStore, tokens: connectionTokenStore(currentOrgId(), connectionId), ...options });
+  if (provider.booking && result.outcome !== "reconnect" && result.outcome !== "busy") {
+    try {
+      await bookingInScope(connectionId, provider);
+    } catch (error) {
+      if (!(error instanceof NotSetUpError)) console.error("accounting: the bookings step failed", connectionId, error instanceof Error ? error.message : "unknown error");
+    }
+  }
+  return result;
 }
 
 export async function sweepAccounting(deps: {

@@ -112,6 +112,8 @@ export interface BookingStore {
    * null when it was in none of them. `sending` counts as a `from` only once its lease ran out, when `nowIso` is given.
    */
   move(posting: PostingRow, from: readonly PostingState[], to: PostingState, patch: Partial<PostingPatch>, options?: { leaseOverAt?: string }): Promise<PostingRow | null>;
+  /** The connection's drafts, each with its bill as the last sync left it (null when it is no longer kept). */
+  drafts(connectionId: string): Promise<Array<{ posting: PostingRow; bill: { status: SourceStatus; amountDue: string } | null }>>;
   /** Sent and not yet confirmed, and sending past its lease: what a run reads back. */
   inFlight(connectionId: string, nowIso: string): Promise<PostingRow[]>;
   /** Appends a signed entry, best effort: the transition stands either way. */
@@ -238,6 +240,27 @@ export async function draftPostings(deps: BookingDeps & { accessToken: () => Pro
     });
   }
   return result;
+}
+
+/**
+ * Drafts whose bill the last sync saw closed in the tool (W3): paid there (its accountant booked it by hand) is refused
+ * as already paid, voided or deleted as closed. So a draft never waits for a review that could only refuse it.
+ */
+export async function closeDrafts(deps: BookingDeps): Promise<number> {
+  let closed = 0;
+  for (const { posting, bill } of await deps.store.drafts(deps.connection.id)) {
+    if (!bill) continue;
+    const refusal =
+      bill.status === "paid" || (bill.status === "open" && Number(bill.amountDue) <= 0)
+        ? { reason: "already_paid", message: alreadyPaid(deps.label) }
+        : bill.status === "voided" || bill.status === "deleted"
+          ? { reason: "bill_closed", message: `The bill was ${bill.status} in ${deps.label}: nothing to book against.` }
+          : null;
+    if (!refusal) continue;
+    await refuse(deps, posting, ["draft"], refusal.reason, refusal.message);
+    closed += 1;
+  }
+  return closed;
 }
 
 /** What one approved line came to. */

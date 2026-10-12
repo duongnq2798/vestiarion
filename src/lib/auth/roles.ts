@@ -29,6 +29,10 @@ export const PERMISSIONS = {
   // Connecting the workspace to Slack, which sends the agent's decisions to a channel, or removing it (Slack design S3); to
   // GitHub; and to Xero, whose bills it reads, with the account payments will be booked to (Xero connector X3).
   "integrations.manage": ["owner", "admin"],
+  // Writing a payment made on Arc into the business's own books, after reviewing exactly what is written (accounting
+  // write-back W6): its own act, apart from adding records and from deciding payments, so an accountant role, when
+  // there is one, gets this alone.
+  "accounting.book": ["owner", "admin"],
   // Putting the workspace's report outside it by a public link, or stopping one: a control over every member's data,
   // as API keys and webhooks are (shared report S3).
   "report.share": ["owner", "admin"],
