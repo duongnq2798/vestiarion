@@ -134,5 +134,6 @@ describe("syncStore", () => {
     });
     expect(await ended({ kind: "reconnect", at: "2026-10-12T08:00:00.000Z", error: "Reconnect Xero." })).toMatchObject({ status: "needs_reconnect", sync_lease_until: null });
     expect(await ended({ kind: "partial", at: "2026-10-12T08:00:00.000Z" })).not.toHaveProperty("last_synced_at");
+    expect(await ended({ kind: "released", at: "2026-10-12T08:00:00.000Z" })).toEqual({ sync_lease_until: null });
   });
 });

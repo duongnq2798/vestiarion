@@ -205,6 +205,10 @@ export const syncStore: SyncDb = {
 
   async finish(connectionId, outcome: SyncFinish) {
     const done = { sync_lease_until: null };
+    if (outcome.kind === "released") {
+      unwrap(await db().from("accounting_connections").update(done).eq("id", connectionId).select("id"));
+      return;
+    }
     const values =
       outcome.kind === "synced"
         ? { ...done, last_synced_at: outcome.at, last_error: null, last_error_at: null, failures: 0, next_sync_after: null }

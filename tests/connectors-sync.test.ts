@@ -228,6 +228,20 @@ describe("syncConnection", () => {
     expect((await run(memory.db, provider({}).provider, empty)).outcome).toBe("reconnect");
   });
 
+  it("lets the connection go, recording nothing, when another holder keeps refreshing its tokens", async () => {
+    const memory = memoryDb();
+    const busy: TokenStore = {
+      read: async () => ({ id: "tok", version: 1, accessToken: "a", refreshToken: "r", expiresAt: NOW, scopes: [] }),
+      lease: async () => null,
+      store: async () => false,
+      release: async () => undefined,
+    };
+    const { provider: p, calls } = provider({ bills: backfill });
+    expect((await run(memory.db, p, busy)).outcome).toBe("busy");
+    expect(calls).toEqual([]);
+    expect(memory.finishes).toEqual([{ kind: "released", at: "2026-10-12T10:00:00.000Z" }]);
+  });
+
   it("reads nothing while another run holds the connection", async () => {
     const memory = memoryDb({ leased: true });
     const { provider: p, calls } = provider({ bills: backfill });

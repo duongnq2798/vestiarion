@@ -71,7 +71,9 @@ create table if not exists public.accounting_tokens (
   org_id             uuid not null references public.orgs(id) on delete cascade,
   provider           text not null constraint accounting_tokens_provider_check check (provider in ('xero', 'quickbooks')),
   connection_id      uuid,
-  authorized_by      uuid references auth.users(id) on delete cascade,
+  -- Who authorized it at the provider: a pending choice is theirs alone. A connection keeps working once they are gone, as
+  -- Slack's and GitHub's do.
+  authorized_by      uuid references auth.users(id) on delete set null,
   access_token_enc   jsonb not null,
   refresh_token_enc  jsonb not null,
   access_expires_at  timestamptz not null,

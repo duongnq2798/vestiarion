@@ -22,6 +22,8 @@ export type SyncFinish =
   | { kind: "synced"; at: string }
   /** The page budget ran out: the cursor holds the next page, and the next run goes on. */
   | { kind: "partial"; at: string }
+  /** Nothing read: another holder was refreshing the tokens. The lease goes, and nothing else changes. */
+  | { kind: "released"; at: string }
   | { kind: "failed"; at: string; error: string; failures: number; nextSyncAfter: string }
   | { kind: "reconnect"; at: string; error: string };
 
@@ -164,7 +166,11 @@ export async function syncConnection(input: {
     if (error instanceof TokenFailure) {
       const outcome = error.outcome;
       if (outcome.reason === "reconnect" || outcome.reason === "missing") return reconnect();
-      return fail(outcome.reason === "busy" ? "unavailable" : "unavailable", outcome.reason === "unavailable" ? outcome.retryAfterMs : null);
+      if (outcome.reason === "busy") {
+        await db.finish(connection.id, { kind: "released", at: iso(now()) });
+        return { ...result, outcome: "busy" };
+      }
+      return fail("unavailable", outcome.retryAfterMs);
     }
     if (error instanceof ProviderError) {
       if (error.failure === "forbidden" || error.failure === "unauthorized") return reconnect();
