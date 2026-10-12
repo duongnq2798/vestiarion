@@ -5,7 +5,7 @@ import { ProviderError } from "@/lib/connectors/provider";
 import { searchBody } from "@/lib/hubspot/api";
 import { authorizeUrl, exchangeCode, listAccount, refreshTokens, revokeToken } from "@/lib/hubspot/oauth";
 import { hubspotProvider } from "@/lib/hubspot/provider";
-import { hubspotRedirectUri, hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
+import { HUBSPOT_SCOPES, hubspotRedirectUri, hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
 
 /**
  * HubSpot over HTTP (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H4, H5, H6, H8), against a recording
@@ -236,5 +236,25 @@ describe("refusals and rate limits", () => {
     expect(await failure(new Response("", { status: 502 }))).toMatchObject({ failure: "unavailable" });
     expect(await failure(json({ category: "VALIDATION_ERROR" }, { status: 400 }))).toMatchObject({ failure: "bad_response" });
     expect(await failure(new Response("<html>", { status: 200 }))).toMatchObject({ failure: "bad_response" });
+  });
+});
+
+describe("the app's config in integrations/hubspot", () => {
+  const config = JSON.parse(readFileSync(path.join(process.cwd(), "integrations", "hubspot", "src", "app", "app-hsmeta.json"), "utf8")) as {
+    config: { auth: { type: string; redirectUrls: string[]; requiredScopes: string[]; optionalScopes: string[] }; distribution: string };
+  };
+
+  it("asks for exactly the scopes the authorize URL sends, read-only, and lists both callbacks", () => {
+    expect(config.config.auth.type).toBe("oauth");
+    expect(config.config.distribution).toBe("marketplace");
+    expect([...config.config.auth.requiredScopes].sort()).toEqual([...HUBSPOT_SCOPES].sort());
+    expect(config.config.auth.redirectUrls).toEqual(
+      expect.arrayContaining([hubspotRedirectUri("https://www.vestiarion.xyz"), hubspotRedirectUri("http://localhost:3000")])
+    );
+  });
+
+  it("holds no secret", () => {
+    const text = readFileSync(path.join(process.cwd(), "integrations", "hubspot", "src", "app", "app-hsmeta.json"), "utf8");
+    expect(text).not.toMatch(/secret|token|password/i);
   });
 });

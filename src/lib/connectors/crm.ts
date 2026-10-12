@@ -153,10 +153,10 @@ export function dayWords(day: string): string {
   return `${MONTHS[month - 1]} ${date}, ${year}`;
 }
 
-/** An exact decimal with its thousands grouped: `15000.5` as "15,000.5". */
+/** An exact decimal with its thousands grouped, and cents written whole: `15000.5` as "15,000.50". */
 export function groupedDecimal(amount: string): string {
   const [whole, fraction] = amount.split(".");
-  return `${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}${fraction ? `.${fraction}` : ""}`;
+  return `${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}${fraction ? `.${fraction.padEnd(2, "0")}` : ""}`;
 }
 
 /** An amount in its currency for a person, or null for a currency Vestiarion never names (VND). */

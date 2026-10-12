@@ -109,7 +109,7 @@ describe("crmChanges", () => {
 describe("crmChangeWords", () => {
   it("says each change in plain words, and that nothing is cancelled", () => {
     expect(crmChangeWords({ what: "amount", from: { amount: "12500", currency: "USD" }, to: { amount: "15000.5", currency: "USD" } }, "HubSpot")).toBe(
-      "Amount: 12,500 USD to 15,000.5 USD."
+      "Amount: 12,500 USD to 15,000.50 USD."
     );
     expect(crmChangeWords({ what: "close", from: "2026-10-01", to: "2026-10-20" }, "HubSpot")).toBe("Close date: Oct 1, 2026 to Oct 20, 2026.");
     expect(crmChangeWords({ what: "close", from: "2026-10-01", to: null }, "HubSpot")).toBe("Close date: Oct 1, 2026 to none.");

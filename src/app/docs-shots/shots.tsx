@@ -1941,7 +1941,7 @@ export const DOCS_SHOTS = {
             id: "00000000-0000-4000-8000-0000000000d3",
             name: "Brand refresh",
             company: "Contoso Design",
-            amount: "4,800.5 USD",
+            amount: "4,800.50 USD",
             closeOn: "2026-10-08",
             stage: "Closed Won",
             plan: { ok: true },
