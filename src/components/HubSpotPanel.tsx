@@ -10,6 +10,7 @@ import { FormMessage } from "@/components/ui/FormMessage";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
+import { BrandMark } from "@/components/vx/BrandMarks";
 import type { CrmPanelView } from "@/lib/connectors/crm-review";
 
 const INITIAL: HubSpotActionResult = { ok: false, message: "" };
@@ -66,7 +67,8 @@ function ConnectButton({ orgSlug, label }: { orgSlug: string; label: string }) {
 }
 
 /**
- * The HubSpot section of Settings (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H16, H17, H20): its
+ * The HubSpot section of Settings (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H16, H17, H20), headed
+ * by HubSpot's mark (docs/superpowers/specs/2026-10-12-integration-marks-design.md): its
  * status in business words, never "connected" while the last sync failed; the won deals to plan and the planned deals
  * changed in HubSpot, each linking to Bills & receivables; a reconnect when HubSpot no longer takes the connection; Sync
  * now and Disconnect HubSpot. Every member sees the status; an owner or admin gets the controls. `view` carries no token.
@@ -76,7 +78,18 @@ export default function HubSpotPanel({ orgSlug, view, canManage, notice }: { org
   const deals = `/o/${orgSlug}/invoices#from-hubspot`;
   return (
     <section aria-labelledby="hubspot-title" id="hubspot">
-      <SectionHeader id="hubspot-title" title="HubSpot" action={<DocsLink href="/docs/guides/hubspot" topic="HubSpot" />} />
+      <SectionHeader
+        id="hubspot-title"
+        // The mark has no text baseline: the title is a flex row, centred, so Docs sits level with it.
+        className="items-center"
+        title={
+          <span className="flex items-center gap-2">
+            <BrandMark brand="hubspot" />
+            HubSpot
+          </span>
+        }
+        action={<DocsLink href="/docs/guides/hubspot" topic="HubSpot" />}
+      />
       <Card className="space-y-4 p-5">
         {told && (
           <p role="status" className={told.tone === "success" ? "text-sm text-ink" : "text-sm text-refused"}>

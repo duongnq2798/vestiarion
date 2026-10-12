@@ -11,6 +11,7 @@ import { FormMessage } from "@/components/ui/FormMessage";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
+import { BrandName, PROVIDER_MARKS } from "@/components/vx/BrandMarks";
 import { accountName } from "@/lib/connectors/booking";
 import type { AccountingPanelView } from "@/lib/connectors/panel";
 import { PROVIDER_LABELS, PROVIDER_WORDS, type ProviderId } from "@/lib/connectors/provider";
@@ -88,7 +89,8 @@ function ConnectButton({ provider, orgSlug, label }: { provider: ProviderId; org
 
 /**
  * An accounting tool's section of Settings (docs/superpowers/specs/2026-10-12-xero-connector-design.md X15, X16, X19;
- * docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q15, Q19), one per tool: its status in business
+ * docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q15, Q19), one per tool, headed by its mark
+ * (docs/superpowers/specs/2026-10-12-integration-marks-design.md): its status in business
  * words, never "connected" while the last sync failed; the bills waiting for review; a reconnect when the tool no
  * longer takes the connection; Sync now and Disconnect; and the account payments made on Arc will be booked to. Every
  * member sees the status; an owner or admin gets the controls. `view` carries no token.
@@ -111,7 +113,13 @@ export default function AccountingPanel({
   const told = notice ? accountingNotices(provider)[notice] : undefined;
   return (
     <section aria-labelledby={`${provider}-title`} id={provider}>
-      <SectionHeader id={`${provider}-title`} title={label} action={<DocsLink href={`/docs/guides/${provider}`} topic={label} />} />
+      <SectionHeader
+        id={`${provider}-title`}
+        // The mark has no text baseline: the title is a flex row, centred, so Docs sits level with it.
+        className="items-center"
+        title={<BrandName brand={PROVIDER_MARKS[provider]} name={label} />}
+        action={<DocsLink href={`/docs/guides/${provider}`} topic={label} />}
+      />
       <Card className="space-y-4 p-5">
         {told && (
           <p role="status" className={told.tone === "success" ? "text-sm text-ink" : "text-sm text-refused"}>
