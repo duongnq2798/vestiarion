@@ -222,7 +222,7 @@ describe("bills", () => {
     expect(statementOf(sent[0])).toContain("STARTPOSITION 201 MAXRESULTS 100");
   });
 
-  it("follows every bill changed since the last run, whatever its balance, and asks change data capture for the deleted ones once", async () => {
+  it("follows every bill changed since the last run, whatever its balance, and asks change data capture for the deleted ones on the last page", async () => {
     const { sent, deps } = company("bills-modified.json", misc.count, JSON.parse(fixture("cdc-bills.json")));
     const page = await billsPage(SETTINGS, request({ phase: "incremental", since: "2026-10-12T09:55:00.000Z" }), deps);
     expect(statementOf(sent[0])).toBe("SELECT * FROM Bill WHERE MetaData.LastUpdatedTime >= '2026-10-12T09:55:00Z' ORDERBY MetaData.LastUpdatedTime STARTPOSITION 1 MAXRESULTS 100");
@@ -231,16 +231,21 @@ describe("bills", () => {
     expect(sent[2].url.pathname).toBe(`/v3/company/${REALM}/preferences`);
     const cdc = sent[3];
     expect(cdc.url.pathname).toBe(`/v3/company/${REALM}/cdc`);
-    expect(Object.fromEntries(cdc.url.searchParams)).toEqual({ entities: "Bill", changedSince: "2026-10-12T09:55:00Z", minorversion: "75" });
+    // Five minutes before the run's start: the last run's read may have ended a moment after it asked.
+    expect(Object.fromEntries(cdc.url.searchParams)).toEqual({ entities: "Bill", changedSince: "2026-10-12T09:50:00Z", minorversion: "75" });
     expect(page.items.map((bill) => [bill.externalId, bill.status, bill.factsKnown ?? true])).toEqual([
       ["146", "paid", true],
       ["139", "voided", true],
       ["152", "open", true],
       ["148", "deleted", false],
     ]);
-    const second = company("bills-modified.json");
-    await billsPage(SETTINGS, request({ phase: "incremental", since: "2026-10-12T09:55:00.000Z", page: 2 }), second.deps);
-    expect(second.sent.some((call) => call.url.pathname.endsWith("/cdc"))).toBe(false);
+    // A page with more to follow does not ask: the last one does, whenever the run reaches it.
+    const full = JSON.parse(fixture("bills-backfill-page-1.json")) as { QueryResponse: { Bill: Array<Record<string, unknown>> } };
+    const hundred = { QueryResponse: { Bill: Array.from({ length: 100 }, (_, index) => ({ ...full.QueryResponse.Bill[0], Id: String(1000 + index) })) } };
+    const middle = recorder((call) => (/^SELECT COUNT/.test(statementOf(call) ?? "") ? json({ QueryResponse: { totalCount: 250 } }) : json(hundred)));
+    const notLast = await billsPage(SETTINGS, request({ phase: "incremental", since: "2026-10-12T09:55:00.000Z", page: 2 }), middle.deps);
+    expect(notLast).toMatchObject({ last: false, total: 250 });
+    expect(middle.sent.some((call) => call.url.pathname.endsWith("/cdc"))).toBe(false);
   });
 
   it("asks change data capture no further back than its 30 days", async () => {

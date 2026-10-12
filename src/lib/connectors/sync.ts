@@ -145,7 +145,9 @@ export async function syncConnection(input: {
         } else {
           const read = await readPage(provider.bills, started.request);
           await applyBills(db, connection, read.items, result);
-          updatedAts = read.items.map((bill) => bill.updatedAt);
+          // A bill named by its id alone comes from the provider's change feed, not this read: its time is not how far the
+          // read got, so it never moves the next run's start past a change the read has not seen (QuickBooks Q8).
+          updatedAts = read.items.filter((bill) => bill.factsKnown !== false).map((bill) => bill.updatedAt);
           page = read;
         }
         result.pages += 1;

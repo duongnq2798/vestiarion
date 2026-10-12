@@ -1,3 +1,4 @@
+import { CLOCK_MARGIN_MS } from "../connectors/cursors";
 import type { ExternalAccount, ExternalBill, ExternalContact, ExternalOrganisation, Page, PageRequest } from "../connectors/provider";
 import { failureOf, jsonOf, quickBooksFetch, type QuickBooksHttp } from "./http";
 import { billsLackCurrency, mapBankAccounts, mapBillsPage, mapCompany, mapCount, mapDeletedBills, mapHomeCurrency, mapVendorsPage, qbFilterTime } from "./map";
@@ -6,9 +7,9 @@ import { MINOR_VERSION, quickBooksApiBase, type QuickBooksSettings } from "./set
 /**
  * Reading a QuickBooks Online company (docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q6, Q7, Q8):
  * vendors and bills a page at a time in update order, with a count of the same filter beside each page of bills; a
- * backfill of the open bills due in the window, or every bill changed since a time; the bills deleted since then from
- * change data capture; the bank accounts; and the company itself. Every call names the company in its path and
- * `minorversion=75`.
+ * backfill of the open bills due in the window, or every bill changed since a time; on the last page of the latter, the
+ * bills deleted since then, from change data capture; the bank accounts; and the company itself. Every call names the
+ * company in its path and `minorversion=75`.
  */
 
 export const PAGE_SIZE = 100;
@@ -76,10 +77,14 @@ async function homeCurrency(settings: QuickBooksSettings, request: CompanyReques
   return currency;
 }
 
-/** The bills change data capture says were deleted since `since`, at most 30 days back (Q8). */
+/**
+ * The bills change data capture says were deleted since five minutes before `since`, at most 30 days back (Q8). The five
+ * minutes overlap the run before, whose last read may have ended a moment after its own change feed was asked; a
+ * deletion read twice is kept once (X10).
+ */
 export async function deletedBills(settings: QuickBooksSettings, request: CompanyRequest & { since: string }, deps: QuickBooksHttp = {}): Promise<ExternalBill[]> {
   const earliest = (deps.now ?? Date.now)() - CDC_LOOKBACK_MS;
-  const since = Math.max(Date.parse(request.since), earliest);
+  const since = Math.max(Date.parse(request.since) - CLOCK_MARGIN_MS, earliest);
   const url = companyUrl(settings, request.externalOrgId, "cdc", { entities: "Bill", changedSince: qbFilterTime(new Date(since).toISOString()) });
   return mapDeletedBills(await read(url, request, "change data capture", deps));
 }
@@ -95,8 +100,9 @@ export async function billsPage(
   const total = mapCount(await query(settings, request, `SELECT COUNT(*) FROM Bill WHERE ${billsWhere(request)}`, "bill count", deps));
   const home = billsLackCurrency(body) ? await homeCurrency(settings, request, deps, cache) : null;
   const page = mapBillsPage(body, request.page, PAGE_SIZE, total, home);
-  if (request.phase !== "incremental" || request.page !== 1 || !request.since) return page;
-  // A deleted bill is never in a query's answer: change data capture names it, once per run, on its first page.
+  if (request.phase !== "incremental" || !page.last || !request.since) return page;
+  // A deleted bill is never in a query's answer: change data capture names it, on the run's last page, so it covers every
+  // deletion up to the end of the read, however long the run took or wherever it resumed.
   return { ...page, items: [...page.items, ...(await deletedBills(settings, { ...request, since: request.since }, deps))] };
 }
 

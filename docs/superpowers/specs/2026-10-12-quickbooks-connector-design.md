@@ -145,8 +145,10 @@ BillPayment, Customer, Invoice, Payment and Vendor. Env: `QUICKBOOKS_CLIENT_ID`,
   `MetaData.LastUpdatedTime >= '<since>'`, whatever the balance, so a bill paid later is seen. Both ordered by update
   time, 100 a page. Each page also asks `SELECT count(*)` of the same filter, kept as the page's `total`, so a bill
   that leaves the read between two pages (paid during a backfill, deleted) restarts the run (X8).
-- Deleted bills: the first page of an incremental run also asks change data capture for deleted bills since `since`
-  (at most 30 days back), and adds them to the page (Q8).
+- Deleted bills: the last page of an incremental run also asks change data capture for the bills deleted since five
+  minutes before `since` (at most 30 days back), and adds them to the page (Q8). The last page, so the answer covers
+  every deletion up to the end of the read, however long the run took or wherever it resumed; five minutes before, so
+  a deletion between the last run's read and its own question is not lost. A deletion read twice is kept once (X10).
 - Times in a filter are UTC to the second (`2026-10-12T08:00:00Z`), floored: a re-read is the risk, not a gap.
 - The chart of accounts: `SELECT * FROM Account WHERE AccountType = 'Bank' AND Active = true`, read when an owner or
   admin opens the picker (I14): bank accounts only.
@@ -170,15 +172,20 @@ is added with the form.
   `VendorRef` the supplier; `TxnDate` and `DueDate` the days; `TotalAmt` and `Balance` the total and the amount due,
   as exact decimals.
 - A deleted bill carries only its id and time: `factsKnown: false`. The sync then changes only its row's status and
-  version, and an added one is marked closed with the row's own supplier and number in `accounting_bill_closed`.
-- Cost if wrong: one mapping function, tested against fixtures.
+  version, and an added one is marked closed with the row's own supplier and number in `accounting_bill_closed`. Its
+  time does not move the cursor: it comes from the change feed, not from the read, and the next run's `since` stays the
+  latest change the read itself saw.
+- Cost if wrong: one mapping function, tested against fixtures. A deletion more than 30 days before a sync reads it
+  (a connection left needing a reconnect that long) is not seen; the bill stays in the review list until someone
+  dismisses it.
 
 **Q9. Partly paid bills.** A bill whose `Balance` is less than its `TotalAmt` is offered at its balance, as Xero's
-amount due already is, and the review list says "Partly paid in QuickBooks: 400.00 of 1,000.00 USD left". A bill
-already added whose amount due later falls below the amount it was added at (its invoice's own figure: the original
-amount in shadow mode, else the amount) is listed under the closed ones: "partly paid in QuickBooks since it was
-added: 400.00 USD left of the 1,250.00 added. Look at it in Payables before the agent pays it." Both are the core's,
-so Xero's partly paid bills say the same. No entry is signed for it: the invoice is unchanged, and the next change
+amount due already is: the review list shows "400.00 USD left of 1,000.00" and a **Partly paid in QuickBooks** badge
+(`ReviewRowView.total`). A bill already added whose amount due later falls below the amount it was added at (its
+invoice's own figure: the original amount in shadow mode, else the amount; an invoice not yet paid or rejected) is
+listed under "Partly paid in QuickBooks after they were added": "PowerDirect · PD-4471: 400.00 USD left of the 1,250.00
+added. Look at it in Payables before the agent pays it." (`partlyPaidSince`, read beside the closed ones). Both are the
+core's, so Xero's partly paid bills say the same. No entry is signed for it: the invoice is unchanged, and the next change
 in QuickBooks may undo it. Cost if wrong: a list to read; the agent's own checks are unchanged.
 
 **Q10. Syncing and the sweeper.** Unchanged (X7, X8): vendors, then bills; 10 pages on connecting, 5 on **Sync now**, 20

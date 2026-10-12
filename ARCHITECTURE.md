@@ -1649,9 +1649,10 @@ the provider.
   - *Reads.* Paged queries (`SELECT … ORDERBY MetaData.LastUpdatedTime STARTPOSITION n MAXRESULTS 100`,
     `minorversion=75`) with a `count(*)` of the same filter on each page, as Xero's `itemCount`. The backfill asks for
     `Balance > '0' AND DueDate >= window_from` (`PageRequest.windowFrom`); later runs read every bill changed since
-    `since`. A deleted bill never comes back from a query: the first page of each later run asks change data capture
-    (`/cdc`, at most 30 days back) for deleted bills, which carry only an id and a time (`factsKnown: false`), so their
-    row keeps its facts and only its status changes. Versions are the update time and the `SyncToken`, so two changes
+    `since`. A deleted bill never comes back from a query: the last page of each later run asks change data capture
+    (`/cdc`, from five minutes before `since`, at most 30 days back) for deleted bills, which carry only an id and a time
+    (`factsKnown: false`), so their row keeps its facts, only its status changes, and their time does not move the
+    cursor. Versions are the update time and the `SyncToken`, so two changes
     in one second still order.
   - *Partly paid.* A bill's `Balance` is its amount due: one partly paid is offered at what is left, and an added bill
     whose amount due fell below its invoice's figure is listed on the review list (`partlyPaidSince`), for Xero too.

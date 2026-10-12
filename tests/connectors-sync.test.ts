@@ -168,7 +168,10 @@ describe("syncConnection", () => {
       number: null, reference: null, currency: "USD", total: "0", amountDue: "0", issuedOn: null, dueOn: null, status: "deleted", factsKnown: false,
     };
     const later = provider({ bills: (request) => ({ items: [tombstone], page: request.page, last: true }) });
+    const sinceBefore = memory.cursors.get("bill")?.since;
     expect(await run(memory.db, later.provider)).toMatchObject({ outcome: "synced", closed: 1 });
+    // The change feed's time is not how far the read got: the next run starts where this one's read ended.
+    expect(memory.cursors.get("bill")?.since).toBe(sinceBefore);
     expect(memory.closed).toEqual([expect.objectContaining({ externalId: id, status: "deleted", contactName: "PowerDirect", number: "PD-4471" })]);
     expect(memory.bills.get(id)).toMatchObject({ reviewState: "added", sourceStatus: "deleted" });
     // A deleted bill Vestiarion never had is not kept.
