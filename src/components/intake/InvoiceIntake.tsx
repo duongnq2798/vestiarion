@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { orgHref } from "@/lib/auth/org-paths";
-import { billAmount } from "@/lib/bill-amount";
+import { billDigits } from "@/lib/bill-amount";
 
 const INITIAL: IntakeActionResult = { ok: false, message: "" };
 
@@ -226,7 +226,7 @@ export default function InvoiceIntake({
             name="amount"
             required
             inputMode="decimal"
-            placeholder={billCurrency && billAmount("2.500.000", billCurrency) !== null ? "2.500.000" : "1250.00"}
+            placeholder={billCurrency && billDigits(billCurrency) === 0 ? "2.500.000" : "1250.00"}
             defaultValue={start(initial?.amount)}
             onChange={(event) => setAmount(event.target.value)}
           />
