@@ -3,8 +3,11 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import type { Actor } from "@/lib/commands/actor";
 import { fillCrmEmail, keepCrmChange, planCrmDeal } from "@/lib/commands/crm";
+import { changeDeal } from "@/lib/commands/deals";
 import { COMMAND_PERMISSIONS, SURFACE_COMMANDS } from "@/lib/commands/policy";
-import type { DealDraft } from "@/lib/deals/input";
+import type { CrmChange } from "@/lib/connectors/crm";
+import { changesKey } from "@/lib/connectors/crm-store";
+import type { ChangeDraft, DealDraft } from "@/lib/deals/input";
 import { DealError } from "@/lib/deals/write";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 import { APPENDED_LEDGER_ROW, signedOrgs } from "./support/signed-org";
@@ -16,11 +19,12 @@ import { APPENDED_LEDGER_ROW, signedOrgs } from "./support/signed-org";
  * email is filled only while the customer has none. Who may: whoever adds deals, from the console.
  */
 
-const { mocks } = vi.hoisted(() => ({ mocks: { confirmDeal: vi.fn(), readDeal: vi.fn(), changeEmail: vi.fn(), ledger: vi.fn() } }));
+const { mocks } = vi.hoisted(() => ({ mocks: { confirmDeal: vi.fn(), writeChange: vi.fn(), readDeal: vi.fn(), changeEmail: vi.fn(), ledger: vi.fn() } }));
 vi.mock("@/lib/ledger-best-effort", () => ({ appendLedgerEntryBestEffort: mocks.ledger }));
-vi.mock("@/lib/deals/write", async (original) => ({ ...(await original<typeof import("@/lib/deals/write")>()), confirmDeal: mocks.confirmDeal }));
+vi.mock("@/lib/deals/write", async (original) => ({ ...(await original<typeof import("@/lib/deals/write")>()), confirmDeal: mocks.confirmDeal, changeDeal: mocks.writeChange }));
 vi.mock("@/lib/deals/read", async (original) => ({ ...(await original<typeof import("@/lib/deals/read")>()), readDeal: mocks.readDeal }));
 vi.mock("@/lib/payment-notices", async (original) => ({ ...(await original<typeof import("@/lib/payment-notices")>()), changeCounterpartyNoticeEmail: mocks.changeEmail }));
+const { NoticeEmailTaken } = await vi.importActual<typeof import("@/lib/payment-notices")>("@/lib/payment-notices");
 
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000f01";
 const USER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000f1";
@@ -75,8 +79,8 @@ describe("who may act on HubSpot's deals", () => {
     const { fake, run } = world();
     for (const role of ["approver", "viewer"] as const) {
       expect(await run(() => planCrmDeal(actor({ role }), { rowId: ROW, draft }))).toMatchObject({ ok: false, code: "forbidden" });
-      expect(await run(() => keepCrmChange(actor({ role }), { dealId: DEAL }))).toMatchObject({ ok: false, code: "forbidden" });
-      expect(await run(() => fillCrmEmail(actor({ role }), { counterpartyId: CUSTOMER }))).toMatchObject({ ok: false, code: "forbidden" });
+      expect(await run(() => keepCrmChange(actor({ role }), { dealId: DEAL, seen: "" }))).toMatchObject({ ok: false, code: "forbidden" });
+      expect(await run(() => fillCrmEmail(actor({ role }), { counterpartyId: CUSTOMER, email: "" }))).toMatchObject({ ok: false, code: "forbidden" });
     }
     expect(fake.requests).toHaveLength(0);
   });
@@ -131,6 +135,8 @@ describe("planCrmDeal", () => {
   });
 });
 
+const AMOUNT_TO_15000: CrmChange = { what: "amount", from: { amount: "12500", currency: "USD" }, to: { amount: "15000", currency: "USD" } };
+
 describe("keepCrmChange", () => {
   const deal = { available: true, deal: { title: "Website rebuild", facts: { id: DEAL, status: "active" } } };
 
@@ -138,7 +144,10 @@ describe("keepCrmChange", () => {
     mocks.readDeal.mockResolvedValue(deal);
     const changed = crmRow({ deal_id: DEAL, amount: 15000, baseline: { amount: "12500", currency: "USD", closeOn: "2026-10-01", stage: "won", stageLabel: "Closed Won" } });
     const { fake, run } = world(undefined, changed);
-    expect(await run(() => keepCrmChange(actor(), { dealId: DEAL }))).toEqual({ ok: true, message: "Website rebuild stays as it is. HubSpot's changes are marked as seen." });
+    expect(await run(() => keepCrmChange(actor(), { dealId: DEAL, seen: changesKey([AMOUNT_TO_15000]) }))).toEqual({
+      ok: true,
+      message: "Website rebuild stays as it is. HubSpot's changes are marked as seen.",
+    });
     const reviewed = fake.requests.find((sent) => sent.path === "/rest/v1/crm_deals" && sent.method === "PATCH");
     expect(reviewed?.body).toMatchObject({ baseline: { amount: "15000" }, flagged: null, reviewed_by: USER });
     expect(mocks.ledger).toHaveBeenCalledTimes(1);
@@ -153,9 +162,45 @@ describe("keepCrmChange", () => {
     mocks.readDeal.mockResolvedValue(deal);
     const same = crmRow({ deal_id: DEAL, baseline: { amount: "12500", currency: "USD", closeOn: "2026-10-01", stage: "won", stageLabel: "Closed Won" } });
     const { fake, run } = world(undefined, same);
-    expect(await run(() => keepCrmChange(actor(), { dealId: DEAL }))).toEqual({ ok: true, message: "Nothing changed in HubSpot since." });
+    expect(await run(() => keepCrmChange(actor(), { dealId: DEAL, seen: changesKey([AMOUNT_TO_15000]) }))).toEqual({ ok: true, message: "Nothing changed in HubSpot since." });
     expect(fake.requests.some((sent) => sent.method === "PATCH")).toBe(false);
     expect(mocks.ledger).not.toHaveBeenCalled();
+  });
+
+  it("keeps only the changes the page showed: HubSpot changed the deal again since, so nothing is marked as seen", async () => {
+    mocks.readDeal.mockResolvedValue(deal);
+    // The page said 12,500 to 15,000; HubSpot has 17,000 now, which no one was shown.
+    const again = crmRow({ deal_id: DEAL, amount: 17000, baseline: { amount: "12500", currency: "USD", closeOn: "2026-10-01", stage: "won", stageLabel: "Closed Won" } });
+    const { fake, run } = world(undefined, again);
+    expect(await run(() => keepCrmChange(actor(), { dealId: DEAL, seen: changesKey([AMOUNT_TO_15000]) }))).toMatchObject({ ok: false, code: "changed", changed: true });
+    expect(fake.requests.some((sent) => sent.method === "PATCH")).toBe(false);
+    expect(mocks.ledger).not.toHaveBeenCalled();
+  });
+});
+
+describe("changeDeal from HubSpot's changes", () => {
+  const change = { dealId: DEAL, kind: "revised", baseVersion: 1, totalMinor: 1_500_000, lines: [], reason: "From HubSpot", idempotencyKey: "change-key-1" } as unknown as ChangeDraft;
+  const changed = (amount: number) =>
+    crmRow({ deal_id: DEAL, amount, baseline: { amount: "12500", currency: "USD", closeOn: "2026-10-01", stage: "won", stageLabel: "Closed Won" } });
+
+  it("saves the version from the changes the page showed, says it came from HubSpot, and marks them as seen", async () => {
+    mocks.writeChange.mockResolvedValue({ version: 2, created: true, title: "Website rebuild", kind: "revised" });
+    const { fake, run } = world(undefined, changed(15000));
+    expect(await run(() => changeDeal(actor(), { change, fromCrm: { seen: changesKey([AMOUNT_TO_15000]) } }))).toMatchObject({ ok: true, version: 2 });
+    expect(mocks.writeChange).toHaveBeenCalledWith({
+      actorId: USER,
+      change,
+      source: { provider: "hubspot", ids: { hubId: "48291736", dealId: "30117482911", companyId: "9100000001" } },
+    });
+    const reviewed = fake.requests.find((sent) => sent.path === "/rest/v1/crm_deals" && sent.method === "PATCH");
+    expect(reviewed?.body).toMatchObject({ baseline: { amount: "15000" }, flagged: null, reviewed_by: USER });
+  });
+
+  it("saves nothing when HubSpot changed the deal again since the form was filled in from it", async () => {
+    const { fake, run } = world(undefined, changed(17000));
+    expect(await run(() => changeDeal(actor(), { change, fromCrm: { seen: changesKey([AMOUNT_TO_15000]) } }))).toMatchObject({ ok: false, code: "changed", changed: true });
+    expect(mocks.writeChange).not.toHaveBeenCalled();
+    expect(fake.requests.some((sent) => sent.method === "PATCH")).toBe(false);
   });
 });
 
@@ -168,18 +213,41 @@ describe("fillCrmEmail", () => {
       if (sent.path === "/rest/v1/crm_deals") return { body: [{ company_email: "jane.ito@northwind.example" }] };
       return undefined;
     });
-    expect(await run(() => fillCrmEmail(actor(), { counterpartyId: CUSTOMER }))).toMatchObject({ ok: true });
+    expect(await run(() => fillCrmEmail(actor(), { counterpartyId: CUSTOMER, email: "jane.ito@northwind.example" }))).toMatchObject({ ok: true });
     expect(mocks.changeEmail).toHaveBeenCalledWith({
       actorId: USER,
       counterpartyId: CUSTOMER,
       email: "jane.ito@northwind.example",
       source: { provider: "hubspot", ids: { hubId: "48291736", companyId: "9100000001" } },
+      onlyIfEmpty: true,
     });
+  });
+
+  it("fills only the email the person was shown: HubSpot's is another one now, so nothing is written", async () => {
+    const { run } = world((sent) => {
+      if (sent.path === "/rest/v1/counterparties") return { body: [{ id: CUSTOMER, name: "Northwind Labs", notice_email: null }] };
+      if (sent.path === "/rest/v1/external_links") return { body: [{ connection_id: "conn-1", external_id: "9100000001" }] };
+      if (sent.path === "/rest/v1/crm_deals") return { body: [{ company_email: "billing@northwind.example" }] };
+      return undefined;
+    });
+    expect(await run(() => fillCrmEmail(actor(), { counterpartyId: CUSTOMER, email: "jane.ito@northwind.example" }))).toMatchObject({ ok: false, changed: true });
+    expect(mocks.changeEmail).not.toHaveBeenCalled();
+  });
+
+  it("says the customer has a billing email when one was set while the person looked", async () => {
+    mocks.changeEmail.mockRejectedValue(new NoticeEmailTaken());
+    const { run } = world((sent) => {
+      if (sent.path === "/rest/v1/counterparties") return { body: [{ id: CUSTOMER, name: "Northwind Labs", notice_email: null }] };
+      if (sent.path === "/rest/v1/external_links") return { body: [{ connection_id: "conn-1", external_id: "9100000001" }] };
+      if (sent.path === "/rest/v1/crm_deals") return { body: [{ company_email: "jane.ito@northwind.example" }] };
+      return undefined;
+    });
+    expect(await run(() => fillCrmEmail(actor(), { counterpartyId: CUSTOMER, email: "jane.ito@northwind.example" }))).toMatchObject({ ok: false, code: "taken", changed: true });
   });
 
   it("never replaces a billing email the customer has", async () => {
     const { run } = world((sent) => (sent.path === "/rest/v1/counterparties" ? { body: [{ id: CUSTOMER, name: "Northwind Labs", notice_email: "ap@northwind.example" }] } : undefined));
-    expect(await run(() => fillCrmEmail(actor(), { counterpartyId: CUSTOMER }))).toMatchObject({ ok: false, code: "not_found" });
+    expect(await run(() => fillCrmEmail(actor(), { counterpartyId: CUSTOMER, email: "jane.ito@northwind.example" }))).toMatchObject({ ok: false, code: "not_found" });
     expect(mocks.changeEmail).not.toHaveBeenCalled();
   });
 });

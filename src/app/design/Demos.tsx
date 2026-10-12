@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/Checkbox";
+import { NativeCheckbox, NativeRadioGroup } from "@/components/ui/NativeChoice";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut } from "@/components/ui/Command";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -111,6 +112,17 @@ export function FormLab() {
           <Textarea name="memo" rows={3} />
         </Field>
         <Checkbox name="goodsReceived" label="Goods or services received" description="Submits “on” when ticked, like a native checkbox" className="sm:col-span-2" />
+        <NativeRadioGroup
+          legend="Workspace (real radio buttons, for a server page's plain form)"
+          name="labWorkspace"
+          defaultValue="acme"
+          options={[
+            { value: "acme", label: "Acme Studio", description: "Owner" },
+            { value: "beta", label: "Beta Works", description: "Admin" },
+          ]}
+          className="sm:col-span-2"
+        />
+        <NativeCheckbox name="labAgree" value="yes" label="I agree (a real checkbox)" description="Clicking the words ticks it, before any JavaScript" className="sm:col-span-2" />
         <div className="sm:col-span-2">
           <FileInput id="lab-file" name="attachment" accept=".csv,text/csv" label="Choose a CSV file, or drop one here" description="Nothing is uploaded until you submit" onFile={() => {}} />
         </div>

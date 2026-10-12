@@ -1,13 +1,14 @@
 "use client";
 
-import { Landmark } from "lucide-react";
+import { ChevronDown, Landmark } from "lucide-react";
 import { useState } from "react";
 import { chooseAccountingAccountAction, loadAccountingAccountsAction, type AccountingAccountsResult, type AccountingActionResult } from "@/app/actions/accounting";
+import { Button } from "@/components/ui/Button";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { RadioGroup } from "@/components/ui/RadioGroup";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
-import { accountName, bookingPreview, BOOKS_PAYMENTS, type BookingSample } from "@/lib/connectors/booking";
+import { accountName, accountsToOffer, bookingPreview, BOOKS_PAYMENTS, type BookingSample } from "@/lib/connectors/booking";
 import type { PaymentAccount } from "@/lib/connectors/connections";
 import { PROVIDER_LABELS, type ProviderId } from "@/lib/connectors/provider";
 
@@ -19,7 +20,9 @@ const CHOOSE_INITIAL: AccountingActionResult = { ok: false, message: "" };
  * X14, I14; docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q6): an owner or admin reads the accounts a
  * payment can be booked to (Xero's bank accounts and accounts that take payments, QuickBooks' bank accounts; never a
  * revenue or expense account, and none picked for them), previews how a payment would be booked to the one they pick,
- * and uses it. Each payment is booked there only after an owner or admin approves it (accounting write-back W6).
+ * and uses it. The bank accounts come first and alone; the others that take payments (an owner's equity or drawings
+ * account, a clearing account) only behind a toggle, with a caution. Each payment is booked there only after an owner
+ * or admin approves it (accounting write-back W6).
  */
 export function AccountingAccountPicker({
   provider,
@@ -36,8 +39,11 @@ export function AccountingAccountPicker({
   const load = useActionForm(loadAccountingAccountsAction, LOAD_INITIAL);
   const choose = useActionForm(chooseAccountingAccountAction, CHOOSE_INITIAL, { toastOnSuccess: true });
   const [picked, setPicked] = useState<string>("");
+  const [showOthers, setShowOthers] = useState(false);
   const accounts = load.state.accounts ?? [];
-  const account = accounts.find((candidate) => candidate.externalId === picked) ?? null;
+  const { offered, others } = accountsToOffer(accounts, showOthers);
+  const noBank = accounts.every((candidate) => !candidate.bank);
+  const account = offered.find((candidate) => candidate.externalId === picked) ?? null;
   const preview = account ? bookingPreview(account, sample, label, BOOKS_PAYMENTS[provider]) : null;
 
   return (
@@ -54,17 +60,42 @@ export function AccountingAccountPicker({
         <form {...choose.formProps} className="space-y-3 rounded-lg border border-line p-4">
           <input type="hidden" name="orgSlug" value={orgSlug} />
           <input type="hidden" name="provider" value={provider} />
-          <RadioGroup
-            legend="Book payments made on Arc to"
-            name="accountId"
-            value={picked}
-            onValueChange={setPicked}
-            options={accounts.map((candidate) => ({
-              value: candidate.externalId,
-              label: accountName(candidate),
-              description: `${candidate.bank ? "Bank account" : "Takes payments"}${candidate.currency ? ` · ${candidate.currency}` : ""}`,
-            }))}
-          />
+          {noBank && <p className="text-sm text-ink-2">{label} has no active bank account to book payments to.</p>}
+          {offered.length > 0 && (
+            <RadioGroup
+              legend="Book payments made on Arc to"
+              name="accountId"
+              value={picked}
+              onValueChange={setPicked}
+              options={offered.map((candidate) => ({
+                value: candidate.externalId,
+                label: accountName(candidate),
+                description: `${candidate.bank ? "Bank account" : "Takes payments, not a bank account"}${candidate.currency ? ` · ${candidate.currency}` : ""}`,
+              }))}
+            />
+          )}
+          {others > 0 && (
+            <div className="space-y-2">
+              {showOthers && (
+                <p className="text-xs text-held">
+                  These are not bank accounts: a supplier payment booked from an owner&apos;s equity or drawings account is almost always wrong, so check with
+                  your accountant first.
+                </p>
+              )}
+              <Button
+                variant="link"
+                aria-expanded={showOthers}
+                icon={<ChevronDown aria-hidden className={showOthers ? "rotate-180" : undefined} />}
+                onClick={() => {
+                  // Hiding them lets go of one picked among them: nothing is kept that the person can no longer see.
+                  if (showOthers && account && !account.bank) setPicked("");
+                  setShowOthers(!showOthers);
+                }}
+              >
+                {showOthers ? "Hide the other accounts" : "Show other accounts that take payments"}
+              </Button>
+            </div>
+          )}
           {preview && (
             <div className="space-y-1 rounded-md bg-surface-2 p-3 text-sm" aria-live="polite">
               <p className="font-medium text-ink">Preview</p>

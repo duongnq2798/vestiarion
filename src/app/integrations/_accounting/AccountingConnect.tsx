@@ -3,9 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
-import { Checkbox } from "@/components/ui/Checkbox";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { RadioGroup } from "@/components/ui/RadioGroup";
+import { NativeCheckbox, NativeRadioGroup } from "@/components/ui/NativeChoice";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { accountingProviderOn } from "@/lib/accounting-providers";
 import { membershipsOf } from "@/lib/auth/membership";
@@ -47,10 +46,11 @@ function errors(label: string, organisation: string): Record<string, string> {
 /**
  * Connecting an accounting tool (docs/superpowers/specs/2026-10-12-xero-connector-design.md X4, X12;
  * docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q4, Q13, QuickBooks' Connect/Reconnect URL).
- * Reading this page has no side effect. The person picks the workspace, among those they may manage integrations for,
- * reads what Vestiarion does with the tool's data and ticks I agree; Continue posts to the connect route, which checks
- * all of it again. After a tool that authorized several organisations (Xero), the person picks one here, from the
- * pending grant only they can read.
+ * Reading this page has no side effect. The person picks the workspace, among those they may manage integrations for
+ * (the one a Settings card names in `?org=`, or the only one, picked already), reads what Vestiarion does with the
+ * tool's data and ticks I agree; Continue posts to the connect route, which checks all of it again. The choices are
+ * real inputs with labels, so the form works as soon as the page is there. After a tool that authorized several
+ * organisations (Xero), the person picks one here, from the pending grant only they can read.
  */
 export async function AccountingConnect({ provider, searchParams }: { provider: AccountingProviderId; searchParams: ConnectSearchParams }) {
   const params = await searchParams;
@@ -116,7 +116,7 @@ export async function AccountingConnect({ provider, searchParams }: { provider: 
               <form method="post" action={`/api/integrations/${provider}/choose`} className="mt-6 space-y-5">
                 <input type="hidden" name="org" value={chosen.slug} />
                 <input type="hidden" name="choice" value={pending.id} />
-                <RadioGroup
+                <NativeRadioGroup
                   legend={organisation === "company" ? "Company" : "Organisation"}
                   name="organisation"
                   required
@@ -145,7 +145,7 @@ export async function AccountingConnect({ provider, searchParams }: { provider: 
                     </p>
                   </>
                 ) : (
-                  <RadioGroup
+                  <NativeRadioGroup
                     legend="Workspace"
                     name="org"
                     required
@@ -164,7 +164,7 @@ export async function AccountingConnect({ provider, searchParams }: { provider: 
                     ))}
                   </ul>
                 </Callout>
-                <Checkbox
+                <NativeCheckbox
                   name="consent"
                   value="yes"
                   required

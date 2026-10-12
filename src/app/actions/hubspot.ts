@@ -104,7 +104,9 @@ export async function keepCrmChangeAction(_previous: HubSpotActionResult, formDa
   return inOrg(auth, async () => {
     const dealId = formData.get("dealId");
     if (typeof dealId !== "string" || !UUID.test(dealId)) return { ok: false, message: "That deal was not found." };
-    return consoleAnswer(await keepCrmChange(consoleActor(auth), { dealId }));
+    // The changes the page showed: only those are kept (H12).
+    const seen = formData.get("seen");
+    return consoleAnswer(await keepCrmChange(consoleActor(auth), { dealId, seen: typeof seen === "string" ? seen.slice(0, 64) : "" }));
   });
 }
 
@@ -115,6 +117,8 @@ export async function fillCrmEmailAction(_previous: HubSpotActionResult, formDat
   return inOrg(auth, async () => {
     const counterpartyId = formData.get("counterpartyId");
     if (typeof counterpartyId !== "string" || !UUID.test(counterpartyId)) return { ok: false, message: "That customer was not found." };
-    return consoleAnswer(await fillCrmEmail(consoleActor(auth), { counterpartyId }));
+    // The email the person was shown: only that one is filled (H13).
+    const email = formData.get("email");
+    return consoleAnswer(await fillCrmEmail(consoleActor(auth), { counterpartyId, email: typeof email === "string" ? email.slice(0, 320) : "" }));
   });
 }

@@ -12,7 +12,7 @@ Vestiarion reads from HubSpot and writes nothing to it.
 
 Open **Settings**. Under **HubSpot**, choose **Connect HubSpot**.
 
-The connect page names the workspace (or lets you pick one, if you manage several) and says what Vestiarion does with HubSpot's data:
+The connect page has the workspace you came from already picked (if you manage several, you can pick another) and says what Vestiarion does with HubSpot's data:
 
 - It reads the companies, contacts and deals of the account you connect: names, amounts, close dates, pipeline stages and each company's main contact email. It writes nothing to HubSpot.
 - They are shown to the workspace's members and to its agent. The agent's model provider may see a deal's facts to decide on its collections, and may not train on them.
@@ -56,7 +56,7 @@ Below, "Not won yet" lists the deals still open in HubSpot, for what is coming. 
 
 **Plan collections** opens the New deal form, filled in from the deal:
 
-- **Customer**: the customer this HubSpot company was planned for before; else the customer with the company's name; else the company as a new customer, added when you confirm. When two customers have the name, you choose.
+- **Customer**: the customer this HubSpot company was planned for before; else the customer with the company's name; else the company as a new customer, added when you confirm. When two customers have the name, or the one that has it was planned for another HubSpot company, you choose.
 - **Deal**: the deal's name.
 - **Total** and **Currency**: the deal's amount, in USDC for a deal in US dollars and EURC for one in euros. The form says "HubSpot says 12,500 USD: planned as 12,500.00 USDC, one for one."
 - **Start date**: the day the deal closed.
@@ -84,6 +84,8 @@ The ledger records each new set of changes once, as `crm_deal_changed`. Then cho
 - **Change deal**, which opens the deal's Change deal form filled in: HubSpot's new amount as the new total, a correction proposed for the lines not invoiced yet, and the changes as the reason. Check it and save it as a new version. Lines already released, and their receivables, stay as they are. The version is signed as `deal_revised` with `via: "hubspot"`.
 - **Keep the deal as it is**, when the deal is right as it stands. The changes are marked as seen, and the ledger records `crm_deal_change_kept`.
 
+Both act on the changes the page showed you. If HubSpot changed the deal again since you opened the page, nothing is saved: reload the page to see what changed now.
+
 A deal marked lost in HubSpot is only flagged. To stop its lines, use **Cancel deal** on its page.
 
 <Screenshot
@@ -94,7 +96,7 @@ A deal marked lost in HubSpot is only flagged. To stop its lines, use **Cancel d
 
 ## 5. Billing emails
 
-A customer linked to a HubSpot company that has no billing email yet is listed under "Billing emails from HubSpot", with the email of the company's main contact. Choose **Use this email** if it is where invoices go: it becomes the customer's billing email, used for reminders once you turn them on for an invoice. The ledger records `counterparty_notice_email_changed` with `via: "hubspot"`. A billing email the customer already has is never replaced.
+A customer linked to a HubSpot company that has no billing email yet is listed under "Billing emails from HubSpot", with the email of the company's main contact. Choose **Use this email** if it is where invoices go: it becomes the customer's billing email, used for reminders once you turn them on for an invoice. The ledger records `counterparty_notice_email_changed` with `via: "hubspot"`. A billing email the customer already has is never replaced, even one typed in while you looked; and only the email you were shown is used.
 
 ## Status and errors
 

@@ -26,7 +26,10 @@ export type AccountingPanelView =
       /** Bills added that the tool says were paid, voided or deleted since. */
       closedAfterAdded: number;
       paymentAccount: PaymentAccount | null;
-      /** A bill of the workspace's, to preview how a payment will be booked. */
+      /**
+       * A bill of the workspace's to preview how a payment will be booked: open in the tool with an amount due, in US
+       * dollars, one added to Vestiarion first. Null when there is none, and the preview is a plain example.
+       */
       sample: BookingSample | null;
       /**
        * Whether the connection may book payments (accounting write-back W8): false for one made before the write scope
@@ -61,14 +64,23 @@ export async function accountingPanelView(
           .in("source_status", ["paid", "voided", "deleted"])
           .then((result) => result.count ?? 0),
     db().from("accounting_sync_cursors").select("page").eq("connection_id", connection.id).not("page", "is", null),
+    // The preview's bill: still open in the tool with something left to pay, in US dollars (paid one for one in USDC),
+    // and not dismissed; one added to Vestiarion first ("added" sorts before "review"), then the latest changed.
     db()
       .from("accounting_bills")
       .select("contact_name, number, amount_due, currency")
       .eq("connection_id", connection.id)
+      .eq("source_status", "open")
+      .gt("amount_due", 0)
+      .eq("currency", "USD")
+      .in("review_state", ["added", "review"])
+      .order("review_state", { ascending: true })
       .order("changed_at", { ascending: false })
       .limit(1),
   ]);
-  const bill = ((latest.data ?? []) as Array<{ contact_name: string; number: string | null; amount_due: number | string; currency: string }>)[0];
+  const bill = ((latest.data ?? []) as Array<{ contact_name: string; number: string | null; amount_due: number | string; currency: string }>).find(
+    (row) => Number(row.amount_due) > 0
+  );
   const read = ((cursors.data ?? []) as Array<{ page: number }>).reduce((sum, row) => sum + pagesRead({ page: row.page } as SyncCursor), 0);
   return {
     state: "connection",

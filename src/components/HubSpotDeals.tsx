@@ -31,6 +31,7 @@ function FillEmail({ orgSlug, email }: { orgSlug: string; email: CrmEmailView })
     <form {...formProps} className="flex flex-wrap items-center gap-x-3 gap-y-1">
       <input type="hidden" name="orgSlug" value={orgSlug} />
       <input type="hidden" name="counterpartyId" value={email.counterpartyId} />
+      <input type="hidden" name="email" value={email.email} />
       <span className="text-sm text-ink-2">
         {email.name}: <span className="font-mono text-xs text-ink">{email.email}</span>
       </span>

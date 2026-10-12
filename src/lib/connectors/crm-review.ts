@@ -2,7 +2,7 @@ import { db, unwrap } from "../dal";
 import { connectionById, connectionFor, isNotSetUp, NotSetUpError, type Connection } from "./connections";
 import { crmChangeWords, moneyWords, plannable, type CrmChange } from "./crm";
 import { changePrefill, dealPrefill, type ChangePrefill, type DealPrefill } from "./crm-prefill";
-import { amountText, CRM_DEAL_COLUMNS, rowChanges, type CrmDealRow } from "./crm-store";
+import { amountText, changesKey, CRM_DEAL_COLUMNS, rowChanges, type CrmDealRow } from "./crm-store";
 import { pagesRead, type SyncCursor } from "./cursors";
 import { PROVIDER_LABELS, type ProviderId } from "./provider";
 import { connectionStatus, type StatusView } from "./status";
@@ -99,9 +99,19 @@ export async function crmReview(connection: Connection | null): Promise<CrmRevie
   return { state: "list", connectionId: connection.id, label, organisation: connection.externalOrgName, won, open, emails: await emailsToConfirm(connection, rows) };
 }
 
-/** Linked customers without a billing email whose company's main contact has one (H13). */
+/**
+ * Linked customers without a billing email whose company's main contact has one (H13): the email of the deal HubSpot
+ * gave last, as `emailToFill` takes it, so Use this email fills the one shown.
+ */
 async function emailsToConfirm(connection: Connection, rows: readonly CrmDealRow[]): Promise<CrmEmailView[]> {
-  const byCompany = new Map(rows.flatMap((row) => (row.company_external_id && row.company_email ? [[row.company_external_id, row.company_email] as const] : [])));
+  const latest = new Map<string, { email: string; at: string }>();
+  for (const row of rows) {
+    if (!row.company_external_id || !row.company_email) continue;
+    const at = row.external_updated_at ? new Date(row.external_updated_at).toISOString() : "";
+    const kept = latest.get(row.company_external_id);
+    if (!kept || at > kept.at) latest.set(row.company_external_id, { email: row.company_email, at });
+  }
+  const byCompany = new Map([...latest].map(([company, { email }]) => [company, email]));
   if (byCompany.size === 0) return [];
   const links = unwrap(
     await db()
@@ -139,6 +149,19 @@ export type CrmPanelView =
       changed: number;
     };
 
+/**
+ * Planned deals with changes recorded, whose Vestiarion deal is not cancelled (H12): a deal cancelled since shows none,
+ * though its record is cleared only at the next sync.
+ */
+async function changedPlanned(connectionId: string): Promise<number> {
+  const flagged = unwrap(
+    await db().from("crm_deals").select("deal_id").eq("connection_id", connectionId).not("deal_id", "is", null).not("flagged", "is", null).limit(MAX_LISTED)
+  ) as Array<{ deal_id: string }>;
+  if (flagged.length === 0) return 0;
+  const deals = unwrap(await db().from("deals").select("id, status").in("id", flagged.map((row) => row.deal_id))) as Array<{ id: string; status: string }>;
+  return deals.filter((deal) => deal.status !== "cancelled").length;
+}
+
 /** The CRM's card in Settings (H16, H17). */
 export async function crmPanelView(provider: ProviderId, nowMs: number = Date.now()): Promise<CrmPanelView> {
   let connection;
@@ -166,9 +189,7 @@ export async function crmPanelView(provider: ProviderId, nowMs: number = Date.no
           .gt("amount", 0)
           .not("company_external_id", "is", null)
           .then(count),
-    revoked
-      ? 0
-      : db().from("crm_deals").select("id", { count: "exact", head: true }).eq("connection_id", connection.id).not("deal_id", "is", null).not("flagged", "is", null).then(count),
+    revoked ? 0 : changedPlanned(connection.id),
     db().from("accounting_sync_cursors").select("page").eq("connection_id", connection.id).not("page", "is", null),
   ]);
   const read = ((cursors.data ?? []) as Array<{ page: number }>).reduce((sum, row) => sum + pagesRead({ page: row.page } as SyncCursor), 0);
@@ -202,6 +223,8 @@ export interface CrmDealChanges {
   changes: CrmChange[];
   words: string[];
   prefill: ChangePrefill;
+  /** These changes' `changesKey`, sent back by Keep the deal as it is and Change deal, which act on them alone. */
+  seen: string;
 }
 
 export async function crmChangesFor(deal: { id: string; status: "active" | "cancelled"; currency: string }): Promise<CrmDealChanges | null> {
@@ -217,7 +240,14 @@ export async function crmChangesFor(deal: { id: string; status: "active" | "canc
   const label = PROVIDER_LABELS[connection.provider];
   const changes = rowChanges(row, deal.status);
   if (changes.length === 0) return null;
-  return { rowId: row.id, label, changes, words: changes.map((change) => crmChangeWords(change, label)), prefill: changePrefill(changes, { currency: deal.currency }, label) };
+  return {
+    rowId: row.id,
+    label,
+    changes,
+    words: changes.map((change) => crmChangeWords(change, label)),
+    prefill: changePrefill(changes, { currency: deal.currency }, label),
+    seen: changesKey(changes),
+  };
 }
 
 /** A deal of the list as the New deal form, prefilled (H11); or why it cannot be planned now. */
@@ -243,16 +273,17 @@ export async function crmPrefillFor(input: {
   const amount = amountText(row.amount);
   const check = plannable({ stage: row.stage_state, sourceStatus: row.source_status, dealId: row.deal_id, amount, companyExternalId: row.company_external_id }, label);
   if (!check.ok) return { ok: false, message: `${row.name} cannot be planned: ${check.reason.toLowerCase()}.` };
+  // The customers this account's companies are linked to: this company's, and the others', which a name never takes.
   const links = unwrap(
     await db()
       .from("external_links")
-      .select("local_id")
+      .select("external_id, local_id")
       .eq("connection_id", connection.id)
       .eq("object_type", "company")
-      .eq("external_id", row.company_external_id as string)
       .not("local_id", "is", null)
-      .limit(1)
-  ) as Array<{ local_id: string }>;
+      .limit(5000)
+  ) as Array<{ external_id: string; local_id: string }>;
+  const own = links.find((link) => link.external_id === row.company_external_id);
   const prefill = dealPrefill({
     deal: {
       externalId: row.external_id,
@@ -262,8 +293,9 @@ export async function crmPrefillFor(input: {
       closeOn: row.close_on ? String(row.close_on).slice(0, 10) : null,
       company: row.company_external_id ? { externalId: row.company_external_id, name: row.company_name ?? "Unnamed company" } : null,
     },
-    linkedCustomerId: links[0]?.local_id ?? null,
+    linkedCustomerId: own?.local_id ?? null,
     customers: input.customers,
+    linkedElsewhere: new Set(links.filter((link) => link.external_id !== row.company_external_id).map((link) => link.local_id)),
     workspace: input.workspace,
     today: input.today,
     label,

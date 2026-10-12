@@ -13,7 +13,7 @@ Vestiarion reads from QuickBooks and writes nothing to it. A bill being open in 
 
 Open **Settings**. Under **QuickBooks**, choose **Connect QuickBooks**. You can also start from QuickBooks: opening Vestiarion from its apps takes a signed-in owner or admin to the same place.
 
-The connect page names the workspace (or lets you pick one, if you manage several) and says what Vestiarion does with QuickBooks' data:
+The connect page has the workspace you came from already picked (if you manage several, you can pick another) and says what Vestiarion does with QuickBooks' data:
 
 - Vestiarion reads the bills, vendors and bank accounts of the QuickBooks company you connect. It writes nothing to QuickBooks.
 - The bills you add are shown to the workspace's members and to its agent. The agent's model provider sees each bill's facts to decide on it, and may not train on them.
@@ -67,9 +67,9 @@ Each bill is added as one typed into the invoice form: the same checks, and a si
 
 ## 4. Choose where payments will be booked
 
-An owner or admin chooses the bank account in QuickBooks that payments made on Arc will be booked to. Under **Where payments made on Arc will be booked**, choose **Choose the account**. Vestiarion reads the company's active bank accounts; never an income or expense account.
+An owner or admin chooses the bank account in QuickBooks that payments made on Arc will be booked to. Under **Where payments made on Arc will be booked**, choose **Choose the account**. Vestiarion reads the company's active bank accounts, and only those: never an income, expense or equity account.
 
-Pick one to see how a payment would be booked: "A payment of 1,250.00 USDC to PowerDirect for bill PD-4471 will be booked in QuickBooks as a payment of 1,250.00 USD from Arc USDC wallet (1090), with the Arc transaction as its reference." USDC is booked as USD and EURC as EUR, so an account in USD fits best. The network fee is shown apart and not booked to this account. Then **Use this account**. The ledger records `accounting_payment_account_chosen`.
+Pick one to see how a payment would be booked: "A payment of 1,250.00 USDC to PowerDirect for bill PD-4471 will be booked in QuickBooks as a payment of 1,250.00 USD from Arc USDC wallet (1090), with the Arc transaction as its reference." The bill is one still open in QuickBooks, in US dollars, with an amount due, one you added first. With none, the preview says it is an example: "For example, a payment of 100.00 USDC for a bill will be booked in QuickBooks as a payment of 100.00 USD from Arc USDC wallet (1090), with the Arc transaction as its reference." USDC is booked as USD and EURC as EUR, so an account in USD fits best. The network fee is shown apart and not booked to this account. Then **Use this account**. The ledger records `accounting_payment_account_chosen`.
 
 Until someone chooses, the card says "Not chosen yet. Nothing is booked to an account nobody chose." Nothing is written to QuickBooks yet: this keeps the choice for when Vestiarion books its payments there.
 

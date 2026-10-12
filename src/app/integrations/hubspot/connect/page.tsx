@@ -4,9 +4,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
-import { Checkbox } from "@/components/ui/Checkbox";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { RadioGroup } from "@/components/ui/RadioGroup";
+import { NativeCheckbox, NativeRadioGroup } from "@/components/ui/NativeChoice";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { membershipsOf } from "@/lib/auth/membership";
 import { can } from "@/lib/auth/roles";
@@ -31,8 +30,9 @@ const ERRORS: Record<string, string> = {
 
 /**
  * Connecting HubSpot (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H4, H14). Reading this page has no
- * side effect. The person picks the workspace, among those they may manage integrations for, reads what Vestiarion does
- * with HubSpot's data and ticks I agree; Continue to HubSpot posts to the connect route, which checks all of it again.
+ * side effect. The person picks the workspace, among those they may manage integrations for (the one a Settings card
+ * names in `?org=`, or the only one, picked already), reads what Vestiarion does with HubSpot's data and ticks I agree
+ * (real inputs with labels); Continue to HubSpot posts to the connect route, which checks all of it again.
  * HubSpot asks which account to install the app in; one account is connected per workspace.
  */
 export default async function HubSpotConnectPage({ searchParams }: ConnectPageProps) {
@@ -82,7 +82,7 @@ export default async function HubSpotConnectPage({ searchParams }: ConnectPagePr
                     </p>
                   </>
                 ) : (
-                  <RadioGroup
+                  <NativeRadioGroup
                     legend="Workspace"
                     name="org"
                     required
@@ -102,7 +102,7 @@ export default async function HubSpotConnectPage({ searchParams }: ConnectPagePr
                   </ul>
                 </Callout>
                 <p className="text-sm text-ink-2">One HubSpot account connects to one Vestiarion workspace at a time.</p>
-                <Checkbox
+                <NativeCheckbox
                   name="consent"
                   value="yes"
                   required

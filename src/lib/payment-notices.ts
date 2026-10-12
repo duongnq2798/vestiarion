@@ -188,9 +188,19 @@ export async function sendPaymentNotices(
   return lines;
 }
 
+/** The counterparty has a billing email already: a fill that only fills an empty one wrote nothing (HubSpot connector H13). */
+export class NoticeEmailTaken extends Error {
+  constructor() {
+    super("The counterparty has a billing email already.");
+    this.name = "NoticeEmailTaken";
+  }
+}
+
 /**
  * Sets, changes or clears a counterparty's billing email (R1), and records it with both addresses masked: a payee's
- * payment notices go to it, and a client's reminders, once a person turns them on (collections R8).
+ * payment notices go to it, and a client's reminders, once a person turns them on (collections R8). With
+ * `onlyIfEmpty`, it fills an empty one only, in the same write: one set in the meantime is never replaced, and the
+ * fill throws `NoticeEmailTaken` with nothing written or recorded.
  */
 export async function changeCounterpartyNoticeEmail(input: {
   actorId: string;
@@ -198,6 +208,7 @@ export async function changeCounterpartyNoticeEmail(input: {
   email: string | null;
   /** The CRM the email came from, confirmed by a person (HubSpot connector H13): the entry says so. */
   source?: { provider: "hubspot"; ids: { hubId: string; companyId: string } };
+  onlyIfEmpty?: boolean;
 }): Promise<{ name: string; email: string | null; role: string }> {
   const orgId = currentOrgId();
   const before = (await db().from("counterparties").select("id, name, role, notice_email").eq("id", input.counterpartyId).maybeSingle()).data as {
@@ -207,8 +218,11 @@ export async function changeCounterpartyNoticeEmail(input: {
     notice_email: string | null;
   } | null;
   if (!before) throw new Error("Counterparty not found.");
+  if (input.onlyIfEmpty && before.notice_email?.trim()) throw new NoticeEmailTaken();
   if ((before.notice_email ?? null) === input.email) return { name: before.name, email: input.email, role: before.role };
-  unwrap(await db().from("counterparties").update({ notice_email: input.email }).eq("id", input.counterpartyId).select("id"));
+  const update = db().from("counterparties").update({ notice_email: input.email }).eq("id", input.counterpartyId);
+  const written = unwrap(await (input.onlyIfEmpty ? update.or("notice_email.is.null,notice_email.eq.") : update).select("id")) as unknown[];
+  if (input.onlyIfEmpty && written.length === 0) throw new NoticeEmailTaken();
   await appendLedgerEntryBestEffort(orgId, {
     actor: "human",
     domain: "compliance",

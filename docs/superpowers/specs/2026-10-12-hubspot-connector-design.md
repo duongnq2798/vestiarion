@@ -115,8 +115,12 @@ reconnect.
   run asks for every deal changed since five minutes before `since`, whatever its stage: search lags a change by a
   few moments, and a deal read twice is ignored by its version.
 - The search caps a query at 10,000 results: the page that reaches it ends the run as the last page read (`capped`),
-  with no restart; a backfill becomes incremental, an incremental run resumes from the latest change it read. Cost if
-  wrong: an account with more than 10,000 open deals brings in the first 10,000 by last change.
+  with no restart; a backfill becomes incremental, an incremental run resumes from the latest change it read, that
+  instant itself and not five minutes before it, or more than 10,000 deals changed within five minutes (a bulk edit)
+  would be read again, the same ones, run after run, and no change after them ever. When every result read shares the
+  instant the run started at, the next run starts a millisecond after it: a search in that order reaches no further.
+  Cost if wrong: an account with more than 10,000 open deals brings in the first 10,000 by last change, and more than
+  10,000 deals changed at one same millisecond are read only as far as the cap.
 - For each page: the deals' companies (associations; the one labelled Primary, else the lowest id), those companies
   (batch read: `name`, `domain`), their contacts (associations; the lowest id of those whose primary company it is,
   else the lowest id) and those contacts' `email`. Up to five calls a page.
@@ -159,7 +163,9 @@ ago stays out until someone changes it. Lost deals are kept only once they had a
   listed as **Not won yet**, read-only.
 - **Plan collections** opens the New deal form prefilled (`?hubspot=<row>#plan-from-hubspot`): the customer (the
   counterparty the company is linked to by its HubSpot id; else the one client with its name; else a new customer
-  with its name; two clients with the name leave the choice to the person), the title (the deal's name), the total
+  with its name; two clients with the name leave the choice to the person, and so does a client of the name linked
+  to another company of the account, since HubSpot says the two are different companies; a client found by its name
+  written differently, its legal suffix or case, is said in a note to check), the title (the deal's name), the total
   and currency, the start (the close day, else today) and the external reference (the HubSpot deal id, read-only).
   The person picks how it is billed and confirms; nothing is made before.
 - Currency, under today's rules (D3): USDC and EURC as they are; a deal in US dollars is planned in USDC, and one in
@@ -184,15 +190,21 @@ ago stays out until someone changes it. Lost deals are kept only once they had a
   a reason naming the changes. Saving it is the revise path (`revise_deal`); the version's `deal_revised` entry says
   `via: "hubspot"`, and the changes count as reviewed (the baseline becomes HubSpot's facts now).
 - **Keep the deal as it is** reviews them without a version, with a signed `crm_deal_change_kept`.
+- Both act only on the changes the page showed: the page sends back their key (`changesKey`, a SHA-256 of the set),
+  and a set HubSpot changed since is refused ("HubSpot changed this deal again since this page was opened") before
+  anything is written, so no change is marked as seen that no one was shown.
 - The sync records a new set of changes once, in a signed `crm_deal_changed` (actor `system`): what changed, from and
-  to; the same set is not recorded again (`flagged`).
+  to; the same set is not recorded again (`flagged`, compared with its keys sorted, since a jsonb column hands keys
+  back in Postgres' own order).
 - Cost if wrong: the person reviews a change they did not need to; never a receivable changed behind them.
 
 **H13. Customers.** A company is linked to the counterparty its deal was planned for, by HubSpot id
 (`external_links`, object `company`), so the next plan finds it whatever its name. A linked customer with no billing
 email, whose company's main contact has one, gets **Use this email** under the HubSpot list; pressing it sets the
 billing email only while it is still empty (`counterparty_notice_email_changed`, with `via: "hubspot"`). Never
-automatically.
+automatically. The list shows the email of the deal HubSpot gave last, the one the command takes; the form sends the
+email it showed, and another one in HubSpot by then is refused. The fill is written only where the email is still
+empty, in the same update, so one typed in meanwhile is never replaced.
 
 **H14. Consent, in plain words, before connecting** (`hubspot-2026-10-12`): what is read (the companies, contacts and
 deals of the account: names, amounts, close dates, stages, each company's main contact email); who sees it (the

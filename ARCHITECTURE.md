@@ -1687,10 +1687,12 @@ the provider.
   compare-and-set); a caller that finds the lease taken waits and reads what was stored. `invalid_grant` marks the
   connection needs reconnect.
 - **Connecting.** `/integrations/xero` takes a signed-in person to their workspace's Xero card; `/integrations/xero/connect`
-  lets them pick the workspace, read what Vestiarion does with Xero's data and tick **I agree**. Its form posts, from this
-  origin only, to `POST /api/integrations/xero/connect`, which checks the session, `integrations.manage` and the tick, and
-  sends them to Xero with a state signed under its own HKDF key (ten minutes), carrying the consent and a nonce kept in an
-  HttpOnly cookie. `GET /api/integrations/xero/callback` checks the state, the cookie, the person, their role again and
+  lets them pick the workspace (the card's link names it in `?org=`, and the only one they manage is picked without it),
+  read what Vestiarion does with Xero's data and tick **I agree**: real inputs with labels (`NativeChoice`), so the form
+  works before any JavaScript. Its form posts, from this origin only, to `POST /api/integrations/xero/connect` (a
+  signed-out person signs in and comes back with `?org=` kept), which checks the session, `integrations.manage` and the
+  tick, and sends them to Xero with a state signed under its own HKDF key (ten minutes), carrying the consent and a
+  nonce kept in an HttpOnly cookie. `GET /api/integrations/xero/callback` checks the state, the cookie, the person, their role again and
   the consent before it exchanges the code and reads `/connections`. One organisation is connected at once
   (`saveConnection`, then the tokens, then the first sync in `after()`); several are kept as a pending grant for ten
   minutes and picked on the connect page (`POST /api/integrations/xero/choose`). A workspace connected to another
@@ -1717,7 +1719,9 @@ the provider.
   (`records.write`, the console only) check the bills again on the server, claim each before adding it, add it through
   `addInvoice` with `via: "xero"` and Xero's ids, and link the bill and the supplier.
 - **The payment account** (I14): an owner or admin reads the chart of accounts from Xero, picks a bank account (or one
-  Xero lets take payments; never revenue or expense), sees a preview (`booking.ts`), and keeps it on the connection
+  Xero lets take payments, kept behind a toggle with a caution, as `accountsToOffer` splits them; never revenue or
+  expense), sees a preview (`booking.ts`: a bill still open in US dollars with
+  an amount due, one added first, else a plain example, never 0.00), and keeps it on the connection
   (`accounting_payment_account_chosen`). Payments are booked to it only as below.
 - **Booking payments made on Arc** (docs/superpowers/specs/2026-10-12-accounting-writeback-design.md). A payment is
   only ever booked into a ledger of the same reality: one on Arc mainnet outside shadow mode into any organisation, one
@@ -1822,14 +1826,18 @@ reads in `api.ts`, `hubspotProvider`), wired in `src/lib/crm-providers.ts`. It i
 - **Syncing** (`crm-sync.ts`, `crm-store.ts`): deals by search, 100 a page in the order of `hs_lastmodifieddate`, `after`
   as the page's offset, so the core's cursor (object type `deal`) and its checkpoints, restarts and backoff work as for
   Xero. A backfill reads open deals and those won since `window_from`; later runs read every deal changed since five
-  minutes before `since`. The page reaching HubSpot's 10,000-result cap ends the run without a restart (`capped`). Each
+  minutes before `since`. The page reaching HubSpot's 10,000-result cap ends the run without a restart (`capped`), and
+  the next run starts at the latest change read itself, not five minutes before it, so a bulk edit of more than 10,000
+  deals is read past rather than again and again (`pageOutcome`). Each
   page reads its companies and their main contacts (associations, batch reads); pipelines and the account's currency
   and time zone once per run. Search never returns a deleted deal, so linked deals and won ones still offered are read
   again by id each run; one HubSpot no longer has is `deleted`. `planCrmDeal` keeps each deal once by its version. The
   sweeper runs a CRM connection with this runner (`sweepAccounting({ crm })`).
 - **Planning** (`crm-prefill.ts`, `crm-review.ts`, `src/lib/commands/crm.ts`). Bills & receivables lists the won deals
-  under Deals, on its Receivables tab (a deal planned already shows the deal it became, `crmPlanState`); **Plan collections** opens the New deal form filled in by `dealPrefill`: the customer by its company's
-  link, else its name, else a new one; dollars as USDC and euros as EURC at par, another currency only in shadow mode,
+  under Deals, on its Receivables tab (a deal planned already shows the deal it became, `crmPlanState`); **Plan
+  collections** opens the New deal form filled in by `dealPrefill`: the customer by its company's link, else its name
+  (never a customer linked to another of the account's companies), else a new one; dollars as USDC and euros as EURC at
+  par, another currency only in shadow mode,
   never VND; the close day as the start; HubSpot's deal id as the reference. `crm.plan_deal` (`records.write`) reads the
   row again, forces the reference, confirms through `confirmDeal` (`create_deal`, whose unique `external_ref` refuses a
   second plan), links the row (`deal_id`, `baseline`) and the company to the customer (`external_links`), and the
@@ -1838,9 +1846,11 @@ reads in `api.ts`, `hubspotProvider`), wired in `src/lib/crm-providers.ts`. It i
   none for a cancelled deal. The sync records a new set once (`crm_deal_changed`, `flagDecision`). The deal's page says
   **Changed in HubSpot**; **Change deal** opens the Change deal form filled in (`changePrefill`), and saving it is the
   revise path with `via: "hubspot"`, marking the changes reviewed; **Keep the deal as it is** (`crm.keep_change`)
-  records `crm_deal_change_kept`. Nothing is revised or cancelled automatically.
+  records `crm_deal_change_kept`. Both send back the key of the changes the page showed (`changesKey`) and are refused
+  when HubSpot changed the deal again since. Nothing is revised or cancelled automatically.
 - **Billing emails.** `crm.fill_email` sets a linked customer's empty billing email from its company's main contact,
-  only when a person presses **Use this email**.
+  only when a person presses **Use this email**: the email the list showed, written only where the billing email is
+  still empty (`changeCounterpartyNoticeEmail({ onlyIfEmpty })`).
 
 ## API
 

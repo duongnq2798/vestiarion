@@ -80,6 +80,22 @@ describe("dealPrefill", () => {
     expect(two.notes).toContain("More than one customer is named Contoso Design: choose one.");
   });
 
+  it("never takes by name a customer linked to another HubSpot company: two companies of one name are two customers", () => {
+    // Northwind Labs here was planned from HubSpot company 9100000001; this deal is another company of the same name.
+    const other = prefill({ company: { externalId: "9100000777", name: "Northwind Labs" } }, { linkedElsewhere: new Set(["c1"]) });
+    expect(other).toMatchObject({ customerId: "", customerName: "" });
+    expect(other.notes).toContain("Northwind Labs here is linked to another HubSpot company: choose the customer, or add a new one under another name.");
+    // Its own company's link still finds it.
+    expect(prefill({}, { linkedCustomerId: "c1", linkedElsewhere: new Set() }).customerId).toBe("c1");
+  });
+
+  it("says so when a customer is taken by a name written differently", () => {
+    const loose = prefill({ company: { externalId: "9", name: "NORTHWIND LABS, Ltd." } });
+    expect(loose.customerId).toBe("c1");
+    expect(loose.notes).toContain("Matched to the customer Northwind Labs by its name: check it is the same company as NORTHWIND LABS, Ltd. in HubSpot.");
+    expect(prefill().notes).not.toContain(expect.stringContaining("Matched to the customer"));
+  });
+
   it("plans a deal in another currency as it is in shadow mode, and leaves the total to type outside it", () => {
     expect(prefill({ currency: "GBP", amount: "9000" }, { workspace: { shadowOn: true } })).toMatchObject({ currency: "GBP", total: "9000.00", notes: [] });
     const outside = prefill({ currency: "GBP", amount: "9000" });
