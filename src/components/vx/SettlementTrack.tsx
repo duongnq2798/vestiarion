@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { cn } from "@/components/ui/cn";
 import { orgHref } from "@/lib/auth/org-paths";
+import { bookedLine, type BookedMark } from "@/lib/connectors/booked";
 import { utcMinute } from "@/lib/copy";
 import { networkProfile, type Network } from "@/lib/network";
 import { chainById, txUrl } from "@/lib/payee-chains";
@@ -291,6 +292,19 @@ function Refs({ mark, orgSlug, network }: { mark: StageMark; orgSlug: string; ne
   );
 }
 
+/** In the books: the payment booked in the accounting tool, as the tool stated it when read back. */
+function BookingRow({ mark, orgSlug, network }: { mark: BookedMark; orgSlug: string; network: Network }) {
+  const line = bookedLine(mark);
+  return (
+    <ol className="space-y-2.5 border-t border-line pt-3" aria-label="In the books">
+      <StageRow kind={line.reached ? "done" : mark.state === "refused" || mark.state === "failed" ? "unknown" : "open"} title={line.title} at={line.reached ? mark.at : null}>
+        {line.text}
+        <Refs mark={{ at: mark.at, by: "books", seq: mark.seq }} orgSlug={orgSlug} network={network} />
+      </StageRow>
+    </ol>
+  );
+}
+
 export function SettlementTrack({
   id,
   settlement,
@@ -298,6 +312,7 @@ export function SettlementTrack({
   network,
   now,
   defaultOpen = false,
+  booking = null,
 }: {
   id: string;
   settlement: Settlement;
@@ -307,6 +322,11 @@ export function SettlementTrack({
   /** When the page read it: what a payment in flight's age counts to. */
   now: number;
   defaultOpen?: boolean;
+  /**
+   * Its booking in the accounting tool, after the seven stages (accounting write-back W10): what the tool said when
+   * Vestiarion read it back, from the signed entries; none for a payable not brought in from one.
+   */
+  booking?: BookedMark | null;
 }) {
   const ended = settlement.end !== null;
   const unknown = settlement.status === "unknown";
@@ -354,6 +374,7 @@ export function SettlementTrack({
             ].filter((item) => item !== null);
           })}
         </ol>
+        {booking && <BookingRow mark={booking} orgSlug={orgSlug} network={network} />}
         {settlement.earlier.length > 0 && (
           <div className="text-xs text-ink-2">
             <p className="font-medium text-ink">Earlier attempts</p>

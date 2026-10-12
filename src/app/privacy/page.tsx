@@ -253,8 +253,11 @@ export default function PrivacyPage() {
             of the person who attached it, the amount and the comment&apos;s link, and asks GitHub whether that person can write to the repository.
           </li>
           <li>
-            <strong>Xero</strong>, for a workspace an owner or admin connects to a Xero organisation after agreeing to it, is read from and never
-            written to. Vestiarion reads that organisation&apos;s approved bills (the supplier, the bill&apos;s number and reference, its currency, total,
+            <strong>Xero</strong>, for a workspace an owner or admin connects to a Xero organisation after agreeing to it, is read from, and written
+            to only to book a payment an owner or admin approved: for each payment made on Arc for a bill brought in from Xero, Vestiarion sends Xero
+            the bill&apos;s id, the account&apos;s id, the day, the amount and the Arc transaction, and reads the payment back. It also reads whether the
+            organisation is a demo company, since payments on Arc testnet and in shadow mode are booked only into one. Vestiarion reads that
+            organisation&apos;s approved bills (the supplier, the bill&apos;s number and reference, its currency, total,
             amount due, dates and status) and its suppliers&apos; names, and its chart of accounts when an owner or admin chooses the account payments
             will be booked to. It keeps the bills read, the suppliers&apos; names, the organisation&apos;s name and id, the access granted and the
             agreement given, and Xero&apos;s tokens encrypted, readable only by the server and never shown in the browser, a log, a model&apos;s prompt

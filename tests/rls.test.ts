@@ -64,6 +64,7 @@ const KEEP_UPDATE: Record<string, { column: string; expr: string }> = {
   accounting_sync_cursors: { column: "page", expr: "coalesce(page, 0) + 1" },
   // The deals a CRM brought in (0105).
   crm_deals: { column: "name", expr: "'changed'" },
+  accounting_postings: { column: "message", expr: "'changed'" },
 };
 
 beforeAll(async () => {

@@ -14,7 +14,7 @@ describe("bookingPreview", () => {
     expect(preview.lines[0]).toBe(
       "A payment of 1,250.00 USDC to PowerDirect for bill PD-4471 will be booked in Xero as a payment of 1,250.00 USD from Arc USDC wallet (091), with the Arc transaction as its reference."
     );
-    expect(preview.lines[1]).toBe("The network fee is booked apart, never to this account. Nothing is written to Xero yet: Vestiarion keeps this choice for when it books its payments there.");
+    expect(preview.lines[1]).toBe("The network fee is shown apart and not booked to this account. Each payment is booked in Xero only after an owner or admin approves it on Bills & receivables.");
     expect(preview.warning).toBeNull();
   });
 

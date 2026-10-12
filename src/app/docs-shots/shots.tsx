@@ -85,6 +85,7 @@ import { AccountingBillsReview } from "@/components/AccountingBillsReview";
 import HubSpotPanel from "@/components/HubSpotPanel";
 import { HubSpotDeals } from "@/components/HubSpotDeals";
 import { CrmDealChanges } from "@/components/CrmDealChanges";
+import { AccountingBookings } from "@/components/AccountingBookings";
 import { APPLY_PAYMENTS, PART_PAID, PART_PAID_VIEW, PART_PAID_VIEWS } from "./allocations-fixture";
 import { designRuleReplay } from "../design/replay-fixture";
 import { RuleTrialPanel } from "@/components/RuleTrial";
@@ -1877,6 +1878,94 @@ export const DOCS_SHOTS = {
             dueOn: "2026-10-31",
             status: "error",
             reason: "This workspace's shadow mode takes bills in USD. Convert the amount to USD or USDC.",
+          },
+        ]}
+      />
+    ),
+  },
+  "xero-bookings": {
+    guide: "xero",
+    page: "invoices",
+    sub: "Your bills, what the agent decided on each, and why.",
+    // A payment made on Arc testnet in shadow mode, to book into the Xero Demo Company; below, one booked and one Xero
+    // already showed paid (accounting write-back W6, W10).
+    render: () => (
+      <AccountingBookings
+        provider="xero"
+        orgSlug={SLUG}
+        connectionId="00000000-0000-4000-8000-0000000000a3"
+        organisation="Demo Company (Global)"
+        scopeMissing={false}
+        accountChosen
+        canBook
+        toReview={[
+          {
+            id: "00000000-0000-4000-8000-0000000000c1",
+            state: "draft",
+            supplier: "PowerDirect Ltd",
+            billNumber: "PD-4471",
+            amount: "1250",
+            currency: "USD",
+            paidOn: "2026-10-12",
+            reference: `0x${"7a".repeat(32)}`,
+            account: "Arc USDC wallet (091)",
+            billNow: { amountDue: "1250", status: "open" },
+            billAfter: { amountDue: "0.00", status: "paid" },
+            network: "arc-testnet",
+            shadow: true,
+            paidAmount: "1250",
+            paidToken: "USDC",
+            networkFee: "0.0021",
+            fingerprint: "0".repeat(64),
+            blocked: null,
+            words: "Waiting for review",
+            paymentId: null,
+          },
+        ]}
+        done={[
+          {
+            id: "00000000-0000-4000-8000-0000000000c2",
+            state: "confirmed",
+            supplier: "Akiba Parts K.K.",
+            billNumber: "AK-77",
+            amount: "300",
+            currency: "USD",
+            paidOn: "2026-10-11",
+            reference: `0x${"5b".repeat(32)}`,
+            account: "Arc USDC wallet (091)",
+            billNow: null,
+            billAfter: null,
+            network: "arc-testnet",
+            shadow: true,
+            paidAmount: "300",
+            paidToken: "USDC",
+            networkFee: "0.0019",
+            fingerprint: null,
+            blocked: null,
+            words: "Booked in Xero",
+            paymentId: "b26fd49a-cbae-470a-a8f8-bcbc119e0379",
+          },
+          {
+            id: "00000000-0000-4000-8000-0000000000c3",
+            state: "refused",
+            supplier: "SMART Agency",
+            billNumber: "SMC-0902",
+            amount: "820.50",
+            currency: "USD",
+            paidOn: "2026-10-11",
+            reference: `0x${"3d".repeat(32)}`,
+            account: null,
+            billNow: null,
+            billAfter: null,
+            network: "arc-testnet",
+            shadow: true,
+            paidAmount: "820.5",
+            paidToken: "USDC",
+            networkFee: null,
+            fingerprint: null,
+            blocked: null,
+            words: "Already paid in Xero.",
+            paymentId: null,
           },
         ]}
       />

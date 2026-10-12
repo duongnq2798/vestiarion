@@ -9,6 +9,7 @@ import { invoiceTrail } from "@/lib/decision-trail";
 import type { LedgerEntry } from "@/lib/ledger";
 import type { ReceivableView } from "@/lib/allocations/view";
 import type { Settlement } from "@/lib/settlement";
+import { bookingFromEntries } from "@/lib/connectors/booked";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow, TreasuryActionRow } from "@/lib/queries";
 import type { Decision, Evidence, Guardrail, Outcome } from "./types";
 import { fmt } from "./Primitives";
@@ -81,7 +82,9 @@ function matchingEntry(entries: LedgerEntry[], key: "invoiceId" | "milestoneId",
       !entry.action.startsWith("receipt_") &&
       entry.action !== "payment_stuck" &&
       entry.action !== "decision_verdict" &&
-      entry.action !== "payment_rescheduled"
+      entry.action !== "payment_rescheduled" &&
+      // An accounting tool's entries (a bill closed there, a booking of its payment) are no decision (accounting write-back W9).
+      !entry.action.startsWith("accounting_")
   );
 }
 
@@ -274,10 +277,13 @@ export function invoiceDecision(
   }
 ): Decision {
   const lifecycle = invoice.direction === "payable" ? options.settlements?.get(invoice.id) : undefined;
+  // Its payment's booking in the accounting tool, from the same entries (accounting write-back W10).
+  const booked = invoice.direction === "payable" ? bookingFromEntries(entries, invoice.id) : null;
   const decision: Decision = {
     ...decideInvoice(invoice, counterparty, entries, options),
     network: options.network,
     ...(lifecycle ? { settlement: { lifecycle, asOf: options.asOf ?? Date.now() } } : {}),
+    ...(booked ? { booked } : {}),
   };
   // A person's verdict on the agent's decision, where the page reads the facts for it (shadow mode S3).
   const payment = { amountUsdc: invoice.amount, payee: invoice.counterparty_name ?? counterparty?.name ?? "the payee", address: counterparty?.address ?? null };

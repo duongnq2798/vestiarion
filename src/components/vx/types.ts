@@ -2,6 +2,7 @@ export type Domain = "ap" | "ar" | "contractor" | "treasury" | "compliance" | "s
 import type { TrailStep } from "@/lib/decision-trail";
 import type { EvidenceRecordKind } from "@/lib/evidence-paths";
 import type { Network } from "@/lib/network";
+import type { BookedMark } from "@/lib/connectors/booked";
 import type { Settlement } from "@/lib/settlement";
 import type { VerdictView } from "@/lib/verdict-view";
 
@@ -65,6 +66,8 @@ export interface Decision {
   chain?: { kind: EvidenceRecordKind; paid: boolean };
   /** Where its payment is, as of when the page read it (settlement lifecycle L7); absent with no payment record. */
   settlement?: { lifecycle: Settlement; asOf: number };
+  /** Its payment's booking in the accounting tool, from the signed entries (accounting write-back W10); absent with none. */
+  booked?: BookedMark;
 }
 
 export interface Account {
