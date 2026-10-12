@@ -102,6 +102,7 @@ export const TENANT_TABLES = [
   "fx_swaps", "screening_dismissals", "receivable_links", "incoming_transfers", "agent_budgets", "recurring_payables", "policy_proposals",
   "service_purchases", "spending_limit_contracts", "ar_reminders", "inbox_emails", "approval_policies", "payment_approvals",
   "shadow_modes", "decision_verdicts", "payment_actuals", "bank_statement_lines", "report_shares", "report_baselines",
+  "accounting_connections", "external_links", "accounting_bills", "accounting_sync_cursors",
 ] as const;
 
 export interface SeededRows {
@@ -192,6 +193,21 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     [orgId, `report-${tag}`]
   );
   await db.query("insert into report_baselines (org_id, minutes_per_bill, people_per_bill) values ($1, 20, 2)", [orgId]);
+  // An accounting connection, a link, a bill to review and a cursor (0101).
+  const connectionId = await one(
+    `insert into accounting_connections (org_id, provider, external_org_id, consent_version, consented_at, window_from)
+     values ($1, 'xero', $2, 'xero-2026-10-12', now(), '2026-07-14') returning id`,
+    [orgId, `tenant-${tag}`]
+  );
+  await db.query(
+    "insert into external_links (org_id, connection_id, provider, external_org_id, object_type, external_id, local_id, linked_at) values ($1, $2, 'xero', $3, 'contact', $4, $5, now())",
+    [orgId, connectionId, `tenant-${tag}`, `contact-${tag}`, counterpartyId]
+  );
+  await db.query(
+    "insert into accounting_bills (org_id, connection_id, external_id, contact_name, currency, total, amount_due, source_status) values ($1, $2, $3, $4, 'USD', 1, 1, 'open')",
+    [orgId, connectionId, `bill-${tag}`, `cp-${tag}`]
+  );
+  await db.query("insert into accounting_sync_cursors (org_id, connection_id, object_type) values ($1, $2, 'bill')", [orgId, connectionId]);
   const approver = await one("insert into auth.users (id, email) values (gen_random_uuid(), $1) returning id", [`approver-${tag}-${crypto.randomUUID()}@example.com`]);
   await db.query(
     "insert into payment_approvals (org_id, source_type, source_id, approved_by, amount, currency) values ($1, 'invoice', $2, $3, 1, 'USDC')",

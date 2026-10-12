@@ -100,6 +100,11 @@ describe("0023 is idempotent", () => {
          where c.contype = 'f' and c.confrelid = 'auth.users'::regclass
          order by 1, 2`);
       expect(keys.rows).toEqual([
+        { tbl: "accounting_bills", col: "decided_by", action: "n" },
+        { tbl: "accounting_connections", col: "connected_by", action: "n" },
+        { tbl: "accounting_connections", col: "payment_account_by", action: "n" },
+        { tbl: "accounting_connections", col: "revoked_by", action: "n" },
+        { tbl: "accounting_tokens", col: "authorized_by", action: "c" },
         { tbl: "agent_budgets", col: "updated_by", action: "n" },
         { tbl: "api_keys", col: "created_by", action: "n" },
         { tbl: "approval_policies", col: "updated_by", action: "n" },
