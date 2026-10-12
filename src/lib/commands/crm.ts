@@ -6,7 +6,7 @@ import { PROVIDER_LABELS } from "../connectors/provider";
 import type { DealDraft } from "../deals/input";
 import { readDeal } from "../deals/read";
 import { confirmDeal, DealError } from "../deals/write";
-import { changeCounterpartyNoticeEmail } from "../payment-notices";
+import { changeCounterpartyNoticeEmail, NoticeEmailTaken } from "../payment-notices";
 import type { Actor } from "./actor";
 import { done, refused, TRY_AGAIN, type CommandOutcome } from "./outcome";
 import { gate } from "./policy";
@@ -82,17 +82,24 @@ export async function keepCrmChange(actor: Actor, input: { dealId: string; seen:
   }
 }
 
-/** Fills a customer's empty billing email with its company's main contact's email from the CRM (H13). */
-export async function fillCrmEmail(actor: Actor, input: { counterpartyId: string }): Promise<CommandOutcome> {
+/**
+ * Fills a customer's empty billing email with its company's main contact's email from the CRM (H13): only the email the
+ * person was shown and confirmed (`email`), and only while the customer still has none, in the same write.
+ */
+export async function fillCrmEmail(actor: Actor, input: { counterpartyId: string; email: string }): Promise<CommandOutcome> {
   const refusal = gate(actor, "crm.fill_email");
   if (refusal) return refusal;
   try {
     const found = await emailToFill(input.counterpartyId);
     if (!found) return refused("not_found", "That customer has a billing email already, or the CRM has none for it.");
-    await changeCounterpartyNoticeEmail({ actorId: actor.userId, counterpartyId: input.counterpartyId, email: found.email, source: found.source });
+    if (found.email !== input.email.trim().toLowerCase()) {
+      return refused("changed", `${PROVIDER_LABELS[found.source.provider]} has another email for ${found.name} now. Reload the page to see it.`, { changed: true });
+    }
+    await changeCounterpartyNoticeEmail({ actorId: actor.userId, counterpartyId: input.counterpartyId, email: found.email, source: found.source, onlyIfEmpty: true });
     return done(`Reminders to ${found.name} go to ${found.email} once you turn them on for an invoice.`);
   } catch (error) {
     if (error instanceof NotSetUpError) return refused("not_ready", NOT_SET_UP);
+    if (error instanceof NoticeEmailTaken) return refused("taken", "That customer has a billing email already. Reload the page to see it.", { changed: true });
     console.error("filling a billing email from a CRM failed", actor.orgId, error instanceof Error ? error.message : "unknown error");
     return refused("failed", TRY_AGAIN);
   }

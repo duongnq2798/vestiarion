@@ -117,6 +117,8 @@ export async function fillCrmEmailAction(_previous: HubSpotActionResult, formDat
   return inOrg(auth, async () => {
     const counterpartyId = formData.get("counterpartyId");
     if (typeof counterpartyId !== "string" || !UUID.test(counterpartyId)) return { ok: false, message: "That customer was not found." };
-    return consoleAnswer(await fillCrmEmail(consoleActor(auth), { counterpartyId }));
+    // The email the person was shown: only that one is filled (H13).
+    const email = formData.get("email");
+    return consoleAnswer(await fillCrmEmail(consoleActor(auth), { counterpartyId, email: typeof email === "string" ? email.slice(0, 320) : "" }));
   });
 }

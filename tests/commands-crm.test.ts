@@ -24,6 +24,7 @@ vi.mock("@/lib/ledger-best-effort", () => ({ appendLedgerEntryBestEffort: mocks.
 vi.mock("@/lib/deals/write", async (original) => ({ ...(await original<typeof import("@/lib/deals/write")>()), confirmDeal: mocks.confirmDeal, changeDeal: mocks.writeChange }));
 vi.mock("@/lib/deals/read", async (original) => ({ ...(await original<typeof import("@/lib/deals/read")>()), readDeal: mocks.readDeal }));
 vi.mock("@/lib/payment-notices", async (original) => ({ ...(await original<typeof import("@/lib/payment-notices")>()), changeCounterpartyNoticeEmail: mocks.changeEmail }));
+const { NoticeEmailTaken } = await vi.importActual<typeof import("@/lib/payment-notices")>("@/lib/payment-notices");
 
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000f01";
 const USER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000f1";
@@ -79,7 +80,7 @@ describe("who may act on HubSpot's deals", () => {
     for (const role of ["approver", "viewer"] as const) {
       expect(await run(() => planCrmDeal(actor({ role }), { rowId: ROW, draft }))).toMatchObject({ ok: false, code: "forbidden" });
       expect(await run(() => keepCrmChange(actor({ role }), { dealId: DEAL, seen: "" }))).toMatchObject({ ok: false, code: "forbidden" });
-      expect(await run(() => fillCrmEmail(actor({ role }), { counterpartyId: CUSTOMER }))).toMatchObject({ ok: false, code: "forbidden" });
+      expect(await run(() => fillCrmEmail(actor({ role }), { counterpartyId: CUSTOMER, email: "" }))).toMatchObject({ ok: false, code: "forbidden" });
     }
     expect(fake.requests).toHaveLength(0);
   });
@@ -212,18 +213,41 @@ describe("fillCrmEmail", () => {
       if (sent.path === "/rest/v1/crm_deals") return { body: [{ company_email: "jane.ito@northwind.example" }] };
       return undefined;
     });
-    expect(await run(() => fillCrmEmail(actor(), { counterpartyId: CUSTOMER }))).toMatchObject({ ok: true });
+    expect(await run(() => fillCrmEmail(actor(), { counterpartyId: CUSTOMER, email: "jane.ito@northwind.example" }))).toMatchObject({ ok: true });
     expect(mocks.changeEmail).toHaveBeenCalledWith({
       actorId: USER,
       counterpartyId: CUSTOMER,
       email: "jane.ito@northwind.example",
       source: { provider: "hubspot", ids: { hubId: "48291736", companyId: "9100000001" } },
+      onlyIfEmpty: true,
     });
+  });
+
+  it("fills only the email the person was shown: HubSpot's is another one now, so nothing is written", async () => {
+    const { run } = world((sent) => {
+      if (sent.path === "/rest/v1/counterparties") return { body: [{ id: CUSTOMER, name: "Northwind Labs", notice_email: null }] };
+      if (sent.path === "/rest/v1/external_links") return { body: [{ connection_id: "conn-1", external_id: "9100000001" }] };
+      if (sent.path === "/rest/v1/crm_deals") return { body: [{ company_email: "billing@northwind.example" }] };
+      return undefined;
+    });
+    expect(await run(() => fillCrmEmail(actor(), { counterpartyId: CUSTOMER, email: "jane.ito@northwind.example" }))).toMatchObject({ ok: false, changed: true });
+    expect(mocks.changeEmail).not.toHaveBeenCalled();
+  });
+
+  it("says the customer has a billing email when one was set while the person looked", async () => {
+    mocks.changeEmail.mockRejectedValue(new NoticeEmailTaken());
+    const { run } = world((sent) => {
+      if (sent.path === "/rest/v1/counterparties") return { body: [{ id: CUSTOMER, name: "Northwind Labs", notice_email: null }] };
+      if (sent.path === "/rest/v1/external_links") return { body: [{ connection_id: "conn-1", external_id: "9100000001" }] };
+      if (sent.path === "/rest/v1/crm_deals") return { body: [{ company_email: "jane.ito@northwind.example" }] };
+      return undefined;
+    });
+    expect(await run(() => fillCrmEmail(actor(), { counterpartyId: CUSTOMER, email: "jane.ito@northwind.example" }))).toMatchObject({ ok: false, code: "taken", changed: true });
   });
 
   it("never replaces a billing email the customer has", async () => {
     const { run } = world((sent) => (sent.path === "/rest/v1/counterparties" ? { body: [{ id: CUSTOMER, name: "Northwind Labs", notice_email: "ap@northwind.example" }] } : undefined));
-    expect(await run(() => fillCrmEmail(actor(), { counterpartyId: CUSTOMER }))).toMatchObject({ ok: false, code: "not_found" });
+    expect(await run(() => fillCrmEmail(actor(), { counterpartyId: CUSTOMER, email: "jane.ito@northwind.example" }))).toMatchObject({ ok: false, code: "not_found" });
     expect(mocks.changeEmail).not.toHaveBeenCalled();
   });
 });

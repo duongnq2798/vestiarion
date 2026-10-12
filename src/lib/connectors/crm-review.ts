@@ -99,9 +99,19 @@ export async function crmReview(connection: Connection | null): Promise<CrmRevie
   return { state: "list", connectionId: connection.id, label, organisation: connection.externalOrgName, won, open, emails: await emailsToConfirm(connection, rows) };
 }
 
-/** Linked customers without a billing email whose company's main contact has one (H13). */
+/**
+ * Linked customers without a billing email whose company's main contact has one (H13): the email of the deal HubSpot
+ * gave last, as `emailToFill` takes it, so Use this email fills the one shown.
+ */
 async function emailsToConfirm(connection: Connection, rows: readonly CrmDealRow[]): Promise<CrmEmailView[]> {
-  const byCompany = new Map(rows.flatMap((row) => (row.company_external_id && row.company_email ? [[row.company_external_id, row.company_email] as const] : [])));
+  const latest = new Map<string, { email: string; at: string }>();
+  for (const row of rows) {
+    if (!row.company_external_id || !row.company_email) continue;
+    const at = row.external_updated_at ? new Date(row.external_updated_at).toISOString() : "";
+    const kept = latest.get(row.company_external_id);
+    if (!kept || at > kept.at) latest.set(row.company_external_id, { email: row.company_email, at });
+  }
+  const byCompany = new Map([...latest].map(([company, { email }]) => [company, email]));
   if (byCompany.size === 0) return [];
   const links = unwrap(
     await db()

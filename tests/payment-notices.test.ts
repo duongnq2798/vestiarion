@@ -5,7 +5,7 @@ import { runWith } from "@/lib/context";
 import { withOrg } from "@/lib/dal/scope";
 import { paymentNoticeEmail } from "@/lib/email/payment-notice";
 import { noticeEmailSchema } from "@/lib/intake-validation";
-import { changeCounterpartyNoticeEmail, maskEmail, sendPaymentNotices } from "@/lib/payment-notices";
+import { changeCounterpartyNoticeEmail, maskEmail, NoticeEmailTaken, sendPaymentNotices } from "@/lib/payment-notices";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
@@ -269,6 +269,31 @@ describe("where payment notices go", () => {
     const before = client.requests.length;
     await run(client, () => changeCounterpartyNoticeEmail({ actorId: ACTOR, counterpartyId: VENDOR, email: "old@example.com" }));
     expect(client.requests.slice(before).some((r) => r.method === "PATCH")).toBe(false);
+  });
+
+  it("fills an address only while there is none: one set a moment before is never replaced, and nothing is recorded", async () => {
+    const reply = (patched: unknown[], current: string | null) =>
+      fakeSupabase((request) => {
+        if (request.path === "/rest/v1/orgs") {
+          return { body: { id: ORG, slug: "northstar", name: "Northstar", mode: "live", ledger_signing_key_enc: encryptSecret(LEDGER_PEM, { orgId: ORG, column: "ledger_signing_key_enc" }, parseMasterKeys(MASTER_KEYS)), circle_api_key_enc: null, circle_entity_secret_enc: null } };
+        }
+        if (request.path === "/rest/v1/counterparties" && request.method === "GET") return { body: { id: VENDOR, name: "Northstar Studio", role: "client", notice_email: current } };
+        if (request.path === "/rest/v1/counterparties" && request.method === "PATCH") return { body: patched };
+        if (request.path === "/rest/v1/rpc/append_ledger_entry") {
+          return { body: { seq: 1, id: "e1", ts: "t", actor: "human", domain: "compliance", action: "x", summary: "", detail: {}, body_hash: "00", signature: "00", prev_hash: null, hash: "00", signing_key_id: null } };
+        }
+        return { body: [] };
+      });
+    // Read empty, then a person typed one in before the fill was written: the write matches no row.
+    const raced = reply([], null);
+    await expect(run(raced, () => changeCounterpartyNoticeEmail({ actorId: ACTOR, counterpartyId: VENDOR, email: "jane@example.com", onlyIfEmpty: true }))).rejects.toBeInstanceOf(NoticeEmailTaken);
+    const patch = raced.requests.find((r) => r.path === "/rest/v1/counterparties" && r.method === "PATCH")!;
+    expect(patch.params.get("or")).toBe("(notice_email.is.null,notice_email.eq.)");
+    expect(appends(raced)).toHaveLength(0);
+    // Already set when read: nothing is written at all.
+    const set = reply([{ id: VENDOR }], "ap@example.com");
+    await expect(run(set, () => changeCounterpartyNoticeEmail({ actorId: ACTOR, counterpartyId: VENDOR, email: "jane@example.com", onlyIfEmpty: true }))).rejects.toBeInstanceOf(NoticeEmailTaken);
+    expect(set.requests.some((r) => r.method === "PATCH")).toBe(false);
   });
 });
 

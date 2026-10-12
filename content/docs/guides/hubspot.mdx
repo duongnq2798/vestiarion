@@ -96,7 +96,7 @@ A deal marked lost in HubSpot is only flagged. To stop its lines, use **Cancel d
 
 ## 5. Billing emails
 
-A customer linked to a HubSpot company that has no billing email yet is listed under "Billing emails from HubSpot", with the email of the company's main contact. Choose **Use this email** if it is where invoices go: it becomes the customer's billing email, used for reminders once you turn them on for an invoice. The ledger records `counterparty_notice_email_changed` with `via: "hubspot"`. A billing email the customer already has is never replaced.
+A customer linked to a HubSpot company that has no billing email yet is listed under "Billing emails from HubSpot", with the email of the company's main contact. Choose **Use this email** if it is where invoices go: it becomes the customer's billing email, used for reminders once you turn them on for an invoice. The ledger records `counterparty_notice_email_changed` with `via: "hubspot"`. A billing email the customer already has is never replaced, even one typed in while you looked; and only the email you were shown is used.
 
 ## Status and errors
 

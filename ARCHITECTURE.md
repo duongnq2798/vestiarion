@@ -1816,7 +1816,8 @@ reads in `api.ts`, `hubspotProvider`), wired in `src/lib/crm-providers.ts`. It i
   records `crm_deal_change_kept`. Both send back the key of the changes the page showed (`changesKey`) and are refused
   when HubSpot changed the deal again since. Nothing is revised or cancelled automatically.
 - **Billing emails.** `crm.fill_email` sets a linked customer's empty billing email from its company's main contact,
-  only when a person presses **Use this email**.
+  only when a person presses **Use this email**: the email the list showed, written only where the billing email is
+  still empty (`changeCounterpartyNoticeEmail({ onlyIfEmpty })`).
 
 ## API
 

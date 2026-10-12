@@ -200,7 +200,9 @@ ago stays out until someone changes it. Lost deals are kept only once they had a
 (`external_links`, object `company`), so the next plan finds it whatever its name. A linked customer with no billing
 email, whose company's main contact has one, gets **Use this email** under the HubSpot list; pressing it sets the
 billing email only while it is still empty (`counterparty_notice_email_changed`, with `via: "hubspot"`). Never
-automatically.
+automatically. The list shows the email of the deal HubSpot gave last, the one the command takes; the form sends the
+email it showed, and another one in HubSpot by then is refused. The fill is written only where the email is still
+empty, in the same update, so one typed in meanwhile is never replaced.
 
 **H14. Consent, in plain words, before connecting** (`hubspot-2026-10-12`): what is read (the companies, contacts and
 deals of the account: names, amounts, close dates, stages, each company's main contact email); who sees it (the

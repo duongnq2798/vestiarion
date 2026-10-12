@@ -137,6 +137,8 @@ describe("HubSpotDeals", () => {
     const markup = list();
     expect(markup).toContain("Not won yet: 1 deal in HubSpot");
     expect(markup).toContain("Use this email");
+    // The form sends the email it shows: only that one is filled.
+    expect(markup).toContain('name="email" value="jane.ito@northwind.example"');
     expect(markup).toContain("jane.ito@northwind.example");
     const viewer = list({ canWrite: false });
     expect(viewer).not.toContain("Plan collections");
