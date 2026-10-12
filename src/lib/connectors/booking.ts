@@ -20,7 +20,10 @@ export interface BookingAccount {
   currency: string | null;
 }
 
-/** A bill to show the preview with: its supplier, number, and amount in its own currency. */
+/**
+ * A bill to show the preview with: its supplier, number, and amount in its own currency. The Settings card reads one
+ * still open in the tool with an amount due, in US dollars, one added to Vestiarion first (`accountingPanelView`).
+ */
 export interface BookingSample {
   supplier: string;
   number: string | null;
@@ -34,12 +37,21 @@ export function accountName(account: BookingAccount): string {
   return account.code ? `${account.name} (${account.code})` : account.name;
 }
 
+/** A bill the preview can show as it is: in US dollars, paid as that many USDC, with something left to pay. */
+function shownAsItIs(sample: BookingSample | null): sample is BookingSample {
+  return sample !== null && sample.currency === "USD" && Number.isFinite(Number(sample.amount)) && Number(sample.amount) > 0;
+}
+
 export function bookingPreview(account: BookingAccount, sample: BookingSample | null, label: string, books = true): { lines: string[]; warning: string | null } {
-  // A bill in US dollars is paid as that many USDC; any other example is a round figure, so no rate is implied.
-  const amount = sample && sample.currency === "USD" ? MONEY.format(Number(sample.amount)) : "1,250.00";
-  const toWhom = sample ? `${sample.supplier}${sample.number ? ` for bill ${sample.number}` : ""}` : "a supplier for one of its bills";
+  // A bill in US dollars with an amount due is paid as that many USDC. Without one, the line says it is an example, with
+  // a round figure and no supplier: never a bill already paid (0.00), and never a rate for another currency.
+  const bill = shownAsItIs(sample) ? sample : null;
+  const amount = bill ? MONEY.format(Number(bill.amount)) : "100.00";
+  const payment = bill
+    ? `A payment of ${amount} USDC to ${bill.supplier}${bill.number ? ` for bill ${bill.number}` : ""}`
+    : "For example, a payment of 100.00 USDC for a bill";
   const lines = [
-    `A payment of ${amount} USDC to ${toWhom} will be booked in ${label} as a payment of ${amount} USD from ${accountName(account)}, with the Arc transaction as its reference.`,
+    `${payment} will be booked in ${label} as a payment of ${amount} USD from ${accountName(account)}, with the Arc transaction as its reference.`,
     books
       ? `The network fee is shown apart and not booked to this account. Each payment is booked in ${label} only after an owner or admin approves it on Bills & receivables.`
       : `The network fee is shown apart and not booked to this account. Nothing is written to ${label} yet: Vestiarion keeps this choice for when it books its payments there.`,
