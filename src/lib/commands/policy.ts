@@ -30,6 +30,12 @@ export const COMMAND_PERMISSIONS = {
   "invoice.import": "records.write",
   "milestone.add": "records.write",
   "payee_link.create": "records.write",
+  // A deal on the receivables side, its versions, and the switch that releases its lines on their days: records, as a
+  // receivable is (deal schedule D13). Releasing a line adds a receivable, so it needs what adding one needs today.
+  "deal.create": "records.write",
+  "deal.change": "records.write",
+  "deal.release": "records.write",
+  "deal.auto_release": "records.write",
   "inbox.add": "records.write",
   "inbox.finish": "records.write",
   "inbox.dismiss": "records.write",
