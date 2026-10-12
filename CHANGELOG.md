@@ -31,6 +31,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 - **Bills from Xero and QuickBooks start unticked**, with Select all: one click on Add no longer adds the whole list.
 - **A HubSpot deal planned already** shows the deal it became, with Open the deal, instead of saying it cannot be
   planned; right after Plan collections the page goes on to the new deal.
+- **A bill's amount hint matches its currency.** In shadow mode, a bill in US dollars, euros or pounds showed
+  `2.500.000` as its example amount; it now shows `1250.00`, and only a currency written without decimals, such as
+  the yen, shows a grouped whole amount.
 
 ## [0.1.0-beta.1] - 2026-10-12
 

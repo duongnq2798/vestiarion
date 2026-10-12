@@ -173,6 +173,15 @@ describe("InvoiceIntake in shadow mode (shadow mode S6)", () => {
     expect(markup).toContain("Rates By Exchange Rate API");
   });
 
+  it("shows a grouped whole amount only for a currency without decimals", () => {
+    for (const currency of ["USD", "EUR", "GBP"]) {
+      const shadow = renderToStaticMarkup(<InvoiceIntake orgSlug="acme" counterparties={COUNTERPARTIES} billCurrency={currency} />);
+      expect(input(shadow, "amount")).toContain('placeholder="1250.00"');
+    }
+    const yen = renderToStaticMarkup(<InvoiceIntake orgSlug="acme" counterparties={COUNTERPARTIES} billCurrency="JPY" />);
+    expect(input(yen, "amount")).toContain('placeholder="2.500.000"');
+  });
+
   it("keeps USDC first outside shadow mode", () => {
     const plain = renderToStaticMarkup(<InvoiceIntake orgSlug="acme" counterparties={COUNTERPARTIES} />);
     expect(plain).not.toContain("Rates By Exchange Rate API");
