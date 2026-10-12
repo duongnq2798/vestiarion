@@ -117,8 +117,8 @@ export function FormLab() {
           name="labWorkspace"
           defaultValue="acme"
           options={[
-            { value: "acme", label: "Acme Studio", description: "Arc testnet" },
-            { value: "beta", label: "Beta Works", description: "Arc" },
+            { value: "acme", label: "Acme Studio", description: "Owner" },
+            { value: "beta", label: "Beta Works", description: "Admin" },
           ]}
           className="sm:col-span-2"
         />
