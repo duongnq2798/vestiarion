@@ -157,6 +157,10 @@ create table if not exists public.accounting_sync_cursors (
   -- The run under way: the next page to read, and the latest change read so far. Null when none is under way.
   page                 integer constraint accounting_sync_cursors_page_check check (page is null or page >= 1),
   high_water           timestamptz,
+  run_started_at       timestamptz,
+  -- Whether the run under way read a change made during it: then a run of several pages reads again from page 1,
+  -- since a row may have moved up into a page already read.
+  changed_in_run       boolean not null default false,
   backfill_started_at  timestamptz,
   completed_at         timestamptz,
   updated_at           timestamptz not null default now(),
