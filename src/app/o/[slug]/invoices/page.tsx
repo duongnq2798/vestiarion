@@ -12,8 +12,9 @@ import { AllocationLines } from "@/components/AllocationLines";
 import { ApplyPayments } from "@/components/ApplyPayments";
 import { BillsScreen } from "@/components/bills/BillsScreen";
 import type { PanelContent } from "@/components/bills/BillsPanels";
-import type { SummaryData, Totals, WaitingItem } from "@/components/bills/BillsSummary";
-import { NewButton, NewMenu } from "@/components/bills/NewMenu";
+import type { WaitingItem } from "@/components/bills/BillsSummary";
+import { billRowItem, countBills, countReceivables, homeOf, JUST_ADDED_MS, listData, listRowOf as rowOf, summaryData, viewHref } from "@/components/bills/build";
+import { NewMenu } from "@/components/bills/NewMenu";
 import type { BillRowItem, ListData } from "@/components/bills/types";
 import { PayLinkControl } from "@/components/PayLinkControl";
 import { ReceiptControl } from "@/components/ReceiptControl";
@@ -23,8 +24,6 @@ import { Callout } from "@/components/ui/Callout";
 import { DecisionCard } from "@/components/vx/DecisionCard";
 import { IntakeFold } from "@/components/vx/IntakeFold";
 import { invoiceDecision } from "@/components/vx/map";
-import { billBlockers, billNextStep, collectionState } from "@/components/vx/bill-next-step";
-import { stoppedWhy } from "@/components/vx/decision-signals";
 import { RecurringSummary } from "@/components/vx/RecurringSummary";
 import { PaymentPlanSection } from "@/components/vx/PaymentPlan";
 import { Button } from "@/components/ui/Button";
@@ -37,28 +36,19 @@ import { toMicros, type PaymentIn } from "@/lib/allocations/model";
 import { receivableLabel } from "@/lib/allocations/suggest";
 import { applyPaymentsView, paymentsByReceivable, receivableViews, type ReceivableView } from "@/lib/allocations/view";
 import {
-  BILL_CARD_FILTERS,
-  BILL_FILTER_LABELS,
-  BILL_FILTERS,
   billFilterMatches,
   billsHref,
-  LIST_SORTS,
-  OPEN_STATUSES,
-  OUTSTANDING_STATUSES,
   PAGE_SIZE,
   pageOf,
   readBillsQuery,
-  RECEIVABLE_FILTER_LABELS,
-  RECEIVABLE_FILTERS,
   receivableFilterMatches,
   resolveBillsView,
-  SORT_LABELS,
   sortRows,
   WAITING_STATUSES,
   type BillFilter,
-  type BillsTab,
   type BillsView,
   type ListRow,
+  type Page,
   type ReceivableFilter,
   type ReviewPanel,
 } from "@/lib/bills-view";
@@ -81,7 +71,7 @@ import { accountingProvider, accountingProviderOn } from "@/lib/accounting-provi
 import { accountingBookings, type BookingsView } from "@/lib/connectors/bookings-view";
 import { ledgerReadMayBeCut, listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { listCounterparties, listInvoices, stats, type InvoiceRow } from "@/lib/queries";
-import { plural, utcDay } from "@/lib/copy";
+import { plural } from "@/lib/copy";
 import { payLinkStates, type PayLinkState } from "@/lib/platform/pay-links";
 import { listRecurringPayables } from "@/lib/recurring-payables";
 import { readPaymentPlan } from "@/lib/payment-plan-read";
@@ -118,9 +108,6 @@ type InvoicePageProps = {
    */
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
-
-/** Rows marked "Just added" while the list shows the newest first. */
-const JUST_ADDED_MS = 10 * 60_000;
 
 /**
  * The bills an accounting tool brought in, waiting for a person (Xero connector X11, X19; QuickBooks connector Q19), on
@@ -232,21 +219,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     // Every invoice's decision, without its payment's track: what the filters, counts and rows read. The rows shown get
     // their track below, from the payments read for them alone.
     const decided = new Map(invoices.map((invoice) => [invoice.id, invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), entries, { network, deciding, verdicts, asOf, allocations })]));
-    const listRowOf = (invoice: InvoiceRow): ListRow => {
-      const decision = decided.get(invoice.id) as Decision;
-      return {
-        id: invoice.id,
-        status: invoice.status,
-        refused: decision.outcome === "refused",
-        due: dueOf(invoice),
-        dueDate: invoice.due_date.slice(0, 10),
-        at: decision.at,
-        added: invoice.created_at ?? decision.at,
-        amount: Number(invoice.amount),
-        name: invoice.counterparty_name,
-        recurring: Boolean(invoice.recurring_id),
-      };
-    };
+    const listRowOf = (invoice: InvoiceRow): ListRow => rowOf(invoice, decided.get(invoice.id) as Decision);
     // A search keeps what it finds (I09): by id, invoice number, purchase order, counterparty, amount or a payment applied.
     const matches = (invoice: InvoiceRow) => {
       if (!search) return true;
@@ -260,12 +233,8 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     // Money received on Arc not applied in full, with suggestions; a search keeps the payments it finds.
     const toApply = book?.available ? applyPaymentsView(book, receivablesIn, counterparties.map(({ id, name, address }) => ({ id, name, address })), { query: search }) : [];
 
-    const countBills = (rows: ListRow[]) =>
-      Object.fromEntries([...BILL_FILTERS, ...BILL_CARD_FILTERS].map((filter) => [filter, rows.filter((row) => billFilterMatches(filter, row, today, inAWeek)).length])) as Record<BillFilter, number>;
-    const countReceivables = (rows: ListRow[]) =>
-      Object.fromEntries(RECEIVABLE_FILTERS.map((filter) => [filter, rows.filter((row) => receivableFilterMatches(filter, row, today)).length])) as Record<ReceivableFilter, number>;
-    const billCounts = countBills(foundPayables);
-    const receivableCounts = countReceivables(foundReceivables);
+    const billCounts = countBills(foundPayables, today, inAWeek);
+    const receivableCounts = countReceivables(foundReceivables, today);
     const view: BillsView = resolveBillsView(query, {
       directionOf: (id) => {
         const direction = invoicesById.get(id)?.direction;
@@ -273,10 +242,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       },
       homeOf: (id) => {
         const invoice = invoicesById.get(id);
-        if (!invoice) return null;
-        const row = listRowOf(invoice);
-        if (invoice.direction === "receivable") return receivableFilterMatches("outstanding", row, today) ? "outstanding" : "received";
-        return billFilterMatches("needs-you", row, today, inAWeek) ? "needs-you" : billFilterMatches("upcoming", row, today, inAWeek) ? "upcoming" : "paid";
+        return invoice ? homeOf(invoice, listRowOf(invoice), today, inAWeek) : null;
       },
       billCounts,
       receivableCounts,
@@ -460,128 +426,47 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       })
     );
 
-    // The address of this view with something changed: every link on the page is written from it.
     const sortAsked = query.sort;
-    const here = (change: Partial<Pick<BillsView, "tab" | "filter" | "q" | "sort" | "page" | "open">>) =>
-      orgHref(
-        slug,
-        billsHref({ tab: view.tab, filter: view.filter, q: view.q, sort: sortAsked, ...change } as Parameters<typeof billsHref>[0])
-      );
-
-    // A row before it is opened (B6): who, what, when, how much, where it stands, what is in its way, what to do next.
-    const rowItem = (row: ListRow): BillRowItem => {
-      const invoice = invoicesById.get(row.id) as InvoiceRow;
-      const decision = shownDecisions.get(row.id) as Decision;
-      const payable = invoice.direction === "payable";
-      const facts = waiting.get(row.id);
-      const needsYou = payable && billFilterMatches("needs-you", row, today, inAWeek);
-      return {
-        id: row.id,
-        name: invoice.counterparty_name,
-        reference: invoice.memo,
-        amount: decision.amount ?? null,
-        token: decision.token ?? "USDC",
-        struck: decision.outcome === "refused",
-        date: rowDate(invoice, today),
-        outcome: decision.outcome,
-        outcomeLabel: decision.outcomeLabel,
-        blockers: needsYou ? billBlockers(decision) : [],
-        why: needsYou ? stoppedWhy(decision) : null,
-        note: payable ? null : owedNote(decision),
-        context: payable ? null : (dealContext(decision) ?? null),
-        next: payable
-          ? billNextStep(decision, {
-              status: invoice.status,
-              waiting: facts,
-              rule: ruleOf(decision),
-              canWrite: canWrite && invoice.tx_ref === null,
-              canDecide,
-              counterparty: { id: invoice.counterparty_id, name: invoice.counterparty_name },
-            })
-          : null,
-        collection: payable ? null : collectionState(linkStates.get(row.id), today),
-        justAdded: view.sort === "added" && Boolean(invoice.created_at) && asOf - Date.parse(invoice.created_at as string) < JUST_ADDED_MS,
-        href: here({ open: row.id }),
-      };
+    const slugHref = (path: string) => orgHref(slug, path);
+    const here = viewHref(slugHref, view, sortAsked);
+    const pageItems: Page<BillRowItem> = {
+      ...page,
+      rows: page.rows.map((row) => {
+        const invoice = invoicesById.get(row.id) as InvoiceRow;
+        const decision = shownDecisions.get(row.id) as Decision;
+        return billRowItem({
+          invoice,
+          decision,
+          row,
+          today,
+          inAWeek,
+          waiting: waiting.get(row.id),
+          rule: ruleOf(decision),
+          canWrite: canWrite && invoice.tx_ref === null,
+          canDecide,
+          owedNote: owedNote(decision),
+          dealContext: dealContext(decision),
+          link: linkStates.get(row.id),
+          justAdded: view.sort === "added" && Boolean(invoice.created_at) && asOf - Date.parse(invoice.created_at as string) < JUST_ADDED_MS,
+          href: here({ open: row.id }),
+        });
+      }),
     };
-
-    const listData = (tab: Exclude<BillsTab, "plan">): ListData => {
-      const bills = tab === "bills";
-      const keys: readonly string[] = bills ? [...BILL_FILTERS, ...(BILL_CARD_FILTERS as readonly string[]).filter((key) => key === view.filter)] : RECEIVABLE_FILTERS;
-      const counts: Record<string, number> = bills ? billCounts : receivableCounts;
-      const labels: Record<string, string> = bills ? BILL_FILTER_LABELS : RECEIVABLE_FILTER_LABELS;
-      const other = bills ? foundReceivables.length : foundPayables.length;
-      const filterLabel = labels[view.filter as string].toLowerCase();
-      return {
-        label: bills ? "Bills" : "Receivables",
-        filters: keys.map((key) => ({ key, label: labels[key], count: counts[key], href: here({ filter: key as BillFilter, page: 1 }), current: key === view.filter })),
-        q: view.q,
-        keep: { tab, filter: view.filter as string, ...(sortAsked ? { sort: sortAsked } : {}) },
-        clearSearchHref: here({ q: null, page: 1 }),
-        sort: view.sort,
-        sorts: LIST_SORTS.map((value) => ({ value, label: SORT_LABELS[value], href: here({ sort: value, page: 1 }) })),
-        page: { ...page, rows: page.rows.map(rowItem) },
-        previousHref: page.page > 1 ? here({ page: page.page - 1 }) : null,
-        nextHref: page.page < page.pages ? here({ page: page.page + 1 }) : null,
-        elsewhere:
-          view.q && other > 0
-            ? {
-                text: bills ? `${other} ${plural(other, "receivable matches", "receivables match")} too` : `${other} ${plural(other, "bill matches", "bills match")} too`,
-                href: orgHref(slug, billsHref({ tab: bills ? "receivables" : "bills", q: view.q })),
-              }
-            : null,
-        empty: view.q
-          ? { title: "Nothing matches", body: `No ${bills ? "bill" : "receivable"} under ${labels[view.filter as string]} matches this search.` }
-          : bills && payableRows.length === 0
-            ? {
-                title: "No bills yet",
-                body: canWrite
-                  ? "Add a bill, have one read from a document, or import a list. The agent decides each one at its next cycle."
-                  : "An owner or admin of this workspace adds the bills.",
-                action: canWrite ? (
-                  <div className="flex flex-wrap gap-2">
-                    <NewButton kind="bill">Add a bill</NewButton>
-                    <NewButton kind="import" variant="secondary">
-                      Import a list
-                    </NewButton>
-                  </div>
-                ) : undefined,
-              }
-            : !bills && receivableRows.length === 0
-              ? {
-                  title: "No receivables yet",
-                  body: "An invoice to a customer, or a deal's line once released, is listed here until it is paid.",
-                  action: canWrite ? <NewButton kind="invoice">Invoice a customer</NewButton> : undefined,
-                }
-              : { title: `Nothing ${filterLabel === "all" ? "here" : `under ${labels[view.filter as string]}`}`, body: `No ${bills ? "bill" : "receivable"} is ${filterLabel === "all" ? "listed" : "in this list"} now.` },
-      };
-    };
+    const listOf = (tab: "bills" | "receivables"): ListData =>
+      listData({
+        tab,
+        view,
+        sortAsked,
+        page: pageItems,
+        counts: tab === "bills" ? billCounts : receivableCounts,
+        slugHref,
+        canWrite,
+        totals: { payables: payableRows.length, receivables: receivableRows.length },
+        otherMatches: tab === "bills" ? foundReceivables.length : foundPayables.length,
+      });
 
     // The figures above the tabs count every bill and receivable, whatever the tab, filter or search shows (B10).
-    const totals = (rows: ListRow[], amountOf: (invoice: InvoiceRow) => number = (invoice) => Number(invoice.amount)): Totals =>
-      rows.reduce(
-        (sum, row) => {
-          const invoice = invoicesById.get(row.id) as InvoiceRow;
-          return invoice.currency === "EURC" ? { ...sum, eurc: sum.eurc + amountOf(invoice) } : { ...sum, usdc: sum.usdc + amountOf(invoice) };
-        },
-        { usdc: 0, eurc: 0 }
-      );
-    const allBillCounts = countBills(payableRows);
-    const dueSoonRows = payableRows.filter((row) => billFilterMatches("due-7", row, today, inAWeek));
-    const overdueRows = payableRows.filter((row) => billFilterMatches("overdue", row, today, inAWeek));
-    const outstandingRows = receivableRows.filter((row) => OUTSTANDING_STATUSES.has(row.status));
-    const summary: SummaryData = {
-      needsYou: { count: allBillCounts["needs-you"], href: orgHref(slug, billsHref({ tab: "bills", filter: "needs-you" })) },
-      dueSoon: { count: dueSoonRows.length, totals: totals(dueSoonRows), href: orgHref(slug, billsHref({ tab: "bills", filter: "due-7" })) },
-      overdue: { count: overdueRows.length, totals: totals(overdueRows), href: orgHref(slug, billsHref({ tab: "bills", filter: "overdue" })) },
-      receivables: {
-        open: outstandingRows.length,
-        overdue: outstandingRows.filter((row) => row.dueDate < today).length,
-        // What is still owed, part payments applied taken off (allocations L11): money owed, never cash.
-        owed: totals(outstandingRows, (invoice) => stillOwed(invoice, book?.rows ?? [])),
-        href: orgHref(slug, billsHref({ tab: "receivables", filter: "outstanding" })),
-      },
-    };
+    const summary = summaryData({ payableRows, receivableRows, invoicesById, today, inAWeek, owedOf: (invoice) => stillOwed(invoice, book?.rows ?? []), slugHref });
 
     // What waits for a person to review, each opening its existing review (B11).
     const waitingItems: WaitingItem[] = [];
@@ -658,7 +543,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     let tabContent: Pick<Parameters<typeof BillsScreen>[0], "bills" | "plan" | "receivables"> = {};
     if (view.tab === "bills") {
       tabContent = {
-        bills: { list: listData("bills"), below: schedules.length > 0 ? <RecurringSummary schedules={schedules} orgSlug={slug} canWrite={canWrite} /> : undefined },
+        bills: { list: listOf("bills"), below: schedules.length > 0 ? <RecurringSummary schedules={schedules} orgSlug={slug} canWrite={canWrite} /> : undefined },
       };
     } else if (view.tab === "plan") {
       // The next 14 days of payments, in the order the cash allows (payment plan design P1), from the invoices and
@@ -692,7 +577,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
           : null;
       tabContent = {
         receivables: {
-          list: listData("receivables"),
+          list: listOf("receivables"),
           above: (
             <>
               {/* Before migration 0103 runs, receivables show as before, and say applying payments waits for it (allocations L11). */}
@@ -740,7 +625,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       };
     }
 
-    const needsYouCount = allBillCounts["needs-you"];
+    const needsYouCount = summary.needsYou.count;
     return (
       <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()} status={await shellStatus()}>
         <PageHead
@@ -774,7 +659,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         <AutoRefresh intervalMs={20_000} />
 
         <BillsScreen
-          slugHref={(path) => orgHref(slug, path)}
+          slugHref={slugHref}
           tab={view.tab}
           tabs={[
             { key: "bills", label: "Bills", href: orgHref(slug, billsHref({ tab: "bills" })), count: needsYouCount },
@@ -790,18 +675,4 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       </ProductShell>
     );
   });
-}
-
-/** The date a row leads with: the day it is scheduled for, its due date (marked once past), or when it was paid. */
-function rowDate(invoice: InvoiceRow | undefined, today: string): BillRowItem["date"] {
-  if (!invoice) return null;
-  if (invoice.status === "scheduled" && invoice.scheduled_for) return { label: `Pays ${utcDay(`${invoice.scheduled_for.slice(0, 10)}T00:00:00Z`)}` };
-  if (!OPEN_STATUSES.has(invoice.status)) return { label: `Due ${utcDay(`${invoice.due_date.slice(0, 10)}T00:00:00Z`)}` };
-  const due = invoice.due_date.slice(0, 10);
-  return due < today ? { label: `Overdue ${utcDay(`${due}T00:00:00Z`)}`, tone: "held" } : { label: `Due ${utcDay(`${due}T00:00:00Z`)}` };
-}
-
-/** Sorts by the day that matters: the scheduled day, else the due date. */
-function dueOf(invoice: InvoiceRow): string {
-  return (invoice.status === "scheduled" && invoice.scheduled_for ? invoice.scheduled_for : invoice.due_date).slice(0, 10);
 }

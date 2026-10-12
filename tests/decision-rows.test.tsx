@@ -96,10 +96,12 @@ describe("the Bills & receivables page", () => {
   const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "invoices", "page.tsx"), "utf8");
   const summary = readFileSync(path.join(process.cwd(), "src", "components", "bills", "BillsSummary.tsx"), "utf8");
   const view = readFileSync(path.join(process.cwd(), "src", "lib", "bills-view.ts"), "utf8");
+  const build = readFileSync(path.join(process.cwd(), "src", "components", "bills", "build.tsx"), "utf8");
 
   it("leads with what needs a person, what is due within 7 days, what is overdue and what customers owe, each opening its list", () => {
     for (const label of ["Needs you", "Due in 7 days", "Overdue", "Receivables"]) expect(summary).toContain(`label="${label}"`);
-    expect(page).toContain('needsYou: { count: allBillCounts["needs-you"], href: orgHref(slug, billsHref({ tab: "bills", filter: "needs-you" })) }');
+    expect(build).toContain('needsYou: { count: needsYou.length, href: slugHref(billsHref({ tab: "bills", filter: "needs-you" })) }');
+    expect(page).toContain("const summary = summaryData({ payableRows, receivableRows, invoicesById, today, inAWeek,");
   });
 
   it("puts every way to add something under New ▾, with no form open on the page (the palette's ?add opens one)", () => {
@@ -115,9 +117,10 @@ describe("the Bills & receivables page", () => {
   });
 
   it("says on each row what is in the way and what to do next, and why it waits when no check says", () => {
-    expect(page).toContain("blockers: needsYou ? billBlockers(decision) : [],");
-    expect(page).toContain("why: needsYou ? stoppedWhy(decision) : null,");
-    expect(page).toContain("next: payable\n          ? billNextStep(decision, {");
+    expect(build).toContain("blockers: needsYou ? billBlockers(decision) : [],");
+    expect(build).toContain("why: needsYou ? stoppedWhy(decision) : null,");
+    expect(build).toContain("next: payable\n      ? billNextStep(decision, {");
+    expect(page).toContain("waiting: waiting.get(row.id),");
     // Every payable's card keeps the footer it had: the verdict first, then what a waiting bill needs or its receipt.
     expect(page).toContain("const payableFooter = withVerdict(needsYouFor);");
   });

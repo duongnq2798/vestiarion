@@ -519,7 +519,7 @@ describe("the new control screens, as source", () => {
     const invoices = read("src/app/o/[slug]/invoices/page.tsx");
     // Its row names what it needs, from the same facts its card offers to add (Bills & receivables tabs B6).
     expect(read("src/components/vx/bill-next-step.ts")).toContain("waitingHint(facts.waiting.onFile, facts.waiting.added)");
-    expect(invoices).toContain("waiting: facts,");
+    expect(invoices).toContain("waiting: waiting.get(row.id),");
     expect(invoices).toContain("const payableFooter = withVerdict(needsYouFor);");
     expect(invoices).toContain("<WaitingPayableAction");
     // A counterparty paid without purchase orders is never asked for one (three-way match design M2).
