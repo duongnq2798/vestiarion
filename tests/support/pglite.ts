@@ -104,6 +104,7 @@ export const TENANT_TABLES = [
   "shadow_modes", "decision_verdicts", "payment_actuals", "bank_statement_lines", "report_shares", "report_baselines", "receivable_allocations",
   "accounting_connections", "external_links", "accounting_bills", "accounting_sync_cursors",
   "deals", "deal_versions", "deal_lines",
+  "crm_deals",
 ] as const;
 
 export interface SeededRows {
@@ -216,6 +217,16 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     [orgId, connectionId, `bill-${tag}`, `cp-${tag}`]
   );
   await db.query("insert into accounting_sync_cursors (org_id, connection_id, object_type) values ($1, $2, 'bill')", [orgId, connectionId]);
+  // A HubSpot connection and a won deal read from it (0105).
+  const crmConnectionId = await one(
+    `insert into accounting_connections (org_id, provider, external_org_id, consent_version, consented_at, window_from)
+     values ($1, 'hubspot', $2, 'hubspot-2026-10-12', now(), '2026-07-14') returning id`,
+    [orgId, `hub-${tag}`]
+  );
+  await db.query(
+    "insert into crm_deals (org_id, connection_id, external_id, name, amount, currency, stage_state) values ($1, $2, $3, 'Website rebuild', 1, 'USD', 'won')",
+    [orgId, crmConnectionId, `deal-${tag}`]
+  );
   // A receivable part paid from a payment received on Arc (0103).
   const receivableId = await one(
     "insert into invoices (org_id, direction, counterparty_id, amount, due_date) values ($1, 'receivable', $2, 2, now()) returning id",
