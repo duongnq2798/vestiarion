@@ -1,6 +1,6 @@
 "use client";
 
-import { Check } from "lucide-react";
+import { Check, Minus } from "lucide-react";
 import { Checkbox as CheckboxPrimitive } from "radix-ui";
 import { useId, type ComponentProps, type ReactNode } from "react";
 import { cn } from "./cn";
@@ -14,7 +14,8 @@ export type CheckboxProps = Omit<ComponentProps<typeof CheckboxPrimitive.Root>, 
  * A checkbox with its label. Inside a form it submits `name=on` when ticked,
  * like a native one, and returns to its default when the form resets.
  *
- * `className` styles the row — the box and the label together — not the box alone.
+ * `className` styles the row — the box and the label together — not the box alone. `checked="indeterminate"` draws a
+ * dash, for a Select all over a list partly ticked.
  */
 export function Checkbox({ label, description, id, className, ...props }: CheckboxProps) {
   const generated = useId();
@@ -25,11 +26,11 @@ export function Checkbox({ label, description, id, className, ...props }: Checkb
       <CheckboxPrimitive.Root
         id={checkboxId}
         aria-describedby={descriptionId}
-        className="mt-0.5 grid size-5 shrink-0 cursor-pointer place-items-center rounded-md border border-line-strong bg-surface text-on-agent shadow-control transition-colors duration-150 ease-standard disabled:cursor-not-allowed data-[state=checked]:border-agent data-[state=checked]:bg-agent"
+        className="mt-0.5 grid size-5 shrink-0 cursor-pointer place-items-center rounded-md border border-line-strong bg-surface text-on-agent shadow-control transition-colors duration-150 ease-standard disabled:cursor-not-allowed data-[state=checked]:border-agent data-[state=checked]:bg-agent data-[state=indeterminate]:border-agent data-[state=indeterminate]:bg-agent"
         {...props}
       >
         <CheckboxPrimitive.Indicator className="duration-150 data-[state=checked]:animate-in data-[state=checked]:zoom-in-50">
-          <Check aria-hidden strokeWidth={3} className="size-3.5" />
+          {props.checked === "indeterminate" ? <Minus aria-hidden strokeWidth={3} className="size-3.5" /> : <Check aria-hidden strokeWidth={3} className="size-3.5" />}
         </CheckboxPrimitive.Indicator>
       </CheckboxPrimitive.Root>
       <div className="grid gap-0.5">

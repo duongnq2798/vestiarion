@@ -114,9 +114,9 @@ describe("the QuickBooks review list", () => {
       )
     );
     expect(markup).toContain("Closed in QuickBooks after they were added");
-    expect(markup).toContain("Hicks Hardware · HH-301: deleted in QuickBooks. Look at it in Payables before the agent pays it.");
+    expect(markup).toContain("Hicks Hardware · HH-301: deleted in QuickBooks. Look at it in Bills before the agent pays it.");
     expect(markup).toContain("Partly paid in QuickBooks after they were added");
-    expect(markup).toContain("PowerDirect · PD-4471: 400.00 USD left of the 1,250.00 added. Look at it in Payables before the agent pays it.");
+    expect(markup).toContain("PowerDirect · PD-4471: 400.00 USD left of the 1,250.00 added. Look at it in Bills before the agent pays it.");
   });
 
   it("shows nothing with nothing to say", () => {

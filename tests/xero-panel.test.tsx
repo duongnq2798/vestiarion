@@ -132,7 +132,7 @@ describe("XeroBillsReview", () => {
     { id: "row-3", supplier: "SMART Agency", supplierNew: false, number: "SMC-0902", amount: "820.5", currency: "USD", usdc: "820.5", dueOn: "2026-09-20", status: "duplicate", reason: "Already in Vestiarion: same counterparty, amount, due date and reference." },
   ];
 
-  it("lists each bill with its fate, ticks the ones that can be added, and offers to add or dismiss them", () => {
+  it("lists each bill with its fate, none ticked to start, and offers to add or dismiss the ones ticked", () => {
     const markup = decode(renderToStaticMarkup(<XeroBillsReview orgSlug="acme" connectionId="conn-1" organisation="Demo Company (Global)" items={rows} closed={[]} canAdd />));
     expect(markup).toContain("From Xero: 3 bills to add");
     expect(markup).toContain("Demo Company (Global) · nothing is added until you add it");
@@ -144,9 +144,9 @@ describe("XeroBillsReview", () => {
     expect(markup).toContain("Add, goods received");
     expect(markup).toContain("Add, not received yet");
     expect(markup).toContain("Dismiss");
-    // Only the bill that can be added is ticked, and only it is sent to Add.
-    expect(markup.match(/name="billId" value="row-1"/g)?.length).toBe(3);
-    expect(markup).not.toContain('name="billId" value="row-2"');
+    // Nothing is ticked to start (Bills & receivables tabs B12): no bill is sent until a person ticks it, or Select all.
+    expect(markup).not.toContain('name="billId"');
+    expect(markup).toContain("Select all");
     expect(markup).toContain('name="goodsReceived" value="true"');
     expect(markup).toContain("Xero approving a bill does not approve its payment: the agent decides it.");
   });
@@ -165,7 +165,7 @@ describe("XeroBillsReview", () => {
       )
     );
     expect(markup).toContain("Closed in Xero after they were added");
-    expect(markup).toContain("PowerDirect · PD-4471: paid in Xero. Look at it in Payables before the agent pays it.");
+    expect(markup).toContain("PowerDirect · PD-4471: paid in Xero. Look at it in Bills before the agent pays it.");
   });
 
   it("shows nothing with nothing to say", () => {
