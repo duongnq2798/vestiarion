@@ -129,7 +129,7 @@ export type RefreshOutcome =
 export interface AccountingProvider {
   id: ProviderId;
   label: string;
-  /** The scopes asked for: read-only, in this version. */
+  /** The scopes asked for: the read scopes, and the write scopes `booking` needs (Xero: `accounting.payments`). */
   scopes: readonly string[];
   authorizeUrl(input: { state: string; redirectUri: string }): string;
   exchangeCode(input: { code: string; redirectUri: string }): Promise<ExchangeOutcome>;
@@ -142,4 +142,75 @@ export interface AccountingProvider {
   contacts(request: PageRequest): Promise<Page<ExternalContact>>;
   /** The chart's accounts a payment can be booked to, read when a person opens the picker. */
   accounts(input: { accessToken: string; externalOrgId: string }): Promise<ExternalAccount[]>;
+  /**
+   * Booking payments made on Arc against the provider's bills (docs/superpowers/specs/2026-10-12-accounting-writeback-design.md
+   * W11). Optional: a provider without it never books, and its connections show nothing about booking.
+   */
+  booking?: BookingProvider;
+}
+
+/** Which organisation a booking call names, with a fresh access token. */
+export interface OrgRequest {
+  accessToken: string;
+  externalOrgId: string;
+}
+
+/**
+ * What the provider says of the organisation (W1): `demo` only when it says so itself (Xero's Demo Company, a
+ * QuickBooks sandbox company). Anything else, a trial included, is a real business's books.
+ */
+export interface OrganisationFacts {
+  externalOrgId: string;
+  name: string;
+  demo: boolean;
+  /** ISO 4217, or null when the provider does not say. */
+  baseCurrency: string | null;
+}
+
+/** A payment booked against a bill in the provider, as the core reads it back. */
+export interface ExternalPayment {
+  externalId: string;
+  billExternalId: string | null;
+  accountExternalId: string | null;
+  /** Exact decimals, in the bill's currency. */
+  amount: string;
+  currency: string | null;
+  /** `YYYY-MM-DD` */
+  date: string | null;
+  reference: string | null;
+  /** `deleted`: someone reversed it in the provider; it is never booked again on its own. */
+  status: "active" | "deleted";
+}
+
+/** One payment to book: against this bill, from this account, on this day, for this amount, with this reference. */
+export interface PaymentToBook {
+  billExternalId: string;
+  accountExternalId: string;
+  /** Exact decimals, in `currency`, the bill's. */
+  amount: string;
+  currency: string;
+  /** `YYYY-MM-DD` */
+  date: string;
+  reference: string;
+}
+
+/** The provider's answer to a booking: the payment it made, or its refusal in its own words (a 400's validation errors). */
+export type BookOutcome = { ok: true; payment: ExternalPayment } | { ok: false; message: string };
+
+/**
+ * The seam a provider implements to book payments (W11). Each call maps the provider's JSON into the core's shapes; a
+ * timeout, a 5xx, a rate limit or a refused token throws `ProviderError`, as every other call does.
+ */
+export interface BookingProvider {
+  /** The scopes booking needs beyond reading (Xero: `accounting.payments`): a connection without them reconnects first. */
+  writeScopes: readonly string[];
+  organisation(input: OrgRequest): Promise<OrganisationFacts>;
+  /** One bill as it is now; null when the provider no longer has it. */
+  bill(input: OrgRequest & { billId: string }): Promise<ExternalBill | null>;
+  /** A payment on this bill carrying this reference, deleted ones included; null when there is none. */
+  findPayment(input: OrgRequest & { billId: string; reference: string }): Promise<ExternalPayment | null>;
+  /** Books one payment. The key makes the same booking the same request to the provider. */
+  bookPayment(input: OrgRequest & { payment: PaymentToBook; idempotencyKey: string }): Promise<BookOutcome>;
+  /** Reads one payment back by its id; null when the provider has none. */
+  payment(input: OrgRequest & { paymentId: string }): Promise<ExternalPayment | null>;
 }
