@@ -38,7 +38,8 @@ someone happens to look, and nobody is told when it waited too long.
 **K4. Cash readiness is worked out in the browser from what the page read, by one pure function.**
 - `dealCashReadiness(deal, costs, today)` (`src/lib/deals/cash.ts`). Money in: each charge in force: a planned line on
   its due day ("planned"), a released line on its receivable's due day ("expected"), an overdue one today, a paid one
-  as collected to date. Credits owed to the customer are no money in or out (deal schedule D8). Money out: each cost as
+  as collected to date. A line whose receivable a payment was applied to (allocations L11) counts what arrived as
+  collected and only what is still owed as expected, once, as Treasury and the payment plan count it (`stillOwed`). Credits owed to the customer are no money in or out (deal schedule D8). Money out: each cost as
   in K2, a planned cost past its day today.
 - **To date**: collected less paid out. Then day by day from today, only days with money moving: what comes in, what
   goes out, and the position after it. **Short** is the first day the position is below zero, by how much on that day,
@@ -61,7 +62,7 @@ someone happens to look, and nobody is told when it waited too long.
 **K7. Try a change: the deposit's day and percent, never saved.**
 - The deposit is the first charge in force by invoice day, while it is still planned, on a deal billed as a deposit
   and balance or whose first line is named as a deposit; a retainer or milestones offer no try. Moving its invoice day moves its
-  due day by the deal's terms. A new percent sets the deposit to that share of the deal's total, and the difference
+  due day by the deal's terms. A new percent sets the deposit to that share of the charges in force (credits left out), and the difference
   comes off (or goes onto) the other planned charges from the last backwards, as a lower price does (D8); a percent the
   planned lines cannot absorb is refused in words.
 - The view shows the gap before and after. Nothing is written: keeping it is **Change deal**, a new version.
@@ -73,8 +74,11 @@ someone happens to look, and nobody is told when it waited too long.
 **K9. Migration 0108.**
 - `deal_costs`: tenant table, row level security as every tenant table, composite foreign keys to `deals`,
   `counterparties` (set null), `invoices` (set null: a deleted bill leaves the cost planned) and `milestones` (set
-  null); terms fixed by a trigger; a link set once, to a payable only; removal once. Unique per workspace on
-  `idempotency_key`; one live cost per bill and per milestone.
+  null); terms fixed by a trigger; a link set once, to a payable only, never cleared by hand (only a deleted bill or
+  milestone clears it); removal once. Unique per workspace on `idempotency_key`; one live cost per bill and per
+  milestone.
+- `approval_escalation_starts`: one row per workspace, the day its escalations started (E4), insert-only for the
+  tenant role.
 - Before 0108 runs the deal page says "Costs are not set up on this deployment yet.", margin says not enough data and
   the badge is not shown.
 
@@ -92,7 +96,11 @@ entered it unless they are the only one who may approve. Shown on the Approvals 
 `approval_escalations` (unique per payable and decide-by day) for each waiting payable past its day, and emails each
 member who has notifications on (the digest's recipients and switch) one message about the payables they can act on
 (E3), and records `decision_escalated` with ids and counts. A payable nobody received is released, so the next cycle
-tries again; a claim kept is never sent again. A new decide-by day (the due date moved) is news again.
+tries again; a claim kept is never sent again. A new decide-by day (the due date moved) is news again. Only a decide-by
+day on or after the day escalations started in the workspace counts (`approval_escalation_starts`, set by its first
+run): a payable already past its day then is never emailed, so turning escalations on sends no backlog. A discount's
+deadline passing moves the decide-by day to the due date (E1), so the escalation comes when the due date passes. Each
+member gets at most one email a run; what the sends need is read before anything is claimed.
 
 **E5. Every status keeps a next action.** Held, flagged and awaiting information: decide in Approvals, or add the
 missing detail; being decided: who is deciding; a viewer: who can act.

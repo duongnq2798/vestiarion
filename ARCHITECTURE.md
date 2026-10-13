@@ -1093,7 +1093,8 @@ add up to the total exactly.
   currency, `expected_on`, `no_document`, and the payable (`invoice_id`) or milestone (`milestone_id`) it became, every
   foreign key composite with `org_id` (`set null` for the counterparty, the payable and the milestone, so a deleted bill
   leaves the cost planned). The tenant role inserts and reads, and updates only the link and the removal (column
-  grants); `deal_costs_guard` keeps a cost's terms, sets a link once and never moves it, and never undoes a removal;
+  grants); `deal_costs_guard` keeps a cost's terms, sets a link once and never moves it (nor clears it while the row it
+  names exists: only the foreign key's `set null` does), keeps who linked it, and never undoes a removal;
   `deal_costs_link_payable` refuses a receivable; partial unique indexes let a payable or a milestone back one live cost
   of any deal, so its money is counted once. `src/lib/deals/costs.ts` (pure) reads the form and says what a cost counts
   as (`costCount`: planned on its day, `due` as the bill or milestone it became, `paid`, or planned again when that bill
@@ -1103,7 +1104,10 @@ add up to the total exactly.
   `deal_cost_added`, `deal_cost_removed` or `deal_cost_linked` entry (domain `ar`), through `deal.add_cost`,
   `deal.remove_cost` and `deal.link_cost` (`records.write`, console only). `src/lib/deals/cash.ts` (pure, browser-safe)
   works out `dealCashReadiness`: collected and paid out to date, then each day from today with money moving (charges
-  in force on their due days, planned or expected, an overdue one today; costs as `costCount` says), the end-of-day
+  in force on their due days, planned or expected, an overdue one today, a part-paid one for what is still owed with
+  what arrived collected, from the payments applied to its receivable, `applied`, which the deal page reads with
+  `readReceivablesHeld` and the Receivables tab builds with `receivablesHeld` from the book it already read
+  (`src/lib/allocations/book.ts`); costs as `costCount` says), the end-of-day
   position, the first short day and the deepest gap, and the estimated margin (`not_enough_data` with no cost);
   `tryDeposit` moves the deposit's invoice day or sets its percent (`depositLever`: the first charge in force, still
   planned, of a deposit-and-balance deal or one whose first line is named a deposit), taking the difference from the other
@@ -1497,13 +1501,16 @@ is logged with the workspace id and never fails the cycle or the tick.
 **A waiting payable past its decide-by day is escalated once for that day.** After the digest,
 `escalateOverdueDecisions` (`src/lib/notifications/escalations.ts`, also from `runScheduledCycle`, in its own `try`)
 reads the waiting payables (`held`, `flagged`, `awaiting_info`) whose decide-by day (`decideByOf`) is before today,
-claims each in `approval_escalations` (migration 0108: unique per payable and decide-by day, an `ignoreDuplicates`
-upsert, so only the rows it inserted are news), and emails the digest's recipients, with the same switch and cap, each
-one message about the payables they may act on (`whoCanAct` over every member, as the card names them;
+on or after the day escalations started in the workspace (`approval_escalation_starts`, 0108: one row per workspace,
+set by its first run, insert-only for the tenant role, so a payable already past its day then is never emailed and
+turning escalations on sends no backlog), reads the recipients, the workspace and the members before anything is
+claimed, claims each in `approval_escalations` (migration 0108: unique per payable and decide-by day, an
+`ignoreDuplicates` upsert, so only the rows it inserted are news), and emails the digest's recipients, with the same
+switch and cap, deduplicated by member and address, each one message a run about the payables they may act on (`whoCanAct` over every member, as the card names them;
 `decisionEscalationEmail`, `src/lib/email/decision-escalation.ts`: names, amounts, statuses and days, escaped; no
 address). A payable someone received keeps its claim with `sent_at` and the counts, and the ledger records
 `decision_escalated` (`detail: { invoiceIds, decideBy, recipients, failed }`); a payable nobody received has its claim
-deleted, so the next scheduled cycle tries again. Without email configured, or nobody to tell, nothing is claimed.
+deleted, even when a send throws, so the next scheduled cycle tries again. Without email configured, or nobody to tell, nothing is claimed.
 Before 0108 runs nothing is escalated.
 
 **The switch** is the member's own: `memberships.notify_email` (migration
