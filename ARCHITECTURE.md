@@ -84,8 +84,9 @@ workspaces it created and the members it invited: migration `0023` gives every f
 `auth.users` a delete action, so `orgs.created_by`, `memberships.invited_by`, `invoices.created_by`
 and `milestones.created_by` become null, and the invitations the person sent are deleted with them.
 
-**The permission map** (spec §7) lives as data in `src/lib/auth/roles.ts` — `PERMISSIONS` maps each
-of `workspace.read`, `agent.pause`, `approval.decide`, `records.write`, `agent.run_cycle`,
+**The permission map** (spec §7) lives as data in `src/lib/auth/roles.ts` — five roles, `owner`, `admin`, `approver`,
+`accountant` (since `0112`, see [The accountant console](#the-accountant-console)) and `viewer`, and `PERMISSIONS` maps each
+of `workspace.read`, `agent.pause`, `approval.decide`, `records.write`, `receivables.reconcile`, `accounting.book`, `agent.run_cycle`,
 `agent.resume`, `members.manage`, `api_keys.manage`, `webhooks.manage`, `integrations.manage`, and `org.administer` to the roles that hold it
 — and is enforced at the boundary through `authorize(slug, permission)` (`src/lib/auth/authorize.ts`),
 which re-derives the caller's membership and role from the session rather than trusting anything the
@@ -105,14 +106,14 @@ every other member sees the endpoint list with each URL reduced to its host — 
 `/api/integrations/xero/*`, for connecting and removing the workspace's Slack, GitHub and Xero — `owner` and `admin` hold it; the
 limit on deciding payments from Slack takes `org.administer`, an owner's). The remaining permissions — `workspace.read` (beyond
 the leaving case above) and `org.administer` — and `canAssignRole`'s rule that an admin may grant
-`approver` or `viewer` but nothing at its own rank or above while only an owner assigns `admin` or
+`approver`, `accountant` or `viewer` but nothing at its own rank or above while only an owner assigns `admin` or
 `owner`, are defined in `roles.ts` ahead of the feature that will call `org.administer`.
 
 **Members and invitations** (spec §7, §10 step 5b) go through service-role-only functions in
 migration `0021`, each told who is acting and re-deriving that person's role inside its own
 transaction — `src/lib/platform/members.ts` wraps them, adds the signed ledger entry, and never
 passes an email address into it (`detail.by` and `detail.member` carry user ids only). `owner` may
-grant or change any role; `admin` may grant or change only `approver` and `viewer`; no one else may
+grant or change any role; `admin` may grant or change only `approver`, `accountant` and `viewer`; no one else may
 do either — enforced identically by `can_assign_role` in the database and `canAssignRole` in
 `roles.ts`. Inviting (`invite_member`) generates 32 random bytes, base64url-encoded, for the link,
 and stores only the `sha256` hex of that token (`invitations.token_hash`); the raw token never
@@ -2203,6 +2204,82 @@ answers in the notes. A dedupe key already taken is skipped, as in an import, an
 When `GROWTH_INBOUND_NOTIFY_EMAIL` is set, the team gets a short note through `sendEmail` about a new lead (never the
 message); nothing is ever sent to the person who asked. The approval queue's card shows an inbound lead's contact,
 site, notes and source detail.
+
+## The accountant console
+
+`docs/superpowers/specs/2026-10-13-accountant-console-design.md`. An outside accountant who looks after several small
+businesses is invited to each as a member with the `accountant` role, and works across them from one page, `/accountant`
+(`src/app/accountant/page.tsx`, `src/components/accountant/AccountantConsole.tsx`).
+
+**The role** (A1). `accountant` is a fifth value of `memberships.role` and `invitations.role` (migration `0112`, which
+replaces each check once, while it does not name the accountant, so every existing membership keeps its role). It holds
+`workspace.read`, `accounting.book` (booking payments made on Arc in Xero after reviewing each, write-back W6) and
+`receivables.reconcile`, a permission split from `records.write` for the receivables bookkeeping: applying money received
+and reversing it (`receivable.apply_payment`, `receivable.reverse_allocation`), and replying to and closing what a
+customer said on its statement link (`customer_request.reply`, `customer_request.close`). Owners and admins hold
+`receivables.reconcile` too, so nothing changed for them; approvers and viewers never held `records.write`. Making and
+stopping a statement link stays `records.write`. The accountant decides no payment and pauses nothing, so the SQL
+functions that name the deciding roles (`0025`, `0061`, `0076`, `0077`) are unchanged and leave it out. It ranks with
+the approver (`role_rank` 2, `RANK` 1): an owner or an admin may grant it, an accountant grants nothing. `0112` also
+makes `can_assign_role` answer false, never null, for a role `role_rank` does not know. Customer messages
+(`notifyCustomerWrote`) now reach an accountant whose email switch is on, and Settings' Notifications offers an accountant
+that switch as "Email me when a customer writes on its statement link". A Xero connection's consent says who approves
+what is booked: version `xero-2026-10-13` names the accountant (`ACCOUNTANT_BOOKING_CONSENTS`), and an accountant's
+booking on a connection agreed under an earlier version is refused (`consent`) with whom to ask, until Xero is reconnected.
+"Unless the owner grants more" is a role change: one person holds one role in a workspace.
+
+**The read model** (A2, A3; `src/lib/accountant/read.ts`, `triage.ts`). Never a service-role read across tenants. The
+page checks the session (`verifySession`) and lists the person's own memberships (`membershipsOf`, the read every
+workspace page's gate makes, from the session's user id, per request). Each workspace is then read inside
+`withOrg(orgId, ..., { userId })`, four at a time: its requests carry a tenant token naming that workspace and that
+person, so row-level security confines them even if a filter were wrong (`tests/accountant-portfolio.test.ts` reads an
+accountant invited to three of four workspaces and checks every tenant request's token names one of the three and the
+accountant, that the fourth is never read, and that removing the membership drops the workspace from the next read).
+Each part of a workspace is read on its own, and one that fails is named on its card (`unread`) while the rest show:
+
+| Kind | Read | Age from | Opens | Who acts |
+| --- | --- | --- | --- | --- |
+| `past_decide_by`, `decision` | payables `held`, `flagged`, `awaiting_info` (split by `decideByOf`), milestones `held` | the decide-by day once past; else `decided_at` | Approvals at the bill; Contractors | `approval.decide` |
+| `to_book` | `accounting_postings` `draft` or `failed` | `created_at` | the bookings review | `accounting.book` |
+| `receivable_overdue` | receivables `pending`/`matched` past `due_date` | the due date | the receivable | `receivables.reconcile` |
+| `customer_says_paid`, `disputed` | open `customer_requests` of kind `paid`, `dispute` | `created_at` | From customers | `receivables.reconcile` |
+| `connector` | `accounting_connections` whose `connectionStatus` is an error | `last_error_at` | Settings at the connector | `integrations.manage` |
+| `limit` | `readUsageLimits` without Gateway's balance, reached ones | the day | Settings, Usage this month | the limit's own |
+
+`routeTo(role, kind)` says "You can ..." or which roles of the workspace act; the queue puts what the viewer can act on
+first, then by kind, then the oldest. The KPI is how many items are open in each age bucket (under a day, 1 to 3, 4 to 7,
+8 to 30, over 30 days). The console counts items and never adds money: each amount stays on its item, in its currency.
+
+**The hand-off** (A7; `GET /api/accountant/handoff?org=&format=csv|json&month=YYYY-MM`, `src/lib/accountant/handoff.ts`).
+The audit export's gate in its order (a cross-site request refused, the session, the membership read afresh, a 404 that
+never says whether a workspace exists), then, in the workspace's scope: the month's (UTC; the last full month by default)
+decisions from the signed ledger (the agent's `AGENT_DECISION_ACTIONS` and a person's approvals, rejections and returns,
+with their numbers and hashes), the payment intents created or confirmed in it, the postings paid in it, and the
+workspace's open items now, with the ledger's head so the audit export of the same chain verifies it. CSV is one table
+with a `section` column (formula-safe through `csvCell`, a BOM first); JSON is `vestiarion-handoff/1`. Each download
+appends `handoff_exported` and is braked at 10 a person in 10 minutes, counted from those entries. Nothing is stored:
+removing a member makes their next console load and download answer as for a workspace they never joined, as removing
+them revokes their API keys (`0069`).
+
+## Usage metering
+
+`src/lib/usage/` (U1 to U4). One `usage_events` row (migration `0112`, a tenant table under the two policies, append-only
+for the tenant role) per thing a workspace used that costs something: `model_call` (each call `decide()` makes, answered
+or not, with the provider's reported tokens and, where the model's price is known, its cost in USD: Claude's list prices
+are built in, others come from `AGENT_LLM_PRICES`; `purpose` names what for: payable, milestone, treasury, proposal,
+reminder, extraction, chat), `circle_transfer` (a live send or batch in `payments.ts`, with the chain-reported fee, and a
+live treasury move), `x402_purchase` (a payee history bought, at its price in USDC), `email` (each Resend attempt whose
+message names a `meter`; one sent outside a workspace's scope, after a payee's or a customer's request, is written into
+the workspace by `recordUsageFor`) and `connector_sync` (each Xero, QuickBooks or HubSpot sync that ran). `recordUsage`
+writes through the workspace's own tenant client, records nothing outside a scope, and never throws: metering never
+stands between a send and its record. A row holds counts, tokens and a cost with its currency; never an address, an
+amount paid to someone or what an email said. Attribution and display only: nothing reads it to charge or to stop.
+
+Settings' **Usage this month** (`UsagePanel`, every member) sums the month per kind and purpose, costs exactly
+(millionths) per currency and never across them, and lists the limits the product already enforces elsewhere
+(`usageLimits`): a sandbox's 20 cycles a day, the agent's spending limit, the payee history checks' daily most and
+Gateway balance, 50 invitations a day, and a connector to reconnect. Each says where the workspace stands, what stops
+when it is reached, and who acts; a reached one is said at the top of the section and in the accountant console's queue.
 
 ## Data ownership
 

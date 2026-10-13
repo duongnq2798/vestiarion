@@ -1,0 +1,85 @@
+An outside accountant who looks after several small businesses should not have to open each workspace to find out where something needs attention. Each business invites its accountant as a member with the **accountant** role. The accountant's **Accountant console** then lists every workspace they are a member of, how long its items have been open, and one queue across them: payments waiting for a decision, payments to book in Xero, receivables to follow up, what customers said on their statement links, connectors to fix and limits reached. Each item opens the right page in its own workspace. It works the same in a workspace on Arc testnet and on Arc mainnet.
+
+## 1. Invite your accountant
+
+An owner or admin opens **Members** and, under the invitation form, chooses the role **accountant**. The form says what each role may do before you send it. For the accountant:
+
+> Reads everything, books payments in Xero, applies money received and answers customers. Decides no payment, and changes no treasury, limit, integration or member.
+
+The accountant accepts the invitation with the address it was sent to, as any member does.
+
+What each role may do:
+
+| Role | What it may do |
+| --- | --- |
+| Owner | Everything an admin does, and connects Circle, sets the two-approval figure and can delete the workspace. |
+| Admin | Adds bills and receivables, runs and resumes the agent, and manages members, API keys, webhooks, integrations and treasury. |
+| Approver | Decides the payments the agent held, and pauses the agent. Adds no records. |
+| Accountant | Reads everything, books payments in Xero, applies money received and answers customers. Decides no payment, and changes no treasury, limit, integration or member. |
+| Viewer | Reads the workspace. |
+
+- **Owners and admins invite an accountant,** as they invite an approver or a viewer. An accountant invites nobody and changes no role.
+- **To give your accountant more,** change their role on **Members**: as an approver they decide payments, as an admin they also manage the workspace. One person holds one role in a workspace.
+- **Deciding payments stays with your people.** An accountant's card in **Approvals** shows who can decide each bill; the accountant can read it all and act on none of it.
+
+## 2. What an accountant does in a workspace
+
+- **Book payments made on Arc in Xero,** after reviewing each, from **Bills & receivables**. See [Bring bills in from Xero](/docs/guides/xero).
+- **Apply money received to receivables,** record a fee, and reverse a mistake. See [Apply money received to invoices](/docs/guides/apply-payments). Anyone else reads "Only an owner, admin or accountant of this workspace can apply payments."
+- **Answer what customers said** on their statement links, under **From customers** on the **Receivables** tab: reply, mark a payment found, or close it as not received. See [Share a statement with a customer](/docs/guides/customer-portal). Making and stopping a statement link stays with owners and admins.
+- **Get an email when a customer writes,** with the switch in **Settings**, under **Notifications**: "Email me when a customer writes on its statement link".
+- **Read everything else,** the ledger, the report, Treasury and the audit export included.
+
+## 3. Open the console
+
+Open **Accountant console** from the workspaces page, which lists it when you are in more than one workspace or an accountant in one, or go to `/accountant`. It lists only the workspaces you are a member of, each read with your role there. It shows nothing from a workspace you were not invited to, and no figure that adds money across workspaces or currencies: it counts items, and each amount stays on its own item, in its own currency.
+
+- **Open items by age** counts what is open across your workspaces in five buckets: **Under a day**, **1 to 3 days**, **4 to 7 days**, **8 to 30 days** and **Over 30 days**. An item's age runs from when it needed someone: the agent's decision for a held payment, its decide-by day once that has passed, a receivable's due date, a customer's message, a payment's booking draft.
+- **Workspaces** has a card for each: its standing, network and your role, how many items are open and of which kind, **Open workspace**, and **Only this one** to narrow the queue to it. A part that could not be read just now is named on the card, and the rest still shows.
+- **What needs attention** is the queue. What you can act on comes first, then by kind, then the oldest first. **Yours to act on** keeps only those; each kind has its own filter.
+
+## 4. What the queue holds
+
+Each item names its workspace, who or what it is about, its amount in its own currency where it has one, how long it has been open, and who acts on it: "You can ..." when your role may, or which roles may when it does not. **Open** goes to the page where it is acted on.
+
+| Kind | What it is | Opens |
+| --- | --- | --- |
+| Past its decide-by day | A payment held for a person whose day to decide passed: its due date, or the last day of its early-payment discount. | **Approvals**, at the bill |
+| Payment waiting for a decision | A payable held, flagged or waiting for details, or a milestone held for a person. | **Approvals**, or **Contractors** for a milestone |
+| Customer says paid | A customer said on its statement link that it paid. Nothing is marked paid until the money is found. | **From customers** |
+| Disputed by the customer | A customer disputes an invoice. Its reminders wait while the dispute is open. | **From customers** |
+| Payment to book | A payment made on Arc waiting for review before it is booked in Xero, or one whose booking failed. | The bookings to review |
+| Receivable overdue | A receivable past its due date and not yet received. | The receivable |
+| Connector problem | Xero, QuickBooks or HubSpot needs reconnecting, or its last sync failed. | **Settings**, at the connector |
+| Limit reached | A limit stopped something: the day's cycles in a sandbox, the agent's spending limit, the payee history checks' daily most or Gateway balance, or the day's invitations. | **Settings**, at **Usage this month** |
+
+With nothing open, the queue says "Nothing needs attention in any of your workspaces."
+
+## 5. Hand a month over
+
+Each workspace card has **Hand-off:** downloads: last month as CSV or JSON, and **This month so far** as CSV. A hand-off holds, for that calendar month (UTC):
+
+- **Decisions**: the agent's decisions on payables and a person's approvals, rejections and returns, each with its ledger number and hash, from the same signed ledger the [audit export](/docs/guides/audit-export) holds. The hand-off names the ledger's last entry, so the audit export of the same workspace verifies it.
+- **Payments** sent or confirmed in the month: what they paid, the amount and token, the payee's address, whether they moved on chain, and the transaction.
+- **Bookings** of payments made in the month, in Xero: their state, reference, account and amount in their own currency.
+- **Open items**: the console's own items for the workspace when you download it, each with its link.
+
+The CSV is one table with a `section` column, in UTF-8 for a spreadsheet; the JSON is one document, `vestiarion-handoff/1`. Amounts keep their own currency in every row, and nothing totals across currencies. Every member may download a workspace's hand-off, as every member reads the workspace. Each download is recorded in the workspace's ledger as `handoff_exported`, with who downloaded it, the month and how many rows of each section it held. Past ten in ten minutes, the download answers "Too many hand-offs in the last 10 minutes. Try again later."
+
+## 6. Usage and limits
+
+Every member sees **Usage this month** in **Settings**: what the workspace used since the 1st (UTC), as **Model calls**, **Circle transfers**, **x402 purchases**, **Emails** and **Connector syncs**, each split by what it was for. A model call shows the tokens the provider reported and its cost in US dollars where the model's price is known; an x402 purchase shows its price in USDC; a Circle transfer shows its network fee where the chain reported it. Costs are never added across currencies, and "This is a record, not a bill."
+
+Under **Limits**, each limit that applies says where the workspace stands (**Within limit**, **Near the limit** or **Stopped**), what stops when it is reached, and **Who acts:**
+
+- **Agent cycles today**, in a sandbox: at most 20 cycles a day (UTC). Past it, cycles wait for midnight UTC.
+- **Agent spending limit**: past it, the agent pays nothing on its own, and each payment waits in **Approvals**. An owner or admin raises the limit on the console.
+- **Payee history checks (x402)**: the agent's daily most, and the Gateway balance it buys from. Past either, it decides without buying.
+- **Invitations**: at most 50 a day. Past it, no new invitation is sent until the oldest of the day is 24 hours old.
+- A connector that needs reconnecting is listed too, with who reconnects it.
+
+A limit that stopped something also shows at the top of the section, and in the accountant console's queue as **Limit reached**, so it never goes unseen.
+
+## 7. When an accountant leaves
+
+Remove the accountant on **Members**, or they leave on their own. The next time they open the console, the workspace is no longer listed, its hand-off download answers as for any workspace they never belonged to, and its pages say it was not found. Nothing was copied to them ahead: the console and the hand-off are read for each request, from the workspace, with the role they hold then. The API keys they created in the workspace, if an owner had made them an admin, are revoked with the membership, as for any member.

@@ -41,7 +41,8 @@ type GuideSlug =
   | "guides/evidence"
   | "guides/controls"
   | "guides/apply-payments"
-  | "guides/customer-portal";
+  | "guides/customer-portal"
+  | "guides/accountants";
 
 const PANEL = "src/components/GoLivePanel.tsx";
 const WALLET_STEPS = "src/components/treasury/WalletTreasurySteps.tsx";
@@ -261,7 +262,69 @@ const PORTAL_VIEW = "src/components/portal/StatementView.tsx";
 const PORTAL_MODEL = "src/lib/customer-portal/model.ts";
 const PORTAL_PUBLIC = "src/lib/customer-portal/public.ts";
 
+const ACCOUNTANT_PAGE = "src/app/accountant/page.tsx";
+const ACCOUNTANT_CONSOLE = "src/components/accountant/AccountantConsole.tsx";
+const TRIAGE = "src/lib/accountant/triage.ts";
+const USAGE_MODEL = "src/lib/usage/model.ts";
+const USAGE_PANEL = "src/components/UsagePanel.tsx";
+const ROLES = "src/lib/auth/roles.ts";
+
 const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
+  "guides/accountants": [
+    ["Accountant console", ACCOUNTANT_PAGE],
+    ["Members", APP_NAV],
+    ["Approvals", APP_NAV],
+    ["Bills & receivables", APP_NAV],
+    ["Settings", APP_NAV],
+    ["Reads everything, books payments in Xero, applies money received and answers customers. Decides no payment, and changes no treasury, limit, integration or member.", ROLES],
+    ["Everything an admin does, and connects Circle, sets the two-approval figure and can delete the workspace.", ROLES],
+    ["Adds bills and receivables, runs and resumes the agent, and manages members, API keys, webhooks, integrations and treasury.", ROLES],
+    ["Decides the payments the agent held, and pauses the agent. Adds no records.", ROLES],
+    ["Only an owner, admin or accountant of this workspace can apply payments.", "src/components/ApplyPayments.tsx"],
+    ["From customers", "src/components/portal/FromCustomers.tsx"],
+    ["Notifications", "src/components/NotificationsPanel.tsx"],
+    ["Email me when a customer writes on its statement link", "src/components/NotificationsPanel.tsx"],
+    ["Open items by age", ACCOUNTANT_CONSOLE],
+    ["Open workspace", ACCOUNTANT_CONSOLE],
+    ["Only this one", ACCOUNTANT_CONSOLE],
+    ["What needs attention", ACCOUNTANT_CONSOLE],
+    ["Yours to act on", ACCOUNTANT_CONSOLE],
+    ["Nothing needs attention in any of your workspaces.", ACCOUNTANT_CONSOLE],
+    ["Hand-off:", ACCOUNTANT_CONSOLE],
+    ["This month so far", ACCOUNTANT_CONSOLE],
+    ["Under a day", TRIAGE],
+    ["1 to 3 days", TRIAGE],
+    ["4 to 7 days", TRIAGE],
+    ["8 to 30 days", TRIAGE],
+    ["Over 30 days", TRIAGE],
+    ["Past its decide-by day", TRIAGE],
+    ["Payment waiting for a decision", TRIAGE],
+    ["Customer says paid", TRIAGE],
+    ["Disputed by the customer", TRIAGE],
+    ["Payment to book", TRIAGE],
+    ["Receivable overdue", TRIAGE],
+    ["Connector problem", TRIAGE],
+    ["Limit reached", TRIAGE],
+    ["Too many hand-offs in the last 10 minutes. Try again later.", "src/app/api/accountant/handoff/route.ts"],
+    ["handoff_exported", "src/app/api/accountant/handoff/route.ts"],
+    ["vestiarion-handoff/1", "src/lib/accountant/handoff.ts"],
+    ["Usage this month", USAGE_PANEL],
+    ["This is a record, not a bill.", USAGE_PANEL],
+    ["Limits", USAGE_PANEL],
+    ["Within limit", USAGE_PANEL],
+    ["Near the limit", USAGE_PANEL],
+    ["Stopped", USAGE_PANEL],
+    ["Who acts:", USAGE_PANEL],
+    ["Model calls", USAGE_MODEL],
+    ["Circle transfers", USAGE_MODEL],
+    ["x402 purchases", USAGE_MODEL],
+    ["Emails", USAGE_MODEL],
+    ["Connector syncs", USAGE_MODEL],
+    ["Agent cycles today", USAGE_MODEL],
+    ["Agent spending limit", USAGE_MODEL],
+    ["Payee history checks (x402)", USAGE_MODEL],
+    ["Invitations", USAGE_MODEL],
+  ],
   "guides/customer-portal": [
     ["Bills & receivables", APP_NAV],
     ["Receivables", INVOICES_PAGE_SOURCE],
@@ -310,7 +373,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Apply payments", APPLY_PAYMENTS],
     ["Bills & receivables", APP_NAV],
     ["Receivables", INVOICES_PAGE_SOURCE],
-    ["Only an owner or admin of this workspace can apply payments.", APPLY_PAYMENTS],
+    ["Only an owner, admin or accountant of this workspace can apply payments.", APPLY_PAYMENTS],
     ["as credit for", APPLY_PAYMENTS],
     ["Other money in, with no suggestion", APPLY_PAYMENTS],
     ["Apply by hand", APPLY_PAYMENTS],
@@ -1601,7 +1664,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["accounting_disconnected", ACCOUNTING_CONNECTIONS],
     // Booking payments made on Arc (accounting write-back W1, W6, W7, W8, W9).
     [
-      "It writes to Xero only the payments an owner or admin approves: each payment made on Arc for a bill brought in from Xero, booked against that bill.",
+      "It writes to Xero only the payments an owner, admin or accountant approves: each payment made on Arc for a bill brought in from Xero, booked against that bill.",
       ACCOUNTING_CONSENT,
     ],
     ["Not booked: payments in shadow mode and on Arc testnet are never booked into your real books.", POSTING],
@@ -2180,6 +2243,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/evidence": 20,
   "guides/apply-payments": 20,
   "guides/customer-portal": 20,
+  "guides/accountants": 20,
 };
 
 describe.each(Object.entries(QUOTED) as Array<[GuideSlug, Array<readonly [string, string, string?]>]>)("the %s guide", (slug, quoted) => {
