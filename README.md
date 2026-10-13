@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/readme-banner.png" alt="Vestiarion: every bill checked before it is paid, every decision on record. A payment refused by code, not by the model, and a person agreeing with the agent before it pays. Works with Xero, QuickBooks, HubSpot, Arc and Circle." width="100%">
+<img src="docs/assets/readme-banner.png" alt="Vestiarion: every bill checked before it is paid, every decision on record. A payment refused by code, not by the model, and a person agreeing with the agent before it pays. Built on Arc and Circle; works with Xero, QuickBooks and HubSpot." width="100%">
 
 # Vestiarion
 
