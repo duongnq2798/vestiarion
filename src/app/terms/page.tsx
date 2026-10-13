@@ -95,7 +95,7 @@ export default function TermsPage() {
       <LegalSection id="accounting-tools" title="Connected accounting tools">
         <p>
           When an owner or admin connects Xero to a workspace, they agree, for the workspace, that Vestiarion reads the bills, suppliers and chart of
-          accounts of the Xero organisation they pick. It writes to Xero only the payments an owner or admin approves, each booked against the bill it
+          accounts of the Xero organisation they pick. It writes to Xero only the payments an owner, admin or accountant approves, each booked against the bill it
           paid, and books a payment on Arc testnet or in shadow mode only into a Xero demo company. The bills a person adds are shown to the workspace&apos;s members and
           to its agent; the agent&apos;s model provider sees each bill&apos;s facts to decide on it, and may not train on them.
         </p>

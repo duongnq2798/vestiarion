@@ -163,7 +163,7 @@ describe("Apply payments", () => {
     expect(page).toContain("Left from a payment applied to Acme Corp before, and exactly what is still owed on Invoice INV-1043: Design sprint.");
     expect(page).toContain("Apply by hand");
     const viewer = text(renderToStaticMarkup(<ApplyPayments orgSlug="mai" network="arc-testnet" payments={views} canWrite={false} />));
-    expect(viewer).toContain("Only an owner or admin of this workspace can apply payments.");
+    expect(viewer).toContain("Only an owner, admin or accountant of this workspace can apply payments.");
     expect(viewer).not.toContain("Apply by hand");
   });
 
@@ -223,10 +223,10 @@ describe("the trail", () => {
 });
 
 describe("the actions", () => {
-  it("authorize records.write first, and read the input before any command", async () => {
+  it("authorize receivables.reconcile first (owners, admins and accountants), and read the input before any command", async () => {
     const input = { paymentId: PAYMENT_ID, version: 1, lines: [{ invoiceId: B, amount: "200.00" }], fees: [] };
     expect(await applyPaymentAction("mai", input)).toEqual({ ok: true, message: "Applied to 1 invoice." });
-    expect(authorizeMock).toHaveBeenCalledWith("mai", "records.write");
+    expect(authorizeMock).toHaveBeenCalledWith("mai", "receivables.reconcile");
     expect(applyMock).toHaveBeenCalledWith(expect.objectContaining({ userId: "u1", role: "owner" }), input);
 
     expect(await applyPaymentAction("mai", { ...input, version: null })).toEqual({ ok: false, message: "That could not be read. Reload the page and try again." });
@@ -241,7 +241,7 @@ describe("the actions", () => {
   it("are wired into Bills & receivables, with search, and the receivable's card", () => {
     const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "invoices", "page.tsx"), "utf8");
     expect(page).toContain("readAllocationBook(db())");
-    expect(page).toContain("<ApplyPayments orgSlug={slug} network={network} payments={toApply} canWrite={canWrite} />");
+    expect(page).toContain("<ApplyPayments orgSlug={slug} network={network} payments={toApply} canWrite={canReconcile} />");
     expect(page).toContain("Applying payments is not set up on this deployment yet.");
     // The search is the list's, on each tab, in the address (Bills & receivables tabs B8).
     expect(readFileSync(path.join(process.cwd(), "src", "components", "bills", "BillsList.tsx"), "utf8")).toContain('<form method="get" role="search"');

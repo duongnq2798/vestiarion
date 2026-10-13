@@ -2,6 +2,7 @@ import { accountingProvider } from "../accounting-providers";
 import { approvePosting, type BookingDeps, type LineResult } from "../connectors/booking-run";
 import { billsByExternalId, bookingStore, postingById } from "../connectors/booking-store";
 import { connectionById, NotSetUpError, type Connection } from "../connectors/connections";
+import { ACCOUNTANT_BOOKING_CONSENTS } from "../connectors/consent";
 import { hasScopes } from "../connectors/posting";
 import { PROVIDER_LABELS, type AccountingProvider, type OrganisationFacts } from "../connectors/provider";
 import { connectionTokenStore } from "../connectors/token-store";
@@ -74,6 +75,13 @@ export async function bookAccountingPayments(
   if (!connection || connection.status === "revoked") return refused("not_connected", "That accounting tool is not connected to this workspace.");
   const label = PROVIDER_LABELS[connection.provider];
   if (connection.status !== "connected") return refused("reconnect", `${label} needs you to reconnect. Reconnect ${label} from Settings, then try again.`);
+  // A connection agreed before accountants could approve bookings keeps that agreement (accountant console A1).
+  if (actor.role === "accountant" && !ACCOUNTANT_BOOKING_CONSENTS.has(connection.consentVersion)) {
+    return refused(
+      "consent",
+      `${label} was connected when only an owner or admin could approve bookings. Ask an owner or admin to approve these, or to reconnect ${label} in Settings so an accountant can.`
+    );
+  }
   const provider = deps.provider === undefined ? accountingProvider(connection.provider) : deps.provider;
   const booking = provider?.booking;
   if (!provider || !booking) return refused("not_set_up", `Booking payments in ${label} is not set up on this deployment yet.`);

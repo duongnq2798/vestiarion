@@ -35,16 +35,16 @@ beforeEach(() => {
 });
 
 describe("who may apply money received", () => {
-  it("is the permission that adds invoices, from the console only", () => {
-    expect(COMMAND_PERMISSIONS["receivable.apply_payment"]).toBe("records.write");
-    expect(COMMAND_PERMISSIONS["receivable.reverse_allocation"]).toBe("records.write");
+  it("is the receivables bookkeeping, an accountant's too, from the console only (accountant console A1)", () => {
+    expect(COMMAND_PERMISSIONS["receivable.apply_payment"]).toBe("receivables.reconcile");
+    expect(COMMAND_PERMISSIONS["receivable.reverse_allocation"]).toBe("receivables.reconcile");
     for (const surface of ["api", "slack", "telegram", "github"] as const) {
       expect(SURFACE_COMMANDS[surface]).not.toContain("receivable.apply_payment");
       expect(SURFACE_COMMANDS[surface]).not.toContain("receivable.reverse_allocation");
     }
   });
 
-  it.each(["owner", "admin"] as const)("lets an %s apply a payment, and says what it did", async (role) => {
+  it.each(["owner", "admin", "accountant"] as const)("lets an %s apply a payment, and says what it did", async (role) => {
     mocks.applyPayment.mockResolvedValueOnce({
       rows: [row({ invoiceId: "a" }), row({ invoiceId: "b" }), row({ invoiceId: "c", outstandingAfter: 50_000_000 })],
       unappliedAfter: 25_000_000,

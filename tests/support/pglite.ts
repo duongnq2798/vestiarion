@@ -106,6 +106,7 @@ export const TENANT_TABLES = [
   "deals", "deal_versions", "deal_lines", "deal_costs", "approval_escalations", "approval_escalation_starts",
   "crm_deals", "crm_receipt_writes",
   "customer_portal_links", "customer_requests", "customer_request_messages",
+  "usage_events",
 ] as const;
 
 export interface SeededRows {
@@ -294,6 +295,11 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     [orgId, portalLinkId, customerId, customerInvoiceId]
   );
   await db.query("insert into customer_request_messages (org_id, request_id, body) values ($1, $2, 'We are checking.')", [orgId, customerRequestId]);
+  // What the workspace used: a model call for a decision, with its tokens and cost (0112).
+  await db.query(
+    "insert into usage_events (org_id, kind, action, provider, model, input_tokens, output_tokens, cost, cost_currency) values ($1, 'model_call', 'decision', 'anthropic', 'claude-test', 100, 20, 0.0006, 'USD')",
+    [orgId]
+  );
   const key = crypto.generateKeyPairSync("ed25519");
   await appendSignedForOrg(db, orgId, { actor: "system", domain: "system", action: "note", summary: tag, detail: { tag } }, key.privateKey);
   return { counterpartyId, accountId, invoiceId, cycleRunId, idempotencyKey };

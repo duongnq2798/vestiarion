@@ -51,6 +51,10 @@ export default function PrivacyPage() {
           <li>API keys and webhook endpoints;</li>
           <li>the ledger: every decision the agent makes, with its reasoning, signed with Ed25519 and chained by hash;</li>
           <li>
+            what the workspace used each month: the agent&apos;s model calls with the tokens they used, Circle transfers, x402 purchases, emails and
+            connector syncs, each with its count and cost where known, and never who it was for or what an email said;
+          </li>
+          <li>
             what a customer sends on its statement link: the day it says it paid, a payment reference and an amount when it gives them, the day it
             promises to pay, and the messages it and the workspace&apos;s members write to each other about an invoice.
           </li>
@@ -69,6 +73,11 @@ export default function PrivacyPage() {
         <ul>
           <li>
             <strong>viewer</strong>: reads the workspace;
+          </li>
+          <li>
+            <strong>accountant</strong>: also books payments in the workspace&apos;s accounting tool, applies money received and answers customers,
+            but decides no payment; an accountant&apos;s console lists only the workspaces they are a member of, and stops listing one when they are
+            removed from it;
           </li>
           <li>
             <strong>approver</strong>: also decides the payments the agent held, and pauses the agent;
