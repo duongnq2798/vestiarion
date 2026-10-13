@@ -11,6 +11,13 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "5mb",
     },
   },
+  // The guides' walkthrough videos (public/docs/videos/) are served as public
+  // files and read by no server code. The docs routes' file tracing reaches
+  // public/ through the screenshot sizes' file reads, so without this each of
+  // those functions would carry the MP4s too.
+  outputFileTracingExcludes: {
+    "/*": ["public/docs/videos/**"],
+  },
   async redirects() {
     return legacyRedirects();
   },

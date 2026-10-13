@@ -70,7 +70,11 @@ describe("proxy matcher", () => {
     expect(matches(path)).toBe(false);
   });
 
-  it.each(["/", "/docs/webhooks/verify", "/o/acme/console"])("still runs on the page %s", (path) => {
+  it.each(["/docs/videos/xero-flow.mp4", "/docs/videos/hubspot-flow-poster.jpg"])("skips the guides' video file %s", (path) => {
+    expect(matches(path)).toBe(false);
+  });
+
+  it.each(["/", "/docs/webhooks/verify", "/docs/guides/xero", "/o/acme/console"])("still runs on the page %s", (path) => {
     expect(matches(path)).toBe(true);
   });
 });

@@ -4,6 +4,50 @@ Vestiarion reads from Xero, and writes to it only the payments an owner, admin o
 
 Keeping your bills in QuickBooks Online instead? [Bring them in from QuickBooks](/docs/guides/quickbooks): the same review list and the same check. A workspace can connect both.
 
+## Watch it
+
+Under two minutes, from approved Xero bills coming in to one paid on Arc testnet. The steps below go through each part in full.
+
+<Video
+  src="/docs/videos/xero-flow.mp4"
+  poster="/docs/videos/xero-flow-poster.jpg"
+  title="Bills from Xero, decided by the agent"
+  duration="1:52"
+  caption="The live product on Arc testnet, with demo data from the Xero Demo Company, in shadow mode. The agent holds two bills and says why; one paid in Xero is flagged at the next sync and rejected, and the other is approved and paid 59.54 USDC. Recorded Oct 12, 2026."
+>
+
+This workspace is connected to Xero. Here, it's Xero's demo company.
+
+Bills you approved in Xero come in on their own. Nothing becomes payable until a person adds it.
+
+We add two of them, Swanston Security and PowerDirect.
+
+Within half a minute, the agent has looked at both, and it holds them.
+
+It says why. There's no purchase order on file, the bill is overdue, and the wallet is short.
+
+Meanwhile, in Xero, the business pays PowerDirect from its bank, the way it always has.
+
+In Xero, it now shows as paid.
+
+Vestiarion checks Xero every fifteen minutes. Here we press Sync now.
+
+It flags PowerDirect. It was paid in Xero after it was added, so nobody should pay it again.
+
+Swanston still needs paying. In shadow mode, the payment goes to a mirror wallet on Arc testnet, while the real supplier is paid from the bank.
+
+A person reads the agent's reasons, and approves it.
+
+Paid at the same amount as the bill: 59.54 USDC on Arc testnet.
+
+Here it is on the public explorer.
+
+And the bill already paid in Xero is rejected, with a reason, so it never leaves twice.
+
+Every decision is signed. Connect Xero: vestiarion.xyz
+
+</Video>
+
 ## Before you start
 
 - **An owner or admin** of the workspace connects Xero. Anyone else sees "An owner or admin connects Xero."

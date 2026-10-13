@@ -8,6 +8,7 @@ import { DocsHeading, textOf } from "@/components/docs/DocsHeading";
 import { EndpointTable } from "@/components/docs/EndpointTable";
 import { McpToolTable } from "@/components/docs/McpToolTable";
 import { Screenshot } from "@/components/docs/Screenshot";
+import { Video } from "@/components/docs/Video";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/components/ui/cn";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
@@ -109,6 +110,7 @@ const components: MDXComponents = {
   Cards,
   Card: DocsCard,
   Screenshot,
+  Video,
   Callout: DocsCallout,
   Action,
 };
