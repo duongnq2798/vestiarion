@@ -309,6 +309,11 @@ npm install @vestiarion/sdk
 
 Pieces of Vestiarion another Arc app can take as they are, under this repository's license. Each is tested on its own.
 
+To fork just the two contracts and the ledger verifier, without the app, use
+[duongnq2798/vestiarion-primitives](https://github.com/duongnq2798/vestiarion-primitives): a Foundry project with
+both contracts byte for byte, a build that reproduces the Arc mainnet bytecode and a script that checks it against the
+chain, unit, fuzz and invariant tests, deploy scripts, the deployment addresses, and viem examples for each call.
+
 | Primitive | What it gives an Arc app | Where |
 | --- | --- | --- |
 | **`VestiarionSpendingLimit`** | An agent that pays from a treasury it does not hold. Only the agent's wallet calls `pay(to, amount, ref)`; it never passes a daily or a 7-day figure and never pays a `ref` twice. The treasury keeps its USDC and approves the contract, so the contract holds nothing; its owner changes the figures with `setLimits`, or stops the agent by approving 0. Runs on Arc mainnet: [`0xd90cA89Fc318d0330Bb14eaeF78B72C3CA7E7fB6`](https://explorer.arc.io/address/0xd90cA89Fc318d0330Bb14eaeF78B72C3CA7E7fB6). | [`contracts/VestiarionSpendingLimit.sol`](contracts/VestiarionSpendingLimit.sol), deploy and calls in [`src/lib/spending-limit/`](src/lib/spending-limit/), tested in an in-process EVM in [`tests/spending-limit-contract.test.ts`](tests/spending-limit-contract.test.ts) |
