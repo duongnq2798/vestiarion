@@ -4,11 +4,18 @@
  * invitations still work before email is configured (spec §10 step 5b).
  */
 
+import { recordUsage } from "../usage/record";
+
 export interface EmailMessage {
   to: string;
   subject: string;
   html: string;
   text: string;
+  /**
+   * What the email is for, when it is metered in the workspace in scope (accountant console U1): `invitation`, `digest`,
+   * `reminder`, ... A send outside a workspace's scope records nothing.
+   */
+  meter?: string;
 }
 
 export type SendResult = { sent: true; id: string } | { sent: false; reason: string };
@@ -49,6 +56,13 @@ export async function sendEmail(
   fetchImpl: typeof fetch = fetch
 ): Promise<SendResult> {
   if (!settings) return { sent: false, reason: "not_configured" };
+  const result = await deliver(message, settings, fetchImpl);
+  // Every attempt Resend was asked for is metered, delivered or not; nothing about the address or the words is kept.
+  if (message.meter) await recordUsage({ kind: "email", action: message.meter, provider: "resend", ok: result.sent });
+  return result;
+}
+
+async function deliver(message: EmailMessage, settings: { apiKey: string; from: string }, fetchImpl: typeof fetch): Promise<SendResult> {
   try {
     const response = await fetchImpl("https://api.resend.com/emails", {
       method: "POST",

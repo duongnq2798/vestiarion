@@ -12,6 +12,7 @@ import ShadowModePanel from "@/components/ShadowModePanel";
 import SlackPanel from "@/components/SlackPanel";
 import TwoApprovalsPanel from "@/components/TwoApprovalsPanel";
 import { UsycReservePanel } from "@/components/UsycReservePanel";
+import UsagePanel from "@/components/UsagePanel";
 import WebhooksPanel from "@/components/WebhooksPanel";
 import AccountingPanel from "@/components/AccountingPanel";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
@@ -46,6 +47,7 @@ import { telegramSettingsFromEnv } from "@/lib/telegram/settings";
 import { networkProfile } from "@/lib/network";
 import { readShadowMode } from "@/lib/shadow-mode";
 import { shellStatus } from "@/lib/shell-status";
+import { readUsageLimits, readUsageMonth } from "@/lib/usage/read";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +68,8 @@ export default async function SettingsPage({
     const canManageWebhooks = can(membership.role, "webhooks.manage");
     const canAdminister = can(membership.role, "org.administer");
     const canDecide = can(membership.role, "approval.decide");
+    // An accountant answers customers without deciding payments: its email switch is about customers (accountant console A1).
+    const canAnswerCustomers = can(membership.role, "receivables.reconcile");
     // Every member may connect their own Telegram chat, when this deployment has a bot (Telegram bot design R1, R4).
     const telegramOn = telegramSettingsFromEnv() !== null;
     // How connecting Slack went, from its way back (Slack design S3); only the codes the panel knows are shown.
@@ -73,7 +77,7 @@ export default async function SettingsPage({
     // And how connecting Xero or QuickBooks went (Xero connector X4; QuickBooks connector Q4), and HubSpot (HubSpot H4).
     const { slack: slackOutcome, github: githubOutcome, xero: xeroOutcome, quickbooks: quickBooksOutcome, hubspot: hubspotOutcome } = await searchParams;
     const inboxSettings = inboxSettingsFromEnv();
-    const [goLive, apiKeys, webhookEndpoints, ledgerKey, dashboardStats, deletion, usyc, slack, notifySwitch, telegramLink, inbox, github, twoApprovals, shadow, xero, quickBooks, hubspot] = await Promise.all([
+    const [goLive, apiKeys, webhookEndpoints, ledgerKey, dashboardStats, deletion, usyc, slack, notifySwitch, telegramLink, inbox, github, twoApprovals, shadow, xero, quickBooks, hubspot, usage, limits] = await Promise.all([
       goLiveStatus(membership.orgId),
       listApiKeys(membership.orgId),
       listWebhookEndpoints(membership.orgId),
@@ -150,6 +154,15 @@ export default async function SettingsPage({
             return null;
           })
         : null,
+      // This month's usage and the limits (accountant console U3, U4): best effort, each on its own.
+      readUsageMonth().catch((error: unknown) => {
+        console.error("settings: usage not loaded", error instanceof Error ? error.message : error);
+        return null;
+      }),
+      readUsageLimits({ orgId: membership.orgId, mode: membership.mode }).catch((error: unknown) => {
+        console.error("settings: limits not loaded", error instanceof Error ? error.message : error);
+        return [];
+      }),
     ]);
     // Receipts written to HubSpot (CRM receipts R8): once connected, best effort; nothing before migration 0107.
     const hubspotWriteScopes = crmProvider("hubspot")?.receipts?.writeScopes ?? null;
@@ -175,10 +188,11 @@ export default async function SettingsPage({
             id: "notifications-title",
             title: "Notifications",
             content:
-              canDecide || telegramOn ? (
+              canDecide || canAnswerCustomers || telegramOn ? (
                 <NotificationsPanel
                   orgSlug={slug}
                   canDecide={canDecide}
+                  canAnswerCustomers={canAnswerCustomers}
                   notifyEmail={notifyEmail}
                   telegram={telegramOn ? { link: telegramLink ? { username: telegramLink.username, linkedAt: telegramLink.linkedAt } : null } : null}
                 />
@@ -204,6 +218,8 @@ export default async function SettingsPage({
             title: "USYC reserve",
             content: usyc ? <UsycReservePanel orgSlug={slug} status={usyc} canManage={can(membership.role, "treasury.manage")} /> : null,
           },
+          // What the workspace used this month and its limits, for every member (accountant console U3, U4).
+          { id: "usage-title", title: "Usage this month", content: <UsagePanel orgSlug={slug} usage={usage} limits={limits} /> },
         ],
       },
       {

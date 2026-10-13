@@ -206,7 +206,7 @@ export async function notifyWaitingDecisions(): Promise<{ sent: number; failed: 
         console.warn("notifications: send deadline passed, not sent", unsent, scopedOrgId);
         break;
       }
-      const result = await sendEmail({ to: recipient.email, ...email }, settings);
+      const result = await sendEmail({ to: recipient.email, ...email, meter: "digest" }, settings);
       if (result.sent) {
         counts.sent += 1;
       } else {

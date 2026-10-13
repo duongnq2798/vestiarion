@@ -4,6 +4,7 @@ import { payeeAddressEmail } from "../email/payee-address";
 import { sendEmail } from "../email/send";
 import { listMembers } from "../platform/members";
 import { publicOrigin } from "../public-origin";
+import { recordUsageFor } from "../usage/record";
 
 /** Enough for any workspace's approvers; a bound so one submission never fans out without limit. */
 const MAX_RECIPIENTS = 10;
@@ -33,6 +34,11 @@ export async function notifyPayeeAddress(input: { orgId: string; orgName: string
       if (result.status === "rejected") console.error("payee address: email not sent", String(result.reason));
       else if (!result.value.sent) console.error("payee address: email not sent", result.value.reason);
       else sent += 1;
+    }
+    // Sent outside the workspace's scope, so metered into it here (accountant console U1).
+    if (results.length > 0) {
+      if (sent > 0) await recordUsageFor(input.orgId, { kind: "email", action: "payee_address", provider: "resend", quantity: sent });
+      if (sent < results.length) await recordUsageFor(input.orgId, { kind: "email", action: "payee_address", provider: "resend", quantity: results.length - sent, ok: false });
     }
     return sent;
   } catch (error) {

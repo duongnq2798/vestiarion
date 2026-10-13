@@ -1059,3 +1059,38 @@ describe("executePayment after a send Circle never answered (payment safety R4)"
     expect(store.intent?.lastError).toBe("Circle took this transfer (circle-tx-5), but it could not be recorded (statement timeout); it may or may not have been accepted");
   });
 });
+
+describe("metering a Circle transfer (accountant console U1)", () => {
+  const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000d0d";
+  const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
+  const inScope = <T,>(fn: () => Promise<T>) => {
+    const fake = fakeSupabase(() => ({ status: 201, body: [] }));
+    const run = runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), fn);
+    return { run, usage: () => fake.requests.filter((sent: RecordedRequest) => sent.path === "/rest/v1/usage_events").map((sent) => sent.body) };
+  };
+
+  it("records a live transfer once its result is recorded, with the fee the chain reported", async () => {
+    const provider = new FakeProvider();
+    provider.transferResults.push(transferResult("confirmed"));
+    const store = new MemoryStore();
+    const { run, usage } = inScope(() => executePayment(request, { provider, store }));
+    await run;
+    expect(store.calls.at(-1)).toMatch(/recordResult/);
+    expect(usage()).toEqual([
+      { org_id: ORG, kind: "circle_transfer", action: "payment", provider: "circle", model: null, quantity: 1, input_tokens: null, output_tokens: null, cost: "0.010000", cost_currency: "USD", ok: true },
+    ]);
+  });
+
+  it("records nothing for a simulated transfer, or one Circle never took", async () => {
+    const simulated = new FakeProvider();
+    simulated.transferResults.push({ ...transferResult("confirmed"), providerMode: "simulate" });
+    const first = inScope(() => executePayment(request, { provider: simulated, store: new MemoryStore() }));
+    await first.run;
+    expect(first.usage()).toEqual([]);
+    const refused = new FakeProvider();
+    refused.transferResults.push(new Error("Circle refused the request"));
+    const second = inScope(() => executePayment(request, { provider: refused, store: new MemoryStore() }));
+    await second.run;
+    expect(second.usage()).toEqual([]);
+  });
+});

@@ -5,6 +5,7 @@ import { UsycNotConfirmedError, UsycSubscriptionsClosedError } from "../circle/u
 import type { OrgDb } from "../dal";
 import { pausedTreasuryNote } from "./pause";
 import type { TreasuryDecision } from "./treasury";
+import { recordUsage } from "../usage/record";
 
 /**
  * Moving cash between the operating wallet and the reserve: the treasury stage's sweep or redemption, the cycle's
@@ -91,6 +92,8 @@ export async function moveTreasuryIfNotPaused(
     // A real move changed both wallets on chain: the stored figures follow from the chain at once
     // (R3), best effort, since the next reconcile reads them again either way.
     if (live) await refreshTreasuryBalances(ctx);
+    // A real move is metered in the workspace (accountant console U1); a simulated one moved nothing.
+    if (live) await recordUsage({ kind: "circle_transfer", action: "treasury", provider: "circle" });
     return { executed: true, executionNote: null, heldBecausePaused: false, ...(execution ? { execution } : {}) };
   } catch (err) {
     if (err instanceof UsycSubscriptionsClosedError) return { executed: false, executionNote: err.message, heldBecausePaused: false };
