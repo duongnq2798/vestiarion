@@ -67,6 +67,8 @@ import { readPlannedDealLines } from "@/lib/deals/read";
 import { readAllocationRows, stillOwed } from "@/lib/allocations/book";
 import { ProjectsTreasuryCard } from "@/components/projects/ProjectViews";
 import { readProjects, type ProjectSummary } from "@/lib/projects/read";
+import { readPlanningRates } from "@/lib/fx/planning-rates";
+import { readScenarioVersions } from "@/lib/scenario-versions";
 
 export const dynamic = "force-dynamic";
 
@@ -296,6 +298,29 @@ export default async function DashboardPage({
     // What the cash scenarios start from (cash scenarios C2-C4): the same rows over 90 days, with the recurring payments
     // not billed yet. The browser works out each scenario from it; nothing it shows reaches a payment or the agent (C9).
     const scenarios = scenarioBasis({ ...outlookInput, recurring });
+    // Exchange rates and saved versions for What if (currency provenance M4, M7): the newest stored reference rate for
+    // each currency an open bill was written in, with its age, the reporting currency, and the versions saved. Reads
+    // only: the hourly rates job stores the rates, never this page. Best effort: a read that fails leaves the section
+    // without them, as before.
+    const foreignCurrencies = [...new Set(scenarios.outflows.flatMap((outflow) => (outflow.original ? [outflow.original.currency] : [])))];
+    const [planning, savedScenarios] = await Promise.all([
+      readPlanningRates(db(), foreignCurrencies, new Date()).catch((error: unknown) => {
+        console.error("treasury: planning rates not read", error instanceof Error ? error.message : error);
+        return { rateHints: {}, reporting: null };
+      }),
+      readScenarioVersions(db()).catch((error: unknown) => {
+        console.error("treasury: saved scenarios not read", error instanceof Error ? error.message : error);
+        return null;
+      }),
+    ]);
+    const scenarioSaving = savedScenarios
+      ? {
+          orgSlug: slug,
+          available: savedScenarios.available,
+          canSave: can(access.membership.role, "reporting.manage"),
+          versions: savedScenarios.available ? savedScenarios.versions.map((version) => ({ ...version, createdBy: null })) : [],
+        }
+      : undefined;
     // What the open bills need beyond the wallet, and for an owner or admin the test USDC to cover it (test USDC T8).
     const operatingAccount = accountsRows.find((account) => account.kind === "operating");
     const testUsdc = testUsdcWeek
@@ -475,7 +500,7 @@ export default async function DashboardPage({
               <ProjectsTreasuryCard projects={projects} allHref={orgHref(slug, "/projects")} hrefOf={(projectId) => orgHref(slug, `/projects/${projectId}`)} />
 
               <CashOutlookPanel outlook={outlook} />
-              <CashScenarios basis={scenarios} />
+              <CashScenarios basis={scenarios} rateHints={planning.rateHints} reporting={planning.reporting} saving={scenarioSaving} />
 
               <section>
                 <SectionHeader

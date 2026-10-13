@@ -48,6 +48,9 @@ export interface OutlookInput {
     scheduled_for: string | null;
     /** The currency the bill was written in, when its USDC amount was worked out at a rate (0084, shadow mode S6). */
     original_currency?: string | null;
+    /** The bill's amount as written, and how many of its currency made one US dollar when it was converted (0084). */
+    original_amount?: number | string | null;
+    fx_rate?: number | string | null;
     /** The recurring payment it was created for, and that payment's period (`YYYY-MM-DD`), when it was. */
     recurring_id?: string | null;
     recurring_period?: string | null;
@@ -138,6 +141,11 @@ export interface OutlookMove {
   dueDay?: string;
   /** A payable written in another currency, whose USDC amount was worked out at a rate. */
   foreign?: boolean;
+  /**
+   * That bill as written, and the rate it was converted at, as decimal strings: what a scenario's own rate for the
+   * currency values it from (currency provenance M7). Absent when the row does not carry them.
+   */
+  original?: { currency: string; amount: string; perUsd: string };
   /** A receivable's client. */
   counterpartyId?: string | null;
   /** A milestone's contractor, whom it pays: its label also names the milestone. */
@@ -191,6 +199,7 @@ export function outlookMoves(input: OutlookInput, windowDays: number): OutlookMo
       item: { kind: "out", label: payable.counterparty, amount: payable.amount, note },
       ...(scheduled ? { dueDay: utcDayOf(utcMidnight(Date.parse(payable.due_date))) } : {}),
       foreign: Boolean(payable.original_currency) && payable.original_currency !== "USDC",
+      ...originalOf(payable),
     });
   }
 
@@ -235,6 +244,13 @@ export function outlookMoves(input: OutlookInput, windowDays: number): OutlookMo
   }
 
   return { today, moves, eurc, planned };
+}
+
+/** A converted bill's own amount and rate, as decimal strings, when the row carries all three. */
+function originalOf(payable: OutlookInput["payables"][number]): Pick<OutlookMove, "original"> {
+  const { original_currency: currency, original_amount: amount, fx_rate: perUsd } = payable;
+  if (!currency || currency === "USDC" || amount == null || perUsd == null) return {};
+  return { original: { currency, amount: String(amount), perUsd: String(perUsd) } };
 }
 
 export function cashOutlook(input: OutlookInput): CashOutlook {

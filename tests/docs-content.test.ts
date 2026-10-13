@@ -176,6 +176,7 @@ describe("the docs navigation", () => {
       ["guides/payment-plan", "Plan the next two weeks of payments"],
       ["guides/report", "Read your workspace report"],
       ["guides/cash-scenarios", "Plan for clients paying late"],
+      ["guides/currencies", "Work in your own currency"],
       ["guides/apply-payments", "Apply money received to invoices"],
       ["guides/projects", "Give each project its own budget"],
       ["guides/deals", "Turn a signed deal into a collection schedule"],
@@ -249,7 +250,8 @@ describe("the docs navigation", () => {
     expect(neighbours("guides/github").next?.slug).toBe("get-started/quickstart");
     expect(neighbours("ai-integration/mcp").next?.slug).toBe("api");
     expect(neighbours("guides/report").next?.slug).toBe("guides/cash-scenarios");
-    expect(neighbours("guides/cash-scenarios").next?.slug).toBe("guides/apply-payments");
+    expect(neighbours("guides/cash-scenarios").next?.slug).toBe("guides/currencies");
+    expect(neighbours("guides/currencies").next?.slug).toBe("guides/apply-payments");
     expect(neighbours("guides/apply-payments").next?.slug).toBe("guides/projects");
     expect(neighbours("guides/projects").next?.slug).toBe("guides/deals");
     expect(neighbours("guides/deals").next?.slug).toBe("guides/customer-portal");

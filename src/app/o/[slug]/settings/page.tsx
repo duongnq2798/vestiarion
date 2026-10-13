@@ -8,6 +8,7 @@ import HubSpotPanel from "@/components/HubSpotPanel";
 import LedgerKeyPanel from "@/components/LedgerKeyPanel";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import { SettingsSections, type SettingsGroup } from "@/components/SettingsSections";
+import ReportingCurrencyPanel from "@/components/ReportingCurrencyPanel";
 import ShadowModePanel from "@/components/ShadowModePanel";
 import SlackPanel from "@/components/SlackPanel";
 import TwoApprovalsPanel from "@/components/TwoApprovalsPanel";
@@ -48,6 +49,7 @@ import { networkProfile } from "@/lib/network";
 import { readShadowMode } from "@/lib/shadow-mode";
 import { shellStatus } from "@/lib/shell-status";
 import { readUsageLimits, readUsageMonth } from "@/lib/usage/read";
+import { readReportingCurrency } from "@/lib/reporting-currency";
 
 export const dynamic = "force-dynamic";
 
@@ -77,7 +79,7 @@ export default async function SettingsPage({
     // And how connecting Xero or QuickBooks went (Xero connector X4; QuickBooks connector Q4), and HubSpot (HubSpot H4).
     const { slack: slackOutcome, github: githubOutcome, xero: xeroOutcome, quickbooks: quickBooksOutcome, hubspot: hubspotOutcome } = await searchParams;
     const inboxSettings = inboxSettingsFromEnv();
-    const [goLive, apiKeys, webhookEndpoints, ledgerKey, dashboardStats, deletion, usyc, slack, notifySwitch, telegramLink, inbox, github, twoApprovals, shadow, xero, quickBooks, hubspot, usage, limits] = await Promise.all([
+    const [goLive, apiKeys, webhookEndpoints, ledgerKey, dashboardStats, deletion, usyc, slack, notifySwitch, telegramLink, inbox, github, twoApprovals, shadow, xero, quickBooks, hubspot, usage, limits, reportingCurrency] = await Promise.all([
       goLiveStatus(membership.orgId),
       listApiKeys(membership.orgId),
       listWebhookEndpoints(membership.orgId),
@@ -163,6 +165,11 @@ export default async function SettingsPage({
         console.error("settings: limits not loaded", error instanceof Error ? error.message : error);
         return [];
       }),
+      // The reporting currency (currency provenance M4); best effort: a section that cannot be read is left out.
+      readReportingCurrency(db()).catch((error: unknown) => {
+        console.error("settings: reporting currency not loaded", error instanceof Error ? error.message : error);
+        return null;
+      }),
     ]);
     // Receipts written to HubSpot (CRM receipts R8): once connected, best effort; nothing before migration 0107.
     const hubspotWriteScopes = crmProvider("hubspot")?.receipts?.writeScopes ?? null;
@@ -211,6 +218,18 @@ export default async function SettingsPage({
             title: "Shadow mode",
             content: shadow ? (
               <ShadowModePanel orgSlug={slug} mode={shadow.mode} network={membership.network} canChange={can(membership.role, "approval.policy")} />
+            ) : null,
+          },
+          {
+            id: "reporting-currency-title",
+            title: "Reporting currency",
+            content: reportingCurrency ? (
+              <ReportingCurrencyPanel
+                orgSlug={slug}
+                available={reportingCurrency.available}
+                setting={reportingCurrency.available ? reportingCurrency.setting : null}
+                canChange={can(membership.role, "reporting.manage")}
+              />
             ) : null,
           },
           {

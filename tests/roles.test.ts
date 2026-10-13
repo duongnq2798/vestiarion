@@ -22,6 +22,7 @@ const TABLE: Array<[Permission, Row]> = [
   ["integrations.manage", { owner: true, admin: true, approver: false, accountant: false, viewer: false }],
   ["accounting.book",  { owner: true,  admin: true,  approver: false, accountant: true,  viewer: false }],
   ["report.share",    { owner: true,  admin: true,  approver: false, accountant: false, viewer: false }],
+  ["reporting.manage", { owner: true, admin: true,  approver: false, accountant: false, viewer: false }],
   ["org.administer",   { owner: true,  admin: false, approver: false, accountant: false, viewer: false }],
 ];
 

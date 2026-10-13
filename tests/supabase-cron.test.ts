@@ -26,6 +26,8 @@ const JOBS = [
   { name: "vestiarion-agent-tick", schedule: "17 */6 * * *", route: "/api/agent/tick", source: "src/app/api/agent/tick/route.ts", workflow: "agent-cycle.yml" },
   // Bills from connected Xero organisations, every 15 minutes (Xero connector X7).
   { name: "vestiarion-accounting-sync", schedule: "*/15 * * * *", route: "/api/platform/accounting-sync", source: "src/app/api/platform/accounting-sync/route.ts", workflow: "accounting-sync.yml" },
+  // The day's reference rates and the FX variance on paid bills, every hour (currency provenance M5, M6).
+  { name: "vestiarion-fx-rates", schedule: "41 * * * *", route: "/api/platform/fx-rates", source: "src/app/api/platform/fx-rates/route.ts", workflow: "fx-rates.yml" },
 ] as const;
 
 /** The schedule and SQL of a job, from its `cron.schedule(name, schedule, $$ … $$)`; undefined when the file has none. */

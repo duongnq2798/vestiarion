@@ -13,6 +13,20 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Work in your own currency.** Every amount keeps the figure and currency written on the bill, where it came from,
+  the rate it was converted at (with who published it and when) and what moves on Arc. An owner or admin sets a
+  **Reporting currency** in Settings (USD, EUR, SGD, JPY, KRW, PHP or MYR), and the report's new **Currencies and
+  rates** shows the bills, what was paid on Arc and what the business paid, each in its own currency and then in the
+  reporting currency with the rates used; a currency whose rate was not recorded shows as unknown, never guessed. A
+  bill paid after the rate moved shows its **FX variance** on its card and in the report: what the payment carried
+  beyond, or short of, what the bill was worth that day. The rates and the variances are recorded every hour; a page
+  shows the newest rate recorded with its age and never waits on the rate feed. The report counts the amounts with full
+  provenance and the rates typed by hand. Payments still settle in USDC (or EURC on Arc testnet), at the amount each
+  bill was converted to.
+- **Exchange rates in cash scenarios, saved as versions.** Treasury's **What if clients pay late?** takes a rate for
+  each currency your open bills are written in, with the latest reference rate recorded beside it (its time and age),
+  and shows the cash in your reporting currency. An owner or admin saves a scenario as a version; saving again makes
+  the next version, and no version is ever changed.
 - **A first task for each role.** Every member sees a short checklist built for their role, ticked because each step
   happened in the workspace, never by a box someone ticks. An owner or admin: the workspace created, a first supplier,
   a first bill added or imported, the agent's decision, then the agent's limits, set or kept as they are with **Keep
@@ -23,7 +37,6 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   **Don't show again** hides a checklist for good, and no step offers anything your role cannot do. Until the
   workspace's database update for this release is applied, the checklists show without **Don't show again** and **Keep
   these limits**.
-
 - **Evidence links people can actually open.** Before the evidence page says a pull request is verified, or offers a
   link someone gave, Vestiarion checks that it can be opened. One that can't (deleted, in a private repository your
   workspace's GitHub connection does not reach, access refused, a signed link expired) is named with the reason and
@@ -35,6 +48,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- A bill's card writes its amount in its currency's own digits (no decimals for yen or won) and names its rate as the
+  reference rate it is; a EURC bill's USDC value names Circle's quote. A bill in US dollars, on its card and in its
+  evidence, names 1 USD = 1 USDC as USDC's 1:1 redemption peg, not a market rate.
 - A link someone gave on the evidence page is now marked **Not checked by Vestiarion** where it said **Not opened by
   Vestiarion**, and a link that can't be opened reads **Can't be opened** with why.
 

@@ -1,4 +1,5 @@
 import type { OutlookItem } from "./cash-outlook";
+import { convertMoney, numberOf, pegRate, rateValue, roundedMoney } from "./money";
 
 /**
  * Cash scenarios (docs/superpowers/specs/2026-10-11-cash-scenarios-design.md): from what Treasury already counts
@@ -32,6 +33,11 @@ export interface BasisOutflow {
   note: OutflowNote;
   /** Written in another currency, its USDC amount worked out at a rate: the narrower scope of the cost lever. */
   foreign: boolean;
+  /**
+   * Such a bill as written and the rate it was converted at (how many of its currency made one US dollar), as decimal
+   * strings: a rate typed for its currency values it again from these (currency provenance M7).
+   */
+  original?: { currency: string; amount: string; perUsd: string };
   /** A scheduled bill's own due day, in days from today, when it is later than the day it is scheduled for. */
   dueDay?: number;
   /**
@@ -104,6 +110,23 @@ export interface ScenarioLevers {
   /** A change in what bills cost, in percent: from −50 to 100. */
   costPct: number;
   costScope: "all" | "foreign";
+  /**
+   * A rate per currency, how many of it make one US dollar, as typed: each open bill written in that currency is valued
+   * at it (its own amount divided by the rate, to the cent) instead of the rate it was converted at. A currency not
+   * listed, or a rate that does not read, keeps each bill at its own conversion (currency provenance M7).
+   */
+  rates?: Record<string, string>;
+}
+
+/** What a typed rate did to the bills of its currency within the horizon. */
+export interface RateEffect {
+  currency: string;
+  /** The rate as read, how many of the currency make one US dollar. */
+  perUsd: string;
+  bills: number;
+  /** What those bills come to at the rates they were converted at, and at the typed rate, in USDC. */
+  converted: number;
+  atRate: number;
 }
 
 export const DEFAULT_LEVERS: ScenarioLevers = { horizon: 60, lateDays: 14, choices: {}, costPct: 0, costScope: "all" };
@@ -184,7 +207,9 @@ export type Driver =
       /** The latest day one of the rest arrives, within the horizon; null when none does. */
       arrivesBy: string | null;
     }
-  | { kind: "costs"; amount: number; pct: number; scope: ScenarioLevers["costScope"] };
+  | { kind: "costs"; amount: number; pct: number; scope: ScenarioLevers["costScope"] }
+  /** Bills written in another currency, valued at the rates typed for it. */
+  | { kind: "rates"; amount: number; currencies: string[] };
 
 export interface Coverage {
   horizon: Horizon;
@@ -207,8 +232,8 @@ export interface Coverage {
 
 export interface ScenarioResult {
   horizon: Horizon;
-  /** The levers as they were applied, each held within its range. */
-  levers: { lateDays: number; costPct: number; costScope: ScenarioLevers["costScope"] };
+  /** The levers as they were applied, each held within its range; `rates` only those that read and value a bill. */
+  levers: { lateDays: number; costPct: number; costScope: ScenarioLevers["costScope"]; rates: Record<string, string> };
   today: string;
   lastDay: string;
   cash: number;
@@ -217,8 +242,12 @@ export interface ScenarioResult {
   receivables: { base: number; scenario: number };
   /** What leaves within the horizon, in each case. */
   outflows: { base: number; scenario: number };
-  /** The scenario's outflows less the base case's: the cost lever's effect. */
+  /** The cost lever's effect on what leaves: the scenario's outflows less the same at the typed rates. */
   costDelta: number;
+  /** The typed rates' effect: the outflows at the typed rates less at the rates bills were converted at. */
+  rateDelta: number;
+  /** Each typed rate, with the bills of its currency within the horizon. */
+  rateEffects: RateEffect[];
   days: ScenarioDay[];
   base: CaseSummary;
   scenario: CaseSummary;
@@ -254,9 +283,28 @@ export function cashScenario(basis: ScenarioBasis, levers: ScenarioLevers): Scen
   const dayOf = (offset: number) => new Date(start + offset * DAY_MS).toISOString().slice(0, 10);
   const available = basis.cash + basis.reserve;
 
+  // A typed rate per currency, read exactly; one that does not read is no rate.
+  const typedRates: Record<string, string> = {};
+  for (const [currency, typed] of Object.entries(levers.rates ?? {})) {
+    const value = rateValue(typed);
+    if (value !== null && /^[A-Z]{3}$/.test(currency) && currency !== "USD") typedRates[currency] = value;
+  }
+  // A bill written in a currency with a typed rate, valued at it to the cent, exactly; any other at its own amount.
+  const atRate = (outflow: BasisOutflow): number => {
+    const original = outflow.original;
+    const perUsd = original ? typedRates[original.currency] : undefined;
+    if (!original || !perUsd) return outflow.amount;
+    try {
+      const written = roundedMoney(original.amount, original.currency);
+      const rate = { from: "USD", to: original.currency, value: perUsd, kind: "manual" as const, source: "this scenario", at: "" };
+      return numberOf(convertMoney(written, [rate, pegRate("USDC")], "USDC", { digits: 2 }));
+    } catch {
+      return outflow.amount;
+    }
+  };
   // The cost lever: every bill and recurring payment, or only those written in another currency; never a milestone.
   const changed = (outflow: BasisOutflow) => costPct !== 0 && outflow.kind !== "milestone" && (levers.costScope === "all" || outflow.foreign);
-  const scenarioAmount = (outflow: BasisOutflow) => (changed(outflow) ? round(outflow.amount * (1 + costPct / 100)) : outflow.amount);
+  const scenarioAmount = (outflow: BasisOutflow) => (changed(outflow) ? round(atRate(outflow) * (1 + costPct / 100)) : atRate(outflow));
   // When a receivable arrives in the scenario: late from its day (today for one overdue), or never.
   const arrival = (receivable: BasisReceivable): number | null => {
     const choice = levers.choices[receivable.id] ?? "late";
@@ -376,6 +424,8 @@ export function cashScenario(basis: ScenarioBasis, levers: ScenarioLevers): Scen
   const on = offsetOf(driversOn);
   const payees = new Map<string, Extract<Driver, { kind: "payee" }>>();
   let costs = 0;
+  let rated = 0;
+  const ratedCurrencies = new Set<string>();
   for (const outflow of inHorizon.filter((candidate) => candidate.day <= on)) {
     const name = outflow.payee ?? outflow.label;
     const payee = payees.get(name) ?? { kind: "payee", label: name, amount: 0, bills: 0, recurring: 0, milestones: 0 };
@@ -384,7 +434,11 @@ export function cashScenario(basis: ScenarioBasis, levers: ScenarioLevers): Scen
     else if (outflow.kind === "recurring") payee.recurring += 1;
     else payee.milestones += 1;
     payees.set(name, payee);
-    costs += scenarioAmount(outflow) - outflow.amount;
+    costs += scenarioAmount(outflow) - atRate(outflow);
+    if (atRate(outflow) !== outflow.amount && outflow.original) {
+      rated += atRate(outflow) - outflow.amount;
+      ratedCurrencies.add(outflow.original.currency);
+    }
   }
   // A client's receivables together, by the client (by its own id without one), each one's arrival kept.
   type ReceivableDriver = Extract<Driver, { kind: "receivable" }>;
@@ -400,10 +454,15 @@ export function cashScenario(basis: ScenarioBasis, levers: ScenarioLevers): Scen
     else if (group.arrivesBy === null || dayOf(arrives) > group.arrivesBy) group.arrivesBy = dayOf(arrives);
     late.set(key, group);
   }
-  const sources: Driver[] = [...payees.values(), ...late.values(), ...(round(costs) > 0 ? [{ kind: "costs" as const, amount: round(costs), pct: costPct, scope: levers.costScope }] : [])];
+  const sources: Driver[] = [
+    ...payees.values(),
+    ...late.values(),
+    ...(round(costs) > 0 ? [{ kind: "costs" as const, amount: round(costs), pct: costPct, scope: levers.costScope }] : []),
+    ...(round(rated) > 0 ? [{ kind: "rates" as const, amount: round(rated), currencies: [...ratedCurrencies].sort() }] : []),
+  ];
   const drivers = sources
     .filter((source) => source.amount > 0)
-    .sort((a, b) => b.amount - a.amount || (a.kind === "costs" ? 1 : b.kind === "costs" ? -1 : a.label.localeCompare(b.label)))
+    .sort((a, b) => b.amount - a.amount || (a.kind === "costs" || a.kind === "rates" ? 1 : b.kind === "costs" || b.kind === "rates" ? -1 : a.label.localeCompare(b.label)))
     .slice(0, 3);
 
   const sum = (rows: Array<{ amount: number }>) => round(rows.reduce((total, row) => total + row.amount, 0));
@@ -432,16 +491,28 @@ export function cashScenario(basis: ScenarioBasis, levers: ScenarioLevers): Scen
     plannedOther.set(line.currency, entry);
   }
 
+  // Each typed rate that values a bill within the horizon, with what those bills come to either way.
+  const rateEffects: RateEffect[] = Object.entries(typedRates)
+    .map(([currency, perUsd]) => {
+      const bills = inHorizon.filter((outflow) => outflow.original?.currency === currency);
+      return { currency, perUsd, bills: bills.length, converted: sum(bills), atRate: round(bills.reduce((total, outflow) => total + atRate(outflow), 0)) };
+    })
+    .filter((effect) => effect.bills > 0)
+    .sort((a, b) => a.currency.localeCompare(b.currency));
+  const atRates = round(inHorizon.reduce((total, outflow) => total + atRate(outflow), 0));
+
   return {
     horizon,
-    levers: { lateDays, costPct, costScope: levers.costScope },
+    levers: { lateDays, costPct, costScope: levers.costScope, rates: Object.fromEntries(rateEffects.map((effect) => [effect.currency, effect.perUsd])) },
     today: basis.today,
     lastDay: dayOf(horizon - 1),
     cash: basis.cash,
     reserve: basis.reserve,
     receivables: { base: sum(expected), scenario: round(scenarioIn.reduce((total, amount) => total + amount, 0)) },
     outflows: { base: sum(inHorizon), scenario: round(scenarioOut.reduce((total, amount) => total + amount, 0)) },
-    costDelta: round(scenarioOut.reduce((total, amount) => total + amount, 0) - inHorizon.reduce((total, outflow) => total + outflow.amount, 0)),
+    costDelta: round(scenarioOut.reduce((total, amount) => total + amount, 0) - atRates),
+    rateDelta: round(atRates - inHorizon.reduce((total, outflow) => total + outflow.amount, 0)),
+    rateEffects,
     days,
     base: baseCase,
     scenario: scenarioCase,
