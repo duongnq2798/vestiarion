@@ -1532,7 +1532,12 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Write receipts to HubSpot", HUBSPOT_PANEL],
     ["Stop writing to HubSpot", HUBSPOT_PANEL],
     ["HubSpot is connected, and Vestiarion writes receipts to the deals planned from it, from the next sync.", HUBSPOT_PANEL],
-    ["a HubSpot super admin may need to approve the app's write access", HUBSPOT_PANEL, "A HubSpot super admin may need to approve the app's write access"],
+    ["On HubSpot's install screen, tick both optional write permissions.", "src/lib/hubspot/write-steps.ts"],
+    [
+      "If your HubSpot account approved Vestiarion before, they show locked there: a super admin first turns them on in HubSpot > Settings > Integrations > Connected Apps > Vestiarion > Data Permissions.",
+      "src/lib/hubspot/write-steps.ts",
+    ],
+    ["HubSpot connected without allowing Vestiarion to write. It still reads your deals.", HUBSPOT_PANEL],
     ["Collected", CRM_RECEIPTS, 'label: "Collected"'],
     ["Still owed", CRM_RECEIPTS, 'label: "Still owed"'],
     ["Collection status", CRM_RECEIPTS, 'label: "Collection status"'],

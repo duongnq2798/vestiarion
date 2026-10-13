@@ -14,6 +14,7 @@ import { BrandMark } from "@/components/vx/BrandMarks";
 import type { CrmPanelView } from "@/lib/connectors/crm-review";
 import type { CrmReceiptsPanel } from "@/lib/connectors/crm-receipts-view";
 import { billsHref } from "@/lib/bills-view";
+import { HUBSPOT_WRITE_STEPS } from "@/lib/hubspot/write-steps";
 
 const INITIAL: HubSpotActionResult = { ok: false, message: "" };
 
@@ -33,7 +34,7 @@ export const HUBSPOT_NOTICES: Record<string, { tone: "success" | "error"; text: 
   writing: { tone: "success", text: "HubSpot is connected, and Vestiarion writes receipts to the deals planned from it, from the next sync." },
   write_not_granted: {
     tone: "error",
-    text: "HubSpot connected without allowing Vestiarion to write. It still reads your deals. A HubSpot super admin may need to approve the app's write access; then try Allow writing to HubSpot again.",
+    text: `HubSpot connected without allowing Vestiarion to write. It still reads your deals. To allow writing, choose Allow writing to HubSpot again. ${HUBSPOT_WRITE_STEPS.tick} ${HUBSPOT_WRITE_STEPS.locked}`,
   },
   write_not_set_up: { tone: "error", text: "HubSpot is connected. Writing receipts is not set up on this deployment yet." },
 };
@@ -121,6 +122,11 @@ function Receipts({ orgSlug, receipts, canManage }: { orgSlug: string; receipts:
         <div className="flex flex-wrap items-start gap-3 pt-1">
           {!receipts.allowed && <ConnectButton orgSlug={orgSlug} label="Allow writing to HubSpot" write variant="secondary" />}
           {(receipts.on || receipts.allowed) && <ReceiptsSwitch orgSlug={orgSlug} on={receipts.on} />}
+          {!receipts.allowed && (
+            <p className="w-full max-w-prose text-sm text-ink-3">
+              {HUBSPOT_WRITE_STEPS.tick} {HUBSPOT_WRITE_STEPS.locked}
+            </p>
+          )}
         </div>
       ) : (
         <p className="text-sm text-ink-3">An owner or admin turns writing to HubSpot on or off.</p>

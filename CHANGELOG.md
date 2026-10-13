@@ -78,6 +78,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 - **A bill's amount hint matches its currency.** In shadow mode, a bill in US dollars, euros or pounds showed
   `2.500.000` as its example amount; it now shows `1250.00`, and only a currency written without decimals, such as
   the yen, shows a grouped whole amount.
+- **Allowing HubSpot writes says what to tick.** The connect page and the HubSpot card say to tick both optional write
+  permissions on HubSpot's install screen, and that in an account which approved Vestiarion before, a super admin first
+  turns them on in HubSpot > Settings > Integrations > Connected Apps > Vestiarion > Data Permissions.
 
 ## [0.1.0-beta.1] - 2026-10-12
 

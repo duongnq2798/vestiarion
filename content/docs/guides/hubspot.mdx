@@ -103,7 +103,9 @@ A customer linked to a HubSpot company that has no billing email yet is listed u
 
 So sales sees whether a customer paid without asking finance, Vestiarion can write each planned deal's collections back to that deal in HubSpot. It is off until an owner or admin turns it on.
 
-**Allow it.** On the HubSpot card in Settings, under **Receipts in HubSpot**, choose **Allow writing to HubSpot**. The connect page opens with **Write receipts to HubSpot** ticked: choose **Continue to HubSpot**, and HubSpot asks you to let Vestiarion write deals and add deal fields. Back in Settings, the card says "HubSpot is connected, and Vestiarion writes receipts to the deals planned from it, from the next sync." If HubSpot did not grant it, the card says so and the connection keeps reading your deals: a HubSpot super admin may need to approve the app's write access. A connection allowed to write shows **Write receipts to HubSpot** and **Stop writing to HubSpot**; what was written stays in HubSpot when you stop.
+**Allow it.** On the HubSpot card in Settings, under **Receipts in HubSpot**, choose **Allow writing to HubSpot**. The connect page opens with **Write receipts to HubSpot** ticked: choose **Continue to HubSpot**. On HubSpot's install screen, tick both optional write permissions. Back in Settings, the card says "HubSpot is connected, and Vestiarion writes receipts to the deals planned from it, from the next sync." A connection allowed to write shows **Write receipts to HubSpot** and **Stop writing to HubSpot**; what was written stays in HubSpot when you stop.
+
+**If the write permissions show locked.** If your HubSpot account approved Vestiarion before, they show locked there: a super admin first turns them on in HubSpot > Settings > Integrations > Connected Apps > Vestiarion > Data Permissions. Then choose **Allow writing to HubSpot** again. Until then the card says "HubSpot connected without allowing Vestiarion to write. It still reads your deals.", and Vestiarion keeps reading your deals.
 
 **What is written**, on each HubSpot deal planned in Vestiarion, in a **Vestiarion** group of deal fields that Vestiarion adds once:
 
