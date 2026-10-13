@@ -44,8 +44,10 @@ function claimsOf(request: RecordedRequest): Record<string, unknown> | null {
   return JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as Record<string, unknown>;
 }
 
-function world(memberships: Membership[]) {
+function world(memberships: Membership[], extra: (sent: RecordedRequest) => FakeReply | null = () => null) {
   const fake = fakeSupabase((sent): FakeReply => {
+    const answered = extra(sent);
+    if (answered) return answered;
     if (sent.path === "/rest/v1/memberships") {
       // As PostgREST filters it: by the user the request names, and by slug when one is named.
       const user = sent.params.get("user_id")?.replace(/^eq\./, "");
@@ -154,6 +156,33 @@ describe("readPortfolio", () => {
       amount: { value: 1250, currency: "USDC" },
       href: "/o/harbor-bakery/approvals#payable-harbor-bakery-bill",
     });
+  });
+
+  it("says an accountant books only on a Xero connection agreed under the words that name the accountant, as the booking command allows", async () => {
+    // Harbor Bakery connected Xero before Oct 13 (only an owner or admin approves); Pine Dental since (an accountant may).
+    const CONNECTIONS: Record<string, { id: string; consent: string }> = {
+      [WORKSPACES[0].id]: { id: "0b6c1c9e-4a4f-4a7e-9b1e-0000000c0a01", consent: "xero-2026-10-12.2" },
+      [WORKSPACES[2].id]: { id: "0b6c1c9e-4a4f-4a7e-9b1e-0000000c0a03", consent: "xero-2026-10-13" },
+    };
+    const { read } = world(INVITED, (sent) => {
+      const connection = CONNECTIONS[String(claimsOf(sent)?.org_id ?? "")];
+      if (sent.path === "/rest/v1/accounting_postings") {
+        return {
+          body: connection
+            ? [{ id: `${connection.id}-posting`, connection_id: connection.id, provider: "xero", amount: "1250", currency: "USD", state: "draft", paid_on: "2026-10-10", message: null, created_at: "2026-10-11T08:00:00Z" }]
+            : [],
+        };
+      }
+      if (sent.path === "/rest/v1/accounting_connections" && sent.params.get("id")) {
+        return { body: connection ? [{ id: connection.id, consent_version: connection.consent }] : [] };
+      }
+      return null;
+    });
+    const toBook = (await read()).items.filter((item) => item.kind === "to_book");
+    expect(toBook.map((item) => [item.workspace.slug, item.canAct, item.who])).toEqual([
+      ["pine-dental", true, "You can review and book it"],
+      ["harbor-bakery", false, "Waiting on an owner or admin of this workspace: Xero was connected before an accountant could book"],
+    ]);
   });
 
   it("keeps listing a workspace whose data cannot be read, and says so, without hiding the others", async () => {

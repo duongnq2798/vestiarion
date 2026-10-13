@@ -2,6 +2,7 @@ import { invoiceDiscount } from "../agent/payment-timing";
 import { membershipsOf, type OrgMembership } from "../auth/membership";
 import { approvalAnchor, orgHref } from "../auth/org-paths";
 import { billsHref } from "../bills-view";
+import { ACCOUNTANT_BOOKING_CONSENTS } from "../connectors/consent";
 import { PROVIDER_LABELS } from "../connectors/provider";
 import { readCustomerRequests } from "../customer-portal/requests";
 import { db, type OrgDb } from "../dal";
@@ -134,15 +135,29 @@ async function decisionItems(orgDb: OrgDb, ws: { slug: string; name: string; rol
 async function bookingItems(orgDb: OrgDb, ws: { slug: string; name: string; role: OrgMembership["role"] }): Promise<TriageItem[]> {
   const result = await orgDb
     .from("accounting_postings")
-    .select("id, provider, amount, currency, state, paid_on, message, created_at")
+    .select("id, connection_id, provider, amount, currency, state, paid_on, message, created_at")
     .in("state", ["draft", "failed"])
     .order("created_at", { ascending: true })
     .limit(ROWS);
   // Before migration 0106 nothing is booked, so there is nothing to book.
   if (result.error && notSetUp(result.error)) return [];
   if (result.error) throw new Error(result.error.message);
-  return ((result.data ?? []) as Array<{ id: string; provider: "xero" | "quickbooks"; amount: string | number; currency: string; state: "draft" | "failed"; paid_on: string; message: string | null; created_at: string }>).map((row) => {
+  const rows = (result.data ?? []) as Array<{ id: string; connection_id: string; provider: "xero" | "quickbooks"; amount: string | number; currency: string; state: "draft" | "failed"; paid_on: string; message: string | null; created_at: string }>;
+  // An accountant books only where the connection agreed to words that name the accountant, as `bookAccountingPayments`
+  // checks (accountant console A1): elsewhere the item waits on an owner or admin, and says why.
+  let agreed: Map<string, string> | null = null;
+  if (ws.role === "accountant" && rows.length > 0) {
+    const connections = await orgDb.from("accounting_connections").select("id, consent_version").in("id", [...new Set(rows.map((row) => row.connection_id))]);
+    if (connections.error) throw new Error(connections.error.message);
+    agreed = new Map(((connections.data ?? []) as Array<{ id: string; consent_version: string }>).map((row) => [row.id, row.consent_version]));
+  }
+  return rows.map((row) => {
     const label = PROVIDER_LABELS[row.provider] ?? row.provider;
+    const consent = agreed?.get(row.connection_id);
+    const route =
+      agreed && !(consent && ACCOUNTANT_BOOKING_CONSENTS.has(consent))
+        ? { canAct: false, who: `Waiting on an owner or admin of this workspace: ${label} was connected before an accountant could book` }
+        : routeTo(ws.role, "to_book");
     return {
       key: `${ws.slug}:to_book:${row.id}`,
       kind: "to_book" as const,
@@ -152,7 +167,7 @@ async function bookingItems(orgDb: OrgDb, ws: { slug: string; name: string; role
       amount: { value: num(row.amount), currency: row.currency },
       since: row.created_at,
       href: orgHref(ws.slug, billsHref({ tab: "bills", review: row.provider === "quickbooks" ? "book-quickbooks" : "book-xero" })),
-      ...routeTo(ws.role, "to_book"),
+      ...route,
     };
   });
 }

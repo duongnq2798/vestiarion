@@ -2240,7 +2240,7 @@ Each part of a workspace is read on its own, and one that fails is named on its 
 | Kind | Read | Age from | Opens | Who acts |
 | --- | --- | --- | --- | --- |
 | `past_decide_by`, `decision` | payables `held`, `flagged`, `awaiting_info` (split by `decideByOf`), milestones `held` | the decide-by day once past; else `decided_at` | Approvals at the bill; Contractors | `approval.decide` |
-| `to_book` | `accounting_postings` `draft` or `failed` | `created_at` | the bookings review | `accounting.book` |
+| `to_book` | `accounting_postings` `draft` or `failed` | `created_at` | the bookings review | `accounting.book`; an accountant only on a connection whose consent is in `ACCOUNTANT_BOOKING_CONSENTS`, as the command checks |
 | `receivable_overdue` | receivables `pending`/`matched` past `due_date` | the due date | the receivable | `receivables.reconcile` |
 | `customer_says_paid`, `disputed` | open `customer_requests` of kind `paid`, `dispute` | `created_at` | From customers | `receivables.reconcile` |
 | `connector` | `accounting_connections` whose `connectionStatus` is an error | `last_error_at` | Settings at the connector | `integrations.manage` |
