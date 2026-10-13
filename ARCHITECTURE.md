@@ -1039,10 +1039,72 @@ already reads, with no query or write of their own beyond the recurring schedule
   balances are never counted, and neither are a deal's lines not released yet: `outlookMoves` takes them as `planned`
   (`OutlookInput.planned`), Next 30 days names what they come to apart (`plannedIn30d`, other currencies apart) and the
   scenarios' coverage names them, in no balance (below, Deals). A released line is a receivable and counts as one.
-- **Nothing that pays reads it.** No server action, ledger entry or setting: the levers live in component state and
-  are gone with the page. Safe to spend today, the treasury's buffer, cash holds and every guardrail still count no
-  receivable; `tests/cash-scenarios-ui.test.tsx` fails if a file under `src/lib/agent`, `src/lib/commands`,
-  `src/app/actions` or `src/app/api` imports a cash-scenario module.
+- **Nothing that pays reads it.** The levers live in component state and are gone with the page, unless an owner or
+  admin saves them as a version (below, Currencies). Safe to spend today, the treasury's buffer, cash holds and every
+  guardrail still count no receivable; `tests/cash-scenarios-ui.test.tsx` fails if a file under `src/lib/agent`,
+  `src/lib/commands`, `src/app/actions` or `src/app/api` imports a cash-scenario module: the save goes through
+  `src/lib/scenario-versions.ts`, which imports none.
+- **Exchange rates** (`docs/superpowers/specs/2026-10-13-currency-provenance-design.md` M7). `outlookMoves` carries a
+  converted bill's `original` (its amount as written and its `fx_rate`, as decimal strings) into the basis;
+  `ScenarioLevers.rates` values each open bill of a typed currency at that rate (the bill's own amount over the rate,
+  exactly, to the cent) before the cost lever, and `ScenarioResult` says what each rate did (`rateEffects`, `rateDelta`)
+  apart from the cost lever (`costDelta`). Empty keeps every bill at its own conversion, so the base case never moves.
+
+## Currencies: provenance, a reporting currency and FX variance
+
+`docs/superpowers/specs/2026-10-13-currency-provenance-design.md`. Reporting and planning only: payments still settle in
+USDC (or EURC on Arc testnet), the executable amount is what the agent pays, and nothing that decides or pays imports
+any of it. `/api/v1` keeps USDC and EURC.
+
+- **One money shape** (`src/lib/money/`, pure and browser-safe). `Money` is `{ minor: bigint, currency }`: 0 digits for
+  the yen, the won and the other zero-decimal codes `billDigits` knows, 6 for USDC and EURC (the tokens' own, since what
+  a transfer carried can hold a discount's micro-units), 2 otherwise. `moneyOf` parses a decimal exactly,
+  `roundedMoney` reads a database value through its shortest decimal text, rounding half away from zero once;
+  `totalsByCurrency` never adds two currencies and `addMoney` throws when asked to. `tests/money.test.ts` runs the round
+  trips and totals of the six currencies (USD, SGD, JPY, KRW, PHP, MYR) thousands of times with a seeded generator.
+- **Rates say their kind** (`rate.ts`): `reference` (ExchangeRate-API's daily rates, through `usdRate`), `quote` (the
+  provider's executable quote: Circle's on a EURC decision), `accounting` (the books'; named, not read yet), `peg` (1 USDC
+  = 1 USD, 1 EURC = 1 EUR, named as the redemption peg and never a market rate) and `manual` (typed into a scenario).
+  `convertMoney` multiplies a chain of rates as fractions and rounds once; `rateWords` says a rate with its kind, source
+  and time wherever a figure used it, and its age (`rateAge`) where a page shows a stored rate. A total that counted
+  USDC in US dollars says "USDC counted at its 1:1 redemption peg" (`tests/currency-report-ui.test.tsx`).
+- **Reporting currency** (`reporting.ts`, `src/lib/reporting-currency.ts`): one row of `reporting_currencies` (0113), USD,
+  EUR, SGD, JPY, KRW, PHP or MYR, set by an owner or admin in Settings (`workspace.reporting_currency`, permission
+  `reporting.manage`, signed `reporting_currency_changed`). `reportingTotals` totals per currency, then converts each
+  total through the US dollar, the token's peg first; a currency whose reference rate is missing, or older than 3 days,
+  makes its row and the total unknown, with the reason and what is known apart. Never a 1:1 fallback.
+- **Stored rates** (`src/lib/fx/rates-store.ts`): `fx_rates` (0113, append-only for the tenant role; one row per kind,
+  source, pair and publication, an upsert that ignores duplicates). `reportingRateBook` reads the newest stored rate
+  published within 3 days, and only reads: no page reads the feed or writes a rate while it renders (Next's data-security
+  guide: no mutation as a side effect of rendering), so a page never waits on ExchangeRate-API. `POST
+  /api/platform/fx-rates` (`src/lib/fx/rates-job.ts`, Supabase Cron hourly, `.github/workflows/fx-rates.yml` by hand) is
+  the only reader of the feed and the only writer of reference rates: for each workspace with a reporting currency,
+  shadow mode in a currency of its own or a converted bill, each in its own scope; a feed that does not answer is asked
+  once a run, not once a workspace; its answer is counts only. `tests/currency-render-path.test.ts` holds the pages to
+  reads only.
+- **FX variance** (`variance.ts`, `src/lib/fx/variances.ts`): for a paid payable converted at a rate from a currency other
+  than the dollar, what the transfer carried less the same part of the bill at the reference rate in force at the
+  payment (the newest stored one published at most 36 hours before it, `rateAtPayment`), to the cent, or to the
+  micro-unit a discounted transfer carried, so an unmoved rate is no variance. Recorded once per bill in `fx_variances`
+  (0113, append-only; a check holds `variance = paid_amount - value_at_payment` and the rate's window), with every input
+  copied, by the hourly rates job alone (`recordFxVariances`); the report and Bills & receivables read them
+  (`readFxVarianceState`), and a paid bill without one reads unknown, with why. None is recorded without a stored rate.
+  It never reads the feed.
+- **The report** (`src/lib/currency-report.ts`, `-read.ts`, `CurrencyReport`): **Currencies and rates**, from the report's
+  own scope (`reportScope`): bills as written, paid on Arc, paid by the business (the newest records of 0090), each per
+  currency and in the reporting currency; the variances; every rate used; and two KPIs, the share of amounts with full
+  provenance (`fullProvenance`: the amount as written and its source, the `create_invoice` entry's `via`; the
+  conversion's rates with source and time; a known reporting value; the rate at payment once a converted bill is paid)
+  and the manual FX adjustments (manual rows of `fx_rates`). Each part is best effort on its own.
+- **Bill cards** (`map.ts`): a bill as written in its currency's digits, "converted at" its reference rate with source
+  and day; a EURC payable's **USDC value** naming Circle's quote; a paid bill's **FX variance**, or unknown.
+- **Saved scenarios** (`src/lib/scenario-versions.ts`): `cash_scenario_versions` (0113, append-only; a trigger takes a
+  version only one after its scenario's last, and the unique key refuses two saves of one number), each typed rate a
+  `manual` row of `fx_rates` naming its version, signed `cash_scenario_saved` (domain `treasury`). Command
+  `cash_scenario.save` (`reporting.manage`), console only.
+- **Before 0113 runs** each read answers not set up (`42P01`, `PGRST205`, `42703`, `PGRST204`): Settings says so, the
+  report shows each currency apart, no rate and no variance, saving refuses with `not_ready`, and the rates job has
+  nothing to do.
 
 ## Deals: a signed deal as a collection schedule
 

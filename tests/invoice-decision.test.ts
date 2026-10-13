@@ -195,7 +195,7 @@ describe("invoiceDecision: a EURC invoice (EURC invoices design E6)", () => {
       [decided({ currency: "EURC", usdcValue: 117, fx: { rate: 1.17, source: "circle-stablecoin-quote", quotedAt: "2026-10-01T09:00:00.000Z" } })], { network: "arc-testnet" });
     expect(decision.token).toBe("EURC");
     expect(decision.amount).toBe(100);
-    expect(decision.evidence).toContainEqual({ label: "USDC value", value: "117.00 USDC at 1.17", state: "neutral" });
+    expect(decision.evidence).toContainEqual({ label: "USDC value", value: "117.00 USDC at 1.1700 USDC per EURC, Circle's quote when it was decided", state: "neutral" });
   });
 
   it("says there was no rate when Circle gave none, and names that rule in the band", () => {
@@ -627,19 +627,21 @@ describe("invoiceDecision: a bill in the business's own currency (shadow mode S6
     fx_at: "2026-10-07T00:02:32.000Z",
   });
 
-  it("shows the bill as it was written, and the rate it was paid at, linked to whose rate it is", () => {
-    const decision = invoiceDecision(invoice({ amount: 96.39, ...bill("VND", 2_500_000, 25_935.897512, "ExchangeRate-API") }), undefined, [], { network: "arc-testnet" });
+  it("shows the bill as it was written, in its currency's own digits, and the reference rate it was converted at, linked to whose rate it is", () => {
+    const decision = invoiceDecision(invoice({ amount: 1086.96, ...bill("KRW", 1_500_000, 1380.0, "ExchangeRate-API") }), undefined, [], { network: "arc-testnet" });
     expect(decision.evidence).toContainEqual({
       label: "Bill",
-      value: "2,500,000 VND, at 25,935.90 VND to the US dollar (ExchangeRate-API, Oct 7, 2026)",
+      value: "1,500,000 KRW, converted at 1,380.0000 KRW per US dollar, the reference rate ExchangeRate-API published Oct 7, 2026",
       href: "https://www.exchangerate-api.com",
       state: "neutral",
     });
+    const sgd = invoiceDecision(invoice({ amount: 1000, ...bill("SGD", 1350, 1.35, "ExchangeRate-API") }), undefined, [], { network: "arc-testnet" });
+    expect(sgd.evidence.find((item) => item.label === "Bill")?.value).toBe("1,350.00 SGD, converted at 1.3500 SGD per US dollar, the reference rate ExchangeRate-API published Oct 7, 2026");
   });
 
-  it("shows a bill in dollars at one USDC to the dollar", () => {
+  it("shows a bill in dollars at one USDC to the dollar, named as USDC's redemption peg, never a market rate", () => {
     const decision = invoiceDecision(invoice({ amount: 1234.56, ...bill("USD", 1234.56, 1, "USD = USDC") }), undefined, [], { network: "arc-testnet" });
-    expect(decision.evidence).toContainEqual({ label: "Bill", value: "1,234.56 USD, at 1 USD = 1 USDC", state: "neutral" });
+    expect(decision.evidence).toContainEqual({ label: "Bill", value: "1,234.56 USD, at 1 USD = 1 USDC, USDC's 1:1 redemption peg, not a market rate", state: "neutral" });
   });
 
   it("shows no bill for an invoice written in USDC", () => {
@@ -674,5 +676,41 @@ describe("invoiceDecision: a hold read from the agent's decision, past a newer e
       { network: "arc-testnet" }
     );
     expect(decision.heldForCash).toBe(true);
+  });
+});
+
+describe("invoiceDecision: a paid bill's FX variance (currency provenance M6, M9)", () => {
+  const sgdBill = { original_currency: "SGD", original_amount: 1350, fx_rate: 1.35, fx_source: "ExchangeRate-API", fx_at: "2026-10-10T00:02:00.000Z" };
+  const recorded = {
+    invoiceId: "inv-1",
+    currency: "SGD",
+    paid: { minor: BigInt(1_000_000_000), currency: "USDC" },
+    paidAt: "2026-10-12T15:00:00.000Z",
+    covered: { minor: BigInt(135_000), currency: "SGD" },
+    decision: { from: "USD", to: "SGD", value: "1.35", kind: "reference" as const, source: "ExchangeRate-API", at: "2026-10-10T00:02:00.000Z" },
+    payment: { from: "USD", to: "SGD", value: "1.36", kind: "reference" as const, source: "ExchangeRate-API", at: "2026-10-12T00:02:00.000Z" },
+    valueAtPayment: { minor: BigInt(992_650_000), currency: "USDC" },
+    variance: { minor: BigInt(7_350_000), currency: "USDC" },
+    recordedAt: "2026-10-13T00:00:00.000Z",
+  };
+
+  it("says what was paid beyond the bill's worth on the payment day, and at which rate", () => {
+    const paid = invoice({ id: "inv-1", amount: 1000, status: "paid", ...sgdBill });
+    const decision = invoiceDecision(paid, undefined, [], { network: "arc-testnet", variances: { recorded: new Map([["inv-1", recorded]]), unknown: new Map() } });
+    expect(decision.evidence).toContainEqual({
+      label: "FX variance",
+      value: "+7.35 USDC: paid more than the bill was worth on the day, 992.65 USDC at 1.3600 SGD per US dollar (published Oct 12, 2026)",
+      href: "https://www.exchangerate-api.com",
+      state: "neutral",
+    });
+  });
+
+  it("says unknown, with why, when no rate was recorded for the payment day, and nothing for an unpaid bill", () => {
+    const unknown = { invoiceId: "inv-1", currency: "SGD", paidAt: "2026-10-12T15:00:00.000Z", reason: "No SGD rate was recorded in the 36 hours before the payment." };
+    const variances = { recorded: new Map(), unknown: new Map([["inv-1", unknown]]) };
+    const paid = invoiceDecision(invoice({ id: "inv-1", status: "paid", ...sgdBill }), undefined, [], { network: "arc-testnet", variances });
+    expect(paid.evidence).toContainEqual({ label: "FX variance", value: "unknown: No SGD rate was recorded in the 36 hours before the payment.", state: "missing" });
+    const open = invoiceDecision(invoice({ id: "inv-1", status: "pending", ...sgdBill }), undefined, [], { network: "arc-testnet", variances });
+    expect(open.evidence.some((item) => item.label === "FX variance")).toBe(false);
   });
 });

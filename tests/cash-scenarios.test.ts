@@ -351,7 +351,7 @@ describe("cashScenario: what moves it most", () => {
   it("measures on the lowest day when the scenario never runs short", () => {
     const result = cashScenario(basis({ cash: 500, outflows: [bill("Harbor", 100, 3), bill("Atlas", 50, 6)], receivables: [owed("Acme", 300, 20)] }), levers({ lateDays: 0 }));
     expect(result.driversOn).toBe(ymd(6));
-    expect(result.drivers.map((driver) => driver.kind === "costs" ? "costs" : driver.label)).toEqual(["Harbor", "Atlas"]);
+    expect(result.drivers.map((driver) => driver.kind === "costs" || driver.kind === "rates" ? driver.kind : driver.label)).toEqual(["Harbor", "Atlas"]);
   });
 
   it("groups a contractor's milestones with its bills, under the contractor's name", () => {

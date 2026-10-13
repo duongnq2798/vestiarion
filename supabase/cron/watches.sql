@@ -65,3 +65,14 @@ select cron.schedule('vestiarion-accounting-sync', '*/15 * * * *', $$
       where name = 'agent_api_token')),
     timeout_milliseconds := 330000)
 $$);
+-- The day's reference rates for each workspace that reports or plans in another currency, and the FX variance of each
+-- paid bill whose payment-day rate is then recorded, every hour at 41 minutes past (at most 300 seconds). The feed
+-- publishes once a day; an hourly read keeps the rate in force at any payment.
+select cron.schedule('vestiarion-fx-rates', '41 * * * *', $$
+  select net.http_post(
+    url := 'https://www.vestiarion.xyz/api/platform/fx-rates',
+    headers := jsonb_build_object('Authorization', 'Bearer ' || (
+      select decrypted_secret from vault.decrypted_secrets
+      where name = 'agent_api_token')),
+    timeout_milliseconds := 330000)
+$$);

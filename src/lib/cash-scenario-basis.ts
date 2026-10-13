@@ -73,6 +73,7 @@ export function scenarioBasis(input: ScenarioBasisInput): ScenarioBasis {
       // Only a receivable is "expected", and receivables were taken above.
       note: item.note as OutflowNote,
       foreign: move.foreign === true,
+      ...(move.original ? { original: move.original } : {}),
       ...(dueDay !== undefined && dueDay > offset(move.at) ? { dueDay } : {}),
       ...(overdue && item.kind !== "milestone" ? { overdue: true as const } : {}),
     });

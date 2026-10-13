@@ -192,6 +192,10 @@ Choose **Find the bills**. Each line of money out is matched against the bills t
 
 Each record is a signed entry in the ledger: `actual_payment_recorded`, or `actual_payment_corrected` for a correction, with who recorded it, the payable and what was recorded. A record from a bank statement also carries `via: "statement"` and `statementLine`: the kept line's `id`, the account as you named it, the line of the file, its booking and value days, its amount (money out is negative), currency, description, payee, reference and the balance after it.
 
+## Currencies and rates
+
+Under the rest of the report, **Currencies and rates** gives the bills as written, what was paid on Arc and what your business recorded paying, each in its own currency first, then in your reporting currency with the rates that took it there, or unknown when a rate was not recorded. It shows the **FX variance on paid bills**, every rate used with its kind, source and time, and two figures: **Amounts with full provenance** and **Manual FX adjustments**. See [Work in your own currency](/docs/guides/currencies#2-read-the-report-in-your-currency).
+
 ## Share this report
 
 An owner or admin can give anyone a live copy of the report, without a login: your partner, your accountant, or an outside reviewer. Choose **Share this report**, beside the guide's link at the top of the report, then choose what the copy shows:

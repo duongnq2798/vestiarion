@@ -3,11 +3,14 @@ import { DocsLink } from "@/components/DocsLink";
 import ReportBaselineControl from "@/components/ReportBaselineControl";
 import { ReportShareButton, ReportShareLinks } from "@/components/ReportShareControl";
 import { ActualsComparison } from "@/components/vx/ActualsComparison";
+import { CurrencyReport } from "@/components/vx/CurrencyReport";
 import { ReportValue } from "@/components/vx/ReportValue";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { WorkspaceReport } from "@/components/vx/WorkspaceReport";
 import { sectionTitle } from "@/components/vx/nav";
 import { readActualsFacts } from "@/lib/actual-payments";
+import { orgHref } from "@/lib/auth/org-paths";
+import { readCurrencyReport } from "@/lib/currency-report-read";
 import { compareActuals } from "@/lib/actual-payments-compare";
 import { actualsCsvTemplate } from "@/lib/actual-payments-csv";
 import { viewerCan } from "@/lib/auth/authorize";
@@ -70,6 +73,9 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
     // A bill the business recorded paying outside Vestiarion is not "not paid yet".
     const value = reportValue(report, baseline, paidOutside(actuals));
     const comparison = actuals.available ? compareActuals(facts, actuals.facts) : null;
+    // Each amount in its own currency, then in the reporting currency with its rates, and the FX variance on paid bills
+    // (currency provenance M8). Its parts are each best effort, said as unknown or not set up where they fail.
+    const currencies = await readCurrencyReport(db(), facts, actuals.available ? actuals.facts.records : null, new Date(facts.now));
     // Who recorded each, who made each link and who answered, by email, as Approvals names approvers. Best effort: a
     // name that cannot be read is a member's.
     const named =
@@ -144,6 +150,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
             }
             actuals={<ActualsComparison slug={slug} comparison={comparison} canRecord={canRecord && comparison !== null} members={members} templateCsv={templateCsv} statement={statement} showAll={query.actuals === "all"} />}
           />
+          <CurrencyReport report={currencies} settingsHref={orgHref(slug, "/settings#reporting-currency-title")} asOf={facts.now} />
           {shares.available && <ReportShareLinks orgSlug={slug} live={liveLinks} stopped={shares.stopped} canStop={canShare} />}
         </div>
       </ProductShell>

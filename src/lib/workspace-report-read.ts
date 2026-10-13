@@ -38,6 +38,9 @@ type InvoiceRow = {
   discount_due_date: string | null;
   original_currency: string | null;
   original_amount: number | string | null;
+  fx_rate: number | string | null;
+  fx_source: string | null;
+  fx_at: string | null;
   counterparties: { id: string; name: string; sample: boolean | null; mirror_wallet_id: string | null } | null;
 };
 
@@ -76,7 +79,7 @@ export async function readReportFacts(orgDb: OrgDb, network: Network, workspace:
       orgDb
         .from("invoices")
         .select(
-          "id, created_at, due_date, amount, currency, status, reviewed_by, paid_amount, early_pay_discount_pct, discount_due_date, original_currency, original_amount, counterparties(id, name, sample, mirror_wallet_id)"
+          "id, created_at, due_date, amount, currency, status, reviewed_by, paid_amount, early_pay_discount_pct, discount_due_date, original_currency, original_amount, fx_rate, fx_source, fx_at, counterparties(id, name, sample, mirror_wallet_id)"
         )
         .eq("direction", "payable")
         .order("id", { ascending: true })
@@ -128,6 +131,7 @@ export async function readReportFacts(orgDb: OrgDb, network: Network, workspace:
     paidAmount: row.paid_amount == null ? null : Number(row.paid_amount),
     discount: invoiceDiscount(row),
     bill: row.original_currency && row.original_amount != null ? { amount: Number(row.original_amount), currency: row.original_currency } : null,
+    conversion: row.original_currency && row.fx_rate != null && row.fx_source && row.fx_at ? { perUsd: row.fx_rate, source: row.fx_source, at: row.fx_at } : null,
     payee: {
       id: row.counterparties?.id ?? "",
       name: row.counterparties?.name ?? "a supplier",

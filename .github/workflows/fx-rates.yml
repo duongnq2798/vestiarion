@@ -1,0 +1,31 @@
+name: Vestiarion FX rates
+
+# Records the day's reference rates for each workspace that reports or plans in another currency, and the FX variance
+# of each paid bill whose payment-day rate is then recorded (docs/superpowers/specs/2026-10-13-currency-provenance-design.md
+# M5, M6). Supabase Cron calls the route every hour (supabase/cron/watches.sql); this workflow is its manual run.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fx-rates
+  cancel-in-progress: false
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger the protected rates job
+        env:
+          VESTIARION_URL: ${{ secrets.VESTIARION_URL }}
+          AGENT_API_TOKEN: ${{ secrets.AGENT_API_TOKEN }}
+        run: |
+          test -n "$VESTIARION_URL"
+          test -n "$AGENT_API_TOKEN"
+          curl --fail-with-body --silent --show-error \
+            --max-time 330 \
+            --request POST \
+            --header "Authorization: Bearer $AGENT_API_TOKEN" \
+            "${VESTIARION_URL%/}/api/platform/fx-rates"

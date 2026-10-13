@@ -46,6 +46,9 @@ export const PERMISSIONS = {
   // Putting the workspace's report outside it by a public link, or stopping one: a control over every member's data,
   // as API keys and webhooks are (shared report S3).
   "report.share": ["owner", "admin"],
+  // How the workspace reports and plans its money: the reporting currency, and the cash scenarios it saves with the
+  // rates typed into them (currency provenance M4, M7). Never what is paid: payments still settle in USDC or EURC.
+  "reporting.manage": ["owner", "admin"],
   "org.administer": ["owner"],
 } as const satisfies Record<string, readonly OrgRole[]>;
 

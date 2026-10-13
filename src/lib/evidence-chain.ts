@@ -559,7 +559,8 @@ const RATES_HOME = "https://www.exchangerate-api.com";
 /** Code's conversion of a bill in another currency to the USDC it is paid in: computed, never a person's figure. */
 function conversionFact(original: NonNullable<ReturnType<typeof originalBill>>, usdc: string, created: EvidenceEntry): EvidenceFact {
   const base = { kind: "checked" as const, at: created.ts, seqs: [created.seq] };
-  if (original.currency === "USD") return { ...base, text: `Converted to ${usdc} at 1 USD = 1 USDC.` };
+  // The dollar reaches USDC by USDC's redemption at par, named as the peg it is: never a silent one-for-one.
+  if (original.currency === "USD") return { ...base, text: `Converted to ${usdc} at 1 USD = 1 USDC, USDC's 1:1 redemption peg, not a market rate.` };
   const rate = original.perUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return {
     ...base,

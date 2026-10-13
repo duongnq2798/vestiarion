@@ -85,6 +85,10 @@ export const COMMAND_PERMISSIONS = {
   "project.create": "agent.budget",
   "project.change": "agent.budget",
   "project.assign": "records.write",
+  // The currency the report and plans total in, and a cash scenario saved as a version with the rates typed into it:
+  // how the money is reported and planned, an owner's or admin's, never what is paid (currency provenance M4, M7).
+  "workspace.reporting_currency": "reporting.manage",
+  "cash_scenario.save": "reporting.manage",
 } as const satisfies Record<string, Permission>;
 
 export type CommandName = keyof typeof COMMAND_PERMISSIONS;

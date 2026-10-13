@@ -18,6 +18,8 @@ import { networkProfile, type Network } from "@/lib/network";
 import { SWAP_COST_CAP_PERCENT } from "@/lib/fx/swap-limits";
 import { TWO_APPROVALS_RULE } from "@/lib/two-approvals";
 import { PROJECT_BUDGET_RULE } from "@/lib/agent/obligation-checks";
+import { formatMoney, formatRateValue, roundedMoney } from "@/lib/money";
+import type { RecordedVariance, UnknownVariance } from "@/lib/fx/variances";
 
 /**
  * Renders the duplicate-billing check as evidence in its own right — including
@@ -275,6 +277,8 @@ export function invoiceDecision(
     asOf?: number;
     /** The payments applied to each receivable, by invoice id (allocations L11); none shows it as before. */
     allocations?: ReadonlyMap<string, ReceivableView>;
+    /** The FX variance of each paid bill converted at a rate, recorded or unknown (currency provenance M6, M9). */
+    variances?: { recorded: ReadonlyMap<string, RecordedVariance>; unknown: ReadonlyMap<string, UnknownVariance> };
   }
 ): Decision {
   const lifecycle = invoice.direction === "payable" ? options.settlements?.get(invoice.id) : undefined;
@@ -299,22 +303,58 @@ export function invoiceDecision(
 /** Where the rates for bills in another currency come from: ExchangeRate-API asks to be named and linked where they are shown. */
 const RATES_HOME = "https://www.exchangerate-api.com";
 
-const grouped = (value: number, digits: number) => value.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
-
-/** The bill as it was written and the rate its USDC amount was worked out at, or null for an invoice written in USDC or EURC. */
+/**
+ * The bill as it was written, in its currency's own digits, and the rate its USDC amount was worked out at, said as the
+ * reference rate it is, with its source and day (currency provenance M9); null for an invoice written in USDC or EURC.
+ */
 function billEvidence(invoice: InvoiceRow): Evidence | null {
   const { original_currency: currency, original_amount: amount, fx_rate: rate, fx_source: source, fx_at: at } = invoice;
   if (!currency || amount == null || rate == null || !source || !at) return null;
-  const written = `${grouped(amount, Number.isInteger(amount) ? 0 : 2)} ${currency}`;
-  if (currency === "USD") return { label: "Bill", value: `${written}, at 1 USD = 1 USDC`, state: "neutral" };
-  return { label: "Bill", value: `${written}, at ${grouped(rate, 2)} ${currency} to the US dollar (${source}, ${utcDay(at)})`, href: RATES_HOME, state: "neutral" };
+  const written = formatMoney(roundedMoney(amount, currency));
+  if (currency === "USD") return { label: "Bill", value: `${written}, at 1 USD = 1 USDC, USDC's 1:1 redemption peg, not a market rate`, state: "neutral" };
+  return {
+    label: "Bill",
+    value: `${written}, converted at ${formatRateValue(String(rate))} ${currency} per US dollar, the reference rate ${source} published ${utcDay(at)}`,
+    href: RATES_HOME,
+    state: "neutral",
+  };
+}
+
+/**
+ * A paid bill's FX variance: what its transfer carried less what the bill was worth on the payment day, with that
+ * day's rate; or unknown, with why. Null for a bill that has none (currency provenance M6, M9).
+ */
+function varianceEvidence(invoice: InvoiceRow, variances: { recorded: ReadonlyMap<string, RecordedVariance>; unknown: ReadonlyMap<string, UnknownVariance> } | undefined): Evidence | null {
+  if (!variances || invoice.status !== "paid") return null;
+  const recorded = variances.recorded.get(invoice.id);
+  if (recorded) {
+    const direction = recorded.variance.minor > BigInt(0) ? "more than" : recorded.variance.minor < BigInt(0) ? "less than" : "what";
+    return {
+      label: "FX variance",
+      value: `${formatMoney(recorded.variance, { sign: true })}: paid ${direction} the bill was worth on the day, ${formatMoney(recorded.valueAtPayment)} at ${formatRateValue(recorded.payment.value)} ${recorded.currency} per US dollar (published ${utcDay(recorded.payment.at)})`,
+      href: RATES_HOME,
+      state: "neutral",
+    };
+  }
+  const unknown = variances.unknown.get(invoice.id);
+  return unknown ? { label: "FX variance", value: `unknown: ${unknown.reason}`, state: "missing" } : null;
+}
+
+/** Whose executable quote a EURC payable was weighed at: Circle's, as recorded with the decision. */
+function quoteSource(detail: Record<string, unknown> | undefined): string {
+  return stringValue(record(detail?.fx)?.source) === "circle-stablecoin-quote" ? "Circle's quote when it was decided" : "the provider's quote when it was decided";
 }
 
 function decideInvoice(
   invoice: InvoiceRow,
   counterparty: CounterpartyRow | undefined,
   entries: LedgerEntry[],
-  options: { network: Network; deciding?: boolean; allocations?: ReadonlyMap<string, ReceivableView> }
+  options: {
+    network: Network;
+    deciding?: boolean;
+    allocations?: ReadonlyMap<string, ReceivableView>;
+    variances?: { recorded: ReadonlyMap<string, RecordedVariance>; unknown: ReadonlyMap<string, UnknownVariance> };
+  }
 ): Omit<Decision, "network"> {
   if (invoice.direction === "receivable") return receivableDecision(invoice, entries, options.network, options.allocations?.get(invoice.id));
   // A payable not yet decided while a cycle runs is being decided now (decision trail R1).
@@ -378,12 +418,13 @@ function decideInvoice(
       { label: "Limit", value: counterparty?.payment_limit == null ? "none" : `${fmt(counterparty.payment_limit)} USDC`, state: counterparty?.payment_limit != null && usdcValue != null && usdcValue > counterparty.payment_limit ? "missing" : "neutral" },
       eurc && entry
         ? usdcValue != null
-          ? { label: "USDC value", value: `${fmt(usdcValue)} USDC${rate != null ? ` at ${rate}` : ""}`, state: "neutral" as const }
+          ? { label: "USDC value", value: `${fmt(usdcValue)} USDC${rate != null ? ` at ${formatRateValue(String(rate))} USDC per EURC, ${quoteSource(entry.detail)}` : ""}`, state: "neutral" as const }
           : { label: "USDC value", value: "no rate", state: "missing" as const }
         : null,
       { label: "Due", value: new Date(invoice.due_date).toLocaleDateString("en-US"), state: "neutral" },
       termsEvidence(invoice),
       paidEvidence(invoice),
+      varianceEvidence(invoice, options.variances),
       eurc ? swapEvidence(entry?.detail, options.network) : null,
       paidAcrossChains(counterparty?.chain) ? { label: "Payee's chain", value: `${chainById(counterparty?.chain as string).label}, through ${route}${routeFees ?? ""}`, state: "neutral" as const } : null,
       duplicateEvidence(observed),
