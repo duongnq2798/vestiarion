@@ -66,6 +66,7 @@ export const DOCS_NAV: NavSection[] = [
       { slug: "guides/projects", title: "Give each project its own budget", description: "Make a project with a budget in USDC, put its bills, milestones and deals in it, and let the agent set each bill's money aside before paying it, holding what the budget cannot cover for a person. An earmark in Vestiarion, never money locked on chain." },
       { slug: "guides/deals", title: "Turn a signed deal into a collection schedule", description: "Confirm a deal's schedule from a deposit, milestones, a retainer or your own lines, release each line as a receivable on its day, and change the deal later without rewriting what was invoiced or paid." },
       { slug: "guides/customer-portal", title: "Share a statement with a customer", description: "Send a customer a link to its own statement: it sees what it owes, pays on Arc, says it paid, promises a day or disputes an invoice, with no account or wallet, and you answer each from the Receivables tab." },
+      { slug: "guides/accountants", title: "Work across clients as an accountant", description: "Invite your accountant with the accountant role: one console lists every workspace they are in and what needs attention across them, oldest first, with a month's hand-off to download and each workspace's usage and limits." },
       { slug: "guides/get-paid", title: "Get paid as a freelancer", description: "For the person being paid: add your wallet address through the link a business sent, follow each step, and check the payment on Arc." },
     ],
   },

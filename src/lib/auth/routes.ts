@@ -9,7 +9,11 @@ const BASE = "http://vestiarion.invalid";
 
 export function requiresSession(pathname: string): boolean {
   return (
-    pathname === "/onboarding" || pathname === "/o" || pathname.startsWith("/o/") || pathname.startsWith("/invite/")
+    pathname === "/onboarding" ||
+    pathname === "/accountant" ||
+    pathname === "/o" ||
+    pathname.startsWith("/o/") ||
+    pathname.startsWith("/invite/")
   );
 }
 

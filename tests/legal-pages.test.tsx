@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import PrivacyPage, { metadata as privacyMetadata } from "@/app/privacy/page";
 import sitemap from "@/app/sitemap";
 import TermsPage, { metadata as termsMetadata } from "@/app/terms/page";
-import { ORG_ROLES } from "@/lib/auth/roles";
+import { can, ORG_ROLES, PERMISSIONS, type OrgRole, type Permission } from "@/lib/auth/roles";
 import { MAINNET_STARTING_TWO_APPROVALS } from "@/lib/mainnet";
 import { ARC_MAINNET, ARC_TESTNET } from "@/lib/network";
 import { loginRedirectFor, requiresSession } from "@/lib/auth/routes";
@@ -34,7 +34,7 @@ const text = (markup: string) =>
 const source = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8");
 
 const PAGES = [
-  { path: "/terms", file: "src/app/terms/page.tsx", Page: TermsPage, metadata: termsMetadata, heading: "Terms of use", updated: "2026-10-12" },
+  { path: "/terms", file: "src/app/terms/page.tsx", Page: TermsPage, metadata: termsMetadata, heading: "Terms of use", updated: "2026-10-13" },
   { path: "/privacy", file: "src/app/privacy/page.tsx", Page: PrivacyPage, metadata: privacyMetadata, heading: "Privacy", updated: "2026-10-13" },
 ] as const;
 
@@ -151,6 +151,19 @@ describe("the privacy page", () => {
 
   it("names every workspace role", () => {
     for (const role of ORG_ROLES) expect(body.toLowerCase(), role).toContain(role);
+  });
+
+  it("says a role does 'also' more only after a role whose every permission it holds", () => {
+    const list = renderToStaticMarkup(<PrivacyPage />).split('id="roles"')[1]?.split("</ul>")[0] ?? "";
+    const items = [...list.matchAll(/<li>\s*<strong>([a-z]+)<\/strong>:\s*([^<]*)/g)].map((match) => ({ role: match[1] as OrgRole, words: match[2].trim() }));
+    expect(items.map((item) => item.role).sort()).toEqual([...ORG_ROLES].sort());
+    for (const [index, item] of items.entries()) {
+      if (!item.words.startsWith("also")) continue;
+      const before = items[index - 1].role;
+      for (const permission of Object.keys(PERMISSIONS) as Permission[]) {
+        if (can(before, permission)) expect(can(item.role, permission), `${item.role}, listed after ${before}, holds ${permission}`).toBe(true);
+      }
+    }
   });
 
   it("says which button choice Google Analytics counts, and the code sends only its name and the redacted path (landing clarity M1)", () => {

@@ -664,7 +664,7 @@ export default function DesignPage() {
               invitations={INVITATIONS}
               viewerId="design-ada"
               viewerRole="owner"
-              assignable={["owner", "admin", "approver", "viewer"]}
+              assignable={["owner", "admin", "approver", "accountant", "viewer"]}
             />
             <NotificationsPanel orgSlug={DESIGN_SLUG} canDecide notifyEmail telegram={{ link: null }} />
           </Section>

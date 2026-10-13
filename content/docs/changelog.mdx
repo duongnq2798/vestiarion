@@ -13,6 +13,13 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 - A new value of `execution.heldBecause`, `project_budget`. The follow-up decides such a payment again once its project has room, with an `invoice_reopened` or `milestone_reopened` entry whose `followUp.changes` says so.
 - Nothing else in `/api/v1` changes: `GET /api/v1/invoices` and the milestones routes return a bill or milestone in a project as before, and the write API takes no project or milestone purchase order.
 
+## 2026-10-13: An accountant role, and a month's hand-off
+
+- A member's role may now be **`accountant`**, wherever an entry names one: `role` in **`member_invited`** and **`member_joined`**, and the roles in **`member_role_changed`**. An accountant reads the workspace, books payments in the accounting tool and applies money received; it decides no payment.
+- A new entry, actor `human`, domain `system`, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`: **`handoff_exported`** `{ by, format, month, decisions, payments, bookings, openItems, headSeq }`, when a member downloads a workspace's hand-off for a month. `format` is `csv` or `json`; `month` is YYYY-MM; the counts are how many rows of each section it held; `headSeq` is the ledger's last entry when it was made.
+- A new Xero connection's **`accounting_connected`** carries `consent.version` `xero-2026-10-13`, whose words say an owner, admin or accountant approves what is booked. **`accounting_payment_approved`** may now name an accountant in `by`, on a connection agreed under that version.
+- Nothing else in `/api/v1` changes.
+
 ## 2026-10-13: A deal's planned costs, and held bills escalated past their day
 
 - A person can enter a deal's planned costs, remove one, and link one to the payable or milestone it became. Its ledger gains three entries, actor `human`, domain `ar`, each listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:

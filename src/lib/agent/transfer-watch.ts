@@ -294,7 +294,7 @@ async function emailTold(told: Told[], deps: WatchDeps): Promise<void> {
       };
     });
     const email = paymentStuckEmail({ orgName: org.name, payments, link: payments.length === 1 ? payments[0].link : `${origin}/o/${org.slug}/invoices`, origin });
-    const send = deps.mail?.send ?? ((message: EmailMessage, with_: { apiKey: string; from: string }) => sendEmail(message, with_));
+    const send = deps.mail?.send ?? ((message: EmailMessage, with_: { apiKey: string; from: string }) => sendEmail({ ...message, meter: "stuck_payment" }, with_));
     for (const recipient of recipients) {
       const result = await send({ to: recipient.email, ...email }, settings);
       // Say that a send failed, never to whom (as the digest does).

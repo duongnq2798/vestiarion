@@ -135,7 +135,7 @@ export async function inviteMember(input: {
     expiresAt: new Date(row.expires_at),
     origin: siteOrigin(),
   });
-  const sendResult = await sendEmail({ to: row.email, subject: email.subject, html: email.html, text: email.text });
+  const sendResult = await sendEmail({ to: row.email, subject: email.subject, html: email.html, text: email.text, meter: "invitation" });
   if (!sendResult.sent) {
     // Never the address or the link — only the reason the send did not happen.
     console.warn(`invitation email not sent: ${sendResult.reason}`);

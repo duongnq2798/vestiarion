@@ -49,7 +49,7 @@ export async function stopCustomerStatementAction(_previous: CustomerPortalActio
 }
 
 export async function replyToCustomerAction(_previous: CustomerPortalActionResult, formData: FormData): Promise<CustomerPortalActionResult> {
-  const auth = await authorize(formData.get("orgSlug"), "records.write");
+  const auth = await authorize(formData.get("orgSlug"), "receivables.reconcile");
   if (!auth.ok) return { ok: false, message: auth.message };
   const requestId = z.string().uuid().safeParse(formData.get("requestId"));
   if (!requestId.success) return { ok: false, message: NOT_FOUND };
@@ -58,7 +58,7 @@ export async function replyToCustomerAction(_previous: CustomerPortalActionResul
 }
 
 export async function closeCustomerRequestAction(_previous: CustomerPortalActionResult, formData: FormData): Promise<CustomerPortalActionResult> {
-  const auth = await authorize(formData.get("orgSlug"), "records.write");
+  const auth = await authorize(formData.get("orgSlug"), "receivables.reconcile");
   if (!auth.ok) return { ok: false, message: auth.message };
   const requestId = z.string().uuid().safeParse(formData.get("requestId"));
   if (!requestId.success) return { ok: false, message: NOT_FOUND };

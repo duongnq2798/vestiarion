@@ -7,7 +7,7 @@ import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fa
 
 /**
  * Telling the members who answer customers that a customer wrote on its statement link
- * (docs/superpowers/specs/2026-10-13-customer-portal-design.md P8): owners and admins (`records.write`) whose email switch
+ * (docs/superpowers/specs/2026-10-13-customer-portal-design.md P8): owners, admins and accountants (`receivables.reconcile`) whose email switch
  * is on, at most ten, each their own message, with a short preview of the words and a link into the workspace. Best
  * effort: it never throws. How often is the database's (0109's `notified_at`): at most once an hour per request.
  */
@@ -70,6 +70,13 @@ describe("notifyCustomerWrote", () => {
     expect(recipients().sort()).toEqual(["member01@example.com", "member02@example.com"]);
     const read = fake.requests.find((request) => request.path === "/rest/v1/memberships") as RecordedRequest;
     expect(read.params.get("org_id")).toBe(`eq.${ORG}`);
+  });
+
+  it("emails an accountant whose switch is on too: they answer customers (accountant console A1)", async () => {
+    const members = [member(1, "owner", false), member(2, "accountant"), member(3, "accountant", false), member(4, "approver")];
+    const { result } = run(members, () => notifyCustomerWrote(NOTICE));
+    expect(await result).toBe(1);
+    expect(recipients()).toEqual(["member02@example.com"]);
   });
 
   it("sends a short preview and a link into the workspace, never more of what the customer wrote", async () => {

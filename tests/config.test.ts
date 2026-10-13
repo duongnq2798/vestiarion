@@ -282,3 +282,11 @@ describe("describeConfig", () => {
     ).toMatchObject({ database: { tenantAccessConfigured: true } });
   });
 });
+
+describe("AGENT_LLM_PRICES (accountant console U2)", () => {
+  it("reads the model prices a workspace's usage costs its calls at, and leaves them out when unset", () => {
+    expect(configFromEnv(env({ AGENT_LLM_PRICES: "deepseek-chat=0.28/0.42" })).llm.prices).toEqual({ "deepseek-chat": { input: 0.28, output: 0.42 } });
+    expect(configFromEnv(env({ AGENT_LLM_PRICES: "nonsense" })).llm.prices).toBeUndefined();
+    expect(configFromEnv(env({})).llm.prices).toBeUndefined();
+  });
+});

@@ -97,7 +97,7 @@ An owner or admin can add a payable from an invoice in Slack: a PDF, an `.eml` o
 
 The payable is added exactly as one added on Bills & receivables: the ledger's `create_invoice` entry names you, and adds `via: "slack"`, the id of your Slack link and the hash of the document. The document itself is not kept. The agent usually decides within a minute, and its decision is posted to the channel like any other. A draft can be added once, within an hour; after that you are told "This draft was already used or has expired."
 
-When the invoice's vendor matches no counterparty in the workspace, or it has no amount or due date, Vestiarion says what is missing and links to Bills & receivables, where you can add it by hand. An approver or a viewer is told "Only an owner or admin can add invoices."
+When the invoice's vendor matches no counterparty in the workspace, or it has no amount or due date, Vestiarion says what is missing and links to Bills & receivables, where you can add it by hand. An approver, an accountant or a viewer is told "Only an owner or admin can add invoices."
 
 Vestiarion reads only the message you chose it on, and Slack lets it open a file only in a channel it is in: for a file shared anywhere else, type `/invite @Vestiarion` in that channel first. If Slack was connected before this was possible, Vestiarion answers that it cannot open files in this Slack yet: an owner or admin chooses **Reconnect Slack** once, and Slack asks them to allow it.
 

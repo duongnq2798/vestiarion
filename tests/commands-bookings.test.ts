@@ -105,9 +105,9 @@ beforeEach(() => {
 });
 
 describe("the permission and the surface (W6)", () => {
-  it("is accounting.book, an owner's or an admin's, from the console only", () => {
+  it("is accounting.book, an owner's, an admin's or an accountant's, from the console only", () => {
     expect(COMMAND_PERMISSIONS["accounting.book_payments"]).toBe("accounting.book");
-    expect(["owner", "admin", "approver", "viewer"].filter((role) => can(role as Actor["role"], "accounting.book"))).toEqual(["owner", "admin"]);
+    expect(["owner", "admin", "approver", "accountant", "viewer"].filter((role) => can(role as Actor["role"], "accounting.book"))).toEqual(["owner", "admin", "accountant"]);
     expect(Object.entries(SURFACE_COMMANDS).filter(([, commands]) => commands.includes("accounting.book_payments")).map(([surface]) => surface)).toEqual(["console"]);
   });
 
@@ -163,6 +163,26 @@ describe("before anything is sent (W7, W8)", () => {
     const { run } = world();
     const { provider } = xero();
     expect(await run(() => bookAccountingPayments(actor(), { connectionId: CONNECTION, lines: [line] }, { provider }))).toMatchObject({ ok: false, code: "reconnect" });
+  });
+
+  it("lets an accountant book on a connection agreed under the words that name the accountant (accountant console A1)", async () => {
+    const { run } = world({ connection: { body: [connectionRow({ consent_version: "xero-2026-10-13" })] } });
+    const { provider, booking } = xero();
+    const outcome = await run(() => bookAccountingPayments(actor("accountant"), { connectionId: CONNECTION, lines: [line] }, { provider }));
+    expect(outcome).toMatchObject({ ok: true, message: "Booked 1 payment in Xero." });
+    expect(booking.bookPayment).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses an accountant on a connection agreed when only an owner or admin approved, and says who can", async () => {
+    const { run } = world();
+    const { provider, booking } = xero();
+    expect(await run(() => bookAccountingPayments(actor("accountant"), { connectionId: CONNECTION, lines: [line] }, { provider }))).toEqual({
+      ok: false,
+      code: "consent",
+      message: "Xero was connected when only an owner or admin could approve bookings. Ask an owner or admin to approve these, or to reconnect Xero in Settings so an accountant can.",
+    });
+    expect(booking.organisation).not.toHaveBeenCalled();
+    expect(booking.bookPayment).not.toHaveBeenCalled();
   });
 
   it("refuses a connection disconnected", async () => {

@@ -11,6 +11,7 @@ import { buyX402, circleTypedData, PurchaseRefused, type Purchase, type X402Sign
 import { isArcAddress, PAYEE_HISTORY_PATH, payeeHistoryRequirements } from "../x402/offer";
 import { pausedPaymentNote } from "./pause";
 import { paymentsDisabled } from "../payments-switch";
+import { recordUsage } from "../usage/record";
 
 /**
  * The cycle's `services` stage (docs/superpowers/specs/2026-10-02-x402-payee-history-design.md R3–R7): before
@@ -151,6 +152,8 @@ export async function buyPayeeHistories(input: {
       spentToday += bought.priceUsdc;
       if (purse !== null) purse = round(purse - bought.priceUsdc);
       const row = await record(db, candidate, seller, { status: "paid", price_usdc: bought.priceUsdc, payer: bought.payer, pay_to: bought.payTo, nonce: bought.nonce, settlement: bought.settlement, result: bought.data });
+      // Metered in the workspace at its price, in USDC, once the purchase is recorded (accountant console U1).
+      await recordUsage({ kind: "x402_purchase", action: "payee_history", provider: "x402", cost: { amount: bought.priceUsdc, currency: "USDC" } });
       const history = bought.data;
       await appendLedgerEntry({
         actor: "agent",
@@ -184,6 +187,8 @@ export async function buyPayeeHistories(input: {
       const refused = error instanceof PurchaseRefused;
       const reason = error instanceof Error ? error.message : "The purchase failed";
       const row = await record(db, candidate, seller, { status: refused ? "refused" : "failed", reason });
+      // A refusal bought nothing; a failure was an attempt, kept without a cost.
+      if (!refused) await recordUsage({ kind: "x402_purchase", action: "payee_history", provider: "x402", ok: false });
       await appendLedgerEntry({
         actor: "agent",
         domain: "compliance",

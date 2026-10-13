@@ -54,6 +54,7 @@ export const TENANT_TABLES = [
   "crm_deals", "crm_receipt_writes",
   "customer_portal_links", "customer_requests", "customer_request_messages",
   "projects", "project_reservations",
+  "usage_events",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 

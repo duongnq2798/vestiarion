@@ -8,6 +8,7 @@ import type { AccountingProvider, ProviderId } from "./provider";
 import { syncConnection, type SyncResult } from "./sync";
 import { syncStore } from "./sync-store";
 import { connectionTokenStore, deleteTokens, expiredPendingGrants, refreshTokenOf } from "./token-store";
+import { recordUsage } from "../usage/record";
 
 /**
  * Syncing without a person (docs/superpowers/specs/2026-10-12-xero-connector-design.md X4, X7): every 15 minutes from
@@ -39,6 +40,8 @@ export const SWEEP_BUDGET_MS = 240_000;
  */
 export async function syncInScope(connectionId: string, provider: AccountingProvider, options: { maxPages?: number } = {}): Promise<SyncResult> {
   const result = await syncConnection({ connectionId, provider, db: syncStore, tokens: connectionTokenStore(currentOrgId(), connectionId), ...options });
+  // A sync that ran is metered in the workspace, worked or not (accountant console U1); one already running elsewhere did not run.
+  if (result.outcome !== "busy") await recordUsage({ kind: "connector_sync", action: provider.id, provider: provider.id, ok: result.outcome === "synced" || result.outcome === "partial" });
   if (provider.booking && result.outcome !== "reconnect" && result.outcome !== "busy") {
     try {
       await bookingInScope(connectionId, provider);

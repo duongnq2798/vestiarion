@@ -128,7 +128,7 @@ export async function sendReceivableReminders(
   if (org.mode !== "live") return [];
   const settings = options.send ? null : emailSettingsFromEnv();
   if (!options.send && !settings) return [];
-  const send = options.send ?? ((message: EmailMessage) => sendEmail(message, settings));
+  const send = options.send ?? ((message: EmailMessage) => sendEmail({ ...message, meter: "reminder" }, settings));
   const now = options.now ?? Date.now();
 
   const links = unwrap(
@@ -196,6 +196,7 @@ export async function sendReceivableReminders(
     const dueOn = utcDay(invoice.due_date);
 
     const { value, mode, agreedWithReference } = await decide<ReminderDecision>({
+      purpose: "reminder",
       systemPrompt: SYSTEM_PROMPT,
       userPrompt: JSON.stringify({
         task: "Decide whether to email this client a reminder about the receivable now, or to wait, and in which tone.",

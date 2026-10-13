@@ -1505,6 +1505,7 @@ async function decideApPayable(
     : null;
 
   const { value: modelDecision, mode, reference, agreedWithReference: sameActionAsReference } = await decide<ApDecision>({
+    purpose: "payable",
     systemPrompt: SYSTEM_PROMPT,
     userPrompt: apDecisionPrompt({
       invoice: {
@@ -3721,6 +3722,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     const overLimit = limit != null && amount > limit;
 
     const { value: decision, mode, reference, agreedWithReference } = await decide<MilestoneDecision>({
+      purpose: "milestone",
       systemPrompt: SYSTEM_PROMPT,
       userPrompt: JSON.stringify({
         task:
@@ -4007,6 +4009,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     const boundFacts = { operatingBalance, reserveBalance, obligationsDue14d, plan, reference: referencePlan, noSweepUntil: personCashBack?.until ?? null };
     const bounds = treasuryBounds(boundFacts);
     const { value: modelDecision, mode, reference } = await decide<TreasuryDecision>({
+      purpose: "treasury",
       systemPrompt: SYSTEM_PROMPT,
       userPrompt: treasuryUserPrompt({
         operatingBalance,
