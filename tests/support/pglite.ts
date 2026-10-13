@@ -103,7 +103,7 @@ export const TENANT_TABLES = [
   "service_purchases", "spending_limit_contracts", "ar_reminders", "inbox_emails", "approval_policies", "payment_approvals",
   "shadow_modes", "decision_verdicts", "payment_actuals", "bank_statement_lines", "report_shares", "report_baselines", "receivable_allocations",
   "accounting_connections", "external_links", "accounting_bills", "accounting_sync_cursors", "accounting_postings",
-  "deals", "deal_versions", "deal_lines", "deal_costs", "approval_escalations",
+  "deals", "deal_versions", "deal_lines", "deal_costs", "approval_escalations", "approval_escalation_starts",
   "crm_deals",
 ] as const;
 
@@ -209,6 +209,7 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     [orgId, invoiceId, `cost-key-${tag}`, `deal-key-${tag}`]
   );
   await db.query("insert into approval_escalations (org_id, invoice_id, decide_by) values ($1, $2, '2026-10-20')", [orgId, invoiceId]);
+  await db.query("insert into approval_escalation_starts (org_id, starts_on) values ($1, '2026-10-13')", [orgId]);
   // An accounting connection, a link, a bill to review and a cursor (0101).
   const connectionId = await one(
     `insert into accounting_connections (org_id, provider, external_org_id, consent_version, consented_at, window_from)

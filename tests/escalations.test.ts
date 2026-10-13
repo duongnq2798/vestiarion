@@ -121,11 +121,22 @@ const payable = (id: string, over: Record<string, unknown> = {}) => ({
 });
 
 /** PostgREST as the escalation meets it: the waiting payables, the claims, the members, the workspace and the ledger. */
-function escalationFake(options: { invoices?: unknown[]; claimed?: (rows: Array<{ invoice_id: string; decide_by: string }>) => FakeReply; members?: Array<{ user_id: string; email: string; role: string; notify: boolean }> } = {}) {
+function escalationFake(
+  options: {
+    invoices?: unknown[];
+    claimed?: (rows: Array<{ invoice_id: string; decide_by: string }>) => FakeReply;
+    members?: Array<{ user_id: string; email: string; role: string; notify: boolean }>;
+    /** The day this workspace's escalations started: Oct 1 unless said, null for none set yet. */
+    startsOn?: string | null;
+    /** What the members' read answers, by its number in the run (1 first); the members when it answers nothing. */
+    membersRead?: (call: number) => FakeReply | null;
+  } = {}
+) {
   const members = options.members ?? [
     { user_id: "0b6c1c9e-4a4f-4a7e-9b1e-000000000001", email: "ana@northstar.example", role: "owner", notify: true },
     { user_id: "0b6c1c9e-4a4f-4a7e-9b1e-000000000002", email: "ben@northstar.example", role: "approver", notify: false },
   ];
+  let memberReads = 0;
   const fake = fakeSupabase((request: RecordedRequest) => {
     if (request.path === "/rest/v1/orgs") {
       return {
@@ -146,6 +157,17 @@ function escalationFake(options: { invoices?: unknown[]; claimed?: (rows: Array<
       return options.claimed ? options.claimed(rows) : { body: rows.map((row, index) => ({ id: `claim-${index}`, ...row })) };
     }
     if (request.path === "/rest/v1/approval_escalations") return { body: [] };
+    if (request.path === "/rest/v1/approval_escalation_starts" && request.method === "POST") {
+      return { body: [{ starts_on: (request.body as { starts_on: string }).starts_on }] };
+    }
+    if (request.path === "/rest/v1/approval_escalation_starts") {
+      const startsOn = options.startsOn === undefined ? "2026-10-01" : options.startsOn;
+      return { body: startsOn ? [{ starts_on: startsOn }] : [] };
+    }
+    if (request.path === "/rest/v1/rpc/org_members" && options.membersRead) {
+      const reply = options.membersRead(++memberReads);
+      if (reply) return reply;
+    }
     if (request.path === "/rest/v1/rpc/org_members") return { body: members.map(({ user_id, email, role }) => ({ user_id, email, role, joined_at: "2026-09-01T00:00:00Z" })) };
     if (request.path === "/rest/v1/memberships") return { body: members.map(({ user_id, notify }) => ({ user_id, notify_email: notify })) };
     if (request.path === "/rest/v1/rpc/append_ledger_entry") {
@@ -225,11 +247,75 @@ describe("escalateOverdueDecisions", () => {
     expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
-  it("never throws: a failure is logged by workspace", async () => {
+  it("never emails a payable that was past its day before escalations started here", async () => {
+    const STALE = "018f8ce0-1557-7b54-a931-4d777f6be003";
+    const { fake, run } = escalationFake({ startsOn: "2026-10-12", invoices: [payable(LATE), payable(STALE, { due_date: "2026-09-01T00:00:00Z" })] });
+    expect(await run(() => escalateOverdueDecisions(NOW))).toEqual({ sent: 1, failed: 0, invoices: 1 });
+    const claim = fake.requests.find((request) => request.path === "/rest/v1/approval_escalations" && request.method === "POST");
+    expect(claim?.body).toEqual([{ org_id: ORG, invoice_id: LATE, decide_by: "2026-10-12" }]);
+  });
+
+  it("starts at its first run, so every payable already past its day then never emails: no backlog when it is turned on", async () => {
+    const { fake, run } = escalationFake({ startsOn: null, invoices: [payable(LATE), payable(ON_TIME, { due_date: "2026-08-01T00:00:00Z" })] });
+    expect(await run(() => escalateOverdueDecisions(NOW))).toEqual({ sent: 0, failed: 0, invoices: 0 });
+    const start = fake.requests.find((request) => request.path === "/rest/v1/approval_escalation_starts" && request.method === "POST");
+    expect(start?.body).toEqual({ org_id: ORG, starts_on: TODAY });
+    expect(start?.params.get("on_conflict")).toBe("org_id");
+    expect(fake.requests.some((request) => request.path === "/rest/v1/approval_escalations")).toBe(false);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("escalates nothing, and fails nothing, before migration 0108 runs", async () => {
+    const missing = { status: 404, body: { code: "PGRST205", message: "Could not find the table 'public.approval_escalation_starts' in the schema cache" } };
+    const fake = fakeSupabase((request) => (request.path === "/rest/v1/approval_escalation_starts" ? missing : { body: [] }));
+    const sent = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => withOrg(ORG, () => escalateOverdueDecisions(NOW)));
+    expect(sent).toEqual({ sent: 0, failed: 0, invoices: 0 });
+    expect(fake.requests.some((request) => request.path === "/rest/v1/invoices")).toBe(false);
+  });
+
+  it("reads who can act before claiming anything: a read that fails leaves every payable for the next cycle", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    // The recipients read, then the read of who may act on each payable fails.
+    const { fake, run } = escalationFake({ membersRead: (call) => (call === 2 ? { status: 500, body: { code: "XX000", message: "members down" } } : null) });
+    expect(await run(() => escalateOverdueDecisions(NOW))).toEqual({ sent: 0, failed: 0, invoices: 0 });
+    expect(fake.requests.some((request) => request.path === "/rest/v1/approval_escalations")).toBe(false);
+  });
+
+  it("sends each member one email a cycle, however many payables passed their day, and none on the next", async () => {
+    const ANA = "0b6c1c9e-4a4f-4a7e-9b1e-000000000001";
+    const BEN = "0b6c1c9e-4a4f-4a7e-9b1e-000000000002";
+    const members = [
+      { user_id: ANA, email: "ana@northstar.example", role: "owner", notify: true },
+      { user_id: BEN, email: "ben@northstar.example", role: "approver", notify: true },
+      // The same person twice, as a read may list them: still one email.
+      { user_id: ANA, email: "ana@northstar.example", role: "owner", notify: true },
+    ];
+    const ids = ["018f8ce0-1557-7b54-a931-4d777f6be011", "018f8ce0-1557-7b54-a931-4d777f6be012", "018f8ce0-1557-7b54-a931-4d777f6be013"];
+    const taken = new Set<string>();
+    // The claims as Postgres keeps them across runs: a key claimed once is never news again.
+    const claimed = (rows: Array<{ invoice_id: string; decide_by: string }>): FakeReply => ({
+      body: rows.flatMap((row, index) => {
+        const key = `${row.invoice_id}|${row.decide_by}`;
+        if (taken.has(key)) return [];
+        taken.add(key);
+        return [{ id: `claim-${row.invoice_id}-${index}`, ...row }];
+      }),
+    });
+    const { run } = escalationFake({ members, claimed, invoices: ids.map((id, index) => payable(id, { due_date: `2026-10-1${index}T00:00:00Z` })) });
+    expect(await run(() => escalateOverdueDecisions(NOW))).toEqual({ sent: 2, failed: 0, invoices: 3 });
+    expect(sendEmailMock.mock.calls.map(([message]) => (message as { to: string }).to).sort()).toEqual(["ana@northstar.example", "ben@northstar.example"]);
+    expect((sendEmailMock.mock.calls[0][0] as { subject: string }).subject).toBe("3 payments passed their decide-by day in Northstar");
+    sendEmailMock.mockClear();
+    expect(await run(() => escalateOverdueDecisions(NOW))).toEqual({ sent: 0, failed: 0, invoices: 0 });
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("never throws: a failure is logged by workspace, and a claim nobody received is released", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    const { run } = escalationFake();
+    const { fake, run } = escalationFake();
     sendEmailMock.mockRejectedValue(new Error("resend down"));
     await expect(run(() => escalateOverdueDecisions(NOW))).resolves.toMatchObject({ sent: 0 });
     expect(error).toHaveBeenCalledWith("escalations: failed", ORG, "resend down");
+    expect(fake.requests.find((request) => request.path === "/rest/v1/approval_escalations" && request.method === "DELETE")?.params.get("id")).toBe("in.(claim-0)");
   });
 });

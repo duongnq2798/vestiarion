@@ -11,6 +11,10 @@
 -- undecided (E4). Claimed before the email is sent and released (deleted) when every send failed, so a payable is
 -- escalated once per decide-by day, whichever cycle sends it.
 --
+-- approval_escalation_starts: the day a workspace's escalations started, set once by its first escalation run (E4). A
+-- payable whose decide-by day is before it had passed its day before escalations began, and is never emailed: turning
+-- escalations on sends no backlog.
+--
 -- Additive, and idempotent throughout: scripts/migrate.ts re-runs every migration each time.
 
 create table if not exists public.deal_costs (
@@ -59,12 +63,18 @@ create table if not exists public.approval_escalations (
   constraint approval_escalations_invoice_fkey foreign key (org_id, invoice_id) references public.invoices (org_id, id) on delete cascade
 );
 
+create table if not exists public.approval_escalation_starts (
+  org_id      uuid primary key references public.orgs(id) on delete cascade,
+  starts_on   date not null,
+  created_at  timestamptz not null default now()
+);
+
 -- Row level security as every tenant table: a permissive policy and a restrictive guard, both on request_org_id().
 do $$
 declare
   t text;
 begin
-  foreach t in array array['deal_costs', 'approval_escalations'] loop
+  foreach t in array array['deal_costs', 'approval_escalations', 'approval_escalation_starts'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('revoke all privileges on table public.%I from anon, authenticated, vestiarion_tenant', t);
     execute format('grant all privileges on table public.%I to service_role', t);
@@ -85,6 +95,8 @@ grant update (invoice_id, milestone_id, linked_at, linked_by, removed_at, remove
 -- An escalation is claimed, marked sent, or released when nobody received it.
 grant select, insert, delete on table public.approval_escalations to vestiarion_tenant;
 grant update (sent_at, recipients, failed) on table public.approval_escalations to vestiarion_tenant;
+-- A workspace's start is set once, and never changed or deleted but with the workspace.
+grant select, insert on table public.approval_escalation_starts to vestiarion_tenant;
 
 -- A cost's terms never change; a link is set once and never moved; a removal is never undone (K3). A foreign key's own
 -- set null (a counterparty, a payable or a milestone deleted, a person's account deleted) passes.
@@ -124,8 +136,15 @@ begin
     if new.linked_at is null then
       raise exception 'deal_cost_linked' using detail = 'A deal cost is linked with the time it was linked.';
     end if;
-  elsif new.linked_at is distinct from old.linked_at and (old.invoice_id is not null or old.milestone_id is not null) then
-    raise exception 'deal_cost_linked' using detail = 'A deal cost keeps when it was linked.';
+  elsif (new.linked_at is distinct from old.linked_at or (new.linked_by is distinct from old.linked_by and new.linked_by is not null))
+        and (old.invoice_id is not null or old.milestone_id is not null) then
+    raise exception 'deal_cost_linked' using detail = 'A deal cost keeps when it was linked, and who linked it.';
+  end if;
+  -- Only the foreign key clears a link, once the row it names is gone: cleared by hand, a link could be moved in two
+  -- steps, and the money the cost was counted at would change without a trace.
+  if (old.invoice_id is not null and new.invoice_id is null and exists (select 1 from public.invoices i where i.org_id = old.org_id and i.id = old.invoice_id))
+     or (old.milestone_id is not null and new.milestone_id is null and exists (select 1 from public.milestones m where m.org_id = old.org_id and m.id = old.milestone_id)) then
+    raise exception 'deal_cost_linked' using detail = 'A deal cost stays linked to what it was linked to.';
   end if;
   return new;
 end;
@@ -172,5 +191,6 @@ notify pgrst, 'reload schema';
 -- drop function if exists public.deal_costs_link_payable();
 -- drop trigger if exists deal_costs_guard on public.deal_costs;
 -- drop function if exists public.deal_costs_guard();
+-- drop table if exists public.approval_escalation_starts;
 -- drop table if exists public.approval_escalations;
 -- drop table if exists public.deal_costs;

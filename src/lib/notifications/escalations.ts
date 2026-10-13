@@ -17,6 +17,10 @@ import { decidingRecipients, DIGEST_MAX_RECIPIENTS, DIGEST_SEND_DEADLINE_MS } fr
  * Each payable is escalated once per decide-by day: an `approval_escalations` row is claimed before the sends and kept
  * once anyone received the email, so a later cycle never sends it again; a claim nobody received is released, so the next
  * cycle tries again. A decide-by day that moves (the due date changed) is a new escalation.
+ *
+ * Only a decide-by day on or after the day escalations started in the workspace counts (`approval_escalation_starts`, set
+ * by its first run): a payable already past its day then is never emailed, so turning escalations on sends no backlog.
+ * Each member gets at most one email a run, about every payable they may act on.
  */
 
 const WAITING = ["held", "flagged", "awaiting_info"] as const;
@@ -25,9 +29,9 @@ const WAITING = ["held", "flagged", "awaiting_info"] as const;
 export const ESCALATION_ACTION = "decision_escalated";
 
 type PostgrestError = { code?: string; message?: string } | null;
-/** Before migration 0108 runs, the claims table is not there: nothing is escalated, and nothing fails. */
+/** Before migration 0108 runs, its tables are not there: nothing is escalated, and nothing fails. */
 const notReady = (error: PostgrestError) =>
-  ["PGRST205", "42P01"].includes(error?.code ?? "") || (/approval_escalations/.test(error?.message ?? "") && /schema cache|does not exist/.test(error?.message ?? ""));
+  ["PGRST205", "42P01"].includes(error?.code ?? "") || (/approval_escalation/.test(error?.message ?? "") && /schema cache|does not exist/.test(error?.message ?? ""));
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -43,8 +47,34 @@ interface WaitingRow {
   counterparties: { name: string } | null;
 }
 
-/** The waiting payables past their decide-by day today, each with that day. In scope. */
-export async function pastDecideBy(now: Date = new Date()): Promise<Array<{ id: string; createdBy: string | null; item: EscalationItem }>> {
+/**
+ * The day escalations started in the workspace in scope (E4): read, or set to `today` by its first run. Null before
+ * migration 0108 runs. Two runs at once set one day: the second reads what the first set.
+ */
+export async function escalationStart(today: string): Promise<string | null> {
+  const read = async () => {
+    const found = await db().from("approval_escalation_starts").select("starts_on").limit(1);
+    if (notReady(found.error)) return null;
+    if (found.error) throw new Error(found.error.message);
+    return ((found.data ?? []) as Array<{ starts_on: string }>)[0]?.starts_on?.slice(0, 10) ?? "";
+  };
+  const found = await read();
+  if (found !== "") return found;
+  const set = await db().from("approval_escalation_starts").upsert({ starts_on: today }, { onConflict: "org_id", ignoreDuplicates: true }).select("starts_on");
+  if (notReady(set.error)) return null;
+  if (set.error) throw new Error(set.error.message);
+  const inserted = ((set.data ?? []) as Array<{ starts_on: string }>)[0]?.starts_on?.slice(0, 10);
+  if (inserted) return inserted;
+  const again = await read();
+  if (again === "") throw new Error("escalation start not set");
+  return again;
+}
+
+/**
+ * The waiting payables past their decide-by day today, each with that day; with `from`, only a day on or after it. In
+ * scope.
+ */
+export async function pastDecideBy(now: Date = new Date(), from?: string): Promise<Array<{ id: string; createdBy: string | null; item: EscalationItem }>> {
   const today = now.toISOString().slice(0, 10);
   const rows = unwrap(
     await db()
@@ -56,7 +86,7 @@ export async function pastDecideBy(now: Date = new Date()): Promise<Array<{ id: 
   ) as unknown as WaitingRow[];
   return rows.flatMap((row) => {
     const decideBy = decideByOf({ dueDate: row.due_date, discount: invoiceDiscount(row) }, today);
-    if (decideBy.day >= today) return [];
+    if (decideBy.day >= today || (from !== undefined && decideBy.day < from)) return [];
     return [
       {
         id: row.id,
@@ -75,10 +105,11 @@ export async function pastDecideBy(now: Date = new Date()): Promise<Array<{ id: 
 }
 
 /**
- * Emails the members who can act on each waiting payable that passed its decide-by day and was not escalated for that day
- * yet: each member with the email switch on is told about the payables they may decide (`whoCanAct`, as the Approvals card
- * names them), in one message. A payable nobody received is released for the next cycle. Never throws: every failure is
- * logged with the workspace id, and the counts so far are returned.
+ * Emails the members who can act on each waiting payable that passed its decide-by day, on or after the day escalations
+ * started here, and was not escalated for that day yet: each member with the email switch on is told about the payables
+ * they may decide (`whoCanAct`, as the Approvals card names them), in one message. Everything the sends need is read
+ * before anything is claimed, and a payable nobody received is released for the next cycle. Never throws: every failure
+ * is logged with the workspace id, and the counts so far are returned.
  */
 export async function escalateOverdueDecisions(now: Date = new Date()): Promise<{ sent: number; failed: number; invoices: number }> {
   const counts = { sent: 0, failed: 0, invoices: 0 };
@@ -86,7 +117,10 @@ export async function escalateOverdueDecisions(now: Date = new Date()): Promise<
   try {
     orgId = currentOrgId();
     const scopedOrgId = orgId;
-    const past = await pastDecideBy(now);
+    // The day escalations started here, set by the first run: what was already past its day then never emails.
+    const startsOn = await escalationStart(now.toISOString().slice(0, 10));
+    if (startsOn === null) return counts;
+    const past = await pastDecideBy(now, startsOn);
     if (past.length === 0) return counts;
 
     const settings = emailSettingsFromEnv();
@@ -94,13 +128,30 @@ export async function escalateOverdueDecisions(now: Date = new Date()): Promise<
       console.log("escalations: email not configured", scopedOrgId);
       return counts;
     }
-    const eligible = await decidingRecipients(scopedOrgId);
+    // One email per member a run: a member listed twice, by id or address, is told once.
+    const seen = new Set<string>();
+    const eligible = (await decidingRecipients(scopedOrgId)).filter((recipient) => {
+      const address = recipient.email.trim().toLowerCase();
+      if (seen.has(recipient.userId) || seen.has(address)) return false;
+      seen.add(recipient.userId);
+      seen.add(address);
+      return true;
+    });
     const recipients = eligible.slice(0, DIGEST_MAX_RECIPIENTS);
     if (eligible.length > recipients.length) console.warn("escalations: recipients over the cap, skipped", eligible.length - recipients.length, scopedOrgId);
     if (recipients.length === 0) {
       console.log("escalations: nobody to tell", scopedOrgId);
       return counts;
     }
+
+    // Everything the sends need, read before anything is claimed: a read that fails leaves every payable for the next
+    // cycle, never claimed and unsent.
+    const org = unwrap(await platformDb().from("orgs").select("name, slug").eq("id", scopedOrgId).single()) as { name: string; slug: string };
+    const origin = siteOrigin();
+    const link = `${origin}/o/${org.slug}/approvals`;
+    // Who may act on each payable, from every member, so whoever entered one decides it only when nobody else may (E3).
+    const members = await listMembers(scopedOrgId);
+    const actingOn = new Map(past.map(({ id, createdBy }) => [id, new Set(whoCanAct(members, createdBy).map((member) => member.userId))]));
 
     // Claim each payable for its decide-by day: one claimed already was escalated, or is being escalated now.
     const claimed = await db()
@@ -118,41 +169,37 @@ export async function escalateOverdueDecisions(now: Date = new Date()): Promise<
     if (fresh.length === 0) return counts;
     counts.invoices = fresh.length;
 
-    const org = unwrap(await platformDb().from("orgs").select("name, slug").eq("id", scopedOrgId).single()) as { name: string; slug: string };
-    const origin = siteOrigin();
-    const link = `${origin}/o/${org.slug}/approvals`;
-    // Who may act on each payable, from every member, so whoever entered one decides it only when nobody else may (E3).
-    const members = await listMembers(scopedOrgId);
-    const actingOn = new Map(fresh.map(({ id, createdBy }) => [id, new Set(whoCanAct(members, createdBy).map((member) => member.userId))]));
-
     const delivered = new Set<string>();
-    const deadline = Date.now() + DIGEST_SEND_DEADLINE_MS;
-    for (const [index, recipient] of recipients.entries()) {
-      if (Date.now() >= deadline) {
-        counts.failed += recipients.length - index;
-        console.warn("escalations: send deadline passed, not sent", recipients.length - index, scopedOrgId);
-        break;
-      }
-      const theirs = fresh.filter(({ id }) => actingOn.get(id)?.has(recipient.userId));
-      if (theirs.length === 0) continue;
-      const email = decisionEscalationEmail({ orgName: org.name, items: theirs.map(({ item }) => item), link, origin });
-      const result = await sendEmail({ to: recipient.email, ...email }, settings);
-      if (result.sent) {
-        counts.sent += 1;
-        for (const { id } of theirs) delivered.add(id);
-      } else {
-        counts.failed += 1;
-        console.warn("escalations: send failed", scopedOrgId, result.reason);
-      }
-    }
-
-    // A payable nobody received is released, and the next scheduled cycle tries again; the others are kept as sent.
     const claimOf = new Map(claims.map((claim) => [claim.invoice_id, claim.id]));
-    const unsent = fresh.filter(({ id }) => !delivered.has(id)).map(({ id }) => claimOf.get(id) as string);
-    if (unsent.length > 0) {
-      if (counts.sent === 0) console.error("escalations: nobody received it", counts.failed, scopedOrgId);
-      const released = await db().from("approval_escalations").delete().in("id", unsent);
-      if (released.error) console.error("escalations: claims not released", scopedOrgId, released.error.message);
+    try {
+      const deadline = Date.now() + DIGEST_SEND_DEADLINE_MS;
+      for (const [index, recipient] of recipients.entries()) {
+        if (Date.now() >= deadline) {
+          counts.failed += recipients.length - index;
+          console.warn("escalations: send deadline passed, not sent", recipients.length - index, scopedOrgId);
+          break;
+        }
+        const theirs = fresh.filter(({ id }) => actingOn.get(id)?.has(recipient.userId));
+        if (theirs.length === 0) continue;
+        const email = decisionEscalationEmail({ orgName: org.name, items: theirs.map(({ item }) => item), link, origin });
+        const result = await sendEmail({ to: recipient.email, ...email }, settings);
+        if (result.sent) {
+          counts.sent += 1;
+          for (const { id } of theirs) delivered.add(id);
+        } else {
+          counts.failed += 1;
+          console.warn("escalations: send failed", scopedOrgId, result.reason);
+        }
+      }
+    } finally {
+      // A payable nobody received is released, even when a send threw, and the next scheduled cycle tries again; the
+      // others are kept as sent.
+      const unsent = fresh.filter(({ id }) => !delivered.has(id)).map(({ id }) => claimOf.get(id) as string);
+      if (unsent.length > 0) {
+        if (counts.sent === 0) console.error("escalations: nobody received it", counts.failed, scopedOrgId);
+        const released = await db().from("approval_escalations").delete().in("id", unsent);
+        if (released.error) console.error("escalations: claims not released", scopedOrgId, released.error.message);
+      }
     }
     const told = fresh.filter(({ id }) => delivered.has(id));
     if (told.length === 0) return counts;

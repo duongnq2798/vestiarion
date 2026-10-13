@@ -50,7 +50,7 @@ export const TENANT_TABLES = [
   "service_purchases", "spending_limit_contracts", "ar_reminders", "inbox_emails", "approval_policies", "payment_approvals",
   "shadow_modes", "decision_verdicts", "payment_actuals", "bank_statement_lines", "report_shares", "report_baselines", "receivable_allocations",
   "accounting_connections", "external_links", "accounting_bills", "accounting_sync_cursors", "accounting_postings",
-  "deals", "deal_versions", "deal_lines", "deal_costs", "approval_escalations",
+  "deals", "deal_versions", "deal_lines", "deal_costs", "approval_escalations", "approval_escalation_starts",
   "crm_deals",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];

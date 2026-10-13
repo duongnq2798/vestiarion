@@ -119,6 +119,30 @@ describe("deal_costs", () => {
     await expect(link(orgId, fourth, "milestone_id", work)).rejects.toThrow(/deal_costs_milestone_key/);
   });
 
+  it("never clears a link by hand, so a link cannot be moved in two steps, and keeps who linked it", async () => {
+    const orgId = await createOrg(db, "costs-unlink");
+    const person = await createUser(db, "costs-linker@example.com");
+    const vendor = await counterparty(orgId, "vendor", "Northwind Hosting");
+    const bill = await invoice(orgId, "payable", vendor);
+    const another = await invoice(orgId, "payable", vendor);
+    const work = await milestone(orgId, vendor);
+    const costId = await addCost(orgId, await deal(orgId));
+    await asTenant(db, orgId, (tx) => tx.query("update public.deal_costs set invoice_id = $1, linked_at = now(), linked_by = $2 where id = $3", [bill, person, costId]));
+    await expect(asTenant(db, orgId, (tx) => tx.query("update public.deal_costs set invoice_id = null where id = $1", [costId]))).rejects.toThrow(/deal_cost_linked/);
+    await expect(db.query("update public.deal_costs set invoice_id = null where id = $1", [costId])).rejects.toThrow(/deal_cost_linked/);
+    await expect(asTenant(db, orgId, (tx) => tx.query("update public.deal_costs set linked_by = $1 where id = $2", [person, costId]))).resolves.toBeTruthy();
+    const other = await createUser(db, "costs-other-linker@example.com");
+    await expect(asTenant(db, orgId, (tx) => tx.query("update public.deal_costs set linked_by = $1 where id = $2", [other, costId]))).rejects.toThrow(/deal_cost_linked/);
+    expect((await db.query<{ invoice_id: string }>("select invoice_id from public.deal_costs where id = $1", [costId])).rows[0].invoice_id).toBe(bill);
+
+    const onMilestone = await addCost(orgId, await deal(orgId));
+    await link(orgId, onMilestone, "milestone_id", work);
+    await expect(asTenant(db, orgId, (tx) => tx.query("update public.deal_costs set milestone_id = null where id = $1", [onMilestone]))).rejects.toThrow(/deal_cost_linked/);
+    // Its bill deleted, the cost is planned again, and may be linked to the bill that replaces it.
+    await db.query("delete from public.invoices where id = $1", [bill]);
+    await link(orgId, costId, "invoice_id", another);
+  });
+
   it("refuses a link into another workspace", async () => {
     const orgId = await createOrg(db, "costs-own-link");
     const other = await createOrg(db, "costs-other-link");
@@ -174,6 +198,20 @@ describe("approval_escalations", () => {
     expect((await claim("2026-10-27")).rows).toHaveLength(1);
     await db.query("delete from public.invoices where id = $1", [bill]);
     expect((await db.query("select 1 from public.approval_escalations where org_id = $1", [orgId])).rows).toHaveLength(0);
+  });
+});
+
+describe("approval_escalation_starts", () => {
+  it("holds the day a workspace's escalations started, set once and never changed", async () => {
+    const orgId = await createOrg(db, "escalation-start");
+    const start = (day: string) =>
+      asTenant(db, orgId, (tx) => tx.query<{ starts_on: string }>("insert into public.approval_escalation_starts (org_id, starts_on) values ($1, $2) on conflict do nothing returning starts_on::text", [orgId, day]));
+    expect((await start("2026-10-13")).rows).toEqual([{ starts_on: "2026-10-13" }]);
+    expect((await start("2026-10-14")).rows).toHaveLength(0);
+    await expect(asTenant(db, orgId, (tx) => tx.query("update public.approval_escalation_starts set starts_on = '2026-01-01' where org_id = $1", [orgId]))).rejects.toThrow(/permission denied/);
+    await expect(asTenant(db, orgId, (tx) => tx.query("delete from public.approval_escalation_starts where org_id = $1", [orgId]))).rejects.toThrow(/permission denied/);
+    const other = await createOrg(db, "escalation-start-other");
+    await expect(asTenant(db, orgId, (tx) => tx.query("insert into public.approval_escalation_starts (org_id, starts_on) values ($1, '2026-10-13')", [other]))).rejects.toThrow(/row-level security/);
   });
 });
 
