@@ -465,6 +465,29 @@ export function proposeNextAction(facts: ReceivableFacts, now: number): Proposal
   return result("remind", `Remind ${facts.customerName} (${tone})`, { reminder, sends: "agent" });
 }
 
+/**
+ * Whether an open task is still needed (C6), so the stage closes one that is not as obsolete. A task stays while what it
+ * asks about can still come back: a broken promise while the promise is open, even under a dispute that holds
+ * everything for now; a HubSpot ask until a reminder went after the due date; a missing contact until there is a
+ * billing email. An ask-first task goes when the rules or the reminder it drafted changed. None stays once the
+ * receivable is paid or no longer open.
+ */
+export function taskStillNeeded(task: Pick<CollectionTask, "reason" | "subjectKey">, facts: ReceivableFacts, proposal: Pick<Proposal, "action">): boolean {
+  if (proposal.action === "none") return false;
+  switch (task.reason) {
+    case "policy_ask_first":
+      return facts.policy.approval === "ask_first" && task.subjectKey === `policy:${facts.policy.version}:reminder:${facts.sent.length + 1}`;
+    case "hubspot_owner":
+      return !sentAfterDue(facts.sent, dayOf(facts.dueDate));
+    case "no_contact":
+      return !facts.billingEmail;
+    case "promise_passed":
+      return facts.said.some((said) => said.status === "open" && said.kind === "promise" && `promise:${said.id}` === task.subjectKey);
+    case "reminders_done":
+      return true;
+  }
+}
+
 /** The ways a person may resolve an open task (C6). */
 export function taskOutcomes(task: Pick<CollectionTask, "kind" | "reason">): TaskOutcome[] {
   switch (task.reason) {

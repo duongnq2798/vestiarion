@@ -2,7 +2,7 @@ import { z } from "zod";
 import { readAllocationRows, toReceivableIn } from "../allocations/book";
 import { fromMicros, receivableBalance } from "../allocations/model";
 import { siteOrigin } from "../auth/env";
-import { proposeNextAction, type CollectionPolicy, type CollectionTask, type Proposal, type ReceivableFacts } from "../collection-context/model";
+import { proposeNextAction, taskStillNeeded, type CollectionPolicy, type CollectionTask, type Proposal, type ReceivableFacts } from "../collection-context/model";
 import { policyOf, readCrmContexts, readPolicies, readSaid, readTasks, tasksByInvoice } from "../collection-context/read";
 import { closeObsolete, notifyTasks, openTask } from "../collection-context/tasks";
 import { boundTone, boundWaitDays, referenceReminder, reminderAllowed, whenInWords, type ReminderDecision, type ReminderTone, type SentReminder } from "../collections";
@@ -255,7 +255,7 @@ export async function sendReceivableReminders(
           lines.push({ domain: "ar", message: `${facts.customerName}: ${proposal.headline}. A person was asked` });
         }
       }
-      for (const task of facts.tasks) if (task.status === "open" && task.subjectKey !== proposal.need?.subjectKey) obsolete.push(task.id);
+      for (const task of facts.tasks) if (task.status === "open" && !taskStillNeeded(task, facts, proposal)) obsolete.push(task.id);
     }
 
     if (proposal.action !== "remind" || (proposal.sends !== "agent" && proposal.sends !== "approved") || !proposal.reminder) continue;

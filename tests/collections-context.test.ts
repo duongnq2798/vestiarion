@@ -7,6 +7,7 @@ import {
   policyWords,
   proposeNextAction,
   taskOutcomes,
+  taskStillNeeded,
   type CollectionPolicy,
   type CollectionTask,
   type CustomerSaid,
@@ -222,6 +223,36 @@ describe("the next action (C1–C6)", () => {
     const all = [said({ kind: "promise", id: "p", promisedOn: "2026-10-10" }), said({ kind: "paid", id: "c", paidOn: "2026-10-18" }), said({ kind: "dispute", id: "d" })];
     expect(proposeNextAction(facts({ said: all }), NOW).heldBy).toBe("dispute");
     expect(proposeNextAction(facts({ said: all.slice(0, 2) }), NOW).heldBy).toBe("paid_claim");
+  });
+});
+
+describe("which open tasks are still needed (C6)", () => {
+  const needed = (task: CollectionTask, over: Partial<ReceivableFacts> = {}) => {
+    const all = facts(over);
+    return taskStillNeeded(task, all, proposeNextAction(all, NOW));
+  };
+
+  it("keeps a broken promise's task while the promise is open, even under a dispute, and drops it once the promise is closed", () => {
+    const promise = said({ id: "r-promise", kind: "promise", promisedOn: "2026-10-19" });
+    const review = task({ kind: "finance_review", reason: "promise_passed", subjectKey: "promise:r-promise" });
+    expect(needed(review, { said: [promise] })).toBe(true);
+    expect(needed(review, { said: [promise, said({ id: "r-dispute", kind: "dispute" })] })).toBe(true);
+    expect(needed(review, { said: [{ ...promise, status: "closed", outcome: "resolved", closedAt: "2026-10-20T08:00:00Z" }] })).toBe(false);
+  });
+
+  it("drops an ask-first task once the rules or the drafted reminder changed, a contact task once there is an email, and every task once paid", () => {
+    const vip = policy({ approval: "ask_first" });
+    expect(needed(task({}), { policy: vip })).toBe(true);
+    expect(needed(task({}), { policy: policy({ approval: "auto" }) })).toBe(false);
+    expect(needed(task({}), { policy: policy({ approval: "ask_first", version: 3 }) })).toBe(false);
+    expect(needed(task({}), { policy: vip, sent: [reminder(1, "2026-10-16T09:00:00Z", "firm")] })).toBe(false);
+    const contact = task({ kind: "finance_review", reason: "no_contact", subjectKey: "no_contact" });
+    expect(needed(contact, { billingEmail: false })).toBe(true);
+    expect(needed(contact, { billingEmail: true })).toBe(false);
+    expect(needed(task({}), { policy: vip, status: "received" })).toBe(false);
+    const hubspot = task({ reason: "hubspot_owner", subjectKey: "hubspot:9001" });
+    expect(needed(hubspot)).toBe(true);
+    expect(needed(hubspot, { sent: [reminder(1, "2026-10-16T09:00:00Z", "firm")] })).toBe(false);
   });
 });
 
