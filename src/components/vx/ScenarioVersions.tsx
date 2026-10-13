@@ -100,12 +100,15 @@ export function ScenarioVersions({
           <input type="hidden" name="scenarioId" value={open?.scenarioId ?? ""} />
           <input type="hidden" name="levers" value={JSON.stringify(levers)} />
           <input type="hidden" name="rates" value={JSON.stringify(rates)} />
-          <Field id={`${id}-scenario-name`} label="Scenario name" description={open ? `Saving makes version ${open.version + 1} of this scenario.` : "Saving makes version 1 of a new scenario."}>
+          <Field id={`${id}-scenario-name`} label="Scenario name">
             <Input name="name" maxLength={80} value={name} onChange={(event) => setName(event.target.value)} placeholder="Such as SGD weakens" />
           </Field>
           <SubmitButton icon={<Save />} pendingLabel="Saving…">
             {open ? `Save as version ${open.version + 1}` : "Save as a version"}
           </SubmitButton>
+          <p className="text-xs text-ink-3 sm:col-span-2">
+            {open ? `Saving makes version ${open.version + 1} of "${open.name}". Its earlier versions stay as they were.` : "Saving makes version 1 of a new scenario."}
+          </p>
           <FormMessage className="sm:col-span-2" tone={form.state.message && !form.state.ok ? "error" : "neutral"}>
             {form.state.ok ? null : form.state.message}
           </FormMessage>

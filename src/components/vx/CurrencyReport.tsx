@@ -4,10 +4,9 @@ import { DocsLink } from "@/components/DocsLink";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { SectionHeader } from "@/components/ui/SectionHeader";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
 import { plural, utcDay } from "@/lib/copy";
 import type { CurrencyReport } from "@/lib/currency-report";
-import { formatMoney, formatRateValue, rateEquation, rateTime, rateWords, RATE_KIND_WORDS, type ReportingTotals, type ReportingValue } from "@/lib/money";
+import { formatMoney, formatRateValue, rateEquation, rateTime, rateWords, RATE_KIND_WORDS, type FxRate, type ReportingTotals, type ReportingValue } from "@/lib/money";
 
 /**
  * The report's **Currencies and rates** (docs/superpowers/specs/2026-10-13-currency-provenance-design.md M8): each
@@ -21,6 +20,11 @@ function valueText(value: ReportingValue): ReactNode {
   if (value.state === "unknown") return <span className="text-held">Unknown</span>;
   return "—";
 }
+
+/** A rate in a row, short: `1 USD = 1.3512 SGD`, and a token's redemption as `1 USDC = 1 USD, redemption`. */
+const legWords = (rate: FxRate) => (rate.kind === "peg" ? `1 ${rate.from} = 1 ${rate.to}, redemption` : rateEquation(rate));
+
+const counted = (n: number, one: string, many: string) => `${n} ${plural(n, one, many)}`;
 
 function TotalLine({ totals }: { totals: ReportingTotals }) {
   if (!totals.reporting || totals.rows.length === 0) return null;
@@ -47,7 +51,12 @@ function TotalLine({ totals }: { totals: ReportingTotals }) {
   );
 }
 
-function TotalsTable({ title, note, totals, countLabel }: { title: string; note: string; totals: ReportingTotals; countLabel: string }) {
+/**
+ * One row per currency: as written, then in the reporting currency with its rates or unknown with why. A grid from
+ * `sm` and stacked lines on a phone, so the reporting figure is never scrolled out of sight.
+ */
+function TotalsTable({ title, note, totals, count }: { title: string; note: string; totals: ReportingTotals; count: [string, string] }) {
+  const columns = totals.reporting ? "sm:grid-cols-[5rem_5rem_minmax(0,1fr)_minmax(0,1.4fr)]" : "sm:grid-cols-[5rem_5rem_minmax(0,1fr)]";
   return (
     <div className="space-y-2">
       <div>
@@ -58,34 +67,44 @@ function TotalsTable({ title, note, totals, countLabel }: { title: string; note:
         <p className="text-sm text-ink-2">None yet.</p>
       ) : (
         <>
-          <Table label={title} containerClassName="rounded-xl border border-line">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Currency</TableHead>
-                <TableHead className="text-right">{countLabel}</TableHead>
-                <TableHead className="text-right">As written</TableHead>
-                {totals.reporting && <TableHead className="text-right">{`In ${totals.reporting}`}</TableHead>}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {totals.rows.map((row) => (
-                <TableRow key={row.total.currency}>
-                  <TableCell className="py-2 font-medium">{row.total.currency}</TableCell>
-                  <TableCell className="py-2 text-right tabular-nums">{row.count}</TableCell>
-                  <TableCell className="py-2 text-right tabular-nums whitespace-nowrap">{formatMoney(row.total)}</TableCell>
-                  {totals.reporting && (
-                    <TableCell className="py-2 text-right tabular-nums whitespace-nowrap">
-                      {valueText(row.value)}
-                      {row.value.state === "converted" && (
-                        <span className="block text-[0.6875rem] font-normal text-ink-3">{row.value.rates.filter((rate) => rate.kind !== "peg").map(rateEquation).join(", ") || "at par"}</span>
-                      )}
-                      {row.value.state === "unknown" && <span className="block max-w-56 text-[0.6875rem] font-normal whitespace-normal text-ink-3">{row.value.reason}</span>}
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div role="table" aria-label={title} className="rounded-xl border border-line text-sm">
+            <div role="row" className={`hidden border-b border-line px-3 py-2 font-mono text-[0.6875rem] font-semibold tracking-[0.1em] text-ink-3 uppercase sm:grid sm:gap-3 ${columns}`}>
+              <span role="columnheader">Currency</span>
+              <span role="columnheader" className="text-right">
+                {count[1]}
+              </span>
+              <span role="columnheader" className="text-right">
+                As written
+              </span>
+              {totals.reporting && (
+                <span role="columnheader" className="text-right">{`In ${totals.reporting}`}</span>
+              )}
+            </div>
+            {totals.rows.map((row) => (
+              <div role="row" key={row.total.currency} className={`grid gap-1 border-b border-line px-3 py-2.5 last:border-b-0 sm:items-baseline sm:gap-3 ${columns}`}>
+                <span role="cell" className="font-medium text-ink">
+                  {row.total.currency}
+                  <span className="font-normal text-ink-3 sm:hidden">{` · ${counted(row.count, count[0], count[1].toLowerCase())}`}</span>
+                </span>
+                <span role="cell" className="hidden text-right tabular-nums sm:block">
+                  {row.count}
+                </span>
+                <span role="cell" className="tabular-nums sm:text-right">
+                  {formatMoney(row.total)}
+                </span>
+                {totals.reporting && (
+                  <span role="cell" className="tabular-nums sm:text-right">
+                    <span className="text-ink-3 sm:hidden">{`In ${totals.reporting}: `}</span>
+                    {valueText(row.value)}
+                    {row.value.state === "converted" && (
+                      <span className="block text-[0.6875rem] text-ink-3">{row.value.rates.map(legWords).join("; ")}</span>
+                    )}
+                    {row.value.state === "unknown" && <span className="block text-[0.6875rem] text-ink-3">{row.value.reason}</span>}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
           <TotalLine totals={totals} />
         </>
       )}
@@ -147,14 +166,14 @@ export function CurrencyReport({ report, settingsHref }: { report: CurrencyRepor
           <Kpi
             label="FX variance on paid bills"
             value={variance.totals.length === 0 ? "None yet" : variance.totals.map(({ total }) => formatMoney(total, { sign: true })).join(" + ")}
-            note={`${plural(variance.rows.length, "bill", "bills")} paid at a rate that moved since the bill${variance.unknown.length > 0 ? `; ${variance.unknown.length} unknown` : ""}. Above zero, more was paid than the bill was worth that day.`}
+            note={`${counted(variance.rows.length, "bill", "bills")} paid after the rate moved since the bill was converted${variance.unknown.length > 0 ? `; ${variance.unknown.length} unknown` : ""}. Above zero, more was paid than the bill was worth that day.`}
           />
         </dl>
 
-        <TotalsTable title="Bills, as written" note="Each bill in the currency on it, from the bills this report counts." totals={report.billsAsWritten} countLabel="Bills" />
-        <TotalsTable title="Paid on Arc" note="What each transfer carried, in the token it moved in." totals={report.paidOnArc} countLabel="Payments" />
+        <TotalsTable title="Bills, as written" note="Each bill in the currency on it, from the bills this report counts." totals={report.billsAsWritten} count={["bill", "Bills"]} />
+        <TotalsTable title="Paid on Arc" note="What each transfer carried, in the token it moved in." totals={report.paidOnArc} count={["payment", "Payments"]} />
         {report.paidByBusiness && (
-          <TotalsTable title="Paid by the business" note="What the business recorded paying outside Vestiarion, in the currency it paid in." totals={report.paidByBusiness} countLabel="Records" />
+          <TotalsTable title="Paid by the business" note="What the business recorded paying outside Vestiarion, in the currency it paid in." totals={report.paidByBusiness} count={["record", "Records"]} />
         )}
 
         <div className="space-y-2">
@@ -167,7 +186,7 @@ export function CurrencyReport({ report, settingsHref }: { report: CurrencyRepor
           </div>
           {variance.rows.length === 0 && variance.unknown.length === 0 ? (
             <p className="text-sm text-ink-2">
-              No bill converted at a rate has been paid yet{variance.inDollars > 0 ? `; ${plural(variance.inDollars, "bill", "bills")} in US dollars carry none` : ""}.
+              No bill converted at a rate has been paid yet{variance.inDollars > 0 ? `; ${counted(variance.inDollars, "bill", "bills")} in US dollars carry none` : ""}.
             </p>
           ) : (
             <ul className="divide-y divide-line rounded-xl border border-line">

@@ -12,7 +12,7 @@ import { carriesOrg, fakeSupabase, orgTestContext, type FakeReply, type Recorded
 
 /**
  * The reads and writes of currency provenance (docs/superpowers/specs/2026-10-13-currency-provenance-design.md M4-M7,
- * M10), against the requests supabase-js builds: the reporting currency set and signed, reference rates stored once
+ * M11), against the requests supabase-js builds: the reporting currency set and signed, reference rates stored once
  * per publication and read back with their age, the FX variance recorded only from a rate recorded for the payment
  * day, scenario versions numbered and never written over, and each part as not set up before migration 0113 runs.
  */

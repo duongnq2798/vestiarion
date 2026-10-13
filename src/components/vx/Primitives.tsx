@@ -1,6 +1,7 @@
 import { ArrowUpRight } from "lucide-react";
 import { Badge, type BadgeProps } from "@/components/ui/Badge";
 import { cn } from "@/components/ui/cn";
+import { billDigits } from "@/lib/bill-amount";
 import { OutcomeGlyph } from "./Glyphs";
 import type { Outcome } from "./types";
 
@@ -9,6 +10,16 @@ export function fmt(value: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 6,
   }).format(value);
+}
+
+/**
+ * An amount in its currency's own digits: USDC and EURC as `fmt` writes them, a currency without minor units, such as
+ * the yen or the won, with none, and any other with two (currency provenance M9).
+ */
+export function fmtIn(value: number, currency: string) {
+  if (currency === "USDC" || currency === "EURC") return fmt(value);
+  const digits = billDigits(currency);
+  return new Intl.NumberFormat("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value);
 }
 
 export function Money({
@@ -30,7 +41,7 @@ export function Money({
     <span className={cn("whitespace-nowrap tabular-nums", className)}>
       <span className={cn(simulated && "underline decoration-dashed decoration-ink-3 underline-offset-4", struck && "line-through decoration-refused decoration-2")}>
         {sign && <span className="mr-0.5 text-ink-3">{sign}</span>}
-        {fmt(Math.abs(value))}
+        {fmtIn(Math.abs(value), token)}
       </span>
       <span className="ml-1 text-[0.72em] font-medium tracking-wide text-ink-3">{token}</span>
     </span>

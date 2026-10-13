@@ -96,9 +96,33 @@ SGD per USD, reference rate from ExchangeRate-API, published …`), a JPY or KRW
 bill's USDC value with Circle's quote named, and a paid bill's FX variance. Token and chain words stay where a decision
 needs them.
 
-**M10. Before 0113 runs.** A missing table or column (`42P01`, `PGRST205`, `PGRST204`, `42703`) reads as not set up:
+**M10. External obligations need no new column.** A bill from Xero or QuickBooks (`accounting_bills`), a HubSpot deal
+(`crm_deals`), a deal and its costs, an imported bill list and a recorded payment (`payment_actuals`) already keep their
+amount and currency as written; a bill taken in another currency keeps its conversion on the invoice (`original_*`,
+0084); where a bill came from is its `create_invoice` entry's `via`. What was missing, the rate at payment, the rates
+used, the reporting currency and saved scenarios, is what 0113 adds.
+
+**M11. Before 0113 runs.** A missing table or column (`42P01`, `PGRST205`, `PGRST204`, `42703`) reads as not set up:
 Settings says the reporting currency is not set up yet, the report shows its figures per currency with rates read but
 not stored, variances unknown, and saving a scenario says it is not set up. Nothing fails for it.
+
+## Screenshots
+
+`currency-provenance-shots/`, each at 1440 and 390 px, from `/docs-shots/currency/<state>`:
+
+1. `01-setting`: the reporting currency in Settings, for an owner or admin and for a member who cannot change it.
+2. `02-report`: Currencies and rates with bills in SGD, JPY, KRW, PHP, MYR and USDC, the rates used, and KRW unknown
+   (its last rate is 11 days old), so the total is unknown with the total without it.
+3. `03-variance`: a paid shadow-mode bill of 1,350.00 SGD, converted at 1.3500 and paid when the rate was 1.3600:
+   +7.35 USDC FX variance.
+4. `04-scenario`: What if with SGD typed at 1.4000 against today's 1.3512, the cash in SGD, and two saved versions of
+   "SGD weakens".
+
+## Operations
+
+- Migration 0113 is the partner's to apply. Until then every part says it is not set up, and nothing fails.
+- The hourly job is a new line in `supabase/cron/watches.sql` (`vestiarion-fx-rates`, 41 minutes past each hour), run by
+  hand in the SQL editor as the others are. Until it runs, rates are recorded when the report or Treasury is opened.
 
 ## Left for later
 

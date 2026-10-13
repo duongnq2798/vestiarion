@@ -1,5 +1,12 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-13: A reporting currency, and cash scenarios saved as versions
+
+- Two new entries, actor `human`, each listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:
+  - **`reporting_currency_changed`**, domain `system`: `{ by, from, to }`, when an owner or admin set the currency the workspace reports and plans in. `to` is `USD`, `EUR`, `SGD`, `JPY`, `KRW`, `PHP` or `MYR`; `from` is the one before, or null the first time.
+  - **`cash_scenario_saved`**, domain `treasury`: `{ by, scenarioId, versionId, version, name, horizon, lateDays, costPct, costScope, receivablesChanged, rates, reportingCurrency }`, when an owner or admin saved a cash scenario. Each save is the next `version` of `scenarioId`, from 1. `rates` lists each rate typed, `{ currency, perUsd, reference }`: `perUsd` is how many of the currency make one US dollar, as a decimal string, and `reference` is `{ perUsd, source, at }`, the reference rate shown beside it, or null.
+- Nothing else in `/api/v1` changes: invoices are still in USDC or EURC, and a payment still carries the amount the bill was converted to. The rates, the reporting currency and the FX variance on paid bills are not in the API.
+
 ## 2026-10-13: Collections that follow the customer's context
 
 - Before it reminds a customer, the agent proposes each receivable's next step from what the customer said, paid and was promised, its own rules and the HubSpot deal it was sold through, and asks a person when the step is theirs. Three new entries, domain `ar`, each listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:
