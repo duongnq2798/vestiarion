@@ -1180,7 +1180,9 @@ enforces only the workspace-wide caps, and every payment still needs its cash wh
   money of a bill or milestone put in a project (`via: "assignment"`, or `"entry"` from Bill to pay and Add milestone,
   whose console actions take a project and, for a milestone, a purchase order). Each is signed (`src/lib/projects/
   write.ts`): `project_created`, `project_changed` and `project_assigned`, domain `ap`, naming a bill as `subjectId`
-  so its card keeps showing the agent's decision. The console only; the write API is unchanged.
+  so its card keeps showing the agent's decision. The console only; the write API is unchanged. Both permissions are an
+  owner's or admin's: an approver, an accountant or a viewer reads projects and changes none
+  (`tests/commands-projects.test.ts`).
 - **Where it shows.** `/o/[slug]/projects` lists every project with its figures (`readProjects`,
   `src/lib/projects/read.ts`; `projectFigures` in `model.ts` is pure): budget, set aside, paid, available, the share of
   its open bills and milestones set aside (commitments covered), payments held for its budget now and in 30 days (from
