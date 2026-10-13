@@ -13,6 +13,16 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Collections that follow the customer.** Before it reminds a customer, the agent weighs what Vestiarion knows about
+  it: a dispute, a payment the customer says it made, a promise, part payments, the reminders already sent and the
+  HubSpot deal it was sold through. Each receivable gets one next step with the facts behind it: wait, ask the account
+  owner, remind in a friendly, firm or final tone, or escalate to finance. A **Collections** panel on the Receivables
+  tab counts what waits on you, the reminders sent this week and promises kept and broken; a receivable's card previews
+  the reminder exactly as the customer would read it. Each customer can have its own rules (ask first for a VIP, the
+  strongest tone, the days between reminders), saved as versions. A broken promise goes to finance for review instead
+  of an automatic reminder, and nothing a customer or HubSpot writes sends an email by itself. Every email goes once,
+  even when it is retried, and turning reminders or emails off takes effect up to the moment of sending.
+
 - **A deal's costs and its cash readiness.** On a deal's page, enter what it will cost (what, for whom, how much, the
   day it leaves, and whether a document backs it yet) and link each cost to the bill or milestone it became, which then
   counts in its place, once. Cash readiness sets the schedule's money in against the costs day by day: collected and
@@ -55,6 +65,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   connect pages show their marks beside their names.
 
 ### Changed
+
+- **A customer saying it paid now holds the agent's reminders** until you find the payment or mark it not received, and a
+  promise whose day passed holds them until finance reviews it, instead of reminders going again the next day.
 
 - **Payment notices say what is known, and who verified it.** Activity toasts, Slack, Telegram, the stuck-payment email,
   the Approve and pay message and the decision trail say a payment was submitted until Circle confirms it, and that its

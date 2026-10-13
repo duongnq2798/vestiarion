@@ -41,7 +41,8 @@ type GuideSlug =
   | "guides/evidence"
   | "guides/controls"
   | "guides/apply-payments"
-  | "guides/customer-portal";
+  | "guides/customer-portal"
+  | "guides/collections";
 
 const PANEL = "src/components/GoLivePanel.tsx";
 const WALLET_STEPS = "src/components/treasury/WalletTreasurySteps.tsx";
@@ -145,6 +146,10 @@ const ACCOUNTING_STATUS = "src/lib/connectors/status.ts";
 const ACCOUNTING_WORDS = "src/lib/connectors/provider.ts";
 // HubSpot's card, list and connect page are its own: a CRM's deals are planned, not added (HubSpot connector H20).
 const HUBSPOT_PANEL = "src/components/HubSpotPanel.tsx";
+const COLLECTIONS_PANEL = "src/components/collections/CollectionsPanel.tsx";
+const COLLECTIONS_VIEW = "src/lib/collection-context/view.ts";
+const COLLECTIONS_MODEL = "src/lib/collection-context/model.ts";
+const NEXT_ACTION = "src/components/collections/NextAction.tsx";
 const CRM_RECEIPT_CARD = "src/components/CrmReceiptCard.tsx";
 const CRM_RECEIPTS = "src/lib/connectors/crm-receipts.ts";
 const DEAL_COLLECTION = "src/lib/deals/collection.ts";
@@ -262,6 +267,47 @@ const PORTAL_MODEL = "src/lib/customer-portal/model.ts";
 const PORTAL_PUBLIC = "src/lib/customer-portal/public.ts";
 
 const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
+  "guides/collections": [
+    ["Bills & receivables", APP_NAV],
+    ["Receivables", INVOICES_PAGE_SOURCE],
+    ["Collections", COLLECTIONS_PANEL],
+    ["Waiting on you", COLLECTIONS_PANEL],
+    ["Reminders sent", COLLECTIONS_PANEL],
+    ["Promises", COLLECTIONS_PANEL],
+    ["Remind", COLLECTIONS_VIEW],
+    ["Wait", COLLECTIONS_VIEW],
+    ["Ask the account owner", COLLECTIONS_VIEW],
+    ["Escalate to finance", COLLECTIONS_VIEW],
+    ["Nothing to do", COLLECTIONS_VIEW],
+    ["Wait: the customer disputes it", COLLECTIONS_MODEL],
+    ["Wait: a payment to verify", COLLECTIONS_MODEL],
+    ["Escalate to finance: a promise was broken", COLLECTIONS_MODEL],
+    ["Why", NEXT_ACTION],
+    ["Preview the reminder", NEXT_ACTION],
+    ["Approve a reminder", COLLECTIONS_MODEL],
+    ["Send this reminder", COLLECTIONS_MODEL],
+    ["Hold reminders", COLLECTIONS_MODEL],
+    ["No reminders for this invoice", COLLECTIONS_MODEL],
+    ["Ask the deal's owner", COLLECTIONS_MODEL],
+    ["Open the deal in HubSpot", NEXT_ACTION],
+    ["Review a broken promise", COLLECTIONS_MODEL],
+    ["Let reminders go again", COLLECTIONS_MODEL],
+    ["Find a billing contact", COLLECTIONS_MODEL],
+    ["Follow up: reminders are done", COLLECTIONS_MODEL],
+    ["Done", COLLECTIONS_MODEL],
+    ["Rules for", NEXT_ACTION],
+    ["Go on their own", NEXT_ACTION],
+    ["Ask first", NEXT_ACTION],
+    ["Strongest tone", NEXT_ACTION],
+    ["Days between reminders", NEXT_ACTION],
+    ["Account owner", NEXT_ACTION],
+    ["Channel", NEXT_ACTION],
+    ["Save rules", NEXT_ACTION],
+    ["Email me when payments need a decision", "src/components/NotificationsPanel.tsx"],
+    ["collection_policy_set", "src/lib/collection-context/write.ts"],
+    ["collection_task_opened", "src/lib/collection-context/tasks.ts"],
+    ["collection_task_resolved", "src/lib/collection-context/tasks.ts"],
+  ],
   "guides/customer-portal": [
     ["Bills & receivables", APP_NAV],
     ["Receivables", INVOICES_PAGE_SOURCE],
@@ -295,6 +341,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Payment found", PORTAL_MODEL],
     ["Not received", PORTAL_MODEL],
     ["Reply, then resolve", PORTAL_MODEL],
+    ["Review it: the promised day passed", PORTAL_MODEL],
     ["Make a pay link", PORTAL_MODEL],
     ["Resolve", PORTAL_MODEL],
     ["Customer promised by", "src/lib/customer-portal/view.ts"],
@@ -1538,6 +1585,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
       "src/lib/hubspot/write-steps.ts",
     ],
     ["HubSpot connected without allowing Vestiarion to write. It still reads your deals.", HUBSPOT_PANEL],
+    ["Ask the deal's owner", COLLECTIONS_MODEL],
+    ["Open the deal in HubSpot", NEXT_ACTION],
     ["Collected", CRM_RECEIPTS, 'label: "Collected"'],
     ["Still owed", CRM_RECEIPTS, 'label: "Still owed"'],
     ["Collection status", CRM_RECEIPTS, 'label: "Collection status"'],
@@ -2185,6 +2234,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/evidence": 20,
   "guides/apply-payments": 20,
   "guides/customer-portal": 20,
+  "guides/collections": 20,
 };
 
 describe.each(Object.entries(QUOTED) as Array<[GuideSlug, Array<readonly [string, string, string?]>]>)("the %s guide", (slug, quoted) => {

@@ -103,6 +103,10 @@ import { todayOf, type CustomerRequest } from "@/lib/customer-portal/model";
 import { readCustomerRequests } from "@/lib/customer-portal/requests";
 import { customerNote, fromCustomerItems, statementLinkRows } from "@/lib/customer-portal/view";
 import { listMembers } from "@/lib/platform/members";
+import { CollectionsPanel } from "@/components/collections/CollectionsPanel";
+import { NextAction } from "@/components/collections/NextAction";
+import { readCollections, type CollectionsView } from "@/lib/collection-context/page";
+import { publicOrigin } from "@/lib/public-origin";
 
 export const dynamic = "force-dynamic";
 
@@ -340,6 +344,31 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       console.error("invoices: pay links not read", error instanceof Error ? error.message : error);
       return new Map<string, PayLinkState>();
     });
+    // Each receivable's next step from its customer's context, and the tab's Collections panel (collections context C8):
+    // on the Receivables tab, and for a receivable opened on any tab. Best effort: a read that fails leaves both out.
+    const receivableDetails = detailInvoices.filter((invoice) => invoice.direction === "receivable").map((invoice) => invoice.id);
+    const collections: CollectionsView | null =
+      view.tab === "receivables" || receivableDetails.length > 0
+        ? await readCollections({
+            orgName: access.membership.name,
+            network,
+            origin: publicOrigin(),
+            now: asOf,
+            invoices,
+            billingEmails: new Map(counterparties.map((counterparty) => [counterparty.id, counterparty.notice_email ?? null])),
+            owed: (invoice) => {
+              const allocation = allocations.get(invoice.id);
+              return { owed: stillOwed(invoice as InvoiceRow, book?.rows ?? []), received: allocation ? allocation.paid : 0 };
+            },
+            members: await listMembers(access.membership.orgId).catch(() => null),
+            focus: receivableDetails,
+            href: (invoiceId) => viewHref((path) => orgHref(slug, path), view, query.sort)({ open: invoiceId }),
+            linkStates: (ids) => (access.membership.mode === "live" ? payLinkStates(ids) : Promise.resolve(new Map<string, PayLinkState>())),
+          }).catch((error: unknown) => {
+            console.error("invoices: collections not read", error instanceof Error ? error.message : error);
+            return null;
+          })
+        : null;
     const dealContext = (decision: Decision) => {
       const link = dealLinks.get(decision.id);
       return link ? `Deal · ${link.title} · ${link.line}` : undefined;
@@ -380,6 +409,17 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     };
     // A receivable made from a deal line opens its deal, above its payments applied and its pay link.
     const receivableFooter = (decision: Decision) => {
+      const next = collections?.views.get(decision.id);
+      const rest = dealAndPayments(decision);
+      if (!next) return rest;
+      return (
+        <div className="space-y-4">
+          <NextAction orgSlug={slug} view={next} canWrite={canWrite} rulesAvailable={collections?.available ?? false} />
+          {rest && <div className="border-t border-line pt-4">{rest}</div>}
+        </div>
+      );
+    };
+    const dealAndPayments = (decision: Decision) => {
       const link = dealLinks.get(decision.id);
       const below = appliedAndPayLink(decision);
       if (!link) return below;
@@ -688,6 +728,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
           list: listOf("receivables"),
           above: (
             <>
+              {collections && <CollectionsPanel panel={collections.panel} available={collections.available} />}
               <FromCustomers orgSlug={slug} items={customerItems} canWrite={canWrite} />
               {/* Before migration 0103 runs, receivables show as before, and say applying payments waits for it (allocations L11). */}
               {book && !book.available && receivableRows.length > 0 && <p className="text-xs text-ink-3">Applying payments is not set up on this deployment yet.</p>}

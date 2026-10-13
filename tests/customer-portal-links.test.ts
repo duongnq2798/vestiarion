@@ -3,7 +3,8 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
 import { createPortalLink, listPortalLinks, PortalLinkError, stopPortalLink } from "@/lib/customer-portal/links";
-import { closeCustomerRequest, CustomerRequestError, readCustomerRequests, readReminderPauses, replyToCustomer } from "@/lib/customer-portal/requests";
+import { closeCustomerRequest, CustomerRequestError, readCustomerRequests, replyToCustomer } from "@/lib/customer-portal/requests";
+import { readSaid } from "@/lib/collection-context/read";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
 /**
@@ -167,9 +168,9 @@ describe("a customer's requests, in the workspace", () => {
     expect(fake.requests.find((request) => request.path === "/rest/v1/customer_requests")?.params.get("status")).toBe("eq.open");
   });
 
-  it("reads no pause before migration 0109 runs", async () => {
+  it("reads nothing said, so nothing holds the reminders, before migration 0109 runs", async () => {
     const { run } = workspace({ missing: true });
-    expect(await run(() => readReminderPauses(db(), [INVOICE], "2026-10-13"))).toEqual(new Map());
+    expect(await run(() => readSaid(db(), [INVOICE], "2026-07-15T00:00:00.000Z"))).toEqual(new Map());
   });
 
   it("replies under the request as the business, signed with the words' hash", async () => {

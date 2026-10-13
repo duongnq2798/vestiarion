@@ -56,6 +56,8 @@ const CRUD_UPDATE: Record<string, { column: string; expr: string }> = {
   shadow_modes: { column: "currency", expr: "'USD'" },
   // Claimed, marked sent, or released by deleting the claim (0108).
   approval_escalations: { column: "recipients", expr: "coalesce(recipients, 0) + 1" },
+  // An email claimed, marked sent, or released by deleting an unsent claim (0110).
+  notification_deliveries: { column: "provider_id", expr: "'changed'" },
 };
 
 /** The connector tables (0101): updated by their own workspace, never deleted by the tenant role. */
@@ -72,6 +74,8 @@ const KEEP_UPDATE: Record<string, { column: string; expr: string }> = {
   // A customer's statement link is stopped, and what the customer said is closed, never deleted (0109).
   customer_portal_links: { column: "revoked_at", expr: "now()" },
   customer_requests: { column: "outcome", expr: "'resolved'" },
+  // A collection task is resolved, never deleted (0110).
+  collection_tasks: { column: "notified_at", expr: "now()" },
 };
 
 beforeAll(async () => {
@@ -173,7 +177,7 @@ describe.each(TENANT_TABLES)("%s", (table) => {
   });
 
   it("cannot change or remove another organization's rows", async () => {
-    if (table === "ledger_entries" || table === "cycle_snapshots" || table === "service_purchases" || table === "decision_verdicts" || table === "payment_actuals" || table === "report_baselines" || table === "bank_statement_lines" || table === "receivable_allocations" || table === "deal_versions" || table === "customer_request_messages" || table === "approval_escalation_starts") {
+    if (table === "ledger_entries" || table === "cycle_snapshots" || table === "service_purchases" || table === "decision_verdicts" || table === "payment_actuals" || table === "report_baselines" || table === "bank_statement_lines" || table === "receivable_allocations" || table === "deal_versions" || table === "customer_request_messages" || table === "approval_escalation_starts" || table === "collection_policies") {
       // Append-only tables, and a workspace's escalation start (0108): the tenant role holds no UPDATE/DELETE privilege
       // at all, cross-org or not, so each statement is refused on its own —
       // the first failure would abort the transaction before the second ran.

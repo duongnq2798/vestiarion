@@ -3,13 +3,14 @@ import { currentOrgId } from "../context";
 import { db, type OrgDb } from "../dal";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { portalTableMissing } from "./links";
-import { CUSTOMER_PORTAL_ACTIONS, MESSAGE_MAX, reminderPause, type CloseOutcome, type CustomerRequest, type ReminderPause, type RequestKind, type RequestMessage, type RequestOutcome } from "./model";
+import { CUSTOMER_PORTAL_ACTIONS, MESSAGE_MAX, type CloseOutcome, type CustomerRequest, type RequestKind, type RequestMessage, type RequestOutcome } from "./model";
 
 /**
  * What customers said through their statement links, read and answered in the workspace in scope
- * (docs/superpowers/specs/2026-10-13-customer-portal-design.md P7, P8): the requests and their threads, a reply, a close,
- * and the pauses a promise or a dispute puts on the agent's reminders. Before migration 0109 runs, reads answer
- * `available: false` (or no pause) and writes refuse with `not_ready`.
+ * (docs/superpowers/specs/2026-10-13-customer-portal-design.md P7, P8): the requests and their threads, a reply and a
+ * close. What they hold of the agent's reminders is the collections stage's to read (`readSaid`,
+ * src/lib/collection-context/read.ts). Before migration 0109 runs, reads answer `available: false` and writes refuse with
+ * `not_ready`.
  */
 
 export const REQUEST_COLUMNS = "id, kind, invoice_id, counterparty_id, link_id, paid_on, reference, amount, promised_on, status, outcome, created_at, closed_at";
@@ -92,29 +93,6 @@ export async function readCustomerRequests(orgDb: OrgDb, filter: RequestFilter =
     byRequest.set(row.request_id, [...(byRequest.get(row.request_id) ?? []), { id: row.id, author: row.author, body: row.body, createdAt: row.created_at, by: row.by }]);
   }
   return { available: true, requests: rows.map((row) => toCustomerRequest(row, byRequest.get(row.id) ?? [])) };
-}
-
-/**
- * Whether each of these invoices' reminders wait on its customer (P7): an open dispute, or an open promise through its
- * day. Before migration 0109 runs, none do.
- */
-export async function readReminderPauses(orgDb: OrgDb, invoiceIds: readonly string[], today: string): Promise<Map<string, ReminderPause>> {
-  const pauses = new Map<string, ReminderPause>();
-  if (invoiceIds.length === 0) return pauses;
-  const read = await orgDb.from("customer_requests").select("invoice_id, kind, status, promised_on").in("invoice_id", [...invoiceIds]).eq("status", "open").in("kind", ["promise", "dispute"]);
-  if (read.error) {
-    if (portalTableMissing(read.error)) return pauses;
-    throw new Error(read.error.message);
-  }
-  const byInvoice = new Map<string, Array<{ kind: RequestKind; status: "open" | "closed"; promisedOn: string | null }>>();
-  for (const row of (read.data ?? []) as Array<{ invoice_id: string; kind: RequestKind; status: "open" | "closed"; promised_on: string | null }>) {
-    byInvoice.set(row.invoice_id, [...(byInvoice.get(row.invoice_id) ?? []), { kind: row.kind, status: row.status, promisedOn: row.promised_on }]);
-  }
-  for (const [invoiceId, requests] of byInvoice) {
-    const pause = reminderPause(requests, today);
-    if (pause) pauses.set(invoiceId, pause);
-  }
-  return pauses;
 }
 
 export type RequestErrorCode = "not_ready" | "not_found" | "closed" | "empty" | "too_long" | "outcome";

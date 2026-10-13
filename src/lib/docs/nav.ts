@@ -65,6 +65,7 @@ export const DOCS_NAV: NavSection[] = [
       { slug: "guides/apply-payments", title: "Apply money received to invoices", description: "One payment for several invoices, part payments, a few cents lost to a fee: apply each payment received on Arc to the right invoices, with the agent's suggestions, keep the rest as credit, and undo a mistake." },
       { slug: "guides/deals", title: "Turn a signed deal into a collection schedule", description: "Confirm a deal's schedule from a deposit, milestones, a retainer or your own lines, release each line as a receivable on its day, and change the deal later without rewriting what was invoiced or paid." },
       { slug: "guides/customer-portal", title: "Share a statement with a customer", description: "Send a customer a link to its own statement: it sees what it owes, pays on Arc, says it paid, promises a day or disputes an invoice, with no account or wallet, and you answer each from the Receivables tab." },
+      { slug: "guides/collections", title: "Chase what customers owe", description: "The next step for each receivable from what the customer said, paid and was promised: wait, ask the account owner, remind in the right tone or escalate to finance, with the reminder previewed and each customer's own rules." },
       { slug: "guides/get-paid", title: "Get paid as a freelancer", description: "For the person being paid: add your wallet address through the link a business sent, follow each step, and check the payment on Arc." },
     ],
   },

@@ -415,7 +415,7 @@ export function proposeNextAction(facts: ReceivableFacts, now: number): Proposal
     reasons.push({ code: "schedule", text: `The workspace's schedule sends reminder ${allowance.number} later: the agent decides again on ${dayWords(until)}.` });
     return result("wait", `Wait until ${dayWords(until)}`, { waitUntil: until, reminder });
   }
-  reasons.push({ code: "schedule", text: `The workspace's schedule sends reminder ${allowance.number} ${whenInWords(allowance.daysFromDue)}, ${toneWords(tone)}.` });
+  reasons.push({ code: "schedule", text: `The workspace's schedule sends reminder ${allowance.number} now, ${whenInWords(allowance.daysFromDue)}, ${toneWords(tone)}.` });
   if (policy.version > 0) reasons.push({ code: "policy", text: policyWords(policy, facts.customerName) });
 
   // Reminders off, or no link to carry: a person turns them on first; nobody is asked anything else.

@@ -1307,7 +1307,8 @@ workspace's mode for that action, never from a link, a key or a button. A
 `shareWorkspaceReport`, `stopSharingWorkspaceReport`, `answerReportBaseline`, `applyReceivedPayment`,
 `reverseAppliedPayment`, `addDeal`, `changeDeal`, `releaseDealLine`,
 `setDealAutoRelease`, `planCrmDeal`, `keepCrmChange`, `fillCrmEmail`, `setCrmReceiptWrites`, `overwriteCrmReceipt`,
-`shareCustomerStatement`, `stopCustomerStatement`, `replyToCustomerRequest`, `closeCustomerRequestCommand` — whose
+`shareCustomerStatement`, `stopCustomerStatement`, `replyToCustomerRequest`, `closeCustomerRequestCommand`,
+`setCollectionPolicy`, `resolveCollectionTaskCommand` — whose
 first statement is
 `gate(actor, "<command>")`:
 
@@ -1457,11 +1458,51 @@ the workspace, and a way to answer each open invoice, with no account and no wal
   (`src/lib/commands/customer-portal.ts`: `customer_portal.share`, `customer_portal.unshare`, `customer_request.reply`,
   `customer_request.close`) need `records.write`, from the console only; a reply and a close are signed
   `customer_request_replied` (with `textSha256`) and `customer_request_closed`. Each entry shows in the invoice's trail.
-- **Reminders.** The collections stage reads the open promises and disputes of the receivables it would remind
-  (`readReminderPauses`): an open dispute holds an invoice's reminders until it is closed, an open promise through its
-  day (`reminderPause`).
+- **Reminders.** The collections stage reads what the customers of its open receivables said (`readSaid`, open
+  requests and those closed in the last 90 days): an open dispute holds an invoice's reminders until it is closed, an
+  open claim of payment until it is closed, an open promise through its day, and a promise whose day passed until
+  finance reviews it (`reminderPause`; see Collections that follow the customer's context).
 - **Before 0109 runs** the lookups answer no link, the reads answer `available: false` (`PGRST205`, `42P01`), the
   commands refuse `not_ready`, the Receivables tab says statements are not set up, and reminders go as before.
+
+## Collections that follow the customer's context
+
+Each open receivable gets one next step from what is known about its customer
+(`src/lib/collection-context/`, migration 0110,
+`docs/superpowers/specs/2026-10-13-collections-context-design.md`):
+
+- **The proposal.** `proposeNextAction` (`model.ts`, pure) takes a receivable's facts (what is still owed and what
+  arrived, its reminders and their link, what its customer said on its statement, its customer's rules, the HubSpot
+  deal it was sold through, its tasks) and answers nothing, wait, ask the account owner, remind with a tone, or escalate
+  to finance, with the facts it rests on as sentences, the reminder it would send, and the task it needs. A dispute, an
+  open claim of payment, a promise not yet due and a person's hold wait; a broken promise escalates. The collections
+  stage and the Receivables tab call the same function (`page.ts` builds the tab's views from what the page read).
+- **Rules.** `collection_policies`: one row per version of a customer's rules (ask first or not, the strongest tone,
+  the days between reminders, 3 to 30, the channel, email only, and the account owner), the last plus one, never
+  changed, for a client only (triggers). `saveCollectionPolicy` (`write.ts`) writes the next version over the one the
+  person saw and signs `collection_policy_set`. `reminderAllowed` and `allowedTones` (`src/lib/collections.ts`) take
+  the spacing and the tone cap; code's own bounds stay the floor.
+- **Tasks.** `collection_tasks`: what the stage asks a person, once per receivable and subject (`subject_key`), with the
+  proposal it was opened for; a person resolves it once (approved with a tone and the reminder's number, held until a
+  day, no reminders, reminders resumed, done), and the stage closes one no longer needed as obsolete. Triggers keep a
+  task on a receivable of its customer, opened open, resolved once. `openTask`, `closeObsolete` and `notifyTasks`
+  (`tasks.ts`) are the stage's; `resolveCollectionTask` (`write.ts`) a person's, which first closes a broken promise
+  (`closeCustomerRequest`) or turns the invoice's reminders off (`setReminders`), then signs
+  `collection_task_resolved`. An approved reminder goes without the model, at its tone, while the rules' version is the
+  one it was approved under.
+- **HubSpot's owner.** `crm_deals.owner_external_id`, from the deal's `hubspot_owner_id` (read with
+  `crm.objects.deals.read`), written apart from the deal's facts so a sync before 0110 still writes them. A receivable
+  whose deal was planned from a HubSpot deal with an owner asks before its first overdue reminder.
+- **Each email once (I11).** `src/lib/notifications/deliveries.ts`: a key per kind, event, recipient (hashed) and rules'
+  version; `notification_deliveries` claims it before the send (unique per workspace and key), a trigger keeps a sent
+  row, and the same key goes to Resend as `Idempotency-Key` (`sendEmail`). `sendOnce` reads the opt-out again right
+  before the send (the receivable's reminders and its link, and the rules' version; a member's
+  `memberships.notify_email` and role) and releases the claim when it stops or the send fails.
+- **Commands.** `collection_policy.set` and `collection_task.resolve` (`src/lib/commands/collections.ts`) need
+  `records.write`, from the console only; `resolveCollectionTaskAction` raises `reminder_approved` for an approval or
+  reminders resumed.
+- **Before 0110 runs** rules and tasks read as none (`notThereYet`: `PGRST205`, `42P01`, `42703`, `PGRST204`),
+  deliveries are not recorded, the owner is left out, and the card says rules are not set up.
 
 ## The payment plan
 
@@ -1616,10 +1657,12 @@ workspaces; the ledger keeps the address with most of its name hidden.
   platform master key (`receivable_links.token_enc`). Each reminder is
   `ar_reminder_sent`, each wait `ar_reminder_deferred`. A part-paid receivable
   is reminded of what is still owed, saying what arrived (`partPaid` in the
-  entry), and one with nothing owed is not reminded (migration 0103). One whose
-  customer promised a day on its statement waits through that day, and one it
-  disputes waits until a person resolves it (`readReminderPauses`, migration
-  0109; see Customer statements).
+  entry), and one with nothing owed is not reminded (migration 0103). Each
+  receivable is first proposed a next step from its customer's context, and only
+  a proposed reminder is weighed (see Collections that follow the customer's
+  context, below). Each reminder carries an idempotency key, claimed in
+  `notification_deliveries` and sent to Resend, and its opt-out is read again
+  right before the send.
 `setNotifyEmailAction` (`src/app/actions/notifications.ts`) is gated on
 `workspace.read`, and writes only the row named by the session's own user id
 — a `userId` field in the form is never read.
