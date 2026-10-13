@@ -27,6 +27,8 @@ export const RULE_WORDS: Record<string, string> = {
   "bridge.fee_unavailable": "the cross-chain fee could not be read",
   "bridge.gateway_balance_short": "the Gateway balance was short",
   "bridge.unsupported_token": "that token cannot cross chains",
+  "obligation.duplicate_reference": "a bill and a milestone named the same purchase order or work",
+  "project.budget_exceeded": "its project's budget had no room left for it",
 };
 
 /** A rule in words, as a clause ("its purchase order or goods receipt was missing"), or null for one with none. */

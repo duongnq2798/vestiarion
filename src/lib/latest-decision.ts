@@ -70,6 +70,7 @@ const HELD_WORDS: Record<string, string> = {
   cash_shortfall: "The operating wallet was short of cash for it.",
   agent_paused: "The agent was paused.",
   outflow_budget: "It would have passed the workspace's spending limit.",
+  project_budget: "Its project's budget had no room left for it.",
 };
 
 /** Why a decision was held, by its `heldBecause` marker, as a sentence; null for a marker without words. */

@@ -41,6 +41,8 @@ export interface NewMenuProps {
   importWorkspace: ImportWorkspace;
   /** What New deal needs, where deals are set up; null hides Deal. */
   deal: { customers: Array<{ id: string; name: string }>; currencies: string[]; idempotencyKey: string; today: string } | null;
+  /** The workspace's active projects, for Bill to pay (project budgets P3); null before projects are set up. */
+  projects?: Array<{ id: string; name: string }> | null;
 }
 
 /** Where "Show it" goes after a save: the newest first, in the tab that lists it. */
@@ -65,7 +67,7 @@ const SAVED_WORDS: Record<NewKind, { text: string; link: string }> = {
  * first, and so does leaving the page. After a save it says what happened and where the new row is; it never says a bill
  * is paid or approved. `?new=<kind>` and the palette's `?add` open a form as the page arrives.
  */
-export function NewMenu({ orgSlug, counterparties, billCurrency, importWorkspace, deal }: NewMenuProps) {
+export function NewMenu({ orgSlug, counterparties, billCurrency, importWorkspace, deal, projects }: NewMenuProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [kind, setKind] = useState<NewKind | null>(null);
@@ -201,6 +203,7 @@ export function NewMenu({ orgSlug, counterparties, billCurrency, importWorkspace
                 billCurrency={billCurrency}
                 importWorkspace={importWorkspace}
                 deal={deal}
+                projects={projects}
                 onSaved={onSaved}
               />
             </div>
@@ -240,11 +243,12 @@ function NewForm({
   billCurrency,
   importWorkspace,
   deal,
+  projects,
   onSaved,
 }: Omit<NewMenuProps, "orgSlug"> & { kind: NewKind; orgSlug: string; onSaved: () => void }) {
   switch (kind) {
     case "bill":
-      return <InvoiceIntake orgSlug={orgSlug} counterparties={counterparties} billCurrency={billCurrency} initialDirection="payable" onAdded={onSaved} />;
+      return <InvoiceIntake orgSlug={orgSlug} counterparties={counterparties} billCurrency={billCurrency} initialDirection="payable" projects={projects} onAdded={onSaved} />;
     case "invoice":
       return <InvoiceIntake orgSlug={orgSlug} counterparties={counterparties} billCurrency={billCurrency} initialDirection="receivable" onAdded={onSaved} />;
     case "document":

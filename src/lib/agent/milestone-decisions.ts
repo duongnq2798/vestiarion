@@ -136,6 +136,8 @@ export type HeldReasonKind =
   | "outflow_budget"
   | "new_payee"
   | "two_approvals"
+  | "project_budget"
+  | "same_work"
   | "agent_held";
 
 export interface HeldReason {
@@ -191,6 +193,8 @@ const HINTS: Record<HeldReasonKind, string> = {
   outflow_budget: "Past the agent's spending limit",
   new_payee: "First payment to a new address",
   two_approvals: "Needs two approvals",
+  project_budget: "No room in its project's budget",
+  same_work: "Same work as a bill",
   agent_held: "The agent held it",
 };
 const usdc = (value: number) => `${value} USDC`;
@@ -324,6 +328,32 @@ function reasonOf(facts: HeldFacts): Omit<HeldReason, "hint"> {
     return {
       kind: "two_approvals",
       text: `Payments ${figure} need two approvals in this workspace. The first Pay now records an approval and sends nothing; another person's Pay now pays it.`,
+      link: null,
+      canPay: true,
+      canClose: true,
+      override: true,
+    };
+  }
+  // Its project's budget had no room (project budgets P5): an earmark in Vestiarion, so a person's Pay now pays it. Only
+  // that hold is decided again on its own (`heldBecause`, P6); one whose project could not be read, or is archived, waits.
+  if (detail.guardrailRule === "project.budget_exceeded") {
+    return {
+      kind: "project_budget",
+      text:
+        execution.heldBecause === "project_budget"
+          ? "Its project's budget had no room left to set it aside. Pay now pays it if it is owed anyway; or raise the project's budget, and the agent decides it again on its own."
+          : "Its project's budget could not be checked, or its project is archived, so nothing was set aside for it. Pay now pays it if it is owed anyway; or close it.",
+      link: { label: "Projects", path: "/projects" },
+      canPay: true,
+      canClose: true,
+      override: true,
+    };
+  }
+  // A bill names the same purchase order or delivered work (project budgets P9): the second of the two waits for a person.
+  if (detail.guardrailRule === "obligation.duplicate_reference") {
+    return {
+      kind: "same_work",
+      text: "An earlier bill names the same purchase order or delivered work, so paying both could pay the work twice. Pay now pays it if both are owed; or close it without paying.",
       link: null,
       canPay: true,
       canClose: true,

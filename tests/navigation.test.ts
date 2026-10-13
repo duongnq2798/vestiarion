@@ -37,7 +37,7 @@ describe("the workspace navigation", () => {
   it("groups the sections as people use them, Approvals beside Treasury", () => {
     expect(NAV_GROUPS.map((group) => [group.label, group.items.map((item) => item.key)])).toEqual([
       ["Home", ["treasury", "approvals"]],
-      ["Operations", ["invoices", "counterparties", "contractors"]],
+      ["Operations", ["invoices", "counterparties", "contractors", "projects"]],
       ["Controls", ["compliance", "audit"]],
       ["Analytics", ["insights", "report"]],
       ["Workspace", ["members", "settings"]],
@@ -104,6 +104,8 @@ describe("navItemForPathname — which section the current URL is in", () => {
   it.each([
     ["/o/acme/evidence/invoice/5f1e2d3c-0000-4000-8000-000000000001", "invoices", "/invoices"],
     ["/o/acme/evidence/milestone/5f1e2d3c-0000-4000-8000-000000000002", "contractors", "/contractors"],
+    // A project's page is part of Projects.
+    ["/o/acme/projects/5f1e2d3c-0000-4000-8000-000000000003", "projects", "/projects"],
   ])("%s → %s", (pathname, key, path) => {
     expect(navItemForPathname(pathname)?.key).toBe(key);
     expect(sectionPathOf(pathname)).toBe(path);

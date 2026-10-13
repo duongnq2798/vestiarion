@@ -3,6 +3,7 @@
 import { Plus } from "lucide-react";
 import { createMilestoneAction, type MilestoneActionResult } from "@/app/actions/milestones";
 import type { IntakeCounterparty } from "@/components/intake/InvoiceIntake";
+import { ProjectSelectField } from "@/components/projects/ProjectSelectField";
 import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { Input } from "@/components/ui/Input";
@@ -12,8 +13,11 @@ import { useActionForm } from "@/components/ui/useActionForm";
 
 const INITIAL: MilestoneActionResult = { ok: false, message: "" };
 
-/** One milestone, typed in. It waits as pending until its work is verified; the agent pays verified ones. */
-export default function MilestoneIntake({ contractors, orgSlug }: { contractors: IntakeCounterparty[]; orgSlug: string }) {
+/**
+ * One milestone, typed in. It waits as pending until its work is verified; the agent pays verified ones. With projects set
+ * up (`projects` not null), it takes the purchase order the work was agreed under, and a project to set its money aside in.
+ */
+export default function MilestoneIntake({ contractors, orgSlug, projects }: { contractors: IntakeCounterparty[]; orgSlug: string; projects?: Array<{ id: string; name: string }> | null }) {
   const { state, formProps } = useActionForm(createMilestoneAction, INITIAL, { resetOnSuccess: true, toastOnSuccess: true });
   const none = contractors.length === 0;
 
@@ -50,6 +54,12 @@ export default function MilestoneIntake({ contractors, orgSlug }: { contractors:
         >
           <Input name="evidence" type="url" maxLength={500} placeholder="https://github.com/your-org/your-repo/pull/42" />
         </Field>
+        {projects && (
+          <Field id="milestone-po" label="PO reference" optional description="A bill for the same purchase order waits for a person, so the work is not paid twice.">
+            <Input name="poReference" maxLength={100} placeholder="PO-100" />
+          </Field>
+        )}
+        <ProjectSelectField projects={projects} id="milestone-project" />
       </div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <FormMessage tone="error">{state.ok ? null : state.message}</FormMessage>

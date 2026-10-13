@@ -12,12 +12,15 @@ import { milestoneInputSchema } from "@/lib/intake-validation";
 import { appendLedgerEntry } from "@/lib/ledger";
 import { consoleActor } from "@/lib/commands/actor";
 import { addMilestone, closeMilestoneUnpaid, payMilestoneNow } from "@/lib/commands/milestones";
+import { assignToProjectCommand } from "@/lib/commands/projects";
 import { consoleAnswer } from "./command-result";
 
 export interface MilestoneActionResult {
   ok: boolean;
   message: string;
 }
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function formString(formData: FormData, key: string): string {
   const value = formData.get(key);
@@ -42,7 +45,15 @@ export async function createMilestoneAction(
       evidence: formString(formData, "evidence"),
     });
     if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid milestone input." };
-    return consoleAnswer(await addMilestone(consoleActor(auth), { milestone: parsed.data }));
+    // The purchase order the work was agreed under, and the project it belongs to (project budgets P3, P9): the console's
+    // own fields, read here, never the write API's.
+    const poReference = formString(formData, "poReference").trim().slice(0, 100) || null;
+    const projectId = formString(formData, "projectId").trim();
+    const actor = consoleActor(auth);
+    const added = await addMilestone(actor, { milestone: parsed.data, poReference });
+    if (!added.ok || !UUID.test(projectId)) return consoleAnswer(added);
+    const placed = await assignToProjectCommand(actor, { subject: { kind: "milestone", id: added.milestoneId }, projectId, atEntry: true });
+    return consoleAnswer({ ...added, message: placed.ok ? `${added.message} ${placed.message}` : `${added.message} It was not put in the project: ${placed.message}` });
   });
 }
 

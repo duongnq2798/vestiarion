@@ -103,6 +103,7 @@ import { todayOf, type CustomerRequest } from "@/lib/customer-portal/model";
 import { readCustomerRequests } from "@/lib/customer-portal/requests";
 import { customerNote, fromCustomerItems, statementLinkRows } from "@/lib/customer-portal/view";
 import { listMembers } from "@/lib/platform/members";
+import { readProjectOptions } from "@/lib/projects/read";
 
 export const dynamic = "force-dynamic";
 
@@ -319,6 +320,9 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     const settlements = settlementsByBill({ payments: payments.values(), invoices: detailInvoices.filter((invoice) => invoice.direction === "payable"), entries, entriesComplete: !ledgerReadMayBeCut(entries), now: asOf });
     const decisionOf = (invoice: InvoiceRow) => invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), entries, { network, deciding, verdicts, settlements, asOf, allocations });
     const shownDecisions = new Map(detailInvoices.map((invoice) => [invoice.id, decisionOf(invoice)]));
+
+    // The projects a new bill may go in (project budgets P3): for New ▾'s Bill to pay. Best effort: none on failure.
+    const projectOptions = canWrite ? await readProjectOptions() : null;
 
     // A paid payable with a transaction on chain offers its receipt to an owner or admin (payment receipts P6).
     const shareable = canWrite
@@ -767,6 +771,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
                     billCurrency={billCurrencyOf(verdicts.shadow)}
                     importWorkspace={{ shadowOn: verdicts.shadow !== null, shadowCurrency: billCurrencyOf(verdicts.shadow) ?? null, network }}
                     deal={Array.isArray(deals) ? { customers, currencies: dealCurrencies, idempotencyKey: randomUUID(), today } : null}
+                    projects={projectOptions}
                   />
                 ) : (
                   <p className="max-w-56 text-xs text-ink-3">Only an owner or admin of this workspace can add or import invoices.</p>

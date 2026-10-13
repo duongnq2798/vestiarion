@@ -74,6 +74,12 @@ export const COMMAND_PERMISSIONS = {
   "customer_portal.unshare": "records.write",
   "customer_request.reply": "receivables.reconcile",
   "customer_request.close": "receivables.reconcile",
+  // A project's budget and buffer are a control on what the agent sets aside, an owner's or admin's as the agent's
+  // spending limit is; putting a bill, a milestone or a deal in a project is a record, entered as an invoice is
+  // (project budgets P1-P3).
+  "project.create": "agent.budget",
+  "project.change": "agent.budget",
+  "project.assign": "records.write",
 } as const satisfies Record<string, Permission>;
 
 export type CommandName = keyof typeof COMMAND_PERMISSIONS;

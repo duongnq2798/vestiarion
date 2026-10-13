@@ -167,6 +167,7 @@ flowchart LR
 | **Two approvals** | Above a figure the owner sets, a payment needs two different people. Arc mainnet workspaces start at 100 USDC, and the owner can raise it but not turn it off there |
 | **Maker and checker** | Roles are owner, admin, approver and viewer. No one approves an invoice they created; only Compliance clears a high-risk counterparty |
 | **Agent spending limit** | A daily and a 7-day figure, checked in code and, where enforced, by the contract. Arc mainnet workspaces start at 50 USDC a day and 150 USDC in 7 days |
+| **Project budgets** | A bill or milestone in a project has its money set aside in the project's budget, under a database lock, before the agent pays or schedules it; one the budget cannot cover waits for a person. An earmark in Vestiarion, never money locked on chain. A bill and a milestone for the same purchase order or delivered work are one obligation: the second waits for a person |
 | **Try a limit first** | A new payment limit, two-approvals figure or spending limit can be tried on the agent's past 30 or 90 days of decisions: the code's checks replayed on what each recorded, in order, with no model call. Applying it is the setting's own change, refused if the setting moved since, and its signed entry records the replay |
 | **Exactly once** | A database claim makes one decision exclusive; an idempotency key keyed on the invoice keeps a payment from leaving twice; the contract refuses a repeated `ref` |
 | **Stop switches** | Anyone who can approve can pause the agent for the workspace; an owner's wallet can stop the contract; an operator can stop every payment on every deployment within 10 seconds |
@@ -246,6 +247,9 @@ run in production, with its ledger entries and transactions.
 - **Deals** — a signed deal (a deposit and the balance, milestones, a retainer or custom lines) as a schedule that adds
   up to its total exactly; each line released as a receivable on its day, by a person or the agent; a price change or
   a cancel is a signed new version that never rewrites what was invoiced or paid.
+- **Projects** — a budget and a buffer in USDC for each job, client or launch; its bills, milestones and deals, what
+  is set aside, paid and still available, what its deals collected, and its days in the payment plan. The agent never
+  sets aside the same money twice, and holds what a budget cannot cover for a person.
 - **Treasury** — safe-to-spend today, cash outlook, USYC reserve with **Bring cash back** (Arc testnet).
 - **Cross-currency and cross-chain** — EURC invoices and swaps, CCTP and Gateway payouts (Arc testnet).
 - **Shadow mode** — try the agent on real bills, paid in the business's own way, before it pays anything itself.
@@ -379,7 +383,7 @@ What each one is for, the wallets around them, and the USDC of the chains payees
 | | |
 | --- | --- |
 | **Start** | [See your first decision](https://www.vestiarion.xyz/docs/guides/try-it) · [How payments are controlled](https://www.vestiarion.xyz/docs/guides/controls) · [Go live](https://www.vestiarion.xyz/docs/guides/go-live) · [Your first payment](https://www.vestiarion.xyz/docs/guides/first-payment) · [Shadow mode](https://www.vestiarion.xyz/docs/guides/shadow-mode) |
-| **Guides** | [Payment plan](https://www.vestiarion.xyz/docs/guides/payment-plan) · [Where a payment is](https://www.vestiarion.xyz/docs/guides/where-a-payment-is) · [Workspace report](https://www.vestiarion.xyz/docs/guides/report) · [Try a limit first](https://www.vestiarion.xyz/docs/guides/try-a-rule) · [Pay a contractor](https://www.vestiarion.xyz/docs/guides/pay-a-contractor) · [Get paid](https://www.vestiarion.xyz/docs/guides/get-paid) · [Why a payment was paid](https://www.vestiarion.xyz/docs/guides/evidence) · [Cash scenarios](https://www.vestiarion.xyz/docs/guides/cash-scenarios) · [Deals](https://www.vestiarion.xyz/docs/guides/deals) · [Audit export](https://www.vestiarion.xyz/docs/guides/audit-export) |
+| **Guides** | [Payment plan](https://www.vestiarion.xyz/docs/guides/payment-plan) · [Where a payment is](https://www.vestiarion.xyz/docs/guides/where-a-payment-is) · [Workspace report](https://www.vestiarion.xyz/docs/guides/report) · [Try a limit first](https://www.vestiarion.xyz/docs/guides/try-a-rule) · [Pay a contractor](https://www.vestiarion.xyz/docs/guides/pay-a-contractor) · [Get paid](https://www.vestiarion.xyz/docs/guides/get-paid) · [Why a payment was paid](https://www.vestiarion.xyz/docs/guides/evidence) · [Cash scenarios](https://www.vestiarion.xyz/docs/guides/cash-scenarios) · [Deals](https://www.vestiarion.xyz/docs/guides/deals) · [Projects](https://www.vestiarion.xyz/docs/guides/projects) · [Audit export](https://www.vestiarion.xyz/docs/guides/audit-export) |
 | **Developers** | [Quickstart](https://www.vestiarion.xyz/docs/get-started/quickstart) · [API reference](https://www.vestiarion.xyz/docs/api) · [SDK](https://www.vestiarion.xyz/docs/get-started/sdk) · [Webhooks](https://www.vestiarion.xyz/docs/webhooks) · [MCP](https://www.vestiarion.xyz/docs/ai-integration/mcp) · [Changelog](https://www.vestiarion.xyz/docs/changelog) |
 | **This repository** | [ARCHITECTURE.md](ARCHITECTURE.md) · [Running it yourself](docs/self-hosting.md) · [Feature designs](docs/superpowers/specs) · [Contracts](contracts) · [SDK source](sdk) · [Changelog](CHANGELOG.md) · [Releasing](docs/RELEASING.md) |
 

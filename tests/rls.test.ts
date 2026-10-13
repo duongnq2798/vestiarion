@@ -72,6 +72,9 @@ const KEEP_UPDATE: Record<string, { column: string; expr: string }> = {
   // A customer's statement link is stopped, and what the customer said is closed, never deleted (0109).
   customer_portal_links: { column: "revoked_at", expr: "now()" },
   customer_requests: { column: "outcome", expr: "'resolved'" },
+  // Projects are changed and archived, never deleted; a reservation is only released (0111).
+  projects: { column: "name", expr: "name || '-changed'" },
+  project_reservations: { column: "release_reason", expr: "'changed'" },
 };
 
 beforeAll(async () => {

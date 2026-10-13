@@ -17,6 +17,7 @@ import { BRIDGE_FEE_CAP_PERCENT, chainById, homeChain, paidAcrossChains } from "
 import { networkProfile, type Network } from "@/lib/network";
 import { SWAP_COST_CAP_PERCENT } from "@/lib/fx/swap-limits";
 import { TWO_APPROVALS_RULE } from "@/lib/two-approvals";
+import { PROJECT_BUDGET_RULE } from "@/lib/agent/obligation-checks";
 
 /**
  * Renders the duplicate-billing check as evidence in its own right — including
@@ -463,11 +464,41 @@ const RULE_REASONS: Readonly<Record<string, string>> = {
   "invoice.match_incomplete": "the three-way match is not complete",
   "invoice.duplicate_of_settled": "it repeats an invoice already paid, being paid or scheduled",
   "counterparty.client_payable": "the counterparty is a client: it pays this business",
+  "obligation.duplicate_reference": "a bill and a milestone name the same purchase order or delivered work, and this one came second",
 };
+
+/**
+ * The band for a payment held for its project's budget (project budgets P5): what it needed against what the project had
+ * left to set aside, from the figures its entry recorded. A project whose budget could not be read, or that was
+ * archived, names the reason instead.
+ */
+function projectGuardrail(amount: number, detail: Record<string, unknown> | undefined): Guardrail {
+  const project = record(record(detail?.observed)?.project);
+  const needed = numberValue(project?.neededMinor);
+  const available = numberValue(project?.availableMinor);
+  const name = stringValue(project?.name);
+  if (project?.state === "over" && needed !== undefined && available !== undefined) {
+    const buffer = numberValue(project.bufferMinor) ?? 0;
+    return {
+      rule: PROJECT_BUDGET_RULE,
+      attempted: needed / 100,
+      attemptedToken: "USDC",
+      limit: Math.max(0, available) / 100,
+      limitToken: "USDC",
+      note: `left to set aside in project ${name ? `"${name}"` : "its project"}${buffer > 0 ? `, after its ${fmt(buffer / 100)} USDC buffer` : ""}`,
+    };
+  }
+  return {
+    rule: PROJECT_BUDGET_RULE,
+    attempted: amount,
+    reason: project?.state === "archived" ? "its project is archived, so nothing more is set aside in it" : "its project's budget could not be checked",
+  };
+}
 
 /** The band for a rule that is not a limit, or for the figure above which two people approve; null for any other rule. */
 function ruleGuardrail(recorded: string | undefined, amount: number, usdcValue: number | null, detail: Record<string, unknown> | undefined): Guardrail | null {
   if (!recorded) return null;
+  if (recorded === PROJECT_BUDGET_RULE) return projectGuardrail(amount, detail);
   const reason = RULE_REASONS[recorded];
   if (reason) return { rule: recorded, attempted: amount, reason };
   if (recorded === TWO_APPROVALS_RULE) {

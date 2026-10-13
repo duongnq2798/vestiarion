@@ -106,6 +106,7 @@ export const TENANT_TABLES = [
   "deals", "deal_versions", "deal_lines", "deal_costs", "approval_escalations", "approval_escalation_starts",
   "crm_deals", "crm_receipt_writes",
   "customer_portal_links", "customer_requests", "customer_request_messages",
+  "projects", "project_reservations",
   "usage_events",
 ] as const;
 
@@ -295,6 +296,17 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     [orgId, portalLinkId, customerId, customerInvoiceId]
   );
   await db.query("insert into customer_request_messages (org_id, request_id, body) values ($1, $2, 'We are checking.')", [orgId, customerRequestId]);
+  // A project, a payable put in it, and the money set aside for that payable (0111).
+  const projectId = await one(
+    "insert into projects (org_id, name, budget_minor, idempotency_key) values ($1, $2, 100000, $3) returning id",
+    [orgId, `project-${tag}`, `project-key-${tag}`]
+  );
+  const projectVendorId = await one("insert into counterparties (org_id, name, role) values ($1, $2, 'vendor') returning id", [orgId, `project-vendor-${tag}`]);
+  const projectBillId = await one(
+    "insert into invoices (org_id, direction, counterparty_id, amount, due_date, project_id) values ($1, 'payable', $2, 5, now(), $3) returning id",
+    [orgId, projectVendorId, projectId]
+  );
+  await db.query("select public.reserve_project_budget($1, $2, null, 'entry', null)", [orgId, projectBillId]);
   // What the workspace used: a model call for a decision, with its tokens and cost (0112).
   await db.query(
     "insert into usage_events (org_id, kind, action, provider, model, input_tokens, output_tokens, cost, cost_currency) values ($1, 'model_call', 'decision', 'anthropic', 'claude-test', 100, 20, 0.0006, 'USD')",

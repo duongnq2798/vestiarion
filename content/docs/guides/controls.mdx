@@ -25,6 +25,10 @@ These checks run on every payment the agent would make, in [`src/lib/agent/guard
 | Where payments are real, it is the first payment to a new address and only one person stands behind that address | Held for a second person. |
 | It would pass the agent's spending limit | Held until the limit has room again. |
 | It is above the figure where two people approve | Held for two approvals. |
+| It names the same purchase order, or the same delivered work, as an earlier milestone or bill | Held for a person, who pays it if both are owed. |
+| Its project's budget, less the project's buffer, has no room left for it | Held for a person, and decided again once the project has room. |
+
+The last two run after every other check, and only ever hold: a payment another check stopped is left as it was.
 
 Payments in EURC and to payees on other chains have checks of their own, such as a cap on the swap's or the transfer's cost.
 
@@ -32,6 +36,7 @@ Payments in EURC and to payees on other chains have checks of their own, such as
 
 - **Each payee's limit.** Every vendor and contractor has a **Payment limit (USDC)**: the most the agent pays it on one bill without a person. Screening sets how much of it applies: all of it for a payee screened clear, a quarter for medium risk, and none for high risk. See [Changing a payment limit](/docs/guides/first-payment#changing-a-payment-limit).
 - **The agent's spending limit.** On the console, the **Agent spending limit** caps what the agent pays on its own per day and per 7 days. A payment that would pass it waits, and is decided again when the limit has room. A payment a person approves is neither stopped by it nor counted against it. On Arc mainnet a workspace always keeps a figure, starting at 50 USDC a day and 150 USDC in 7 days. See [Cap what the agent pays on its own](/docs/guides/first-payment#cap-what-the-agent-pays-on-its-own).
+- **A project's budget.** A bill or milestone in a project has its money set aside in the project's budget before the agent pays or schedules it, one decision at a time, so two never spend the same budget. One the budget cannot cover waits for a person. A project's budget is an earmark in Vestiarion, never money locked on chain, and a person's approval is not held by it. See [Give each project its own budget](/docs/guides/projects).
 - **A limit enforced on Arc.** The spending limit is checked in Vestiarion's code. On Arc testnet, **Enforce on Arc** also puts it in a contract the agent's payments must go through, which refuses anything past it. On Arc mainnet, a treasury in a wallet you hold pays the agent only through a contract your wallet deploys, within the daily and 7-day figures you set in it. See [Enforce the limit on Arc](/docs/guides/first-payment#enforce-the-limit-on-arc) and [Path C: your own wallet](/docs/guides/go-live#path-c-your-own-wallet).
 
 ## People
