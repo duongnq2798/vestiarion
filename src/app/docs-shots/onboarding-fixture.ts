@@ -70,14 +70,17 @@ const entry = (seq: number, ts: string, actor: string, domain: string, action: s
   signing_key_id: null,
 });
 
-/** What the evidence page's check said of each given link: the private pull request, and the comment that opens. */
+/**
+ * What the evidence page's check said of each given link: the pull request, in a private repository the workspace's GitHub
+ * connection does not reach, and the comment that opens.
+ */
 export const LINK_CHECKS: ReadonlyMap<string, LinkAccess> = new Map<string, LinkAccess>([
-  [PRIVATE_PR, { state: "cannot_open", reason: LINK_WORDS.private }],
+  [PRIVATE_PR, { state: "cannot_open", reason: LINK_WORDS.notPublic }],
   [BOUNTY_COMMENT, { state: "open" }],
   [HAND_LINK, { state: "not_checked", reason: NOT_CHECKED_WORDS.host }],
 ]);
 
-/** A milestone a bounty attached on GitHub, its pull request merged in the studio's private repository. */
+/** A milestone a bounty attached on GitHub, its pull request merged in a private repository the workspace's connection does not reach. */
 export function privateMilestoneChain(): EvidenceChain {
   const entries = [
     entry(80, "2026-10-12T09:00:00Z", "human", "compliance", "create_counterparty", "Added Lina Park as a contractor", { by: LINA, counterpartyId: CONTRACTOR, address: PAYEE }),

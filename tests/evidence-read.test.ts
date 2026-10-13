@@ -354,13 +354,20 @@ describe("a given link's access, checked before the page says it is verified (ev
     expect(delivered(read).facts[0].link).toMatchObject({ href: PR, state: "checked" });
   });
 
-  it("never counts one in a private repository as verified, and says why its link can't be opened", async () => {
+  it("keeps one in the workspace's own private repository verified, read through its own GitHub connection", async () => {
     const read = await database({ milestone: merged, intent: null, targets: [] }).run(() =>
       readEvidence("milestone", MILESTONE, { links: links(github(true), "installation-token") })
     );
     const step = delivered(read);
+    expect(step.kind).toBe("verified");
+    expect(step.facts[0]).toMatchObject({ kind: "verified", link: { href: PR, state: "checked" } });
+  });
+
+  it("never counts one in a private repository the workspace's connection does not reach as verified, and says why", async () => {
+    const read = await database({ milestone: merged, intent: null, targets: [] }).run(() => readEvidence("milestone", MILESTONE, { links: links(github(true)) }));
+    const step = delivered(read);
     expect(step.kind).toBe("unreachable");
-    expect(step.facts[0].link).toMatchObject({ state: "cannot_open", reason: LINK_WORDS.private });
+    expect(step.facts[0].link).toMatchObject({ state: "cannot_open", reason: LINK_WORDS.notPublic });
     expect(step.facts[0].notes).toContain("Its link can't be opened, so it is not counted as verified.");
     expect(step.facts.some((fact) => fact.kind === "verified")).toBe(false);
   });

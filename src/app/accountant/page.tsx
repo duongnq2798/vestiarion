@@ -4,6 +4,7 @@ import { dismissChecklistAction } from "@/app/actions/onboarding";
 import { AccountantConsole } from "@/components/accountant/AccountantConsole";
 import { DocsLink } from "@/components/DocsLink";
 import { AccountMenu } from "@/components/vx/AccountMenu";
+import { ChecklistVisit } from "@/components/vx/ChecklistVisit";
 import { GettingStarted } from "@/components/vx/GettingStarted";
 import { SiteFooter, SiteHeader, SiteHeaderLink } from "@/components/vx/SiteChrome";
 import { readPortfolio } from "@/lib/accountant/read";
@@ -23,8 +24,9 @@ export const metadata: Metadata = { title: "Accountant console", robots: { index
  * own scope, as this person (`readPortfolio`). A workspace someone was removed from is gone on the next load.
  *
  * Someone who keeps the books of a workspace (the accountant role) also sees their checklist here, where an invitation
- * lands them (onboarding by role R3, R6): this page open is its first step, read and recorded in each such workspace as
- * them. "Don't show again" records the dismissal in the workspace its steps open, and it stays dismissed here.
+ * lands them (onboarding by role R3, R6): this page open is its first step, read in each such workspace as them, and
+ * recorded there once the page is in the browser (`ChecklistVisit`), never while it renders. "Don't show again" records
+ * the dismissal in the workspace its steps open, and it stays dismissed here.
  */
 export default async function AccountantPage({ searchParams }: { searchParams: Promise<{ kind?: string | string[]; workspace?: string | string[]; mine?: string | string[] }> }) {
   const user = await verifySession("/accountant");
@@ -59,6 +61,7 @@ export default async function AccountantPage({ searchParams }: { searchParams: P
             dismiss={onboarding.canDismiss ? dismissChecklistAction : undefined}
           />
         )}
+        {onboarding && onboarding.unrecorded.length > 0 && <ChecklistVisit page="accountant" slugs={onboarding.unrecorded} queue={filter.workspace} />}
         <AccountantConsole portfolio={portfolio} now={now} filter={filter} />
         <p className="mt-10 text-xs text-ink-3">
           Only workspaces you are a member of are listed, read with your role in each. To be added to another, ask its owner or an admin to invite you

@@ -25,8 +25,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   these limits**.
 
 - **Evidence links people can actually open.** Before the evidence page says a pull request is verified, or offers a
-  link someone gave, Vestiarion checks that it can be opened. One that can't (deleted, in a private repository, access
-  refused, a signed link expired) is named with the reason and never offered, and is never counted as verified.
+  link someone gave, Vestiarion checks that it can be opened. One that can't (deleted, in a private repository your
+  workspace's GitHub connection does not reach, access refused, a signed link expired) is named with the reason and
+  never offered, and is never counted as verified. A pull request in your own private repository, read through your
+  workspace's GitHub connection, stays verified.
   Vestiarion checks links on GitHub and on its own file storage only, through GitHub's API and the link's own signature,
   and never opens any other site from its server: such a link is shown as given, marked **Not checked by Vestiarion**.
   Milestone cards on Contractors say the same. Answers are kept a few minutes at most.

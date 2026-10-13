@@ -99,6 +99,66 @@ describe("checkTargetOf: never requested (SSRF)", () => {
   });
 });
 
+describe("checkTargetOf: every other way to name a host (SSRF)", () => {
+  it.each([
+    // IPv6, IPv4 inside IPv6, unique-local, link-local, unspecified, documentation, and a public one.
+    ["https://[::ffff:127.0.0.1]/acme/app/pull/1", "address"],
+    ["https://[::ffff:7f00:1]/acme/app/pull/1", "address"],
+    ["https://[0:0:0:0:0:ffff:a9fe:a9fe]/latest/meta-data/", "address"],
+    ["https://[::1]/acme/app/pull/1", "address"],
+    ["https://[fc00::1]/", "address"],
+    ["https://[fe80::1]/", "address"],
+    ["https://[::]/", "address"],
+    ["https://[2001:db8::1]/", "address"],
+    ["https://[2606:4700::1111]/acme/app/pull/1", "address"],
+    ["https://[fe80::1%25eth0]/", "invalid"],
+    // IPv4 in decimal, octal, hex and short forms: the parser turns each into a dotted address.
+    ["https://2130706433/acme/app/pull/1", "address"],
+    ["https://0177.0.0.1/acme/app/pull/1", "address"],
+    ["https://0x7f000001/acme/app/pull/1", "address"],
+    ["https://0x7f.0x0.0x0.0x1/", "address"],
+    ["https://127.1/", "address"],
+    ["https://0/", "address"],
+    ["https://169.254.169.254./latest/meta-data/", "address"],
+    // Trailing dots, look-alikes and suffix tricks.
+    ["https://github.com./acme/app/pull/1", "host"],
+    ["https://api.github.com./repos/acme/app/pulls/1", "host"],
+    ["https://localhost./", "host"],
+    ["https://gіthub.com/acme/app/pull/1", "host"],
+    ["https://github.co/acme/app/pull/1", "host"],
+    ["https://github.com。evil.example/acme/app/pull/1", "host"],
+    ["https://github.com%2eevil.example/acme/app/pull/1", "host"],
+    ["https://api.github.com.evil.example/repos/acme/app/pulls/1", "host"],
+    ["https://evil.example#@github.com/acme/app/pull/1", "host"],
+    // A user name or password in any form.
+    ["https://api.github.com@evil.example/repos/acme/app/pulls/1", "credentials"],
+    ["https://github.com@evil.example/acme/app/pull/1", "credentials"],
+    ["https://github.com:@evil.example/acme/app/pull/1", "credentials"],
+    ["https://github.com%40evil.example@evil.example/acme/app/pull/1", "credentials"],
+    // A backslash is a path separator: the host stays github.com, and the path is not a pull request's.
+    ["https://github.com\\@evil.example/acme/app/pull/1", "path"],
+  ])("%s → %s, never requested", (raw, reason) => {
+    expect(checkTargetOf(raw, { storageHost: STORAGE })).toEqual({ notChecked: reason });
+  });
+
+  it("asks GitHub's API only, whatever spelling of github.com the parser normalises", () => {
+    for (const raw of ["https://ＧＩＴＨＵＢ.com/acme/app/pull/1", "https://%67ithub.com/acme/app/pull/1", "https://github.com:443/acme/app/pull/1", "HTTPS://GitHub.com/acme/app/pull/1"]) {
+      const decided = checkTargetOf(raw);
+      expect("target" in decided && decided.target.request, raw).toBe("https://api.github.com/repos/acme/app/pulls/1");
+    }
+  });
+
+  it("never climbs out of a signed storage path to the rest of the workspace's Supabase", () => {
+    for (const path of [
+      "/storage/v1/object/sign/../../../rest/v1/orgs",
+      "/storage/v1/object/sign/evidence/%2e%2e/%2e%2e/%2e%2e/%2e%2e/rest/v1/orgs",
+      "/storage/v1/object/sign/%2E%2E/%2E%2E/auth/v1/admin/users",
+    ]) {
+      expect(checkTargetOf(`https://${STORAGE}${path}?token=${token(1)}`, { storageHost: STORAGE }), path).toEqual({ notChecked: "path" });
+    }
+  });
+});
+
 describe("storageHostOf", () => {
   it("takes the workspace's Supabase host only when it is an https public name", () => {
     expect(storageHostOf(`https://${STORAGE}`)).toBe(STORAGE);

@@ -57,7 +57,7 @@ describe("/docs-shots/onboarding/<state>", () => {
     vi.stubEnv("DOCS_SCREENSHOTS", "1");
     const markup = await render("evidence");
     expect(markup).not.toContain('href="https://github.com/northstar-studio/brand-site/pull/58"');
-    expect(text(markup)).toContain("Can't be opened: It is in a private repository on GitHub");
+    expect(text(markup)).toContain("Can't be opened: GitHub does not show it publicly");
     expect(text(markup)).toContain("merged PR, can't be opened");
     expect(text(markup)).toContain("drive.example.test, not checked");
   });

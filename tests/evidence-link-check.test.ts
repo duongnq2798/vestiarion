@@ -57,12 +57,23 @@ describe("checkEvidenceLinks: GitHub", () => {
     expect((await checkEvidenceLinks([PR], options({ fetch: fetchImpl }))).get(PR)).toEqual({ state: "cannot_open", reason: LINK_WORDS.notPublic });
   });
 
-  it("says a pull request in the workspace's private repository can't be opened by everyone, and why", async () => {
+  it("opens a pull request in the workspace's own private repository, read through its own GitHub connection", async () => {
     const { calls, fetchImpl } = github({ [PR_API]: pull(true) });
     const access = await checkEvidenceLinks([PR], options({ fetch: fetchImpl, tokenFor: async () => "installation-token" }));
-    expect(access.get(PR)).toEqual({ state: "cannot_open", reason: LINK_WORDS.private });
+    // Its people open it on GitHub: a merged pull request in it stays verified, as before any check.
+    expect(access.get(PR)).toEqual({ state: "open" });
     // The workspace's own connection, not the deployment's token.
     expect((calls[0].init.headers as Record<string, string>).Authorization).toBe("Bearer installation-token");
+  });
+
+  it("opens a comment in the workspace's own private repository, asking its repository first", async () => {
+    const comment = `${PR}#issuecomment-987654`;
+    const { calls, fetchImpl } = github({
+      "https://api.github.com/repos/acme/app": json({ private: true }),
+      "https://api.github.com/repos/acme/app/issues/comments/987654": json({ id: 987654 }),
+    });
+    expect((await checkEvidenceLinks([comment], options({ fetch: fetchImpl, tokenFor: async () => "installation-token" }))).get(comment)).toEqual({ state: "open" });
+    expect(calls.map((call) => call.url)).toEqual(["https://api.github.com/repos/acme/app", "https://api.github.com/repos/acme/app/issues/comments/987654"]);
   });
 
   it("never says what only the deployment's token can see: a private repository it reads is not public, as a deleted one", async () => {
@@ -72,8 +83,11 @@ describe("checkEvidenceLinks: GitHub", () => {
     expect((calls[0].init.headers as Record<string, string>).Authorization).toBe("Bearer deployment-token");
   });
 
-  it("says GitHub refused access, and that the workspace's connection no longer reaches a repository it cannot find", async () => {
-    expect((await checkEvidenceLinks([PR], options({ fetch: github({ [PR_API]: json({}, 403) }).fetchImpl }))).get(PR)).toEqual({ state: "cannot_open", reason: LINK_WORDS.refused });
+  it("says GitHub refused the workspace's connection, and that the connection no longer reaches a repository it cannot find", async () => {
+    expect((await checkEvidenceLinks([PR], options({ fetch: github({ [PR_API]: json({}, 403) }).fetchImpl, tokenFor: async () => "installation-token" }))).get(PR)).toEqual({
+      state: "cannot_open",
+      reason: LINK_WORDS.refused,
+    });
     forgetLinkChecks();
     const gone = await checkEvidenceLinks([PR], options({ fetch: github({}).fetchImpl, tokenFor: async () => "installation-token" }));
     expect(gone.get(PR)).toEqual({ state: "cannot_open", reason: LINK_WORDS.notFoundConnected });
@@ -96,14 +110,17 @@ describe("checkEvidenceLinks: GitHub", () => {
     }
   });
 
-  it("checks a comment, then its repository for whether it is private", async () => {
+  it("checks a comment's repository for whether it is private, then the comment", async () => {
     const comment = `${PR}#issuecomment-987654`;
     const { calls, fetchImpl } = github({
       "https://api.github.com/repos/acme/app/issues/comments/987654": json({ id: 987654 }),
       "https://api.github.com/repos/acme/app": json({ private: false }),
     });
     expect((await checkEvidenceLinks([comment], options({ fetch: fetchImpl }))).get(comment)).toEqual({ state: "open" });
-    expect(calls.map((call) => call.url)).toEqual(["https://api.github.com/repos/acme/app/issues/comments/987654", "https://api.github.com/repos/acme/app"]);
+    expect(calls.map((call) => call.url)).toEqual(["https://api.github.com/repos/acme/app", "https://api.github.com/repos/acme/app/issues/comments/987654"]);
+    forgetLinkChecks();
+    const deleted = github({ "https://api.github.com/repos/acme/app": json({ private: false }) });
+    expect((await checkEvidenceLinks([comment], options({ fetch: deleted.fetchImpl }))).get(comment)).toEqual({ state: "cannot_open", reason: LINK_WORDS.notPublic });
   });
 
   it("follows GitHub's own redirect for a renamed repository, once, and no other", async () => {
@@ -245,8 +262,12 @@ describe("checkEvidenceLinks: kept briefly, per workspace", () => {
     const { calls, fetchImpl } = github({ [PR_API]: pull(true) });
     const a = await inOrg("org-a", () => checkEvidenceLinks([PR], options({ fetch: fetchImpl, tokenFor: async () => "a-installation" })));
     const b = await inOrg("org-b", () => checkEvidenceLinks([PR], options({ fetch: fetchImpl, tokenFor: async () => undefined })));
-    expect(a.get(PR)).toEqual({ state: "cannot_open", reason: LINK_WORDS.private });
+    expect(a.get(PR)).toEqual({ state: "open" });
     expect(b.get(PR)).toEqual({ state: "cannot_open", reason: LINK_WORDS.notPublic });
+    expect(calls).toHaveLength(2);
+    // Asked again from either workspace, each keeps its own answer.
+    expect((await inOrg("org-b", () => checkEvidenceLinks([PR], options({ fetch: fetchImpl, tokenFor: async () => undefined })))).get(PR)?.state).toBe("cannot_open");
+    expect((await inOrg("org-a", () => checkEvidenceLinks([PR], options({ fetch: fetchImpl, tokenFor: async () => "a-installation" })))).get(PR)?.state).toBe("open");
     expect(calls).toHaveLength(2);
   });
 
@@ -260,5 +281,145 @@ describe("checkEvidenceLinks: kept briefly, per workspace", () => {
     now += 31_000;
     expect((await check()).get(PR)).toEqual({ state: "open" });
     expect(calls).toHaveLength(2);
+  });
+});
+
+describe("checkEvidenceLinks: nothing reaches past GitHub's API and the workspace's storage (SSRF)", () => {
+  it("sends every request, a redirect's included, to GitHub's API or the workspace's own storage, and resolves only those", async () => {
+    const link = signed(Date.parse("2026-10-14T00:00:00Z") / 1000);
+    const resolved: string[] = [];
+    const away = (location: string) => () => new Response(null, { status: 302, headers: { location } });
+    const { calls, fetchImpl } = github({
+      [PR_API]: away("https://api.github.com.evil.example/repos/acme/app/pulls/12"),
+      "https://api.github.com/repos/acme/app/pulls/13": away("https://api.github.com@evil.example/repos/acme/app/pulls/13"),
+      "https://api.github.com/repos/acme/app/pulls/14": away("https://[::ffff:127.0.0.1]/repos/acme/app/pulls/14"),
+      "https://api.github.com/repos/acme/app/pulls/15": away("//evil.example/repos/acme/app/pulls/15"),
+      "https://api.github.com/repos/acme/app/pulls/16": away("https://api.github.com./repos/acme/app/pulls/16"),
+      [new URL(link).href]: away("https://api.github.com/repos/acme/app/pulls/17"),
+    });
+    const links = [
+      PR,
+      "https://github.com/acme/app/pull/13",
+      "https://github.com/acme/app/pull/14",
+      "https://github.com/acme/app/pull/15",
+      "https://github.com/acme/app/pull/16",
+      link,
+      "https://[::ffff:127.0.0.1]/acme/app/pull/1",
+      "https://2130706433/acme/app/pull/1",
+      "https://github.com./acme/app/pull/1",
+      "https://api.github.com.evil.example/repos/acme/app/pulls/1",
+      "https://api.github.com@evil.example/repos/acme/app/pulls/1",
+      "https://gіthub.com/acme/app/pull/1",
+      `https://other-project.supabase.co/storage/v1/object/sign/evidence/a.pdf?token=${new URL(link).searchParams.get("token")}`,
+    ];
+    const access = await checkEvidenceLinks(
+      links,
+      options({
+        fetch: fetchImpl,
+        resolve: async (host) => {
+          resolved.push(host);
+          return [{ address: "140.82.112.6", family: 4 }];
+        },
+      })
+    );
+    for (const each of links) expect(access.get(each)?.state, each).toBe("not_checked");
+    expect(new Set(calls.map((call) => new URL(call.url).hostname))).toEqual(new Set(["api.github.com", STORAGE]));
+    expect(new Set(resolved)).toEqual(new Set(["api.github.com", STORAGE]));
+    // Only the first hop of each allowed link: none of the redirects above was followed.
+    expect(calls).toHaveLength(6);
+    // The token went to GitHub's API only; storage got the link's own signature and nothing else.
+    for (const call of calls) {
+      const sent = call.init.headers as Record<string, string>;
+      if (new URL(call.url).hostname === STORAGE) expect(sent).toEqual({ Range: "bytes=0-0" });
+      else expect(sent.Authorization).toBe("Bearer deployment-token");
+    }
+  });
+
+  it("resolves the host again before each hop, and drops the hop whose name now resolves to a private address", async () => {
+    const moved = "https://api.github.com/repositories/42/pulls/12";
+    const answers = ["140.82.112.6", "127.0.0.1"];
+    const { calls, fetchImpl } = github({ [PR_API]: () => new Response(null, { status: 301, headers: { location: moved } }), [moved]: pull(false) });
+    const access = await checkEvidenceLinks([PR], options({ fetch: fetchImpl, resolve: async () => [{ address: answers.shift() ?? "127.0.0.1", family: 4 }] }));
+    expect(access.get(PR)?.state).toBe("not_checked");
+    expect(calls.map((call) => call.url)).toEqual([PR_API]);
+  });
+
+  it("never reads a storage reply's body, however large: it asks for one byte and cancels the rest", async () => {
+    const link = signed(Date.parse("2026-10-14T00:00:00Z") / 1000);
+    let pulled = 0;
+    const endless = () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          pull(controller) {
+            pulled += 1;
+            controller.enqueue(new Uint8Array(1024 * 1024));
+          },
+        }),
+        { status: 200 }
+      );
+    const { fetchImpl } = github({ [new URL(link).href]: endless });
+    expect((await checkEvidenceLinks([link], options({ fetch: fetchImpl }))).get(link)).toEqual({ state: "open" });
+    expect(pulled).toBeLessThanOrEqual(1);
+  });
+
+  it("asks under a timeout, so a reply that never ends is cut off", async () => {
+    const { calls, fetchImpl } = github({ [PR_API]: pull(false) });
+    await checkEvidenceLinks([PR], options({ fetch: fetchImpl }));
+    expect(calls[0].init.signal).toBeInstanceOf(AbortSignal);
+    expect(calls[0].init.signal?.aborted).toBe(false);
+  });
+});
+
+describe("checkEvidenceLinks: what only the deployment's token can see is never told (oracle)", () => {
+  const COMMENT = `${PR}#issuecomment-987654`;
+  const COMMENT_API = "https://api.github.com/repos/acme/app/issues/comments/987654";
+  const REPO_API = "https://api.github.com/repos/acme/app";
+  const deployment = (over: Partial<LinkCheckOptions> = {}) => options({ tokenFor: async () => undefined, ...over });
+
+  it("says a refusal of the deployment's token as it says a deleted link: GitHub refuses only what exists", async () => {
+    const refused = await checkEvidenceLinks([PR], deployment({ fetch: github({ [PR_API]: json({ message: "Resource protected by organization SAML enforcement." }, 403) }).fetchImpl }));
+    forgetLinkChecks();
+    const deleted = await checkEvidenceLinks([PR], deployment({ fetch: github({}).fetchImpl }));
+    expect(refused.get(PR)).toEqual({ state: "cannot_open", reason: LINK_WORDS.notPublic });
+    expect(refused.get(PR)).toEqual(deleted.get(PR));
+  });
+
+  it("asks as many questions about a comment in a private repository it alone can read as about a deleted one", async () => {
+    const hidden = github({ [COMMENT_API]: json({ id: 987654 }), [REPO_API]: json({ private: true }) });
+    const seen = await checkEvidenceLinks([COMMENT], deployment({ fetch: hidden.fetchImpl }));
+    forgetLinkChecks();
+    const gone = github({});
+    const missing = await checkEvidenceLinks([COMMENT], deployment({ fetch: gone.fetchImpl }));
+    expect(seen.get(COMMENT)).toEqual({ state: "cannot_open", reason: LINK_WORDS.notPublic });
+    expect(missing.get(COMMENT)).toEqual(seen.get(COMMENT));
+    expect(hidden.calls).toHaveLength(gone.calls.length);
+  });
+
+  it("keeps its answer exactly as long as a deleted one's", async () => {
+    const asked = async (fetchImpl: typeof fetch) => {
+      forgetLinkChecks();
+      const counts: number[] = [];
+      for (const minutes of [0, 1.9, 2.1]) {
+        const now = Date.parse("2026-10-13T09:00:00Z") + minutes * 60_000;
+        await checkEvidenceLinks([PR], deployment({ fetch: fetchImpl, now: () => now }));
+        counts.push((fetchImpl as unknown as { mock: { calls: unknown[] } }).mock.calls.length);
+      }
+      return counts;
+    };
+    expect(await asked(github({ [PR_API]: pull(true) }).fetchImpl)).toEqual(await asked(github({}).fetchImpl));
+  });
+
+  it("logs neither a token nor a signed link's token when a check fails", async () => {
+    const link = signed(Date.parse("2026-10-14T00:00:00Z") / 1000);
+    const secret = new URL(link).searchParams.get("token") ?? "";
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const failing = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      throw new Error(`connect failed for ${String(input)} with ${JSON.stringify(init?.headers)}`);
+    }) as unknown as typeof fetch;
+    await checkEvidenceLinks([PR, link], options({ fetch: failing }));
+    const logged = JSON.stringify(errors.mock.calls);
+    errors.mockRestore();
+    expect(logged).not.toContain("deployment-token");
+    expect(logged).not.toContain(secret);
   });
 });

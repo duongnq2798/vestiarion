@@ -6,8 +6,9 @@ import { revalidatePath } from "next/cache";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { inOrg } from "@/lib/dal/scope";
-import { recordOnboardingMarks } from "@/lib/onboarding/read";
-import { checklistRoleOf, DISMISSED, isChecklistRole } from "@/lib/onboarding/role-checklists";
+import { accountantVisitMarks } from "@/lib/onboarding/accountant";
+import { billWaitingOnApprovals, recordOnboardingMarks } from "@/lib/onboarding/read";
+import { checklistRoleOf, DISMISSED, isChecklistRole, type OnboardingMark } from "@/lib/onboarding/role-checklists";
 
 /**
  * A role's checklist dismissed for good, and the agent's limits kept as they are (docs/superpowers/specs/2026-10-13-role-
@@ -43,5 +44,34 @@ export async function confirmLimitsAction(formData: FormData): Promise<void> {
   return inOrg(auth, async () => {
     await recordOnboardingMarks(auth.user.id, ["limits_confirmed"]);
     revalidateOrgPages();
+  });
+}
+
+/**
+ * Opening Approvals as an approver (R2): `approvals_opened`, and `held_reason_seen` when a bill waits there, its reasons
+ * on its card. Sent by the page once it is in the browser (`ChecklistVisit`), never recorded while the page renders:
+ * Next.js forbids a mutation there, and a prefetch could tick a step for a page nobody opened. The session's membership
+ * and role are checked again, and whether a bill waits is read here, not taken from the browser.
+ */
+export async function recordApprovalsVisitAction(orgSlug: unknown): Promise<void> {
+  const auth = await authorize(orgSlug, "workspace.read");
+  if (!auth.ok || checklistRoleOf(auth.membership.role) !== "approver") return;
+  return inOrg(auth, async () => {
+    const seen: OnboardingMark[] = ["approvals_opened", ...((await billWaitingOnApprovals()) ? (["held_reason_seen"] as const) : [])];
+    await recordOnboardingMarks(auth.user.id, seen);
+  });
+}
+
+/**
+ * Opening the accountant console (R3), in one workspace where the session's person is an accountant:
+ * `accountant_console_opened`, and `accountant_queue_opened` when the console is narrowed to that workspace. Sent by the
+ * console once it is in the browser, once for each such workspace still missing them (`ChecklistVisit`), never recorded
+ * while it renders; the membership and the role are checked again here.
+ */
+export async function recordAccountantVisitAction(orgSlug: unknown, queueSlug: unknown): Promise<void> {
+  const auth = await authorize(orgSlug, "workspace.read");
+  if (!auth.ok || checklistRoleOf(auth.membership.role) !== "accountant") return;
+  return inOrg(auth, async () => {
+    await recordOnboardingMarks(auth.user.id, accountantVisitMarks(auth.membership.slug, typeof queueSlug === "string" ? queueSlug : null));
   });
 }

@@ -2278,7 +2278,6 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Not checked by Vestiarion", EVIDENCE_VIEW],
     ["Checked by Vestiarion", EVIDENCE_VIEW],
     ["Can't be opened", EVIDENCE_VIEW],
-    ["It is in a private repository on GitHub: only people with access to that repository can open it.", LINK_CHECK],
     ["Its link can't be opened, so it is not counted as verified.", EVIDENCE_CHAIN],
     ["GitHub does not show it publicly: it was deleted, or its repository is private.", LINK_CHECK],
     ["Verified by", "src/components/vx/map.ts"],

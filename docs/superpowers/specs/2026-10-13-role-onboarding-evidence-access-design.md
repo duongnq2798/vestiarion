@@ -34,7 +34,9 @@ checklist.
 
 **R4. Ticked because it happened; dismissed for good.** No step has a box to tick. Acts that leave no other row are
 marks in `onboarding_marks` (migration 0114: one row per workspace, member and mark, select and insert only for the
-tenant role, under the two tenant policies, cascading with the workspace and the account). **Don't show again** records
+tenant role, under the two tenant policies, cascading with the workspace and the account). A page that is opened never
+writes while it renders: it ticks the visit's steps itself, and records their marks from the browser once it is shown,
+through a Server Action that checks the session and the role again. **Don't show again** records
 `dismissed_owner`, `dismissed_approver` or `dismissed_accountant`, only for the checklist the person's role sees, and it
 never comes back. Before 0114 runs, every read answers "not set up" (42P01, PGRST205, 42703): the checklists show from
 the other rows, without Don't show again or Keep these limits.
@@ -51,8 +53,8 @@ approver to Approvals, an accountant to the accountant console, and anyone else 
 
 **E1. Checked before "verified".** The evidence chain's given links (a milestone's pull request, the comment a bounty
 was attached with, the evidence a milestone was verified by hand with) and the Contractors cards' links are checked
-before the page labels them. A link that can't be opened (deleted, private repository, access refused, an expired
-signed link) is shown as **Can't be opened** with the reason when it is known, is never offered as a link, and a fact
+before the page labels them. A link that can't be opened (deleted, a private repository the workspace's own GitHub
+connection does not reach, access refused, an expired signed link) is shown as **Can't be opened** with the reason when it is known, is never offered as a link, and a fact
 resting on it is never counted as verified (it reads **Could not open**). A link the check did not reach, or not on the
 allow-list, is not verified either. Bills' documents and deal costs' documents are never kept (a bill keeps its
 document's SHA-256 only, a cost only whether it has one), and a payee receipt's link is never stored: nothing there can
@@ -72,8 +74,10 @@ checked".
 
 **E4. Brief, and nothing leaks.** Results are kept in the server's memory per workspace and link: five minutes for a
 link that opens, two for one that can't, thirty seconds for no answer. GitHub is asked with the workspace's own GitHub
-connection where the repository is in it, else the deployment's token; a private repository seen only through the
-deployment's token reads as "GitHub does not show it publicly", as a deleted one does, so the check says nothing the
+connection where the repository is in it, else the deployment's token. A private repository the workspace's own
+connection reads opens: its people open it on GitHub, and a merged pull request in it stays verified. One seen only
+through the deployment's token, or a 403 to that token, reads as "GitHub does not show it publicly", as a deleted one
+does, after as many requests (a comment's repository is asked first) and kept as long, so the check says nothing the
 workspace could not see. Storage is asked with the link's own signature and nothing else. The member's session goes to
 no other host, and no link with its token is logged. At most 25 links are checked per page.
 
@@ -88,6 +92,6 @@ in `src/app/docs-shots/onboarding-fixture.ts`):
 - `02-approver`: Approvals as an approver who opened it while a bill waits, **Decide it, or send it back** next, above the
   held bill's card.
 - `03-accountant`: the accountant console with the accountant's checklist, **Open one workspace's queue** next.
-- `04-evidence`: a milestone's evidence whose pull request is in a private repository: **Can't be opened** with why, the
-  fact **Could not open**, the bounty comment checked; below, the Contractors cards with the same link and a hand
-  verification's link **not checked**.
+- `04-evidence`: a milestone's evidence whose pull request is in a private repository the workspace's GitHub connection
+  does not reach: **Can't be opened** with why, the fact **Could not open**, the bounty comment checked; below, the
+  Contractors cards with the same link and a hand verification's link **not checked**.

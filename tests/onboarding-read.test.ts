@@ -8,8 +8,8 @@ import { signedOrgs } from "./support/signed-org";
 
 vi.mock("server-only", () => ({}));
 
-import { readLimitsSet, readOnboardingMarks, readPersonActs, recordOnboardingMarks } from "@/lib/onboarding/read";
-import { readAccountantOnboarding } from "@/lib/onboarding/accountant";
+import { billWaitingOnApprovals, readLimitsSet, readOnboardingMarks, readPersonActs, recordOnboardingMarks } from "@/lib/onboarding/read";
+import { accountantVisitMarks, readAccountantOnboarding } from "@/lib/onboarding/accountant";
 
 /**
  * What a member's checklist is ticked from (docs/superpowers/specs/2026-10-13-role-onboarding-evidence-access-design.md
@@ -127,6 +127,20 @@ describe("readLimitsSet", () => {
   });
 });
 
+describe("billWaitingOnApprovals", () => {
+  it("reads whether a payable waits on Approvals, in the workspace's scope, as the page lists them", async () => {
+    const { fake, run } = inScope(() => ({ body: [{ id: "i-1" }] }), () => billWaitingOnApprovals());
+    expect(await run()).toBe(true);
+    const [sent] = fake.requests;
+    expect(sent.path).toBe("/rest/v1/invoices");
+    expect(sent.params.get("org_id")).toBe(`eq.${ORG}`);
+    expect(sent.params.get("direction")).toBe("eq.payable");
+    expect(sent.params.get("status")).toBe("in.(held,flagged,awaiting_info,processing)");
+    expect(await inScope(() => ({ body: [] }), () => billWaitingOnApprovals()).run()).toBe(false);
+    expect(await inScope(() => ({ status: 500, body: { message: "boom" } }), () => billWaitingOnApprovals()).run()).toBe(false);
+  });
+});
+
 describe("readAccountantOnboarding (R3)", () => {
   const HARBOR = "0b6c1c9e-4a4f-4a7e-9b1e-000000000c11";
   const LUMEN = "0b6c1c9e-4a4f-4a7e-9b1e-000000000c12";
@@ -157,7 +171,8 @@ describe("readAccountantOnboarding (R3)", () => {
     });
     const read = (portfolio: Portfolio = EMPTY, queue: string | null = null) =>
       runWith({ config, db: fake.client, fetch: fake.fetch }, () => readAccountantOnboarding(ME, MEMBERSHIPS, portfolio, queue));
-    return { fake, read };
+    const writes = () => fake.requests.filter((sent) => sent.path === "/rest/v1/onboarding_marks" && sent.method !== "GET");
+    return { fake, read, writes };
   }
 
   it("shows nobody who keeps no workspace's books a checklist", async () => {
@@ -167,29 +182,33 @@ describe("readAccountantOnboarding (R3)", () => {
     expect(fake.requests).toHaveLength(0);
   });
 
-  it("ticks the console as open, records it in each workspace the person keeps the books of, as them, and never in their own", async () => {
-    const { fake, read } = world({});
+  it("ticks the console as open from this visit, and writes nothing while the page renders", async () => {
+    const { fake, read, writes } = world({});
     const onboarding = await read();
     expect(onboarding?.checklist.steps.find((step) => step.id === "console")?.done).toBe(true);
     expect(onboarding?.canDismiss).toBe(true);
-    const writes = fake.requests.filter((sent) => sent.path === "/rest/v1/onboarding_marks" && sent.method === "POST");
-    expect(writes.map((sent) => claimsOf(sent).org_id).sort()).toEqual([HARBOR, LUMEN]);
-    for (const sent of writes) {
-      expect(claimsOf(sent).sub).toBe(ME);
-      expect(sent.body).toEqual([{ user_id: ME, mark: "accountant_console_opened", org_id: claimsOf(sent).org_id }]);
-    }
+    // Not recorded yet in either workspace the person keeps the books of: the page has it recorded there once it is in the
+    // browser, and never in the workspace they own.
+    expect(onboarding?.unrecorded).toEqual(["harbor-bakery", "lumen-studio"]);
+    expect(writes()).toHaveLength(0);
     expect(fake.requests.some((sent) => claimsOf(sent).org_id === OWNED)).toBe(false);
   });
 
-  it("records one workspace's queue opened when the console is narrowed to it", async () => {
-    const { fake, read } = world({});
+  it("asks for nothing to be recorded once every workspace has this visit's marks", async () => {
+    const opened = [{ user_id: ME, mark: "accountant_console_opened" }];
+    const { read, writes } = world({ [HARBOR]: { marks: opened }, [LUMEN]: { marks: opened } });
+    expect((await read())?.unrecorded).toEqual([]);
+    expect((await read(EMPTY, "lumen-studio"))?.unrecorded).toEqual(["lumen-studio"]);
+    expect(writes()).toHaveLength(0);
+  });
+
+  it("ticks one workspace's queue opened when the console is narrowed to it, and marks it there only", async () => {
+    const { read } = world({});
     const onboarding = await read(EMPTY, "lumen-studio");
     expect(onboarding?.checklist.steps.find((step) => step.id === "queue")?.done).toBe(true);
-    const lumen = fake.requests.find((sent) => sent.method === "POST" && claimsOf(sent).org_id === LUMEN);
-    expect(lumen?.body).toEqual([
-      { user_id: ME, mark: "accountant_console_opened", org_id: LUMEN },
-      { user_id: ME, mark: "accountant_queue_opened", org_id: LUMEN },
-    ]);
+    expect(accountantVisitMarks("lumen-studio", "lumen-studio")).toEqual(["accountant_console_opened", "accountant_queue_opened"]);
+    expect(accountantVisitMarks("harbor-bakery", "lumen-studio")).toEqual(["accountant_console_opened"]);
+    expect(accountantVisitMarks("harbor-bakery", null)).toEqual(["accountant_console_opened"]);
   });
 
   it("ticks a step done in any of the person's workspaces, and stays dismissed once dismissed in one", async () => {
@@ -232,6 +251,7 @@ describe("readAccountantOnboarding (R3)", () => {
     const { read } = world({ [HARBOR]: { marksMissing: true }, [LUMEN]: { marksMissing: true } });
     const onboarding = await read();
     expect(onboarding?.canDismiss).toBe(false);
+    expect(onboarding?.unrecorded).toEqual([]);
     expect(onboarding?.checklist.show).toBe(true);
     expect(onboarding?.checklist.steps[0].done).toBe(true);
   });

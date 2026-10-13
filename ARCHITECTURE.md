@@ -2360,9 +2360,14 @@ as a short checklist, ticked from what happened, rendered by one component (`Get
   (`confirmLimitsAction`, `agent.budget`). An approver's and an accountant's from the person's own signed acts
   (`readPersonActs`: `detail.by` the person, actor human: decisions, `accounting_payment_approved`,
   `ar_payment_applied`, `handoff_exported`) and from marks for what leaves no row: Approvals opened, a held bill's
-  reasons seen there, the accountant console opened, one workspace's queue opened. The pages record those marks when
-  they render (`recordOnboardingMarks`, best effort); `/accountant` reads and records them in each workspace where the
-  person is an accountant, through `withOrg(orgId, ..., { userId })`, never across tenants (`readAccountantOnboarding`).
+  reasons seen there, the accountant console opened, one workspace's queue opened. A page only reads them while it
+  renders, and ticks this visit's steps itself; while a mark is missing it renders `ChecklistVisit`
+  (`src/components/vx/ChecklistVisit.tsx`), which sends `recordApprovalsVisitAction` or `recordAccountantVisitAction`
+  once the page is in the browser (Next.js forbids a mutation during rendering, and a prefetch could tick a step for a
+  page nobody opened). Each action is gated as every action is (`authorize`, then `inOrg`), checks the role again, and
+  reads whether a bill waits on the server (`billWaitingOnApprovals`). `/accountant` reads the marks in each workspace
+  where the person is an accountant, through `withOrg(orgId, ..., { userId })`, never across tenants
+  (`readAccountantOnboarding`), and has the visit recorded in each of those still missing it, one action per workspace.
 - **Marks** (`src/lib/onboarding/read.ts`, migration `0114`): `onboarding_marks (org_id, user_id, mark)`, one row each,
   under the two tenant policies, select and insert only for the tenant role, cascading with the workspace and the
   account. Before `0114` runs, reads answer `available: false` (42P01, PGRST205, 42703), nothing is recorded, and the
@@ -2383,12 +2388,14 @@ as a short checklist, ticked from what happened, rendered by one component (`Get
   name only), and builds the request address itself: GitHub's API from the link's owner, repository and number. Anything
   else is `notChecked` with its reason: another scheme, credentials, a port, an IP literal in any notation, a local name,
   another host, another path. `requestAllowed` checks every address again before a request, a redirect's included.
-- **The check** (`check.ts`). `checkEvidenceLinks(hrefs)` answers `open`, `cannot_open` (with the reason: deleted,
-  private, refused, expired), `not_checked` or `no_answer`. Each host is resolved and the request dropped unless every
+- **The check** (`check.ts`). `checkEvidenceLinks(hrefs)` answers `open` (public, or a private repository the
+  workspace's own connection reads), `cannot_open` (with the reason: deleted, private and not the workspace's, refused,
+  expired), `not_checked` or `no_answer`. Each host is resolved and the request dropped unless every
   address is public (`isPublicAddress`, as webhooks use it); `redirect: "manual"`, five seconds, at most one redirect and
   only GitHub's API to itself; at most 25 links a call. GitHub is asked with the workspace's own connection
   (`pullRequestTokens`), else the deployment's `GITHUB_TOKEN`, sent to `api.github.com` only; a private repository seen
-  only through the deployment's token answers as not public, as a deleted one does. A signed link's expiry is read from
+  only through the deployment's token, or a 403 to that token, answers as not public, as a deleted one does, after as
+  many requests (a comment's repository is asked first) and kept as long. A signed link's expiry is read from
   its token first; storage is asked for one byte with the link's own signature only. Results are kept in memory per
   workspace and link (five minutes open, two can't be opened, thirty seconds no answer, 500 at most); nothing is stored,
   and no link is logged.

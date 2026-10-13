@@ -10,9 +10,10 @@ import { checkTargetOf, NOT_CHECKED_WORDS, requestAllowed, storageHostOf, type C
  * Whether an evidence link can be opened, checked before a page says "verified" or offers it
  * (docs/superpowers/specs/2026-10-13-role-onboarding-evidence-access-design.md E1 to E4).
  *
- * - **open**: GitHub shows the pull request or comment publicly, or the workspace's storage serves the signed file.
- * - **cannot_open**: it was deleted, its repository is private, access was refused, or a signed link expired; the reason
- *   is given where it is known. Never counted as verified, and never offered as a link.
+ * - **open**: GitHub shows the pull request or comment publicly, or in a private repository the workspace's own GitHub
+ *   connection reads (its people open it there), or the workspace's storage serves the signed file.
+ * - **cannot_open**: it was deleted, its repository is private and not the workspace's, access was refused, or a signed
+ *   link expired; the reason is given where it is known. Never counted as verified, and never offered as a link.
  * - **not_checked**: anything not on the allow-list (`./allow-list`). No request is made for it; it is shown as typed.
  * - **no_answer**: the service did not answer just now, or its rate limit was reached. Not verified either.
  *
@@ -20,8 +21,9 @@ import { checkTargetOf, NOT_CHECKED_WORDS, requestAllowed, storageHostOf, type C
  * its host resolved and refused unless every address is public, no redirect followed except to GitHub's API, five
  * seconds at most. The member's session goes nowhere: GitHub is asked with the workspace's own GitHub connection where
  * the repository is in it, else the deployment's token, and storage with the link's own signature only. A private
- * repository seen only through the deployment's token reads as not public, as a deleted one does, so a check never says
- * what the deployment can see that the workspace cannot.
+ * repository seen only through the deployment's token reads as not public, as a deleted one does, with the same words,
+ * the same number of questions and the same time kept, and so does GitHub refusing that token: a check never says what
+ * the deployment can see that the workspace cannot.
  *
  * Results are kept briefly, per workspace and link, in this server's memory: five minutes for a link that opens, two
  * for one that does not, thirty seconds for no answer. Nothing is stored, and no link with its token is logged.
@@ -34,7 +36,6 @@ export type LinkAccess =
   | { state: "no_answer"; reason: string };
 
 export const LINK_WORDS = {
-  private: "It is in a private repository on GitHub: only people with access to that repository can open it.",
   notPublic: "GitHub does not show it publicly: it was deleted, or its repository is private.",
   notFoundConnected: "GitHub could not find it: it was deleted, or the workspace's GitHub connection no longer reaches its repository.",
   refused: "GitHub refused access to it.",
@@ -154,27 +155,34 @@ async function askGitHub(
     if (response.status === 429 || (response.status === 403 && response.headers.get("x-ratelimit-remaining") === "0")) {
       return { access: { state: "no_answer", reason: LINK_WORDS.githubLimited } };
     }
-    if (response.status === 403) return { access: { state: "cannot_open", reason: LINK_WORDS.refused } };
+    // GitHub refuses only what exists (an organization's single sign-on, a token kept out of it): to the deployment's
+    // token, a refusal reads as a deleted link does, or it would say what that token alone can see.
+    if (response.status === 403) return { access: { state: "cannot_open", reason: installation ? LINK_WORDS.refused : LINK_WORDS.notPublic } };
     return { access: { state: "no_answer", reason: LINK_WORDS.githubSilent } };
   };
+  const silent: LinkAccess = { state: "no_answer", reason: LINK_WORDS.githubSilent };
+  // A private repository the workspace's own connection reads is the workspace's: its people open it on GitHub, and a
+  // merged pull request in it stays verified. One only the deployment's token reads is answered as GitHub answers the
+  // public, as a deleted one is, so the check discloses nothing more.
+  const hidden = (isPrivate: boolean): LinkAccess | null => (isPrivate && !installation ? { state: "cannot_open", reason: LINK_WORDS.notPublic } : null);
 
-  const first = await read(target.request);
-  if ("access" in first) return first.access;
-  let isPrivate: boolean | null = null;
   if (target.kind === "github_pull") {
-    const parsed = pullSchema.safeParse(first.json);
-    isPrivate = parsed.success ? parsed.data.base.repo.private : null;
-  } else {
-    const repository = await read(target.repository);
-    if ("access" in repository) return repository.access;
-    const parsed = repoSchema.safeParse(repository.json);
-    isPrivate = parsed.success ? parsed.data.private : null;
+    const pull = await read(target.request);
+    if ("access" in pull) return pull.access;
+    const parsed = pullSchema.safeParse(pull.json);
+    if (!parsed.success) return silent;
+    return hidden(parsed.data.base.repo.private) ?? { state: "open" };
   }
-  if (isPrivate === null) return { state: "no_answer", reason: LINK_WORDS.githubSilent };
-  if (!isPrivate) return { state: "open" };
-  // Seen through the workspace's own connection, it is the workspace's private repository; seen only through the
-  // deployment's token, it reads as GitHub reads it to the public, so the check discloses nothing more.
-  return { state: "cannot_open", reason: installation ? LINK_WORDS.private : LINK_WORDS.notPublic };
+  // A comment: its repository first, so one in a private repository only the deployment's token reads is answered after
+  // one question, as one in a deleted repository is.
+  const repository = await read(target.repository);
+  if ("access" in repository) return repository.access;
+  const parsed = repoSchema.safeParse(repository.json);
+  if (!parsed.success) return silent;
+  const notShown = hidden(parsed.data.private);
+  if (notShown) return notShown;
+  const comment = await read(target.request);
+  return "access" in comment ? comment.access : { state: "open" };
 }
 
 async function askStorage(target: Extract<CheckTarget, { kind: "signed_storage" }>, options: Required<Pick<LinkCheckOptions, "fetch" | "resolve">>, now: number): Promise<LinkAccess> {

@@ -1,3 +1,4 @@
+import { WAITING_STATUSES } from "../agent/approvals";
 import { db } from "../dal";
 import { ONBOARDING_MARKS, type OnboardingMark } from "./role-checklists";
 
@@ -129,6 +130,24 @@ export async function readPersonActs(userId: string): Promise<PersonActs> {
   } catch (error) {
     console.error("onboarding: acts not read", error instanceof Error ? error.message : "unknown error");
     return NO_ACTS;
+  }
+}
+
+/**
+ * Whether a bill waits on Approvals now, as the page lists them (`listWaitingPayables`): what opening it shows an approver,
+ * its reasons on its card (R2). Never throws: a read that fails says none waits, and ticks nothing.
+ */
+export async function billWaitingOnApprovals(): Promise<boolean> {
+  try {
+    const result = await db().from("invoices").select("id").eq("direction", "payable").in("status", [...WAITING_STATUSES]).limit(1);
+    if (result.error) {
+      console.error("onboarding: waiting bills not read", result.error.message);
+      return false;
+    }
+    return ((result.data ?? []) as unknown[]).length > 0;
+  } catch (error) {
+    console.error("onboarding: waiting bills not read", error instanceof Error ? error.message : "unknown error");
+    return false;
   }
 }
 

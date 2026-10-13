@@ -6,6 +6,7 @@ import { ProposalCard } from "@/components/ProposalCard";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ChecklistVisit } from "@/components/vx/ChecklistVisit";
 import { GettingStarted } from "@/components/vx/GettingStarted";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
@@ -20,7 +21,7 @@ import { can } from "@/lib/auth/roles";
 import { shellModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
 import { listMembers } from "@/lib/platform/members";
-import { readOnboardingMarks, readPersonActs, recordOnboardingMarks } from "@/lib/onboarding/read";
+import { readOnboardingMarks, readPersonActs } from "@/lib/onboarding/read";
 import { approverChecklist, checklistRoleOf, type OnboardingMark } from "@/lib/onboarding/role-checklists";
 import { listOpenProposals } from "@/lib/policy-proposals";
 import { stats } from "@/lib/queries";
@@ -81,7 +82,8 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
 
     // An approver's checklist (onboarding by role R2): this page open is its first step, and a bill waiting on it, its
     // reasons on its card, the second. Both are recorded for this person (migration 0114), best effort, so the console
-    // ticks them too; deciding a bill is read from the signed ledger.
+    // ticks them too: once the page is in the browser (`ChecklistVisit`), never while it renders. Deciding a bill is read
+    // from the signed ledger.
     const approverList = checklistRoleOf(membership.role) === "approver" ? await approverOnboarding(user.id, waiting) : null;
 
     return (
@@ -99,6 +101,7 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
             on return to the tab. Open dialogs and a typed rejection reason survive a refresh. */}
         <AutoRefresh intervalMs={waiting.length > 0 ? 15_000 : 30_000} />
         {approverList && <GettingStarted slug={slug} checklist={approverList.checklist} isOwner={false} dismiss={approverList.canDismiss ? dismissChecklistAction : undefined} />}
+        {approverList?.unrecorded && <ChecklistVisit page="approvals" slugs={[slug]} />}
         {proposals.length > 0 && (
           <section className="mb-8">
             <SectionHeader title="Suggested by the agent" meta="from what people approved here" />
@@ -136,14 +139,16 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
   });
 }
 
-/** The approver's checklist on Approvals, recording what opening it just did: the page seen, and a held bill's reasons. */
+/**
+ * The approver's checklist on Approvals, ticked with what opening it just did: the page seen, and a held bill's reasons.
+ * Reading writes nothing; `unrecorded` says the page should have the visit recorded.
+ */
 async function approverOnboarding(userId: string, waiting: ReadonlyArray<{ id: string; status: string; reclaimable?: boolean }>) {
   const [marks, acts] = await Promise.all([readOnboardingMarks(userId), readPersonActs(userId)]);
   const seen: OnboardingMark[] = ["approvals_opened", ...(waiting.length > 0 ? (["held_reason_seen"] as const) : [])];
-  const missing = seen.filter((mark) => !marks.mine.has(mark));
-  if (marks.available && missing.length > 0) await recordOnboardingMarks(userId, missing);
   return {
     canDismiss: marks.available,
+    unrecorded: marks.available && seen.some((mark) => !marks.mine.has(mark)),
     checklist: approverChecklist({
       approvalsOpened: true,
       heldReasonSeen: marks.mine.has("held_reason_seen") || waiting.length > 0,
