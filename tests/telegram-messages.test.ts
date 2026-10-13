@@ -63,6 +63,14 @@ describe("decisionsMessage", () => {
     expect(message).toContain("⏸ Held Jiren");
   });
 
+  it("gives a payment Circle has not confirmed no check mark: it is submitted, not done (I17)", () => {
+    const text = "Submitted 0.30 USDC to Jiren; waiting for Circle to confirm it on Arc testnet.";
+    const message = decisionsMessage(WORKSPACE, [item({ seq: 43, tone: "pending", text })], ORIGIN);
+    expect(message).toContain(`\n\n${text}`);
+    expect(message).not.toContain("✅");
+    expect(message).not.toContain("⏸");
+  });
+
   it("stays under Telegram's limit with many long decisions, and says how many more the console holds", () => {
     const long = "x".repeat(600);
     const items = Array.from({ length: 40 }, (_, index) => item({ seq: index + 1, text: `Paid vendor ${index} ${long}`, detail: long }));
@@ -195,10 +203,10 @@ describe("a payment that has not confirmed (stuck-transfer alert D6)", () => {
   it("is posted as a stopped decision, with its transaction and its page", () => {
     const message = decisionsMessage(
       { name: "Acme", slug: "acme" },
-      [item({ text: "Payment of 0.30 USDC to Jiren has not confirmed 18 min after it was sent on Arc testnet.", detail: "Circle shows it stuck.", tone: "stopped" })],
+      [item({ text: "Payment of 0.30 USDC to Jiren has not confirmed 18 min after it was submitted to Circle on Arc testnet.", detail: "Circle shows it stuck.", tone: "stopped" })],
       "https://www.vestiarion.xyz"
     );
-    expect(message).toContain("⏸ Payment of 0.30 USDC to Jiren has not confirmed 18 min after it was sent on Arc testnet.");
+    expect(message).toContain("⏸ Payment of 0.30 USDC to Jiren has not confirmed 18 min after it was submitted to Circle on Arc testnet.");
     expect(message).toContain("Arc testnet transaction");
   });
 });

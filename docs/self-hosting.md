@@ -450,9 +450,13 @@ With `HUBSPOT_CLIENT_ID` and `HUBSPOT_CLIENT_SECRET` set, from a HubSpot app on 
 marketplace distribution, an owner or admin connects a workspace to one HubSpot account from Settings, after agreeing to
 what Vestiarion does with its data. Its won deals come in with their customers under Deals on Bills & receivables, and a
 person plans each one's collections from the New deal form filled in from it. One HubSpot account connects to one
-workspace at a time. The app asks for read-only scopes only (`oauth crm.objects.companies.read crm.objects.contacts.read
-crm.objects.deals.read`), exactly the required scopes of its config. The connection needs migration 0105; before it
-runs, the HubSpot card says HubSpot is not set up yet. Its tokens are kept encrypted under `VESTIARION_MASTER_KEYS`, as
+workspace at a time. The app asks for read scopes (`oauth crm.objects.companies.read crm.objects.contacts.read
+crm.objects.deals.read`), exactly the required scopes of its config. Writing receipts back to the deals planned from
+HubSpot is off until an owner or admin allows it from the card: only then does the connect page ask for the config's
+optional scopes, `crm.objects.deals.write` and `crm.schemas.deals.write`, and Vestiarion adds a `vestiarion` group of
+deal properties once. Payments on Arc testnet or in shadow mode are written only to a HubSpot developer test account or
+sandbox. The connection needs migration 0105, and writing needs 0107; before 0105 runs, the HubSpot card says HubSpot is
+not set up yet, and before 0107 it offers no writing. Its tokens are kept encrypted under `VESTIARION_MASTER_KEYS`, as
 Xero's. See [Bring deals in from HubSpot](https://www.vestiarion.xyz/docs/guides/hubspot).
 
 The app's config is in the repository, under `integrations/hubspot/` (`hsproject.json` and `src/app/app-hsmeta.json`):

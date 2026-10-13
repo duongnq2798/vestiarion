@@ -39,6 +39,8 @@ import { accountingPanelView } from "@/lib/connectors/panel";
 import { accountingProvider, accountingProviderOn } from "@/lib/accounting-providers";
 import { crmPanelView } from "@/lib/connectors/crm-review";
 import { hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
+import { crmReceiptsPanelFor } from "@/lib/connectors/crm-receipts-view";
+import { crmProvider } from "@/lib/crm-providers";
 import { linkFor as telegramLinkFor } from "@/lib/telegram/links";
 import { telegramSettingsFromEnv } from "@/lib/telegram/settings";
 import { networkProfile } from "@/lib/network";
@@ -149,6 +151,15 @@ export default async function SettingsPage({
           })
         : null,
     ]);
+    // Receipts written to HubSpot (CRM receipts R8): once connected, best effort; nothing before migration 0107.
+    const hubspotWriteScopes = crmProvider("hubspot")?.receipts?.writeScopes ?? null;
+    const hubspotReceipts =
+      hubspot?.state === "connection" && hubspotWriteScopes
+        ? await crmReceiptsPanelFor(hubspot.connectionId, hubspotWriteScopes).catch((error: unknown) => {
+            console.error("settings: HubSpot receipts not loaded", error instanceof Error ? error.message : error);
+            return null;
+          })
+        : null;
     const notifyEmail = notifySwitch ? (unwrap(notifySwitch) as { notify_email: boolean }).notify_email : false;
 
     const canManageIntegrations = can(membership.role, "integrations.manage");
@@ -262,7 +273,13 @@ export default async function SettingsPage({
             id: "hubspot-title",
             title: "HubSpot",
             content: hubspot ? (
-              <HubSpotPanel orgSlug={slug} view={hubspot} canManage={canManageIntegrations} notice={typeof hubspotOutcome === "string" ? hubspotOutcome : null} />
+              <HubSpotPanel
+                orgSlug={slug}
+                view={hubspot}
+                canManage={canManageIntegrations}
+                notice={typeof hubspotOutcome === "string" ? hubspotOutcome : null}
+                receipts={hubspotReceipts}
+              />
             ) : null,
           },
           {

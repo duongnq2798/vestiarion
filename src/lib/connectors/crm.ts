@@ -1,3 +1,4 @@
+import type { ReceiptProperty } from "./crm-receipts";
 import type { ConnectingProvider, Page, PageRequest } from "./provider";
 
 /**
@@ -54,7 +55,51 @@ export type CrmProvider = ConnectingProvider & {
   deals(request: CrmPageRequest): Promise<CrmPage>;
   /** The deals named, as the CRM has them now; `missing`, those it no longer has (deleted there). At most 100 ids. */
   dealsById(input: { accessToken: string; externalOrgId: string; ids: readonly string[] }): Promise<{ deals: ExternalDeal[]; missing: string[] }>;
+  /**
+   * Writing receipts back to the CRM's deals (docs/superpowers/specs/2026-10-13-crm-receipts-design.md R3, R6).
+   * Optional: a CRM without it never writes, and its connections show nothing about writing.
+   */
+  receipts?: CrmReceiptWriter;
 };
+
+/** What the CRM says of the account it writes to (R4): `test` only when it says so itself. */
+export interface CrmAccountFacts {
+  /** The CRM's own word for the account (HubSpot: `STANDARD`, `DEVELOPER_TEST`, `SANDBOX`, `APP_DEVELOPER`), or null. */
+  accountType: string | null;
+  /**
+   * A developer test account or a sandbox; any other type the CRM names, a trial included, is a real business's CRM.
+   * Null when it names none: the account was not read, so nothing is written to it, nor refused for good.
+   */
+  test: boolean | null;
+}
+
+/** A deal's fields as the CRM holds them now, or that it no longer has the deal. */
+export type CrmFieldRead = { found: false } | { found: true; values: Record<string, string | null> };
+
+/**
+ * The seam a CRM implements to write receipts (R3, R6). Each call maps the CRM's JSON into the core's shapes; a timeout,
+ * a 5xx, a rate limit or a refused token throws `ProviderError`, as every other call does; a refusal of the request
+ * itself (a 400) is `{ ok: false, message }` in the CRM's own words.
+ */
+export interface CrmReceiptWriter {
+  /** The scopes writing needs beyond reading: a connection without them asks a person to allow writing first. */
+  writeScopes: readonly string[];
+  account(input: { accessToken: string; externalOrgId: string }): Promise<CrmAccountFacts>;
+  /** Makes the property group and every property Vestiarion owns, where missing; never changes one that is there. */
+  ensureFields(input: {
+    accessToken: string;
+    externalOrgId: string;
+    group: { name: string; label: string };
+    properties: readonly ReceiptProperty[];
+  }): Promise<{ ok: true } | { ok: false; message: string }>;
+  readFields(input: { accessToken: string; externalOrgId: string; dealId: string; names: readonly string[] }): Promise<CrmFieldRead>;
+  writeFields(input: {
+    accessToken: string;
+    externalOrgId: string;
+    dealId: string;
+    values: Readonly<Record<string, string>>;
+  }): Promise<{ ok: true } | { ok: false; message: string }>;
+}
 
 /** What is kept of a deal already read. */
 export interface StagedCrmDeal {

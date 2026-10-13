@@ -20,12 +20,12 @@ The bot works only in a private chat with you. Added to a group, it answers "I o
 
 ## 2. What the chat receives
 
-After each cycle, the chat gets one message listing what the agent decided since the last one: what it paid, scheduled, released or received, and what it stopped. Each decision says why, and links to where you see it in Vestiarion. A payment that has not confirmed 15 minutes after it was sent is posted within minutes, without waiting for a cycle.
+After each cycle, the chat gets one message listing what the agent decided since the last one: what it paid, scheduled, released or received, and what it stopped. Each decision says why, and links to where you see it in Vestiarion. A payment that has not confirmed 15 minutes after it was submitted to Circle is posted within minutes, without waiting for a cycle.
 
 ```text
 Acme · the agent decided 2 things
 
-✅ Paid Centronex 0.35 USDC · 26 s after it was added.
+✅ Paid Centronex 0.35 USDC · 26 s after it was added; Circle confirmed it on Arc testnet.
 DeepSeek decided, as the written policy would. Checks passed: purchase order and goods, the 2.00 USDC limit, screening.
 Arc testnet transaction · How it decided
 
@@ -35,6 +35,7 @@ Decide in Approvals
 ```
 
 - ✅ marks what was done; **Arc testnet transaction** opens the payment on the explorer, or **Arc mainnet transaction** for a workspace on Arc mainnet.
+- A payment Circle has not confirmed yet has neither mark: it says it was submitted and waits for Circle.
 - ⏸ marks what the agent stopped. **Decide in Approvals** opens the payable in Vestiarion, where you approve, reject or return it.
 - In shadow mode, a payment held for your verdict links **Give your verdict** instead, where you agree or disagree with it.
 - A chat is told only about decisions made after it was connected. A busy cycle's message ends with how many more decisions are in the console.

@@ -52,6 +52,8 @@ If a release is interrupted before its receivable is made, the line says **Recei
 
 **Deals** lists each deal with its total, what was **Released**, **Paid**, is **Outstanding** and is **Planned**, and its next line. A deal whose lines are all paid says **Paid in full**.
 
+**Paid** is what arrived on Arc, confirmed by Circle and applied to the deal's invoices: a part payment counts as what arrived, and a fee a person marked settles an invoice without counting as paid. **Outstanding** is what is invoiced and not paid yet. These are the same figures written to HubSpot as Collected and Still owed.
+
 The deal's page shows the same figures, then its **Schedule**: each line with its state, **Planned**, **Released**, **Overdue**, **Paid**, or **Credit owed**. Lines a later version replaced or cancelled are folded under **Replaced and cancelled lines**. **Versions** lists every version, newest first, with its total, the difference from the one before, its reason and what it changed.
 
 <Screenshot
@@ -102,7 +104,7 @@ When the bill for a cost arrives, or you add the contractor's milestone, choose 
 
 **Cash readiness**, above the schedule, puts it together:
 
-- **Collected to date** and **Paid out to date**: money that moved, each with what it is made of. A line the customer paid part of, once the payment is applied to its receivable, counts what arrived as collected and only what is still owed as expected, once, as Treasury and the payment plan count it.
+- **Collected to date** and **Paid out to date**: money that moved, each with what it is made of. Collected is the deal's **Paid**: a line the customer paid part of counts what arrived as collected and only what is still owed as expected, once, and a line marked received without a payment on Arc is not counted, and the view says so.
 - Day by day from today, each day money is planned or expected to move: the schedule's lines on their due days, planned until they are invoiced and expected until they are paid (an overdue one counts today), and the costs on their days. Each move names its line or cost, its state and its day, with the position after the day.
 - **Short by 1,240.00 USDC on Oct 20, 2026** when the position first goes below zero, with how that day's figure is made and the deepest gap. **No cash gap** when it never does. **Not enough data** while no cost is entered.
 - **Estimated margin**: the deal's total less every cost counted, as an amount and a percent. With no cost entered it says **Not enough data**, never 100%.

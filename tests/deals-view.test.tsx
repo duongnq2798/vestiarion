@@ -13,7 +13,9 @@ import { DealForm } from "@/components/deals/DealForm";
 import { DealSchedule, DealVersions } from "@/components/deals/DealSchedule";
 import { DealsSection } from "@/components/deals/DealsSection";
 import { PlanIncomingList } from "@/components/vx/PaymentPlan";
+import { collectionOfRows } from "@/lib/deals/collection";
 import type { DealRecord } from "@/lib/deals/read";
+import { NETWORKS } from "@/lib/network";
 import { deal, line, released } from "./support/deal-facts";
 
 /**
@@ -50,7 +52,18 @@ describe("the Deals section", () => {
   });
 
   it("lists each deal with what was released, paid, is outstanding and planned, and its next line", () => {
-    const shown = text(renderToStaticMarkup(<DealsSection deals={[record()]} orgSlug="acme" today={TODAY} />));
+    // Paid and Outstanding are what the deal collected: its deposit, matched whole on Arc.
+    const collected = collectionOfRows(
+      record(),
+      {
+        receivables: [{ id: "inv-1", deal_id: record().facts.id, amount: "3000.000000", currency: "USDC", status: "received", due_date: "2026-10-26", original_currency: null, original_amount: null }],
+        allocations: [],
+        transfers: new Map(),
+        wholeMatches: [{ id: "t-1", invoice_id: "inv-1", amount: "3000.000000", received_at: "2026-10-20T10:00:00Z", tx_hash: null, chain: NETWORKS["arc-testnet"].circleBlockchain }],
+      },
+      TODAY
+    );
+    const shown = text(renderToStaticMarkup(<DealsSection deals={[record()]} orgSlug="acme" today={TODAY} collected={new Map([[record().facts.id, collected]])} />));
     expect(shown).toContain("Website rebuild");
     expect(shown).toContain("Acme Studio");
     expect(shown).toContain("Active");

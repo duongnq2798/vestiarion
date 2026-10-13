@@ -32,7 +32,15 @@ export function hubspotRedirectUri(origin: string): string {
 
 /**
  * The app's required scopes, exactly as `integrations/hubspot/src/app/app-hsmeta.json` lists them: HubSpot refuses an
- * authorize URL whose scopes differ. Read-only: the optional `crm.objects.deals.write` is not asked for, since nothing
- * is written to HubSpot in this version. Pipelines are read with `crm.objects.deals.read`.
+ * authorize URL whose scopes differ. Read-only: pipelines and deal property definitions are read with
+ * `crm.objects.deals.read`.
  */
 export const HUBSPOT_SCOPES = ["oauth", "crm.objects.companies.read", "crm.objects.contacts.read", "crm.objects.deals.read"] as const;
+
+/**
+ * The app's optional scopes for writing receipts back to deals (docs/superpowers/specs/2026-10-13-crm-receipts-design.md
+ * R3), asked for (`optional_scope`) only when an owner or admin allows writing: `crm.objects.deals.write` writes the
+ * values, `crm.schemas.deals.write` makes the Vestiarion property group and its properties once. A connection without
+ * both keeps reading and writes nothing.
+ */
+export const HUBSPOT_WRITE_SCOPES = ["crm.objects.deals.write", "crm.schemas.deals.write"] as const;

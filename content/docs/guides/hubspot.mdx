@@ -1,6 +1,6 @@
 Connect HubSpot, and your won deals come into Vestiarion with their customers, so you plan their collections without typing them again. A won deal becomes a [deal](/docs/guides/deals) with its collection schedule only when you plan it, from the New deal form filled in for you. A deal changed in HubSpot afterwards says so, and nothing in Vestiarion changes until you do.
 
-Vestiarion reads from HubSpot and writes nothing to it.
+Vestiarion reads from HubSpot. It writes to HubSpot only once an owner or admin allows it: what each planned deal collected, in deal fields of its own ([step 6](#6-receipts-back-in-hubspot)).
 
 ## Before you start
 
@@ -14,7 +14,8 @@ Open **Settings**. Under **HubSpot**, choose **Connect HubSpot**.
 
 The connect page has the workspace you came from already picked (if you manage several, you can pick another) and says what Vestiarion does with HubSpot's data:
 
-- It reads the companies, contacts and deals of the account you connect: names, amounts, close dates, pipeline stages and each company's main contact email. It writes nothing to HubSpot.
+- It reads the companies, contacts and deals of the account you connect: names, amounts, close dates, pipeline stages and each company's main contact email.
+- It writes to HubSpot only once an owner or admin allows it: then, on each HubSpot deal planned in Vestiarion, what was collected from payments confirmed on Arc, what is still owed, the last receipt, the reconciliation status and a link to the deal in Vestiarion, in a Vestiarion property group it creates. It never changes HubSpot's own deal fields, and writes payments on Arc testnet or in shadow mode only to a HubSpot developer test account or sandbox.
 - They are shown to the workspace's members and to its agent. The agent's model provider may see a deal's facts to decide on its collections, and may not train on them.
 - Vestiarion never uses HubSpot data to train or improve any AI model, and never passes it to anyone else without your workspace's say.
 
@@ -98,6 +99,43 @@ A deal marked lost in HubSpot is only flagged. To stop its lines, use **Cancel d
 
 A customer linked to a HubSpot company that has no billing email yet is listed under "Billing emails from HubSpot", with the email of the company's main contact. Choose **Use this email** if it is where invoices go: it becomes the customer's billing email, used for reminders once you turn them on for an invoice. The ledger records `counterparty_notice_email_changed` with `via: "hubspot"`. A billing email the customer already has is never replaced, even one typed in while you looked; and only the email you were shown is used.
 
+## 6. Receipts back in HubSpot
+
+So sales sees whether a customer paid without asking finance, Vestiarion can write each planned deal's collections back to that deal in HubSpot. It is off until an owner or admin turns it on.
+
+**Allow it.** On the HubSpot card in Settings, under **Receipts in HubSpot**, choose **Allow writing to HubSpot**. The connect page opens with **Write receipts to HubSpot** ticked: choose **Continue to HubSpot**, and HubSpot asks you to let Vestiarion write deals and add deal fields. Back in Settings, the card says "HubSpot is connected, and Vestiarion writes receipts to the deals planned from it, from the next sync." If HubSpot did not grant it, the card says so and the connection keeps reading your deals: a HubSpot super admin may need to approve the app's write access. A connection allowed to write shows **Write receipts to HubSpot** and **Stop writing to HubSpot**; what was written stays in HubSpot when you stop.
+
+**What is written**, on each HubSpot deal planned in Vestiarion, in a **Vestiarion** group of deal fields that Vestiarion adds once:
+
+- **Collected**: money received on Arc, confirmed by Circle and applied to the deal's invoices. Nothing submitted or pending counts, and a fee a person marked is never collected. It is the deal's **Paid** in Vestiarion, the same figure.
+- **Still owed**: invoiced to the customer and not paid yet. A part payment shows as partial: the rest of that invoice is still owed. Lines not invoiced yet are not in it.
+- **Collection currency**, and **Collection status**: Paid in full, Paid to date, Partly paid, Overdue, Awaiting payment or Nothing invoiced yet.
+- **Last receipt date**, **Last receipt amount**, and **Last receipt**: a link to the payment's transaction on Arc's explorer.
+- **Reconciliation status**: Reconciled, Needs review (an invoice is marked received without a payment on Arc, and is not counted) or No receipts yet.
+- **Evidence**: a link to the deal in Vestiarion.
+
+HubSpot's own deal fields, such as the amount and the stage, are never changed.
+
+**When.** After each sync: every 15 minutes, or at once with **Sync now**. Each write is read back from HubSpot, and counts as written only when HubSpot holds the same figures. The deal's page, under **Receipts in HubSpot**, says what was written and when, or why not yet. The ledger records `crm_receipt_written`.
+
+<Screenshot
+  src="/docs/guides/hubspot-receipts.png"
+  alt="Receipts in HubSpot on a deal's page: Written to HubSpot, read back the same; Collected 5,600.00 USDC, Still owed 2,200.00 USDC, Collection status Partly paid, the last receipt of 2,000.00 USDC on Oct 12, 2026 with its transaction link, Reconciliation status Reconciled and the link to the deal."
+  caption="What was written to the HubSpot deal, as HubSpot read it back."
+/>
+
+**When someone changed a field in HubSpot.** Vestiarion never writes over it. The deal's page says "Not written: someone changed it in HubSpot", field by field: what Vestiarion last wrote, what HubSpot holds now and what Vestiarion would write. An owner or admin chooses **Write Vestiarion's figures to HubSpot** to put them back; until someone chooses, later receipts wait too. The ledger records `crm_receipt_conflict`, and `crm_receipt_overwrite_chosen` for the choice.
+
+**When HubSpot is down.** Nothing happens to your payments. The write waits and is tried again on its own: the deal's page says "Not written to HubSpot yet", and when it is tried again.
+
+**Arc testnet and shadow mode.** Payments on Arc testnet, and every payment in shadow mode, are written only to an account HubSpot itself calls a developer test account or a sandbox. To any other account: "Not written: payments on Arc testnet and in shadow mode are written only to a HubSpot developer test account or sandbox, never to a real HubSpot account."
+
+<Screenshot
+  src="/docs/guides/hubspot-receipts-settings.png"
+  alt="The HubSpot card in Settings with Receipts in HubSpot on: 6 deals written, 1 waiting, 1 changed in HubSpot and waiting on you; HubSpot says this is a developer test account; the rule for Arc testnet; and the Stop writing to HubSpot button."
+  caption="Writing receipts on, and how the writes stand."
+/>
+
 ## Status and errors
 
 The HubSpot card in Settings says how the connection is doing:
@@ -108,4 +146,4 @@ The HubSpot card in Settings says how the connection is doing:
 
 ## Disconnect
 
-Choose **Disconnect HubSpot** on the card. Vestiarion stops reading at once, ends its access in HubSpot and deletes its tokens. Deals already planned stay in Vestiarion, with their receivables. The ledger records `accounting_disconnected`.
+Choose **Disconnect HubSpot** on the card. Vestiarion stops reading, and writing, at once, ends its access in HubSpot and deletes its tokens. What it wrote stays in HubSpot. Deals already planned stay in Vestiarion, with their receivables. The ledger records `accounting_disconnected`.

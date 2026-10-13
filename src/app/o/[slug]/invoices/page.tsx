@@ -31,7 +31,7 @@ import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import type { Decision } from "@/components/vx/types";
 import { addedSince, latestDecision, recordedFacts } from "@/lib/added-details";
-import { readAllocationBook, receivablesHeld, stillOwed, toReceivableIn } from "@/lib/allocations/book";
+import { readAllocationBook, stillOwed, toReceivableIn } from "@/lib/allocations/book";
 import { toMicros, type PaymentIn } from "@/lib/allocations/model";
 import { receivableLabel } from "@/lib/allocations/suggest";
 import { applyPaymentsView, paymentsByReceivable, receivableViews, type ReceivableView } from "@/lib/allocations/view";
@@ -93,6 +93,7 @@ import { crmPrefillFor, crmReady, crmReview, type CrmPrefillRead, type CrmReview
 import { readDealCosts } from "@/lib/deals/costs-read";
 import { exceptionFacts } from "@/lib/exceptions";
 import { invoiceDiscount } from "@/lib/agent/payment-timing";
+import { readDealCollections } from "@/lib/deals/collection-read";
 import { dealLinksOf, plannedLinesOf, readDeals, type DealLink } from "@/lib/deals/read";
 import { hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
 import { FromCustomers } from "@/components/portal/FromCustomers";
@@ -236,8 +237,6 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     });
     const receivablesIn = invoices.filter((invoice) => invoice.direction === "receivable").map(toReceivableIn);
     const allocations = book ? receivableViews(book, receivablesIn) : new Map<string, ReceivableView>();
-    // A part-paid deal line counts what is still owed in its cash badge, as in the plan (allocations L11).
-    const dealsApplied = book ? receivablesHeld(invoices.filter((invoice) => invoice.direction === "receivable"), book.rows) : {};
     const appliedPayments = book ? paymentsByReceivable(book) : new Map<string, PaymentIn[]>();
     // One read of the entries about every invoice, as before: Needs you counts the bills code refused, which only the
     // entries say, and the cards' verdicts come from them.
@@ -249,6 +248,16 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     const asOf = Date.now();
     const today = new Date(asOf).toISOString().slice(0, 10);
     const inAWeek = new Date(asOf + 7 * 86_400_000).toISOString().slice(0, 10);
+    // What each deal collected: its Paid and Outstanding, the same figures its own page shows (CRM receipts R1). Best
+    // effort: a read that fails leaves those two out of the list, nothing else.
+    const dealsCollected = Array.isArray(deals)
+      ? await readDealCollections(deals, today)
+          .then((read) => new Map([...read].map(([dealId, { collection }]) => [dealId, collection])))
+          .catch((error: unknown) => {
+            console.error("invoices: what the deals collected was not read", error instanceof Error ? error.message : error);
+            return null;
+          })
+      : null;
 
     // Every invoice's decision, without its payment's track: what the filters, counts and rows read. The rows shown get
     // their track below, from the payments read for them alone.
@@ -691,9 +700,9 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
               <DealsSection
                 deals={deals}
                 costs={dealCosts}
-                applied={dealsApplied}
                 orgSlug={slug}
                 today={today}
+                collected={dealsCollected}
                 fromCrm={
                   fromHubSpot.state === "list" ? (
                     <>

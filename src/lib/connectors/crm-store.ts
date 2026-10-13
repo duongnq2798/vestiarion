@@ -3,6 +3,8 @@ import { currentOrgId } from "../context";
 import { db, unwrap } from "../dal";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { changesText, crmChanges, flagDecision, readFacts, type CrmChange, type CrmFacts, type CrmProvider, type ExternalDeal, type StagedCrmDeal, type StageState } from "./crm";
+import { NotSetUpError } from "./connections";
+import { receiptsInScope } from "./crm-receipts-sync";
 import { syncCrmConnection, type CrmSyncDb, type CrmSyncResult } from "./crm-sync";
 import { PROVIDER_LABELS } from "./provider";
 import { syncStore } from "./sync-store";
@@ -217,7 +219,20 @@ export const crmStore: CrmSyncDb = {
   },
 };
 
-/** Runs one CRM connection's sync in the workspace already in scope, with the database's stores. */
-export function crmSyncInScope(connectionId: string, provider: CrmProvider, options: { maxPages?: number } = {}): Promise<CrmSyncResult> {
-  return syncCrmConnection({ connectionId, provider, db: crmStore, tokens: connectionTokenStore(currentOrgId(), connectionId), ...options });
+/**
+ * Runs one CRM connection's sync in the workspace already in scope, with the database's stores; then its receipts
+ * (docs/superpowers/specs/2026-10-13-crm-receipts-design.md R5): written back to the deals planned from it, while a
+ * person has writing on. Best effort: a receipts step that fails never fails the sync, and before migration 0107 it has
+ * nothing to do.
+ */
+export async function crmSyncInScope(connectionId: string, provider: CrmProvider, options: { maxPages?: number } = {}): Promise<CrmSyncResult> {
+  const result = await syncCrmConnection({ connectionId, provider, db: crmStore, tokens: connectionTokenStore(currentOrgId(), connectionId), ...options });
+  if (provider.receipts && result.outcome !== "reconnect" && result.outcome !== "busy") {
+    try {
+      await receiptsInScope(connectionId, provider);
+    } catch (error) {
+      if (!(error instanceof NotSetUpError)) console.error("crm: the receipts step failed", connectionId, error instanceof Error ? error.message : "unknown error");
+    }
+  }
+  return result;
 }

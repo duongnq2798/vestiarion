@@ -55,6 +55,10 @@ export const COMMAND_PERMISSIONS = {
   "crm.plan_deal": "records.write",
   "crm.keep_change": "records.write",
   "crm.fill_email": "records.write",
+  // Writing receipts back to the CRM's deals, turned on or off, and Vestiarion's figures written over a field someone
+  // changed there: the integration's own writes, an owner's or admin's (CRM receipts R3, R5).
+  "crm.receipt_writes": "integrations.manage",
+  "crm.receipt_overwrite": "integrations.manage",
   // Booking payments made on Arc in the accounting tool, after a person reviewed each (accounting write-back W6).
   "accounting.book_payments": "accounting.book",
   // A public link to the workspace report, and stopping one; the value question is the business's own figure about

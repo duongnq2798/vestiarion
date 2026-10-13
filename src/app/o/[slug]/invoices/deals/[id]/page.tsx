@@ -4,13 +4,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CrmDealChanges } from "@/components/CrmDealChanges";
+import { CrmReceiptCard } from "@/components/CrmReceiptCard";
 import { DocsLink } from "@/components/DocsLink";
 import { DealCashReadiness } from "@/components/deals/DealCashReadiness";
 import { DealChangeForm } from "@/components/deals/DealChangeForm";
 import { DealCosts } from "@/components/deals/DealCosts";
 import { AutoReleaseSwitch, CancelDealButton } from "@/components/deals/DealControls";
 import { DealSchedule, DealVersions } from "@/components/deals/DealSchedule";
-import { DealFigures, DealHeadSub } from "@/components/deals/DealHead";
+import { DealFigures } from "@/components/deals/DealFigures";
+import { DealHeadSub } from "@/components/deals/DealHead";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { IntakeFold } from "@/components/vx/IntakeFold";
@@ -20,10 +22,13 @@ import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { shellModes } from "@/lib/circle";
 import { utcDay } from "@/lib/copy";
-import { readReceivablesHeld } from "@/lib/allocations/book";
 import { crmChangesFor, type CrmDealChanges as CrmChangesRead } from "@/lib/connectors/crm-review";
+import { crmReceiptFor, type CrmReceiptView } from "@/lib/connectors/crm-receipts-view";
+import { crmProvider } from "@/lib/crm-providers";
 import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
+import type { Collection } from "@/lib/deals/collection";
+import { readDealCollections } from "@/lib/deals/collection-read";
 import type { DealCost } from "@/lib/deals/costs";
 import { readDealCosts, readLinkCandidates, type LinkCandidate } from "@/lib/deals/costs-read";
 import { inForce } from "@/lib/deals/lines";
@@ -54,7 +59,7 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
   const access = await requireMembership(slug);
   const { from } = await searchParams;
   return inOrg(access, async () => {
-    const [read, dashboardStats, canWrite] = await Promise.all([readDeal(id), stats(), viewerCan(slug, "records.write")]);
+    const [read, dashboardStats, canWrite, canManage] = await Promise.all([readDeal(id), stats(), viewerCan(slug, "records.write"), viewerCan(slug, "integrations.manage")]);
     const shell = { network: access.membership.network, day: dashboardStats.day, clockMode: dashboardStats.clockMode, lastCycleAt: dashboardStats.lastCycleAt, chainModes: shellModes(), status: await shellStatus() };
     const back = (
       <Button asChild variant="link">
@@ -91,15 +96,6 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
         console.error("deal: costs not read", error instanceof Error ? error.message : error);
         return null;
       });
-    // What was applied to each released line's receivable (allocations L11): a part-paid line is expected for what is
-    // still owed. Best effort: a read that fails counts each line in full, as before.
-    const applied = await readReceivablesHeld(
-      db(),
-      facts.lines.flatMap((line) => (line.receivable ? [line.receivable.id] : []))
-    ).catch((error: unknown) => {
-      console.error("deal: payments applied not read", error instanceof Error ? error.message : error);
-      return {};
-    });
     // What a cost may be linked to, and who a new one may be for: an owner's or admin's forms only.
     const [candidates, payees] =
       canWrite && costs !== null
@@ -117,6 +113,19 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
               .catch(() => []),
           ])
         : [[], []];
+    // What was written back to the CRM it was planned from, and when (CRM receipts R8). Best effort, as the changes.
+    const receipt: CrmReceiptView | null = await crmReceiptFor(facts.id, (connection) => crmProvider(connection.provider)?.receipts?.writeScopes ?? null).catch((error: unknown) => {
+      console.error("deal: receipts in the CRM not read", error instanceof Error ? error.message : error);
+      return null;
+    });
+    // What it collected: the one figure its Paid and Outstanding show, and the CRM is told (CRM receipts R1). Best effort,
+    // as the cards: a read that fails says so on the tiles rather than show another figure.
+    const collected: Collection | null = await readDealCollections([deal], today)
+      .then((collections) => collections.get(facts.id)?.collection ?? null)
+      .catch((error: unknown) => {
+        console.error("deal: what it collected was not read", error instanceof Error ? error.message : error);
+        return null;
+      });
     const stopping = inForce(facts.lines).filter((line) => line.status === "planned" && line.kind === "charge");
 
     return (
@@ -132,11 +141,20 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
           }
         />
 
-        <DealFigures deal={deal} today={today} />
+        <DealFigures deal={deal} today={today} collected={collected} />
 
         <div className="space-y-8">
           {crm && <CrmDealChanges orgSlug={slug} dealId={facts.id} label={crm.label} words={crm.words} seen={crm.seen} canWrite={canWrite} active={facts.status === "active"} />}
-          <DealCashReadiness facts={facts} digits={digits} template={deal.template} costs={costs} applied={applied} today={today} {...(canWrite && facts.status === "active" ? { changeHref: "#change" } : {})} />
+          {receipt && <CrmReceiptCard orgSlug={slug} dealId={facts.id} view={receipt} canManage={canManage} />}
+          <DealCashReadiness
+            facts={facts}
+            digits={digits}
+            template={deal.template}
+            costs={costs}
+            collected={collected?.byReceivable ?? null}
+            today={today}
+            {...(canWrite && facts.status === "active" ? { changeHref: "#change" } : {})}
+          />
           <DealSchedule orgSlug={slug} deal={deal} today={today} canWrite={canWrite} />
           <DealCosts
             orgSlug={slug}

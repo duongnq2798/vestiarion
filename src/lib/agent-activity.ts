@@ -28,7 +28,7 @@ export const ACTIVITY_ACTIONS = [
 /** The people's actions on an invoice that give the agent something to decide: how long after one it decided is told. */
 export const TRIGGER_ACTIONS = ["create_invoice", "invoice_details_added", "approval_returned"] as const;
 
-export type ActivityTone = "done" | "stopped";
+export type ActivityTone = "done" | "pending" | "stopped";
 
 export interface ActivityItem {
   seq: number;
@@ -36,7 +36,11 @@ export interface ActivityItem {
   text: string;
   /** Who decided and what was checked, or why it stopped; null when the entry says neither. */
   detail: string | null;
-  /** Done (paid, scheduled, released, received) or stopped (held, asked, flagged, refused by code). */
+  /**
+   * Done (paid or released as Circle confirmed it, simulated, scheduled, received), pending (submitted and not confirmed
+   * by Circle yet, its outcome unknown, or a decision whose transfer the entry does not record), or stopped (held,
+   * asked, flagged, refused by code).
+   */
   tone: ActivityTone;
   /** Where in the workspace a person sees it, or handles it: an org path such as `/approvals#payable-<id>`. */
   path: string;
@@ -159,6 +163,30 @@ function firstSentence(detail: Record<string, unknown>): string | null {
 
 const joined = (...parts: Array<string | null>) => parts.filter((part): part is string => part !== null).join(" ") || null;
 
+/**
+ * What the entry's transfer ended as, as the entry recorded it, never the bill's status now (settlement lifecycle I17):
+ * `confirmed` once Circle confirmed it, `simulated` when the sandbox's simulator made it, `submitted` while Circle has
+ * it and has not confirmed it, and `unknown` when Circle never answered the send, so no Circle id was recorded (L3,
+ * "Outcome unknown"). A send in flight is never called simulated (L4). Null when the entry records no transfer.
+ */
+type TransferOutcome = "confirmed" | "simulated" | "submitted" | "unknown" | null;
+
+function transferOutcome(execution: Record<string, unknown> | null, statuses: { confirmed: string; sent: string }): TransferOutcome {
+  const resulting = text(execution?.resultingStatus);
+  // The simulator's mode, or its own transaction id (`sim_…`), which nothing else makes.
+  const simulated = text(execution?.chainMode) === "simulate" || (text(execution?.txRef)?.startsWith("sim_") ?? false);
+  if (resulting === statuses.confirmed) return simulated ? "simulated" : "confirmed";
+  if (resulting === statuses.sent) return text(execution?.txRef) ? "submitted" : "unknown";
+  return null;
+}
+
+/** What a transfer still in flight waits for, after "Submitted …": Circle's confirmation, or Circle's answer to the send. */
+function inFlight(outcome: "submitted" | "unknown", network: Network): string {
+  return outcome === "submitted"
+    ? `waiting for Circle to confirm it on ${networkProfile(network).label}`
+    : "Circle has not answered yet, so the outcome is unknown and nothing goes out again until it does";
+}
+
 /** One entry in words, or null when it is not one a person is told about, or what it is about is gone. */
 export function activityItem(entry: ActivityEntry, refs: ActivityRefs): ActivityItem | null {
   const item = itemOf(entry, refs);
@@ -184,9 +212,18 @@ function itemOf(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem, "t
         return { seq: entry.seq, text: `Tried to release ${what} to ${milestone.name}; it is held for you.`, detail: why, tone: "stopped", path: "/contractors", pathLabel: "Decide in Contractors", txHash: null };
       }
       const tx = arcTx(text(execution?.txRef)) ?? arcTx(milestone.txRef);
-      const sent =
-        resulting === "verified" ? `Sent ${what} to ${milestone.name}; ${networkProfile(refs.network).label} is confirming it.` : `Released ${what} to ${milestone.name}.`;
-      return { seq: entry.seq, text: sent, detail: deciderLine(entry.detail), tone: "done", path: "/contractors", pathLabel: "Contractors", txHash: tx };
+      // Released only once Circle confirmed it (I17): submitted, an unknown outcome, or no transfer recorded say so.
+      const outcome = transferOutcome(execution, { confirmed: "paid", sent: "verified" });
+      const said =
+        outcome === "confirmed"
+          ? `Released ${what} to ${milestone.name}; Circle confirmed it on ${networkProfile(refs.network).label}.`
+          : outcome === "simulated"
+            ? `Released ${what} to ${milestone.name} in the sandbox (simulated).`
+            : outcome
+              ? `Submitted ${what} to ${milestone.name}; ${inFlight(outcome, refs.network)}.`
+              : `Decided to release ${what} to ${milestone.name}.`;
+      const done = outcome === "confirmed" || outcome === "simulated";
+      return { seq: entry.seq, text: said, detail: deciderLine(entry.detail), tone: done ? "done" : "pending", path: "/contractors", pathLabel: "Contractors", txHash: tx };
     }
     return {
       seq: entry.seq,
@@ -220,7 +257,8 @@ function stuckItem(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem,
   const amount = activityAmount(number(entry.detail.amount) ?? 0, text(entry.detail.currency) ?? "USDC");
   return {
     seq: entry.seq,
-    text: `Payment of ${amount} to ${payee} has not confirmed ${number(entry.detail.minutes) ?? 0} min after it was sent on ${networkProfile(refs.network).label}.`,
+    // Submitted, never "sent": Circle may not have taken it (I17).
+    text: `Payment of ${amount} to ${payee} has not confirmed ${number(entry.detail.minutes) ?? 0} min after it was submitted to Circle on ${networkProfile(refs.network).label}.`,
     detail: stuckCircleLine(entry.detail),
     tone: "stopped",
     path: invoiceId ? invoiceHref(invoiceId, "trail") : "/contractors",
@@ -231,7 +269,7 @@ function stuckItem(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem,
 
 /** What Circle said of a payment that has not confirmed, or that it was not asked, or never answered the send. */
 function stuckCircleLine(detail: Record<string, unknown>): string {
-  if (detail.sendAnswered === false) return "Circle never answered the send.";
+  if (detail.sendAnswered === false) return "Circle never answered when it was submitted, so the outcome is unknown.";
   if (detail.circleAsked !== true) return "Circle could not be asked just now.";
   const state = text(detail.providerState);
   return state === "STUCK" ? "Circle shows it stuck." : `Circle shows it as ${state ?? "pending"}.`;
@@ -251,7 +289,16 @@ function invoiceItem(
   const how = { path: invoiceHref(id, "trail"), pathLabel: "How it decided" };
 
   if (entry.action === "ar_received") {
-    return { seq: entry.seq, text: `Received ${amount} from ${invoice.name}.`, detail: null, tone: "done", path: "/invoices", pathLabel: "Bills & receivables", txHash: arcTx(text(entry.detail.txHash)) };
+    // Read from Circle's completed inbound transfers only (receivables on Arc R3, R4): the source is named (I17).
+    return {
+      seq: entry.seq,
+      text: `Received ${amount} from ${invoice.name} on ${networkProfile(refs.network).label}: Circle reported the transfer complete.`,
+      detail: null,
+      tone: "done",
+      path: "/invoices",
+      pathLabel: "Bills & receivables",
+      txHash: arcTx(text(entry.detail.txHash)),
+    };
   }
   if (entry.action === "ar_reminder_sent") {
     const tone = text(entry.detail.tone) ?? "friendly";
@@ -283,8 +330,9 @@ function invoiceItem(
   switch (entry.action) {
     case "ap_pay": {
       const execution = record(entry.detail.execution);
-      // What the payment ended as, as the entry recorded it; the invoice's status now otherwise.
-      const resulting = text(execution?.resultingStatus) ?? invoice.status;
+      // What the payment ended as, as the entry recorded it; never the invoice's status now, which a later cycle or a
+      // person may have moved since (I17).
+      const resulting = text(execution?.resultingStatus);
       // Held in shadow mode: it passed every check and waits for a person to agree (shadow mode S2, S4).
       if (heldForVerdict(entry.detail)) {
         return {
@@ -302,8 +350,18 @@ function invoiceItem(
         return { seq: entry.seq, text: `Tried to pay ${invoice.name} ${amount}; it is held for you.`, detail: deciderLine(entry.detail), tone: "stopped", ...decide, txHash: null };
       }
       const tx = arcTx(text(execution?.txRef)) ?? arcTx(invoice.txRef);
-      const sent = resulting === "matched" ? `Sent ${amount} to ${invoice.name}${after}; ${networkProfile(refs.network).label} is confirming it.` : `Paid ${invoice.name} ${amount}${after}.`;
-      return { seq: entry.seq, text: sent, detail: joined(deciderLine(entry.detail), checksLine(entry.detail)), tone: "done", ...how, txHash: tx };
+      // Paid only once Circle confirmed it (I17): submitted, an unknown outcome, or no transfer recorded say so.
+      const outcome = transferOutcome(execution, { confirmed: "paid", sent: "matched" });
+      const said =
+        outcome === "confirmed"
+          ? `Paid ${invoice.name} ${amount}${after}; Circle confirmed it on ${networkProfile(refs.network).label}.`
+          : outcome === "simulated"
+            ? `Paid ${invoice.name} ${amount}${after} in the sandbox (simulated).`
+            : outcome
+              ? `Submitted ${amount} to ${invoice.name}${after}; ${inFlight(outcome, refs.network)}.`
+              : `Decided to pay ${invoice.name} ${amount}${after}.`;
+      const done = outcome === "confirmed" || outcome === "simulated";
+      return { seq: entry.seq, text: said, detail: joined(deciderLine(entry.detail), checksLine(entry.detail)), tone: done ? "done" : "pending", ...how, txHash: tx };
     }
     case "ap_schedule": {
       const payOn = text(record(entry.detail.decision)?.payOn) ?? invoice.scheduledFor;

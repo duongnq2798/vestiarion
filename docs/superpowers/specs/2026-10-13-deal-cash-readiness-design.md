@@ -38,8 +38,10 @@ someone happens to look, and nobody is told when it waited too long.
 **K4. Cash readiness is worked out in the browser from what the page read, by one pure function.**
 - `dealCashReadiness(deal, costs, today)` (`src/lib/deals/cash.ts`). Money in: each charge in force: a planned line on
   its due day ("planned"), a released line on its receivable's due day ("expected"), an overdue one today, a paid one
-  as collected to date. A line whose receivable a payment was applied to (allocations L11) counts what arrived as
-  collected and only what is still owed as expected, once, as Treasury and the payment plan count it (`stillOwed`). Credits owed to the customer are no money in or out (deal schedule D8). Money out: each cost as
+  as collected to date. Collected and still owed come line by line from what the deal collected
+  (`Collection.byReceivable`, src/lib/deals/collection.ts, crm-receipts R1), the same figures as the deal's Paid and
+  Outstanding: a part payment counts as what arrived and only the rest is expected; a fee settles the rest; a line
+  marked received with no payment on Arc is neither, and said. With no collection read, a line counts by its status. Credits owed to the customer are no money in or out (deal schedule D8). Money out: each cost as
   in K2, a planned cost past its day today.
 - **To date**: collected less paid out. Then day by day from today, only days with money moving: what comes in, what
   goes out, and the position after it. **Short** is the first day the position is below zero, by how much on that day,

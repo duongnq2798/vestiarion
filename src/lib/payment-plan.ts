@@ -522,7 +522,8 @@ function billDraft(bill: PlanBill, today: string, through: string, limits: PlanL
   if (bill.status === "flagged") {
     return draft("not_counted", "Flagged for review by the agent: not counted unless a person approves it.", { nowOn: null, defaultOn: null });
   }
-  if (bill.status === "matched") return draft("on_its_way", "Payment sent; waiting for confirmation.", { nowOn: today, defaultOn: today });
+  // Submitted, never "sent", until Circle confirms it (settlement lifecycle I17).
+  if (bill.status === "matched") return draft("on_its_way", "Payment submitted; waiting for Circle to confirm it.", { nowOn: today, defaultOn: today });
   if (bill.status === "processing") return draft("waiting", "A person is deciding it now in Approvals; counted today.", { nowOn: today, defaultOn: today });
   if (bill.status === "held" || bill.status === "awaiting_info") {
     const reason =

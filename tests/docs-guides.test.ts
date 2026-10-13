@@ -145,6 +145,11 @@ const ACCOUNTING_STATUS = "src/lib/connectors/status.ts";
 const ACCOUNTING_WORDS = "src/lib/connectors/provider.ts";
 // HubSpot's card, list and connect page are its own: a CRM's deals are planned, not added (HubSpot connector H20).
 const HUBSPOT_PANEL = "src/components/HubSpotPanel.tsx";
+const CRM_RECEIPT_CARD = "src/components/CrmReceiptCard.tsx";
+const CRM_RECEIPTS = "src/lib/connectors/crm-receipts.ts";
+const DEAL_COLLECTION = "src/lib/deals/collection.ts";
+const CRM_RECEIPTS_VIEW = "src/lib/connectors/crm-receipts-view.ts";
+const CRM_RECEIPTS_RUN = "src/lib/connectors/crm-receipts-run.ts";
 const HUBSPOT_DEALS = "src/components/HubSpotDeals.tsx";
 const HUBSPOT_CONNECT_PAGE = "src/app/integrations/hubspot/connect/page.tsx";
 const CRM_WORDS = "src/lib/connectors/crm.ts";
@@ -882,6 +887,13 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Payment approved", "src/components/payment-toast.tsx"],
     ["Payment confirmed", "src/components/payment-toast.tsx"],
     ["Payment processing", "src/components/payment-toast.tsx"],
+    // Paid only once Circle confirms it; submitted until then; simulated in a sandbox (settlement lifecycle I17).
+    ["Payment simulated", "src/components/payment-toast.tsx"],
+    ["Confirmed by Circle on", "src/components/payment-toast.tsx"],
+    ["waiting for Circle to confirm it on Arc testnet", "src/lib/agent-activity.ts", "waiting for Circle to confirm it on ${networkProfile(network).label}"],
+    ["in the sandbox (simulated)", "src/lib/agent-activity.ts"],
+    ["Circle confirmed it on Arc testnet", "src/lib/agent-activity.ts", "Circle confirmed it on ${networkProfile(refs.network).label}"],
+    ["marked this invoice paid. Thank you.", "src/app/pay/[token]/page.tsx"],
     ["Money you owe", "src/components/intake/InvoiceIntake.tsx"],
     ["USYC reserve", "src/lib/next-step.ts"],
     ["The agent decides it again on its own once cash comes in: USDC added to the operating wallet, or brought back from the reserve.", "src/lib/next-step.ts"],
@@ -1106,9 +1118,9 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["the workspace's people were told.", "src/lib/decision-trail.ts"],
     ["A payment of 12.50 USDC to Jiren has not confirmed", "src/lib/email/payment-stuck.ts", "A payment of ${first.amount} ${first.currency} to ${first.payeeName} has not confirmed"],
     [
-      "Payment of 12.50 USDC to Jiren has not confirmed 18 min after it was sent on Arc testnet.",
+      "Payment of 12.50 USDC to Jiren has not confirmed 18 min after it was submitted to Circle on Arc testnet.",
       "src/lib/agent-activity.ts",
-      "has not confirmed ${number(entry.detail.minutes) ?? 0} min after it was sent on ${networkProfile(refs.network).label}.",
+      "has not confirmed ${number(entry.detail.minutes) ?? 0} min after it was submitted to Circle on ${networkProfile(refs.network).label}.",
     ],
     [
       "The payment is still in flight on Arc testnet. It cannot be rejected or returned until Circle settles it; approving checks it again.",
@@ -1412,7 +1424,9 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["This payable changed after this message was posted. Open Vestiarion to see it as it is now.", CHAT_DECISIONS],
     ["This button no longer works", SLACK_INTERACTIONS],
     ["Connect your Slack account to Vestiarion first", SLACK_INTERACTIONS],
-    ["Approved and paid by", SLACK_BLOCKS],
+    ["Approved by", SLACK_BLOCKS],
+    // Paid only once Circle confirmed it (settlement lifecycle I17).
+    ["Circle confirmed the payment on Arc testnet.", SLACK_BLOCKS, "Circle confirmed the payment on ${label}."],
     ["Rejected by", SLACK_BLOCKS],
     ["Returned to the agent by", SLACK_BLOCKS],
     ["approval_paid", "src/lib/agent/approvals.ts"],
@@ -1511,6 +1525,33 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["HubSpot is not set up on this deployment yet.", HUBSPOT_PANEL],
     ["Disconnect HubSpot", HUBSPOT_PANEL],
     ["accounting_disconnected", ACCOUNTING_CONNECTIONS],
+    // Receipts back in HubSpot (CRM receipts R3, R8).
+    ["what was collected from payments confirmed on Arc, what is still owed, the last receipt, the reconciliation status and a link to the deal in Vestiarion", ACCOUNTING_CONSENT],
+    ["Receipts in HubSpot", CRM_RECEIPT_CARD, "Receipts in {view.label}"],
+    ["Allow writing to HubSpot", HUBSPOT_PANEL],
+    ["Write receipts to HubSpot", HUBSPOT_PANEL],
+    ["Stop writing to HubSpot", HUBSPOT_PANEL],
+    ["HubSpot is connected, and Vestiarion writes receipts to the deals planned from it, from the next sync.", HUBSPOT_PANEL],
+    ["a HubSpot super admin may need to approve the app's write access", HUBSPOT_PANEL, "A HubSpot super admin may need to approve the app's write access"],
+    ["Collected", CRM_RECEIPTS, 'label: "Collected"'],
+    ["Still owed", CRM_RECEIPTS, 'label: "Still owed"'],
+    ["Collection status", CRM_RECEIPTS, 'label: "Collection status"'],
+    ["Paid in full, Paid to date, Partly paid, Overdue, Awaiting payment or Nothing invoiced yet", DEAL_COLLECTION, 'nothing_invoiced: "Nothing invoiced yet"'],
+    ["Last receipt date", CRM_RECEIPTS, 'label: "Last receipt date"'],
+    ["Reconciliation status", CRM_RECEIPTS, 'label: "Reconciliation status"'],
+    ["Needs review", DEAL_COLLECTION, 'needs_review: "Needs review"'],
+    ["Evidence", CRM_RECEIPTS, 'label: "Evidence"'],
+    ["crm_receipt_written", CRM_RECEIPTS_RUN],
+    ["Not written: someone changed it in HubSpot", CRM_RECEIPTS_VIEW, "Not written: someone changed it in ${label}"],
+    ["Write Vestiarion's figures to HubSpot", CRM_RECEIPT_CARD, "Write Vestiarion&apos;s figures to {view.label}"],
+    ["crm_receipt_conflict", CRM_RECEIPTS_RUN],
+    ["crm_receipt_overwrite_chosen", "src/lib/connectors/crm-receipts-actions.ts"],
+    ["Not written to HubSpot yet", CRM_RECEIPTS_VIEW, "Not written to ${label} yet"],
+    [
+      "Not written: payments on Arc testnet and in shadow mode are written only to a HubSpot developer test account or sandbox, never to a real HubSpot account.",
+      CRM_RECEIPTS,
+      "Not written: payments on Arc testnet and in shadow mode are written only to a ${label} developer test account or sandbox, never to a real ${label} account.",
+    ],
   ],
   "guides/xero": [
     ["Connect Xero", ACCOUNTING_PANEL, "`Connect ${label}`"],

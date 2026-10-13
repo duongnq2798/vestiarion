@@ -9,7 +9,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { orgHref } from "@/lib/auth/org-paths";
 import { utcDay } from "@/lib/copy";
-import { cashBadge, dealCashReadiness, type ReceivableHeld } from "@/lib/deals/cash";
+import { cashBadge, dealCashReadiness } from "@/lib/deals/cash";
+import type { Collection } from "@/lib/deals/collection";
 import type { DealCost } from "@/lib/deals/costs";
 import { dealSummary } from "@/lib/deals/lines";
 import type { DealRecord } from "@/lib/deals/read";
@@ -28,28 +29,30 @@ export function dealStanding(deal: DealRecord, today: string): { label: string; 
 /**
  * Bills & receivables' Deals (docs/superpowers/specs/2026-10-12-deal-schedule-design.md): each signed deal with what of
  * it was released, paid, is still expected and is planned, its next line, and one badge for its cash readiness
- * (docs/superpowers/specs/2026-10-13-deal-cash-readiness-design.md K8); New deal for owners and admins. Before
- * migration 0104 runs it says deals are not set up, and nothing else on the page changes (D15).
+ * (docs/superpowers/specs/2026-10-13-deal-cash-readiness-design.md K8); New deal for owners and admins. Paid and
+ * Outstanding are what the deal collected (`collected`, src/lib/deals/collection.ts), the figure its own page shows and
+ * the CRM is told, and the badge counts collected money from the same figure; a deal whose collection was not read
+ * shows neither. Before migration 0104 runs it says deals are not set up, and nothing else on the page changes (D15).
  */
 export function DealsSection({
   deals,
   costs = null,
-  applied = {},
   orgSlug,
   today,
   newDeal,
   fromCrm,
+  collected = null,
 }: {
   deals: DealRecord[] | "not_ready" | "unread";
   /** Each deal's costs, for its cash badge (deal cash readiness K8); null before they are set up or when unread: no badge. */
   costs?: ReadonlyMap<string, DealCost[]> | null;
-  /** What was applied to each receivable, by its id (allocations L11): a part-paid line counts what is still owed. */
-  applied?: Readonly<Record<string, ReceivableHeld>>;
   orgSlug: string;
   today: string;
   newDeal?: ReactNode;
   /** A CRM's won deals, and the New deal form filled in from one (HubSpot connector H20). */
   fromCrm?: ReactNode;
+  /** What each deal collected, by deal id; null when it could not be read. */
+  collected?: ReadonlyMap<string, Collection> | null;
 }) {
   const header = (
     <SectionHeader
@@ -88,7 +91,9 @@ export function DealsSection({
             {deals.map((deal) => {
               const summary = dealSummary(deal.facts, today);
               const standing = dealStanding(deal, today);
-              const cash = costs ? cashBadge(dealCashReadiness(deal, costs.get(deal.facts.id) ?? [], today, applied), deal.facts.status) : null;
+              const collection = collected?.get(deal.facts.id) ?? null;
+              // Money in counted as Paid and Outstanding count it, when that was read (src/lib/deals/collection.ts).
+              const cash = costs ? cashBadge(dealCashReadiness(deal, costs.get(deal.facts.id) ?? [], today, collection?.byReceivable ?? null), deal.facts.status) : null;
               const money = (minor: number) => <DealMoney minor={minor} digits={deal.digits} currency={deal.facts.currency} />;
               return (
                 <li key={deal.facts.id}>
@@ -112,8 +117,12 @@ export function DealsSection({
                       <span className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-ink-2">
                         <span>Total {money(summary.totalMinor)}</span>
                         <span>Released {money(summary.releasedMinor)}</span>
-                        <span>Paid {money(summary.paidMinor)}</span>
-                        <span className={summary.overdueMinor > 0 ? "text-held" : undefined}>Outstanding {money(summary.outstandingMinor)}</span>
+                        {collection && (
+                          <>
+                            <span>Paid {money(collection.collectedMinor)}</span>
+                            <span className={collection.overdueMinor > 0 ? "text-held" : undefined}>Outstanding {money(collection.stillOwedMinor)}</span>
+                          </>
+                        )}
                         <span>Planned {money(summary.plannedMinor)}</span>
                       </span>
                       <span className="block text-xs text-ink-3">

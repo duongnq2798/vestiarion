@@ -146,14 +146,32 @@ describe.each(["xero", "quickbooks", "hubspot"] as const)("the %s connect page",
   it("asks for I agree with a real, required checkbox its label ticks", async () => {
     memberships.value = [workspace("acme")];
     const markup = await connectPage(provider);
-    const boxes = inputs(markup).filter((input) => input.type === "checkbox");
+    const checkboxes = inputs(markup).filter((input) => input.type === "checkbox");
+    const boxes = checkboxes.filter((input) => input.name === "consent");
     expect(boxes).toHaveLength(1);
     expect(boxes[0]).toMatchObject({ name: "consent", value: "yes" });
     expect("required" in boxes[0]).toBe(true);
     expect(labelFor(markup, boxes[0].id)).toMatch(/^I agree/);
+    // HubSpot alone offers to write receipts back, a choice of its own, never required (CRM receipts R3).
+    const others = checkboxes.filter((input) => input.name !== "consent");
+    expect(others.map((input) => input.name)).toEqual(provider === "hubspot" ? ["write"] : []);
+    for (const box of others) {
+      expect("required" in box).toBe(false);
+      expect("checked" in box).toBe(false);
+      expect(labelFor(markup, box.id)).toMatch(/^Write receipts to HubSpot/);
+    }
     // No stand-in control a form cannot see: what is ticked is what is posted.
     expect(markup).not.toContain('role="checkbox"');
     expect(markup).not.toContain('role="radio"');
+  });
+});
+
+describe("the HubSpot connect page's choice to write receipts (CRM receipts R3)", () => {
+  it("is ticked when a Settings card sent the person to allow writing, and only then", async () => {
+    memberships.value = [workspace("acme")];
+    const ticked = inputs(await connectPage("hubspot", { org: "acme", write: "1" })).find((input) => input.name === "write");
+    expect(ticked).toMatchObject({ type: "checkbox", value: "yes" });
+    expect(ticked && "checked" in ticked).toBe(true);
   });
 });
 

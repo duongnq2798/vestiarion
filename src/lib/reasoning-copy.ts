@@ -107,9 +107,12 @@ export function noteSentence(note: string): string | null {
     return detail ? plainFigures(`The transfer failed: ${detail}.`) : "The transfer failed.";
   }
   if (note.startsWith("execution failed:")) return "The payment could not be sent.";
-  if (note.startsWith("transfer submitted")) return "The transfer was sent and is waiting for Circle to confirm it.";
-  // A note the transfer's own follows when it did not confirm (sent, or failed): never "paid" before it was (settlement lifecycle L9).
+  // Submitted, never "sent", until Circle confirms it (settlement lifecycle I17).
+  if (note.startsWith("transfer submitted")) return "The transfer was submitted and is waiting for Circle to confirm it.";
+  // A note the transfer's own follows when it did not confirm (submitted, or failed): never "paid" before it was (settlement
+  // lifecycle L9). Stored before I17, a person's payment said paid whatever its transfer did; since, only once it is.
   if (note === "approved and paid by a person") return "A person approved paying it.";
+  if (note === "approved by a person; payment submitted" || note === "approved by a person; payment not confirmed") return "A person approved paying it.";
   if (note === "paid now by a person") return "A person chose Pay now.";
   if (note.startsWith("closed without paying by a person:")) return `A person closed it without paying: ${after("closed without paying by a person:").replace(/\.$/, "")}.`;
   if (note.startsWith("balance sync failed:")) return "The wallet balance could not be refreshed afterwards.";

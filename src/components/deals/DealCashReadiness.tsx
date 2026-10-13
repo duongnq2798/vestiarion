@@ -12,7 +12,8 @@ import { Input } from "@/components/ui/Input";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { StatTile } from "@/components/vx/StatTile";
 import { utcDay } from "@/lib/copy";
-import { dealCashReadiness, depositLever, percentWords, tryDeposit, type CashDay, type CashItem, type CashReadiness, type ReceivableHeld } from "@/lib/deals/cash";
+import { dealCashReadiness, depositLever, percentWords, tryDeposit, type CashDay, type CashItem, type CashReadiness } from "@/lib/deals/cash";
+import type { ReceivableCollected } from "@/lib/deals/collection";
 import type { DealCost } from "@/lib/deals/costs";
 import type { DealFacts } from "@/lib/deals/lines";
 import { formatMinor } from "@/lib/deals/money";
@@ -106,7 +107,7 @@ export function DealCashReadiness({
   digits,
   template,
   costs,
-  applied = {},
+  collected = null,
   today,
   changeHref,
   initialTry,
@@ -117,8 +118,11 @@ export function DealCashReadiness({
   template: DealTemplate;
   /** Null when the costs could not be read, or before they are set up. */
   costs: DealCost[] | null;
-  /** What was applied to each released line's receivable, by its id (allocations L11): a part-paid line counts what is still owed. */
-  applied?: Readonly<Record<string, ReceivableHeld>>;
+  /**
+   * What each released line's receivable collected and still owes, by its id: the figures behind the deal's Paid and
+   * Outstanding (src/lib/deals/collection.ts). Null when they could not be read: each line counts by its status.
+   */
+  collected?: Readonly<Record<string, ReceivableCollected>> | null;
   today: string;
   /** Where Change deal is, for a person who may save a try as a new version. */
   changeHref?: string;
@@ -132,12 +136,12 @@ export function DealCashReadiness({
   const [depositOn, setDepositOn] = useState(initialTry?.depositOn ?? lever?.invoiceOn ?? "");
   const [depositPct, setDepositPct] = useState(initialTry?.depositPct ?? startPct);
 
-  const base = dealCashReadiness({ facts, digits }, costs, today, applied);
+  const base = dealCashReadiness({ facts, digits }, costs, today, collected);
   const trying = lever !== null && (depositOn !== lever.invoiceOn || depositPct.trim() !== startPct);
   const tried = trying
     ? tryDeposit(facts, { depositOn: depositOn !== lever?.invoiceOn ? depositOn : undefined, depositPct: depositPct.trim() !== startPct ? depositPct : undefined }, digits, template)
     : null;
-  const triedReadiness = tried?.ok ? dealCashReadiness({ facts: tried.facts, digits }, costs, today, applied) : null;
+  const triedReadiness = tried?.ok ? dealCashReadiness({ facts: tried.facts, digits }, costs, today, collected) : null;
   const shown = triedReadiness ?? base;
   const margin = shown.margin;
   const lowest = shown.days.reduce((low, day) => Math.min(low, day.positionMinor), shown.toDateMinor);
@@ -251,6 +255,7 @@ export function DealCashReadiness({
             <span className={cn("text-right font-mono text-xs font-semibold tabular-nums sm:order-last", shown.toDateMinor < 0 ? "text-held" : "text-ink")}>{money(shown.toDateMinor)}</span>
             <span className="col-span-2 text-xs text-ink-2 sm:col-span-1">
               {money(shown.collected.totalMinor)} collected − {money(shown.paidOut.totalMinor)} paid out: money that moved.
+              {shown.unverified.totalMinor > 0 && ` ${money(shown.unverified.totalMinor)} marked received without a payment on Arc is not counted.`}
             </span>
           </li>
           {shown.days.map((day) => (

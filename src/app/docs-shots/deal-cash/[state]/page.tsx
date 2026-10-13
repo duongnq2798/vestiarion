@@ -5,7 +5,8 @@ import { BillRows } from "@/components/bills/BillsList";
 import type { BillRowItem } from "@/components/bills/types";
 import { DealCashReadiness } from "@/components/deals/DealCashReadiness";
 import { DealCosts } from "@/components/deals/DealCosts";
-import { DealFigures, DealHeadSub } from "@/components/deals/DealHead";
+import { DealFigures } from "@/components/deals/DealFigures";
+import { DealHeadSub } from "@/components/deals/DealHead";
 import { DealSchedule } from "@/components/deals/DealSchedule";
 import { DealsSection } from "@/components/deals/DealsSection";
 import { cn } from "@/components/ui/cn";
@@ -24,6 +25,7 @@ import {
   DEAL_CASH_COSTS,
   DEAL_CASH_MEMBERS,
   DEAL_CASH_TODAY,
+  dealCashCollected,
   HELD_BILLS,
   LINK_CANDIDATES,
   NO_COSTS_DEAL,
@@ -57,12 +59,13 @@ const DEALS: Record<"short" | "covered" | "no-costs" | "try", { deal: DealRecord
 function DealShot({ state }: { state: keyof typeof DEALS }) {
   const { deal, costs } = DEALS[state];
   const today = DEAL_CASH_TODAY;
+  const collected = dealCashCollected(deal);
   return (
     <>
       <PageHead title={deal.title} sub={<DealHeadSub deal={deal} today={today} />} />
-      <DealFigures deal={deal} today={today} />
+      <DealFigures deal={deal} today={today} collected={collected} />
       <div className="space-y-8">
-        <DealCashReadiness facts={deal.facts} digits={deal.digits} template={deal.template} costs={costs} today={today} changeHref="#change" {...(state === "try" ? { initialTry: { depositOn: "2026-10-05" } } : {})} />
+        <DealCashReadiness facts={deal.facts} digits={deal.digits} template={deal.template} costs={costs} collected={collected.byReceivable} today={today} changeHref="#change" {...(state === "try" ? { initialTry: { depositOn: "2026-10-05" } } : {})} />
         <DealSchedule orgSlug={DESIGN_SLUG} deal={deal} today={today} canWrite />
         <DealCosts
           orgSlug={DESIGN_SLUG}
@@ -142,7 +145,13 @@ export default async function DealCashStatePage({ params }: Props) {
           ) : shown === "list" ? (
             <>
               <PageHead title={sectionTitle("invoices")} sub="Your bills, what the agent decided on each, and why." />
-              <DealsSection deals={[SHORT_DEAL, COVERED_DEAL, NO_COSTS_DEAL]} costs={DEAL_CASH_COSTS} orgSlug={DESIGN_SLUG} today={DEAL_CASH_TODAY} />
+              <DealsSection
+                deals={[SHORT_DEAL, COVERED_DEAL, NO_COSTS_DEAL]}
+                costs={DEAL_CASH_COSTS}
+                collected={new Map([SHORT_DEAL, COVERED_DEAL, NO_COSTS_DEAL].map((each) => [each.facts.id, dealCashCollected(each)]))}
+                orgSlug={DESIGN_SLUG}
+                today={DEAL_CASH_TODAY}
+              />
             </>
           ) : (
             <DealShot state={shown} />

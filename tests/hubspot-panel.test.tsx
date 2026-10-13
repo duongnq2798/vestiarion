@@ -6,6 +6,8 @@ vi.mock("@/app/actions/hubspot", () => ({
   disconnectHubSpotAction: vi.fn(),
   keepCrmChangeAction: vi.fn(),
   fillCrmEmailAction: vi.fn(),
+  setHubSpotReceiptsAction: vi.fn(),
+  overwriteHubSpotReceiptAction: vi.fn(),
 }));
 vi.mock("@/app/actions/deals", () => ({ createDealAction: vi.fn(), changeDealAction: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));

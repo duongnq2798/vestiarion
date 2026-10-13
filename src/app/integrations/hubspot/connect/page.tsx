@@ -19,7 +19,7 @@ export const metadata: Metadata = { title: "Connect HubSpot" };
 export const dynamic = "force-dynamic";
 
 type ConnectPageProps = {
-  searchParams: Promise<{ org?: string | string[]; consent?: string | string[]; error?: string | string[] }>;
+  searchParams: Promise<{ org?: string | string[]; consent?: string | string[]; error?: string | string[]; write?: string | string[] }>;
 };
 
 const one = (value: string | string[] | undefined) => (typeof value === "string" ? value : "");
@@ -34,7 +34,10 @@ const ERRORS: Record<string, string> = {
  * side effect. The person picks the workspace, among those they may manage integrations for (the one a Settings card
  * names in `?org=`, or the only one, picked already), reads what Vestiarion does with HubSpot's data and ticks I agree
  * (real inputs with labels); Continue to HubSpot posts to the connect route, which checks all of it again.
- * HubSpot asks which account to install the app in; one account is connected per workspace.
+ * HubSpot asks which account to install the app in; one account is connected per workspace. Write receipts to HubSpot
+ * (docs/superpowers/specs/2026-10-13-crm-receipts-design.md R3) is the person's own choice here, ticked when a Settings
+ * card sent them to allow writing (`?write=1`): HubSpot is then asked for its write scopes too, and writing is turned on
+ * once it grants them.
  */
 export default async function HubSpotConnectPage({ searchParams }: ConnectPageProps) {
   const params = await searchParams;
@@ -44,6 +47,7 @@ export default async function HubSpotConnectPage({ searchParams }: ConnectPagePr
   const workspaces = (await membershipsOf(user.id)).filter((membership) => can(membership.role, "integrations.manage"));
   const chosen = workspaces.find((membership) => membership.slug === org) ?? (workspaces.length === 1 ? workspaces[0] : null);
   const error = ERRORS[one(params.error)] ?? null;
+  const write = one(params.write) === "1";
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -108,6 +112,13 @@ export default async function HubSpotConnectPage({ searchParams }: ConnectPagePr
                   </ul>
                 </Callout>
                 <p className="text-sm text-ink-2">One HubSpot account connects to one Vestiarion workspace at a time.</p>
+                <NativeCheckbox
+                  name="write"
+                  value="yes"
+                  defaultChecked={write}
+                  label="Write receipts to HubSpot"
+                  description="HubSpot is asked to let Vestiarion write, too: each deal planned from HubSpot then gets what was collected from payments confirmed on Arc, what is still owed, the last receipt, the reconciliation status and a link to it, in a Vestiarion property group. Payments on Arc testnet or in shadow mode are written only to a HubSpot developer test account or sandbox."
+                />
                 <NativeCheckbox
                   name="consent"
                   value="yes"

@@ -1,7 +1,9 @@
 import type { WaitingPayable } from "@/lib/agent/approvals";
+import { dealCollection, type Collection } from "@/lib/deals/collection";
 import type { DealCost } from "@/lib/deals/costs";
 import type { LinkCandidate } from "@/lib/deals/costs-read";
 import type { DealRecord } from "@/lib/deals/read";
+import { NETWORKS } from "@/lib/network";
 import { homeChain } from "@/lib/payee-chains";
 
 /**
@@ -163,6 +165,39 @@ export const DEAL_CASH_COSTS = new Map<string, DealCost[]>([
   [COVERED_ID, COVERED_COSTS],
   [NO_COSTS_ID, []],
 ]);
+
+/**
+ * What a pictured deal collected, as its page reads it (`dealCollection`): each line marked received was paid whole on
+ * Arc the day before its due day.
+ */
+export function dealCashCollected(record: DealRecord): Collection {
+  const released = record.facts.lines.flatMap((line) => (line.receivable ? [{ line, receivable: line.receivable }] : []));
+  return dealCollection({
+    deal: { currency: record.facts.currency, digits: record.digits, status: record.facts.status },
+    receivables: released.map(({ line, receivable }) => ({
+      id: receivable.id,
+      amount: line.amountMinor / 10 ** record.digits,
+      currency: record.facts.currency,
+      status: receivable.status,
+      dueOn: receivable.dueDate.slice(0, 10),
+      originalCurrency: null,
+      originalAmount: null,
+    })),
+    payments: released
+      .filter(({ receivable }) => receivable.status === "received")
+      .map(({ line, receivable }) => ({
+        transferId: `transfer-${receivable.id}`,
+        invoiceId: receivable.id,
+        amount: line.amountMinor / 10 ** record.digits,
+        receivedAt: `${receivable.dueDate.slice(0, 10)}T09:00:00Z`,
+        txHash: null,
+        chain: NETWORKS["arc-testnet"].circleBlockchain,
+      })),
+    fees: [],
+    notInvoicedMinor: record.facts.lines.filter((line) => line.status === "planned" && line.kind === "charge").reduce((sum, line) => sum + line.amountMinor, 0),
+    today: DEAL_CASH_TODAY,
+  });
+}
 
 export const DEAL_CASH_MEMBERS = [
   { userId: "docs-sample-owner", email: "ana@northstar.example", role: "owner" },

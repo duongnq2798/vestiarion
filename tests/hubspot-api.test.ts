@@ -5,7 +5,7 @@ import { ProviderError } from "@/lib/connectors/provider";
 import { searchBody } from "@/lib/hubspot/api";
 import { authorizeUrl, exchangeCode, listAccount, refreshTokens, revokeToken } from "@/lib/hubspot/oauth";
 import { hubspotProvider } from "@/lib/hubspot/provider";
-import { HUBSPOT_SCOPES, hubspotRedirectUri, hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
+import { HUBSPOT_SCOPES, HUBSPOT_WRITE_SCOPES, hubspotRedirectUri, hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
 
 /**
  * HubSpot over HTTP (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H4, H5, H6, H8), against a recording
@@ -70,6 +70,13 @@ describe("settings", () => {
 });
 
 describe("OAuth", () => {
+  it("asks for the write scopes as optional ones only when writing receipts is allowed (CRM receipts R3)", () => {
+    const url = new URL(authorizeUrl(SETTINGS, { state: "vx1.state", redirectUri: "https://www.vestiarion.xyz/api/integrations/hubspot/callback", write: true }));
+    expect(url.searchParams.get("scope")).toBe("oauth crm.objects.companies.read crm.objects.contacts.read crm.objects.deals.read");
+    expect(url.searchParams.get("optional_scope")).toBe("crm.objects.deals.write crm.schemas.deals.write");
+  });
+
+
   it("sends the person to HubSpot with the app's required scopes, read-only, and the state", () => {
     const url = new URL(authorizeUrl(SETTINGS, { state: "vx1.state", redirectUri: "https://www.vestiarion.xyz/api/integrations/hubspot/callback" }));
     expect(`${url.origin}${url.pathname}`).toBe("https://app.hubspot.com/oauth/authorize");
@@ -248,6 +255,8 @@ describe("the app's config in integrations/hubspot", () => {
     expect(config.config.auth.type).toBe("oauth");
     expect(config.config.distribution).toBe("marketplace");
     expect([...config.config.auth.requiredScopes].sort()).toEqual([...HUBSPOT_SCOPES].sort());
+    // Writing receipts back (CRM receipts R3): optional, asked for only when an owner or admin allows it.
+    expect([...config.config.auth.optionalScopes].sort()).toEqual([...HUBSPOT_WRITE_SCOPES].sort());
     expect(config.config.auth.redirectUrls).toEqual(
       expect.arrayContaining([hubspotRedirectUri("https://www.vestiarion.xyz"), hubspotRedirectUri("http://localhost:3000")])
     );

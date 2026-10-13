@@ -66,8 +66,11 @@ export function plainText(html: string): string {
     .replace(/&amp;/g, "&");
 }
 
+/** A decision's mark: done, or stopped for a person. A payment Circle has not confirmed yet is neither, and has none (I17). */
+const MARK: Record<ActivityItem["tone"], string> = { done: "✅ ", stopped: "⏸ ", pending: "" };
+
 function decisionBlock(item: ActivityItem, slug: string, origin: string): string {
-  const lines = [`${item.tone === "done" ? "✅" : "⏸"} ${escapeHtml(clip(item.text, ITEM_TEXT_MAX))}`];
+  const lines = [`${MARK[item.tone]}${escapeHtml(clip(item.text, ITEM_TEXT_MAX))}`];
   if (item.detail) lines.push(`<i>${escapeHtml(clip(item.detail, ITEM_DETAIL_MAX))}</i>`);
   const links = [...(item.txUrl ? [link(item.txUrl, `${networkProfile(item.network).label} transaction`)] : []), link(orgUrl(origin, slug, item.path), item.pathLabel)];
   lines.push(links.join(" · "));

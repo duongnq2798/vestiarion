@@ -2,7 +2,7 @@ import { parseRetryAfter } from "../connectors/backoff";
 import { ProviderError, type ExchangeOutcome, type ExternalOrganisation, type RefreshOutcome } from "../connectors/provider";
 import { HUBSPOT_AUTHORIZE, HUBSPOT_INTROSPECT, HUBSPOT_REVOKE, HUBSPOT_TOKEN, hubspotFetch, jsonOf, oauthForm, type HubSpotHttp } from "./http";
 import { mapIntrospection, mapTokens } from "./map";
-import { HUBSPOT_SCOPES, type HubSpotSettings } from "./settings";
+import { HUBSPOT_SCOPES, HUBSPOT_WRITE_SCOPES, type HubSpotSettings } from "./settings";
 
 /**
  * HubSpot's OAuth 2.0 authorization code flow for an app on the developer platform
@@ -12,11 +12,16 @@ import { HUBSPOT_SCOPES, type HubSpotSettings } from "./settings";
  * the grant's "authorization event" so the core can ask for the account without another call.
  */
 
-export function authorizeUrl(settings: HubSpotSettings, input: { state: string; redirectUri: string }): string {
+/**
+ * With `write` (an owner or admin allowing receipts to be written, docs/superpowers/specs/2026-10-13-crm-receipts-design.md
+ * R3), the optional write scopes too: HubSpot grants them, or drops them and connects read-only.
+ */
+export function authorizeUrl(settings: HubSpotSettings, input: { state: string; redirectUri: string; write?: boolean }): string {
   const url = new URL(HUBSPOT_AUTHORIZE);
   url.searchParams.set("client_id", settings.clientId);
   url.searchParams.set("redirect_uri", input.redirectUri);
   url.searchParams.set("scope", HUBSPOT_SCOPES.join(" "));
+  if (input.write) url.searchParams.set("optional_scope", HUBSPOT_WRITE_SCOPES.join(" "));
   url.searchParams.set("state", input.state);
   return url.toString();
 }

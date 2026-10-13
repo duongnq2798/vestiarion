@@ -43,7 +43,7 @@ beforeEach(() => {
 });
 
 describe("paymentReceiptToast", () => {
-  it("says the payment is confirmed first, then how much, to whom, who decided it, where, and the transaction", () => {
+  it("says the payment is confirmed first, then how much, to whom, who decided it, where and who confirmed it, and the transaction", () => {
     paymentReceiptToast(CONFIRMED, "payment-inv-1");
 
     const [title, options] = toastMock.success.mock.calls[0];
@@ -51,7 +51,9 @@ describe("paymentReceiptToast", () => {
     expect(options).toMatchObject({ id: "payment-inv-1", duration: 10_000, closeButton: true });
     const markup = html(options.description);
     const read = text(markup);
-    const order = ["4.50", "USDC", "Paid to Design Studio", "Agent decision approved by you", "Arc testnet", "View transaction"].map((part) => read.indexOf(part));
+    const order = ["4.50", "USDC", "Paid to Design Studio", "Agent decision approved by you", "Confirmed by Circle on Arc testnet", "View transaction"].map((part) =>
+      read.indexOf(part)
+    );
     expect(order.every((at) => at >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     // A quiet link, not a button: the payment is what the toast says, the transaction is where to check it.
@@ -61,7 +63,7 @@ describe("paymentReceiptToast", () => {
     expect(markup).not.toContain("<button");
   });
 
-  it("calls a payment the network is still confirming processing, never confirmed", () => {
+  it("calls a payment Circle has not confirmed processing and submitted, never confirmed, sent or paid (I17)", () => {
     paymentReceiptToast({ ...CONFIRMED, state: "confirming", txUrl: null });
 
     expect(toastMock.success).not.toHaveBeenCalled();
@@ -70,11 +72,34 @@ describe("paymentReceiptToast", () => {
     expect(title).toBe("Payment processing");
     expect(options).toMatchObject({ closeButton: true });
     const read = text(html(options.description));
-    expect(read).toContain("Sent to Design Studio");
-    expect(read).toContain("Waiting for Arc testnet to confirm it");
-    expect(read).not.toContain("Paid to");
+    expect(read).toContain("Submitted to Circle for Design Studio");
+    expect(read).toContain("Waiting for Circle to confirm it on Arc testnet");
+    expect(read).not.toMatch(/\b(sent|paid)\b/i);
     // Circle's own id is not a transaction the explorer opens.
     expect(read).not.toContain("View transaction");
+  });
+
+  it("says a send Circle never answered has an unknown outcome, never that it was sent or paid", () => {
+    paymentReceiptToast({ ...CONFIRMED, state: "confirming", outcomeUnknown: true, txUrl: null });
+
+    const [title, options] = toastMock.info.mock.calls[0];
+    expect(title).toBe("Payment processing");
+    const read = text(html(options.description));
+    expect(read).toContain("Submitted to Circle for Design Studio");
+    expect(read).toContain("Circle has not answered yet, so the outcome is unknown; nothing goes out again until it does");
+    expect(read).not.toMatch(/\b(sent|paid)\b/i);
+  });
+
+  it("calls a payment the sandbox simulated simulated, never confirmed by Circle", () => {
+    paymentReceiptToast({ ...CONFIRMED, network: "Sandbox (simulated)", txUrl: null });
+
+    const [title, options] = toastMock.success.mock.calls[0];
+    expect(title).toBe("Payment simulated");
+    const read = text(html(options.description));
+    expect(read).toContain("Simulated payment to Design Studio");
+    expect(read).toContain("Sandbox (simulated)");
+    expect(read).not.toContain("Circle");
+    expect(read).not.toContain("Paid to");
   });
 
   it("says a person approved it when it was not the agent's decision to pay, and what the reserve gave back", () => {

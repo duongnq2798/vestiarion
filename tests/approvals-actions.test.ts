@@ -128,7 +128,7 @@ describe("approveInvoiceAction", () => {
 
     const result = await run(() => approveInvoiceAction(INITIAL, form(VALID_ID)));
 
-    expect(result).toEqual({ ok: true, message: "Payment submitted; waiting for confirmation." });
+    expect(result).toEqual({ ok: true, message: "Payment submitted; waiting for Circle to confirm it." });
     // Not confirmed yet: the cycle that confirms it sends the notice.
     expect(noticesSoonMock).not.toHaveBeenCalled();
   });

@@ -45,7 +45,7 @@ const SERVICES: ReadonlyArray<{
     href: "/docs/guides/quickbooks",
     check: "Read the guide",
   },
-  { brand: "hubspot", name: "HubSpot", role: "Works with", body: "Won deals come in with their customers, to plan as collection schedules.", href: "/docs/guides/hubspot", check: "Read the guide" },
+  { brand: "hubspot", name: "HubSpot", role: "Works with", body: "Won deals come in with their customers, to plan as collection schedules; what each collected goes back to the deal.", href: "/docs/guides/hubspot", check: "Read the guide" },
   { brand: "slack", name: "Slack", role: "Works with", body: "The agent's decisions in a channel your team picks.", href: "/docs/guides/slack", check: "Read the guide" },
   { brand: "telegram", name: "Telegram", role: "Works with", body: "The agent's decisions in your own chat. The bot never pays.", href: "/docs/guides/telegram", check: "Read the guide" },
   { brand: "npm", name: "npm", role: "SDK on", body: "@vestiarion/sdk, a typed client for every endpoint.", href: "/docs/get-started/sdk", check: "Read the docs" },

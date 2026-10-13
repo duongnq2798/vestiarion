@@ -115,8 +115,11 @@ export default function TermsPage() {
         </p>
         <p>
           When an owner or admin connects HubSpot to a workspace, they agree, for the workspace, that Vestiarion reads the companies, contacts and deals
-          of the HubSpot account they connect: names, amounts, close dates, pipeline stages and each company&apos;s main contact email. It writes nothing
-          to HubSpot. They are shown to the workspace&apos;s members and to its agent; the agent&apos;s model provider may see a deal&apos;s facts to
+          of the HubSpot account they connect: names, amounts, close dates, pipeline stages and each company&apos;s main contact email. It writes to
+          HubSpot only once an owner or admin allows it: then, on each HubSpot deal planned in Vestiarion, what was collected from payments confirmed
+          on Arc, what is still owed, the last receipt, the reconciliation status and a link to the deal in Vestiarion, in a Vestiarion property
+          group, never HubSpot&apos;s own fields; and payments on Arc testnet or in shadow mode only to a HubSpot developer test account or sandbox. A
+          field someone changed in HubSpot is not written over until a person in Vestiarion chooses to. They are shown to the workspace&apos;s members and to its agent; the agent&apos;s model provider may see a deal&apos;s facts to
           decide on its collections, and may not train on them. Vestiarion never uses HubSpot data to train or improve any AI model, and never passes
           it to anyone else without the workspace&apos;s say. A deal won in HubSpot becomes a deal in Vestiarion only when a person plans it, and a
           change made in HubSpot afterwards changes nothing in Vestiarion until a person does. One HubSpot account connects to one workspace at a

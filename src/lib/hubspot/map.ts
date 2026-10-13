@@ -38,11 +38,50 @@ export function mapIntrospection(body: unknown): { hubId: string | null; hubDoma
   return { hubId: idOf(json.hub_id), hubDomain: cut(text(json.hub_domain), 200) };
 }
 
-/** The account's details (`/account-info/2026-03/details`): its currency and time zone. */
-export function mapAccountDetails(body: unknown): { hubId: string | null; currency: string | null; timeZone: string | null } {
+/**
+ * The account's details (`/account-info/2026-03/details`): its currency and time zone, and its type
+ * (docs/superpowers/specs/2026-10-13-crm-receipts-design.md R4): `STANDARD`, `DEVELOPER_TEST`, `SANDBOX` or
+ * `APP_DEVELOPER`, as HubSpot names it; null when it names none or another word.
+ */
+export function mapAccountDetails(body: unknown): { hubId: string | null; currency: string | null; timeZone: string | null; accountType: string | null } {
   const json = isObject(body) ? body : {};
   const currency = typeof json.companyCurrency === "string" && CURRENCY.test(json.companyCurrency) ? json.companyCurrency : null;
-  return { hubId: idOf(json.portalId), currency, timeZone: cut(text(json.timeZone), 64) };
+  const accountType = typeof json.accountType === "string" && /^[A-Z_]{1,40}$/.test(json.accountType) ? json.accountType : null;
+  return { hubId: idOf(json.portalId), currency, timeZone: cut(text(json.timeZone), 64), accountType };
+}
+
+/** HubSpot's own test accounts (R4): a developer test account and a sandbox. Anything else is a real business's portal. */
+export const HUBSPOT_TEST_ACCOUNTS: ReadonlySet<string> = new Set(["DEVELOPER_TEST", "SANDBOX"]);
+
+/** Property definitions (`/crm/properties/2026-03/deals/batch/read`): each one's name and type, archived ones left out. */
+export function mapPropertyDefinitions(body: unknown): Map<string, { type: string | null; groupName: string | null }> {
+  const json = isObject(body) ? body : {};
+  if (!Array.isArray(json.results)) throw new ProviderError("bad_response", "HubSpot's property read had no results");
+  const found = new Map<string, { type: string | null; groupName: string | null }>();
+  for (const item of json.results) {
+    if (!isObject(item) || item.archived === true) continue;
+    const name = text(item.name);
+    if (name) found.set(name, { type: text(item.type), groupName: text(item.groupName) });
+  }
+  return found;
+}
+
+/** A deal read with these properties (`/crm/objects/2026-03/deals/{id}`): each one's value as text, null for none. */
+export function mapDealFields(body: unknown, names: readonly string[]): Record<string, string | null> {
+  const json = isObject(body) ? body : {};
+  if (!isObject(json.properties)) throw new ProviderError("bad_response", "HubSpot's deal had no properties");
+  const properties = json.properties;
+  return Object.fromEntries(names.map((name) => {
+    const value = properties[name];
+    return [name, typeof value === "string" ? value : typeof value === "number" && Number.isFinite(value) ? String(value) : null];
+  }));
+}
+
+/** HubSpot's words for a refused request (a 400's `message`), cut to fit, never a token. */
+export function mapRefusal(body: unknown): string {
+  const json = isObject(body) ? body : {};
+  const message = text(json.message);
+  return message ? `HubSpot said: ${message.slice(0, 240)}` : "HubSpot refused the request.";
 }
 
 export interface PipelineStage {

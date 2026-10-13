@@ -179,7 +179,8 @@ function tell(items: ActivityItem[], since: number, go: (path: string) => void) 
   }
   for (const item of items) {
     const id = `agent-activity-${item.seq}`;
-    const raise = item.tone === "done" ? toast.success : toast.warning;
+    // A payment Circle has not confirmed yet is neither a success nor a stop (I17).
+    const raise = item.tone === "done" ? toast.success : item.tone === "pending" ? toast.info : toast.warning;
     raise(item.text, {
       id,
       description: (

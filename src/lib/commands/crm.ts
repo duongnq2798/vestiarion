@@ -1,8 +1,11 @@
-import { NotSetUpError } from "../connectors/connections";
+import { connectionFor, NotSetUpError } from "../connectors/connections";
+import { chooseOverwrite, setReceiptWrites } from "../connectors/crm-receipts-actions";
+import { writeGate } from "../connectors/crm-receipts-run";
 import { plannable } from "../connectors/crm";
 import { crmRow, crmRowForDeal, emailToFill, keepChanges, linkPlanned, sourceOf } from "../connectors/crm-actions";
 import { amountText, changesKey, rowChanges } from "../connectors/crm-store";
-import { PROVIDER_LABELS } from "../connectors/provider";
+import { PROVIDER_KINDS, PROVIDER_LABELS, type ProviderId } from "../connectors/provider";
+import { crmProvider } from "../crm-providers";
 import type { DealDraft } from "../deals/input";
 import { readDeal } from "../deals/read";
 import { confirmDeal, DealError } from "../deals/write";
@@ -101,6 +104,58 @@ export async function fillCrmEmail(actor: Actor, input: { counterpartyId: string
     if (error instanceof NotSetUpError) return refused("not_ready", NOT_SET_UP);
     if (error instanceof NoticeEmailTaken) return refused("taken", "That customer has a billing email already. Reload the page to see it.", { changed: true });
     console.error("filling a billing email from a CRM failed", actor.orgId, error instanceof Error ? error.message : "unknown error");
+    return refused("failed", TRY_AGAIN);
+  }
+}
+
+/**
+ * Turns writing receipts to a CRM on or off (docs/superpowers/specs/2026-10-13-crm-receipts-design.md R3): an owner's or
+ * admin's. On needs the connection connected with every write scope granted; one without them is told to allow writing
+ * to the CRM first, which goes through the connect page and turns it on there.
+ */
+export async function setCrmReceiptWrites(actor: Actor, input: { provider: ProviderId; on: boolean }): Promise<CommandOutcome> {
+  const refusal = gate(actor, "crm.receipt_writes");
+  if (refusal) return refusal;
+  const label = PROVIDER_LABELS[input.provider];
+  const provider = PROVIDER_KINDS[input.provider] === "crm" ? crmProvider(input.provider) : null;
+  if (!provider?.receipts) return refused("not_ready", `Writing to ${label} is not set up on this deployment.`);
+  try {
+    const connection = await connectionFor(input.provider);
+    if (!connection || connection.status === "revoked") return refused("not_connected", `${label} is not connected to this workspace.`);
+    if (input.on) {
+      const allowed = writeGate({ ...connection, writesOn: true }, provider.receipts.writeScopes);
+      if (!allowed.ok && allowed.reason === "reconnect") return refused("reconnect", `${label} needs you to reconnect first.`);
+      if (!allowed.ok) return refused("scope", `${label} has not allowed Vestiarion to write yet. Use Allow writing to ${label}, then try again.`);
+    }
+    const changed = await setReceiptWrites({ connection, on: input.on, by: actor.userId });
+    if (!input.on) return done(changed ? `Vestiarion no longer writes to ${label}. What it wrote stays there.` : `Writing to ${label} is off already.`);
+    return done(
+      changed
+        ? `Receipts are written to ${label} from the next sync, within 15 minutes, or now with Sync now.`
+        : `Writing to ${label} is on already.`
+    );
+  } catch (error) {
+    if (error instanceof NotSetUpError) return refused("not_ready", `Writing to ${label} is not set up on this deployment yet.`);
+    console.error("turning CRM receipts on or off failed", actor.orgId, error instanceof Error ? error.message : "unknown error");
+    return refused("failed", TRY_AGAIN);
+  }
+}
+
+/**
+ * Writes Vestiarion's figures over what someone changed in the CRM (R5): only over the fields the page showed, as the
+ * CRM held them then (`seen`); a conflict that changed since is refused, never written over unseen.
+ */
+export async function overwriteCrmReceipt(actor: Actor, input: { dealId: string; seen: string; label: string }): Promise<CommandOutcome> {
+  const refusal = gate(actor, "crm.receipt_overwrite");
+  if (refusal) return refusal;
+  try {
+    const outcome = await chooseOverwrite({ dealId: input.dealId, seen: input.seen, by: actor.userId, label: input.label });
+    if (outcome.ok) return done(`Vestiarion writes its figures to ${input.label} at the next sync, as long as ${input.label} still holds what you saw.`);
+    if (outcome.reason === "none") return refused("not_found", "Nothing waits on you for this deal now. Reload the page.");
+    return refused("changed", `${input.label} changed since this page was opened. Reload the page to see what it holds now.`, { changed: true });
+  } catch (error) {
+    if (error instanceof NotSetUpError) return refused("not_ready", "Writing to a CRM is not set up on this deployment yet.");
+    console.error("overwriting a CRM receipt failed", actor.orgId, error instanceof Error ? error.message : "unknown error");
     return refused("failed", TRY_AGAIN);
   }
 }

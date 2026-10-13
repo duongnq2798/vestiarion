@@ -2,6 +2,7 @@ import type { CrmProvider } from "../connectors/crm";
 import { hubspotReader } from "./api";
 import type { HubSpotHttp } from "./http";
 import { authorizeUrl, exchangeCode, listAccount, refreshTokens, revokeToken } from "./oauth";
+import { hubspotReceipts } from "./receipts";
 import { HUBSPOT_SCOPES, type HubSpotSettings } from "./settings";
 
 /**
@@ -25,5 +26,7 @@ export function hubspotProvider(settings: HubSpotSettings, deps: HubSpotHttp = {
     revoke: (refreshToken) => revokeToken(settings, refreshToken, deps),
     deals: (request) => reader.deals(request),
     dealsById: (input) => reader.dealsById(input),
+    // Receipts written back to the deals planned from HubSpot (docs/superpowers/specs/2026-10-13-crm-receipts-design.md).
+    receipts: hubspotReceipts(deps),
   };
 }

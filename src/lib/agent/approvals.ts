@@ -742,6 +742,17 @@ export const SOLE_APPROVER_NOTE = "(entered and approved by the workspace's only
 /** How a ledger summary marks the approval that paid a payment two people approved (two approvals T7). */
 export const SECOND_OF_TWO_NOTE = "(the second of two approvals)";
 
+/**
+ * The note a person's payment adds to the bill's reasoning, by what its transfer did (settlement lifecycle I17): `paidNote`
+ * only once Circle confirmed it; submitted while Circle has not (`matched`, a milestone's `verified`); not confirmed when
+ * it was held again, which a failed transfer and a read of ours that threw both leave (L9). Notes stored before keep
+ * their words, and read as before.
+ */
+export function personPaymentNote(status: string, paidNote: string): string {
+  if (status === "paid") return ` [${paidNote}]`;
+  return status === "matched" || status === "verified" ? " [approved by a person; payment submitted]" : " [approved by a person; payment not confirmed]";
+}
+
 /** A EURC payable's USDC value as the agent last weighed it (its latest decision's `usdcValue`), null when it has none (two approvals T2). */
 
 /**
@@ -1046,7 +1057,7 @@ export async function approveAndPay(
     .from("invoices")
     .update({
       status: result.status,
-      agent_reasoning: `${invoice.agentReasoning ?? ""} [approved and paid by a person]${result.note}`,
+      agent_reasoning: `${invoice.agentReasoning ?? ""}${personPaymentNote(result.status, "approved and paid by a person")}${result.note}`,
       decided_at: now,
       settled_at: result.status === "paid" ? now : null,
       tx_ref: result.txRef,

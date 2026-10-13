@@ -1,4 +1,5 @@
 import { utcDay } from "../copy";
+import type { ReceivableCollected } from "./collection";
 import { costBasis, costCount, liveCosts, type DealCost } from "./costs";
 import { inForce, lineState, type DealFacts, type DealLine } from "./lines";
 import { formatMinor } from "./money";
@@ -61,8 +62,10 @@ export interface CashReadiness {
   today: string;
   currency: string;
   digits: number;
-  /** The lines paid by the customer: money that arrived. */
+  /** The lines paid by the customer: money that arrived, as the deal's Paid counts it when that was read. */
   collected: { totalMinor: number; lines: Array<{ id: string; label: string; amountMinor: number }> };
+  /** Lines marked received with no payment on Arc behind them: neither collected nor expected, as Paid leaves them out. */
+  unverified: { totalMinor: number; lines: Array<{ id: string; label: string; amountMinor: number }> };
   /** The costs paid: money that left. */
   paidOut: { totalMinor: number; costs: Array<{ id: string; label: string; amountMinor: number; on: string | null }> };
   /** Collected less paid out. */
@@ -113,47 +116,46 @@ function lineItem(line: DealLine, today: string): CashItem | null {
 }
 
 /**
- * What a receivable a payment was applied to holds now (allocations L11), in its own currency's micros: its amount, what
- * the customer's payments brought to it, and what it is still owed. A receivable nobody applied money to is absent, and
- * its line counts in full.
- */
-export interface ReceivableHeld {
-  amount: number;
-  paid: number;
-  outstanding: number;
-}
-
-/**
- * A part of a receivable as the same part of its line, in the deal's minor units, to the nearest: exact for USDC and
- * EURC, in proportion for a shadow deal's currency, whose receivable is in USDC at the day's rate.
- */
-function lineShare(lineMinor: number, part: number, whole: number): number {
-  if (!(whole > 0) || !(part > 0)) return 0;
-  if (part >= whole) return lineMinor;
-  const total = BigInt(Math.round(whole));
-  return Number((BigInt(lineMinor) * BigInt(Math.round(part)) * BigInt(2) + total) / (total * BigInt(2)));
-}
-
-/**
  * The deal's money in and out from today, against its costs (K4). `costs` is null when they could not be read, or before
- * migration 0108: then no cost is counted and the margin is not enough data. `applied` holds, by receivable id, what was
- * applied to a released line's receivable (allocations L11): a part-paid line's arrived part is collected, and only what
- * is still owed is expected, as Treasury and the payment plan count it.
+ * migration 0108: then no cost is counted and the margin is not enough data.
+ *
+ * `collectedBy` is what each of the deal's receivables collected and still owes, by its id: the figures behind the deal's
+ * Paid and Outstanding (`dealCollection`, src/lib/deals/collection.ts), so this view agrees with them. A released line's
+ * collected part is collected to date and only what is still owed is expected: a part payment counts as what arrived, a
+ * fee settles the rest, and a line marked received with no payment on Arc is neither, and said. Null when it could not be
+ * read: each line then counts by its receivable's status, in full.
  */
 export function dealCashReadiness(
   deal: { facts: DealFacts; digits: number },
   costs: readonly DealCost[] | null,
   today: string,
-  applied: Readonly<Record<string, ReceivableHeld>> = {}
+  collectedBy: Readonly<Record<string, ReceivableCollected>> | null = null
 ): CashReadiness {
   const money = (minor: number) => `${formatMinor(minor, deal.digits)} ${deal.facts.currency}`;
   const lines = inForce(deal.facts.lines);
   const collected: CashReadiness["collected"]["lines"] = [];
+  const unverified: CashReadiness["unverified"]["lines"] = [];
   const items: Array<CashItem & { day: string }> = [];
   let creditMinor = 0;
   for (const line of [...lines].sort(byDay)) {
     if (line.kind === "credit") {
       creditMinor += line.amountMinor;
+      continue;
+    }
+    const counted = line.receivable && collectedBy ? collectedBy[line.receivable.id] : undefined;
+    if (counted) {
+      const part = counted.collectedMinor > 0 && counted.stillOwedMinor > 0;
+      if (counted.collectedMinor > 0) collected.push({ id: line.id, label: part ? `${line.label}, part paid` : line.label, amountMinor: counted.collectedMinor });
+      if (counted.unverified) unverified.push({ id: line.id, label: line.label, amountMinor: line.amountMinor });
+      if (counted.stillOwedMinor <= 0) continue;
+      const item = lineItem(line, today);
+      if (!item) continue;
+      if (counted.stillOwedMinor !== line.amountMinor) {
+        item.amountMinor = counted.stillOwedMinor;
+        item.basis = `${item.basis}, ${part ? "part paid: " : ""}${money(counted.stillOwedMinor)} of ${money(line.amountMinor)} still owed`;
+      }
+      const day = item.late ? today : (line.receivable?.dueDate || line.dueOn).slice(0, 10);
+      items.push({ ...item, day: day < today ? today : day });
       continue;
     }
     if (lineState(line, today) === "paid") {
@@ -162,18 +164,6 @@ export function dealCashReadiness(
     }
     const item = lineItem(line, today);
     if (!item) continue;
-    const held = line.receivable ? applied[line.receivable.id] : undefined;
-    if (held) {
-      // Part paid: what arrived is collected to date, and only what is still owed is expected, once.
-      const owed = lineShare(line.amountMinor, held.outstanding, held.amount);
-      const arrived = Math.min(line.amountMinor - owed, lineShare(line.amountMinor, held.paid, held.amount));
-      if (arrived > 0) collected.push({ id: line.id, label: `${line.label}, part paid`, amountMinor: arrived });
-      if (owed <= 0) continue;
-      if (owed < line.amountMinor) {
-        item.amountMinor = owed;
-        item.basis = `${item.basis}, part paid: ${money(owed)} of ${money(line.amountMinor)} still owed`;
-      }
-    }
     const day = item.late ? today : (line.receivable?.dueDate || line.dueOn).slice(0, 10);
     items.push({ ...item, day: day < today ? today : day });
   }
@@ -247,6 +237,7 @@ export function dealCashReadiness(
     currency: deal.facts.currency,
     digits: deal.digits,
     collected: { totalMinor: collectedMinor, lines: collected },
+    unverified: { totalMinor: sum(unverified.map((line) => line.amountMinor)), lines: unverified },
     paidOut: { totalMinor: paidOutMinor, costs: paidOut },
     toDateMinor,
     days,

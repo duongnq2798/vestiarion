@@ -38,27 +38,36 @@ const TX_HASH = /^0x[0-9a-fA-F]{64}$/;
 
 type Paid = NonNullable<Awaited<ReturnType<typeof approveAndPay>>["paid"]>;
 
-/** A person's confirmation of a payment in words: what went out, to whom and on which network, or that it was simulated. */
-function paidMessage(status: "paid" | "matched", paid: Paid | undefined): string {
-  if (!paid) return status === "paid" ? "Paid." : "Payment submitted; waiting for confirmation.";
+/**
+ * A person's confirmation of a payment in words: what went out, to whom and on which network, and who said so (settlement
+ * lifecycle I17). Paid only once Circle confirmed it, or simulated in a sandbox; submitted while Circle has not
+ * confirmed it; and, with no Circle id, a send Circle never answered, whose outcome is unknown. A send in flight is
+ * never called simulated (L4).
+ */
+function paidMessage(status: "paid" | "matched", paid: Paid | undefined, txRef: string | null): string {
+  if (!paid) return status === "paid" ? "Paid." : "Payment submitted; waiting for Circle to confirm it.";
   const what = `${activityAmount(paid.amount, paid.currency)} to ${paid.payee}`;
-  if (paid.simulated) return status === "paid" ? `Paid ${what} in the sandbox (simulated).` : `Sent ${what} in the sandbox (simulated).`;
   const network = workspaceNetwork().label;
-  return status === "paid" ? `Paid ${what} on ${network}.` : `Sent ${what}; ${network} is confirming it.`;
+  if (status === "paid") return paid.simulated ? `Paid ${what} in the sandbox (simulated).` : `Paid ${what}; Circle confirmed it on ${network}.`;
+  return txRef
+    ? `Submitted ${what}; waiting for Circle to confirm it on ${network}.`
+    : `Submitted ${what}; Circle has not answered yet, so the outcome is unknown and nothing goes out again until it does.`;
 }
 
 /**
- * The same confirmation for a screen to lay out (payment confirmation): confirmed only once the network says so, the
- * transaction once it has a hash, and whether the person approved the agent's stop or agreed with its decision.
+ * The same confirmation for a screen to lay out (payment confirmation): confirmed only once Circle says so, an unknown
+ * outcome when Circle never answered the send (no Circle id), the transaction once it has a hash, and whether the person
+ * approved the agent's stop or agreed with its decision. Only a confirmed payment is called simulated (L4).
  */
 function paymentReceipt(status: "paid" | "matched", paid: Paid, txRef: string | null, fromReserveUsdc: number | undefined, forVerdict: boolean): PaymentReceipt {
   const network = workspaceNetwork();
   return {
     state: status === "paid" ? "confirmed" : "confirming",
+    ...(status === "matched" && !txRef ? { outcomeUnknown: true as const } : {}),
     amount: paid.amount,
     currency: paid.currency,
     payee: paid.payee,
-    network: paid.simulated ? SIMULATED_NETWORK : network.label,
+    network: paid.simulated && status === "paid" ? SIMULATED_NETWORK : network.label,
     decidedBy: forVerdict ? "verdict" : "approval",
     txUrl: !paid.simulated && txRef && TX_HASH.test(txRef) ? txUrl(network.id, txRef) : null,
     fromReserve: fromReserveNote(fromReserveUsdc).trim() || null,
@@ -107,7 +116,7 @@ export async function approvePayable(
   if (result.status === "paid") sendNoticesSoon(accessOf(actor));
   // What went out, to whom and on which network, in words and laid out with its transaction one click away; cash
   // brought back from the reserve to pay it is said too (approval cash R4).
-  const message = paidMessage(result.status, result.paid);
+  const message = paidMessage(result.status, result.paid, result.txRef);
   const receipt = result.paid ? paymentReceipt(result.status, result.paid, result.txRef, result.fromReserveUsdc, input.forVerdict === true) : null;
   return done(`${message}${fromReserveNote(result.fromReserveUsdc)}`, { status: result.status, txRef: result.txRef, ...(receipt ? { receipt } : {}) });
 }

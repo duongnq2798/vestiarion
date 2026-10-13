@@ -7,11 +7,17 @@ import { PROVIDER_LABELS, type AccountingProviderId, type ProviderId } from "./p
  * it agreed to. Browser-safe.
  */
 
-export const CONSENT_VERSIONS: Record<ProviderId, string> = { xero: "xero-2026-10-12.2", quickbooks: "quickbooks-2026-10-12", hubspot: "hubspot-2026-10-12" };
+export const CONSENT_VERSIONS: Record<ProviderId, string> = { xero: "xero-2026-10-12.2", quickbooks: "quickbooks-2026-10-12", hubspot: "hubspot-2026-10-13" };
 
-/** A CRM's statement (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H14): its companies, contacts and deals. */
+/**
+ * A CRM's statement (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H14): its companies, contacts and
+ * deals; and, from version 2026-10-13, what is written back once an owner or admin allows it
+ * (docs/superpowers/specs/2026-10-13-crm-receipts-design.md R3). The first version said it writes nothing; a connection
+ * keeps the version it agreed to until it connects again.
+ */
 const CRM_STATEMENT = (label: string) => [
-  `Vestiarion reads the companies, contacts and deals of the ${label} account you connect: names, amounts, close dates, pipeline stages and each company's main contact email. It writes nothing to ${label}.`,
+  `Vestiarion reads the companies, contacts and deals of the ${label} account you connect: names, amounts, close dates, pipeline stages and each company's main contact email.`,
+  `It writes to ${label} only once an owner or admin allows it: then, on each ${label} deal planned in Vestiarion, what was collected from payments confirmed on Arc, what is still owed, the last receipt, the reconciliation status and a link to the deal in Vestiarion, in a Vestiarion property group it creates. It never changes ${label}'s own deal fields, and writes payments on Arc testnet or in shadow mode only to a ${label} developer test account or sandbox.`,
   `They are shown to this workspace's members and to its agent. The agent's model provider may see a deal's facts to decide on its collections, and may not train on them.`,
   `Vestiarion never uses ${label} data to train or improve any AI model, and never passes it to anyone else without your workspace's say.`,
   `Disconnecting stops the reading at once. Deals already planned stay in Vestiarion.`,
