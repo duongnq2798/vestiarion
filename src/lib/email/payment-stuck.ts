@@ -23,7 +23,7 @@ export interface StuckPayment {
 /**
  * The email a workspace's deciding members get about payments that have not confirmed (docs/superpowers/specs/
  * 2026-10-06-stuck-transfer-alert-design.md D6, D7): one message to each person each run, listing each payment, how long
- * ago it was sent and on which network, and what Circle says, and that Vestiarion sends nothing again while a payment
+ * ago it was submitted and on which network, and what Circle says, and that Vestiarion sends nothing again while a payment
  * may still settle. Speeding up or cancelling a transfer stays out of scope, as the failed-transfer retry design ruled.
  */
 export function paymentStuckEmail(input: {
@@ -67,14 +67,15 @@ export function paymentStuckEmail(input: {
   return { subject, html, text };
 }
 
+/** Submitted, never "sent": until Circle confirms it, a payment may not have moved, and Circle may not have taken it (I17). */
 function lead(payment: StuckPayment): string {
   const { label } = networkProfile(payment.network);
-  return `The payment of ${payment.amount} ${payment.currency} to ${payment.payeeName}, sent ${payment.minutes} minutes ago on ${label}, has not confirmed.`;
+  return `The payment of ${payment.amount} ${payment.currency} to ${payment.payeeName}, submitted to Circle ${payment.minutes} minutes ago on ${label}, has not confirmed.`;
 }
 
-/** What Circle said (D7), or that it was not asked, or never answered the send. */
+/** What Circle said (D7), or that it was not asked, or never answered the send, whose outcome is then unknown (L3). */
 function circleLine(payment: StuckPayment): string {
-  if (!payment.sendAnswered) return "Circle never answered when it was sent, so it may not have taken the transfer.";
+  if (!payment.sendAnswered) return "Circle never answered when it was submitted, so the outcome is unknown: Circle may or may not have taken the transfer.";
   if (!payment.circleAsked) return "Vestiarion could not ask Circle about it just now.";
   if (payment.providerState === "STUCK") return "Circle shows it stuck: check it in Circle's console, or contact Circle support.";
   return `Circle shows it as ${payment.providerState ?? "pending"}.`;

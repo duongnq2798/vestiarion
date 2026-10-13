@@ -97,9 +97,12 @@ export interface DealSummary {
   totalMinor: number;
   /** Charges made receivables. */
   releasedMinor: number;
-  /** Of those, paid. */
+  /**
+   * Of those, the lines whose receivable is settled, whole, however it was settled (a fee included): the deal's standing
+   * reads it. Money the deal collected is `dealCollection`'s (`collection.ts`), never this: a part payment is not here.
+   */
   paidMinor: number;
-  /** Released and not paid: money expected, never cash (D14). */
+  /** Released and not settled, by its lines; what is still owed is `dealCollection`'s. */
   outstandingMinor: number;
   /** Of that, past its due date. */
   overdueMinor: number;

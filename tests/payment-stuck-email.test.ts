@@ -28,7 +28,7 @@ describe("the email about payments that have not confirmed", () => {
     const one = email([payment]);
     expect(one.subject).toBe("A payment of 12.50 USDC to Jiren has not confirmed");
     for (const part of [one.text, one.html]) {
-      expect(part).toContain("The payment of 12.50 USDC to Jiren, sent 18 minutes ago on Arc mainnet, has not confirmed.");
+      expect(part).toContain("The payment of 12.50 USDC to Jiren, submitted to Circle 18 minutes ago on Arc mainnet, has not confirmed.");
       expect(part).toContain("Circle shows it as SENT.");
       expect(part).toContain("Vestiarion sends nothing again while a payment may still settle, and checks it again at the next cycle.");
     }
@@ -39,8 +39,8 @@ describe("the email about payments that have not confirmed", () => {
   it("lists several payments in one message", () => {
     const several = email([payment, { ...payment, payeeName: "Puka Hotel", amount: "1.00", providerState: "QUEUED", link: "https://www.vestiarion.xyz/o/acme/contractors" }]);
     expect(several.subject).toBe("2 payments have not confirmed");
-    expect(several.text).toContain("The payment of 12.50 USDC to Jiren, sent 18 minutes ago on Arc mainnet, has not confirmed.");
-    expect(several.text).toContain("The payment of 1.00 USDC to Puka Hotel, sent 18 minutes ago on Arc mainnet, has not confirmed.");
+    expect(several.text).toContain("The payment of 12.50 USDC to Jiren, submitted to Circle 18 minutes ago on Arc mainnet, has not confirmed.");
+    expect(several.text).toContain("The payment of 1.00 USDC to Puka Hotel, submitted to Circle 18 minutes ago on Arc mainnet, has not confirmed.");
     expect(several.text).toContain("https://www.vestiarion.xyz/o/acme/contractors");
   });
 
@@ -51,13 +51,15 @@ describe("the email about payments that have not confirmed", () => {
   it("says when Circle could not be asked, and when it never answered the send", () => {
     expect(email([{ ...payment, circleAsked: false, providerState: null }]).text).toContain("Vestiarion could not ask Circle about it just now.");
     const unanswered = email([{ ...payment, circleAsked: false, sendAnswered: false, providerState: null, txUrl: null }]);
-    expect(unanswered.text).toContain("Circle never answered when it was sent, so it may not have taken the transfer.");
+    expect(unanswered.text).toContain("Circle never answered when it was submitted, so the outcome is unknown: Circle may or may not have taken the transfer.");
     expect(unanswered.text).not.toContain("View the transaction");
+    // Submitted, never "sent", and never paid: Circle may not have taken it (I17).
+    expect(unanswered.text).not.toMatch(/\b(was sent|sent \d+ minutes|paid)\b/i);
   });
 
   it("names Arc testnet for a payment there, and escapes names in the HTML", () => {
     const testnet = email([{ ...payment, network: "arc-testnet", payeeName: "Jiren <b>" }]);
-    expect(testnet.text).toContain("sent 18 minutes ago on Arc testnet");
+    expect(testnet.text).toContain("submitted to Circle 18 minutes ago on Arc testnet");
     expect(testnet.html).toContain("Jiren &lt;b&gt;");
     expect(testnet.html).not.toContain("Jiren <b>");
     expect(testnet.html).toContain("Acme &lt;Ops&gt;");

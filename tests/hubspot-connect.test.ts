@@ -51,7 +51,7 @@ const provider: ConnectingProvider = {
   label: "HubSpot",
   scopes: SCOPES,
   exclusive: true,
-  authorizeUrl: ({ state, redirectUri }) => `https://app.hubspot.com/oauth/authorize?state=${state}&redirect_uri=${encodeURIComponent(redirectUri)}`,
+  authorizeUrl: ({ state, redirectUri, write }) => `https://app.hubspot.com/oauth/authorize?state=${state}&redirect_uri=${encodeURIComponent(redirectUri)}&write=${write ? 1 : 0}`,
   exchangeCode,
   organisations,
   refresh: vi.fn(),
@@ -119,7 +119,10 @@ describe("startConnect for HubSpot", () => {
     expect(`${to.origin}${to.pathname}`).toBe("https://app.hubspot.com/oauth/authorize");
     expect(to.searchParams.get("redirect_uri")).toBe(`${ORIGIN}/api/integrations/hubspot/callback`);
     const state = readConnectState(to.searchParams.get("state") ?? "", keys(), NOW);
-    expect(state).toMatchObject({ provider: "hubspot", org: ORG, user: USER, consent: { version: "hubspot-2026-10-12", at: "2026-10-12T08:00:00.000Z" } });
+    expect(state).toMatchObject({ provider: "hubspot", org: ORG, user: USER, consent: { version: "hubspot-2026-10-13", at: "2026-10-12T08:00:00.000Z" } });
+    // Writing was not asked for: HubSpot is asked for the read scopes alone.
+    expect(state?.write).toBeUndefined();
+    expect(to.searchParams.get("write")).toBe("0");
     const cookie = response.headers.get("set-cookie") ?? "";
     expect(cookie).toContain(`vx_hubspot_oauth=${state?.nonce}`);
     expect(cookie).toContain("Path=/api/integrations/hubspot");
@@ -270,5 +273,47 @@ describe("finishConnect for HubSpot", () => {
     expect(location(await run(() => finishConnect(callback({ code: "c", state: signed() }, NONCE), deps()))).toString()).toBe(
       `${ORIGIN}/o/acme/settings?hubspot=failed#hubspot`
     );
+  });
+});
+
+describe("allowing receipts to be written to HubSpot (docs/superpowers/specs/2026-10-13-crm-receipts-design.md R3)", () => {
+  const WRITE_SCOPES = [...SCOPES, "crm.objects.deals.write", "crm.schemas.deals.write"];
+
+  it("asks HubSpot for the write scopes only when the person ticked Write receipts to HubSpot, and carries the choice in the signed state", async () => {
+    const { run, deps } = world();
+    const allowWrites = vi.fn();
+    const response = await run(() => startConnect(form({ org: "acme", consent: "yes", write: "yes" }), { ...deps(), allowWrites }));
+    const to = location(response);
+    expect(to.searchParams.get("write")).toBe("1");
+    expect(readConnectState(to.searchParams.get("state") ?? "", keys(), NOW)?.write).toBe(true);
+    // A provider that does not write ignores the box.
+    const plain = location(await run(() => startConnect(form({ org: "acme", consent: "yes", write: "yes" }), deps())));
+    expect(plain.searchParams.get("write")).toBe("0");
+    expect(allowWrites).not.toHaveBeenCalled();
+  });
+
+  it("turns writing on once HubSpot granted the write scopes, before the first sync", async () => {
+    exchangeCode.mockResolvedValue({ ok: true, tokens: { ...TOKENS, scopes: WRITE_SCOPES }, authEventId: null });
+    const { run, deps, later } = world();
+    const allowWrites = vi.fn(async () => "writing" as const);
+    const response = await run(() => finishConnect(callback({ code: "c", state: signed({ write: true }) }, NONCE), { ...deps(), allowWrites }));
+    expect(location(response).toString()).toBe(`${ORIGIN}/o/acme/settings?hubspot=writing#hubspot`);
+    expect(allowWrites).toHaveBeenCalledWith({ connection: expect.objectContaining({ id: "conn-1" }), userId: USER, scopes: WRITE_SCOPES });
+    expect(later).toHaveLength(1);
+  });
+
+  it("says so when HubSpot connected without them, and keeps the connection reading", async () => {
+    const { run, deps } = world();
+    const allowWrites = vi.fn(async () => "write_not_granted" as const);
+    const response = await run(() => finishConnect(callback({ code: "c", state: signed({ write: true }) }, NONCE), { ...deps(), allowWrites }));
+    expect(location(response).toString()).toBe(`${ORIGIN}/o/acme/settings?hubspot=write_not_granted#hubspot`);
+  });
+
+  it("never turns writing on for a connection the person did not allow it for", async () => {
+    const { run, deps } = world();
+    const allowWrites = vi.fn(async () => "writing" as const);
+    const response = await run(() => finishConnect(callback({ code: "c", state: signed() }, NONCE), { ...deps(), allowWrites }));
+    expect(location(response).toString()).toBe(`${ORIGIN}/o/acme/settings?hubspot=connected#hubspot`);
+    expect(allowWrites).not.toHaveBeenCalled();
   });
 });

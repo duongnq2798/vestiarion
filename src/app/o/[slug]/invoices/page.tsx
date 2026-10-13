@@ -90,6 +90,7 @@ import { crmPlanState } from "@/components/deals/crm-plan";
 import { PlanFromCrmForm, PlannedFromCrm } from "@/components/deals/PlannedFromCrm";
 import { HubSpotDeals } from "@/components/HubSpotDeals";
 import { crmPrefillFor, crmReady, crmReview, type CrmPrefillRead, type CrmReviewView } from "@/lib/connectors/crm-review";
+import { readDealCollections } from "@/lib/deals/collection-read";
 import { dealLinksOf, plannedLinesOf, readDeals, type DealLink } from "@/lib/deals/read";
 import { hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
 import { FromCustomers } from "@/components/portal/FromCustomers";
@@ -233,6 +234,16 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     const asOf = Date.now();
     const today = new Date(asOf).toISOString().slice(0, 10);
     const inAWeek = new Date(asOf + 7 * 86_400_000).toISOString().slice(0, 10);
+    // What each deal collected: its Paid and Outstanding, the same figures its own page shows (CRM receipts R1). Best
+    // effort: a read that fails leaves those two out of the list, nothing else.
+    const dealsCollected = Array.isArray(deals)
+      ? await readDealCollections(deals, today)
+          .then((read) => new Map([...read].map(([dealId, { collection }]) => [dealId, collection])))
+          .catch((error: unknown) => {
+            console.error("invoices: what the deals collected was not read", error instanceof Error ? error.message : error);
+            return null;
+          })
+      : null;
 
     // Every invoice's decision, without its payment's track: what the filters, counts and rows read. The rows shown get
     // their track below, from the payments read for them alone.
@@ -664,6 +675,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
                 deals={deals}
                 orgSlug={slug}
                 today={today}
+                collected={dealsCollected}
                 fromCrm={
                   fromHubSpot.state === "list" ? (
                     <>

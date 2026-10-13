@@ -65,6 +65,8 @@ const KEEP_UPDATE: Record<string, { column: string; expr: string }> = {
   // The deals a CRM brought in (0105).
   crm_deals: { column: "name", expr: "'changed'" },
   accounting_postings: { column: "message", expr: "'changed'" },
+  // The receipts written back to HubSpot (0107).
+  crm_receipt_writes: { column: "message", expr: "'changed'" },
   // A customer's statement link is stopped, and what the customer said is closed, never deleted (0109).
   customer_portal_links: { column: "revoked_at", expr: "now()" },
   customer_requests: { column: "outcome", expr: "'resolved'" },

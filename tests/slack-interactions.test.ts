@@ -141,7 +141,7 @@ describe("handleInteraction", () => {
     expect(replies).toHaveLength(1);
     expect(replies[0]).toMatchObject({ replace_original: true });
     const rewritten = JSON.stringify(replies[0]);
-    expect(rewritten).toContain("Approved and paid by <@U0LINH>.");
+    expect(rewritten).toContain("Approved by <@U0LINH>. Circle confirmed the payment on Arc testnet.");
     expect(rewritten).toContain(`https://explorer.testnet.arc.io/tx/${TX}`);
     expect(rewritten).not.toContain("vx_approve");
   });

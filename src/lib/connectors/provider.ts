@@ -223,7 +223,12 @@ export interface AccountingProvider {
    * for the organisation, so two workspaces would cut each other off. Xero lets several share one (X4).
    */
   exclusive?: boolean;
-  authorizeUrl(input: { state: string; redirectUri: string }): string;
+  /**
+   * `write`: an owner or admin allowed writing to the provider on the connect page (a CRM's receipts,
+   * docs/superpowers/specs/2026-10-13-crm-receipts-design.md R3), so the provider's optional write scopes are asked for
+   * too. A provider that asks for its write scopes on every connection (Xero) leaves it.
+   */
+  authorizeUrl(input: { state: string; redirectUri: string; write?: boolean }): string;
   exchangeCode(input: { code: string; redirectUri: string }): Promise<ExchangeOutcome>;
   /**
    * The organisations a fresh token reaches, those of this authorization first where the provider says which; with

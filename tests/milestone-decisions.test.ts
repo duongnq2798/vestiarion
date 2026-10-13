@@ -403,11 +403,23 @@ describe("Pay now", () => {
     expect(entry.p_detail).toMatchObject({ by: ACTOR, milestoneId: MILESTONE, amount: 0.3, overrode: "held", heldFor: "transfer_failed", status: "paid", attempt: 2, retriedAfter: { providerState: "FAILED" } });
   });
 
-  it("puts a submitted transfer back to verified, for the agent's cycle to reconcile", async () => {
+  it("puts a submitted transfer back to verified, for the agent's cycle to reconcile, and never notes it paid (I17)", async () => {
     releaseHeldMilestoneMock.mockResolvedValue({ ...PAID, status: "verified", txRef: null, reasoningSuffix: " [transfer submitted; awaiting provider confirmation]" });
     const { run, patch } = world();
     await run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }));
     expect(patch()?.body).toMatchObject({ status: "verified", settled_at: null });
+    const reasoning = (patch()?.body as Record<string, unknown>).agent_reasoning as string;
+    expect(reasoning).toContain("[approved by a person; payment submitted] [transfer submitted; awaiting provider confirmation]");
+    expect(reasoning).not.toContain("paid now");
+  });
+
+  it("notes a Pay now whose transfer failed as not confirmed, never paid (I17)", async () => {
+    releaseHeldMilestoneMock.mockResolvedValue({ ...PAID, status: "held", txRef: null, reasoningSuffix: " [transfer failed: provider reported failure]" });
+    const { run, patch } = world();
+    await run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }));
+    const reasoning = (patch()?.body as Record<string, unknown>).agent_reasoning as string;
+    expect(reasoning).toContain("[approved by a person; payment not confirmed] [transfer failed: provider reported failure]");
+    expect(reasoning).not.toContain("paid now");
   });
 
   it("refuses, before any claim, what the agent's release refuses", async () => {

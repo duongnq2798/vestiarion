@@ -9,7 +9,7 @@
 
 import { bookingFromEntries } from "./connectors/booked";
 import { utcDay, utcMinute } from "./copy";
-import { deciderName, decisionChecks, PAYMENT_HELD_AGAIN, PAYMENT_SENT, trailStep } from "./decision-trail";
+import { deciderName, decisionChecks, PAYMENT_HELD_AGAIN, PAYMENT_SUBMITTED, trailStep } from "./decision-trail";
 import { MIRROR, PAYEE, addressProvenance } from "./new-payee";
 import { networkOf, networkProfile, type Network } from "./network";
 import { chainById, homeChain } from "./payee-chains";
@@ -718,12 +718,12 @@ type PeopleWords = { act: string; then?: string };
 
 /**
  * A person's Approve and pay, or Pay now, by what its transfer did then (the entry's `status`): paid only once it
- * confirmed; sent, while the network confirms it (`matched`, `verified` for a milestone); held again, never "failed",
+ * confirmed; submitted, while Circle has not confirmed it (`matched`, `verified` for a milestone); held again, never "failed",
  * since Gateway's reported failure or a failed read may still settle (settlement lifecycle L3, L9).
  */
 function approvedWords(detail: Record<string, unknown>, network: string, sent: "matched" | "verified", own: string): PeopleWords {
   if (detail.status === "paid") return { act: `Approved and paid it${own}` };
-  if (detail.status === sent) return { act: `Approved it${own}`, then: `; ${PAYMENT_SENT(network)}` };
+  if (detail.status === sent) return { act: `Approved it${own}`, then: `; ${PAYMENT_SUBMITTED(network)}` };
   if (detail.status === "held") return { act: `Approved it${own}`, then: `; ${PAYMENT_HELD_AGAIN}` };
   return { act: `Approved paying it${own}` };
 }

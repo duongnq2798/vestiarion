@@ -5,6 +5,7 @@ import { READER_NAMES } from "../invoice-document/chat-draft";
 import type { InvoiceDraftRead } from "../invoice-document/draft";
 import type { VerificationResult } from "../ledger";
 import { txUrl } from "../payee-chains";
+import { SIMULATED_NETWORK, type PaymentReceipt } from "../payment-receipt";
 import { networkProfile, type Network } from "../network";
 import { shortenAddresses } from "../telegram/messages";
 import type { TodayFacts, WaitingFact } from "../telegram/today";
@@ -156,23 +157,34 @@ export function withApprovalGiven(blocks: unknown[], invoiceId: string, line: st
 
 const VERB: Record<"approve" | "reject" | "return", string> = { approve: "approved it", reject: "rejected it", return: "returned it" };
 
-/** The line a decided card says: who decided, what came of it, and the transaction when one went out on Arc. */
+/**
+ * The line a decided card says: who decided, what came of it, and the transaction when one went out on Arc. Paid only
+ * once Circle confirmed it, and named so; submitted while Circle has not; an unknown outcome when Circle never answered
+ * the send (no Circle id); simulated in a sandbox (settlement lifecycle I17).
+ */
 export function outcomeLine(
   decision: "approve" | "reject" | "return",
   slackUserId: string,
-  outcome: CommandOutcome<{ status?: string; txRef?: string | null }>,
+  outcome: CommandOutcome<{ status?: string; txRef?: string | null; receipt?: Pick<PaymentReceipt, "network"> }>,
   network: Network
 ): string {
   const who = `<@${slackUserId}>`;
   if (!outcome.ok) return `${who} ${VERB[decision]}. ${mrkdwn(outcome.message)}`;
   if (decision === "reject") return `Rejected by ${who}.`;
   if (decision === "return") return `Returned to the agent by ${who}. It usually decides it again within a minute.`;
+  const { label } = networkProfile(network);
   if (outcome.status === "paid") {
-    const tx = outcome.txRef && /^0x[0-9a-fA-F]{64}$/.test(outcome.txRef) ? ` ${link(txUrl(network, outcome.txRef), `${networkProfile(network).label} transaction`)}` : "";
-    return `Approved and paid by ${who}.${tx}`;
+    if (outcome.receipt?.network === SIMULATED_NETWORK) return `Approved by ${who}. The payment was simulated in the sandbox.`;
+    const tx = outcome.txRef && /^0x[0-9a-fA-F]{64}$/.test(outcome.txRef) ? ` ${link(txUrl(network, outcome.txRef), `${label} transaction`)}` : "";
+    return `Approved by ${who}. Circle confirmed the payment on ${label}.${tx}`;
   }
   if (outcome.status === "approved") return `Approved by ${who}. One more approval, by another person, pays it.`;
-  return `Approved by ${who}. The payment was sent; ${networkProfile(network).label} is confirming it.`;
+  if (outcome.status === "matched") {
+    return outcome.txRef
+      ? `Approved by ${who}. The payment was submitted; waiting for Circle to confirm it on ${label}.`
+      : `Approved by ${who}. The payment was submitted, but Circle has not answered yet, so the outcome is unknown; nothing goes out again until it does.`;
+  }
+  return `Approved by ${who}.`;
 }
 
 /** An answer only the person who asked sees, unless it is for the channel. `text` is mrkdwn already. */

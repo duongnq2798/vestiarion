@@ -25,7 +25,7 @@ import { isSoleApprover } from "./sole-approver";
 import { PAYMENTS_OFF, PaymentsDisabledError, paymentsHold } from "../payments-switch";
 import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
 import { needsSecondApprover, TWO_APPROVALS_RULE, type TwoApprovalsFacts } from "../two-approvals";
-import { SECOND_OF_TWO_NOTE } from "./approvals";
+import { personPaymentNote, SECOND_OF_TWO_NOTE } from "./approvals";
 import { bringCashForApproval, CashBackError, cashShortMessage, HELD_FOR_CASH, reserveCover, type ReserveCover } from "./liquidity";
 import { ContractRefusal, personPaymentThroughContract } from "../treasury/person-payment";
 import type { SpendingLimitPayment } from "../circle/types";
@@ -692,7 +692,8 @@ export async function payHeldMilestone(input: {
     .update({
       ...RELEASED,
       status: outcome.status,
-      agent_reasoning: `${milestone.agentReasoning ?? ""} [paid now by a person]${outcome.reasoningSuffix}`,
+      // Paid only once Circle confirmed it: submitted, or held again, says so (I17).
+      agent_reasoning: `${milestone.agentReasoning ?? ""}${personPaymentNote(outcome.status, "paid now by a person")}${outcome.reasoningSuffix}`,
       decided_at: now,
       settled_at: outcome.status === "paid" ? now : null,
       tx_ref: outcome.txRef,

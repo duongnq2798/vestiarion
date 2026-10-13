@@ -1,8 +1,8 @@
 "use client";
 
-import { Link2, RefreshCw, Unplug } from "lucide-react";
+import { Link2, PenLine, PenOff, RefreshCw, Unplug } from "lucide-react";
 import Link from "next/link";
-import { disconnectHubSpotAction, syncHubSpotNowAction, type HubSpotActionResult } from "@/app/actions/hubspot";
+import { disconnectHubSpotAction, setHubSpotReceiptsAction, syncHubSpotNowAction, type HubSpotActionResult } from "@/app/actions/hubspot";
 import { DocsLink } from "@/components/DocsLink";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -12,6 +12,7 @@ import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { BrandMark } from "@/components/vx/BrandMarks";
 import type { CrmPanelView } from "@/lib/connectors/crm-review";
+import type { CrmReceiptsPanel } from "@/lib/connectors/crm-receipts-view";
 import { billsHref } from "@/lib/bills-view";
 
 const INITIAL: HubSpotActionResult = { ok: false, message: "" };
@@ -28,6 +29,13 @@ export const HUBSPOT_NOTICES: Record<string, { tone: "success" | "error"; text: 
   },
   not_set_up: { tone: "error", text: "HubSpot is not set up on this deployment yet." },
   failed: { tone: "error", text: "HubSpot did not finish connecting. Try again in a moment." },
+  // Writing receipts allowed on the connect page (CRM receipts R3).
+  writing: { tone: "success", text: "HubSpot is connected, and Vestiarion writes receipts to the deals planned from it, from the next sync." },
+  write_not_granted: {
+    tone: "error",
+    text: "HubSpot connected without allowing Vestiarion to write. It still reads your deals. A HubSpot super admin may need to approve the app's write access; then try Allow writing to HubSpot again.",
+  },
+  write_not_set_up: { tone: "error", text: "HubSpot is connected. Writing receipts is not set up on this deployment yet." },
 };
 
 function SyncNow({ orgSlug }: { orgSlug: string }) {
@@ -56,14 +64,68 @@ function Disconnect({ orgSlug }: { orgSlug: string }) {
   );
 }
 
-function ConnectButton({ orgSlug, label }: { orgSlug: string; label: string }) {
+function ConnectButton({ orgSlug, label, write = false, variant }: { orgSlug: string; label: string; write?: boolean; variant?: "secondary" }) {
   return (
-    <Button asChild size="sm">
-      <Link href={`/integrations/hubspot/connect?org=${orgSlug}`}>
-        <Link2 aria-hidden />
+    <Button asChild size="sm" variant={variant}>
+      <Link href={`/integrations/hubspot/connect?org=${orgSlug}${write ? "&write=1" : ""}`}>
+        {write && variant ? <PenLine aria-hidden /> : <Link2 aria-hidden />}
         {label}
       </Link>
     </Button>
+  );
+}
+
+function ReceiptsSwitch({ orgSlug, on }: { orgSlug: string; on: boolean }) {
+  const { state, formProps } = useActionForm(setHubSpotReceiptsAction, INITIAL, { toastOnSuccess: true });
+  return (
+    <form {...formProps} className="flex flex-wrap items-center gap-3">
+      <input type="hidden" name="orgSlug" value={orgSlug} />
+      <input type="hidden" name="on" value={on ? "no" : "yes"} />
+      <SubmitButton variant="secondary" size="sm" pendingLabel="Saving…" icon={on ? <PenOff aria-hidden /> : <PenLine aria-hidden />}>
+        {on ? "Stop writing to HubSpot" : "Write receipts to HubSpot"}
+      </SubmitButton>
+      <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.ok ? null : state.message}</FormMessage>
+    </form>
+  );
+}
+
+const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * Receipts in HubSpot (docs/superpowers/specs/2026-10-13-crm-receipts-design.md R3, R8): whether Vestiarion writes what
+ * each planned deal collected to HubSpot, how the writes stand, what HubSpot says the account is and the reality rule;
+ * Write receipts to HubSpot or Stop writing to HubSpot, and Allow writing to HubSpot when HubSpot has not granted it.
+ */
+function Receipts({ orgSlug, receipts, canManage }: { orgSlug: string; receipts: CrmReceiptsPanel; canManage: boolean }) {
+  const { counts } = receipts;
+  const standing = [
+    counts.written > 0 ? count(counts.written, "deal written", "deals written") : null,
+    counts.waiting > 0 ? `${counts.waiting} waiting` : null,
+    counts.failed > 0 ? `${counts.failed} not written yet, tried again on their own` : null,
+    counts.conflicts > 0 ? `${counts.conflicts} changed in HubSpot, waiting on you` : null,
+    counts.refused > 0 ? `${counts.refused} not written` : null,
+  ].filter((line): line is string => line !== null);
+  return (
+    <div className="space-y-2 border-t border-line pt-4">
+      <h3 className="text-sm font-semibold text-ink">Receipts in HubSpot</h3>
+      <p className="max-w-prose text-sm text-ink-2">
+        {receipts.on
+          ? "On: each deal planned from HubSpot gets what it collected, what is still owed, the last receipt, the reconciliation status and a link to it in Vestiarion, in its Vestiarion fields in HubSpot. Only payments confirmed on Arc and applied to an invoice count."
+          : "Write each deal's collections back to HubSpot, so sales sees whether the customer paid: what was collected from payments confirmed on Arc, what is still owed, the last receipt, the reconciliation status and a link to the deal in Vestiarion. Vestiarion never changes HubSpot's own fields, and never writes over a field someone changed there."}
+      </p>
+      {receipts.on && standing.length > 0 && <p className="text-sm text-ink-2">{standing.join(" · ")}.</p>}
+      {receipts.on && !receipts.allowed && <p className="text-sm text-held">HubSpot has not allowed Vestiarion to write: nothing is written until it does.</p>}
+      {receipts.account && <p className="text-sm text-ink-3">{receipts.account}</p>}
+      {receipts.rule && <p className="max-w-prose text-sm text-ink-3">{receipts.rule}</p>}
+      {canManage ? (
+        <div className="flex flex-wrap items-start gap-3 pt-1">
+          {!receipts.allowed && <ConnectButton orgSlug={orgSlug} label="Allow writing to HubSpot" write variant="secondary" />}
+          {(receipts.on || receipts.allowed) && <ReceiptsSwitch orgSlug={orgSlug} on={receipts.on} />}
+        </div>
+      ) : (
+        <p className="text-sm text-ink-3">An owner or admin turns writing to HubSpot on or off.</p>
+      )}
+    </div>
   );
 }
 
@@ -74,7 +136,20 @@ function ConnectButton({ orgSlug, label }: { orgSlug: string; label: string }) {
  * changed in HubSpot, each linking to Bills & receivables; a reconnect when HubSpot no longer takes the connection; Sync
  * now and Disconnect HubSpot. Every member sees the status; an owner or admin gets the controls. `view` carries no token.
  */
-export default function HubSpotPanel({ orgSlug, view, canManage, notice }: { orgSlug: string; view: CrmPanelView; canManage: boolean; notice: string | null }) {
+export default function HubSpotPanel({
+  orgSlug,
+  view,
+  canManage,
+  notice,
+  receipts = null,
+}: {
+  orgSlug: string;
+  view: CrmPanelView;
+  canManage: boolean;
+  notice: string | null;
+  /** Receipts written to HubSpot (CRM receipts R8); null before migration 0107, or once disconnected. */
+  receipts?: CrmReceiptsPanel | null;
+}) {
   const told = notice ? HUBSPOT_NOTICES[notice] : undefined;
   const deals = `/o/${orgSlug}${billsHref({ tab: "receivables" })}#from-hubspot`;
   return (
@@ -137,9 +212,11 @@ export default function HubSpotPanel({ orgSlug, view, canManage, notice }: { org
                 )}
               </ul>
             )}
+            {receipts && !view.revoked && <Receipts orgSlug={orgSlug} receipts={receipts} canManage={canManage} />}
             {canManage ? (
               <div className="flex flex-wrap items-start gap-3 border-t border-line pt-4">
-                {view.status.reconnect && <ConnectButton orgSlug={orgSlug} label="Reconnect HubSpot" />}
+                {/* A reconnect keeps writing allowed when it is on: HubSpot is asked for the write scopes again. */}
+                {view.status.reconnect && <ConnectButton orgSlug={orgSlug} label="Reconnect HubSpot" write={receipts?.on === true} />}
                 {view.revoked && <ConnectButton orgSlug={orgSlug} label="Connect HubSpot" />}
                 {view.connected && <SyncNow orgSlug={orgSlug} />}
                 {!view.revoked && <Disconnect orgSlug={orgSlug} />}

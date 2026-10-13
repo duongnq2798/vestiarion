@@ -79,7 +79,7 @@ describe("approvePayable", () => {
     const paid = await run(() => approvePayable(approver(), { invoiceId: INVOICE }));
     expect(paid).toMatchObject({
       ok: true,
-      message: "Paid 13.50 USDC to Design Studio on Arc testnet.",
+      message: "Paid 13.50 USDC to Design Studio; Circle confirmed it on Arc testnet.",
       receipt: {
         state: "confirmed",
         amount: 13.5,
@@ -94,16 +94,29 @@ describe("approvePayable", () => {
 
     mocks.approveAndPay.mockResolvedValueOnce({ status: "matched", txRef: "circle-tx-1", note: "", paid: { amount: 13.5, currency: "USDC", payee: "Design Studio" } });
     const sent = await run(() => approvePayable(approver(), { invoiceId: INVOICE }));
-    expect(sent).toMatchObject({ ok: true, message: "Sent 13.50 USDC to Design Studio; Arc testnet is confirming it." });
-    // Sent is not confirmed; and a transfer Circle has not put on chain yet has no transaction to open.
+    expect(sent).toMatchObject({ ok: true, message: "Submitted 13.50 USDC to Design Studio; waiting for Circle to confirm it on Arc testnet." });
+    // Submitted is not confirmed; and a transfer Circle has not put on chain yet has no transaction to open.
     expect(sent).toMatchObject({ receipt: { state: "confirming", txUrl: null } });
+    expect((sent as { receipt?: object }).receipt).not.toHaveProperty("outcomeUnknown");
+  });
+
+  it("never says sent or paid of a send Circle never answered: submitted, with an unknown outcome (I17)", async () => {
+    // A send Circle never answered is `pending` with no Circle id, which the invoice records as `matched` with no reference.
+    mocks.approveAndPay.mockResolvedValueOnce({ status: "matched", txRef: null, note: "", paid: { amount: 13.5, currency: "USDC", payee: "Design Studio" } });
+    const unanswered = await run(() => approvePayable(approver(), { invoiceId: INVOICE }));
+    expect(unanswered).toMatchObject({
+      ok: true,
+      message: "Submitted 13.50 USDC to Design Studio; Circle has not answered yet, so the outcome is unknown and nothing goes out again until it does.",
+      receipt: { state: "confirming", outcomeUnknown: true, network: "Arc testnet", txUrl: null },
+    });
+    expect((unanswered as { message: string }).message).not.toMatch(/\b(sent|paid)\b/i);
   });
 
   it("says a payment agreed to in shadow mode was the agent's decision, and cash the reserve gave back", async () => {
     mocks.approveAndPay.mockResolvedValueOnce({ status: "paid", txRef: "0xabc", note: "", fromReserveUsdc: 1.2, paid: { amount: 4.5, currency: "USDC", payee: "Design Studio" } });
     const paid = await run(() => approvePayable(approver(), { invoiceId: INVOICE, forVerdict: true }));
     expect(paid).toMatchObject({
-      message: "Paid 4.50 USDC to Design Studio on Arc testnet. 1.2 USDC came back from the USYC reserve first.",
+      message: "Paid 4.50 USDC to Design Studio; Circle confirmed it on Arc testnet. 1.2 USDC came back from the USYC reserve first.",
       receipt: { decidedBy: "verdict", fromReserve: "1.2 USDC came back from the USYC reserve first.", txUrl: null },
     });
   });
@@ -140,7 +153,7 @@ describe("approvePayable", () => {
     });
     mocks.approveAndPay.mockResolvedValueOnce({ status: "matched", txRef: "0xabc", note: "", fromReserveUsdc: 0.215761 });
     expect((await run(() => approvePayable(approver(), { invoiceId: INVOICE }))).message).toBe(
-      "Payment submitted; waiting for confirmation. 0.215761 USDC came back from the USYC reserve first."
+      "Payment submitted; waiting for Circle to confirm it. 0.215761 USDC came back from the USYC reserve first."
     );
   });
 
@@ -154,7 +167,7 @@ describe("approvePayable", () => {
   it("says a submitted payment is waiting, and leaves the notice to the cycle that confirms it", async () => {
     mocks.approveAndPay.mockResolvedValueOnce({ status: "matched", txRef: "0xabc", note: "" });
     const outcome = await run(() => approvePayable(approver(), { invoiceId: INVOICE }));
-    expect(outcome).toMatchObject({ ok: true, message: "Payment submitted; waiting for confirmation." });
+    expect(outcome).toMatchObject({ ok: true, message: "Payment submitted; waiting for Circle to confirm it." });
     expect(mocks.sendNoticesSoon).not.toHaveBeenCalled();
   });
 

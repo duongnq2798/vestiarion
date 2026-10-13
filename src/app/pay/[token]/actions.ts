@@ -17,9 +17,13 @@ const MESSAGES = {
   invalid: "This pay link no longer works. Ask for a new one.",
 } as const;
 
-/** The thanks, on the link's network (mainnet copy C1). */
+/**
+ * The thanks, on the link's network (mainnet copy C1), saying who said what (settlement lifecycle I17): the payment is
+ * on the network, where Circle reported it complete, and the record of it against the invoice is Vestiarion's.
+ */
 function received(network: Network | null): string {
-  return network ? `Received, thank you. The payment is recorded on ${networkProfile(network).label}.` : "Received, thank you. The payment is recorded.";
+  const on = network ? ` on ${networkProfile(network).label}` : "";
+  return `Received, thank you. Circle reported the payment complete${on}, and Vestiarion recorded it against this invoice.`;
 }
 
 /**

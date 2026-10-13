@@ -43,7 +43,7 @@ describe("what the agent did, in words", () => {
     });
     expect(activityItem(paid, refs())).toEqual({
       seq: 972,
-      text: "Paid Jiren 0.30 USDC.",
+      text: "Paid Jiren 0.30 USDC; Circle confirmed it on Arc testnet.",
       detail: "DeepSeek decided, as the written policy would. Checks passed: purchase order and goods, the 30.00 USDC limit, screening, the spending-limit contract.",
       tone: "done",
       path: `/invoices?open=${INVOICE}#trail-${INVOICE}`,
@@ -72,35 +72,74 @@ describe("what the agent did, in words", () => {
         entry("ap_pay", { reevaluation: { reopenedSeq: 971, trigger, previousDecisionSeq: 965, previousAction: "hold" }, execution: { txRef: TX, resultingStatus: "paid" } }),
         refs({ currency: "EURC" })
       )?.text;
-    expect(decidedAgain("rate_available")).toBe("Paid Jiren 0.30 EURC · decided again once a EURC rate was quoted.");
-    expect(decidedAgain("swap_available")).toBe("Paid Jiren 0.30 EURC · decided again once a USDC→EURC swap was quoted.");
-    expect(decidedAgain("swap_cost_within_cap")).toBe("Paid Jiren 0.30 EURC · decided again once a swap cost within its cap.");
-    expect(decidedAgain("value_within_limit")).toBe("Paid Jiren 0.30 EURC · decided again once the rate brought it within the limit.");
+    expect(decidedAgain("rate_available")).toBe("Paid Jiren 0.30 EURC · decided again once a EURC rate was quoted; Circle confirmed it on Arc testnet.");
+    expect(decidedAgain("swap_available")).toBe("Paid Jiren 0.30 EURC · decided again once a USDC→EURC swap was quoted; Circle confirmed it on Arc testnet.");
+    expect(decidedAgain("swap_cost_within_cap")).toBe("Paid Jiren 0.30 EURC · decided again once a swap cost within its cap; Circle confirmed it on Arc testnet.");
+    expect(decidedAgain("value_within_limit")).toBe("Paid Jiren 0.30 EURC · decided again once the rate brought it within the limit; Circle confirmed it on Arc testnet.");
   });
 
   it("says how long after the person's action the agent decided", () => {
     const paid = { ...entry("ap_pay", { execution: { txRef: TX, resultingStatus: "paid" } }), ts: "2026-10-03T02:20:53Z" };
     const withTriggers = (action: string, ts: string) => ({ ...refs(), triggers: new Map([[INVOICE, [{ seq: 968, ts, action }]]]) });
-    expect(activityItem(paid, withTriggers("invoice_details_added", "2026-10-03T02:20:25Z"))?.text).toBe("Paid Jiren 0.30 USDC · 28 s after details were added.");
-    expect(activityItem(paid, withTriggers("create_invoice", "2026-10-03T02:15:53Z"))?.text).toBe("Paid Jiren 0.30 USDC · 5 min after it was added.");
+    expect(activityItem(paid, withTriggers("invoice_details_added", "2026-10-03T02:20:25Z"))?.text).toBe("Paid Jiren 0.30 USDC · 28 s after details were added; Circle confirmed it on Arc testnet.");
+    expect(activityItem(paid, withTriggers("create_invoice", "2026-10-03T02:15:53Z"))?.text).toBe("Paid Jiren 0.30 USDC · 5 min after it was added; Circle confirmed it on Arc testnet.");
     // More than an hour later is not news of speed; neither is an action after the decision.
-    expect(activityItem(paid, withTriggers("create_invoice", "2026-10-03T00:00:00Z"))?.text).toBe("Paid Jiren 0.30 USDC.");
+    expect(activityItem(paid, withTriggers("create_invoice", "2026-10-03T00:00:00Z"))?.text).toBe("Paid Jiren 0.30 USDC; Circle confirmed it on Arc testnet.");
     expect(afterTrigger(paid, [{ seq: 990, ts: "2026-10-03T02:30:00Z", action: "approval_returned" }])).toBe("");
   });
 
-  it("names the workspace's network: Arc mainnet is confirming a payment there, and its item says so (mainnet copy C1)", () => {
+  it("names the workspace's network: a payment submitted there waits for Circle on Arc mainnet, and its item says so (mainnet copy C1)", () => {
     const sent = activityItem(entry("ap_pay", { execution: { txRef: TX, resultingStatus: "matched" } }), { ...refs(), network: "arc-mainnet" });
-    expect(sent?.text).toBe("Sent 0.30 USDC to Jiren; Arc mainnet is confirming it.");
+    expect(sent?.text).toBe("Submitted 0.30 USDC to Jiren; waiting for Circle to confirm it on Arc mainnet.");
     expect(sent?.network).toBe("arc-mainnet");
     expect(sent?.txUrl).toBe(`https://explorer.arc.io/tx/${TX}`);
   });
 
-  it("says a payment still confirming, and one that did not go out", () => {
-    expect(activityItem(entry("ap_pay", { execution: { txRef: TX, resultingStatus: "matched" } }), refs())?.text).toBe(
-      "Sent 0.30 USDC to Jiren; Arc testnet is confirming it."
-    );
+  it("says a payment Circle has not confirmed is submitted, never sent or paid, and one that did not go out", () => {
+    expect(activityItem(entry("ap_pay", { execution: { txRef: "circle-transfer-1", resultingStatus: "matched" } }), refs({ status: "matched", txRef: null }))).toMatchObject({
+      text: "Submitted 0.30 USDC to Jiren; waiting for Circle to confirm it on Arc testnet.",
+      tone: "pending",
+      txHash: null,
+    });
     const held = activityItem(entry("ap_pay", { execution: { txRef: null, resultingStatus: "held" } }), refs({ status: "held" }));
     expect(held).toMatchObject({ text: "Tried to pay Jiren 0.30 USDC; it is held for you.", tone: "stopped", path: `/approvals#payable-${INVOICE}`, txHash: null });
+  });
+
+  it("never says sent or paid of a send Circle never answered: submitted, with an unknown outcome, and no check mark (I17)", () => {
+    // executePayment turns a send Circle never answered into `pending`, which the invoice records as `matched`, with no
+    // Circle id, so the entry's transfer reference is null (settlement lifecycle L3, "Outcome unknown").
+    const unanswered = activityItem(entry("ap_pay", { execution: { txRef: null, chainMode: "live", resultingStatus: "matched" } }), refs({ status: "matched", txRef: null }));
+    expect(unanswered).toMatchObject({
+      text: "Submitted 0.30 USDC to Jiren; Circle has not answered yet, so the outcome is unknown and nothing goes out again until it does.",
+      tone: "pending",
+      txHash: null,
+    });
+    expect(unanswered?.text).not.toMatch(/\b(sent|paid)\b/i);
+    // A sandbox whose earlier attempt was refused keeps `simulate` on the row: a send in flight is never called simulated (L4).
+    expect(activityItem(entry("ap_pay", { execution: { txRef: null, chainMode: "simulate", resultingStatus: "matched" } }), refs({ txRef: null }))?.text).toMatch(
+      /^Submitted 0.30 USDC to Jiren; Circle has not answered yet/
+    );
+    const release = activityItem({ seq: 6, action: "milestone_release", detail: { milestoneId: MILESTONE, execution: { txRef: null, resultingStatus: "verified" } } }, refs());
+    expect(release).toMatchObject({ text: "Submitted 1.00 USDC for Landing page to Puka Hotel; Circle has not answered yet, so the outcome is unknown and nothing goes out again until it does.", tone: "pending" });
+    expect(release?.text).not.toMatch(/\b(sent|released)\b/i);
+  });
+
+  it("says a payment the sandbox simulated was simulated, never confirmed by Circle", () => {
+    const simulated = activityItem(entry("ap_pay", { execution: { txRef: "sim_pay_1", chainMode: "simulate", resultingStatus: "paid" } }), refs({ txRef: "sim_pay_1" }));
+    expect(simulated).toMatchObject({ text: "Paid Jiren 0.30 USDC in the sandbox (simulated).", tone: "done", txHash: null });
+    expect(simulated?.text).not.toContain("Circle");
+    const release = activityItem({ seq: 6, action: "milestone_release", detail: { milestoneId: MILESTONE, execution: { txRef: "sim_ms_1", chainMode: "simulate", resultingStatus: "paid" } } }, refs());
+    expect(release?.text).toBe("Released 1.00 USDC for Landing page to Puka Hotel in the sandbox (simulated).");
+  });
+
+  it("says only what an entry with no transfer recorded says, never paid from the invoice's status now", () => {
+    // The invoice is paid now, but this entry recorded no transfer: it says the decision, without a check mark. The
+    // invoice's transaction is still linked, as where to check it.
+    expect(activityItem(entry("ap_pay", {}), refs({ status: "paid" }))).toMatchObject({ text: "Decided to pay Jiren 0.30 USDC.", tone: "pending", txHash: TX });
+    expect(activityItem({ seq: 6, action: "milestone_release", detail: { milestoneId: MILESTONE } }, refs())).toMatchObject({
+      text: "Decided to release 1.00 USDC for Landing page to Puka Hotel.",
+      tone: "pending",
+    });
   });
 
   it("says a payment held in shadow mode waits for a verdict, sends the person to give one, and offers a chat no card to settle it", () => {
@@ -164,18 +203,22 @@ describe("what the agent did, in words", () => {
     expect(activityItem(entry("ap_flag_fraud", {}), refs({ status: "flagged" }))?.text).toBe("Flagged Jiren 0.30 USDC for you to review.");
   });
 
-  it("says milestones and money received", () => {
+  it("says milestones and money received, with who reported the money in", () => {
     const milestone = (action: string, detail: Record<string, unknown> = {}) => ({ seq: 5, action, detail: { milestoneId: MILESTONE, ...detail } });
-    expect(activityItem(milestone("milestone_release", { execution: { txRef: TX } }), refs())).toMatchObject({
-      text: "Released 1.00 USDC for Landing page to Puka Hotel.",
+    expect(activityItem(milestone("milestone_release", { execution: { txRef: TX, resultingStatus: "paid" } }), refs())).toMatchObject({
+      text: "Released 1.00 USDC for Landing page to Puka Hotel; Circle confirmed it on Arc testnet.",
       tone: "done",
       txHash: TX,
     });
     expect(activityItem(milestone("milestone_hold"), refs())).toMatchObject({ text: "Held 1.00 USDC for Landing page from Puka Hotel for you.", tone: "stopped", path: "/contractors" });
-    expect(activityItem(entry("ar_received", { txHash: TX }), refs({ status: "received" }))).toMatchObject({ text: "Received 0.30 USDC from Jiren.", tone: "done", txHash: TX });
+    expect(activityItem(entry("ar_received", { txHash: TX }), refs({ status: "received" }))).toMatchObject({
+      text: "Received 0.30 USDC from Jiren on Arc testnet: Circle reported the transfer complete.",
+      tone: "done",
+      txHash: TX,
+    });
   });
 
-  it("says a release that did not go out is held, and one Arc is still confirming is sent (mainnet pre-flight review)", () => {
+  it("says a release that did not go out is held, one Circle has not confirmed is submitted, and released only once it has (mainnet pre-flight review, I17)", () => {
     const release = (execution: Record<string, unknown>) => ({ seq: 5, action: "milestone_release", detail: { milestoneId: MILESTONE, guardrailBlocked: false, execution } });
     expect(activityItem(release({ resultingStatus: "held", heldBecause: "cash_shortfall" }), refs())).toMatchObject({
       text: "Tried to release 1.00 USDC for Landing page to Puka Hotel; it is held for you.",
@@ -189,11 +232,11 @@ describe("what the agent did, in words", () => {
       tone: "stopped",
     });
     expect(activityItem(release({ txRef: TX, resultingStatus: "verified" }), refs())).toMatchObject({
-      text: "Sent 1.00 USDC for Landing page to Puka Hotel; Arc testnet is confirming it.",
-      tone: "done",
+      text: "Submitted 1.00 USDC for Landing page to Puka Hotel; waiting for Circle to confirm it on Arc testnet.",
+      tone: "pending",
       txHash: TX,
     });
-    expect(activityItem(release({ txRef: TX, resultingStatus: "paid" }), refs())?.text).toBe("Released 1.00 USDC for Landing page to Puka Hotel.");
+    expect(activityItem(release({ txRef: TX, resultingStatus: "paid" }), refs())?.text).toBe("Released 1.00 USDC for Landing page to Puka Hotel; Circle confirmed it on Arc testnet.");
   });
 
   it("says a reminder it sent a client, with who decided (collections R8)", () => {
@@ -215,7 +258,9 @@ describe("what the agent did, in words", () => {
   it("writes amounts as the app does, in the invoice's own token", () => {
     expect(activityAmount(1250, "USDC")).toBe("1,250.00 USDC");
     expect(activityAmount(0.123074, "USDC")).toBe("0.123074 USDC");
-    expect(activityItem(entry("ap_pay", {}), refs({ currency: "EURC" }))?.text).toBe("Paid Jiren 0.30 EURC.");
+    expect(activityItem(entry("ap_pay", { execution: { txRef: TX, resultingStatus: "paid" } }), refs({ currency: "EURC" }))?.text).toBe(
+      "Paid Jiren 0.30 EURC; Circle confirmed it on Arc testnet."
+    );
   });
 
   it("keeps the order things happened in", () => {
@@ -398,7 +443,7 @@ describe("reading the agent's activity", () => {
     const client = fake([{ seq: 972, ts: "2026-10-03T02:20:53Z", action: "ap_pay", detail: { invoiceId: INVOICE, execution: { txRef: TX, resultingStatus: "paid" } } }]);
     const activity = await read(client, 967);
     expect(activity.items).toEqual([
-      { seq: 972, text: "Paid Jiren 0.30 USDC · 28 s after details were added.", detail: null, tone: "done", path: `/invoices?open=${INVOICE}#trail-${INVOICE}`, pathLabel: "How it decided", txHash: TX, txUrl: `https://explorer.testnet.arc.io/tx/${TX}`, network: "arc-testnet" },
+      { seq: 972, text: "Paid Jiren 0.30 USDC · 28 s after details were added; Circle confirmed it on Arc testnet.", detail: null, tone: "done", path: `/invoices?open=${INVOICE}#trail-${INVOICE}`, pathLabel: "How it decided", txHash: TX, txUrl: `https://explorer.testnet.arc.io/tx/${TX}`, network: "arc-testnet" },
     ]);
     const triggers = client.requests.find((r) => r.path === "/rest/v1/ledger_entries" && (r.params.get("select") ?? "").includes("invoiceId"))!;
     expect(triggers.params.get("actor")).toBe("eq.human");
@@ -440,7 +485,7 @@ describe("a payment that has not confirmed (stuck-transfer alert D6, D7)", () =>
     const item = activityItem(stuck(), refs());
     expect(item).toMatchObject({
       seq: 990,
-      text: "Payment of 0.30 USDC to Jiren has not confirmed 18 min after it was sent on Arc testnet.",
+      text: "Payment of 0.30 USDC to Jiren has not confirmed 18 min after it was submitted to Circle on Arc testnet.",
       detail: "Circle shows it stuck.",
       tone: "stopped",
       path: `/invoices?open=${INVOICE}#trail-${INVOICE}`,
@@ -453,11 +498,11 @@ describe("a payment that has not confirmed (stuck-transfer alert D6, D7)", () =>
 
   it("names Arc mainnet for a workspace there, and says what Circle said, or that it was not asked or never answered", () => {
     expect(activityItem(stuck({ circleAsked: false, providerState: null }), { ...refs(), network: "arc-mainnet" })).toMatchObject({
-      text: "Payment of 0.30 USDC to Jiren has not confirmed 18 min after it was sent on Arc mainnet.",
+      text: "Payment of 0.30 USDC to Jiren has not confirmed 18 min after it was submitted to Circle on Arc mainnet.",
       detail: "Circle could not be asked just now.",
     });
     expect(activityItem(stuck({ circleAsked: false, sendAnswered: false, providerState: null, txHash: null }), refs())).toMatchObject({
-      detail: "Circle never answered the send.",
+      detail: "Circle never answered when it was submitted, so the outcome is unknown.",
       txHash: null,
       txUrl: null,
     });
@@ -471,7 +516,7 @@ describe("a payment that has not confirmed (stuck-transfer alert D6, D7)", () =>
       detail: { milestoneId: MILESTONE, amount: 1, currency: "USDC", minutes: 16, circleAsked: true, sendAnswered: true, providerState: "QUEUED", txHash: null, network: "arc-testnet" },
     };
     expect(activityItem(milestone, refs())).toMatchObject({
-      text: "Payment of 1.00 USDC to Puka Hotel has not confirmed 16 min after it was sent on Arc testnet.",
+      text: "Payment of 1.00 USDC to Puka Hotel has not confirmed 16 min after it was submitted to Circle on Arc testnet.",
       detail: "Circle shows it as QUEUED.",
       tone: "stopped",
       path: "/contractors",

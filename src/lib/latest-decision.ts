@@ -116,11 +116,12 @@ function headline(facts: DecisionFacts, network: string): string {
     case "ap_pay":
     case "milestone_release":
       if (facts.resultingStatus === "paid") return `Paid ${what}.`;
-      // Sent, still confirming when the agent recorded it: what came of it since, when that is known.
+      // Submitted, not confirmed when the agent recorded it: what came of it since, when that is known. Submitted, never
+      // "sent", until Circle confirms it (settlement lifecycle I17).
       if (facts.resultingStatus === "matched" || facts.resultingStatus === "verified") {
         if (facts.paidTxHash) return `Paid ${what}.`;
-        if (facts.paymentFailed) return `Sent ${what}; the transfer failed.`;
-        return `Sent ${what}; ${network} is confirming it.`;
+        if (facts.paymentFailed) return `Submitted ${what}; the transfer failed.`;
+        return `Submitted ${what}; waiting for Circle to confirm it on ${network}.`;
       }
       // Held for a person, who then paid it.
       if (facts.paidTxHash) return facts.verdict === "agree" ? `Paid ${what} after a person agreed.` : `Paid ${what} after a person approved it.`;

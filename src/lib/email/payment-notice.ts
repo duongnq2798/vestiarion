@@ -4,7 +4,8 @@ import { actionEmailHtml } from "./layout";
 
 /**
  * The email a payee gets once a payment to them is confirmed on its network (payment notices R2): who paid, how
- * much and its token, what for, to which address and when, with the transaction to see it on chain.
+ * much and its token, what for, to which address and when, with the transaction to see it on chain. It names who
+ * confirmed it, Circle, on which network (settlement lifecycle I17): only a live payment Circle confirmed is told.
  */
 export function paymentNoticeEmail(input: {
   orgName: string;
@@ -25,23 +26,25 @@ export function paymentNoticeEmail(input: {
   const { label } = networkProfile(input.network);
   const subject = `${orgName} paid you ${amount} ${token}`;
   const lead = `${orgName} paid you ${amount} ${token} on ${label}${what ? ` for ${what}` : ""}.`;
-  const sent = `Sent to ${address} on ${paidAt}.`;
+  const sent = `Sent to ${address}.`;
+  const confirmed = `Circle confirmed the transfer on ${label} on ${paidAt}.`;
   const note = `You get this email because ${orgName} pays you through Vestiarion and gave this address for payment notices. For anything about this payment, contact ${orgName}.`;
 
   const html = actionEmailHtml({
     title: subject,
     preheader: lead,
-    eyebrow: "Payment sent",
+    eyebrow: "Payment confirmed",
     heading: `Hi ${payeeName}, you have been paid`,
     paragraphsHtml: [
       `<strong style="color:#18211c;">${escapeHtml(orgName)}</strong> paid you <strong style="color:#18211c;">${escapeHtml(amount)} ${escapeHtml(token)}</strong> on ${escapeHtml(label)}${what ? ` for ${escapeHtml(what)}` : ""}.`,
-      `Sent to <span style="font-family:'SFMono-Regular',Menlo,Consolas,monospace;font-size:13px;">${escapeHtml(address)}</span> on ${escapeHtml(paidAt)}.`,
+      `Sent to <span style="font-family:'SFMono-Regular',Menlo,Consolas,monospace;font-size:13px;">${escapeHtml(address)}</span>.`,
+      escapeHtml(confirmed),
     ],
     button: { label: "View the transaction", link: txUrl },
     note,
     origin,
   });
 
-  const text = [`Hi ${payeeName},`, "", lead, sent, "", `View the transaction: ${txUrl}`, "", note].join("\n");
+  const text = [`Hi ${payeeName},`, "", lead, sent, confirmed, "", `View the transaction: ${txUrl}`, "", note].join("\n");
   return { subject, html, text };
 }

@@ -39,8 +39,8 @@ describe("tokens and the account", () => {
   it("reads the account's domain from the introspection, and its currency and time zone from its details", () => {
     expect(mapIntrospection(fixture("introspect.json"))).toEqual({ hubId: "48291736", hubDomain: "northstar-studio.example" });
     expect(mapIntrospection({ active: false })).toEqual({ hubId: null, hubDomain: null });
-    expect(mapAccountDetails(fixture("account-details.json"))).toEqual({ hubId: "48291736", currency: "USD", timeZone: "Asia/Singapore" });
-    expect(mapAccountDetails({ companyCurrency: "dollars", timeZone: 7 })).toEqual({ hubId: null, currency: null, timeZone: null });
+    expect(mapAccountDetails(fixture("account-details.json"))).toEqual({ hubId: "48291736", currency: "USD", timeZone: "Asia/Singapore", accountType: "DEVELOPER_TEST" });
+    expect(mapAccountDetails({ companyCurrency: "dollars", timeZone: 7, accountType: "standard portal" })).toEqual({ hubId: null, currency: null, timeZone: null, accountType: null });
   });
 });
 

@@ -634,7 +634,7 @@ function milestoneProgress(milestone: MilestoneRow, waiting: MilestoneContext["w
     return { label: "Address to confirm", line: `Verified. ${name}'s address changed and no one has confirmed it yet: confirm it on Counterparties, and the agent decides on pay within a minute.` };
   }
   if (waiting === "no_address") return { label: "Waiting for an address", line: `Verified. ${name} has not added an address yet: the agent pays once they add one through their payee link.` };
-  if (milestone.tx_ref) return { label: "Payment in flight", line: "Verified. The payment was sent and is waiting for Circle to confirm it." };
+  if (milestone.tx_ref) return { label: "Payment in flight", line: "Verified. The payment was submitted and is waiting for Circle to confirm it." };
   return { label: "Being decided", line: "Verified. The agent decides on pay within a minute." };
 }
 

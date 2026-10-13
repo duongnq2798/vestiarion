@@ -4,17 +4,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CrmDealChanges } from "@/components/CrmDealChanges";
+import { CrmReceiptCard } from "@/components/CrmReceiptCard";
 import { DocsLink } from "@/components/DocsLink";
 import { DealChangeForm } from "@/components/deals/DealChangeForm";
 import { AutoReleaseSwitch, CancelDealButton } from "@/components/deals/DealControls";
 import { DealSchedule, DealVersions } from "@/components/deals/DealSchedule";
 import { dealStanding } from "@/components/deals/DealsSection";
-import { DealMoney } from "@/components/deals/DealMoney";
+import { DealFigures } from "@/components/deals/DealFigures";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { IntakeFold } from "@/components/vx/IntakeFold";
-import { StatTile } from "@/components/vx/StatTile";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
@@ -22,8 +22,12 @@ import { orgHref } from "@/lib/auth/org-paths";
 import { shellModes } from "@/lib/circle";
 import { utcDay } from "@/lib/copy";
 import { crmChangesFor, type CrmDealChanges as CrmChangesRead } from "@/lib/connectors/crm-review";
+import { crmReceiptFor, type CrmReceiptView } from "@/lib/connectors/crm-receipts-view";
+import { crmProvider } from "@/lib/crm-providers";
 import { inOrg } from "@/lib/dal/scope";
-import { dealSummary, inForce } from "@/lib/deals/lines";
+import type { Collection } from "@/lib/deals/collection";
+import { readDealCollections } from "@/lib/deals/collection-read";
+import { inForce } from "@/lib/deals/lines";
 import { formatMinor } from "@/lib/deals/money";
 import { readDeal } from "@/lib/deals/read";
 import { billsHref } from "@/lib/bills-view";
@@ -50,7 +54,7 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
   const access = await requireMembership(slug);
   const { from } = await searchParams;
   return inOrg(access, async () => {
-    const [read, dashboardStats, canWrite] = await Promise.all([readDeal(id), stats(), viewerCan(slug, "records.write")]);
+    const [read, dashboardStats, canWrite, canManage] = await Promise.all([readDeal(id), stats(), viewerCan(slug, "records.write"), viewerCan(slug, "integrations.manage")]);
     const shell = { network: access.membership.network, day: dashboardStats.day, clockMode: dashboardStats.clockMode, lastCycleAt: dashboardStats.lastCycleAt, chainModes: shellModes(), status: await shellStatus() };
     const back = (
       <Button asChild variant="link">
@@ -79,9 +83,20 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
       return null;
     });
     const changeFromCrm = crm !== null && from === "hubspot" && facts.status === "active";
-    const summary = dealSummary(facts, today);
+    // What was written back to the CRM it was planned from, and when (CRM receipts R8). Best effort, as the changes.
+    const receipt: CrmReceiptView | null = await crmReceiptFor(facts.id, (connection) => crmProvider(connection.provider)?.receipts?.writeScopes ?? null).catch((error: unknown) => {
+      console.error("deal: receipts in the CRM not read", error instanceof Error ? error.message : error);
+      return null;
+    });
+    // What it collected: the one figure its Paid and Outstanding show, and the CRM is told (CRM receipts R1). Best effort,
+    // as the cards: a read that fails says so on the tiles rather than show another figure.
+    const collected: Collection | null = await readDealCollections([deal], today)
+      .then((collections) => collections.get(facts.id)?.collection ?? null)
+      .catch((error: unknown) => {
+        console.error("deal: what it collected was not read", error instanceof Error ? error.message : error);
+        return null;
+      });
     const standing = dealStanding(deal, today);
-    const money = (minor: number) => <DealMoney minor={minor} digits={digits} currency={facts.currency} />;
     const stopping = inForce(facts.lines).filter((line) => line.status === "planned" && line.kind === "charge");
     const signedAt = deal.versions[0]?.createdAt ?? deal.createdAt;
 
@@ -109,26 +124,11 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
           }
         />
 
-        <div className="mb-6 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 xl:grid-cols-5">
-          <StatTile label="Total" sub={summary.creditMinor < 0 ? <>Includes a credit owed of {money(-summary.creditMinor)}</> : `In ${inForce(facts.lines).length} lines`}>
-            {money(summary.totalMinor)}
-          </StatTile>
-          <StatTile label="Released" sub="Made receivables">
-            {money(summary.releasedMinor)}
-          </StatTile>
-          <StatTile label="Paid" sub="Received from the customer">
-            {money(summary.paidMinor)}
-          </StatTile>
-          <StatTile label="Outstanding" tone={summary.overdueMinor > 0 ? "held" : "default"} sub={summary.overdueMinor > 0 ? <>Expected, {money(summary.overdueMinor)} overdue</> : "Expected, not cash until paid"}>
-            {money(summary.outstandingMinor)}
-          </StatTile>
-          <StatTile label="Planned" sub={summary.next ? <>Next: {summary.next.label}, {utcDay(`${summary.next.invoiceOn}T00:00:00Z`)}</> : "Nothing left to invoice"}>
-            {money(summary.plannedMinor)}
-          </StatTile>
-        </div>
+        <DealFigures deal={deal} today={today} collected={collected} />
 
         <div className="space-y-8">
           {crm && <CrmDealChanges orgSlug={slug} dealId={facts.id} label={crm.label} words={crm.words} seen={crm.seen} canWrite={canWrite} active={facts.status === "active"} />}
+          {receipt && <CrmReceiptCard orgSlug={slug} dealId={facts.id} view={receipt} canManage={canManage} />}
           <DealSchedule orgSlug={slug} deal={deal} today={today} canWrite={canWrite} />
 
           {canWrite ? (

@@ -79,7 +79,7 @@ describe("presentReasoning", () => {
 describe("the notes code adds", () => {
   it("says each one as a sentence", () => {
     expect(noteSentence("transfer failed: provider reported failure")).toBe("The transfer failed: Circle reported a failure.");
-    expect(noteSentence("transfer submitted; awaiting provider confirmation")).toBe("The transfer was sent and is waiting for Circle to confirm it.");
+    expect(noteSentence("transfer submitted; awaiting provider confirmation")).toBe("The transfer was submitted and is waiting for Circle to confirm it.");
     expect(noteSentence("execution failed: column milestones.escrow_state does not exist")).toBe("The payment could not be sent.");
     // Followed by what the transfer did, when it did not confirm: never "paid" before it was (settlement lifecycle L9).
     expect(noteSentence("approved and paid by a person")).toBe("A person approved paying it.");
@@ -87,6 +87,11 @@ describe("the notes code adds", () => {
       "Held for manual review. A person approved paying it. The transfer failed: Circle reported a failure."
     );
     expect(noteSentence("paid now by a person")).toBe("A person chose Pay now.");
+    // Since I17 a person's payment notes paid only once Circle confirmed it; otherwise what its transfer did.
+    expect(presentReasoning("Held. [approved by a person; payment submitted] [transfer submitted; awaiting provider confirmation]")).toBe(
+      "Held. A person approved paying it. The transfer was submitted and is waiting for Circle to confirm it."
+    );
+    expect(noteSentence("approved by a person; payment not confirmed")).toBe("A person approved paying it.");
     expect(noteSentence("closed without paying by a person: Paid in cash")).toBe("A person closed it without paying: Paid in cash.");
     expect(noteSentence("guardrail override: contractor is high risk — release refused")).toBe("Not released: the contractor is high risk.");
     expect(noteSentence("guardrail override: 3 exceeds the 0.25 USDC payment limit — pay refused before execution")).toBe("Not paid: the amount exceeds the 0.25 USDC payment limit.");

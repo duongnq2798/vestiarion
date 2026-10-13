@@ -248,7 +248,7 @@ describe("the landing page's built on and works with", () => {
     expect(page).toContain("Bills come in for review; payments on Arc are booked back once approved. Read the guide");
     // The lockup says QuickBooks; the words say which one.
     expect(page).toContain("Open bills from QuickBooks Online come in for review, sooner via webhooks. Read the guide");
-    expect(page).toContain("Won deals come in with their customers, to plan as collection schedules. Read the guide");
+    expect(page).toContain("Won deals come in with their customers, to plan as collection schedules; what each collected goes back to the deal. Read the guide");
   });
 
   it("says built on and works with, never that a service vouches for Vestiarion", () => {

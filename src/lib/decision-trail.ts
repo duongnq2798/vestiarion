@@ -239,7 +239,8 @@ export function trailStep(entry: TrailEntry, network: Network = "arc-testnet"): 
         ...base,
         who: "agent",
         tone: "stopped",
-        text: `Not confirmed ${number(detail.minutes) ?? 0} minutes after it was sent; the workspace's people were told.`,
+        // Submitted, never "sent": Circle may not have taken it (settlement lifecycle I17).
+        text: `Not confirmed ${number(detail.minutes) ?? 0} minutes after it was submitted; the workspace's people were told.`,
         txHash: arcTx(detail.txHash),
       };
     case "approval_paid":
@@ -382,13 +383,13 @@ function approvalStep(status: string | null, sole: boolean, network: string): Pi
   const who = sole ? "The person who entered it" : "A person";
   const own = sole ? ", as the workspace's only approver" : "";
   if (status === "paid") return { tone: "done", text: `${who} approved and paid it${own}.` };
-  if (status === "matched") return { tone: "neutral", text: `${who} approved it${own}; ${PAYMENT_SENT(network)}.` };
+  if (status === "matched") return { tone: "neutral", text: `${who} approved it${own}; ${PAYMENT_SUBMITTED(network)}.` };
   if (status === "held") return { tone: "stopped", text: `${who} approved it${own}; ${PAYMENT_HELD_AGAIN}.` };
   return { tone: "neutral", text: `${who} approved paying it${own}.` };
 }
 
-/** What a person's approval says of a payment it sent that the network has not confirmed yet. */
-export const PAYMENT_SENT = (network: string) => `the payment was sent and ${network} is confirming it`;
+/** What a person's approval says of a payment it submitted that Circle has not confirmed yet: submitted, never "sent" (I17). */
+export const PAYMENT_SUBMITTED = (network: string) => `the payment was submitted and is waiting for Circle to confirm it on ${network}`;
 /** What it says of one held again: not confirmed, whatever became of its transfer. */
 export const PAYMENT_HELD_AGAIN = "the payment was not confirmed, so it was held again";
 

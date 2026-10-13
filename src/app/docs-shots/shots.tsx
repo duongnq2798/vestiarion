@@ -102,6 +102,9 @@ import { DEALS_SHOT_TODAY, dealShot } from "./deals-fixture";
 import { RULE_TRIAL_COPY } from "@/lib/rule-trial-copy";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
+import { CrmReceiptCard } from "@/components/CrmReceiptCard";
+import { receiptView } from "@/lib/connectors/crm-receipts-view";
+import { RECEIPT_ROWS, RECEIPTS_CONNECTED, RECEIPTS_DEAL_ID, RECEIPTS_PANELS } from "./crm-receipts-fixture";
 
 /**
  * The screenshots in the user guides, one state each, rendered by the app's
@@ -2143,6 +2146,24 @@ export const DOCS_SHOTS = {
         />
       </Card>
     ),
+  },
+  "hubspot-receipts": {
+    guide: "hubspot",
+    // A planned deal's page: what was written to its HubSpot deal, as HubSpot read it back (CRM receipts R8).
+    render: () => (
+      <CrmReceiptCard
+        orgSlug={SLUG}
+        dealId={RECEIPTS_DEAL_ID}
+        view={receiptView({ label: "HubSpot", gate: { ok: true }, latest: RECEIPT_ROWS.written, lastWritten: RECEIPT_ROWS.written })}
+        canManage
+      />
+    ),
+  },
+  "hubspot-receipts-settings": {
+    guide: "hubspot",
+    page: "settings",
+    sub: SETTINGS_SUB,
+    render: () => <HubSpotPanel orgSlug={SLUG} view={RECEIPTS_CONNECTED} canManage notice={null} receipts={RECEIPTS_PANELS.on} />,
   },
   "hubspot-changed": {
     guide: "hubspot",

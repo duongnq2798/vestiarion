@@ -24,11 +24,30 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   The page and the pay page work on a phone: the amount and its currency stay in view, and every button is large enough
   to tap.
 
+- **Receipts back in HubSpot.** Sales sees whether a customer paid without asking finance: once an owner or admin turns
+  on Write receipts to HubSpot, each deal planned from HubSpot gets what was collected, what is still owed, the last
+  receipt (day, amount and its transaction on Arc), a collection and a reconciliation status, and a link to the deal in
+  Vestiarion, in a Vestiarion group of deal fields. Only payments confirmed on Arc and applied to an invoice count, and a
+  part payment shows as partial. Each write is read back from HubSpot before it counts as written; the deal's page says
+  what was written and when. A field someone changed in HubSpot is never written over: the deal's page shows the
+  conflict, and an owner or admin chooses. HubSpot being down never touches a payment: the write waits and is tried
+  again on its own. Payments on Arc testnet or in shadow mode are written only to a HubSpot developer test account or
+  sandbox. A connection made before keeps reading, and offers Allow writing to HubSpot. A deal's page and the Deals list
+  show the same figures as Paid and Outstanding: a part payment counts as what arrived, and a fee a person marked
+  settles an invoice without counting as paid.
+
 - **Xero, QuickBooks Online and HubSpot on the landing page and in Settings.** "Built on, and works with" lists them
   beside Arc, Circle, Slack, Telegram and npm, each with its mark, what it does and its guide; their Settings cards and
   connect pages show their marks beside their names.
 
 ### Changed
+
+- **Payment notices say what is known, and who verified it.** Activity toasts, Slack, Telegram, the stuck-payment email,
+  the Approve and pay message and the decision trail say a payment was submitted until Circle confirms it, and that its
+  outcome is unknown when Circle never answered; a confirmed payment names its source ("Circle confirmed it on Arc
+  testnet"), and a sandbox payment says it was simulated. The payee email names Circle's confirmation, and a customer's
+  pay page says what actually arrived and who reported it. A person's approval is noted as paid only once Circle
+  confirms the payment.
 
 - **Bills & receivables in three tabs.** The page keeps its four figures (Needs you, Due in 7 days, Overdue, and what
   customers owe), shows Waiting for review only when something waits, and puts the work under Bills, Payment plan and

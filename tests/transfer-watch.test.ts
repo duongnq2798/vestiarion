@@ -295,7 +295,7 @@ describe("telling every payment, whatever fails along the way (final review I3)"
     });
     expect(results).toEqual([{ slug: "acme", inFlight: 2, told: 1, error: "append failed" }]);
     expect(send).toHaveBeenCalledTimes(1);
-    expect((send.mock.calls[0] as unknown as [{ text: string }])[0].text).toContain("sent 20 minutes ago");
+    expect((send.mock.calls[0] as unknown as [{ text: string }])[0].text).toContain("submitted to Circle 20 minutes ago");
   });
 });
 
