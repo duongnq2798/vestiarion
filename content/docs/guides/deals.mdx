@@ -120,6 +120,10 @@ Under **Deals** on the **Receivables** tab, each deal carries one badge for this
 - **The payment plan** on **Bills & receivables** lists, under **Money expected in**, the receivables due in its 14 days, a part-paid one for what is still owed, and the deal lines planned for them, apart from its balances.
 - **A deal's costs** count on its own page only. A bill a cost is linked to is a bill like any other on **Treasury** and in the payment plan, and on the deal's page it counts in the cost's place, once.
 
+## Show the customer what it owes
+
+A [statement link](/docs/guides/customer-portal) shows a customer every receivable released from its deals, with what is still owed on each and its pay link, and lets it say it paid, promise a day or dispute a line's invoice.
+
 ## What is signed
 
 Each version is a signed entry in the workspace's ledger, which the audit log shows and webhooks deliver: `deal_signed` for version 1, `deal_revised` for a change or a reopen, `deal_cancelled` for a cancel, and `deal_auto_release_changed` for the switch. Each cost is one too: `deal_cost_added`, `deal_cost_removed` and `deal_cost_linked`, which names the bill or milestone it became. A deal planned from HubSpot, and a change saved from what HubSpot changed, say `via: "hubspot"` with the deal's ids in HubSpot. Each release is the receivable's own `create_invoice` entry, which names the deal and the line, and says whether a person or the agent released it.

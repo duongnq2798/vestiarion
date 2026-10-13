@@ -81,6 +81,10 @@ The search box on each tab of **Bills & receivables** finds bills and receivable
 
 Each payment applied, fee and reversal is a signed entry: `ar_payment_applied`, `ar_fee_recorded` and `ar_allocation_reversed`. Each appears under the invoice's **How the agent decided**, with what is still owed after it. Webhook endpoints receive them as `ledger.appended`; [the changelog](/docs/changelog) lists their fields. In `GET /api/v1/invoices`, a part-paid invoice keeps its full amount and the status `pending` until what is applied covers it, then becomes `received`.
 
+## When a customer says it paid
+
+A customer with a [statement link](/docs/guides/customer-portal) can say it paid an invoice, with the day, a reference and the amount. Its claim waits under **From customers**, at the top of the **Receivables** tab, as "Customer says paid": the invoice stays open until the payment arrives and you apply it here. Then close the claim as found.
+
 ## Before it is set up
 
 On a deployment where applying payments is not set up yet, the **Receivables** tab says "Applying payments is not set up on this deployment yet." Receivables work as before: the agent matches a payment of exactly one invoice's amount.

@@ -3,7 +3,7 @@ import { LINK_PREVIEWS, type LinkPage } from "@/lib/link-previews";
 
 /**
  * The preview card of each kind of link page (docs/superpowers/specs/2026-10-06-mainnet-polish-design.md E1), at
- * `linkImagePath(page)`: `/pay`, `/payee`, `/receipt` and `/report` point their metadata here. Like the docs pages'
+ * `linkImagePath(page)`: `/pay`, `/payee`, `/receipt`, `/report` and `/statement` point their metadata here. Like the docs pages'
  * images it is a route under `og/`, so every card is rendered at build time and the proxy never runs for a crawler's
  * fetch (final review I2). It reads nothing of any link; any other page is a 404.
  */

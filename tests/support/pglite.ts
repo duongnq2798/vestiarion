@@ -105,6 +105,7 @@ export const TENANT_TABLES = [
   "accounting_connections", "external_links", "accounting_bills", "accounting_sync_cursors", "accounting_postings",
   "deals", "deal_versions", "deal_lines", "deal_costs", "approval_escalations", "approval_escalation_starts",
   "crm_deals",
+  "customer_portal_links", "customer_requests", "customer_request_messages",
 ] as const;
 
 export interface SeededRows {
@@ -271,6 +272,21 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     "insert into service_purchases (org_id, counterparty_id, address, seller_url, status, reason) values ($1, $2, '0x' || repeat('cd', 20), $3, 'refused', 'seeded')",
     [orgId, counterpartyId, `https://seller.invalid/${tag}`]
   );
+  // A customer's statement link, a claim of payment through it, and a reply under it (0109).
+  const customerId = await one("insert into counterparties (org_id, name, role) values ($1, $2, 'client') returning id", [orgId, `customer-${tag}`]);
+  const customerInvoiceId = await one(
+    "insert into invoices (org_id, direction, counterparty_id, amount, due_date) values ($1, 'receivable', $2, 3, now()) returning id",
+    [orgId, customerId]
+  );
+  const portalLinkId = await one(
+    "insert into customer_portal_links (org_id, counterparty_id, token_hash, expires_at) values ($1, $2, encode(sha256(convert_to($3, 'utf8')), 'hex'), now() + interval '30 days') returning id",
+    [orgId, customerId, `portal-${tag}`]
+  );
+  const customerRequestId = await one(
+    "insert into customer_requests (org_id, link_id, counterparty_id, invoice_id, kind, paid_on) values ($1, $2, $3, $4, 'paid', current_date) returning id",
+    [orgId, portalLinkId, customerId, customerInvoiceId]
+  );
+  await db.query("insert into customer_request_messages (org_id, request_id, body) values ($1, $2, 'We are checking.')", [orgId, customerRequestId]);
   const key = crypto.generateKeyPairSync("ed25519");
   await appendSignedForOrg(db, orgId, { actor: "system", domain: "system", action: "note", summary: tag, detail: { tag } }, key.privateKey);
   return { counterpartyId, accountId, invoiceId, cycleRunId, idempotencyKey };

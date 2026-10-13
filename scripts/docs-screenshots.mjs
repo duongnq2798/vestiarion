@@ -253,6 +253,8 @@ const SHOTS = {
   },
   "hubspot-plan": async () => {},
   "hubspot-changed": async () => {},
+  "customer-portal-statement": async () => {},
+  "customer-portal-from-customers": async () => {},
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

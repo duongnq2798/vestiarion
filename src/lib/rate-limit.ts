@@ -110,3 +110,13 @@ const slackUserBuckets = new Map<string, Bucket>();
 export function takeSlackUserToken(key: string, now = Date.now()): boolean {
   return take(slackUserBuckets, key, 20, 3_000, now);
 }
+
+const portalActionBuckets = new Map<string, Bucket>();
+
+/**
+ * What a customer's statement link sends (customer portal P6): five requests or messages at once, then one every 12 s,
+ * per link. Single-instance, like the others; the database's cap of 30 a day per link (0109) holds across instances.
+ */
+export function takePortalActionToken(key: string, now = Date.now()): boolean {
+  return take(portalActionBuckets, key, 5, 12_000, now);
+}

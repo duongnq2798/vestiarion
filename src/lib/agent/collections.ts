@@ -5,6 +5,7 @@ import { siteOrigin } from "../auth/env";
 import { allowedTones, boundTone, boundWaitDays, reminderAllowed, referenceReminder, whenInWords, type ReminderDecision, type ReminderTone, type SentReminder } from "../collections";
 import { currentOrgId } from "../context";
 import { utcDay } from "../copy";
+import { readReminderPauses } from "../customer-portal/requests";
 import { platformDb, unwrap, type OrgDb } from "../dal";
 import { receivableReminderEmail } from "../email/receivable-reminder";
 import { emailSettingsFromEnv, sendEmail, type EmailMessage, type SendResult } from "../email/send";
@@ -26,6 +27,10 @@ import { agentPaused } from "./pause";
  *
  * A part-paid receivable is reminded of what is still owed, saying what arrived, and a paid one is not reminded at all
  * (docs/superpowers/specs/2026-10-12-allocations-design.md L11). Before migration 0103 runs, nothing is applied.
+ *
+ * A receivable whose customer promised on its statement to pay by a day waits through that day, and one it disputes
+ * waits until a person resolves the dispute (docs/superpowers/specs/2026-10-13-customer-portal-design.md P7). Before
+ * migration 0109 runs, none waits.
  */
 
 /** The most reminders one cycle sends. */
@@ -143,6 +148,8 @@ export async function sendReceivableReminders(
   const owedBy = new Map(
     invoices.map((row) => [row.id, receivableBalance(toReceivableIn({ ...row, created_at: null }), allocations, false)] as const)
   );
+  // What the customers said on their statements: a promise or a dispute holds the reminders (P7).
+  const pauses = await readReminderPauses(orgDb, invoices.map((row) => row.id), new Date(now).toISOString().slice(0, 10));
   const clientIds = [...new Set(invoices.map((row) => row.counterparty_id))];
   const [clients, reminders, settled] = await Promise.all([
     orgDb.from("counterparties").select("id, name, notice_email").in("id", clientIds),
@@ -172,6 +179,8 @@ export async function sendReceivableReminders(
     // Paid by the payments applied to it: nothing to remind.
     const balance = owedBy.get(invoice.id);
     if (balance && balance.outstanding === 0) continue;
+    // The customer promised a day or disputes it: no reminder until then.
+    if (pauses.has(invoice.id)) continue;
     const sent = sentBy.get(invoice.id) ?? [];
     const facts = { now, dueDate: invoice.due_date, sent, deferredUntil: link.reminder_deferred_until };
     const allowance = reminderAllowed(facts);
