@@ -109,6 +109,7 @@ export const TENANT_TABLES = [
   "projects", "project_reservations",
   "usage_events",
   "collection_policies", "collection_tasks", "notification_deliveries", "collection_task_starts",
+  "reporting_currencies", "cash_scenario_versions", "fx_rates", "fx_variances",
 ] as const;
 
 export interface SeededRows {
@@ -328,6 +329,28 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
   await db.query(
     "insert into usage_events (org_id, kind, action, provider, model, input_tokens, output_tokens, cost, cost_currency) values ($1, 'model_call', 'decision', 'anthropic', 'claude-test', 100, 20, 0.0006, 'USD')",
     [orgId]
+  );
+  // The reporting currency, a saved cash scenario with a rate typed into it, the day's reference rate, and the FX
+  // variance on a paid bill at it (0113).
+  await db.query("insert into reporting_currencies (org_id, currency) values ($1, 'SGD')", [orgId]);
+  const scenarioVersionId = await one(
+    "insert into cash_scenario_versions (org_id, scenario_id, version, name, levers) values ($1, gen_random_uuid(), 1, $2, '{}'::jsonb) returning id",
+    [orgId, `scenario-${tag}`]
+  );
+  await db.query(
+    "insert into fx_rates (org_id, base, quote, rate, kind, source, published_at, scenario_version_id) values ($1, 'USD', 'SGD', 1.4, 'manual', 'Cash scenario', now(), $2)",
+    [orgId, scenarioVersionId]
+  );
+  const rateId = await one(
+    "insert into fx_rates (org_id, base, quote, rate, kind, source, published_at) values ($1, 'USD', 'SGD', 1.36, 'reference', 'ExchangeRate-API', '2026-10-12T00:02:00Z') returning id",
+    [orgId]
+  );
+  await db.query(
+    `insert into fx_variances (org_id, invoice_id, currency, paid_currency, paid_amount, paid_at, covered_amount, decision_rate, decision_source,
+       decision_at, payment_rate_id, payment_rate, payment_source, payment_rate_at, value_at_payment, variance)
+     values ($1, $2, 'SGD', 'USDC', 1000, '2026-10-12T15:00:00Z', 1350, 1.35, 'ExchangeRate-API', '2026-10-10T00:02:00Z', $3, 1.36,
+       'ExchangeRate-API', '2026-10-12T00:02:00Z', 992.65, 7.35)`,
+    [orgId, invoiceId, rateId]
   );
   const key = crypto.generateKeyPairSync("ed25519");
   await appendSignedForOrg(db, orgId, { actor: "system", domain: "system", action: "note", summary: tag, detail: { tag } }, key.privateKey);
