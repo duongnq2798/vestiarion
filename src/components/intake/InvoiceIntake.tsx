@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/Input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
+import { ProjectSelectField } from "@/components/projects/ProjectSelectField";
 import { orgHref } from "@/lib/auth/org-paths";
 import { billDigits } from "@/lib/bill-amount";
 
@@ -93,6 +94,7 @@ export default function InvoiceIntake({
   idPrefix = "invoice",
   billCurrency,
   initialDirection,
+  projects,
 }: {
   counterparties: IntakeCounterparty[];
   orgSlug: string;
@@ -108,6 +110,8 @@ export default function InvoiceIntake({
   billCurrency?: string;
   /** The direction it starts in before a counterparty is chosen: New ▾'s Bill to pay or Invoice to a customer. */
   initialDirection?: Direction;
+  /** The workspace's active projects, for a bill to pay in USDC (project budgets P3); none shown when absent or empty. */
+  projects?: Array<{ id: string; name: string }> | null;
 }) {
   const { state, formProps } = useActionForm(action, INITIAL, { resetOnSuccess: true, toastOnSuccess: true, onSuccess: onAdded });
   const fromDocument = !!document || !!inboxEmailId;
@@ -294,6 +298,7 @@ export default function InvoiceIntake({
         <Field id={id("po")} label="PO reference" optional error={fieldError("poReference")}>
           <Input name="poReference" maxLength={100} placeholder="PO-100" defaultValue={start(initial?.poReference)} />
         </Field>
+        {direction === "payable" && <ProjectSelectField projects={projects} id={id("project")} />}
       </div>
       <Checkbox
         name="goodsReceived"

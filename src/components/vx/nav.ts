@@ -26,6 +26,7 @@ export const NAV_GROUPS = [
       { key: "invoices", path: "/invoices", label: "Bills & receivables" },
       { key: "counterparties", path: "/counterparties", label: "Counterparties" },
       { key: "contractors", path: "/contractors", label: "Contractors" },
+      { key: "projects", path: "/projects", label: "Projects" },
     ],
   },
   {
@@ -78,6 +79,8 @@ const NESTED: ReadonlyArray<readonly [RegExp, NavKey]> = [
   [/^\/o\/[^/]+\/evidence\/milestone(?:\/|$)/, "contractors"],
   // A deal's page sits inside Bills & receivables, where its Deals are listed (deal schedule).
   [/^\/o\/[^/]+\/invoices\/deals(?:\/|$)/, "invoices"],
+  // A project's page sits inside Projects, where every project is listed (project budgets).
+  [/^\/o\/[^/]+\/projects\/[^/]+/, "projects"],
 ];
 
 /** The section a workspace pathname is in: `/o/acme/audit` → Audit log, `/o/acme/evidence/invoice/<id>` → Bills & receivables. */

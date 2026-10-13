@@ -24,6 +24,7 @@ const SECTION_KEYWORDS: Record<NavKey, string[]> = {
   invoices: ["invoices", "payables", "receivables", "bills", "ap", "ar"],
   counterparties: ["vendors", "clients", "suppliers", "payees"],
   contractors: ["milestones", "freelancers", "work"],
+  projects: ["budgets", "earmarks", "reserved", "jobs", "client work"],
   compliance: ["screening", "sanctions", "risk", "limits"],
   audit: ["ledger", "log", "hash", "signatures", "chain"],
   insights: ["charts", "metrics", "measurements", "fees", "settlement"],

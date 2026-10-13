@@ -20,7 +20,13 @@ export type CreatedMilestone =
  *
  * Either way the agent pays only a verified milestone, and only after its own release decision and guardrails.
  */
-export async function createMilestone(input: { actorId: string; milestone: MilestoneInput; provenance?: Provenance }): Promise<CreatedMilestone> {
+export async function createMilestone(input: {
+  actorId: string;
+  milestone: MilestoneInput;
+  provenance?: Provenance;
+  /** The purchase order the work was agreed under (0111), from the console's form; never written when absent. */
+  poReference?: string | null;
+}): Promise<CreatedMilestone> {
   const { milestone } = input;
   // Scoped to the organization: another organization's counterparty id is answered exactly like one that does not exist.
   const lookup = await db()
@@ -44,6 +50,8 @@ export async function createMilestone(input: { actorId: string; milestone: Miles
         amount: milestone.amount,
         verification_source: verificationSource,
         created_by: input.actorId,
+        // Only when given: before migration 0111 there is no such column (project budgets P9).
+        ...(input.poReference ? { po_reference: input.poReference } : {}),
       })
       .select("id")
       .single<{ id: string }>()
@@ -61,6 +69,7 @@ export async function createMilestone(input: { actorId: string; milestone: Miles
       counterpartyName: contractor.name,
       amount: milestone.amount,
       verificationSource,
+      ...(input.poReference ? { poReference: input.poReference } : {}),
       ...input.provenance,
     },
   });

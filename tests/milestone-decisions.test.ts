@@ -95,6 +95,17 @@ function facts(overrides: Partial<Omit<HeldFacts, "contractor">> & { contractor?
 const FAILED_INTENT = { status: "failed", provider_tx_id: "circle-batch-1", last_error: null, provider_state: "FAILED", failure_reason: "ESTIMATION_ERROR" };
 
 describe("what a held milestone waits for", () => {
+  it("promises the agent decides again only for a project with no room, never for one that could not be read or is archived", () => {
+    const over = heldReason(facts({ lastEntry: { action: "milestone_release", detail: { guardrailBlocked: true, guardrailRule: "project.budget_exceeded", execution: { heldBecause: "project_budget" } } } }));
+    expect(over).toMatchObject({ kind: "project_budget", canPay: true, canClose: true });
+    expect(over.text).toContain("the agent decides it again on its own");
+    for (const state of ["unreadable", "archived"]) {
+      const stuck = heldReason(facts({ lastEntry: { action: "milestone_release", detail: { guardrailBlocked: true, guardrailRule: "project.budget_exceeded", observed: { project: { state } }, execution: {} } } }));
+      expect(stuck, state).toMatchObject({ kind: "project_budget", canPay: true, canClose: true });
+      expect(stuck.text, state).not.toContain("on its own");
+    }
+  });
+
   it("says Circle did not send it, in plain words, and offers to send it again or close it", () => {
     const reason = heldReason(facts({ intent: FAILED_INTENT, lastEntry: { action: "milestone_release", detail: {} } }));
     expect(reason).toMatchObject({ kind: "transfer_failed", hint: "Circle did not send it", canPay: true, canClose: true, override: false });

@@ -19,6 +19,11 @@ import { syncOnChainBalances, type BalanceSync } from "./balances";
 import { CycleRunningError, hasRunningCycle } from "./cycle-running";
 import { decide, type DecideResult } from "./decide";
 import { budgetClause, enforceApGuardrails, onChainLimitHold } from "./guardrails";
+import { afterGuardrails, HELD_FOR_PROJECT, PROJECT_BUDGET_RULE, projectBudgetHold, projectRecord, sameWorkHold, type ProjectCheck } from "./obligation-checks";
+import { loadObligationGate, NO_OBLIGATIONS, type ObligationGate } from "./obligation-gate";
+import { projectRoomsFor } from "../projects/rooms";
+import type { HeldForProject } from "./follow-up";
+import type { SameWorkMatch } from "../projects/same-work";
 import { readTwoApprovalsAbove } from "../approval-policy";
 import { readShadowMode, type ShadowMode } from "../shadow-mode";
 import { choosePayoutRoute } from "../payout-route";
@@ -426,8 +431,13 @@ export async function followUpHeldMilestones(orgDb: OrgDb, budget?: BudgetGate):
       heldForCash: execution?.heldBecause === HELD_FOR_CASH ? heldForCashFacts(execution) : null,
       // Held in shadow mode for a person to agree: only a person ends it (shadow mode S2).
       heldForVerdict: execution?.heldBecause === HELD_FOR_VERDICT,
+      // Held for its project's budget: decided again once the project has room (project budgets P6).
+      heldForProject: heldForProjectFacts(detail),
     });
   }
+  // Each project's room now, read only when a milestone waits on it (P6).
+  const projectHeldIds = [...factsByMilestone].filter(([, facts]) => facts.heldForProject).map(([id]) => id);
+  const projectRooms = projectHeldIds.length > 0 ? await projectRoomsFor(orgDb, "milestones", projectHeldIds) : undefined;
   // What the limit leaves now, read only when a milestone waits on it.
   const budgetHeld = [...factsByMilestone.values()].some((facts) => facts.heldForBudget);
   const room = budgetHeld ? await (budget ?? budgetGate(orgDb)).room() : undefined;
@@ -451,6 +461,7 @@ export async function followUpHeldMilestones(orgDb: OrgDb, budget?: BudgetGate):
         ...(room !== undefined ? { budgetRoom: room === null ? null : room.remaining } : {}),
         ...(twoApprovalsNow !== undefined ? { twoApprovalsAbove: twoApprovalsNow } : {}),
         ...(cash !== undefined ? { cash } : {}),
+        ...(projectRooms?.has(row.id) ? { project: projectRooms.get(row.id) } : {}),
       },
       factsByMilestone.get(row.id) ?? null
     );
@@ -1016,6 +1027,10 @@ interface ApPayableRow {
   scheduled_for?: string | null;
   /** USDC or EURC (0040); absent on rows read before it. */
   currency?: string | null;
+  /** When it was entered: of a bill and a milestone for the same work, the second waits (project budgets P9). */
+  created_at?: string;
+  /** The project it belongs to (0111); absent before it, null in none. */
+  project_id?: string | null;
   /** The recurring payment and period it was created for (0055); null for a typed invoice. */
   recurring_id?: string | null;
   recurring_period?: string | null;
@@ -1316,6 +1331,8 @@ async function decideApPayable(
     twoApprovalsAbove?: number | null;
     /** The workspace's shadow mode, null when it is off (shadow mode S2): a payment then waits for a person to agree. */
     shadow?: ShadowMode | null;
+    /** The checks after the guardrails (project budgets P5, P9): the same work as a milestone, and the project's budget. */
+    obligations?: ObligationGate;
   }
 ): Promise<{ status: string; scheduledFor: string | null; operatingBalance: number | null; line: CycleLogLine }> {
   const { db, provider, operating, operatingBalance, history, metrics } = ctx;
@@ -1691,7 +1708,7 @@ async function decideApPayable(
   // `schedule` is refused exactly as `pay` is, against the full amount.
   // For EURC, what counts against the USDC limit is the USDC value (P3), and
   // a live payment must fit in the wallet's EURC, after any discount.
-  const guardrail = enforceApGuardrails({
+  const checked = enforceApGuardrails({
     action: decision.action,
     reasoning: decision.reasoning + timingNote,
     amount: usdcValue ?? amount,
@@ -1721,6 +1738,28 @@ async function decideApPayable(
     onChainLimit,
     twoApprovalsAbove: ctx.twoApprovalsAbove ?? null,
   });
+  // After every check above (project budgets P5, P9), for a payment they let through: a bill for the same work as an
+  // earlier milestone waits for a person; then the bill's money is set aside in its project, under the database's lock,
+  // or the bill waits for a person when the project cannot hold it. Each only ever holds: a payment another check stopped
+  // is left exactly as it was, and a bill in no project is never asked about.
+  const obligations = ctx.obligations ?? NO_OBLIGATIONS;
+  const goes = !checked.blocked && (decision.action === "pay" || decision.action === "schedule");
+  const verb = decision.action === "schedule" ? "scheduling" : "payment";
+  const sameWork: SameWorkMatch[] = obligations.sameWork({
+    kind: "bill",
+    id: invoice.id,
+    counterpartyId: counterparty.id,
+    label: invoice.memo?.trim() || `Bill for ${amount} ${currency}`,
+    poReference: invoice.po_reference,
+    evidence: invoice.memo,
+    status: invoice.status,
+    createdAt: invoice.created_at ?? new Date(0).toISOString(),
+  });
+  const sameWorkHeld = goes ? sameWorkHold(sameWork, checked.reasoning, verb, "bill") : null;
+  const projectCheck: ProjectCheck | null = goes && !sameWorkHeld ? await obligations.reserve({ invoiceId: invoice.id }, invoice.project_id ?? null) : null;
+  const projectHeld = projectBudgetHold(projectCheck, checked.reasoning, verb, "bill");
+  const guardrail = afterGuardrails(checked, decision.action, sameWorkHeld ?? projectHeld);
+  const heldForProject = guardrail.rule === PROJECT_BUDGET_RULE && projectHeld?.heldForProject === true;
   const heldForBudget = guardrail.rule === "workspace.outflow_budget";
   // Held because the cash it needs is not there (`timing.shortfall`), and nothing else stopped it: decided again once
   // the operating wallet and the reserve cover it (reserve cash back R4). USDC from the operating wallet only: the
@@ -1921,6 +1960,13 @@ async function decideApPayable(
         addressUnconfirmed: addressUnconfirmed(counterparty.address_changed_at, counterparty.address_confirmed_at),
         // No address where payments are real: the follow-up decides it again once one is added and confirmed.
         ...(addressMissing ? { addressMissing: true } : {}),
+        // The project it belongs to, and what its reservation found (project budgets P5); absent in none.
+        ...(invoice.project_id ? { projectId: invoice.project_id } : {}),
+        ...(projectCheck ? { project: projectRecord(projectCheck) } : {}),
+        // An earlier milestone for the same purchase order or delivered work (project budgets P9), whether or not it held.
+        ...(sameWork.length > 0
+          ? { sameWork: sameWork.map((match) => ({ otherKind: match.otherKind, otherId: match.otherId, otherStatus: match.otherStatus, signal: match.signal, reference: match.reference, finding: match.explanation })) }
+          : {}),
         // Recorded whether or not anything matched. "We looked and found
         // nothing" is the half of a fraud control that a log which only
         // records hits can never prove.
@@ -1955,6 +2001,8 @@ async function decideApPayable(
         ...heldBecausePausedDetail(heldBecausePaused),
         // The spending limit is why this held, which the follow-up stage reopens once it has room (R6).
         ...(heldForBudget ? { heldBecause: HELD_FOR_BUDGET } : {}),
+        // Its project's budget is why this held, which the follow-up stage reopens once the project has room (P6).
+        ...(heldForProject ? { heldBecause: HELD_FOR_PROJECT } : {}),
         // Shadow mode is why this held: a person's verdict ends it, never the follow-up (shadow mode S2).
         ...(heldForVerdict ? { heldBecause: HELD_FOR_VERDICT } : {}),
         // Want of cash is why this held, which the follow-up reopens once it is there (reserve cash back R4): what it
@@ -2021,6 +2069,8 @@ export interface ApStageInput {
   twoApprovalsAbove?: number | null;
   /** The workspace's shadow mode (shadow mode S2); read from the workspace when absent. */
   shadow?: ShadowMode | null;
+  /** The checks after the guardrails (project budgets P5, P9); read from the workspace when absent. */
+  obligations?: ObligationGate;
 }
 
 /** At most this many EURC payables held for FX get a fresh quote in one cycle, the oldest decided first (FX re-evaluation F9). */
@@ -2215,6 +2265,8 @@ export async function runApStage(input: ApStageInput): Promise<number> {
     total: verifiedMilestones.reduce((sum, amount) => sum + amount, 0),
     count: verifiedMilestones.length,
   };
+  // The milestones a bill may repeat, and its project's reservations (project budgets P5, P9): read once, when anything is decided.
+  const obligations = input.obligations ?? (payables.length > 0 ? await loadObligationGate(db, "bill") : NO_OBLIGATIONS);
   // Each outcome is written back into both the book and the duplicate
   // history before the next invoice is decided. A twin decided later in the
   // same cycle must see this one paid, in flight or scheduled — or, as
@@ -2296,6 +2348,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
           : null,
       twoApprovalsAbove,
       shadow,
+      obligations,
     });
     if (decided.operatingBalance !== null) operatingBalance = decided.operatingBalance;
     record(invoice.id, decided.status, decided.scheduledFor);
@@ -2801,6 +2854,15 @@ export async function reconcileMilestone(
   return { status, operatingBalance: outcome.operatingBalance, line: { domain: "contractor", message } };
 }
 
+/** What a decision held for its project's budget needed, from its entry (project budgets P6); null for any other. */
+function heldForProjectFacts(detail: Record<string, unknown>): HeldForProject | null {
+  const execution = detail.execution as Record<string, unknown> | undefined;
+  const project = (detail.observed as Record<string, unknown> | undefined)?.project as Record<string, unknown> | undefined;
+  if (execution?.heldBecause !== HELD_FOR_PROJECT || typeof project?.id !== "string") return null;
+  const needed = Number(project.neededMinor);
+  return Number.isFinite(needed) ? { projectId: project.id, neededMinor: needed } : null;
+}
+
 /** A hold for want of cash, from its ledger entry's `execution` (reserve cash back R4). */
 function heldForCashFacts(execution: Record<string, unknown>): { needed: number; operating: number; reserve: number } {
   const seen = (execution.cashSeen ?? {}) as Record<string, unknown>;
@@ -3202,8 +3264,13 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         newPayeeHeld: entry.detail.guardrailRule === "counterparty.new_payee",
         // Held for two approvals: the value and the figure it was weighed at (two approvals T3).
         heldForTwoApprovals: twoApprovalsHeldValue(entry),
+        // Held for its project's budget: the project and what it needed (project budgets P6).
+        heldForProject: heldForProjectFacts(entry.detail),
       });
     }
+    // Each project's room now, read only when a payable waits on it (P6).
+    const projectHeldIds = frozenRows.filter((row) => factsByInvoice.get(row.id)?.heldForProject).map((row) => row.id);
+    const projectRooms = projectHeldIds.length > 0 ? await projectRoomsFor(db, "invoices", projectHeldIds) : undefined;
     // The figure for two approvals now, read only when a payable waits on it (T3).
     const twoApprovalsHeldIds = frozenRows.filter((row) => factsByInvoice.get(row.id)?.heldForTwoApprovals).map((row) => row.id);
     const twoApprovalsNow = twoApprovalsHeldIds.length > 0 ? await readTwoApprovalsAbove(db) : undefined;
@@ -3273,6 +3340,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           ...(fxNow.has(row.id) ? { fx: fxNow.get(row.id) } : {}),
           ...(newPayeeNow.has(row.id) ? { newPayee: newPayeeNow.get(row.id) } : {}),
           ...(twoApprovalsNow !== undefined ? { twoApprovalsAbove: twoApprovalsNow } : {}),
+          ...(projectRooms?.has(row.id) ? { project: projectRooms.get(row.id) } : {}),
         },
         factsByInvoice.get(row.id) ?? null,
         now,
@@ -3413,6 +3481,10 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     contractor_id: string;
     agent_reasoning: string | null;
     tx_ref: string | null;
+    created_at?: string;
+    /** The project it belongs to, and the purchase order it was agreed under (0111); absent before it. */
+    project_id?: string | null;
+    po_reference?: string | null;
     counterparties: {
       id: string;
       name: string;
@@ -3444,7 +3516,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     | typeof TWO_APPROVALS_RULE
     | "workspace.outflow_budget"
     | "workspace.onchain_limit"
-    | "workspace.onchain_limit_route";
+    | "workspace.onchain_limit_route"
+    | "obligation.duplicate_reference"
+    | "project.budget_exceeded";
   // Two parties before the first release to an address, wherever payments are real (new payee check N3, N5): read once.
   const newPayeeFacts =
     provider.mode === "live" && milestones.length > 0 ? await loadNewPayeeFacts(db, [...new Set(milestones.map((m) => m.contractor_id))]) : null;
@@ -3452,6 +3526,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   const twoApprovalsAbove = milestones.length > 0 ? await readTwoApprovalsAbove(db) : null;
   // Whether the workspace is in shadow mode (shadow mode S2): read once for the stage, when anything is decided.
   const shadow = milestones.length > 0 ? await readShadowMode(db) : null;
+  // The bills a milestone may repeat, and its project's reservations (project budgets P5, P9): read once, when anything is decided.
+  const obligations = milestones.length > 0 ? await loadObligationGate(db, "milestone") : NO_OBLIGATIONS;
   const firstReleaseTo = (contractor: { id: string; address: string | null }) => {
     const check = newPayeeFacts
       ? newPayeeCheck({ address: contractor.address, paidTo: newPayeeFacts.paidTo, entries: newPayeeFacts.entries.get(contractor.id) ?? [] })
@@ -3473,6 +3549,12 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     heldForCash?: { needed: number; available: number } | null;
     /** Held in shadow mode for a person to agree, having passed every check (shadow mode S2). */
     heldForVerdict?: boolean;
+    /** What its project's reservation found (project budgets P5); null in no project, or when nothing was set aside. */
+    project?: ProjectCheck | null;
+    /** Earlier bills for the same purchase order or delivered work (project budgets P9). */
+    sameWork?: SameWorkMatch[];
+    /** Held for its project's budget, which the follow-up reopens once the project has room (P6). */
+    heldForProject?: boolean;
   };
   // Releases that passed every check, sent once every milestone is decided (batch payouts §2).
   const planned: Decided[] = [];
@@ -3480,6 +3562,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   /** A milestone's decision and what came of it: its row, the metrics, its signed entry and its line. */
   const writeDecision = async (entry: Decided & { guardrailBlocked: boolean; guardrailRule: ContractorGuardrailRule | null; outcome: PayStepOutcome | null }) => {
     const { milestone, amount, limit, guardrailBlocked, guardrailRule, outflowBudget, onChainLimit: onChainCheck, heldForCash, heldForVerdict, outcome } = entry;
+    const sameWork = entry.sameWork ?? [];
     const { value: decision, mode, reference, agreedWithReference } = entry.decided;
     const contractor = milestone.counterparties;
     // What the operating wallet keeps for its own gas, which its balance leaves out: a cash hold names it (review R3).
@@ -3538,6 +3621,14 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           ...(firstRelease ? { newPayee: { addressBy: firstRelease.addressBy, confirmedBy: firstRelease.confirmedBy, twoParties: firstRelease.twoParties } } : {}),
           // The figure above which two people approve a release, when the workspace set one (two approvals T3).
           ...(twoApprovalsAbove != null ? { twoApprovalsAbove } : {}),
+          // The project it belongs to, and what its reservation found (project budgets P5); absent in none.
+          ...(milestone.project_id ? { projectId: milestone.project_id } : {}),
+          ...(entry.project ? { project: projectRecord(entry.project) } : {}),
+          ...(milestone.po_reference ? { poReference: milestone.po_reference } : {}),
+          // An earlier bill for the same purchase order or delivered work (project budgets P9), whether or not it held.
+          ...(sameWork.length > 0
+            ? { sameWork: sameWork.map((match) => ({ otherKind: match.otherKind, otherId: match.otherId, otherStatus: match.otherStatus, signal: match.signal, reference: match.reference, finding: match.explanation })) }
+            : {}),
         },
         execution: {
           txRef,
@@ -3553,6 +3644,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           // comment there.
           ...heldBecausePausedDetail(heldBecausePaused),
           ...(guardrailRule === "workspace.outflow_budget" ? { heldBecause: HELD_FOR_BUDGET } : {}),
+          // Its project's budget is why this held, which the follow-up stage reopens once the project has room (P6).
+          ...(guardrailRule === PROJECT_BUDGET_RULE && entry.heldForProject ? { heldBecause: HELD_FOR_PROJECT } : {}),
           // Want of cash is why this held, which the follow-up stage reopens once cash comes in (mainnet pre-flight): what
           // it needed, and what the operating wallet had left for it after the releases before it, with the reserve.
           ...(heldForCash ? { heldBecause: HELD_FOR_CASH, cashNeededUsdc: heldForCash.needed, cashSeen: { operating: heldForCash.available, reserve: reserveBalance, ...(gasKeptUsdc > 0 ? { gasKeptUsdc } : {}) } } : {}),
@@ -3684,6 +3777,19 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     let onChainCheck: OnChainLimitDecisionCheck | null = null;
     let heldForCash: { needed: number; available: number } | null = null;
     let heldForVerdict = false;
+    let project: ProjectCheck | null = null;
+    let heldForProject = false;
+    // An earlier bill for the same purchase order or delivered work (project budgets P9): compared whatever is decided.
+    const sameWork = obligations.sameWork({
+      kind: "milestone",
+      id: milestone.id,
+      counterpartyId: contractor.id,
+      label: milestone.title,
+      poReference: milestone.po_reference ?? null,
+      evidence: milestone.verification_source,
+      status: milestone.status,
+      createdAt: milestone.created_at ?? new Date(0).toISOString(),
+    });
 
     if (decision.action === "release") {
       // The first release to an address one party alone stands behind is code's to refuse (new payee check N3).
@@ -3700,6 +3806,13 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       onChainCheck =
         highRisk || unscreened || overLimit || newPayeeHeld || twoApprovalsHeld || escrowed ? null : await onChainLimit.check({ sourceType: "milestone", sourceId: milestone.id, to: contractor.address, amount });
       const onChainHold = onChainLimitHold(onChainCheck, reasoning);
+      // After every check above (project budgets P5, P9), for a release they let through: the same work billed earlier
+      // waits for a person; then its money is set aside in its project, or it waits for a person when the project cannot
+      // hold it. Neither is asked for a release another check stopped, and a milestone in no project is never asked about.
+      const stoppedBefore = highRisk || unscreened || overLimit || newPayeeHeld || twoApprovalsHeld || exceedsBudget(amount, outflowBudget) || onChainHold !== null;
+      const sameWorkHeld = stoppedBefore ? null : sameWorkHold(sameWork, reasoning, "release", "milestone");
+      project = stoppedBefore || sameWorkHeld ? null : await obligations.reserve({ milestoneId: milestone.id }, milestone.project_id ?? null);
+      const obligationHeld = sameWorkHeld ?? projectBudgetHold(project, reasoning, "release", "milestone");
       if (highRisk || unscreened || overLimit) {
         guardrailBlocked = true;
         guardrailRule = highRisk ? "counterparty.high_risk" : unscreened ? "counterparty.unscreened" : "counterparty.payment_limit";
@@ -3724,6 +3837,11 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         guardrailBlocked = true;
         guardrailRule = onChainHold.rule;
         reasoning = onChainHold.reasoning;
+      } else if (obligationHeld) {
+        guardrailBlocked = true;
+        guardrailRule = obligationHeld.rule;
+        reasoning = obligationHeld.reasoning;
+        heldForProject = obligationHeld.heldForProject;
       } else if (shadow) {
         // Shadow mode (shadow mode S2): it passed every check and waits for a person to agree, never planned or sent.
         heldForVerdict = true;
@@ -3741,7 +3859,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           // Sent once every milestone is decided, together where they can be (batch payouts §2). It counts
           // against the spending limit now, so the releases of one cycle never pass it together (R5).
           budget.spend(amount);
-          planned.push({ milestone, amount, limit, decided: { value: decision, mode, reference, agreedWithReference }, reasoning, outflowBudget, fromEscrow: escrowed, onChainLimit: onChainCheck });
+          planned.push({ milestone, amount, limit, decided: { value: decision, mode, reference, agreedWithReference }, reasoning, outflowBudget, fromEscrow: escrowed, project, sameWork, onChainLimit: onChainCheck });
           continue;
         }
       }
@@ -3759,6 +3877,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       guardrailRule,
       heldForCash,
       heldForVerdict,
+      project,
+      sameWork,
+      heldForProject,
       outcome: null,
     });
   }

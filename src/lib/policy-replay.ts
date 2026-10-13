@@ -117,6 +117,9 @@ const LIMIT = "counterparty.payment_limit";
 const BUDGET = "workspace.outflow_budget";
 const ROUTE = "workspace.onchain_limit_route";
 const CONTRACT = "workspace.onchain_limit";
+/** After every other check (project budgets P5, P9): the same work billed twice, and the project's budget. */
+const SAME_WORK = "obligation.duplicate_reference";
+const PROJECT = "project.budget_exceeded";
 
 /** The figures' own checks; every other stage is a check no setting here changes. */
 const FIGURE_STAGES = new Set<string>([LIMIT, TWO_APPROVALS_RULE, BUDGET]);
@@ -144,6 +147,8 @@ export const BILL_STAGES: readonly string[] = [
   "fx.swap_cost_above_cap",
   "fx.swap_usdc_short",
   "treasury.insufficient_eurc",
+  SAME_WORK,
+  PROJECT,
 ];
 
 /** The order the contractor stage (./agent/orchestrator.ts) runs its checks in, for a milestone release (P4). */
@@ -156,6 +161,8 @@ export const MILESTONE_STAGES: readonly string[] = [
   BUDGET,
   ROUTE,
   CONTRACT,
+  SAME_WORK,
+  PROJECT,
 ];
 
 /** Checks that run only for a payment now (a bill's `pay`, a milestone's `release`), never for a schedule. */
@@ -218,6 +225,10 @@ interface Facts {
   /** The spending limit's figures the decision was weighed against; null with none set. */
   recordedBudget: OutflowBudget | null;
   newPayee: { twoParties: boolean } | null;
+  /** The decision found an earlier bill or milestone for the same work (`observed.sameWork`, project budgets P9). */
+  sameWork: boolean;
+  /** The bill or milestone was in a project (`observed.projectId`, project budgets P5). */
+  inProject: boolean;
   /** The entry has what any replay needs: an amount and a decision. */
   complete: boolean;
 }
@@ -293,6 +304,8 @@ function factsOf(entry: ReplayEntry, history: ShadowHistory): Facts | null {
     contract: record(detail.onChainLimit) ?? undefined,
     recordedBudget: budget ? { dailyUsdc: numeric(budget.dailyUsdc), weeklyUsdc: numeric(budget.weeklyUsdc) } : null,
     newPayee: newPayee ? { twoParties: newPayee.twoParties === true } : null,
+    sameWork: Array.isArray(observed?.sameWork) && observed.sameWork.length > 0,
+    inProject: typeof observed?.projectId === "string",
     complete: observed !== null && amount !== null && action !== null,
   };
 }
@@ -387,6 +400,10 @@ function settleFromFacts(stage: string, facts: Facts, figures: RuleFigures): Sta
     return contractAnswer(stage, facts, figures);
   }
   if (stage === "counterparty.new_payee") return facts.newPayee && !facts.newPayee.twoParties ? "fires" : "passes";
+  // The same work: recorded whenever a decision found an earlier bill or milestone for it, whatever held it.
+  if (stage === SAME_WORK) return facts.sameWork ? "fires" : "passes";
+  // A project's budget is read at the moment of the decision, so a bill in a project cannot be told; one in none passes.
+  if (stage === PROJECT) return facts.inProject ? { cantTell: "stage_unsettled" } : "passes";
   return { cantTell: "stage_unsettled" };
 }
 

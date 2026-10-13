@@ -281,6 +281,7 @@ describe("a code stop, in a few words", () => {
       "counterparty.address_unconfirmed", "counterparty.client_payable", "counterparty.high_risk", "counterparty.no_address", "counterparty.payment_limit", "counterparty.unscreened",
       "fx.rate_unavailable", "fx.swap_cost_above_cap", "fx.swap_usdc_short", "invoice.duplicate_of_settled", "invoice.match_incomplete", "counterparty.new_payee",
       "treasury.insufficient_eurc", "workspace.onchain_limit", "workspace.onchain_limit_route", "workspace.outflow_budget", "workspace.two_approvals",
+      "project.budget_exceeded", "obligation.duplicate_reference",
     ];
     for (const rule of rules) {
       expect(ruleInBrief(rule), rule).not.toBeNull();
@@ -313,6 +314,11 @@ describe("what to do about a payable code stopped", () => {
     });
     expect(ruleInBrief("counterparty.no_address")).toBe("the counterparty has no payment address yet");
     expect(agentResumes("counterparty.no_address")).toBe("The agent decides it again on its own once the counterparty has an address and a person has confirmed it.");
+  });
+
+  it("says a payment held because its project could not be read, or is archived, waits for a person, not for room", () => {
+    expect(agentResumes("project.budget_exceeded")).toContain("once its project has room");
+    expect(agentResumes("project.budget_exceeded")).toContain("could not be read, or is archived, a person decides it");
   });
 
   it("links the page that removes the cause, for the rules a person can change", () => {
@@ -394,6 +400,7 @@ describe("what to do about a payable code stopped", () => {
       "counterparty.address_unconfirmed", "counterparty.client_payable", "counterparty.high_risk", "counterparty.no_address", "counterparty.payment_limit", "counterparty.unscreened",
       "fx.rate_unavailable", "fx.swap_cost_above_cap", "fx.swap_usdc_short", "invoice.duplicate_of_settled",
       "treasury.insufficient_eurc", "workspace.onchain_limit", "workspace.onchain_limit_route", "workspace.outflow_budget", "workspace.two_approvals",
+      "project.budget_exceeded", "obligation.duplicate_reference",
     ];
     for (const rule of rules) expect(ruleNextStep(rule, counterparty), rule).not.toBeNull();
     expect(ruleNextStep(null, counterparty)).toBeNull();

@@ -79,6 +79,12 @@ export const COMMAND_PERMISSIONS = {
   // reminders on does, so owners and admins only, never the accountant's bookkeeping (collections context C4, C6).
   "collection_policy.set": "records.write",
   "collection_task.resolve": "records.write",
+  // A project's budget and buffer are a control on what the agent sets aside, an owner's or admin's as the agent's
+  // spending limit is; putting a bill, a milestone or a deal in a project is a record, entered as an invoice is
+  // (project budgets P1-P3).
+  "project.create": "agent.budget",
+  "project.change": "agent.budget",
+  "project.assign": "records.write",
 } as const satisfies Record<string, Permission>;
 
 export type CommandName = keyof typeof COMMAND_PERMISSIONS;

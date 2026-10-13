@@ -27,6 +27,19 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   when it is retried or the customer's rules changed in between, and turning reminders or emails off takes effect up to
   the moment of sending.
 
+- **Projects, each with its own budget.** Make a project for a job, a client or a launch, with a budget in USDC and a
+  buffer kept back from it, and put its bills, milestones and deals in it, as you add them or from its page. The agent
+  sets each bill's money aside in its project before paying or scheduling it, and a bill the budget cannot cover waits
+  for a person in Approvals with the project's figures. Two decisions at the same moment never set aside the same money.
+  Each project shows its budget, what is set aside, paid and still available, the share of its open bills covered, the
+  payments held for its budget, what its deals collected, its days in the 14-day payment plan and the treasury it
+  shares; Treasury lists every project's money set aside. A budget is an earmark in Vestiarion, not money locked on
+  chain: payments still need their cash, and the spending limit on Arc still counts only the workspace's figures.
+
+- **The same work is not paid twice.** A milestone takes a purchase order. A bill for the same purchase order and payee
+  as a milestone, or one linking the same delivered work, waits for a person when it comes second, and so does a
+  milestone that repeats a bill; a person pays it when both are owed.
+
 - **An accountant role, and a console across your clients.** Invite an outside accountant or bookkeeper on Members with
   the new accountant role: they read everything, book payments made on Arc in Xero, apply money received and answer
   what customers say on their statement links, and decide no payment and change no treasury, limit, integration or

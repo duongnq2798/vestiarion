@@ -152,7 +152,8 @@ function heldByOurConfiguration(entry: CounterpartyHistoryLedgerEntry): boolean 
     rule === "treasury.insufficient_eurc" ||
     rule === "workspace.outflow_budget" ||
     rule === "workspace.onchain_limit" ||
-    rule === "workspace.onchain_limit_route"
+    rule === "workspace.onchain_limit_route" ||
+    rule === "project.budget_exceeded"
   ) {
     return true;
   }

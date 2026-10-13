@@ -389,6 +389,23 @@ describe("checks no setting here changes (P4)", () => {
     expect(changes(result)).toEqual(["cant_tell", "now_paid"]);
   });
 
+  it("runs the same work and the project's budget last: the same work fires from its record, a bill in a project cannot be told", () => {
+    const sameWork = bill({ amount: 700, rule: "counterparty.payment_limit", observed: { sameWork: [{ otherKind: "milestone", otherId: "m1", signal: "purchase_order" }] } });
+    const inProject = bill({ amount: 700, rule: "counterparty.payment_limit", observed: { projectId: "p1" } });
+    const plain = bill({ amount: 700, rule: "counterparty.payment_limit" });
+    const result = run([sameWork, inProject, plain], figures(), withCandidate(figures(), { kind: "counterparty_limit", counterpartyId: ACME, limit: 1000 }));
+    expect(result.decisions[0].after).toEqual({ kind: "stopped", rule: "obligation.duplicate_reference" });
+    expect(result.decisions[1].after).toEqual({ kind: "cant_tell", because: "stage_unsettled" });
+    expect(changes(result)).toEqual(["unchanged", "cant_tell", "now_paid"]);
+  });
+
+  it("keeps a bill its project's budget held, under a candidate that changes nothing before it", () => {
+    const held = bill({ amount: 300, rule: "project.budget_exceeded", observed: { projectId: "p1" } });
+    const result = run([held], figures(), withCandidate(figures(), { kind: "counterparty_limit", counterpartyId: ACME, limit: 1000 }));
+    expect(result.decisions[0].before).toEqual({ kind: "stopped", rule: "project.budget_exceeded" });
+    expect(changes(result)).toEqual(["unchanged"]);
+  });
+
   it("cannot tell a EURC payment that reaches the swap checks, and passes a USDC one", () => {
     const eurc = bill({ amount: 700, rule: "counterparty.payment_limit", detail: { currency: "EURC", usdcValue: 800, amountPaid: null } });
     const result = run([eurc], figures(), withCandidate(figures(), { kind: "counterparty_limit", counterpartyId: ACME, limit: 1000 }));

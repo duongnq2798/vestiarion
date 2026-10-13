@@ -31,6 +31,8 @@ import { changeCounterpartyPurchaseOrders, CounterpartyPurchaseOrdersError } fro
 import { documentProvenance } from "@/lib/invoice-document/provenance";
 import { createCounterparty } from "@/lib/counterparties/create";
 import { createInvoice } from "@/lib/invoices/create";
+import { consoleActor } from "@/lib/commands/actor";
+import { assignToProjectCommand } from "@/lib/commands/projects";
 import { workspaceNetwork } from "@/lib/workspace-network";
 import { FxRateError } from "@/lib/fx/usd-rates";
 import { shadowBill, ShadowBillError, type OriginalBill } from "@/lib/shadow-bills";
@@ -43,6 +45,8 @@ export interface IntakeActionResult {
   /** The invoice form's refused fields, each with its first error, shown under the field. */
   fieldErrors?: Partial<Record<InvoiceField, string>>;
 }
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function formString(formData: FormData, key: string): string {
   const value = formData.get(key);
@@ -327,12 +331,18 @@ export async function createInvoiceAction(
       // rather than linked to this organization's invoice, and is answered exactly like one that does not exist.
       const created = await createInvoice({ actorId: auth.user.id, invoice: input, document, ...(original ? { original } : {}) });
       if (!created) return { ok: false, message: "Counterparty not found." };
+      // The project it belongs to, chosen on the form (project budgets P3): its money is set aside as it is added.
+      const projectId = formString(formData, "projectId").trim();
+      const placed = UUID_PATTERN.test(projectId)
+        ? await assignToProjectCommand(consoleActor(auth), { subject: { kind: "bill", id: created.id }, projectId, atEntry: true })
+        : null;
+      const inProject = placed === null ? "" : placed.ok ? ` ${placed.message}` : ` It was not put in the project: ${placed.message}`;
 
       revalidatePath("/");
       revalidateOrgPages();
-      if (input.direction !== "payable") return { ok: true, created: 1, message: `Invoice added for ${created.counterpartyName}.` };
+      if (input.direction !== "payable") return { ok: true, created: 1, message: `Invoice added for ${created.counterpartyName}.${inProject}` };
       raiseCycleEvent(auth, "invoice_added");
-      return { ok: true, created: 1, message: `Invoice added for ${created.counterpartyName}. The agent usually decides on it within a minute.` };
+      return { ok: true, created: 1, message: `Invoice added for ${created.counterpartyName}. The agent usually decides on it within a minute.${inProject}` };
     } catch (error) {
       console.error("invoice intake failed", error);
       return { ok: false, message: error instanceof Error ? error.message : "Invoice could not be added." };
