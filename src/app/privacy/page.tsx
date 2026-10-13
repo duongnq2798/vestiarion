@@ -75,18 +75,18 @@ export default function PrivacyPage() {
             <strong>viewer</strong>: reads the workspace;
           </li>
           <li>
-            <strong>accountant</strong>: also books payments in the workspace&apos;s accounting tool, applies money received and answers customers,
-            but decides no payment; an accountant&apos;s console lists only the workspaces they are a member of, and stops listing one when they are
-            removed from it;
-          </li>
-          <li>
             <strong>approver</strong>: also decides the payments the agent held, and pauses the agent;
           </li>
           <li>
             <strong>admin</strong>: also adds records, runs and resumes the agent, and manages members, API keys and webhooks;
           </li>
           <li>
-            <strong>owner</strong>: also connects Circle, and can delete the workspace.
+            <strong>owner</strong>: also connects Circle, and can delete the workspace;
+          </li>
+          <li>
+            <strong>accountant</strong>: reads the workspace as a viewer does, and books payments in the workspace&apos;s accounting tool, applies money
+            received and answers customers, but decides no payment; an accountant&apos;s console lists only the workspaces they are a member of, and
+            stops listing one when they are removed from it.
           </li>
         </ul>
         <p>Nobody can approve an invoice they created. The service&apos;s own scheduled jobs, such as the agent&apos;s cycles and the cleanup below, work across workspaces.</p>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { can, canAssignRole, isOrgRole, ORG_ROLES, PERMISSIONS, type Permission } from "@/lib/auth/roles";
+import { can, canAssignRole, isOrgRole, ORG_ROLES, PERMISSIONS, ROLE_SUMMARIES, type OrgRole, type Permission } from "@/lib/auth/roles";
 
 // Spec §7, row by row. ✓ = allowed. The accountant (accountant console A1) reads everything, books payments in the
 // accounting tool and does the receivables bookkeeping; it decides no payment and changes no treasury, limit,
@@ -56,6 +56,23 @@ describe("canAssignRole — no one grants a role above their own", () => {
     ["viewer", "viewer", false],
   ] as const)("%s may assign %s: %s", (actor, target, expected) => {
     expect(canAssignRole(actor, target)).toBe(expected);
+  });
+});
+
+describe("ROLE_SUMMARIES — what the invitation form says each role may do", () => {
+  // A summary may say "Everything an X does" (or "an X and a Y do"): it then says all of X's too.
+  const said = (role: OrgRole): string => {
+    const summary = ROLE_SUMMARIES[role];
+    const inherited = /^Everything an? ([a-z]+)(?: and an? ([a-z]+))? do(?:es)?\b/.exec(summary);
+    return [summary, ...(inherited ? inherited.slice(1).filter(Boolean).map((other) => said(other as OrgRole)) : [])].join(" ");
+  };
+
+  it.each([
+    ["approval.decide", /\bDecides the payments\b/],
+    ["accounting.book", /\bbooks payments\b/],
+    ["receivables.reconcile", /\bapplies money received\b/],
+  ] as const)("says a role holds %s exactly when it does, so nobody grants a decision unknowingly", (permission, words) => {
+    for (const role of ORG_ROLES) expect(words.test(said(role)), `${role}: ${said(role)}`).toBe(can(role, permission));
   });
 });
 

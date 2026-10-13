@@ -278,7 +278,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Settings", APP_NAV],
     ["Reads everything, books payments in Xero, applies money received and answers customers. Decides no payment, and changes no treasury, limit, integration or member.", ROLES],
     ["Everything an admin does, and connects Circle, sets the two-approval figure and can delete the workspace.", ROLES],
-    ["Adds bills and receivables, runs and resumes the agent, and manages members, API keys, webhooks, integrations and treasury.", ROLES],
+    ["Everything an approver and an accountant do, and adds bills and receivables, runs and resumes the agent, and manages members, API keys, webhooks, integrations and treasury.", ROLES],
     ["Decides the payments the agent held, and pauses the agent. Adds no records.", ROLES],
     ["Only an owner, admin or accountant of this workspace can apply payments.", "src/components/ApplyPayments.tsx"],
     ["From customers", "src/components/portal/FromCustomers.tsx"],

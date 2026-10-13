@@ -14,7 +14,7 @@ import { gate } from "./policy";
 
 /**
  * Booking payments made on Arc in the accounting tool, after a person reviewed each one
- * (docs/superpowers/specs/2026-10-12-accounting-writeback-design.md W6, W7, W8): `accounting.book` (owner, admin),
+ * (docs/superpowers/specs/2026-10-12-accounting-writeback-design.md W6, W7, W8): `accounting.book` (owner, admin, accountant),
  * from the console only. Each ticked booking comes with the fingerprint of what the page showed; the server works it
  * out again from the rows, and a different one is stale. The connection must hold the write scope, an account must be
  * chosen, and the ledger must be able to sign before anything is sent. The organisation is read once for the whole

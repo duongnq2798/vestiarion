@@ -18,7 +18,7 @@ export default function TermsPage() {
   return (
     <LegalPage
       title="Terms of use"
-      updated="2026-10-12"
+      updated="2026-10-13"
       intro="These terms cover your use of Vestiarion, an autonomous treasury agent that pays invoices and contractors in USDC on Arc mainnet and Arc testnet. By using it, you accept them."
     >
       <LegalSection id="networks" title="Arc mainnet and Arc testnet">

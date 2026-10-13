@@ -54,7 +54,8 @@ export type Permission = keyof typeof PERMISSIONS;
 /** What each role may do, in a sentence, where a role is chosen (the invitation form) and in the docs. */
 export const ROLE_SUMMARIES: Record<OrgRole, string> = {
   owner: "Everything an admin does, and connects Circle, sets the two-approval figure and can delete the workspace.",
-  admin: "Adds bills and receivables, runs and resumes the agent, and manages members, API keys, webhooks, integrations and treasury.",
+  admin:
+    "Everything an approver and an accountant do, and adds bills and receivables, runs and resumes the agent, and manages members, API keys, webhooks, integrations and treasury.",
   approver: "Decides the payments the agent held, and pauses the agent. Adds no records.",
   accountant:
     "Reads everything, books payments in Xero, applies money received and answers customers. Decides no payment, and changes no treasury, limit, integration or member.",
