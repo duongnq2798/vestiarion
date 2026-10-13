@@ -11,7 +11,9 @@ import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } fr
 /**
  * The collections stage (docs/superpowers/specs/2026-10-03-collections-design.md): a receivable whose reminders are
  * on, where code allows one now, is decided by the model beside the written policy (R3–R5), claimed before it is
- * sent (R7), emailed from the template with the pay link (R6), and signed; a wait is signed and remembered.
+ * sent (R7), emailed from the template with the pay link (R6), and signed; a wait is signed and remembered. First,
+ * each receivable's next step from its customer's context (docs/superpowers/specs/2026-10-13-collections-context-design.md)
+ * holds it, opens a task for a person, or lets it through; and each email goes once, its opt-out read again (I11).
  */
 
 const { ledgerMock, decideMock } = vi.hoisted(() => ({ ledgerMock: vi.fn(), decideMock: vi.fn() }));
