@@ -25,6 +25,9 @@ import { WaitingPayableAction } from "@/components/WaitingPayableAction";
 import CounterpartyAddress from "@/components/intake/CounterpartyAddressEdit";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
 import { BillImportShot } from "./BillImportShot";
+import { fromCustomersShot, PORTAL_TOKEN, statementShot } from "./portal-fixture";
+import { FromCustomers } from "@/components/portal/FromCustomers";
+import { StatementView } from "@/components/portal/StatementView";
 import { BillRows } from "@/components/bills/BillsList";
 import { billRowItem, listRowOf } from "@/components/bills/build";
 import { NEW_ITEMS } from "@/components/bills/new-items";
@@ -139,7 +142,8 @@ export interface DocsShot {
     | "cash-scenarios"
     | "evidence"
     | "apply-payments"
-    | "deals";
+    | "deals"
+    | "customer-portal";
   /** The workspace page it is on: its title heads the frame. None for a public page, such as a payee's link. */
   page?: NavKey;
   /** The page's line under its title, where the real page has one. */
@@ -2175,6 +2179,17 @@ export const DOCS_SHOTS = {
         active
       />
     ),
+  },
+  "customer-portal-statement": {
+    guide: "customer-portal",
+    // A public page, as the customer reads it: its own invoices, what it still owes in each currency, and its actions.
+    render: () => <StatementView view={statementShot({ short: true })} token={PORTAL_TOKEN} />,
+  },
+  "customer-portal-from-customers": {
+    guide: "customer-portal",
+    page: "invoices",
+    // The Receivables tab's list: a claim of payment, and a dispute with a member's reply.
+    render: () => <FromCustomers orgSlug={SLUG} items={fromCustomersShot((id) => orgHref(SLUG, `/invoices?tab=receivables&open=${id}`), { kinds: ["paid", "dispute"] })} canWrite />,
   },
 } satisfies Record<string, DocsShot>;
 

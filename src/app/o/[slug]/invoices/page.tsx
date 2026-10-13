@@ -93,6 +93,13 @@ import { crmPrefillFor, crmReady, crmReview, type CrmPrefillRead, type CrmReview
 import { readDealCollections } from "@/lib/deals/collection-read";
 import { dealLinksOf, plannedLinesOf, readDeals, type DealLink } from "@/lib/deals/read";
 import { hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
+import { FromCustomers } from "@/components/portal/FromCustomers";
+import { StatementLinks } from "@/components/portal/StatementLinks";
+import { listPortalLinks, type PortalLink } from "@/lib/customer-portal/links";
+import { todayOf, type CustomerRequest } from "@/lib/customer-portal/model";
+import { readCustomerRequests } from "@/lib/customer-portal/requests";
+import { customerNote, fromCustomerItems, statementLinkRows } from "@/lib/customer-portal/view";
+import { listMembers } from "@/lib/platform/members";
 
 export const dynamic = "force-dynamic";
 
@@ -195,6 +202,15 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         : ({ state: "hidden" } as CrmReviewView),
     ]);
     const deals = dealsRead === "unread" ? "unread" : dealsRead.available ? dealsRead.deals : "not_ready";
+    // What customers said on their statement links and wait for an answer (customer portal P8). Best effort: before
+    // migration 0109 runs, or when it cannot be read, nothing waits and the Receivables tab says statements are not set up.
+    const customerSaid = await readCustomerRequests(db(), { openOnly: true }).catch((error: unknown) => {
+      console.error("invoices: customer requests not read", error instanceof Error ? error.message : error);
+      return { available: false as const };
+    });
+    const openRequests: CustomerRequest[] = customerSaid.available ? customerSaid.requests : [];
+    const saidBy = new Map<string, CustomerRequest[]>();
+    for (const request of openRequests) saidBy.set(request.invoiceId, [...(saidBy.get(request.invoiceId) ?? []), request]);
     // The payments made on Arc to book in each accounting tool, for a person to review (accounting write-back W6, W10).
     const [toBook, canBook] = await Promise.all([Promise.all(PROVIDERS.map(toBookIn)), viewerCan(slug, "accounting.book")]);
     // Each receivable a deal line became names its deal (deal schedule).
@@ -369,11 +385,13 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         </div>
       );
     };
+    // What the customer said on its statement, as its word: never as a payment (customer portal P8).
     const owedNote = (decision: Decision): string | null => {
       const allocation = allocations.get(decision.id);
-      if (!allocation || allocation.state !== "part_paid") return null;
+      const said = customerNote(saidBy.get(decision.id) ?? []);
+      if (!allocation || allocation.state !== "part_paid") return said;
       const money = (value: number) => `${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} ${allocation.currency}`;
-      return `Part paid · ${money(allocation.outstanding)} still owed`;
+      return [`Part paid · ${money(allocation.outstanding)} still owed`, said].filter(Boolean).join(" · ");
     };
 
     // A payable waiting for a person: the purchase order and goods receipt on file, and what a person added since
@@ -546,6 +564,14 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       else if (changed > 0) waitingItems.push({ key: "hubspot", href, label: `${changed} changed in HubSpot` });
     }
 
+    if (openRequests.length > 0) {
+      waitingItems.push({
+        key: "customers",
+        href: orgHref(slug, `${billsHref({ tab: "receivables" })}#from-customers`),
+        label: `${openRequests.length} from ${plural(openRequests.length, "a customer", "customers")}`,
+      });
+    }
+
     // The customers, as the New deal form offers them; and the currencies a deal may be in.
     const customers = counterparties
       .filter((counterparty) => counterparty.role === "client")
@@ -591,18 +617,60 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
               return { ok: false, message: "That deal could not be read. Reload the page in a moment." };
             })
           : null;
+      // Customer statements (customer portal P8, P9): the links not stopped, and what customers said, each with its next
+      // step. Best effort: a read that fails hides only these parts.
+      const portalLinks = await listPortalLinks(db(), asOf).catch((error: unknown) => {
+        console.error("invoices: statement links not read", error instanceof Error ? error.message : error);
+        return null;
+      });
+      const linkList: PortalLink[] = portalLinks?.available ? portalLinks.links : [];
+      const needMembers = linkList.length > 0 || openRequests.some((request) => request.messages.some((message) => message.author === "business"));
+      const members = needMembers
+        ? await listMembers(access.membership.orgId)
+            .then((list) => new Map(list.map((member) => [member.userId, member.email])))
+            .catch(() => null)
+        : null;
+      // The pay links the statements show, for the requests asking for one.
+      const askedPayLink = openRequests.filter((request) => request.kind === "pay_link").map((request) => request.invoiceId);
+      const askedLinks =
+        askedPayLink.length > 0 && access.membership.mode === "live"
+          ? await payLinkStates([...new Set(askedPayLink)]).catch(() => new Map<string, PayLinkState>())
+          : new Map<string, PayLinkState>();
+      const customerItems = fromCustomerItems({
+        requests: openRequests,
+        invoices: new Map(
+          invoices
+            .filter((invoice) => invoice.direction === "receivable")
+            .map((invoice) => [
+              invoice.id,
+              { id: invoice.id, counterpartyName: invoice.counterparty_name, amount: Number(invoice.amount), currency: invoice.currency ?? "USDC", status: invoice.status, dueDate: invoice.due_date, memo: invoice.memo },
+            ])
+        ),
+        owedOf: (invoiceId) => {
+          const invoice = invoicesById.get(invoiceId);
+          return invoice ? stillOwed(invoice, book?.rows ?? []) : 0;
+        },
+        payLinked: new Set([...askedLinks.entries()].filter(([, state]) => state.url !== null).map(([invoiceId]) => invoiceId)),
+        sandbox: access.membership.mode !== "live",
+        today: todayOf(asOf),
+        members,
+        invoiceHref: (invoiceId) => here({ open: invoiceId }),
+      });
+      const statementLinks = statementLinkRows(linkList, new Map(counterparties.map((counterparty) => [counterparty.id, counterparty.name])), members);
       tabContent = {
         receivables: {
           list: listOf("receivables"),
           above: (
             <>
+              <FromCustomers orgSlug={slug} items={customerItems} canWrite={canWrite} />
               {/* Before migration 0103 runs, receivables show as before, and say applying payments waits for it (allocations L11). */}
               {book && !book.available && receivableRows.length > 0 && <p className="text-xs text-ink-3">Applying payments is not set up on this deployment yet.</p>}
               {toApply.length > 0 && receivableRows.length > 0 && <ApplyPayments orgSlug={slug} network={network} payments={toApply} canWrite={canWrite} />}
             </>
           ),
           below: (
-            <div className="pt-6">
+            <div className="space-y-10 pt-6">
+              <StatementLinks orgSlug={slug} customers={customers} links={statementLinks} canWrite={canWrite} available={portalLinks?.available ?? false} />
               <DealsSection
                 deals={deals}
                 orgSlug={slug}

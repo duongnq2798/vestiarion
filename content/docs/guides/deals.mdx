@@ -94,6 +94,10 @@ Under the lines, the version is worked out as you type: the old and new totals, 
 - **A line not released yet** is planned. **Next 30 days** names what the lines due in the next 30 days come to, apart; **What if clients pay late?** names them under what the figure is built from; neither counts them in any balance.
 - **The payment plan** on **Bills & receivables** lists, under **Money expected in**, the receivables due in its 14 days, a part-paid one for what is still owed, and the deal lines planned for them, apart from its balances.
 
+## Show the customer what it owes
+
+A [statement link](/docs/guides/customer-portal) shows a customer every receivable released from its deals, with what is still owed on each and its pay link, and lets it say it paid, promise a day or dispute a line's invoice.
+
 ## What is signed
 
 Each version is a signed entry in the workspace's ledger, which the audit log shows and webhooks deliver: `deal_signed` for version 1, `deal_revised` for a change or a reopen, `deal_cancelled` for a cancel, and `deal_auto_release_changed` for the switch. A deal planned from HubSpot, and a change saved from what HubSpot changed, say `via: "hubspot"` with the deal's ids in HubSpot. Each release is the receivable's own `create_invoice` entry, which names the deal and the line, and says whether a person or the agent released it.

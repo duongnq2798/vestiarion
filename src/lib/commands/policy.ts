@@ -61,6 +61,12 @@ export const COMMAND_PERMISSIONS = {
   "report.share": "report.share",
   "report.unshare": "report.share",
   "report.baseline": "org.administer",
+  // A customer's statement link, stopping one, and answering what a customer said through it: records on the
+  // receivables side, as a pay link is (customer portal P9).
+  "customer_portal.share": "records.write",
+  "customer_portal.unshare": "records.write",
+  "customer_request.reply": "records.write",
+  "customer_request.close": "records.write",
 } as const satisfies Record<string, Permission>;
 
 export type CommandName = keyof typeof COMMAND_PERMISSIONS;

@@ -13,6 +13,17 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **A statement link for each customer.** From the Receivables tab, an owner or admin sends a customer a link to its own
+  statement, working for 7, 30 or 90 days: what it owes in each currency, each open invoice with what is still owed and
+  how late it is, and what it paid recently. With no account or wallet, the customer pays an invoice on Arc through its
+  pay link or asks for one, says it paid (with the day, a reference and the amount), promises a day, or disputes an
+  invoice, and writes back and forth with you under it. A promise holds the agent's reminders through its day and a
+  dispute until you resolve it. Everything customers say waits under **From customers** on the Receivables tab with the
+  next step; "Customer says paid" stays the customer's word until the money arrives and is applied. Owners and admins
+  with email on are told when a customer writes, with a short preview and a link, at most once an hour for each request.
+  The page and the pay page work on a phone: the amount and its currency stay in view, and every button is large enough
+  to tap.
+
 - **Receipts back in HubSpot.** Sales sees whether a customer paid without asking finance: once an owner or admin turns
   on Write receipts to HubSpot, each deal planned from HubSpot gets what was collected, what is still owed, the last
   receipt (day, amount and its transaction on Arc), a collection and a reconciliation status, and a link to the deal in

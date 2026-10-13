@@ -52,6 +52,7 @@ export const TENANT_TABLES = [
   "accounting_connections", "external_links", "accounting_bills", "accounting_sync_cursors", "accounting_postings",
   "deals", "deal_versions", "deal_lines",
   "crm_deals", "crm_receipt_writes",
+  "customer_portal_links", "customer_requests", "customer_request_messages",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
@@ -86,6 +87,7 @@ export const PLATFORM_RPCS = [
   "growth_team_member", "growth_workspaces", "growth_update_lead", "growth_import_leads", "record_org_attribution",
   "accounting_token_lease", "accounting_token_store", "accounting_token_release", "accounting_connections_due",
   "accounting_connections_by_external",
+  "customer_portal_by_token", "customer_portal_submit", "customer_portal_reply",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 

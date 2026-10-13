@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { CircleCheck, CloudOff, Unlink } from "lucide-react";
-import PaymentCheck from "@/components/PaymentCheck";
-import { CopyButton } from "@/components/ui/CopyButton";
+import { PayInvoice } from "@/components/PayInvoice";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
@@ -30,6 +29,7 @@ const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximu
  * by when, for what, and the address on Arc testnet. Every unusable link shows the same sentence and
  * names no one. Opening it changes nothing. Once a payment was applied to the invoice, it asks for what is still owed
  * and says what arrived (docs/superpowers/specs/2026-10-12-allocations-design.md L11).
+ * The open invoice itself is `PayInvoice`.
  *
  * Settled, it says what arrived, never the invoice's whole amount when part of it was marked a fee, which never arrived
  * (0103 settles a receivable once payments and fees cover it), and who says so: Circle reported the payments complete,
@@ -56,7 +56,6 @@ export default async function PayPage({ params }: PayPageProps) {
         return null;
       })
     : null;
-  const owed = balance ? balance.owed : (preview?.amount ?? 0);
   const arrived: number | null = balance ? balance.received : balanceRead ? (preview?.amount ?? 0) : null;
   const network = preview ? homeChain(networkOfChain(preview.chain)).label : undefined;
 
@@ -107,55 +106,7 @@ export default async function PayPage({ params }: PayPageProps) {
               )}
             </section>
           ) : (
-            <section className="rounded-2xl border border-line bg-surface p-6 shadow-surface">
-              <p>
-                <Eyebrow className="text-agent">Invoice</Eyebrow>
-              </p>
-              <h1 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-ink">
-                {preview.orgName} asks {preview.clientName} to pay {AMOUNT.format(owed)} {preview.currency}
-              </h1>
-              <dl className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
-                {balance && (
-                  <>
-                    <dt className="text-ink-3">Received</dt>
-                    <dd className="text-ink">
-                      {AMOUNT.format(balance.received)} of {AMOUNT.format(preview.amount)} {preview.currency}. This is what is still owed.
-                    </dd>
-                  </>
-                )}
-                <dt className="text-ink-3">Due</dt>
-                <dd className="text-ink">{preview.dueDate}</dd>
-                {preview.memo && (
-                  <>
-                    <dt className="text-ink-3">For</dt>
-                    <dd className="break-words text-ink">{preview.memo}</dd>
-                  </>
-                )}
-                <dt className="text-ink-3">Network</dt>
-                <dd className="text-ink">{homeChain(networkOfChain(preview.chain)).label}</dd>
-              </dl>
-              {preview.payTo ? (
-                <div className="mt-5 grid gap-2">
-                  <p className="text-sm font-medium text-ink">Send exactly {AMOUNT.format(owed)} {preview.currency} to</p>
-                  <div className="flex items-center gap-2">
-                    <code className="min-w-0 flex-1 break-all rounded-lg border border-line bg-ground px-3 py-2 font-mono text-xs text-ink">{preview.payTo}</code>
-                    <CopyButton value={preview.payTo} label="Copy address" variant="secondary">
-                      Copy
-                    </CopyButton>
-                  </div>
-                  <p className="text-xs leading-5 text-ink-3">
-                    From any wallet on {homeChain(networkOfChain(preview.chain)).label}. Send the exact amount: that is how the payment is matched to this invoice.
-                  </p>
-                </div>
-              ) : (
-                <p className="mt-5 text-sm text-ink-2">{preview.orgName} has no address to receive payments yet. Ask them before you pay.</p>
-              )}
-              {preview.payTo && (
-                <div className="mt-6 border-t border-line pt-5">
-                  <PaymentCheck token={token} />
-                </div>
-              )}
-            </section>
+            <PayInvoice preview={preview} balance={balance} token={token} />
           )}
         </div>
       </main>

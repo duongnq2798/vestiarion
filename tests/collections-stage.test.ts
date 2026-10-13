@@ -58,12 +58,15 @@ interface World {
   history?: Array<Record<string, unknown>>;
   claim?: { status?: number; body: unknown };
   allocations?: { status?: number; body: unknown };
+  /** What the customer said on its statement (0109). */
+  requests?: { status?: number; body: unknown };
 }
 
 function world(w: World = {}) {
   return fakeSupabase((request: RecordedRequest) => {
     if (request.path === "/rest/v1/orgs") return { body: { name: "Mai Studio", mode: w.mode ?? "live" } };
     if (request.path === "/rest/v1/receivable_allocations") return w.allocations ?? { body: [] };
+    if (request.path === "/rest/v1/customer_requests") return w.requests ?? { body: [] };
     if (request.path === "/rest/v1/rpc/agent_paused") return { body: w.paused === true };
     if (request.path === "/rest/v1/receivable_links" && request.method === "GET") return { body: w.links ?? [link()] };
     if (request.path === "/rest/v1/invoices" && request.method === "GET") {
@@ -249,5 +252,41 @@ describe("a part-paid receivable (allocations L11)", () => {
   it("is reminded of the whole invoice before migration 0103 runs", async () => {
     await run(world({ allocations: { status: 404, body: { code: "PGRST205", message: "Could not find the table 'public.receivable_allocations' in the schema cache" } } }));
     expect(sendMock.mock.calls[0][0].subject).toBe("Mai Studio: 12.50 USDC due today");
+  });
+});
+
+describe("a receivable its customer answered on its statement (customer portal P7)", () => {
+  const said = (over: Record<string, unknown>) => ({ invoice_id: INVOICE, status: "open", promised_on: null, ...over });
+
+  it("waits through the day the customer promised to pay", async () => {
+    const lines = await run(world({ requests: { body: [said({ kind: "promise", promised_on: "2026-10-10" })] } }));
+    expect(decideMock).not.toHaveBeenCalled();
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(lines).toEqual([]);
+  });
+
+  it("is reminded again the day after the promised day", async () => {
+    await run(world({ requests: { body: [said({ kind: "promise", promised_on: "2026-10-09" })] } }));
+    expect(sendMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits while the customer disputes it", async () => {
+    await run(world({ requests: { body: [said({ kind: "dispute" })] } }));
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("asks only for the open promises and disputes of the receivables it would remind", async () => {
+    const client = world();
+    await run(client);
+    const asked = client.requests.find((r) => r.path === "/rest/v1/customer_requests")!;
+    expect(asked.params.get("invoice_id")).toBe(`in.(${INVOICE})`);
+    expect(asked.params.get("status")).toBe("eq.open");
+    expect(asked.params.get("kind")).toBe("in.(promise,dispute)");
+    expect(asked.params.get("org_id")).toBe(`eq.${ORG}`);
+  });
+
+  it("is reminded as before when migration 0109 has not run", async () => {
+    await run(world({ requests: { status: 404, body: { code: "PGRST205", message: "Could not find the table 'public.customer_requests' in the schema cache" } } }));
+    expect(sendMock).toHaveBeenCalledTimes(1);
   });
 });

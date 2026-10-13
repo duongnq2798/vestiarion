@@ -74,14 +74,14 @@ describe("every /o/[slug] page", () => {
 });
 
 describe("every server action", () => {
-  it("lives in src/app/actions, except sign-in, accepting an invitation, creating a first workspace, your own account, a payee's own address, a client's payment check, the founder dashboard, and a studio's guided setup request", () => {
+  it("lives in src/app/actions, except sign-in, accepting an invitation, creating a first workspace, your own account, a payee's own address, a client's payment check, a customer's statement, the founder dashboard, and a studio's guided setup request", () => {
     const withDirective = walk(path.join(ROOT, "src")).filter(
       (file) => /\.(ts|tsx)$/.test(file) && /^\s*["']use server["']/.test(read(file))
     );
     const outside = withDirective.map(rel).filter((file) => !file.startsWith("src/app/actions/"));
     expect(outside.sort()).toEqual([
       "src/app/account/actions.ts", "src/app/admin/growth/actions.ts", "src/app/invite/actions.ts", "src/app/login/actions.ts", "src/app/onboarding/actions.ts",
-      "src/app/pay/[token]/actions.ts", "src/app/payee/[token]/actions.ts", "src/app/studios/actions.ts",
+      "src/app/pay/[token]/actions.ts", "src/app/payee/[token]/actions.ts", "src/app/statement/[token]/actions.ts", "src/app/studios/actions.ts",
     ]);
   });
 
@@ -123,6 +123,25 @@ describe("the payee's address action", () => {
     const [action] = actions;
     expect(awaitedNames(action.body)[0]).toBe("submitPayeeAddress");
     expect(action.body).not.toMatch(/inOrg|withOrg|authorize/);
+  });
+});
+
+describe("the customer's statement actions", () => {
+  // A customer has no account and no wallet: the statement link is the credential, checked with the invoice's customer
+  // and a daily cap inside the database (customer portal P4, P5). So each action's gate is the link itself, checked by
+  // the function it awaits first, never a session; and nothing it does settles an invoice.
+  const STATEMENT_ACTIONS = path.join(ROOT, "src", "app", "statement", "[token]", "actions.ts");
+  const actions = exportedAsyncFunctions(read(STATEMENT_ACTIONS));
+
+  it("are the request and the reply", () => {
+    expect(actions.map((action) => action.name)).toEqual(["submitStatementRequestAction", "replyOnStatementAction"]);
+  });
+
+  it("each awaits its link check first, and enters no workspace itself", () => {
+    const [request, reply] = actions;
+    expect(awaitedNames(request.body)[0]).toBe("submitCustomerRequest");
+    expect(awaitedNames(reply.body)[0]).toBe("replyAsCustomer");
+    for (const action of actions) expect(action.body).not.toMatch(/inOrg|withOrg|authorize|platformDb/);
   });
 });
 

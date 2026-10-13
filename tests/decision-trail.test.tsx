@@ -318,3 +318,24 @@ describe("a reconcile, as it found the payment (stuck-transfer alert D8)", () =>
     });
   });
 });
+
+describe("a receivable's trail of what its customer said (customer portal P10)", () => {
+  it("tells a claim of payment as the customer's word, a promise, a dispute and a person's answers", () => {
+    const SAID: TrailEntry[] = [
+      step(1200, "08:00:00", "human", "customer_said_paid", { via: "customer_portal", paidOn: "2026-10-12", amount: 750, currency: "USDC" }),
+      step(1201, "08:10:00", "human", "customer_promised_payment", { via: "customer_portal", promisedOn: "2026-10-20" }),
+      step(1202, "08:20:00", "human", "customer_disputed_invoice", { via: "customer_portal" }),
+      step(1203, "09:00:00", "human", "customer_request_replied", { by: "u1", kind: "dispute" }),
+      step(1204, "09:30:00", "human", "customer_request_closed", { by: "u1", kind: "paid", outcome: "not_received" }),
+    ];
+    const steps = invoiceTrail([...SAID].reverse(), INVOICE);
+    expect(steps.map((s) => s.text)).toEqual([
+      "The customer said on its statement that it paid 750.00 USDC on Oct 12.",
+      "The customer promised on its statement to pay by Oct 20.",
+      "The customer disputed the invoice on its statement.",
+      "A person replied to the customer on its statement.",
+      "A person closed the customer's claim of payment: not received.",
+    ]);
+    expect(steps[0].notes).toEqual(["· Its word, not a payment: the invoice stays open until the money arrives and is applied"]);
+  });
+});

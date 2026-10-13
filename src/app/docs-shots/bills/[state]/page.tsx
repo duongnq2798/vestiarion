@@ -10,6 +10,8 @@ import type { WaitingItem } from "@/components/bills/BillsSummary";
 import { billRowItem, countBills, countReceivables, homeOf, listData, listRowOf, summaryData, viewHref } from "@/components/bills/build";
 import { NewMenu } from "@/components/bills/NewMenu";
 import { DealsSection } from "@/components/deals/DealsSection";
+import { FromCustomers } from "@/components/portal/FromCustomers";
+import { StatementLinks } from "@/components/portal/StatementLinks";
 import { cn } from "@/components/ui/cn";
 import { MotionProvider } from "@/components/ui/MotionProvider";
 import { DecisionCard } from "@/components/vx/DecisionCard";
@@ -42,6 +44,9 @@ import type { RecurringPayableView } from "@/lib/recurring-payables";
 import { DESIGN_SLUG } from "../../../design/fixtures";
 import { dealShot, dealShotCollected } from "../../deals-fixture";
 import { PAYMENT_PLAN_OUTCOMES, PAYMENT_PLAN_VIEWER, paymentPlanShot } from "../../payment-plan-fixture";
+import { customerNotesShot, fromCustomersShot, PORTAL_CUSTOMERS, statementLinksShot } from "../../portal-fixture";
+
+const CUSTOMER_NOTES = customerNotesShot();
 import {
   BILLS_COUNTERPARTIES,
   BILLS_ENTRIES,
@@ -152,7 +157,7 @@ export default async function BillsStatePage({ params, searchParams }: Props) {
     rows: page.rows.map((row) => {
       const invoice = invoicesById.get(row.id) as InvoiceRow;
       const decision = decided.get(row.id) as Decision;
-      return billRowItem({ invoice, decision, row, today, inAWeek, waiting: waiting.get(row.id), rule: ruleOf(decision), canWrite: true, canDecide: true, link: BILLS_LINKS.get(row.id), href: here({ open: row.id }) });
+      return billRowItem({ invoice, decision, row, today, inAWeek, waiting: waiting.get(row.id), rule: ruleOf(decision), canWrite: true, canDecide: true, link: BILLS_LINKS.get(row.id), owedNote: busy ? (CUSTOMER_NOTES.get(row.id) ?? null) : null, href: here({ open: row.id }) });
     }),
   };
   const listOf = (tab: "bills" | "receivables") =>
@@ -175,6 +180,7 @@ export default async function BillsStatePage({ params, searchParams }: Props) {
         { key: "quickbooks", review: "quickbooks", label: `${QUICKBOOKS_ITEMS.length} from QuickBooks` },
         { key: "hubspot", href: `${slugHref(billsHref({ tab: "receivables" }))}#from-hubspot`, label: "1 won deal in HubSpot" },
         { key: "book-xero", review: "book-xero", label: "1 to book in Xero" },
+        { key: "customers", href: `${slugHref(billsHref({ tab: "receivables" }))}#from-customers`, label: "4 from customers" },
       ]
     : [];
   const reviews: Partial<Record<ReviewPanel, PanelContent>> = busy
@@ -208,8 +214,10 @@ export default async function BillsStatePage({ params, searchParams }: Props) {
         : {
             receivables: {
               list: listOf("receivables"),
+              above: busy ? <FromCustomers orgSlug={slug} items={fromCustomersShot((id) => here({ open: id }))} canWrite /> : undefined,
               below: (
-                <div className="pt-6">
+                <div className="space-y-10 pt-6">
+                  <StatementLinks orgSlug={slug} customers={busy ? PORTAL_CUSTOMERS : []} links={busy ? statementLinksShot() : []} canWrite available />
                   <DealsSection
                     deals={busy ? [dealShot()] : []}
                     collected={busy ? dealShotCollected() : null}
