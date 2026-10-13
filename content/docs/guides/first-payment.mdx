@@ -515,4 +515,4 @@ From then on, each cycle, the agent decides whether to send a reminder now or to
   caption="A receivable whose reminders are on: the link, and the two reminders the agent sent."
 />
 
-The row shows the reminders sent so far, with their dates and tones, and until when the agent waits. **Turn off reminders** stops them. Each reminder is a signed `ar_reminder_sent` entry, each wait an `ar_reminder_deferred` one, and both appear under the invoice's **How the agent decided**. Turning reminders on or off is signed as `ar_reminders_on` or `ar_reminders_off`.
+The row shows the reminders sent so far, with their dates and tones, and until when the agent waits. **Turn off reminders** stops them. A client that promises a day to pay on its [statement link](/docs/guides/customer-portal) holds them through that day, and one that disputes the invoice holds them until you resolve it. Each reminder is a signed `ar_reminder_sent` entry, each wait an `ar_reminder_deferred` one, and both appear under the invoice's **How the agent decided**. Turning reminders on or off is signed as `ar_reminders_on` or `ar_reminders_off`.
