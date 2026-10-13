@@ -40,7 +40,8 @@ type GuideSlug =
   | "guides/audit-export"
   | "guides/evidence"
   | "guides/controls"
-  | "guides/apply-payments";
+  | "guides/apply-payments"
+  | "guides/customer-portal";
 
 const PANEL = "src/components/GoLivePanel.tsx";
 const WALLET_STEPS = "src/components/treasury/WalletTreasurySteps.tsx";
@@ -245,7 +246,58 @@ const BILLS_VIEW = "src/lib/bills-view.ts";
 const BILLS_SUMMARY = "src/components/bills/BillsSummary.tsx";
 const BILL_NEXT_STEP = "src/components/vx/bill-next-step.ts";
 
+/** Customer statements (docs/superpowers/specs/2026-10-13-customer-portal-design.md). */
+const PORTAL_LINKS = "src/components/portal/StatementLinks.tsx";
+const PORTAL_ACTIONS = "src/components/portal/StatementActions.tsx";
+const PORTAL_VIEW = "src/components/portal/StatementView.tsx";
+const PORTAL_MODEL = "src/lib/customer-portal/model.ts";
+const PORTAL_PUBLIC = "src/lib/customer-portal/public.ts";
+
 const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
+  "guides/customer-portal": [
+    ["Bills & receivables", APP_NAV],
+    ["Receivables", INVOICES_PAGE_SOURCE],
+    ["Customer statements", PORTAL_LINKS],
+    ["Link works for", PORTAL_LINKS],
+    ["Make a link", PORTAL_LINKS],
+    ["Stop the link", PORTAL_LINKS],
+    ["An owner or admin can share a statement with a customer.", PORTAL_LINKS],
+    ["Add a counterparty with the role client to share a statement with it.", PORTAL_LINKS],
+    ["Copy it now: it is shown only once.", "src/lib/commands/customer-portal.ts"],
+    ["Statement links are for customers. This counterparty is not a client.", "src/lib/customer-portal/links.ts"],
+    ["Customer statements are not set up on this deployment yet.", "src/lib/customer-portal/links.ts"],
+    ["Open invoices", PORTAL_VIEW],
+    ["Paid recently", PORTAL_VIEW],
+    ["Nothing is owed. Thank you.", PORTAL_VIEW],
+    ["Pay on Arc", PORTAL_ACTIONS],
+    ["Ask for a pay link", PORTAL_ACTIONS],
+    ["I paid", PORTAL_ACTIONS],
+    ["Tell them you paid", PORTAL_ACTIONS],
+    ["Day you paid", PORTAL_ACTIONS],
+    ["Payment reference", PORTAL_ACTIONS],
+    ["Promise to pay", PORTAL_ACTIONS],
+    ["Day you will pay", PORTAL_ACTIONS],
+    ["What is wrong with this invoice?", PORTAL_ACTIONS],
+    ["Reminders about this invoice wait until then.", PORTAL_MODEL],
+    ["From customers", "src/components/portal/FromCustomers.tsx"],
+    ["Open the invoice", "src/components/portal/FromCustomers.tsx"],
+    ["Customer says paid", PORTAL_MODEL],
+    ["Asks for a pay link", PORTAL_MODEL],
+    ["Find the payment", PORTAL_MODEL],
+    ["Payment found", PORTAL_MODEL],
+    ["Not received", PORTAL_MODEL],
+    ["Reply, then resolve", PORTAL_MODEL],
+    ["Make a pay link", PORTAL_MODEL],
+    ["Resolve", PORTAL_MODEL],
+    ["Customer promised by", "src/lib/customer-portal/view.ts"],
+    ["Disputed by the customer", "src/lib/customer-portal/view.ts"],
+    ["This link has expired.", "src/app/statement/[token]/page.tsx"],
+    ["This link has sent all it can for today. Try again tomorrow, or contact the business directly.", PORTAL_PUBLIC],
+    ["Email me when payments need a decision", "src/components/NotificationsPanel.tsx"],
+    ["Notifications", "src/components/NotificationsPanel.tsx"],
+    ["Open From customers", "src/lib/email/customer-wrote.ts"],
+    ["140", "src/lib/email/customer-wrote.ts", "PREVIEW_MAX = 140"],
+  ],
   "guides/apply-payments": [
     ["Apply payments", APPLY_PAYMENTS],
     ["Bills & receivables", APP_NAV],
@@ -268,7 +320,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Record a fee", ALLOCATION_LINES],
     ["Reverse", ALLOCATION_LINES],
     ["Nothing is deleted: a correction is added, and the audit log keeps both.", ALLOCATION_LINES],
-    ["This is what is still owed.", "src/app/pay/[token]/page.tsx"],
+    ["This is what is still owed.", "src/components/PayInvoice.tsx"],
     ["That is more than is still owed on the invoice.", ALLOCATION_MODEL],
     ["The payment and the invoice are in different currencies. Apply it to an invoice in the same currency.", ALLOCATION_MODEL],
     ["One payment is applied to one customer's invoices.", ALLOCATION_MODEL],
@@ -2051,6 +2103,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/audit-export": 5,
   "guides/evidence": 20,
   "guides/apply-payments": 20,
+  "guides/customer-portal": 20,
 };
 
 describe.each(Object.entries(QUOTED) as Array<[GuideSlug, Array<readonly [string, string, string?]>]>)("the %s guide", (slug, quoted) => {

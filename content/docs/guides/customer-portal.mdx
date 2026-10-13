@@ -1,0 +1,87 @@
+Customers ask for an invoice again, email a screenshot to prove they paid, or argue about an amount in a thread nobody else can find. A statement link gives one customer a page of its own: what it owes you, each open invoice with what is still owed and how late it is, and a way to pay it on Arc, say it paid, promise a day or dispute it. It needs no account and no wallet. Everything the customer says comes back to one list on **Bills & receivables**, with the next step for each. It works the same in a workspace on Arc testnet and on Arc mainnet.
+
+## 1. Make a link
+
+Open **Bills & receivables**, choose the **Receivables** tab and scroll to **Customer statements**.
+
+- **Choose the customer** and how long the link works under **Link works for**: 7, 30 or 90 days. Then choose **Make a link**.
+- **Copy the link at once.** The page shows it with "Copy it now: it is shown only once." Vestiarion keeps only a fingerprint of it, so it cannot show it again. A link that is lost is replaced by making a new one.
+- **One link per customer.** Making a new link for a customer stops the one it had; the page says so. The list under the form shows each customer with a link, until when it works, and who made it.
+- **Who makes links.** Owners and admins, as for a pay link. Every other member sees the list and reads "An owner or admin can share a statement with a customer."
+- **Customers only.** A link is for a counterparty with the role client. For anyone else: "Statement links are for customers. This counterparty is not a client." With no client yet, the section says "Add a counterparty with the role client to share a statement with it."
+
+Send the link to the customer the way you usually reach them. It starts with `https://www.vestiarion.xyz/statement/`.
+
+<Screenshot
+  src="/docs/guides/customer-portal-from-customers.png"
+  alt="From customers on the Receivables tab, 2 to answer. Granite Labs, Dispute: the deposit in its signed quote is 2,500.00, not 3,000.00, with a member's reply, Checking the quote now; reminders wait until you resolve it; next Reply, then resolve, with Reply and Resolve. Acme Retail, Customer says paid: says it paid 1,800.00 USDC on Oct 11, 2026, reference ACME-WIRE-5531; next Find the payment, with Reply, Payment found and Not received."
+  caption="What customers said on their statements, each with its next step."
+/>
+
+## 2. What your customer sees
+
+The link opens a page titled with what the customer owes you, and until when the link works.
+
+- **What it owes,** in each currency apart: USDC and EURC are never added together. Each says how many invoices are open and how much of it is overdue.
+- **Open invoices,** by due date. Each shows what is still owed, in its currency; for a part-paid invoice, what was received; its due date, or how many days it is overdue; and its purchase order reference when it has one. Under it is everything the customer said about it, and your replies.
+- **Paid recently:** invoices paid in the last 90 days, up to 10.
+
+It shows nothing else of your workspace: no other customer, no supplier, no balance, no ledger, and no name or email of anyone at your business. A reply you write shows under your workspace's name. With nothing owed, the page says "Nothing is owed. Thank you."
+
+<Screenshot
+  src="/docs/guides/customer-portal-statement.png"
+  alt="The statement Acme Retail reads from Northstar Studio, as of Oct 13, 2026, its link working until Nov 11, 2026: you owe 800.00 USDC, 1 open invoice, 800.00 USDC overdue. Open invoices: INV-1042 October retainer, overdue 10 days, 800.00 USDC, still owed, 1,000.00 of 1,800.00 USDC received, with Pay on Arc, I paid, Promise to pay and Dispute. Paid recently: INV-1031 September retainer, 1,800.00 USDC, paid Sep 4, 2026."
+  caption="One customer's own invoices: what it still owes, how late, and what it can do about each."
+/>
+
+## 3. What your customer can do
+
+Each open invoice has its buttons, and each opens a short form under them that repeats what is owed, in its currency, so it stays in view on a phone with the keyboard up.
+
+- **Pay on Arc** opens the invoice's [pay link](/docs/guides/first-payment#9-get-paid-by-a-client), with the amount and the address to copy. Without a pay link, the button is **Ask for a pay link**: the request comes to you, and once you make the link, the statement shows **Pay on Arc**.
+- **I paid**, under **Tell them you paid**: **Day you paid**, the amount (what is owed, unless they change it), a **Payment reference** such as a bank reference or a transaction hash, and a note. It is the customer's word, not a payment. The invoice stays open until the money arrives and is applied, and the customer reads that you are checking for it.
+- **Promise to pay**: **Day you will pay**, today or up to 90 days ahead, and a note. The customer reads "Reminders about this invoice wait until then."
+- **Dispute**: **What is wrong with this invoice?** The agent's reminders about the invoice wait until you resolve it.
+- **Write more.** Under anything still open, the customer can write to you again, and you can reply. A newer **I paid** or promise on the same invoice replaces the older one; a second dispute adds to the first.
+
+## 4. Answer from the Receivables tab
+
+When a customer says something, **Waiting for review** at the top of Bills & receivables says how many wait, and **From customers**, at the top of the **Receivables** tab, lists each one: what the customer said, about which invoice, what is still owed on it, the messages, and **Next**. Owners and admins answer; every other member reads.
+
+| The customer | Shown as | Next | Close it with |
+|---|---|---|---|
+| Says it paid | **Customer says paid** | **Find the payment**: the amount, the day and the reference to look for. Once it arrived on Arc, apply it under [Apply payments](/docs/guides/apply-payments). | **Payment found**, or **Not received**: the customer then reads that you have not received it, and can tell you again. |
+| Promises a day | **Promise to pay** | Wait until that day; after it, follow up. | **Close** |
+| Disputes the invoice | **Dispute** | **Reply, then resolve.** | **Resolve** |
+| Asks for a pay link | **Asks for a pay link** | **Make a pay link**: **Open the invoice** and make its link. | **Done** |
+
+A receivable's own row says it too: "Customer says paid" and the day, "Customer promised by" a day, or "Disputed by the customer". Nothing a customer says marks an invoice paid: only money received on Arc and applied to it does.
+
+Owners and admins who keep **Email me when payments need a decision** on, under **Notifications** in **Settings**, also get an email when a customer writes: who wrote, what it asks, its first 140 characters with any link left out, and **Open From customers**. A long thread sends at most one email an hour for each request. Asking again for a pay link already asked for, with nothing written, sends nothing and adds nothing.
+
+## Reminders while a customer answers
+
+If you turned on the agent's reminders for an invoice, a promise holds them through the promised day, and they go again the day after if the invoice is still open. A dispute holds them until you resolve it. Closing a promise or a dispute lets them go again at once. A claim of payment holds nothing: if the money does not come, the reminders carry on.
+
+## Who can open a link
+
+The link is the key: anyone who has it sees the customer's statement, and can send you a message as that customer. A link forwarded to someone else works for them the same way, for that customer's invoices only.
+
+- **Expiry.** A link stops working on the day you chose. It then reads "This link has expired." with the day, and names no one.
+- **Stopping one.** **Stop the link** stops it at once for everyone who has it; it then reads as a link that no longer works. Making a new link for the customer stops the old one too.
+- **Limits.** One link sends at most 30 messages a day, and a few a minute. Past that the customer reads "This link has sent all it can for today. Try again tomorrow, or contact the business directly."
+- **Search engines** are asked not to index statement pages, and the link's address is not sent to analytics.
+
+## In the ledger
+
+Each step is a signed entry in the `ar` domain, under the invoice's **How the agent decided** where it names one: `customer_statement_shared` and `customer_statement_unshared` for a link; `customer_said_paid`, `customer_promised_payment`, `customer_disputed_invoice`, `customer_asked_pay_link` and `customer_wrote` for what the customer said; `customer_request_replied` and `customer_request_closed` for your answers. An entry holds a fingerprint (SHA-256) of the words written, never the words themselves; the words stay with the request, where your members read them. Webhook endpoints receive each as `ledger.appended`; [the changelog](/docs/changelog) lists their fields.
+
+## If something goes wrong
+
+| What you see | Why | What to do |
+|---|---|---|
+| Statement links are for customers. This counterparty is not a client. | The counterparty is a supplier or a contractor. | Choose a client, or add the customer as a client on Counterparties. |
+| Customer statements are not set up on this deployment yet. | The database is not ready for statements on this deployment. | Ask whoever runs it to apply the latest migration. |
+| The customer reads "This link has expired." | The link's days ran out. | Make a new link and send it. |
+| The customer reads that the link no longer works | You stopped it, or made a newer one. | Send the newer one, or make one. |
+| No **Pay on Arc** on an invoice | The invoice has no pay link yet, or your workspace is a sandbox, which has no wallet to be paid into. | Make its pay link on the invoice's card, in a live workspace. |

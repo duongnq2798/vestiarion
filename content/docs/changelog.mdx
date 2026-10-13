@@ -1,5 +1,16 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-13: Customer statements and what customers say on them
+
+- An owner or admin can send a customer a link to its own statement, where the customer pays an invoice through its pay link, or says it paid, promises a day, disputes an invoice or asks for a pay link. Nine new entries, domain `ar`, each listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`. None changes an invoice: a customer saying it paid is its word, and the invoice stays `pending` until the payment arrives and is applied.
+  - **`customer_statement_shared`**, actor `human`: `{ by, linkId, counterpartyId, expiresAt, days, replaced }`. `days` is 7, 30 or 90; `replaced` lists the ids of the customer's earlier links this one stopped. The link itself is never in the entry.
+  - **`customer_statement_unshared`**, actor `human`: `{ by, linkId, counterpartyId }`.
+  - **`customer_said_paid`**, **`customer_promised_payment`**, **`customer_disputed_invoice`** and **`customer_asked_pay_link`**, actor `human` with no `by`: `{ via: "customer_portal", linkId, requestId, invoiceId, counterpartyId, kind }`, with `paidOn` (YYYY-MM-DD), and `amount` and `currency` when the customer gave an amount, for `customer_said_paid`; `promisedOn` for `customer_promised_payment`; `superseded`, the ids of the customer's earlier open requests of the same kind on that invoice it replaced; and `textSha256`, the SHA-256 of what the customer wrote (its reference and message, joined by a line break), never the words. `kind` is `paid`, `promise`, `dispute` or `pay_link`.
+  - **`customer_wrote`**, actor `human` with no `by`: the customer wrote more under an open request. `{ via: "customer_portal", linkId, requestId, invoiceId, counterpartyId, kind, textSha256 }`, with `messageId` for a message written under the request; a second dispute or pay link request on the same invoice, added to the open one, has none. Asking again for a pay link already asked for, with no words, writes nothing and adds no entry.
+  - **`customer_request_replied`**, actor `human`: `{ by, requestId, messageId, invoiceId, counterpartyId, kind, textSha256 }`.
+  - **`customer_request_closed`**, actor `human`: `{ by, requestId, invoiceId, counterpartyId, kind, outcome }`. `outcome` is `resolved`, or `not_received` for a claim of payment the business has not received.
+- Nothing else in `/api/v1` changes: the statements and what customers said are not in the API.
+
 ## 2026-10-12: Deals brought in from HubSpot
 
 - An owner or admin can connect a workspace to a HubSpot account, and a person plans the collections of the won deals it brings in. Connecting and disconnecting are the **`accounting_connected`** and **`accounting_disconnected`** entries the Xero connector added, with `provider: "hubspot"`; `externalOrgId` is the HubSpot account (hub) id and `externalOrgName` its domain.

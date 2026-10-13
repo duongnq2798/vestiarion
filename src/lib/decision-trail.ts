@@ -320,6 +320,41 @@ export function trailStep(entry: TrailEntry, network: Network = "arc-testnet"): 
         text: `${deciderName(detail.decisionMode)} decided to wait${until ? ` until ${dayOf(until)}` : ""} before reminding the client${agreement(detail)}.`,
       };
     }
+    // What the customer said on its statement, and a person's answer (customer portal P10): its word, never a payment.
+    case "customer_said_paid": {
+      const paidOn = text(detail.paidOn);
+      const amount = number(detail.amount);
+      return {
+        ...base,
+        who: "person",
+        tone: "neutral",
+        text: `The customer said on its statement that it paid${amount !== null ? ` ${coins(amount, detail.currency)}` : ""}${paidOn ? ` on ${dayOf(paidOn)}` : ""}.`,
+        notes: ["· Its word, not a payment: the invoice stays open until the money arrives and is applied"],
+      };
+    }
+    case "customer_promised_payment": {
+      const promisedOn = text(detail.promisedOn);
+      return {
+        ...base,
+        who: "person",
+        tone: "neutral",
+        text: `The customer promised on its statement to pay${promisedOn ? ` by ${dayOf(promisedOn)}` : ""}.`,
+        notes: ["· The agent's reminders wait through that day"],
+      };
+    }
+    case "customer_disputed_invoice":
+      return { ...base, who: "person", tone: "stopped", text: "The customer disputed the invoice on its statement.", notes: ["· The agent's reminders wait until a person resolves it"] };
+    case "customer_asked_pay_link":
+      return { ...base, who: "person", tone: "neutral", text: "The customer asked on its statement for a pay link." };
+    case "customer_wrote":
+      return { ...base, who: "person", tone: "neutral", text: "The customer wrote more on its statement." };
+    case "customer_request_replied":
+      return { ...base, who: "person", tone: "neutral", text: "A person replied to the customer on its statement." };
+    case "customer_request_closed": {
+      const what = { paid: "claim of payment", promise: "promise to pay", dispute: "dispute", pay_link: "request for a pay link" }[text(detail.kind) ?? ""] ?? "request";
+      const outcome = text(detail.outcome) === "not_received" ? "not received" : detail.kind === "paid" ? "payment found" : "resolved";
+      return { ...base, who: "person", tone: "neutral", text: `A person closed the customer's ${what}: ${outcome}.` };
+    }
     default:
       return null;
   }

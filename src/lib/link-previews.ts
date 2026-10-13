@@ -12,6 +12,12 @@ export const LINK_PREVIEWS = {
   payee: { badge: "Your payment", title: "A payment for your work", line: "Open the link to add your address and follow your payment.", alt: "Vestiarion — a payment for your work" },
   receipt: { badge: "Payment receipt", title: "A signed payment receipt", line: "Open the link to see the payment and check its signatures.", alt: "Vestiarion — a signed payment receipt" },
   report: { badge: "Shared report", title: "A business's shared report", line: "Open the link to see what the agent did with its bills.", alt: "Vestiarion — a business's shared report" },
+  statement: {
+    badge: "Your statement",
+    title: "A statement of what you owe",
+    line: "Open the link to see your invoices, pay one, or tell the business about a payment.",
+    alt: "Vestiarion — a statement of what you owe",
+  },
 } as const;
 
 export type LinkPage = keyof typeof LINK_PREVIEWS;

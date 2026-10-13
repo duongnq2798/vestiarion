@@ -18,7 +18,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy"
-      updated="2026-10-12"
+      updated="2026-10-13"
       intro="Vestiarion is an autonomous treasury agent on Arc mainnet and Arc testnet. This page describes what the service stores and sends, as its code does it today. The code is public, so every statement here can be checked against it."
     >
       <LegalSection id="signing-in" title="Signing in">
@@ -49,7 +49,11 @@ export default function PrivacyPage() {
           <li>the agent&apos;s settings and its treasury records;</li>
           <li>its members and their roles, and open invitations with the invited email addresses;</li>
           <li>API keys and webhook endpoints;</li>
-          <li>the ledger: every decision the agent makes, with its reasoning, signed with Ed25519 and chained by hash.</li>
+          <li>the ledger: every decision the agent makes, with its reasoning, signed with Ed25519 and chained by hash;</li>
+          <li>
+            what a customer sends on its statement link: the day it says it paid, a payment reference and an amount when it gives them, the day it
+            promises to pay, and the messages it and the workspace&apos;s members write to each other about an invoice.
+          </li>
         </ul>
         <p>
           It is stored in a Supabase Postgres database. Each request for a workspace&apos;s data runs as a database role that row-level security limits to
@@ -92,6 +96,14 @@ export default function PrivacyPage() {
           first sentence of its reasoning, and the payments with their transactions, which are not linked when amounts are hidden. It never shows memos, notes, references, invoice ids, or the names
           and emails of the workspace&apos;s members, and it hides any purchase order reference or memo the agent&apos;s sentence quotes. The link stops working when they stop sharing it, and the workspace&apos;s members see every live
           link.
+        </p>
+        <p>
+          An owner or admin can send a customer a link to its own statement. Anyone with the link sees, until it expires or is stopped, that
+          customer&apos;s invoices with the workspace (their memos, purchase order references, amounts, what is still owed and due dates), the pay links
+          of its open invoices, and what the customer and the workspace wrote about them, a member&apos;s reply shown under the workspace&apos;s name. It
+          never shows another customer, the workspace&apos;s other records or ledger, or the names and emails of its members. Anyone with the link can
+          also write to the workspace as that customer. What the customer writes is kept with the workspace&apos;s invoices; its signed ledger entry
+          keeps the days, the amount and a SHA-256 fingerprint of the words, never the words.
         </p>
       </LegalSection>
 
@@ -155,8 +167,9 @@ export default function PrivacyPage() {
           </li>
           <li>
             <strong>Resend</strong> sends transactional email: invitations to a workspace, digests of the payments waiting for a decision, the link a payee
-            adds their address through, payment notices to a payee once a live workspace&apos;s payment to them is confirmed, and the reminders an owner
-            or admin turns on for a client&apos;s invoice, with its pay link. It receives each recipient&apos;s email address and the message. When the
+            adds their address through, payment notices to a payee once a live workspace&apos;s payment to them is confirmed, the reminders an owner
+            or admin turns on for a client&apos;s invoice, with its pay link, and a note to a workspace&apos;s owners and admins when a customer writes
+            on its statement link, with at most 140 characters of what it wrote and no link it wrote. It receives each recipient&apos;s email address and the message. When the
             team has turned it on, it also sends the team a short note about each new guided setup request, described below.
           </li>
           <li>
@@ -306,7 +319,8 @@ export default function PrivacyPage() {
         <ul>
           <li>
             an invitation address becomes <code>/invite/:token</code>, a payee link <code>/payee/:token</code>, a client&apos;s pay link{" "}
-            <code>/pay/:token</code>, a receipt link <code>/receipt/:token</code> and a shared report <code>/report/:token</code>, and a workspace address has the workspace&apos;s slug
+            <code>/pay/:token</code>, a receipt link <code>/receipt/:token</code>, a shared report <code>/report/:token</code> and a customer&apos;s statement{" "}
+            <code>/statement/:token</code>, and a workspace address has the workspace&apos;s slug
             replaced, as <code>/o/:org</code>;
           </li>
           <li>only the path is sent, never the query string or anything after a #;</li>

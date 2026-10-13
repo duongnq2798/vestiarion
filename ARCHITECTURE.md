@@ -1268,7 +1268,8 @@ workspace's mode for that action, never from a link, a key or a button. A
 `importActualPayments`, `approvePlanLines`,
 `shareWorkspaceReport`, `stopSharingWorkspaceReport`, `answerReportBaseline`, `applyReceivedPayment`,
 `reverseAppliedPayment`, `addDeal`, `changeDeal`, `releaseDealLine`,
-`setDealAutoRelease` — whose first statement is
+`setDealAutoRelease`, `shareCustomerStatement`, `stopCustomerStatement`, `replyToCustomerRequest`,
+`closeCustomerRequestCommand` — whose first statement is
 `gate(actor, "<command>")`:
 
 - the scope in force must be the actor's workspace, or it throws
@@ -1353,6 +1354,75 @@ invoices by email, HubSpot won deals); then **Bills**, **Payment plan** and **Re
   Import a list, Recurring and Deal, with their own actions and checks; closing with something typed asks first.
 - `/docs-shots/bills/<state>` renders the page's states with sample data through the same builders, behind
   `DOCS_SCREENSHOTS=1` as /docs-shots is.
+
+## Customer statements
+
+A customer's statement link (`src/lib/customer-portal/`, migration 0109,
+`docs/superpowers/specs/2026-10-13-customer-portal-design.md`) gives one client counterparty a public page of what it owes
+the workspace, and a way to answer each open invoice, with no account and no wallet:
+
+- **The link.** A row of `customer_portal_links` holds the SHA-256 of the link's secret (`vxc_` and 43 base64url
+  characters, `src/lib/customer-portal/token.ts`), the customer, who made it and when it expires (7, 30 or 90 days; the
+  database refuses more than 91). A trigger refuses a counterparty that is not a client. One link per customer is live
+  (a partial unique index): `createPortalLink` stops the customer's live link, expired or not, then inserts the new one,
+  then signs `customer_statement_shared`; a link whose entry cannot be written is stopped at once. Stopping sets
+  `revoked_at` first, then signs `customer_statement_unshared` best effort. The tenant role inserts a link's `org_id`,
+  `counterparty_id`, `token_hash`, `created_by` and `expires_at` only (so `created_at`, which bounds the expiry, is
+  always now) and may set `revoked_at` and `revoked_by` alone (column grants); a trigger refuses to clear or move a
+  revocation; nothing deletes one. No browser role may execute the 0109 trigger functions.
+- **The page.** `/statement/[token]` has no session. A malformed token is never looked up; a well-formed one is hashed
+  and looked up by the service role's `customer_portal_by_token`, which answers null for a stopped or unknown link (or a
+  deleted workspace or customer), only `{ expired, expiresAt }` for an expired one, and otherwise the link's workspace and
+  customer ids, names, mode and network. `readStatement` (`public.ts`) then enters that workspace's scope (`withOrg`) and
+  reads, filtered by the link's customer: its receivables but rejected ones, the payments applied to the open ones (what
+  is still owed), their kept pay links (`receivable_links.token_enc`, read back with the master keys), and its requests
+  with their threads, open ones and those closed in the last 90 days. `buildStatement` (`model.ts`) is pure: open invoices
+  by due day with what is still owed and the days overdue, totals per currency never summed across, and paid invoices of
+  the last 90 days, at most 10. The page names the workspace and the customer only; a member's reply reaches it under the
+  workspace's name, with its author's id dropped before rendering. It is `noindex`, has its own preview card
+  (`linkSocialMetadata("statement")`), and analytics sees `/statement/:token`. The pay page it links to keeps the amount,
+  with its currency, beside its own Copy, and 44 px buttons, for a phone.
+- **What the customer sends.** `submitStatementRequestAction` and `replyOnStatementAction`
+  (`src/app/statement/[token]/actions.ts`) await `submitCustomerRequest` and `replyAsCustomer` first and enter no workspace
+  themselves. A per-instance bucket (`takePortalActionToken`: 5, then one every 12 s per link) slows a burst; the form is
+  read by `readSubmission`; then the service role's `customer_portal_submit` or `customer_portal_reply`, in one
+  transaction, locks the link's row, refuses a stopped or expired link, counts what the link sent in the last day (at most
+  30 requests and messages, across instances), checks that the invoice is an open receivable of the link's customer, and
+  checks each kind's fields. A request is `paid` (a day not after tomorrow and at most a year back, an optional reference
+  and amount), `promise` (today up to 90 days ahead), `dispute` (its words) or `pay_link`; a new claim or promise closes
+  the open one of its kind on that invoice as `superseded`, and a second dispute or pay link request adds to the open one.
+  The customer's words go to `customer_request_messages` with the link they came by. Each is then signed in the
+  workspace's ledger, best effort, with `via: "customer_portal"`, the ids, days and amount, and `textSha256` of the words
+  rather than the words: `customer_said_paid`, `customer_promised_payment`, `customer_disputed_invoice`,
+  `customer_asked_pay_link`, `customer_wrote`. A pay link asked again with no words adds no row, so the function answers
+  `written: false` and nothing is signed or emailed for it (it would otherwise be free under the cap). Nothing here
+  changes an invoice: a claim of payment is the customer's word.
+- **Telling the members.** Each write also answers `notify`: the function stamps `customer_requests.notified_at` in the
+  same transaction when the request was not emailed about in the last hour (a claim or promise replacing one emailed
+  within the hour keeps its stamp), so a long thread sends one email an hour at most, across instances.
+  `notifyCustomerWrote` (`src/lib/notifications/customer-portal.ts`) then emails the owners and admins
+  (`records.write`) whose `memberships.notify_email` is on, at most ten, each their own message
+  (`src/lib/email/customer-wrote.ts`): who wrote, the kind, at most 140 characters of the words with links replaced,
+  and a link to From customers; never a reference, an amount or a day. The statement's Server Actions run it with
+  `after`, once the customer has its answer; it never throws.
+- **The tenant role** reads `customer_requests` and may close an open one (`status`, `outcome`, `closed_at`, `closed_by`;
+  a trigger refuses to reopen or change a closed one, and a check needs an outcome and a day). It inserts into
+  `customer_request_messages` only `org_id`, `request_id`, `body` and `by`, so `author` keeps its default, `business`, and
+  `link_id` stays null: it can write a reply, never the customer's words. A closed request takes no message. Composite
+  foreign keys keep every link, request and message in the workspace of the customer and the invoice they name.
+- **Finance.** Bills & receivables reads the open requests on every tab (one read, best effort): Waiting for review says
+  how many came from customers, and a receivable's row says "Customer says paid", "Customer promised by" or "Disputed by
+  the customer". The Receivables tab lists them under **From customers** (`fromCustomerItems`, `view.ts`), each with its
+  next step (`financeNextStep`): find a claimed payment and apply it, wait for a promise's day, reply and resolve a
+  dispute, make the pay link asked for. **Customer statements** below it makes and stops links. The commands
+  (`src/lib/commands/customer-portal.ts`: `customer_portal.share`, `customer_portal.unshare`, `customer_request.reply`,
+  `customer_request.close`) need `records.write`, from the console only; a reply and a close are signed
+  `customer_request_replied` (with `textSha256`) and `customer_request_closed`. Each entry shows in the invoice's trail.
+- **Reminders.** The collections stage reads the open promises and disputes of the receivables it would remind
+  (`readReminderPauses`): an open dispute holds an invoice's reminders until it is closed, an open promise through its
+  day (`reminderPause`).
+- **Before 0109 runs** the lookups answer no link, the reads answer `available: false` (`PGRST205`, `42P01`), the
+  commands refuse `not_ready`, the Receivables tab says statements are not set up, and reminders go as before.
 
 ## The payment plan
 
@@ -1492,7 +1562,10 @@ workspaces; the ledger keeps the address with most of its name hidden.
   platform master key (`receivable_links.token_enc`). Each reminder is
   `ar_reminder_sent`, each wait `ar_reminder_deferred`. A part-paid receivable
   is reminded of what is still owed, saying what arrived (`partPaid` in the
-  entry), and one with nothing owed is not reminded (migration 0103).
+  entry), and one with nothing owed is not reminded (migration 0103). One whose
+  customer promised a day on its statement waits through that day, and one it
+  disputes waits until a person resolves it (`readReminderPauses`, migration
+  0109; see Customer statements).
 `setNotifyEmailAction` (`src/app/actions/notifications.ts`) is gated on
 `workspace.read`, and writes only the row named by the session's own user id
 — a `userId` field in the form is never read.
