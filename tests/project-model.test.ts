@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { projectRoomChange } from "@/lib/agent/follow-up";
+import { planFollowUp, projectRoomChange } from "@/lib/agent/follow-up";
 import { figuresSentence, NO_MONEY, obligationMinor, parseProjectForm, projectFigures, workState } from "@/lib/projects/model";
 
 /**
@@ -75,5 +75,33 @@ describe("projectRoomChange", () => {
     expect(projectRoomChange({ projectId: "p1", availableMinor: 30_000 }, held)).toBe("its project has room for it again (300.00 USDC left to set aside)");
     expect(projectRoomChange({ projectId: null, availableMinor: null }, held)).toBe("it was taken out of its project");
     expect(projectRoomChange({ projectId: "p2", availableMinor: 0 }, held)).toBe("it was moved to another project");
+  });
+});
+
+describe("the follow-up and a payment held for its project's budget", () => {
+  const config = { staleAfterDays: 3, reEscalateAfterDays: 7 };
+  const now = Date.parse("2026-10-13T09:00:00Z");
+  const invoice = {
+    id: "inv-1",
+    status: "held",
+    amount: 300,
+    dueDate: "2026-10-20T00:00:00Z",
+    decidedAt: "2026-10-13T08:00:00Z",
+    escalatedAt: null,
+    poReference: "PO-1",
+    goodsReceived: true,
+    riskLevel: "clear",
+    paymentLimit: 1000,
+  };
+  const held = { poReference: "PO-1", goodsReceived: true, riskLevel: "clear", paymentLimit: 1000, heldForProject: { projectId: "p1", neededMinor: 30_000 } };
+
+  it("reopens it once the project has room, and waits while it has none", () => {
+    expect(planFollowUp({ ...invoice, project: { projectId: "p1", availableMinor: 30_000 } }, held, now, config)).toMatchObject({
+      action: "reopen",
+      changes: ["its project has room for it again (300.00 USDC left to set aside)"],
+    });
+    expect(planFollowUp({ ...invoice, project: { projectId: "p1", availableMinor: 100 } }, held, now, config).action).toBe("wait");
+    // Not read, because nothing waited on it: nothing to reopen on.
+    expect(planFollowUp(invoice, held, now, config).action).toBe("wait");
   });
 });

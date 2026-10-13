@@ -98,21 +98,20 @@ async function readHoldEntries(orgDb: OrgDb, now: Date): Promise<HoldEntry[]> {
   return (read.data ?? []) as unknown as HoldEntry[];
 }
 
-/** Bills and milestones held now, by id: whose holds count as "held now". */
+const IDS_PER_READ = 100;
+
+/** Bills and milestones held now, by id: whose holds count as "held now". A hundred ids a read, so no address grows too long. */
 async function heldNow(orgDb: OrgDb, entries: HoldEntry[]): Promise<Set<string>> {
-  const invoiceIds = [...new Set(entries.flatMap((entry) => (entry.invoiceId ? [entry.invoiceId] : [])))];
-  const milestoneIds = [...new Set(entries.flatMap((entry) => (entry.milestoneId ? [entry.milestoneId] : [])))];
   const held = new Set<string>();
-  if (invoiceIds.length > 0) {
-    const read = await orgDb.from("invoices").select("id").in("id", invoiceIds).eq("status", "held");
-    if (read.error) throw new Error(read.error.message);
-    for (const row of (read.data ?? []) as Array<{ id: string }>) held.add(row.id);
-  }
-  if (milestoneIds.length > 0) {
-    const read = await orgDb.from("milestones").select("id").in("id", milestoneIds).eq("status", "held");
-    if (read.error) throw new Error(read.error.message);
-    for (const row of (read.data ?? []) as Array<{ id: string }>) held.add(row.id);
-  }
+  const read = async (table: "invoices" | "milestones", ids: string[]) => {
+    for (let at = 0; at < ids.length; at += IDS_PER_READ) {
+      const answer = await orgDb.from(table).select("id").in("id", ids.slice(at, at + IDS_PER_READ)).eq("status", "held");
+      if (answer.error) throw new Error(answer.error.message);
+      for (const row of (answer.data ?? []) as Array<{ id: string }>) held.add(row.id);
+    }
+  };
+  await read("invoices", [...new Set(entries.flatMap((entry) => (entry.invoiceId ? [entry.invoiceId] : [])))]);
+  await read("milestones", [...new Set(entries.flatMap((entry) => (entry.milestoneId ? [entry.milestoneId] : [])))]);
   return held;
 }
 

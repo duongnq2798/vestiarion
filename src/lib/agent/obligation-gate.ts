@@ -37,11 +37,12 @@ interface BillRow {
   amount: string | number;
 }
 
+/** The newest this many of the other book are compared: the work a bill or milestone repeats is recent. */
 const PAGE = 1000;
 
 /** The workspace's milestones as a bill is compared with them: their purchase order once 0111 runs, their evidence. */
 async function milestoneItems(orgDb: OrgDb): Promise<WorkItem[]> {
-  const read = (columns: string) => orgDb.from("milestones").select(columns).neq("status", "closed").order("created_at", { ascending: true }).range(0, PAGE - 1);
+  const read = (columns: string) => orgDb.from("milestones").select(columns).neq("status", "closed").order("created_at", { ascending: false }).range(0, PAGE - 1);
   let answer = await read("id, contractor_id, title, status, created_at, verification_source, po_reference");
   // Before 0111 there is no purchase order on a milestone: its evidence is still compared.
   if (projectsNotReady(answer.error)) answer = await read("id, contractor_id, title, status, created_at, verification_source");
@@ -65,7 +66,7 @@ async function billItems(orgDb: OrgDb): Promise<WorkItem[]> {
     .select("id, counterparty_id, memo, po_reference, status, created_at, amount")
     .eq("direction", "payable")
     .neq("status", "rejected")
-    .order("created_at", { ascending: true })
+    .order("created_at", { ascending: false })
     .range(0, PAGE - 1);
   if (answer.error) throw new Error(answer.error.message);
   return ((answer.data ?? []) as unknown as BillRow[]).map((row) => ({
