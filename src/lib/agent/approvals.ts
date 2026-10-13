@@ -188,7 +188,8 @@ function trimReason(reason: string | undefined): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-const WAITING_STATUSES = ["held", "flagged", "awaiting_info", "processing"] as const;
+/** What waits on Approvals: held for a person, or being paid by one (`listWaitingPayables`). */
+export const WAITING_STATUSES = ["held", "flagged", "awaiting_info", "processing"] as const;
 
 export { RECLAIM_AFTER_MS } from "./claim-age";
 

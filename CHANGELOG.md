@@ -27,12 +27,32 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   each currency your open bills are written in, with the latest reference rate recorded beside it (its time and age),
   and shows the cash in your reporting currency. An owner or admin saves a scenario as a version; saving again makes
   the next version, and no version is ever changed.
+- **A first task for each role.** Every member sees a short checklist built for their role, ticked because each step
+  happened in the workspace, never by a box someone ticks. An owner or admin: the workspace created, a first supplier,
+  a first bill added or imported, the agent's decision, then the agent's limits, set or kept as they are with **Keep
+  these limits**, before what paying on Arc needs. An approver, on Treasury and on Approvals: open Approvals, read why a
+  bill is held, then decide it or send it back. An accountant, on the accountant console: open it, open one workspace's
+  queue, book one payment or apply one receipt, and download the month's hand-off. A viewer has none. Accepting an
+  invitation lands you on your role's first step: Approvals for an approver, the accountant console for an accountant.
+  **Don't show again** hides a checklist for good, and no step offers anything your role cannot do. Until the
+  workspace's database update for this release is applied, the checklists show without **Don't show again** and **Keep
+  these limits**.
+- **Evidence links people can actually open.** Before the evidence page says a pull request is verified, or offers a
+  link someone gave, Vestiarion checks that it can be opened. One that can't (deleted, in a private repository your
+  workspace's GitHub connection does not reach, access refused, a signed link expired) is named with the reason and
+  never offered, and is never counted as verified. A pull request in your own private repository, read through your
+  workspace's GitHub connection, stays verified.
+  Vestiarion checks links on GitHub and on its own file storage only, through GitHub's API and the link's own signature,
+  and never opens any other site from its server: such a link is shown as given, marked **Not checked by Vestiarion**.
+  Milestone cards on Contractors say the same. Answers are kept a few minutes at most.
 
 ### Changed
 
 - A bill's card writes its amount in its currency's own digits (no decimals for yen or won) and names its rate as the
   reference rate it is; a EURC bill's USDC value names Circle's quote. A bill in US dollars, on its card and in its
   evidence, names 1 USD = 1 USDC as USDC's 1:1 redemption peg, not a market rate.
+- A link someone gave on the evidence page is now marked **Not checked by Vestiarion** where it said **Not opened by
+  Vestiarion**, and a link that can't be opened reads **Can't be opened** with why.
 
 ## [0.1.0-beta.2] - 2026-10-13
 

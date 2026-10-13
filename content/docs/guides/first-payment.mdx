@@ -1,10 +1,28 @@
-This page takes a workspace from an empty book to its first payment on Arc: add a counterparty and an invoice, let the agent decide, and follow the payment to the explorer and the signed ledger. For a payment on Arc, start with a workspace that is live and has USDC in its operating wallet: testnet USDC on Arc testnet, real USDC on Arc mainnet. [Go live](/docs/guides/go-live) sets that up. A sandbox on Arc testnet with no wallet can take the first steps now: it simulates its payments, the payee's address included, so the agent decides on your bill straight away. A workspace on Arc mainnet never simulates: nothing moves until an owner takes it live. Until the first payment settles, the console's **Get started** checklist follows these steps too, and links the next one. In a sandbox with no wallet it starts with **Add a supplier**, **Add a bill** and **See the agent's decision**, and lists the wallet after them, under **To pay on Arc**.
+This page takes a workspace from an empty book to its first payment on Arc: add a counterparty and an invoice, let the agent decide, and follow the payment to the explorer and the signed ledger. For a payment on Arc, start with a workspace that is live and has USDC in its operating wallet: testnet USDC on Arc testnet, real USDC on Arc mainnet. [Go live](/docs/guides/go-live) sets that up. A sandbox on Arc testnet with no wallet can take the first steps now: it simulates its payments, the payee's address included, so the agent decides on your bill straight away. A workspace on Arc mainnet never simulates: nothing moves until an owner takes it live. Until the first payment settles, the console's **Get started** checklist follows these steps too, and links the next one. In a sandbox with no wallet it starts with **Add a supplier**, **Add or import a first bill**, **See the agent's decision** and **Set or confirm the limits**, and lists the wallet after them, under **To pay on Arc**. Approvers and accountants have checklists of their own: see [Your first steps, by role](#your-first-steps-by-role).
 
 Who does what:
 
 - **Owners and admins** add counterparties and invoices, and run cycles.
 - **Owners, admins and approvers** decide the payments the agent holds.
+- **Accountants** book payments in Xero and apply money received: see [Accountants](/docs/guides/accountants).
 - **Viewers** see everything, but have no controls.
+
+## Your first steps, by role
+
+Each member sees the checklist of their own role, with the next step highlighted and linked, and each step ticked because it happened in the workspace, never by a box a person ticks:
+
+| Role | Where it shows | Its steps |
+| --- | --- | --- |
+| Owner or admin | **Treasury**, as **Get started** | **Create the workspace**, **Add a supplier**, **Add or import a first bill**, **See the agent's decision**, **Set or confirm the limits**, then what paying on Arc needs |
+| Approver | **Treasury** and **Approvals**, as **Get started as an approver** | **Open Approvals**, **Read why a bill is held**, **Decide it, or send it back** |
+| Accountant | The **Accountant console**, as **Get started as an accountant** | See [Accountants](/docs/guides/accountants#your-first-steps) |
+
+A viewer has no checklist.
+
+- **Invited by email,** you land on your role's first step when you accept: an approver on **Approvals**, an accountant on the **Accountant console**, an owner or admin on **Treasury**.
+- **Set or confirm the limits** names the agent's spending limit as it stands. It ticks once someone changes that limit, or the figure above which a payment needs two approvals, or chooses **Keep these limits**; it is the workspace's, so one person doing it ticks it for everyone. Only an owner or admin sees **Keep these limits**.
+- **Read why a bill is held** ticks when you open **Approvals** while a bill waits there: its card says what the agent decided, why, and what would let it pay. Deciding a bill ticks it too.
+- **Don't show again** hides your checklist for good, in that workspace. An admin sees the owner's steps that only an owner takes, such as **Add a wallet** and **Go live**, marked "An owner of this workspace does this step.", with **View** instead of **Start**. No checklist offers a step your role cannot take.
 
 ## Try it with sample data first
 

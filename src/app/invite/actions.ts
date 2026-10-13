@@ -4,8 +4,9 @@ import "server-only";
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { orgHref } from "@/lib/auth/org-paths";
 import { getSessionUser } from "@/lib/auth/session";
+import type { OrgRole } from "@/lib/auth/roles";
+import { firstStepHref } from "@/lib/onboarding/role-checklists";
 import { acceptInvitation, acceptInvitationById, MemberError } from "@/lib/platform/members";
 
 export interface AcceptInvitationResult {
@@ -23,7 +24,8 @@ const INVITATION_ID = z.string().uuid();
  * authorize against — the invitation itself names the organization and the
  * role — so the session is the gate, exactly as `createWorkspaceAction`
  * gates on the session rather than on `authorize`. `redirect` stays outside
- * the `try`, since it works by throwing.
+ * the `try`, since it works by throwing. The person lands on their role's
+ * first step (docs/superpowers/specs/2026-10-13-role-onboarding-evidence-access-design.md R6).
  */
 export async function acceptInvitationAction(
   _previous: AcceptInvitationResult,
@@ -38,14 +40,16 @@ export async function acceptInvitationAction(
   }
 
   let slug: string;
+  let role: OrgRole;
   try {
-    ({ slug } = await acceptInvitation({ token, userId: user.id }));
+    ({ slug, role } = await acceptInvitation({ token, userId: user.id }));
   } catch (error) {
     if (error instanceof MemberError) return { ok: false, message: error.message };
     console.error("invitation acceptance failed", error);
     return { ok: false, message: "This invitation could not be accepted. Try again in a moment." };
   }
-  redirect(orgHref(slug, "/console"));
+  // Their role's first step (onboarding by role R6): Approvals, the accountant console, or the console.
+  redirect(firstStepHref(role, slug));
 }
 
 /**
@@ -66,12 +70,14 @@ export async function acceptInvitationByIdAction(
   }
 
   let slug: string;
+  let role: OrgRole;
   try {
-    ({ slug } = await acceptInvitationById({ invitationId, userId: user.id }));
+    ({ slug, role } = await acceptInvitationById({ invitationId, userId: user.id }));
   } catch (error) {
     if (error instanceof MemberError) return { ok: false, message: error.message };
     console.error("invitation acceptance failed", error);
     return { ok: false, message: "This invitation could not be accepted. Try again in a moment." };
   }
-  redirect(orgHref(slug, "/console"));
+  // Their role's first step (onboarding by role R6): Approvals, the accountant console, or the console.
+  redirect(firstStepHref(role, slug));
 }

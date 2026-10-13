@@ -182,7 +182,7 @@ describe.each(TENANT_TABLES)("%s", (table) => {
   });
 
   it("cannot change or remove another organization's rows", async () => {
-    if (table === "ledger_entries" || table === "cycle_snapshots" || table === "service_purchases" || table === "decision_verdicts" || table === "payment_actuals" || table === "report_baselines" || table === "bank_statement_lines" || table === "receivable_allocations" || table === "deal_versions" || table === "customer_request_messages" || table === "approval_escalation_starts" || table === "collection_policies" || table === "collection_task_starts" || table === "usage_events" || table === "cash_scenario_versions" || table === "fx_rates" || table === "fx_variances") {
+    if (table === "ledger_entries" || table === "cycle_snapshots" || table === "service_purchases" || table === "decision_verdicts" || table === "payment_actuals" || table === "report_baselines" || table === "bank_statement_lines" || table === "receivable_allocations" || table === "deal_versions" || table === "customer_request_messages" || table === "approval_escalation_starts" || table === "collection_policies" || table === "collection_task_starts" || table === "usage_events" || table === "cash_scenario_versions" || table === "fx_rates" || table === "fx_variances" || table === "onboarding_marks") {
       // Append-only tables, and a workspace's escalation start (0108): the tenant role holds no UPDATE/DELETE privilege
       // at all, cross-org or not, so each statement is refused on its own —
       // the first failure would abort the transaction before the second ran.
@@ -225,7 +225,7 @@ describe.each(TENANT_TABLES)("%s", (table) => {
 });
 
 describe("history is append-only for the tenant role", () => {
-  it.each(["ledger_entries", "cycle_snapshots", "service_purchases", "decision_verdicts", "payment_actuals", "report_baselines", "bank_statement_lines", "receivable_allocations", "deal_versions", "customer_request_messages", "usage_events", "cash_scenario_versions", "fx_rates", "fx_variances"])("%s refuses UPDATE and DELETE even on the tenant's own rows", async (table) => {
+  it.each(["ledger_entries", "cycle_snapshots", "service_purchases", "decision_verdicts", "payment_actuals", "report_baselines", "bank_statement_lines", "receivable_allocations", "deal_versions", "customer_request_messages", "usage_events", "cash_scenario_versions", "fx_rates", "fx_variances", "onboarding_marks"])("%s refuses UPDATE and DELETE even on the tenant's own rows", async (table) => {
     await expect(asTenant(db, A, (tx) => tx.query(`update public.${table} set org_id = org_id`))).rejects.toThrow(/permission denied/);
     await expect(asTenant(db, A, (tx) => tx.query(`delete from public.${table}`))).rejects.toThrow(/permission denied/);
   });

@@ -57,6 +57,7 @@ export const TENANT_TABLES = [
   "usage_events",
   "collection_policies", "collection_tasks", "notification_deliveries", "collection_task_starts",
   "reporting_currencies", "cash_scenario_versions", "fx_rates", "fx_variances",
+  "onboarding_marks",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 

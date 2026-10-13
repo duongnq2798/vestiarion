@@ -110,6 +110,7 @@ export const TENANT_TABLES = [
   "usage_events",
   "collection_policies", "collection_tasks", "notification_deliveries", "collection_task_starts",
   "reporting_currencies", "cash_scenario_versions", "fx_rates", "fx_variances",
+  "onboarding_marks",
 ] as const;
 
 export interface SeededRows {
@@ -352,6 +353,8 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
        'ExchangeRate-API', '2026-10-12T00:02:00Z', 992.65, 7.35)`,
     [orgId, invoiceId, rateId]
   );
+  // A member's checklist mark: Approvals opened while a bill waited there (0114).
+  await db.query("insert into onboarding_marks (org_id, user_id, mark) values ($1, $2, 'approvals_opened')", [orgId, approver]);
   const key = crypto.generateKeyPairSync("ed25519");
   await appendSignedForOrg(db, orgId, { actor: "system", domain: "system", action: "note", summary: tag, detail: { tag } }, key.privateKey);
   return { counterpartyId, accountId, invoiceId, cycleRunId, idempotencyKey };

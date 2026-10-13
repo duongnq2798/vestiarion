@@ -48,6 +48,11 @@ export default function PrivacyPage() {
           <li>contractor milestones, with any GitHub pull request link used to verify one;</li>
           <li>the agent&apos;s settings and its treasury records;</li>
           <li>its members and their roles, and open invitations with the invited email addresses;</li>
+          <li>
+            for each member, the steps of their getting-started checklist that nothing else records, and when: that they opened Approvals or the
+            accountant console, kept the agent&apos;s limits as they were, or hid their checklist; these go with the workspace, and with the
+            member&apos;s account;
+          </li>
           <li>API keys and webhook endpoints;</li>
           <li>the ledger: every decision the agent makes, with its reasoning, signed with Ed25519 and chained by hash;</li>
           <li>
@@ -265,7 +270,9 @@ export default function PrivacyPage() {
             them nowhere.
           </li>
           <li>
-            <strong>GitHub</strong> is asked for a pull request&apos;s status when a milestone is verified by its link. For a workspace an owner or
+            <strong>GitHub</strong> is asked for a pull request&apos;s status when a milestone is verified by its link, and, when a page shows a pull
+            request or a comment on github.com given as evidence, whether it can still be opened: only its owner, repository and number go to
+            GitHub&apos;s API, with the workspace&apos;s own GitHub connection or Vestiarion&apos;s, never your sign-in. For a workspace an owner or
             admin connects to GitHub, it also receives a comment on the pull request a milestone was paid for: the amount, the network, the
             workspace&apos;s name and the transaction&apos;s link, never the payee&apos;s name. The app keeps the installation&apos;s id, its
             account&apos;s login and type, and whether it covers all repositories or selected ones; disconnecting GitHub deletes them, and the

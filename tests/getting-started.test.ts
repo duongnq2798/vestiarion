@@ -26,6 +26,8 @@ function input(overrides: Partial<GettingStartedInput> = {}): GettingStartedInpu
     onchainPayments: 0,
     waitingCount: 0,
     network: "arc-testnet",
+    // The limits kept, unless a test is about them: the other steps' order is what these tests read.
+    limits: { confirmed: true, dailyUsdc: null, weeklyUsdc: null },
     ...overrides,
   };
 }
@@ -34,23 +36,25 @@ const done = (result: ReturnType<typeof gettingStarted>) => Object.fromEntries(r
 const step = (result: ReturnType<typeof gettingStarted>, id: string) => result.steps.find((candidate) => candidate.id === id)!;
 
 describe("gettingStarted", () => {
-  it("lists the six steps to a first payment in order, none done, the wallet next, for a new workspace on Arc mainnet", () => {
-    const result = gettingStarted(input({ network: "arc-mainnet" }));
+  it("lists the steps to a first payment in order, the workspace done, the wallet next, for a new workspace on Arc mainnet", () => {
+    const result = gettingStarted(input({ network: "arc-mainnet", limits: null }));
     expect(result.show).toBe(true);
     expect(result.steps.map((each) => each.title)).toEqual([
+      "Create the workspace",
       "Add a wallet",
       "Fund it with USDC",
       "Go live",
       "Add a payee with an Arc address",
-      "Add a payable",
+      "Add or import a first bill",
+      "Set or confirm the limits",
       "First payment on Arc mainnet",
     ]);
-    expect(Object.values(done(result))).toEqual([false, false, false, false, false, false]);
+    expect(Object.values(done(result))).toEqual([true, false, false, false, false, false, false, false]);
     expect(result.next).toBe("wallet");
   });
 
   it("keeps that order on Arc testnet once the workspace has a wallet, or is live", () => {
-    const order = ["wallet", "fund", "live", "payee", "payable", "payment"];
+    const order = ["workspace", "wallet", "fund", "live", "payee", "payable", "limits", "payment"];
     expect(gettingStarted(input({ accounts: WALLET })).steps.map((each) => each.id)).toEqual(order);
     expect(gettingStarted(input({ mode: "live" })).steps.map((each) => each.id)).toEqual(order);
     expect(gettingStarted(input({ accounts: WALLET })).steps.every((each) => each.section === undefined)).toBe(true);
@@ -116,6 +120,7 @@ describe("gettingStarted", () => {
     const result = gettingStarted(input({ mode: "live", accounts: FUNDED, counterparties: [PAYEE] }));
     expect(result.next).toBe("payable");
     expect(step(result, "payable").body).toContain("PO reference");
+    expect(step(result, "payable").body).toContain("Import a list");
     expect(done(gettingStarted(input({ payableCount: 1 }))).payable).toBe(true);
   });
 
@@ -158,11 +163,13 @@ describe("gettingStarted", () => {
 
   it("links each step to the page where it is done", () => {
     expect(Object.fromEntries(gettingStarted(input({ accounts: WALLET })).steps.map((each) => [each.id, each.path]))).toEqual({
+      workspace: "/settings",
       wallet: "/settings#go-live-title",
       fund: "/settings#go-live-title",
       live: "/settings#go-live-title",
       payee: "/counterparties",
-      payable: "/invoices",
+      payable: "/invoices?new=bill",
+      limits: "/console#agent-budget",
       payment: "/invoices",
     });
   });
@@ -269,12 +276,14 @@ describe("gettingStarted in shadow mode", () => {
     expect(result.title).toBe("Get started in shadow mode");
     expect(result.guide).toBe("shadow-mode");
     expect(result.steps.map((each) => each.title)).toEqual([
+      "Create the workspace",
       "Add a wallet",
       "Fund it with USDC",
       "Go live",
       "Add your suppliers",
       "Add your real bills",
       "Give your first verdict",
+      "Set or confirm the limits",
     ]);
     expect(result.show).toBe(true);
     expect(result.next).toBe("fund");
@@ -316,8 +325,8 @@ describe("gettingStarted in shadow mode", () => {
   it("in a sandbox with no wallet, asks for suppliers, bills and the first verdict first, then the setup to pay on Arc", () => {
     const result = gettingStarted(input({ shadow: shadow() }));
     expect(result.title).toBe("Get started in shadow mode");
-    expect(result.steps.map((each) => each.id)).toEqual(["suppliers", "bills", "verdict", "wallet", "fund", "live"]);
-    expect(result.steps.map((each) => each.section)).toEqual([undefined, undefined, undefined, PAY_ON_ARC, PAY_ON_ARC, PAY_ON_ARC]);
+    expect(result.steps.map((each) => each.id)).toEqual(["workspace", "suppliers", "bills", "verdict", "limits", "wallet", "fund", "live"]);
+    expect(result.steps.map((each) => each.section)).toEqual([undefined, undefined, undefined, undefined, undefined, PAY_ON_ARC, PAY_ON_ARC, PAY_ON_ARC]);
     expect(result.next).toBe("suppliers");
     expect(result.guide).toBe("shadow-mode");
   });
@@ -342,15 +351,17 @@ describe("gettingStarted in a sandbox with no wallet: the first bill before the 
   it("asks for a supplier, a bill and the agent's decision first, then the wallet, USDC, going live and the first payment, to pay on Arc", () => {
     const result = gettingStarted(input());
     expect(result.steps.map((each) => each.title)).toEqual([
+      "Create the workspace",
       "Add a supplier",
-      "Add a bill",
+      "Add or import a first bill",
       "See the agent's decision",
+      "Set or confirm the limits",
       "Add a wallet",
       "Fund it with USDC",
       "Go live",
       "First payment on Arc testnet",
     ]);
-    expect(result.steps.map((each) => each.section)).toEqual([undefined, undefined, undefined, PAY_ON_ARC, PAY_ON_ARC, PAY_ON_ARC, PAY_ON_ARC]);
+    expect(result.steps.map((each) => each.section)).toEqual([undefined, undefined, undefined, undefined, undefined, PAY_ON_ARC, PAY_ON_ARC, PAY_ON_ARC, PAY_ON_ARC]);
     expect(result.next).toBe("payee");
     expect(result.guide).toBe("first-payment");
     expect(result.show).toBe(true);
@@ -360,7 +371,7 @@ describe("gettingStarted in a sandbox with no wallet: the first bill before the 
     const supplier = step(gettingStarted(input()), "payee");
     expect(supplier.title).not.toContain("Arc address");
     expect(supplier.body).toContain("Its Arc address can wait");
-    expect(supplier.path).toBe("/counterparties");
+    expect(supplier.path).toBe("/counterparties?add");
     expect(done(gettingStarted(input({ counterparties: [SUPPLIER] }))).payee).toBe(true);
     expect(done(gettingStarted(input({ counterparties: [{ ...SUPPLIER, role: "client" }] }))).payee).toBe(false);
     expect(done(gettingStarted(input({ counterparties: [{ ...SUPPLIER, sample: true }] }))).payee).toBe(false);
@@ -380,7 +391,7 @@ describe("gettingStarted in a sandbox with no wallet: the first bill before the 
   });
 
   it("keeps the order to a first payment on Arc mainnet, which never simulates", () => {
-    expect(gettingStarted(input({ network: "arc-mainnet" })).steps[0].id).toBe("wallet");
+    expect(gettingStarted(input({ network: "arc-mainnet" })).steps.map((each) => each.id).slice(0, 2)).toEqual(["workspace", "wallet"]);
   });
 });
 
@@ -408,5 +419,54 @@ describe("ownBillCount", () => {
       { counterparty_id: "c2", direction: "payable", status: "pending" },
     ];
     expect(ownBillCount(invoices, counterparties)).toBe(2);
+  });
+});
+
+describe("the owner's checklist by role (onboarding by role R1, R4, R5)", () => {
+  it("opens with the workspace created, done, and never offers it as a step to take", () => {
+    for (const variant of [input(), input({ accounts: WALLET }), input({ mode: "live" }), input({ shadow: { currency: "USDC", verdictsGiven: 0, billCount: 0 } })]) {
+      const first = gettingStarted(variant).steps[0];
+      expect(first).toMatchObject({ id: "workspace", title: "Create the workspace", done: true, needs: null });
+    }
+  });
+
+  it("asks for the limits after the agent's first decision, and ticks them once a person set or kept them", () => {
+    const decided = { counterparties: [{ name: "Northstar Studio", role: "vendor", address: null }], billCount: 1, decidedCount: 1 };
+    const open = gettingStarted(input({ ...decided, limits: { confirmed: false, dailyUsdc: 50, weeklyUsdc: 150 } }));
+    expect(open.next).toBe("limits");
+    expect(step(open, "limits")).toMatchObject({ path: "/console#agent-budget", needs: "agent.budget", done: false });
+    expect(step(open, "limits").body).toContain("at most 50.00 USDC a day and 150.00 USDC in 7 days");
+    expect(step(open, "limits").body).toContain("keep them as they are");
+    expect(gettingStarted(input({ ...decided, limits: { confirmed: true, dailyUsdc: 50, weeklyUsdc: 150 } })).next).toBe("wallet");
+  });
+
+  it("says when the agent has no spending limit, and that each supplier's payment limit still caps a bill", () => {
+    const body = step(gettingStarted(input({ limits: { confirmed: false, dailyUsdc: null, weeklyUsdc: null } })), "limits").body;
+    expect(body).toContain("no daily or 7-day spending limit");
+    expect(body).toContain("payment limit");
+    expect(step(gettingStarted(input({ limits: { confirmed: false, dailyUsdc: 20, weeklyUsdc: null } })), "limits").body).toContain("20.00 USDC a day, with no 7-day limit");
+    expect(step(gettingStarted(input({ limits: { confirmed: false, dailyUsdc: null, weeklyUsdc: 70 } })), "limits").body).toContain("70.00 USDC in 7 days, with no daily limit");
+  });
+
+  it("opens the bill form, or Import a list, for a first bill", () => {
+    const bill = step(gettingStarted(input({ counterparties: [{ name: "Northstar Studio", role: "vendor", address: null }] })), "payable");
+    expect(bill.title).toBe("Add or import a first bill");
+    expect(bill.path).toBe("/invoices?new=bill");
+    expect(bill.body).toContain("Import a list");
+  });
+
+  it("hides for good once dismissed, in every variant, whatever is left", () => {
+    for (const variant of [input(), input({ accounts: WALLET }), input({ mode: "live" }), input({ shadow: { currency: "USDC", verdictsGiven: 0, billCount: 0 } })]) {
+      expect(gettingStarted(variant).show).toBe(true);
+      expect(gettingStarted({ ...variant, dismissed: true }).show).toBe(false);
+    }
+  });
+
+  it("names the permission each step takes, and marks an owner's step as only an owner's", () => {
+    for (const variant of [input(), input({ accounts: WALLET }), input({ mode: "live", waitingCount: 1 }), input({ shadow: { currency: "EUR", verdictsGiven: 0, billCount: 0 } })]) {
+      for (const each of gettingStarted(variant).steps) {
+        expect(each.ownerOnly, each.id).toBe(each.needs === "org.administer");
+      }
+    }
   });
 });

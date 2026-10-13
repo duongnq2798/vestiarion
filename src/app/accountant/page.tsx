@@ -1,12 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { dismissChecklistAction } from "@/app/actions/onboarding";
 import { AccountantConsole } from "@/components/accountant/AccountantConsole";
 import { DocsLink } from "@/components/DocsLink";
 import { AccountMenu } from "@/components/vx/AccountMenu";
+import { ChecklistVisit } from "@/components/vx/ChecklistVisit";
+import { GettingStarted } from "@/components/vx/GettingStarted";
 import { SiteFooter, SiteHeader, SiteHeaderLink } from "@/components/vx/SiteChrome";
 import { readPortfolio } from "@/lib/accountant/read";
 import { triageFilter } from "@/lib/accountant/triage";
+import { membershipsOf } from "@/lib/auth/membership";
 import { verifySession } from "@/lib/auth/session";
+import { readAccountantOnboarding } from "@/lib/onboarding/accountant";
 
 export const dynamic = "force-dynamic";
 
@@ -17,12 +22,18 @@ export const metadata: Metadata = { title: "Accountant console", robots: { index
  * signed-in person is a member of, and one queue of what needs attention across them. The session is checked here, and
  * the workspaces are the person's own memberships, read afresh on this request; each workspace's items are read in its
  * own scope, as this person (`readPortfolio`). A workspace someone was removed from is gone on the next load.
+ *
+ * Someone who keeps the books of a workspace (the accountant role) also sees their checklist here, where an invitation
+ * lands them (onboarding by role R3, R6): this page open is its first step, read in each such workspace as them, and
+ * recorded there once the page is in the browser (`ChecklistVisit`), never while it renders. "Don't show again" records
+ * the dismissal in the workspace its steps open, and it stays dismissed here.
  */
 export default async function AccountantPage({ searchParams }: { searchParams: Promise<{ kind?: string | string[]; workspace?: string | string[]; mine?: string | string[] }> }) {
   const user = await verifySession("/accountant");
   const now = new Date();
-  const [portfolio, query] = await Promise.all([readPortfolio(user.id, now), searchParams]);
+  const [portfolio, query, memberships] = await Promise.all([readPortfolio(user.id, now), searchParams, membershipsOf(user.id)]);
   const filter = triageFilter(query);
+  const onboarding = await readAccountantOnboarding(user.id, memberships, portfolio, filter.workspace);
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -42,6 +53,15 @@ export default async function AccountantPage({ searchParams }: { searchParams: P
           </div>
           <DocsLink href="/docs/guides/accountants" topic="the accountant console" />
         </div>
+        {onboarding && (
+          <GettingStarted
+            slug={onboarding.slug}
+            checklist={onboarding.checklist}
+            isOwner={false}
+            dismiss={onboarding.canDismiss ? dismissChecklistAction : undefined}
+          />
+        )}
+        {onboarding && onboarding.unrecorded.length > 0 && <ChecklistVisit page="accountant" slugs={onboarding.unrecorded} queue={filter.workspace} />}
         <AccountantConsole portfolio={portfolio} now={now} filter={filter} />
         <p className="mt-10 text-xs text-ink-3">
           Only workspaces you are a member of are listed, read with your role in each. To be added to another, ask its owner or an admin to invite you

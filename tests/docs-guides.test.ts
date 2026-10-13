@@ -188,6 +188,8 @@ const EVIDENCE_VIEW = "src/components/vx/EvidenceChain.tsx";
 const EVIDENCE_PAGE = "src/app/o/[slug]/evidence/[kind]/[id]/page.tsx";
 const EVIDENCE_CHECK = "src/components/EvidenceBrowserCheck.tsx";
 const EVIDENCE_EXPORT = "src/lib/evidence-export.ts";
+const LINK_CHECK = "src/lib/evidence-links/check.ts";
+const ROLE_CHECKLISTS = "src/lib/onboarding/role-checklists.ts";
 const SHADOW_LIBRARY = "src/lib/shadow-mode.ts";
 const SHADOW_SUMMARY = "src/components/ShadowModeSummary.tsx";
 const TEST_USDC_CONTROL = "src/components/TestUsdcControl.tsx";
@@ -330,6 +332,12 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["collection_task_resolved", "src/lib/collection-context/tasks.ts"],
   ],
   "guides/accountants": [
+    ["Get started as an accountant", ROLE_CHECKLISTS],
+    ["Open the accountant console", ROLE_CHECKLISTS],
+    ["Open one workspace's queue", ROLE_CHECKLISTS],
+    ["Book one payment or apply one receipt", ROLE_CHECKLISTS],
+    ["Download the month's hand-off", ROLE_CHECKLISTS],
+    ["Don't show again", CHECKLIST],
     ["Accountant console", ACCOUNTANT_PAGE],
     ["Members", APP_NAV],
     ["Approvals", APP_NAV],
@@ -503,6 +511,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Go live", "src/components/vx/command-items.ts"],
   ],
   "guides/try-it": [
+    ["Create the workspace", GETTING_STARTED],
+    ["Set or confirm the limits", GETTING_STARTED],
     ["Continue with Google", LOGIN_PAGE],
     ["Work email", LOGIN_FORM],
     ["Email me a sign-in link", LOGIN_FORM],
@@ -592,7 +602,9 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   ],
   "guides/go-live": [
     ["Add a supplier", GETTING_STARTED],
-    ["Add a bill", GETTING_STARTED],
+    ["Add or import a first bill", GETTING_STARTED],
+    ["Create the workspace", GETTING_STARTED],
+    ["Set or confirm the limits", GETTING_STARTED],
     ["See the agent's decision", GETTING_STARTED],
     ["To pay on Arc", GETTING_STARTED],
     ["Circle shows it stuck.", "src/lib/agent-activity.ts"],
@@ -1035,6 +1047,17 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["The agent pays it once a person agrees, in shadow mode", REPLAY_READ],
   ],
   "guides/first-payment": [
+    ["Create the workspace", GETTING_STARTED],
+    ["Add or import a first bill", GETTING_STARTED],
+    ["Set or confirm the limits", GETTING_STARTED],
+    ["Keep these limits", CHECKLIST],
+    ["Don't show again", CHECKLIST],
+    ["Get started as an approver", ROLE_CHECKLISTS],
+    ["Open Approvals", ROLE_CHECKLISTS],
+    ["Read why a bill is held", ROLE_CHECKLISTS],
+    ["Decide it, or send it back", ROLE_CHECKLISTS],
+    ["Get started as an accountant", ROLE_CHECKLISTS],
+    ["An owner of this workspace does this step.", CHECKLIST],
     ["Why it was paid", EVIDENCE_PATHS],
     ["Evidence so far", EVIDENCE_PATHS],
     ["The whole chain, from purchase order to receipt", EVIDENCE_PATHS],
@@ -2150,6 +2173,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["cash_scenario_saved", "src/lib/scenario-versions.ts"],
   ],
   "guides/shadow-mode": [
+    ["Set or confirm the limits", GETTING_STARTED],
     ["Run alongside how you pay today (shadow mode)", CREATE_FORM],
     ["Try it on your bills", "src/components/landing/cta.ts"],
     ["Your workspace is ready, but shadow mode did not turn on.", "src/app/o/[slug]/console/page.tsx"],
@@ -2281,7 +2305,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["A member or the payee entered it. The page names who, and when.", EVIDENCE_CHAIN],
     ["Read, not recorded: the model's judgement, sample data, or a setting as it is today.", EVIDENCE_CHAIN],
     ["Nothing records it. Where it can still be added, the page says how.", EVIDENCE_CHAIN],
-    ["A check got no answer, or a link was revoked: it never counts as verified.", EVIDENCE_CHAIN],
+    ["A check got no answer, or a link can't be opened (deleted, private, refused or expired): it never counts as verified.", EVIDENCE_CHAIN],
     ["A check answered, and its answer contradicts the record.", EVIDENCE_CHAIN],
     ["What was agreed", EVIDENCE_CHAIN],
     ["What was delivered", EVIDENCE_CHAIN],
@@ -2296,8 +2320,12 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["a former member", EVIDENCE_CHAIN],
     ["the payee", EVIDENCE_CHAIN],
     ["How the agent decided, step by step", EVIDENCE_VIEW],
-    ["Not opened by Vestiarion", EVIDENCE_VIEW],
+    ["Not checked by Vestiarion", EVIDENCE_VIEW],
     ["Checked by Vestiarion", EVIDENCE_VIEW],
+    ["Can't be opened", EVIDENCE_VIEW],
+    ["Its link can't be opened, so it is not counted as verified.", EVIDENCE_CHAIN],
+    ["GitHub does not show it publicly: it was deleted, or its repository is private.", LINK_CHECK],
+    ["Verified by", "src/components/vx/map.ts"],
     ["A person marks them received with Add details on Bills & receivables.", EVIDENCE_CHAIN],
     ["A signed entry proves who recorded what, and when. It does not prove the goods were good or the work was done.", EVIDENCE_CHAIN],
     ["Checked again in your browser", EVIDENCE_CHECK],

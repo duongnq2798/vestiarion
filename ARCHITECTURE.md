@@ -127,7 +127,9 @@ sends the link through Resend; without it, `inviteMemberAction` returns the link
 share directly, shown once. Opening `/invite/<token>` (`src/app/invite/[token]/page.tsx`) has no
 side effect — it only previews the invitation; accepting is a separate submit (`accept_invitation`)
 that requires signing in with the invited address first, and fails with `invitation_email_mismatch`
-otherwise. The members page (`/o/[slug]/members`) lists members and open invitations through
+otherwise. Once accepted, the person lands on their role's first step (`firstStepHref`, see
+[Onboarding by role](#onboarding-by-role)): an approver on Approvals, an accountant on `/accountant`, anyone else on the
+console. The members page (`/o/[slug]/members`) lists members and open invitations through
 `org_members`, and lets `owner`/`admin` change a role, revoke an invitation, or remove a member; any
 member can leave. Both go through `remove_member_revoking_keys` (migration `0069`), which calls
 `remove_member` (`p_actor = p_user_id` to leave) and, in the same transaction, revokes the API keys
@@ -877,7 +879,8 @@ disagrees with every decision.
   before them, which are then listed under "To pay on Arc", in an Arc testnet sandbox with no wallet, since it simulates
   its payments. Outside shadow mode such a sandbox likewise starts with a supplier, a bill and the agent's decision
   (`ownDecidedCount`). It hides once every step is done. In shadow mode, Add counterparty asks whether a vendor or
-  contractor sends purchase orders, and its answer is stored as `purchase_order_required` with the row.
+  contractor sends purchase orders, and its answer is stored as `purchase_order_required` with the row. Every variant
+  also opens with the workspace created and asks for the agent's limits (see [Onboarding by role](#onboarding-by-role)).
 - **Test USDC from Vestiarion's float** (`src/lib/test-usdc.ts`, rules in `src/lib/test-usdc-rules.ts`). A bill is
   paid at its real amount and the faucet gives 20 USDC every two hours, so the console offers an owner or admin the
   shortfall **Safe to spend today** shows, from one float wallet in the hosted entity (`SHADOW_FLOAT_WALLET_ID`, filled
@@ -1276,7 +1279,10 @@ does the decision trail's last line.
   entries, the intent, the receipt and its entries (by its seq and by `receiptId`), and the members, best effort.
 - **Checks.** Each entry alone with `verifyEntry` (`src/lib/receipts/verify.ts`) on the server, and again in the
   reader's browser (`EvidenceBrowserCheck`); the transaction with `readOnChain` against the chain's public RPC. A URL a
-  person or a payee typed is shown, marked not opened, and never fetched. `intentFacts` and `recordingEntry`
+  person, a payee or GitHub gave (`EvidenceLink.given`: a pull request, a bounty's comment, a hand verification's
+  evidence) is never fetched by its own address: `readEvidence` builds the chain once, takes its given links
+  (`givenLinks`), checks them on the allow-list (see [Evidence links people can open](#evidence-links-people-can-open)) and
+  builds it again with `checks.links`, so a link that can't be opened is never counted as verified. `intentFacts` and `recordingEntry`
   (`src/lib/receipts/facts.ts`) are shared with the payment receipts, so both read the same transaction and the same
   recording entry, and the receipt's named entry is matched with `recordsTransaction`, as the public receipt page
   matches it: the payee's transaction or a CCTP payout's burn. `decisionChecks` is shared with the decision trail.
@@ -2400,6 +2406,65 @@ answers in the notes. A dedupe key already taken is skipped, as in an import, an
 When `GROWTH_INBOUND_NOTIFY_EMAIL` is set, the team gets a short note through `sendEmail` about a new lead (never the
 message); nothing is ever sent to the person who asked. The approval queue's card shows an inbound lead's contact,
 site, notes and source detail.
+
+## Onboarding by role
+
+`docs/superpowers/specs/2026-10-13-role-onboarding-evidence-access-design.md` (R1 to R6). Each member's first real task
+as a short checklist, ticked from what happened, rendered by one component (`GettingStarted`,
+`src/components/vx/GettingStarted.tsx`):
+
+- **Whose.** `checklistRoleOf` (`src/lib/onboarding/role-checklists.ts`): an owner and an admin follow the owner's, the
+  console's Get started (`gettingStarted`, which now opens with the workspace created and asks to set or confirm the
+  limits before the first payment); an approver an approver's (`approverChecklist`), on the console and on Approvals; an
+  accountant an accountant's (`accountantChecklist`), on `/accountant`; a viewer none.
+- **Ticked from data.** The owner's from the rows the console reads, plus the limits: a person's `agent_budget_changed`
+  or `approval_policy_changed` (`readLimitsSet`), or a `limits_confirmed` mark from Keep these limits
+  (`confirmLimitsAction`, `agent.budget`). An approver's and an accountant's from the person's own signed acts
+  (`readPersonActs`: `detail.by` the person, actor human: decisions, `accounting_payment_approved`,
+  `ar_payment_applied`, `handoff_exported`) and from marks for what leaves no row: Approvals opened, a held bill's
+  reasons seen there, the accountant console opened, one workspace's queue opened. A page only reads them while it
+  renders, and ticks this visit's steps itself; while a mark is missing it renders `ChecklistVisit`
+  (`src/components/vx/ChecklistVisit.tsx`), which sends `recordApprovalsVisitAction` or `recordAccountantVisitAction`
+  once the page is in the browser (Next.js forbids a mutation during rendering, and a prefetch could tick a step for a
+  page nobody opened). Each action is gated as every action is (`authorize`, then `inOrg`), checks the role again, and
+  reads whether a bill waits on the server (`billWaitingOnApprovals`). `/accountant` reads the marks in each workspace
+  where the person is an accountant, through `withOrg(orgId, ..., { userId })`, never across tenants
+  (`readAccountantOnboarding`), and has the visit recorded in each of those still missing it, one action per workspace.
+- **Marks** (`src/lib/onboarding/read.ts`, migration `0114`): `onboarding_marks (org_id, user_id, mark)`, one row each,
+  under the two tenant policies, select and insert only for the tenant role, cascading with the workspace and the
+  account. Before `0114` runs, reads answer `available: false` (42P01, PGRST205, 42703), nothing is recorded, and the
+  pages offer neither Don't show again nor Keep these limits.
+- **Dismissed for good.** `dismissChecklistAction` (`workspace.read`) records `dismissed_<role>` only for the checklist
+  the person's own role sees. The accountant's is dismissed in the workspace its steps open, and stays dismissed on the
+  console once any of the person's workspaces holds the mark.
+- **Never more than the role may do.** Each step carries `needs`, the permission it takes; `tests/role-checklists.test.ts`
+  checks every variant of every role's checklist against `PERMISSIONS`, an admin's owner-only steps shown as an owner's.
+- **Landing.** Accepting an invitation redirects to `firstStepHref(role, slug)`.
+
+## Evidence links people can open
+
+`docs/superpowers/specs/2026-10-13-role-onboarding-evidence-access-design.md` (E1 to E4); `src/lib/evidence-links/`.
+
+- **The allow-list** (`allow-list.ts`, pure). `checkTargetOf` takes a pull request or a comment on `github.com`, and a
+  signed link (`/storage/v1/object/sign/...?token=`) to the workspace's own Supabase (`storageHostOf`, https and a public
+  name only), and builds the request address itself: GitHub's API from the link's owner, repository and number. Anything
+  else is `notChecked` with its reason: another scheme, credentials, a port, an IP literal in any notation, a local name,
+  another host, another path. `requestAllowed` checks every address again before a request, a redirect's included.
+- **The check** (`check.ts`). `checkEvidenceLinks(hrefs)` answers `open` (public, or a private repository the
+  workspace's own connection reads), `cannot_open` (with the reason: deleted, private and not the workspace's, refused,
+  expired), `not_checked` or `no_answer`. Each host is resolved and the request dropped unless every
+  address is public (`isPublicAddress`, as webhooks use it); `redirect: "manual"`, five seconds, at most one redirect and
+  only GitHub's API to itself; at most 25 links a call. GitHub is asked with the workspace's own connection
+  (`pullRequestTokens`), else the deployment's `GITHUB_TOKEN`, sent to `api.github.com` only; a private repository seen
+  only through the deployment's token, or a 403 to that token, answers as not public, as a deleted one does, after as
+  many requests (a comment's repository is asked first) and kept as long. A signed link's expiry is read from
+  its token first; storage is asked for one byte with the link's own signature only. Results are kept in memory per
+  workspace and link (five minutes open, two can't be opened, thirty seconds no answer, 500 at most); nothing is stored,
+  and no link is logged.
+- **Where.** The evidence page and its download (`readEvidence`), and the Contractors cards (`milestoneDecision`'s
+  `links`, checked on the page, open milestones first): a link that can't be opened is shown without an anchor, with the
+  reason, and its fact reads Could not open; a link not checked is shown as given, `rel="noreferrer nofollow ugc"`. Bills'
+  documents and deal costs' documents are never kept, and a receipt's link is never stored, so nothing there is offered.
 
 ## The accountant console
 
