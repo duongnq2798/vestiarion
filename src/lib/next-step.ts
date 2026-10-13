@@ -143,6 +143,20 @@ export function ruleNextStep(rule: string | null | undefined, counterparty: { id
       };
     case "workspace.onchain_limit_route":
       return { sentence: "The spending-limit contract carries only USDC paid on Arc. Pay it in Approvals.", fix: null };
+    case "project.budget_exceeded":
+      // A project's budget is an earmark in Vestiarion, never money locked on chain (project budgets P5): a person decides.
+      return {
+        sentence:
+          "Its project's budget has no room left to set it aside. Pay it in Approvals if it is owed anyway, move it to another project, or raise the project's budget; the agent decides it again on its own once the project has room.",
+        fix: { label: "Projects", path: "/projects" },
+      };
+    case "obligation.duplicate_reference":
+      // A bill and a milestone for the same purchase order or delivered work (project budgets P9): the second waits.
+      return {
+        sentence:
+          "It names the same purchase order or delivered work as an earlier milestone or bill, so paying both could pay the work twice. Pay it in Approvals if both are owed, or reject it.",
+        fix: null,
+      };
     case "bridge.fee_above_cap":
       return { sentence: "The payout fee is above 10% of the invoice, more than the agent pays. Pay it with the fee in Approvals, or reject it.", fix: null };
     case "bridge.fee_unavailable":
@@ -184,6 +198,8 @@ export function agentResumes(rule: string | null | undefined): string | null {
       return "The agent decides it again on its own if an owner raises the figure for two approvals to its amount or more, or turns it off.";
     case CASH_SHORTFALL:
       return "The agent decides it again on its own once cash comes in: USDC added to the operating wallet, or brought back from the reserve.";
+    case "project.budget_exceeded":
+      return "The agent decides it again on its own once its project has room: money set aside for another bill released, or the budget raised by an owner or admin.";
     default:
       return null;
   }
@@ -220,6 +236,10 @@ export function ruleInBrief(rule: string | null | undefined): string | null {
       return "the spending-limit contract on Arc would refuse it";
     case "workspace.onchain_limit_route":
       return "the spending-limit contract carries only USDC on Arc";
+    case "project.budget_exceeded":
+      return "its project's budget has no room left for it";
+    case "obligation.duplicate_reference":
+      return "it names the same purchase order or work as an earlier bill or milestone";
     case "bridge.fee_above_cap":
       return "the payout fee is above 10% of the invoice";
     case "bridge.fee_unavailable":

@@ -1,0 +1,87 @@
+When one treasury pays for several jobs, clients or launches, the same balance gets promised to several places at once. A project gives one of them its own budget in USDC. You put its bills, milestones and deals in it; the agent sets each bill's money aside in the project before it pays or schedules it, and holds for a person a bill the project's budget cannot cover. Two decisions made at the same moment never set aside the same money. It works the same in a workspace on Arc testnet and on Arc mainnet.
+
+<Callout kind="important" title="A budget is an earmark, not a lock">
+A project's budget lives in Vestiarion. Nothing is moved, locked or held on chain for it: the treasury stays one pool of cash, the spending limit on Arc still counts only the workspace's daily and 7-day figures, and every payment still needs its cash when it is sent. A bill a project can cover still waits when the cash is not there, exactly as before.
+</Callout>
+
+## Before you start
+
+- **An owner or admin** makes a project and changes its budget, as for the agent's spending limit. Anyone who adds bills puts a bill, a milestone or a deal in a project. Every member reads projects; anyone else sees "Only an owner or admin of this workspace can make a project or change its budget."
+- **Projects are set up on your deployment.** Until they are, **Projects** says "Projects are not set up on this deployment yet." and nothing else changes.
+
+## 1. Make a project
+
+Open **Projects**, choose **New project**, and fill in:
+
+- **Name**: what the project is called, such as Website rebuild for Acme. Two active projects never share a name.
+- **Budget (USDC)**: what the project may spend, bills and milestones together.
+- **Buffer (USDC)**, optional: "Part of the budget the agent keeps back: a bill that would reach into it waits for a person." A 12,000.00 USDC budget with a 500.00 USDC buffer lets the agent set aside 11,500.00 USDC on its own.
+
+Then choose **Make project**. Its page opens.
+
+## 2. Put bills, milestones and deals in it
+
+- **As you add them.** **Bill to pay** under **New** on **Bills & receivables**, and **Add milestone** on **Contractors**, have a **Project** field once the workspace has a project: "Its money is set aside in the project's budget as it is added." Choose **No project** to leave one out.
+- **From the project's page.** Under **Add to this project**, choose an open bill in USDC, a milestone or a deal in no project, in **Put in this project**, then **Add to project**. **Take out** takes one out again, and releases what was set aside for it.
+
+A bill or milestone put in a project has its money set aside at once when the budget holds it, as its full amount to the cent above. When it does not, nothing is set aside, the page says so, and the agent holds the bill for a person when it comes to pay it. A project counts bills in USDC; a bill in EURC stays out, with "A project counts bills in USDC; this bill is in another currency." A bill that is paid, or being paid, keeps its project.
+
+A deal in a project brings what it collected: money that arrived on Arc for its invoices, counted as on the deal's own page. A deal in another currency is counted apart, never added to the budget's USDC.
+
+## 3. Read a project
+
+Each project's page, and its card on **Projects**, shows:
+
+- **Budget**, and what of it is kept back as a buffer.
+- **Set aside**: money set aside for open bills and milestones, not paid yet.
+- **Paid**: its bills, at what their transfer carried after any discount, and its milestones.
+- **Available**: the budget, less the buffer, less what is set aside and paid. A project over its budget, after a person paid past it, says how far over, and the agent sets nothing more aside in it.
+- **Commitments covered**: the share of its open bills and milestones, by amount, that has its money set aside. **Not set aside** is the rest: bills and milestones waiting for room.
+- **Held for its budget**: payments the agent held for this project's budget that still wait for a person, with how many it held in the last 30 days.
+- **Collected**: what its deals collected.
+
+Under **Bills and milestones**, each one says **Set aside**, **Not set aside**, **Paid** or **Closed**, and why it waits when the agent held it.
+
+**Next 14 days** lists the project's own lines of the payment plan: when each bill leaves, in the cash's order. The days and balances are the whole treasury's, since every project pays from one pool; **The whole payment plan** opens the plan on **Bills & receivables**. See [Plan the next two weeks of payments](/docs/guides/payment-plan).
+
+**Treasury for this project** puts the project beside the one pool it shares: the cash in the treasury, what every project has set aside (**Set aside, every project**), this project's share, and what it pays in the next 14 days as planned. On **Treasury**, **Projects** lists each active project's money set aside and what it has left.
+
+## 4. When the agent holds a bill for its project
+
+Before the agent pays or schedules a bill or a milestone in a project, it asks the database to set the money aside. The database does it under a lock on the project, one decision at a time, and refuses when the budget less its buffer, less what is set aside and paid, cannot hold the full amount. Then the bill is held for a person, and its card says why with the project's own figures, for example: project "Website rebuild" has 150.00 USDC of its 1,000.00 USDC budget left to set aside after its 100.00 USDC buffer, less than the 300.00 USDC this needs. The rule is named `project.budget_exceeded` in the ledger.
+
+This check runs after every other check in code, and only holds: a bill another check stopped is left as it was, and a bill in no project is never asked about. So putting bills in projects never makes the agent pay anything it would not have paid before. See [How payments are controlled](/docs/guides/controls).
+
+What you can do:
+
+- **Pay it anyway**, with **Approve and pay** in **Approvals**, or **Pay now** for a milestone. A person's payment is not held by a project's budget, and counts as paid in it.
+- **Raise the budget, or lower the buffer**, with **Change budget** on the project's page. What is already set aside stays.
+- **Move it** to another project, or take it out.
+
+The agent decides it again on its own once the project has room: money set aside for another bill released, the budget raised or the buffer lowered.
+
+## 5. When money is released
+
+What is set aside for a bill or milestone is released, in the same step that changes it, when:
+
+- it is **paid**: the money moves from set aside to paid, counted once;
+- the bill is **rejected**, or the milestone **closed** without paying;
+- its amount **changes**: the agent sets the new amount aside when it next decides it;
+- it **moves** to another project, or out of one.
+
+## The same work billed twice
+
+A purchase order or a piece of delivered work is one obligation. When a bill and a milestone name the same one, paying both would pay it twice, so the second of the two waits for a person:
+
+- **The same purchase order, for the same payee.** **Add milestone** takes a **PO reference**: "A bill for the same purchase order waits for a person, so the work is not paid twice." A bill with the same **PO reference** for that contractor, entered after the milestone, is held; so is a milestone entered after such a bill.
+- **The same delivered work.** A bill whose memo links the work a milestone was verified by, such as the same pull request, is held, whoever sent it.
+
+The first of the two goes as usual. The second's card says it repeats the first and names it; the ledger names the rule `obligation.duplicate_reference`. When both are owed, a person pays the second with **Approve and pay**, or **Pay now** on a milestone; otherwise reject it, or close the milestone without paying. A rejected bill or a closed milestone is no obligation, and holds nothing.
+
+## Archive a project
+
+When its work is done, **Archive project** on its page takes it off the list of projects to choose from. A project with open bills or milestones is not archived: "This project still has open bills or milestones. Pay, reject or move them before archiving it." **Reopen project** brings it back.
+
+## The record
+
+Making a project, changing it, and putting a bill, a milestone or a deal in one are signed entries in the workspace's ledger: `project_created`, `project_changed` and `project_assigned`, the last with what was set aside. The agent's decision on a bill in a project records the project's figures it was weighed against. See [Changes for integrators](/docs/changelog).

@@ -115,7 +115,11 @@ export type ApGuardrailRule =
   | typeof TWO_APPROVALS_RULE
   | "workspace.outflow_budget"
   | "workspace.onchain_limit_route"
-  | "workspace.onchain_limit";
+  | "workspace.onchain_limit"
+  // After every check above, for a payment they let through (./obligation-checks.ts): the same work billed as a bill
+  // and a milestone, and a project whose budget cannot hold it.
+  | "obligation.duplicate_reference"
+  | "project.budget_exceeded";
 
 export { BRIDGE_FEE_CAP_PERCENT };
 

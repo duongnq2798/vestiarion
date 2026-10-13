@@ -40,6 +40,7 @@ import { paidAcrossChains } from "@/lib/payee-chains";
 import { networkProfile } from "@/lib/network";
 import { DocsLink } from "@/components/DocsLink";
 import { shellStatus } from "@/lib/shell-status";
+import { readProjectOptions } from "@/lib/projects/read";
 
 export const dynamic = "force-dynamic";
 
@@ -108,6 +109,8 @@ export default async function ContractorsPage({ params, searchParams }: { params
       .filter((counterparty) => counterparty.role !== "client")
       .sort((a, b) => Number(b.role === "contractor") - Number(a.role === "contractor"))
       .map(({ id, name, role }) => ({ id, name, role }));
+    // The projects a new milestone may go in, and whether milestones take a purchase order yet (project budgets P3, P9).
+    const projectOptions = canWrite ? await readProjectOptions() : null;
 
     // Under a milestone's card once its row is opened: its verification, and its escrow hold.
     const controls = (milestone: MilestoneRow) => (
@@ -281,7 +284,7 @@ export default async function ContractorsPage({ params, searchParams }: { params
               </TabsContent>
               <TabsContent value="milestone" forceMount className="data-[state=inactive]:hidden">
                 <p className="mb-4 text-[0.8125rem] text-ink-3">Work a contractor on file is paid for once it is verified.</p>
-                <MilestoneIntake orgSlug={slug} contractors={payees} />
+                <MilestoneIntake orgSlug={slug} contractors={payees} projects={projectOptions} />
               </TabsContent>
             </Tabs>
           </IntakeFold>

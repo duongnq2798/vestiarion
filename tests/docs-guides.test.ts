@@ -26,6 +26,7 @@ type GuideSlug =
   | "guides/import-bills"
   | "guides/payment-plan"
   | "guides/deals"
+  | "guides/projects"
   | "guides/pay-a-contractor"
   | "guides/get-paid"
   | "guides/telegram"
@@ -250,6 +251,11 @@ const INVOICES_PAGE_SOURCE = "src/app/o/[slug]/invoices/page.tsx";
 /** Bills & receivables' tabs (docs/superpowers/specs/2026-10-12-bills-tabs-design.md): the list, New ▾, the filters, a row's words. */
 const BILLS_LIST = "src/components/bills/BillsList.tsx";
 const NEW_MENU = "src/components/bills/new-items.ts";
+const PROJECT_FORMS = "src/components/projects/ProjectForms.tsx";
+const PROJECT_VIEWS = "src/components/projects/ProjectViews.tsx";
+const PROJECT_PAGE = "src/app/o/[slug]/projects/[id]/page.tsx";
+const PROJECTS_PAGE = "src/app/o/[slug]/projects/page.tsx";
+const PROJECT_WRITE = "src/lib/projects/write.ts";
 const BILLS_VIEW = "src/lib/bills-view.ts";
 const BILLS_SUMMARY = "src/components/bills/BillsSummary.tsx";
 const BILL_NEXT_STEP = "src/components/vx/bill-next-step.ts";
@@ -628,6 +634,49 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["refused the transfer. Your USDC did not leave your wallet.", "src/lib/inbound-usdc.ts"],
     ["Your wallet holds no ETH on Base to pay its gas. Add a little ETH there, then choose Review again.", "src/lib/inbound-usdc.ts", " to pay its gas. Add a little "],
     ["Your wallet does not hold enough ETH on Base for the gas. Add a little ETH there, then send again.", "src/lib/inbound-usdc.ts", " for the gas. Add a little "],
+  ],
+  // Projects, their budgets and the money set aside for each (project budgets P1-P9).
+  "guides/projects": [
+    ["Projects", APP_NAV],
+    ["New project", PROJECTS_PAGE],
+    ["Only an owner or admin of this workspace can make a project or change its budget.", PROJECTS_PAGE],
+    ["Projects are not set up on this deployment yet.", PROJECTS_PAGE],
+    ["Budget (USDC)", PROJECT_FORMS],
+    ["Buffer (USDC)", PROJECT_FORMS],
+    ["Part of the budget the agent keeps back: a bill that would reach into it waits for a person.", PROJECT_FORMS],
+    ["Make project", PROJECT_FORMS],
+    ["Bill to pay", NEW_MENU],
+    ["Add milestone", "src/components/intake/MilestoneIntake.tsx"],
+    ["Its money is set aside in the project's budget as it is added.", "src/components/projects/ProjectSelectField.tsx"],
+    ["No project", "src/components/projects/ProjectSelectField.tsx"],
+    ["Add to this project", PROJECT_PAGE],
+    ["Put in this project", PROJECT_FORMS],
+    ["Add to project", PROJECT_FORMS],
+    ["Take out", PROJECT_FORMS],
+    ["A project counts bills in USDC; this bill is in another currency.", PROJECT_WRITE],
+    ["Set aside", PROJECT_VIEWS],
+    ["Available", PROJECT_VIEWS],
+    ["Commitments covered", PROJECT_VIEWS],
+    ["Not set aside", PROJECT_VIEWS],
+    ["Held for its budget", PROJECT_VIEWS],
+    ["Collected", PROJECT_VIEWS],
+    ["Bills and milestones", PROJECT_PAGE],
+    ["Next 14 days", PROJECT_PAGE],
+    ["The whole payment plan", PROJECT_VIEWS],
+    ["Treasury for this project", PROJECT_VIEWS],
+    ["Set aside, every project", PROJECT_VIEWS],
+    ["Change budget", PROJECT_PAGE],
+    ["Approve and pay", APPROVAL_CARD],
+    ["PO reference", "src/components/intake/MilestoneIntake.tsx"],
+    ["A bill for the same purchase order waits for a person, so the work is not paid twice.", "src/components/intake/MilestoneIntake.tsx"],
+    ["Archive project", PROJECT_FORMS],
+    ["Reopen project", PROJECT_FORMS],
+    ["This project still has open bills or milestones. Pay, reject or move them before archiving it.", PROJECT_WRITE],
+    ["project.budget_exceeded", "src/lib/agent/obligation-checks.ts"],
+    ["obligation.duplicate_reference", "src/lib/projects/same-work.ts"],
+    ["project_created", "src/lib/projects/model.ts"],
+    ["project_changed", "src/lib/projects/model.ts"],
+    ["project_assigned", "src/lib/projects/model.ts"],
   ],
   // Deals on Bills & receivables (deal schedule design D1-D16).
   "guides/deals": [
@@ -2165,6 +2214,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/import-bills": 20,
   "guides/payment-plan": 20,
   "guides/deals": 20,
+  "guides/projects": 20,
   "guides/pay-a-contractor": 20,
   "guides/get-paid": 20,
   "guides/telegram": 20,

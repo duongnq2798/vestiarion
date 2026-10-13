@@ -1120,6 +1120,75 @@ add up to the total exactly.
   (`tests/deal-cash.test.ts`). Before 0108 runs the reads answer not set up (`costsNotReady`): the page says so and the
   margin says not enough data.
 
+## Projects: budgets and the money set aside
+
+A project (`docs/superpowers/specs/2026-10-13-project-budgets-design.md`) gives a job, a client or a launch its own budget
+in USDC, so several projects sharing one treasury never promise the same balance twice. It is an earmark in the
+application: nothing is escrowed or locked on chain, the treasury stays one pool, the spending limit contract on Arc still
+enforces only the workspace-wide caps, and every payment still needs its cash when it is sent.
+
+- **Migration 0111.** `projects` (a name, `budget_minor` and `buffer_minor` in USDC cents, the buffer within the
+  budget, `active` or `archived`, one active name per workspace, once per `idempotency_key`) and
+  `project_reservations` are tenant tables with row level security as 0108 and every foreign key composite with
+  `org_id`. `invoices.project_id`, `milestones.project_id` and `deals.project_id` say what belongs to a project
+  (`on delete set null`); `project_assignment_check` takes a payable in USDC or a milestone into an active project only,
+  never a receivable, and keeps the project of a bill `paid`, `matched` or `processing`, or of a paid milestone.
+  `milestones.po_reference` holds the purchase order a milestone was agreed under. The tenant role reads and adds
+  projects and changes only their name, figures and status (column grants; `projects_guard` keeps the rest, and refuses
+  archiving while anything open is left in it), may set `deals.project_id` alone, and reads and adds reservations and
+  sets only their release.
+- **A reservation never spends the same money twice.** `reserve_project_budget(p_org_id, p_invoice_id, p_milestone_id,
+  p_via, p_by)` (invoker rights, for the tenant role) locks the bill or milestone (`for update`), then the project's row,
+  counts what is reserved and paid in one statement (one snapshot, so a bill being paid counts once, as reserved or as
+  paid), and sets the amount aside, to the cent above (`project_minor`), only when the budget less its buffer holds it;
+  it answers `reserved` (with `already`), `over`, `archived`, `settled`, `no_project` or `not_found`, with the
+  figures it weighed. `project_reservations_within_budget`, before every insert however it is made, takes the same lock
+  and refuses a reservation past the budget (`project_budget_exceeded`) or for a bill or milestone not open in the
+  project at that amount; a partial unique index keeps one live reservation per bill and per milestone. Two decisions at
+  once therefore wait on the project's row, one after the other: `npm run fixture:project-budget` shows it on a real
+  Postgres with ten concurrent transactions (exactly the reservations the budget holds go through, and the same race
+  with no lock overspends), which a single-connection test database cannot.
+- **Released with what changes it.** `project_reservations_release`, after an update of a bill's status, amount,
+  currency or project, or a milestone's status, amount or project, releases its live reservation in the same
+  transaction, with its reason: `paid` (its money now counts as paid: a bill at `paid_amount` when its transfer carried
+  a discount), `rejected`, `closed`, `changed` or `moved`. `project_reservations_guard` keeps a reservation's terms and
+  a release once made. `project_figures(p_org_id)` gives each project's reserved, paid and open money, and what of it is
+  not set aside, as the reservation counts it.
+- **The agent's side** (`src/lib/agent/obligation-checks.ts`, `obligation-gate.ts`). After `enforceApGuardrails` in the
+  AP stage, and after the release's own checks in the contractor stage, two checks run for a payment or a schedule the
+  others let through, and only hold (`afterGuardrails`: a payment another check stopped is returned as it was, and
+  `tests/obligation-checks.test.ts` holds that over every guardrail's trigger). `obligation.duplicate_reference` holds
+  the second of a bill and a milestone for the same purchase order and payee, or the same delivered work
+  (`sameWorkMatches`, `src/lib/projects/same-work.ts`: the milestones a bill may repeat, or the bills a milestone may,
+  read once per stage). `project.budget_exceeded` then reserves the bill's or milestone's money through the function,
+  and holds it with the project's figures when the answer is `over` (`execution.heldBecause: "project_budget"`) or
+  `archived`, or when the call failed (`observed.project.state: "unreadable"`). A bill or milestone in no project is
+  never asked about, and a read before 0111 sees no `project_id`. The reservation is made before the shadow mode hold,
+  the cash check and the transfer: a bill the budget holds still waits for cash exactly as before, and a hold (the
+  model's, or for cash) reserves nothing. The entry records `observed.projectId`, `observed.project` and
+  `observed.sameWork`. The follow-up reopens a payment held for its project once `projectRoomsFor` (`src/lib/projects/
+  rooms.ts`) says the project has room for it, or it left the project (`projectRoomChange`). Policy replay runs both
+  checks last (`BILL_STAGES`, `MILESTONE_STAGES`): the same work fires from the recorded matches; a project's budget,
+  read at the moment of the decision, is can't tell for a bill in a project and passes for one in none.
+- **A person's side.** Approve and pay, Pay now, Reject and Close work as before: a person's payment is not held by a
+  project's budget, counts as paid in it, and releases its reservation through the trigger; so does a rejection.
+- **Commands.** `project.create` and `project.change` (`addProject`, `changeProjectCommand`) need `agent.budget`, as the
+  agent's spending limit does; `project.assign` (`assignToProjectCommand`) needs `records.write`, and reserves the
+  money of a bill or milestone put in a project (`via: "assignment"`, or `"entry"` from Bill to pay and Add milestone,
+  whose console actions take a project and, for a milestone, a purchase order). Each is signed (`src/lib/projects/
+  write.ts`): `project_created`, `project_changed` and `project_assigned`, domain `ap`, naming a bill as `subjectId`
+  so its card keeps showing the agent's decision. The console only; the write API is unchanged.
+- **Where it shows.** `/o/[slug]/projects` lists every project with its figures (`readProjects`,
+  `src/lib/projects/read.ts`; `projectFigures` in `model.ts` is pure): budget, set aside, paid, available, the share of
+  its open bills and milestones set aside (commitments covered), payments held for its budget now and in 30 days (from
+  the agent's entries), and what its deals collected (`readDealCollections`, the figure behind a deal's Paid; USDC only,
+  another currency apart). `/o/[slug]/projects/[id]` adds its bills and milestones, its lines of the payment plan (the
+  whole treasury's plan, `readPaymentPlan`, with the project's lines listed), the treasury it shares, its deals, and the
+  forms. Treasury's **Projects** card lists each active project's money set aside. Every such page says the budget is an
+  earmark. `/docs-shots/projects/<state>` renders the screens with sample data, behind `DOCS_SCREENSHOTS=1`. Before
+  0111 runs, every read answers not set up, the forms show no project and no milestone purchase order, and the agent
+  asks nothing.
+
 ## Why it was paid: the evidence chain
 
 `/o/[slug]/evidence/invoice|milestone/<id>` (spec `2026-10-10-evidence-chain-design.md`) gives every member one page
@@ -1307,6 +1376,7 @@ workspace's mode for that action, never from a link, a key or a button. A
 `shareWorkspaceReport`, `stopSharingWorkspaceReport`, `answerReportBaseline`, `applyReceivedPayment`,
 `reverseAppliedPayment`, `addDeal`, `changeDeal`, `releaseDealLine`,
 `setDealAutoRelease`, `planCrmDeal`, `keepCrmChange`, `fillCrmEmail`, `setCrmReceiptWrites`, `overwriteCrmReceipt`,
+`addProject`, `changeProjectCommand`, `assignToProjectCommand`,
 `shareCustomerStatement`, `stopCustomerStatement`, `replyToCustomerRequest`, `closeCustomerRequestCommand` — whose
 first statement is
 `gate(actor, "<command>")`:

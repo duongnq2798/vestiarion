@@ -62,6 +62,8 @@ import { flightRows, followUpOf, type FlightRow } from "@/lib/settlement-facts";
 import { readPaymentsInFlight } from "@/lib/settlement-read";
 import { readPlannedDealLines } from "@/lib/deals/read";
 import { readAllocationRows, stillOwed } from "@/lib/allocations/book";
+import { ProjectsTreasuryCard } from "@/components/projects/ProjectViews";
+import { readProjects, type ProjectSummary } from "@/lib/projects/read";
 
 export const dynamic = "force-dynamic";
 
@@ -254,6 +256,13 @@ export default async function DashboardPage({
     // What the agent will pay next, soonest first (payment timing design §1):
     // derived from the invoices already loaded above, no extra query.
     const scheduledPayments = scheduledPaymentRows(invoices);
+    // Each project's money set aside, beside the one pool of cash (project budgets P8). Best effort: hidden when not read.
+    const projects: ProjectSummary[] = await readProjects(db(), new Date(), { revenue: false })
+      .then((read) => (read.available ? read.projects : []))
+      .catch((error: unknown) => {
+        console.error("treasury: projects not read", error instanceof Error ? error.message : error);
+        return [];
+      });
     // A part-paid receivable is expected for what is still owed: what was received is in the wallet already
     // (allocations L11), a deal's released line among them, its planned lines apart (deal schedule D14). Best effort:
     // before migration 0103, or on a failed read, each counts in full, as before.
@@ -424,6 +433,8 @@ export default async function DashboardPage({
               <PaymentsInFlight payments={flight} now={flightNow} stuckAfterMinutes={networkProfile(network).stuckAfterMinutes} orgSlug={slug} network={network} />
 
               {scheduledPayments.length > 0 && <ScheduledPayments payments={scheduledPayments} allHref={orgHref(slug, "/invoices")} />}
+
+              <ProjectsTreasuryCard projects={projects} allHref={orgHref(slug, "/projects")} hrefOf={(projectId) => orgHref(slug, `/projects/${projectId}`)} />
 
               <CashOutlookPanel outlook={outlook} />
               <CashScenarios basis={scenarios} />

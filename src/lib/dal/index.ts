@@ -53,6 +53,7 @@ export const TENANT_TABLES = [
   "deals", "deal_versions", "deal_lines", "deal_costs", "approval_escalations", "approval_escalation_starts",
   "crm_deals", "crm_receipt_writes",
   "customer_portal_links", "customer_requests", "customer_request_messages",
+  "projects", "project_reservations",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
@@ -61,6 +62,7 @@ export const TENANT_RPCS = [
   "begin_cycle_run", "agent_paused", "claim_invoice_decision", "begin_payment_retry", "claim_milestone_decision",
   "sole_approver", "approvers_besides", "approvers_among",
   "create_deal", "revise_deal",
+  "reserve_project_budget", "project_figures",
 ] as const;
 export type TenantRpc = (typeof TENANT_RPCS)[number];
 

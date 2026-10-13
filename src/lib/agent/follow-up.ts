@@ -33,6 +33,7 @@
 import { currentConfig } from "../context";
 import type { FollowUpConfig } from "../config";
 import { fxChange, type FxChange, type FxHold, type FxNow } from "../fx/recheck";
+import { usdcMinor } from "../projects/model";
 import { TWO_APPROVALS_RULE } from "../two-approvals";
 
 export type { FollowUpConfig };
@@ -83,6 +84,33 @@ export interface FrozenInvoice {
    * Absent when it was not read, because nothing waited on it.
    */
   twoApprovalsAbove?: number | null;
+  /** Its project now, and what that project has left to set aside (project budgets P6). Absent when it was not read. */
+  project?: ProjectRoomNow;
+}
+
+/** A bill's or milestone's project as it is now: its id (null in none), and the USDC cents it may still set aside (null when archived). */
+export interface ProjectRoomNow {
+  projectId: string | null;
+  availableMinor: number | null;
+}
+
+/** Held for its project's budget (`execution.heldBecause`): the project, and the USDC cents it needed (project budgets P6). */
+export interface HeldForProject {
+  projectId: string;
+  neededMinor: number;
+}
+
+/**
+ * A hold for a project's budget ends when the project has room for what was held (money released, the budget raised or
+ * the buffer lowered), or the bill or milestone left that project. Null while neither, or while not read.
+ */
+export function projectRoomChange(now: ProjectRoomNow | undefined, held: HeldForProject): string | null {
+  if (now === undefined) return null;
+  if (now.projectId !== held.projectId) return now.projectId === null ? "it was taken out of its project" : "it was moved to another project";
+  if (now.availableMinor !== null && now.availableMinor >= held.neededMinor) {
+    return `its project has room for it again (${usdcMinor(now.availableMinor)} left to set aside)`;
+  }
+  return null;
 }
 
 /** The facts as they stood when the decision was taken, from the ledger. */
@@ -118,6 +146,8 @@ export interface DecisionFacts {
   heldForTwoApprovals?: { value: number; above: number } | null;
   /** Held in shadow mode for a person to agree (`execution.heldBecause`, shadow mode S2): only a person ends it. */
   heldForVerdict?: boolean;
+  /** Held for its project's budget (`execution.heldBecause`, project budgets P6). Null otherwise. */
+  heldForProject?: HeldForProject | null;
 }
 
 export type FollowUpAction = "reopen" | "escalate" | "wait";
@@ -306,6 +336,9 @@ export function planFollowUp(
   // A payment held for two approvals: decided again once the figure no longer covers it.
   const twoApprovals = atDecision.heldForTwoApprovals ? twoApprovalsChange(invoice.twoApprovalsAbove, atDecision.heldForTwoApprovals) : null;
   if (twoApprovals) changes.push(twoApprovals);
+  // A payment held for its project's budget: decided again once the project has room for it, or it left that project.
+  const projectRoom = atDecision.heldForProject ? projectRoomChange(invoice.project, atDecision.heldForProject) : null;
+  if (projectRoom) changes.push(projectRoom);
   // A fresh quote that crossed the threshold that held a EURC payable (FX re-evaluation F2), weighed against the limit now.
   const fx = atDecision.fxHold && invoice.fx ? fxChange(atDecision.fxHold, invoice.fx, invoice.paymentLimit) : null;
   if (fx) changes.push(fx.sentence);
@@ -389,6 +422,8 @@ export interface HeldMilestone {
   twoApprovalsAbove?: number | null;
   /** What the operating wallet and the reserve hold now; absent when not read (mainnet pre-flight). */
   cash?: { operating: number; reserve: number };
+  /** Its project now, and what that project has left to set aside; absent when not read (project budgets P6). */
+  project?: ProjectRoomNow;
 }
 
 /** What the milestone decision rested on, from its ledger entry's `observed` and `execution`. */
@@ -409,6 +444,8 @@ export interface MilestoneDecisionFacts {
   heldForCash?: { needed: number; operating: number; reserve: number } | null;
   /** Held in shadow mode for a person to agree (`execution.heldBecause`, shadow mode S2): only a person ends it. */
   heldForVerdict?: boolean;
+  /** Held for its project's budget (`execution.heldBecause`, project budgets P6). Null otherwise. */
+  heldForProject?: HeldForProject | null;
 }
 
 export interface MilestoneFollowUpPlan {
@@ -461,6 +498,9 @@ export function planMilestoneFollowUp(milestone: HeldMilestone, atDecision: Mile
       changes.push(`the figure for two approvals is now ${milestone.twoApprovalsAbove} USDC, which covers its ${milestone.amount} USDC`);
     }
   }
+  // Held for its project's budget: decided again once the project has room for it, or it left that project (P6).
+  const projectRoom = atDecision.heldForProject ? projectRoomChange(milestone.project, atDecision.heldForProject) : null;
+  if (projectRoom) changes.push(projectRoom);
 
   if (changes.length > 0) {
     return {

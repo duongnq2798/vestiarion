@@ -13,6 +13,19 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Projects, each with its own budget.** Make a project for a job, a client or a launch, with a budget in USDC and a
+  buffer kept back from it, and put its bills, milestones and deals in it, as you add them or from its page. The agent
+  sets each bill's money aside in its project before paying or scheduling it, and a bill the budget cannot cover waits
+  for a person in Approvals with the project's figures. Two decisions at the same moment never set aside the same money.
+  Each project shows its budget, what is set aside, paid and still available, the share of its open bills covered, the
+  payments held for its budget, what its deals collected, its days in the 14-day payment plan and the treasury it
+  shares; Treasury lists every project's money set aside. A budget is an earmark in Vestiarion, not money locked on
+  chain: payments still need their cash, and the spending limit on Arc still counts only the workspace's figures.
+
+- **The same work is not paid twice.** A milestone takes a purchase order. A bill for the same purchase order and payee
+  as a milestone, or one linking the same delivered work, waits for a person when it comes second, and so does a
+  milestone that repeats a bill; a person pays it when both are owed.
+
 - **A deal's costs and its cash readiness.** On a deal's page, enter what it will cost (what, for whom, how much, the
   day it leaves, and whether a document backs it yet) and link each cost to the bill or milestone it became, which then
   counts in its place, once. Cash readiness sets the schedule's money in against the costs day by day: collected and

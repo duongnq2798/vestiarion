@@ -24,6 +24,7 @@
     "status": "tsx scripts/status.ts",
     "cycle": "tsx scripts/run-cycle.ts",
     "fixture:guardrail": "tsx scripts/guardrail-fixture.ts",
+    "fixture:project-budget": "tsx scripts/project-budget-fixture.ts",
     "org:grant": "tsx scripts/org-grant.ts",
     "org:adopt-env": "tsx scripts/org-adopt-env.ts",
     "numbers": "tsx scripts/open-numbers.ts",

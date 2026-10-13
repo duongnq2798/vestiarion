@@ -129,6 +129,8 @@ const RULE_WORDS: Record<string, string> = {
   "bridge.gateway_balance_short": "the Gateway balance is short",
   "workspace.onchain_limit_route": "the spending-limit contract on Arc cannot carry it",
   "workspace.onchain_limit": "the spending-limit contract on Arc refuses it",
+  "obligation.duplicate_reference": "the same purchase order or work as an earlier bill or milestone",
+  "project.budget_exceeded": "its project's budget has no room",
 };
 
 /** Why a decision cannot be told, in a few words (P7). */

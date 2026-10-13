@@ -68,13 +68,13 @@ export async function closeMilestoneUnpaid(actor: Actor, input: { milestoneId: s
  */
 export async function addMilestone(
   actor: Actor,
-  input: { milestone: MilestoneInput }
+  input: { milestone: MilestoneInput; poReference?: string | null }
 ): Promise<CommandOutcome<{ milestoneId: string; contractorName: string }>> {
   const refusal = gate(actor, "milestone.add");
   if (refusal) return refusal;
   let created: CreatedMilestone;
   try {
-    created = await createMilestone({ actorId: actor.userId, milestone: input.milestone, ...provenanceOf(actor) });
+    created = await createMilestone({ actorId: actor.userId, milestone: input.milestone, ...provenanceOf(actor), ...(input.poReference ? { poReference: input.poReference } : {}) });
   } catch (error) {
     console.error("adding a milestone failed", actor.orgId, error instanceof Error ? error.message : "unknown error");
     return refused("failed", "The milestone could not be added. Try again in a moment.");
