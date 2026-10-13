@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="src/app/icon.svg" alt="Vestiarion" width="72" height="72">
+<img src="docs/assets/readme-banner.png" alt="Vestiarion: every bill checked before it is paid, every decision on record. A payment refused by code, not by the model, and a person agreeing with the agent before it pays. Works with Xero, QuickBooks, HubSpot, Arc and Circle." width="100%">
 
 # Vestiarion
 
@@ -12,7 +12,8 @@
 [![npm](https://img.shields.io/npm/v/%40vestiarion%2Fsdk?style=flat-square&logo=npm&label=%40vestiarion%2Fsdk)](https://www.npmjs.com/package/@vestiarion/sdk)
 [![CI](https://img.shields.io/github/actions/workflow/status/duongnq2798/vestiarion/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/duongnq2798/vestiarion/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6b7280?style=flat-square)](LICENSE)
-[![Demo video](https://img.shields.io/badge/Demo_video-4%3A48-b91c1c?style=flat-square&logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=hIS3THDLtVQ)
+[![Demo video](https://img.shields.io/badge/Demo-2%3A59-b91c1c?style=flat-square&logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=UqfvCkkYGlk)
+[![Product tour](https://img.shields.io/badge/Product_tour-4%3A58-b91c1c?style=flat-square&logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=omER_wFsH3M)
 
 [![Arc mainnet](https://img.shields.io/badge/Arc_mainnet-first_payment_settled-111827?style=flat-square)](https://explorer.arc.io/tx/0xcecef38e3f751bc118f8f00cee5bb5344679e84f89123d679b986b47d7f1dee6)
 [![Arc testnet](https://img.shields.io/badge/Arc_testnet-open_to_everyone-4b5563?style=flat-square)](https://www.vestiarion.xyz/docs/guides/try-it)
@@ -21,7 +22,12 @@
 [![Slack](https://img.shields.io/badge/Slack-guide-4A154B?style=flat-square&logo=slack)](https://www.vestiarion.xyz/docs/guides/slack)
 [![Telegram](https://img.shields.io/badge/Telegram-guide-26A5E4?style=flat-square&logo=telegram&logoColor=white)](https://www.vestiarion.xyz/docs/guides/telegram)
 
-**[Open the app](https://www.vestiarion.xyz)** · **[Watch the demo](https://www.youtube.com/watch?v=hIS3THDLtVQ)** · **[See your first decision](https://www.vestiarion.xyz/docs/guides/try-it)** · **[Open numbers](https://www.vestiarion.xyz/open)** · **[Docs](https://www.vestiarion.xyz/docs)** · **[@vestiarionhq](https://x.com/vestiarionhq)**
+[![Xero](https://img.shields.io/badge/Xero-bills_%26_bookings-13B5EA?style=flat-square&logo=xero&logoColor=white)](https://www.vestiarion.xyz/docs/guides/xero)
+[![QuickBooks Online](https://img.shields.io/badge/QuickBooks_Online-bills-2CA01C?style=flat-square&logo=quickbooks&logoColor=white)](https://www.vestiarion.xyz/docs/guides/quickbooks)
+[![HubSpot](https://img.shields.io/badge/HubSpot-deals_%26_receipts-FF7A59?style=flat-square&logo=hubspot&logoColor=white)](https://www.vestiarion.xyz/docs/guides/hubspot)
+[![GitHub](https://img.shields.io/badge/GitHub-bounties-181717?style=flat-square&logo=github&logoColor=white)](https://www.vestiarion.xyz/docs/guides/github)
+
+**[Open the app](https://www.vestiarion.xyz)** · **[Watch the demo](https://www.youtube.com/watch?v=UqfvCkkYGlk)** · **[See your first decision](https://www.vestiarion.xyz/docs/guides/try-it)** · **[Open numbers](https://www.vestiarion.xyz/open)** · **[Docs](https://www.vestiarion.xyz/docs)** · **[@vestiarionhq](https://x.com/vestiarionhq)**
 
 </div>
 
@@ -31,9 +37,10 @@ whether it may happen; a person decides what code sends to them; and on Arc main
 through a spending-limit contract the owner's own wallet deployed. Every outcome, refusals included, is signed into a
 hash-chained ledger anyone in the workspace can verify.
 
-**Watch it work:** [the full demo](https://www.youtube.com/watch?v=hIS3THDLtVQ) (4:48, recorded from the live app: decisions, shadow
-mode, customers and Arc mainnet in the first 2:20, then email intake, cross-chain payouts, EURC, x402, escrow, GitHub
-bounties and collections) or [a 2:50 cut](https://youtu.be/3I-HfGHHbWs).
+**Watch it work:** [the demo](https://www.youtube.com/watch?v=UqfvCkkYGlk) (2:59) or [the full product tour](https://www.youtube.com/watch?v=omER_wFsH3M)
+(4:58), both recorded on the live product on October 12, 2026: a new workspace and its first payments, a freelancer paid
+by the agent on its own, a first payment code holds for a person, shadow mode, Xero, QuickBooks Online, HubSpot and
+GitHub, treasury, Arc mainnet and the public numbers.
 
 > *Tameion* is ancient Greek for a treasury, the room the money was kept in. In Byzantium that room grew into the
 > *vestiarion*, the department that minted the coin, held the stores and paid the army.
