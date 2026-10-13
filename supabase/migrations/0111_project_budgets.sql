@@ -285,7 +285,9 @@ create trigger deals_project_check
 
 -- The check every reservation passes, however it is inserted: under a lock on the project's row, so reservations of
 -- one project are made one at a time, it refuses one for a bill or milestone that is not open in that project at that
--- amount, and one that would take what is reserved and paid past the budget less its buffer.
+-- amount, and one that would take what is reserved and paid past the budget less its buffer. The bill or milestone is
+-- locked before the project, the order reserve_project_budget takes them in, so an insert that skips the function and
+-- the function, for one bill at once, wait on each other rather than deadlock.
 create or replace function public.project_reservations_within_budget()
 returns trigger
 language plpgsql
@@ -298,6 +300,11 @@ declare
   v_reserved bigint;
   v_paid bigint;
 begin
+  if new.invoice_id is not null then
+    perform 1 from public.invoices i where i.org_id = new.org_id and i.id = new.invoice_id for update;
+  else
+    perform 1 from public.milestones m where m.org_id = new.org_id and m.id = new.milestone_id for update;
+  end if;
   select p.budget_minor, p.buffer_minor, p.status into v_budget, v_buffer, v_status
     from public.projects p
    where p.org_id = new.org_id and p.id = new.project_id

@@ -316,6 +316,11 @@ describe("what to do about a payable code stopped", () => {
     expect(agentResumes("counterparty.no_address")).toBe("The agent decides it again on its own once the counterparty has an address and a person has confirmed it.");
   });
 
+  it("says a payment held because its project could not be read, or is archived, waits for a person, not for room", () => {
+    expect(agentResumes("project.budget_exceeded")).toContain("once its project has room");
+    expect(agentResumes("project.budget_exceeded")).toContain("could not be read, or is archived, a person decides it");
+  });
+
   it("links the page that removes the cause, for the rules a person can change", () => {
     expect(ruleNextStep("counterparty.payment_limit", counterparty)).toEqual({
       sentence: "It is above CME's payment limit. Pay it in Approvals, or raise the limit.",

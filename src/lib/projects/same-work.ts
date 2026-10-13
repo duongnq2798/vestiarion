@@ -47,19 +47,29 @@ const ENDED: Record<WorkItem["kind"], ReadonlySet<string>> = {
   milestone: new Set(["closed"]),
 };
 
+/**
+ * What people write in a purchase order field when there is none ("N/A", "none", "TBD", "0"), as `purchaseOrderKey`
+ * reads it: no purchase order, so two of them never name the same order.
+ */
+const NO_PURCHASE_ORDER = new Set(["na", "none", "nil", "null", "nopo", "tbd", "tba", "tbc", "unknown", "notapplicable"]);
+
 /** Purchase orders are written inconsistently: "PO-1042", "po 1042", "1042" (as `findDuplicates` reads them). */
 export function purchaseOrderKey(value: string | null | undefined): string | null {
   if (!value) return null;
   const compact = value.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/^po/, "");
-  return compact.length === 0 ? null : compact;
+  return compact.length === 0 || NO_PURCHASE_ORDER.has(compact) || /^0+$/.test(compact) ? null : compact;
 }
 
 const URL_IN_TEXT = /\bhttps?:\/\/[^\s<>"')\]]+/gi;
 
+/** Query parameters that only say where a link was shared from, never which work it is. */
+const TRACKING_PARAM = /^(utm_.+|fbclid|gclid|usp)$/i;
+
 /**
- * The web addresses in a piece of text, each reduced to what names the work: no scheme, `www.`, query, fragment or
- * trailing slash, the host in lower case, and a GitHub pull request or issue cut after its number (`/files`, `/commits`
- * name the same pull request).
+ * The web addresses in a piece of text, each reduced to what names the work: no scheme, `www.` or trailing slash, no
+ * tracking parameter, in lower case, and a GitHub pull request or issue cut after its number (`/files`, `/commits`, a
+ * query or an anchor name the same pull request). Any other address keeps its query and its anchor, which often say
+ * which document or record it is (`open?id=`, `watch?v=`, `#INV-2`): two addresses that differ there are two works.
  */
 export function deliverableKeys(text: string | null | undefined): string[] {
   if (!text) return [];
@@ -76,7 +86,13 @@ export function deliverableKeys(text: string | null | undefined): string[] {
     const github = host === "github.com" ? /^(\/[^/]+\/[^/]+\/(?:pull|issues)\/\d+)/.exec(path) : null;
     if (github) path = github[1];
     if (host.length === 0 || path.length === 0) continue;
-    keys.add(`${host}${path.toLowerCase()}`);
+    let rest = "";
+    if (!github) {
+      const query = [...parsed.searchParams].filter(([name]) => !TRACKING_PARAM.test(name)).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+      if (query.length > 0) rest += `?${new URLSearchParams(query).toString()}`;
+      if (parsed.hash.length > 1) rest += parsed.hash;
+    }
+    keys.add(`${host}${path}${rest}`.toLowerCase());
   }
   return [...keys];
 }

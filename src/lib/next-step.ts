@@ -199,7 +199,7 @@ export function agentResumes(rule: string | null | undefined): string | null {
     case CASH_SHORTFALL:
       return "The agent decides it again on its own once cash comes in: USDC added to the operating wallet, or brought back from the reserve.";
     case "project.budget_exceeded":
-      return "The agent decides it again on its own once its project has room: money set aside for another bill released, or the budget raised by an owner or admin.";
+      return "The agent decides it again on its own once its project has room: money set aside for another bill released, or the budget raised by an owner or admin. When its project could not be read, or is archived, a person decides it.";
     default:
       return null;
   }

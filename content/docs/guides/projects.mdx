@@ -58,7 +58,7 @@ What you can do:
 - **Raise the budget, or lower the buffer**, with **Change budget** on the project's page. What is already set aside stays.
 - **Move it** to another project, or take it out.
 
-The agent decides it again on its own once the project has room: money set aside for another bill released, the budget raised or the buffer lowered.
+The agent decides it again on its own once the project has room: money set aside for another bill released, the budget raised or the buffer lowered. A bill held because its project's budget could not be checked at that moment, or because its project is archived, waits for a person instead.
 
 ## 5. When money is released
 
@@ -74,7 +74,9 @@ What is set aside for a bill or milestone is released, in the same step that cha
 A purchase order or a piece of delivered work is one obligation. When a bill and a milestone name the same one, paying both would pay it twice, so the second of the two waits for a person:
 
 - **The same purchase order, for the same payee.** **Add milestone** takes a **PO reference**: "A bill for the same purchase order waits for a person, so the work is not paid twice." A bill with the same **PO reference** for that contractor, entered after the milestone, is held; so is a milestone entered after such a bill.
-- **The same delivered work.** A bill whose memo links the work a milestone was verified by, such as the same pull request, is held, whoever sent it.
+- **The same delivered work.** A bill whose memo links the work a milestone was verified by, such as the same pull request, is held, whoever sent it. Two links to one page that open different documents, such as two files shared from the same drive, are two pieces of work and hold nothing.
+
+A purchase order written as none, such as N/A, TBD or 0, names no order, so it never matches another.
 
 The first of the two goes as usual. The second's card says it repeats the first and names it; the ledger names the rule `obligation.duplicate_reference`. When both are owed, a person pays the second with **Approve and pay**, or **Pay now** on a milestone; otherwise reject it, or close the milestone without paying. A rejected bill or a closed milestone is no obligation, and holds nothing.
 

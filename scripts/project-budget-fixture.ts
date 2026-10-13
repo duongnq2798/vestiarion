@@ -17,6 +17,9 @@
  * 3. The release. Concurrently, one transaction pays a reserved bill while another reserves for a waiting one: the paid
  *    bill is counted once, as reserved or as paid, at every moment; once it is paid its money is paid, not reserved; a
  *    rejected bill frees its money for the bill that was over, which is then reserved.
+ * 4. The lock order. An insert that skips the function and `reserve_project_budget`, for the same bill at once, take
+ *    their locks in one order (the bill, then the project), so neither deadlocks: one reservation is made, and the other
+ *    is refused as a second live one.
  *
  * Exits 1 when any of it does not hold.
  */
@@ -179,6 +182,29 @@ async function main() {
     const again = (await setup.query<{ r: { state: string } }>("select public.reserve_project_budget($1, $2, null, 'agent', null) as r", [orgId, waiting])).rows[0].r;
     const end = await figures(released);
     check(again.state === "reserved" && end.reserved === 35_000 && end.paid === 50_000, "a rejected bill frees its money: the bill that was over is reserved, and 850.00 of 900.00 is committed");
+
+    // 4. The lock order: the function holds the bill's row when an insert that skips it arrives for the same bill.
+    const ordered = await project("Lock order");
+    const contested = await bill(ordered, "200.00");
+    const [reserving, inserting] = deciders;
+    await asTenant(reserving, orgId);
+    await asTenant(inserting, orgId);
+    // The function's first step, as it is taken: the bill's row.
+    await reserving.query("select 1 from public.invoices where id = $1 for update", [contested]);
+    const inserted = inserting
+      .query("insert into public.project_reservations (org_id, project_id, invoice_id, amount_minor, via) values ($1, $2, $3, 20000, 'entry')", [orgId, ordered, contested])
+      .then(() => "inserted", (error: Error) => error.message);
+    await sleep(HOLD_OPEN_MS);
+    const answered = await reserving
+      .query<{ r: { state: string } }>("select public.reserve_project_budget($1, $2, null, 'agent', null) as r", [orgId, contested])
+      .then(({ rows }) => rows[0].r.state, (error: Error) => error.message);
+    await reserving.query(answered === "reserved" ? "commit" : "rollback");
+    const insertOutcome = await inserted;
+    await inserting.query(insertOutcome === "inserted" ? "commit" : "rollback");
+    const live = (await setup.query("select 1 from public.project_reservations where invoice_id = $1 and released_at is null", [contested])).rows.length;
+    console.log(`Lock order: the function answered ${answered}; the insert ${insertOutcome}.`);
+    check(!/deadlock/.test(`${answered} ${insertOutcome}`), "an insert that skips the function and the function, for one bill at once, never deadlock");
+    check(answered === "reserved" && live === 1, "one reservation is made for the bill, and the other is refused as a second live one");
   } finally {
     for (const client of clients) await client.end().catch(() => undefined);
     await root.query(`drop database if exists ${name} with (force)`);

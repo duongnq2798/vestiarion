@@ -334,11 +334,15 @@ function reasonOf(facts: HeldFacts): Omit<HeldReason, "hint"> {
       override: true,
     };
   }
-  // Its project's budget had no room (project budgets P5): an earmark in Vestiarion, so a person's Pay now pays it.
+  // Its project's budget had no room (project budgets P5): an earmark in Vestiarion, so a person's Pay now pays it. Only
+  // that hold is decided again on its own (`heldBecause`, P6); one whose project could not be read, or is archived, waits.
   if (detail.guardrailRule === "project.budget_exceeded") {
     return {
       kind: "project_budget",
-      text: "Its project's budget had no room left to set it aside. Pay now pays it if it is owed anyway; or raise the project's budget, and the agent decides it again on its own.",
+      text:
+        execution.heldBecause === "project_budget"
+          ? "Its project's budget had no room left to set it aside. Pay now pays it if it is owed anyway; or raise the project's budget, and the agent decides it again on its own."
+          : "Its project's budget could not be checked, or its project is archived, so nothing was set aside for it. Pay now pays it if it is owed anyway; or close it.",
       link: { label: "Projects", path: "/projects" },
       canPay: true,
       canClose: true,

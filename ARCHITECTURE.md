@@ -1142,9 +1142,9 @@ enforces only the workspace-wide caps, and every payment still needs its cash wh
   counts what is reserved and paid in one statement (one snapshot, so a bill being paid counts once, as reserved or as
   paid), and sets the amount aside, to the cent above (`project_minor`), only when the budget less its buffer holds it;
   it answers `reserved` (with `already`), `over`, `archived`, `settled`, `no_project` or `not_found`, with the
-  figures it weighed. `project_reservations_within_budget`, before every insert however it is made, takes the same lock
-  and refuses a reservation past the budget (`project_budget_exceeded`) or for a bill or milestone not open in the
-  project at that amount; a partial unique index keeps one live reservation per bill and per milestone. Two decisions at
+  figures it weighed. `project_reservations_within_budget`, before every insert however it is made, takes the same locks
+  in the same order (the bill or milestone, then the project, so the two paths never deadlock) and refuses a reservation
+  past the budget (`project_budget_exceeded`) or for a bill or milestone not open in the project at that amount; a partial unique index keeps one live reservation per bill and per milestone. Two decisions at
   once therefore wait on the project's row, one after the other: `npm run fixture:project-budget` shows it on a real
   Postgres with ten concurrent transactions (exactly the reservations the budget holds go through, and the same race
   with no lock overspends), which a single-connection test database cannot.
@@ -1158,14 +1158,16 @@ enforces only the workspace-wide caps, and every payment still needs its cash wh
   AP stage, and after the release's own checks in the contractor stage, two checks run for a payment or a schedule the
   others let through, and only hold (`afterGuardrails`: a payment another check stopped is returned as it was, and
   `tests/obligation-checks.test.ts` holds that over every guardrail's trigger). `obligation.duplicate_reference` holds
-  the second of a bill and a milestone for the same purchase order and payee, or the same delivered work
-  (`sameWorkMatches`, `src/lib/projects/same-work.ts`: the milestones a bill may repeat, or the bills a milestone may,
-  read once per stage). `project.budget_exceeded` then reserves the bill's or milestone's money through the function,
+  the second of a bill and a milestone for the same purchase order and payee (a purchase order written as none, such as
+  N/A, names none), or the same delivered work (`sameWorkMatches`, `src/lib/projects/same-work.ts`: a URL equal but for
+  its scheme, `www.`, a trailing slash and tracking parameters, its query and anchor kept; a GitHub pull request by
+  number; the milestones a bill may repeat, or the bills a milestone may, read once per stage). `project.budget_exceeded` then reserves the bill's or milestone's money through the function,
   and holds it with the project's figures when the answer is `over` (`execution.heldBecause: "project_budget"`) or
   `archived`, or when the call failed (`observed.project.state: "unreadable"`). A bill or milestone in no project is
   never asked about, and a read before 0111 sees no `project_id`. The reservation is made before the shadow mode hold,
-  the cash check and the transfer: a bill the budget holds still waits for cash exactly as before, and a hold (the
-  model's, or for cash) reserves nothing. The entry records `observed.projectId`, `observed.project` and
+  the cash check and the transfer: a bill the budget holds still waits for cash exactly as before, a hold the model
+  decides reserves nothing, and a release then held for want of cash keeps what it set aside, found again when it is
+  decided. The entry records `observed.projectId`, `observed.project` and
   `observed.sameWork`. The follow-up reopens a payment held for its project once `projectRoomsFor` (`src/lib/projects/
   rooms.ts`) says the project has room for it, or it left the project (`projectRoomChange`). Policy replay runs both
   checks last (`BILL_STAGES`, `MILESTONE_STAGES`): the same work fires from the recorded matches; a project's budget,

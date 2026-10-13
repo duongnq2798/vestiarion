@@ -32,14 +32,16 @@ two decisions at the same moment, never spend the same money.
   (`paid`, `matched`, `processing`), or a paid milestone, keeps its project.
 - **P4 Reservations, serialized.** `reserve_project_budget` locks the bill or milestone, then the project's row, and
   counts reserved and paid in one statement, then inserts only when the budget less its buffer holds the full amount
-  (to the cent above). A trigger on insert takes the same lock and makes the same check, so no path overspends; one live
-  reservation per bill and per milestone. Reserved at entry, at assignment, and by the agent when it decides to pay or
+  (to the cent above). A trigger on insert takes the same locks, in the same order (the bill or milestone, then the
+  project), and makes the same check, so no path overspends and no two paths deadlock; one live reservation per bill and
+  per milestone. Reserved at entry, at assignment, and by the agent when it decides to pay or
   schedule. A person's own payment reserves nothing and is not held by the budget; it counts as paid.
 - **P5 The guardrail, `project.budget_exceeded`.** After every existing guardrail, for a pay, schedule or release they
   let through, the agent reserves; `over`, `archived` or a failed call holds it for a person, with the figures. It only
   holds: `afterGuardrails` returns any blocked result unchanged, and a bill in no project is never asked about. The
   reservation comes before the shadow hold, the cash check and the transfer, so a bill the budget holds still waits for
-  cash as before; a hold (the model's, or for cash) reserves nothing.
+  cash as before; a hold the model decides reserves nothing, and a release then held for want of cash keeps what it set
+  aside, found again when it is decided.
 - **P6 Release.** In the transaction that changes the bill or milestone: paid (now counted as paid, at `paid_amount`),
   rejected, closed, amount changed, moved. The follow-up reopens a payment held for its project once the project has room
   or it left the project (`execution.heldBecause: "project_budget"`).
@@ -50,8 +52,10 @@ two decisions at the same moment, never spend the same money.
   balances stay the treasury's), and the treasury it shares (cash, what every project set aside, this project's share,
   what it pays in 14 days). Treasury lists each project's money set aside.
 - **P9 The same work, `obligation.duplicate_reference`.** A bill and a milestone are one obligation when they name the
-  same purchase order for the same payee (`milestones.po_reference`, new), or link the same delivered work (a URL in
-  the bill's memo equal to the milestone's verification source; GitHub pull requests compared by number). The second
+  same purchase order for the same payee (`milestones.po_reference`, new; one written as none, such as N/A, TBD or 0,
+  names no order), or link the same delivered work (a URL in the bill's memo equal to the milestone's verification
+  source, but for its scheme, `www.`, a trailing slash and tracking parameters, so two documents behind one page stay
+  two; GitHub pull requests compared by number). The second
   entered waits for a person; the first goes as usual. A rejected bill or closed milestone counts for nothing. Runs after
   every other guardrail, before the project's budget, so a held duplicate reserves nothing. A person pays it when both are
   owed. Two bills are `findDuplicates`'s, unchanged.
@@ -63,7 +67,9 @@ throwaway Postgres on the same machine, races ten deciders on ten connections, e
 reserving: exactly the four 200.00 bills a 1,000.00 budget with a 100.00 buffer holds are reserved, six are over, every
 decider after the first waited on the project's row, and the same race through a check-then-insert with no lock sets
 aside 2,000.00. It then pays a reserved bill while another decider reserves (counted once), and rejects one to free room
-for the bill that was over. The AP stage's own test (`tests/project-ap-stage.test.ts`) shows the cash side: a bill the
+for the bill that was over. Last, an insert that skips the function arrives while the function holds the same bill:
+both lock the bill before the project, so the insert waits and is refused as a second live reservation rather than
+deadlock. The AP stage's own test (`tests/project-ap-stage.test.ts`) shows the cash side: a bill the
 budget holds and the cash does not still waits for cash, and reserves nothing.
 
 ## Screenshots
