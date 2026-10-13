@@ -159,6 +159,15 @@ function agreement(detail: Record<string, unknown>): string {
   return detail.agreedWithReference === true ? ", as the written policy would" : detail.agreedWithReference === false ? "; the written policy would have decided otherwise" : "";
 }
 
+/** What a collection task asked, by its reason (collections context C6). */
+const COLLECTION_TASK_WORDS: Record<string, string> = {
+  policy_ask_first: "the customer's rules say to ask first",
+  hubspot_owner: "its HubSpot deal has an owner, who may have given more time",
+  no_contact: "the customer has no billing email",
+  promise_passed: "the customer's promised day passed",
+  reminders_done: "the agent's reminders are done",
+};
+
 /** One entry as a step, or null for one the trail does not show (receipts, links). */
 export function trailStep(entry: TrailEntry, network: Network = "arc-testnet"): TrailStep | null {
   // The viewed workspace's network, old entries included: steps are rebuilt on every view (mainnet copy C4).
@@ -301,11 +310,16 @@ export function trailStep(entry: TrailEntry, network: Network = "arc-testnet"): 
       const days = number(detail.daysFromDue);
       const when = days === null ? "" : days === 0 ? ", on the due date" : days < 0 ? `, ${-days} ${days === -1 ? "day" : "days"} before the due date` : `, ${days} ${days === 1 ? "day" : "days"} after the due date`;
       const limited = record(detail.toneLimited);
+      const toneWords = tone === "final" ? "a final reminder" : `in a ${tone} tone`;
       return {
         ...base,
         who: "agent",
         tone: "done",
-        text: `${decider} decided to remind the client by email, ${tone === "final" ? "a final reminder" : `in a ${tone} tone`}${when}${agreement(detail)}.`,
+        // A reminder a person approved from a collection task went without the model (collections context C6).
+        text:
+          detail.decisionMode === "person"
+            ? `A person approved the reminder, and the agent sent it to the client by email, ${toneWords}${when}.`
+            : `${decider} decided to remind the client by email, ${toneWords}${when}${agreement(detail)}.`,
         notes: [
           ...(number(detail.number) !== null ? [`· Reminder ${number(detail.number)} of 4, sent to ${text(detail.to) ?? "the client's billing email"}`] : []),
           ...(limited ? [`✗ It chose a ${text(limited.chosen)} tone; code sent it ${text(limited.sent)}`] : []),
@@ -321,6 +335,25 @@ export function trailStep(entry: TrailEntry, network: Network = "arc-testnet"): 
         text: `${deciderName(detail.decisionMode)} decided to wait${until ? ` until ${dayOf(until)}` : ""} before reminding the client${agreement(detail)}.`,
       };
     }
+    // What the collections stage asked a person, and their answer (collections context C6).
+    case "collection_task_opened":
+      return { ...base, who: "agent", tone: "neutral", text: `The agent asked a person before going on: ${COLLECTION_TASK_WORDS[text(detail.reason) ?? ""] ?? "a person decides the next step"}.` };
+    case "collection_task_resolved": {
+      const until = text(detail.holdUntil);
+      const reminder = record(detail.reminder);
+      const outcome = text(detail.outcome);
+      const said =
+        outcome === "approved"
+          ? `approved reminder ${number(reminder?.number) ?? ""}${text(reminder?.tone) ? `, ${text(reminder?.tone)}` : ""}`.replace(" ,", ",")
+          : outcome === "held"
+            ? `held reminders${until ? ` until ${dayOf(until)}` : ""}`
+            : outcome === "no_reminder"
+              ? "turned reminders off for this invoice"
+              : outcome === "resumed"
+                ? "closed the promise and let reminders go again"
+                : "marked it done";
+      return { ...base, who: "person", tone: "neutral", text: `A person ${said}.` };
+    }
     // What the customer said on its statement, and a person's answer (customer portal P10): its word, never a payment.
     case "customer_said_paid": {
       const paidOn = text(detail.paidOn);
@@ -330,7 +363,7 @@ export function trailStep(entry: TrailEntry, network: Network = "arc-testnet"): 
         who: "person",
         tone: "neutral",
         text: `The customer said on its statement that it paid${amount !== null ? ` ${coins(amount, detail.currency)}` : ""}${paidOn ? ` on ${dayOf(paidOn)}` : ""}.`,
-        notes: ["· Its word, not a payment: the invoice stays open until the money arrives and is applied"],
+        notes: ["· Its word, not a payment: the invoice stays open until the money arrives and is applied", "· The agent's reminders wait until a person finds it or marks it not received"],
       };
     }
     case "customer_promised_payment": {
@@ -340,7 +373,7 @@ export function trailStep(entry: TrailEntry, network: Network = "arc-testnet"): 
         who: "person",
         tone: "neutral",
         text: `The customer promised on its statement to pay${promisedOn ? ` by ${dayOf(promisedOn)}` : ""}.`,
-        notes: ["· The agent's reminders wait through that day"],
+        notes: ["· The agent's reminders wait through that day; once it passes, finance reviews it before any reminder"],
       };
     }
     case "customer_disputed_invoice":

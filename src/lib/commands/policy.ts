@@ -72,6 +72,11 @@ export const COMMAND_PERMISSIONS = {
   "customer_portal.unshare": "records.write",
   "customer_request.reply": "records.write",
   "customer_request.close": "records.write",
+  // A customer's collection rules, and resolving what the collections stage asks a person (approve a reminder, hold
+  // reminders until a day, no reminders, let them go again): records on the receivables side, as turning reminders on
+  // is (collections context C4, C6).
+  "collection_policy.set": "records.write",
+  "collection_task.resolve": "records.write",
 } as const satisfies Record<string, Permission>;
 
 export type CommandName = keyof typeof COMMAND_PERMISSIONS;

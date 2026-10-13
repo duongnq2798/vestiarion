@@ -157,7 +157,7 @@ describe("searching deals", () => {
         },
       ],
       sorts: [{ propertyName: "hs_lastmodifieddate", direction: "ASCENDING" }],
-      properties: ["dealname", "amount", "deal_currency_code", "closedate", "pipeline", "dealstage", "hs_is_closed", "hs_is_closed_won", "hs_lastmodifieddate"],
+      properties: ["dealname", "amount", "deal_currency_code", "closedate", "pipeline", "dealstage", "hs_is_closed", "hs_is_closed_won", "hs_lastmodifieddate", "hubspot_owner_id"],
       limit: 100,
     });
   });

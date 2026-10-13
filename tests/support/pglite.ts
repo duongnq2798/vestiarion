@@ -106,6 +106,7 @@ export const TENANT_TABLES = [
   "deals", "deal_versions", "deal_lines", "deal_costs", "approval_escalations", "approval_escalation_starts",
   "crm_deals", "crm_receipt_writes",
   "customer_portal_links", "customer_requests", "customer_request_messages",
+  "collection_policies", "collection_tasks", "notification_deliveries",
 ] as const;
 
 export interface SeededRows {
@@ -294,6 +295,21 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     [orgId, portalLinkId, customerId, customerInvoiceId]
   );
   await db.query("insert into customer_request_messages (org_id, request_id, body) values ($1, $2, 'We are checking.')", [orgId, customerRequestId]);
+  // That customer's collection rules, a task about its invoice, and a reminder email recorded as sent (0110).
+  await db.query(
+    "insert into collection_policies (org_id, counterparty_id, version, approval, max_tone, min_days_between) values ($1, $2, 1, 'ask_first', 'firm', 7)",
+    [orgId, customerId]
+  );
+  await db.query(
+    `insert into collection_tasks (org_id, invoice_id, counterparty_id, kind, reason, subject_key, policy_version, proposal)
+     values ($1, $2, $3, 'ask_owner', 'policy_ask_first', 'policy:1:reminder:1', 1, '{"headline": "Ask first"}'::jsonb)`,
+    [orgId, customerInvoiceId, customerId]
+  );
+  await db.query(
+    `insert into notification_deliveries (org_id, idempotency_key, kind, subject_id, recipient_hash, policy_version, sent_at)
+     values ($1, encode(sha256(convert_to($2, 'utf8')), 'hex'), 'collection_reminder', $3, encode(sha256(convert_to($4, 'utf8')), 'hex'), 1, now())`,
+    [orgId, `delivery-${tag}`, customerInvoiceId, `billing-${tag}@example.com`]
+  );
   const key = crypto.generateKeyPairSync("ed25519");
   await appendSignedForOrg(db, orgId, { actor: "system", domain: "system", action: "note", summary: tag, detail: { tag } }, key.privateKey);
   return { counterpartyId, accountId, invoiceId, cycleRunId, idempotencyKey };

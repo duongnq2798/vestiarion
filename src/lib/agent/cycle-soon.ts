@@ -49,6 +49,8 @@ export type CycleEventKind =
   /** Test USDC came in from Vestiarion's float: a payable held for cash may be paid now (test USDC T7). */
   | "test_usdc_added"
   | "reminders_on"
+  /** A person approved a reminder, or let reminders go again, from a collection task (collections context C6). */
+  | "reminder_approved"
   | "agent_resumed"
   | "sample_loaded"
   /** A pull request a milestone waits on was merged (bounties B13). */

@@ -58,32 +58,40 @@ function latest(sent: readonly SentReminder[]): SentReminder | undefined {
   return [...sent].sort((a, b) => Date.parse(b.sentAt) - Date.parse(a.sentAt))[0];
 }
 
-/** Whether code allows a reminder now (R3). The workspace, the receivable, the client's email and the link are the caller's. */
-export function reminderAllowed(facts: ReminderFacts): Allowance {
+/**
+ * Whether code allows a reminder now (R3). The workspace, the receivable, the client's email and the link are the caller's.
+ * A customer's rules may space reminders further apart than 3 days (collections context C4), never closer.
+ */
+export function reminderAllowed(facts: ReminderFacts, minDaysBetween: number = MIN_DAYS_BETWEEN): Allowance {
+  const spacing = Math.max(MIN_DAYS_BETWEEN, Math.round(minDaysBetween));
   const days = daysFromDue(facts.dueDate, facts.now);
   if (facts.sent.some((reminder) => reminder.tone === "final")) return { allowed: false, reason: "the final reminder was sent" };
   if (facts.sent.length >= MAX_REMINDERS) return { allowed: false, reason: `all ${MAX_REMINDERS} reminders were sent` };
   if (days < -EARLIEST_DAYS_BEFORE_DUE) return { allowed: false, reason: `it is more than ${EARLIEST_DAYS_BEFORE_DUE} days before the due date` };
   if (days > LATEST_DAYS_AFTER_DUE) return { allowed: false, reason: `it is more than ${LATEST_DAYS_AFTER_DUE} days after the due date` };
   const last = latest(facts.sent);
-  if (last && facts.now - Date.parse(last.sentAt) < MIN_DAYS_BETWEEN * DAY_MS) {
-    return { allowed: false, reason: `a reminder went out less than ${MIN_DAYS_BETWEEN} days ago` };
+  if (last && facts.now - Date.parse(last.sentAt) < spacing * DAY_MS) {
+    return { allowed: false, reason: `a reminder went out less than ${spacing} days ago` };
   }
   if (facts.deferredUntil && Date.parse(facts.deferredUntil) > facts.now) return { allowed: false, reason: "the agent chose to wait" };
   return { allowed: true, number: facts.sent.length + 1, daysFromDue: days };
 }
 
-/** The tones code allows now (R5): friendly always; firm after the due date; final 7 days after it, with 2 reminders sent. */
-export function allowedTones(daysFromDueDate: number, sentCount: number): ReminderTone[] {
+/**
+ * The tones code allows now (R5): friendly always; firm after the due date; final 7 days after it, with 2 reminders sent.
+ * A customer's rules may cap them lower (collections context C4): friendly is always allowed.
+ */
+export function allowedTones(daysFromDueDate: number, sentCount: number, maxTone: ReminderTone = "final"): ReminderTone[] {
   const tones: ReminderTone[] = ["friendly"];
   if (daysFromDueDate > 0) tones.push("firm");
   if (daysFromDueDate >= 7 && sentCount >= 2) tones.push("final");
-  return tones;
+  const cap = REMINDER_TONES.indexOf(maxTone);
+  return tones.filter((tone) => REMINDER_TONES.indexOf(tone) <= cap);
 }
 
 /** The model's tone, or the strongest allowed when it chose a stronger one (R5). */
-export function boundTone(tone: ReminderTone, daysFromDueDate: number, sentCount: number): { tone: ReminderTone; limited: boolean } {
-  const allowed = allowedTones(daysFromDueDate, sentCount);
+export function boundTone(tone: ReminderTone, daysFromDueDate: number, sentCount: number, maxTone: ReminderTone = "final"): { tone: ReminderTone; limited: boolean } {
+  const allowed = allowedTones(daysFromDueDate, sentCount, maxTone);
   return allowed.includes(tone) ? { tone, limited: false } : { tone: allowed[allowed.length - 1], limited: true };
 }
 

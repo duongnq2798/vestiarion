@@ -101,14 +101,19 @@ describe("reminderPause", () => {
     expect(reminderPause([request({ kind: "dispute" }), request({ kind: "promise", promisedOn: "2026-10-20" })], TODAY)).toEqual({ reason: "dispute", until: null });
   });
 
-  it("holds them through a promise's day, and lets them go the day after", () => {
+  it("holds them through a promise's day, and after it until finance reviews the promise (collections context C3)", () => {
     expect(reminderPause([request({ kind: "promise", promisedOn: TODAY })], TODAY)).toEqual({ reason: "promise", until: TODAY });
-    expect(reminderPause([request({ kind: "promise", promisedOn: "2026-10-12" })], TODAY)).toBeNull();
+    expect(reminderPause([request({ kind: "promise", promisedOn: "2026-10-12" })], TODAY)).toEqual({ reason: "promise_passed", until: null });
+    expect(reminderPause([request({ kind: "promise", promisedOn: "2026-10-12", status: "closed", outcome: "resolved", closedAt: "2026-10-13T08:00:00Z" })], TODAY)).toBeNull();
   });
 
-  it("ignores a closed request, a claim of payment and a pay link asked for", () => {
+  it("holds them while a claim of payment is open (collections context C2)", () => {
+    expect(reminderPause([request({ kind: "paid", paidOn: "2026-10-12" })], TODAY)).toEqual({ reason: "paid", until: null });
+  });
+
+  it("ignores a closed request and a pay link asked for", () => {
     expect(reminderPause([request({ kind: "dispute", status: "closed", outcome: "resolved", closedAt: "2026-10-13T08:00:00Z" })], TODAY)).toBeNull();
-    expect(reminderPause([request({ kind: "paid", paidOn: "2026-10-12" }), request({ kind: "pay_link" })], TODAY)).toBeNull();
+    expect(reminderPause([request({ kind: "pay_link" })], TODAY)).toBeNull();
   });
 });
 
@@ -204,7 +209,9 @@ describe("financeNextStep", () => {
   it("asks finance to find a claimed payment, never to mark it paid", () => {
     const step = financeNextStep(request({ kind: "paid", paidOn: "2026-10-10", reference: "WIRE-2210", amount: 750 }), live);
     expect(step).toMatchObject({ label: "Find the payment", closes: ["resolved", "not_received"] });
-    expect(step.detail).toBe("Look for 750.00 USDC paid on Oct 10, 2026, reference WIRE-2210. Once it arrived, apply it under Apply payments, then close this as found.");
+    expect(step.detail).toBe(
+      "Look for 750.00 USDC paid on Oct 10, 2026, reference WIRE-2210. Once it arrived, apply it under Apply payments, then close this as found. The agent's reminders wait until you close it."
+    );
   });
 
   it("closes a claim whose invoice was paid since", () => {
@@ -213,7 +220,7 @@ describe("financeNextStep", () => {
 
   it("waits on a promise until its day, then follows up", () => {
     expect(financeNextStep(request({ kind: "promise", promisedOn: "2026-10-18" }), live)).toMatchObject({ label: "Wait until Oct 18, 2026" });
-    expect(financeNextStep(request({ kind: "promise", promisedOn: "2026-10-12" }), live)).toMatchObject({ label: "Follow up: the promised day passed" });
+    expect(financeNextStep(request({ kind: "promise", promisedOn: "2026-10-12" }), live)).toMatchObject({ label: "Review it: the promised day passed" });
   });
 
   it("asks for a reply and a resolution on a dispute", () => {

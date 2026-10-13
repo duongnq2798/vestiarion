@@ -128,3 +128,47 @@ describe("markDeleted", () => {
     expect(update?.body).toMatchObject({ source_status: "deleted" });
   });
 });
+
+describe("the deal's owner (collections context C5)", () => {
+  const deal = {
+    externalId: "30117482911",
+    version: "2026-10-01T02:04:11.733Z",
+    updatedAt: "2026-10-01T02:04:11.733Z",
+    name: "Website rebuild",
+    amount: "12500",
+    currency: "USD",
+    closeOn: "2026-10-01",
+    pipelineId: "default",
+    pipelineLabel: "Sales Pipeline",
+    stageId: "closedwon",
+    stageLabel: "Closed Won",
+    stage: "won" as const,
+    company: null,
+    ownerId: "77001",
+  };
+
+  it("is written beside the deal's facts, on a new row and an updated one", async () => {
+    const { fake, run } = world([], "active", (sent) => (sent.path === "/rest/v1/crm_deals" && sent.method === "POST" ? { body: [{ id: "row-new" }] } : undefined));
+    await run(() => crmStore.insertDeal(connection, deal));
+    const owner = fake.requests.find((sent) => sent.method === "PATCH" && (sent.body as Record<string, unknown>).owner_external_id !== undefined);
+    expect(owner?.body).toEqual({ owner_external_id: "77001" });
+    expect(owner?.params.get("id")).toBe("eq.row-new");
+    // The facts themselves never carry it, so they still write where the column is not there yet.
+    const insert = fake.requests.find((sent) => sent.method === "POST");
+    expect(insert?.body).not.toHaveProperty("owner_external_id");
+
+    const again = world([]);
+    await again.run(() => crmStore.updateDeal(connection, { id: "row-1", externalVersion: null, sourceStatus: "present", dealId: DEAL }, { ...deal, ownerId: null }));
+    expect(again.fake.requests.filter((sent) => sent.method === "PATCH").map((sent) => sent.body)).toContainEqual({ owner_external_id: null });
+  });
+
+  it("is left out before migration 0110 adds its column, and the deal still syncs", async () => {
+    const { run } = world([], "active", (sent) => {
+      if (sent.method === "PATCH" && (sent.body as Record<string, unknown>).owner_external_id !== undefined) {
+        return { status: 400, body: { code: "PGRST204", message: "Could not find the 'owner_external_id' column of 'crm_deals' in the schema cache" } };
+      }
+      return undefined;
+    });
+    await expect(run(() => crmStore.updateDeal(connection, { id: "row-1", externalVersion: null, sourceStatus: "present", dealId: DEAL }, deal))).resolves.toBeUndefined();
+  });
+});

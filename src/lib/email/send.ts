@@ -9,6 +9,11 @@ export interface EmailMessage {
   subject: string;
   html: string;
   text: string;
+  /**
+   * Resend's `Idempotency-Key`: the same key sent again within 24 hours is not sent twice (notifications I11). A SHA-256
+   * of the recipient, the event and the rules' version (`src/lib/notifications/deliveries.ts`); never an address.
+   */
+  idempotencyKey?: string;
 }
 
 export type SendResult = { sent: true; id: string } | { sent: false; reason: string };
@@ -52,7 +57,11 @@ export async function sendEmail(
   try {
     const response = await fetchImpl("https://api.resend.com/emails", {
       method: "POST",
-      headers: { authorization: `Bearer ${settings.apiKey}`, "content-type": "application/json" },
+      headers: {
+        authorization: `Bearer ${settings.apiKey}`,
+        "content-type": "application/json",
+        ...(message.idempotencyKey ? { "idempotency-key": message.idempotencyKey } : {}),
+      },
       body: JSON.stringify({ from: settings.from, to: [message.to], subject: message.subject, html: message.html, text: message.text }),
       signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });
