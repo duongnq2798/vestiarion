@@ -100,6 +100,42 @@ describe("the accountant role (A1)", () => {
     await db.query("insert into public.memberships (org_id, user_id, role) values ($1, $2, 'accountant')", [orgA, books]);
     // 0025: pausing the agent takes a deciding role.
     await expect(call("select public.pause_agent($1, $2, 'checking')", [orgA, books])).rejects.toThrow(/pause_not_permitted/);
+    // 0025, 0054, 0031: resuming it, turning on the USYC reserve and deleting the workspace take an owner or an admin.
+    await expect(call("select public.resume_agent($1, $2)", [orgA, books])).rejects.toThrow(/resume_not_permitted/);
+    await expect(call("select public.enable_usyc_reserve($1, $2)", [orgA, books])).rejects.toThrow(/usyc_not_permitted/);
+    await expect(call("select public.delete_org($1, $2)", [orgA, books])).rejects.toThrow(/not_owner/);
+    // 0061, 0077: an accountant is never the sole approver, never counted toward two approvals, and its approval counts for nothing.
+    const [sole] = await call<{ sole: boolean }>("select public.sole_approver($1, $2) as sole", [orgA, books]);
+    expect(sole.sole).toBe(false);
+    const [among] = await call<{ ids: string[] }>("select public.approvers_among($1, $2::uuid[]) as ids", [orgA, [books, approver]]);
+    expect(among.ids).toEqual([approver]);
+    const deciders = (await db.query<{ id: string }>("select user_id as id from public.memberships where org_id = $1 and role in ('owner', 'admin', 'approver')", [orgA])).rows;
+    const [besides] = await call<{ n: number }>("select public.approvers_besides($1, '{}'::uuid[]) as n", [orgA]);
+    expect(besides.n).toBe(deciders.length);
+  });
+
+  it("lets nobody reach admin or owner through the accountant role", async () => {
+    const books = await createUser(db, "books7@example.com");
+    await db.query("insert into public.memberships (org_id, user_id, role) values ($1, $2, 'accountant')", [orgA, books]);
+    // An admin may not raise an accountant to admin or owner; an accountant may raise nobody, itself included.
+    for (const target of ["admin", "owner"]) {
+      await expect(call("select public.change_member_role($1, $2, $3, $4)", [orgA, admin, books, target])).rejects.toThrow(/role_not_assignable/);
+      await expect(call("select public.change_member_role($1, $2, $3, $4)", [orgA, books, books, target])).rejects.toThrow(/role_not_assignable/);
+      await expect(call("select * from public.invite_member($1, $2, $3, $4, $5)", [orgA, books, `up-${target}@example.com`, target, hash()])).rejects.toThrow(/role_not_assignable/);
+    }
+    // An accountant removes nobody else.
+    await expect(call("select public.remove_member($1, $2, $3)", [orgA, books, viewer])).rejects.toThrow(/role_not_assignable/);
+    // An invitation an admin sent stops working once that admin is moved to accountant.
+    const helper = await createUser(db, "helper@example.com");
+    const invited = await createUser(db, "invited@example.com");
+    await db.query("insert into public.memberships (org_id, user_id, role) values ($1, $2, 'admin')", [orgA, helper]);
+    const token = hash();
+    await call("select * from public.invite_member($1, $2, 'invited@example.com', 'approver', $3)", [orgA, helper, token]);
+    await call("select public.change_member_role($1, $2, $3, 'accountant')", [orgA, owner, helper]);
+    await expect(call("select * from public.accept_invitation($1, $2)", [token, invited])).rejects.toThrow(/invitation_no_longer_valid/);
+    // An owner still may make an accountant an admin.
+    await call("select public.change_member_role($1, $2, $3, 'admin')", [orgA, owner, books]);
+    expect((await db.query<{ role: string }>("select role from public.memberships where org_id = $1 and user_id = $2", [orgA, books])).rows[0].role).toBe("admin");
   });
 });
 
