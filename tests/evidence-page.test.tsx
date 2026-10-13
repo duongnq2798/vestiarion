@@ -154,6 +154,30 @@ describe("what a fact that is not known says", () => {
     expect(text(markup)).toContain("Record A milestone on Contractors");
     expect(markup).not.toContain("How the agent decided, step by step");
   });
+
+  it("names a link that can't be opened, with why, and never offers it (evidence access E1, E3)", () => {
+    const LINK = "https://github.com/acme/app/pull/12";
+    const input = paidInFull();
+    const entries = [entry(71, "08:31:00", "human", "verify_milestone_manual", { by: BOB, milestoneId: MILESTONE, verificationSource: LINK }, "contractor")];
+    const chain = buildEvidenceChain({
+      ...input,
+      subject: {
+        kind: "milestone",
+        milestone: {
+          id: MILESTONE, contractor_id: CP, title: "Five October posts", amount: 25, status: "verified", verified: true, verification_method: "manual",
+          verification_status: "verified", verification_source: LINK, verification_checked_at: null, verified_at: at("08:31:00"), verification_detail: {}, tx_ref: null,
+        },
+      },
+      entries,
+      payment: null,
+      receipt: null,
+      checks: { entries: okChecks(entries), onChain: null, links: new Map([[LINK, { state: "cannot_open", reason: "GitHub does not show it publicly: it was deleted, or its repository is private." }]]) },
+    });
+    const markup = view(chain);
+    expect(markup).not.toContain(`href="${LINK}"`);
+    expect(markup).toContain('data-link-state="cannot_open"');
+    expect(text(markup)).toContain(`· ${LINK_STATE.cannot_open}: GitHub does not show it publicly: it was deleted, or its repository is private.`);
+  });
 });
 
 describe("who can see this (E10)", () => {

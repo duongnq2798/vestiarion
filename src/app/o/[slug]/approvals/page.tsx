@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { Inbox } from "lucide-react";
+import { dismissChecklistAction } from "@/app/actions/onboarding";
 import ApprovalCard from "@/components/ApprovalCard";
 import { ProposalCard } from "@/components/ProposalCard";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { GettingStarted } from "@/components/vx/GettingStarted";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import { listWaitingPayables } from "@/lib/agent/approvals";
@@ -18,6 +20,8 @@ import { can } from "@/lib/auth/roles";
 import { shellModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
 import { listMembers } from "@/lib/platform/members";
+import { readOnboardingMarks, readPersonActs, recordOnboardingMarks } from "@/lib/onboarding/read";
+import { approverChecklist, checklistRoleOf, type OnboardingMark } from "@/lib/onboarding/role-checklists";
 import { listOpenProposals } from "@/lib/policy-proposals";
 import { stats } from "@/lib/queries";
 import { shellStatus } from "@/lib/shell-status";
@@ -75,6 +79,11 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
     const exceptionOf = (payable: (typeof waiting)[number]) =>
       members ? exceptionFacts({ dueDate: payable.dueDate, discount: payable.discount, createdBy: payable.createdBy }, members, today) : undefined;
 
+    // An approver's checklist (onboarding by role R2): this page open is its first step, and a bill waiting on it, its
+    // reasons on its card, the second. Both are recorded for this person (migration 0114), best effort, so the console
+    // ticks them too; deciding a bill is read from the signed ledger.
+    const approverList = checklistRoleOf(membership.role) === "approver" ? await approverOnboarding(user.id, waiting) : null;
+
     return (
       <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()} status={await shellStatus()}>
         <PageHead
@@ -89,6 +98,7 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
             every 15 s while something waits (someone else may be deciding it), every 30 s otherwise, and at once
             on return to the tab. Open dialogs and a typed rejection reason survive a refresh. */}
         <AutoRefresh intervalMs={waiting.length > 0 ? 15_000 : 30_000} />
+        {approverList && <GettingStarted slug={slug} checklist={approverList.checklist} isOwner={false} dismiss={approverList.canDismiss ? dismissChecklistAction : undefined} />}
         {proposals.length > 0 && (
           <section className="mb-8">
             <SectionHeader title="Suggested by the agent" meta="from what people approved here" />
@@ -124,4 +134,23 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
       </ProductShell>
     );
   });
+}
+
+/** The approver's checklist on Approvals, recording what opening it just did: the page seen, and a held bill's reasons. */
+async function approverOnboarding(userId: string, waiting: ReadonlyArray<{ id: string; status: string; reclaimable?: boolean }>) {
+  const [marks, acts] = await Promise.all([readOnboardingMarks(userId), readPersonActs(userId)]);
+  const seen: OnboardingMark[] = ["approvals_opened", ...(waiting.length > 0 ? (["held_reason_seen"] as const) : [])];
+  const missing = seen.filter((mark) => !marks.mine.has(mark));
+  if (marks.available && missing.length > 0) await recordOnboardingMarks(userId, missing);
+  return {
+    canDismiss: marks.available,
+    checklist: approverChecklist({
+      approvalsOpened: true,
+      heldReasonSeen: marks.mine.has("held_reason_seen") || waiting.length > 0,
+      decided: acts.decided,
+      waitingCount: waiting.filter((payable) => payable.status !== "processing" || payable.reclaimable).length,
+      firstWaitingId: waiting[0]?.id ?? null,
+      dismissed: marks.mine.has("dismissed_approver"),
+    }),
+  };
 }

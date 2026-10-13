@@ -241,7 +241,7 @@ function EvidenceRow({ items, className }: { items: Evidence[]; className?: stri
               <a
                 href={item.href}
                 target="_blank"
-                rel="noreferrer"
+                rel={item.typed ? "noreferrer nofollow ugc" : "noreferrer"}
                 aria-label={`${item.label} ${item.value} (opens in a new tab)`}
                 className="inline-flex items-center gap-0.5 font-mono text-agent transition-colors duration-150 ease-standard hover:underline"
               >

@@ -142,6 +142,8 @@ describe("0023 is idempotent", () => {
         { tbl: "milestones", col: "closed_by", action: "n" },
         { tbl: "milestones", col: "created_by", action: "n" },
         { tbl: "milestones", col: "decision_claimed_by", action: "n" },
+        // A member's checklist marks (0114) are theirs alone: they go with the account.
+        { tbl: "onboarding_marks", col: "user_id", action: "c" },
         { tbl: "orgs", col: "agent_paused_by", action: "n" },
         { tbl: "orgs", col: "created_by", action: "n" },
         { tbl: "orgs", col: "usyc_live_by", action: "n" },

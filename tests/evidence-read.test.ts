@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { evidenceRequest, readEvidence } from "@/lib/evidence-read";
+import { NOT_CHECKED_WORDS } from "@/lib/evidence-links/allow-list";
+import { forgetLinkChecks, LINK_WORDS } from "@/lib/evidence-links/check";
 import type { LedgerEntryInput } from "@/lib/ledger";
 import { ledgerKeyId } from "@/lib/ledger-keys";
 import { chainById } from "@/lib/payee-chains";
@@ -308,5 +310,71 @@ describe("a milestone's evidence", () => {
     // Not paid and never decided: the newest check stands, with no time to read it at.
     const check = db.fake.requests.find((request) => request.path === "/rest/v1/compliance_checks");
     expect(check?.params.get("created_at")).toBeNull();
+  });
+});
+
+describe("a given link's access, checked before the page says it is verified (evidence access E1)", () => {
+  const PR = "https://github.com/acme/app/pull/12";
+  const merged = {
+    id: MILESTONE,
+    org_id: ORG,
+    contractor_id: CP,
+    title: "Fix the login redirect",
+    amount: "25",
+    status: "verified",
+    verified: true,
+    verification_method: "github",
+    verification_status: "verified",
+    verification_source: PR,
+    verification_checked_at: "2026-01-01T00:01:00Z",
+    verified_at: "2026-01-01T00:00:30Z",
+    verification_detail: { pullRequest: PR, mergedAt: "2026-01-01T00:00:30Z" },
+    tx_ref: null,
+  };
+  const github = (isPrivate: boolean | null) =>
+    vi.fn(async (input: string | URL | Request) => {
+      expect(String(input)).toBe("https://api.github.com/repos/acme/app/pulls/12");
+      return isPrivate === null ? new Response("{}", { status: 404 }) : Response.json({ base: { repo: { private: isPrivate } } });
+    }) as unknown as typeof fetch;
+  const links = (fetchImpl: typeof fetch, installation?: string) => ({
+    fetch: fetchImpl,
+    resolve: async () => [{ address: "140.82.112.6", family: 4 }],
+    tokenFor: async () => installation,
+    fallbackToken: null,
+  });
+  const delivered = (read: Awaited<ReturnType<typeof readEvidence>>) => read!.chain.steps.find((step) => step.id === "delivered")!;
+
+  beforeEach(() => {
+    forgetLinkChecks();
+  });
+
+  it("keeps a merged pull request GitHub shows publicly verified, its link checked", async () => {
+    const read = await database({ milestone: merged, intent: null, targets: [] }).run(() => readEvidence("milestone", MILESTONE, { links: links(github(false)) }));
+    expect(delivered(read).kind).toBe("verified");
+    expect(delivered(read).facts[0].link).toMatchObject({ href: PR, state: "checked" });
+  });
+
+  it("never counts one in a private repository as verified, and says why its link can't be opened", async () => {
+    const read = await database({ milestone: merged, intent: null, targets: [] }).run(() =>
+      readEvidence("milestone", MILESTONE, { links: links(github(true), "installation-token") })
+    );
+    const step = delivered(read);
+    expect(step.kind).toBe("unreachable");
+    expect(step.facts[0].link).toMatchObject({ state: "cannot_open", reason: LINK_WORDS.private });
+    expect(step.facts[0].notes).toContain("Its link can't be opened, so it is not counted as verified.");
+    expect(step.facts.some((fact) => fact.kind === "verified")).toBe(false);
+  });
+
+  it("says a deleted pull request can't be opened", async () => {
+    const read = await database({ milestone: merged, intent: null, targets: [] }).run(() => readEvidence("milestone", MILESTONE, { links: links(github(null)) }));
+    expect(delivered(read).facts[0].link).toMatchObject({ state: "cannot_open", reason: LINK_WORDS.notPublic });
+  });
+
+  it("never requests a link on another site: a hand verification's evidence is shown as not checked", async () => {
+    const fetchImpl = vi.fn() as unknown as typeof fetch;
+    const byHand = { ...merged, verification_method: "manual", verification_status: "unverified", verification_source: "https://169.254.169.254/latest/meta-data/", verification_detail: {} };
+    const read = await database({ milestone: byHand, intent: null, targets: [] }).run(() => readEvidence("milestone", MILESTONE, { links: links(fetchImpl) }));
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(delivered(read).facts[0]).toMatchObject({ kind: "stated", link: { state: "not_opened", reason: NOT_CHECKED_WORDS.address } });
   });
 });

@@ -23,7 +23,7 @@ Every fact carries one of seven labels, in words with an icon beside it, never t
 | **Stated by a person** | A member or the payee entered it. The page names who, and when. |
 | **Inferred** | Read, not recorded: the model's judgement, sample data, or a setting as it is today. |
 | **Missing** | Nothing records it. Where it can still be added, the page says how. |
-| **Could not open** | A check got no answer, or a link was revoked: it never counts as verified. |
+| **Could not open** | A check got no answer, or a link can't be opened (deleted, private, refused or expired): it never counts as verified. |
 | **Does not match** | A check answered, and its answer contradicts the record. |
 
 As the box says, "Each link reads as its weakest fact, so it is never labelled above what its least-supported fact is." A label comes from where a fact came from, never from the entry that recorded it: goods a person marked received stay **Stated by a person**, though the entry that records them is signed.
@@ -51,7 +51,26 @@ Each fact names who stated it by email, and when: "a former member" for someone 
 
 Under each fact, the numbers of the entries it rests on open them in the **Audit log**.
 
-A link a person typed, such as the evidence a milestone was verified by hand with, is shown as a link marked **Not opened by Vestiarion**: Vestiarion never fetches it, so its fact stays **Stated by a person**. Only `https` links are shown. A link Vestiarion checked, such as the transaction, is marked **Checked by Vestiarion**. A fact that is **Missing** says what would fill it, such as "A person marks them received with Add details on Bills & receivables."
+A link Vestiarion checked, such as the transaction, is marked **Checked by Vestiarion**. A fact that is **Missing** says what would fill it, such as "A person marks them received with Add details on Bills & receivables."
+
+## Links that can't be opened
+
+A link someone gave, such as a milestone's pull request, the comment a bounty was attached with, or the evidence a milestone was verified by hand with, is checked before the page says what it is. Only `https` links are shown.
+
+- **It opens**: the pull request or comment is public on GitHub, or the workspace's own storage serves the signed file. The link is marked **Checked by Vestiarion**.
+- **It can't be opened**: it was deleted, its repository is private, GitHub refused access, or a signed link expired. The page names it without offering it, marked **Can't be opened** with the reason when it is known, such as "It is in a private repository on GitHub: only people with access to that repository can open it." A fact resting on it is never counted as verified: a merged pull request that can't be opened reads **Could not open**, with "Its link can't be opened, so it is not counted as verified."
+- **It is not checked**: Vestiarion checks links on GitHub and on its own file storage only. Any other link, such as a document on a drive, is shown as given and marked **Not checked by Vestiarion**, with why; it opens in your browser, never on Vestiarion's server, and its fact stays **Stated by a person**. A check that got no answer is marked **Could not open**, and is not counted as verified either.
+
+How the check is made, so that it never reaches anything it should not:
+
+- Vestiarion never opens the link itself. For a pull request or a comment it asks GitHub's API, at an address it builds from the link's owner, repository and number; for a signed file, the workspace's own storage, with the link's own signature and nothing else.
+- A link with another scheme, a user name or password, a port, a numeric or private address, or any other site is never requested at all. Before each request the address is checked again and its name resolved, and nothing is sent unless every address it has is public. A redirect is not followed, except GitHub's own to a renamed repository.
+- GitHub is asked through the workspace's own GitHub connection where the repository is in it. A private repository that only Vestiarion's own GitHub token can read is described as GitHub describes it to the public, "GitHub does not show it publicly: it was deleted, or its repository is private.", so the check tells no one more than the workspace could see. Your sign-in is never sent anywhere.
+- An answer is kept for a few minutes at most: five for a link that opens, two for one that can't be opened, thirty seconds when the service did not answer. At most 25 links are checked on a page.
+
+The same check runs on **Contractors**: a milestone's card says a pull request can't be opened beside **Verified by**, with the reason and no link, and says a link on another site is not checked.
+
+A bill's document is never kept, only its SHA-256, and a deal cost records only whether it has a document; a receipt's link is never shown again, only its hash is kept. There is nothing there to open, so nothing there is offered.
 
 ## Signatures
 

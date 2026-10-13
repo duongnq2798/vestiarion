@@ -55,12 +55,13 @@ const LABEL: Record<EvidenceKind, { icon: LucideIcon; tone: "neutral" | "agent" 
   contradicted: { icon: OctagonX, tone: "refused" },
 };
 
-/** How Vestiarion stands to a link a fact points to (E4). */
+/** How Vestiarion stands to a link a fact points to (E4; evidence access E1, E3). */
 export const LINK_STATE: Record<EvidenceLink["state"], string> = {
   checked: "Checked by Vestiarion",
-  not_opened: "Not opened by Vestiarion",
+  not_opened: "Not checked by Vestiarion",
   unreachable: "Could not open",
   contradicted: "Does not match",
+  cannot_open: "Can't be opened",
 };
 
 /** A label in words with its icon: never by colour alone (E3). */
@@ -265,11 +266,24 @@ function Fact({ fact, orgSlug }: { fact: EvidenceFact; orgSlug: string }) {
   );
 }
 
-/** A link outside, and how Vestiarion stands to it (E4): a typed one is shown, never fetched. */
+/**
+ * A link outside, and how Vestiarion stands to it (E4; evidence access E1, E3): one that can't be opened is named, with
+ * why, and never offered; one a person gave is never fetched by its own address, and opens with no referrer.
+ */
 function FactLink({ link }: { link: EvidenceLink }) {
-  const typed = link.state === "not_opened";
+  const typed = link.given === true || link.state === "not_opened";
+  const tone = link.state === "contradicted" ? "text-refused" : link.state === "unreachable" || link.state === "cannot_open" ? "text-held" : "text-ink-3";
+  const said = link.reason && link.state !== "checked" ? `${LINK_STATE[link.state]}: ${link.reason}` : LINK_STATE[link.state];
+  if (link.state === "cannot_open") {
+    return (
+      <span className="inline-flex flex-wrap items-center gap-x-1.5" data-link-state="cannot_open">
+        <span className="font-medium text-ink-2 [overflow-wrap:anywhere]">{link.label}</span>
+        <span className={tone}>· {said}</span>
+      </span>
+    );
+  }
   return (
-    <span className="inline-flex flex-wrap items-center gap-x-1.5">
+    <span className="inline-flex flex-wrap items-center gap-x-1.5" data-link-state={link.state}>
       <a
         href={link.href}
         target="_blank"
@@ -280,7 +294,7 @@ function FactLink({ link }: { link: EvidenceLink }) {
         <ArrowUpRight aria-hidden className="size-3" />
         <span className="sr-only">(opens in a new tab)</span>
       </a>
-      <span className={cn(link.state === "contradicted" ? "text-refused" : link.state === "unreachable" ? "text-held" : "text-ink-3")}>· {LINK_STATE[link.state]}</span>
+      <span className={tone}>· {said}</span>
     </span>
   );
 }

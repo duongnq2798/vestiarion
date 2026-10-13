@@ -26,13 +26,44 @@
  * to decide a bill. Its checklist starts with what leads to the agent's first decision on a real bill: a supplier, a
  * bill and the decision (in shadow mode, the first verdict). The wallet, its USDC and going live follow, under "To pay
  * on Arc", with the first payment. A live workspace, or one with a wallet, keeps the order above.
+ *
+ * It is the owner's checklist of onboarding by role (docs/superpowers/specs/2026-10-13-role-onboarding-evidence-access-design.md
+ * R1): every variant opens with the workspace created and asks for the agent's limits, set or kept as they are, before
+ * the first payment, and an owner or admin may dismiss it for good. Each step names the permission it takes (`needs`),
+ * so an admin sees an owner's step as an owner's, and no step offers what a role cannot do. Approvers and accountants
+ * have checklists of their own (./onboarding/role-checklists).
  */
 
+import type { Permission } from "./auth/roles";
 import { addressUnconfirmed } from "./counterparty-address";
 import { networkProfile, type Network } from "./network";
 import type { WalletHost } from "./config";
 
-export type GettingStartedStepId = "wallet" | "fund" | "live" | "payee" | "payable" | "decision" | "payment" | "suppliers" | "bills" | "verdict";
+export type GettingStartedStepId =
+  | "workspace"
+  | "wallet"
+  | "fund"
+  | "live"
+  | "payee"
+  | "payable"
+  | "decision"
+  | "limits"
+  | "payment"
+  | "suppliers"
+  | "bills"
+  | "verdict"
+  // An approver's (onboarding by role R2).
+  | "approvals"
+  | "held_reason"
+  | "decide"
+  // An accountant's (R3).
+  | "console"
+  | "queue"
+  | "book"
+  | "handoff";
+
+/** Whose checklist it is (R1 to R3): an admin follows the owner's, and a viewer has none. */
+export type ChecklistRole = "owner" | "approver" | "accountant";
 
 export interface GettingStartedInput {
   mode: "sandbox" | "live";
@@ -66,6 +97,13 @@ export interface GettingStartedInput {
    * counterparty a person added, paid or not (`ownBillCount`). Null or absent outside it.
    */
   shadow?: { currency: string; verdictsGiven: number; billCount: number } | null;
+  /**
+   * The agent's spending limit as it stands, and whether a person set it, or the two-approval figure, or kept them as
+   * they are (`limits_confirmed`): "Set or confirm the limits" (R1). Absent, nobody has.
+   */
+  limits?: { confirmed: boolean; dailyUsdc: number | null; weeklyUsdc: number | null } | null;
+  /** This person dismissed the owner's checklist for good (`dismissed_owner`, R4). */
+  dismissed?: boolean;
 }
 
 export interface GettingStartedStep {
@@ -74,14 +112,22 @@ export interface GettingStartedStep {
   body: string;
   /** Where the step is done, relative to the workspace (`orgHref(slug, path)`). */
   path: string;
+  /** Where the step is done when that is outside the workspace (the accountant console, a download): used as it is. */
+  href?: string;
+  /** The link downloads a file rather than opening a page (an accountant's hand-off). */
+  download?: boolean;
   done: boolean;
   /** Only an owner can take this step; an admin sees it but not its controls. */
   ownerOnly: boolean;
+  /** The permission taking the step needs (`roles.ts`), or null when anyone can: the checklist never offers more (R5). */
+  needs: Permission | null;
   /** The heading the step is listed under, when the checklist groups its steps: "To pay on Arc" in a sandbox with no wallet. */
   section?: string;
 }
 
 export interface GettingStarted {
+  /** Whose checklist it is; the owner's when absent. */
+  role?: ChecklistRole;
   /** The section's title when it is not "Get started": the shadow mode checklist names itself. */
   title?: string;
   /** False once the workspace is live and has made its first payment on Arc testnet: the checklist is done and hides. */
@@ -89,14 +135,57 @@ export interface GettingStarted {
   steps: GettingStartedStep[];
   /** The first step not done, or null when every one is. */
   next: GettingStartedStepId | null;
-  /** The guide for where the workspace is: going live, then its first payment; or running in shadow mode. */
-  guide: "go-live" | "first-payment" | "shadow-mode";
+  /**
+   * The guide for where the workspace is: going live, then its first payment; or running in shadow mode. An approver's
+   * opens the first-payment guide at deciding a held payment, and an accountant's the accountants guide.
+   */
+  guide: "go-live" | "first-payment" | "shadow-mode" | "first-payment#6-approve-a-held-payment" | "accountants";
 }
 
 const GO_LIVE = "/settings#go-live-title";
 /** Where a sandbox with no wallet lists the steps to real payments, after its first decision. */
 export const PAY_ON_ARC = "To pay on Arc";
 const SETTINGS_STEPS: ReadonlySet<GettingStartedStepId> = new Set(["wallet", "fund", "live"]);
+/** The agent's spending limit on the console (`AgentBudgetPanel`). */
+export const LIMITS_PATH = "/console#agent-budget";
+
+/** The workspace exists once its console shows this: the first of the owner's steps, always done (R1). */
+const WORKSPACE_STEP: GettingStartedStep = {
+  id: "workspace",
+  title: "Create the workspace",
+  body: "",
+  path: "/settings",
+  done: true,
+  ownerOnly: false,
+  needs: null,
+};
+
+const usdc = (value: number) => `${value.toFixed(2)} USDC`;
+
+/** "Set or confirm the limits" (R1): the agent's spending limit as it stands, set by a person or kept as it is. */
+function limitsStep(limits: GettingStartedInput["limits"]): GettingStartedStep {
+  const daily = limits?.dailyUsdc ?? null;
+  const weekly = limits?.weeklyUsdc ?? null;
+  const figures =
+    daily !== null && weekly !== null
+      ? `at most ${usdc(daily)} a day and ${usdc(weekly)} in 7 days`
+      : daily !== null
+        ? `at most ${usdc(daily)} a day, with no 7-day limit`
+        : weekly !== null
+          ? `at most ${usdc(weekly)} in 7 days, with no daily limit`
+          : null;
+  return {
+    id: "limits",
+    title: "Set or confirm the limits",
+    body: figures
+      ? `On its own, the agent pays ${figures}, and each supplier no more than its payment limit. Change them on Agent spending limit, or keep them as they are.`
+      : "The agent has no daily or 7-day spending limit: on its own it pays each supplier up to its payment limit. Set one on Agent spending limit, or keep it as it is.",
+    path: LIMITS_PATH,
+    done: limits?.confirmed === true,
+    ownerOnly: false,
+    needs: "agent.budget",
+  };
+}
 
 export function gettingStarted(input: GettingStartedInput): GettingStarted {
   const live = input.mode === "live";
@@ -133,6 +222,7 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
       path: GO_LIVE,
       done: live || hasWallet,
       ownerOnly: true,
+      needs: "org.administer",
     },
     {
       id: "fund",
@@ -151,6 +241,7 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
       path: GO_LIVE,
       done: funded,
       ownerOnly: false,
+      needs: null,
     },
     {
       id: "live",
@@ -159,6 +250,7 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
       path: GO_LIVE,
       done: live,
       ownerOnly: true,
+      needs: "org.administer",
     },
   ];
 
@@ -171,27 +263,36 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
     path: held ? "/approvals" : "/invoices",
     done: paid,
     ownerOnly: false,
+    needs: held ? "approval.decide" : null,
   };
+  const limits = limitsStep(input.limits);
+  const dismissed = input.dismissed === true;
 
-  if (input.shadow) return shadowChecklist(input.shadow, setup, { payable, unconfirmed, held, label, billFirst, supplierAdded: suppliers.length > 0 });
+  if (input.shadow) {
+    const shadow = shadowChecklist(input.shadow, setup, limits, { payable, unconfirmed, held, label, billFirst, supplierAdded: suppliers.length > 0 });
+    return { ...shadow, show: shadow.show && !dismissed };
+  }
 
   if (billFirst) {
-    const steps: GettingStartedStep[] = [
+    const first: GettingStartedStep[] = [
+      WORKSPACE_STEP,
       {
         id: "payee",
         title: "Add a supplier",
         body: "A vendor or contractor you pay, with the most the agent may pay it on one bill. Its Arc address can wait: a sandbox simulates the payment.",
-        path: "/counterparties",
+        path: "/counterparties?add",
         done: suppliers.length > 0,
         ownerOnly: false,
+        needs: "records.write",
       },
       {
         id: "payable",
-        title: "Add a bill",
-        body: "One of your bills from that supplier, in Bills & receivables. Tick Goods or services received once they have come. The agent decides on it within a minute.",
-        path: "/invoices",
+        title: "Add or import a first bill",
+        body: "One of your bills from that supplier, in Bills & receivables: New, then Bill to pay or From a document, or Import a list for many. Tick Goods or services received once they have come. The agent decides on it within a minute.",
+        path: "/invoices?new=bill",
         done: (input.billCount ?? input.payableCount) > 0,
         ownerOnly: false,
+        needs: "records.write",
       },
       {
         id: "decision",
@@ -200,15 +301,18 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
         path: "/invoices",
         done: (input.decidedCount ?? 0) > 0 || held,
         ownerOnly: false,
+        needs: null,
       },
-      ...[...setup, firstPayment].map((step) => ({ ...step, section: PAY_ON_ARC })),
+      limits,
     ];
-    // The first-payment guide walks the first three steps; the Go live guide the rest.
-    const decided = steps.slice(0, 3).every((step) => step.done);
-    return { show: true, steps, next: steps.find((step) => !step.done)?.id ?? null, guide: decided ? "go-live" : "first-payment" };
+    const steps: GettingStartedStep[] = [...first, ...[...setup, firstPayment].map((step) => ({ ...step, section: PAY_ON_ARC }))];
+    // The first-payment guide walks the steps to the agent's first decision; the Go live guide the rest.
+    const decided = first.every((step) => step.done || step.id === "limits");
+    return { show: !dismissed, steps, next: steps.find((step) => !step.done)?.id ?? null, guide: decided ? "go-live" : "first-payment" };
   }
 
   const steps: GettingStartedStep[] = [
+    WORKSPACE_STEP,
     ...setup,
     {
       id: "payee",
@@ -219,21 +323,24 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
       path: "/counterparties",
       done: Boolean(payable),
       ownerOnly: false,
+      needs: "records.write",
     },
     {
       id: "payable",
-      title: "Add a payable",
-      body: "An invoice from that payee, within its payment limit, with a PO reference and Goods or services received ticked. The agent decides on it within a minute.",
-      path: "/invoices",
+      title: "Add or import a first bill",
+      body: "An invoice from that payee, within its payment limit, with a PO reference and Goods or services received ticked: New, then Bill to pay, or Import a list for many. The agent decides on it within a minute.",
+      path: "/invoices?new=bill",
       done: input.payableCount > 0,
       ownerOnly: false,
+      needs: "records.write",
     },
+    limits,
     firstPayment,
   ];
 
   const next = steps.find((step) => !step.done)?.id ?? null;
   return {
-    show: !(paid && live),
+    show: !(paid && live) && !dismissed,
     steps,
     next,
     guide: steps.some((step) => SETTINGS_STEPS.has(step.id) && !step.done) ? "go-live" : "first-payment",
@@ -247,6 +354,7 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
 function shadowChecklist(
   shadow: NonNullable<GettingStartedInput["shadow"]>,
   setup: GettingStartedStep[],
+  limits: GettingStartedStep,
   facts: { payable: unknown; unconfirmed: { name?: string } | undefined; held: boolean; label: string; billFirst: boolean; supplierAdded: boolean }
 ): GettingStarted {
   const inUsdc = shadow.currency === "USDC";
@@ -263,6 +371,7 @@ function shadowChecklist(
       path: "/counterparties",
       done: facts.billFirst ? facts.supplierAdded : Boolean(facts.payable),
       ownerOnly: false,
+      needs: "records.write",
     },
     {
       id: "bills",
@@ -273,6 +382,7 @@ function shadowChecklist(
       path: "/invoices",
       done: shadow.billCount > 0,
       ownerOnly: false,
+      needs: "records.write",
     },
     {
       id: "verdict",
@@ -283,9 +393,13 @@ function shadowChecklist(
       path: facts.held ? "/approvals" : "/invoices",
       done: shadow.verdictsGiven > 0,
       ownerOnly: false,
+      needs: "approval.decide",
     },
+    limits,
   ];
-  const steps = facts.billFirst ? [...run, ...setup.map((step) => ({ ...step, section: PAY_ON_ARC }))] : [...setup, ...run];
+  const steps = facts.billFirst
+    ? [WORKSPACE_STEP, ...run, ...setup.map((step) => ({ ...step, section: PAY_ON_ARC }))]
+    : [WORKSPACE_STEP, ...setup, ...run];
   return {
     title: "Get started in shadow mode",
     show: steps.some((step) => !step.done),

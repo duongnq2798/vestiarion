@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { confirmLimitsAction, dismissChecklistAction } from "@/app/actions/onboarding";
 import { refreshOnChainBalanceAction } from "@/app/actions/treasury";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import AgentControls from "@/components/AgentControls";
@@ -40,7 +41,9 @@ import { spendingLimitStatus } from "@/lib/circle/spending-limit-setup";
 import { readServiceBudget } from "@/lib/service-budget";
 import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
-import { gettingStarted, ownBillCount, ownDecidedCount, ownPayableCount } from "@/lib/getting-started";
+import { gettingStarted, ownBillCount, ownDecidedCount, ownPayableCount, type GettingStarted as Checklist } from "@/lib/getting-started";
+import { readLimitsSet, readOnboardingMarks, readPersonActs } from "@/lib/onboarding/read";
+import { approverChecklist, checklistRoleOf } from "@/lib/onboarding/role-checklists";
 import { ledgerReadMayBeCut, listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { pauseStateOf } from "@/lib/platform/pause";
 import { cashOutlook, type OutlookInput } from "@/lib/cash-outlook";
@@ -317,12 +320,25 @@ export default async function DashboardPage({
     const needsReview = waiting.filter((payable) => payable.status !== "processing" || payable.reclaimable).length;
     const paused = pause !== null;
     const role = access.membership.role;
-    // Computed from the rows above, with no extra read (getting-started design G1, G2), until the first
-    // payment on Arc testnet (first-payment design §2). Only people who can act on it see it: owners and
-    // admins add records, and an owner takes the workspace live. In shadow mode it has steps of its own: suppliers, real
-    // bills and a first verdict, from the shadow mode and verdicts read above. A sandbox with no wallet starts with its
-    // first bill and the agent's decision on it, from the invoices read above.
-    const checklist = can(role, "records.write")
+    // Each role's own checklist (onboarding by role, docs/superpowers/specs/2026-10-13-role-onboarding-evidence-access-design.md):
+    // the owner's, which an admin follows, or an approver's. An accountant's is on the accountant console, where their
+    // invitation lands them, and a viewer has none. Ticked from what happened: the rows above, this person's signed acts
+    // and the marks of migration 0114, read best effort (before 0114 runs, no marks and no Don't show again).
+    const checklistRole = checklistRoleOf(role);
+    const [marks, acts, limitsSet] =
+      checklistRole === "owner" || checklistRole === "approver"
+        ? await Promise.all([
+            readOnboardingMarks(access.user.id),
+            checklistRole === "approver" ? readPersonActs(access.user.id) : Promise.resolve(null),
+            checklistRole === "owner" ? readLimitsSet() : Promise.resolve(false),
+          ])
+        : [null, null, false];
+    // The owner's is computed from the rows above (getting-started design G1, G2), until the first payment on Arc testnet
+    // (first-payment design §2). Owners and admins add records, and an owner takes the workspace live. In shadow mode it
+    // has steps of its own: suppliers, real bills and a first verdict, from the shadow mode and verdicts read above. A
+    // sandbox with no wallet starts with its first bill and the agent's decision on it, from the invoices read above. The
+    // limits are the spending limit read above, set by a person or kept as they are.
+    const ownerChecklist = checklistRole === "owner" && can(role, "records.write")
       ? gettingStarted({
           mode: access.membership.mode,
           accounts: accountsRows,
@@ -338,8 +354,22 @@ export default async function DashboardPage({
           shadow: shadow
             ? { currency: shadow.currency, verdictsGiven: (shadowSummary?.agreed ?? 0) + (shadowSummary?.disagreed ?? 0), billCount: ownBillCount(invoices, counterparties) }
             : null,
+          limits: { confirmed: limitsSet || (marks?.limitsConfirmed ?? false), dailyUsdc: budget?.budget?.dailyUsdc ?? null, weeklyUsdc: budget?.budget?.weeklyUsdc ?? null },
+          dismissed: marks?.mine.has("dismissed_owner") ?? false,
         })
       : null;
+    const checklist: Checklist | null =
+      ownerChecklist ??
+      (checklistRole === "approver" && marks && acts
+        ? approverChecklist({
+            approvalsOpened: marks.mine.has("approvals_opened"),
+            heldReasonSeen: marks.mine.has("held_reason_seen"),
+            decided: acts.decided,
+            waitingCount: needsReview,
+            firstWaitingId: waiting[0]?.id ?? null,
+            dismissed: marks.mine.has("dismissed_approver"),
+          })
+        : null);
     // Sample data (sample-data design §1): offered in an empty simulated sandbox, and called out while it is loaded.
     const sampleOffered = offerSampleData({
       canWrite: can(role, "records.write"),
@@ -381,7 +411,15 @@ export default async function DashboardPage({
           </Callout>
         )}
 
-        {checklist && <GettingStarted slug={slug} checklist={checklist} isOwner={can(role, "org.administer")} />}
+        {checklist && (
+          <GettingStarted
+            slug={slug}
+            checklist={checklist}
+            isOwner={can(role, "org.administer")}
+            dismiss={marks?.available ? dismissChecklistAction : undefined}
+            confirmLimits={marks?.available && can(role, "agent.budget") ? confirmLimitsAction : undefined}
+          />
+        )}
 
         {sampleOffered && <SampleDataOffer orgSlug={slug} />}
         {sampleLoaded && <SampleDataLoaded orgSlug={slug} canRemove={can(role, "records.write")} />}

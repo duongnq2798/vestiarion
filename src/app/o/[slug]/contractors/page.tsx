@@ -20,6 +20,7 @@ import { IntakeFold } from "@/components/vx/IntakeFold";
 import { Money } from "@/components/vx/Primitives";
 import { StatTile } from "@/components/vx/StatTile";
 import { milestoneDecision } from "@/components/vx/map";
+import { checkEvidenceLinks, type LinkAccess } from "@/lib/evidence-links/check";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import { decisionEntryOf, heldMilestonesTwoApprovals, heldReason, milestoneIntents } from "@/lib/agent/milestone-decisions";
@@ -96,8 +97,18 @@ export default async function ContractorsPage({ params, searchParams }: { params
       const contractor = contractorsById.get(milestone.contractor_id);
       return milestone.status === "verified" && contractor ? payeeNotReady(contractor, live) : null;
     };
+    // Each milestone's evidence link, checked before its card offers it (evidence access E1): GitHub's pull requests and
+    // the workspace's own storage only, kept briefly; the open milestones' first. Any other link is shown as not checked.
+    const evidenceHrefs = [
+      ...milestones.filter((milestone) => milestone.status !== "paid" && milestone.status !== "closed"),
+      ...milestones.filter((milestone) => milestone.status === "paid" || milestone.status === "closed"),
+    ].flatMap((milestone) => (milestone.verification_source?.startsWith("https://") ? [milestone.verification_source] : []));
+    const links = await checkEvidenceLinks(evidenceHrefs).catch((error: unknown) => {
+      console.error("contractors: evidence links not checked", error instanceof Error ? error.name : "unknown");
+      return new Map<string, LinkAccess>();
+    });
     const decisions = milestones.map((milestone) =>
-      milestoneDecision(milestone, entries, { network, riskLevel: contractorsById.get(milestone.contractor_id)?.risk_level ?? null, waiting: waitingOf(milestone) })
+      milestoneDecision(milestone, entries, { network, riskLevel: contractorsById.get(milestone.contractor_id)?.risk_level ?? null, waiting: waitingOf(milestone), links })
     );
     const milestonesById = new Map(milestones.map((milestone) => [milestone.id, milestone]));
     // Made here, not in the browser, so the server's markup and the browser's agree (as the Gateway form's id is).

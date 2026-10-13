@@ -10,6 +10,7 @@ import type { LedgerEntry } from "@/lib/ledger";
 import type { ReceivableView } from "@/lib/allocations/view";
 import type { Settlement } from "@/lib/settlement";
 import { bookingFromEntries } from "@/lib/connectors/booked";
+import type { LinkAccess } from "@/lib/evidence-links/check";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow, TreasuryActionRow } from "@/lib/queries";
 import type { Decision, Evidence, Guardrail, Outcome } from "./types";
 import { fmt } from "./Primitives";
@@ -654,6 +655,30 @@ export interface MilestoneContext {
   network: Network;
   riskLevel?: string | null;
   waiting?: "unconfirmed" | "no_address" | null;
+  /**
+   * Whether each milestone's evidence link can be opened, by its address (evidence access E1, `checkEvidenceLinks`).
+   * Absent, the card links its evidence as before any check; present, it never offers a link that can't be opened, and
+   * says a link it did not check is not checked.
+   */
+  links?: ReadonlyMap<string, LinkAccess>;
+}
+
+/** A link's chip, and the reason chip that follows it when it can't be opened (evidence access E3). */
+function linkChips(base: Evidence, href: string, access: LinkAccess | undefined, typed: boolean): Evidence[] {
+  if (!access) return [{ ...base, href }];
+  switch (access.state) {
+    case "open":
+      return [{ ...base, href, ...(typed ? { typed: true } : {}) }];
+    case "cannot_open":
+      return [
+        { ...base, value: `${base.value}, can't be opened`, state: "missing" },
+        { label: "Can't be opened", value: access.reason, state: "missing" },
+      ];
+    case "no_answer":
+      return [{ ...base, value: `${base.value}, not checked just now`, href, typed: true }];
+    default:
+      return [{ ...base, value: `${base.value}, not checked`, href, typed: true }];
+  }
 }
 
 /** A milestone not yet decided, or decided and on its way, as its card says it (never "Scheduled"). */
@@ -693,6 +718,8 @@ function decideMilestone(milestone: MilestoneRow, entries: LedgerEntry[], contex
     ? milestone.verification_status === "verified" ? "merged PR" : milestone.verification_status.replace("_", " ")
     : milestone.verification_method === "manual" ? "manual approval" : milestone.verification_method === "seed" ? "demo fixture" : "not verified";
   const evidenceLink = milestoneEvidenceLink(milestone.verification_source, githubSource);
+  const access = (href: string) => (context.links ? (context.links.get(href) ?? { state: "not_checked" as const, reason: "" }) : undefined);
+  const verifiedBy: Evidence = { label: "Verified by", value: verificationLabel, state: milestone.verified ? "ok" : "missing" };
   return {
     id: milestone.id,
     domain: "contractor",
@@ -706,9 +733,9 @@ function decideMilestone(milestone: MilestoneRow, entries: LedgerEntry[], contex
     // What it waits for now comes after what the agent last decided, if it decided before.
     reasoning: [presented, progress && (milestone.status !== "pending" || !presented) ? progress.line : ""].filter(Boolean).join(" ") || "The agent is waiting for milestone verification.",
     evidence: [
-      { label: "Verified by", value: verificationLabel, href: githubSource, state: milestone.verified ? "ok" : "missing" },
+      ...(githubSource ? linkChips(verifiedBy, githubSource, access(milestone.verification_source ?? githubSource), false) : [verifiedBy]),
       { label: "Verified", value: milestone.verified ? "yes" : "not yet", state: milestone.verified ? "ok" : "missing" },
-      ...(evidenceLink ? [{ label: "Evidence", value: evidenceLink.host, href: evidenceLink.href, state: "neutral" as const }] : []),
+      ...(evidenceLink ? linkChips({ label: "Evidence", value: evidenceLink.host, state: "neutral" }, evidenceLink.href, access(milestone.verification_source ?? evidenceLink.href), true) : []),
       { label: "Risk", value: risk, state: risk === "high" ? "missing" : "neutral" },
     ],
     guardrail: guardrailBlocked

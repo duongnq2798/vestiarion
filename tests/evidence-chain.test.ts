@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  givenLinks,
   buildEvidenceChain,
   chainAnchors,
   EVIDENCE_MEANINGS,
@@ -403,6 +404,54 @@ describe("a milestone a person verified", () => {
     const delivered = step(chain, "delivered");
     expect(delivered.kind).toBe("stated");
     expect(delivered.facts[0]).toMatchObject({ kind: "stated", who: "bob@northstar.test", seqs: [71], link: expect.objectContaining({ href: LINK, state: "not_opened" }) });
+  });
+});
+
+describe("a given link, labelled by whether it can be opened (evidence access E1, E3)", () => {
+  const LINK = "https://drive.example.test/handoff";
+  const withLinks = (links: Map<string, { state: "open" } | { state: "cannot_open" | "not_checked" | "no_answer"; reason: string }>, input = milestoneInput()) =>
+    buildEvidenceChain({ ...input, checks: { ...input.checks, links } });
+
+  it("marks every link a person or GitHub gave, and none Vestiarion built itself", () => {
+    const chain = buildEvidenceChain(milestoneInput());
+    expect(givenLinks(chain)).toEqual([PR]);
+    expect(step(chain, "payment").facts[0].link?.given).toBeUndefined();
+  });
+
+  it("keeps a pull request that opens verified, its link checked", () => {
+    const delivered = step(withLinks(new Map([[PR, { state: "open" }]])), "delivered");
+    expect(delivered.kind).toBe("verified");
+    expect(delivered.facts[0].link).toMatchObject({ state: "checked" });
+  });
+
+  it("never counts one that can't be opened as verified, says why, and keeps the step at its weakest", () => {
+    const chain = withLinks(new Map([[PR, { state: "cannot_open", reason: "It is in a private repository on GitHub." }]]));
+    const delivered = step(chain, "delivered");
+    expect(delivered.kind).toBe("unreachable");
+    expect(delivered.facts[0]).toMatchObject({ kind: "unreachable", link: { href: PR, state: "cannot_open", reason: "It is in a private repository on GitHub." } });
+    expect(delivered.facts[0].notes).toContain("Its link can't be opened, so it is not counted as verified.");
+    // Counted once fewer than when it opens: the box of labels never counts it verified.
+    expect(chain.tally.verified).toBe(withLinks(new Map([[PR, { state: "open" }]])).tally.verified - 1);
+  });
+
+  it("reads a check with no answer, or no check at all, as not verified either", () => {
+    expect(step(withLinks(new Map([[PR, { state: "no_answer", reason: "GitHub did not answer just now." }]])), "delivered").facts[0]).toMatchObject({
+      kind: "unreachable",
+      link: { state: "unreachable", reason: "GitHub did not answer just now." },
+    });
+    expect(step(withLinks(new Map()), "delivered").facts[0]).toMatchObject({ kind: "unreachable", link: { state: "not_opened" } });
+  });
+
+  it("keeps what a person stated as stated, and its link not checked, or can't be opened, as it is", () => {
+    const entries = [
+      ADDRESS_GIVEN,
+      entry(71, "08:31:00", "human", "verify_milestone_manual", { by: BOB, milestoneId: MILESTONE, verificationSource: LINK, verificationMethod: "manual", verified: true }, "contractor"),
+    ];
+    const input = milestoneInput({ entries, verification: { verification_method: "manual", verification_status: "verified", verification_source: LINK, verification_detail: {} } });
+    const notChecked = step(withLinks(new Map([[LINK, { state: "not_checked", reason: "Vestiarion checks links on GitHub and on its own file storage only, and never opens other sites." }]]), input), "delivered");
+    expect(notChecked.facts[0]).toMatchObject({ kind: "stated", link: { state: "not_opened", reason: expect.stringContaining("never opens other sites") } });
+    const gone = step(withLinks(new Map([[LINK, { state: "cannot_open", reason: "The signed link expired on 2026-10-12 08:30 UTC." }]]), input), "delivered");
+    expect(gone.facts[0]).toMatchObject({ kind: "stated", link: { state: "cannot_open" } });
   });
 });
 

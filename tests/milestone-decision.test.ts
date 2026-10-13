@@ -103,3 +103,33 @@ describe("milestoneDecision: a milestone the agent has not paid yet says what it
     expect(milestoneDecision(milestone(), [], { network: "arc-testnet" })).toMatchObject({ outcomeLabel: "Awaiting verification", reasoning: "The agent is waiting for milestone verification." });
   });
 });
+
+describe("milestoneDecision: a link checked before the card offers it (evidence access E1, E3)", () => {
+  const PR = "https://github.com/acme/widgets/pull/42";
+  const merged = milestone({ verification_source: PR, verification_method: "github", verification_status: "verified", verified: true, status: "verified" });
+  const card = (row: MilestoneRow, links: Map<string, { state: "open" } | { state: "cannot_open" | "not_checked" | "no_answer"; reason: string }>) =>
+    milestoneDecision(row, [], { network: "arc-testnet", links }).evidence;
+
+  it("links a merged pull request that opens", () => {
+    expect(card(merged, new Map([[PR, { state: "open" }]]))[0]).toEqual({ label: "Verified by", value: "merged PR", href: PR, state: "ok" });
+  });
+
+  it("never offers one that can't be opened, and says why", () => {
+    const rows = card(merged, new Map([[PR, { state: "cannot_open", reason: "It is in a private repository on GitHub: only people with access to that repository can open it." }]]));
+    expect(rows[0]).toEqual({ label: "Verified by", value: "merged PR, can't be opened", state: "missing" });
+    expect(rows[1]).toEqual({ label: "Can't be opened", value: "It is in a private repository on GitHub: only people with access to that repository can open it.", state: "missing" });
+    expect(rows.some((row) => row.href)).toBe(false);
+  });
+
+  it("says a typed link is not checked, and opens it with no referrer", () => {
+    const link = "https://www.canva.com/design/DAG123/view";
+    const row = card(milestone({ verification_source: link }), new Map([[link, { state: "not_checked", reason: "Vestiarion checks links on GitHub and on its own file storage only, and never opens other sites." }]])).find(
+      (item) => item.label === "Evidence"
+    );
+    expect(row).toEqual({ label: "Evidence", value: "www.canva.com, not checked", href: link, state: "neutral", typed: true });
+  });
+
+  it("says one GitHub did not answer about is not checked just now, and keeps it", () => {
+    expect(card(merged, new Map([[PR, { state: "no_answer", reason: "GitHub did not answer just now." }]]))[0]).toMatchObject({ value: "merged PR, not checked just now", href: PR });
+  });
+});

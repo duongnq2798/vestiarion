@@ -3,6 +3,7 @@ import { db, unwrap } from "./dal";
 import {
   buildEvidenceChain,
   chainAnchors,
+  givenLinks,
   paymentOnChain,
   type EvidenceChain,
   type EvidenceCounterparty,
@@ -15,6 +16,7 @@ import {
   type EvidenceScreening,
   type EvidenceSubject,
 } from "./evidence-chain";
+import { checkEvidenceLinks, type LinkCheckOptions } from "./evidence-links/check";
 import { ledgerPublicKeyPems, ledgerVerificationKeyring } from "./ledger";
 import { listMembers } from "./platform/members";
 import { readOnChain } from "./receipts/onchain";
@@ -172,12 +174,17 @@ async function memberEmails(): Promise<Map<string, string> | null> {
 
 /**
  * The evidence for one payable or milestone of the workspace in scope, or null when it has none: a receivable, an id
- * that is not a UUID, or a record this workspace does not hold. `fetch` and `rpcUrl` reach Arc's record (tests).
+ * that is not a UUID, or a record this workspace does not hold. `fetch` and `rpcUrl` reach Arc's record (tests);
+ * `links` how the given links are checked (tests).
+ *
+ * The links a person, a payee or GitHub gave (a pull request, a comment, the evidence a milestone was verified by hand
+ * with) are checked before the page says what they are (evidence access E1): on the allow-list only, never by their own
+ * address, kept briefly (`./evidence-links/check`).
  */
 export async function readEvidence(
   kind: unknown,
   id: unknown,
-  options: { fetch?: typeof fetch; rpcUrl?: (chain: string) => string } = {}
+  options: { fetch?: typeof fetch; rpcUrl?: (chain: string) => string; links?: LinkCheckOptions } = {}
 ): Promise<EvidenceRead | null> {
   const request = evidenceRequest(kind, id);
   if (!request) return null;
@@ -277,7 +284,9 @@ export async function readEvidence(
     people,
     checks: { entries: new Map(checked), onChain },
   };
-  const chain = buildEvidenceChain(input);
+  // Built once to find the links it shows, then again with what each link's check said (E1).
+  const links = await checkEvidenceLinks(givenLinks(buildEvidenceChain(input)), options.links);
+  const chain = buildEvidenceChain({ ...input, checks: { ...input.checks, links } });
   return {
     chain,
     publicKeys,

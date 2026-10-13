@@ -8,6 +8,7 @@
  */
 
 import { bookingFromEntries } from "./connectors/booked";
+import type { LinkAccess } from "./evidence-links/check";
 import { utcDay, utcMinute } from "./copy";
 import { deciderName, decisionChecks, PAYMENT_HELD_AGAIN, PAYMENT_SUBMITTED, trailStep } from "./decision-trail";
 import { MIRROR, PAYEE, addressProvenance } from "./new-payee";
@@ -37,7 +38,7 @@ export const EVIDENCE_MEANINGS: Readonly<Record<EvidenceKind, string>> = {
   stated: "A member or the payee entered it. The page names who, and when.",
   inferred: "Read, not recorded: the model's judgement, sample data, or a setting as it is today.",
   missing: "Nothing records it. Where it can still be added, the page says how.",
-  unreachable: "A check got no answer, or a link was revoked: it never counts as verified.",
+  unreachable: "A check got no answer, or a link can't be opened (deleted, private, refused or expired): it never counts as verified.",
   contradicted: "A check answered, and its answer contradicts the record.",
 };
 
@@ -54,11 +55,23 @@ export const SIGNED_ENTRY_PROVES = "A signed entry proves who recorded what, and
 /** A ledger entry as the chain reads it: its whole signed body, so each can be checked alone. */
 export type EvidenceEntry = PublicLedgerRow & { ts: string; id?: string };
 
-/** A link a fact points to (E4): checked here, shown without being opened, unanswered, or contradicting the record. */
+/**
+ * A link a fact points to (E4): checked here, not checked (never opened by Vestiarion), unanswered, contradicting the
+ * record, or one that can't be opened (onboarding by role and evidence access E1: deleted, private, refused, expired),
+ * which is shown without being offered.
+ */
 export interface EvidenceLink {
   href: string;
   label: string;
-  state: "checked" | "not_opened" | "unreachable" | "contradicted";
+  state: "checked" | "not_opened" | "unreachable" | "contradicted" | "cannot_open";
+  /** Why it can't be opened, was not checked, or got no answer, where that is known. */
+  reason?: string;
+  /**
+   * A link a person, a payee or GitHub's webhook gave: a pull request, a comment, the evidence a milestone was verified
+   * by hand with. Before the page says it opens, its access is checked (`./evidence-links/check`), on the allow-list
+   * only. Links Vestiarion builds itself (an explorer, the rates' source) have none.
+   */
+  given?: true;
 }
 
 export interface EvidenceFact {
@@ -182,6 +195,11 @@ export interface EvidenceInput {
     entries: ReadonlyMap<number, EntryCheck>;
     /** Arc's record of the payment's transaction; null when there is none to read. */
     onChain: OnChainCheck | null;
+    /**
+     * Whether each given link can be opened, by its address (E1); absent, the links are labelled as before any check.
+     * A given link with no answer here reads as not checked.
+     */
+    links?: ReadonlyMap<string, LinkAccess>;
   };
 }
 
@@ -267,15 +285,64 @@ function pullRequestName(url: string): string {
   return match ? `${match[1]}/${match[2]}#${match[3]}` : url;
 }
 
-/** A link a person typed, shown and never opened (E4); null for anything but an https address. */
+/** A link a person typed, shown and never opened by its own address (E4); null for anything but an https address. */
 function typedLink(value: string | null): EvidenceLink | null {
   if (!value) return null;
   try {
     const url = new URL(value);
-    return url.protocol === "https:" && url.hostname ? { href: url.href, label: url.hostname, state: "not_opened" } : null;
+    return url.protocol === "https:" && url.hostname ? { href: url.href, label: url.hostname, state: "not_opened", given: true } : null;
   } catch {
     return null;
   }
+}
+
+/** Every given link the chain shows, by address, for `readEvidence` to check before the page says what they are (E1). */
+export function givenLinks(chain: Pick<EvidenceChain, "steps">): string[] {
+  return [...new Set(chain.steps.flatMap((one) => one.facts.flatMap((fact) => (fact.link?.given ? [fact.link.href] : []))))];
+}
+
+const OPENS_NOTE = "Its link can't be opened, so it is not counted as verified.";
+const UNCHECKED_NOTE = "Its link could not be checked just now, so it is not counted as verified.";
+
+/**
+ * Each given link labelled by whether it can be opened (E1, E3): one that opens is checked; one that can't be opened is
+ * shown without a link, with the reason, and a fact resting on it is never verified, nor checked by code; one not on the
+ * allow-list, or not answered, is not checked, and a verified fact resting on it is not verified either.
+ */
+function withLinkAccess(steps: EvidenceStep[], links: ReadonlyMap<string, LinkAccess>): EvidenceStep[] {
+  return steps.map((one) => {
+    let changed = false;
+    const facts = one.facts.map((fact): EvidenceFact => {
+      const link = fact.link;
+      if (!link?.given) return fact;
+      const access = links.get(link.href) ?? { state: "not_checked" as const, reason: "" };
+      changed = true;
+      const strong = fact.kind === "verified" || fact.kind === "checked";
+      switch (access.state) {
+        case "open":
+          return { ...fact, link: { ...link, state: "checked" } };
+        case "cannot_open":
+          return {
+            ...fact,
+            ...(strong ? { kind: "unreachable" as const, notes: [...(fact.notes ?? []), OPENS_NOTE] } : {}),
+            link: { ...link, state: "cannot_open", reason: access.reason },
+          };
+        case "no_answer":
+          return {
+            ...fact,
+            ...(strong ? { kind: "unreachable" as const, notes: [...(fact.notes ?? []), UNCHECKED_NOTE] } : {}),
+            link: { ...link, state: "unreachable", reason: access.reason },
+          };
+        default:
+          return {
+            ...fact,
+            ...(fact.kind === "verified" ? { kind: "unreachable" as const, notes: [...(fact.notes ?? []), UNCHECKED_NOTE] } : {}),
+            link: { ...link, state: "not_opened", ...(access.reason ? { reason: access.reason } : {}) },
+          };
+      }
+    });
+    return changed ? { ...one, facts, kind: weakest(facts.map((fact) => fact.kind)) } : one;
+  });
 }
 
 /** The newest entry that matches. */
@@ -446,7 +513,7 @@ function deliveredMilestone(ctx: Context, milestone: EvidenceMilestone): Evidenc
     const source = text(detail.pullRequest) ?? milestone.verification_source ?? "";
     const name = pullRequestName(source);
     const asked = newest(ctx.own, (entry) => entry.action === "verify_milestone_github" || entry.action === "github_verification_update");
-    const link = (state: EvidenceLink["state"]): EvidenceLink | undefined => (source.startsWith("https://") ? { href: source, label: name, state } : undefined);
+    const link = (state: EvidenceLink["state"]): EvidenceLink | undefined => (source.startsWith("https://") ? { href: source, label: name, state, given: true } : undefined);
     const seqs = asked ? [asked.seq] : [];
     switch (milestone.verification_status) {
       case "verified":
@@ -1056,6 +1123,8 @@ export function buildEvidenceChain(input: EvidenceInput): EvidenceChain {
         receiptStep(ctx),
       ]
     : [agreedMilestone(ctx, milestone!), deliveredMilestone(ctx, milestone!), payeeStep(ctx), decisionStep(ctx), peopleStep(ctx), paymentStep(ctx, input.checks.onChain)];
+  // Each given link labelled by whether it opens, before the facts are counted (E1).
+  if (input.checks.links) steps.splice(0, steps.length, ...withLinkAccess(steps, input.checks.links));
   // Every entry about the record, and every other entry a fact rests on.
   const cited = new Set(steps.flatMap((s) => s.facts.flatMap((fact) => fact.seqs)));
   const rows = input.entries

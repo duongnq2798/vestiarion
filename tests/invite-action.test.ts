@@ -96,6 +96,18 @@ describe("acceptInvitationAction", () => {
     await expect(acceptInvitationAction(INITIAL, form(VALID_TOKEN))).rejects.toThrow("REDIRECT:/o/acme/console");
     expect(acceptInvitationMock).toHaveBeenCalledWith({ token: VALID_TOKEN, userId: USER.id });
   });
+
+  it.each([
+    ["approver", "/o/acme/approvals"],
+    ["accountant", "/accountant"],
+    ["admin", "/o/acme/console"],
+    ["owner", "/o/acme/console"],
+  ])("lands an invited %s on their role's first step, %s (onboarding by role R6)", async (role, href) => {
+    getSessionUserMock.mockResolvedValueOnce(USER);
+    acceptInvitationMock.mockResolvedValueOnce({ orgId: "org-1", slug: "acme", role });
+
+    await expect(acceptInvitationAction(INITIAL, form(VALID_TOKEN))).rejects.toThrow(`REDIRECT:${href}`);
+  });
 });
 
 function idForm(invitationId?: string): FormData {
@@ -152,5 +164,15 @@ describe("acceptInvitationByIdAction", () => {
 
     await expect(acceptInvitationByIdAction(INITIAL, idForm(VALID_INVITATION_ID))).rejects.toThrow("REDIRECT:/o/acme/console");
     expect(acceptInvitationByIdMock).toHaveBeenCalledWith({ invitationId: VALID_INVITATION_ID, userId: USER.id });
+  });
+
+  it("lands an invited approver on Approvals, and an accountant on the accountant console", async () => {
+    getSessionUserMock.mockResolvedValueOnce(USER);
+    acceptInvitationByIdMock.mockResolvedValueOnce({ orgId: "org-1", slug: "acme", role: "approver" });
+    await expect(acceptInvitationByIdAction(INITIAL, idForm(VALID_INVITATION_ID))).rejects.toThrow("REDIRECT:/o/acme/approvals");
+
+    getSessionUserMock.mockResolvedValueOnce(USER);
+    acceptInvitationByIdMock.mockResolvedValueOnce({ orgId: "org-1", slug: "acme", role: "accountant" });
+    await expect(acceptInvitationByIdAction(INITIAL, idForm(VALID_INVITATION_ID))).rejects.toThrow("REDIRECT:/accountant");
   });
 });

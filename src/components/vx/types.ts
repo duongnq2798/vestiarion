@@ -15,6 +15,8 @@ export interface Evidence {
   value: string;
   href?: string;
   state?: "ok" | "missing" | "neutral";
+  /** A link a person gave, opened with no referrer and never followed by search engines (evidence access E3). */
+  typed?: boolean;
 }
 
 export interface Guardrail {
