@@ -1055,8 +1055,10 @@ add up to the total exactly.
   VND), `schedule.ts` (the four templates, deposit and balance, equal milestones, a monthly retainer with month-end
   days, custom lines; each line the floor of its share in `BigInt`, the remainder on the last line as
   `roundingMinor`; due day = invoice day + terms), `input.ts` (both forms, read the same in the browser and on the
-  server), `revision.ts` (`proposeCorrection`, `planRevision`, `planCancel`) and `lines.ts` (each line's state,
-  `releaseRefusal`, `dueForRelease`, `dealSummary`). `read.ts` and `write.ts` are the server's.
+  server), `revision.ts` (`proposeCorrection`, `planRevision`, `planCancel`), `lines.ts` (each line's state,
+  `releaseRefusal`, `dueForRelease`, `dealSummary`) and `collection.ts` (`dealCollection`: what a deal collected, the one
+  figure behind its page's Paid and Outstanding, the Deals list and the receipts written back to a CRM). `read.ts`,
+  `write.ts` and `collection-read.ts` are the server's.
 - **Migration 0104.** `deals`, `deal_versions` and `deal_lines` are tenant tables with row level security as 0090 and
   every foreign key composite with `org_id`. A line not released yet is a `planned` deal line, never an invoice, so no
   reader of receivables sees it. `create_deal` and `revise_deal` (security invoker, for the tenant role) write a version
@@ -1860,15 +1862,18 @@ reads in `api.ts`, `hubspotProvider`), wired in `src/lib/crm-providers.ts`. It i
   (`accounting_connections.writes_on`, `crm.receipt_writes`, `integrations.manage`), each deal planned from HubSpot gets
   nine fields Vestiarion owns, in a `vestiarion` property group it makes once: collected, still owed, the currency, a
   collection status, the last receipt's day, amount and explorer link, a reconciliation status and the deal's page as
-  evidence. `dealCollection` (pure) counts only money that arrived on Arc (`incoming_transfers`, recorded once Circle
-  reports it complete) and was applied to the deal's receivables, whole (0050) or in part (live allocations, 0103): a
-  part payment is partial, a fee is never collected, an invoice marked received without a payment on Arc is not counted
-  and makes the reconciliation "needs review". The outbox `crm_receipt_writes` (a tenant table, one write in hand per
+  evidence. `dealCollection` (pure, `src/lib/deals/collection.ts`, read by `readDealCollections`: the same figure the
+  deal's page shows as Paid and Outstanding) counts only money that arrived on Arc (`incoming_transfers`, recorded once
+  Circle reports it complete) and was applied to the deal's receivables, whole (0050) or in part (live allocations,
+  0103): a part payment is partial, a fee is never collected, an invoice marked received without a payment on Arc is not
+  counted and makes the reconciliation "needs review". The outbox `crm_receipt_writes` (a tenant table, one write in hand per
   deal, the fields fixed once queued) is filled after each CRM sync where a deal's fields changed (`queueReceipts`), and
   sent by the same run (`sendReceipts`): the reality rule against `GET /account-info/2026-03/details` (`accountType`:
   payments on Arc testnet or in shadow mode only to `DEVELOPER_TEST` or `SANDBOX`, refused otherwise, and held by the
-  table's check), a claim with a lease, the deal's fields read, a conflict when HubSpot holds otherwise than the last
-  write read back (never written over; **Write Vestiarion's figures** with `crm.receipt_overwrite` writes over exactly
+  table's checks; an account HubSpot names no type for is not read, so neither written nor refused), a claim with a
+  lease (every move compares the write's `attempts`, so a send whose lease ran out never moves a later claim), the
+  deal's fields read, a conflict when HubSpot holds otherwise than the last write read back or a write since that it may
+  have taken unanswered (never written over; **Write Vestiarion's figures** with `crm.receipt_overwrite` writes over exactly
   what the page showed), the write, and a read-back whose answer is the acknowledgement (`written`). A timeout reads
   back first; a failure waits (`failureDelayMs`), a rate limit ends the run; nothing that moves money reads any of it
   (`tests/crm-receipts.test.ts` pins it). Disconnecting turns writing off (`accounting_connections_writes_off`); a

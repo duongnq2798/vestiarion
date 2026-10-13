@@ -203,6 +203,20 @@ describe("comparing what the CRM holds", () => {
     expect(differing(FIELDS, { ...FIELDS, vestiarion_collected: "2000", vestiarion_last_receipt_date: "2026-10-12T00:00:00.000Z" })).toEqual([]);
   });
 
+  it("reads a number handed back in exponent form, or with a sign, as the same number", () => {
+    expect(normalField("vestiarion_collected", "2E+3")).toBe("2000");
+    expect(normalField("vestiarion_collected", "1.25E+3")).toBe("1250");
+    expect(normalField("vestiarion_collected", "1.2345e2")).toBe("123.45");
+    expect(normalField("vestiarion_collected", "1.5E-1")).toBe("0.15");
+    expect(normalField("vestiarion_collected", "+3000.00")).toBe("3000");
+    expect(normalField("vestiarion_collected", "0E-2")).toBe("0");
+    expect(normalField("vestiarion_collected", "0.00")).toBe("0");
+    expect(normalField("vestiarion_collected", "-0")).toBe("0");
+    expect(differing(FIELDS, { ...FIELDS, vestiarion_collected: "2E+3", vestiarion_still_owed: "3E+3", vestiarion_last_receipt_amount: "2.000E+3" })).toEqual([]);
+    // Another figure is still another figure.
+    expect(differing(FIELDS, { ...FIELDS, vestiarion_collected: "2.1E+3" })).toEqual(["vestiarion_collected"]);
+  });
+
   it("finds no conflict where the CRM holds what Vestiarion last wrote", () => {
     expect(fieldConflicts({ owned: FIELDS, held: FIELDS, next: { ...FIELDS, vestiarion_collected: "5000.00" } })).toEqual([]);
   });

@@ -1,4 +1,6 @@
+import { dealCollection, type Collection } from "@/lib/deals/collection";
 import type { DealRecord } from "@/lib/deals/read";
+import { NETWORKS } from "@/lib/network";
 
 /**
  * The deal the deals guide's pictures show (docs/superpowers/specs/2026-10-12-deal-schedule-design.md): Website rebuild
@@ -76,4 +78,19 @@ export function dealShot(): DealRecord {
       },
     ],
   };
+}
+
+/** What the pictured deal collected: its deposit, paid whole on Arc (`dealCollection`, as the deal's own page reads it). */
+export function dealShotCollected(): Map<string, Collection> {
+  const deal = dealShot();
+  const deposit = deal.facts.lines[0];
+  const collection = dealCollection({
+    deal: { currency: deal.facts.currency, digits: deal.digits, status: deal.facts.status },
+    receivables: [{ id: deposit.receivable?.id ?? "", amount: 3000, currency: "USDC", status: "received", dueOn: "2026-10-26", originalCurrency: null, originalAmount: null }],
+    payments: [{ transferId: "ffffffff-0000-4000-8000-0000000000f1", invoiceId: deposit.receivable?.id ?? "", amount: 3000, receivedAt: "2026-10-20T10:00:00Z", txHash: null, chain: NETWORKS["arc-testnet"].circleBlockchain }],
+    fees: [],
+    notInvoicedMinor: 900_001,
+    today: DEALS_SHOT_TODAY,
+  });
+  return new Map([[deal.facts.id, collection]]);
 }

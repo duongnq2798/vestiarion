@@ -137,6 +137,28 @@ describe("crm_receipt_writes", () => {
     expect(await stateOf(id)).toBe("sending");
   });
 
+  it("takes an account for a test one only when HubSpot's own word for it says so", async () => {
+    const w = await world("receipts-account-word");
+    const id = await queue(w);
+    for (const word of ["STANDARD", "APP_DEVELOPER", null]) {
+      await expect(
+        db.query(
+          `update public.crm_receipt_writes set state = 'sending', sending_until = now() + interval '2 minutes', attempts = attempts + 1, account_type = $2, account_test = true where id = $1`,
+          [id, word]
+        ),
+        String(word)
+      ).rejects.toThrow(/crm_receipt_writes_account_test_check/);
+    }
+    for (const word of ["DEVELOPER_TEST", "SANDBOX"]) {
+      const other = await queue(await world(`receipts-account-${word.toLowerCase().replace("_", "-")}`));
+      await db.query(
+        `update public.crm_receipt_writes set state = 'sending', sending_until = now() + interval '2 minutes', attempts = attempts + 1, account_type = $2, account_test = true where id = $1`,
+        [other, word]
+      );
+      expect(await stateOf(other)).toBe("sending");
+    }
+  });
+
   it("lets payments on Arc mainnet outside shadow mode go to any account, and refuses shadow mode's", async () => {
     const w = await world("receipts-mainnet", { network: "arc-mainnet" });
     const id = await queue(w, { network: "arc-mainnet" });

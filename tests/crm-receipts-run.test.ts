@@ -101,7 +101,16 @@ function memoryStore(deals: LinkedDealFields[], rows: ReceiptWriteRow[] = []) {
       const last = [...rows].reverse().find((row) => row.crmDealId === crmDealId && row.state === "written");
       return last?.readBack ?? null;
     },
-    async insert(_connection, deal) {
+    async unacknowledged(crmDealId, exceptId) {
+      const own = rows.filter((row) => row.crmDealId === crmDealId);
+      const lastWritten = own.map((row) => row.state).lastIndexOf("written");
+      return own
+        .slice(lastWritten + 1)
+        .filter((row) => row.id !== exceptId && row.attempts > 0 && ["failed", "superseded", "conflict"].includes(row.state))
+        .reverse()
+        .map((row) => row.fields);
+    },
+    async insert(_connection, deal, chosen) {
       if (rows.some((row) => row.crmDealId === deal.crmDealId && ["queued", "sending", "sent", "failed", "conflict"].includes(row.state))) return null;
       const row: ReceiptWriteRow = {
         id: `write-${next++}`,
@@ -121,9 +130,9 @@ function memoryStore(deals: LinkedDealFields[], rows: ReceiptWriteRow[] = []) {
         nextAttemptAt: null,
         sendingUntil: null,
         conflicts: [],
-        overwrite: null,
-        overwriteBy: null,
-        overwriteAt: null,
+        overwrite: chosen?.overwrite ?? null,
+        overwriteBy: chosen?.overwriteBy ?? null,
+        overwriteAt: chosen?.overwriteAt ?? null,
         readBack: null,
         sentAt: null,
         writtenAt: null,
@@ -137,7 +146,8 @@ function memoryStore(deals: LinkedDealFields[], rows: ReceiptWriteRow[] = []) {
       if (!current) return null;
       // A claim (with `leaseOverAt`) takes a write being sent only once its lease ran out; a send moves its own claim on.
       const fromOk = from.includes(current.state) && (current.state !== "sending" || options?.leaseOverAt === undefined || (current.sendingUntil ?? "") <= options.leaseOverAt);
-      if (!fromOk) return null;
+      // Only the write as the caller read it: another run's claim since counted an attempt.
+      if (!fromOk || current.attempts !== row.attempts) return null;
       if (!MOVES[current.state].includes(to)) throw new Error(`crm_receipt_write_transition: ${current.state} to ${to}`);
       const after: ReceiptWriteRow = { ...current, ...(Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) as Partial<ReceiptWriteRow>), state: to };
       if (["sending", "sent", "written"].includes(to) && !(after.network === "arc-mainnet" && !after.shadow) && after.accountTest !== true) {
@@ -295,6 +305,36 @@ describe("sendReceipts", () => {
     expect(rows[0].state).toBe("queued");
   });
 
+  it("leaves a later run's claim alone when its own lease ran out mid-send", async () => {
+    const { store, rows, entries } = memoryStore([linked(fields("2000.00", "3000.00"))]);
+    await queueReceipts({ connection, store });
+    const crm = fakeCrm({});
+    const slow: CrmReceiptWriter = {
+      ...crm.writer,
+      async ensureFields() {
+        // HubSpot is slow: the lease runs out, and another run (Sync now) claims the same write.
+        rows[0] = { ...rows[0], attempts: rows[0].attempts + 1, sendingUntil: new Date(NOW + 5 * 60_000).toISOString() };
+        return { ok: false, message: "HubSpot said: try again" };
+      },
+    };
+    expect(await run(store, slow)).toMatchObject({ failed: 0, waiting: 1 });
+    // The later run's claim stands: still being sent, by it, with no failure recorded for it.
+    expect(rows[0]).toMatchObject({ state: "sending", attempts: 2 });
+    expect(entries).toEqual([]);
+  });
+
+  it("neither writes nor refuses for good when HubSpot names no type for the account", async () => {
+    const { store, rows, entries } = memoryStore([linked(fields("2000.00", "3000.00"))]);
+    await queueReceipts({ connection, store });
+    const crm = fakeCrm({});
+    const unnamed: CrmReceiptWriter = { ...crm.writer, account: async () => ({ accountType: null, test: null }) };
+    expect(await run(store, unnamed)).toMatchObject({ waiting: 1, written: 0, refused: 0 });
+    expect(rows[0].state).toBe("queued");
+    expect(entries).toEqual([]);
+    // Read again at the next run: a developer test account, so written.
+    expect(await run(store, crm.writer)).toMatchObject({ written: 1 });
+  });
+
   it("reports a field someone changed in HubSpot since the last write, and writes nothing over it", async () => {
     const first = fields("2000.00", "3000.00");
     const written: ReceiptWriteRow = {
@@ -325,12 +365,89 @@ describe("sendReceipts", () => {
     expect(crm.held().vestiarion_collected).toBe("5000.00");
   });
 
+  it("keeps a person's choice to write over a change when newer figures supersede the write before it is sent", async () => {
+    const first = fields("2000.00", "3000.00");
+    const written: ReceiptWriteRow = {
+      ...(await (async () => {
+        const { store, rows } = memoryStore([linked(first)]);
+        await queueReceipts({ connection, store });
+        return rows[0];
+      })()),
+      state: "written",
+      readBack: first,
+      writtenAt: "2026-10-12T10:00:00.000Z",
+      id: "write-0",
+    };
+    const deals = [linked(fields("5000.00", "0.00"))];
+    const { store, rows, entries } = memoryStore(deals, [written]);
+    await queueReceipts({ connection, store });
+    const crm = fakeCrm({ held: { ...first, vestiarion_still_owed: "0" } });
+    expect(await run(store, crm.writer)).toMatchObject({ conflicts: 1 });
+    // A person chooses to write Vestiarion's figures over exactly what they saw.
+    await store.move(rows[1], ["conflict"], "queued", { overwrite: { vestiarion_still_owed: "0" }, overwriteBy: "user-1", overwriteAt: "2026-10-13T08:00:00.000Z" });
+    // Before the next send, another receipt arrives: newer figures supersede the write the person chose.
+    deals[0] = linked(fields("5500.00", "0.00"));
+    expect(await queueReceipts({ connection, store })).toEqual({ queued: 1 });
+    expect(rows.map((row) => row.state)).toEqual(["written", "superseded", "queued"]);
+    expect(rows[2]).toMatchObject({ overwrite: { vestiarion_still_owed: "0" }, overwriteBy: "user-1", overwriteAt: "2026-10-13T08:00:00.000Z" });
+    // Written while HubSpot still holds what the person saw, with no second conflict to choose on again.
+    expect(await run(store, crm.writer)).toMatchObject({ written: 1, conflicts: 0 });
+    expect(crm.held().vestiarion_collected).toBe("5500.00");
+    expect(entries.map((entry) => entry.action)).toEqual(["crm_receipt_conflict", "crm_receipt_written"]);
+  });
+
   it("acknowledges a write that landed while its answer was lost, by reading back before anything else", async () => {
     const { store, rows } = memoryStore([linked(fields("2000.00", "3000.00"))]);
     await queueReceipts({ connection, store });
     const crm = fakeCrm({ write: () => "lost" });
     expect(await run(store, crm.writer)).toMatchObject({ written: 1 });
     expect(rows[0].state).toBe("written");
+  });
+
+  it("never takes its own write that landed unanswered for someone's change, once newer figures superseded it", async () => {
+    const deals = [linked(fields("2000.00", "3000.00"))];
+    const { store, rows, entries } = memoryStore(deals);
+    await queueReceipts({ connection, store });
+    // HubSpot takes the write but its answer is lost, and the read-back right after finds no answer either.
+    let held: Record<string, string | null> = Object.fromEntries(RECEIPT_FIELDS.map((name) => [name, null]));
+    let down = false;
+    const flaky: CrmReceiptWriter = {
+      ...fakeCrm({}).writer,
+      async readFields() {
+        if (down) throw new ProviderError("unavailable", "HubSpot deal: no answer");
+        return { found: true, values: { ...held } };
+      },
+      async writeFields({ values }) {
+        held = { ...held, ...values };
+        down = true;
+        throw new ProviderError("unavailable", "HubSpot deal update: no answer");
+      },
+    };
+    expect(await run(store, flaky)).toMatchObject({ failed: 1, written: 0 });
+    expect(rows[0]).toMatchObject({ state: "failed", reason: "no_answer" });
+    // A payment arrives before the retry: newer figures supersede the write HubSpot in fact took.
+    deals[0] = linked(fields("5000.00", "0.00"));
+    expect(await queueReceipts({ connection, store })).toEqual({ queued: 1 });
+    expect(rows.map((row) => row.state)).toEqual(["superseded", "queued"]);
+    // HubSpot is back, holding Vestiarion's own first figures: no one changed them, so the newer ones are written.
+    const back = fakeCrm({ held });
+    expect(await run(store, back.writer, { now: NOW + 120_000 })).toMatchObject({ written: 1, conflicts: 0 });
+    expect(back.held().vestiarion_collected).toBe("5000.00");
+    expect(entries.map((entry) => entry.action)).toEqual(["crm_receipt_failed", "crm_receipt_written"]);
+  });
+
+  it("still reports a field someone changed over a write of Vestiarion's that landed unanswered, and only that field", async () => {
+    const deals = [linked(fields("2000.00", "3000.00"))];
+    const { store, rows } = memoryStore(deals);
+    await queueReceipts({ connection, store });
+    expect(await run(store, fakeCrm({ write: () => "throw-unavailable" }).writer)).toMatchObject({ failed: 1 });
+    deals[0] = linked(fields("5000.00", "0.00"));
+    await queueReceipts({ connection, store });
+    // HubSpot holds the first write's figures, one of them changed by a person since.
+    const back = fakeCrm({ held: { ...fields("2000.00", "3000.00"), vestiarion_still_owed: "1" } });
+    expect(await run(store, back.writer, { now: NOW + 120_000 })).toMatchObject({ conflicts: 1, written: 0 });
+    expect(rows[1].conflicts).toEqual([{ field: "vestiarion_still_owed", ours: "", theirs: "1", next: "0" }]);
+    expect(back.calls).not.toContain("write");
   });
 
   it("fails an unanswered write, retries it later on its own with a backoff, and records the failure once", async () => {

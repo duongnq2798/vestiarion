@@ -146,6 +146,7 @@ const ACCOUNTING_WORDS = "src/lib/connectors/provider.ts";
 const HUBSPOT_PANEL = "src/components/HubSpotPanel.tsx";
 const CRM_RECEIPT_CARD = "src/components/CrmReceiptCard.tsx";
 const CRM_RECEIPTS = "src/lib/connectors/crm-receipts.ts";
+const DEAL_COLLECTION = "src/lib/deals/collection.ts";
 const CRM_RECEIPTS_VIEW = "src/lib/connectors/crm-receipts-view.ts";
 const CRM_RECEIPTS_RUN = "src/lib/connectors/crm-receipts-run.ts";
 const HUBSPOT_DEALS = "src/components/HubSpotDeals.tsx";
@@ -1448,10 +1449,10 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Collected", CRM_RECEIPTS, 'label: "Collected"'],
     ["Still owed", CRM_RECEIPTS, 'label: "Still owed"'],
     ["Collection status", CRM_RECEIPTS, 'label: "Collection status"'],
-    ["Paid in full, Paid to date, Partly paid, Overdue, Awaiting payment or Nothing invoiced yet", CRM_RECEIPTS, 'nothing_invoiced: "Nothing invoiced yet"'],
+    ["Paid in full, Paid to date, Partly paid, Overdue, Awaiting payment or Nothing invoiced yet", DEAL_COLLECTION, 'nothing_invoiced: "Nothing invoiced yet"'],
     ["Last receipt date", CRM_RECEIPTS, 'label: "Last receipt date"'],
     ["Reconciliation status", CRM_RECEIPTS, 'label: "Reconciliation status"'],
-    ["Needs review", CRM_RECEIPTS, 'needs_review: "Needs review"'],
+    ["Needs review", DEAL_COLLECTION, 'needs_review: "Needs review"'],
     ["Evidence", CRM_RECEIPTS, 'label: "Evidence"'],
     ["crm_receipt_written", CRM_RECEIPTS_RUN],
     ["Not written: someone changed it in HubSpot", CRM_RECEIPTS_VIEW, "Not written: someone changed it in ${label}"],

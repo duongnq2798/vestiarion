@@ -45,9 +45,12 @@ describe("account", () => {
       const one = recorder(() => json({ ...JSON.parse(fixture("account-details.json")), accountType }));
       expect(await one.writer.account(ACCOUNT)).toEqual({ accountType, test: isTest });
     }
-    // An account that names no type is not taken for a test one.
-    const unnamed = recorder(() => json({ portalId: 48291736, companyCurrency: "USD" }));
-    expect(await unnamed.writer.account(ACCOUNT)).toEqual({ accountType: null, test: false });
+    // An account that names no type, or one that does not read, is neither a test one nor a real one: not read, so the
+    // run neither writes nor refuses (a refusal is final, and would say the account is a real one).
+    for (const accountType of [undefined, "", "developer test", 7]) {
+      const unnamed = recorder(() => json({ portalId: 48291736, companyCurrency: "USD", ...(accountType === undefined ? {} : { accountType }) }));
+      expect(await unnamed.writer.account(ACCOUNT)).toEqual({ accountType: null, test: null });
+    }
   });
 
   it("throws on a refused or unanswered read, never guessing the account", async () => {

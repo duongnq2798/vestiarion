@@ -66,8 +66,11 @@ export type CrmProvider = ConnectingProvider & {
 export interface CrmAccountFacts {
   /** The CRM's own word for the account (HubSpot: `STANDARD`, `DEVELOPER_TEST`, `SANDBOX`, `APP_DEVELOPER`), or null. */
   accountType: string | null;
-  /** A developer test account or a sandbox; anything else, a trial included, is a real business's CRM. */
-  test: boolean;
+  /**
+   * A developer test account or a sandbox; any other type the CRM names, a trial included, is a real business's CRM.
+   * Null when it names none: the account was not read, so nothing is written to it, nor refused for good.
+   */
+  test: boolean | null;
 }
 
 /** A deal's fields as the CRM holds them now, or that it no longer has the deal. */

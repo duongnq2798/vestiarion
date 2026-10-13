@@ -199,6 +199,16 @@ describe("the pay page", () => {
     expect(page).not.toContain("Arrived 12.50");
   });
 
+  it("never says the whole invoice arrived when what arrived could not be read (I17)", async () => {
+    previewMock.mockResolvedValueOnce({ ...PREVIEW, status: "received" });
+    balanceMock.mockRejectedValueOnce(new Error("allocations not read"));
+    const page = await render();
+    expect(page).toContain("Mai Studio marked this invoice paid. Thank you.");
+    expect(page).toContain("Invoiced 12.50 USDC");
+    expect(page).not.toContain("Arrived 12.50");
+    expect(page).not.toContain("Circle reported what arrived");
+  });
+
   it("names no one for a dead link", async () => {
     previewMock.mockResolvedValueOnce(null);
     expect(await render()).toContain("This link is no longer valid");

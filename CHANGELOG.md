@@ -21,7 +21,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   what was written and when. A field someone changed in HubSpot is never written over: the deal's page shows the
   conflict, and an owner or admin chooses. HubSpot being down never touches a payment: the write waits and is tried
   again on its own. Payments on Arc testnet or in shadow mode are written only to a HubSpot developer test account or
-  sandbox. A connection made before keeps reading, and offers Allow writing to HubSpot.
+  sandbox. A connection made before keeps reading, and offers Allow writing to HubSpot. A deal's page and the Deals list
+  show the same figures as Paid and Outstanding: a part payment counts as what arrived, and a fee a person marked
+  settles an invoice without counting as paid.
 
 - **Xero, QuickBooks Online and HubSpot on the landing page and in Settings.** "Built on, and works with" lists them
   beside Arc, Circle, Slack, Telegram and npm, each with its mark, what it does and its guide; their Settings cards and

@@ -1,19 +1,21 @@
 import { siteOrigin } from "../auth/env";
 import { currentOrgConfig, currentOrgId } from "../context";
 import { db, platformDb, unwrap } from "../dal";
-import { inForce } from "../deals/lines";
+import { collectionOfRows, type CollectionRows } from "../deals/collection";
+import { readDealCollections } from "../deals/collection-read";
+import { paidOnArc } from "../deals/money";
 import { readDeals, type DealRecord } from "../deals/read";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { networkOf, type Network } from "../network";
 import { isNotSetUp, NotSetUpError } from "./connections";
-import { dealCollection, evidenceUrl, readConflicts, readReceiptFields, receiptFields, type AppliedPayment, type DealReceivable, type ReceiptFields } from "./crm-receipts";
+import { evidenceUrl, readConflicts, readReceiptFields, receiptFields, type ReceiptFields } from "./crm-receipts";
 import type { LinkedDealFields, ReceiptStore, ReceiptWriteRow, WritePatch, WriteState } from "./crm-receipts-run";
 
 /**
  * The receipts' database (docs/superpowers/specs/2026-10-13-crm-receipts-design.md R1, R5, R7), in the workspace's own
- * scope through the DAL: the deals planned from the CRM with what they collected, read from their receivables, the
- * money applied to them and the payments that brought it; and the outbox of writes (`crm_receipt_writes`, migration
- * 0107). Before 0107 has run, every read says it is not set up. No token is read here.
+ * scope through the DAL: the deals planned from the CRM with what they collected, read as the deal's own page reads it
+ * (`readDealCollections`); and the outbox of writes (`crm_receipt_writes`, migration 0107). Before 0107 has run, every
+ * read says it is not set up. No token is read here.
  */
 
 export const WRITE_COLUMNS =
@@ -133,89 +135,12 @@ async function byIds<T>(ids: readonly string[], read: (batch: string[]) => Promi
   return rows;
 }
 
-interface ReceivableRow {
-  id: string;
-  deal_id: string;
-  amount: number | string;
-  currency: string | null;
-  status: string;
-  due_date: string;
-  original_currency: string | null;
-  original_amount: number | string | null;
-}
-
-interface AllocationDbRow {
-  id: string;
-  kind: "payment" | "fee" | "reversal";
-  invoice_id: string;
-  transfer_id: string | null;
-  amount: number | string;
-  reverses: string | null;
-}
-
-interface TransferRow {
-  id: string;
-  invoice_id: string | null;
-  amount: number | string;
-  received_at: string;
-  tx_hash: string | null;
-  chain: string;
-}
-
 /**
- * What each deal collected (R1), from records already read: its receivables, the live allocations on them, and the
- * payments that arrived on Arc and were applied, whole or in part.
+ * The fields written for a deal (R1, R2), from rows already read: what it collected, as its own page shows it
+ * (`collectionOfRows`), and the deal's page in Vestiarion as its evidence.
  */
-export function dealFields(input: {
-  deal: DealRecord;
-  receivables: readonly ReceivableRow[];
-  allocations: readonly AllocationDbRow[];
-  transfers: ReadonlyMap<string, TransferRow>;
-  wholeMatches: readonly TransferRow[];
-  today: string;
-  evidence: string;
-}): ReceiptFields {
-  const { deal } = input;
-  const own = input.receivables.filter((row) => row.deal_id === deal.facts.id);
-  const ids = new Set(own.map((row) => row.id));
-  const rows = input.allocations.filter((row) => ids.has(row.invoice_id));
-  const reversed = new Set(rows.flatMap((row) => (row.kind === "reversal" && row.reverses ? [row.reverses] : [])));
-  const live = rows.filter((row) => row.kind !== "reversal" && !reversed.has(row.id));
-  const receivables: DealReceivable[] = own.map((row) => ({
-    id: row.id,
-    amount: Number(row.amount),
-    currency: row.currency ?? "USDC",
-    status: row.status,
-    dueOn: String(row.due_date).slice(0, 10),
-    originalCurrency: row.original_currency,
-    originalAmount: row.original_amount === null ? null : Number(row.original_amount),
-  }));
-  const payments: AppliedPayment[] = [];
-  for (const row of live) {
-    if (row.kind !== "payment" || !row.transfer_id) continue;
-    const transfer = input.transfers.get(row.transfer_id);
-    if (!transfer) continue;
-    payments.push({ transferId: transfer.id, invoiceId: row.invoice_id, amount: Number(row.amount), receivedAt: transfer.received_at, txHash: transfer.tx_hash, chain: transfer.chain });
-  }
-  // A whole match settled its receivable with all of the payment (0050): what the receivable asked.
-  for (const transfer of input.wholeMatches) {
-    const receivable = receivables.find((row) => row.id === transfer.invoice_id);
-    if (!receivable || (receivable.status !== "received" && receivable.status !== "paid")) continue;
-    payments.push({ transferId: transfer.id, invoiceId: receivable.id, amount: receivable.amount, receivedAt: transfer.received_at, txHash: transfer.tx_hash, chain: transfer.chain });
-  }
-  const fees = live.filter((row) => row.kind === "fee").map((row) => ({ invoiceId: row.invoice_id, amount: Number(row.amount) }));
-  const notInvoicedMinor = inForce(deal.facts.lines)
-    .filter((line) => line.status === "planned" && line.kind === "charge")
-    .reduce((sum, line) => sum + line.amountMinor, 0);
-  const collection = dealCollection({
-    deal: { currency: deal.facts.currency, digits: deal.digits, status: deal.facts.status },
-    receivables,
-    payments,
-    fees,
-    notInvoicedMinor,
-    today: input.today,
-  });
-  return receiptFields(collection, input.evidence);
+export function dealFields(input: { deal: Pick<DealRecord, "facts" | "digits">; today: string; evidence: string } & CollectionRows): ReceiptFields {
+  return receiptFields(collectionOfRows(input.deal, input, input.today), input.evidence);
 }
 
 /** The workspace's slug, for the evidence link. */
@@ -236,38 +161,26 @@ export const receiptStore: ReceiptStore = {
     const read = await readDeals();
     if (!read.available) return [];
     const deals = read.deals.filter((deal) => linked.some((row) => row.deal_id === deal.facts.id));
-    const dealIds = deals.map((deal) => deal.facts.id);
-    const receivables = await byIds<ReceivableRow>(dealIds, (batch) =>
-      db().from("invoices").select("id, deal_id, amount, currency, status, due_date, original_currency, original_amount").in("deal_id", batch).eq("direction", "receivable")
-    );
-    const receivableIds = receivables.map((row) => row.id);
-    const [allocations, wholeMatches, shadow] = await Promise.all([
-      byIds<AllocationDbRow>(receivableIds, (batch) => db().from("receivable_allocations").select("id, kind, invoice_id, transfer_id, amount, reverses").in("invoice_id", batch)),
-      byIds<TransferRow>(receivableIds, (batch) => db().from("incoming_transfers").select("id, invoice_id, amount, received_at, tx_hash, chain").in("invoice_id", batch)),
-      db().from("shadow_modes").select("org_id").limit(1),
-    ]);
-    const transferIds = [...new Set(allocations.flatMap((row) => (row.transfer_id ? [row.transfer_id] : [])))];
-    const transfers = new Map(
-      (await byIds<TransferRow>(transferIds, (batch) => db().from("incoming_transfers").select("id, invoice_id, amount, received_at, tx_hash, chain").in("id", batch))).map((row) => [row.id, row])
-    );
+    const today = new Date().toISOString().slice(0, 10);
+    // What each deal collected, read as its own page reads it: one figure, wherever it is shown.
+    const [collected, shadow] = await Promise.all([readDealCollections(deals, today), db().from("shadow_modes").select("org_id").limit(1)]);
     const shadowOn = !shadow.error && (shadow.data ?? []).length > 0;
     const network: Network = networkOf(currentOrgConfig().network);
     const slug = await workspaceSlug();
-    const today = new Date().toISOString().slice(0, 10);
     return linked.flatMap((row): LinkedDealFields[] => {
       const deal = deals.find((candidate) => candidate.facts.id === row.deal_id);
-      if (!deal) return [];
-      const own = receivables.filter((receivable) => receivable.deal_id === deal.facts.id);
+      const own = deal ? collected.get(deal.facts.id) : undefined;
+      if (!deal || !own) return [];
       return [
         {
           crmDealId: row.id,
           dealId: deal.facts.id,
           externalDealId: row.external_id,
           title: deal.title,
-          fields: dealFields({ deal, receivables, allocations, transfers, wholeMatches, today, evidence: evidenceUrl(siteOrigin(), slug, deal.facts.id) }),
+          fields: receiptFields(own.collection, evidenceUrl(siteOrigin(), slug, deal.facts.id)),
           network,
           // Shadow mode, or a deal in the business's own currency, whose invoices only shadow mode converts (D3).
-          shadow: shadowOn || own.some((receivable) => receivable.original_currency !== null) || !["USDC", "EURC"].includes(deal.facts.currency),
+          shadow: shadowOn || own.keepsOriginalCurrency || !paidOnArc(deal.facts.currency),
         },
       ];
     });
@@ -290,7 +203,31 @@ export const receiptStore: ReceiptStore = {
     return row ? readReceiptFields(row.read_back) : null;
   },
 
-  async insert(connection, deal) {
+  async unacknowledged(crmDealId, exceptId) {
+    const [written, tried] = await Promise.all([
+      db().from("crm_receipt_writes").select("created_at").eq("crm_deal_id", crmDealId).eq("state", "written").order("created_at", { ascending: false }).limit(1),
+      db()
+        .from("crm_receipt_writes")
+        .select("id, fields, created_at")
+        .eq("crm_deal_id", crmDealId)
+        .gt("attempts", 0)
+        .in("state", ["failed", "superseded", "conflict"])
+        .neq("id", exceptId)
+        .order("created_at", { ascending: false })
+        .limit(10),
+    ]);
+    if (written.error) raise(written.error);
+    if (tried.error) raise(tried.error);
+    const since = ((written.data ?? []) as Array<{ created_at: string }>)[0]?.created_at ?? null;
+    return ((tried.data ?? []) as Array<{ fields: unknown; created_at: string }>)
+      .filter((row) => since === null || Date.parse(row.created_at) > Date.parse(since))
+      .flatMap((row) => {
+        const fields = readReceiptFields(row.fields);
+        return fields ? [fields] : [];
+      });
+  },
+
+  async insert(connection, deal, chosen) {
     const result = await db()
       .from("crm_receipt_writes")
       .insert({
@@ -303,6 +240,7 @@ export const receiptStore: ReceiptStore = {
         fields: deal.fields,
         network: deal.network,
         shadow: deal.shadow,
+        ...(chosen?.overwrite ? { overwrite: chosen.overwrite, overwrite_by: chosen.overwriteBy, overwrite_at: chosen.overwriteAt } : {}),
       })
       .select(WRITE_COLUMNS);
     if (result.error) {
@@ -327,7 +265,9 @@ export const receiptStore: ReceiptStore = {
     } else {
       query = query.in("state", [...from]);
     }
-    if (patch.attempts !== undefined) query = query.eq("attempts", row.attempts);
+    // Only the write as the caller read it: each claim counts an attempt, so a send whose lease ran out never moves the
+    // claim a later run took of the same write.
+    query = query.eq("attempts", row.attempts);
     const result = await query.select(WRITE_COLUMNS);
     if (result.error) raise(result.error);
     const moved = ((result.data ?? []) as unknown as WriteDbRow[])[0];

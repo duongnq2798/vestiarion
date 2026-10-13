@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { orgHref } from "@/lib/auth/org-paths";
 import { utcDay } from "@/lib/copy";
+import type { Collection } from "@/lib/deals/collection";
 import { dealSummary } from "@/lib/deals/lines";
 import type { DealRecord } from "@/lib/deals/read";
 import { DealMoney } from "./DealMoney";
@@ -25,8 +26,10 @@ export function dealStanding(deal: DealRecord, today: string): { label: string; 
 
 /**
  * Bills & receivables' Deals (docs/superpowers/specs/2026-10-12-deal-schedule-design.md): each signed deal with what of
- * it was released, paid, is still expected and is planned, and its next line; New deal for owners and admins. Before
- * migration 0104 runs it says deals are not set up, and nothing else on the page changes (D15).
+ * it was released, paid, is still expected and is planned, and its next line; New deal for owners and admins. Paid and
+ * Outstanding are what the deal collected (`collected`, src/lib/deals/collection.ts), the figure its own page shows and
+ * the CRM is told; a deal whose collection was not read shows neither. Before migration 0104 runs it says deals are not
+ * set up, and nothing else on the page changes (D15).
  */
 export function DealsSection({
   deals,
@@ -34,6 +37,7 @@ export function DealsSection({
   today,
   newDeal,
   fromCrm,
+  collected = null,
 }: {
   deals: DealRecord[] | "not_ready" | "unread";
   orgSlug: string;
@@ -41,6 +45,8 @@ export function DealsSection({
   newDeal?: ReactNode;
   /** A CRM's won deals, and the New deal form filled in from one (HubSpot connector H20). */
   fromCrm?: ReactNode;
+  /** What each deal collected, by deal id; null when it could not be read. */
+  collected?: ReadonlyMap<string, Collection> | null;
 }) {
   const header = (
     <SectionHeader
@@ -80,6 +86,7 @@ export function DealsSection({
               const summary = dealSummary(deal.facts, today);
               const standing = dealStanding(deal, today);
               const money = (minor: number) => <DealMoney minor={minor} digits={deal.digits} currency={deal.facts.currency} />;
+              const collection = collected?.get(deal.facts.id) ?? null;
               return (
                 <li key={deal.facts.id}>
                   <Link
@@ -97,8 +104,12 @@ export function DealsSection({
                       <span className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-ink-2">
                         <span>Total {money(summary.totalMinor)}</span>
                         <span>Released {money(summary.releasedMinor)}</span>
-                        <span>Paid {money(summary.paidMinor)}</span>
-                        <span className={summary.overdueMinor > 0 ? "text-held" : undefined}>Outstanding {money(summary.outstandingMinor)}</span>
+                        {collection && (
+                          <>
+                            <span>Paid {money(collection.collectedMinor)}</span>
+                            <span className={collection.overdueMinor > 0 ? "text-held" : undefined}>Outstanding {money(collection.stillOwedMinor)}</span>
+                          </>
+                        )}
                         <span>Planned {money(summary.plannedMinor)}</span>
                       </span>
                       <span className="block text-xs text-ink-3">

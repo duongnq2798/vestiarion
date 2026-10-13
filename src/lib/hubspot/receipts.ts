@@ -59,7 +59,8 @@ export function hubspotReceipts(deps: HubSpotHttp = {}): CrmReceiptWriter {
       const response = await send(HUBSPOT_ACCOUNT, account, "account details", "GET");
       if (!response.ok) throw await failureOf(response, "account details", now());
       const { accountType } = mapAccountDetails(await jsonOf(response, "account details"));
-      return { accountType, test: accountType !== null && HUBSPOT_TEST_ACCOUNTS.has(accountType) };
+      // An account HubSpot names no type for is not read: neither a test one nor, for good, a real one (R4).
+      return { accountType, test: accountType === null ? null : HUBSPOT_TEST_ACCOUNTS.has(accountType) };
     },
 
     async ensureFields({ group, properties, ...account }) {

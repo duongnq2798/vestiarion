@@ -18,7 +18,8 @@
 -- Vestiarion deal on that connection; its fields and facts never change; its state moves only along the outbox's
 -- transitions; written, refused and superseded are final. The reality rule is held here too: a write reaches sending,
 -- sent or written only for payments on Arc mainnet outside shadow mode, or into a CRM account the CRM itself said is a
--- test one (account_test, written with the claim from a read made right before it).
+-- test one (account_test, written with the claim from a read made right before it, and true only beside HubSpot's own
+-- word for a developer test account or a sandbox: crm_receipt_writes_account_test_check).
 --
 -- One write is in hand per deal at a time (queued, sending, sent, failed or conflict): crm_receipt_writes_one_open.
 --
@@ -116,6 +117,17 @@ create table if not exists public.crm_receipt_writes (
     state not in ('sending', 'sent', 'written') or (network = 'arc-mainnet' and not shadow) or account_test is true
   )
 );
+
+-- A test account is one HubSpot itself names a developer test account or a sandbox (R4): account_test is never true
+-- beside any other word for it, or none. HubSpot is the only CRM that writes; another adds its own words here.
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'crm_receipt_writes_account_test_check' and conrelid = 'public.crm_receipt_writes'::regclass) then
+    alter table public.crm_receipt_writes
+      add constraint crm_receipt_writes_account_test_check
+      check (account_test is not true or (provider = 'hubspot' and account_type is not null and account_type in ('DEVELOPER_TEST', 'SANDBOX')));
+  end if;
+end $$;
 
 -- One write in hand per deal: a newer one supersedes it first.
 create unique index if not exists crm_receipt_writes_one_open

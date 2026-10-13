@@ -45,16 +45,19 @@ export default async function PayPage({ params }: PayPageProps) {
     console.error("pay link preview failed");
     failed = true;
   }
-  // Best effort: a balance that cannot be read asks for the whole invoice, as before, and a settled one says the whole
-  // invoice arrived, as a whole match (one transfer of exactly its amount) does.
+  // Best effort: a balance that cannot be read asks for the whole invoice, as before. A settled invoice with no payment
+  // applied in part says the whole invoice arrived, as a whole match (one transfer of exactly its amount) does; one whose
+  // balance could not be read says only what was invoiced, never that all of it arrived (I17).
+  let balanceRead = true;
   const balance = preview
     ? await payLinkBalance(preview).catch(() => {
         console.error("pay link balance not read");
+        balanceRead = false;
         return null;
       })
     : null;
   const owed = balance ? balance.owed : (preview?.amount ?? 0);
-  const arrived = balance ? balance.received : (preview?.amount ?? 0);
+  const arrived: number | null = balance ? balance.received : balanceRead ? (preview?.amount ?? 0) : null;
   const network = preview ? homeChain(networkOfChain(preview.chain)).label : undefined;
 
   return (
@@ -74,7 +77,7 @@ export default async function PayPage({ params }: PayPageProps) {
               </p>
               <h1 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-ink">{preview.orgName} marked this invoice paid. Thank you.</h1>
               <dl className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
-                {Math.round(arrived * 1_000_000) !== Math.round(preview.amount * 1_000_000) && (
+                {(arrived === null || Math.round(arrived * 1_000_000) !== Math.round(preview.amount * 1_000_000)) && (
                   <>
                     <dt className="text-ink-3">Invoiced</dt>
                     <dd className="text-ink">
@@ -82,10 +85,14 @@ export default async function PayPage({ params }: PayPageProps) {
                     </dd>
                   </>
                 )}
-                <dt className="text-ink-3">Arrived</dt>
-                <dd className="text-ink">
-                  {AMOUNT.format(arrived)} {preview.currency} on {network}
-                </dd>
+                {arrived !== null && (
+                  <>
+                    <dt className="text-ink-3">Arrived</dt>
+                    <dd className="text-ink">
+                      {AMOUNT.format(arrived)} {preview.currency} on {network}
+                    </dd>
+                  </>
+                )}
                 {preview.memo && (
                   <>
                     <dt className="text-ink-3">For</dt>
@@ -93,9 +100,11 @@ export default async function PayPage({ params }: PayPageProps) {
                   </>
                 )}
               </dl>
-              <p className="mt-4 text-xs leading-5 text-ink-3">
-                Circle reported what arrived as complete on {network}, and {preview.orgName} applied it to this invoice in Vestiarion.
-              </p>
+              {arrived !== null && (
+                <p className="mt-4 text-xs leading-5 text-ink-3">
+                  Circle reported what arrived as complete on {network}, and {preview.orgName} applied it to this invoice in Vestiarion.
+                </p>
+              )}
             </section>
           ) : (
             <section className="rounded-2xl border border-line bg-surface p-6 shadow-surface">

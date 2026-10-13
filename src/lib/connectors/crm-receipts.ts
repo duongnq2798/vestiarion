@@ -1,38 +1,44 @@
 import { billDigits } from "../bill-amount";
+import {
+  COLLECTION_STATUS_WORDS,
+  COLLECTION_STATUSES,
+  RECONCILIATION_WORDS,
+  RECONCILIATIONS,
+  type Collection,
+  type CollectionStatus,
+  type LastReceipt,
+  type Reconciliation,
+} from "../deals/collection";
 import { minorToDecimal } from "../deals/money";
-import { NETWORKS, networkProfile, type Network } from "../network";
+import { networkProfile, type Network } from "../network";
 
 /**
- * Receipts written back to a CRM deal (docs/superpowers/specs/2026-10-13-crm-receipts-design.md R1-R6): what a deal
- * planned from the CRM has collected, from the money that arrived on Arc and was applied to its receivables; the deal
- * properties that carry it, which Vestiarion owns; the reality rule; and whether a person changed one of them in the CRM
- * since Vestiarion last wrote it. Pure: the runs (`crm-receipts-run.ts`) read the rows and call the CRM. Nothing that
- * moves money reads this module. Browser-safe: no Node module, so a card may read the words.
+ * Receipts written back to a CRM deal (docs/superpowers/specs/2026-10-13-crm-receipts-design.md R1-R6): the deal
+ * properties that carry what a deal planned from the CRM has collected, which Vestiarion owns; the reality rule; and
+ * whether a person changed one of them in the CRM since Vestiarion last wrote it. What a deal collected is the deal's own
+ * figure (`src/lib/deals/collection.ts`), the same its page shows, re-exported here for the receipts' readers. Pure: the
+ * runs (`crm-receipts-run.ts`) read the rows and call the CRM. Nothing that moves money reads this module. Browser-safe:
+ * no Node module, so a card may read the words.
  */
+
+export {
+  COLLECTION_STATUS_WORDS,
+  COLLECTION_STATUSES,
+  dealCollection,
+  networkOfChain,
+  RECONCILIATION_WORDS,
+  RECONCILIATIONS,
+  type AppliedPayment,
+  type Collection,
+  type CollectionInput,
+  type CollectionStatus,
+  type DealReceivable,
+  type LastReceipt,
+  type Reconciliation,
+} from "../deals/collection";
 
 /** The property group the fields live in, created once per CRM account. */
 export const RECEIPT_GROUP = { name: "vestiarion", label: "Vestiarion" } as const;
-
-export const COLLECTION_STATUSES = ["paid_in_full", "paid_to_date", "partly_paid", "overdue", "awaiting_payment", "nothing_invoiced"] as const;
-export type CollectionStatus = (typeof COLLECTION_STATUSES)[number];
-
-export const COLLECTION_STATUS_WORDS: Record<CollectionStatus, string> = {
-  paid_in_full: "Paid in full",
-  paid_to_date: "Paid to date",
-  partly_paid: "Partly paid",
-  overdue: "Overdue",
-  awaiting_payment: "Awaiting payment",
-  nothing_invoiced: "Nothing invoiced yet",
-};
-
-export const RECONCILIATIONS = ["reconciled", "needs_review", "no_receipts"] as const;
-export type Reconciliation = (typeof RECONCILIATIONS)[number];
-
-export const RECONCILIATION_WORDS: Record<Reconciliation, string> = {
-  reconciled: "Reconciled",
-  needs_review: "Needs review",
-  no_receipts: "No receipts yet",
-};
 
 export const RECEIPT_FIELDS = [
   "vestiarion_collected",
@@ -109,168 +115,6 @@ export const RECEIPT_PROPERTIES: readonly ReceiptProperty[] = [
 
 export const RECEIPT_LABELS: Record<ReceiptField, string> = Object.fromEntries(RECEIPT_PROPERTIES.map((property) => [property.name, property.label])) as Record<ReceiptField, string>;
 
-// ---------------------------------------------------------------------------
-// What a deal has collected (R1)
-
-/** A receivable made from one of the deal's lines. Amounts in the receivable's own currency, as numbers of it. */
-export interface DealReceivable {
-  id: string;
-  amount: number;
-  currency: string;
-  status: string;
-  /** `YYYY-MM-DD` */
-  dueOn: string;
-  /** Shadow mode's invoice in the business's own currency (0084): both or neither. */
-  originalCurrency: string | null;
-  originalAmount: number | null;
-}
-
-/**
- * A payment that arrived on Arc (`incoming_transfers`: recorded only once Circle reported it complete) and was applied to
- * one of the receivables: a whole match, or a live allocation. Its amount is what it brought to that receivable.
- */
-export interface AppliedPayment {
-  transferId: string;
-  invoiceId: string;
-  amount: number;
-  receivedAt: string;
-  txHash: string | null;
-  /** Circle's blockchain name the payment arrived on (`ARC-TESTNET`, `ARC`). */
-  chain: string;
-}
-
-export interface CollectionInput {
-  deal: { currency: string; digits: 0 | 2; status: "active" | "cancelled" };
-  receivables: readonly DealReceivable[];
-  payments: readonly AppliedPayment[];
-  /** Live fees a person marked on a receivable: they settle it, and are never collected. */
-  fees: ReadonlyArray<{ invoiceId: string; amount: number }>;
-  /** Charges in force not invoiced yet, in the deal's minor units. */
-  notInvoicedMinor: number;
-  /** `YYYY-MM-DD` */
-  today: string;
-}
-
-export interface LastReceipt {
-  /** `YYYY-MM-DD`, UTC. */
-  on: string;
-  minor: number;
-  txHash: string | null;
-  network: Network;
-}
-
-export interface Collection {
-  currency: string;
-  digits: 0 | 2;
-  collectedMinor: number;
-  stillOwedMinor: number;
-  invoicedMinor: number;
-  feesMinor: number;
-  overdueMinor: number;
-  notInvoicedMinor: number;
-  /** Marked received with no payment on Arc behind it: never counted (R1). */
-  unverifiedMinor: number;
-  /** Receivables in a currency the deal cannot be told in: left out, and said. */
-  leftOut: number;
-  receipts: number;
-  status: CollectionStatus;
-  reconciliation: Reconciliation;
-  lastReceipt: LastReceipt | null;
-}
-
-const SETTLED = new Set(["received", "paid"]);
-const CLOSED = new Set(["rejected"]);
-
-/** The network a payment arrived on, by Circle's blockchain name: Arc mainnet only when it says so. */
-export function networkOfChain(chain: string): Network {
-  return chain === NETWORKS["arc-mainnet"].circleBlockchain ? "arc-mainnet" : "arc-testnet";
-}
-
-/**
- * What a deal has collected (R1). Only money that arrived on Arc, confirmed by Circle, and was applied to one of its
- * invoices counts: nothing submitted, pending or promised. A part payment is part: the rest of that invoice is still
- * owed. A fee a person marked settles its invoice and is not collected. An invoice marked received with no payment on
- * Arc is not counted, and makes the reconciliation "needs review". In the deal's currency: a shadow-mode invoice kept in
- * it is converted at its own rate; one in another currency is left out.
- */
-export function dealCollection(input: CollectionInput): Collection {
-  const { deal } = input;
-  const scale = 10 ** deal.digits;
-  const totals = { collected: 0, owed: 0, invoiced: 0, fees: 0, overdue: 0, unverified: 0 };
-  let leftOut = 0;
-  const factorOf = new Map<string, number>();
-  for (const receivable of input.receivables) {
-    if (CLOSED.has(receivable.status) || !(receivable.amount > 0)) continue;
-    const factor =
-      receivable.originalCurrency === deal.currency && receivable.originalAmount !== null && receivable.originalAmount > 0
-        ? receivable.originalAmount / receivable.amount
-        : receivable.currency === deal.currency
-          ? 1
-          : null;
-    if (factor === null) {
-      leftOut += 1;
-      continue;
-    }
-    factorOf.set(receivable.id, factor);
-    const minor = (value: number) => Math.round(Number((value * factor * scale).toPrecision(15)));
-    const paid = input.payments.filter((payment) => payment.invoiceId === receivable.id).reduce((sum, payment) => sum + payment.amount, 0);
-    const fees = input.fees.filter((fee) => fee.invoiceId === receivable.id).reduce((sum, fee) => sum + fee.amount, 0);
-    const settled = SETTLED.has(receivable.status);
-    const owed = settled ? 0 : Math.max(0, receivable.amount - paid - fees);
-    totals.invoiced += minor(receivable.amount);
-    totals.collected += minor(Math.min(paid, receivable.amount));
-    totals.fees += minor(fees);
-    totals.owed += minor(owed);
-    if (owed > 0 && receivable.dueOn < input.today) totals.overdue += minor(owed);
-    if (settled && paid + fees <= 0) totals.unverified += minor(receivable.amount);
-  }
-
-  // The latest payment: what it brought to this deal's invoices, all of them.
-  const counted = input.payments.filter((payment) => factorOf.has(payment.invoiceId));
-  const transfers = [...new Set(counted.map((payment) => payment.transferId))];
-  const latest = [...counted].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt) || b.transferId.localeCompare(a.transferId))[0];
-  const lastReceipt: LastReceipt | null = latest
-    ? {
-        on: new Date(latest.receivedAt).toISOString().slice(0, 10),
-        minor: counted
-          .filter((payment) => payment.transferId === latest.transferId)
-          .reduce((sum, payment) => sum + Math.round(Number((payment.amount * (factorOf.get(payment.invoiceId) ?? 1) * scale).toPrecision(15))), 0),
-        txHash: latest.txHash,
-        network: networkOfChain(latest.chain),
-      }
-    : null;
-
-  const status: CollectionStatus =
-    totals.invoiced === 0 && totals.collected === 0
-      ? "nothing_invoiced"
-      : totals.owed === 0
-        ? input.notInvoicedMinor > 0 && deal.status === "active"
-          ? "paid_to_date"
-          : "paid_in_full"
-        : totals.collected > 0
-          ? "partly_paid"
-          : totals.overdue > 0
-            ? "overdue"
-            : "awaiting_payment";
-  const reconciliation: Reconciliation = totals.unverified > 0 ? "needs_review" : transfers.length === 0 ? "no_receipts" : "reconciled";
-  return {
-    currency: deal.currency,
-    digits: deal.digits,
-    collectedMinor: totals.collected,
-    stillOwedMinor: totals.owed,
-    invoicedMinor: totals.invoiced,
-    feesMinor: totals.fees,
-    overdueMinor: totals.overdue,
-    notInvoicedMinor: Math.max(0, input.notInvoicedMinor),
-    unverifiedMinor: totals.unverified,
-    leftOut,
-    receipts: transfers.length,
-    status,
-    reconciliation,
-    lastReceipt,
-  };
-}
-
 /** The explorer page of a transaction on its network, or "" without a well-formed hash. */
 export function receiptLink(receipt: Pick<LastReceipt, "txHash" | "network">): string {
   if (!receipt.txHash || !/^0x[0-9a-fA-F]{64}$/.test(receipt.txHash)) return "";
@@ -320,17 +164,32 @@ const PROPERTY_TYPE: Record<ReceiptField, ReceiptProperty["type"]> = Object.from
   ReceiptProperty["type"]
 >;
 
+/**
+ * A decimal as plain digits, exactly: `2E+3` is `2000`, `1.5E-1` is `0.15`, as a CRM that stores numbers as decimals may
+ * print them once their trailing zeros are gone. Null for anything else.
+ */
+function plainDecimal(text: string): { negative: boolean; whole: string; fraction: string } | null {
+  const match = /^([+-]?)(\d+)(?:\.(\d*))?(?:[eE]([+-]?\d{1,3}))?$/.exec(text);
+  if (!match) return null;
+  const digits = `${match[2]}${match[3] ?? ""}`;
+  const point = match[2].length + Number(match[4] ?? 0);
+  const padded = point > digits.length ? digits.padEnd(point, "0") : point < 0 ? `${"0".repeat(-point)}${digits}` : digits;
+  const at = Math.max(point, 0);
+  return { negative: match[1] === "-", whole: padded.slice(0, at) || "0", fraction: padded.slice(at) };
+}
+
 /** A value as the CRM may hand it back: a number without its trailing zeros, a day from an instant, text trimmed. */
 export function normalField(name: ReceiptField, value: string | null | undefined): string {
   const text = (value ?? "").trim();
   if (text === "") return "";
   switch (PROPERTY_TYPE[name]) {
     case "number": {
-      const match = /^(-?\d+)(?:\.(\d+))?$/.exec(text);
-      if (!match) return text;
-      const fraction = (match[2] ?? "").replace(/0+$/, "");
-      const whole = match[1].replace(/^(-?)0+(?=\d)/, "$1");
-      return fraction ? `${whole}.${fraction}` : whole;
+      const decimal = plainDecimal(text);
+      if (!decimal) return text;
+      const fraction = decimal.fraction.replace(/0+$/, "");
+      const whole = decimal.whole.replace(/^0+(?=\d)/, "");
+      const zero = whole === "0" && fraction === "";
+      return `${decimal.negative && !zero ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
     }
     case "date": {
       if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
@@ -365,13 +224,16 @@ export interface FieldConflict {
  * Whether someone changed Vestiarion's fields in the CRM since it last wrote them (R5): each field the CRM holds
  * otherwise than the last write read back. Before a first write, any field already holding something is someone
  * else's. With `seen` (a person chose to write Vestiarion's figures over what the page showed them), a field holding
- * exactly what they saw is no conflict; anything else still is.
+ * exactly what they saw is no conflict; anything else still is. `sent`: the fields of Vestiarion's own writes the CRM may
+ * have taken while their answer was lost, never read back (a write that failed with no answer, then superseded by newer
+ * figures): a field holding what one of them wrote is Vestiarion's, not someone's change.
  */
 export function fieldConflicts(input: {
   owned: ReceiptFields | null;
   held: Readonly<Record<string, string | null>>;
   next: ReceiptFields;
   seen?: Readonly<Record<string, string>> | null;
+  sent?: readonly ReceiptFields[] | null;
 }): FieldConflict[] {
   const conflicts: FieldConflict[] = [];
   for (const field of RECEIPT_FIELDS) {
@@ -379,6 +241,7 @@ export function fieldConflicts(input: {
     const ours = input.owned ? normalField(field, input.owned[field]) : "";
     if (theirs === ours) continue;
     if (input.seen && field in input.seen && normalField(field, input.seen[field]) === theirs) continue;
+    if (input.sent?.some((fields) => normalField(field, fields[field]) === theirs)) continue;
     conflicts.push({ field, ours, theirs, next: normalField(field, input.next[field]) });
   }
   return conflicts;

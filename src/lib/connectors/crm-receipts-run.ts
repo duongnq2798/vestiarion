@@ -97,11 +97,20 @@ export interface ReceiptStore {
   latest(connectionId: string, crmDealIds: readonly string[]): Promise<Map<string, ReceiptWriteRow>>;
   /** What Vestiarion owns on the deal: the fields of its last write read back, or null before its first. */
   owned(crmDealId: string): Promise<ReceiptFields | null>;
-  /** Queues a write; null when another is in hand for the deal (one per deal). */
-  insert(connection: Connection, deal: LinkedDealFields): Promise<ReceiptWriteRow | null>;
   /**
-   * Moves a write to `to` from one of `from`, as a compare-and-set: the row after, or null when it was in none of them.
-   * `sending` counts as a `from` only once its lease ran out, at `leaseOverAt`.
+   * The fields of the deal's writes since its last one read back that were tried (`attempts` > 0) and never read back,
+   * besides `exceptId`, newest first: the CRM may have taken one while its answer was lost (R5, R6).
+   */
+  unacknowledged(crmDealId: string, exceptId: string): Promise<ReceiptFields[]>;
+  /**
+   * Queues a write; null when another is in hand for the deal (one per deal). `chosen`: a person's choice to write over
+   * what the CRM held, carried from the write this one supersedes.
+   */
+  insert(connection: Connection, deal: LinkedDealFields, chosen?: Pick<WritePatch, "overwrite" | "overwriteBy" | "overwriteAt"> | null): Promise<ReceiptWriteRow | null>;
+  /**
+   * Moves a write to `to` from one of `from`, as a compare-and-set: the row after, or null when it was in none of them,
+   * or another run claimed it since `row` was read (its `attempts`, which each claim counts, differ). `sending` counts
+   * as a `from` only once its lease ran out, at `leaseOverAt`.
    */
   move(row: ReceiptWriteRow, from: readonly WriteState[], to: WriteState, patch: Partial<WritePatch>, options?: { leaseOverAt?: string }): Promise<ReceiptWriteRow | null>;
   /** What a run sends: queued; failed whose time came; sending past its lease; sent and not read back. Oldest first. */
@@ -159,7 +168,9 @@ const summaryOf = (fields: ReceiptFields) =>
  * Queues a write for each deal planned from the CRM whose fields differ from its latest write (R5): the first time
  * writing is on, every one; then only what a receipt, a reversal, a release or a new version changed. A newer write
  * supersedes one still queued, failed or in conflict; one in flight is left to finish, and the next run queues after it.
- * The same figures are never queued twice, whatever happened to the last write of them.
+ * A person's choice to write over what the CRM held (Write Vestiarion's figures) goes on with the newer write, still
+ * only while the CRM holds exactly what they saw; a conflict found since waits for them again. The same figures are never
+ * queued twice, whatever happened to the last write of them.
  */
 export async function queueReceipts(deps: Pick<ReceiptDeps, "connection" | "store">): Promise<{ queued: number }> {
   const deals = await deps.store.linkedDeals(deps.connection);
@@ -173,7 +184,8 @@ export async function queueReceipts(deps: Pick<ReceiptDeps, "connection" | "stor
     if (last && (last.state === "queued" || last.state === "failed" || last.state === "conflict")) {
       if (!(await deps.store.move(last, [last.state], "superseded", {}))) continue;
     }
-    if (await deps.store.insert(deps.connection, deal)) queued += 1;
+    const chosen = last && (last.state === "queued" || last.state === "failed") && last.overwrite ? { overwrite: last.overwrite, overwriteBy: last.overwriteBy, overwriteAt: last.overwriteAt } : null;
+    if (await deps.store.insert(deps.connection, deal, chosen)) queued += 1;
   }
   return { queued };
 }
@@ -293,7 +305,8 @@ async function sendOne(
         detail: { ...base(deps, claimed), reason, message, retryAt: iso(now() + retryInMs) },
       });
     }
-    return "failed";
+    // Not moved: another run claimed the write since, and it is that run's to finish.
+    return failed ? "failed" : "waiting";
   };
   const fromError = async (error: unknown): Promise<Outcome> => {
     if (!(error instanceof ProviderError)) throw error;
@@ -323,8 +336,10 @@ async function sendOne(
     // Already what this write says (an earlier write that landed while its answer was lost): acknowledged as it is.
     if (differing(claimed.fields, read.values).length === 0) return written(deps, claimed, ["sending"], read.values, now, true);
 
-    const owned = await store.owned(claimed.crmDealId);
-    const conflicts = fieldConflicts({ owned, held: read.values, next: claimed.fields, seen: claimed.overwrite });
+    // Vestiarion's own: its last write read back, and any write since that the CRM may have taken while its answer was
+    // lost before a newer write superseded it. Neither is someone's change.
+    const [owned, unacknowledged] = await Promise.all([store.owned(claimed.crmDealId), store.unacknowledged(claimed.crmDealId, claimed.id)]);
+    const conflicts = fieldConflicts({ owned, held: read.values, next: claimed.fields, seen: claimed.overwrite, sent: unacknowledged });
     if (conflicts.length > 0) return conflict(deps, claimed, ["sending"], conflicts);
 
     let answered: { ok: true } | { ok: false; message: string };

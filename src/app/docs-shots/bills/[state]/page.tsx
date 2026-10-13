@@ -40,7 +40,7 @@ import { CASH_SHORTFALL, SHADOW_VERDICT } from "@/lib/next-step";
 import type { InvoiceRow } from "@/lib/queries";
 import type { RecurringPayableView } from "@/lib/recurring-payables";
 import { DESIGN_SLUG } from "../../../design/fixtures";
-import { dealShot } from "../../deals-fixture";
+import { dealShot, dealShotCollected } from "../../deals-fixture";
 import { PAYMENT_PLAN_OUTCOMES, PAYMENT_PLAN_VIEWER, paymentPlanShot } from "../../payment-plan-fixture";
 import {
   BILLS_COUNTERPARTIES,
@@ -212,6 +212,7 @@ export default async function BillsStatePage({ params, searchParams }: Props) {
                 <div className="pt-6">
                   <DealsSection
                     deals={busy ? [dealShot()] : []}
+                    collected={busy ? dealShotCollected() : null}
                     orgSlug={slug}
                     today={today}
                     fromCrm={busy ? <HubSpotDeals orgSlug={slug} organisation="granite-labs.example" won={HUBSPOT_WON} open={[]} emails={[]} canWrite /> : undefined}
