@@ -72,7 +72,8 @@ export function UsageLimits({ orgSlug, limits }: { orgSlug: string; limits: Usag
 
 export function UsageTable({ kinds }: { kinds: UsageKindSummary[] }) {
   return (
-    <Table label="Usage this month">
+    // Wide enough that each kind's lines stay readable on a phone, where the table scrolls sideways in its own frame.
+    <Table label="Usage this month" className="min-w-[40rem]">
       <TableHeader>
         <TableRow>
           <TableHead>What</TableHead>
