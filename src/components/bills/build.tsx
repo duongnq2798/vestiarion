@@ -21,8 +21,10 @@ import {
   type ListSort,
   type Page,
   type ReceivableFilter,
+  WAITING_STATUSES,
 } from "@/lib/bills-view";
 import { plural, utcDay } from "@/lib/copy";
+import type { ExceptionFacts } from "@/lib/exceptions";
 import type { PayLinkState } from "@/lib/platform/pay-links";
 import type { InvoiceRow } from "@/lib/queries";
 import type { SummaryData, Totals } from "./BillsSummary";
@@ -99,6 +101,8 @@ export interface RowFacts {
   dealContext?: string | null;
   link?: PayLinkState | null;
   justAdded?: boolean;
+  /** A bill waiting for a person: its priority, decide-by day and who can act (deal cash readiness E1-E3). */
+  exception?: ExceptionFacts | null;
   /** Its detail's address. */
   href: string;
 }
@@ -135,6 +139,7 @@ export function billRowItem(facts: RowFacts): BillRowItem {
       : null,
     collection: payable ? null : collectionState(facts.link, facts.today),
     justAdded: facts.justAdded ?? false,
+    exception: payable && WAITING_STATUSES.has(invoice.status) ? (facts.exception ?? null) : null,
     href: facts.href,
   };
 }

@@ -1,6 +1,7 @@
 import { currentOrgId } from "../context";
 import { platformDb, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
+import { escalateOverdueDecisions } from "../notifications/escalations";
 import { notifyWaitingDecisions } from "../notifications/waiting";
 import { CycleRunningError } from "./cycle-running";
 import { runAgentCycle, type CycleResult } from "./orchestrator";
@@ -88,7 +89,8 @@ export async function runLiveOrganizations<T>(run: () => Promise<T>): Promise<Cr
  * `AgentPausedError`, so neither notifies. Notifying never changes the
  * cycle's result: `notifyWaitingDecisions` does not throw, and if it ever
  * did, the error is logged here by organization id and the result still
- * returned.
+ * returned. The escalation of payables past their decide-by day follows the
+ * digest, on the same terms.
  */
 export async function runScheduledCycle(): Promise<CycleResult> {
   const result = await runAgentCycle({ trigger: { kind: "schedule" } });
@@ -96,6 +98,12 @@ export async function runScheduledCycle(): Promise<CycleResult> {
     await notifyWaitingDecisions();
   } catch (error) {
     console.error("notifications failed after the cycle", currentOrgId(), error instanceof Error ? error.message : String(error));
+  }
+  // A held payable past the day it had to be decided by: one escalation per payable and day (deal cash readiness E4).
+  try {
+    await escalateOverdueDecisions();
+  } catch (error) {
+    console.error("escalations failed after the cycle", currentOrgId(), error instanceof Error ? error.message : String(error));
   }
   return result;
 }

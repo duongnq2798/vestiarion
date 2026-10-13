@@ -2,6 +2,8 @@ import { NotSetUpError } from "../connectors/connections";
 import { crmRowForDeal, reviewChanges, sourceOf } from "../connectors/crm-actions";
 import { changesKey, rowChanges } from "../connectors/crm-store";
 import { PROVIDER_LABELS } from "../connectors/provider";
+import type { CostDraft } from "../deals/costs";
+import { addDealCost as writeAddCost, DealCostError, linkDealCost as writeLinkCost, removeDealCost as writeRemoveCost, type LinkTarget } from "../deals/costs-write";
 import type { ChangeDraft, DealDraft } from "../deals/input";
 import { changeDeal as writeChange, confirmDeal, DealError, releaseDealLine as writeRelease, switchDealAutoRelease } from "../deals/write";
 import type { Actor } from "./actor";
@@ -112,5 +114,56 @@ export async function setDealAutoRelease(actor: Actor, input: { dealId: string; 
     );
   } catch (error) {
     return refusalOf(error, "switching a deal's release failed", actor);
+  }
+}
+
+/**
+ * A cost's refusal in its own words (deal cash readiness K3); a form sent again with other details, or a cost changed
+ * since the page was drawn, refreshes the page. Anything else is logged and said as a failure no one can act on.
+ */
+function costRefusalOf(error: unknown, what: string, actor: Actor): Refused {
+  if (error instanceof DealCostError) {
+    return refused(error.code, error.message, ["key_reused", "removed", "linked", "link_taken", "link_not_found"].includes(error.code) ? { changed: true } : {});
+  }
+  console.error(what, actor.orgId, error instanceof Error ? error.message : "unknown error");
+  return refused("failed", TRY_AGAIN);
+}
+
+/** Adds a planned cost to a deal. The same form again adds no second one. */
+export async function addDealCost(actor: Actor, input: { draft: CostDraft }): Promise<CommandOutcome<{ costId: string }>> {
+  const refusal = gate(actor, "deal.add_cost");
+  if (refusal) return refusal;
+  try {
+    const result = await writeAddCost({ actorId: actor.userId, draft: input.draft });
+    return done(
+      result.created ? `${result.cost.label}, ${result.amount}, is planned for ${result.title}.` : `This cost was added already: ${result.cost.label}.`,
+      { costId: result.cost.id }
+    );
+  } catch (error) {
+    return costRefusalOf(error, "adding a deal cost failed", actor);
+  }
+}
+
+/** Removes a planned cost: it is kept, and counted nowhere. */
+export async function removeDealCost(actor: Actor, input: { dealId: string; costId: string }): Promise<CommandOutcome> {
+  const refusal = gate(actor, "deal.remove_cost");
+  if (refusal) return refusal;
+  try {
+    const result = await writeRemoveCost({ actorId: actor.userId, dealId: input.dealId, costId: input.costId });
+    return done(result.removed ? `${result.label} is removed from ${result.title}.` : `${result.label} was removed already.`);
+  } catch (error) {
+    return costRefusalOf(error, "removing a deal cost failed", actor);
+  }
+}
+
+/** Links a planned cost to the bill or milestone it became, which then counts in its place. */
+export async function linkDealCost(actor: Actor, input: { dealId: string; costId: string; target: LinkTarget }): Promise<CommandOutcome> {
+  const refusal = gate(actor, "deal.link_cost");
+  if (refusal) return refusal;
+  try {
+    const result = await writeLinkCost({ actorId: actor.userId, dealId: input.dealId, costId: input.costId, target: input.target });
+    return done(`${result.label} is linked to ${result.to}: it counts in the plan's place.`);
+  } catch (error) {
+    return costRefusalOf(error, "linking a deal cost failed", actor);
   }
 }

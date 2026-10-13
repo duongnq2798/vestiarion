@@ -90,6 +90,10 @@ import { crmPlanState } from "@/components/deals/crm-plan";
 import { PlanFromCrmForm, PlannedFromCrm } from "@/components/deals/PlannedFromCrm";
 import { HubSpotDeals } from "@/components/HubSpotDeals";
 import { crmPrefillFor, crmReady, crmReview, type CrmPrefillRead, type CrmReviewView } from "@/lib/connectors/crm-review";
+import { readDealCosts } from "@/lib/deals/costs-read";
+import { exceptionFacts } from "@/lib/exceptions";
+import { invoiceDiscount } from "@/lib/agent/payment-timing";
+import { listMembers } from "@/lib/platform/members";
 import { dealLinksOf, plannedLinesOf, readDeals, type DealLink } from "@/lib/deals/read";
 import { hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
 
@@ -194,6 +198,17 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         : ({ state: "hidden" } as CrmReviewView),
     ]);
     const deals = dealsRead === "unread" ? "unread" : dealsRead.available ? dealsRead.deals : "not_ready";
+    // Each deal's costs, for its cash badge (deal cash readiness K8). Best effort: before migration 0108, or when they
+    // cannot be read, no badge is shown.
+    const dealCosts =
+      Array.isArray(deals) && deals.length > 0
+        ? await readDealCosts(deals)
+            .then((read) => (read.available ? read.byDeal : null))
+            .catch((error: unknown) => {
+              console.error("invoices: deal costs not loaded", error instanceof Error ? error.message : error);
+              return null;
+            })
+        : null;
     // The payments made on Arc to book in each accounting tool, for a person to review (accounting write-back W6, W10).
     const [toBook, canBook] = await Promise.all([Promise.all(PROVIDERS.map(toBookIn)), viewerCan(slug, "accounting.book")]);
     // Each receivable a deal line became names its deal (deal schedule).
@@ -381,6 +396,17 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
           return [invoice.id, { onFile, added: addedSince(recordedFacts(latestDecision(entries, invoice.id)), onFile) }] as const;
         })
     );
+    // Each bill waiting for a person: its priority, the day it must be decided by, and who can act (deal cash readiness
+    // E1-E3). The members are read once, only while a bill waits, and best effort: a list that fails leaves the rows as before.
+    const members =
+      waiting.size > 0
+        ? await listMembers(access.membership.orgId).catch((error: unknown) => {
+            console.error("invoices: members not read", error instanceof Error ? error.message : error);
+            return null;
+          })
+        : null;
+    const exceptionOf = (invoice: InvoiceRow) =>
+      members && waiting.has(invoice.id) ? exceptionFacts({ dueDate: invoice.due_date, discount: invoiceDiscount(invoice), createdBy: invoice.created_by ?? null }, members, today) : null;
     const ruleOf = (decision: Decision) => decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : decision.heldForVerdict ? SHADOW_VERDICT : null);
     const needsYouFor = (decision: Decision) => {
       const invoice = invoicesById.get(decision.id);
@@ -450,6 +476,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
           dealContext: dealContext(decision),
           link: linkStates.get(row.id),
           justAdded: view.sort === "added" && Boolean(invoice.created_at) && asOf - Date.parse(invoice.created_at as string) < JUST_ADDED_MS,
+          exception: exceptionOf(invoice),
           href: here({ open: row.id }),
         });
       }),
@@ -594,6 +621,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
             <div className="pt-6">
               <DealsSection
                 deals={deals}
+                costs={dealCosts}
                 orgSlug={slug}
                 today={today}
                 fromCrm={

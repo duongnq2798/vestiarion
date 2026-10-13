@@ -9,9 +9,10 @@ import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fa
 
 // What a cycle does is the orchestrator's tests' job, and what a digest does
 // is tests/notifications.test.ts's: here only the order and isolation of the two.
-const { runAgentCycleMock, notifyMock } = vi.hoisted(() => ({ runAgentCycleMock: vi.fn(), notifyMock: vi.fn() }));
+const { runAgentCycleMock, notifyMock, escalateMock } = vi.hoisted(() => ({ runAgentCycleMock: vi.fn(), notifyMock: vi.fn(), escalateMock: vi.fn() }));
 vi.mock("@/lib/agent/orchestrator", () => ({ runAgentCycle: runAgentCycleMock }));
 vi.mock("@/lib/notifications/waiting", () => ({ notifyWaitingDecisions: notifyMock }));
+vi.mock("@/lib/notifications/escalations", () => ({ escalateOverdueDecisions: escalateMock }));
 
 const A = "5d0f3a2e-8c1b-4f7a-9e6d-00000000a000";
 const B = "5d0f3a2e-8c1b-4f7a-9e6d-00000000b000";
@@ -161,6 +162,7 @@ describe("runScheduledCycle", () => {
   afterEach(() => {
     runAgentCycleMock.mockReset();
     notifyMock.mockReset();
+    escalateMock.mockReset();
     vi.restoreAllMocks();
   });
 
@@ -175,6 +177,10 @@ describe("runScheduledCycle", () => {
       order.push(`notify ${currentOrgId()}`);
       return { sent: 1, failed: 0, invoices: 1 };
     });
+    escalateMock.mockImplementation(async () => {
+      order.push(`escalate ${currentOrgId()}`);
+      return { sent: 0, failed: 0, invoices: 0 };
+    });
 
     const results = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => runLiveOrganizations(runScheduledCycle));
 
@@ -182,7 +188,7 @@ describe("runScheduledCycle", () => {
       { slug: "a-corp", ok: true, result: { lines: [] } },
       { slug: "b-corp", ok: true, result: { lines: [] } },
     ]);
-    expect(order).toEqual([`cycle ${A}`, `notify ${A}`, `cycle ${B}`, `notify ${B}`]);
+    expect(order).toEqual([`cycle ${A}`, `notify ${A}`, `escalate ${A}`, `cycle ${B}`, `notify ${B}`, `escalate ${B}`]);
     // Only the scheduled path starts a cycle this way: no person, no cap (N1), and the schedule as its trigger.
     expect(runAgentCycleMock).toHaveBeenCalledWith({ trigger: { kind: "schedule" } });
   });
@@ -202,6 +208,7 @@ describe("runScheduledCycle", () => {
       { slug: "b-corp", ok: true, skipped: "paused" },
     ]);
     expect(notifyMock).not.toHaveBeenCalled();
+    expect(escalateMock).not.toHaveBeenCalled();
   });
 
   it("skips a workspace whose cycle is already running, as a skip and not a failure", async () => {
@@ -246,5 +253,7 @@ describe("runScheduledCycle", () => {
     ]);
     expect(error).toHaveBeenCalledWith("notifications failed after the cycle", A, "smtp down");
     expect(error).toHaveBeenCalledWith("notifications failed after the cycle", B, "smtp down");
+    // The escalations still run: a digest that failed never holds them back.
+    expect(escalateMock).toHaveBeenCalledTimes(2);
   });
 });

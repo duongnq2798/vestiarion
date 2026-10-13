@@ -39,6 +39,11 @@ export const COMMAND_PERMISSIONS = {
   "deal.change": "records.write",
   "deal.release": "records.write",
   "deal.auto_release": "records.write",
+  // A deal's planned costs, and linking one to the bill or milestone it became: records, as a deal is (deal cash
+  // readiness K3).
+  "deal.add_cost": "records.write",
+  "deal.remove_cost": "records.write",
+  "deal.link_cost": "records.write",
   "inbox.add": "records.write",
   "inbox.finish": "records.write",
   "inbox.dismiss": "records.write",

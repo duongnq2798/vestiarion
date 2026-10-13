@@ -103,7 +103,7 @@ export const TENANT_TABLES = [
   "service_purchases", "spending_limit_contracts", "ar_reminders", "inbox_emails", "approval_policies", "payment_approvals",
   "shadow_modes", "decision_verdicts", "payment_actuals", "bank_statement_lines", "report_shares", "report_baselines", "receivable_allocations",
   "accounting_connections", "external_links", "accounting_bills", "accounting_sync_cursors", "accounting_postings",
-  "deals", "deal_versions", "deal_lines",
+  "deals", "deal_versions", "deal_lines", "deal_costs", "approval_escalations",
   "crm_deals",
 ] as const;
 
@@ -202,6 +202,13 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
        '[{"position": 1, "label": "All", "invoiceOn": "2026-10-12", "dueOn": "2026-10-26", "amountMinor": 100}]'::jsonb)`,
     [orgId, counterpartyId, `deal-${tag}`, `deal-key-${tag}`]
   );
+  // A planned cost of that deal, linked to the payable it became, and an escalation of that payable (0108).
+  await db.query(
+    `insert into deal_costs (org_id, deal_id, label, amount_minor, expected_on, invoice_id, linked_at, idempotency_key)
+     select $1, d.id, 'Contractor', 50, '2026-10-20', $2, now(), $3 from deals d where d.org_id = $1 and d.idempotency_key = $4`,
+    [orgId, invoiceId, `cost-key-${tag}`, `deal-key-${tag}`]
+  );
+  await db.query("insert into approval_escalations (org_id, invoice_id, decide_by) values ($1, $2, '2026-10-20')", [orgId, invoiceId]);
   // An accounting connection, a link, a bill to review and a cursor (0101).
   const connectionId = await one(
     `insert into accounting_connections (org_id, provider, external_org_id, consent_version, consented_at, window_from)

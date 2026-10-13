@@ -6,9 +6,10 @@ import { consoleAnswer } from "@/app/actions/command-result";
 import { authorize } from "@/lib/auth/authorize";
 import { consoleActor } from "@/lib/commands/actor";
 import { planCrmDeal } from "@/lib/commands/crm";
-import { addDeal, changeDeal, releaseDealLine, setDealAutoRelease } from "@/lib/commands/deals";
+import { addDeal, addDealCost, changeDeal, linkDealCost, releaseDealLine, removeDealCost, setDealAutoRelease } from "@/lib/commands/deals";
 import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
+import { readCostForm, type CostFormField } from "@/lib/deals/costs";
 import { readChangeForm, readDealForm, type DealFormField, type DealFormFields } from "@/lib/deals/input";
 import { readDeal } from "@/lib/deals/read";
 import { readShadowMode } from "@/lib/shadow-mode";
@@ -134,5 +135,68 @@ export async function setDealAutoReleaseAction(_previous: DealActionResult, form
     const on = formString(formData, "on", 10);
     if (on !== "true" && on !== "false") return { ok: false, message: "Choose whether the agent releases the lines." };
     return consoleAnswer(await setDealAutoRelease(consoleActor(auth), { dealId, on: on === "true" }));
+  });
+}
+
+/** What a deal cost's form answers: the field a refusal is about, on Add a cost. */
+export interface DealCostActionResult {
+  ok: boolean;
+  message: string;
+  field?: CostFormField;
+}
+
+/**
+ * Adds a planned cost to a deal from its page (deal cash readiness K1). The amount is typed in the deal's own currency:
+ * read it from the deal, never from the form. The same form sent twice adds one cost.
+ */
+export async function addDealCostAction(_previous: DealCostActionResult, formData: FormData): Promise<DealCostActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "records.write");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    const dealId = formString(formData, "dealId", 64);
+    if (!UUID.test(dealId)) return { ok: false, message: "That deal was not found." };
+    const deal = await readDeal(dealId);
+    if (!deal.available) return { ok: false, message: "Deals are not set up on this deployment yet." };
+    if (!deal.deal) return { ok: false, message: "That deal was not found." };
+    const read = readCostForm(
+      {
+        dealId,
+        label: formString(formData, "label", 400),
+        counterpartyId: formString(formData, "counterpartyId", 64),
+        amount: formString(formData, "amount", 40),
+        expectedOn: formString(formData, "expectedOn", 20),
+        noDocument: formData.get("noDocument") === "on",
+        idempotencyKey: formString(formData, "idempotencyKey", 120),
+      },
+      { currency: deal.deal.facts.currency, startsOn: deal.deal.facts.startsOn }
+    );
+    if (!read.ok) return { ok: false, message: read.message, field: read.field };
+    return consoleAnswer(await addDealCost(consoleActor(auth), { draft: read.draft }));
+  });
+}
+
+/** Removes a planned cost from a deal: kept, and counted nowhere. */
+export async function removeDealCostAction(_previous: DealCostActionResult, formData: FormData): Promise<DealCostActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "records.write");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    const dealId = formString(formData, "dealId", 64);
+    const costId = formString(formData, "costId", 64);
+    if (!UUID.test(dealId) || !UUID.test(costId)) return { ok: false, message: "That cost is not on this deal." };
+    return consoleAnswer(await removeDealCost(consoleActor(auth), { dealId, costId }));
+  });
+}
+
+/** Links a planned cost to the bill or milestone it became: `target` is `payable:<id>` or `milestone:<id>`. */
+export async function linkDealCostAction(_previous: DealCostActionResult, formData: FormData): Promise<DealCostActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "records.write");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    const dealId = formString(formData, "dealId", 64);
+    const costId = formString(formData, "costId", 64);
+    if (!UUID.test(dealId) || !UUID.test(costId)) return { ok: false, message: "That cost is not on this deal." };
+    const [kind, id = ""] = formString(formData, "target", 100).split(":");
+    if ((kind !== "payable" && kind !== "milestone") || !UUID.test(id)) return { ok: false, message: "Choose the bill or milestone this cost became." };
+    return consoleAnswer(await linkDealCost(consoleActor(auth), { dealId, costId, target: { kind, id } }));
   });
 }

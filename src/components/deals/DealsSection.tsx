@@ -9,6 +9,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { orgHref } from "@/lib/auth/org-paths";
 import { utcDay } from "@/lib/copy";
+import { cashBadge, dealCashReadiness } from "@/lib/deals/cash";
+import type { DealCost } from "@/lib/deals/costs";
 import { dealSummary } from "@/lib/deals/lines";
 import type { DealRecord } from "@/lib/deals/read";
 import { DealMoney } from "./DealMoney";
@@ -25,17 +27,21 @@ export function dealStanding(deal: DealRecord, today: string): { label: string; 
 
 /**
  * Bills & receivables' Deals (docs/superpowers/specs/2026-10-12-deal-schedule-design.md): each signed deal with what of
- * it was released, paid, is still expected and is planned, and its next line; New deal for owners and admins. Before
+ * it was released, paid, is still expected and is planned, its next line, and one badge for its cash readiness
+ * (docs/superpowers/specs/2026-10-13-deal-cash-readiness-design.md K8); New deal for owners and admins. Before
  * migration 0104 runs it says deals are not set up, and nothing else on the page changes (D15).
  */
 export function DealsSection({
   deals,
+  costs = null,
   orgSlug,
   today,
   newDeal,
   fromCrm,
 }: {
   deals: DealRecord[] | "not_ready" | "unread";
+  /** Each deal's costs, for its cash badge (deal cash readiness K8); null before they are set up or when unread: no badge. */
+  costs?: ReadonlyMap<string, DealCost[]> | null;
   orgSlug: string;
   today: string;
   newDeal?: ReactNode;
@@ -79,6 +85,7 @@ export function DealsSection({
             {deals.map((deal) => {
               const summary = dealSummary(deal.facts, today);
               const standing = dealStanding(deal, today);
+              const cash = costs ? cashBadge(dealCashReadiness(deal, costs.get(deal.facts.id) ?? [], today), deal.facts.status) : null;
               const money = (minor: number) => <DealMoney minor={minor} digits={deal.digits} currency={deal.facts.currency} />;
               return (
                 <li key={deal.facts.id}>
@@ -93,6 +100,11 @@ export function DealsSection({
                         <Badge size="sm" tone={standing.tone} dot>
                           {standing.label}
                         </Badge>
+                        {cash && (
+                          <Badge size="sm" tone={cash.tone} shape="tag" title="Cash readiness: the deal's money in against its costs, if the customer pays each line on its due day">
+                            {cash.label}
+                          </Badge>
+                        )}
                       </span>
                       <span className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-ink-2">
                         <span>Total {money(summary.totalMinor)}</span>

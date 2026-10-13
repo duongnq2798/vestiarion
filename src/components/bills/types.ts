@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { NextStep } from "@/components/vx/bill-next-step";
 import type { Outcome } from "@/components/vx/types";
 import type { Page } from "@/lib/bills-view";
+import type { ExceptionFacts } from "@/lib/exceptions";
 
 /** One bill or receivable as its row shows it, before it is opened (B6). Every href is the page's own, ready to use. */
 export interface BillRowItem {
@@ -33,6 +34,8 @@ export interface BillRowItem {
   collection?: string | null;
   /** Added in the last few minutes, while the list shows the newest first. */
   justAdded?: boolean;
+  /** A bill waiting for a person: its priority, the day it must be decided by, and who can act (deal cash readiness E1-E3). */
+  exception?: ExceptionFacts | null;
   /** Its detail's address. */
   href: string;
 }

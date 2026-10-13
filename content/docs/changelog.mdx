@@ -1,5 +1,14 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-13: A deal's planned costs, and held bills escalated past their day
+
+- A person can enter a deal's planned costs, remove one, and link one to the payable or milestone it became. Its ledger gains three entries, actor `human`, domain `ar`, each listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:
+  - **`deal_cost_added`** `{ by, dealId, title, costId, label, counterpartyId, counterpartyName, currency, digits, amount, amountMinor, expectedOn, noDocument }`. `currency` and `digits` are the deal's; `amount` is a decimal string and `amountMinor` the same in minor units; `expectedOn` is YYYY-MM-DD; `counterpartyId` and `counterpartyName` are null when nobody was named; `noDocument` is true when no bill or quote backs it yet.
+  - **`deal_cost_removed`**, the same fields plus `linked`: null, or `{ kind, id }` for the payable (`kind: "payable"`, an invoice id) or milestone it was linked to. A removed cost stays in the deal's record and counts nowhere.
+  - **`deal_cost_linked`**, the same fields plus `linked: { kind, id, amount, amountMinor, status }`: the payable or milestone the cost became, its amount in the deal's currency and its status when it was linked. A payable or milestone backs one cost at a time.
+- A new entry, actor `system`, domain `system`, listed and sent the same way: **`decision_escalated`** `{ invoiceIds, decideBy, recipients, failed }`, when the members who can decide payments were emailed about held payables that passed the day they were to be decided by. `decideBy` maps each invoice id to that day (YYYY-MM-DD); `recipients` and `failed` are counts. A payable is escalated once for each such day.
+- Nothing else in `/api/v1` changes: a planned cost is not an invoice, and `GET /api/v1/invoices` returns a linked payable as before.
+
 ## 2026-10-12: Deals brought in from HubSpot
 
 - An owner or admin can connect a workspace to a HubSpot account, and a person plans the collections of the won deals it brings in. Connecting and disconnecting are the **`accounting_connected`** and **`accounting_disconnected`** entries the Xero connector added, with `provider: "hubspot"`; `externalOrgId` is the HubSpot account (hub) id and `externalOrgName` its domain.

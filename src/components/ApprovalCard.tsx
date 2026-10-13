@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useState, type FormEvent } from "react";
 import { approveInvoiceAction, rejectInvoiceAction, returnInvoiceAction } from "@/app/actions/approvals";
 import { AddDetailsDialog } from "@/components/AddDetailsDialog";
+import { ExceptionLine } from "@/components/ExceptionLine";
 import { Badge, type BadgeProps } from "@/components/ui/Badge";
 import VerdictControl from "@/components/VerdictControl";
 import { Button } from "@/components/ui/Button";
@@ -25,6 +26,7 @@ import { addedDetailsSentence } from "@/lib/added-details";
 import { approvalAnchor, orgHref } from "@/lib/auth/org-paths";
 import { agentResumes, CASH_SHORTFALL, SHADOW_VERDICT, counterpartyPath, ruleNextStep } from "@/lib/next-step";
 import { amountToPay } from "@/lib/agent/payment-timing";
+import type { ExceptionFacts } from "@/lib/exceptions";
 import { utcDay, utcMinute } from "@/lib/copy";
 import { chainById, homeChain, networkOfChain, paidAcrossChains } from "@/lib/payee-chains";
 import { approveFirstDescription, mayApproveNow, onlyApproverOfTwo, SECOND_APPROVAL_PAYS, twoApprovalsLine } from "@/lib/two-approvals";
@@ -152,6 +154,8 @@ export default function ApprovalCard({
   canEdit = false,
   memberEmails = {},
   verdict,
+  exception,
+  viewerEmail,
 }: {
   orgSlug: string;
   payable: WaitingPayable;
@@ -166,6 +170,10 @@ export default function ApprovalCard({
   memberEmails?: Record<string, string>;
   /** A person's verdict on the agent's decision, in shadow mode: given, or to give in place of approving it (shadow mode S4). */
   verdict?: VerdictView;
+  /** Its priority, the day it must be decided by and who can act on it (deal cash readiness E1-E3). */
+  exception?: ExceptionFacts;
+  /** The viewer's own email, named "you" among who can act. */
+  viewerEmail?: string | null;
 }) {
   const unfinished = payable.status === "processing" && payable.reclaimable;
   // Above the figure for two approvals: one person, sole approver or not, never pays it alone (two approvals T5).
@@ -197,6 +205,7 @@ export default function ApprovalCard({
               Due {utcDay(payable.dueDate)}
               {payable.decidedAt && <span className="text-ink-3"> · stopped {utcMinute(payable.decidedAt)}</span>}
             </p>
+            {exception && !processing && <ExceptionLine facts={exception} viewerEmail={viewerEmail} className="pt-0.5" />}
           </div>
           <div className="flex shrink-0 items-center gap-3 sm:flex-col sm:items-end sm:gap-1.5">
             <Money value={payable.amount} token={payable.currency ?? "USDC"} className="text-lg font-semibold text-ink" />
@@ -282,6 +291,11 @@ export default function ApprovalCard({
             )}
             <Decisions orgSlug={orgSlug} payable={payable} viewerId={viewerId} sandbox={sandbox} ownEntry={ownEntry} ownAddress={ownAddress} canAddDetails={canAddDetails} />
           </>
+        ) : exception && exception.owners.length > 0 ? (
+          // Someone who cannot decide it still has a next step: who to ask (deal cash readiness E5).
+          <CardFooter>
+            <p className="text-sm text-ink-2">Ask {exception.owners[0]} to decide it{exception.owners.length > 1 ? `, or another of the ${exception.owners.length} people who can` : ""}.</p>
+          </CardFooter>
         ) : null}
       </article>
     </Card>

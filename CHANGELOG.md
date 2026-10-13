@@ -13,6 +13,17 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **A deal's costs and its cash readiness.** On a deal's page, enter what it will cost (what, for whom, how much, the
+  day it leaves, and whether a document backs it yet) and link each cost to the bill or milestone it became, which then
+  counts in its place, once. Cash readiness sets the schedule's money in against the costs day by day: collected and
+  paid out to date, the first day the deal would be short and by how much, and an estimated margin, which says "Not
+  enough data" until a cost is entered. Try a different deposit day or percent and see the gap move; nothing is saved
+  until you change the deal. Each deal on the Receivables tab carries one badge: short and when, no cash gap, or no
+  costs entered.
+- **Held bills have a priority, a day to decide by and an owner.** Each card in Approvals and each row on Bills says
+  Overdue, Due today, Due this week or Later, the day to decide it by (its due date, or its discount's last day), and
+  who can act. When that day passes undecided, the people who can decide get one email about it, unless they turned
+  these emails off.
 - **Xero, QuickBooks Online and HubSpot on the landing page and in Settings.** "Built on, and works with" lists them
   beside Arc, Circle, Slack, Telegram and npm, each with its mark, what it does and its guide; their Settings cards and
   connect pages show their marks beside their names.
