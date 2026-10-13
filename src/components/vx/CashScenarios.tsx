@@ -26,15 +26,19 @@ import {
   type Suggestion,
 } from "@/lib/cash-scenarios";
 import { utcDay } from "@/lib/copy";
+import { formatMoney, formatRateValue, rateWords, roundedMoney, toReporting, type FxRate, type RateBook } from "@/lib/money";
 import { Money } from "./Primitives";
+import { ScenarioRates, type RateHint } from "./ScenarioRates";
+import { ScenarioVersions, type SavedScenarioView, type ScenarioSaving } from "./ScenarioVersions";
 
 /**
  * What if clients pay late? (docs/superpowers/specs/2026-10-11-cash-scenarios-design.md): Treasury's folded section
  * under Next 30 days. A person picks a horizon, how late clients pay, which receivables are late, on time or never
  * arrive, and a change in bill costs; the section works it out in the browser from the rows the page passed, on every
  * render, so a refreshed row moves its day (C10). It shows the balance if clients pay on time and in the scenario, the first
- * short day, the bills it touches, advice in words, what moves it most and what it is built from. Nothing is saved,
- * paid or sent to the agent (C9).
+ * short day, the bills it touches, advice in words, what moves it most and what it is built from. Nothing is paid or
+ * sent to the agent (C9). Exchange rates for bills written in another currency, and saving the levers as a version, are
+ * docs/superpowers/specs/2026-10-13-currency-provenance-design.md M7; a version is kept only when a person saves it.
  */
 
 const dayLabel = (day: string) => utcDay(`${day}T00:00:00Z`);
@@ -66,26 +70,79 @@ const typed = (text: string) => {
   return text.trim() === "" || !Number.isFinite(value) ? 0 : value;
 };
 
+/** The workspace's reporting currency and the reference rates to show the scenario's cash in it (currency provenance M4). */
+export interface ScenarioReporting {
+  currency: string;
+  /** Each currency's reference rate to the US dollar, and why one is missing; plain values. */
+  rates: FxRate[];
+  missing: Record<string, string>;
+}
+
 /**
  * The section. `outcome={false}` draws the levers alone, for the guide's picture of them; the parts of the outcome
- * (`ScenarioCases`, `ScenarioFindings`, `CoverageList`) have their own pictures.
+ * (`ScenarioCases`, `ScenarioFindings`, `CoverageList`) have their own pictures. `rateHints` are today's reference rates
+ * for the currencies bills were written in, `saving` the saved versions and who may save, `reporting` the reporting
+ * currency; each is left out where the page has none.
  */
-export function CashScenarios({ basis, defaultOpen = false, outcome = true }: { basis: ScenarioBasis; defaultOpen?: boolean; outcome?: boolean }) {
+export function CashScenarios({
+  basis,
+  defaultOpen = false,
+  outcome = true,
+  rateHints = {},
+  saving,
+  reporting,
+  initial,
+}: {
+  basis: ScenarioBasis;
+  defaultOpen?: boolean;
+  outcome?: boolean;
+  rateHints?: Record<string, RateHint>;
+  saving?: ScenarioSaving;
+  reporting?: ScenarioReporting | null;
+  /** A saved version to start from, for a picture of one. */
+  initial?: SavedScenarioView;
+}) {
   const id = useId();
-  const [horizon, setHorizon] = useState<Horizon>(DEFAULT_LEVERS.horizon);
-  const [lateText, setLateText] = useState(String(DEFAULT_LEVERS.lateDays));
-  const [costText, setCostText] = useState(String(DEFAULT_LEVERS.costPct));
-  const [costScope, setCostScope] = useState<ScenarioLevers["costScope"]>(DEFAULT_LEVERS.costScope);
-  const [choices, setChoices] = useState<Record<string, ReceivableChoice>>({});
-
+  const [horizon, setHorizon] = useState<Horizon>(initial?.levers.horizon ?? DEFAULT_LEVERS.horizon);
+  const [lateText, setLateText] = useState(String(initial?.levers.lateDays ?? DEFAULT_LEVERS.lateDays));
+  const [costText, setCostText] = useState(String(initial?.levers.costPct ?? DEFAULT_LEVERS.costPct));
+  const [costScope, setCostScope] = useState<ScenarioLevers["costScope"]>(initial?.levers.costScope ?? DEFAULT_LEVERS.costScope);
+  const [choices, setChoices] = useState<Record<string, ReceivableChoice>>(initial?.levers.choices ?? {});
+  const [rateTexts, setRateTexts] = useState<Record<string, string>>(Object.fromEntries((initial?.rates ?? []).map((rate) => [rate.currency, rate.perUsd])));
+  const [open, setOpen] = useState<{ scenarioId: string; version: number; name: string } | null>(
+    initial ? { scenarioId: initial.scenarioId, version: initial.version, name: initial.name } : null
+  );
   const levers: ScenarioLevers = useMemo(
-    () => ({ horizon, lateDays: typed(lateText), costPct: typed(costText), costScope, choices }),
-    [horizon, lateText, costText, costScope, choices]
+    () => ({ horizon, lateDays: typed(lateText), costPct: typed(costText), costScope, choices, rates: rateTexts }),
+    [horizon, lateText, costText, costScope, choices, rateTexts]
   );
   // Worked out from the rows on every render, never kept: a row the page re-reads moves its day (C10).
   const result = useMemo(() => cashScenario(basis, levers), [basis, levers]);
   const receivables = receivablesIn(basis, horizon);
   const foreignBills = basis.outflows.filter((outflow) => outflow.day < horizon && outflow.foreign).length;
+  // The currencies open bills were written in, each with its count: the rates a person may type.
+  const rateCurrencies = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const outflow of basis.outflows) if (outflow.original) counts.set(outflow.original.currency, (counts.get(outflow.original.currency) ?? 0) + 1);
+    return [...counts.entries()].map(([currency, bills]) => ({ currency, bills })).sort((a, b) => a.currency.localeCompare(b.currency));
+  }, [basis]);
+  // What a save keeps: the levers as applied, and each typed rate that reads, with the reference rate shown beside it.
+  const saved = {
+    levers: { horizon, lateDays: result.levers.lateDays, costPct: result.levers.costPct, costScope, choices },
+    rates: Object.entries(result.levers.rates).map(([currency, perUsd]) => {
+      const hint = rateHints[currency];
+      return { currency, perUsd, reference: hint ? { perUsd: hint.perUsd, source: hint.source, at: hint.at } : null };
+    }),
+  };
+  const openVersion = (version: SavedScenarioView) => {
+    setHorizon(version.levers.horizon);
+    setLateText(String(version.levers.lateDays));
+    setCostText(String(version.levers.costPct));
+    setCostScope(version.levers.costScope);
+    setChoices(version.levers.choices);
+    setRateTexts(Object.fromEntries(version.rates.map((rate) => [rate.currency, rate.perUsd])));
+    setOpen({ scenarioId: version.scenarioId, version: version.version, name: version.name });
+  };
 
   return (
     <section id="cash-scenarios" aria-labelledby={`${id}-title`} className="scroll-mt-6">
@@ -98,7 +155,9 @@ export function CashScenarios({ basis, defaultOpen = false, outcome = true }: { 
             <h2 id={`${id}-title`} className="text-base font-semibold tracking-tight text-ink">
               What if clients pay late?
             </h2>
-            <span className="text-[0.8125rem] font-normal text-ink-3">Late or missing receivables and changed bill costs, 30 to 90 days ahead. Nothing here is saved or paid.</span>
+            <span className="text-[0.8125rem] font-normal text-ink-3">
+              Late or missing receivables, changed bill costs and exchange rates, 30 to 90 days ahead. Nothing here is paid; a scenario is kept only when you save it.
+            </span>
           </span>
         }
       >
@@ -133,6 +192,13 @@ export function CashScenarios({ basis, defaultOpen = false, outcome = true }: { 
               </SelectContent>
             </Select>
           </Field>
+          <ScenarioRates
+            id={id}
+            currencies={rateCurrencies}
+            hints={rateHints}
+            values={rateTexts}
+            onChange={(currency, value) => setRateTexts((current) => ({ ...current, [currency]: value }))}
+          />
         </div>
 
         <div>
@@ -168,7 +234,18 @@ export function CashScenarios({ basis, defaultOpen = false, outcome = true }: { 
           )}
         </div>
 
-        {outcome && <ScenarioOutcome result={result} />}
+        {outcome && <ScenarioOutcome result={result} reporting={reporting ?? null} />}
+        {saving && (
+          <ScenarioVersions
+            id={id}
+            saving={saving}
+            levers={saved.levers}
+            rates={saved.rates}
+            open={open}
+            onOpen={openVersion}
+            onSaved={(next) => setOpen(next)}
+          />
+        )}
       </Disclosure>
     </section>
   );
@@ -180,17 +257,41 @@ function dayOf(today: string, offset: number): string {
 }
 
 /** Everything worked out for one set of levers: the two cases, the chart, the bills touched, advice, drivers, coverage. */
-export function ScenarioOutcome({ result }: { result: ScenarioResult }) {
+export function ScenarioOutcome({ result, reporting = null }: { result: ScenarioResult; reporting?: ScenarioReporting | null }) {
   return (
     <div className="space-y-6">
       <ScenarioCases result={result} />
+      {reporting && <InReportingCurrency result={result} reporting={reporting} />}
       <ScenarioFindings result={result} />
       <CoverageList result={result} />
       <DayByDay result={result} />
       <p className="text-xs leading-5 text-ink-3">
-        A what-if from the bills and receivables on record, not a forecast. Nothing here is saved, changes a payment or reaches the agent: Safe to spend today and
-        every payment still count no receivable.
+        A what-if from the bills and receivables on record, not a forecast. Nothing here changes a payment or reaches the agent: Safe to spend today and every
+        payment still count no receivable, and every payment still settles in USDC.
       </p>
+    </div>
+  );
+}
+
+/**
+ * The scenario's cash today and its lowest balance in the reporting currency, with the rates that took them there:
+ * USDC by its dollar redemption, then the dollar's reference rate. A missing rate says unknown, never a guess.
+ */
+export function InReportingCurrency({ result, reporting }: { result: ScenarioResult; reporting: ScenarioReporting }) {
+  const book: RateBook = { rates: new Map(reporting.rates.map((rate) => [rate.to, rate])), missing: new Map(Object.entries(reporting.missing)) };
+  const cash = toReporting(roundedMoney(result.cash + result.reserve, "USDC"), reporting.currency, book);
+  const lowest = toReporting(roundedMoney(result.scenario.lowest.balance, "USDC"), reporting.currency, book);
+  if (cash.state === "unknown" || lowest.state === "unknown") {
+    const reason = cash.state === "unknown" ? cash.reason : lowest.state === "unknown" ? lowest.reason : "";
+    return <p className="text-xs leading-5 text-ink-2">{`In ${reporting.currency}: unknown. ${reason}`}</p>;
+  }
+  if (cash.state !== "converted" || lowest.state !== "converted") return null;
+  return (
+    <div className="text-xs leading-5 text-ink-2">
+      <p>
+        {`In ${reporting.currency}: cash today ${formatMoney(cash.money)}; lowest in this scenario ${formatMoney(lowest.money)}.`}
+      </p>
+      <p className="text-ink-3">{`At ${cash.rates.map(rateWords).join("; then ")}.`}</p>
     </div>
   );
 }
@@ -267,11 +368,17 @@ function ScenarioChanges({ result }: { result: ScenarioResult }) {
       `${plural(late.length, "receivable")} ${result.levers.lateDays} days late${outside.length > 0 ? `, ${outside.length} of them after the ${result.horizon} days` : ""}`,
     never.length > 0 && `${plural(never.length, "receivable")} never ${never.length === 1 ? "arrives" : "arrive"}`,
   ].filter((line): line is string => Boolean(line));
-  if (lines.length === 0 && result.costDelta === 0) return <p className="mt-2 text-xs text-ink-3">Nothing changed yet: set a lever above.</p>;
+  if (lines.length === 0 && result.costDelta === 0 && result.rateEffects.length === 0) return <p className="mt-2 text-xs text-ink-3">Nothing changed yet: set a lever above.</p>;
   return (
     <ul className="mt-2 space-y-0.5 text-xs text-ink-2">
       {lines.map((line) => (
         <li key={line}>{line}</li>
+      ))}
+      {result.rateEffects.map((effect) => (
+        <li key={effect.currency}>
+          {`${effect.currency} at ${formatRateValue(effect.perUsd)} per US dollar: ${plural(effect.bills, "bill")} `}
+          <Money value={effect.atRate} /> instead of <Money value={effect.converted} />
+        </li>
       ))}
       {result.costDelta !== 0 && (
         <li>
@@ -502,6 +609,13 @@ function DriverText({ driver, result }: { driver: Driver; result: ScenarioResult
       </>
     );
   }
+  if (driver.kind === "rates") {
+    return (
+      <>
+        Bills in {driver.currencies.join(" and ")} at the rates typed: <Money value={driver.amount} /> more
+      </>
+    );
+  }
   return (
     <>
       {driver.scope === "foreign" ? "Bills written in another currency" : "Bills"} costing {driver.pct}% more: <Money value={driver.amount} /> more
@@ -517,7 +631,7 @@ function Drivers({ result }: { result: ScenarioResult }) {
       </h3>
       <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm leading-6 text-ink-2 marker:text-ink-3">
         {result.drivers.map((driver) => (
-          <li key={driver.kind === "costs" ? "costs" : driver.kind === "receivable" ? `receivable-${driver.key}` : `payee-${driver.label}`}>
+          <li key={driver.kind === "costs" || driver.kind === "rates" ? driver.kind : driver.kind === "receivable" ? `receivable-${driver.key}` : `payee-${driver.label}`}>
             <DriverText driver={driver} result={result} />
           </li>
         ))}

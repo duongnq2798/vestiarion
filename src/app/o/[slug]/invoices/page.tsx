@@ -81,6 +81,7 @@ import { verdictFacts } from "@/lib/verdicts";
 import { receiptShareable } from "@/lib/receipts/facts";
 import { sharedReceipts } from "@/lib/receipts/share";
 import { settlementsByBill } from "@/lib/settlement-facts";
+import { recordFxVariances } from "@/lib/fx/variances";
 import { readInvoicePayments, type PaymentRecord } from "@/lib/settlement-read";
 import { workspaceNetwork } from "@/lib/workspace-network";
 import { shellStatus } from "@/lib/shell-status";
@@ -322,7 +323,26 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       : new Map<string, PaymentRecord>();
     // The entries answer in one request, newest first: one cut at its limit may hold no entry for an older payable.
     const settlements = settlementsByBill({ payments: payments.values(), invoices: detailInvoices.filter((invoice) => invoice.direction === "payable"), entries, entriesComplete: !ledgerReadMayBeCut(entries), now: asOf });
-    const decisionOf = (invoice: InvoiceRow) => invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), entries, { network, deciding, verdicts, settlements, asOf, allocations });
+    // The FX variance of each paid bill shown that was converted at a rate (currency provenance M6, M9), recording first
+    // any the payment day's rate now allows. Best effort: a read that fails shows the cards without it.
+    const convertedPaid = detailInvoices
+      .filter((invoice) => invoice.direction === "payable" && invoice.status === "paid" && invoice.original_currency && invoice.original_currency !== "USD")
+      .map((invoice) => invoice.id);
+    const variances =
+      convertedPaid.length > 0
+        ? await recordFxVariances(db(), { invoiceIds: convertedPaid })
+            .then((read) =>
+              read.available
+                ? { recorded: new Map(read.recorded.map((row) => [row.invoiceId, row])), unknown: new Map(read.unknown.map((row) => [row.invoiceId, row])) }
+                : undefined
+            )
+            .catch((error: unknown) => {
+              console.error("invoices: FX variances not read", error instanceof Error ? error.message : error);
+              return undefined;
+            })
+        : undefined;
+    const decisionOf = (invoice: InvoiceRow) =>
+      invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), entries, { network, deciding, verdicts, settlements, asOf, allocations, variances });
     const shownDecisions = new Map(detailInvoices.map((invoice) => [invoice.id, decisionOf(invoice)]));
 
     // The projects a new bill may go in (project budgets P3): for New ▾'s Bill to pay. Best effort: none on failure.

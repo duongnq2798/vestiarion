@@ -429,6 +429,9 @@ describe("readReportFacts", () => {
               discount_due_date: "2026-10-10T00:00:00Z",
               original_currency: "USD",
               original_amount: "196",
+              fx_rate: "1.000000000000",
+              fx_source: "USD = USDC",
+              fx_at: "2026-10-07T09:00:00Z",
               counterparties: { id: "cp-1", name: "Hetzner", sample: false, mirror_wallet_id: "w-1" },
             },
           ],
@@ -490,6 +493,8 @@ describe("readReportFacts", () => {
         paidAmount: 196,
         discount: { pct: 2, deadline: "2026-10-10T00:00:00Z" },
         bill: { amount: 196, currency: "USD" },
+        // The rate it was converted at, as read: its source and time say which it was (currency provenance M3).
+        conversion: { perUsd: "1.000000000000", source: "USD = USDC", at: "2026-10-07T09:00:00Z" },
         payee: { id: "cp-1", name: "Hetzner", mirror: true, sample: false },
       },
     ]);

@@ -1,0 +1,75 @@
+Your bills come in the currency they were written in: US dollars, Singapore dollars, yen, won, pesos, ringgit or euros. Vestiarion keeps every amount in its own currency, says where each rate came from, and adds amounts in two currencies only in your **reporting currency**, with the rates shown. Payments still settle in USDC on Arc (or in EURC on Arc testnet): nothing on this page changes what the agent pays.
+
+## Four things every amount keeps
+
+- **The amount as written**: the figure and currency on the bill, the deal or the payment you recorded. A yen or won amount has no decimals; the others have two.
+- **Where it came from**: the form in the console, a bill list, an emailed invoice, Xero, QuickBooks, HubSpot, a deal, or the API.
+- **The rate it was converted at**, when it was: how many of its currency made one US dollar, who published that rate, and when.
+- **The executable amount**: what moves on Arc, in USDC or EURC. For a bill written in another currency, that is the bill's amount at the rate of the day it was added, to the cent, and it does not change afterwards.
+
+A bill's card on **Bills & receivables** shows it as "converted at" the rate, for example `1,350.00 SGD, converted at 1.3500 SGD per US dollar, the reference rate ExchangeRate-API published Oct 9, 2026`. A bill in US dollars says `at 1 USD = 1 USDC`, USDC's 1:1 dollar redemption, which is never a market rate.
+
+## Three kinds of rate
+
+Vestiarion never uses one kind of rate in place of another, and every figure says which one it used:
+
+- A **reference rate** is a market rate a feed published. Vestiarion reads ExchangeRate-API's daily rates. Reports, plans and bills taken in another currency use it.
+- A **provider's quote** is what the provider will actually exchange at. A EURC payable is weighed at Circle's quote, shown on its card as its **USDC value**.
+- An **accounting rate** is the rate your books used, in Xero or QuickBooks. Vestiarion does not read it yet.
+
+Two more are named where they appear: the **1:1 redemption, not a market rate** that takes USDC to US dollars and EURC to euros, and a rate **typed by a person** into a cash scenario.
+
+A rate that was not recorded is unknown. Vestiarion never guesses one, and never counts one currency as another at 1:1.
+
+## 1. Choose a reporting currency
+
+In **Settings**, an owner or admin opens **Reporting currency**, picks one of USD, EUR, SGD, JPY, KRW, PHP or MYR under **Report in**, and presses **Save reporting currency**. Until one is set, the section says "Not set: each amount stays in its own currency, and nothing is added across currencies." Everyone else sees which one is set, and "An owner or admin of this workspace can set it." Each change is recorded in the audit log as `reporting_currency_changed`.
+
+The reporting currency changes how totals are shown. It changes no bill, no rate already used, and no payment.
+
+## 2. Read the report in your currency
+
+The **Report** section gains **Currencies and rates**, under the rest of the report:
+
+- **Bills, as written**: each currency's bills, in the currency on them, and the same in your reporting currency.
+- **Paid on Arc**: what the transfers carried, in USDC or EURC. In your reporting currency, USDC goes by its dollar redemption and then by the dollar's reference rate; both are listed.
+- **Paid by the business**: what you recorded paying outside Vestiarion, in the currency you paid in.
+- Each table ends with its total in your reporting currency. When one currency has no recorded rate, the total is **unknown**, and the line says which currency and gives the total without it.
+- **Rates used** lists every rate a figure used, with its kind, who published it and when.
+
+Two figures sit at the top:
+
+- **Amounts with full provenance**: how many of the bills counted keep everything that applies to them: the amount as written and where it came from, the conversion's rate and time, a known value in your reporting currency, and, once it was paid, the rate on the day it was paid.
+- **Manual FX adjustments**: how many rates a person typed into a saved cash scenario.
+
+## 3. See what a moving rate cost
+
+A bill written in Singapore dollars was converted to USDC on the day it was added. If it was paid on Arc on a later day, the same bill was worth more or less USDC at that day's rate. The difference is its **FX variance**: what the transfer carried, less what that part of the bill was worth on the payment day.
+
+- Above zero, the payment carried more than the bill was worth that day. Below zero, less.
+- The rate on the payment day is the reference rate in force then: the newest one published before the payment, at most 36 hours before it. Vestiarion records the day's rates every hour and whenever the report is opened. With none recorded for that day, the bill's card and the report say **FX variance unknown**, with why.
+- A discount is in both sides, so it is never counted as a variance. A bill in US dollars has none.
+
+The paid bill's card shows its **FX variance**, and the report lists each one under **FX variance on paid bills**, with the two rates and the bill's worth on the day. Variances are totalled per currency, never across currencies.
+
+## 4. Try a rate in a cash scenario
+
+On **Treasury**, **What if clients pay late?** gains **Exchange rates** when an open bill was written in another currency. Each currency has a field, such as SGD **per US dollar**, with today's reference rate and its time beside it, and **Use today's rate**. Empty keeps each bill at the rate it was converted at. A rate you type values that currency's bills at it: the bill's own amount divided by the rate, to the cent. Under **In this scenario** you see what that rate did: for each currency, its bills at the typed rate instead of at their own. With a reporting currency set, the section also gives the cash today and the scenario's lowest balance in it, with the rates.
+
+To keep a scenario, an owner or admin types a **Scenario name** under **Saved scenarios** and presses **Save as a version**. Saving it again makes the next version: a version is never changed, so a new rate never rewrites a figure saved before. **Open** sets the levers to a saved version. Each save is recorded as `cash_scenario_saved`, and each rate typed into it counts as a manual FX adjustment.
+
+Nothing in the scenario reaches a payment or the agent: it only shows what the bills would come to.
+
+## Who can do what
+
+| Action | Who |
+| --- | --- |
+| Read amounts, rates and variances | Every member |
+| Set the reporting currency | Owners and admins |
+| Save a cash scenario as a version | Owners and admins |
+
+## What stays the same
+
+- The agent pays the executable amount, as before, in USDC on Arc (or EURC on Arc testnet). A rate changed in a scenario or the reporting currency never changes it.
+- A bill in a currency other than USDC or EURC is still taken in shadow mode only. See [Run alongside how you pay today](/docs/guides/shadow-mode).
+- The API's invoices are still in USDC or EURC.

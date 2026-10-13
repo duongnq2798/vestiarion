@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CashScenarios, CoverageList, ScenarioCases, ScenarioFindings, ScenarioOutcome } from "@/components/vx/CashScenarios";
 import { cashScenario, DEFAULT_LEVERS, type ScenarioBasis, type ScenarioLevers } from "@/lib/cash-scenarios";
 
@@ -10,6 +10,8 @@ import { cashScenario, DEFAULT_LEVERS, type ScenarioBasis, type ScenarioLevers }
  * the bills a short day touches, advice in words, what moves it most and what it is built from; never an instruction
  * to borrow or invest, and never read by anything that pays.
  */
+
+vi.mock("@/app/actions/currency", () => ({ saveCashScenarioAction: vi.fn(), setReportingCurrencyAction: vi.fn() }));
 
 const ROOT = process.cwd();
 // Tags become spaces, so the space a tag leaves before a comma or a full stop is taken out again.
@@ -103,7 +105,7 @@ describe("ScenarioOutcome", () => {
 
   it("says it is a what-if that reaches no payment, with a day-by-day table and a chart that says the same", () => {
     expect(short).toContain("A what-if from the bills and receivables on record, not a forecast.");
-    expect(short).toContain("Nothing here is saved, changes a payment or reaches the agent");
+    expect(short).toContain("Nothing here changes a payment or reaches the agent");
     expect(short).toContain("Day by day");
     const markup = renderToStaticMarkup(<ScenarioOutcome result={cashScenario(BASIS, levers())} />);
     expect(markup).toMatch(/role="img" aria-label="The balance over the next 30 days\. If clients pay on time, it never runs short\. In this scenario, it runs short on Oct 14, 2026\."/);
@@ -162,7 +164,9 @@ describe("CashScenarios", () => {
     expect(markup).toMatch(/^<section id="cash-scenarios"/);
     expect(markup).toMatch(/<details(?![^>]*\sopen)/);
     expect(markup).toMatch(/<h2 id="[^"]+-title"[^>]*>What if clients pay late\?<\/h2>/);
-    expect(shown).toContain("Late or missing receivables and changed bill costs, 30 to 90 days ahead. Nothing here is saved or paid.");
+    expect(shown).toContain(
+      "Late or missing receivables, changed bill costs and exchange rates, 30 to 90 days ahead. Nothing here is paid; a scenario is kept only when you save it."
+    );
   });
 
   it("offers 30, 60 or 90 days, 60 first, as pressed buttons in a labelled group", () => {
@@ -255,7 +259,9 @@ describe("the Treasury page", () => {
   const page = readFileSync(path.join(ROOT, "src", "app", "o", "[slug]", "console", "page.tsx"), "utf8");
 
   it("draws What if right under Next 30 days, from the rows the outlook counts and the recurring payments", () => {
-    expect(page).toContain("<CashOutlookPanel outlook={outlook} />\n              <CashScenarios basis={scenarios} />");
+    expect(page).toContain(
+      "<CashOutlookPanel outlook={outlook} />\n              <CashScenarios basis={scenarios} rateHints={planning.rateHints} reporting={planning.reporting} saving={scenarioSaving} />"
+    );
     expect(page).toContain("const outlook = cashOutlook(outlookInput);");
     expect(page).toContain("const scenarios = scenarioBasis({ ...outlookInput, recurring });");
     expect(page).toMatch(/listRecurringPayables\(\)\.catch\(/);

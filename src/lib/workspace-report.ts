@@ -27,6 +27,11 @@ export interface ReportBill {
   discount: { pct: number; deadline: string } | null;
   /** The bill as it was written, when it was in a currency of its own (shadow mode S6). */
   bill: { amount: number; currency: string } | null;
+  /**
+   * The rate its USDC was worked out at, when it was converted: how many of its currency made one US dollar, the
+   * rate's source and when it was published (0084's `fx_*`; currency provenance M3). Absent where it was not read.
+   */
+  conversion?: { perUsd: number | string; source: string; at: string } | null;
   payee: { id: string; name: string; mirror: boolean; sample: boolean };
 }
 
