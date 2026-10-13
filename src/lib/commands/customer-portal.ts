@@ -7,8 +7,9 @@ import { gate } from "./policy";
 
 /**
  * A customer's statement link and what customers say through it
- * (docs/superpowers/specs/2026-10-13-customer-portal-design.md P9): making and stopping a link, replying and closing a
- * request are records on the receivables side, so `records.write` (owners and admins), from the console only.
+ * (docs/superpowers/specs/2026-10-13-customer-portal-design.md P9): making and stopping a link are records on the
+ * receivables side, so `records.write` (owners and admins); replying and closing a request are the receivables
+ * bookkeeping, `receivables.reconcile` (owners, admins and accountants; accountant console A1). From the console only.
  */
 
 export async function shareCustomerStatement(

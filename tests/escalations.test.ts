@@ -60,6 +60,12 @@ describe("who can act", () => {
     expect(ownersWords(["ana@northstar.example", "cam@northstar.example", "ben@northstar.example"], "cam@northstar.example")).toBe("Who can act: ana@northstar.example, you and 1 more");
     expect(ownersWords([])).toBe("Nobody in this workspace can approve it yet: an owner invites an approver from Members.");
   });
+
+  it("never names an accountant, who decides no payment (accountant console A1)", () => {
+    const withAccountant = [...members, { userId: "u-books", email: "books@ledgerline.example", role: "accountant" }];
+    expect(whoCanAct(withAccountant, null).map((member) => member.userId)).toEqual(["u-owner", "u-admin", "u-approver"]);
+    expect(whoCanAct([withAccountant[0], withAccountant[4]], null)).toEqual([]);
+  });
 });
 
 describe("the escalation email", () => {

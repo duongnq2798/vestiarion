@@ -19,7 +19,7 @@ import { homeChain } from "@/lib/payee-chains";
 /**
  * The payments and fees applied to one receivable, on its card (docs/superpowers/specs/2026-10-12-allocations-design.md
  * L7, L8, L11): what was received and what is still owed, each payment with its transaction, each fee with its reason,
- * and, for an owner or admin, Reverse (a correction appended, with a reason) and Record a fee beside a payment.
+ * and, for an owner, admin or accountant, Reverse (a correction appended, with a reason) and Record a fee beside a payment.
  */
 
 type Note = { tone: "neutral" | "error"; text: string } | null;

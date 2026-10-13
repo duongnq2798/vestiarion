@@ -117,7 +117,7 @@ describe("inviteMemberAction", () => {
     expect(inviteMemberMock).not.toHaveBeenCalled();
   });
 
-  it("rejects a role outside the four, before calling inviteMember", async () => {
+  it("rejects a role outside the five, before calling inviteMember", async () => {
     authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: membership("owner") });
 
     const result = await run(() => inviteMemberAction(INITIAL, inviteForm("superadmin")));

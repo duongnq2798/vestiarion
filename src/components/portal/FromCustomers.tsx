@@ -21,7 +21,7 @@ import type { FromCustomerView } from "@/lib/customer-portal/view";
  * What customers said on their statements, for finance to act on (docs/superpowers/specs/2026-10-13-customer-portal-
  * design.md P8), on Bills & receivables' Receivables tab: each request with its customer, invoice and what is owed, the
  * customer's words, the thread, and the next step. A claim of payment is shown as the customer's word ("Customer says
- * paid"), never as a payment. An owner or admin replies and closes; every other member reads.
+ * paid"), never as a payment. An owner, admin or accountant replies and closes; every other member reads.
  */
 
 /** One request as finance reads it (`fromCustomerItems`). */

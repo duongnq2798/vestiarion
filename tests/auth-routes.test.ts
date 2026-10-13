@@ -35,6 +35,8 @@ describe("requiresSession", () => {
     ["/o/founding/console", true],
     ["/o/founding", true],
     ["/onboarding", true],
+    ["/accountant", true],
+    ["/accountants", false],
     ["/invite/x", true],
     ["/", false],
     ["/login", false],
@@ -44,6 +46,8 @@ describe("requiresSession", () => {
     ["/auth/callback", false],
     ["/api/ledger/verify", false],
     ["/api/ledger/export", false],
+    // The hand-off checks the session itself and answers 401, as the audit export does.
+    ["/api/accountant/handoff", false],
   ])("%s → %s", (pathname, expected) => {
     expect(requiresSession(pathname)).toBe(expected);
   });

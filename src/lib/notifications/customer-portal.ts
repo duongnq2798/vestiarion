@@ -5,21 +5,22 @@ import { customerPreview, customerWroteEmail } from "../email/customer-wrote";
 import { emailSettingsFromEnv, sendEmail } from "../email/send";
 import { listMembers } from "../platform/members";
 import { publicOrigin } from "../public-origin";
+import { recordUsageFor } from "../usage/record";
 
 /**
  * Telling the members who answer customers that a customer wrote on its statement link
- * (docs/superpowers/specs/2026-10-13-customer-portal-design.md P8): the owners and admins (`records.write`, who reply and
- * close) whose email switch (`memberships.notify_email`, the one in Settings' Notifications) is on, each a message of
+ * (docs/superpowers/specs/2026-10-13-customer-portal-design.md P8): the owners, admins and accountants
+ * (`receivables.reconcile`, who reply and close; accountant console A1) whose email switch (`memberships.notify_email`, the one in Settings' Notifications) is on, each a message of
  * their own, with a short preview of the words and a link to From customers. How often is the database's: 0109's
  * functions say `notify` at most once an hour per request, so a long thread sends one email an hour at most.
  *
  * Best effort: it never throws, logs what did not go out without an address, and returns how many went.
  */
 
-/** Enough for any workspace's owners and admins; a bound so one message never fans out without limit. */
+/** Enough for any workspace's owners, admins and accountants; a bound so one message never fans out without limit. */
 export const CUSTOMER_NOTICE_MAX_RECIPIENTS = 10;
 
-const ROLE_ORDER: readonly OrgRole[] = ["owner", "admin"];
+const ROLE_ORDER: readonly OrgRole[] = ["owner", "admin", "accountant"];
 
 export interface CustomerWroteNotice {
   orgId: string;
@@ -37,7 +38,7 @@ async function answeringRecipients(orgId: string): Promise<string[]> {
   const switches = unwrap(await platformDb().from("memberships").select("user_id, notify_email").eq("org_id", orgId)) as Array<{ user_id: string; notify_email: boolean }>;
   const switchedOn = new Set(switches.filter((row) => row.notify_email === true).map((row) => row.user_id));
   return members
-    .filter((member) => can(member.role, "records.write") && switchedOn.has(member.userId))
+    .filter((member) => can(member.role, "receivables.reconcile") && switchedOn.has(member.userId))
     .sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role) || (a.email < b.email ? -1 : a.email > b.email ? 1 : 0))
     .slice(0, CUSTOMER_NOTICE_MAX_RECIPIENTS)
     .map((member) => member.email);
@@ -67,6 +68,9 @@ export async function notifyCustomerWrote(notice: CustomerWroteNotice): Promise<
       else if (!result.value.sent) console.error("customer wrote: email not sent", notice.orgId, result.value.reason);
       else sent += 1;
     }
+    // Sent from the public statement page, outside any member's scope, so metered into the workspace here (U1).
+    if (sent > 0) await recordUsageFor(notice.orgId, { kind: "email", action: "customer_wrote", provider: "resend", quantity: sent });
+    if (sent < results.length) await recordUsageFor(notice.orgId, { kind: "email", action: "customer_wrote", provider: "resend", quantity: results.length - sent, ok: false });
     return sent;
   } catch (error) {
     console.error("customer wrote: members not told", notice.orgId, error instanceof Error ? error.message : "unknown");

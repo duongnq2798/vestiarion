@@ -182,7 +182,7 @@ export async function escalateOverdueDecisions(now: Date = new Date()): Promise<
         const theirs = fresh.filter(({ id }) => actingOn.get(id)?.has(recipient.userId));
         if (theirs.length === 0) continue;
         const email = decisionEscalationEmail({ orgName: org.name, items: theirs.map(({ item }) => item), link, origin });
-        const result = await sendEmail({ to: recipient.email, ...email }, settings);
+        const result = await sendEmail({ to: recipient.email, ...email, meter: "escalation" }, settings);
         if (result.sent) {
           counts.sent += 1;
           for (const { id } of theirs) delivered.add(id);

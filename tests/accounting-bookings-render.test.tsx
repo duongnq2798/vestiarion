@@ -115,7 +115,7 @@ describe("To book in Xero (W6)", () => {
 
   it("lets only an owner or admin approve", () => {
     const words = text(bookings({ canBook: false }));
-    expect(words).toContain("An owner or admin approves bookings in Xero.");
+    expect(words).toContain("An owner, admin or accountant approves bookings in Xero.");
     expect(words).not.toContain("Approve and book");
   });
 });

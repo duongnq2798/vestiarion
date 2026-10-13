@@ -17,7 +17,7 @@ const INITIAL: NotifyEmailActionResult = { ok: false, message: "" };
  * the requested state while the change is on its way, and the server's answer afterwards, reverted to `initial` on a
  * refusal.
  */
-function NotifyEmailSwitch({ orgSlug, initial }: { orgSlug: string; initial: boolean }) {
+function NotifyEmailSwitch({ orgSlug, initial, label }: { orgSlug: string; initial: boolean; label: string }) {
   const [requested, setRequested] = useState(initial);
   const { state, pending, formProps } = useActionForm(setNotifyEmailAction, INITIAL, { toastOnSuccess: true });
 
@@ -34,7 +34,7 @@ function NotifyEmailSwitch({ orgSlug, initial }: { orgSlug: string; initial: boo
             flushSync(() => setRequested(checked === true));
             formProps.ref.current?.requestSubmit();
           }}
-          label="Email me when payments need a decision"
+          label={label}
         />
         {!state.ok && state.message && (
           <p role="alert" className="text-xs text-refused">
@@ -48,23 +48,28 @@ function NotifyEmailSwitch({ orgSlug, initial }: { orgSlug: string; initial: boo
 
 /**
  * The viewer's own notifications, first in Settings, for every member: the digest email for someone who decides
- * payments (a viewer decides nothing, so receives nothing), and their own Telegram chat when this deployment has a bot
+ * payments (a viewer decides nothing, so receives nothing), or for an accountant, who answers customers, the email
+ * when a customer writes on its statement link (accountant console A1); and their own Telegram chat when this deployment has a bot
  * (Telegram bot design R1, R4). Nothing when neither applies. The workspace's Slack channel has its own section.
  */
 export default function NotificationsPanel({
   orgSlug,
   canDecide,
+  canAnswerCustomers = false,
   notifyEmail,
   telegram,
 }: {
   orgSlug: string;
   /** Whether the viewer can decide payments: only then is there an email to switch. */
   canDecide: boolean;
+  /** Whether the viewer answers customers without deciding payments (an accountant): their email is about customers. */
+  canAnswerCustomers?: boolean;
   notifyEmail: boolean;
   /** The viewer's own Telegram chat for this workspace; null when this deployment has no bot. */
   telegram: { link: { username: string | null; linkedAt: string } | null } | null;
 }) {
-  if (!canDecide && !telegram) return null;
+  const emailLabel = canDecide ? "Email me when payments need a decision" : canAnswerCustomers ? "Email me when a customer writes on its statement link" : null;
+  if (!emailLabel && !telegram) return null;
   return (
     <section aria-labelledby="notifications-title" id="notifications">
       <SectionHeader
@@ -73,7 +78,7 @@ export default function NotificationsPanel({
         action={telegram ? <DocsLink href="/docs/guides/telegram" topic="Telegram notifications" /> : undefined}
       />
       <div className="space-y-4">
-        {canDecide && <NotifyEmailSwitch orgSlug={orgSlug} initial={notifyEmail} />}
+        {emailLabel && <NotifyEmailSwitch orgSlug={orgSlug} initial={notifyEmail} label={emailLabel} />}
         {telegram && <TelegramCard orgSlug={orgSlug} link={telegram.link} />}
       </div>
     </section>

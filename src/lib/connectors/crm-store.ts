@@ -9,6 +9,7 @@ import { syncCrmConnection, type CrmSyncDb, type CrmSyncResult } from "./crm-syn
 import { PROVIDER_LABELS } from "./provider";
 import { syncStore } from "./sync-store";
 import { connectionTokenStore } from "./token-store";
+import { recordUsage } from "../usage/record";
 
 /**
  * The CRM runner's database (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H2, H7, H10, H12), in the
@@ -227,6 +228,8 @@ export const crmStore: CrmSyncDb = {
  */
 export async function crmSyncInScope(connectionId: string, provider: CrmProvider, options: { maxPages?: number } = {}): Promise<CrmSyncResult> {
   const result = await syncCrmConnection({ connectionId, provider, db: crmStore, tokens: connectionTokenStore(currentOrgId(), connectionId), ...options });
+  // Metered as an accounting tool's sync is (accountant console U1).
+  if (result.outcome !== "busy") await recordUsage({ kind: "connector_sync", action: provider.id, provider: provider.id, ok: result.outcome === "synced" || result.outcome === "partial" });
   if (provider.receipts && result.outcome !== "reconnect" && result.outcome !== "busy") {
     try {
       await receiptsInScope(connectionId, provider);

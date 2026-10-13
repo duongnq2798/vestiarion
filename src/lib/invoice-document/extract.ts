@@ -124,6 +124,7 @@ export function ruleBasedExtraction(text: string): RawExtraction {
  */
 export async function extractInvoice(text: string, today: string): Promise<{ raw: RawExtraction; reader: DecisionMode; reference: RawExtraction }> {
   const result = await decide({
+    purpose: "extraction",
     systemPrompt: EXTRACTION_SYSTEM_PROMPT,
     userPrompt: extractionUserPrompt(text, today),
     schema: rawExtractionSchema,

@@ -5,6 +5,7 @@ import { BatchNotSentError, MAX_BATCH_SIZE } from "./circle/batch";
 import { FAILED_STATES, MAY_HAVE_BEEN_ACCEPTED } from "./circle/settlement";
 import { db, unwrap } from "./dal";
 import { paidAcrossChains } from "./payee-chains";
+import { recordUsage } from "./usage/record";
 
 export type PaymentSourceType = "invoice" | "milestone";
 export type PaymentIntentStatus = "created" | "submitting" | "pending" | "confirmed" | "failed";
@@ -742,6 +743,27 @@ export async function settleUnknownSend(
   return { answer: "undecided", retryAt: looked && looked.error?.startsWith("Circle has not listed") ? new Date(listedBy).toISOString() : null };
 }
 
+/** What a usage row calls a send: a payment, or one released from escrow or paid across chains. */
+function sendAction(intent: PaymentIntent, request: PaymentRequest): string {
+  if (intent.route === "escrow" || request.escrow) return "escrow_release";
+  return paidAcrossChains(request.destinationChain) ? "payout" : "payment";
+}
+
+/**
+ * One Circle transfer, metered in the workspace in scope (accountant console U1): only a real one, which Circle took,
+ * with the network fee when the chain reported it. Never throws, and never stands between a send and its record.
+ */
+async function meterTransfer(result: TransferResult, action: string, quantity: number): Promise<void> {
+  if (result.providerMode !== "live") return;
+  await recordUsage({
+    kind: "circle_transfer",
+    action,
+    provider: "circle",
+    quantity,
+    cost: result.feeSource === "chain_reported" && Number.isFinite(result.feeUsd) ? { amount: result.feeUsd, currency: "USD" } : null,
+  });
+}
+
 /** A claimed attempt, sent alone under its own key: `executePayment`'s send, and a batch member's when it cannot go in a batch. */
 async function sendClaimed(
   intent: PaymentIntent,
@@ -798,7 +820,10 @@ async function sendClaimed(
     return execution(await store.recordError(idempotencyKey, kept), false, retriedAfter);
   }
   try {
-    return execution(await store.recordResult(idempotencyKey, result), false, retriedAfter);
+    const recorded = execution(await store.recordResult(idempotencyKey, result), false, retriedAfter);
+    // Metered once the send is recorded, never before it (accountant console U1); it never throws.
+    await meterTransfer(result, sendAction(intent, request), 1);
+    return recorded;
   } catch (error) {
     // Circle took it, but it could not be recorded: it is looked for and found, never closed over (R9).
     const reason = error instanceof Error ? error.message : "the write failed";
@@ -942,7 +967,7 @@ async function sendBatch(
     return each(async (member) => execution(await store.recordError(member.intent.idempotencyKey, message), false));
   }
   const share = shareOf(result, keys.length);
-  return each(async (member) => {
+  const recorded = await each(async (member) => {
     try {
       return execution(await store.recordResult(member.intent.idempotencyKey, share), false);
     } catch (error) {
@@ -951,4 +976,7 @@ async function sendBatch(
       return { ...execution({ ...member.intent, batchKey: batch.key, batchSize: batch.size, batchSentAt: batch.sentAt }, false), txHash: result.txHash, txRef: result.txRef };
     }
   });
+  // Metered once its members are recorded (accountant console U1): one batch, counted by its payments.
+  await meterTransfer(result, "payment_batch", keys.length);
+  return recorded;
 }

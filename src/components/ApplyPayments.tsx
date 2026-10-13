@@ -45,7 +45,7 @@ export function ApplyPayments({ orgSlug, network, payments, canWrite }: { orgSlu
         </h3>
         <p className="text-xs text-ink-3">Money received on {homeChain(network).label} not applied to invoices in full.</p>
       </div>
-      {!canWrite && <p className="mb-2 text-xs text-ink-3">Only an owner or admin of this workspace can apply payments.</p>}
+      {!canWrite && <p className="mb-2 text-xs text-ink-3">Only an owner, admin or accountant of this workspace can apply payments.</p>}
       <div className="grid gap-3">
         {leading.map((payment) => (
           <PaymentCard key={payment.id} orgSlug={orgSlug} network={network} payment={payment} canWrite={canWrite} />
