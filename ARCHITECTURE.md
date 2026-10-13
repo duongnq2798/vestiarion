@@ -1090,6 +1090,35 @@ add up to the total exactly.
   its deal (`dealLinksOf`). Treasury and the payment plan read the planned lines best effort (`readPlannedDealLines`,
   `plannedLinesOf`). Before 0104 runs every read answers not set up (`dealsNotReady`), the section says so, the
   commands refuse with `not_ready` and the cycle releases nothing.
+- **Costs and cash readiness** (`docs/superpowers/specs/2026-10-13-deal-cash-readiness-design.md`). Migration 0108's
+  `deal_costs` holds a deal's planned costs: a label, an optional vendor or contractor, `amount_minor` in the deal's
+  currency, `expected_on`, `no_document`, and the payable (`invoice_id`) or milestone (`milestone_id`) it became, every
+  foreign key composite with `org_id` (`set null` for the counterparty, the payable and the milestone, so a deleted bill
+  leaves the cost planned). The tenant role inserts and reads, and updates only the link and the removal (column
+  grants); `deal_costs_guard` keeps a cost's terms, sets a link once and never moves it (nor clears it while the row it
+  names exists: only the foreign key's `set null` does), keeps who linked it, and never undoes a removal;
+  `deal_costs_link_payable` refuses a receivable; partial unique indexes let a payable or a milestone back one live cost
+  of any deal, so its money is counted once. `src/lib/deals/costs.ts` (pure) reads the form and says what a cost counts
+  as (`costCount`: planned on its day, `due` as the bill or milestone it became, `paid`, or planned again when that bill
+  was rejected or that milestone closed); `costs-read.ts` reads costs with their links in the deal's minor units
+  (`payableMinor`: the bill's own amount in USDC or EURC, its `original_amount` for a shadow deal's currency) and the
+  candidates to link; `costs-write.ts` adds (once per `idempotency_key`), removes and links, each a signed
+  `deal_cost_added`, `deal_cost_removed` or `deal_cost_linked` entry (domain `ar`), through `deal.add_cost`,
+  `deal.remove_cost` and `deal.link_cost` (`records.write`, console only). `src/lib/deals/cash.ts` (pure, browser-safe)
+  works out `dealCashReadiness`: collected and paid out to date, then each day from today with money moving (charges
+  in force on their due days, planned or expected, an overdue one today; a released line's collected part and what it
+  still owes come from `Collection.byReceivable`, the per-receivable figures `dealCollection` adds up into the deal's
+  Paid and Outstanding (`src/lib/deals/collection.ts`), so a part payment counts as what arrived, a fee settles the
+  rest, and a line marked received with no payment on Arc is neither and is said; with no collection read, each line
+  counts by its receivable's status; costs as `costCount` says), the end-of-day
+  position, the first short day and the deepest gap, and the estimated margin (`not_enough_data` with no cost);
+  `tryDeposit` moves the deposit's invoice day or sets its percent (`depositLever`: the first charge in force, still
+  planned, of a deposit-and-balance deal or one whose first line is named a deposit), taking the difference from the other
+  planned charges from the last, for a preview that is never saved; `cashBadge` is the deals list's badge. The deal page
+  renders `DealCashReadiness` (a client component that recomputes as the levers move) and `DealCosts`; the Receivables
+  tab reads every deal's costs once for the badges. Nothing that pays, decides or answers the API imports `cash.ts`
+  (`tests/deal-cash.test.ts`). Before 0108 runs the reads answer not set up (`costsNotReady`): the page says so and the
+  margin says not enough data.
 
 ## Why it was paid: the evidence chain
 
@@ -1254,6 +1283,13 @@ from the reserve, which passes `byPerson` to that call.
 **Ledger actions** `approval_paid`, `approval_rejected`, `approval_returned`,
 `agent_paused`, and `agent_resumed` record every decision, pause, and resume,
 each carrying the acting person's user id, never an address.
+
+**Each waiting payable is an exception someone owns**
+(`docs/superpowers/specs/2026-10-13-deal-cash-readiness-design.md` E1-E5). `exceptionFacts` (`src/lib/exceptions.ts`,
+pure) gives its decide-by day (the due date, or the early-payment discount's deadline while it is still ahead and
+earlier), its priority (`overdue`, `today`, `week`, `later`) and who can act: the members whose role holds
+`approval.decide`, less whoever entered it unless nobody else may. The Approvals page and the Bills rows read the members
+once (`listMembers`) and show it through `ExceptionLine`; someone who cannot decide reads whom to ask.
 
 ## Commands: one action from every surface
 
@@ -1535,6 +1571,21 @@ received is retried, never lost — and the ledger records `notification_sent`,
 with `detail: { invoiceIds, escalatedIds, recipients: <count>, failed:
 <count> }`: ids and counts, never an address. A failure anywhere in this path
 is logged with the workspace id and never fails the cycle or the tick.
+
+**A waiting payable past its decide-by day is escalated once for that day.** After the digest,
+`escalateOverdueDecisions` (`src/lib/notifications/escalations.ts`, also from `runScheduledCycle`, in its own `try`)
+reads the waiting payables (`held`, `flagged`, `awaiting_info`) whose decide-by day (`decideByOf`) is before today,
+on or after the day escalations started in the workspace (`approval_escalation_starts`, 0108: one row per workspace,
+set by its first run, insert-only for the tenant role, so a payable already past its day then is never emailed and
+turning escalations on sends no backlog), reads the recipients, the workspace and the members before anything is
+claimed, claims each in `approval_escalations` (migration 0108: unique per payable and decide-by day, an
+`ignoreDuplicates` upsert, so only the rows it inserted are news), and emails the digest's recipients, with the same
+switch and cap, deduplicated by member and address, each one message a run about the payables they may act on (`whoCanAct` over every member, as the card names them;
+`decisionEscalationEmail`, `src/lib/email/decision-escalation.ts`: names, amounts, statuses and days, escaped; no
+address). A payable someone received keeps its claim with `sent_at` and the counts, and the ledger records
+`decision_escalated` (`detail: { invoiceIds, decideBy, recipients, failed }`); a payable nobody received has its claim
+deleted, even when a send throws, so the next scheduled cycle tries again. Without email configured, or nobody to tell, nothing is claimed.
+Before 0108 runs nothing is escalated.
 
 **The switch** is the member's own: `memberships.notify_email` (migration
 `0026`), on by default. It changes only from the Notifications section at

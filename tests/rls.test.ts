@@ -54,6 +54,8 @@ const CRUD_UPDATE: Record<string, { column: string; expr: string }> = {
   approval_policies: { column: "two_approvals_above", expr: "coalesce(two_approvals_above, 1) + 1" },
   payment_approvals: { column: "used_at", expr: "now()" },
   shadow_modes: { column: "currency", expr: "'USD'" },
+  // Claimed, marked sent, or released by deleting the claim (0108).
+  approval_escalations: { column: "recipients", expr: "coalesce(recipients, 0) + 1" },
 };
 
 /** The connector tables (0101): updated by their own workspace, never deleted by the tenant role. */
@@ -171,18 +173,18 @@ describe.each(TENANT_TABLES)("%s", (table) => {
   });
 
   it("cannot change or remove another organization's rows", async () => {
-    if (table === "ledger_entries" || table === "cycle_snapshots" || table === "service_purchases" || table === "decision_verdicts" || table === "payment_actuals" || table === "report_baselines" || table === "bank_statement_lines" || table === "receivable_allocations" || table === "deal_versions" || table === "customer_request_messages") {
-      // Append-only tables: the tenant role holds no UPDATE/DELETE privilege
+    if (table === "ledger_entries" || table === "cycle_snapshots" || table === "service_purchases" || table === "decision_verdicts" || table === "payment_actuals" || table === "report_baselines" || table === "bank_statement_lines" || table === "receivable_allocations" || table === "deal_versions" || table === "customer_request_messages" || table === "approval_escalation_starts") {
+      // Append-only tables, and a workspace's escalation start (0108): the tenant role holds no UPDATE/DELETE privilege
       // at all, cross-org or not, so each statement is refused on its own —
       // the first failure would abort the transaction before the second ran.
       await expect(asTenant(db, A, (tx) => tx.query(`update public.${table} set org_id = org_id where org_id = $1`, [B]))).rejects.toThrow(/permission denied/);
       await expect(asTenant(db, A, (tx) => tx.query(`delete from public.${table} where org_id = $1`, [B]))).rejects.toThrow(/permission denied/);
       return;
     }
-    if (table === "deals" || table === "deal_lines") {
+    if (table === "deals" || table === "deal_lines" || table === "deal_costs") {
       // Status-only updates (column grants) and no delete: another organization's row is hidden from the update, and
-      // the delete is refused outright.
-      const column = table === "deals" ? "auto_release = not auto_release" : "status = status";
+      // the delete is refused outright. A cost's link and removal are the only columns the tenant updates (0108).
+      const column = table === "deals" ? "auto_release = not auto_release" : table === "deal_costs" ? "removed_at = now()" : "status = status";
       const updated = await asTenant(db, A, (tx) => tx.query(`update public.${table} set ${column} where org_id = $1`, [B]));
       expect(updated.affectedRows ?? 0).toBe(0);
       await expect(asTenant(db, A, (tx) => tx.query(`delete from public.${table} where org_id = $1`, [B]))).rejects.toThrow(/permission denied/);

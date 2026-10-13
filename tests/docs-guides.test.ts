@@ -210,6 +210,9 @@ const DEAL_CHANGE = "src/components/deals/DealChangeForm.tsx";
 const DEAL_SCHEDULE = "src/components/deals/DealSchedule.tsx";
 const DEALS_SECTION = "src/components/deals/DealsSection.tsx";
 const DEAL_PAGE = "src/app/o/[slug]/invoices/deals/[id]/page.tsx";
+const DEAL_COSTS = "src/components/deals/DealCosts.tsx";
+const DEAL_COST_CONTROLS = "src/components/deals/DealCostControls.tsx";
+const DEAL_CASH = "src/components/deals/DealCashReadiness.tsx";
 const PLAN_COMMAND = "src/lib/commands/payment-plan.ts";
 const PLAN_APPLY = "src/lib/payment-plan-apply.ts";
 const DECISION_TRAIL = "src/lib/decision-trail.ts";
@@ -456,6 +459,13 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Verify hash chain", VERIFY_BADGE],
     ["Chain intact", VERIFY_BADGE],
     ["Why it was paid", EVIDENCE_PATHS],
+    // A held bill as an exception someone owns (deal cash readiness E1-E5).
+    ["Overdue", "src/lib/exceptions.ts"],
+    ["Due today", "src/lib/exceptions.ts"],
+    ["Due this week", "src/lib/exceptions.ts"],
+    ["Who can act", "src/lib/exceptions.ts"],
+    ["Decide by Oct 15, 2026 to keep the early-payment discount", "src/lib/exceptions.ts", " to keep the early-payment discount"],
+    ["Email me when payments need a decision", "src/components/NotificationsPanel.tsx"],
   ],
   "guides/go-live": [
     ["Add a supplier", GETTING_STARTED],
@@ -666,6 +676,31 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Reopen deal", DEAL_PAGE],
     ["Money expected in", PAYMENT_PLAN],
     ["Safe to spend today", "src/components/vx/CashOutlook.tsx"],
+    // A deal's costs and its cash readiness (deal cash readiness K1-K8).
+    ["Costs", DEAL_COSTS],
+    ["Add a cost", DEAL_COSTS],
+    ["What it is", DEAL_COST_CONTROLS],
+    ["Who it is for", DEAL_COST_CONTROLS],
+    ["Nobody named yet", DEAL_COST_CONTROLS],
+    ["Expected to leave on", DEAL_COST_CONTROLS],
+    ["No document yet", DEAL_COST_CONTROLS],
+    ["Add cost", DEAL_COST_CONTROLS],
+    ["Remove", DEAL_COST_CONTROLS],
+    ["Removed costs", DEAL_COSTS],
+    ["Link", DEAL_COST_CONTROLS],
+    ["Cash readiness", DEAL_CASH],
+    ["Collected to date", DEAL_CASH],
+    ["Paid out to date", DEAL_CASH],
+    ["Short by 1,240.00 USDC on Oct 20, 2026", DEAL_CASH, "Short by "],
+    ["No cash gap", DEAL_CASH],
+    ["Not enough data", DEAL_CASH],
+    ["Estimated margin", DEAL_CASH],
+    ["Try a different deposit", DEAL_CASH],
+    ["Deposit (%)", DEAL_CASH],
+    ["With this try: no cash gap. Now: short by 1,240.00 USDC on Oct 20, 2026.", DEAL_CASH, "With this try: "],
+    ["Back to the deal", DEAL_CASH],
+    ["Short 1,240.00 USDC on Oct 20, 2026", "src/lib/deals/cash.ts", "`Short "],
+    ["No costs entered", "src/lib/deals/cash.ts"],
   ],
   // The payment plan on Bills & receivables (payment plan design P1-P14).
   "guides/payment-plan": [

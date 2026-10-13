@@ -6,12 +6,13 @@ import { notFound } from "next/navigation";
 import { CrmDealChanges } from "@/components/CrmDealChanges";
 import { CrmReceiptCard } from "@/components/CrmReceiptCard";
 import { DocsLink } from "@/components/DocsLink";
+import { DealCashReadiness } from "@/components/deals/DealCashReadiness";
 import { DealChangeForm } from "@/components/deals/DealChangeForm";
+import { DealCosts } from "@/components/deals/DealCosts";
 import { AutoReleaseSwitch, CancelDealButton } from "@/components/deals/DealControls";
 import { DealSchedule, DealVersions } from "@/components/deals/DealSchedule";
-import { dealStanding } from "@/components/deals/DealsSection";
 import { DealFigures } from "@/components/deals/DealFigures";
-import { Badge } from "@/components/ui/Badge";
+import { DealHeadSub } from "@/components/deals/DealHead";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { IntakeFold } from "@/components/vx/IntakeFold";
@@ -24,14 +25,17 @@ import { utcDay } from "@/lib/copy";
 import { crmChangesFor, type CrmDealChanges as CrmChangesRead } from "@/lib/connectors/crm-review";
 import { crmReceiptFor, type CrmReceiptView } from "@/lib/connectors/crm-receipts-view";
 import { crmProvider } from "@/lib/crm-providers";
+import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import type { Collection } from "@/lib/deals/collection";
 import { readDealCollections } from "@/lib/deals/collection-read";
+import type { DealCost } from "@/lib/deals/costs";
+import { readDealCosts, readLinkCandidates, type LinkCandidate } from "@/lib/deals/costs-read";
 import { inForce } from "@/lib/deals/lines";
 import { formatMinor } from "@/lib/deals/money";
 import { readDeal } from "@/lib/deals/read";
 import { billsHref } from "@/lib/bills-view";
-import { stats } from "@/lib/queries";
+import { listCounterparties, stats } from "@/lib/queries";
 import { shellStatus } from "@/lib/shell-status";
 
 export const dynamic = "force-dynamic";
@@ -45,9 +49,10 @@ type DealPageProps = {
 };
 
 /**
- * One deal (docs/superpowers/specs/2026-10-12-deal-schedule-design.md): its schedule with each line's state, Release now,
- * the agent's release switch, Change deal, Cancel deal and Reopen deal for an owner or admin, and every version with what
- * it changed, for every member. An id the workspace does not hold is the workspace's not-found page.
+ * One deal (docs/superpowers/specs/2026-10-12-deal-schedule-design.md): its cash readiness against its costs
+ * (docs/superpowers/specs/2026-10-13-deal-cash-readiness-design.md), its schedule with each line's state, its costs,
+ * Release now, the agent's release switch, Change deal, Cancel deal and Reopen deal for an owner or admin, and every
+ * version with what it changed, for every member. An id the workspace does not hold is the workspace's not-found page.
  */
 export default async function DealPage({ params, searchParams }: DealPageProps) {
   const { slug, id } = await params;
@@ -83,6 +88,31 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
       return null;
     });
     const changeFromCrm = crm !== null && from === "hubspot" && facts.status === "active";
+    // The deal's costs, each with what it became (deal cash readiness K2). Best effort: before migration 0108, or when
+    // they cannot be read, the page stands without them and the margin says there is not enough data.
+    const costs: DealCost[] | null = await readDealCosts([deal], db(), facts.id)
+      .then((read) => (read.available ? (read.byDeal.get(facts.id) ?? []) : null))
+      .catch((error: unknown) => {
+        console.error("deal: costs not read", error instanceof Error ? error.message : error);
+        return null;
+      });
+    // What a cost may be linked to, and who a new one may be for: an owner's or admin's forms only.
+    const [candidates, payees] =
+      canWrite && costs !== null
+        ? await Promise.all([
+            readLinkCandidates(deal, ({ name, amountMinor, status, dueOn }) =>
+              [name, `${formatMinor(amountMinor, digits)} ${facts.currency}`, dueOn ? `due ${utcDay(`${dueOn}T00:00:00Z`)}` : null, status].filter(Boolean).join(" · ")
+            )
+              .then((read): LinkCandidate[] => (read.available ? read.candidates : []))
+              .catch((error: unknown): LinkCandidate[] => {
+                console.error("deal: bills to link not read", error instanceof Error ? error.message : error);
+                return [];
+              }),
+            listCounterparties()
+              .then((rows) => rows.filter((row) => row.role !== "client").map(({ id, name }) => ({ id, name })))
+              .catch(() => []),
+          ])
+        : [[], []];
     // What was written back to the CRM it was planned from, and when (CRM receipts R8). Best effort, as the changes.
     const receipt: CrmReceiptView | null = await crmReceiptFor(facts.id, (connection) => crmProvider(connection.provider)?.receipts?.writeScopes ?? null).catch((error: unknown) => {
       console.error("deal: receipts in the CRM not read", error instanceof Error ? error.message : error);
@@ -96,26 +126,13 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
         console.error("deal: what it collected was not read", error instanceof Error ? error.message : error);
         return null;
       });
-    const standing = dealStanding(deal, today);
     const stopping = inForce(facts.lines).filter((line) => line.status === "planned" && line.kind === "charge");
-    const signedAt = deal.versions[0]?.createdAt ?? deal.createdAt;
 
     return (
       <ProductShell {...shell}>
         <PageHead
           title={deal.title}
-          sub={
-            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span>{deal.customer.name}</span>
-              <Badge size="sm" tone={standing.tone} dot>
-                {standing.label}
-              </Badge>
-              <span className="text-ink-3">
-                Version {facts.version} · signed {utcDay(signedAt)} · payment terms {facts.termsDays} {facts.termsDays === 1 ? "day" : "days"}
-                {deal.externalRef ? ` · reference ${deal.externalRef}` : ""}
-              </span>
-            </span>
-          }
+          sub={<DealHeadSub deal={deal} today={today} />}
           right={
             <div className="flex shrink-0 items-center gap-3">
               <DocsLink href="/docs/guides/deals" topic="deals" />
@@ -129,7 +146,28 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
         <div className="space-y-8">
           {crm && <CrmDealChanges orgSlug={slug} dealId={facts.id} label={crm.label} words={crm.words} seen={crm.seen} canWrite={canWrite} active={facts.status === "active"} />}
           {receipt && <CrmReceiptCard orgSlug={slug} dealId={facts.id} view={receipt} canManage={canManage} />}
+          <DealCashReadiness
+            facts={facts}
+            digits={digits}
+            template={deal.template}
+            costs={costs}
+            collected={collected?.byReceivable ?? null}
+            today={today}
+            {...(canWrite && facts.status === "active" ? { changeHref: "#change" } : {})}
+          />
           <DealSchedule orgSlug={slug} deal={deal} today={today} canWrite={canWrite} />
+          <DealCosts
+            orgSlug={slug}
+            dealId={facts.id}
+            costs={costs}
+            today={today}
+            digits={digits}
+            currency={facts.currency}
+            canWrite={canWrite}
+            candidates={candidates}
+            payees={payees}
+            idempotencyKey={randomUUID()}
+          />
 
           {canWrite ? (
             <section aria-labelledby="deal-controls-title" className="space-y-4">

@@ -88,11 +88,39 @@ Under the lines, the version is worked out as you type: the old and new totals, 
   caption="Every version with what it changed: each one is a signed entry in the audit log."
 />
 
+## 5. Plan its costs and see when it needs cash
+
+A deal can bring in more than it costs and still need money before the customer pays: a contractor paid in the first week, a vendor's deposit, a licence bought up front. Enter what the deal will cost, and its page says the first day it would be short, and by how much.
+
+Under **Costs** on the deal's page, open **Add a cost**:
+
+- **What it is**, such as Contractor: design, and **Who it is for**: one of your vendors or contractors, or **Nobody named yet**.
+- **Amount**, in the deal's currency, and **Expected to leave on**: the day you expect to pay it.
+- **No document yet** when no bill or quote backs it. It is counted all the same, and named as such.
+
+Choose **Add cost**. Pressing it twice adds one cost. A cost is never edited: **Remove** takes it out of every figure and keeps it, with who removed it, under **Removed costs**; enter it again with the right amount.
+
+When the bill for a cost arrives, or you add the contractor's milestone, choose it under the cost and **Link**. From then on the bill or milestone counts in the plan's place, at its own amount and on its own day: a bill to pay on its due day or the day it is scheduled for, a paid one as paid out. A bill or milestone backs one cost of one deal, so its money is counted once. A bill rejected, or a milestone closed unpaid, leaves the plan standing again, and the cost says so.
+
+**Cash readiness**, above the schedule, puts it together:
+
+- **Collected to date** and **Paid out to date**: money that moved, each with what it is made of. Collected is the deal's **Paid**: a line the customer paid part of counts what arrived as collected and only what is still owed as expected, once, and a line marked received without a payment on Arc is not counted, and the view says so.
+- Day by day from today, each day money is planned or expected to move: the schedule's lines on their due days, planned until they are invoiced and expected until they are paid (an overdue one counts today), and the costs on their days. Each move names its line or cost, its state and its day, with the position after the day.
+- **Short by 1,240.00 USDC on Oct 20, 2026** when the position first goes below zero, with how that day's figure is made and the deepest gap. **No cash gap** when it never does. **Not enough data** while no cost is entered.
+- **Estimated margin**: the deal's total less every cost counted, as an amount and a percent. With no cost entered it says **Not enough data**, never 100%.
+
+Nothing here is cash until it is collected: a planned line is planned, a receivable not paid is expected, and no line is weighted by how likely it is. Treasury, the payment plan and the agent's checks count none of it.
+
+**Try a different deposit**, on a deal with a deposit not invoiced yet, moves its invoice day (its due day follows by the payment terms) or sets another **Deposit (%)**, the difference coming off the lines not invoiced yet, from the last. The view then shows the gap with the try and without it, such as "With this try: no cash gap. Now: short by 1,240.00 USDC on Oct 20, 2026." Nothing is saved. To keep it, change the deal as in step 4, which saves a new version; **Back to the deal** drops the try.
+
+Under **Deals** on the **Receivables** tab, each deal carries one badge for this: "Short 1,240.00 USDC on Oct 20, 2026", **No cash gap**, or **No costs entered**.
+
 ## Where deals show in your cash
 
 - **A released line not paid yet** is a receivable: **Next 30 days** on **Treasury** and **What if clients pay late?** count it as money expected on its due day, never as cash, as any receivable. A line a client paid part of counts for what is still owed, once: what arrived is in the wallet already. See [Apply money received to invoices](/docs/guides/apply-payments). **Safe to spend today** and the agent's checks still count no receivable.
 - **A line not released yet** is planned. **Next 30 days** names what the lines due in the next 30 days come to, apart; **What if clients pay late?** names them under what the figure is built from; neither counts them in any balance.
 - **The payment plan** on **Bills & receivables** lists, under **Money expected in**, the receivables due in its 14 days, a part-paid one for what is still owed, and the deal lines planned for them, apart from its balances.
+- **A deal's costs** count on its own page only. A bill a cost is linked to is a bill like any other on **Treasury** and in the payment plan, and on the deal's page it counts in the cost's place, once.
 
 ## Show the customer what it owes
 
@@ -100,4 +128,4 @@ A [statement link](/docs/guides/customer-portal) shows a customer every receivab
 
 ## What is signed
 
-Each version is a signed entry in the workspace's ledger, which the audit log shows and webhooks deliver: `deal_signed` for version 1, `deal_revised` for a change or a reopen, `deal_cancelled` for a cancel, and `deal_auto_release_changed` for the switch. A deal planned from HubSpot, and a change saved from what HubSpot changed, say `via: "hubspot"` with the deal's ids in HubSpot. Each release is the receivable's own `create_invoice` entry, which names the deal and the line, and says whether a person or the agent released it.
+Each version is a signed entry in the workspace's ledger, which the audit log shows and webhooks deliver: `deal_signed` for version 1, `deal_revised` for a change or a reopen, `deal_cancelled` for a cancel, and `deal_auto_release_changed` for the switch. Each cost is one too: `deal_cost_added`, `deal_cost_removed` and `deal_cost_linked`, which names the bill or milestone it became. A deal planned from HubSpot, and a change saved from what HubSpot changed, say `via: "hubspot"` with the deal's ids in HubSpot. Each release is the receivable's own `create_invoice` entry, which names the deal and the line, and says whether a person or the agent released it.

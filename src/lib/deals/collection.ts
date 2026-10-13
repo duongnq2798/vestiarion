@@ -79,6 +79,17 @@ export interface LastReceipt {
   network: Network;
 }
 
+/**
+ * What one of the deal's receivables collected and still owes, in the deal's minor units: the same figures the deal's
+ * totals add up, so a view that places money by line (a deal's cash readiness) agrees with Paid and Outstanding.
+ */
+export interface ReceivableCollected {
+  collectedMinor: number;
+  stillOwedMinor: number;
+  /** Marked received with no payment on Arc behind it: neither collected nor owed (R1). */
+  unverified: boolean;
+}
+
 export interface Collection {
   currency: string;
   digits: 0 | 2;
@@ -96,6 +107,8 @@ export interface Collection {
   status: CollectionStatus;
   reconciliation: Reconciliation;
   lastReceipt: LastReceipt | null;
+  /** Each receivable counted, by id; one closed or in another currency is not here. */
+  byReceivable: Record<string, ReceivableCollected>;
 }
 
 const SETTLED = new Set(["received", "paid"]);
@@ -119,6 +132,7 @@ export function dealCollection(input: CollectionInput): Collection {
   const totals = { collected: 0, owed: 0, invoiced: 0, fees: 0, overdue: 0, unverified: 0 };
   let leftOut = 0;
   const factorOf = new Map<string, number>();
+  const byReceivable: Record<string, ReceivableCollected> = {};
   for (const receivable of input.receivables) {
     if (CLOSED.has(receivable.status) || !(receivable.amount > 0)) continue;
     const factor =
@@ -137,12 +151,16 @@ export function dealCollection(input: CollectionInput): Collection {
     const fees = input.fees.filter((fee) => fee.invoiceId === receivable.id).reduce((sum, fee) => sum + fee.amount, 0);
     const settled = SETTLED.has(receivable.status);
     const owed = settled ? 0 : Math.max(0, receivable.amount - paid - fees);
+    const collectedMinor = minor(Math.min(paid, receivable.amount));
+    const owedMinor = minor(owed);
+    const unverified = settled && paid + fees <= 0;
+    byReceivable[receivable.id] = { collectedMinor, stillOwedMinor: owedMinor, unverified };
     totals.invoiced += minor(receivable.amount);
-    totals.collected += minor(Math.min(paid, receivable.amount));
+    totals.collected += collectedMinor;
     totals.fees += minor(fees);
-    totals.owed += minor(owed);
-    if (owed > 0 && receivable.dueOn < input.today) totals.overdue += minor(owed);
-    if (settled && paid + fees <= 0) totals.unverified += minor(receivable.amount);
+    totals.owed += owedMinor;
+    if (owed > 0 && receivable.dueOn < input.today) totals.overdue += owedMinor;
+    if (unverified) totals.unverified += minor(receivable.amount);
   }
 
   // The latest payment: what it brought to this deal's invoices, all of them.
@@ -188,6 +206,7 @@ export function dealCollection(input: CollectionInput): Collection {
     status,
     reconciliation,
     lastReceipt,
+    byReceivable,
   };
 }
 

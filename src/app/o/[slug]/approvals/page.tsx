@@ -12,6 +12,7 @@ import { db } from "@/lib/dal";
 import { verdictView, type DecisionEntryFacts } from "@/lib/verdict-view";
 import { verdictFacts } from "@/lib/verdicts";
 import { isSoleApprover } from "@/lib/agent/sole-approver";
+import { exceptionFacts } from "@/lib/exceptions";
 import { requireMembership } from "@/lib/auth/membership";
 import { can } from "@/lib/auth/roles";
 import { shellModes } from "@/lib/circle";
@@ -56,12 +57,23 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
             address: payable.address,
           })
         : undefined;
-    // Who approved a payment above the figure for two approvals, by email (two approvals T8): read only when someone has.
+    // The members, read once while something waits: who approved a payment above the figure for two approvals, by email
+    // (two approvals T8), and who can act on each payable (deal cash readiness E3). Best effort: a read that fails leaves
+    // the cards to be decided as before, without who can act, rather than fail the page.
+    const members =
+      waiting.length > 0
+        ? await listMembers(membership.orgId).catch((error: unknown) => {
+            console.error("approvals: members not read", error instanceof Error ? error.message : error);
+            return null;
+          })
+        : [];
     const approverIds = new Set(waiting.flatMap((payable) => payable.twoApprovals?.approvals.map((approval) => approval.by) ?? []));
-    const memberEmails: Record<string, string> =
-      approverIds.size > 0
-        ? Object.fromEntries((await listMembers(membership.orgId)).filter((member) => approverIds.has(member.userId)).map((member) => [member.userId, member.email]))
-        : {};
+    const memberEmails: Record<string, string> = Object.fromEntries((members ?? []).filter((member) => approverIds.has(member.userId)).map((member) => [member.userId, member.email]));
+    // Each held payable's priority, the day it must be decided by, and who can act on it (E1-E3); none when the members
+    // could not be read, never "nobody can approve it".
+    const today = new Date().toISOString().slice(0, 10);
+    const exceptionOf = (payable: (typeof waiting)[number]) =>
+      members ? exceptionFacts({ dueDate: payable.dueDate, discount: payable.discount, createdBy: payable.createdBy }, members, today) : undefined;
 
     return (
       <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()} status={await shellStatus()}>
@@ -103,6 +115,8 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
                 canEdit={can(membership.role, "records.write")}
                 memberEmails={memberEmails}
                 verdict={verdictFor(payable)}
+                exception={exceptionOf(payable)}
+                viewerEmail={user.email}
               />
             ))}
           </div>
