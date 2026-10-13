@@ -104,7 +104,7 @@ describe("who may change collections", () => {
     }
   });
 
-  it.each(["approver", "viewer"] as const)("refuses an %s before anything is read", async (role) => {
+  it.each(["approver", "viewer", "accountant"] as const)("refuses an %s before anything is read: rules and tasks decide what a customer is sent", async (role) => {
     const client = world();
     expect(await run(client, () => setCollectionPolicy(actor({ role }), rules()))).toMatchObject({ ok: false, code: "forbidden" });
     expect(await run(client, () => resolveCollectionTaskCommand(actor({ role }), { taskId: TASK, outcome: "approved" }))).toMatchObject({ ok: false, code: "forbidden" });
@@ -189,6 +189,23 @@ describe("resolving a task (C6)", () => {
     expect(await run(world({ task: promise }), () => resolveCollectionTaskCommand(actor(), { taskId: TASK, outcome: "held", holdUntil: "2026-10-25" }))).toMatchObject({ ok: true });
   });
 
+  it("marks an unchecked claim of payment not received before letting reminders go again or holding them", async () => {
+    const claim = taskRow({ kind: "finance_review", reason: "claim_unverified", subject_key: "claim:req-7", proposal: { headline: "Escalate", reasons: [], reminder: null } });
+    mocks.close.mockResolvedValue({ customerName: "Acme", kind: "paid" });
+    expect(await run(world({ task: claim }), () => resolveCollectionTaskCommand(actor(), { taskId: TASK, outcome: "resumed" }))).toMatchObject({
+      ok: true,
+      message: "The claim of payment is marked not received. The agent's reminders to Acme go again.",
+      startsCycle: true,
+    });
+    expect(mocks.close).toHaveBeenCalledWith({ actorId: USER, requestId: "req-7", outcome: "not_received" });
+    expect(await run(world({ task: claim }), () => resolveCollectionTaskCommand(actor(), { taskId: TASK, outcome: "held", holdUntil: "2026-10-25" }))).toMatchObject({
+      ok: true,
+      message: "The claim of payment is marked not received. Reminders to Acme about this invoice wait until Oct 25, 2026.",
+    });
+    expect(mocks.close).toHaveBeenLastCalledWith({ actorId: USER, requestId: "req-7", outcome: "not_received" });
+    expect(mocks.ledger).toHaveBeenCalledWith(ORG, expect.objectContaining({ action: "collection_task_resolved", detail: expect.objectContaining({ reason: "claim_unverified", outcome: "held" }) }));
+  });
+
   it("says when someone resolved it first, and when it is not this workspace's", async () => {
     expect(await run(world({ resolved: [] }), () => resolveCollectionTaskCommand(actor(), { taskId: TASK, outcome: "approved" }))).toMatchObject({ ok: false, code: "changed", changed: true });
     expect(await run(world({ task: taskRow({ status: "done", outcome: "done", resolved_at: "2026-10-19T10:00:00Z" }) }), () => resolveCollectionTaskCommand(actor(), { taskId: TASK, outcome: "approved" }))).toMatchObject({
@@ -200,15 +217,16 @@ describe("resolving a task (C6)", () => {
 });
 
 describe("the idempotency key (I11)", () => {
-  const base = { kind: "collection_reminder" as const, event: `reminder:${INVOICE}:1`, recipient: "billing@acme.example", policyVersion: 2 };
+  const base = { kind: "collection_reminder" as const, event: `reminder:${INVOICE}:1`, recipient: "billing@acme.example" };
 
-  it("is one per recipient, event and rules' version, and never carries the address", () => {
+  it("is one per recipient and event, the same under any rules' version, and never carries the address", () => {
     const key = deliveryKey(base);
     expect(key).toMatch(/^[0-9a-f]{64}$/);
     expect(deliveryKey({ ...base, recipient: " Billing@Acme.example " })).toBe(key);
     expect(deliveryKey({ ...base, recipient: "ap@acme.example" })).not.toBe(key);
     expect(deliveryKey({ ...base, event: `reminder:${INVOICE}:2` })).not.toBe(key);
-    expect(deliveryKey({ ...base, policyVersion: 3 })).not.toBe(key);
+    // A rules change is not a new email: a retry under newer rules keeps the key Resend knows.
+    expect(deliveryKey({ ...base, policyVersion: 3 } as typeof base)).toBe(key);
     expect(deliveryKey({ ...base, kind: "collection_task" })).not.toBe(key);
     expect(recipientHash("billing@acme.example")).not.toContain("acme");
   });

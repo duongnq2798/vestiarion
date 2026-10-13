@@ -7,13 +7,14 @@ import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { sendOnce } from "../notifications/deliveries";
 import { listMembers } from "../platform/members";
 import { taskProposalOf, type CollectionTask, type Proposal, type ReceivableFacts, type TaskNeed } from "./model";
-import { TASK_COLUMNS, toTask, type TaskRow } from "./read";
+import { notThereYet, readTaskStart, TASK_COLUMNS, toTask, type TaskRow } from "./read";
 
 /**
  * The collections stage's tasks (docs/superpowers/specs/2026-10-13-collections-context-design.md C6, I11): a task opened
  * once per receivable and subject, with the proposal it was opened for, and signed; one no longer needed closed as
- * obsolete; and the members it asks told by email, each once per task and rules' version, their own email switch read
- * again right before the send.
+ * obsolete; and the members it asks told by email, each once per task, at most one email each a cycle, their own email
+ * switch read again right before the send. Tasks open only from the day they began in the workspace
+ * (`collection_task_starts`, set by the stage's first run): what was already so then emails nobody.
  */
 
 export const COLLECTION_TASK_ACTIONS = {
@@ -25,6 +26,23 @@ export const COLLECTION_TASK_ACTIONS = {
 export const TASK_NOTICE_MAX_RECIPIENTS = 10;
 /** An open task not emailed is tried again for this long, then left on the page alone. */
 export const TASK_NOTICE_DAYS = 7;
+
+/**
+ * The day tasks began in the workspace in scope: read, or set to `today` by the stage's first run. Null before migration
+ * 0110 runs. Two runs at once set one day: the second reads what the first set.
+ */
+export async function taskStart(orgDb: OrgDb, today: string): Promise<string | null> {
+  const found = await readTaskStart(orgDb);
+  if (found !== "") return found;
+  const set = await orgDb.from("collection_task_starts").upsert({ starts_on: today }, { onConflict: "org_id", ignoreDuplicates: true }).select("starts_on");
+  if (notThereYet(set.error)) return null;
+  if (set.error) throw new Error(set.error.message);
+  const inserted = ((set.data ?? []) as Array<{ starts_on: string }>)[0]?.starts_on;
+  if (inserted) return String(inserted).slice(0, 10);
+  const again = await readTaskStart(orgDb);
+  if (again === "") throw new Error("collection task start not set");
+  return again;
+}
 
 /** Opens the task a proposal needs, once: null when it was open already (another cycle, the same subject). */
 export async function openTask(orgDb: OrgDb, facts: ReceivableFacts, proposal: Proposal, need: TaskNeed): Promise<CollectionTask | null> {
@@ -88,18 +106,26 @@ interface Recipient {
 const ROLE_ORDER: readonly OrgRole[] = ["owner", "admin"];
 
 /**
- * Who a task asks: its assignee when the customer's rules name one who still may act and gets email, else the owners
- * and admins (`records.write`, who resolve tasks) whose email switch is on, owners first, at most ten.
+ * Who tasks may ask, read once a cycle: the owners and admins (`records.write`, who resolve tasks) whose email switch is
+ * on, owners first.
  */
-export async function taskRecipients(orgId: string, assignee: string | null): Promise<Recipient[]> {
+async function askable(orgId: string): Promise<Array<Recipient & { role: OrgRole }>> {
   const members = await listMembers(orgId);
   const switches = unwrap(await platformDb().from("memberships").select("user_id, notify_email").eq("org_id", orgId)) as Array<{ user_id: string; notify_email: boolean }>;
   const on = new Set(switches.filter((row) => row.notify_email === true).map((row) => row.user_id));
-  const able = members.filter((member) => can(member.role, "records.write") && on.has(member.userId));
+  return members
+    .filter((member) => can(member.role, "records.write") && on.has(member.userId))
+    .sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role) || (a.email < b.email ? -1 : a.email > b.email ? 1 : 0))
+    .map((member) => ({ userId: member.userId, email: member.email, role: member.role }));
+}
+
+/**
+ * Who a task asks: its assignee when the customer's rules name one who still may act and gets email, else the owners
+ * and admins whose email switch is on, owners first, at most ten.
+ */
+export function taskRecipients(able: ReadonlyArray<Recipient>, assignee: string | null): Recipient[] {
   const named = assignee ? able.find((member) => member.userId === assignee) : undefined;
-  const chosen = named
-    ? [named]
-    : able.sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role) || (a.email < b.email ? -1 : a.email > b.email ? 1 : 0)).slice(0, TASK_NOTICE_MAX_RECIPIENTS);
+  const chosen = named ? [named] : able.slice(0, TASK_NOTICE_MAX_RECIPIENTS);
   return chosen.map((member) => ({ userId: member.userId, email: member.email }));
 }
 
@@ -110,9 +136,10 @@ async function stillOn(orgId: string, userId: string): Promise<boolean> {
 }
 
 /**
- * Emails each open task not emailed yet (opened in the last week) to the members it asks, once per member, task and
- * rules' version; stamps the task once one member got it. Best effort per task: a failure is logged and the next run
- * tries again, under the same keys.
+ * Emails each open task not emailed yet (opened in the last week) to the members it asks, once per member and task,
+ * the task waiting longest first; stamps the task once one member got it. Each member gets at most one email a cycle:
+ * a task whose members all had theirs waits for the next cycle. Best effort per task: a failure is logged and the next
+ * run tries again, under the same keys.
  */
 export async function notifyTasks(
   orgDb: OrgDb,
@@ -121,11 +148,23 @@ export async function notifyTasks(
 ): Promise<number> {
   const orgId = currentOrgId();
   const cutoff = context.now - TASK_NOTICE_DAYS * 86_400_000;
-  const due = tasks.filter((task) => task.status === "open" && task.notifiedAt === null && Date.parse(task.createdAt) >= cutoff);
+  const due = tasks
+    .filter((task) => task.status === "open" && task.notifiedAt === null && Date.parse(task.createdAt) >= cutoff)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+  if (due.length === 0) return 0;
+  let able: Array<Recipient & { role: OrgRole }>;
+  try {
+    able = await askable(orgId);
+  } catch (error) {
+    console.error("collection task: members not read", error instanceof Error ? error.message : "unknown");
+    return 0;
+  }
+  // The members emailed this cycle: one email each, whatever the number of tasks.
+  const emailed = new Set<string>();
   let told = 0;
   for (const task of due) {
     try {
-      const recipients = await taskRecipients(orgId, task.assignee);
+      const recipients = taskRecipients(able, task.assignee).filter((recipient) => !emailed.has(recipient.userId));
       if (recipients.length === 0) continue;
       const email = collectionTaskEmail({
         orgName: context.orgName,
@@ -144,6 +183,7 @@ export async function notifyTasks(
           context.send,
           () => stillOn(orgId, recipient.userId)
         );
+        if (result.sent) emailed.add(recipient.userId);
         if (result.sent || result.reason === "sent_before") sent += 1;
         else if (result.reason === "failed") console.error("collection task: email not sent", task.id, result.detail ?? "unknown");
       }

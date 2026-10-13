@@ -20,8 +20,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   tab counts what waits on you, the reminders sent this week and promises kept and broken; a receivable's card previews
   the reminder exactly as the customer would read it. Each customer can have its own rules (ask first for a VIP, the
   strongest tone, the days between reminders), saved as versions. A broken promise goes to finance for review instead
-  of an automatic reminder, and nothing a customer or HubSpot writes sends an email by itself. Every email goes once,
-  even when it is retried, and turning reminders or emails off takes effect up to the moment of sending.
+  of an automatic reminder, and so does a customer's "I paid" still unconfirmed a week later, so a claim alone never
+  stops reminders for good. Nothing a customer or HubSpot writes sends an email by itself. Tasks begin the first time
+  the agent runs with this in your workspace: what was already overdue or broken before then shows on its card and
+  emails nobody, and each person gets at most one task email each time the agent runs. Every email goes once, even
+  when it is retried or the customer's rules changed in between, and turning reminders or emails off takes effect up to
+  the moment of sending.
 
 - **An accountant role, and a console across your clients.** Invite an outside accountant or bookkeeper on Members with
   the new accountant role: they read everything, book payments made on Arc in Xero, apply money received and answer

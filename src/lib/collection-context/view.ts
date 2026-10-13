@@ -6,7 +6,7 @@ import type { Network } from "../network";
 import {
   MAX_DAYS_BETWEEN,
   MAX_HOLD_DAYS,
-  OUTCOME_LABELS,
+  outcomeLabel,
   outcomeWords,
   policyWords,
   TASK_LABELS,
@@ -177,7 +177,7 @@ export function taskView(task: CollectionTask, members: ReadonlyMap<string, stri
     label: TASK_LABELS[task.reason],
     askedOf: askedOf(task, members),
     opened: `Opened ${dayWords(task.createdAt)}`,
-    outcomes: taskOutcomes(task).map((value) => ({ value, label: OUTCOME_LABELS[value] })),
+    outcomes: taskOutcomes(task).map((value) => ({ value, label: outcomeLabel(task, value) })),
     tones: reminder?.tones ?? [],
     tone: reminder?.tone ?? null,
     holdFrom: addDays(today, 1),

@@ -8,7 +8,8 @@
 --
 -- collection_tasks: what the collections stage asks a person to do for one receivable, once per receivable and subject
 -- (subject_key): approve a reminder the rules hold, ask the HubSpot deal's owner before the first overdue reminder, find a
--- billing contact, review a promise whose day passed, or follow up once the agent's reminders are done. It keeps the
+-- billing contact, review a promise whose day passed, check a claim of payment nobody found within a week, or follow up
+-- once the agent's reminders are done. It keeps the
 -- proposal it was opened for. A person resolves it once (approved, held until a day, no reminders, reminders resumed,
 -- done); the stage closes one no longer needed (obsolete). A resolved task never changes again, but for the day its
 -- members were emailed. The tenant role reads, adds and resolves; nothing deletes one but its invoice or workspace.
@@ -17,6 +18,14 @@
 -- and the rules' version (I11), claimed before the send and marked sent after it. A claim whose send failed is deleted so
 -- the next cycle tries again with the same key; a sent one is never deleted or changed. The tenant role reads, claims,
 -- marks sent and releases.
+--
+-- collection_task_starts: the day the collections stage began opening tasks in a workspace, set once by its first run. A
+-- need that was already so before it (a promise whose day was before it, a claim, reminders done, a missing contact, a
+-- receivable already overdue) opens no task and emails nobody: turning tasks on sends no backlog. The tenant role reads
+-- and sets it once.
+--
+-- invoices_open_receivables_idx: a workspace's open receivables by due day, as the collections stage reads them each
+-- cycle.
 --
 -- crm_deals.owner_external_id: the CRM's owner of the deal (HubSpot's hubspot_owner_id), read with the deal.
 --
@@ -58,7 +67,7 @@ create table if not exists public.collection_tasks (
   counterparty_id  uuid not null,
   kind             text not null constraint collection_tasks_kind_check check (kind in ('ask_owner', 'finance_review')),
   reason           text not null constraint collection_tasks_reason_check
-                     check (reason in ('policy_ask_first', 'hubspot_owner', 'no_contact', 'promise_passed', 'reminders_done')),
+                     check (reason in ('policy_ask_first', 'hubspot_owner', 'no_contact', 'promise_passed', 'claim_unverified', 'reminders_done')),
   subject_key      text not null constraint collection_tasks_subject_key_check check (char_length(subject_key) between 1 and 120),
   assignee         uuid references auth.users(id) on delete set null,
   policy_version   integer not null default 0 constraint collection_tasks_policy_version_check check (policy_version between 0 and 100000),
@@ -91,6 +100,11 @@ create table if not exists public.collection_tasks (
 
 create index if not exists collection_tasks_open_idx on public.collection_tasks (org_id, status, created_at);
 
+-- The reasons as this file names them, on a table an earlier run of it created.
+alter table public.collection_tasks drop constraint if exists collection_tasks_reason_check;
+alter table public.collection_tasks add constraint collection_tasks_reason_check
+  check (reason in ('policy_ask_first', 'hubspot_owner', 'no_contact', 'promise_passed', 'claim_unverified', 'reminders_done'));
+
 create table if not exists public.notification_deliveries (
   id               uuid primary key default gen_random_uuid(),
   org_id           uuid not null references public.orgs(id) on delete cascade,
@@ -108,12 +122,21 @@ create table if not exists public.notification_deliveries (
 
 create index if not exists notification_deliveries_subject_idx on public.notification_deliveries (org_id, subject_id);
 
+create table if not exists public.collection_task_starts (
+  org_id      uuid primary key references public.orgs(id) on delete cascade,
+  starts_on   date not null,
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists invoices_open_receivables_idx
+  on public.invoices (org_id, due_date) where direction = 'receivable' and status in ('pending', 'matched');
+
 -- Row level security as every tenant table: a permissive policy and a restrictive guard, both on request_org_id().
 do $$
 declare
   t text;
 begin
-  foreach t in array array['collection_policies', 'collection_tasks', 'notification_deliveries'] loop
+  foreach t in array array['collection_policies', 'collection_tasks', 'notification_deliveries', 'collection_task_starts'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('revoke all privileges on table public.%I from anon, authenticated, vestiarion_tenant', t);
     execute format('grant all privileges on table public.%I to service_role', t);
@@ -129,12 +152,13 @@ begin
 end $$;
 
 -- What the tenant role may do: add a version of a customer's rules; open and resolve a task; claim, mark and release a
--- delivery. Nothing else.
+-- delivery; set the day tasks began, once. Nothing else.
 grant select, insert on table public.collection_policies to vestiarion_tenant;
 grant select, insert on table public.collection_tasks to vestiarion_tenant;
 grant update (status, outcome, hold_until, approved_number, approved_tone, resolved_at, resolved_by, notified_at) on table public.collection_tasks to vestiarion_tenant;
 grant select, insert, delete on table public.notification_deliveries to vestiarion_tenant;
 grant update (sent_at, provider_id) on table public.notification_deliveries to vestiarion_tenant;
+grant select, insert on table public.collection_task_starts to vestiarion_tenant;
 
 -- A version of a customer's rules: for a client of the same workspace, the last version plus one.
 create or replace function public.collection_policies_next()
@@ -284,6 +308,8 @@ create trigger notification_deliveries_sent_once
 notify pgrst, 'reload schema';
 
 -- Down (by hand, never by migrate.ts):
+-- drop index if exists public.invoices_open_receivables_idx;
+-- drop table if exists public.collection_task_starts;
 -- drop table if exists public.notification_deliveries;
 -- drop table if exists public.collection_tasks;
 -- drop table if exists public.collection_policies;

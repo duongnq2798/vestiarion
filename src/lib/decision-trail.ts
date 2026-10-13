@@ -165,6 +165,7 @@ const COLLECTION_TASK_WORDS: Record<string, string> = {
   hubspot_owner: "its HubSpot deal has an owner, who may have given more time",
   no_contact: "the customer has no billing email",
   promise_passed: "the customer's promised day passed",
+  claim_unverified: "the customer says it paid, and the payment is still not found a week later",
   reminders_done: "the agent's reminders are done",
 };
 
@@ -342,15 +343,19 @@ export function trailStep(entry: TrailEntry, network: Network = "arc-testnet"): 
       const until = text(detail.holdUntil);
       const reminder = record(detail.reminder);
       const outcome = text(detail.outcome);
+      // A claim's review marks the customer's claim not received first, whichever way it goes.
+      const claim = text(detail.reason) === "claim_unverified" ? "marked the customer's claim of payment not received and " : "";
       const said =
         outcome === "approved"
           ? `approved reminder ${number(reminder?.number) ?? ""}${text(reminder?.tone) ? `, ${text(reminder?.tone)}` : ""}`.replace(" ,", ",")
           : outcome === "held"
-            ? `held reminders${until ? ` until ${dayOf(until)}` : ""}`
+            ? `${claim}held reminders${until ? ` until ${dayOf(until)}` : ""}`
             : outcome === "no_reminder"
               ? "turned reminders off for this invoice"
               : outcome === "resumed"
-                ? "closed the promise and let reminders go again"
+                ? claim
+                  ? `${claim}let reminders go again`
+                  : "closed the promise and let reminders go again"
                 : "marked it done";
       return { ...base, who: "person", tone: "neutral", text: `A person ${said}.` };
     }
@@ -363,7 +368,10 @@ export function trailStep(entry: TrailEntry, network: Network = "arc-testnet"): 
         who: "person",
         tone: "neutral",
         text: `The customer said on its statement that it paid${amount !== null ? ` ${coins(amount, detail.currency)}` : ""}${paidOn ? ` on ${dayOf(paidOn)}` : ""}.`,
-        notes: ["· Its word, not a payment: the invoice stays open until the money arrives and is applied", "· The agent's reminders wait until a person finds it or marks it not received"],
+        notes: [
+          "· Its word, not a payment: the invoice stays open until the money arrives and is applied",
+          "· The agent's reminders wait until a person finds it or marks it not received; finance is asked after 7 days",
+        ],
       };
     }
     case "customer_promised_payment": {

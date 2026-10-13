@@ -14,6 +14,7 @@ const SUBJECTS: Record<TaskReason, (customer: string) => string> = {
   hubspot_owner: (customer) => `${customer}: did sales give more time to pay?`,
   no_contact: (customer) => `${customer}: no billing contact for an invoice`,
   promise_passed: (customer) => `${customer} missed the day it promised to pay`,
+  claim_unverified: (customer) => `${customer} says it paid: the payment is not found`,
   reminders_done: (customer) => `${customer}: the agent's reminders are done`,
 };
 
@@ -22,6 +23,8 @@ const ASKS: Record<TaskReason, string> = {
   hubspot_owner: "It was sold through HubSpot, and its deal has an owner there. Before the first overdue reminder, check whether sales gave the customer more time, then send the reminder or hold reminders until a day.",
   no_contact: "No reminder can go without a billing email. Add one on Counterparties, then mark this done.",
   promise_passed: "No reminder went: finance reviews a broken promise first. Let reminders go again, or hold them until a day.",
+  claim_unverified:
+    "No reminder went while the customer says it paid, and a week passed without the payment being found. Find it and apply it under Apply payments, or mark it not received to let reminders go again or hold them until a day.",
   reminders_done: "The agent sends no more reminders for it. Follow up with the customer yourself, then mark this done.",
 };
 

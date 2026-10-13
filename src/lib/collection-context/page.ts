@@ -5,7 +5,7 @@ import { db } from "../dal";
 import type { Network } from "../network";
 import type { PayLinkState } from "../platform/pay-links";
 import { proposeNextAction, type CollectionPolicy, type CollectionTask, type CrmContext, type CustomerSaid } from "./model";
-import { policyOf, readCrmContexts, readPolicies, readSaid, readTasks, tasksByInvoice, type PoliciesRead } from "./read";
+import { policyOf, readCrmContexts, readPolicies, readSaid, readTasks, readTaskStart, tasksByInvoice, type PoliciesRead } from "./read";
 import { collectionsPanel, promiseRecord, proposalView, reminderPreview, type CollectionsPanelView, type PromiseOutcome, type ProposalView } from "./view";
 
 /**
@@ -60,6 +60,8 @@ export interface CollectionsInput {
   sentThisWeek: number;
   promises: readonly PromiseOutcome[];
   href: (invoiceId: string) => string;
+  /** The day tasks began in the workspace, as the stage reads it: what was already so then opens none. */
+  tasksFrom?: string | null;
 }
 
 export interface CollectionsView {
@@ -116,6 +118,7 @@ export function buildCollections(input: CollectionsInput): CollectionsView {
         policy,
         crm,
         tasks,
+        tasksFrom: input.tasksFrom ?? null,
       },
       input.now
     );
@@ -165,7 +168,7 @@ export function buildCollections(input: CollectionsInput): CollectionsView {
  * the page shows the tab without the panel.
  */
 export async function readCollections(
-  input: Omit<CollectionsInput, "links" | "said" | "policies" | "tasks" | "crm" | "sentThisWeek" | "promises"> & {
+  input: Omit<CollectionsInput, "links" | "said" | "policies" | "tasks" | "crm" | "sentThisWeek" | "promises" | "tasksFrom"> & {
     linkStates: (invoiceIds: string[]) => Promise<Map<string, PayLinkState>>;
   }
 ): Promise<CollectionsView> {
@@ -177,7 +180,7 @@ export async function readCollections(
   const ids = chosen.map((invoice) => invoice.id);
   const weekAgo = new Date(input.now - 7 * 86_400_000).toISOString();
   const promisedFrom = new Date(input.now - 90 * 86_400_000).toISOString().slice(0, 10);
-  const [links, said, policies, tasks, crm, sentThisWeek, promised] = await Promise.all([
+  const [links, said, policies, tasks, crm, sentThisWeek, promised, start] = await Promise.all([
     input.linkStates(ids),
     readSaid(orgDb, ids, new Date(input.now - 90 * 86_400_000).toISOString()),
     readPolicies(orgDb, [...new Set(chosen.map((invoice) => invoice.counterparty_id))]),
@@ -185,6 +188,8 @@ export async function readCollections(
     readCrmContexts(orgDb, chosen),
     orgDb.from("ar_reminders").select("id", { count: "exact", head: true }).gte("sent_at", weekAgo),
     orgDb.from("customer_requests").select("invoice_id, promised_on, outcome").eq("kind", "promise").gte("promised_on", promisedFrom).limit(1000),
+    // Read, never set: before the stage's first run, tasks begin today at the earliest.
+    readTaskStart(orgDb),
   ]);
   const settled = new Map(input.invoices.map((invoice) => [invoice.id, invoice.settled_at ?? null]));
   const promises: PromiseOutcome[] = promised.error
@@ -203,5 +208,6 @@ export async function readCollections(
     crm,
     sentThisWeek: sentThisWeek.error ? 0 : (sentThisWeek.count ?? 0),
     promises,
+    tasksFrom: start === "" ? today : start,
   });
 }

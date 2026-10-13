@@ -107,7 +107,7 @@ export const TENANT_TABLES = [
   "crm_deals", "crm_receipt_writes",
   "customer_portal_links", "customer_requests", "customer_request_messages",
   "usage_events",
-  "collection_policies", "collection_tasks", "notification_deliveries",
+  "collection_policies", "collection_tasks", "notification_deliveries", "collection_task_starts",
 ] as const;
 
 export interface SeededRows {
@@ -311,6 +311,7 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
      values ($1, encode(sha256(convert_to($2, 'utf8')), 'hex'), 'collection_reminder', $3, encode(sha256(convert_to($4, 'utf8')), 'hex'), 1, now())`,
     [orgId, `delivery-${tag}`, customerInvoiceId, `billing-${tag}@example.com`]
   );
+  await db.query("insert into collection_task_starts (org_id, starts_on) values ($1, '2026-10-13')", [orgId]);
   // What the workspace used: a model call for a decision, with its tokens and cost (0112).
   await db.query(
     "insert into usage_events (org_id, kind, action, provider, model, input_tokens, output_tokens, cost, cost_currency) values ($1, 'model_call', 'decision', 'anthropic', 'claude-test', 100, 20, 0.0006, 'USD')",

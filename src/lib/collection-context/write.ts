@@ -7,7 +7,7 @@ import { db } from "../dal";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { setReminders } from "../platform/pay-links";
 import { listMembers } from "../platform/members";
-import { APPROVALS, holdDayAllowed, MAX_DAYS_BETWEEN, taskOutcomes, type Approval, type CollectionPolicy, type TaskOutcome } from "./model";
+import { APPROVALS, holdDayAllowed, MAX_DAYS_BETWEEN, taskOutcomes, type Approval, type CollectionPolicy, type TaskOutcome, type TaskReason } from "./model";
 import { notThereYet, readPolicies, TASK_COLUMNS, toTask, type TaskRow } from "./read";
 import { COLLECTION_TASK_ACTIONS } from "./tasks";
 
@@ -145,11 +145,13 @@ export interface ResolveInput {
 /**
  * Resolves an open task, once (C6). An approval names the drafted reminder and a tone it offered; the agent sends it at
  * its next cycle, through every check. A hold names its last day. "No reminders" turns the invoice's reminders off. For
- * a broken promise, the promise is closed first, so reminders may go again (or after the hold).
+ * a broken promise, the promise is closed first, so reminders may go again (or after the hold); for a claim of payment
+ * nobody found within a week, the claim is closed as not received first, the same way.
  */
 export interface Resolved {
   customerName: string;
   invoiceId: string;
+  reason: TaskReason;
   outcome: TaskOutcome;
   holdUntil: string | null;
   approvedNumber: number | null;
@@ -194,9 +196,16 @@ export async function resolveCollectionTask(input: ResolveInput): Promise<Resolv
 
   // What the outcome does beyond the task, first: a task marked done whose effect failed would hold nothing.
   if (outcome === "no_reminder") await setReminders({ actorId: input.actorId, invoiceId: task.invoiceId, on: false });
-  if (task.reason === "promise_passed" && task.subjectKey.startsWith("promise:")) {
+  // The customer's request the task is about is closed first: a promise as reviewed, a claim nobody found as not received.
+  const request =
+    task.reason === "promise_passed" && task.subjectKey.startsWith("promise:")
+      ? { requestId: task.subjectKey.slice("promise:".length), outcome: "resolved" as const }
+      : task.reason === "claim_unverified" && task.subjectKey.startsWith("claim:")
+        ? { requestId: task.subjectKey.slice("claim:".length), outcome: "not_received" as const }
+        : null;
+  if (request) {
     try {
-      await closeCustomerRequest({ actorId: input.actorId, requestId: task.subjectKey.slice("promise:".length), outcome: "resolved" });
+      await closeCustomerRequest({ actorId: input.actorId, ...request });
     } catch (error) {
       // Closed already (by a person, or replaced by the customer): what the task needed is done.
       if (!(error instanceof CustomerRequestError && (error.code === "closed" || error.code === "not_found"))) throw error;
@@ -233,5 +242,5 @@ export async function resolveCollectionTask(input: ResolveInput): Promise<Resolv
       ...(approvedNumber !== null ? { reminder: { number: approvedNumber, tone: approvedTone } } : {}),
     },
   });
-  return { customerName, invoiceId: task.invoiceId, outcome, holdUntil, approvedNumber, approvedTone, startsCycle: outcome === "approved" || outcome === "resumed" };
+  return { customerName, invoiceId: task.invoiceId, reason: task.reason, outcome, holdUntil, approvedNumber, approvedTone, startsCycle: outcome === "approved" || outcome === "resumed" };
 }

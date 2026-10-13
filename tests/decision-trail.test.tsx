@@ -338,7 +338,7 @@ describe("a receivable's trail of what its customer said (customer portal P10)",
     ]);
     expect(steps[0].notes).toEqual([
       "· Its word, not a payment: the invoice stays open until the money arrives and is applied",
-      "· The agent's reminders wait until a person finds it or marks it not received",
+      "· The agent's reminders wait until a person finds it or marks it not received; finance is asked after 7 days",
     ]);
   });
 
@@ -349,6 +349,9 @@ describe("a receivable's trail of what its customer said (customer portal P10)",
       step(1302, "09:00:00", "agent", "collection_task_opened", { taskId: "t2", reason: "policy_ask_first" }),
       step(1303, "09:10:00", "human", "collection_task_resolved", { by: "u1", taskId: "t2", outcome: "approved", reminder: { number: 2, tone: "firm" } }),
       step(1304, "09:20:00", "agent", "ar_reminder_sent", { decisionMode: "person", tone: "firm", daysFromDue: 4, number: 2, to: "bi***@acme.example" }),
+      step(1305, "10:00:00", "agent", "collection_task_opened", { taskId: "t3", reason: "claim_unverified" }),
+      step(1306, "10:10:00", "human", "collection_task_resolved", { by: "u1", taskId: "t3", reason: "claim_unverified", outcome: "resumed" }),
+      step(1307, "10:20:00", "human", "collection_task_resolved", { by: "u1", taskId: "t4", reason: "claim_unverified", outcome: "held", holdUntil: "2026-10-30" }),
     ];
     const steps = invoiceTrail([...ASKED].reverse(), INVOICE);
     expect(steps.map((s) => s.text)).toEqual([
@@ -357,6 +360,9 @@ describe("a receivable's trail of what its customer said (customer portal P10)",
       "The agent asked a person before going on: the customer's rules say to ask first.",
       "A person approved reminder 2, firm.",
       "A person approved the reminder, and the agent sent it to the client by email, in a firm tone, 4 days after the due date.",
+      "The agent asked a person before going on: the customer says it paid, and the payment is still not found a week later.",
+      "A person marked the customer's claim of payment not received and let reminders go again.",
+      "A person marked the customer's claim of payment not received and held reminders until Oct 30.",
     ]);
   });
 });

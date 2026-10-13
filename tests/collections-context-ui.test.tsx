@@ -4,7 +4,7 @@ import { COLLECTION_INVOICES, COLLECTION_SHOTS, COLLECTIONS_NOW, collectionsShot
 import { CollectionsPanel } from "@/components/collections/CollectionsPanel";
 import { NextAction } from "@/components/collections/NextAction";
 import { TooltipProvider } from "@/components/ui/Tooltip";
-import { inCollections } from "@/lib/collection-context/page";
+import { buildCollections, inCollections } from "@/lib/collection-context/page";
 import { maskAddress, promiseRecord } from "@/lib/collection-context/view";
 
 /**
@@ -104,6 +104,32 @@ describe("a receivable's next step", () => {
     expect(render(<NextAction orgSlug="northstar" view={hubspot} canWrite rulesAvailable />)).toContain("Open the deal in HubSpot");
     const promise = shot.views.get(COLLECTION_SHOTS.promise)!;
     expect(promise).toMatchObject({ action: "escalate", preview: null, task: { label: "Review a broken promise", outcomes: [{ value: "resumed" }, { value: "held" }] } });
+  });
+
+  it("shows a promise broken before tasks began here as the stage sees it: held for finance, with no task and nobody emailed", () => {
+    const bluebird = COLLECTION_INVOICES[1];
+    const view = buildCollections({
+      orgName: "Northstar Studio",
+      network: "arc-testnet",
+      origin: "https://www.vestiarion.xyz",
+      now: COLLECTIONS_NOW,
+      invoices: [bluebird],
+      billingEmails: new Map([[bluebird.counterparty_id, "ap@bluebird.example"]]),
+      owed: (invoice) => ({ owed: invoice.amount, received: 0 }),
+      links: new Map(),
+      said: new Map([[bluebird.id, [{ id: "p-1", kind: "promise", status: "open", outcome: null, promisedOn: "2026-10-16", paidOn: null, createdAt: "2026-10-09T07:55:00Z", closedAt: null }]]]),
+      policies: { available: true, latest: new Map() },
+      tasks: [],
+      crm: new Map(),
+      members: [],
+      focus: [],
+      sentThisWeek: 0,
+      promises: [],
+      href,
+      tasksFrom: "2026-10-18",
+    }).views.get(bluebird.id)!;
+    expect(view).toMatchObject({ action: "escalate", task: null });
+    expect(view.reasons).toContain("This was already so before the agent began asking people here on Oct 18, 2026: no task was opened and nobody was emailed.");
   });
 
   it("hides most of an address", () => {

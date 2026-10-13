@@ -152,6 +152,15 @@ export async function readTasks(orgDb: OrgDb, filter: { invoiceIds?: readonly st
   return { available: true, tasks: ((read.data ?? []) as TaskRow[]).map(toTask) };
 }
 
+/** The day tasks began in the workspace in scope; "" before the stage's first run, null before migration 0110 runs. */
+export async function readTaskStart(orgDb: OrgDb): Promise<string | null> {
+  const found = await orgDb.from("collection_task_starts").select("starts_on").limit(1);
+  if (notThereYet(found.error)) return null;
+  if (found.error) throw new Error(found.error.message);
+  const day = ((found.data ?? []) as Array<{ starts_on: string }>)[0]?.starts_on;
+  return day ? String(day).slice(0, 10) : "";
+}
+
 /** HubSpot's own address for a deal, in the account it lives in. */
 export const hubspotDealUrl = (portalId: string, dealId: string) =>
   /^\d{1,20}$/.test(portalId) && /^\d{1,30}$/.test(dealId) ? `https://app.hubspot.com/contacts/${portalId}/record/0-3/${dealId}` : null;

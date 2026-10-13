@@ -13,15 +13,16 @@ import { gate } from "./policy";
 /** What a resolution did, in the console's words. */
 export function resolvedWords(resolved: Resolved): string {
   const name = resolved.customerName;
+  const claim = resolved.reason === "claim_unverified" ? "The claim of payment is marked not received. " : "";
   switch (resolved.outcome) {
     case "approved":
       return `Approved reminder ${resolved.approvedNumber} to ${name}, ${resolved.approvedTone}. The agent sends it within a minute, if nothing changed since.`;
     case "held":
-      return `Reminders to ${name} about this invoice wait until ${dayWords(resolved.holdUntil as string)}.`;
+      return `${claim}Reminders to ${name} about this invoice wait until ${dayWords(resolved.holdUntil as string)}.`;
     case "no_reminder":
       return `Reminders to ${name} about this invoice are off.`;
     case "resumed":
-      return `The promise is closed. The agent's reminders to ${name} go again.`;
+      return `${claim || "The promise is closed. "}The agent's reminders to ${name} go again.`;
     default:
       return "Done.";
   }

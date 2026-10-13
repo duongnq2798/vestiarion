@@ -64,7 +64,7 @@ Owners and admins who keep **Email me when payments need a decision** on, and ac
 If you turned on the agent's reminders for an invoice, what the customer says holds them:
 
 - **A dispute** holds them until you resolve it.
-- **A claim of payment** holds them until you close it: **Payment found**, or **Not received**.
+- **A claim of payment** holds them until you close it: **Payment found**, or **Not received**. If it is still open 7 days after the customer made it, finance gets a task to check the payment, so a claim alone never stops reminders for good.
 - **A promise** holds them through the promised day. If the day passes with money still owed, no reminder goes by itself: finance gets a task to review the broken promise first, and the request's next step reads **Review it: the promised day passed**. See [Chase what customers owe](/docs/guides/collections).
 
 Closing a promise, a dispute or a claim lets them go again at once.

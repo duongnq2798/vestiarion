@@ -4,13 +4,14 @@ import { fromMicros, receivableBalance } from "../allocations/model";
 import { siteOrigin } from "../auth/env";
 import { proposeNextAction, taskStillNeeded, type CollectionPolicy, type CollectionTask, type Proposal, type ReceivableFacts } from "../collection-context/model";
 import { policyOf, readCrmContexts, readPolicies, readSaid, readTasks, tasksByInvoice } from "../collection-context/read";
-import { closeObsolete, notifyTasks, openTask } from "../collection-context/tasks";
+import { closeObsolete, notifyTasks, openTask, taskStart } from "../collection-context/tasks";
 import { boundTone, boundWaitDays, referenceReminder, reminderAllowed, whenInWords, type ReminderDecision, type ReminderTone, type SentReminder } from "../collections";
 import { currentOrgId } from "../context";
 import { utcDay } from "../copy";
+import { todayOf } from "../customer-portal/model";
 import { platformDb, unwrap, type OrgDb } from "../dal";
 import { receivableReminderEmail } from "../email/receivable-reminder";
-import { emailSettingsFromEnv, sendEmail, type EmailMessage, type SendResult } from "../email/send";
+import { emailSettingsFromEnv, IDEMPOTENCY_KEY_USED, sendEmail, type EmailMessage, type SendResult } from "../email/send";
 import { appendLedgerEntry } from "../ledger";
 import { sendOnce } from "../notifications/deliveries";
 import { maskEmail } from "../payment-notices";
@@ -35,16 +36,22 @@ import { agentPaused } from "./pause";
  * what the customer said on its statement, its rules, its HubSpot deal and the tasks a person resolved. The proposal
  * (`proposeNextAction`) decides whether a reminder may be weighed at all: a dispute, a payment the customer says it
  * made, a promise not yet due and a person's hold wait; a broken promise, rules that say ask first, a HubSpot deal's
- * owner before the first overdue reminder, a missing billing contact and reminders done each open a task for a person
- * instead, emailed to them once. A reminder a person approved goes at the tone they chose, without the model. Every
- * email has an idempotency key per recipient, event and rules' version, and the opt-out is read again right before it
- * is sent (I11). Before migrations 0109 and 0110 run, none of this holds anything and reminders go as before.
+ * owner before the first overdue reminder, a claim of payment nobody checked within a week, a missing billing contact
+ * and reminders done each open a task for a person instead, emailed to them once, each member at most once a cycle;
+ * what was already so before tasks began in the workspace opens none. A reminder a person approved goes at the tone
+ * they chose, without the model. Every email has an idempotency key per recipient and event, and the opt-out is read
+ * again right before it is sent (I11). Before migrations 0109 and 0110 run, none of this holds anything and reminders
+ * go as before.
+ *
+ * The context is read for at most `READ_BATCH` receivables a request, so no request's address grows too long.
  */
 
 /** The most reminders one cycle sends. */
 export const REMINDERS_PER_RUN = 10;
 /** The most open receivables one cycle reads. */
 export const OPEN_READ = 500;
+/** The most receivables whose context one request reads (`.in()` filters), so a request's address stays short. */
+export const READ_BATCH = 100;
 const DAY_MS = 86_400_000;
 /** What a customer said is read back this far, for a dispute resolved or a claim not received. */
 const SAID_DAYS = 90;
@@ -146,6 +153,47 @@ async function stillWanted(orgDb: OrgDb, invoice: InvoiceRow, decidedUnder: Coll
 
 const NONE = { data: [], error: null };
 
+type ClientRow = { id: string; name: string; notice_email: string | null };
+
+/** What the stage reads about a batch of open receivables, in as many requests whatever the batch's size. */
+async function readContext(orgDb: OrgDb, invoices: readonly InvoiceRow[], now: number) {
+  const invoiceIds = invoices.map((row) => row.id);
+  const clientIds = [...new Set(invoices.map((row) => row.counterparty_id))];
+  const saidSince = new Date(now - SAID_DAYS * DAY_MS).toISOString();
+  const [links, allocations, clients, reminders, settled, said, policies, tasks, crm] = await Promise.all([
+    orgDb.from("receivable_links").select("id, invoice_id, token_enc, reminders_on_at, revoked_at, reminder_deferred_until").in("invoice_id", invoiceIds),
+    // What is still owed on each, from the payments a person applied (0103); none before it runs.
+    readAllocationRows(orgDb, { invoiceIds }),
+    clientIds.length > 0 ? orgDb.from("counterparties").select("id, name, notice_email").in("id", clientIds) : Promise.resolve(NONE),
+    orgDb.from("ar_reminders").select("invoice_id, number, tone, sent_at").in("invoice_id", invoiceIds),
+    clientIds.length > 0
+      ? orgDb.from("invoices").select("counterparty_id, due_date, settled_at").eq("direction", "receivable").in("counterparty_id", clientIds).in("status", ["received", "paid"])
+      : Promise.resolve(NONE),
+    // What the customers said on their statements (0109): a dispute, a claim or a promise holds the reminders (C2, C3).
+    readSaid(orgDb, invoiceIds, saidSince),
+    readPolicies(orgDb, clientIds),
+    readTasks(orgDb, { invoiceIds }),
+    readCrmContexts(orgDb, invoices),
+  ]);
+  const owedBy = new Map(invoices.map((row) => [row.id, receivableBalance(toReceivableIn({ ...row, created_at: null }), allocations ?? [], false)] as const));
+  const sentBy = new Map<string, SentReminder[]>();
+  for (const row of unwrap(reminders) as Array<{ invoice_id: string; number: number; tone: ReminderTone; sent_at: string }>) {
+    sentBy.set(row.invoice_id, [...(sentBy.get(row.invoice_id) ?? []), { number: row.number, tone: row.tone, sentAt: row.sent_at }]);
+  }
+  return {
+    linkBy: new Map((unwrap(links) as LinkRow[]).map((link) => [link.invoice_id, link])),
+    owedBy,
+    clientById: new Map((unwrap(clients) as ClientRow[]).map((row) => [row.id, row])),
+    sentBy,
+    historyBy: histories(unwrap(settled) as Array<{ counterparty_id: string; due_date: string; settled_at: string | null }>),
+    said,
+    policies,
+    tasks,
+    tasksBy: tasksByInvoice(tasks.available ? tasks.tasks : []),
+    crm,
+  };
+}
+
 /**
  * The stage: every open receivable read with its context, its tasks kept, and, where a reminder may go, decided and,
  * when the decision is to send, emailed and signed. Quietly does nothing in a sandbox or while the agent is paused;
@@ -180,102 +228,83 @@ export async function sendReceivableReminders(
   // Tasks still open on receivables no longer open (paid, rejected) are closed below, as no longer needed.
   const openTasks = await readTasks(orgDb, { openOnly: true });
   if (invoices.length === 0 && (!openTasks.available || openTasks.tasks.length === 0)) return [];
-
-  const links =
-    invoiceIds.length > 0
-      ? (unwrap(await orgDb.from("receivable_links").select("id, invoice_id, token_enc, reminders_on_at, revoked_at, reminder_deferred_until").in("invoice_id", invoiceIds)) as LinkRow[])
-      : [];
-  // What is still owed on each, from the payments a person applied (0103); none before it runs.
-  const allocations = invoiceIds.length > 0 ? ((await readAllocationRows(orgDb, { invoiceIds })) ?? []) : [];
-  const owedBy = new Map(invoices.map((row) => [row.id, receivableBalance(toReceivableIn({ ...row, created_at: null }), allocations, false)] as const));
-  const clientIds = [...new Set(invoices.map((row) => row.counterparty_id))];
-  const saidSince = new Date(now - SAID_DAYS * DAY_MS).toISOString();
-  const [clients, reminders, settled, said, policies, tasks, crm] = await Promise.all([
-    clientIds.length > 0 ? orgDb.from("counterparties").select("id, name, notice_email").in("id", clientIds) : Promise.resolve(NONE),
-    invoiceIds.length > 0 ? orgDb.from("ar_reminders").select("invoice_id, number, tone, sent_at").in("invoice_id", invoiceIds) : Promise.resolve(NONE),
-    clientIds.length > 0
-      ? orgDb.from("invoices").select("counterparty_id, due_date, settled_at").eq("direction", "receivable").in("counterparty_id", clientIds).in("status", ["received", "paid"])
-      : Promise.resolve(NONE),
-    // What the customers said on their statements (0109): a dispute, a claim or a promise holds the reminders (C2, C3).
-    readSaid(orgDb, invoiceIds, saidSince),
-    readPolicies(orgDb, clientIds),
-    readTasks(orgDb, { invoiceIds }),
-    readCrmContexts(orgDb, invoices),
-  ]);
-  const clientById = new Map((unwrap(clients) as Array<{ id: string; name: string; notice_email: string | null }>).map((row) => [row.id, row]));
-  const sentBy = new Map<string, SentReminder[]>();
-  for (const row of unwrap(reminders) as Array<{ invoice_id: string; number: number; tone: ReminderTone; sent_at: string }>) {
-    sentBy.set(row.invoice_id, [...(sentBy.get(row.invoice_id) ?? []), { number: row.number, tone: row.tone, sentAt: row.sent_at }]);
-  }
-  const historyBy = histories(unwrap(settled) as Array<{ counterparty_id: string; due_date: string; settled_at: string | null }>);
-  const linkBy = new Map(links.map((link) => [link.invoice_id, link]));
-  const tasksBy = tasksByInvoice(tasks.available ? tasks.tasks : []);
+  // The day tasks began here, set by the first run: what was already so then opens none (no backlog is emailed).
+  const tasksFrom = openTasks.available ? ((await taskStart(orgDb, todayOf(now))) ?? todayOf(now)) : null;
 
   const origin = options.origin ?? siteOrigin();
   const lines: CycleLogLine[] = [];
   const opened: CollectionTask[] = [];
   const obsolete: string[] = [];
+  const customerNames = new Map<string, string>();
+  let tasksAvailable = openTasks.available;
   let sentCount = 0;
 
-  for (const invoice of invoices) {
-    const link = linkBy.get(invoice.id);
-    const client = clientById.get(invoice.counterparty_id);
-    const balance = owedBy.get(invoice.id);
-    const token = link && !link.revoked_at ? payLinkToken(orgId, link.token_enc, options.keys) : null;
-    const facts: ReceivableFacts = {
-      invoiceId: invoice.id,
-      customerId: invoice.counterparty_id,
-      customerName: client?.name ?? "The customer",
-      billingEmail: Boolean(client?.notice_email),
-      amount: Number(invoice.amount),
-      currency: invoice.currency === "EURC" ? "EURC" : "USDC",
-      dueDate: invoice.due_date,
-      status: invoice.status,
-      // What is still owed: the whole invoice, or the rest of a part-paid one.
-      owed: balance && balance.applied > 0 ? fromMicros(balance.outstanding) : Number(invoice.amount),
-      // What arrived from the client: its payments, never a fee a person recorded beside them.
-      received: balance && balance.applied > 0 ? fromMicros(balance.paid) : 0,
-      remindersOn: Boolean(link?.reminders_on_at) && !link?.revoked_at,
-      payLink: token !== null,
-      deferredUntil: link?.reminder_deferred_until ?? null,
-      sent: sentBy.get(invoice.id) ?? [],
-      said: said.get(invoice.id) ?? [],
-      policy: policyOf(policies, invoice.counterparty_id),
-      crm: crm.get(invoice.id) ?? null,
-      tasks: tasksBy.get(invoice.id) ?? [],
-    };
-    const proposal = proposeNextAction(facts, now);
+  for (let from = 0; from < invoices.length; from += READ_BATCH) {
+    const batch = invoices.slice(from, from + READ_BATCH);
+    const { linkBy, owedBy, clientById, sentBy, historyBy, said, policies, tasks, tasksBy, crm } = await readContext(orgDb, batch, now);
+    for (const row of clientById.values()) customerNames.set(row.id, row.name);
+    tasksAvailable = tasksAvailable && tasks.available;
+    for (const invoice of batch) {
+      const link = linkBy.get(invoice.id);
+      const client = clientById.get(invoice.counterparty_id);
+      const balance = owedBy.get(invoice.id);
+      const token = link && !link.revoked_at ? payLinkToken(orgId, link.token_enc, options.keys) : null;
+      const facts: ReceivableFacts = {
+        invoiceId: invoice.id,
+        customerId: invoice.counterparty_id,
+        customerName: client?.name ?? "The customer",
+        billingEmail: Boolean(client?.notice_email),
+        amount: Number(invoice.amount),
+        currency: invoice.currency === "EURC" ? "EURC" : "USDC",
+        dueDate: invoice.due_date,
+        status: invoice.status,
+        // What is still owed: the whole invoice, or the rest of a part-paid one.
+        owed: balance && balance.applied > 0 ? fromMicros(balance.outstanding) : Number(invoice.amount),
+        // What arrived from the client: its payments, never a fee a person recorded beside them.
+        received: balance && balance.applied > 0 ? fromMicros(balance.paid) : 0,
+        remindersOn: Boolean(link?.reminders_on_at) && !link?.revoked_at,
+        payLink: token !== null,
+        deferredUntil: link?.reminder_deferred_until ?? null,
+        sent: sentBy.get(invoice.id) ?? [],
+        said: said.get(invoice.id) ?? [],
+        policy: policyOf(policies, invoice.counterparty_id),
+        crm: crm.get(invoice.id) ?? null,
+        tasks: tasksBy.get(invoice.id) ?? [],
+        tasksFrom,
+      };
+      const proposal = proposeNextAction(facts, now);
 
-    // The task this receivable needs, opened once; any other open one is no longer needed.
-    if (tasks.available) {
-      if (proposal.need && !proposal.openTask) {
-        const task = await openTask(orgDb, facts, proposal, proposal.need);
-        if (task) {
-          opened.push(task);
-          lines.push({ domain: "ar", message: `${facts.customerName}: ${proposal.headline}. A person was asked` });
+      // The task this receivable needs, opened once; any other open one is no longer needed.
+      if (tasks.available) {
+        if (proposal.need && !proposal.openTask) {
+          const task = await openTask(orgDb, facts, proposal, proposal.need);
+          if (task) {
+            opened.push(task);
+            lines.push({ domain: "ar", message: `${facts.customerName}: ${proposal.headline}. A task waits for a person` });
+          }
         }
+        for (const task of facts.tasks) if (task.status === "open" && !taskStillNeeded(task, facts, proposal)) obsolete.push(task.id);
       }
-      for (const task of facts.tasks) if (task.status === "open" && !taskStillNeeded(task, facts, proposal)) obsolete.push(task.id);
-    }
 
-    if (proposal.action !== "remind" || (proposal.sends !== "agent" && proposal.sends !== "approved") || !proposal.reminder) continue;
-    if (!send || !link || !client?.notice_email || !token || sentCount >= REMINDERS_PER_RUN) continue;
-    const outcome = await remind({
-      orgDb,
-      orgName: org.name,
-      invoice,
-      link,
-      client: { name: client.name, email: client.notice_email },
-      token,
-      facts,
-      proposal,
-      history: historyBy.get(invoice.counterparty_id),
-      now,
-      origin,
-      send,
-    });
-    if (outcome.sent) sentCount += 1;
-    if (outcome.line) lines.push(outcome.line);
+      if (proposal.action !== "remind" || (proposal.sends !== "agent" && proposal.sends !== "approved") || !proposal.reminder) continue;
+      if (!send || !link || !client?.notice_email || !token || sentCount >= REMINDERS_PER_RUN) continue;
+      const outcome = await remind({
+        orgDb,
+        orgName: org.name,
+        invoice,
+        link,
+        client: { name: client.name, email: client.notice_email },
+        token,
+        facts,
+        proposal,
+        history: historyBy.get(invoice.counterparty_id),
+        now,
+        origin,
+        send,
+      });
+      if (outcome.sent) sentCount += 1;
+      if (outcome.line) lines.push(outcome.line);
+    }
   }
 
   if (openTasks.available && invoices.length < OPEN_READ) {
@@ -284,8 +313,9 @@ export async function sendReceivableReminders(
   }
   if (obsolete.length > 0) await closeObsolete(orgDb, [...new Set(obsolete)]);
 
-  // Tell the members each new task asks, and any not told yet: once each, their own email switch read again (I11).
-  if (send && tasks.available) {
+  // Tell the members each new task asks, and any not told yet: once each, at most one email a member this cycle, their
+  // own email switch read again (I11).
+  if (send && tasksAvailable) {
     const closed = new Set(obsolete);
     const seen = new Set<string>();
     const toTell = [...opened, ...(openTasks.available ? openTasks.tasks : [])].filter((task) => {
@@ -296,7 +326,7 @@ export async function sendReceivableReminders(
     const slug = org.slug ?? "";
     await notifyTasks(orgDb, toTell, {
       orgName: org.name,
-      customerNames: new Map([...clientById.values()].map((row) => [row.id, row.name])),
+      customerNames,
       linkOf: (task) => `${origin}/o/${slug}/invoices?tab=receivables&open=${task.invoiceId}`,
       origin,
       send,
@@ -429,7 +459,7 @@ async function remind(input: {
     network: workspaceNetwork().id,
     ...(partPaid ? { partPaid: { invoiced: AMOUNT.format(partPaid.invoiced), received: AMOUNT.format(partPaid.received) } } : {}),
   });
-  // Sent once per recipient, reminder and rules' version, the opt-out read again first (I11).
+  // Sent once per recipient and reminder, the opt-out read again first (I11).
   const result = await sendOnce(
     orgDb,
     { kind: "collection_reminder", subjectId: invoice.id, event: `reminder:${invoice.id}:${allowance.number}`, recipient: client.email, policyVersion: policy.version },
@@ -438,8 +468,14 @@ async function remind(input: {
     () => stillWanted(orgDb, invoice, policy)
   );
   if (!result.sent) {
-    // Sent by an earlier run under the same key: the claim stays, and nothing is sent again.
-    if (result.reason === "sent_before") return { sent: false, line: { domain: "ar", message: `Reminder ${allowance.number} to ${client.name} went out already; not sent again` } };
+    // Sent by an earlier run under the same key, or handed to Resend under it before: the claim stays, nothing is sent again.
+    if (result.reason === "sent_before") {
+      const message =
+        result.detail === IDEMPOTENCY_KEY_USED
+          ? `Reminder ${allowance.number} to ${client.name} was handed to Resend before under the same key; not sent again`
+          : `Reminder ${allowance.number} to ${client.name} went out already; not sent again`;
+      return { sent: false, line: { domain: "ar", message } };
+    }
     // Released, so the next cycle may try again.
     await orgDb.from("ar_reminders").delete().eq("id", claim.data.id);
     if (result.reason === "opted_out") return { sent: false, line: { domain: "ar", message: `Reminder to ${client.name} not sent: its reminders or its rules changed just before the send` } };

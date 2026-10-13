@@ -159,7 +159,26 @@ describe("the next action (C1–C6)", () => {
   it('"I paid" claim pending: waits for the payment to be verified', () => {
     const proposal = proposeNextAction(facts({ said: [said({ kind: "paid", paidOn: "2026-10-18" })] }), NOW);
     expect(proposal).toMatchObject({ action: "wait", heldBy: "paid_claim", need: null });
-    expect(proposal.reasons.at(-1)?.text).toBe("The customer says it paid on Oct 18, 2026. Reminders wait until you find the payment or mark it not received.");
+    expect(proposal.reasons.at(-1)?.text).toBe(
+      "The customer says it paid on Oct 18, 2026. Reminders wait until you find the payment or mark it not received; finance is asked to check it on Oct 24, 2026 if it is still open."
+    );
+  });
+
+  it('"I paid" claim nobody checked for a week: finance reviews it, and reminders wait for that person, never for ever on the claim alone', () => {
+    const claim = said({ id: "r-claim", kind: "paid", paidOn: "2026-10-10", createdAt: "2026-10-12T10:00:00Z" });
+    const proposal = proposeNextAction(facts({ said: [claim] }), NOW);
+    expect(proposal).toMatchObject({ action: "escalate", heldBy: "paid_claim", reminder: null, sends: null });
+    expect(proposal.headline).toBe("Escalate to finance: a payment to verify");
+    expect(proposal.need).toEqual({ kind: "finance_review", reason: "claim_unverified", subjectKey: "claim:r-claim", assignee: null });
+    expect(proposal.reasons.at(-1)?.text).toBe(
+      "The customer said on Oct 12, 2026 that it paid on Oct 10, 2026, and the payment is still not found after 7 days. Finance finds it or marks it not received before any reminder."
+    );
+    // Seven whole days after the day it was made, it still only waits.
+    expect(proposeNextAction(facts({ said: [{ ...claim, createdAt: "2026-10-13T23:00:00Z" }] }), NOW)).toMatchObject({ action: "wait", heldBy: "paid_claim", need: null });
+    // A review open already is the one asked; a dispute still outranks the claim.
+    const open = task({ kind: "finance_review", reason: "claim_unverified", subjectKey: "claim:r-claim", assignee: null });
+    expect(proposeNextAction(facts({ said: [claim], tasks: [open] }), NOW)).toMatchObject({ action: "escalate", openTask: open });
+    expect(proposeNextAction(facts({ said: [claim, said({ id: "d", kind: "dispute" })] }), NOW)).toMatchObject({ action: "wait", heldBy: "dispute" });
   });
 
   it("stale (no billing email): escalates to finance, or asks the account owner when the rules name one", () => {
@@ -254,6 +273,54 @@ describe("which open tasks are still needed (C6)", () => {
     expect(needed(hubspot)).toBe(true);
     expect(needed(hubspot, { sent: [reminder(1, "2026-10-16T09:00:00Z", "firm")] })).toBe(false);
   });
+
+  it("keeps a claim's review while the claim is open, and drops it once the payment is found or marked not received", () => {
+    const claim = said({ id: "r-claim", kind: "paid", paidOn: "2026-10-10", createdAt: "2026-10-12T10:00:00Z" });
+    const review = task({ kind: "finance_review", reason: "claim_unverified", subjectKey: "claim:r-claim" });
+    expect(needed(review, { said: [claim] })).toBe(true);
+    expect(needed(review, { said: [{ ...claim, status: "closed", outcome: "not_received", closedAt: "2026-10-20T08:00:00Z" }] })).toBe(false);
+  });
+});
+
+describe("tasks only from the day they began in the workspace (C6, at launch)", () => {
+  // Tasks began here two days before NOW: what was already so then is shown, and asks nobody.
+  const START = "2026-10-18";
+  const stale = (proposal: ReturnType<typeof proposeNextAction>) => codes(proposal).includes("before_tasks");
+
+  it("a promise broken before tasks began opens none, still holds reminders, and says so; one whose day is on or after the start opens one", () => {
+    const old = proposeNextAction(facts({ tasksFrom: START, said: [said({ id: "p-old", kind: "promise", promisedOn: "2026-10-17" })] }), NOW);
+    expect(old).toMatchObject({ action: "escalate", heldBy: "promise_passed", need: null, openTask: null });
+    expect(stale(old)).toBe(true);
+    const fresh = proposeNextAction(facts({ tasksFrom: START, said: [said({ id: "p-new", kind: "promise", promisedOn: "2026-10-18" })] }), NOW);
+    expect(fresh.need).toMatchObject({ reason: "promise_passed", subjectKey: "promise:p-new" });
+    expect(stale(fresh)).toBe(false);
+  });
+
+  it("a claim, reminders done and a missing contact already so before the start open none", () => {
+    const claim = said({ id: "c-old", kind: "paid", paidOn: "2026-10-01", createdAt: "2026-10-02T10:00:00Z" });
+    expect(proposeNextAction(facts({ tasksFrom: START, said: [claim] }), NOW)).toMatchObject({ action: "escalate", need: null });
+    const done = [reminder(1, "2026-10-12T09:00:00Z"), reminder(2, "2026-10-15T09:00:00Z", "firm"), reminder(3, "2026-10-17T09:00:00Z", "final")];
+    expect(proposeNextAction(facts({ tasksFrom: START, sent: done }), NOW)).toMatchObject({ action: "escalate", need: null });
+    // The final reminder went on the start day: a task.
+    const doneLater = [...done.slice(0, 2), reminder(3, "2026-10-18T09:00:00Z", "final")];
+    expect(proposeNextAction(facts({ tasksFrom: START, sent: doneLater }), NOW).need).toMatchObject({ reason: "reminders_done" });
+    expect(proposeNextAction(facts({ tasksFrom: START, billingEmail: false }), NOW)).toMatchObject({ action: "escalate", need: null });
+    expect(proposeNextAction(facts({ tasksFrom: START, billingEmail: false, dueDate: "2026-10-18" }), NOW).need).toMatchObject({ reason: "no_contact" });
+  });
+
+  it("a HubSpot receivable already overdue before the start is not held for its deal's owner: it is reminded as before", () => {
+    const crm = { provider: "hubspot" as const, dealExternalId: "9001", dealName: "Website rebuild", ownerId: "77", url: null };
+    expect(proposeNextAction(facts({ tasksFrom: START, crm }), NOW)).toMatchObject({ action: "remind", sends: "agent", need: null });
+    expect(proposeNextAction(facts({ tasksFrom: START, crm, dueDate: "2026-10-18" }), NOW).need).toMatchObject({ reason: "hubspot_owner" });
+  });
+
+  it("keeps a task opened before, whatever its day", () => {
+    const review = task({ kind: "finance_review", reason: "promise_passed", subjectKey: "promise:p-old" });
+    expect(proposeNextAction(facts({ tasksFrom: START, said: [said({ id: "p-old", kind: "promise", promisedOn: "2026-10-01" })], tasks: [review] }), NOW)).toMatchObject({
+      action: "escalate",
+      openTask: review,
+    });
+  });
 });
 
 describe("tasks and rules in words", () => {
@@ -261,6 +328,7 @@ describe("tasks and rules in words", () => {
     expect(taskOutcomes({ kind: "ask_owner", reason: "policy_ask_first" })).toEqual(["approved", "held", "no_reminder"]);
     expect(taskOutcomes({ kind: "finance_review", reason: "promise_passed" })).toEqual(["resumed", "held"]);
     expect(taskOutcomes({ kind: "finance_review", reason: "reminders_done" })).toEqual(["done"]);
+    expect(taskOutcomes({ kind: "finance_review", reason: "claim_unverified" })).toEqual(["resumed", "held"]);
   });
 
   it("says a resolution and the rules plainly", () => {

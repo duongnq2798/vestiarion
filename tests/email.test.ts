@@ -64,6 +64,21 @@ describe("sendEmail", () => {
     });
   });
 
+  it("sends its idempotency key, and says when Resend refuses it because the key went with another email (notifications I11)", async () => {
+    const key = "a".repeat(64);
+    let headers: Headers | undefined;
+    const used = await sendEmail({ ...message, idempotencyKey: key }, { apiKey: "re_test", from: "x <no-reply@vestiarion.xyz>" }, async (_url, init) => {
+      headers = new Headers(init?.headers);
+      return new Response(JSON.stringify({ name: "invalid_idempotent_request", message: "Same idempotency key used with a different request payload." }), { status: 409 });
+    });
+    expect(headers?.get("idempotency-key")).toBe(key);
+    expect(used).toEqual({ sent: false, reason: "idempotency_key_used" });
+    // Another request still in progress under the key is only a failure: the next cycle tries again.
+    const busy = await sendEmail({ ...message, idempotencyKey: key }, { apiKey: "re_test", from: "x <no-reply@vestiarion.xyz>" },
+      async () => new Response(JSON.stringify({ name: "concurrent_idempotent_requests" }), { status: 409 }));
+    expect(busy).toEqual({ sent: false, reason: "status 409" });
+  });
+
   it("reports a refused send without throwing", async () => {
     const result = await sendEmail(message, { apiKey: "re_test", from: "x <no-reply@vestiarion.xyz>" },
       async () => new Response(JSON.stringify({ message: "bad" }), { status: 422 }));

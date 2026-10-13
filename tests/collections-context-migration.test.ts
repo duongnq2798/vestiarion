@@ -141,6 +141,20 @@ describe("collection_tasks", () => {
     expect((await db.query("select 1 from public.collection_tasks where id = $1", [id])).rows).toHaveLength(0);
   });
 
+  it("takes a review of a claim of payment nobody checked", async () => {
+    const orgId = await createOrg(db, "tasks-claim");
+    const customer = await counterparty(orgId);
+    const invoiceId = await receivable(orgId, customer);
+    const inserted = await asTenant(db, orgId, (tx) =>
+      tx.query(
+        `insert into public.collection_tasks (org_id, invoice_id, counterparty_id, kind, reason, subject_key, proposal)
+         values ($1, $2, $3, 'finance_review', 'claim_unverified', 'claim:' || gen_random_uuid(), '{}'::jsonb) returning id`,
+        [orgId, invoiceId, customer]
+      )
+    );
+    expect(inserted.rows).toHaveLength(1);
+  });
+
   it("holds until a day", async () => {
     const orgId = await createOrg(db, "tasks-hold");
     const customer = await counterparty(orgId);
@@ -177,6 +191,31 @@ describe("notification_deliveries (I11)", () => {
     await expect(asTenant(db, orgId, (tx) => tx.query("delete from public.notification_deliveries where id = $1", [id]))).rejects.toThrow(/notification_sent/);
     await expect(asTenant(db, orgId, (tx) => tx.query("update public.notification_deliveries set idempotency_key = $2 where id = $1", [id, hex("c")]))).rejects.toThrow(/permission denied/);
     await expect(db.query("update public.notification_deliveries set recipient_hash = $2 where id = $1", [id, hex("c")])).rejects.toThrow(/notification_sent/);
+  });
+});
+
+describe("collection_task_starts", () => {
+  it("keeps the day tasks began in a workspace: set once, never changed, its own only", async () => {
+    const orgId = await createOrg(db, "task-starts");
+    const other = await createOrg(db, "task-starts-other");
+    const set = (day: string) =>
+      asTenant(db, orgId, (tx) => tx.query<{ starts_on: string }>("insert into public.collection_task_starts (org_id, starts_on) values ($1, $2) on conflict do nothing returning starts_on::text", [orgId, day]));
+    expect((await set("2026-10-13")).rows).toEqual([{ starts_on: "2026-10-13" }]);
+    // A second run at once sets nothing: the first day stays.
+    expect((await set("2026-10-14")).rows).toEqual([]);
+    await expect(asTenant(db, orgId, (tx) => tx.query("update public.collection_task_starts set starts_on = '2026-01-01' where org_id = $1", [orgId]))).rejects.toThrow(/permission denied/);
+    await expect(asTenant(db, orgId, (tx) => tx.query("delete from public.collection_task_starts where org_id = $1", [orgId]))).rejects.toThrow(/permission denied/);
+    await expect(asTenant(db, orgId, (tx) => tx.query("insert into public.collection_task_starts (org_id, starts_on) values ($1, '2026-10-13')", [other]))).rejects.toThrow(/row-level security/);
+    expect((await asTenant(db, other, (tx) => tx.query("select 1 from public.collection_task_starts"))).rows).toHaveLength(0);
+    await expect(asRole(db, "anon", (tx) => tx.query("select 1 from public.collection_task_starts"))).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe("the collections stage's read", () => {
+  it("has an index for a workspace's open receivables by due day", async () => {
+    const found = await db.query<{ indexdef: string }>("select indexdef from pg_indexes where tablename = 'invoices' and indexname = 'invoices_open_receivables_idx'");
+    expect(found.rows[0]?.indexdef).toMatch(/\(org_id, due_date\)/);
+    expect(found.rows[0]?.indexdef).toMatch(/receivable/);
   });
 });
 

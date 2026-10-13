@@ -21,8 +21,9 @@ import { addDays, dayOf, dayWords, money, todayOf, type RequestKind, type Reques
  *
  * The next action is one of: nothing (it is paid), wait, ask the account owner, remind the customer (with a tone), or
  * escalate to finance. A dispute, a payment the customer says it made, a promise not yet due and a hold a person chose
- * hold every reminder (C2); a promise whose day passed goes to finance, never to an automatic reminder (C3). Nothing here
- * sends: the collections stage acts on a proposal only through its own checks, and the receivable's card shows it.
+ * hold every reminder (C2); a promise whose day passed goes to finance, never to an automatic reminder (C3), and so does a
+ * claim of payment nobody found or refused within a week. Nothing here sends: the collections stage acts on a proposal
+ * only through its own checks, and the receivable's card shows it.
  */
 
 export type Approval = "auto" | "ask_first";
@@ -33,6 +34,11 @@ export type Channel = "email";
 export const MAX_DAYS_BETWEEN = 30;
 /** A hold a person chooses lasts at most this many days. */
 export const MAX_HOLD_DAYS = 60;
+/**
+ * A customer's claim that it paid holds reminders through this many days after the day it was made; after them, finance
+ * is asked to find the payment or mark it not received, so a claim alone never silences reminders for good (C2).
+ */
+export const CLAIM_REVIEW_DAYS = 7;
 
 /** A customer's collection rules, one version (C4). Version 0 is the default every customer has before any is saved. */
 export interface CollectionPolicy {
@@ -54,7 +60,7 @@ export function defaultPolicy(counterpartyId: string): CollectionPolicy {
 }
 
 export type TaskKind = "ask_owner" | "finance_review";
-export type TaskReason = "policy_ask_first" | "hubspot_owner" | "no_contact" | "promise_passed" | "reminders_done";
+export type TaskReason = "policy_ask_first" | "hubspot_owner" | "no_contact" | "promise_passed" | "claim_unverified" | "reminders_done";
 export type TaskOutcome = "approved" | "held" | "no_reminder" | "resumed" | "done" | "obsolete";
 
 /** What a task was opened for, kept with it so its card reads the same later. */
@@ -130,6 +136,12 @@ export interface ReceivableFacts {
   policy: CollectionPolicy;
   crm: CrmContext | null;
   tasks: readonly CollectionTask[];
+  /**
+   * The day tasks began in the workspace (`collection_task_starts`, set by the stage's first run). What was already so
+   * before it (a promise whose day was before it, a claim, reminders done, a missing contact, a receivable already
+   * overdue) is shown and opens no task, so turning tasks on emails nobody about a backlog. Absent: every need opens one.
+   */
+  tasksFrom?: string | null;
 }
 
 export type NextAction = "none" | "wait" | "ask_owner" | "remind" | "escalate";
@@ -146,6 +158,7 @@ export type ReasonCode =
   | "dispute"
   | "dispute_resolved"
   | "paid_claim"
+  | "claim_unverified"
   | "claim_not_received"
   | "promise"
   | "promise_passed"
@@ -160,7 +173,8 @@ export type ReasonCode =
   | "hubspot_owner"
   | "approved"
   | "reminders_off"
-  | "no_pay_link";
+  | "no_pay_link"
+  | "before_tasks";
 
 /** One fact the proposal rests on, in a sentence. */
 export interface Reason {
@@ -229,6 +243,16 @@ function sentAfterDue(sent: readonly SentReminder[], dueDate: string): boolean {
   return sent.some((reminder) => dayOf(reminder.sentAt) > due);
 }
 
+/** The day the agent's reminders were done: its final one, its last allowed one, or its last allowed day after the due date. */
+function doneOn(sent: readonly SentReminder[], dueDay: string): string {
+  const candidates = [addDays(dueDay, LATEST_DAYS_AFTER_DUE)];
+  const final = sent.find((reminder) => reminder.tone === "final");
+  if (final) candidates.push(dayOf(final.sentAt));
+  const byDay = sent.map((reminder) => dayOf(reminder.sentAt)).sort();
+  if (byDay.length >= MAX_REMINDERS) candidates.push(byDay[MAX_REMINDERS - 1]);
+  return candidates.sort()[0];
+}
+
 /** "Rules for Acme, version 3: ask first; at most firm; at least 7 days apart". */
 export function policyWords(policy: CollectionPolicy, customerName: string): string {
   if (policy.version === 0) return `${customerName} has no rules of its own: reminders follow the workspace's schedule.`;
@@ -268,11 +292,23 @@ export function proposeNextAction(facts: ReceivableFacts, now: number): Proposal
     ...more,
   });
   const taskFor = (subjectKey: string) => facts.tasks.find((task) => task.subjectKey === subjectKey);
-  /** A need, with its open task, or none when a person already resolved one for the same subject. */
-  const needing = (need: TaskNeed): Pick<Proposal, "need" | "openTask"> => {
+  /** Whether what is about `day` was already so before tasks began here: it is shown, and asks nobody. */
+  const beforeTasks = (day: string) => Boolean(facts.tasksFrom) && day < (facts.tasksFrom as string);
+  /**
+   * A need, with its open task; none when a person already resolved one for the same subject, or when what it is about
+   * (`day`) was before tasks began here and none was opened (said, so the card is plain about it).
+   */
+  const needing = (need: TaskNeed, day: string): Pick<Proposal, "need" | "openTask"> => {
     const task = taskFor(need.subjectKey);
-    if (!task) return { need, openTask: null };
-    return task.status === "open" ? { need, openTask: task } : { need: null, openTask: null };
+    if (task) return task.status === "open" ? { need, openTask: task } : { need: null, openTask: null };
+    if (beforeTasks(day)) {
+      reasons.push({
+        code: "before_tasks",
+        text: `This was already so before the agent began asking people here on ${dayWords(facts.tasksFrom as string)}: no task was opened and nobody was emailed.`,
+      });
+      return { need: null, openTask: null };
+    }
+    return { need, openTask: null };
   };
 
   // Paid, rejected, or nothing left to collect: no action (C1).
@@ -317,11 +353,23 @@ export function proposeNextAction(facts: ReceivableFacts, now: number): Proposal
   if (resolved) reasons.push({ code: "dispute_resolved", text: `The customer's dispute was resolved on ${dayWords(resolved.createdAt)}.` });
   const claim = latestOf(open.filter((said) => said.kind === "paid"));
   if (claim) {
+    // It waits through its last day; after it, finance is asked, so a claim alone never holds reminders for good.
+    const lastDay = addDays(dayOf(claim.createdAt), CLAIM_REVIEW_DAYS);
+    if (lastDay >= today) {
+      reasons.push({
+        code: "paid_claim",
+        text: `The customer says it paid on ${dayWords(claim.paidOn ?? claim.createdAt)}. Reminders wait until you find the payment or mark it not received; finance is asked to check it on ${dayWords(addDays(lastDay, 1))} if it is still open.`,
+      });
+      return result("wait", "Wait: a payment to verify", { heldBy: "paid_claim" });
+    }
     reasons.push({
-      code: "paid_claim",
-      text: `The customer says it paid on ${dayWords(claim.paidOn ?? claim.createdAt)}. Reminders wait until you find the payment or mark it not received.`,
+      code: "claim_unverified",
+      text: `The customer said on ${dayWords(claim.createdAt)} that it paid on ${dayWords(claim.paidOn ?? claim.createdAt)}, and the payment is still not found after ${days(CLAIM_REVIEW_DAYS)}. Finance finds it or marks it not received before any reminder.`,
     });
-    return result("wait", "Wait: a payment to verify", { heldBy: "paid_claim" });
+    return result("escalate", "Escalate to finance: a payment to verify", {
+      heldBy: "paid_claim",
+      ...needing({ kind: "finance_review", reason: "claim_unverified", subjectKey: `claim:${claim.id}`, assignee: null }, lastDay),
+    });
   }
   const notReceived = latestOf(facts.said.filter((said) => said.kind === "paid" && said.outcome === "not_received"));
   if (notReceived) reasons.push({ code: "claim_not_received", text: `A payment the customer said it made was marked not received on ${dayWords(notReceived.closedAt ?? notReceived.createdAt)}.` });
@@ -339,7 +387,7 @@ export function proposeNextAction(facts: ReceivableFacts, now: number): Proposal
     });
     return result("escalate", "Escalate to finance: a promise was broken", {
       heldBy: "promise_passed",
-      ...needing({ kind: "finance_review", reason: "promise_passed", subjectKey: `promise:${promise.id}`, assignee: null }),
+      ...needing({ kind: "finance_review", reason: "promise_passed", subjectKey: `promise:${promise.id}`, assignee: null }, promise.promisedOn as string),
     });
   }
 
@@ -376,7 +424,8 @@ export function proposeNextAction(facts: ReceivableFacts, now: number): Proposal
       return result("wait", "Follow up with the customer yourself");
     }
     // Only where the agent reminded the customer: an old receivable never reminded is the person's own to follow up.
-    const need = facts.sent.length > 0 ? needing({ kind: "finance_review", reason: "reminders_done", subjectKey: "reminders_done", assignee: null }) : { need: null, openTask: null };
+    const need =
+      facts.sent.length > 0 ? needing({ kind: "finance_review", reason: "reminders_done", subjectKey: "reminders_done", assignee: null }, doneOn(facts.sent, due)) : { need: null, openTask: null };
     return result("escalate", "Escalate to finance: reminders are done", need);
   }
 
@@ -387,7 +436,7 @@ export function proposeNextAction(facts: ReceivableFacts, now: number): Proposal
     const need: TaskNeed = owner
       ? { kind: "ask_owner", reason: "no_contact", subjectKey: "no_contact", assignee: owner }
       : { kind: "finance_review", reason: "no_contact", subjectKey: "no_contact", assignee: null };
-    return result(owner ? "ask_owner" : "escalate", owner ? "Ask the account owner for a billing contact" : "Escalate to finance: add a billing email", fromDue >= 0 && facts.remindersOn ? needing(need) : {});
+    return result(owner ? "ask_owner" : "escalate", owner ? "Ask the account owner for a billing contact" : "Escalate to finance: add a billing email", fromDue >= 0 && facts.remindersOn ? needing(need, due) : {});
   }
 
   // Cadence: code's bounds, spaced by the customer's rules.
@@ -442,22 +491,23 @@ export function proposeNextAction(facts: ReceivableFacts, now: number): Proposal
   if (policy.approval === "ask_first") {
     return result("ask_owner", "Ask the account owner before reminding", {
       reminder,
-      ...needing({ kind: "ask_owner", reason: "policy_ask_first", subjectKey: `policy:${policy.version}:reminder:${allowance.number}`, assignee: policy.accountOwner }),
+      ...needing({ kind: "ask_owner", reason: "policy_ask_first", subjectKey: `policy:${policy.version}:reminder:${allowance.number}`, assignee: policy.accountOwner }, today),
     });
   }
 
-  // Sold through HubSpot, with an owner: ask before the first overdue reminder whether sales gave more time (C5).
+  // Sold through HubSpot, with an owner: ask before the first overdue reminder whether sales gave more time (C5). One
+  // already overdue before tasks began here is reminded as before, never held for an ask nobody was told of.
   if (facts.crm?.ownerId && allowance.daysFromDue > 0 && !sentAfterDue(facts.sent, due)) {
     const subjectKey = `hubspot:${facts.crm.dealExternalId}`;
     const asked = taskFor(subjectKey);
-    if (!asked || asked.status === "open") {
+    if ((!asked && !beforeTasks(due)) || asked?.status === "open") {
       reasons.push({
         code: "hubspot_owner",
         text: `From the HubSpot deal ${facts.crm.dealName}, which has an owner: ask whether sales gave ${facts.customerName} more time before the first overdue reminder.`,
       });
       return result("ask_owner", "Ask the deal's owner before reminding", {
         reminder,
-        ...needing({ kind: "ask_owner", reason: "hubspot_owner", subjectKey, assignee: policy.accountOwner }),
+        ...needing({ kind: "ask_owner", reason: "hubspot_owner", subjectKey, assignee: policy.accountOwner }, due),
       });
     }
   }
@@ -468,7 +518,7 @@ export function proposeNextAction(facts: ReceivableFacts, now: number): Proposal
 /**
  * Whether an open task is still needed (C6), so the stage closes one that is not as obsolete. A task stays while what it
  * asks about can still come back: a broken promise while the promise is open, even under a dispute that holds
- * everything for now; a HubSpot ask until a reminder went after the due date; a missing contact until there is a
+ * everything for now, and an unchecked claim of payment while the claim is open; a HubSpot ask until a reminder went after the due date; a missing contact until there is a
  * billing email. An ask-first task goes when the rules or the reminder it drafted changed. None stays once the
  * receivable is paid or no longer open.
  */
@@ -483,6 +533,8 @@ export function taskStillNeeded(task: Pick<CollectionTask, "reason" | "subjectKe
       return !facts.billingEmail;
     case "promise_passed":
       return facts.said.some((said) => said.status === "open" && said.kind === "promise" && `promise:${said.id}` === task.subjectKey);
+    case "claim_unverified":
+      return facts.said.some((said) => said.status === "open" && said.kind === "paid" && `claim:${said.id}` === task.subjectKey);
     case "reminders_done":
       return true;
   }
@@ -495,6 +547,7 @@ export function taskOutcomes(task: Pick<CollectionTask, "kind" | "reason">): Tas
     case "hubspot_owner":
       return ["approved", "held", "no_reminder"];
     case "promise_passed":
+    case "claim_unverified":
       return ["resumed", "held"];
     case "no_contact":
     case "reminders_done":
@@ -507,6 +560,7 @@ export const TASK_LABELS: Record<TaskReason, string> = {
   hubspot_owner: "Ask the deal's owner",
   no_contact: "Find a billing contact",
   promise_passed: "Review a broken promise",
+  claim_unverified: "Check a payment the customer says it made",
   reminders_done: "Follow up: reminders are done",
 };
 
@@ -519,17 +573,26 @@ export const OUTCOME_LABELS: Record<TaskOutcome, string> = {
   obsolete: "No longer needed",
 };
 
+/** A claim's review says on its buttons that either answer marks the customer's claim not received. */
+const CLAIM_OUTCOME_LABELS: Partial<Record<TaskOutcome, string>> = { resumed: "Not received: let reminders go again", held: "Not received: hold reminders" };
+
+/** A way to resolve a task, on its button. */
+export function outcomeLabel(task: Pick<CollectionTask, "reason">, outcome: TaskOutcome): string {
+  return (task.reason === "claim_unverified" ? CLAIM_OUTCOME_LABELS[outcome] : undefined) ?? OUTCOME_LABELS[outcome];
+}
+
 /** What a resolved task did, in a sentence. */
-export function outcomeWords(task: Pick<CollectionTask, "outcome" | "holdUntil" | "approvedNumber" | "approvedTone">): string {
+export function outcomeWords(task: Pick<CollectionTask, "outcome" | "holdUntil" | "approvedNumber" | "approvedTone"> & { reason?: TaskReason }): string {
+  const claim = task.reason === "claim_unverified" ? "The claim of payment was marked not received. " : "";
   switch (task.outcome) {
     case "approved":
       return `Approved reminder ${task.approvedNumber ?? ""}${task.approvedTone ? `, ${task.approvedTone}` : ""}.`.replace(" ,", ",");
     case "held":
-      return task.holdUntil ? `Reminders held until ${dayWords(task.holdUntil)}.` : "Reminders held.";
+      return `${claim}${task.holdUntil ? `Reminders held until ${dayWords(task.holdUntil)}.` : "Reminders held."}`;
     case "no_reminder":
       return "Reminders turned off for this invoice.";
     case "resumed":
-      return "The promise was closed and reminders go again.";
+      return claim ? `${claim}Reminders go again.` : "The promise was closed and reminders go again.";
     case "done":
       return "Done.";
     case "obsolete":
