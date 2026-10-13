@@ -16,6 +16,7 @@ import { dealCashReadiness, depositLever, percentWords, tryDeposit, type CashDay
 import type { DealCost } from "@/lib/deals/costs";
 import type { DealFacts } from "@/lib/deals/lines";
 import { formatMinor } from "@/lib/deals/money";
+import type { DealTemplate } from "@/lib/deals/schedule";
 import { DealMoney } from "./DealMoney";
 
 const dayWords = (day: string) => utcDay(`${day}T00:00:00.000Z`);
@@ -103,6 +104,7 @@ function DayRow({ day, money }: { day: CashDay; money: (minor: number) => string
 export function DealCashReadiness({
   facts,
   digits,
+  template,
   costs,
   today,
   changeHref,
@@ -110,6 +112,8 @@ export function DealCashReadiness({
 }: {
   facts: DealFacts;
   digits: number;
+  /** How it is billed: a deposit is tried only on a deal that has one. */
+  template: DealTemplate;
   /** Null when the costs could not be read, or before they are set up. */
   costs: DealCost[] | null;
   today: string;
@@ -120,14 +124,16 @@ export function DealCashReadiness({
 }) {
   const money = (minor: number) => `${minor < 0 ? "−" : ""}${formatMinor(Math.abs(minor), digits)} ${facts.currency}`;
   const amount = (minor: number) => <DealMoney minor={minor} digits={digits} currency={facts.currency} />;
-  const lever = depositLever(facts);
+  const lever = depositLever(facts, template);
   const startPct = lever ? String(Number((lever.basisPoints / 100).toFixed(2))) : "";
   const [depositOn, setDepositOn] = useState(initialTry?.depositOn ?? lever?.invoiceOn ?? "");
   const [depositPct, setDepositPct] = useState(initialTry?.depositPct ?? startPct);
 
   const base = dealCashReadiness({ facts, digits }, costs, today);
   const trying = lever !== null && (depositOn !== lever.invoiceOn || depositPct.trim() !== startPct);
-  const tried = trying ? tryDeposit(facts, { depositOn: depositOn !== lever?.invoiceOn ? depositOn : undefined, depositPct: depositPct.trim() !== startPct ? depositPct : undefined }, digits) : null;
+  const tried = trying
+    ? tryDeposit(facts, { depositOn: depositOn !== lever?.invoiceOn ? depositOn : undefined, depositPct: depositPct.trim() !== startPct ? depositPct : undefined }, digits, template)
+    : null;
   const triedReadiness = tried?.ok ? dealCashReadiness({ facts: tried.facts, digits }, costs, today) : null;
   const shown = triedReadiness ?? base;
   const margin = shown.margin;
@@ -182,11 +188,11 @@ export function DealCashReadiness({
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h3 className="text-sm font-semibold text-ink">Try a different deposit</h3>
             <span className="text-xs text-ink-3">
-              {lever.label}: {money(lever.amountMinor)}, {percentWords(lever.basisPoints)}, invoiced {dayWords(lever.invoiceOn)}. Nothing here is saved.
+              {lever.label}: {money(lever.amountMinor)}, {percentWords(lever.basisPoints)}, invoiced {dayWords(lever.invoiceOn)}, due {facts.termsDays} {facts.termsDays === 1 ? "day" : "days"} later. Nothing here is saved.
             </span>
           </div>
-          <div className="grid gap-3 sm:grid-cols-[12rem_10rem_auto] sm:items-end">
-            <Field id="cash-try-day" label="Deposit invoiced on" error={tried && !tried.ok && tried.field === "depositOn" ? tried.message : undefined} description={`Due ${facts.termsDays} ${facts.termsDays === 1 ? "day" : "days"} later`}>
+          <div className="grid gap-3 sm:grid-cols-[12rem_10rem_minmax(0,1fr)] sm:items-end">
+            <Field id="cash-try-day" label="Deposit invoiced on" error={tried && !tried.ok && tried.field === "depositOn" ? tried.message : undefined}>
               <Input type="date" value={depositOn} min={facts.startsOn} onChange={(event) => setDepositOn(event.target.value)} />
             </Field>
             <Field id="cash-try-pct" label="Deposit (%)" error={tried && !tried.ok && tried.field === "depositPct" ? tried.message : undefined}>
@@ -202,7 +208,7 @@ export function DealCashReadiness({
                 setDepositOn(lever.invoiceOn);
                 setDepositPct(startPct);
               }}
-              className="sm:mb-0.5"
+              className="justify-self-start sm:mb-1"
             >
               Back to the deal
             </Button>

@@ -1105,7 +1105,8 @@ add up to the total exactly.
   works out `dealCashReadiness`: collected and paid out to date, then each day from today with money moving (charges
   in force on their due days, planned or expected, an overdue one today; costs as `costCount` says), the end-of-day
   position, the first short day and the deepest gap, and the estimated margin (`not_enough_data` with no cost);
-  `tryDeposit` moves the first planned charge's invoice day or sets its percent, taking the difference from the other
+  `tryDeposit` moves the deposit's invoice day or sets its percent (`depositLever`: the first charge in force, still
+  planned, of a deposit-and-balance deal or one whose first line is named a deposit), taking the difference from the other
   planned charges from the last, for a preview that is never saved; `cashBadge` is the deals list's badge. The deal page
   renders `DealCashReadiness` (a client component that recomputes as the levers move) and `DealCosts`; the Receivables
   tab reads every deal's costs once for the badges. Nothing that pays, decides or answers the API imports `cash.ts`
@@ -1497,10 +1498,11 @@ is logged with the workspace id and never fails the cycle or the tick.
 `escalateOverdueDecisions` (`src/lib/notifications/escalations.ts`, also from `runScheduledCycle`, in its own `try`)
 reads the waiting payables (`held`, `flagged`, `awaiting_info`) whose decide-by day (`decideByOf`) is before today,
 claims each in `approval_escalations` (migration 0108: unique per payable and decide-by day, an `ignoreDuplicates`
-upsert, so only the rows it inserted are news), and emails the digest's recipients, with the same switch and cap, one
-message each (`decisionEscalationEmail`, `src/lib/email/decision-escalation.ts`: names, amounts, statuses and days,
-escaped; no address). Once anyone received it the claims get `sent_at` and the counts, and the ledger records
-`decision_escalated` (`detail: { invoiceIds, decideBy, recipients, failed }`); when every send failed the claims are
+upsert, so only the rows it inserted are news), and emails the digest's recipients, with the same switch and cap, each
+one message about the payables they may act on (`whoCanAct` over every member, as the card names them;
+`decisionEscalationEmail`, `src/lib/email/decision-escalation.ts`: names, amounts, statuses and days, escaped; no
+address). A payable someone received keeps its claim with `sent_at` and the counts, and the ledger records
+`decision_escalated` (`detail: { invoiceIds, decideBy, recipients, failed }`); a payable nobody received has its claim
 deleted, so the next scheduled cycle tries again. Without email configured, or nobody to tell, nothing is claimed.
 Before 0108 runs nothing is escalated.
 

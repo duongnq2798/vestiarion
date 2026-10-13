@@ -62,7 +62,7 @@ function DealShot({ state }: { state: keyof typeof DEALS }) {
       <PageHead title={deal.title} sub={<DealHeadSub deal={deal} today={today} />} />
       <DealFigures deal={deal} today={today} />
       <div className="space-y-8">
-        <DealCashReadiness facts={deal.facts} digits={deal.digits} costs={costs} today={today} changeHref="#change" {...(state === "try" ? { initialTry: { depositOn: "2026-10-05" } } : {})} />
+        <DealCashReadiness facts={deal.facts} digits={deal.digits} template={deal.template} costs={costs} today={today} changeHref="#change" {...(state === "try" ? { initialTry: { depositOn: "2026-10-05" } } : {})} />
         <DealSchedule orgSlug={DESIGN_SLUG} deal={deal} today={today} canWrite />
         <DealCosts
           orgSlug={DESIGN_SLUG}

@@ -59,7 +59,8 @@ someone happens to look, and nobody is told when it waited too long.
   with "No document yet" are counted and named.
 
 **K7. Try a change: the deposit's day and percent, never saved.**
-- The deposit is the first charge in force by invoice day, while it is still planned. Moving its invoice day moves its
+- The deposit is the first charge in force by invoice day, while it is still planned, on a deal billed as a deposit
+  and balance or whose first line is named as a deposit; a retainer or milestones offer no try. Moving its invoice day moves its
   due day by the deal's terms. A new percent sets the deposit to that share of the deal's total, and the difference
   comes off (or goes onto) the other planned charges from the last backwards, as a lower price does (D8); a percent the
   planned lines cannot absorb is refused in words.
@@ -88,10 +89,10 @@ still ahead and earlier. Pure: `exceptionFacts` (`src/lib/exceptions.ts`).
 entered it unless they are the only one who may approve. Shown on the Approvals card and on the payable's row on Bills.
 
 **E4. One escalation email when the day passes undecided.** After a scheduled cycle, `escalateOverdueDecisions` claims
-`approval_escalations` (unique per payable and decide-by day) for each waiting payable past its day, emails the members
-who can decide and have notifications on (the digest's recipients and switch), one message each, and records
-`decision_escalated` with ids and counts. A claim whose every send failed is released, so the next cycle tries again; a
-claim kept is never sent again. A new decide-by day (the due date moved) is news again.
+`approval_escalations` (unique per payable and decide-by day) for each waiting payable past its day, and emails each
+member who has notifications on (the digest's recipients and switch) one message about the payables they can act on
+(E3), and records `decision_escalated` with ids and counts. A payable nobody received is released, so the next cycle
+tries again; a claim kept is never sent again. A new decide-by day (the due date moved) is news again.
 
 **E5. Every status keeps a next action.** Held, flagged and awaiting information: decide in Approvals, or add the
 missing detail; being decided: who is deciding; a viewer: who can act.

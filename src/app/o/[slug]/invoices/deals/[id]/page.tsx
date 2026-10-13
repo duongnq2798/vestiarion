@@ -126,7 +126,7 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
 
         <div className="space-y-8">
           {crm && <CrmDealChanges orgSlug={slug} dealId={facts.id} label={crm.label} words={crm.words} seen={crm.seen} canWrite={canWrite} active={facts.status === "active"} />}
-          <DealCashReadiness facts={facts} digits={digits} costs={costs} today={today} {...(canWrite && facts.status === "active" ? { changeHref: "#change" } : {})} />
+          <DealCashReadiness facts={facts} digits={digits} template={deal.template} costs={costs} today={today} {...(canWrite && facts.status === "active" ? { changeHref: "#change" } : {})} />
           <DealSchedule orgSlug={slug} deal={deal} today={today} canWrite={canWrite} />
           <DealCosts
             orgSlug={slug}

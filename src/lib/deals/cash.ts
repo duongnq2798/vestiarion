@@ -2,7 +2,7 @@ import { utcDay } from "../copy";
 import { costBasis, costCount, liveCosts, type DealCost } from "./costs";
 import { inForce, lineState, type DealFacts, type DealLine } from "./lines";
 import { formatMinor } from "./money";
-import { addDays, isDay, percentBasisPoints } from "./schedule";
+import { addDays, isDay, percentBasisPoints, type DealTemplate } from "./schedule";
 
 /**
  * A deal's cash readiness (docs/superpowers/specs/2026-10-13-deal-cash-readiness-design.md K4-K8): the money the deal's
@@ -223,7 +223,11 @@ export function percentWords(basisPoints: number): string {
   return `${Number((basisPoints / 100).toFixed(2))}%`;
 }
 
-/** The deposit a person may try moving (K7): the first charge in force by invoice day, while it is still planned. */
+/**
+ * The deposit a person may try moving (K7): the first charge in force by invoice day, while it is still planned, on a deal
+ * billed as a deposit and balance or whose first line is named as a deposit. A retainer's first month or a milestone is
+ * no deposit, and offers no try.
+ */
 export interface DepositLever {
   lineId: string;
   label: string;
@@ -236,13 +240,14 @@ export interface DepositLever {
   chargesMinor: number;
 }
 
-export function depositLever(facts: DealFacts): DepositLever | null {
+export function depositLever(facts: DealFacts, template?: DealTemplate): DepositLever | null {
   if (facts.status !== "active") return null;
   const charges = inForce(facts.lines)
     .filter((line) => line.kind === "charge")
     .sort(byDay);
   const first = charges[0];
-  if (!first || first.status !== "planned") return null;
+  if (!first || first.status !== "planned" || charges.length < 2) return null;
+  if (template !== "deposit" && !/\bdeposit\b/i.test(first.label)) return null;
   const chargesMinor = sum(charges.map((line) => line.amountMinor));
   return {
     lineId: first.id,
@@ -273,8 +278,8 @@ const latestDay = (startsOn: string) => `${Number(startsOn.slice(0, 4)) + 10}${s
  * saved. A new percent sets the deposit to that share of the charges in force, and the difference comes off the other
  * planned charges from the last backwards (a line taken to nothing drops out), or goes onto the last one.
  */
-export function tryDeposit(facts: DealFacts, change: DepositTry, digits: number): DepositTried {
-  const lever = depositLever(facts);
+export function tryDeposit(facts: DealFacts, change: DepositTry, digits: number, template?: DealTemplate): DepositTried {
+  const lever = depositLever(facts, template);
   const money = (minor: number) => `${formatMinor(minor, digits)} ${facts.currency}`;
   if (!lever) return { ok: true, facts, changes: [] };
   const lines = facts.lines.map((line) => ({ ...line }));

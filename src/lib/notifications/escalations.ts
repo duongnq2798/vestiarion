@@ -4,8 +4,9 @@ import { currentOrgId } from "../context";
 import { db, platformDb, unwrap } from "../dal";
 import { decisionEscalationEmail, type EscalationItem } from "../email/decision-escalation";
 import { emailSettingsFromEnv, sendEmail } from "../email/send";
-import { decideByOf } from "../exceptions";
+import { decideByOf, whoCanAct } from "../exceptions";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
+import { listMembers } from "../platform/members";
 import { decidingRecipients, DIGEST_MAX_RECIPIENTS, DIGEST_SEND_DEADLINE_MS } from "./waiting";
 
 /**
@@ -38,16 +39,17 @@ interface WaitingRow {
   due_date: string;
   early_pay_discount_pct: number | string | null;
   discount_due_date: string | null;
+  created_by: string | null;
   counterparties: { name: string } | null;
 }
 
 /** The waiting payables past their decide-by day today, each with that day. In scope. */
-export async function pastDecideBy(now: Date = new Date()): Promise<Array<{ id: string; item: EscalationItem }>> {
+export async function pastDecideBy(now: Date = new Date()): Promise<Array<{ id: string; createdBy: string | null; item: EscalationItem }>> {
   const today = now.toISOString().slice(0, 10);
   const rows = unwrap(
     await db()
       .from("invoices")
-      .select("id, amount, currency, status, due_date, early_pay_discount_pct, discount_due_date, counterparties(name)")
+      .select("id, amount, currency, status, due_date, early_pay_discount_pct, discount_due_date, created_by, counterparties(name)")
       .eq("direction", "payable")
       .in("status", WAITING)
       .order("due_date", { ascending: true })
@@ -58,6 +60,7 @@ export async function pastDecideBy(now: Date = new Date()): Promise<Array<{ id: 
     return [
       {
         id: row.id,
+        createdBy: row.created_by ?? null,
         item: {
           counterpartyName: row.counterparties?.name ?? "unknown",
           amount: Number(row.amount),
@@ -72,8 +75,10 @@ export async function pastDecideBy(now: Date = new Date()): Promise<Array<{ id: 
 }
 
 /**
- * Emails the members who can decide about every waiting payable that passed its decide-by day and was not escalated for
- * that day yet. Never throws: every failure is logged with the workspace id, and the counts so far are returned.
+ * Emails the members who can act on each waiting payable that passed its decide-by day and was not escalated for that day
+ * yet: each member with the email switch on is told about the payables they may decide (`whoCanAct`, as the Approvals card
+ * names them), in one message. A payable nobody received is released for the next cycle. Never throws: every failure is
+ * logged with the workspace id, and the counts so far are returned.
  */
 export async function escalateOverdueDecisions(now: Date = new Date()): Promise<{ sent: number; failed: number; invoices: number }> {
   const counts = { sent: 0, failed: 0, invoices: 0 };
@@ -115,8 +120,12 @@ export async function escalateOverdueDecisions(now: Date = new Date()): Promise<
 
     const org = unwrap(await platformDb().from("orgs").select("name, slug").eq("id", scopedOrgId).single()) as { name: string; slug: string };
     const origin = siteOrigin();
-    const email = decisionEscalationEmail({ orgName: org.name, items: fresh.map(({ item }) => item), link: `${origin}/o/${org.slug}/approvals`, origin });
+    const link = `${origin}/o/${org.slug}/approvals`;
+    // Who may act on each payable, from every member, so whoever entered one decides it only when nobody else may (E3).
+    const members = await listMembers(scopedOrgId);
+    const actingOn = new Map(fresh.map(({ id, createdBy }) => [id, new Set(whoCanAct(members, createdBy).map((member) => member.userId))]));
 
+    const delivered = new Set<string>();
     const deadline = Date.now() + DIGEST_SEND_DEADLINE_MS;
     for (const [index, recipient] of recipients.entries()) {
       if (Date.now() >= deadline) {
@@ -124,33 +133,43 @@ export async function escalateOverdueDecisions(now: Date = new Date()): Promise<
         console.warn("escalations: send deadline passed, not sent", recipients.length - index, scopedOrgId);
         break;
       }
+      const theirs = fresh.filter(({ id }) => actingOn.get(id)?.has(recipient.userId));
+      if (theirs.length === 0) continue;
+      const email = decisionEscalationEmail({ orgName: org.name, items: theirs.map(({ item }) => item), link, origin });
       const result = await sendEmail({ to: recipient.email, ...email }, settings);
-      if (result.sent) counts.sent += 1;
-      else {
+      if (result.sent) {
+        counts.sent += 1;
+        for (const { id } of theirs) delivered.add(id);
+      } else {
         counts.failed += 1;
         console.warn("escalations: send failed", scopedOrgId, result.reason);
       }
     }
 
-    const claimIds = claims.map((claim) => claim.id);
-    if (counts.sent === 0) {
-      // Nobody received it: the claims are released, and the next scheduled cycle tries again.
-      console.error("escalations: every send failed", counts.failed, scopedOrgId);
-      const released = await db().from("approval_escalations").delete().in("id", claimIds);
+    // A payable nobody received is released, and the next scheduled cycle tries again; the others are kept as sent.
+    const claimOf = new Map(claims.map((claim) => [claim.invoice_id, claim.id]));
+    const unsent = fresh.filter(({ id }) => !delivered.has(id)).map(({ id }) => claimOf.get(id) as string);
+    if (unsent.length > 0) {
+      if (counts.sent === 0) console.error("escalations: nobody received it", counts.failed, scopedOrgId);
+      const released = await db().from("approval_escalations").delete().in("id", unsent);
       if (released.error) console.error("escalations: claims not released", scopedOrgId, released.error.message);
-      return counts;
     }
-    const marked = await db().from("approval_escalations").update({ sent_at: new Date().toISOString(), recipients: counts.sent, failed: counts.failed }).in("id", claimIds);
+    const told = fresh.filter(({ id }) => delivered.has(id));
+    if (told.length === 0) return counts;
+    const marked = await db()
+      .from("approval_escalations")
+      .update({ sent_at: new Date().toISOString(), recipients: counts.sent, failed: counts.failed })
+      .in("id", told.map(({ id }) => claimOf.get(id) as string));
     if (marked.error) console.error("escalations: claims not marked sent", scopedOrgId, marked.error.message);
 
     await appendLedgerEntryBestEffort(scopedOrgId, {
       actor: "system",
       domain: "system",
       action: ESCALATION_ACTION,
-      summary: `Told ${counts.sent} member(s) that ${fresh.length} payment(s) passed the day to decide them`,
+      summary: `Told ${counts.sent} member(s) that ${told.length} payment(s) passed the day to decide them`,
       detail: {
-        invoiceIds: fresh.map(({ id }) => id),
-        decideBy: Object.fromEntries(fresh.map(({ id, item }) => [id, item.decideBy])),
+        invoiceIds: told.map(({ id }) => id),
+        decideBy: Object.fromEntries(told.map(({ id, item }) => [id, item.decideBy])),
         recipients: counts.sent,
         failed: counts.failed,
       },

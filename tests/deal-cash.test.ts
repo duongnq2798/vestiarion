@@ -232,9 +232,13 @@ describe("trying another deposit", () => {
     expect(tryDeposit(deal, { depositOn: "2026-09-01" }, 2)).toMatchObject({ ok: false, field: "depositOn" });
   });
 
-  it("offers no try once the deposit is invoiced, or on a cancelled deal", () => {
+  it("offers no try once the deposit is invoiced, on a cancelled deal, or where the first line is no deposit", () => {
     expect(depositLever(depositDeal({ deposit: { status: "released", releasedAt: "2026-10-13T00:00:00Z", releasedVia: "person" } }))).toBeNull();
     expect(depositLever({ ...depositDeal(), status: "cancelled" })).toBeNull();
+    // A retainer's first month is no deposit; a deal billed as deposit and balance has one, whatever its line is named.
+    const retainer = depositDeal({ deposit: { label: "November 2026" }, balance: { label: "December 2026" } });
+    expect(depositLever(retainer, "retainer")).toBeNull();
+    expect(depositLever(retainer, "deposit")).toMatchObject({ label: "November 2026" });
   });
 });
 

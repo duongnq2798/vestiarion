@@ -294,7 +294,10 @@ export default function ApprovalCard({
         ) : exception && exception.owners.length > 0 ? (
           // Someone who cannot decide it still has a next step: who to ask (deal cash readiness E5).
           <CardFooter>
-            <p className="text-sm text-ink-2">Ask {exception.owners[0]} to decide it{exception.owners.length > 1 ? `, or another of the ${exception.owners.length} people who can` : ""}.</p>
+            <p className="text-sm text-ink-2">
+              Ask {exception.owners.slice(0, 2).join(" or ")}
+              {exception.owners.length > 2 ? `, or one of the ${exception.owners.length - 2} others who can,` : ""} to decide it.
+            </p>
           </CardFooter>
         ) : null}
       </article>

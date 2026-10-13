@@ -207,7 +207,7 @@ function Row({ row, slugHref }: { row: BillRowItem; slugHref: (path: string) => 
           </ul>
         )}
         {below && <p className="mt-1 text-xs leading-5 text-ink-2">{below}</p>}
-        {row.exception && <ExceptionLine facts={row.exception} compact className="relative mt-1" />}
+        {row.exception && <ExceptionLine facts={row.exception} compact className="mt-1" />}
         {row.collection && <p className="mt-0.5 text-xs text-ink-2">{row.collection}</p>}
       </div>
       <div className="hidden @3xl:block @3xl:pt-0.5">

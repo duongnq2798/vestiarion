@@ -177,6 +177,22 @@ describe("escalateOverdueDecisions", () => {
     expect(JSON.parse(JSON.stringify(ledger.p_detail))).toEqual({ invoiceIds: [LATE], decideBy: { [LATE]: "2026-10-12" }, recipients: 1, failed: 0 });
   });
 
+  it("tells each member about the payables they may decide: not whoever entered one, while someone else may", async () => {
+    const ANA = "0b6c1c9e-4a4f-4a7e-9b1e-000000000001";
+    const members = [
+      { user_id: ANA, email: "ana@northstar.example", role: "owner", notify: true },
+      { user_id: "0b6c1c9e-4a4f-4a7e-9b1e-000000000002", email: "ben@northstar.example", role: "approver", notify: true },
+    ];
+    const { fake, run } = escalationFake({ members, invoices: [payable(LATE, { created_by: ANA }), payable(ON_TIME, { due_date: "2026-10-10T00:00:00Z" })] });
+    expect(await run(() => escalateOverdueDecisions(NOW))).toEqual({ sent: 2, failed: 0, invoices: 2 });
+    const sent = Object.fromEntries(sendEmailMock.mock.calls.map(([message]) => [(message as { to: string }).to, (message as { subject: string }).subject]));
+    expect(sent).toEqual({
+      "ana@northstar.example": "1 payment passed its decide-by day in Northstar",
+      "ben@northstar.example": "2 payments passed their decide-by day in Northstar",
+    });
+    expect(fake.requests.some((request) => request.path === "/rest/v1/approval_escalations" && request.method === "DELETE")).toBe(false);
+  });
+
   it("sends nothing for a payable escalated already for that day", async () => {
     const { fake, run } = escalationFake({ claimed: () => ({ body: [] }) });
     expect(await run(() => escalateOverdueDecisions(NOW))).toEqual({ sent: 0, failed: 0, invoices: 0 });
