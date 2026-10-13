@@ -1366,8 +1366,10 @@ the workspace, and a way to answer each open invoice, with no account and no wal
   database refuses more than 91). A trigger refuses a counterparty that is not a client. One link per customer is live
   (a partial unique index): `createPortalLink` stops the customer's live link, expired or not, then inserts the new one,
   then signs `customer_statement_shared`; a link whose entry cannot be written is stopped at once. Stopping sets
-  `revoked_at` first, then signs `customer_statement_unshared` best effort. The tenant role inserts links and may set
-  `revoked_at` and `revoked_by` alone (column grants); a trigger refuses to clear or move a revocation; nothing deletes one.
+  `revoked_at` first, then signs `customer_statement_unshared` best effort. The tenant role inserts a link's `org_id`,
+  `counterparty_id`, `token_hash`, `created_by` and `expires_at` only (so `created_at`, which bounds the expiry, is
+  always now) and may set `revoked_at` and `revoked_by` alone (column grants); a trigger refuses to clear or move a
+  revocation; nothing deletes one. No browser role may execute the 0109 trigger functions.
 - **The page.** `/statement/[token]` has no session. A malformed token is never looked up; a well-formed one is hashed
   and looked up by the service role's `customer_portal_by_token`, which answers null for a stopped or unknown link (or a
   deleted workspace or customer), only `{ expired, expiresAt }` for an expired one, and otherwise the link's workspace and
@@ -1392,7 +1394,17 @@ the workspace, and a way to answer each open invoice, with no account and no wal
   The customer's words go to `customer_request_messages` with the link they came by. Each is then signed in the
   workspace's ledger, best effort, with `via: "customer_portal"`, the ids, days and amount, and `textSha256` of the words
   rather than the words: `customer_said_paid`, `customer_promised_payment`, `customer_disputed_invoice`,
-  `customer_asked_pay_link`, `customer_wrote`. Nothing here changes an invoice: a claim of payment is the customer's word.
+  `customer_asked_pay_link`, `customer_wrote`. A pay link asked again with no words adds no row, so the function answers
+  `written: false` and nothing is signed or emailed for it (it would otherwise be free under the cap). Nothing here
+  changes an invoice: a claim of payment is the customer's word.
+- **Telling the members.** Each write also answers `notify`: the function stamps `customer_requests.notified_at` in the
+  same transaction when the request was not emailed about in the last hour (a claim or promise replacing one emailed
+  within the hour keeps its stamp), so a long thread sends one email an hour at most, across instances.
+  `notifyCustomerWrote` (`src/lib/notifications/customer-portal.ts`) then emails the owners and admins
+  (`records.write`) whose `memberships.notify_email` is on, at most ten, each their own message
+  (`src/lib/email/customer-wrote.ts`): who wrote, the kind, at most 140 characters of the words with links replaced,
+  and a link to From customers; never a reference, an amount or a day. The statement's Server Actions run it with
+  `after`, once the customer has its answer; it never throws.
 - **The tenant role** reads `customer_requests` and may close an open one (`status`, `outcome`, `closed_at`, `closed_by`;
   a trigger refuses to reopen or change a closed one, and a check needs an outcome and a day). It inserts into
   `customer_request_messages` only `org_id`, `request_id`, `body` and `by`, so `author` keeps its default, `business`, and

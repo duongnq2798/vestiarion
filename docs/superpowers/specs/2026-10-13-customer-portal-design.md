@@ -37,7 +37,12 @@ Pay links (#116) pay one invoice; nothing showed a customer everything it owes, 
 - **P8. Finance answers on the Receivables tab.** "From customers" lists open requests oldest first, each with the
   invoice, what is still owed, what was said, the thread and the next step: find the payment and apply it (Payment found
   / Not received), wait for a promise's day then follow up, reply then resolve a dispute, make the pay link asked for.
-  Waiting for review counts them; a receivable's row says what its customer said.
+  Waiting for review counts them; a receivable's row says what its customer said. When a customer writes, the owners and
+  admins whose email switch is on (Settings, Notifications) get an email: who wrote, the kind, at most 140 characters of
+  its words with links left out, and a link to From customers. At most one per request an hour: the service role's
+  functions stamp `notified_at` in the same transaction as the words, and a claim or promise replacing one emailed
+  within the hour keeps its stamp. A pay link asked again with no words writes nothing, so it is neither signed, counted
+  nor emailed.
 - **P9. Commands.** `customer_portal.share`, `customer_portal.unshare`, `customer_request.reply`,
   `customer_request.close`: `records.write`, console only.
 - **P10. The ledger.** Every step is signed in the workspace's ledger (`ar`): the customer's with `via:
@@ -51,15 +56,16 @@ Pay links (#116) pay one invoice; nothing showed a customer everything it owes, 
 
 - `customer_portal_links (id, org_id, counterparty_id, token_hash unique, created_by, created_at, expires_at, revoked_at,
   revoked_by)`; composite FK to the counterparty; trigger: a client only; one live per customer (partial unique index);
-  tenant: select, insert, update of `revoked_at`/`revoked_by` only, revoke once.
+  tenant: select, insert of `org_id`/`counterparty_id`/`token_hash`/`created_by`/`expires_at` only (so `created_at`, which
+  bounds the expiry, is always now), update of `revoked_at`/`revoked_by` only, revoke once.
 - `customer_requests (id, org_id, link_id, counterparty_id, invoice_id, kind, paid_on, reference, amount, promised_on,
-  status, outcome, created_at, closed_at, closed_by)`; composite FKs to link, counterparty and invoice; a trigger checks
+  status, outcome, created_at, closed_at, closed_by, notified_at)`; composite FKs to link, counterparty and invoice; a trigger checks
   they agree; tenant: select, update of `status`/`outcome`/`closed_at`/`closed_by` only, close once.
 - `customer_request_messages (id, org_id, request_id, author, body, link_id, by, created_at)`; tenant: select, insert of
   `org_id`/`request_id`/`body`/`by` only, so it writes replies and never the customer's words; append-only; none on a
   closed request.
 - `customer_portal_by_token`, `customer_portal_submit`, `customer_portal_reply`, `customer_portal_live_link`: security
-  definer, `search_path = ''`, the service role's alone.
+  definer, `search_path = ''`, the service role's alone. The trigger functions are no browser role's either.
 
 ## Screens
 
@@ -70,5 +76,5 @@ at 1440, 390 and 360 px (the workspace at 1440 and 390). No page scrolls sideway
 ## Not in this change
 
 - Emailing the statement link, or carrying it in the agent's reminders.
-- Telling members by email, Slack or Telegram when a customer writes (webhooks carry every entry).
+- Telling members on Slack or Telegram when a customer writes (webhooks carry every entry; email is above, P8).
 - A customer's identity: whoever holds the link speaks as the customer.

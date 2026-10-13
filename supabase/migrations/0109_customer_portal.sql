@@ -3,13 +3,15 @@
 -- customer_portal_links: one link a member made for one customer (a client counterparty) to see what it owes, kept only
 -- as the SHA-256 of its secret, with when it expires (at most about 90 days after it was made). One link per customer is
 -- live at a time: making a new one stops the old one first. Stopping sets revoked_at, once; the row is kept, never
--- deleted. The tenant role reads and adds links and may set revoked_at and revoked_by alone.
+-- deleted. The tenant role reads links, adds one with what a new link needs (never created_at, which bounds its expiry),
+-- and may set revoked_at and revoked_by alone.
 --
 -- customer_requests: what the customer said about one of its own open invoices through its link: that it paid (a claim,
 -- never a payment: nothing is settled by it), that it will pay on a date, that it disputes the invoice, or that it needs
 -- a pay link. Only the service role's customer_portal_submit adds one, after checking the link and that the invoice is
 -- the link's customer's. The tenant role reads them and may close an open one (status, outcome, closed_at, closed_by);
--- what the customer said never changes.
+-- what the customer said never changes. notified_at is when the workspace's members were last emailed about it, set
+-- only by the service role's functions: at most once an hour per request.
 --
 -- customer_request_messages: the thread under a request: the customer's words (added only through the service role's
 -- functions, with the link they came by) and the business's replies (added by the tenant role, which can write only a
@@ -116,6 +118,9 @@ create table if not exists public.customer_requests (
     references public.invoices (org_id, id) on delete cascade
 );
 
+-- When the workspace's members were last emailed about this request (the service role's functions alone set it).
+alter table public.customer_requests add column if not exists notified_at timestamptz;
+
 create index if not exists customer_requests_open on public.customer_requests (org_id, invoice_id) where status = 'open';
 create index if not exists customer_requests_link_created on public.customer_requests (link_id, created_at);
 create index if not exists customer_requests_counterparty on public.customer_requests (org_id, counterparty_id, created_at desc);
@@ -210,13 +215,22 @@ revoke all privileges on table public.customer_portal_links from anon, authentic
 revoke all privileges on table public.customer_requests from anon, authenticated, vestiarion_tenant;
 revoke all privileges on table public.customer_request_messages from anon, authenticated, vestiarion_tenant;
 
-grant select, insert on table public.customer_portal_links to vestiarion_tenant;
+grant select on table public.customer_portal_links to vestiarion_tenant;
+-- What a new link needs, and no more: created_at keeps its default, so the expiry check bounds the link from now.
+grant insert (org_id, counterparty_id, token_hash, created_by, expires_at) on table public.customer_portal_links to vestiarion_tenant;
 grant update (revoked_at, revoked_by) on table public.customer_portal_links to vestiarion_tenant;
 grant select on table public.customer_requests to vestiarion_tenant;
 grant update (status, outcome, closed_at, closed_by) on table public.customer_requests to vestiarion_tenant;
 grant select on table public.customer_request_messages to vestiarion_tenant;
 -- A reply, never the customer's words: author keeps its default, and link_id cannot be given.
 grant insert (org_id, request_id, body, by) on table public.customer_request_messages to vestiarion_tenant;
+
+-- The trigger functions run as triggers only: no browser role may call them.
+revoke all on function public.customer_portal_links_client() from public, anon, authenticated;
+revoke all on function public.customer_portal_links_revoke_once() from public, anon, authenticated;
+revoke all on function public.customer_requests_consistent() from public, anon, authenticated;
+revoke all on function public.customer_requests_close_once() from public, anon, authenticated;
+revoke all on function public.customer_request_messages_open() from public, anon, authenticated;
 
 grant all privileges on table public.customer_portal_links to service_role;
 grant all privileges on table public.customer_requests to service_role;
@@ -305,6 +319,9 @@ grant execute on function public.customer_portal_live_link(text) to service_role
 
 -- A customer's request about one of its own open invoices. A new claim of payment or promise replaces the open one of
 -- its kind on that invoice; a dispute or a pay link asked again while one is open adds to it instead of opening another.
+-- written says whether anything was added: a pay link asked again with no words adds nothing, so nothing is counted
+-- against the day's cap, and the caller signs and sends nothing for it either. notify says whether the workspace's
+-- members are to be emailed: at most once an hour per request, a claim or promise keeping the stamp of the one it replaced.
 create or replace function public.customer_portal_submit(
   p_token_hash  text,
   p_invoice_id  uuid,
@@ -329,6 +346,9 @@ declare
   v_superseded uuid[] := array[]::uuid[];
   v_message    text := nullif(btrim(coalesce(p_message, '')), '');
   v_reference  text := nullif(btrim(coalesce(p_reference, '')), '');
+  v_told       timestamptz;
+  v_written    boolean;
+  v_notify     boolean := false;
 begin
   v_link := public.customer_portal_live_link(p_token_hash);
 
@@ -388,13 +408,17 @@ begin
       )
       select coalesce(array_agg(id), array[]::uuid[]) into v_superseded from closed;
     end if;
-    insert into public.customer_requests (org_id, link_id, counterparty_id, invoice_id, kind, paid_on, reference, amount, promised_on)
+    -- A claim or promise replacing one the members were emailed about within the hour keeps that stamp.
+    select max(r.notified_at) into v_told from public.customer_requests r where r.id = any(v_superseded);
+    v_notify := v_told is null or v_told <= now() - interval '1 hour';
+    insert into public.customer_requests (org_id, link_id, counterparty_id, invoice_id, kind, paid_on, reference, amount, promised_on, notified_at)
     values (
       v_link.org_id, v_link.id, v_link.counterparty_id, v_invoice.id, p_kind,
       case when p_kind = 'paid' then p_paid_on end,
       case when p_kind = 'paid' then v_reference end,
       case when p_kind = 'paid' then p_amount end,
-      case when p_kind = 'promise' then p_promised_on end
+      case when p_kind = 'promise' then p_promised_on end,
+      case when v_notify then now() else v_told end
     )
     returning id into v_request;
   end if;
@@ -404,9 +428,20 @@ begin
     values (v_link.org_id, v_request, 'customer', v_message, v_link.id);
   end if;
 
+  -- A pay link asked again with no words wrote nothing; words added to an open request are emailed at most once an hour.
+  v_written := not v_appended or v_message is not null;
+  if v_appended and v_written then
+    update public.customer_requests r
+       set notified_at = now()
+     where r.id = v_request and (r.notified_at is null or r.notified_at <= now() - interval '1 hour');
+    v_notify := found;
+  end if;
+
   return jsonb_build_object(
     'requestId', v_request,
     'appended', v_appended,
+    'written', v_written,
+    'notify', v_notify,
     'superseded', to_jsonb(v_superseded),
     'orgId', v_link.org_id,
     'linkId', v_link.id,
@@ -419,7 +454,8 @@ $$;
 revoke all on function public.customer_portal_submit(text, uuid, text, date, text, numeric, date, text) from public, anon, authenticated, vestiarion_tenant;
 grant execute on function public.customer_portal_submit(text, uuid, text, date, text, numeric, date, text) to service_role;
 
--- The customer's message under one of its own open requests.
+-- The customer's message under one of its own open requests. notify, as for customer_portal_submit: at most once an
+-- hour per request.
 create or replace function public.customer_portal_reply(p_token_hash text, p_request_id uuid, p_message text)
 returns jsonb
 language plpgsql
@@ -431,6 +467,7 @@ declare
   v_request record;
   v_message text := nullif(btrim(coalesce(p_message, '')), '');
   v_id      uuid;
+  v_notify  boolean;
 begin
   v_link := public.customer_portal_live_link(p_token_hash);
   if v_message is null or char_length(v_message) > 2000 then
@@ -448,10 +485,15 @@ begin
   insert into public.customer_request_messages (org_id, request_id, author, body, link_id)
   values (v_link.org_id, v_request.id, 'customer', v_message, v_link.id)
   returning id into v_id;
+  update public.customer_requests r
+     set notified_at = now()
+   where r.id = v_request.id and (r.notified_at is null or r.notified_at <= now() - interval '1 hour');
+  v_notify := found;
   return jsonb_build_object(
     'messageId', v_id,
     'requestId', v_request.id,
     'kind', v_request.kind,
+    'notify', v_notify,
     'orgId', v_link.org_id,
     'linkId', v_link.id,
     'counterpartyId', v_link.counterparty_id,

@@ -26,12 +26,14 @@ const RAW_KEYS = `t1:${crypto.randomBytes(32).toString("base64")}`;
 const KEYS = parseMasterKeys(RAW_KEYS);
 const PAY_TOKEN = `vxr_${"P".repeat(43)}`;
 
-const { rpc, scopes, tenant, appendBestEffort } = vi.hoisted(() => ({
+const { rpc, scopes, tenant, appendBestEffort, notifyCustomerWrote } = vi.hoisted(() => ({
   rpc: vi.fn(),
   scopes: [] as string[],
   tenant: { reply: ((): unknown => ({ body: [] })) as (request: unknown) => unknown, requests: [] as unknown[] },
   appendBestEffort: vi.fn(async () => undefined),
+  notifyCustomerWrote: vi.fn(async () => 1),
 }));
+vi.mock("@/lib/notifications/customer-portal", () => ({ notifyCustomerWrote }));
 vi.mock("@/lib/dal", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/dal")>()),
   platformDb: () => ({ rpc }),
@@ -119,6 +121,7 @@ beforeEach(() => {
   tenant.requests.length = 0;
   tenant.reply = statementReplies as (request: unknown) => unknown;
   appendBestEffort.mockClear();
+  notifyCustomerWrote.mockClear();
 });
 
 const fresh = () => generateCustomerPortalToken();
@@ -266,6 +269,40 @@ describe("submitCustomerRequest", () => {
     expect(await submitCustomerRequest(fresh().token, { invoiceId: INVOICE, kind: "dispute", message: "And the second charge." }, NOW)).toEqual({ ok: true, message: "Added. Northstar Studio will reply here." });
     expect((appendBestEffort.mock.calls[1] as unknown as [string, { action: string }])[1].action).toBe("customer_wrote");
   });
+
+  it("signs and sends nothing for a pay link asked again with no words, which the database did not write or count", async () => {
+    // Otherwise each such ask, free under the cap of 30 a day, would be one more signed entry and email.
+    rpc.mockResolvedValueOnce({ data: LIVE, error: null }).mockResolvedValueOnce(done({ appended: true, written: false, notify: false }));
+    expect(await submitCustomerRequest(fresh().token, { invoiceId: INVOICE, kind: "pay_link" }, NOW)).toEqual({
+      ok: true,
+      message: "You asked already. Northstar Studio will add a pay link here.",
+    });
+    expect(appendBestEffort).not.toHaveBeenCalled();
+    expect(notifyCustomerWrote).not.toHaveBeenCalled();
+    expect(scopes).toEqual([]);
+  });
+
+  it("tells finance after the answer when the database says to, with the customer's words for a preview", async () => {
+    tenant.reply = (() => ({ body: [{ amount: "1250", currency: "USDC" }] })) as (request: unknown) => unknown;
+    const deferred: Array<() => Promise<unknown>> = [];
+    rpc.mockResolvedValueOnce({ data: LIVE, error: null }).mockResolvedValueOnce(done({ notify: true }));
+    const answer = await submitCustomerRequest(fresh().token, { invoiceId: INVOICE, kind: "dispute", message: "We were charged twice." }, NOW, { defer: (work) => deferred.push(work) });
+    expect(answer.ok).toBe(true);
+    expect(notifyCustomerWrote).not.toHaveBeenCalled();
+    expect(deferred).toHaveLength(1);
+    await deferred[0]();
+    expect(notifyCustomerWrote).toHaveBeenCalledWith({ orgId: ORG, customerName: "Acme Corp", kind: "dispute", more: false, words: "We were charged twice." });
+
+    // Told about this request within the hour: not again.
+    rpc.mockResolvedValueOnce({ data: LIVE, error: null }).mockResolvedValueOnce(done({ appended: true, notify: false }));
+    await submitCustomerRequest(fresh().token, { invoiceId: INVOICE, kind: "dispute", message: "And again." }, NOW, { defer: (work) => deferred.push(work) });
+    expect(deferred).toHaveLength(1);
+
+    // A claim of payment: the reference is never part of the preview.
+    rpc.mockResolvedValueOnce({ data: LIVE, error: null }).mockResolvedValueOnce(done({ notify: true }));
+    await submitCustomerRequest(fresh().token, PAID, NOW);
+    expect(notifyCustomerWrote).toHaveBeenLastCalledWith({ orgId: ORG, customerName: "Acme Corp", kind: "paid", more: false, words: "Sent from our bank." });
+  });
 });
 
 describe("replyAsCustomer", () => {
@@ -279,6 +316,16 @@ describe("replyAsCustomer", () => {
     const [, entry] = appendBestEffort.mock.calls[0] as unknown as [string, { action: string; detail: Record<string, unknown> }];
     expect(entry.action).toBe("customer_wrote");
     expect(JSON.stringify(entry)).not.toContain("bank statement");
+    // The database said finance was told about this request within the hour.
+    expect(notifyCustomerWrote).not.toHaveBeenCalled();
+  });
+
+  it("tells finance about more words under a request when the database says to", async () => {
+    rpc
+      .mockResolvedValueOnce({ data: LIVE, error: null })
+      .mockResolvedValueOnce({ data: { messageId: "6d0f3a2e-8c1b-4f7a-9e6d-0000000000f2", requestId: REQUEST, kind: "promise", notify: true, orgId: ORG, linkId: LINK, counterpartyId: CUSTOMER, invoiceId: INVOICE }, error: null });
+    expect(await replyAsCustomer(fresh().token, { requestId: REQUEST, message: "Paying on Friday instead." }, NOW)).toMatchObject({ ok: true });
+    expect(notifyCustomerWrote).toHaveBeenCalledWith({ orgId: ORG, customerName: "Acme Corp", kind: "promise", more: true, words: "Paying on Friday instead." });
   });
 
   it("refuses an empty message and a request that is not the customer's", async () => {

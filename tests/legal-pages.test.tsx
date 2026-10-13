@@ -12,6 +12,7 @@ import { loginRedirectFor, requiresSession } from "@/lib/auth/routes";
 import { FIRST_TOUCH_COOKIE, FIRST_TOUCH_DAYS, TAG_KEYS, TAG_MAX } from "@/lib/growth/attribution";
 import { CONSENT, MESSAGE_MAX } from "@/lib/growth/guided-setup";
 import { SANDBOX_IDLE_DAYS, WEBHOOK_DELIVERY_RETENTION_DAYS } from "@/lib/platform/cleanup";
+import { PREVIEW_MAX } from "@/lib/email/customer-wrote";
 import { publicOrigin } from "@/lib/public-origin";
 import { ISSUES_URL } from "@/lib/site-links";
 
@@ -142,6 +143,10 @@ describe("the privacy page", () => {
 
   it("states the webhook delivery retention as the code has it", () => {
     expect(body).toContain(`${WEBHOOK_DELIVERY_RETENTION_DAYS} days`);
+  });
+
+  it("states how much of a customer's words reach the members' email, as the code has it", () => {
+    expect(body).toContain(`at most ${PREVIEW_MAX} characters of what it wrote and no link it wrote`);
   });
 
   it("names every workspace role", () => {

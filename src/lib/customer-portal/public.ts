@@ -6,6 +6,7 @@ import { db, platformDb, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { networkOf, type Network } from "../network";
+import { notifyCustomerWrote, type CustomerWroteNotice } from "../notifications/customer-portal";
 import { payLinkToken, payLinkUrl } from "../platform/pay-links";
 import { takePortalActionToken } from "../rate-limit";
 import {
@@ -35,8 +36,21 @@ import { customerPortalTokenHash } from "./token";
  *
  * What the customer sends goes through `customer_portal_submit` and `customer_portal_reply`, which check the link, the
  * invoice's customer and a cap of 30 a day per link in one transaction; each is then a signed entry in the workspace's
- * ledger, best effort, with the SHA-256 of the customer's words rather than the words.
+ * ledger, best effort, with the SHA-256 of the customer's words rather than the words. A pay link asked again with no
+ * words writes nothing, so it is neither signed nor counted. When the database says so (at most once an hour per
+ * request), the owners and admins who get email are told, after the answer when the caller defers it.
  */
+
+export interface PortalSendOptions {
+  /** Runs work after the customer has its answer (`after` in a Server Action); without it, the work is awaited. */
+  defer?: (work: () => Promise<unknown>) => void;
+}
+
+async function tellMembers(notice: CustomerWroteNotice, options: PortalSendOptions): Promise<void> {
+  const work = () => notifyCustomerWrote(notice);
+  if (options.defer) options.defer(work);
+  else await work();
+}
 
 const foundSchema = z.union([
   z.object({ expired: z.literal(true), expiresAt: z.string() }),
@@ -210,6 +224,10 @@ async function liveLink(token: string, now: number): Promise<{ ok: true; link: L
 const submitted = z.object({
   requestId: z.string().uuid(),
   appended: z.boolean(),
+  /** False for a pay link asked again with no words: nothing was added. */
+  written: z.boolean().default(true),
+  /** Whether to email the members: at most once an hour per request (0109). */
+  notify: z.boolean().default(false),
   superseded: z.array(z.string()),
   orgId: z.string().uuid(),
   linkId: z.string().uuid(),
@@ -234,7 +252,7 @@ async function invoiceFacts(invoiceId: string): Promise<{ amount: number; curren
  * The customer tells the business something about one of its open invoices (P4): it paid, it will pay by a day, it
  * disputes it, or it needs a pay link. Nothing is settled by it.
  */
-export async function submitCustomerRequest(token: string, form: SubmissionForm, now: number = Date.now()): Promise<PortalAnswer> {
+export async function submitCustomerRequest(token: string, form: SubmissionForm, now: number = Date.now(), options: PortalSendOptions = {}): Promise<PortalAnswer> {
   const live = await liveLink(token, now);
   if (!live.ok) return live.answer;
   const read = readSubmission(form, todayOf(now));
@@ -259,6 +277,8 @@ export async function submitCustomerRequest(token: string, form: SubmissionForm,
     throw new Error(answer.error.message);
   }
   const done = submitted.parse(answer.data);
+  // A pay link asked again with no words: nothing was added, so nothing is signed or sent.
+  if (!done.written) return { ok: true, message: `You asked already. ${link.orgName} will add a pay link here.` };
 
   // Signed in the workspace's ledger, best effort: what the customer said is recorded already.
   try {
@@ -300,6 +320,9 @@ export async function submitCustomerRequest(token: string, form: SubmissionForm,
   } catch (error) {
     console.error("statement request not signed", error instanceof Error ? error.name : "unknown");
   }
+  if (done.notify) {
+    await tellMembers({ orgId: done.orgId, customerName: link.customerName, kind: submission.kind, more: done.appended, words: submission.message }, options);
+  }
 
   if (done.appended) return { ok: true, message: `Added. ${link.orgName} will reply here.` };
   return { ok: true, message: THANKS[submission.kind](link.orgName, submission.promisedOn ? dayWords(submission.promisedOn) : null) };
@@ -309,6 +332,7 @@ const replied = z.object({
   messageId: z.string().uuid(),
   requestId: z.string().uuid(),
   kind: z.enum(["paid", "promise", "dispute", "pay_link"]),
+  notify: z.boolean().default(false),
   orgId: z.string().uuid(),
   linkId: z.string().uuid(),
   counterpartyId: z.string().uuid(),
@@ -316,7 +340,12 @@ const replied = z.object({
 });
 
 /** The customer writes more under one of its own open requests (P5). */
-export async function replyAsCustomer(token: string, form: { requestId?: string; message?: string }, now: number = Date.now()): Promise<PortalAnswer> {
+export async function replyAsCustomer(
+  token: string,
+  form: { requestId?: string; message?: string },
+  now: number = Date.now(),
+  options: PortalSendOptions = {}
+): Promise<PortalAnswer> {
   const live = await liveLink(token, now);
   if (!live.ok) return live.answer;
   const requestId = (form.requestId ?? "").trim();
@@ -356,5 +385,6 @@ export async function replyAsCustomer(token: string, form: { requestId?: string;
   } catch (error) {
     console.error("statement message not signed", error instanceof Error ? error.name : "unknown");
   }
+  if (done.notify) await tellMembers({ orgId: done.orgId, customerName: live.link.customerName, kind: done.kind, more: true, words: message }, options);
   return { ok: true, message: `Sent. ${live.link.orgName} will reply here.` };
 }

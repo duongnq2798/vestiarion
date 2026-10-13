@@ -293,6 +293,10 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Disputed by the customer", "src/lib/customer-portal/view.ts"],
     ["This link has expired.", "src/app/statement/[token]/page.tsx"],
     ["This link has sent all it can for today. Try again tomorrow, or contact the business directly.", PORTAL_PUBLIC],
+    ["Email me when payments need a decision", "src/components/NotificationsPanel.tsx"],
+    ["Notifications", "src/components/NotificationsPanel.tsx"],
+    ["Open From customers", "src/lib/email/customer-wrote.ts"],
+    ["140", "src/lib/email/customer-wrote.ts", "PREVIEW_MAX = 140"],
   ],
   "guides/apply-payments": [
     ["Apply payments", APPLY_PAYMENTS],

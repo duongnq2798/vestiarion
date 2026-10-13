@@ -174,7 +174,9 @@ describe("the statement's actions", () => {
   it("hands the link and the form to the library, and refreshes the page only once it was sent", async () => {
     submitMock.mockResolvedValueOnce({ ok: true, message: "Sent." });
     expect(await submitStatementRequestAction({ ok: false, message: "" }, form({ token: TOKEN, invoiceId: INVOICE, kind: "dispute", message: "Wrong rate." }))).toEqual({ ok: true, message: "Sent." });
-    expect(submitMock).toHaveBeenCalledWith(TOKEN, { invoiceId: INVOICE, kind: "dispute", paidOn: "", reference: "", amount: "", promisedOn: "", message: "Wrong rate." });
+    expect(submitMock).toHaveBeenCalledWith(TOKEN, { invoiceId: INVOICE, kind: "dispute", paidOn: "", reference: "", amount: "", promisedOn: "", message: "Wrong rate." }, expect.any(Number), {
+      defer: expect.any(Function),
+    });
     expect(refreshMock).toHaveBeenCalledTimes(1);
     submitMock.mockResolvedValueOnce({ ok: false, field: "message", message: "Say what is wrong with this invoice." });
     await submitStatementRequestAction({ ok: false, message: "" }, form({ token: TOKEN, invoiceId: INVOICE, kind: "dispute" }));

@@ -138,6 +138,39 @@ describe("customer_portal_links (0109)", () => {
     }
   });
 
+  it("takes from the tenant only what a new link needs: never the day it was made", async () => {
+    // The expiry is bounded by created_at: a tenant that could write created_at could make a link that works for years.
+    const orgId = await createOrg(db, "portal-created-at");
+    const client = await customer(orgId);
+    await expect(
+      asTenant(db, orgId, (tx) =>
+        tx.query(
+          "insert into public.customer_portal_links (org_id, counterparty_id, token_hash, created_at, expires_at) values ($1, $2, $3, now() + interval '5 years', now() + interval '5 years 30 days')",
+          [orgId, client, nextHash()]
+        )
+      )
+    ).rejects.toThrow(/permission denied/);
+    const made = await asTenant(db, orgId, async (tx) =>
+      (await tx.query<{ id: string }>("insert into public.customer_portal_links (org_id, counterparty_id, token_hash, expires_at) values ($1, $2, $3, now() + interval '30 days') returning id", [orgId, client, nextHash()])).rows
+    );
+    expect(made).toHaveLength(1);
+  });
+
+  it("gives the browser roles no use of its trigger functions", async () => {
+    for (const fn of [
+      "customer_portal_links_client()",
+      "customer_portal_links_revoke_once()",
+      "customer_requests_consistent()",
+      "customer_requests_close_once()",
+      "customer_request_messages_open()",
+    ]) {
+      for (const role of ["anon", "authenticated"]) {
+        const granted = (await db.query<{ ok: boolean }>("select has_function_privilege($1, $2, 'execute') as ok", [role, `public.${fn}`])).rows[0].ok;
+        expect(granted, `${role} on ${fn}`).toBe(false);
+      }
+    }
+  });
+
   it("goes with its customer and its workspace", async () => {
     const orgId = await createOrg(db, "portal-cascade");
     const client = await customer(orgId);
@@ -239,6 +272,40 @@ describe("customer_portal_submit (0109)", () => {
 
     const ask = await submit(hash, invoiceId, { kind: "pay_link" });
     expect(await submit(hash, invoiceId, { kind: "pay_link" })).toMatchObject({ requestId: ask.requestId, appended: true });
+  });
+
+  it("says when asking again for a pay link wrote nothing, so nothing is signed or sent for it", async () => {
+    // A second ask with no words adds no row, so the cap of 30 a day never counts it: the caller must not sign it either.
+    const { invoiceId, hash } = await setUp("ask-again");
+    const ask = await submit(hash, invoiceId, { kind: "pay_link" });
+    expect(ask).toMatchObject({ appended: false, written: true });
+    const again = await submit(hash, invoiceId, { kind: "pay_link" });
+    expect(again).toMatchObject({ requestId: ask.requestId, appended: true, written: false, notify: false });
+    const withWords = await submit(hash, invoiceId, { kind: "pay_link", message: "Still waiting for it." });
+    expect(withWords).toMatchObject({ requestId: ask.requestId, appended: true, written: true });
+  });
+
+  it("asks for an email to finance at most once an hour per request", async () => {
+    const { invoiceId, hash } = await setUp("notify");
+    const dispute = await submit(hash, invoiceId, { kind: "dispute", message: "Wrong rate." });
+    expect(dispute).toMatchObject({ notify: true });
+    expect(await submit(hash, invoiceId, { kind: "dispute", message: "And the second charge." })).toMatchObject({ appended: true, notify: false });
+    expect(await reply(hash, String(dispute.requestId), "Here is the contract.")).toMatchObject({ notify: false });
+    await db.query("update public.customer_requests set notified_at = now() - interval '61 minutes' where id = $1", [dispute.requestId]);
+    expect(await reply(hash, String(dispute.requestId), "Any news?")).toMatchObject({ notify: true });
+    expect(await reply(hash, String(dispute.requestId), "Hello?")).toMatchObject({ notify: false });
+
+    // A claim that replaces one told about within the hour is not told again; one replacing an older one is.
+    const claim = await submit(hash, invoiceId, { kind: "paid", paidOn: today() });
+    expect(claim).toMatchObject({ notify: true });
+    const corrected = await submit(hash, invoiceId, { kind: "paid", paidOn: today(), reference: "WIRE-1" });
+    expect(corrected).toMatchObject({ superseded: [claim.requestId], notify: false });
+    await db.query("update public.customer_requests set notified_at = now() - interval '2 hours' where id = $1", [corrected.requestId]);
+    expect(await submit(hash, invoiceId, { kind: "paid", paidOn: today(), reference: "WIRE-2" })).toMatchObject({ superseded: [corrected.requestId], notify: true });
+
+    // The tenant role cannot move the stamp.
+    const orgId = (await db.query<{ org_id: string }>("select org_id from public.customer_requests where id = $1", [dispute.requestId])).rows[0].org_id;
+    await expect(asTenant(db, orgId, (tx) => tx.query("update public.customer_requests set notified_at = null where id = $1", [dispute.requestId]))).rejects.toThrow(/permission denied/);
   });
 
   it("refuses another customer's invoice, a payable, a closed invoice and an invoice of another workspace", async () => {

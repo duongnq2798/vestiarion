@@ -19,8 +19,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   pay link or asks for one, says it paid (with the day, a reference and the amount), promises a day, or disputes an
   invoice, and writes back and forth with you under it. A promise holds the agent's reminders through its day and a
   dispute until you resolve it. Everything customers say waits under **From customers** on the Receivables tab with the
-  next step; "Customer says paid" stays the customer's word until the money arrives and is applied. The page and the pay
-  page work on a phone: the amount and its currency stay in view, and every button is large enough to tap.
+  next step; "Customer says paid" stays the customer's word until the money arrives and is applied. Owners and admins
+  with email on are told when a customer writes, with a short preview and a link, at most once an hour for each request.
+  The page and the pay page work on a phone: the amount and its currency stay in view, and every button is large enough
+  to tap.
 
 - **Xero, QuickBooks Online and HubSpot on the landing page and in Settings.** "Built on, and works with" lists them
   beside Arc, Circle, Slack, Telegram and npm, each with its mark, what it does and its guide; their Settings cards and
