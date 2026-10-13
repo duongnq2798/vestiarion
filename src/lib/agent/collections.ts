@@ -347,6 +347,7 @@ async function remind(input: {
     agreedWithReference = null;
   } else {
     const decided = await decide<ReminderDecision>({
+      purpose: "reminder",
       systemPrompt: SYSTEM_PROMPT,
       userPrompt: JSON.stringify({
         task: "Decide whether to email this client a reminder about the receivable now, or to wait, and in which tone.",
@@ -432,7 +433,7 @@ async function remind(input: {
   const result = await sendOnce(
     orgDb,
     { kind: "collection_reminder", subjectId: invoice.id, event: `reminder:${invoice.id}:${allowance.number}`, recipient: client.email, policyVersion: policy.version },
-    { to: client.email, ...email },
+    { to: client.email, ...email, meter: "reminder" },
     input.send,
     () => stillWanted(orgDb, invoice, policy)
   );

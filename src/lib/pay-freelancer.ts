@@ -183,7 +183,7 @@ export async function setUpFreelancerPayment(
       network: workspaceNetwork().id,
     });
     try {
-      emailed = (await sendEmail({ to: input.email, ...email })).sent;
+      emailed = (await sendEmail({ to: input.email, ...email, meter: "freelancer" })).sent;
     } catch (error) {
       console.error("pay a freelancer: link not emailed", error instanceof Error ? error.message : error);
       emailed = false;

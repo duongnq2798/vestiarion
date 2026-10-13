@@ -38,7 +38,7 @@ import { receivableLabel, type SuggestionRule } from "./suggest";
  * design.md L5, L7, L8, L12). Each reads what it needs now, plans the rows with the pure model, so a refusal reads in
  * plain words before anything is written, checks the signing key, writes every row in one insert (the trigger of 0103
  * holds the invariants however many people act at once), then signs one entry per row, best effort, as every recorded
- * change is. Every export runs inside an organization scope; who may do it (`records.write`) is the command's check.
+ * change is. Every export runs inside an organization scope; who may do it (`receivables.reconcile`) is the command's check.
  */
 
 export const ALLOCATION_ACTIONS = { payment: "ar_payment_applied", fee: "ar_fee_recorded", reversal: "ar_allocation_reversed" } as const;

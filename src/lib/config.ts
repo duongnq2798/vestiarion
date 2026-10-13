@@ -24,6 +24,7 @@
  */
 
 import type { NetworkProfile } from "./network";
+import { parseModelPrices } from "./usage/model";
 
 /** Whose wallets a workspace pays from (0030, 0082): its own Circle account, Vestiarion's hosted one, or its owner's own wallet. */
 export type WalletHost = "own" | "hosted" | "external";
@@ -110,6 +111,11 @@ export interface LlmConfig {
   anthropic?: { apiKey: string; model?: string };
   openai?: { apiKey: string; model?: string; baseUrl?: string };
   deepseek?: { apiKey: string; model?: string; baseUrl?: string };
+  /**
+   * US dollars per million tokens by model, from `AGENT_LLM_PRICES` (`model=input/output,...`), for the cost a workspace's
+   * usage shows (accountant console U2). Claude's list prices are built in; any other model's cost is unknown without it.
+   */
+  prices?: Record<string, { input: number; output: number }>;
 }
 
 export interface ComplianceConfig {
@@ -272,6 +278,9 @@ export function configFromEnv(env: EnvLike = process.env): VestiarionConfig {
       baseUrl: trimmed(env.DEEPSEEK_BASE_URL),
     };
   }
+
+  const prices = parseModelPrices(trimmed(env.AGENT_LLM_PRICES));
+  if (Object.keys(prices).length > 0) llm.prices = prices;
 
   const pinned = trimmed(env.AGENT_LLM_PROVIDER)?.toLowerCase();
   if (pinned) {

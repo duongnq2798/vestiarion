@@ -51,6 +51,10 @@ export default function PrivacyPage() {
           <li>API keys and webhook endpoints;</li>
           <li>the ledger: every decision the agent makes, with its reasoning, signed with Ed25519 and chained by hash;</li>
           <li>
+            what the workspace used each month: the agent&apos;s model calls with the tokens they used, Circle transfers, x402 purchases, emails and
+            connector syncs, each with its count and cost where known, and never who it was for or what an email said;
+          </li>
+          <li>
             what a customer sends on its statement link: the day it says it paid, a payment reference and an amount when it gives them, the day it
             promises to pay, and the messages it and the workspace&apos;s members write to each other about an invoice.
           </li>
@@ -77,7 +81,12 @@ export default function PrivacyPage() {
             <strong>admin</strong>: also adds records, runs and resumes the agent, and manages members, API keys and webhooks;
           </li>
           <li>
-            <strong>owner</strong>: also connects Circle, and can delete the workspace.
+            <strong>owner</strong>: also connects Circle, and can delete the workspace;
+          </li>
+          <li>
+            <strong>accountant</strong>: reads the workspace as a viewer does, and books payments in the workspace&apos;s accounting tool, applies money
+            received and answers customers, but decides no payment; an accountant&apos;s console lists only the workspaces they are a member of, and
+            stops listing one when they are removed from it.
           </li>
         </ul>
         <p>Nobody can approve an invoice they created. The service&apos;s own scheduled jobs, such as the agent&apos;s cycles and the cleanup below, work across workspaces.</p>

@@ -7,7 +7,8 @@ import { gate } from "./policy";
 
 /**
  * Applying money received to receivables, and reversing it (docs/superpowers/specs/2026-10-12-allocations-design.md
- * L10): records, entered as an invoice is, so `records.write` (owners and admins), from the console only. A refusal
+ * L10): the receivables bookkeeping, so `receivables.reconcile` (owners, admins and accountants; accountant console A1),
+ * from the console only. A refusal
  * from the model or the database reads in its own words; anything else is logged and said as a failure.
  */
 

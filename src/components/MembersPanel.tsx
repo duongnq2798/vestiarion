@@ -31,7 +31,7 @@ import { toast } from "@/components/ui/Toaster";
 import { MOTION } from "@/components/ui/tokens";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { orgHref } from "@/lib/auth/org-paths";
-import { canAssignRole, type OrgRole } from "@/lib/auth/roles";
+import { canAssignRole, ROLE_SUMMARIES, type OrgRole } from "@/lib/auth/roles";
 import { leaveWorkspaceDescription, removeMemberDescription } from "@/lib/member-keys";
 import type { Member, OpenInvitation } from "@/lib/platform/members";
 
@@ -151,7 +151,8 @@ function LeaveWorkspace({ orgSlug, userId, form, keyNames }: { orgSlug: string; 
   );
 }
 
-function InviteForm({ orgSlug, assignable }: { orgSlug: string; assignable: readonly OrgRole[] }) {
+function InviteForm({ orgSlug, assignable, initialRole }: { orgSlug: string; assignable: readonly OrgRole[]; initialRole?: OrgRole }) {
+  const [role, setRole] = useState<OrgRole>(initialRole && assignable.includes(initialRole) ? initialRole : assignable[assignable.length - 1]);
   const { state, formProps } = useActionForm(inviteMemberAction, INITIAL, {
     resetOnSuccess: true,
     // With a link to hand over, the full message sits beside the link; the toast only confirms.
@@ -168,7 +169,7 @@ function InviteForm({ orgSlug, assignable }: { orgSlug: string; assignable: read
             <Input name="email" type="email" required autoComplete="email" placeholder="name@company.com" />
           </Field>
           <Field id="invite-role" label="Role" className="sm:w-40">
-            <Select name="role" defaultValue={assignable[assignable.length - 1]}>
+            <Select name="role" value={role} onValueChange={(value) => setRole(value as OrgRole)}>
               <SelectTrigger className="capitalize">
                 <SelectValue />
               </SelectTrigger>
@@ -185,6 +186,11 @@ function InviteForm({ orgSlug, assignable }: { orgSlug: string; assignable: read
             Invite
           </SubmitButton>
         </div>
+        {/* What the chosen role may do, so an accountant is invited as one knowingly (accountant console A1). */}
+        <p className="text-xs leading-5 text-ink-2" aria-live="polite">
+          <span className="font-medium capitalize text-ink">{role}: </span>
+          {ROLE_SUMMARIES[role]}
+        </p>
         <FormMessage tone="error">{state.ok ? null : state.message}</FormMessage>
         {state.ok && state.link && (
           <div className="rounded-xl border border-agent-line bg-agent-soft p-3">
@@ -271,6 +277,7 @@ export default function MembersPanel({
   viewerRole,
   assignable,
   keyNames = {},
+  inviteRole,
 }: {
   orgSlug: string;
   members: Member[];
@@ -280,6 +287,8 @@ export default function MembersPanel({
   assignable: readonly OrgRole[];
   /** The names of the active API keys each member created, by user id: the viewer's own and those of members they may remove. */
   keyNames?: Record<string, string[]>;
+  /** The role the invitation form starts on; viewer when absent (the pictures of the accountant console start it on accountant). */
+  inviteRole?: OrgRole;
 }) {
   const isManager = assignable.length > 0;
   const router = useRouter();
@@ -352,7 +361,7 @@ export default function MembersPanel({
         <>
           <section aria-labelledby="invite-title">
             <SectionHeader id="invite-title" title="Invite someone" meta="the link is shown once, right after sending" />
-            <InviteForm orgSlug={orgSlug} assignable={assignable} />
+            <InviteForm orgSlug={orgSlug} assignable={assignable} initialRole={inviteRole} />
           </section>
           <OpenInvitations orgSlug={orgSlug} invitations={invitations} />
         </>

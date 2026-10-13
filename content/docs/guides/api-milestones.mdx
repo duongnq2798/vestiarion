@@ -6,7 +6,7 @@ A key adds records. It never verifies work, approves or pays. Every address wait
 
 An owner or an admin opens **Settings** and, under **API keys**, chooses **Create key**, ticks **Can also add records**, and creates it. In the list of keys, it shows **Read and write**. [Add invoices from your own system](/docs/guides/api-invoices#1-create-a-read-and-write-key) walks through this step.
 
-The key adds records as the person who created it, for as long as they can. If they leave the workspace, the key is revoked. If an owner moves them to approver or viewer, the key still reads, and each write answers `403 forbidden`: "This key's issuer can no longer add records in this workspace."
+The key adds records as the person who created it, for as long as they can. If they leave the workspace, the key is revoked. If an owner moves them to approver, accountant or viewer, the key still reads, and each write answers `403 forbidden`: "This key's issuer can no longer add records in this workspace."
 
 ## 2. Add the contributor
 

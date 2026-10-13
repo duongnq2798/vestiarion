@@ -89,7 +89,7 @@ function ArcLine({ row }: { row: BookingRowView }) {
 
 /**
  * To book in Xero (docs/superpowers/specs/2026-10-12-accounting-writeback-design.md W6, W10): each payment made on Arc
- * for a bill brought in from the tool, as the change it makes there, for an owner or admin to approve. Nothing is
+ * for a bill brought in from the tool, as the change it makes there, for an owner, admin or accountant to approve. Nothing is
  * written to the tool until they do; each ticked booking goes with the fingerprint of what this page shows, and the
  * server refuses it as stale if anything changed since. Below, the bookings done, and those never booked, with why.
  */
@@ -209,7 +209,7 @@ export function AccountingBookings({
               <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.ok ? null : state.message}</FormMessage>
             </form>
           ) : (
-            <p className="text-sm text-ink-3">An owner or admin approves bookings in {label}.</p>
+            <p className="text-sm text-ink-3">An owner, admin or accountant approves bookings in {label}.</p>
           ))}
         {done.length > 0 && (
           <div className="space-y-1 border-t border-line pt-4">

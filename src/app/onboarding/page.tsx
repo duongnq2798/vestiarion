@@ -108,6 +108,18 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
           {memberships.length ? (
             <>
               <p className="mt-2 text-[0.9375rem] text-ink-2">Choose a workspace to continue. You can switch at any time from the navigation.</p>
+              {/* Someone in several workspaces, or an accountant in one, sees what needs attention across them (accountant console A4). */}
+              {(memberships.length > 1 || memberships.some((membership) => membership.role === "accountant")) && (
+                <Card asChild interactive tone="agent" className="mt-6">
+                  <Link href="/accountant" className="group flex items-center gap-3 px-4 py-3.5 text-ink">
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[0.9375rem] font-medium">Accountant console</span>
+                      <span className="mt-0.5 block text-xs text-ink-3">What needs attention across all your workspaces, in one queue.</span>
+                    </span>
+                    <ChevronRight aria-hidden className="size-4 shrink-0 text-ink-3 transition-transform duration-150 ease-standard group-hover:translate-x-0.5 group-hover:text-agent" />
+                  </Link>
+                </Card>
+              )}
               {split && <h2 className="mt-8 font-mono text-xs font-semibold uppercase tracking-[0.11em] text-ink-3">Recent</h2>}
               <WorkspaceList workspaces={split ? workspaces.slice(0, RECENT) : workspaces} markFirst={workspaces.length > 1} className={split ? "mt-3" : "mt-6"} />
               {split && (

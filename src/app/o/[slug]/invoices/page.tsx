@@ -162,13 +162,15 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     const raw = await searchParams;
     const query = readBillsQuery(raw);
     // Every tab: what the figures, the strip and the New forms need (B5).
-    const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, schedules, deciding, emailed, fromXero, fromQuickBooks, dealsRead, fromHubSpot] = await Promise.all([
+    const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, canReconcile, schedules, deciding, emailed, fromXero, fromQuickBooks, dealsRead, fromHubSpot] = await Promise.all([
       listInvoices(),
       listCounterparties(),
       listLedgerEntries(1),
       stats(),
       viewerCan(slug, "records.write"),
       viewerCan(slug, "approval.decide"),
+      // Applying received money and answering customers: an accountant does these too (accountant console A1).
+      viewerCan(slug, "receivables.reconcile"),
       // Best effort: a list that cannot be read hides its section, nothing else.
       listRecurringPayables().catch((error: unknown) => {
         console.error("invoices: recurring payments not loaded", error instanceof Error ? error.message : error);
@@ -396,7 +398,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       const link = payLinkFor(decision);
       if (!allocation || allocation.lines.length === 0 || !invoice) return link;
       const lines = (
-        <AllocationLines orgSlug={slug} network={network} view={allocation} label={receivableLabel({ memo: invoice.memo, dueDate: invoice.due_date })} canWrite={canWrite} />
+        <AllocationLines orgSlug={slug} network={network} view={allocation} label={receivableLabel({ memo: invoice.memo, dueDate: invoice.due_date })} canWrite={canReconcile} />
       );
       return link ? (
         <div className="space-y-4">
@@ -729,10 +731,10 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
           above: (
             <>
               {collections && <CollectionsPanel panel={collections.panel} available={collections.available} />}
-              <FromCustomers orgSlug={slug} items={customerItems} canWrite={canWrite} />
+              <FromCustomers orgSlug={slug} items={customerItems} canWrite={canReconcile} />
               {/* Before migration 0103 runs, receivables show as before, and say applying payments waits for it (allocations L11). */}
               {book && !book.available && receivableRows.length > 0 && <p className="text-xs text-ink-3">Applying payments is not set up on this deployment yet.</p>}
-              {toApply.length > 0 && receivableRows.length > 0 && <ApplyPayments orgSlug={slug} network={network} payments={toApply} canWrite={canWrite} />}
+              {toApply.length > 0 && receivableRows.length > 0 && <ApplyPayments orgSlug={slug} network={network} payments={toApply} canWrite={canReconcile} />}
             </>
           ),
           below: (

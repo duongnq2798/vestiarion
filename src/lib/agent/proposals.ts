@@ -249,6 +249,7 @@ export async function proposeLimitChanges(orgDb: OrgDb, now: Date = new Date()):
   for (const candidate of candidates) {
     const reference = referenceDecision(candidate);
     const { value, mode, agreedWithReference } = await decide<ProposalDecision>({
+      purpose: "proposal",
       systemPrompt: systemPrompt(workspaceNetwork().label),
       userPrompt: JSON.stringify({
         task: "Decide whether to propose raising this counterparty's payment limit, given what people approved above it.",

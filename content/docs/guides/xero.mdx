@@ -1,6 +1,6 @@
 Connect Xero, and the bills you approve there come into Vestiarion for you to review, without retyping them. Each bill goes through the same check as a bill list: duplicates, currency, the supplier. It becomes a payable only when you add it, and the agent then decides it as any other bill, with every guardrail.
 
-Vestiarion reads from Xero, and writes to it only the payments an owner or admin approves: each payment made on Arc for a bill brought in from Xero, booked against that bill. Approving a bill in Xero does not approve its payment in Vestiarion.
+Vestiarion reads from Xero, and writes to it only the payments an owner, admin or accountant approves: each payment made on Arc for a bill brought in from Xero, booked against that bill. Approving a bill in Xero does not approve its payment in Vestiarion.
 
 Keeping your bills in QuickBooks Online instead? [Bring them in from QuickBooks](/docs/guides/quickbooks): the same review list and the same check. A workspace can connect both.
 
@@ -16,7 +16,7 @@ Open **Settings**. Under **Xero**, choose **Connect Xero**.
 
 The connect page has the workspace you came from already picked (if you manage several, you can pick another) and says what Vestiarion does with Xero's data:
 
-- It reads the bills, suppliers and chart of accounts of the Xero organisation you pick. It writes to Xero only the payments an owner or admin approves: each payment made on Arc for a bill brought in from Xero, booked against that bill.
+- It reads the bills, suppliers and chart of accounts of the Xero organisation you pick. It writes to Xero only the payments an owner, admin or accountant approves: each payment made on Arc for a bill brought in from Xero, booked against that bill.
 - The bills you add are shown to the workspace's members and to its agent. The agent's model provider sees each bill's facts to decide on it, and may not train on them.
 - Vestiarion never uses Xero data to train or improve any AI model, and never passes it to anyone else without your workspace's say.
 
@@ -77,7 +77,7 @@ Until someone chooses, the card says "Not chosen yet. Nothing is booked to an ac
 
 ## 5. Book payments in Xero
 
-When a bill you added from Xero is paid on Arc, by the agent or by a person, and the payment is confirmed, Vestiarion drafts its booking in Xero: within 15 minutes, or at once with **Sync now**. Nothing is written to Xero until an owner or admin approves it.
+When a bill you added from Xero is paid on Arc, by the agent or by a person, and the payment is confirmed, Vestiarion drafts its booking in Xero: within 15 minutes, or at once with **Sync now**. Nothing is written to Xero until an owner, admin or accountant approves it. A connection made before Oct 13, 2026 agreed that only an owner or admin approves: there an accountant is told to ask one of them, or to have Xero reconnected so an accountant can. See [Work across clients as an accountant](/docs/guides/accountants).
 
 **A payment is only ever booked into books of the same reality.**
 

@@ -140,7 +140,7 @@ export async function notifyTasks(
         const result = await sendOnce(
           orgDb,
           { kind: "collection_task", subjectId: task.id, event: `task:${task.id}`, recipient: recipient.email, policyVersion: task.policyVersion },
-          { to: recipient.email, ...email },
+          { to: recipient.email, ...email, meter: "collection_task" },
           context.send,
           () => stillOn(orgId, recipient.userId)
         );

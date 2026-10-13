@@ -18,9 +18,10 @@ export const COMMAND_PERMISSIONS = {
   "payable.import_actuals": "records.write",
   // So is filling them in from a bank statement (bank statement B8).
   "payable.import_statement": "records.write",
-  // Applying money received to receivables, a fee and a reversal: records, entered as an invoice is (allocations L10).
-  "receivable.apply_payment": "records.write",
-  "receivable.reverse_allocation": "records.write",
+  // Applying money received to receivables, a fee and a reversal (allocations L10): the receivables bookkeeping, which
+  // an accountant does as well as an owner or admin (accountant console A1).
+  "receivable.apply_payment": "receivables.reconcile",
+  "receivable.reverse_allocation": "receivables.reconcile",
   // Moving a scheduled bill to the payment plan's day: a decision on when the agent pays, never a payment (payment plan P10).
   "payment_plan.approve": "approval.decide",
   "milestone.pay": "approval.decide",
@@ -66,15 +67,16 @@ export const COMMAND_PERMISSIONS = {
   "report.share": "report.share",
   "report.unshare": "report.share",
   "report.baseline": "org.administer",
-  // A customer's statement link, stopping one, and answering what a customer said through it: records on the
-  // receivables side, as a pay link is (customer portal P9).
+  // A customer's statement link, and stopping one: records on the receivables side, as a pay link is (customer portal
+  // P9). Answering or closing what a customer said through it is the receivables bookkeeping, an accountant's too
+  // (accountant console A1).
   "customer_portal.share": "records.write",
   "customer_portal.unshare": "records.write",
-  "customer_request.reply": "records.write",
-  "customer_request.close": "records.write",
+  "customer_request.reply": "receivables.reconcile",
+  "customer_request.close": "receivables.reconcile",
   // A customer's collection rules, and resolving what the collections stage asks a person (approve a reminder, hold
-  // reminders until a day, no reminders, let them go again): records on the receivables side, as turning reminders on
-  // is (collections context C4, C6).
+  // reminders until a day, no reminders, let them go again): they decide what the agent sends a customer, as turning
+  // reminders on does, so owners and admins only, never the accountant's bookkeeping (collections context C4, C6).
   "collection_policy.set": "records.write",
   "collection_task.resolve": "records.write",
 } as const satisfies Record<string, Permission>;

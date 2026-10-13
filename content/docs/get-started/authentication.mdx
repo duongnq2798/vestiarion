@@ -41,7 +41,7 @@ A key is read-only, or it reads and writes:
 
 A key whose scopes do not cover a route answers `403 forbidden`, as a read-only key does on a write.
 
-A write also needs the person who created the key to be able to add records now, which owners and admins can. If an owner moves them to approver or viewer, the key keeps reading, and each write answers `403 forbidden`: "This key's issuer can no longer add records in this workspace."
+A write also needs the person who created the key to be able to add records now, which owners and admins can. If an owner moves them to approver, accountant or viewer, the key keeps reading, and each write answers `403 forbidden`: "This key's issuer can no longer add records in this workspace."
 
 Write access adds records, and nothing more. A key never verifies work, approves, rejects or pays:
 

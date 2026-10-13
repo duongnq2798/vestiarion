@@ -77,7 +77,7 @@ export async function sendPaymentNotices(
   if (org.mode !== "live") return [];
   const settings = options.send ? null : emailSettingsFromEnv();
   if (!options.send && !settings) return [];
-  const send = options.send ?? ((message: EmailMessage) => sendEmail(message, settings));
+  const send = options.send ?? ((message: EmailMessage) => sendEmail({ ...message, meter: "payment_notice" }, settings));
   const now = options.now ?? Date.now();
 
   // Who wants notices at all, usually nobody: without them, no payment is read. The earliest time an address was set

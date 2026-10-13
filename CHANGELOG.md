@@ -23,6 +23,25 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   of an automatic reminder, and nothing a customer or HubSpot writes sends an email by itself. Every email goes once,
   even when it is retried, and turning reminders or emails off takes effect up to the moment of sending.
 
+- **An accountant role, and a console across your clients.** Invite an outside accountant or bookkeeper on Members with
+  the new accountant role: they read everything, book payments made on Arc in Xero, apply money received and answer
+  what customers say on their statement links, and decide no payment and change no treasury, limit, integration or
+  member. The invitation form says what each role may do. The accountant console (`/accountant`) lists every workspace
+  the person is a member of, how long its items have been open (under a day to over 30 days), and one queue across them:
+  payments waiting for a decision or past their decide-by day, payments to book, overdue receivables, customers who say
+  they paid or dispute an invoice, connector problems and limits reached, each opening the right page in its own
+  workspace. Each workspace has a month's hand-off to download, as CSV or JSON: its decisions, payments, bookings and
+  open items. The console counts items and never adds money across workspaces or currencies. Removing an accountant
+  takes the workspace off their console and their downloads at once. A Xero connection made before this release keeps
+  bookings with owners and admins until it is reconnected.
+
+- **Usage this month, in Settings.** Every member sees what the workspace used since the 1st: model calls with their
+  tokens and cost where the price is known, Circle transfers, x402 purchases, emails and connector syncs, each split by
+  what it was for, costs in their own currency. Below it, each limit (a sandbox's cycles a day, the agent's spending
+  limit, the payee history checks, invitations a day, a connector to reconnect) says where the workspace stands, what
+  stops when it is reached, and who acts. A limit that stopped something is said at the top, and in the accountant
+  console. It is a record, not a bill.
+
 - **A deal's costs and its cash readiness.** On a deal's page, enter what it will cost (what, for whom, how much, the
   day it leaves, and whether a document backs it yet) and link each cost to the bill or milestone it became, which then
   counts in its place, once. Cash readiness sets the schedule's money in against the costs day by day: collected and

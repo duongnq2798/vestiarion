@@ -2,6 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { ZodType } from "zod";
 import { currentConfig } from "../context";
 import type { LlmConfig } from "../config";
+import { modelCallCost } from "../usage/model";
+import { recordUsage } from "../usage/record";
 
 /**
  * Every "should the agent actually do this" question passes through here.
@@ -28,6 +30,23 @@ export interface DecideParams<T> {
   userPrompt: string;
   schema: ZodType<T>;
   fallback: () => T;
+  /**
+   * What the call is for, as the workspace's usage shows it (accountant console U1): `payable`, `milestone`, `treasury`,
+   * `proposal`, `reminder`, `extraction`, `chat`. Defaults to `decision`.
+   */
+  purpose?: string;
+}
+
+/** What a provider said a call used: the model that answered and its tokens, when the provider reported them. */
+export interface CallUsage {
+  model: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+}
+
+interface CallReply {
+  text: string;
+  usage: CallUsage;
 }
 
 export interface DecideResult<T> {
@@ -105,7 +124,7 @@ export function extractJson(text: string): unknown {
   return JSON.parse(raw.slice(start, end + 1));
 }
 
-async function callAnthropic(params: DecideParams<unknown>, llm: LlmConfig): Promise<string> {
+async function callAnthropic(params: DecideParams<unknown>, llm: LlmConfig): Promise<CallReply> {
   const settings = llm.anthropic;
   if (!settings) throw new Error("Anthropic was selected but is not configured");
 
@@ -115,23 +134,25 @@ async function callAnthropic(params: DecideParams<unknown>, llm: LlmConfig): Pro
     anthropicClients.set(llm, client);
   }
 
+  const model = settings.model ?? "claude-sonnet-5";
   const response = await client.messages.create({
-    model: settings.model ?? "claude-sonnet-5",
+    model,
     max_tokens: 1024,
     system: params.systemPrompt,
     messages: [{ role: "user", content: params.userPrompt }],
   });
-  return response.content
+  const text = response.content
     .filter((block): block is Anthropic.TextBlock => block.type === "text")
     .map((block) => block.text)
     .join("\n");
+  return { text, usage: { model, inputTokens: response.usage?.input_tokens ?? null, outputTokens: response.usage?.output_tokens ?? null } };
 }
 
 /** OpenAI and DeepSeek both speak the OpenAI chat-completions dialect. */
 async function callOpenAICompatible(
   params: DecideParams<unknown>,
   config: { label: string; baseUrl: string; apiKey: string; model: string }
-): Promise<string> {
+): Promise<CallReply> {
   const response = await fetch(`${config.baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
@@ -156,13 +177,26 @@ async function callOpenAICompatible(
 
   const body = (await response.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
   };
+  const usage: CallUsage = { model: config.model, inputTokens: body.usage?.prompt_tokens ?? null, outputTokens: body.usage?.completion_tokens ?? null };
   const content = body.choices?.[0]?.message?.content;
-  if (!content) throw new Error(`${config.label} returned no content`);
-  return content;
+  if (!content) throw new CallFailed(`${config.label} returned no content`, usage);
+  return { text: content, usage };
 }
 
-function callOpenAI(params: DecideParams<unknown>, llm: LlmConfig): Promise<string> {
+/** A call the provider answered, and billed, without anything usable in it. */
+class CallFailed extends Error {
+  constructor(
+    message: string,
+    readonly usage: CallUsage
+  ) {
+    super(message);
+    this.name = "CallFailed";
+  }
+}
+
+function callOpenAI(params: DecideParams<unknown>, llm: LlmConfig): Promise<CallReply> {
   const settings = llm.openai;
   if (!settings) throw new Error("OpenAI was selected but is not configured");
   return callOpenAICompatible(params, {
@@ -173,7 +207,7 @@ function callOpenAI(params: DecideParams<unknown>, llm: LlmConfig): Promise<stri
   });
 }
 
-function callDeepSeek(params: DecideParams<unknown>, llm: LlmConfig): Promise<string> {
+function callDeepSeek(params: DecideParams<unknown>, llm: LlmConfig): Promise<CallReply> {
   const settings = llm.deepseek;
   if (!settings) throw new Error("DeepSeek was selected but is not configured");
   return callOpenAICompatible(params, {
@@ -186,7 +220,7 @@ function callDeepSeek(params: DecideParams<unknown>, llm: LlmConfig): Promise<st
 
 const CALLERS: Record<
   Exclude<DecisionMode, "heuristic">,
-  (params: DecideParams<unknown>, llm: LlmConfig) => Promise<string>
+  (params: DecideParams<unknown>, llm: LlmConfig) => Promise<CallReply>
 > = {
   anthropic: callAnthropic,
   openai: callOpenAI,
@@ -230,7 +264,33 @@ export async function decide<T>(params: DecideParams<T>): Promise<DecideResult<T
   }
 
   const caller = CALLERS[provider];
-  const call = (p: DecideParams<unknown>) => caller(p, llm);
+  const purpose = params.purpose && /^[a-z][a-z0-9_]{0,39}$/.test(params.purpose) ? params.purpose : "decision";
+  // Each call is metered in the workspace in scope, answered or not (accountant console U1): its tokens, and its cost
+  // where the model's price is known. A call that failed before the provider answered has no tokens to record.
+  const meter = (usage: CallUsage | null, ok: boolean) => {
+    const amount = usage ? modelCallCost(usage.model, { input: usage.inputTokens, output: usage.outputTokens }, llm.prices) : null;
+    return recordUsage({
+      kind: "model_call",
+      action: purpose,
+      provider,
+      model: usage?.model ?? null,
+      inputTokens: usage?.inputTokens ?? null,
+      outputTokens: usage?.outputTokens ?? null,
+      cost: amount === null ? null : { amount, currency: "USD" },
+      ok,
+    });
+  };
+  const call = async (p: DecideParams<unknown>): Promise<string> => {
+    let reply: CallReply;
+    try {
+      reply = await caller(p, llm);
+    } catch (error) {
+      await meter(error instanceof CallFailed ? error.usage : null, false);
+      throw error;
+    }
+    await meter(reply.usage, true);
+    return reply.text;
+  };
 
   try {
     const text = await call(params as DecideParams<unknown>);

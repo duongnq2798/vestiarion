@@ -10,7 +10,7 @@ import { inOrg } from "@/lib/dal/scope";
 
 /**
  * Approving bookings of payments made on Arc in the accounting tool, from Bills & receivables
- * (docs/superpowers/specs/2026-10-12-accounting-writeback-design.md W6): `accounting.book` (owner, admin). Each ticked
+ * (docs/superpowers/specs/2026-10-12-accounting-writeback-design.md W6): `accounting.book` (owner, admin, accountant). Each ticked
  * booking comes as `<booking id>:<fingerprint of what the page showed>`; the command works both out again on the server.
  */
 

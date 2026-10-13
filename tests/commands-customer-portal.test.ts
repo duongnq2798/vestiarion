@@ -10,8 +10,8 @@ import { fakeSupabase, orgTestContext } from "./support/fake-supabase";
 
 /**
  * A customer's statement link and what customers say through it, as commands
- * (docs/superpowers/specs/2026-10-13-customer-portal-design.md P9): owners and admins (`records.write`), from the console
- * only; the gate runs before anything is read, and a refusal reads in its own words.
+ * (docs/superpowers/specs/2026-10-13-customer-portal-design.md P9): owners and admins (`records.write`) make and stop links,
+ * and accountants answer too (`receivables.reconcile`), from the console only; the gate runs before anything is read, and a refusal reads in its own words.
  */
 
 const { mocks } = vi.hoisted(() => ({ mocks: { create: vi.fn(), stop: vi.fn(), reply: vi.fn(), close: vi.fn() } }));
@@ -38,9 +38,11 @@ beforeEach(() => {
 });
 
 describe("who may share a statement and answer a customer", () => {
-  it("is the permission that adds invoices, from the console only", () => {
+  it("shares a link with the permission that adds invoices, and answers with the receivables bookkeeping, from the console only", () => {
+    for (const name of ["customer_portal.share", "customer_portal.unshare"] as const) expect(COMMAND_PERMISSIONS[name]).toBe("records.write");
+    // An accountant answers customers, and makes no link (accountant console A1).
+    for (const name of ["customer_request.reply", "customer_request.close"] as const) expect(COMMAND_PERMISSIONS[name]).toBe("receivables.reconcile");
     for (const name of ["customer_portal.share", "customer_portal.unshare", "customer_request.reply", "customer_request.close"] as const) {
-      expect(COMMAND_PERMISSIONS[name]).toBe("records.write");
       for (const surface of ["api", "slack", "telegram", "github"] as const) expect(SURFACE_COMMANDS[surface]).not.toContain(name);
     }
   });
@@ -51,6 +53,15 @@ describe("who may share a statement and answer a customer", () => {
     expect(await run(() => replyToCustomerRequest(actor({ role }), { requestId: "r", body: "Hi" }))).toMatchObject({ ok: false, code: "forbidden" });
     expect(await run(() => closeCustomerRequestCommand(actor({ role }), { requestId: "r", outcome: "resolved" }))).toMatchObject({ ok: false, code: "forbidden" });
     for (const mock of Object.values(mocks)) expect(mock).not.toHaveBeenCalled();
+  });
+
+  it("lets an accountant answer a customer, and make or stop no link (accountant console A1)", async () => {
+    const accountant = actor({ role: "accountant" });
+    expect(await run(() => shareCustomerStatement(accountant, { counterpartyId: CUSTOMER, days: 30 }))).toMatchObject({ ok: false, code: "forbidden" });
+    expect(await run(() => stopCustomerStatement(accountant, { linkId: "l" }))).toMatchObject({ ok: false, code: "forbidden" });
+    expect(mocks.create).not.toHaveBeenCalled();
+    mocks.reply.mockResolvedValueOnce({ customerName: "Acme Corp" });
+    expect(await run(() => replyToCustomerRequest(accountant, { requestId: "r", body: "We found it, thank you." }))).toMatchObject({ ok: true });
   });
 
   it("refuses from another surface", async () => {

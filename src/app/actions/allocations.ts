@@ -33,7 +33,7 @@ const reverseSchema = z.object({ allocationId: z.string().uuid(), reason: z.stri
 const UNREADABLE = "That could not be read. Reload the page and try again.";
 
 export async function applyPaymentAction(orgSlug: string, input: unknown): Promise<{ ok: boolean; message: string }> {
-  const auth = await authorize(orgSlug, "records.write");
+  const auth = await authorize(orgSlug, "receivables.reconcile");
   if (!auth.ok) return { ok: false, message: auth.message };
   const parsed = applySchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: UNREADABLE };
@@ -41,7 +41,7 @@ export async function applyPaymentAction(orgSlug: string, input: unknown): Promi
 }
 
 export async function reverseAllocationAction(orgSlug: string, input: unknown): Promise<{ ok: boolean; message: string }> {
-  const auth = await authorize(orgSlug, "records.write");
+  const auth = await authorize(orgSlug, "receivables.reconcile");
   if (!auth.ok) return { ok: false, message: auth.message };
   const parsed = reverseSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: UNREADABLE };

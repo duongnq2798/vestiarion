@@ -48,6 +48,7 @@ export function keywordIntent(text: string): TextIntent {
 export async function routeText(text: string, network: Network): Promise<{ intent: TextIntent; mode: DecisionMode }> {
   const shown = text.length > MODEL_TEXT_MAX ? text.slice(0, MODEL_TEXT_MAX) : text;
   const result = await decide({
+    purpose: "chat",
     systemPrompt: systemPrompt(networkProfile(network).label),
     userPrompt: `The member's message, between the lines:\n---\n${shown}\n---`,
     schema: intentSchema,
