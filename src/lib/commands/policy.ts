@@ -74,6 +74,11 @@ export const COMMAND_PERMISSIONS = {
   "customer_portal.unshare": "records.write",
   "customer_request.reply": "receivables.reconcile",
   "customer_request.close": "receivables.reconcile",
+  // A customer's collection rules, and resolving what the collections stage asks a person (approve a reminder, hold
+  // reminders until a day, no reminders, let them go again): they decide what the agent sends a customer, as turning
+  // reminders on does, so owners and admins only, never the accountant's bookkeeping (collections context C4, C6).
+  "collection_policy.set": "records.write",
+  "collection_task.resolve": "records.write",
   // A project's budget and buffer are a control on what the agent sets aside, an owner's or admin's as the agent's
   // spending limit is; putting a bill, a milestone or a deal in a project is a record, entered as an invoice is
   // (project budgets P1-P3).

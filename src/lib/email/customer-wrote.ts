@@ -30,7 +30,7 @@ const SUBJECTS: Record<RequestKind, (customer: string) => string> = {
 };
 
 const WHAT_IT_MEANS: Record<RequestKind, string> = {
-  paid: "It is the customer's word, not a payment: the invoice stays open until the money arrives and is applied.",
+  paid: "It is the customer's word, not a payment: the invoice stays open until the money arrives and is applied. The agent's reminders about it wait until you find the payment or mark it not received.",
   promise: "The agent's reminders about the invoice wait through the promised day.",
   dispute: "The agent's reminders about the invoice wait until you resolve the dispute.",
   pay_link: "Make the invoice's pay link, and it shows on their statement at once.",

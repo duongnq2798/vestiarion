@@ -6,12 +6,14 @@ import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
 import type { EmailMessage, SendResult } from "@/lib/email/send";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
-import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
+import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
 /**
  * The collections stage (docs/superpowers/specs/2026-10-03-collections-design.md): a receivable whose reminders are
  * on, where code allows one now, is decided by the model beside the written policy (R3–R5), claimed before it is
- * sent (R7), emailed from the template with the pay link (R6), and signed; a wait is signed and remembered.
+ * sent (R7), emailed from the template with the pay link (R6), and signed; a wait is signed and remembered. First,
+ * each receivable's next step from its customer's context (docs/superpowers/specs/2026-10-13-collections-context-design.md)
+ * holds it, opens a task for a person, or lets it through; and each email goes once, its opt-out read again (I11).
  */
 
 const { ledgerMock, decideMock } = vi.hoisted(() => ({ ledgerMock: vi.fn(), decideMock: vi.fn() }));
@@ -24,6 +26,7 @@ const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000c0c";
 const INVOICE = "0b6c1c9e-4a4f-4a7e-9b1e-0000000001c1";
 const CLIENT = "0b6c1c9e-4a4f-4a7e-9b1e-0000000002c2";
+const OWNER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000003c3";
 const KEYS = parseMasterKeys(`t1:${crypto.randomBytes(32).toString("base64")}`);
 const TOKEN = `vxr_${"B".repeat(43)}`;
 const NOW = Date.parse("2026-10-10T09:00:00Z");
@@ -32,6 +35,8 @@ const link = (over: Record<string, unknown> = {}) => ({
   id: "link-1",
   invoice_id: INVOICE,
   token_enc: encryptSecret(TOKEN, { orgId: ORG, column: "receivable_links.token_enc" }, KEYS),
+  reminders_on_at: "2026-10-01T09:00:00Z",
+  revoked_at: null,
   reminder_deferred_until: null,
   ...over,
 });
@@ -52,6 +57,8 @@ interface World {
   mode?: string;
   paused?: boolean;
   links?: Array<Record<string, unknown>>;
+  /** The link as read again right before the send (I11); the same as `links` when not given. */
+  recheck?: Array<Record<string, unknown>>;
   invoices?: Array<Record<string, unknown>>;
   email?: string | null;
   sent?: Array<Record<string, unknown>>;
@@ -60,24 +67,61 @@ interface World {
   allocations?: { status?: number; body: unknown };
   /** What the customer said on its statement (0109). */
   requests?: { status?: number; body: unknown };
+  /** The customer's rules (0110), newest version first. */
+  policies?: Array<Record<string, unknown>>;
+  /** The receivable's tasks (0110), the open ones, and the row a new one is inserted as. */
+  tasks?: Array<Record<string, unknown>>;
+  openTasks?: Array<Record<string, unknown>>;
+  taskInsert?: { status?: number; body: unknown };
+  /** A delivery claim's answer, and the row found when the claim inserts nothing (I11). */
+  delivery?: { status?: number; body: unknown };
+  deliveryFound?: Array<Record<string, unknown>>;
+  /** The HubSpot deal the receivable's deal was planned from. */
+  crm?: Array<Record<string, unknown>>;
+  /** The members and their email switches, for a task's email. */
+  members?: Array<Record<string, unknown>>;
+  switches?: Array<Record<string, unknown>>;
+  /** The day tasks began in the workspace (0110); none yet when empty. */
+  starts?: Array<Record<string, unknown>>;
 }
 
-function world(w: World = {}) {
-  return fakeSupabase((request: RecordedRequest) => {
-    if (request.path === "/rest/v1/orgs") return { body: { name: "Mai Studio", mode: w.mode ?? "live" } };
+/** What the database answers in `w`; `world(w)` records it. */
+function responder(w: World = {}) {
+  return (request: RecordedRequest): FakeReply => {
+    if (request.path === "/rest/v1/orgs") return { body: { name: "Mai Studio", mode: w.mode ?? "live", slug: "mai" } };
     if (request.path === "/rest/v1/receivable_allocations") return w.allocations ?? { body: [] };
     if (request.path === "/rest/v1/customer_requests") return w.requests ?? { body: [] };
     if (request.path === "/rest/v1/rpc/agent_paused") return { body: w.paused === true };
-    if (request.path === "/rest/v1/receivable_links" && request.method === "GET") return { body: w.links ?? [link()] };
+    if (request.path === "/rest/v1/receivable_links" && request.method === "GET") {
+      const again = request.params.get("invoice_id")?.startsWith("eq.");
+      return { body: again ? (w.recheck ?? w.links ?? [link()]) : (w.links ?? [link()]) };
+    }
     if (request.path === "/rest/v1/invoices" && request.method === "GET") {
-      return { body: request.params.has("id") ? (w.invoices ?? [invoice()]) : (w.history ?? []) };
+      return { body: request.params.get("status") === "in.(pending,matched)" ? (w.invoices ?? [invoice()]) : (w.history ?? []) };
     }
     if (request.path === "/rest/v1/counterparties") return { body: [{ id: CLIENT, name: "Acme", notice_email: w.email === undefined ? "billing@acme.example" : w.email }] };
     if (request.path === "/rest/v1/ar_reminders" && request.method === "GET") return { body: w.sent ?? [] };
     if (request.path === "/rest/v1/ar_reminders" && request.method === "POST") return w.claim ?? { body: { id: "reminder-1" } };
+    if (request.path === "/rest/v1/collection_policies" && request.method === "GET") return { body: w.policies ?? [] };
+    if (request.path === "/rest/v1/collection_tasks" && request.method === "GET") {
+      return { body: request.params.get("status") === "eq.open" ? (w.openTasks ?? []) : (w.tasks ?? []) };
+    }
+    if (request.path === "/rest/v1/collection_tasks" && request.method === "POST") return w.taskInsert ?? { body: [] };
+    if (request.path === "/rest/v1/notification_deliveries" && request.method === "POST") return w.delivery ?? { body: [{ id: "delivery-1" }] };
+    if (request.path === "/rest/v1/notification_deliveries" && request.method === "GET") return { body: w.deliveryFound ?? [] };
+    if (request.path === "/rest/v1/collection_task_starts" && request.method === "GET") return { body: w.starts ?? [{ starts_on: "2026-10-01" }] };
+    if (request.path === "/rest/v1/collection_task_starts" && request.method === "POST") return { body: [{ starts_on: (request.body as { starts_on: string }).starts_on }] };
+    if (request.path === "/rest/v1/crm_deals") return { body: w.crm ?? [] };
+    if (request.path === "/rest/v1/accounting_connections") return { body: [{ id: "conn-1", provider: "hubspot", external_org_id: "4410" }] };
+    if (request.path === "/rest/v1/rpc/org_members") {
+      return { body: w.members ?? [{ user_id: OWNER, email: "owner@mai.example", role: "owner", joined_at: "2026-09-01T00:00:00Z" }] };
+    }
+    if (request.path === "/rest/v1/memberships") return { body: w.switches ?? [{ user_id: OWNER, notify_email: true, role: "owner" }] };
     return { body: [] };
-  });
+  };
 }
+
+const world = (w: World = {}) => fakeSupabase(responder(w));
 
 /** The model answers `answer`, or the written policy when it is not given. */
 function model(answer?: Record<string, unknown>) {
@@ -117,6 +161,8 @@ describe("a reminder the agent sends", () => {
     expect(email.subject).toBe("Mai Studio: 12.50 USDC due today");
     expect(email.text).toContain(`/pay/${TOKEN}`);
     expect(email.text).toContain("Mai Studio asked you to pay 12.50 USDC for October retainer, due today, Oct 10, 2026.");
+    // Metered once, as a reminder, when it is handed to Resend.
+    expect(email.meter).toBe("reminder");
 
     expect(ledgerMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -256,7 +302,17 @@ describe("a part-paid receivable (allocations L11)", () => {
 });
 
 describe("a receivable its customer answered on its statement (customer portal P7)", () => {
-  const said = (over: Record<string, unknown>) => ({ invoice_id: INVOICE, status: "open", promised_on: null, ...over });
+  const said = (over: Record<string, unknown>) => ({
+    id: "req-1",
+    invoice_id: INVOICE,
+    status: "open",
+    outcome: null,
+    promised_on: null,
+    paid_on: null,
+    created_at: "2026-10-08T09:00:00Z",
+    closed_at: null,
+    ...over,
+  });
 
   it("waits through the day the customer promised to pay", async () => {
     const lines = await run(world({ requests: { body: [said({ kind: "promise", promised_on: "2026-10-10" })] } }));
@@ -265,9 +321,16 @@ describe("a receivable its customer answered on its statement (customer portal P
     expect(lines).toEqual([]);
   });
 
-  it("is reminded again the day after the promised day", async () => {
-    await run(world({ requests: { body: [said({ kind: "promise", promised_on: "2026-10-09" })] } }));
-    expect(sendMock).toHaveBeenCalledTimes(1);
+  it("is not reminded once the promised day passed: finance reviews it first (collections context C3)", async () => {
+    await run(world({ requests: { body: [said({ id: "req-promise", kind: "promise", promised_on: "2026-10-09" })] } }));
+    expect(decideMock).not.toHaveBeenCalled();
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("waits while the customer says it paid and the payment is not found yet (collections context C2)", async () => {
+    await run(world({ requests: { body: [said({ kind: "paid", paid_on: "2026-10-09" })] } }));
+    expect(decideMock).not.toHaveBeenCalled();
+    expect(sendMock).not.toHaveBeenCalled();
   });
 
   it("waits while the customer disputes it", async () => {
@@ -275,18 +338,333 @@ describe("a receivable its customer answered on its statement (customer portal P
     expect(sendMock).not.toHaveBeenCalled();
   });
 
-  it("asks only for the open promises and disputes of the receivables it would remind", async () => {
+  it("asks only for what the customers of its open receivables said: open, or closed in the last 90 days", async () => {
     const client = world();
     await run(client);
     const asked = client.requests.find((r) => r.path === "/rest/v1/customer_requests")!;
     expect(asked.params.get("invoice_id")).toBe(`in.(${INVOICE})`);
-    expect(asked.params.get("status")).toBe("eq.open");
-    expect(asked.params.get("kind")).toBe("in.(promise,dispute)");
+    expect(asked.params.get("or")).toBe("(status.eq.open,closed_at.gte.2026-07-12T09:00:00.000Z)");
     expect(asked.params.get("org_id")).toBe(`eq.${ORG}`);
   });
 
   it("is reminded as before when migration 0109 has not run", async () => {
     await run(world({ requests: { status: 404, body: { code: "PGRST205", message: "Could not find the table 'public.customer_requests' in the schema cache" } } }));
     expect(sendMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+/** A collection task as the database returns it (0110). */
+const taskRow = (over: Record<string, unknown> = {}) => ({
+  id: "task-1",
+  invoice_id: INVOICE,
+  counterparty_id: CLIENT,
+  kind: "ask_owner",
+  reason: "policy_ask_first",
+  subject_key: "policy:1:reminder:1",
+  assignee: null,
+  policy_version: 1,
+  proposal: {
+    headline: "Ask the account owner before reminding",
+    reasons: [{ code: "due_today", text: "Due today." }],
+    reminder: { number: 1, tone: "friendly", tones: ["friendly"], channel: "email", daysFromDue: 0, owed: 12.5, received: 0 },
+  },
+  status: "open",
+  outcome: null,
+  hold_until: null,
+  approved_number: null,
+  approved_tone: null,
+  resolved_at: null,
+  resolved_by: null,
+  notified_at: null,
+  created_at: "2026-10-10T08:00:00Z",
+  ...over,
+});
+const rules = (over: Record<string, unknown> = {}) => ({
+  id: "policy-1",
+  counterparty_id: CLIENT,
+  version: 1,
+  approval: "ask_first",
+  max_tone: "final",
+  min_days_between: 3,
+  channel: "email",
+  account_owner: OWNER,
+  created_by: OWNER,
+  created_at: "2026-10-01T00:00:00Z",
+  ...over,
+});
+const posted = (client: ReturnType<typeof world>, path: string) => client.requests.filter((r) => r.path === path && r.method === "POST");
+const patched = (client: ReturnType<typeof world>, path: string) => client.requests.filter((r) => r.path === path && r.method === "PATCH");
+
+describe("the customer's context (collections context C1-C6)", () => {
+  it("a broken promise opens a finance review task, signed, and emails the owners once, with an idempotency key", async () => {
+    const promise = { id: "req-promise", invoice_id: INVOICE, kind: "promise", status: "open", outcome: null, promised_on: "2026-10-09", paid_on: null, created_at: "2026-10-05T09:00:00Z", closed_at: null };
+    const opened = taskRow({
+      kind: "finance_review",
+      reason: "promise_passed",
+      subject_key: "promise:req-promise",
+      policy_version: 0,
+      proposal: { headline: "Escalate to finance: a promise was broken", reasons: [{ code: "promise_passed", text: "The customer promised to pay by Oct 9, 2026." }], reminder: null },
+    });
+    const client = world({ requests: { body: [promise] }, taskInsert: { body: [opened] } });
+    await run(client);
+    expect(decideMock).not.toHaveBeenCalled();
+    expect(posted(client, "/rest/v1/collection_tasks")[0].body).toMatchObject({
+      org_id: ORG,
+      invoice_id: INVOICE,
+      counterparty_id: CLIENT,
+      kind: "finance_review",
+      reason: "promise_passed",
+      subject_key: "promise:req-promise",
+      policy_version: 0,
+    });
+    expect(ledgerMock).toHaveBeenCalledWith(
+      expect.objectContaining({ actor: "agent", action: "collection_task_opened", detail: expect.objectContaining({ taskId: "task-1", reason: "promise_passed", invoiceId: INVOICE }) })
+    );
+    // The one email is to the owner, about the task: never to the customer.
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    const email = sendMock.mock.calls[0][0];
+    expect(email.to).toBe("owner@mai.example");
+    expect(email.subject).toBe("Acme missed the day it promised to pay");
+    expect(email.text).toContain(`https://www.vestiarion.xyz/o/mai/invoices?tab=receivables&open=${INVOICE}`);
+    expect(email.idempotencyKey).toMatch(/^[0-9a-f]{64}$/);
+    expect(email.meter).toBe("collection_task");
+    expect(posted(client, "/rest/v1/notification_deliveries")[0].body).toMatchObject({ kind: "collection_task", subject_id: "task-1", policy_version: 0 });
+    expect(patched(client, "/rest/v1/collection_tasks")[0].body).toEqual({ notified_at: "2026-10-10T09:00:00.000Z" });
+  });
+
+  it("rules that say ask first open a task with the drafted reminder, and send nothing to the customer", async () => {
+    const client = world({ policies: [rules()], taskInsert: { body: [taskRow({ notified_at: "2026-10-10T09:00:00Z" })] } });
+    await run(client);
+    expect(decideMock).not.toHaveBeenCalled();
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(posted(client, "/rest/v1/collection_tasks")[0].body).toMatchObject({
+      kind: "ask_owner",
+      reason: "policy_ask_first",
+      subject_key: "policy:1:reminder:1",
+      assignee: OWNER,
+      policy_version: 1,
+      proposal: expect.objectContaining({ reminder: expect.objectContaining({ number: 1, tone: "friendly" }) }),
+    });
+    expect(posted(client, "/rest/v1/ar_reminders")).toHaveLength(0);
+  });
+
+  it("a reminder a person approved goes at their tone without the model, and says who approved it", async () => {
+    const approved = taskRow({ status: "done", outcome: "approved", approved_number: 1, approved_tone: "friendly", resolved_at: "2026-10-10T08:30:00Z", resolved_by: OWNER });
+    await run(world({ policies: [rules()], tasks: [approved] }));
+    expect(decideMock).not.toHaveBeenCalled();
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock.mock.calls[0][0].to).toBe("billing@acme.example");
+    expect(ledgerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "ar_reminder_sent",
+        detail: expect.objectContaining({ tone: "friendly", decisionMode: "person", approvedTaskId: "task-1", approvedBy: OWNER, context: expect.objectContaining({ policyVersion: 1 }) }),
+      })
+    );
+  });
+
+  it("a HubSpot deal with an owner asks before the first overdue reminder", async () => {
+    const client = world({
+      invoices: [invoice({ due_date: "2026-10-08T12:00:00+00:00", deal_id: "deal-1" })],
+      crm: [{ deal_id: "deal-1", connection_id: "conn-1", external_id: "9001", name: "Website rebuild", owner_external_id: "77" }],
+    });
+    await run(client);
+    expect(decideMock).not.toHaveBeenCalled();
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(posted(client, "/rest/v1/collection_tasks")[0].body).toMatchObject({ kind: "ask_owner", reason: "hubspot_owner", subject_key: "hubspot:9001" });
+  });
+
+  it("closes an open task the receivable no longer needs, and one whose receivable is no longer open", async () => {
+    const gone = "0b6c1c9e-4a4f-4a7e-9b1e-0000000009c9";
+    const client = world({ tasks: [taskRow()], openTasks: [taskRow(), taskRow({ id: "task-gone", invoice_id: gone })] });
+    await run(client);
+    const closed = patched(client, "/rest/v1/collection_tasks").find((r) => (r.body as { outcome?: string }).outcome === "obsolete");
+    expect(closed?.params.get("id")).toBe("in.(task-1,task-gone)");
+    expect(closed?.params.get("status")).toBe("eq.open");
+  });
+});
+
+describe("tasks at launch, and how many emails a member gets (collections context C6)", () => {
+  const promise = (promisedOn: string) => ({ id: "req-promise", invoice_id: INVOICE, kind: "promise", status: "open", outcome: null, promised_on: promisedOn, paid_on: null, created_at: "2026-09-20T09:00:00Z", closed_at: null });
+
+  it("sets the day tasks begin on its first run, and a promise already broken then opens no task and emails nobody", async () => {
+    const client = world({ starts: [], requests: { body: [promise("2026-10-05")] } });
+    await run(client);
+    expect(posted(client, "/rest/v1/collection_task_starts")[0].body).toMatchObject({ org_id: ORG, starts_on: "2026-10-10" });
+    expect(posted(client, "/rest/v1/collection_tasks")).toHaveLength(0);
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(decideMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps the day it began: a promise broken since opens a task", async () => {
+    const opened = taskRow({ kind: "finance_review", reason: "promise_passed", subject_key: "promise:req-promise", policy_version: 0, proposal: { headline: "Escalate", reasons: [], reminder: null } });
+    const client = world({ starts: [{ starts_on: "2026-10-08" }], requests: { body: [promise("2026-10-08")] }, taskInsert: { body: [opened] } });
+    await run(client);
+    expect(posted(client, "/rest/v1/collection_task_starts")).toHaveLength(0);
+    expect(posted(client, "/rest/v1/collection_tasks")[0].body).toMatchObject({ reason: "promise_passed", subject_key: "promise:req-promise" });
+    expect(sendMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("emails each member at most once a cycle, the task waiting longest first; the rest wait for the next cycle", async () => {
+    const second = "0b6c1c9e-4a4f-4a7e-9b1e-0000000001c2";
+    const done = (invoiceId: string) => [
+      { invoice_id: invoiceId, number: 1, tone: "friendly", sent_at: "2026-09-01T09:00:00Z" },
+      { invoice_id: invoiceId, number: 2, tone: "firm", sent_at: "2026-09-05T09:00:00Z" },
+      { invoice_id: invoiceId, number: 3, tone: "final", sent_at: "2026-10-05T09:00:00Z" },
+    ];
+    const review = (id: string, invoiceId: string, createdAt: string) =>
+      taskRow({ id, invoice_id: invoiceId, kind: "finance_review", reason: "reminders_done", subject_key: "reminders_done", proposal: { headline: "Escalate", reasons: [], reminder: null }, created_at: createdAt });
+    const tasks = [review("task-new", INVOICE, "2026-10-09T09:00:00Z"), review("task-old", second, "2026-10-06T09:00:00Z")];
+    const client = world({ invoices: [invoice(), invoice({ id: second })], sent: [...done(INVOICE), ...done(second)], tasks, openTasks: tasks });
+    await run(client);
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock.mock.calls[0][0].text).toContain(`open=${second}`);
+    const stamped = patched(client, "/rest/v1/collection_tasks").filter((r) => "notified_at" in (r.body as object));
+    expect(stamped.map((r) => r.params.get("id"))).toEqual(["eq.task-old"]);
+    // Who is asked is read once a cycle, not once a task.
+    expect(client.requests.filter((r) => r.path === "/rest/v1/rpc/org_members")).toHaveLength(1);
+  });
+
+  it("reads the context of at most 100 receivables a request, so no request's address grows too long", async () => {
+    const ids = Array.from({ length: 150 }, (_, index) => `0b6c1c9e-4a4f-4a7e-9b1e-${String(index).padStart(12, "0")}`);
+    const client = world({ invoices: ids.map((id) => invoice({ id })), links: [] });
+    await run(client);
+    const lists = client.requests
+      .flatMap((r) => [...r.params.entries()].filter(([key, value]) => (key === "invoice_id" || key === "id" || key === "counterparty_id") && value.startsWith("in.(")).map(([, value]) => value))
+      .map((value) => value.slice(4, -1).split(","));
+    expect(lists.length).toBeGreaterThan(0);
+    for (const list of lists) expect(list.length).toBeLessThanOrEqual(100);
+    const asked = new Set(client.requests.filter((r) => r.path === "/rest/v1/ar_reminders" && r.method === "GET").flatMap((r) => (r.params.get("invoice_id") ?? "").slice(4, -1).split(",")));
+    expect(asked.size).toBe(150);
+  });
+});
+
+describe("each email once, the opt-out read again (I11)", () => {
+  it("sends a reminder under the key of its recipient, reminder and rules' version, and marks it sent", async () => {
+    const client = world();
+    await run(client);
+    const claim = posted(client, "/rest/v1/notification_deliveries")[0];
+    expect(claim.body).toMatchObject({ org_id: ORG, kind: "collection_reminder", subject_id: INVOICE, policy_version: 0 });
+    const key = (claim.body as { idempotency_key: string }).idempotency_key;
+    expect(sendMock.mock.calls[0][0].idempotencyKey).toBe(key);
+    expect((claim.body as { recipient_hash: string }).recipient_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(JSON.stringify(claim.body)).not.toContain("billing@acme.example");
+    expect(patched(client, "/rest/v1/notification_deliveries")[0].body).toMatchObject({ provider_id: "email-1" });
+  });
+
+  it("keeps the key when the customer's rules change, so a retry after a send that timed out is never a second email", async () => {
+    // Version 1: the send times out, though Resend may have sent it; both claims are released.
+    sendMock.mockResolvedValueOnce({ sent: false, reason: "timeout" });
+    const first = world({ policies: [rules({ approval: "auto", version: 1 })] });
+    await run(first);
+    // Version 2 saved before the next cycle: the same reminder goes under the same key.
+    const second = world({ policies: [rules({ approval: "auto", version: 2 })] });
+    await run(second);
+    const keys = [first, second].map((client) => (posted(client, "/rest/v1/notification_deliveries")[0].body as { idempotency_key: string }).idempotency_key);
+    expect(keys[1]).toBe(keys[0]);
+    expect(sendMock.mock.calls[1][0].idempotencyKey).toBe(keys[0]);
+    expect(posted(second, "/rest/v1/notification_deliveries")[0].body).toMatchObject({ policy_version: 2 });
+  });
+
+  it("never sends again when Resend says the key went with another email: recorded as sent, and the reminder's claim stays", async () => {
+    sendMock.mockResolvedValueOnce({ sent: false, reason: "idempotency_key_used" });
+    const client = world();
+    const lines = await run(client);
+    expect(client.requests.some((r) => r.path === "/rest/v1/ar_reminders" && r.method === "DELETE")).toBe(false);
+    expect(client.requests.some((r) => r.path === "/rest/v1/notification_deliveries" && r.method === "DELETE")).toBe(false);
+    expect(patched(client, "/rest/v1/notification_deliveries")[0].body).toMatchObject({ provider_id: null });
+    expect(ledgerMock).not.toHaveBeenCalled();
+    expect(lines).toEqual([{ domain: "ar", message: "Reminder 1 to Acme was handed to Resend before under the same key; not sent again" }]);
+  });
+
+  it("takes over a claim a stopped run left unsent, after 15 minutes and within Resend's 24 hours, under the same key", async () => {
+    const base = responder();
+    let claims = 0;
+    const left = { id: "delivery-left", sent_at: null, claimed_at: new Date(Date.now() - 20 * 60_000).toISOString() };
+    const client = fakeSupabase((request) => {
+      if (request.path === "/rest/v1/notification_deliveries" && request.method === "POST") {
+        claims += 1;
+        return { body: claims === 1 ? [] : [{ id: "delivery-2" }] };
+      }
+      if (request.path === "/rest/v1/notification_deliveries" && request.method === "GET") return { body: [left] };
+      return base(request);
+    });
+    await run(client);
+    const taken = client.requests.find((r) => r.path === "/rest/v1/notification_deliveries" && r.method === "DELETE")!;
+    expect(taken.params.get("id")).toBe("eq.delivery-left");
+    expect(taken.params.get("sent_at")).toBe("is.null");
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    const keys = posted(client, "/rest/v1/notification_deliveries").map((r) => (r.body as { idempotency_key: string }).idempotency_key);
+    expect(keys[1]).toBe(keys[0]);
+    expect(sendMock.mock.calls[0][0].idempotencyKey).toBe(keys[0]);
+  });
+
+  it("leaves a claim alone while its run may still be sending, and one older than Resend keeps its key", async () => {
+    for (const minutes of [5, 25 * 60]) {
+      sendMock.mockClear();
+      const left = { id: "delivery-left", sent_at: null, claimed_at: new Date(Date.now() - minutes * 60_000).toISOString() };
+      const client = world({ delivery: { body: [] }, deliveryFound: [left] });
+      await run(client);
+      expect(sendMock).not.toHaveBeenCalled();
+      expect(client.requests.some((r) => r.path === "/rest/v1/notification_deliveries" && r.method === "DELETE")).toBe(false);
+    }
+  });
+
+  it("never sends again what went out under the same key, and keeps the reminder's claim", async () => {
+    const client = world({ delivery: { body: [] }, deliveryFound: [{ sent_at: "2026-10-10T08:00:00Z" }] });
+    const lines = await run(client);
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(client.requests.some((r) => r.path === "/rest/v1/ar_reminders" && r.method === "DELETE")).toBe(false);
+    expect(lines).toContainEqual({ domain: "ar", message: "Reminder 1 to Acme went out already; not sent again" });
+  });
+
+  it("stops when reminders were turned off between the decision and the send, and releases both claims", async () => {
+    const client = world({ recheck: [{ reminders_on_at: null, revoked_at: null }] });
+    const lines = await run(client);
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(client.requests.find((r) => r.path === "/rest/v1/ar_reminders" && r.method === "DELETE")?.params.get("id")).toBe("eq.reminder-1");
+    expect(client.requests.find((r) => r.path === "/rest/v1/notification_deliveries" && r.method === "DELETE")?.params.get("id")).toBe("eq.delivery-1");
+    expect(ledgerMock).not.toHaveBeenCalled();
+    expect(lines).toEqual([{ domain: "ar", message: "Reminder to Acme not sent: its reminders or its rules changed just before the send" }]);
+  });
+
+  it("stops when the customer's rules changed between the decision and the send", async () => {
+    const base = responder();
+    let reads = 0;
+    const client = fakeSupabase((request) => {
+      if (request.path === "/rest/v1/collection_policies") {
+        reads += 1;
+        // Read with the context, then again right before the send: a version saved in between.
+        return { body: reads === 1 ? [] : [rules({ approval: "auto" })] };
+      }
+      return base(request);
+    });
+    await run(client);
+    expect(reads).toBe(2);
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(client.requests.find((r) => r.path === "/rest/v1/ar_reminders" && r.method === "DELETE")).toBeDefined();
+  });
+
+  it("emails a task's member only while their email switch is on at the send", async () => {
+    const done = [
+      { invoice_id: INVOICE, number: 1, tone: "friendly", sent_at: "2026-09-01T09:00:00Z" },
+      { invoice_id: INVOICE, number: 2, tone: "firm", sent_at: "2026-09-05T09:00:00Z" },
+      { invoice_id: INVOICE, number: 3, tone: "final", sent_at: "2026-09-10T09:00:00Z" },
+    ];
+    const open = taskRow({ kind: "finance_review", reason: "reminders_done", subject_key: "reminders_done", proposal: { headline: "Escalate to finance: reminders are done", reasons: [], reminder: null } });
+    const base = responder({ sent: done, tasks: [open], openTasks: [open] });
+    let switchReads = 0;
+    const client = fakeSupabase((request) => {
+      if (request.path === "/rest/v1/memberships") {
+        switchReads += 1;
+        // On when the recipients are chosen, off when read again right before the send.
+        return { body: [{ user_id: OWNER, notify_email: switchReads === 1, role: "owner" }] };
+      }
+      return base(request);
+    });
+    await run(client);
+    expect(switchReads).toBe(2);
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(client.requests.find((r) => r.path === "/rest/v1/notification_deliveries" && r.method === "DELETE")).toBeDefined();
+    expect(patched(client, "/rest/v1/collection_tasks").some((r) => "notified_at" in (r.body as object))).toBe(false);
   });
 });

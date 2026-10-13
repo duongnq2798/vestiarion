@@ -21,6 +21,9 @@ const BATCH = 100;
 
 export const DEAL_PROPERTIES = [
   "dealname", "amount", "deal_currency_code", "closedate", "pipeline", "dealstage", "hs_is_closed", "hs_is_closed_won", "hs_lastmodifieddate",
+  // The deal's owner in HubSpot, by id: the collections stage asks before the first overdue reminder when there is one
+  // (docs/superpowers/specs/2026-10-13-collections-context-design.md C5). Read with crm.objects.deals.read, as the rest.
+  "hubspot_owner_id",
 ] as const;
 
 type Account = { accessToken: string; externalOrgId: string };

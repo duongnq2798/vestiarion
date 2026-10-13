@@ -43,6 +43,7 @@ type GuideSlug =
   | "guides/controls"
   | "guides/apply-payments"
   | "guides/customer-portal"
+  | "guides/collections"
   | "guides/accountants";
 
 const PANEL = "src/components/GoLivePanel.tsx";
@@ -147,6 +148,10 @@ const ACCOUNTING_STATUS = "src/lib/connectors/status.ts";
 const ACCOUNTING_WORDS = "src/lib/connectors/provider.ts";
 // HubSpot's card, list and connect page are its own: a CRM's deals are planned, not added (HubSpot connector H20).
 const HUBSPOT_PANEL = "src/components/HubSpotPanel.tsx";
+const COLLECTIONS_PANEL = "src/components/collections/CollectionsPanel.tsx";
+const COLLECTIONS_VIEW = "src/lib/collection-context/view.ts";
+const COLLECTIONS_MODEL = "src/lib/collection-context/model.ts";
+const NEXT_ACTION = "src/components/collections/NextAction.tsx";
 const CRM_RECEIPT_CARD = "src/components/CrmReceiptCard.tsx";
 const CRM_RECEIPTS = "src/lib/connectors/crm-receipts.ts";
 const DEAL_COLLECTION = "src/lib/deals/collection.ts";
@@ -276,6 +281,53 @@ const USAGE_PANEL = "src/components/UsagePanel.tsx";
 const ROLES = "src/lib/auth/roles.ts";
 
 const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
+  "guides/collections": [
+    ["Bills & receivables", APP_NAV],
+    ["Receivables", INVOICES_PAGE_SOURCE],
+    ["Collections", COLLECTIONS_PANEL],
+    ["Waiting on you", COLLECTIONS_PANEL],
+    ["Reminders sent", COLLECTIONS_PANEL],
+    ["Promises", COLLECTIONS_PANEL],
+    ["Remind", COLLECTIONS_VIEW],
+    ["Wait", COLLECTIONS_VIEW],
+    ["Ask the account owner", COLLECTIONS_VIEW],
+    ["Escalate to finance", COLLECTIONS_VIEW],
+    ["Nothing to do", COLLECTIONS_VIEW],
+    ["Wait: the customer disputes it", COLLECTIONS_MODEL],
+    ["Wait: a payment to verify", COLLECTIONS_MODEL],
+    ["Escalate to finance: a promise was broken", COLLECTIONS_MODEL],
+    ["Escalate to finance: a payment to verify", COLLECTIONS_MODEL],
+    ["Check a payment the customer says it made", COLLECTIONS_MODEL],
+    ["Not received: let reminders go again", COLLECTIONS_MODEL],
+    ["Not received: hold reminders", COLLECTIONS_MODEL],
+    ["From customers", "src/components/portal/FromCustomers.tsx"],
+    ["Apply payments", "src/components/ApplyPayments.tsx"],
+    ["Why", NEXT_ACTION],
+    ["Preview the reminder", NEXT_ACTION],
+    ["Approve a reminder", COLLECTIONS_MODEL],
+    ["Send this reminder", COLLECTIONS_MODEL],
+    ["Hold reminders", COLLECTIONS_MODEL],
+    ["No reminders for this invoice", COLLECTIONS_MODEL],
+    ["Ask the deal's owner", COLLECTIONS_MODEL],
+    ["Open the deal in HubSpot", NEXT_ACTION],
+    ["Review a broken promise", COLLECTIONS_MODEL],
+    ["Let reminders go again", COLLECTIONS_MODEL],
+    ["Find a billing contact", COLLECTIONS_MODEL],
+    ["Follow up: reminders are done", COLLECTIONS_MODEL],
+    ["Done", COLLECTIONS_MODEL],
+    ["Rules for", NEXT_ACTION],
+    ["Go on their own", NEXT_ACTION],
+    ["Ask first", NEXT_ACTION],
+    ["Strongest tone", NEXT_ACTION],
+    ["Days between reminders", NEXT_ACTION],
+    ["Account owner", NEXT_ACTION],
+    ["Channel", NEXT_ACTION],
+    ["Save rules", NEXT_ACTION],
+    ["Email me when payments need a decision", "src/components/NotificationsPanel.tsx"],
+    ["collection_policy_set", "src/lib/collection-context/write.ts"],
+    ["collection_task_opened", "src/lib/collection-context/tasks.ts"],
+    ["collection_task_resolved", "src/lib/collection-context/tasks.ts"],
+  ],
   "guides/accountants": [
     ["Accountant console", ACCOUNTANT_PAGE],
     ["Members", APP_NAV],
@@ -364,6 +416,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Payment found", PORTAL_MODEL],
     ["Not received", PORTAL_MODEL],
     ["Reply, then resolve", PORTAL_MODEL],
+    ["Review it: the promised day passed", PORTAL_MODEL],
     ["Make a pay link", PORTAL_MODEL],
     ["Resolve", PORTAL_MODEL],
     ["Customer promised by", "src/lib/customer-portal/view.ts"],
@@ -1644,7 +1697,14 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Write receipts to HubSpot", HUBSPOT_PANEL],
     ["Stop writing to HubSpot", HUBSPOT_PANEL],
     ["HubSpot is connected, and Vestiarion writes receipts to the deals planned from it, from the next sync.", HUBSPOT_PANEL],
-    ["a HubSpot super admin may need to approve the app's write access", HUBSPOT_PANEL, "A HubSpot super admin may need to approve the app's write access"],
+    ["On HubSpot's install screen, tick both optional write permissions.", "src/lib/hubspot/write-steps.ts"],
+    [
+      "If your HubSpot account approved Vestiarion before, they show locked there: a super admin first turns them on in HubSpot > Settings > Integrations > Connected Apps > Vestiarion > Data Permissions.",
+      "src/lib/hubspot/write-steps.ts",
+    ],
+    ["HubSpot connected without allowing Vestiarion to write. It still reads your deals.", HUBSPOT_PANEL],
+    ["Ask the deal's owner", COLLECTIONS_MODEL],
+    ["Open the deal in HubSpot", NEXT_ACTION],
     ["Collected", CRM_RECEIPTS, 'label: "Collected"'],
     ["Still owed", CRM_RECEIPTS, 'label: "Still owed"'],
     ["Collection status", CRM_RECEIPTS, 'label: "Collection status"'],
@@ -2293,6 +2353,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/evidence": 20,
   "guides/apply-payments": 20,
   "guides/customer-portal": 20,
+  "guides/collections": 20,
   "guides/accountants": 20,
 };
 

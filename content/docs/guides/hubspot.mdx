@@ -103,7 +103,9 @@ A customer linked to a HubSpot company that has no billing email yet is listed u
 
 So sales sees whether a customer paid without asking finance, Vestiarion can write each planned deal's collections back to that deal in HubSpot. It is off until an owner or admin turns it on.
 
-**Allow it.** On the HubSpot card in Settings, under **Receipts in HubSpot**, choose **Allow writing to HubSpot**. The connect page opens with **Write receipts to HubSpot** ticked: choose **Continue to HubSpot**, and HubSpot asks you to let Vestiarion write deals and add deal fields. Back in Settings, the card says "HubSpot is connected, and Vestiarion writes receipts to the deals planned from it, from the next sync." If HubSpot did not grant it, the card says so and the connection keeps reading your deals: a HubSpot super admin may need to approve the app's write access. A connection allowed to write shows **Write receipts to HubSpot** and **Stop writing to HubSpot**; what was written stays in HubSpot when you stop.
+**Allow it.** On the HubSpot card in Settings, under **Receipts in HubSpot**, choose **Allow writing to HubSpot**. The connect page opens with **Write receipts to HubSpot** ticked: choose **Continue to HubSpot**. On HubSpot's install screen, tick both optional write permissions. Back in Settings, the card says "HubSpot is connected, and Vestiarion writes receipts to the deals planned from it, from the next sync." A connection allowed to write shows **Write receipts to HubSpot** and **Stop writing to HubSpot**; what was written stays in HubSpot when you stop.
+
+**If the write permissions show locked.** If your HubSpot account approved Vestiarion before, they show locked there: a super admin first turns them on in HubSpot > Settings > Integrations > Connected Apps > Vestiarion > Data Permissions. Then choose **Allow writing to HubSpot** again. Until then the card says "HubSpot connected without allowing Vestiarion to write. It still reads your deals.", and Vestiarion keeps reading your deals.
 
 **What is written**, on each HubSpot deal planned in Vestiarion, in a **Vestiarion** group of deal fields that Vestiarion adds once:
 
@@ -135,6 +137,10 @@ HubSpot's own deal fields, such as the amount and the stage, are never changed.
   alt="The HubSpot card in Settings with Receipts in HubSpot on: 6 deals written, 1 waiting, 1 changed in HubSpot and waiting on you; HubSpot says this is a developer test account; the rule for Arc testnet; and the Stop writing to HubSpot button."
   caption="Writing receipts on, and how the writes stand."
 />
+
+## Reminders and the deal's owner
+
+HubSpot also tells Vestiarion who owns each deal. When a receivable from a deal planned from HubSpot is overdue and no reminder went since its due date, and its HubSpot deal has an owner, the agent asks before its first overdue reminder, in case sales gave the customer more time: the receivable's card shows **Ask the deal's owner**, with **Open the deal in HubSpot**. See [Chase what customers owe](/docs/guides/collections). A deal read before this came in gets its owner the next time it changes in HubSpot, and a receivable already overdue before the agent began opening tasks in your workspace is reminded as before, without the ask.
 
 ## Status and errors
 

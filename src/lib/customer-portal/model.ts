@@ -191,23 +191,27 @@ export function readSubmission(form: SubmissionForm, today: string): SubmissionR
 }
 
 export interface ReminderPause {
-  reason: "promise" | "dispute";
-  /** The promised day, through which the reminders wait; null for a dispute, which holds them until it is resolved. */
+  reason: "promise" | "dispute" | "paid" | "promise_passed";
+  /** The promised day, through which the reminders wait; null for anything that holds them until a person acts. */
   until: string | null;
 }
 
 /**
- * Whether an invoice's reminders wait, from its customer's requests (P7): an open dispute holds them until a person
- * resolves it; an open promise holds them through its day, and the day after they go as before.
+ * Whether an invoice's reminders wait, from its customer's requests (P7, and collections context C2, C3): an open
+ * dispute holds them until a person resolves it; a claim of payment until a person finds the payment or marks it not
+ * received; an open promise through its day; and a promise whose day passed until finance reviews it and closes it.
  */
 export function reminderPause(requests: readonly Pick<CustomerRequest, "kind" | "status" | "promisedOn">[], today: string): ReminderPause | null {
   const open = requests.filter((request) => request.status === "open");
   if (open.some((request) => request.kind === "dispute")) return { reason: "dispute", until: null };
+  if (open.some((request) => request.kind === "paid")) return { reason: "paid", until: null };
   const promised = open
-    .filter((request) => request.kind === "promise" && request.promisedOn !== null && request.promisedOn >= today)
+    .filter((request) => request.kind === "promise" && request.promisedOn !== null)
     .map((request) => request.promisedOn as string)
     .sort();
-  return promised.length > 0 ? { reason: "promise", until: promised[promised.length - 1] } : null;
+  if (promised.length === 0) return null;
+  const last = promised[promised.length - 1];
+  return last >= today ? { reason: "promise", until: last } : { reason: "promise_passed", until: null };
 }
 
 export interface StatementInvoiceIn {
@@ -432,7 +436,7 @@ export function financeNextStep(
       const reference = request.reference ? `, reference ${request.reference}` : "";
       return step(
         "Find the payment",
-        `Look for ${amount} paid on ${dayWords(request.paidOn as string)}${reference}. Once it arrived, apply it under Apply payments, then close this as found.`,
+        `Look for ${amount} paid on ${dayWords(request.paidOn as string)}${reference}. Once it arrived, apply it under Apply payments, then close this as found. The agent's reminders wait until you close it.`,
         ["resolved", "not_received"],
         { reply: true }
       );
@@ -441,7 +445,12 @@ export function financeNextStep(
       const day = request.promisedOn as string;
       return day >= context.today
         ? step(`Wait until ${dayWords(day)}`, `The agent's reminders about this invoice wait through ${dayWords(day)}. Nothing to do before then.`, ["resolved"], { reply: true })
-        : step("Follow up: the promised day passed", "The invoice is still open and the agent's reminders go again. Reply or follow up, then close this.", ["resolved"], { reply: true });
+        : step(
+            "Review it: the promised day passed",
+            "The invoice is still open, and the agent sends no reminder until you close this. Reply or follow up, then close it to let reminders go again.",
+            ["resolved"],
+            { reply: true }
+          );
     }
     case "dispute":
       return step("Reply, then resolve", "The agent's reminders about this invoice wait until you resolve the dispute.", ["resolved"], { reply: true });

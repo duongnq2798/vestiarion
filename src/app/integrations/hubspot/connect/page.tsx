@@ -13,6 +13,7 @@ import { can } from "@/lib/auth/roles";
 import { verifySession } from "@/lib/auth/session";
 import { CONSENT_LABEL, consentStatement } from "@/lib/connectors/consent";
 import { hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
+import { HUBSPOT_WRITE_STEPS } from "@/lib/hubspot/write-steps";
 import { networkProfile } from "@/lib/network";
 
 export const metadata: Metadata = { title: "Connect HubSpot" };
@@ -117,7 +118,16 @@ export default async function HubSpotConnectPage({ searchParams }: ConnectPagePr
                   value="yes"
                   defaultChecked={write}
                   label="Write receipts to HubSpot"
-                  description="HubSpot is asked to let Vestiarion write, too: each deal planned from HubSpot then gets what was collected from payments confirmed on Arc, what is still owed, the last receipt, the reconciliation status and a link to it, in a Vestiarion property group. Payments on Arc testnet or in shadow mode are written only to a HubSpot developer test account or sandbox."
+                  description={
+                    <>
+                      HubSpot is asked to let Vestiarion write, too: each deal planned from HubSpot then gets what was collected from payments confirmed on
+                      Arc, what is still owed, the last receipt, the reconciliation status and a link to it, in a Vestiarion property group.
+                      {" Payments on Arc testnet or in shadow mode are written only to a HubSpot developer test account or sandbox."}
+                      <span className="mt-1.5 block font-medium text-ink-2">
+                        {HUBSPOT_WRITE_STEPS.tick} {HUBSPOT_WRITE_STEPS.locked}
+                      </span>
+                    </>
+                  }
                 />
                 <NativeCheckbox
                   name="consent"

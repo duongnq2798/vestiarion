@@ -158,11 +158,12 @@ describe("a deal", () => {
       stageLabel: "Closed Won",
       stage: "won",
       company: northwind,
+      ownerId: "77001",
     });
   });
 
   it("takes the account's currency for a deal without one, and says an open deal is open", () => {
-    expect(mapDeal(page1[1], context())).toMatchObject({ amount: "4800.5", currency: "USD", stage: "open", stageLabel: "Contract Sent", company: null });
+    expect(mapDeal(page1[1], context())).toMatchObject({ amount: "4800.5", currency: "USD", stage: "open", stageLabel: "Contract Sent", company: null, ownerId: null });
     expect(mapDeal(page1[1], context({ accountCurrency: null }))?.currency).toBeNull();
   });
 

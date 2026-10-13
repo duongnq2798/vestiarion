@@ -301,5 +301,6 @@ export function mapDeal(raw: RawRecord, context: DealContext): ExternalDeal | nu
     stageLabel: stage?.label ?? null,
     stage: state,
     company: context.companyOf(raw.id),
+    ownerId: cut(text(props.hubspot_owner_id), 100),
   };
 }

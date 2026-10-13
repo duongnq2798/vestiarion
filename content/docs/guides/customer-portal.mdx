@@ -39,7 +39,7 @@ It shows nothing else of your workspace: no other customer, no supplier, no bala
 Each open invoice has its buttons, and each opens a short form under them that repeats what is owed, in its currency, so it stays in view on a phone with the keyboard up.
 
 - **Pay on Arc** opens the invoice's [pay link](/docs/guides/first-payment#9-get-paid-by-a-client), with the amount and the address to copy. Without a pay link, the button is **Ask for a pay link**: the request comes to you, and once you make the link, the statement shows **Pay on Arc**.
-- **I paid**, under **Tell them you paid**: **Day you paid**, the amount (what is owed, unless they change it), a **Payment reference** such as a bank reference or a transaction hash, and a note. It is the customer's word, not a payment. The invoice stays open until the money arrives and is applied, and the customer reads that you are checking for it.
+- **I paid**, under **Tell them you paid**: **Day you paid**, the amount (what is owed, unless they change it), a **Payment reference** such as a bank reference or a transaction hash, and a note. It is the customer's word, not a payment. The invoice stays open until the money arrives and is applied, the customer reads that you are checking for it, and the agent's reminders about it wait until you close it.
 - **Promise to pay**: **Day you will pay**, today or up to 90 days ahead, and a note. The customer reads "Reminders about this invoice wait until then."
 - **Dispute**: **What is wrong with this invoice?** The agent's reminders about the invoice wait until you resolve it.
 - **Write more.** Under anything still open, the customer can write to you again, and you can reply. A newer **I paid** or promise on the same invoice replaces the older one; a second dispute adds to the first.
@@ -51,7 +51,7 @@ When a customer says something, **Waiting for review** at the top of Bills & rec
 | The customer | Shown as | Next | Close it with |
 |---|---|---|---|
 | Says it paid | **Customer says paid** | **Find the payment**: the amount, the day and the reference to look for. Once it arrived on Arc, apply it under [Apply payments](/docs/guides/apply-payments). | **Payment found**, or **Not received**: the customer then reads that you have not received it, and can tell you again. |
-| Promises a day | **Promise to pay** | Wait until that day; after it, follow up. | **Close** |
+| Promises a day | **Promise to pay** | Wait until that day; after it, review it before any reminder goes. | **Close** |
 | Disputes the invoice | **Dispute** | **Reply, then resolve.** | **Resolve** |
 | Asks for a pay link | **Asks for a pay link** | **Make a pay link**: **Open the invoice** and make its link. | **Done** |
 
@@ -61,7 +61,13 @@ Owners and admins who keep **Email me when payments need a decision** on, and ac
 
 ## Reminders while a customer answers
 
-If you turned on the agent's reminders for an invoice, a promise holds them through the promised day, and they go again the day after if the invoice is still open. A dispute holds them until you resolve it. Closing a promise or a dispute lets them go again at once. A claim of payment holds nothing: if the money does not come, the reminders carry on.
+If you turned on the agent's reminders for an invoice, what the customer says holds them:
+
+- **A dispute** holds them until you resolve it.
+- **A claim of payment** holds them until you close it: **Payment found**, or **Not received**. If it is still open 7 days after the customer made it, finance gets a task to check the payment, so a claim alone never stops reminders for good.
+- **A promise** holds them through the promised day. If the day passes with money still owed, no reminder goes by itself: finance gets a task to review the broken promise first, and the request's next step reads **Review it: the promised day passed**. See [Chase what customers owe](/docs/guides/collections).
+
+Closing a promise, a dispute or a claim lets them go again at once.
 
 ## Who can open a link
 

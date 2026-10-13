@@ -1,0 +1,67 @@
+A reminder sent by the due date alone can annoy a customer who is disputing the invoice, who says it paid yesterday, or whom sales gave more time. Before it reminds anyone, the agent weighs what Vestiarion knows about the customer: what it said on its [statement link](/docs/guides/customer-portal), what it paid, the HubSpot deal it was sold through, the reminders already sent, and the rules you set for it. Each receivable gets one next step, with the facts it rests on, and you see the reminder exactly as the customer would read it before it goes. It works the same in a workspace on Arc testnet and on Arc mainnet.
+
+## 1. The Collections panel
+
+Open **Bills & receivables** and choose the **Receivables** tab. **Collections**, at the top, sums up what needs chasing:
+
+- **Waiting on you**: receivables whose next step is a person's.
+- **Reminders sent**: reminders the agent emailed this week.
+- **Promises**: promises to pay kept and broken, of the last 90 days.
+
+Under the figures are the receivables to look at first, each with its next step and the fact that decides it. Choose one to open its card.
+
+## 2. The next step, and why
+
+Each receivable due in the next 7 days, overdue, waiting on a person, or opened from the list gets one next step:
+
+| Next step | When |
+|---|---|
+| **Remind** | Nothing holds it, and the schedule sends a reminder now. The tone says how firmly: friendly, firm or final. |
+| **Wait** | The customer disputes it ("Wait: the customer disputes it"), said in the last week that it paid and the payment is not found yet ("Wait: a payment to verify"), promised a day that has not passed, or a person held reminders until a day. Or it is too early, or too soon after the last reminder. |
+| **Ask the account owner** | The customer's rules say ask first; it was sold through a HubSpot deal with an owner and no reminder went since its due date, so sales may have given more time; or it has no billing email and its rules name an account owner. |
+| **Escalate to finance** | The customer promised a day and missed it ("Escalate to finance: a promise was broken"), said it paid more than 7 days ago and the payment is still not found ("Escalate to finance: a payment to verify"), it has no billing email, or the agent's reminders are done. |
+| **Nothing to do** | It is paid, or the payments applied cover it. |
+
+Under **Why**, the card lists the facts the step rests on, such as how late it is, what arrived, what the customer said and when, the reminders sent, and the rules that apply.
+
+**Preview the reminder** shows the reminder the step would send, exactly as the template writes it: the channel and the billing email it goes to, the subject, and the text, with the pay link. The customer gets exactly this. Nothing the agent, a customer or HubSpot wrote is added to it.
+
+## 3. When the agent asks you first
+
+When a step needs a person, the agent opens a task on the receivable, once, and emails the people it asks: the account owner the customer's rules name, or else the owners and admins. Each gets one email per task and at most one email each time the agent runs, the task waiting longest first; the others wait for its next run, and every task is on its card at once. None goes while **Email me when payments need a decision** is off for them in **Settings**.
+
+Tasks begin the first time the agent runs in your workspace with this in place. What was already so before that day, such as a promise already broken or reminders already done, shows on its card with its next step, opens no task and emails nobody: you are not sent a backlog. Close such a promise or claim under **From customers** once you have looked at it.
+
+Owners and admins answer from the card:
+
+| Task | Answers |
+|---|---|
+| **Approve a reminder** | **Send this reminder**, in the tone you choose; **Hold reminders** until a day you pick (up to 60 days); or **No reminders for this invoice**, which turns them off. |
+| **Ask the deal's owner** | The same. **Open the deal in HubSpot** opens the deal to check with its owner whether the customer was given more time. |
+| **Review a broken promise** | **Let reminders go again**, or **Hold reminders** until a day. Either closes the customer's promise. |
+| **Check a payment the customer says it made** | Opened when a claim of payment is still open 7 days after the customer made it, so a claim alone never stops reminders for good. **Not received: let reminders go again**, or **Not received: hold reminders** until a day. Either marks the claim not received, which the customer reads on its statement. If the payment did arrive, apply it under **Apply payments** instead: the task closes by itself. |
+| **Find a billing contact** | Add the customer's billing email on **Counterparties**, then **Done**. |
+| **Follow up: reminders are done** | Follow up with the customer yourself, then **Done**. |
+
+An approved reminder goes at the agent's next cycle, within a minute, at the tone you chose, and still only if nothing changed: the invoice still open and owed, its reminders still on, the customer's rules the same, and the schedule allowing it. A task the receivable no longer needs, because it was paid or the customer answered, closes by itself.
+
+## 4. A customer's rules
+
+Under **Rules for** the customer, on any of its receivables' cards, an owner or admin sets how it is reminded:
+
+- **Reminders**: **Go on their own**, within the schedule and these bounds; or **Ask first**, so every reminder waits for the account owner's OK, for a customer such as a VIP.
+- **Strongest tone**: friendly only, up to firm, or any tone, the final reminder included.
+- **Days between reminders**: at least 3, at most 30.
+- **Account owner**: who is asked first, an owner or admin; or the owners and admins.
+- **Channel**: email, to the customer's billing email.
+
+**Save rules** confirms the tone and channel for the customer as a new version. The agent follows the latest version from its next cycle, and an approval given under an earlier version no longer counts. Without rules, a customer follows the workspace's schedule.
+
+## What never happens
+
+- **No reminder goes on its own because of what a customer or HubSpot said.** What they say can hold reminders or ask a person; every reminder still needs its invoice's reminders on, the schedule's bounds, the customer's rules and the fixed template.
+- **No email goes twice.** Each email has a key for its recipient and the reminder or task it is about; a retry under the same key is never sent again, even after the customer's rules changed. Turning reminders off, or an email switch, just before the send stops it.
+
+## In the ledger
+
+Each step is a signed entry in the `ar` domain: `collection_policy_set` when a customer's rules are saved, `collection_task_opened` when the agent asks a person, and `collection_task_resolved` with the answer. The invoice's **How the agent decided** shows the last two, and a reminder a person approved says so. Webhook endpoints receive each as `ledger.appended`.

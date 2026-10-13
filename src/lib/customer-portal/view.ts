@@ -1,5 +1,5 @@
 import { utcDay } from "../copy";
-import { CLOSE_LABELS, dayWords, financeNextStep, KIND_LABELS, money, reminderPause, type Coin, type CustomerRequest, type FinanceStep, type RequestKind } from "./model";
+import { CLOSE_LABELS, dayWords, financeNextStep, KIND_LABELS, money, reminderPause, type Coin, type CustomerRequest, type FinanceStep, type ReminderPause, type RequestKind } from "./model";
 
 /**
  * The Receivables tab's view of customer statements (docs/superpowers/specs/2026-10-13-customer-portal-design.md P8, P9),
@@ -68,6 +68,20 @@ export function customerNote(requests: readonly CustomerRequest[]): string | nul
   return null;
 }
 
+/** What holds an invoice's reminders, as finance reads it beside a request. */
+export function pauseWords(pause: ReminderPause): string {
+  switch (pause.reason) {
+    case "dispute":
+      return "Reminders wait until you resolve it";
+    case "paid":
+      return "Reminders wait until you find the payment or mark it not received";
+    case "promise_passed":
+      return "Reminders wait until you review it";
+    case "promise":
+      return `Reminders wait through ${dayWords(pause.until as string)}`;
+  }
+}
+
 /** The open requests, oldest first (the one waiting longest on top), as finance acts on them. */
 export function fromCustomerItems(input: {
   requests: readonly CustomerRequest[];
@@ -103,7 +117,7 @@ export function fromCustomerItems(input: {
         owed: invoiceOpen ? `${money(owed, currency)} still owed` : PAID.has(invoice.status) ? "Paid" : "No longer open",
         said: saidWords(request, currency),
         on: utcDay(request.createdAt),
-        pause: pause ? (pause.reason === "dispute" ? "Reminders wait until you resolve it" : `Reminders wait through ${dayWords(pause.until as string)}`) : null,
+        pause: pause ? pauseWords(pause) : null,
         messages: request.messages.map((message) => ({
           id: message.id,
           who: message.author === "customer" ? invoice.counterpartyName : message.by ? (input.members?.get(message.by) ?? "A member") : "A former member",

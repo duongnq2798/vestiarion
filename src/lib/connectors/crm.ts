@@ -37,6 +37,8 @@ export interface ExternalDeal {
   stageLabel: string | null;
   stage: StageState;
   company: ExternalCompany | null;
+  /** The CRM's owner of the deal, by the CRM's own id; null when it has none (collections context C5). */
+  ownerId?: string | null;
 }
 
 /** A page of deals: a backfill of what is open (and won since `windowFrom`), or the changes since `since`. */

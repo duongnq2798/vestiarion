@@ -92,6 +92,16 @@ function dealFacts(deal: ExternalDeal) {
   };
 }
 
+/**
+ * The deal's owner (collections context C5), written apart from its facts so a database before migration 0110, which
+ * has no column for it, keeps reading deals: there the owner is left out, and nothing else changes.
+ */
+async function writeOwner(rowId: string, deal: ExternalDeal): Promise<void> {
+  if (deal.ownerId === undefined) return;
+  const written = await db().from("crm_deals").update({ owner_external_id: deal.ownerId }).eq("id", rowId);
+  if (written.error && written.error.code !== "42703" && written.error.code !== "PGRST204") throw new Error(written.error.message);
+}
+
 const KINDS: Record<CrmChange["what"], string> = { amount: "amount", close: "close date", stage: "stage", deleted: "deleted" };
 
 export const crmStore: CrmSyncDb = {
@@ -110,16 +120,18 @@ export const crmStore: CrmSyncDb = {
 
   async insertDeal(connection, deal) {
     // A row already there (a run that stopped after writing it) is left for the next update to follow.
-    unwrap(
+    const rows = unwrap(
       await db()
         .from("crm_deals")
         .upsert({ connection_id: connection.id, external_id: deal.externalId, ...dealFacts(deal) }, { onConflict: "org_id,connection_id,external_id", ignoreDuplicates: true })
         .select("id")
-    );
+    ) as Array<{ id: string }>;
+    if (rows[0]) await writeOwner(rows[0].id, deal);
   },
 
   async updateDeal(_connection, row, deal) {
     unwrap(await db().from("crm_deals").update({ ...dealFacts(deal), changed_at: new Date().toISOString() }).eq("id", row.id).select("id"));
+    await writeOwner(row.id, deal);
   },
 
   async linkReferences(connection, externalIds) {

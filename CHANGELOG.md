@@ -13,6 +13,20 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Collections that follow the customer.** Before it reminds a customer, the agent weighs what Vestiarion knows about
+  it: a dispute, a payment the customer says it made, a promise, part payments, the reminders already sent and the
+  HubSpot deal it was sold through. Each receivable gets one next step with the facts behind it: wait, ask the account
+  owner, remind in a friendly, firm or final tone, or escalate to finance. A **Collections** panel on the Receivables
+  tab counts what waits on you, the reminders sent this week and promises kept and broken; a receivable's card previews
+  the reminder exactly as the customer would read it. Each customer can have its own rules (ask first for a VIP, the
+  strongest tone, the days between reminders), saved as versions. A broken promise goes to finance for review instead
+  of an automatic reminder, and so does a customer's "I paid" still unconfirmed a week later, so a claim alone never
+  stops reminders for good. Nothing a customer or HubSpot writes sends an email by itself. Tasks begin the first time
+  the agent runs with this in your workspace: what was already overdue or broken before then shows on its card and
+  emails nobody, and each person gets at most one task email each time the agent runs. Every email goes once, even
+  when it is retried or the customer's rules changed in between, and turning reminders or emails off takes effect up to
+  the moment of sending.
+
 - **Projects, each with its own budget.** Make a project for a job, a client or a launch, with a budget in USDC and a
   buffer kept back from it, and put its bills, milestones and deals in it, as you add them or from its page. The agent
   sets each bill's money aside in its project before paying or scheduling it, and a bill the budget cannot cover waits
@@ -88,6 +102,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- **A customer saying it paid now holds the agent's reminders** until you find the payment or mark it not received, and a
+  promise whose day passed holds them until finance reviews it, instead of reminders going again the next day.
+
 - **Payment notices say what is known, and who verified it.** Activity toasts, Slack, Telegram, the stuck-payment email,
   the Approve and pay message and the decision trail say a payment was submitted until Circle confirms it, and that its
   outcome is unknown when Circle never answered; a confirmed payment names its source ("Circle confirmed it on Arc
@@ -110,6 +127,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 - **A bill's amount hint matches its currency.** In shadow mode, a bill in US dollars, euros or pounds showed
   `2.500.000` as its example amount; it now shows `1250.00`, and only a currency written without decimals, such as
   the yen, shows a grouped whole amount.
+- **Allowing HubSpot writes says what to tick.** The connect page and the HubSpot card say to tick both optional write
+  permissions on HubSpot's install screen, and that in an account which approved Vestiarion before, a super admin first
+  turns them on in HubSpot > Settings > Integrations > Connected Apps > Vestiarion > Data Permissions.
 
 ## [0.1.0-beta.1] - 2026-10-12
 

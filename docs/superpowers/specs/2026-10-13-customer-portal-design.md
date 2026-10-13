@@ -33,7 +33,8 @@ Pay links (#116) pay one invoice; nothing showed a customer everything it owes, 
   bucket (5, then one every 12 s) slows a burst first. A forwarded link works for whoever holds it, for that customer's
   invoices only; the page says so.
 - **P7. Reminders wait.** An open dispute holds an invoice's reminders until a person closes it; an open promise through
-  its day. A claim of payment holds nothing.
+  its day. A claim of payment holds nothing. (Changed the same day by 2026-10-13-collections-context-design.md C2, C3:
+  an open claim of payment holds them until it is closed, and a promise whose day passed until finance reviews it.)
 - **P8. Finance answers on the Receivables tab.** "From customers" lists open requests oldest first, each with the
   invoice, what is still owed, what was said, the thread and the next step: find the payment and apply it (Payment found
   / Not received), wait for a promise's day then follow up, reply then resolve a dispute, make the pay link asked for.

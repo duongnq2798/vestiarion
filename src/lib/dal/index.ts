@@ -55,6 +55,7 @@ export const TENANT_TABLES = [
   "customer_portal_links", "customer_requests", "customer_request_messages",
   "projects", "project_reservations",
   "usage_events",
+  "collection_policies", "collection_tasks", "notification_deliveries", "collection_task_starts",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
