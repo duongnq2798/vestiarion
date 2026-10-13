@@ -2,7 +2,7 @@ import type { ActualRecord } from "./actual-payment-fields";
 import { buildCurrencyReport, currenciesNeeded, type CurrencyReport } from "./currency-report";
 import { unwrap, type OrgDb } from "./dal";
 import { countManualRates, reportingRateBook } from "./fx/rates-store";
-import { readFxVariances, recordFxVariances, type VariancesRead } from "./fx/variances";
+import { readFxVariances, readFxVarianceState, type VariancesRead } from "./fx/variances";
 import { rateBook, type RateBook } from "./money";
 import { readReportingCurrency } from "./reporting-currency";
 import type { ReportFacts } from "./workspace-report";
@@ -10,10 +10,10 @@ import type { ReportFacts } from "./workspace-report";
 /**
  * Reads what the report's **Currencies and rates** needs (docs/superpowers/specs/2026-10-13-currency-provenance-
  * design.md M8), inside the workspace's organization scope: the reporting currency, where each bill came from (its
- * `create_invoice` entry's `via`), the reference rates for the currencies its figures are in (read from the feed and
- * stored when the stored ones are a day old), the FX variances (recording any new one first) and the manual
- * adjustments. Each part is best effort on its own: one that cannot be read shows as unknown or not set up, never as
- * a figure.
+ * `create_invoice` entry's `via`), the reference rates for the currencies its figures are in, the FX variances and the
+ * manual adjustments. Reads only, while the report renders: the rates and variances are those the hourly rates job
+ * stored, never the feed read here, and nothing is written. Each part is best effort on its own: one that cannot be
+ * read shows as unknown or not set up, never as a figure.
  */
 
 const PAGE = 1000;
@@ -51,9 +51,9 @@ export async function readCurrencyReport(orgDb: OrgDb, facts: ReportFacts, actua
       console.error("report: rates not read", error instanceof Error ? error.message : error);
       return rateBook([], Object.fromEntries(needed.map((code) => [code, `The ${code} rate could not be read.`])));
     }),
-    // Any variance the payment-day rate now allows is recorded first; a failure still shows those recorded.
-    recordFxVariances(orgDb).catch(async (error: unknown): Promise<VariancesRead> => {
-      console.error("report: FX variances not recorded", error instanceof Error ? error.message : error);
+    // The variances the job recorded, and each paid bill without one as unknown; a failure still shows those recorded.
+    readFxVarianceState(orgDb).catch(async (error: unknown): Promise<VariancesRead> => {
+      console.error("report: FX variances not read", error instanceof Error ? error.message : error);
       const read = await readFxVariances(orgDb).catch(() => ({ available: false as const }));
       return read.available ? { ...read, unknown: [] } : read;
     }),

@@ -85,7 +85,7 @@ function ReportShot() {
         title={sectionTitle("report")}
         sub="What the agent did with this workspace's bills since it opened: what it paid and with what proof, what it stopped and why, and how often a person stepped in."
       />
-      <CurrencyReport report={CURRENCY_REPORT} settingsHref="#" />
+      <CurrencyReport report={CURRENCY_REPORT} settingsHref="#" asOf={`${CURRENCY_TODAY}T09:00:00.000Z`} />
     </>
   );
 }
@@ -105,7 +105,7 @@ function VarianceShot() {
 }
 
 function ScenarioShot() {
-  const reporting = { currency: "SGD", rates: TODAY_RATES, missing: {} };
+  const reporting = { currency: "SGD", rates: TODAY_RATES, missing: {}, asOf: `${CURRENCY_TODAY}T09:00:00.000Z` };
   return (
     <>
       <PageHead title={sectionTitle("treasury")} sub="What the agent holds, what it decided, and why." />

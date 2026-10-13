@@ -13,7 +13,7 @@ export const RATE_KIND_WORDS: Record<RateKind, string> = {
   reference: "reference rate",
   quote: "provider's quote",
   accounting: "accounting rate",
-  peg: "1:1 redemption, not a market rate",
+  peg: "redemption peg",
   manual: "typed by a person",
 };
 
@@ -137,12 +137,30 @@ export function rateEquation(rate: FxRate): string {
   return `1 ${rate.from} = ${formatRateValue(rate.value)} ${rate.to}`;
 }
 
-/** The rate whole, for a figure that used it: `1 USD = 1.3500 SGD, reference rate from ExchangeRate-API, published 13 Oct 2026, 00:02 UTC`. */
-export function rateWords(rate: FxRate): string {
-  if (rate.kind === "peg") return `1 ${rate.from} = 1 ${rate.to}, ${rate.source}, not a market rate`;
+/**
+ * How long before `now` a rate was published, in words: `under an hour old`, `11 hours old`, `2 days old`. A page that
+ * shows a stored rate says it, since the hourly job, not the page, keeps it fresh.
+ */
+export function rateAge(at: string, now: string | number): string {
+  const published = Date.parse(at);
+  const reader = typeof now === "number" ? now : Date.parse(now);
+  if (!Number.isFinite(published) || !Number.isFinite(reader)) return "age not known";
+  const hours = Math.floor(Math.max(0, reader - published) / (60 * 60_000));
+  if (hours < 1) return "under an hour old";
+  if (hours < 48) return `${hours} ${hours === 1 ? "hour" : "hours"} old`;
+  return `${Math.floor(hours / 24)} days old`;
+}
+
+/**
+ * The rate whole, for a figure that used it: `1 USD = 1.3500 SGD, reference rate from ExchangeRate-API, published 13 Oct
+ * 2026, 00:02 UTC`, and its age when `now` is given. A token's peg is named as the redemption peg it is.
+ */
+export function rateWords(rate: FxRate, options: { now?: string | number } = {}): string {
+  if (rate.kind === "peg") return `1 ${rate.from} = 1 ${rate.to}, ${RATE_KIND_WORDS.peg} (${rate.source}), not a market rate`;
   const when = rate.at ? `, ${rate.kind === "manual" ? "set" : "published"} ${rateTime(rate.at)}` : "";
+  const age = rate.at && rate.kind !== "manual" && options.now !== undefined ? `, ${rateAge(rate.at, options.now)}` : "";
   const by = rate.kind === "manual" ? `, ${RATE_KIND_WORDS.manual}` : `, ${RATE_KIND_WORDS[rate.kind]} from ${rate.source}`;
-  return `${rateEquation(rate)}${by}${when}`;
+  return `${rateEquation(rate)}${by}${when}${age}`;
 }
 
 /** Whether two rates are the same rate: same pair, kind, source, value and time. */

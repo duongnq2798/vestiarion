@@ -768,7 +768,7 @@ describe("a bill written in another currency, in shadow mode (shadow mode S6)", 
   it("converts a bill in US dollars one for one, naming no rate service", () => {
     const usd = entry(20, "09:30:00", "human", "create_invoice", { ...added.detail, amount: 125, bill: { currency: "USD", amount: 125, perUsd: 1, source: "USD = USDC", at: "2026-10-05T09:30:00Z" } });
     const facts = step(buildEvidenceChain({ ...base, entries: [usd], payment: null, receipt: null, checks: { entries: okChecks([usd]), onChain: null } }), "bill").facts;
-    expect(facts.map((fact) => fact.text)).toEqual(["125 USD, added in the invoice form on Bills & receivables.", "Converted to 125.00 USDC at 1 USD = 1 USDC."]);
+    expect(facts.map((fact) => fact.text)).toEqual(["125 USD, added in the invoice form on Bills & receivables.", "Converted to 125.00 USDC at 1 USD = 1 USDC, USDC's 1:1 redemption peg, not a market rate."]);
     expect(facts[1].link).toBeUndefined();
   });
 });

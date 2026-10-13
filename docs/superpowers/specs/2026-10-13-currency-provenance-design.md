@@ -41,8 +41,9 @@ value a decimal string, `to` per one `from`:
   and planning use it.
 - `quote`: the provider's executable quote for what moves on Arc (Circle's EURC quote, recorded on a EURC decision).
 - `accounting`: the rate the books used (Xero's or QuickBooks' own). Named so a figure can say it; not read yet.
-- And two that a figure says by name: `peg`, 1 USDC = 1 USD or 1 EURC = 1 EUR, the tokens' redemption at par, said as
-  such wherever it is used and never a market rate; and `manual`, a rate a person typed (a scenario's).
+- And two that a figure says by name: `peg`, 1 USDC = 1 USD or 1 EURC = 1 EUR, the tokens' redemption at par, named
+  as the redemption peg wherever it is used (a total that counted it says so) and never a market rate or a dollar
+  balance; and `manual`, a rate a person typed (a scenario's).
 Every converted figure carries the rates it used, and every place that shows one names its kind, source and time.
 
 **M3. A figure's provenance.** `MoneyFigure` keeps apart the amount as on the document and where it came from, the
@@ -58,29 +59,33 @@ MYR, who set it and when. An owner or admin sets it in Settings (`workspace.repo
 own currency and the report says where to set one.
 - Conversion to it: through the US dollar, exactly (the cross rate is a fraction of the two reference rates, rounded
   once). USDC and EURC reach the dollar and the euro by the peg, said. The newest reference rate published within 3
-  days counts; an older or missing one makes the figure unknown, with the last rate's day when there was one.
+  days counts, shown with its time and age; an older or missing one makes the figure unknown, with the last rate's day
+  when there was one.
 
 **M5. Rates are stored.** `fx_rates` (0113), append-only for the tenant role: base, quote, the value, kind, source, when
 the source published it, when it was recorded and by whom (a person for a manual rate). One row per workspace, kind,
-source, pair and publication. Reference rates are recorded from the feed (`recordReferenceRates`) by the report and
-Treasury when they need one, and every hour by `POST /api/platform/fx-rates` for each workspace with a reporting
-currency or shadow mode in a currency of its own. The feed is read at most once an hour per server, as before.
+source, pair and publication. Reference rates are recorded from the feed (`recordReferenceRates`) only by the hourly
+`POST /api/platform/fx-rates`, for each workspace with a reporting currency, shadow mode in a currency of its own or a
+converted bill. A page never reads the feed or writes while it renders: it shows what is stored, with its age, or
+unknown. The feed is read at most once an hour per server, as before, and a feed that does not answer is asked once a
+run.
 
 **M6. FX variance on a paid bill.** A shadow-mode bill in a currency of its own was converted at its decision rate
 (the bill's `fx_rate`, on the day it was entered); its payment on Arc carried USDC. The rate at payment is the newest
 recorded reference rate published at or before the payment and at most 36 hours before it (the feed publishes daily);
 none means unknown.
-- Value at payment = what the transfer carried × decision rate ÷ payment-day rate, to the cent. Variance = what it
-  carried less that value, in USDC: more than zero means the business paid more than the bill was worth that day.
-  A discount is in both sides, so it is never a variance. A bill in US dollars has none: the dollar's rate does not
+- Value at payment = what the transfer carried × decision rate ÷ payment-day rate, to the cent (to the micro-unit the
+  transfer carried, when a discount left more digits). Variance = what it carried less that value, in USDC: more than
+  zero means the business paid more than the bill was worth that day. A discount is in both sides, so it is never a
+  variance, and a rate that did not move is a variance of zero. A bill in US dollars has none: the dollar's rate does not
   move against itself.
 - Recorded once per bill in `fx_variances` (0113, append-only), with every input copied (the decision rate and its
-  source and day, the payment-day rate's row and value, what moved and when), by the hourly job and by the report.
-  Shown on the bill's card and in the report, per currency.
+  source and day, the payment-day rate's row and value, what moved and when), by the hourly job alone. Shown on the
+  bill's card and in the report, per currency; a paid bill the job has not recorded yet reads unknown, with why.
 
 **M7. Rates in a cash scenario are versions.** Treasury's What if section gains **Exchange rates** when an open bill
-was written in another currency: a rate per currency, empty for each bill at its own conversion, today's reference
-rate offered beside it. A rate typed there values that currency's bills at it (the bill's own amount ÷ the rate, to the
+was written in another currency: a rate per currency, empty for each bill at its own conversion, the newest stored
+reference rate offered beside it with its age. A rate typed there values that currency's bills at it (the bill's own amount ÷ the rate, to the
 cent), before the cost lever. **Save as a version** keeps the levers and rates as the next version of that scenario in
 `cash_scenario_versions` (0113, append-only), each typed rate as a `manual` row of `fx_rates`, and signs
 `cash_scenario_saved`; a version is never changed, a change is the next version. Saved versions are listed and opened
@@ -103,8 +108,8 @@ amount and currency as written; a bill taken in another currency keeps its conve
 used, the reporting currency and saved scenarios, is what 0113 adds.
 
 **M11. Before 0113 runs.** A missing table or column (`42P01`, `PGRST205`, `PGRST204`, `42703`) reads as not set up:
-Settings says the reporting currency is not set up yet, the report shows its figures per currency with rates read but
-not stored, variances unknown, and saving a scenario says it is not set up. Nothing fails for it.
+Settings says the reporting currency is not set up yet, the report shows its figures per currency with no rate,
+variances unknown, and saving a scenario says it is not set up. Nothing fails for it.
 
 ## Screenshots
 
@@ -122,7 +127,8 @@ not stored, variances unknown, and saving a scenario says it is not set up. Noth
 
 - Migration 0113 is the partner's to apply. Until then every part says it is not set up, and nothing fails.
 - The hourly job is a new line in `supabase/cron/watches.sql` (`vestiarion-fx-rates`, 41 minutes past each hour), run by
-  hand in the SQL editor as the others are. Until it runs, rates are recorded when the report or Treasury is opened.
+  hand in the SQL editor as the others are. Until it runs, no rate is recorded and every converted figure reads
+  unknown: pages never read the feed themselves.
 
 ## Left for later
 

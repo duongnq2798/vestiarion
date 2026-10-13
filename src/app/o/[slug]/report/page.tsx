@@ -150,7 +150,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
             }
             actuals={<ActualsComparison slug={slug} comparison={comparison} canRecord={canRecord && comparison !== null} members={members} templateCsv={templateCsv} statement={statement} showAll={query.actuals === "all"} />}
           />
-          <CurrencyReport report={currencies} settingsHref={orgHref(slug, "/settings#reporting-currency-title")} />
+          <CurrencyReport report={currencies} settingsHref={orgHref(slug, "/settings#reporting-currency-title")} asOf={facts.now} />
           {shares.available && <ReportShareLinks orgSlug={slug} live={liveLinks} stopped={shares.stopped} canStop={canShare} />}
         </div>
       </ProductShell>

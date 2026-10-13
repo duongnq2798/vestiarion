@@ -76,11 +76,13 @@ export interface ScenarioReporting {
   /** Each currency's reference rate to the US dollar, and why one is missing; plain values. */
   rates: FxRate[];
   missing: Record<string, string>;
+  /** When the page read the rates: each says its age then. */
+  asOf?: string;
 }
 
 /**
  * The section. `outcome={false}` draws the levers alone, for the guide's picture of them; the parts of the outcome
- * (`ScenarioCases`, `ScenarioFindings`, `CoverageList`) have their own pictures. `rateHints` are today's reference rates
+ * (`ScenarioCases`, `ScenarioFindings`, `CoverageList`) have their own pictures. `rateHints` are the newest stored reference rates
  * for the currencies bills were written in, `saving` the saved versions and who may save, `reporting` the reporting
  * currency; each is left out where the page has none.
  */
@@ -267,7 +269,7 @@ export function ScenarioOutcome({ result, reporting = null }: { result: Scenario
       <DayByDay result={result} />
       <p className="text-xs leading-5 text-ink-3">
         A what-if from the bills and receivables on record, not a forecast. Nothing here changes a payment or reaches the agent: Safe to spend today and every
-        payment still count no receivable, and every payment still settles in USDC.
+        payment still count no receivable, and every payment still settles in USDC or EURC.
       </p>
     </div>
   );
@@ -275,7 +277,8 @@ export function ScenarioOutcome({ result, reporting = null }: { result: Scenario
 
 /**
  * The scenario's cash today and its lowest balance in the reporting currency, with the rates that took them there:
- * USDC by its dollar redemption, then the dollar's reference rate. A missing rate says unknown, never a guess.
+ * USDC by its dollar redemption peg, then the dollar's reference rate with its time and age. Said as USDC valued in that
+ * currency, never as that currency held. A missing rate says unknown, never a guess.
  */
 export function InReportingCurrency({ result, reporting }: { result: ScenarioResult; reporting: ScenarioReporting }) {
   const book: RateBook = { rates: new Map(reporting.rates.map((rate) => [rate.to, rate])), missing: new Map(Object.entries(reporting.missing)) };
@@ -289,9 +292,9 @@ export function InReportingCurrency({ result, reporting }: { result: ScenarioRes
   return (
     <div className="text-xs leading-5 text-ink-2">
       <p>
-        {`In ${reporting.currency}: cash today ${formatMoney(cash.money)}; lowest in this scenario ${formatMoney(lowest.money)}.`}
+        {`In ${reporting.currency}, valued from USDC: cash today ${formatMoney(cash.money)}; lowest in this scenario ${formatMoney(lowest.money)}.`}
       </p>
-      <p className="text-ink-3">{`At ${cash.rates.map(rateWords).join("; then ")}.`}</p>
+      <p className="text-ink-3">{`At ${cash.rates.map((rate) => rateWords(rate, reporting.asOf ? { now: reporting.asOf } : {})).join("; then ")}.`}</p>
     </div>
   );
 }

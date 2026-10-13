@@ -5,18 +5,17 @@ import { usdRate, type UsdRate } from "./usd-rates";
 /**
  * The rates a workspace used, stored with their kind, source and time (docs/superpowers/specs/2026-10-13-currency-
  * provenance-design.md M5), in `fx_rates` (0113), inside the workspace's organization scope. Reference rates come from
- * the feed shadow mode already reads (`usdRate`: ExchangeRate-API, at most once an hour per server); a rate the feed
- * did not give is said, never guessed. Nothing that decides or pays reads this module.
+ * the feed shadow mode already reads (`usdRate`: ExchangeRate-API, at most once an hour per server), and only the
+ * hourly rates job (`rates-job.ts`) reads it and records them: a page reads what is stored, never the feed, and writes
+ * nothing. A rate the feed did not give is said, never guessed. Nothing that decides or pays reads this module.
  *
  * Before migration 0113 runs, reading answers as if nothing was stored and recording stores nothing: a figure then
- * shows the rate read from the feed, or unknown.
+ * shows as unknown.
  */
 
 export const REFERENCE_SOURCE = "ExchangeRate-API";
 /** A reporting figure counts a reference rate published within this long: the feed publishes daily. */
 export const REPORT_RATE_MAX_AGE_MS = 3 * 24 * 60 * 60_000;
-/** A stored rate younger than this needs no new read of the feed. */
-const FRESH_MS = 26 * 60 * 60_000;
 
 type PostgrestError = { code?: string; message?: string } | null;
 
@@ -97,39 +96,22 @@ export async function storedReferenceRates(orgDb: OrgDb, currencies: Iterable<st
 }
 
 /**
- * The reference rate each currency is reported at: the newest stored, published within 3 days of `now`. When one is
- * missing or older than a day, the feed is read and stored first, best effort. A currency with none says why.
+ * The reference rate each currency is reported at: the newest stored, published within 3 days of `now`. Reads only
+ * what the hourly job stored: it never reads the feed and never writes, so a page that asks waits on nothing outside.
+ * A currency with none says why, and the page shows each rate with its time and age.
  */
-export async function reportingRateBook(orgDb: OrgDb, currencies: Iterable<string>, now: Date, deps: { rate?: (currency: string) => Promise<UsdRate> } = {}): Promise<RateBook> {
+export async function reportingRateBook(orgDb: OrgDb, currencies: Iterable<string>, now: Date): Promise<RateBook> {
   const codes = rated(currencies);
   if (codes.length === 0) return rateBook([]);
-  const since = new Date(now.getTime() - REPORT_RATE_MAX_AGE_MS);
-  let stored = await storedReferenceRates(orgDb, codes, { since: new Date(now.getTime() - 30 * 24 * 60 * 60_000), until: now });
-  const newest = (code: string) => stored.find((rate) => rate.to === code);
-  const stale = codes.filter((code) => {
-    const rate = newest(code);
-    return !rate || now.getTime() - Date.parse(rate.at) > FRESH_MS;
-  });
-  let failed: Record<string, string> = {};
-  let unstored: FxRate[] = [];
-  if (stale.length > 0) {
-    const recorded = await recordReferenceRates(orgDb, stale, deps).catch((error: unknown) => {
-      console.error("fx rates not recorded", error instanceof Error ? error.message : error);
-      return { rates: [] as FxRate[], failed: {} as Record<string, string>, stored: false };
-    });
-    failed = recorded.failed;
-    // Rates read but not stored (before 0113) still count for this read, with their source and time.
-    if (recorded.stored) stored = [...recorded.rates, ...stored];
-    else unstored = recorded.rates;
-  }
+  const since = now.getTime() - REPORT_RATE_MAX_AGE_MS;
+  const stored = await storedReferenceRates(orgDb, codes, { since: new Date(now.getTime() - 30 * 24 * 60 * 60_000), until: now });
   const usable: FxRate[] = [];
   const missing: Record<string, string> = {};
   for (const code of codes) {
-    const candidates = [...unstored, ...stored].filter((rate) => rate.to === code).sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
-    const best = candidates[0];
-    if (best && Date.parse(best.at) >= since.getTime() && Date.parse(best.at) <= now.getTime()) usable.push(best);
+    const best = stored.filter((rate) => rate.to === code).sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0];
+    if (best && Date.parse(best.at) >= since && Date.parse(best.at) <= now.getTime()) usable.push(best);
     else if (best) missing[code] = `The last ${code} rate recorded was published ${rateTime(best.at)}, too old to report with.`;
-    else missing[code] = failed[code] ? `No ${code} rate was recorded: ${failed[code]}` : `No ${code} rate was recorded.`;
+    else missing[code] = `No ${code} rate is recorded yet. Rates are recorded every hour.`;
   }
   return rateBook(usable, missing);
 }

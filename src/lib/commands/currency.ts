@@ -15,7 +15,7 @@ export async function setWorkspaceReportingCurrency(actor: Actor, input: { curre
   if (refusal) return refusal;
   try {
     const setting = await setReportingCurrency({ actorId: actor.userId, currency: input.currency });
-    return done(`Reports and plans now total in ${setting.currency}, with the rates shown. Payments still settle in USDC.`);
+    return done(`Reports and plans now total in ${setting.currency}, with the rates shown. Payments still settle in USDC or EURC.`);
   } catch (error) {
     if (error instanceof ReportingCurrencyError) return refused(error.code, error.message);
     console.error("setting the reporting currency failed", actor.orgId, error instanceof Error ? error.message : "unknown error");

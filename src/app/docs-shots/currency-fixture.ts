@@ -212,8 +212,8 @@ export const HARBOR_ENTRY = {
 // ------------------------------------------------------------------ a cash scenario with a rate typed
 
 export const SCENARIO_HINTS: Record<string, RateHint> = {
-  SGD: { currency: "SGD", perUsd: "1.3512", source, at: "2026-10-13T00:02:31.000Z" },
-  JPY: { currency: "JPY", perUsd: "149.235", source, at: "2026-10-13T00:02:31.000Z" },
+  SGD: { currency: "SGD", perUsd: "1.3512", source, at: "2026-10-13T00:02:31.000Z", age: "8 hours old" },
+  JPY: { currency: "JPY", perUsd: "149.235", source, at: "2026-10-13T00:02:31.000Z", age: "8 hours old" },
 };
 
 export const SAVED_SCENARIOS: SavedScenarioView[] = [

@@ -3,7 +3,7 @@ import { withOrg } from "../dal/scope";
 import { readReportingCurrency } from "../reporting-currency";
 import { readShadowMode } from "../shadow-mode";
 import { notSetUp, recordReferenceRates } from "./rates-store";
-import type { UsdRate } from "./usd-rates";
+import { usdRate, type UsdRate } from "./usd-rates";
 import { recordFxVariances } from "./variances";
 
 /**
@@ -14,7 +14,11 @@ import { recordFxVariances } from "./variances";
  * now recorded. So a payment made at any hour finds the rate that was in force, whoever opens a page.
  *
  * Each workspace runs in its own scope, one after another, and one's failure is its own. It reads and writes only rates
- * and variances: nothing that decides or pays. Before migration 0113 runs, it has nothing to do.
+ * and variances: nothing that decides or pays. Before migration 0113 runs, it has nothing to do. This job is the only
+ * reader of the feed and the only writer of reference rates and variances: no page reads the feed or writes either.
+ *
+ * A feed that does not answer is asked once a run, not again for each workspace: the rest of the run records the
+ * variances the rates already stored allow, and the next hour asks again.
  */
 
 export interface RatesJobResult {
@@ -30,7 +34,12 @@ export interface RatesJobResult {
   skipped: number;
 }
 
-/** The currencies a workspace needs a reference rate for, or none when it needs none. */
+/**
+ * The currencies a workspace needs a reference rate for, or none when it needs none: since no page reads the feed,
+ * every currency a page converts. Bills' own currencies (their variances, Treasury's rates, the report), the shadow
+ * mode's, and with a reporting currency set, it and every other currency the report converts into it: what the
+ * business recorded paying in, and the euro, which EURC reaches by its peg.
+ */
 async function currenciesOf(orgDb: OrgDb): Promise<string[] | null> {
   const [reporting, shadow, bills] = await Promise.all([
     readReportingCurrency(orgDb),
@@ -40,9 +49,19 @@ async function currenciesOf(orgDb: OrgDb): Promise<string[] | null> {
   if (!reporting.available) return null;
   if (bills.error) throw new Error(`invoices not read: ${bills.error.message}`);
   const codes = new Set<string>();
-  if (reporting.setting) codes.add(reporting.setting.currency);
   if (shadow && shadow.currency !== "USDC") codes.add(shadow.currency);
   for (const row of (bills.data ?? []) as Array<{ original_currency: string | null }>) if (row.original_currency) codes.add(row.original_currency);
+  if (reporting.setting) {
+    codes.add(reporting.setting.currency);
+    const [paid, eurc] = await Promise.all([
+      orgDb.from("payment_actuals").select("currency").not("currency", "is", null).limit(1000),
+      orgDb.from("invoices").select("currency").eq("currency", "EURC").limit(1),
+    ]);
+    if (paid.error && !notSetUp(paid.error)) throw new Error(`payment_actuals not read: ${paid.error.message}`);
+    if (eurc.error) throw new Error(`invoices not read: ${eurc.error.message}`);
+    for (const row of (paid.data ?? []) as Array<{ currency: string | null }>) if (row.currency && row.currency !== "USDC" && row.currency !== "EURC") codes.add(row.currency);
+    if ((eurc.data ?? []).length > 0) codes.add("EUR");
+  }
   codes.delete("USD");
   return [...codes].sort();
 }
@@ -53,6 +72,19 @@ export async function recordRatesForWorkspaces(deps: { now?: () => number; budge
   const budget = deps.budgetMs ?? 240_000;
   const orgs = unwrap(await platformDb().from("orgs").select("id").order("id")) as Array<{ id: string }>;
   const result: RatesJobResult = { workspaces: 0, rates: 0, variances: 0, failed: 0, skipped: 0 };
+  const feed = deps.rate ?? ((currency: string) => usdRate(currency));
+  // The feed answers every currency in one read: once it has failed, this run asks it nothing more. A currency it does
+  // not list is that currency's alone.
+  let down: unknown = null;
+  const rate = async (currency: string): Promise<UsdRate> => {
+    if (down) throw down;
+    try {
+      return await feed(currency);
+    } catch (error) {
+      if (!(error instanceof Error && error.message.startsWith("There is no rate for "))) down = error;
+      throw error;
+    }
+  };
   for (const [index, org] of orgs.entries()) {
     if (now() - started > budget) {
       result.skipped = orgs.length - index;
@@ -64,7 +96,7 @@ export async function recordRatesForWorkspaces(deps: { now?: () => number; budge
         const currencies = await currenciesOf(orgDb);
         if (!currencies || currencies.length === 0) return;
         result.workspaces += 1;
-        const recorded = await recordReferenceRates(orgDb, currencies, deps.rate ? { rate: deps.rate } : {});
+        const recorded = await recordReferenceRates(orgDb, currencies, { rate });
         if (recorded.stored) result.rates += recorded.rates.length;
         const variances = await recordFxVariances(orgDb);
         if (variances.available) result.variances += variances.recorded.length;

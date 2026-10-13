@@ -7,8 +7,8 @@ import { notSetUp, storedReferenceRates } from "./rates-store";
  * design.md M6), recorded once per bill in `fx_variances` (0113) inside the workspace's organization scope. The rate at
  * payment is a stored reference rate, published at or before the payment and at most 36 hours before it; this module
  * never reads the feed, and a bill whose payment-day rate was not recorded has an unknown variance, never a guess.
- * Recorded by the hourly rates job, the report and Bills & receivables, whichever comes first; nothing that decides or
- * pays reads it.
+ * Recorded only by the hourly rates job (`recordFxVariances`), exactly once per bill; the report and Bills &
+ * receivables read them (`readFxVarianceState`) and write nothing. Nothing that decides or pays reads it.
  */
 
 export interface RecordedVariance {
@@ -144,16 +144,16 @@ async function paidConvertedBills(orgDb: OrgDb, invoiceIds?: readonly string[]):
   });
 }
 
-/**
- * Records the variance of each paid, converted bill that has none yet and whose payment-day rate was recorded, then
- * answers every variance recorded and every one still unknown. `invoiceIds` limits it to those bills.
- */
-export async function recordFxVariances(orgDb: OrgDb = db(), options: { invoiceIds?: readonly string[] } = {}): Promise<VariancesRead> {
-  const before = await readFxVariances(orgDb, options.invoiceIds);
+/** What the stored rates allow for the paid, converted bills that have no variance yet: rows to record, and the rest. */
+type Assessment = { available: false } | { available: true; recorded: RecordedVariance[]; ready: Array<{ fact: UnknownVariance; row: Record<string, unknown> }>; unknown: UnknownVariance[] };
+
+/** Reads only: the variances recorded, and for each paid, converted bill without one, its row from the stored rates or why there is none. */
+async function assessFxVariances(orgDb: OrgDb, invoiceIds?: readonly string[]): Promise<Assessment> {
+  const before = await readFxVariances(orgDb, invoiceIds);
   if (!before.available) return before;
   const done = new Set(before.recorded.map((row) => row.invoiceId));
-  const candidates = (await paidConvertedBills(orgDb, options.invoiceIds)).filter(({ bill }) => !done.has(bill.id));
-  if (candidates.length === 0) return { available: true, recorded: before.recorded, unknown: [] };
+  const candidates = (await paidConvertedBills(orgDb, invoiceIds)).filter(({ bill }) => !done.has(bill.id));
+  if (candidates.length === 0) return { available: true, recorded: before.recorded, ready: [], unknown: [] };
 
   const facts = candidates.flatMap(({ bill, intent }) => {
     const currency = (bill.original_currency ?? "").toUpperCase();
@@ -167,7 +167,7 @@ export async function recordFxVariances(orgDb: OrgDb = db(), options: { invoiceI
     if ((intent.token ?? "USDC") !== "USDC" || (bill.currency ?? "USDC") !== "USDC" || !decision || paid.minor <= BigInt(0)) return [];
     return [{ invoiceId: bill.id, currency, paidAt, paid, decision }];
   });
-  if (facts.length === 0) return { available: true, recorded: before.recorded, unknown: [] };
+  if (facts.length === 0) return { available: true, recorded: before.recorded, ready: [], unknown: [] };
 
   const times = facts.map((fact) => Date.parse(fact.paidAt));
   const stored = await storedReferenceRates(
@@ -175,7 +175,7 @@ export async function recordFxVariances(orgDb: OrgDb = db(), options: { invoiceI
     facts.map((fact) => fact.currency),
     { since: new Date(Math.min(...times) - 36 * 60 * 60_000), until: new Date(Math.max(...times)) }
   );
-  const rows: Array<Record<string, unknown>> = [];
+  const ready: Array<{ fact: UnknownVariance; row: Record<string, unknown> }> = [];
   const unknown: UnknownVariance[] = [];
   for (const fact of facts) {
     const payment = rateAtPayment(stored.filter((rate) => rate.to === fact.currency), fact.paidAt);
@@ -184,31 +184,57 @@ export async function recordFxVariances(orgDb: OrgDb = db(), options: { invoiceI
       unknown.push({ invoiceId: fact.invoiceId, currency: fact.currency, paidAt: fact.paidAt, reason: `No ${fact.currency} rate was recorded in the 36 hours before the payment.` });
       continue;
     }
-    rows.push({
-      invoice_id: fact.invoiceId,
-      currency: fact.currency,
-      paid_currency: "USDC",
-      paid_amount: decimal(variance.paid),
-      paid_at: fact.paidAt,
-      covered_amount: decimal(variance.covered),
-      decision_rate: fact.decision.value,
-      decision_source: fact.decision.source,
-      decision_at: fact.decision.at,
-      payment_rate_id: payment.id,
-      payment_rate: payment.value,
-      payment_source: payment.source,
-      payment_rate_at: payment.at,
-      value_at_payment: decimal(variance.valueAtPayment),
-      variance: decimal(variance.variance),
+    ready.push({
+      fact: { invoiceId: fact.invoiceId, currency: fact.currency, paidAt: fact.paidAt, reason: `Not recorded yet: the hourly rates job records it from the ${fact.currency} rate in force at the payment.` },
+      row: {
+        invoice_id: fact.invoiceId,
+        currency: fact.currency,
+        paid_currency: "USDC",
+        paid_amount: decimal(variance.paid),
+        paid_at: fact.paidAt,
+        covered_amount: decimal(variance.covered),
+        decision_rate: fact.decision.value,
+        decision_source: fact.decision.source,
+        decision_at: fact.decision.at,
+        payment_rate_id: payment.id,
+        payment_rate: payment.value,
+        payment_source: payment.source,
+        payment_rate_at: payment.at,
+        value_at_payment: decimal(variance.valueAtPayment),
+        variance: decimal(variance.variance),
+      },
     });
   }
-  if (rows.length > 0) {
-    const write = await orgDb.from("fx_variances").upsert(rows, { onConflict: "org_id,invoice_id", ignoreDuplicates: true });
-    if (write.error) {
-      if (notSetUp(write.error)) return { available: false };
-      throw new Error(`fx_variances not recorded: ${write.error.message}`);
-    }
+  return { available: true, recorded: before.recorded, ready, unknown };
+}
+
+/**
+ * For a page: the variances recorded, and every paid, converted bill without one as unknown, with why. Reads only: it
+ * never writes and never reads the feed, so it is safe while a page renders. `invoiceIds` limits it to those bills.
+ */
+export async function readFxVarianceState(orgDb: OrgDb = db(), options: { invoiceIds?: readonly string[] } = {}): Promise<VariancesRead> {
+  const assessed = await assessFxVariances(orgDb, options.invoiceIds);
+  if (!assessed.available) return assessed;
+  return { available: true, recorded: assessed.recorded, unknown: [...assessed.unknown, ...assessed.ready.map(({ fact }) => fact)] };
+}
+
+/**
+ * The hourly rates job's: records the variance of each paid, converted bill that has none yet and whose payment-day
+ * rate was recorded, once (a bill recorded meanwhile is kept as it was), then answers every variance recorded and every
+ * one still unknown. `invoiceIds` limits it to those bills. Never called while a page renders.
+ */
+export async function recordFxVariances(orgDb: OrgDb = db(), options: { invoiceIds?: readonly string[] } = {}): Promise<VariancesRead> {
+  const assessed = await assessFxVariances(orgDb, options.invoiceIds);
+  if (!assessed.available) return assessed;
+  if (assessed.ready.length === 0) return { available: true, recorded: assessed.recorded, unknown: assessed.unknown };
+  const write = await orgDb.from("fx_variances").upsert(
+    assessed.ready.map(({ row }) => row),
+    { onConflict: "org_id,invoice_id", ignoreDuplicates: true }
+  );
+  if (write.error) {
+    if (notSetUp(write.error)) return { available: false };
+    throw new Error(`fx_variances not recorded: ${write.error.message}`);
   }
   const after = await readFxVariances(orgDb, options.invoiceIds);
-  return after.available ? { available: true, recorded: after.recorded, unknown } : after;
+  return after.available ? { available: true, recorded: after.recorded, unknown: assessed.unknown } : after;
 }

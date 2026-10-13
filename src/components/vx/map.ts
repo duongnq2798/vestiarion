@@ -311,7 +311,7 @@ function billEvidence(invoice: InvoiceRow): Evidence | null {
   const { original_currency: currency, original_amount: amount, fx_rate: rate, fx_source: source, fx_at: at } = invoice;
   if (!currency || amount == null || rate == null || !source || !at) return null;
   const written = formatMoney(roundedMoney(amount, currency));
-  if (currency === "USD") return { label: "Bill", value: `${written}, at 1 USD = 1 USDC, USDC's 1:1 dollar redemption`, state: "neutral" };
+  if (currency === "USD") return { label: "Bill", value: `${written}, at 1 USD = 1 USDC, USDC's 1:1 redemption peg, not a market rate`, state: "neutral" };
   return {
     label: "Bill",
     value: `${written}, converted at ${formatRateValue(String(rate))} ${currency} per US dollar, the reference rate ${source} published ${utcDay(at)}`,

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { recordRatesForWorkspaces } from "@/lib/fx/rates-job";
-import type { UsdRate } from "@/lib/fx/usd-rates";
+import { FxRateError, type UsdRate } from "@/lib/fx/usd-rates";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
 /**
@@ -69,5 +69,59 @@ describe("recordRatesForWorkspaces", () => {
     expect(await run(failing)).toMatchObject({ workspaces: 0, failed: 1 });
     expect(logged.mock.calls.flat().join(" ")).not.toMatch(/rates-co|Rates Co/);
     logged.mockRestore();
+  });
+
+  it("asks a feed that is down once a run, never again for each workspace, and still records every workspace's variances", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const ids = Array.from({ length: 30 }, (_, index) => `5d0f3a2e-8c1b-4f7a-9e6d-${String(index).padStart(12, "0")}`);
+    // Each read of a feed that does not answer waits out its 10-second timeout.
+    let clock = 0;
+    const down = vi.fn(async (): Promise<UsdRate> => {
+      clock += 10_000;
+      throw new FxRateError("The day's rate could not be read. Try again in a moment.");
+    });
+    const fake = fakeSupabase((request) => {
+      if (request.path === "/rest/v1/orgs" && request.params.get("select") === "id") return { body: ids.map((id) => ({ id })) };
+      if (request.path === "/rest/v1/orgs") {
+        const id = (request.params.get("id") ?? "").replace("eq.", "");
+        return { body: { id, slug: `w-${id.slice(-2)}`, name: "W", mode: "live", ledger_signing_key_enc: null, circle_api_key_enc: null, circle_entity_secret_enc: null } };
+      }
+      if (request.path === "/rest/v1/reporting_currencies") return { body: [{ currency: "MYR", set_by: null, set_at: "2026-10-01T00:00:00Z" }] };
+      if (request.path === "/rest/v1/shadow_modes") return { body: [{ currency: "SGD", started_at: "2026-10-01T00:00:00Z", started_by: null }] };
+      return { body: [] };
+    });
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => recordRatesForWorkspaces({ rate: down, now: () => clock, budgetMs: 240_000 }));
+    expect(down).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ workspaces: 30, rates: 0, variances: 0, failed: 0, skipped: 0 });
+    // Each workspace still looked for the variances its stored rates allow.
+    expect(fake.requests.filter((request) => request.path === "/rest/v1/fx_variances").length).toBe(30);
+    logged.mockRestore();
+  });
+
+  it("keeps asking for the other currencies when the feed lists no rate for one", async () => {
+    const partial = vi.fn(async (currency: string): Promise<UsdRate> => {
+      if (currency === "MYR") throw new FxRateError("There is no rate for MYR. Choose another currency.");
+      return { currency, perUsd: 1.36, source: "ExchangeRate-API", at: "2026-10-12T00:02:00.000Z" };
+    });
+    const fake = workspace({
+      reporting_currencies: () => ({ body: [{ currency: "MYR", set_by: null, set_at: "2026-10-01T00:00:00Z" }] }),
+      shadow_modes: () => ({ body: [{ currency: "SGD", started_at: "2026-10-01T00:00:00Z", started_by: null }] }),
+      fx_rates: (request) => (request.method === "POST" ? { status: 201, body: [] } : { body: [] }),
+    });
+    expect(await runWith({ config, db: fake.client, fetch: fake.fetch }, () => recordRatesForWorkspaces({ rate: partial }))).toMatchObject({ workspaces: 1, rates: 1, failed: 0 });
+    expect(partial.mock.calls.map(([currency]) => currency)).toEqual(["MYR", "SGD"]);
+  });
+
+  it("records a rate for every currency the report converts: what the business paid in, and the euro for EURC", async () => {
+    const read = vi.fn(async (currency: string): Promise<UsdRate> => ({ currency, perUsd: 2, source: "ExchangeRate-API", at: "2026-10-12T00:02:00.000Z" }));
+    const fake = workspace({
+      reporting_currencies: () => ({ body: [{ currency: "SGD", set_by: null, set_at: "2026-10-01T00:00:00Z" }] }),
+      shadow_modes: () => ({ body: [] }),
+      invoices: (request) => (request.params.get("select") === "currency" ? { body: [{ currency: "EURC" }] } : { body: [] }),
+      payment_actuals: () => ({ body: [{ currency: "PHP" }, { currency: "USDC" }, { currency: "USD" }] }),
+      fx_rates: (request) => (request.method === "POST" ? { status: 201, body: [] } : { body: [] }),
+    });
+    expect(await runWith({ config, db: fake.client, fetch: fake.fetch }, () => recordRatesForWorkspaces({ rate: read }))).toMatchObject({ workspaces: 1, rates: 3, failed: 0 });
+    expect(read.mock.calls.map(([currency]) => currency)).toEqual(["EUR", "PHP", "SGD"]);
   });
 });

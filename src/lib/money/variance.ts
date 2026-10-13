@@ -1,4 +1,4 @@
-import { subtractMoney, type Money } from "./money";
+import { moneyDigits, subtractMoney, type Money } from "./money";
 import { convertMoney, pegRate, type FxRate } from "./rate";
 
 /**
@@ -15,7 +15,11 @@ export interface FxVariance {
   paid: Money;
   /** The part of the bill the payment covered, in its own currency, at the decision rate. */
   covered: Money;
-  /** What that part was worth in USDC at the payment day's rate, to the cent, as the bill's own USDC was worked out. */
+  /**
+   * What that part was worth in USDC at the payment day's rate: to the cent, as the bill's own USDC was worked out, or
+   * to the micro-unit the transfer carried when it carried more (a discount's), so a rate that did not move is no
+   * variance.
+   */
   valueAtPayment: Money;
   /** `paid` less `valueAtPayment`. */
   variance: Money;
@@ -35,8 +39,20 @@ export function fxVariance(input: { paid: Money; decision: FxRate; payment: FxRa
   if (decision.from !== "USD" || payment.from !== "USD" || decision.to !== payment.to || decision.to === "USD") return null;
   const peg = pegRate("USDC");
   const covered = convertMoney(paid, [peg, decision], decision.to);
-  const valueAtPayment = convertMoney(paid, [peg, decision, payment, peg], "USDC", { digits: 2 });
+  const valueAtPayment = convertMoney(paid, [peg, decision, payment, peg], "USDC", { digits: carriedDigits(paid) });
   return { currency: decision.to, paid, covered, valueAtPayment, variance: subtractMoney(paid, valueAtPayment), decision, payment };
+}
+
+/** The decimals an amount of USDC carries, at least the cent's two: 1,209.8786 carries four. */
+function carriedDigits(amount: Money): number {
+  const digits = moneyDigits(amount.currency);
+  let carried = digits;
+  let minor = amount.minor < BigInt(0) ? -amount.minor : amount.minor;
+  while (carried > 2 && minor % BigInt(10) === BigInt(0)) {
+    minor /= BigInt(10);
+    carried -= 1;
+  }
+  return carried;
 }
 
 /** Within this long before a payment, the feed's newest rate is the one in force: it publishes once a day. */

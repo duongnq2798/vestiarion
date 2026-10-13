@@ -4,7 +4,7 @@ import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
 import { recordReferenceRates, reportingRateBook } from "@/lib/fx/rates-store";
 import { FxRateError, type UsdRate } from "@/lib/fx/usd-rates";
-import { recordFxVariances } from "@/lib/fx/variances";
+import { readFxVarianceState, recordFxVariances } from "@/lib/fx/variances";
 import { formatMoney } from "@/lib/money";
 import { setReportingCurrency } from "@/lib/reporting-currency";
 import { saveScenarioVersion } from "@/lib/scenario-versions";
@@ -17,7 +17,9 @@ import { carriesOrg, fakeSupabase, orgTestContext, type FakeReply, type Recorded
  * day, scenario versions numbered and never written over, and each part as not set up before migration 0113 runs.
  */
 
-const { appendBestEffort, canSign } = vi.hoisted(() => ({ appendBestEffort: vi.fn(async () => undefined), canSign: vi.fn() }));
+const { appendBestEffort, canSign, feedRead } = vi.hoisted(() => ({ appendBestEffort: vi.fn(async () => undefined), canSign: vi.fn(), feedRead: vi.fn() }));
+// The feed itself: a read that a page makes would show here. Only the hourly job reads it, through its own reader.
+vi.mock("@/lib/fx/usd-rates", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/fx/usd-rates")>()), usdRate: feedRead }));
 vi.mock("@/lib/ledger", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/ledger")>()), assertLedgerCanSign: canSign }));
 vi.mock("@/lib/ledger-best-effort", () => ({ appendLedgerEntryBestEffort: appendBestEffort }));
 
@@ -37,6 +39,7 @@ const object = (request: RecordedRequest, row: Record<string, unknown>): FakeRep
 beforeEach(() => {
   appendBestEffort.mockClear();
   canSign.mockReset();
+  feedRead.mockReset();
 });
 
 describe("setReportingCurrency", () => {
@@ -126,20 +129,22 @@ describe("reportingRateBook", () => {
   const NOW = new Date("2026-10-13T12:00:00.000Z");
   const stored = (quote: string, rate: number, published: string) => ({ id: `rate-${quote}-${published}`, base: "USD", quote, rate, kind: "reference", source: "ExchangeRate-API", published_at: published });
 
-  it("uses a stored rate under a day old without reading the feed", async () => {
-    const { run } = database(() => ({ body: [stored("SGD", 1.35, "2026-10-13T00:02:00+00:00")] }));
-    const read = feed({ SGD: 9 });
-    const book = await run(() => reportingRateBook(db(), ["SGD"], NOW, { rate: read }));
-    expect(read).not.toHaveBeenCalled();
-    expect(book.rates.get("SGD")?.value).toBe("1.35");
+  it("uses the newest rate stored within 3 days, whatever its age under that, never reading the feed or writing", async () => {
+    const { fake, run } = database(() => ({ body: [stored("SGD", 1.35, "2026-10-11T00:02:00+00:00"), stored("SGD", 1.34, "2026-10-10T00:02:00+00:00")] }));
+    const book = await run(() => reportingRateBook(db(), ["SGD"], NOW));
+    expect(book.rates.get("SGD")).toMatchObject({ value: "1.35", at: "2026-10-11T00:02:00.000Z", source: "ExchangeRate-API" });
+    expect(feedRead).not.toHaveBeenCalled();
+    expect(fake.requests.map((request) => request.method)).toEqual(["GET"]);
   });
 
-  it("reads the feed for a rate missing or a day old, and says unknown, with why, where none is usable", async () => {
-    const { run } = database((request) => (request.method === "POST" ? { status: 201, body: [] } : { body: [stored("KRW", 1380, "2026-10-05T00:02:00+00:00")] }));
-    const book = await run(() => reportingRateBook(db(), ["KRW", "MYR"], NOW, { rate: feed({}) }));
+  it("says unknown, with why, where no usable rate is stored, never reading the feed or writing", async () => {
+    const { fake, run } = database(() => ({ body: [stored("KRW", 1380, "2026-10-05T00:02:00+00:00")] }));
+    const book = await run(() => reportingRateBook(db(), ["KRW", "MYR"], NOW));
     expect(book.rates.size).toBe(0);
     expect(book.missing.get("KRW")).toBe("The last KRW rate recorded was published 5 Oct 2026, 00:02 UTC, too old to report with.");
-    expect(book.missing.get("MYR")).toBe("No MYR rate was recorded: There is no rate for MYR. Choose another currency.");
+    expect(book.missing.get("MYR")).toBe("No MYR rate is recorded yet. Rates are recorded every hour.");
+    expect(feedRead).not.toHaveBeenCalled();
+    expect(fake.requests.every((request) => request.method === "GET")).toBe(true);
   });
 });
 
@@ -232,6 +237,42 @@ describe("recordFxVariances", () => {
     expect(read.available && read.recorded[0].covered).toEqual({ minor: BigInt(135_000), currency: "SGD" });
     const before = database(() => missing("fx_variances"));
     expect(await before.run(() => recordFxVariances(db()))).toEqual({ available: false });
+  });
+});
+
+describe("readFxVarianceState", () => {
+  const BILL = { id: "bill-1", amount: 1000, paid_amount: null, currency: "USDC", original_currency: "SGD", original_amount: 1350, fx_rate: 1.35, fx_source: "ExchangeRate-API", fx_at: "2026-10-10T00:02:00+00:00" };
+  const INTENT = { source_id: "bill-1", amount: 1000, token: "USDC", confirmed_at: "2026-10-12T15:00:00+00:00", executed_at: null, updated_at: "2026-10-12T15:00:05+00:00" };
+  const RATE = { id: "rate-1", base: "USD", quote: "SGD", rate: 1.36, kind: "reference", source: "ExchangeRate-API", published_at: "2026-10-12T00:02:00+00:00" };
+  const reply =
+    (rates: unknown[], variances: unknown[] = []) =>
+    (request: RecordedRequest): FakeReply => {
+      if (request.path === "/rest/v1/fx_variances") return { body: variances };
+      if (request.path === "/rest/v1/invoices") return { body: [BILL] };
+      if (request.path === "/rest/v1/payment_intents") return { body: [INTENT] };
+      if (request.path === "/rest/v1/fx_rates") return { body: rates };
+      return { body: [] };
+    };
+
+  it("never writes: a variance the stored rate allows is said to be recorded within the hour, by the rates job", async () => {
+    const { fake, run } = database(reply([RATE]));
+    const read = await run(() => readFxVarianceState(db()));
+    expect(fake.requests.every((request) => request.method === "GET")).toBe(true);
+    expect(feedRead).not.toHaveBeenCalled();
+    expect(read).toEqual({
+      available: true,
+      recorded: [],
+      unknown: [{ invoiceId: "bill-1", currency: "SGD", paidAt: "2026-10-12T15:00:00.000Z", reason: "Not recorded yet: the hourly rates job records it from the SGD rate in force at the payment." }],
+    });
+  });
+
+  it("says unknown, with why, when no rate was recorded for the payment day, and answers what was recorded", async () => {
+    const none = database(reply([{ ...RATE, published_at: "2026-10-10T00:02:00+00:00" }]));
+    const read = await none.run(() => readFxVarianceState(db()));
+    expect(read.available && read.unknown.map((row) => row.reason)).toEqual(["No SGD rate was recorded in the 36 hours before the payment."]);
+    expect(none.fake.requests.every((request) => request.method === "GET")).toBe(true);
+    const before = database(() => missing("fx_variances"));
+    expect(await before.run(() => readFxVarianceState(db()))).toEqual({ available: false });
   });
 });
 

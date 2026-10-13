@@ -17,6 +17,7 @@ import {
   pegRate,
   provenanceShare,
   rateAtPayment,
+  rateAge,
   rateBook,
   rateValue,
   rateWords,
@@ -155,8 +156,20 @@ describe("rates", () => {
 
   it("names its kind, source and time wherever it is said", () => {
     expect(rateWords(usd("SGD", "1.35"))).toBe("1 USD = 1.3500 SGD, reference rate from ExchangeRate-API, published 13 Oct 2026, 00:02 UTC");
-    expect(rateWords(pegRate("USDC"))).toBe("1 USDC = 1 USD, USDC's 1:1 dollar redemption, not a market rate");
+    expect(rateWords(pegRate("USDC"))).toBe("1 USDC = 1 USD, redemption peg (USDC's 1:1 dollar redemption), not a market rate");
     expect(formatRateValue("1380.2512")).toBe("1,380.2512");
+  });
+
+  it("says a stored rate's age beside its time, when the reader's time is given", () => {
+    expect(rateWords(usd("SGD", "1.35"), { now: "2026-10-13T12:00:00.000Z" })).toBe(
+      "1 USD = 1.3500 SGD, reference rate from ExchangeRate-API, published 13 Oct 2026, 00:02 UTC, 11 hours old"
+    );
+    // A peg has no time, so no age.
+    expect(rateWords(pegRate("USDC"), { now: "2026-10-13T12:00:00.000Z" })).toBe(rateWords(pegRate("USDC")));
+    expect(rateAge("2026-10-13T00:02:00.000Z", "2026-10-13T00:40:00.000Z")).toBe("under an hour old");
+    expect(rateAge("2026-10-13T00:02:00.000Z", "2026-10-13T01:10:00.000Z")).toBe("1 hour old");
+    expect(rateAge("2026-10-11T00:02:00.000Z", "2026-10-13T12:00:00.000Z")).toBe("2 days old");
+    expect(rateAge("not a time", "2026-10-13T12:00:00.000Z")).toBe("age not known");
   });
 
   it.each(SIX_CURRENCIES.filter((currency) => currency !== "USD"))("converts %s to the dollar and back within one minor unit of each side", (currency) => {
@@ -252,6 +265,17 @@ describe("FX variance", () => {
     const variance = fxVariance({ paid: money(980_000_000, "USDC"), decision: usd("SGD", "1.35"), payment: usd("SGD", "1.35") });
     expect(variance?.covered).toEqual(money(132_300, "SGD"));
     expect(variance?.variance).toEqual(money(0, "USDC"));
+  });
+
+  it("is zero when the rate did not move, whatever micro-units the transfer carried, and values it at their precision", () => {
+    const rate = usd("SGD", "1.35");
+    // 2% off a 1,234.57 USDC bill: 1,209.8786 USDC carried. At the same rate it was worth exactly that.
+    expect(fxVariance({ paid: money(1_209_878_600, "USDC"), decision: rate, payment: rate })?.variance).toEqual(money(0, "USDC"));
+    expect(fxVariance({ paid: money(1, "USDC"), decision: rate, payment: rate })?.variance).toEqual(money(0, "USDC"));
+    // At 1.36: 1,209.8786 x 1.35 / 1.36 = 1,200.98243…, to the ten-thousandth it was carried in.
+    const moved = fxVariance({ paid: money(1_209_878_600, "USDC"), decision: rate, payment: usd("SGD", "1.36") });
+    expect(moved?.valueAtPayment).toEqual(money(1_200_982_400, "USDC"));
+    expect(moved?.variance).toEqual(money(8_896_200, "USDC"));
   });
 
   it("has none for a bill in dollars, a payment not in USDC or rates of two currencies", () => {

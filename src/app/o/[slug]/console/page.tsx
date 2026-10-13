@@ -295,9 +295,10 @@ export default async function DashboardPage({
     // What the cash scenarios start from (cash scenarios C2-C4): the same rows over 90 days, with the recurring payments
     // not billed yet. The browser works out each scenario from it; nothing it shows reaches a payment or the agent (C9).
     const scenarios = scenarioBasis({ ...outlookInput, recurring });
-    // Exchange rates and saved versions for What if (currency provenance M4, M7): today's reference rate for each
-    // currency an open bill was written in, the reporting currency, and the versions saved. Best effort: a read that
-    // fails leaves the section without them, as before.
+    // Exchange rates and saved versions for What if (currency provenance M4, M7): the newest stored reference rate for
+    // each currency an open bill was written in, with its age, the reporting currency, and the versions saved. Reads
+    // only: the hourly rates job stores the rates, never this page. Best effort: a read that fails leaves the section
+    // without them, as before.
     const foreignCurrencies = [...new Set(scenarios.outflows.flatMap((outflow) => (outflow.original ? [outflow.original.currency] : [])))];
     const [planning, savedScenarios] = await Promise.all([
       readPlanningRates(db(), foreignCurrencies, new Date()).catch((error: unknown) => {

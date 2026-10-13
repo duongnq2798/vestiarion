@@ -8,16 +8,18 @@ import { formatRateValue, rateTime, rateValue } from "@/lib/money";
 /**
  * Exchange rates in Treasury's What if section (docs/superpowers/specs/2026-10-13-currency-provenance-design.md M7): for
  * each currency an open bill was written in, a rate a person may type, how many of it make one US dollar. Empty keeps
- * each bill at the rate it was converted at; today's reference rate is offered beside it, with its source and time.
- * Nothing typed here changes a bill or a payment.
+ * each bill at the rate it was converted at; the newest stored reference rate is offered beside it, with its source,
+ * time and age. Nothing typed here changes a bill or a payment.
  */
 
-/** Today's reference rate for a currency, as the page read and stored it. */
+/** The newest reference rate the hourly job stored for a currency, as the page read it. */
 export interface RateHint {
   currency: string;
   perUsd: string;
   source: string;
   at: string;
+  /** How old it was when the page read it: `11 hours old`. */
+  age?: string;
 }
 
 export interface RateCurrency {
@@ -60,8 +62,8 @@ export function ScenarioRates({
                 label={`${currency} per US dollar`}
                 description={
                   hint
-                    ? `${bills} ${bills === 1 ? "bill" : "bills"}. Today's reference rate: ${formatRateValue(hint.perUsd)}, from ${hint.source}, published ${rateTime(hint.at)}.`
-                    : `${bills} ${bills === 1 ? "bill" : "bills"}. Today's reference rate could not be read.`
+                    ? `${bills} ${bills === 1 ? "bill" : "bills"}. Latest reference rate: ${formatRateValue(hint.perUsd)}, from ${hint.source}, published ${rateTime(hint.at)}${hint.age ? `, ${hint.age}` : ""}.`
+                    : `${bills} ${bills === 1 ? "bill" : "bills"}. No reference rate is recorded yet.`
                 }
                 error={invalid ? "Type a rate above zero, such as 1.35." : undefined}
               >
@@ -70,7 +72,7 @@ export function ScenarioRates({
               {hint && typed.trim() !== formatRateValue(hint.perUsd) && rateValue(typed) !== rateValue(hint.perUsd) && (
                 <div>
                   <Button size="sm" variant="ghost" onClick={() => onChange(currency, hint.perUsd)}>
-                    {`Use today's rate, ${formatRateValue(hint.perUsd)}`}
+                    {`Use the latest rate, ${formatRateValue(hint.perUsd)}`}
                   </Button>
                 </div>
               )}

@@ -21,18 +21,28 @@ function valueText(value: ReportingValue): ReactNode {
   return "—";
 }
 
-/** A rate in a row, short: `1 USD = 1.3512 SGD`, and a token's redemption as `1 USDC = 1 USD, redemption`. */
-const legWords = (rate: FxRate) => (rate.kind === "peg" ? `1 ${rate.from} = 1 ${rate.to}, redemption` : rateEquation(rate));
+/** A rate in a row, short: `1 USD = 1.3512 SGD`, and a token's peg named as such: `1 USDC = 1 USD, redemption peg`. */
+const legWords = (rate: FxRate) => (rate.kind === "peg" ? `1 ${rate.from} = 1 ${rate.to}, ${RATE_KIND_WORDS.peg}` : rateEquation(rate));
+
+/** The tokens a total reached its currency from by their peg: said on the total, so it never reads as dollars held. */
+function peggedTokens(totals: ReportingTotals): string[] {
+  const tokens = new Set<string>();
+  for (const row of totals.rows) if (row.value.state === "converted") for (const rate of row.value.rates) if (rate.kind === "peg") tokens.add(rate.from);
+  return [...tokens].sort();
+}
 
 const counted = (n: number, one: string, many: string) => `${n} ${plural(n, one, many)}`;
 
 function TotalLine({ totals }: { totals: ReportingTotals }) {
   if (!totals.reporting || totals.rows.length === 0) return null;
   const { total } = totals;
+  const tokens = peggedTokens(totals);
+  const pegged = `${tokens.join(" and ")} counted at ${tokens.length === 1 ? "its" : "their"} 1:1 redemption peg.`;
   if (total.state === "known") {
     return (
       <p className="text-sm text-ink">
         Total in {totals.reporting}: <span className="font-semibold tabular-nums">{formatMoney(total.money)}</span>
+        {tokens.length > 0 && <span className="text-ink-2">{`, ${pegged}`}</span>}
       </p>
     );
   }
@@ -41,6 +51,7 @@ function TotalLine({ totals }: { totals: ReportingTotals }) {
   return (
     <p className="text-sm text-ink">
       Total in {totals.reporting}: <span className="font-semibold text-held">unknown</span>, since no {missing} rate was recorded.
+      {tokens.length > 0 && <span className="text-ink-2">{` ${pegged.replace(/^./, (first) => first.toUpperCase())}`}</span>}
       {total.known && (
         <span className="text-ink-2">
           {" "}
@@ -122,7 +133,8 @@ function Kpi({ label, value, note }: { label: string; value: ReactNode; note: Re
   );
 }
 
-export function CurrencyReport({ report, settingsHref }: { report: CurrencyReport; settingsHref: string }) {
+/** `asOf` is when the report was read: each stored rate says its age then. */
+export function CurrencyReport({ report, settingsHref, asOf }: { report: CurrencyReport; settingsHref: string; asOf?: string }) {
   const { provenance, variance } = report;
   const share = provenance.total === 0 ? null : Math.round((provenance.full / provenance.total) * 100);
   return (
@@ -135,7 +147,7 @@ export function CurrencyReport({ report, settingsHref }: { report: CurrencyRepor
           ) : report.reporting ? (
             <>
               Reporting currency: <span className="font-semibold text-ink">{report.reporting}</span>. Totals in it use the reference rates listed below; a rate not recorded
-              makes a figure unknown, never a guess. Payments still settle in USDC.
+              makes a figure unknown, never a guess. Payments still settle in USDC or EURC.
             </>
           ) : (
             <>
@@ -166,7 +178,7 @@ export function CurrencyReport({ report, settingsHref }: { report: CurrencyRepor
           <Kpi
             label="FX variance on paid bills"
             value={variance.totals.length === 0 ? "None yet" : variance.totals.map(({ total }) => formatMoney(total, { sign: true })).join(" + ")}
-            note={`${counted(variance.rows.length, "bill", "bills")} paid after the rate moved since the bill was converted${variance.unknown.length > 0 ? `; ${variance.unknown.length} unknown` : ""}. Above zero, more was paid than the bill was worth that day.`}
+            note={`${counted(variance.rows.length, "paid bill", "paid bills")}, each valued at the rate on its payment day${variance.unknown.length > 0 ? `; ${variance.unknown.length} unknown` : ""}. Above zero, more was paid than the bill was worth that day.`}
           />
         </dl>
 
@@ -226,7 +238,7 @@ export function CurrencyReport({ report, settingsHref }: { report: CurrencyRepor
             <ul className="space-y-1 text-xs leading-relaxed text-ink-2">
               {report.rates.map((rate) => (
                 <li key={`${rate.kind}-${rate.from}-${rate.to}-${rate.source}-${rate.at}-${rate.value}`}>
-                  <span className="font-medium text-ink">{RATE_KIND_WORDS[rate.kind].replace(/^./, (first) => first.toUpperCase())}</span>: {rateWords(rate)}.
+                  <span className="font-medium text-ink">{RATE_KIND_WORDS[rate.kind].replace(/^./, (first) => first.toUpperCase())}</span>: {rateWords(rate, asOf ? { now: asOf } : {})}.
                 </li>
               ))}
             </ul>

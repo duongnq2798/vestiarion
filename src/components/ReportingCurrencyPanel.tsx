@@ -49,7 +49,7 @@ function Choose({ orgSlug, current }: { orgSlug: string; current: string | null 
     <form {...form.formProps} className="space-y-3">
       <input type="hidden" name="orgSlug" value={orgSlug} />
       <input type="hidden" name="currency" value={currency} />
-      <Field id="reporting-currency" label="Report in" description="Totals in this currency use the day's reference rate, shown beside each one. A rate not recorded shows as unknown.">
+      <Field id="reporting-currency" label="Report in" description="Totals in this currency use the newest reference rate recorded, shown with its time and age. A rate not recorded shows as unknown.">
         <Select value={currency} onValueChange={setCurrency}>
           <SelectTrigger id="reporting-currency" className="w-64">
             <SelectValue />

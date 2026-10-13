@@ -639,9 +639,9 @@ describe("invoiceDecision: a bill in the business's own currency (shadow mode S6
     expect(sgd.evidence.find((item) => item.label === "Bill")?.value).toBe("1,350.00 SGD, converted at 1.3500 SGD per US dollar, the reference rate ExchangeRate-API published Oct 7, 2026");
   });
 
-  it("shows a bill in dollars at one USDC to the dollar, said as USDC's redemption", () => {
+  it("shows a bill in dollars at one USDC to the dollar, named as USDC's redemption peg, never a market rate", () => {
     const decision = invoiceDecision(invoice({ amount: 1234.56, ...bill("USD", 1234.56, 1, "USD = USDC") }), undefined, [], { network: "arc-testnet" });
-    expect(decision.evidence).toContainEqual({ label: "Bill", value: "1,234.56 USD, at 1 USD = 1 USDC, USDC's 1:1 dollar redemption", state: "neutral" });
+    expect(decision.evidence).toContainEqual({ label: "Bill", value: "1,234.56 USD, at 1 USD = 1 USDC, USDC's 1:1 redemption peg, not a market rate", state: "neutral" });
   });
 
   it("shows no bill for an invoice written in USDC", () => {
