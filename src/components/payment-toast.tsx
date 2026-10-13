@@ -4,13 +4,14 @@ import { ArrowUpRight, Check, Clock } from "lucide-react";
 import { toast } from "@/components/ui/Toaster";
 import type { ActionResult } from "@/components/ui/useActionForm";
 import { Money } from "@/components/vx/Primitives";
-import type { PaymentReceipt } from "@/lib/payment-receipt";
+import { SIMULATED_NETWORK, type PaymentReceipt } from "@/lib/payment-receipt";
 
 /**
  * A person's payment, told where they made it in steps that never run ahead of the money (payment confirmation):
- * "Payment approved" while it is sent, then "Payment confirmed" once the network confirms it, or "Payment processing"
- * while it still confirms. Each reads in the order a person asks: has it gone, how much, to whom, who decided it, on
- * which network, and where to check it. The transaction is a quiet link, so it never outshines the payment itself.
+ * "Payment approved" while it is sent, then "Payment confirmed" once Circle confirms it ("Payment simulated" in a
+ * sandbox), or "Payment processing" while it is submitted and Circle has not confirmed it. Each reads in the order a
+ * person asks: has it gone, how much, to whom, who decided it, on which network and who said so, and where to check
+ * it. The transaction is a quiet link, so it never outshines the payment itself.
  */
 
 type Sending = Pick<PaymentReceipt, "amount" | "currency" | "payee" | "decidedBy">;
@@ -36,19 +37,38 @@ export function paymentSendingToast(id: string, sending: Sending): void {
   });
 }
 
+/**
+ * What the confirmation says of where the payment is, and who said so (settlement lifecycle I17): confirmed by Circle,
+ * simulated by the sandbox, submitted and waiting for Circle, or submitted with no answer from Circle yet.
+ */
+function whereItIs(receipt: PaymentReceipt, simulated: boolean): { toLine: string; network: string } {
+  if (receipt.state === "confirmed") {
+    return simulated
+      ? { toLine: `Simulated payment to ${receipt.payee}`, network: receipt.network }
+      : { toLine: `Paid to ${receipt.payee}`, network: `Confirmed by Circle on ${receipt.network}` };
+  }
+  return {
+    toLine: `Submitted to Circle for ${receipt.payee}`,
+    network: receipt.outcomeUnknown ? "Circle has not answered yet, so the outcome is unknown; nothing goes out again until it does" : `Waiting for Circle to confirm it on ${receipt.network}`,
+  };
+}
+
 /** The payment's confirmation, in place of its sending notice when `id` names one. */
 export function paymentReceiptToast(receipt: PaymentReceipt, id?: string): void {
   const confirmed = receipt.state === "confirmed";
+  // Only a confirmed payment is called simulated: a send in flight may have moved money (settlement lifecycle L4).
+  const simulated = confirmed && receipt.network === SIMULATED_NETWORK;
+  const where = whereItIs(receipt, simulated);
   const options = {
     ...(id ? { id } : {}),
     description: (
       <PaymentToastBody
         amount={receipt.amount}
         currency={receipt.currency}
-        toLine={confirmed ? `Paid to ${receipt.payee}` : `Sent to ${receipt.payee}`}
+        toLine={where.toLine}
         decidedBy={receipt.decidedBy}
         fromReserve={receipt.fromReserve}
-        network={confirmed ? receipt.network : `Waiting for ${receipt.network} to confirm it`}
+        network={where.network}
         txUrl={receipt.txUrl}
       />
     ),
@@ -57,7 +77,7 @@ export function paymentReceiptToast(receipt: PaymentReceipt, id?: string): void 
     // Room for the close button beside the title.
     classNames: { title: "pr-7" },
   };
-  if (confirmed) toast.success("Payment confirmed", options);
+  if (confirmed) toast.success(simulated ? "Payment simulated" : "Payment confirmed", options);
   else toast.info("Payment processing", { ...options, icon: <Clock className="size-[1.125rem] text-held" /> });
 }
 

@@ -128,10 +128,10 @@ describe("checkPaymentAction", () => {
     expect(result.received).toBe(outcome === "received");
   });
 
-  it("says a payment received on a link on Arc mainnet is recorded there (mainnet copy C1)", async () => {
+  it("says a payment received on a link on Arc mainnet is there, as Circle reported it, and recorded by Vestiarion (mainnet copy C1, I17)", async () => {
     checkMock.mockResolvedValueOnce({ outcome: "received", network: "arc-mainnet" });
     const result = await checkPaymentAction({ ok: false, message: "" }, form({ token: TOKEN }));
-    expect(result.message).toBe("Received, thank you. The payment is recorded on Arc mainnet.");
+    expect(result.message).toBe("Received, thank you. Circle reported the payment complete on Arc mainnet, and Vestiarion recorded it against this invoice.");
   });
 
   it("answers a failure with a sentence, never a broken page", async () => {
@@ -177,9 +177,26 @@ describe("the pay page", () => {
     expect(page).not.toContain("Arc testnet");
   });
 
-  it("thanks the client once it is received", async () => {
+  it("thanks the client once it is received, with what arrived and who says so (I17)", async () => {
     previewMock.mockResolvedValueOnce({ ...PREVIEW, status: "received" });
-    expect(await render()).toContain("Mai Studio received 12.50 USDC. Thank you.");
+    const page = await render();
+    expect(page).toContain("Mai Studio marked this invoice paid. Thank you.");
+    // Settled by one transfer of its whole amount (a whole match): no allocation, so all of it arrived.
+    expect(page).toContain("Arrived 12.50 USDC on Arc testnet");
+    expect(page).not.toContain("Invoiced");
+    expect(page).toContain("Circle reported what arrived as complete on Arc testnet, and Mai Studio applied it to this invoice in Vestiarion.");
+  });
+
+  it("says what arrived on an invoice settled with part of it marked a fee, never the whole amount (I17)", async () => {
+    previewMock.mockResolvedValueOnce({ ...PREVIEW, status: "received" });
+    // 12.00 arrived; a person marked the other 0.50 a fee, which never arrived, and 0103 settled the invoice.
+    balanceMock.mockResolvedValueOnce({ owed: 0, received: 12 });
+    const page = await render();
+    expect(page).toContain("Mai Studio marked this invoice paid. Thank you.");
+    expect(page).toContain("Invoiced 12.50 USDC");
+    expect(page).toContain("Arrived 12.00 USDC on Arc testnet");
+    expect(page).not.toContain("received 12.50");
+    expect(page).not.toContain("Arrived 12.50");
   });
 
   it("names no one for a dead link", async () => {

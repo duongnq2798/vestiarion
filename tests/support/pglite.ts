@@ -104,7 +104,7 @@ export const TENANT_TABLES = [
   "shadow_modes", "decision_verdicts", "payment_actuals", "bank_statement_lines", "report_shares", "report_baselines", "receivable_allocations",
   "accounting_connections", "external_links", "accounting_bills", "accounting_sync_cursors", "accounting_postings",
   "deals", "deal_versions", "deal_lines",
-  "crm_deals",
+  "crm_deals", "crm_receipt_writes",
 ] as const;
 
 export interface SeededRows {
@@ -223,9 +223,16 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
      values ($1, 'hubspot', $2, 'hubspot-2026-10-12', now(), '2026-07-14') returning id`,
     [orgId, `hub-${tag}`]
   );
+  const dealId = (await db.query<{ id: string }>("select id from deals where org_id = $1 and idempotency_key = $2", [orgId, `deal-key-${tag}`])).rows[0].id;
+  const crmDealId = await one(
+    "insert into crm_deals (org_id, connection_id, external_id, name, amount, currency, stage_state, deal_id) values ($1, $2, $3, 'Website rebuild', 1, 'USD', 'won', $4) returning id",
+    [orgId, crmConnectionId, `deal-${tag}`, dealId]
+  );
+  // A receipt queued to be written back to that deal in HubSpot (0107).
   await db.query(
-    "insert into crm_deals (org_id, connection_id, external_id, name, amount, currency, stage_state) values ($1, $2, $3, 'Website rebuild', 1, 'USD', 'won')",
-    [orgId, crmConnectionId, `deal-${tag}`]
+    `insert into crm_receipt_writes (org_id, connection_id, crm_deal_id, deal_id, provider, external_org_id, external_deal_id, fields, network, shadow)
+     values ($1, $2, $3, $4, 'hubspot', $5, $6, '{"vestiarion_collected": "0.00"}'::jsonb, 'arc-testnet', false)`,
+    [orgId, crmConnectionId, crmDealId, dealId, `hub-${tag}`, `deal-${tag}`]
   );
   // A payment made on Arc, drafted to be booked against its bill (0106).
   await db.query(

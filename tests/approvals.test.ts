@@ -507,7 +507,7 @@ describe("approveAndPay", () => {
 
   it("skips the funds check when a transfer exists with a provider id, still pending", async () => {
     payInvoiceMock.mockResolvedValue({ status: "matched", txRef: "circle-tx-1", execution: null, note: "", operatingBalance: null });
-    const { run } = approvalsFake({
+    const { fake, run } = approvalsFake({
       account: () => ({ body: accountRow("40") }),
       intents: [{ source_id: INVOICE_ID, status: "pending", provider_tx_id: "circle-tx-1", last_error: null }],
     });
@@ -515,6 +515,10 @@ describe("approveAndPay", () => {
     await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
 
     expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+    // Submitted, not confirmed: the reasoning never notes it paid (I17).
+    const [update] = patchBodies(fake.requests, "/rest/v1/invoices");
+    expect(update.agent_reasoning).toContain("[approved by a person; payment submitted]");
+    expect(update.agent_reasoning).not.toContain("paid by a person");
   });
 
   it("still refuses insufficient funds when the only intent is a provider-reported failure", async () => {
@@ -840,7 +844,7 @@ describe("approveAndPay", () => {
     expect(update.status).toBe("held");
     expect(update.settled_at).toBeNull();
     expect(update.agent_reasoning).toBe(
-      "Held for manual review: over the daily limit. [approved and paid by a person] [transfer failed: provider reported failure]"
+      "Held for manual review: over the daily limit. [approved by a person; payment not confirmed] [transfer failed: provider reported failure]"
     );
 
     const [append] = rpcBodies(fake.requests, "append_ledger_entry");

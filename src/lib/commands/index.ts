@@ -16,4 +16,4 @@ export { addAccountingBills, dismissAccountingBills, type BroughtInBill, type Br
 export { bookAccountingPayments, MAX_BOOKINGS, type BookingCounts } from "./bookings";
 export { applyReceivedPayment, reverseAppliedPayment } from "./allocations";
 export { addDeal, changeDeal, releaseDealLine, setDealAutoRelease } from "./deals";
-export { fillCrmEmail, keepCrmChange, planCrmDeal } from "./crm";
+export { fillCrmEmail, keepCrmChange, overwriteCrmReceipt, planCrmDeal, setCrmReceiptWrites } from "./crm";

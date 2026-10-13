@@ -124,20 +124,29 @@ describe("a decided card", () => {
     expect(blocks).toContain("Arc mainnet transaction");
     expect(blocks).not.toContain("Arc testnet");
     expect(outcomeLine("approve", "U0LINH", { ok: true, message: "Paid.", status: "paid", txRef: TX }, "arc-mainnet")).toBe(
-      `Approved and paid by <@U0LINH>. <https://explorer.arc.io/tx/${TX}|Arc mainnet transaction>`
+      `Approved by <@U0LINH>. Circle confirmed the payment on Arc mainnet. <https://explorer.arc.io/tx/${TX}|Arc mainnet transaction>`
     );
-    expect(outcomeLine("approve", "U0LINH", { ok: true, message: "", status: "matched", txRef: null }, "arc-mainnet")).toBe(
-      "Approved by <@U0LINH>. The payment was sent; Arc mainnet is confirming it."
+    expect(outcomeLine("approve", "U0LINH", { ok: true, message: "", status: "matched", txRef: "circle-transfer-1" }, "arc-mainnet")).toBe(
+      "Approved by <@U0LINH>. The payment was submitted; waiting for Circle to confirm it on Arc mainnet."
     );
   });
 
-  it("says each outcome, with the transaction when one went out on Arc", () => {
+  it("says each outcome, with the transaction when one went out on Arc, and paid only once Circle confirmed it (I17)", () => {
     expect(outcomeLine("approve", "U0LINH", { ok: true, message: "Paid.", status: "paid", txRef: TX }, "arc-testnet")).toBe(
-      `Approved and paid by <@U0LINH>. <https://explorer.testnet.arc.io/tx/${TX}|Arc testnet transaction>`
+      `Approved by <@U0LINH>. Circle confirmed the payment on Arc testnet. <https://explorer.testnet.arc.io/tx/${TX}|Arc testnet transaction>`
     );
-    expect(outcomeLine("approve", "U0LINH", { ok: true, message: "", status: "matched", txRef: null }, "arc-testnet")).toBe(
-      "Approved by <@U0LINH>. The payment was sent; Arc testnet is confirming it."
+    // Submitted: Circle has it, and has not confirmed it.
+    expect(outcomeLine("approve", "U0LINH", { ok: true, message: "", status: "matched", txRef: "circle-transfer-1" }, "arc-testnet")).toBe(
+      "Approved by <@U0LINH>. The payment was submitted; waiting for Circle to confirm it on Arc testnet."
     );
+    // Circle never answered the send, so no Circle id was recorded: an unknown outcome, never "sent" or "paid".
+    const unanswered = outcomeLine("approve", "U0LINH", { ok: true, message: "", status: "matched", txRef: null }, "arc-testnet");
+    expect(unanswered).toBe("Approved by <@U0LINH>. The payment was submitted, but Circle has not answered yet, so the outcome is unknown; nothing goes out again until it does.");
+    expect(unanswered).not.toMatch(/\b(sent|paid)\b/i);
+    // A sandbox's payment is simulated, and names no network or Circle.
+    expect(
+      outcomeLine("approve", "U0LINH", { ok: true, message: "", status: "paid", txRef: "sim_1", receipt: { network: "Sandbox (simulated)" } }, "arc-testnet")
+    ).toBe("Approved by <@U0LINH>. The payment was simulated in the sandbox.");
     expect(outcomeLine("approve", "U0LINH", { ok: false, code: "transfer_failed", message: "The transfer failed: x. The invoice is held.", changed: true }, "arc-testnet")).toBe(
       "<@U0LINH> approved it. The transfer failed: x. The invoice is held."
     );
@@ -207,9 +216,9 @@ describe("todayAnswer's wallet line", () => {
 
 describe("a payment that has not confirmed (stuck-transfer alert D6)", () => {
   it("shows its transaction and its page, with no card to decide", () => {
-    const stuck = item({ text: "Payment of 0.30 USDC to Jiren has not confirmed 18 min after it was sent on Arc testnet.", detail: "Circle shows it stuck.", tone: "stopped" });
+    const stuck = item({ text: "Payment of 0.30 USDC to Jiren has not confirmed 18 min after it was submitted to Circle on Arc testnet.", detail: "Circle shows it stuck.", tone: "stopped" });
     const message = JSON.stringify(decisionsMessage(WORKSPACE, [stuck], ORIGIN, new Map()));
-    expect(message).toContain("has not confirmed 18 min after it was sent");
+    expect(message).toContain("has not confirmed 18 min after it was submitted to Circle");
     expect(message).toContain("Arc testnet transaction");
     expect(message).not.toContain("vx_approve");
   });

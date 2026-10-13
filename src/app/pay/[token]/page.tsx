@@ -30,6 +30,10 @@ const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximu
  * by when, for what, and the address on Arc testnet. Every unusable link shows the same sentence and
  * names no one. Opening it changes nothing. Once a payment was applied to the invoice, it asks for what is still owed
  * and says what arrived (docs/superpowers/specs/2026-10-12-allocations-design.md L11).
+ *
+ * Settled, it says what arrived, never the invoice's whole amount when part of it was marked a fee, which never arrived
+ * (0103 settles a receivable once payments and fees cover it), and who says so: Circle reported the payments complete,
+ * and the business applied them in Vestiarion (settlement lifecycle I17).
  */
 export default async function PayPage({ params }: PayPageProps) {
   const { token } = await params;
@@ -41,15 +45,17 @@ export default async function PayPage({ params }: PayPageProps) {
     console.error("pay link preview failed");
     failed = true;
   }
-  // Best effort: a balance that cannot be read asks for the whole invoice, as before.
-  const balance =
-    preview && preview.status === "open"
-      ? await payLinkBalance(preview).catch(() => {
-          console.error("pay link balance not read");
-          return null;
-        })
-      : null;
+  // Best effort: a balance that cannot be read asks for the whole invoice, as before, and a settled one says the whole
+  // invoice arrived, as a whole match (one transfer of exactly its amount) does.
+  const balance = preview
+    ? await payLinkBalance(preview).catch(() => {
+        console.error("pay link balance not read");
+        return null;
+      })
+    : null;
   const owed = balance ? balance.owed : (preview?.amount ?? 0);
+  const arrived = balance ? balance.received : (preview?.amount ?? 0);
+  const network = preview ? homeChain(networkOfChain(preview.chain)).label : undefined;
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -66,9 +72,30 @@ export default async function PayPage({ params }: PayPageProps) {
                 <CircleCheck aria-hidden className="size-4 text-proof" />
                 <Eyebrow className="text-proof">Paid</Eyebrow>
               </p>
-              <h1 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-ink">
-                {preview.orgName} received {AMOUNT.format(preview.amount)} {preview.currency}. Thank you.
-              </h1>
+              <h1 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-ink">{preview.orgName} marked this invoice paid. Thank you.</h1>
+              <dl className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
+                {Math.round(arrived * 1_000_000) !== Math.round(preview.amount * 1_000_000) && (
+                  <>
+                    <dt className="text-ink-3">Invoiced</dt>
+                    <dd className="text-ink">
+                      {AMOUNT.format(preview.amount)} {preview.currency}
+                    </dd>
+                  </>
+                )}
+                <dt className="text-ink-3">Arrived</dt>
+                <dd className="text-ink">
+                  {AMOUNT.format(arrived)} {preview.currency} on {network}
+                </dd>
+                {preview.memo && (
+                  <>
+                    <dt className="text-ink-3">For</dt>
+                    <dd className="break-words text-ink">{preview.memo}</dd>
+                  </>
+                )}
+              </dl>
+              <p className="mt-4 text-xs leading-5 text-ink-3">
+                Circle reported what arrived as complete on {network}, and {preview.orgName} applied it to this invoice in Vestiarion.
+              </p>
             </section>
           ) : (
             <section className="rounded-2xl border border-line bg-surface p-6 shadow-surface">

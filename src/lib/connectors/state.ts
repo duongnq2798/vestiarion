@@ -30,6 +30,12 @@ export interface ConnectState {
   nonce: string;
   /** Null when the state carries none: the callback then refuses. */
   consent: Consent | null;
+  /**
+   * The person allowed writing to the provider on the connect page (a CRM's receipts,
+   * docs/superpowers/specs/2026-10-13-crm-receipts-design.md R3): the callback turns writing on once the provider granted
+   * its write scopes. Absent means false.
+   */
+  write?: boolean;
 }
 
 function mac(master: MasterKey, body: string): Buffer {
@@ -46,6 +52,7 @@ export function connectState(state: ConnectState, keys: MasterKey[], nowMs: numb
     u: state.user,
     n: state.nonce,
     ...(state.consent ? { c: { v: state.consent.version, a: state.consent.at } } : {}),
+    ...(state.write ? { w: 1 } : {}),
     x: nowMs + STATE_TTL_MS,
   };
   const body = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
@@ -69,7 +76,7 @@ export function readConnectState(token: string, keys: MasterKey[], nowMs: number
     return null;
   }
   if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return null;
-  const { p, o, u, n, c, x } = payload as Record<string, unknown>;
+  const { p, o, u, n, c, w, x } = payload as Record<string, unknown>;
   if (typeof x !== "number" || x <= nowMs) return null;
   if (typeof p !== "string" || !(PROVIDERS as readonly string[]).includes(p)) return null;
   if (typeof o !== "string" || !UUID.test(o) || typeof u !== "string" || !UUID.test(u)) return null;
@@ -79,7 +86,7 @@ export function readConnectState(token: string, keys: MasterKey[], nowMs: number
     const { v, a } = c as Record<string, unknown>;
     if (typeof v === "string" && v.length <= 40 && typeof a === "string" && !Number.isNaN(Date.parse(a))) consent = { version: v, at: a };
   }
-  return { provider: p as ProviderId, org: o, user: u, nonce: n, consent };
+  return { provider: p as ProviderId, org: o, user: u, nonce: n, consent, ...(w === 1 ? { write: true } : {}) };
 }
 
 /** A random nonce for the browser's cookie: 32 bytes in base64url. */

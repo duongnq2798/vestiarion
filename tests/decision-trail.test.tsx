@@ -136,14 +136,14 @@ describe("the decision trail", () => {
     );
   });
 
-  it("says an approval paid only once its transfer confirmed: sent, failed, or not said (settlement lifecycle L9)", () => {
+  it("says an approval paid only once its transfer confirmed: submitted, failed, or not said (settlement lifecycle L9, I17)", () => {
     expect(trailStep(step(985, "02:47:18", "human", "approval_paid", { txRef: TX, status: "matched" }))).toMatchObject({
-      text: "A person approved it; the payment was sent and Arc testnet is confirming it.",
+      text: "A person approved it; the payment was submitted and is waiting for Circle to confirm it on Arc testnet.",
       txHash: TX,
       tone: "neutral",
     });
     expect(trailStep(step(985, "02:47:18", "human", "approval_paid", { txRef: TX, status: "matched" }), "arc-mainnet")!.text).toBe(
-      "A person approved it; the payment was sent and Arc mainnet is confirming it."
+      "A person approved it; the payment was submitted and is waiting for Circle to confirm it on Arc mainnet."
     );
     // Held again: Circle may have ended the transfer, or Gateway reported it failed though it may still be minted, or a read
     // of ours failed on a transfer still moving. The entry does not say which, so the step never says it failed.
@@ -161,7 +161,7 @@ describe("the decision trail", () => {
     }
     expect(trailStep(step(987, "02:47:18", "human", "approval_paid", { txRef: TX }))).toMatchObject({ text: "A person approved paying it.", tone: "neutral" });
     expect(trailStep(step(988, "02:47:18", "human", "approval_paid", { soleApprover: true, status: "matched" }))!.text).toBe(
-      "The person who entered it approved it, as the workspace's only approver; the payment was sent and Arc testnet is confirming it."
+      "The person who entered it approved it, as the workspace's only approver; the payment was submitted and is waiting for Circle to confirm it on Arc testnet."
     );
     expect(trailStep(step(989, "02:47:18", "human", "approval_paid", { soleApprover: true, status: "held" }))!.text).toBe(
       "The person who entered it approved it, as the workspace's only approver; the payment was not confirmed, so it was held again."
@@ -313,7 +313,7 @@ describe("a reconcile, as it found the payment (stuck-transfer alert D8)", () =>
     expect(trailStep(step(996, "08:05:00", "agent", "payment_stuck", { minutes: 18, txHash: TX }))).toMatchObject({
       who: "agent",
       tone: "stopped",
-      text: "Not confirmed 18 minutes after it was sent; the workspace's people were told.",
+      text: "Not confirmed 18 minutes after it was submitted; the workspace's people were told.",
       txHash: TX,
     });
   });

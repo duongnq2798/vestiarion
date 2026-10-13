@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CrmDealChanges } from "@/components/CrmDealChanges";
+import { CrmReceiptCard } from "@/components/CrmReceiptCard";
 import { DocsLink } from "@/components/DocsLink";
 import { DealChangeForm } from "@/components/deals/DealChangeForm";
 import { AutoReleaseSwitch, CancelDealButton } from "@/components/deals/DealControls";
@@ -22,6 +23,8 @@ import { orgHref } from "@/lib/auth/org-paths";
 import { shellModes } from "@/lib/circle";
 import { utcDay } from "@/lib/copy";
 import { crmChangesFor, type CrmDealChanges as CrmChangesRead } from "@/lib/connectors/crm-review";
+import { crmReceiptFor, type CrmReceiptView } from "@/lib/connectors/crm-receipts-view";
+import { crmProvider } from "@/lib/crm-providers";
 import { inOrg } from "@/lib/dal/scope";
 import { dealSummary, inForce } from "@/lib/deals/lines";
 import { formatMinor } from "@/lib/deals/money";
@@ -50,7 +53,7 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
   const access = await requireMembership(slug);
   const { from } = await searchParams;
   return inOrg(access, async () => {
-    const [read, dashboardStats, canWrite] = await Promise.all([readDeal(id), stats(), viewerCan(slug, "records.write")]);
+    const [read, dashboardStats, canWrite, canManage] = await Promise.all([readDeal(id), stats(), viewerCan(slug, "records.write"), viewerCan(slug, "integrations.manage")]);
     const shell = { network: access.membership.network, day: dashboardStats.day, clockMode: dashboardStats.clockMode, lastCycleAt: dashboardStats.lastCycleAt, chainModes: shellModes(), status: await shellStatus() };
     const back = (
       <Button asChild variant="link">
@@ -79,6 +82,11 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
       return null;
     });
     const changeFromCrm = crm !== null && from === "hubspot" && facts.status === "active";
+    // What was written back to the CRM it was planned from, and when (CRM receipts R8). Best effort, as the changes.
+    const receipt: CrmReceiptView | null = await crmReceiptFor(facts.id, (connection) => crmProvider(connection.provider)?.receipts?.writeScopes ?? null).catch((error: unknown) => {
+      console.error("deal: receipts in the CRM not read", error instanceof Error ? error.message : error);
+      return null;
+    });
     const summary = dealSummary(facts, today);
     const standing = dealStanding(deal, today);
     const money = (minor: number) => <DealMoney minor={minor} digits={digits} currency={facts.currency} />;
@@ -129,6 +137,7 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
 
         <div className="space-y-8">
           {crm && <CrmDealChanges orgSlug={slug} dealId={facts.id} label={crm.label} words={crm.words} seen={crm.seen} canWrite={canWrite} active={facts.status === "active"} />}
+          {receipt && <CrmReceiptCard orgSlug={slug} dealId={facts.id} view={receipt} canManage={canManage} />}
           <DealSchedule orgSlug={slug} deal={deal} today={today} canWrite={canWrite} />
 
           {canWrite ? (

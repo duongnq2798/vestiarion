@@ -135,10 +135,10 @@ describe("recentDecisionView", () => {
 
   it("says what came of a payment still confirming when it was recorded: paid once it confirmed, failed once it failed", () => {
     const sent = { resultingStatus: "matched", txRef: null };
-    expect(view(sent)).toMatchObject({ outcome: { kind: "confirming", label: "Confirming" }, headline: "Sent a 0.20 USDC bill; Arc testnet is confirming it." });
+    expect(view(sent)).toMatchObject({ outcome: { kind: "confirming", label: "Confirming" }, headline: "Submitted a 0.20 USDC bill; waiting for Circle to confirm it on Arc testnet." });
     expect(view({ ...sent, paidTxHash: TX })).toMatchObject({ outcome: { kind: "paid" }, headline: "Paid a 0.20 USDC bill." });
     const failed = view({ ...sent, paymentFailed: true });
-    expect(failed).toMatchObject({ outcome: { kind: "failed", label: "Transfer failed", tone: "refused" }, headline: "Sent a 0.20 USDC bill; the transfer failed." });
+    expect(failed).toMatchObject({ outcome: { kind: "failed", label: "Transfer failed", tone: "refused" }, headline: "Submitted a 0.20 USDC bill; the transfer failed." });
     expect(failed.txUrl).toBeNull();
   });
 

@@ -2,7 +2,7 @@
   "uid": "vestiarion_hubspot_app",
   "type": "app",
   "config": {
-    "description": "Vestiarion reads your HubSpot companies, contacts and deals so a signed deal becomes a collection schedule and its payments are tracked.",
+    "description": "Vestiarion reads your HubSpot companies, contacts and deals so a signed deal becomes a collection schedule and its payments are tracked; when you allow it, it writes each deal's collections back to it.",
     "name": "Vestiarion",
     "distribution": "marketplace",
     "auth": {
@@ -18,7 +18,8 @@
         "crm.objects.deals.read"
       ],
       "optionalScopes": [
-        "crm.objects.deals.write"
+        "crm.objects.deals.write",
+        "crm.schemas.deals.write"
       ],
       "conditionallyRequiredScopes": []
     },

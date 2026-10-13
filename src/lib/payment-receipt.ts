@@ -3,8 +3,13 @@
  * to whom, who decided it, on which network, and where to check it (payment confirmation).
  */
 export interface PaymentReceipt {
-  /** Confirmed on chain, or sent and still confirming: a payment is never called confirmed before its network says so. */
+  /**
+   * Confirmed by Circle, or submitted and not confirmed yet: a payment is never called confirmed before Circle says so,
+   * nor sent while it is only submitted (settlement lifecycle I17).
+   */
   state: "confirmed" | "confirming";
+  /** A submitted payment Circle never answered, so no Circle id was recorded: its outcome is unknown (L3). */
+  outcomeUnknown?: true;
   amount: number;
   currency: string;
   payee: string;

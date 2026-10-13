@@ -36,6 +36,13 @@ export interface ConnectDeps {
   afterConnect?: (work: () => Promise<void>) => void;
   /** The first sync itself, in the workspace's scope. */
   firstSync?: (connection: Connection) => Promise<unknown>;
+  /**
+   * A provider that writes only once a person allows it (a CRM's receipts, docs/superpowers/specs/2026-10-13-crm-receipts-design.md
+   * R3): the connect page offers it, and once the provider answered with the scopes it granted, this turns writing on
+   * (`writing`) or says it was not granted (`write_not_granted`), in the workspace's scope. Without it, the connect page's
+   * choice is ignored.
+   */
+  allowWrites?: (input: { connection: Connection; userId: string; scopes: readonly string[] }) => Promise<"writing" | "write_not_granted" | "write_not_set_up">;
 }
 
 const cookieName = (deps: ConnectDeps) => `vx_${deps.provider.id}_oauth`;
@@ -121,15 +128,20 @@ export async function startConnect(request: Request, deps: ConnectDeps): Promise
   const now = (deps.now ?? Date.now)();
   const nonce = newNonce();
   const consent: Consent = { version: CONSENT_VERSIONS[deps.provider.id], at: new Date(now).toISOString() };
-  const state = connectState({ provider: deps.provider.id, org: membership.orgId, user: user.id, nonce, consent }, deps.keys ?? masterKeysFromEnv(), now);
-  return redirect(deps.provider.authorizeUrl({ state, redirectUri: redirectUri(deps) }), cookie(deps, nonce, STATE_TTL_MS / 1000));
+  // Allowing writes is the person's own choice on the connect page, offered only by a provider that writes on it.
+  const write = deps.allowWrites !== undefined && text(form, "write") === "yes";
+  const state = connectState({ provider: deps.provider.id, org: membership.orgId, user: user.id, nonce, consent, write }, deps.keys ?? masterKeysFromEnv(), now);
+  return redirect(deps.provider.authorizeUrl({ state, redirectUri: redirectUri(deps), write }), cookie(deps, nonce, STATE_TTL_MS / 1000));
 }
 
 /** Connects one organisation in the workspace's scope, keeps its tokens, and starts its first sync after the answer. */
 async function connectOne(
   deps: ConnectDeps,
-  input: { orgId: string; userId: string; organisation: ExternalOrganisation; scopes: string[]; consent: Consent } & ({ tokens: ProviderTokens } | { pendingId: string })
-): Promise<"connected" | "other_organisation" | "other_workspace" | "expired"> {
+  input: { orgId: string; userId: string; organisation: ExternalOrganisation; scopes: string[]; consent: Consent; write?: boolean } & (
+    | { tokens: ProviderTokens }
+    | { pendingId: string }
+  )
+): Promise<"connected" | "writing" | "write_not_granted" | "write_not_set_up" | "other_organisation" | "other_workspace" | "expired"> {
   // One workspace per organisation, for a provider whose disconnect ends every grant (QuickBooks Q5) or whose account two
   // workspaces must not share (HubSpot H4). The tokens just granted are neither kept nor revoked: revoking them would cut
   // the other workspace off too.
@@ -149,6 +161,8 @@ async function connectOne(
     return "expired";
   }
   const { firstSync, afterConnect } = deps;
+  // Writing allowed on the connect page is turned on before the first sync, so that sync writes the receipts too.
+  const written = "tokens" in input && input.write && deps.allowWrites ? await deps.allowWrites({ connection: saved.connection, userId: input.userId, scopes: input.scopes }) : null;
   if (firstSync && afterConnect) {
     afterConnect(() =>
       withOrg(input.orgId, async () => {
@@ -158,7 +172,7 @@ async function connectOne(
       })
     );
   }
-  return "connected";
+  return written ?? "connected";
 }
 
 /** `GET /api/integrations/<provider>/callback`: where the provider sends the person back. */
@@ -201,7 +215,17 @@ export async function finishConnect(request: Request, deps: ConnectDeps): Promis
           ? await deps.provider.organisations(exchanged.tokens, exchanged.authEventId, named)
           : await deps.provider.organisations(exchanged.tokens, exchanged.authEventId);
         if (organisations.length === 1) {
-          return back(await connectOne(deps, { orgId: state.org, userId: user.id, organisation: organisations[0], scopes: exchanged.tokens.scopes, consent, tokens: exchanged.tokens }));
+          return back(
+            await connectOne(deps, {
+              orgId: state.org,
+              userId: user.id,
+              organisation: organisations[0],
+              scopes: exchanged.tokens.scopes,
+              consent,
+              tokens: exchanged.tokens,
+              write: state.write === true,
+            })
+          );
         }
         const pendingId = await saveTokens(
           {

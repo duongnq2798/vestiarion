@@ -18,6 +18,8 @@ export const HUBSPOT_ACCOUNT = `${HUBSPOT_API}/account-info/${HUBSPOT_API_VERSIO
 export const hubspotObjects = (object: "deals" | "companies" | "contacts") => `${HUBSPOT_API}/crm/objects/${HUBSPOT_API_VERSION}/${object}`;
 export const hubspotAssociations = (from: string, to: string) => `${HUBSPOT_API}/crm/associations/${HUBSPOT_API_VERSION}/${from}/${to}/batch/read`;
 export const HUBSPOT_DEAL_PIPELINES = `${HUBSPOT_API}/crm/pipelines/${HUBSPOT_API_VERSION}/deals`;
+/** Deal property definitions and their groups (crm-receipts R2). */
+export const HUBSPOT_DEAL_PROPERTIES = `${HUBSPOT_API}/crm/properties/${HUBSPOT_API_VERSION}/deals`;
 
 export interface HubSpotHttp {
   fetchImpl?: typeof fetch;

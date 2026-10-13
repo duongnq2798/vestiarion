@@ -1268,7 +1268,8 @@ workspace's mode for that action, never from a link, a key or a button. A
 `importActualPayments`, `approvePlanLines`,
 `shareWorkspaceReport`, `stopSharingWorkspaceReport`, `answerReportBaseline`, `applyReceivedPayment`,
 `reverseAppliedPayment`, `addDeal`, `changeDeal`, `releaseDealLine`,
-`setDealAutoRelease` — whose first statement is
+`setDealAutoRelease`, `planCrmDeal`, `keepCrmChange`, `fillCrmEmail`, `setCrmReceiptWrites`, `overwriteCrmReceipt` —
+whose first statement is
 `gate(actor, "<command>")`:
 
 - the scope in force must be the actor's workspace, or it throws
@@ -1817,12 +1818,15 @@ reads in `api.ts`, `hubspotProvider`), wired in `src/lib/crm-providers.ts`. It i
   connection, with its facts, `stage_state` (`open`, `won`, `lost`), its company and that company's main contact's
   email, `source_status` (`present`, `deleted`), the Vestiarion deal it became (`deal_id`), the `baseline` it was
   planned from or last reviewed at, and the changes last recorded (`flagged`).
-- **Connecting.** The core's flow (state, nonce cookie, person, role, consent `hubspot-2026-10-12`), on
+- **Connecting.** The core's flow (state, nonce cookie, person, role, consent `hubspot-2026-10-13`; `hubspot-2026-10-12`
+  said it writes nothing, and a connection keeps the version it agreed to), on
   `/integrations/hubspot`, `/integrations/hubspot/connect`, `POST /api/integrations/hubspot/connect` and
   `GET /api/integrations/hubspot/callback`. The token answer's `hub_id` is the account, its introspected `hub_domain` its
   name; one account per grant. `ConnectDeps.ready` probes `crm_deals`, so before 0105 no one is sent to HubSpot. An
   account another workspace holds is refused (`other_workspace`), and the tokens just granted are neither kept nor
-  revoked. Read-only scopes, exactly the config's required ones.
+  revoked. The config's required scopes read; its optional `crm.objects.deals.write` and `crm.schemas.deals.write` are
+  asked for (`optional_scope`) only when the person ticks **Write receipts to HubSpot** on the connect page (receipts,
+  below).
 - **Syncing** (`crm-sync.ts`, `crm-store.ts`): deals by search, 100 a page in the order of `hs_lastmodifieddate`, `after`
   as the page's offset, so the core's cursor (object type `deal`) and its checkpoints, restarts and backoff work as for
   Xero. A backfill reads open deals and those won since `window_from`; later runs read every deal changed since five
@@ -1851,6 +1855,27 @@ reads in `api.ts`, `hubspotProvider`), wired in `src/lib/crm-providers.ts`. It i
 - **Billing emails.** `crm.fill_email` sets a linked customer's empty billing email from its company's main contact,
   only when a person presses **Use this email**: the email the list showed, written only where the billing email is
   still empty (`changeCounterpartyNoticeEmail({ onlyIfEmpty })`).
+- **Receipts back in HubSpot** (docs/superpowers/specs/2026-10-13-crm-receipts-design.md; `crm-receipts*.ts`,
+  `src/lib/hubspot/receipts.ts`, migration `0107`). Once an owner or admin turns on **Write receipts to HubSpot**
+  (`accounting_connections.writes_on`, `crm.receipt_writes`, `integrations.manage`), each deal planned from HubSpot gets
+  nine fields Vestiarion owns, in a `vestiarion` property group it makes once: collected, still owed, the currency, a
+  collection status, the last receipt's day, amount and explorer link, a reconciliation status and the deal's page as
+  evidence. `dealCollection` (pure) counts only money that arrived on Arc (`incoming_transfers`, recorded once Circle
+  reports it complete) and was applied to the deal's receivables, whole (0050) or in part (live allocations, 0103): a
+  part payment is partial, a fee is never collected, an invoice marked received without a payment on Arc is not counted
+  and makes the reconciliation "needs review". The outbox `crm_receipt_writes` (a tenant table, one write in hand per
+  deal, the fields fixed once queued) is filled after each CRM sync where a deal's fields changed (`queueReceipts`), and
+  sent by the same run (`sendReceipts`): the reality rule against `GET /account-info/2026-03/details` (`accountType`:
+  payments on Arc testnet or in shadow mode only to `DEVELOPER_TEST` or `SANDBOX`, refused otherwise, and held by the
+  table's check), a claim with a lease, the deal's fields read, a conflict when HubSpot holds otherwise than the last
+  write read back (never written over; **Write Vestiarion's figures** with `crm.receipt_overwrite` writes over exactly
+  what the page showed), the write, and a read-back whose answer is the acknowledgement (`written`). A timeout reads
+  back first; a failure waits (`failureDelayMs`), a rate limit ends the run; nothing that moves money reads any of it
+  (`tests/crm-receipts.test.ts` pins it). Disconnecting turns writing off (`accounting_connections_writes_off`); a
+  connection without both write scopes keeps reading and shows **Allow writing to HubSpot**. The deal's page shows what
+  was written and when (`CrmReceiptCard`), the HubSpot card how the writes stand. Entries: `crm_receipt_writes_changed`,
+  `crm_receipt_written`, `crm_receipt_conflict`, `crm_receipt_failed` (once per write), `crm_receipt_refused`,
+  `crm_receipt_overwrite_chosen`.
 
 ## API
 

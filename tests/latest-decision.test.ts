@@ -58,7 +58,7 @@ describe("latestDecisionView", () => {
   });
 
   it("never calls a payment the network is still confirming paid, nor links a reference that is not a transaction", () => {
-    expect(view({ resultingStatus: "matched", txRef: "circle-transfer-1" })).toMatchObject({ headline: "Sent a 0.35 USDC bill; Arc testnet is confirming it.", txUrl: null });
+    expect(view({ resultingStatus: "matched", txRef: "circle-transfer-1" })).toMatchObject({ headline: "Submitted a 0.35 USDC bill; waiting for Circle to confirm it on Arc testnet.", txUrl: null });
   });
 
   it("says a payment held for a person's verdict in shadow mode, and the verdict once given", () => {

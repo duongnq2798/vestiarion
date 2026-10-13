@@ -4,10 +4,11 @@ import "server-only";
 
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
-import { consoleActor, fillCrmEmail, keepCrmChange } from "@/lib/commands";
+import { consoleActor, fillCrmEmail, keepCrmChange, overwriteCrmReceipt, setCrmReceiptWrites } from "@/lib/commands";
 import { connectionFor, disconnectConnection, NotSetUpError, type Connection } from "@/lib/connectors/connections";
 import type { CrmProvider } from "@/lib/connectors/crm";
 import { crmReady } from "@/lib/connectors/crm-review";
+import { receiptsInScope } from "@/lib/connectors/crm-receipts-sync";
 import { crmSyncInScope } from "@/lib/connectors/crm-store";
 import { crmProvider } from "@/lib/crm-providers";
 import { inOrg } from "@/lib/dal/scope";
@@ -16,8 +17,10 @@ import { consoleAnswer } from "./command-result";
 /**
  * HubSpot from the console (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H3, H7, H12, H13, H15):
  * syncing now and disconnecting are an owner's or admin's (`integrations.manage`); keeping a deal's changes and filling
- * a billing email from HubSpot are for whoever adds deals (`records.write`), through their commands. Every action reads
- * the person's role again and works in the workspace's scope; nothing returned carries a token.
+ * a billing email from HubSpot are for whoever adds deals (`records.write`), through their commands. Writing receipts to
+ * HubSpot, turned on or off, and Vestiarion's figures written over a conflict are an owner's or admin's
+ * (docs/superpowers/specs/2026-10-13-crm-receipts-design.md R3, R5). Every action reads the person's role again and works
+ * in the workspace's scope; nothing returned carries a token.
  */
 
 export interface HubSpotActionResult {
@@ -120,5 +123,45 @@ export async function fillCrmEmailAction(_previous: HubSpotActionResult, formDat
     // The email the person was shown: only that one is filled (H13).
     const email = formData.get("email");
     return consoleAnswer(await fillCrmEmail(consoleActor(auth), { counterpartyId, email: typeof email === "string" ? email.slice(0, 320) : "" }));
+  });
+}
+
+/** Write receipts to HubSpot, or Stop writing to HubSpot (CRM receipts R3). */
+export async function setHubSpotReceiptsAction(_previous: HubSpotActionResult, formData: FormData): Promise<HubSpotActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "integrations.manage");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    const answer = consoleAnswer(await setCrmReceiptWrites(consoleActor(auth), { provider: "hubspot", on: formData.get("on") === "yes" }));
+    revalidateOrgPages();
+    return answer;
+  });
+}
+
+/**
+ * Write Vestiarion's figures over what someone changed in HubSpot (CRM receipts R5): only over what the page showed
+ * (`seen`). The write is tried at once, best effort; the next sync tries it otherwise.
+ */
+export async function overwriteHubSpotReceiptAction(_previous: HubSpotActionResult, formData: FormData): Promise<HubSpotActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "integrations.manage");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    const dealId = formData.get("dealId");
+    if (typeof dealId !== "string" || !UUID.test(dealId)) return { ok: false, message: "That deal was not found." };
+    const seen = formData.get("seen");
+    const outcome = await overwriteCrmReceipt(consoleActor(auth), { dealId, seen: typeof seen === "string" ? seen.slice(0, 64) : "", label: "HubSpot" });
+    if (!outcome.ok) return consoleAnswer(outcome);
+    try {
+      const found = await connected();
+      if (!("message" in found) && found.connection.status === "connected") {
+        const run = await receiptsInScope(found.connection.id, found.provider);
+        revalidateOrgPages();
+        if (run && run.written > 0) return { ok: true, message: "Written to HubSpot, and HubSpot read it back the same." };
+        if (run && run.conflicts > 0) return { ok: false, message: "HubSpot changed again since this page was opened. Reload the page to see what it holds now." };
+      }
+    } catch (error) {
+      console.error("overwriteHubSpotReceiptAction: the write was left for the next sync", error instanceof Error ? error.message : "unknown error");
+    }
+    revalidateOrgPages();
+    return consoleAnswer(outcome);
   });
 }

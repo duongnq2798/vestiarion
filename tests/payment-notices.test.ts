@@ -136,7 +136,9 @@ describe("sending payment notices", () => {
     expect(message.subject).toBe("Northstar paid you 12.50 USDC");
     expect(message.text).toContain("Northstar paid you 12.50 USDC on Arc testnet for October design retainer (PO-2207).");
     expect(message.text).toContain(`https://explorer.testnet.arc.io/tx/${TX}`);
-    expect(message.text).toContain("Sent to 0x7a3c9e2b41d05f8a6c1e3b9d2f4a8c6e0b5d1f93 on Oct 3, 2026, 03:27 UTC.");
+    expect(message.text).toContain("Sent to 0x7a3c9e2b41d05f8a6c1e3b9d2f4a8c6e0b5d1f93.");
+    // Who confirmed it, and on which network (I17).
+    expect(message.text).toContain("Circle confirmed the transfer on Arc testnet on Oct 3, 2026, 03:27 UTC.");
 
     const [entry] = appends(client);
     expect(entry).toMatchObject({ p_actor: "system", p_domain: "ap", p_action: "payment_notice_sent", p_summary: "Told Northstar Studio by email that 12.50 USDC was paid" });
@@ -152,6 +154,7 @@ describe("sending payment notices", () => {
     const message = send.mock.calls[0][0];
     for (const part of [message.text, message.html]) {
       expect(part).toContain("Northstar paid you 12.50 USDC on Arc mainnet");
+      expect(part).toContain("Circle confirmed the transfer on Arc mainnet on");
       expect(part).not.toContain("Arc testnet");
     }
     expect(message.text).toContain(`https://explorer.arc.io/tx/${TX}`);
@@ -316,5 +319,26 @@ describe("the payment notice email", () => {
     expect(email.html).not.toContain("Acme <Ops>");
     expect(email.html).toContain("View the transaction");
     expect(email.text).toContain("For anything about this payment, contact Acme <Ops>.");
+  });
+
+  it("names Circle's confirmation, on the payment's network, with the transaction, in the text and the HTML (I17)", () => {
+    const email = paymentNoticeEmail({
+      orgName: "Northstar",
+      payeeName: "Linh",
+      amount: "12.50",
+      token: "USDC",
+      what: null,
+      address: "0x7a3c",
+      paidAt: "Oct 3, 2026, 03:27 UTC",
+      txUrl: `https://explorer.testnet.arc.io/tx/${TX}`,
+      origin: "https://www.vestiarion.xyz",
+      network: "arc-testnet",
+    });
+    for (const part of [email.text, email.html]) {
+      expect(part).toContain("Circle confirmed the transfer on Arc testnet on Oct 3, 2026, 03:27 UTC.");
+      expect(part).toContain(`https://explorer.testnet.arc.io/tx/${TX}`);
+    }
+    expect(email.html).toContain("Payment confirmed");
+    expect(email.html).not.toContain("Payment sent");
   });
 });

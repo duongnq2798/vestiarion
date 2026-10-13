@@ -252,6 +252,8 @@ const SHOTS = {
     await page.click(`[...document.querySelectorAll("[data-docs-shot] summary")].find((s) => s.textContent.includes("Not won yet"))`);
   },
   "hubspot-plan": async () => {},
+  "hubspot-receipts": async () => {},
+  "hubspot-receipts-settings": async () => {},
   "hubspot-changed": async () => {},
 };
 

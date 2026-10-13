@@ -65,6 +65,8 @@ const KEEP_UPDATE: Record<string, { column: string; expr: string }> = {
   // The deals a CRM brought in (0105).
   crm_deals: { column: "name", expr: "'changed'" },
   accounting_postings: { column: "message", expr: "'changed'" },
+  // The receipts written back to HubSpot (0107).
+  crm_receipt_writes: { column: "message", expr: "'changed'" },
 };
 
 beforeAll(async () => {

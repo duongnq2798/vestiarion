@@ -279,8 +279,10 @@ export default function PrivacyPage() {
             already read stay with the workspace, and the signed ledger keeps only ids and names.
           </li>
           <li>
-            <strong>HubSpot</strong>, for a workspace an owner or admin connects to a HubSpot account after agreeing to it, is read from and never
-            written to. Vestiarion reads that account&apos;s open deals and the deals won in the last 90 days, then the deals that change (each
+            <strong>HubSpot</strong>, for a workspace an owner or admin connects to a HubSpot account after agreeing to it, is read from, and written
+            to only once an owner or admin allows it: then each HubSpot deal planned in Vestiarion receives what was collected on it from payments
+            confirmed on Arc, what is still owed, the last receipt&apos;s day, amount and transaction link, the reconciliation status and a link to the
+            deal in Vestiarion, and nothing else. Vestiarion reads that account&apos;s open deals and the deals won in the last 90 days, then the deals that change (each
             one&apos;s name, amount, currency, close date, pipeline and stage), each deal&apos;s company (its name) and that company&apos;s main
             contact (its email), and the account&apos;s currency, time zone and domain. It keeps the deals read, the companies&apos; names, the main
             contacts&apos; emails, the account&apos;s id and domain, the access granted and the agreement given, and HubSpot&apos;s tokens encrypted,
