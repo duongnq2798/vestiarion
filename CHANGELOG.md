@@ -11,6 +11,8 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+## [0.1.0-beta.2] - 2026-10-13
+
 ### Added
 
 - **Collections that follow the customer.** Before it reminds a customer, the agent weighs what Vestiarion knows about
@@ -220,5 +222,6 @@ public beta, on Arc testnet and Arc mainnet. Release notes:
   company.
 - HubSpot is read-only, polled every 15 minutes, and its app is not yet verified by HubSpot.
 
-[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.1...HEAD
+[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.2...HEAD
+[0.1.0-beta.2]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.2
 [0.1.0-beta.1]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.1
