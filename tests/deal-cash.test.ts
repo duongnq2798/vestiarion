@@ -145,6 +145,43 @@ describe("the short day", () => {
     expect(read(depositDeal(), costs).short).toEqual({ day: TODAY, byMinor: 50_000, deepest: { day: TODAY, byMinor: 50_000 } });
   });
 
+  it("fixture 4: a deposit the customer paid part of counts what arrived as collected and only what is still owed as expected", () => {
+    // 1,600.00 of the 3,600.00 deposit arrived and was applied (allocations L11): 2,000.00 is still owed on Oct 27.
+    const deal = depositDeal({
+      deposit: { status: "released", releasedAt: "2026-10-05T09:00:00Z", releasedVia: "person", receivable: { id: "r1", status: "pending", dueDate: "2026-10-27T00:00:00Z" } },
+    });
+    const costs = [cost(1, { label: "Contractor: design", amountMinor: 124_000, expectedOn: "2026-10-20" })];
+    const applied = { r1: { amount: 3_600_000_000, paid: 1_600_000_000, outstanding: 2_000_000_000 } };
+    const readiness = dealCashReadiness({ facts: deal, digits: 2 }, costs, TODAY, applied);
+    expect(readiness.collected).toEqual({ totalMinor: 160_000, lines: [{ id: deal.lines[0].id, label: "Deposit (30%), part paid", amountMinor: 160_000 }] });
+    const depositIn = readiness.days.flatMap((day) => day.items).find((item) => item.id === deal.lines[0].id);
+    expect(depositIn).toMatchObject({ kind: "expected", amountMinor: 200_000, basis: "Invoiced, due Oct 27, 2026, part paid: 2,000.00 USDC of 3,600.00 USDC still owed" });
+    expect(readiness.in.expectedMinor).toBe(200_000);
+    // The contractor leaves against what arrived: 1,600.00 - 1,240.00, no gap; the deal ends where it would in full.
+    expect(readiness.short).toBeNull();
+    expect(readiness.days.map((day) => [day.day, day.positionMinor])).toEqual([
+      ["2026-10-20", 36_000],
+      ["2026-10-27", 236_000],
+      ["2026-12-15", 1_076_000],
+    ]);
+    // Counted in full, as before, the same deal looked short on Oct 20 and expected the whole deposit again.
+    const unapplied = read(deal, costs);
+    expect(unapplied.short?.day).toBe("2026-10-20");
+    expect(unapplied.in.expectedMinor).toBe(360_000);
+  });
+
+  it("fixture 5: a shadow deal's part-paid line counts in proportion, and a line nothing is owed on any more drops out", () => {
+    // 1,000.00 USD released at 1,086.956521 USDC; half of the USDC arrived.
+    const usd = facts([line(1, { label: "All", invoiceOn: "2026-10-01", dueOn: "2026-10-30", amountMinor: 100_000, status: "released", receivable: { id: "r1", status: "matched", dueDate: "2026-10-30" } })], { currency: "USD" });
+    const half = dealCashReadiness({ facts: usd, digits: 2 }, [], TODAY, { r1: { amount: 1_086_956_521, paid: 543_478_260, outstanding: 543_478_261 } });
+    expect(half.collected.totalMinor).toBe(50_000);
+    expect(half.in.expectedMinor).toBe(50_000);
+    // All of it applied, the receivable not marked received yet: nothing is expected, all of it arrived.
+    const all = dealCashReadiness({ facts: usd, digits: 2 }, [], TODAY, { r1: { amount: 1_086_956_521, paid: 1_086_956_521, outstanding: 0 } });
+    expect(all.days).toEqual([]);
+    expect(all.collected.totalMinor).toBe(100_000);
+  });
+
   it("finds no gap when the deposit arrives before any cost leaves", () => {
     const readiness = read(depositDeal(), [cost(1, { amountMinor: 300_000, expectedOn: "2026-10-28" })]);
     expect(readiness.short).toBeNull();

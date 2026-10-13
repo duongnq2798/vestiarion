@@ -113,10 +113,40 @@ function lineItem(line: DealLine, today: string): CashItem | null {
 }
 
 /**
- * The deal's money in and out from today, against its costs (K4). `costs` is null when they could not be read, or before
- * migration 0108: then no cost is counted and the margin is not enough data.
+ * What a receivable a payment was applied to holds now (allocations L11), in its own currency's micros: its amount, what
+ * the customer's payments brought to it, and what it is still owed. A receivable nobody applied money to is absent, and
+ * its line counts in full.
  */
-export function dealCashReadiness(deal: { facts: DealFacts; digits: number }, costs: readonly DealCost[] | null, today: string): CashReadiness {
+export interface ReceivableHeld {
+  amount: number;
+  paid: number;
+  outstanding: number;
+}
+
+/**
+ * A part of a receivable as the same part of its line, in the deal's minor units, to the nearest: exact for USDC and
+ * EURC, in proportion for a shadow deal's currency, whose receivable is in USDC at the day's rate.
+ */
+function lineShare(lineMinor: number, part: number, whole: number): number {
+  if (!(whole > 0) || !(part > 0)) return 0;
+  if (part >= whole) return lineMinor;
+  const total = BigInt(Math.round(whole));
+  return Number((BigInt(lineMinor) * BigInt(Math.round(part)) * BigInt(2) + total) / (total * BigInt(2)));
+}
+
+/**
+ * The deal's money in and out from today, against its costs (K4). `costs` is null when they could not be read, or before
+ * migration 0108: then no cost is counted and the margin is not enough data. `applied` holds, by receivable id, what was
+ * applied to a released line's receivable (allocations L11): a part-paid line's arrived part is collected, and only what
+ * is still owed is expected, as Treasury and the payment plan count it.
+ */
+export function dealCashReadiness(
+  deal: { facts: DealFacts; digits: number },
+  costs: readonly DealCost[] | null,
+  today: string,
+  applied: Readonly<Record<string, ReceivableHeld>> = {}
+): CashReadiness {
+  const money = (minor: number) => `${formatMinor(minor, deal.digits)} ${deal.facts.currency}`;
   const lines = inForce(deal.facts.lines);
   const collected: CashReadiness["collected"]["lines"] = [];
   const items: Array<CashItem & { day: string }> = [];
@@ -132,6 +162,18 @@ export function dealCashReadiness(deal: { facts: DealFacts; digits: number }, co
     }
     const item = lineItem(line, today);
     if (!item) continue;
+    const held = line.receivable ? applied[line.receivable.id] : undefined;
+    if (held) {
+      // Part paid: what arrived is collected to date, and only what is still owed is expected, once.
+      const owed = lineShare(line.amountMinor, held.outstanding, held.amount);
+      const arrived = Math.min(line.amountMinor - owed, lineShare(line.amountMinor, held.paid, held.amount));
+      if (arrived > 0) collected.push({ id: line.id, label: `${line.label}, part paid`, amountMinor: arrived });
+      if (owed <= 0) continue;
+      if (owed < line.amountMinor) {
+        item.amountMinor = owed;
+        item.basis = `${item.basis}, part paid: ${money(owed)} of ${money(line.amountMinor)} still owed`;
+      }
+    }
     const day = item.late ? today : (line.receivable?.dueDate || line.dueOn).slice(0, 10);
     items.push({ ...item, day: day < today ? today : day });
   }

@@ -126,6 +126,41 @@ export function stillOwed(invoice: Parameters<typeof toReceivableIn>[0], rows: r
 
 export const RECEIVABLE_COLUMNS ="id, counterparty_id, amount, currency, status, due_date, created_at, memo, po_reference, direction, counterparties(name)";
 
+/** What a receivable a payment was applied to holds now, in micros (L11): the shape `dealCashReadiness` takes. */
+export interface ReceivableHeldMicros {
+  amount: number;
+  paid: number;
+  outstanding: number;
+}
+
+/**
+ * What each receivable a payment was applied to holds now (L11), by id: its amount, what the customer's payments brought
+ * to it and what it is still owed. A deal's cash readiness counts a part-paid line's arrived part as collected and only
+ * what is still owed as expected, as `stillOwed` does for Treasury and the plan. A receivable no row names is left out,
+ * and its line counts in full.
+ */
+export function receivablesHeld(invoices: ReadonlyArray<Parameters<typeof toReceivableIn>[0]>, rows: readonly AllocationRow[]): Record<string, ReceivableHeldMicros> {
+  const named = new Set(rows.map((row) => row.invoiceId));
+  const held: Record<string, ReceivableHeldMicros> = {};
+  for (const invoice of invoices) {
+    if (!named.has(invoice.id)) continue;
+    const balance = receivableBalance(toReceivableIn(invoice), rows, false);
+    held[invoice.id] = { amount: balance.amount, paid: balance.paid, outstanding: balance.outstanding };
+  }
+  return held;
+}
+
+/** `receivablesHeld` for some receivables, read now: a deal's. Empty before migration 0103 runs. */
+export async function readReceivablesHeld(orgDb: OrgDb, invoiceIds: readonly string[]): Promise<Record<string, ReceivableHeldMicros>> {
+  if (invoiceIds.length === 0) return {};
+  const rows = await readAllocationRows(orgDb, { invoiceIds });
+  if (rows === null || rows.length === 0) return {};
+  const invoices = unwrap(await orgDb.from("invoices").select(RECEIVABLE_COLUMNS).eq("direction", "receivable").in("id", [...invoiceIds])) as unknown as Array<
+    Parameters<typeof toReceivableIn>[0]
+  >;
+  return receivablesHeld(invoices, rows);
+}
+
 /**
  * The rows about some receivables or payments, or every row (to `ROWS_READ`); null before migration 0103 runs. A
  * failure of another kind throws.

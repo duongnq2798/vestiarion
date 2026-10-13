@@ -20,6 +20,7 @@ import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { shellModes } from "@/lib/circle";
 import { utcDay } from "@/lib/copy";
+import { readReceivablesHeld } from "@/lib/allocations/book";
 import { crmChangesFor, type CrmDealChanges as CrmChangesRead } from "@/lib/connectors/crm-review";
 import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
@@ -90,6 +91,15 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
         console.error("deal: costs not read", error instanceof Error ? error.message : error);
         return null;
       });
+    // What was applied to each released line's receivable (allocations L11): a part-paid line is expected for what is
+    // still owed. Best effort: a read that fails counts each line in full, as before.
+    const applied = await readReceivablesHeld(
+      db(),
+      facts.lines.flatMap((line) => (line.receivable ? [line.receivable.id] : []))
+    ).catch((error: unknown) => {
+      console.error("deal: payments applied not read", error instanceof Error ? error.message : error);
+      return {};
+    });
     // What a cost may be linked to, and who a new one may be for: an owner's or admin's forms only.
     const [candidates, payees] =
       canWrite && costs !== null
@@ -126,7 +136,7 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
 
         <div className="space-y-8">
           {crm && <CrmDealChanges orgSlug={slug} dealId={facts.id} label={crm.label} words={crm.words} seen={crm.seen} canWrite={canWrite} active={facts.status === "active"} />}
-          <DealCashReadiness facts={facts} digits={digits} template={deal.template} costs={costs} today={today} {...(canWrite && facts.status === "active" ? { changeHref: "#change" } : {})} />
+          <DealCashReadiness facts={facts} digits={digits} template={deal.template} costs={costs} applied={applied} today={today} {...(canWrite && facts.status === "active" ? { changeHref: "#change" } : {})} />
           <DealSchedule orgSlug={slug} deal={deal} today={today} canWrite={canWrite} />
           <DealCosts
             orgSlug={slug}

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
-import { projectedReceivableInflow } from "@/lib/allocations/book";
+import { projectedReceivableInflow, readReceivablesHeld } from "@/lib/allocations/book";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
 /**
@@ -72,5 +72,34 @@ describe("projectedReceivableInflow", () => {
   it("adds up the whole of each before migration 0103 runs", async () => {
     fake = world(MISSING);
     expect(await run(() => projectedReceivableInflow(db()))).toBe(112.5);
+  });
+});
+
+describe("readReceivablesHeld", () => {
+  const RECEIVABLES = [
+    { id: "inv-1", counterparty_id: "cp-1", amount: "12.500000", currency: "USDC", status: "pending", due_date: "2026-10-27", created_at: "2026-10-05T09:00:00Z", memo: null, po_reference: null, direction: "receivable", counterparties: { name: "Acme" } },
+    { id: "inv-2", counterparty_id: "cp-1", amount: "100.000000", currency: "USDC", status: "pending", due_date: "2026-11-27", created_at: "2026-10-05T09:00:00Z", memo: null, po_reference: null, direction: "receivable", counterparties: { name: "Acme" } },
+  ];
+  const held = (allocations: FakeReply) =>
+    fakeSupabase((r: RecordedRequest): FakeReply => {
+      if (r.path === "/rest/v1/invoices") return { body: RECEIVABLES };
+      if (r.path === "/rest/v1/receivable_allocations") return allocations;
+      return { body: [] };
+    });
+
+  it("says, for a deal's receivables a payment was applied to, what arrived and what is still owed; none for the others", async () => {
+    fake = held({ body: [row({ amount: "5.000000" }), row({ id: "fee-1", kind: "fee", transfer_id: null, amount: "0.500000", reason: "Transfer fee", basis: null, payment_seq: null })] });
+    expect(await run(() => readReceivablesHeld(db(), ["inv-1", "inv-2"]))).toEqual({ "inv-1": { amount: 12_500_000, paid: 5_000_000, outstanding: 7_000_000 } });
+    expect(fake.requests.find((r) => r.path === "/rest/v1/invoices")?.params.get("direction")).toBe("eq.receivable");
+  });
+
+  it("is empty with nothing applied, before migration 0103 runs, and for a deal with no receivable", async () => {
+    fake = held({ body: [] });
+    expect(await run(() => readReceivablesHeld(db(), ["inv-1"]))).toEqual({});
+    fake = held(MISSING);
+    expect(await run(() => readReceivablesHeld(db(), ["inv-1"]))).toEqual({});
+    fake = held({ body: [] });
+    expect(await run(() => readReceivablesHeld(db(), []))).toEqual({});
+    expect(fake.requests).toEqual([]);
   });
 });

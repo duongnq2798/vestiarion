@@ -31,7 +31,7 @@ import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import type { Decision } from "@/components/vx/types";
 import { addedSince, latestDecision, recordedFacts } from "@/lib/added-details";
-import { readAllocationBook, stillOwed, toReceivableIn } from "@/lib/allocations/book";
+import { readAllocationBook, receivablesHeld, stillOwed, toReceivableIn } from "@/lib/allocations/book";
 import { toMicros, type PaymentIn } from "@/lib/allocations/model";
 import { receivableLabel } from "@/lib/allocations/suggest";
 import { applyPaymentsView, paymentsByReceivable, receivableViews, type ReceivableView } from "@/lib/allocations/view";
@@ -221,6 +221,8 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     });
     const receivablesIn = invoices.filter((invoice) => invoice.direction === "receivable").map(toReceivableIn);
     const allocations = book ? receivableViews(book, receivablesIn) : new Map<string, ReceivableView>();
+    // A part-paid deal line counts what is still owed in its cash badge, as in the plan (allocations L11).
+    const dealsApplied = book ? receivablesHeld(invoices.filter((invoice) => invoice.direction === "receivable"), book.rows) : {};
     const appliedPayments = book ? paymentsByReceivable(book) : new Map<string, PaymentIn[]>();
     // One read of the entries about every invoice, as before: Needs you counts the bills code refused, which only the
     // entries say, and the cards' verdicts come from them.
@@ -622,6 +624,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
               <DealsSection
                 deals={deals}
                 costs={dealCosts}
+                applied={dealsApplied}
                 orgSlug={slug}
                 today={today}
                 fromCrm={

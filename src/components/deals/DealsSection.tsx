@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { orgHref } from "@/lib/auth/org-paths";
 import { utcDay } from "@/lib/copy";
-import { cashBadge, dealCashReadiness } from "@/lib/deals/cash";
+import { cashBadge, dealCashReadiness, type ReceivableHeld } from "@/lib/deals/cash";
 import type { DealCost } from "@/lib/deals/costs";
 import { dealSummary } from "@/lib/deals/lines";
 import type { DealRecord } from "@/lib/deals/read";
@@ -34,6 +34,7 @@ export function dealStanding(deal: DealRecord, today: string): { label: string; 
 export function DealsSection({
   deals,
   costs = null,
+  applied = {},
   orgSlug,
   today,
   newDeal,
@@ -42,6 +43,8 @@ export function DealsSection({
   deals: DealRecord[] | "not_ready" | "unread";
   /** Each deal's costs, for its cash badge (deal cash readiness K8); null before they are set up or when unread: no badge. */
   costs?: ReadonlyMap<string, DealCost[]> | null;
+  /** What was applied to each receivable, by its id (allocations L11): a part-paid line counts what is still owed. */
+  applied?: Readonly<Record<string, ReceivableHeld>>;
   orgSlug: string;
   today: string;
   newDeal?: ReactNode;
@@ -85,7 +88,7 @@ export function DealsSection({
             {deals.map((deal) => {
               const summary = dealSummary(deal.facts, today);
               const standing = dealStanding(deal, today);
-              const cash = costs ? cashBadge(dealCashReadiness(deal, costs.get(deal.facts.id) ?? [], today), deal.facts.status) : null;
+              const cash = costs ? cashBadge(dealCashReadiness(deal, costs.get(deal.facts.id) ?? [], today, applied), deal.facts.status) : null;
               const money = (minor: number) => <DealMoney minor={minor} digits={deal.digits} currency={deal.facts.currency} />;
               return (
                 <li key={deal.facts.id}>
