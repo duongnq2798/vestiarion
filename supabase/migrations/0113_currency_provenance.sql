@@ -37,7 +37,7 @@ create table if not exists public.cash_scenario_versions (
   scenario_id         uuid not null,
   version             integer not null constraint cash_scenario_versions_version_check check (version between 1 and 10000),
   name                text not null constraint cash_scenario_versions_name_check check (char_length(btrim(name)) between 1 and 80),
-  levers              jsonb not null constraint cash_scenario_versions_levers_check check (jsonb_typeof(levers) = 'object' and octet_length(levers::text) <= 16384),
+  levers              jsonb not null constraint cash_scenario_versions_levers_check check (jsonb_typeof(levers) = 'object' and octet_length(levers::text) <= 65536),
   rates               jsonb not null default '[]'::jsonb constraint cash_scenario_versions_rates_check check (jsonb_typeof(rates) = 'array' and octet_length(rates::text) <= 8192),
   reporting_currency  text constraint cash_scenario_versions_reporting_check check (reporting_currency is null or reporting_currency in ('USD', 'EUR', 'SGD', 'JPY', 'KRW', 'PHP', 'MYR')),
   created_by          uuid references auth.users(id) on delete set null,
