@@ -45,6 +45,8 @@ export async function proxy(request: NextRequest) {
 export const config = {
   // Social images (the root metadata images and the docs pages' under og/) are
   // public build artifacts; crawlers must never pay for a Supabase session
-  // refresh while fetching a link preview.
-  matcher: ["/((?!api/|_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|opengraph-image|twitter-image|og/|manifest.webmanifest|icons/).*)"],
+  // refresh while fetching a link preview. The guides' videos under
+  // docs/videos/ are public files fetched in many range requests while one
+  // plays; none of them reads or refreshes a session, or sets a cookie.
+  matcher: ["/((?!api/|_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|opengraph-image|twitter-image|og/|manifest.webmanifest|icons/|docs/videos/).*)"],
 };

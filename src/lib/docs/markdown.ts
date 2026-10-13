@@ -9,6 +9,7 @@ import { docsHref, docsMarkdownPath } from "./paths";
 import { ERROR_MEANINGS, REFERENCE_SECTIONS } from "./reference";
 import { sampleRequest } from "./samples";
 import { schemaTree, type SchemaNode } from "./schema-tree";
+import { videoProblem } from "./videos";
 
 /**
  * Every docs page as Markdown: the `.md` view of each page, "Copy page",
@@ -69,6 +70,16 @@ export const MDX_TO_MARKDOWN: Record<string, (attributes: JsxAttributes, childre
     const image = `![${alt.replace(/[[\]\\]/g, "\\$&")}](${src})`;
     return typeof caption === "string" && caption.trim() ? `${image}\n\n*${caption.trim()}*` : image;
   },
+  // A guide's walkthrough video: a link to the file, its root path made absolute with the links, named with its title
+  // and length; its caption in italics; then its transcript, as on the page.
+  Video: (attributes, children, { convert }) => {
+    const transcript = convert(children).trim();
+    const problem = videoProblem(attributes, transcript !== "");
+    if (problem) throw new Error(problem);
+    const { src, title, caption, duration } = attributes as Record<"src" | "title" | "caption" | "duration", string>;
+    const name = `Video: ${title.trim()} (${duration.trim()})`.replace(/[[\]\\]/g, "\\$&");
+    return [`[${name}](${src})`, `*${caption.trim()}*`, "**Transcript**", transcript].join("\n\n");
+  },
 };
 
 /**
@@ -85,7 +96,7 @@ export const MDX_TO_MARKDOWN: Record<string, (attributes: JsxAttributes, childre
  *   table row it would be a cell; after a quote, a list item or text, and
  *   before text, it would continue a paragraph.
  */
-const BLOCK_COMPONENTS = new Set(["Callout", "Action", "Cards", "Card", "EndpointTable", "McpToolTable", "Screenshot"]);
+const BLOCK_COMPONENTS = new Set(["Callout", "Action", "Cards", "Card", "EndpointTable", "McpToolTable", "Screenshot", "Video"]);
 
 /** Components that belong only inside another: a `Card` is one cell of a `Cards` grid. */
 const PARENT_OF: Record<string, string> = { Card: "Cards" };

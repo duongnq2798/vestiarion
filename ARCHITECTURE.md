@@ -2312,7 +2312,13 @@ folds (`NavSection.folded`) until opened or holding the page being read; pages k
 MDX pages have `<Callout kind="note|tip|important|warning|real-money">`, whose kind is written beside its title on the
 page and in the `.md` view, `<Action href>` for a guide's one next step in the app, and numbered `## 1. …` steps, which
 `DocsHeading` draws with a number badge while keeping their ids. A `<Screenshot>` opens larger in a dialog
-(`ZoomableImage`). **A PR that
+(`ZoomableImage`). A `<Video>` (`src/components/docs/Video.tsx`) shows a guide's walkthrough film, an MP4 and its poster
+under `public/docs/videos/`, in the browser's own player with `preload="none"` (no embed, no autoplay), its title,
+length and caption below, and its transcript, written between its tags in the MDX, under "Read the transcript"; the
+`.md` view links the file and gives the transcript. A `<Video>` missing an attribute or its transcript fails the render,
+and `tests/docs-videos.test.tsx` holds each one to an existing fast-start MP4 of the length it states, and every file
+there to a guide. The proxy skips `docs/videos/`, and `outputFileTracingExcludes` keeps the files out of the server
+functions. **A PR that
 changes `/api/v1` or webhooks adds a changelog entry** to
 `content/docs/changelog.mdx`: dated, newest first, saying what changed for an
 integrator.

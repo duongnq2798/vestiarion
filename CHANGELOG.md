@@ -13,6 +13,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Walkthrough videos in the Xero and HubSpot guides.** Each guide now opens with a film of under two minutes,
+  recorded in the live product on Arc testnet with demo data: bills from the Xero Demo Company held, caught when paid in
+  Xero and paid on Arc; a deal won in a HubSpot developer test account planned, collected and written back to HubSpot.
+  Each has a caption and its transcript, and the player loads nothing until you press play. The docs Overview links to
+  both.
 - **Work in your own currency.** Every amount keeps the figure and currency written on the bill, where it came from,
   the rate it was converted at (with who published it and when) and what moves on Arc. An owner or admin sets a
   **Reporting currency** in Settings (USD, EUR, SGD, JPY, KRW, PHP or MYR), and the report's new **Currencies and
