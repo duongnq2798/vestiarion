@@ -99,5 +99,17 @@ missing detail; being decided: who is deciding; a viewer: who can act.
 
 ## Screenshots
 
-`docs/superpowers/specs/deal-cash-shots/`, from `/docs-shots/deal-cash/<state>` (flag-gated, sample data) at 1440, 1024
-and 390 px.
+In `docs/superpowers/specs/deal-cash-shots/`, from a production build in headless Edge, each at 1440, 1024 and 390 px
+(`<name>-<width>.png`), through `/docs-shots/deal-cash/<state>` (answers only with `DOCS_SCREENSHOTS=1`; sample data
+in `src/app/docs-shots/deal-cash-fixture.ts`, on Oct 13, 2026):
+
+- `01-deal-short`: Website rebuild, 12,000.00 USDC with a 30% deposit due Oct 27 and a contractor paid Oct 20: "Short
+  by 1,240.00 USDC on Oct 20, 2026", the day by day, a cost linked to a bill of 1,500.00 planned at 1,000.00, a cost
+  with no document yet, a removed cost folded away, and an estimated margin of 8,960.00 USDC (74.67%).
+- `02-deal-no-gap`: Brand refresh, half collected and an illustrator's milestone paid: "No cash gap".
+- `03-deal-not-enough-data`: a retainer with no cost entered: "Not enough data", no margin, and no deposit to try.
+- `04-deal-try-moved`: the first deal with its deposit tried on Oct 5 (due Oct 19): "With this try: no cash gap. Now:
+  short by 1,240.00 USDC on Oct 20, 2026."
+- `05-deals-list-badges`: the Deals list with one badge each: short and when, no cash gap, no costs entered.
+- `06-approvals-owner-priority`: Approvals with an overdue bill, one due today to keep its discount, one due this week,
+  and the card a viewer sees ("Ask ... to decide it"); then the same bills as rows on Bills.
