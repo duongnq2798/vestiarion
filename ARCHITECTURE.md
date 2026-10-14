@@ -841,8 +841,10 @@ Every page under `/o/[slug]` sits in one frame (spec `2026-10-10-workspace-shell
   surface reads `readCapability()` (`src/lib/capability-read.ts`) inside the workspace's scope: Settings (Go live's
   badge, the shadow mode panel), the console (balance tile, shadow summary), Approvals and verdicts (`verdictFacts`
   carries it to `VerdictControl`), contractors, and `GET /api/v1/status` (`apiPayments`). Pages that need only whether
-  the chain simulates (the report, the shared report, the payee's page and email) call `simulatesPayments()`, the same
-  function with the switch and shadow mode aside, and read nothing for it. `tests/capability-surfaces.test.tsx` checks
+  the workspace makes simulated payments (the report and the shared report, which count a sandbox's simulated payments,
+  the payee's page and email) call `simulatesPayments(mode)`, which reads nothing: the chain mode, the switch and shadow
+  mode aside; a held workspace's chain mode cannot be told, so its mode says, as the report always read it; Arc mainnet
+  never simulates. `tests/capability-surfaces.test.tsx` checks
   every surface against each situation, and that none can be told apart wrongly.
 - **Banners** (Arc mainnet, payments switched off, agent paused) are read by the layout and drawn by each page under its
   header (`FrameBanners`). The loading and error states draw the same header with the layout's facts alone, and the
@@ -857,13 +859,16 @@ When a person goes against the agent, the surface asks why in the same step, opt
 to agent and, on a payable the agent flagged or held on a rule (`overridesHold`), Approve and pay (`ApprovalCard`, whose
 `ConfirmDialog` takes the field as children and hands it to its form through a hidden input). The command layer keeps
 it: `src/lib/commands/payables.ts` calls `recordDecisionReason` (`src/lib/decision-reasons.ts`) after the decision,
-with the actor's surface, unless a verdict settles it; `giveVerdict` keeps a disagreement's. A row in `decision_reasons`
+for the console only, the surface whose hint says Vestiarion's team reads it, and unless a verdict settles it;
+`giveVerdict` keeps a disagreement's. A reason from another surface goes only into the decision's ledger entry. A row in `decision_reasons`
 (migration 0120, a tenant table: select and insert only) names the feature and decision, the surface, the subject, who
 gave it and `appVersion()` (`src/lib/app-version.ts`: `VERCEL_GIT_COMMIT_SHA` cut to 12, or the package version).
 Best effort throughout: before 0120 runs (42P01 / PGRST205) or on a failed write nothing is kept and the decision is
 unchanged. Owners and admins read the workspace's latest 20 on Insights (`DecisionReasons`); the team reads the latest
 200 across workspaces on `/admin/growth` through `growth_decision_reasons(p_since)`, a definer for the service role
-only, by workspace slug and side, with no person.
+only, by workspace slug and side, with no person. The privacy page's "Reasons you give" entry says all of it, and what
+deleting an account does (`given_by` set null; the ledger keeps the id). `tests/approval-card-reasons.test.tsx` runs in
+happy-dom (a dev dependency, for that file only): it opens each dialog, types a reason and presses the confirmation.
 
 ## Shadow mode
 

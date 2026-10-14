@@ -24,8 +24,10 @@ import { workspaceNetwork } from "../workspace-network";
  * settling passes `forVerdict`, and the approvals library refuses every other before a verdict is given.
  *
  * Paying, rejecting or returning what the agent stopped goes against it: a reason the person gave, which is never
- * required, is kept with the surface it came from once the decision is made (capability and reasons R10, R11). A verdict
- * keeps its own (src/lib/verdicts.ts), so a decision settling one keeps none here.
+ * required, is kept once the decision is made (capability and reasons R10, R11). Only the console's: it is the one
+ * surface that says, where the reason is typed, that Vestiarion's team reads it. Slack sends no reason today, and the
+ * other surfaces decide no payable; a reason one ever sends still goes into the decision's own ledger entry, as before,
+ * and nowhere else. A verdict keeps its own (src/lib/verdicts.ts), so a decision settling one keeps none here.
  */
 
 /** The chat's rules for a decision from any surface but the console; the console's decisions pass untouched. */
@@ -38,9 +40,12 @@ async function chatRules(actor: Actor, decision: "approve" | "reject" | "return"
 /** The verdict's own settling of a payable held for one, passed on only when it is that (shadow mode S4). */
 const verdictSettles = (input: { forVerdict?: boolean }) => (input.forVerdict ? { forVerdict: true } : {});
 
-/** Keeps the reason given for a decision on a payable, unless a verdict settles it, which keeps its own. Never throws. */
+/**
+ * Keeps the reason given in the console for a decision on a payable, unless a verdict settles it, which keeps its own.
+ * Never throws.
+ */
 async function keepReason(actor: Actor, source: "approvals.pay_held" | "approvals.reject" | "approvals.return", input: { invoiceId: string; reason?: string | null; forVerdict?: boolean }) {
-  if (input.forVerdict) return;
+  if (input.forVerdict || actor.surface.kind !== "console") return;
   await recordDecisionReason({ source, surface: actor.surface.kind, subject: "invoice", subjectId: input.invoiceId, reason: input.reason, givenBy: actor.userId });
 }
 

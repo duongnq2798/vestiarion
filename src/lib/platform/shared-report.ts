@@ -100,7 +100,7 @@ export async function readSharedReport(token: string, now: Date = new Date()): P
     const [facts, actuals, baseline, knownNames, texts] = await Promise.all([
       // Simulated as the workspace's capability says, not its mode: a sandbox connected to Circle pays for real (capability
       // and reasons R5).
-      readReportFacts(db(), network, { sandbox: simulatesPayments() }, now),
+      readReportFacts(db(), network, { sandbox: simulatesPayments(found.mode === "sandbox" ? "sandbox" : "live") }, now),
       readActualsFacts(db()),
       readBaseline(db()),
       counterpartyNames(db()),

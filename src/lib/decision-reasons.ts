@@ -9,8 +9,8 @@ import { db } from "./dal";
  * gives none goes on exactly as before, and a reason that cannot be saved never stops what they did.
  *
  * One row in `decision_reasons` (migration 0120) per reason given, with where in the product it came from (`feature`,
- * `decision`), the surface it was given on, and the build of the app that asked for it, so the team can see which
- * screens and which versions people disagree with most. Every export runs inside an organization scope; reads go
+ * `decision`), the surface it was given on, and the build of the app that asked for it, so Vestiarion's team can see
+ * which screens and which versions people disagree with most. Only the console asks for one, and says so where it asks. Every export runs inside an organization scope; reads go
  * through `db()`, so row-level security confines them to the workspace.
  *
  * Until 0120 runs here, nothing is saved and nothing is read (42P01 / PGRST205): the reasons list says it is not set up.

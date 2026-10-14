@@ -31,13 +31,19 @@ export async function readCapability(known: { shadow?: boolean | null } = {}): P
 }
 
 /**
- * Whether the workspace in scope simulates its payments: the capability of its chain alone, with no hold, the switch on
- * and shadow mode aside (a payment agreed to in shadow mode is simulated too). For the pages that say only that, and
- * read nothing for it: the shared report, the payee's page and email. Never throws: false when it cannot be told.
+ * Whether the workspace in scope makes simulated payments: what its chain does, the switch and shadow mode aside (a
+ * payment agreed to in shadow mode is simulated too), whether or not anything can be paid right now. For the pages that
+ * say only that, and read nothing for it: the report and the shared report, which count a sandbox's simulated payments,
+ * the payee's page and email. A held workspace's chain mode cannot be told (no provider, or credentials that cannot be
+ * read), so its mode says, as the report always read it: a sandbox on Arc testnet simulates. Arc mainnet never does.
+ * Never throws: false when it cannot be told.
  */
-export function simulatesPayments(): boolean {
+export function simulatesPayments(mode?: "sandbox" | "live"): boolean {
   try {
-    return paysSimulated(capabilityOf({ network: workspaceNetwork().id, payments: { state: "on" }, hold: paymentsHoldReason(), chainMode: chainModes().mode, shadow: false }));
+    const network = workspaceNetwork().id;
+    if (network === "arc-mainnet") return false;
+    if (paymentsHoldReason() !== null) return mode === "sandbox";
+    return paysSimulated(capabilityOf({ network, payments: { state: "on" }, hold: null, chainMode: chainModes().mode, shadow: false }));
   } catch (error) {
     console.error("capability: chain mode not read", error instanceof Error ? error.message : error);
     return false;

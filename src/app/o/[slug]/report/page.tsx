@@ -63,7 +63,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
     const [facts, actuals, dashboardStats, canRecord, shares, baseline] = await Promise.all([
       // Simulated as the workspace's capability says, not its mode: a sandbox connected to Circle pays for real (capability
       // and reasons R5).
-      readReportFacts(db(), workspaceNetwork().id, { sandbox: simulatesPayments() }),
+      readReportFacts(db(), workspaceNetwork().id, { sandbox: simulatesPayments(access.membership.mode) }),
       readActualsFacts(db()),
       stats(),
       viewerCan(slug, "records.write"),

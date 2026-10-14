@@ -6,7 +6,7 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 - A shadow-mode workspace still answers its chain mode: a payment a person agrees to is paid as `provenance.payments` says.
 - Each `approval_returned` entry may now carry `reason`, the line a person gave when they returned a bill to the agent, as `approval_rejected` already could. It is absent when none was given.
 - A `decision_verdict` entry for a disagreement may now carry `reason: null`: a reason is asked for, and no longer required.
-- Nothing else in `/api/v1` or the webhooks changes. The TypeScript SDK's types are unchanged.
+- Nothing else in `/api/v1` or the webhooks changes. The TypeScript SDK 0.3.4 describes the new reason for `unavailable` in `provenance`'s comment; its types are unchanged.
 
 ## 2026-10-14: Commissions on money received
 

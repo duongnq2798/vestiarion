@@ -72,7 +72,7 @@ export interface FreelancerPaymentResult {
 }
 
 export async function setUpFreelancerPayment(
-  input: FreelancerPayment & { actorId: string; orgName: string; now?: Date }
+  input: FreelancerPayment & { actorId: string; orgName: string; now?: Date; mode?: "sandbox" | "live" }
 ): Promise<FreelancerPaymentResult> {
   const now = (input.now ?? new Date()).toISOString();
 
@@ -174,7 +174,7 @@ export async function setUpFreelancerPayment(
   let emailed: boolean | null = null;
   if (input.email) {
     // A sandbox that simulates its payments says so, and names no network (capability and reasons R5).
-    const simulated = simulatesPayments();
+    const simulated = simulatesPayments(input.mode);
     const email = payeeLinkEmail({
       orgName: input.orgName,
       payeeName: counterparty.name,

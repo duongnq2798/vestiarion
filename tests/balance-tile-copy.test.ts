@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { balanceTileCopy, balanceTileMode } from "@/components/vx/Treasury";
+import { capabilityOf } from "@/lib/capability";
+import { MAINNET_NOT_LIVE } from "@/lib/mainnet";
 
 /**
  * The balance tile's label and sub-line, pinned as a pure function so the
@@ -23,6 +25,20 @@ describe("balanceTileMode", () => {
     expect(balanceTileMode("live", [noWallet])).toBe("sandbox");
     expect(balanceTileMode("live", [])).toBe("sandbox");
     expect(balanceTileMode("simulate", [wallet])).toBe("sandbox");
+  });
+});
+
+describe("balanceTileMode on a held workspace (capability and reasons R6)", () => {
+  const held = capabilityOf({ network: "arc-mainnet", payments: { state: "on" }, hold: MAINNET_NOT_LIVE, chainMode: "live", shadow: false });
+  const wallet = { kind: "operating", circle_wallet_id: "w-1" };
+
+  it("keeps reading a wallet the chain can still be read for, as an Arc mainnet workspace connected and not live yet", () => {
+    expect(balanceTileMode("live", [wallet], null, held)).toBe("live");
+  });
+
+  it("says a stored figure is not read from the chain where it cannot be, and never calls it a sandbox", () => {
+    expect(balanceTileMode("simulate", [wallet], null, held)).toBe("held");
+    expect(balanceTileCopy("held", 0)).toEqual({ label: "Balance", sub: "Payments are held here, so this figure is not read from the chain" });
   });
 });
 

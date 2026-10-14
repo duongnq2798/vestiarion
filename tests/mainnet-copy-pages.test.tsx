@@ -61,7 +61,7 @@ describe("the shell on the workspace's network (mainnet copy C1, C3; workspace s
   });
 
   it("reads Held from the rule the status API reads: the workspace's capability (capability and reasons R4)", () => {
-    expect(squash(source("src/app/api/v1/status/route.ts"))).toContain("const capability = await readCapability();");
+    expect(squash(source("src/app/api/v1/status/route.ts"))).toContain("const capability = await readCapability({ shadow: false });");
     expect(squash(source("src/app/api/v1/status/route.ts"))).toContain("const payments = apiPayments(capability, modes.mode);");
   });
 

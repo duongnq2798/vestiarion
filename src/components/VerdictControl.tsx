@@ -118,7 +118,7 @@ export default function VerdictControl({ orgSlug, view, payBlocked = null }: { o
               Disagree
             </Button>
           </DialogTrigger>
-          <DialogContent title="Disagree with the agent?" description="A reason, if you give one, is kept with the verdict in the ledger and helps the team improve the agent.">
+          <DialogContent title="Disagree with the agent?" description="A reason, if you give one, is kept with the verdict in the ledger, and Vestiarion's team reads it to improve the agent.">
             <form onSubmit={submitDisagreement} className="grid gap-5">
               <Field id={`verdict-reason-${view.entrySeq}`} label="Why do you disagree?" optional description="One line is enough. At most 280 characters.">
                 <Textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={280} rows={2} />

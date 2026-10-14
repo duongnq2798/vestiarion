@@ -78,8 +78,9 @@ export async function GET(request: Request) {
     // mainnet copy C12; nor while payments are switched off, or the switch
     // could not be read. The workspace's capability says all of it, as the
     // header does (capability and reasons R4); shadow mode is not a reason:
-    // a payment someone agrees to is paid as the chain mode says.
-    const capability = await readCapability();
+    // a payment someone agrees to is paid as the chain mode says, so it is
+    // not read here.
+    const capability = await readCapability({ shadow: false });
     // A network with no yield reserve has nothing to earn in, live or not.
     const noReserve = !networkProfile(networkOf(config.network)).usyc;
     const modes = chainModes();

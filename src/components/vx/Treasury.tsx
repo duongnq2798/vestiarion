@@ -22,9 +22,10 @@ export { StatTile };
  * and the operating account holds a real wallet. The workspace's mode is not
  * the test — a sandbox that connected Circle or took a hosted wallet pays for
  * real on a hand-run cycle, while one connected but not yet provisioned still
- * holds only simulated balances. A workspace that cannot pay now because it is held (Arc mainnet off or not live, no
- * Circle account, a wallet that cannot be reached) is neither: its figure is not read from the chain, and it is no
- * sandbox (capability and reasons R6).
+ * holds only simulated balances. A held workspace (Arc mainnet off or not live, no Circle account, a wallet that cannot
+ * be reached) whose chain cannot be read is no sandbox either: its stored figure is shown as one not read from the chain
+ * (capability and reasons R6). One whose wallet can still be read, such as an Arc mainnet workspace connected and not live
+ * yet, keeps reading its balance from the chain.
  */
 export function balanceTileMode(
   chainMode: "live" | "simulate",
@@ -32,13 +33,13 @@ export function balanceTileMode(
   walletHost?: WalletHost | null,
   capability?: Capability
 ): BalanceTileMode {
-  if (capability?.situation === "unavailable" && capability.cause === "held") return "held";
   // A workspace paying from its owner's own wallet: its operating account has the wallet's address and no Circle wallet
   // (wallet treasury W12).
   const operatingHasWallet = accounts.some(
     (account) => account.kind === "operating" && (!!account.circle_wallet_id || (walletHost === "external" && !!account.address))
   );
-  return chainMode === "live" && operatingHasWallet ? "live" : "sandbox";
+  if (chainMode === "live" && operatingHasWallet) return "live";
+  return capability?.situation === "unavailable" && capability.cause === "held" ? "held" : "sandbox";
 }
 
 /**

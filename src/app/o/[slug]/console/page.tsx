@@ -172,15 +172,18 @@ export default async function DashboardPage({
     const canDecide = can(access.membership.role, "approval.decide");
     // In shadow mode, each card carries a person's verdict on the agent's decision (shadow mode S3), and the console
     // says how often people agreed (S5). Best effort, like the reads above.
-    const [verdicts, shadow] = await Promise.all([
+    const [verdicts, shadowRead] = await Promise.all([
       verdictFacts(db(), invoiceEntries, canDecide),
       readShadowMode(db()).catch((error: unknown) => {
         console.error("console: shadow mode not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
-        return null;
+        return undefined;
       }),
     ]);
+    // Shadow mode not read is not known, never off: the capability then says so, and the agent pays nothing on a guess.
+    const shadowKnown = shadowRead === undefined ? null : shadowRead !== null;
+    const shadow = shadowRead ?? null;
     // What the workspace's payments do now, in the words every surface uses (capability and reasons R1).
-    const capability = verdicts.capability ?? (await readCapability({ shadow: shadow !== null }));
+    const capability = verdicts.capability ?? (await readCapability({ shadow: shadowKnown }));
     // In shadow mode the section also offers test USDC for what the open bills need (test USDC T8); best effort too.
     const [shadowSummary, testUsdcWeek] = shadow
       ? await Promise.all([

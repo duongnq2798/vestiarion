@@ -430,6 +430,31 @@ export default function PrivacyPage() {
         </ul>
       </LegalSection>
 
+      <LegalSection id="decision-reasons" title="Reasons you give for going against the agent">
+        <p>
+          When you disagree with the agent in shadow mode, reject a bill, return one to the agent, or pay a bill the agent flagged or held, the console
+          asks why, in one line you may leave empty. Nothing waits on it.
+        </p>
+        <ul>
+          <li>
+            A reason you give is kept in the workspace&apos;s records in Vestiarion&apos;s Supabase Postgres database, up to 280 characters, with what you
+            did and where (such as returning a bill to the agent, in the console), the bill it is about, your account&apos;s id, when, and the
+            version of Vestiarion that asked. A reason for disagreeing, rejecting or returning is also kept with that decision in the workspace&apos;s signed
+            ledger, as decisions always are.
+          </li>
+          <li>
+            The workspace&apos;s owners and admins see the latest ones on Insights, without your name. The Vestiarion team sees the latest ones across
+            workspaces, with the workspace&apos;s slug and never your name or email, in a dashboard nobody else can open, to decide what to improve in the
+            agent. They are not shared with anyone else.
+          </li>
+          <li>They are kept until the workspace is deleted, and deleted with it.</li>
+          <li>
+            When you delete your account, the reasons in a workspace deleted with it go with that workspace. In a workspace that stays, a reason stays
+            without your account&apos;s id; the ledger entry of the same decision keeps your account&apos;s id, as every ledger entry does.
+          </li>
+        </ul>
+      </LegalSection>
+
       <LegalSection id="retention" title="How long data is kept">
         <ul>
           <li>

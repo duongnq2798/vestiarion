@@ -58,8 +58,13 @@ record.
   header says.
 - **R5. Every other surface reads it.** Agree and pay, the shadow mode summary and panel, Approve and pay's and a held
   milestone's "(simulated)", Pay a freelancer, the workspace and shared report, the payee's page and email. While nothing
-  can be paid, Agree and pay is not offered: Agree records the verdict and says why.
-- **R6. The balance tile** says a held workspace's figure is not read from the chain, and never calls it a sandbox.
+  can be paid, Agree and pay is not offered: Agree records the verdict and says why. The reports, the payee's page and
+  email need only whether the workspace makes simulated payments (`simulatesPayments(mode)`): the chain mode, or, while
+  the workspace is held and the chain mode cannot be told, the workspace's mode, as the report always read it; never on
+  Arc mainnet. So a sandbox whose credentials cannot be read still counts its simulated payments.
+- **R6. The balance tile** says a held workspace's figure is not read from the chain where the chain cannot be read, and
+  never calls it a sandbox; a held workspace whose wallet can still be read (Arc mainnet connected, not live yet) keeps
+  reading it.
 - **R7. Go live's badge** keeps its step's words while they agree with the capability, and otherwise says the standing
   and the situation: "Live · payments off", "Live · shadow mode, paying after a verdict".
 - **R8. The receipt** names the network a payout left from, never a fixed one.
@@ -76,7 +81,10 @@ record.
   feature and decision (`shadow_mode.disagree`, `approvals.reject`, `approvals.return`, `approvals.pay_held`), the
   surface (console, Slack, Telegram, API, GitHub, from the command's actor), the subject, who gave it, when, and the
   app's version (`appVersion()`: the deployment's git commit from `VERCEL_GIT_COMMIT_SHA`, cut to 12 characters, or the
-  package version). Written by the command layer for every surface; a decision settling a verdict keeps none twice.
+  package version). Written by the command layer for the console only, the one surface that says where the reason is
+  typed that Vestiarion's team reads it ("Optional. One line helps Vestiarion's team improve the agent."). Slack sends
+  no reason today and the other surfaces decide no payable; a reason one sends still goes into the decision's ledger
+  entry, and nowhere else. A decision settling a verdict keeps none twice.
 - **R12. Never in the way.** Keeping a reason is best effort: before migration `0120` runs, or when the write fails,
   nothing is saved and the decision goes on exactly as before.
 - **R13. Owners see them.** Insights shows owners and admins the workspace's latest 20, "Why people went against the
@@ -84,6 +92,11 @@ record.
 - **R14. The team sees them.** The founder dashboard (`/admin/growth`) lists the latest 200 across workspaces in its
   window, by workspace slug and side, through `growth_decision_reasons(p_since)`: a definer, for the service role only,
   naming no person.
+- **R15. Privacy.** The privacy page says what is kept, who sees it (the workspace's owners and admins on Insights,
+  without a name; Vestiarion's team across workspaces, by slug, never a name or email), how long (until the workspace is
+  deleted), and what deleting an account does: reasons in a workspace deleted with the account go with it; in a
+  workspace that stays, `given_by` is set null by the foreign key when the auth user is deleted, so the reason stays
+  without the account's id, and the decision's ledger entry keeps the id as every entry does.
 
 ## Migration 0120
 
@@ -101,4 +114,7 @@ pgrst`. Down: drop the function, then the table.
 - `tests/decision-reasons-migration.test.ts` (PGlite): the table's constraints, isolation, append-only, cascade, and the
   team function's grants and output.
 - `tests/decision-reasons.test.ts`: the reason's cleaning, the version, best effort before the migration, and the
-  command layer keeping a reason with its surface.
+  command layer keeping a console reason, and none from another surface.
+- `tests/approval-card-reasons.test.tsx` (happy-dom): the card rendered, each dialog opened, a reason typed and the
+  confirmation pressed; the action receives the reason in the form's data, and nothing waits on an empty field.
+- `tests/legal-pages.test.tsx`: the privacy entry, checked against migration 0120 and the command layer.

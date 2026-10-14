@@ -106,7 +106,7 @@ export function overridesHold(payable: Pick<WaitingPayable, "status" | "guardrai
 }
 
 /** The optional reason's field: one line, never required, kept with where it was given and the app's version (R10, R11). */
-export const REASON_HINT = "Optional. One line helps the team improve the agent.";
+export const REASON_HINT = "Optional. One line helps Vestiarion's team improve the agent.";
 
 /** The confirmation of an approval that pays nothing yet, the first of two (two approvals T8). */
 export function approveFirstTitle(payable: Pick<WaitingPayable, "amount" | "counterpartyName"> & Partial<Pick<WaitingPayable, "currency">>): string {

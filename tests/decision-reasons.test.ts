@@ -106,9 +106,17 @@ describe("the workspace's latest reasons", () => {
 
 describe("the payable commands keep the reason given, with the surface it came from (R10, R11)", () => {
   it("keeps a return's reason, and passes it to the ledger entry", async () => {
-    await run(() => returnPayable(actor({ kind: "slack", linkId: "link-1", decisionsLimitUsdc: 1000 }), { invoiceId: INVOICE, reason: "Waiting on the PO" }));
+    await run(() => returnPayable(actor(), { invoiceId: INVOICE, reason: "Waiting on the PO" }));
     expect(mocks.returnInvoice).toHaveBeenCalledWith(expect.objectContaining({ invoiceId: INVOICE, reason: "Waiting on the PO" }));
-    expect(kept()).toEqual([expect.objectContaining({ feature: "approvals", decision: "return", surface: "slack", reason: "Waiting on the PO", subject_id: INVOICE })]);
+    expect(kept()).toEqual([expect.objectContaining({ feature: "approvals", decision: "return", surface: "console", reason: "Waiting on the PO", subject_id: INVOICE })]);
+  });
+
+  it("keeps reasons from the console only, the one surface that says Vestiarion's team reads them; the ledger still has it", async () => {
+    await run(() => returnPayable(actor({ kind: "slack", linkId: "link-1", decisionsLimitUsdc: 1000 }), { invoiceId: INVOICE, reason: "Waiting on the PO" }));
+    await run(() => rejectPayable(actor({ kind: "slack", linkId: "link-1", decisionsLimitUsdc: 1000 }), { invoiceId: INVOICE, reason: "Duplicate" }));
+    expect(mocks.returnInvoice).toHaveBeenCalledWith(expect.objectContaining({ reason: "Waiting on the PO" }));
+    expect(mocks.rejectInvoice).toHaveBeenCalledWith(expect.objectContaining({ reason: "Duplicate" }));
+    expect(kept()).toEqual([]);
   });
 
   it("keeps a rejection's reason, and a payment of a held bill's", async () => {

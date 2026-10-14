@@ -16,9 +16,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 - **Asking why, in the moment.** When you go against the agent, Vestiarion asks why right there, in one optional line
   that never stops you: disagreeing in shadow mode, rejecting a bill, returning one to the agent, or paying a bill the
-  agent flagged or held on one of its rules. Each reason is kept with where it was given (the console, Slack, Telegram)
-  and the version of Vestiarion that asked, and owners and admins see the latest ones on Insights, under "Why people
-  went against the agent". Before migration `0120` runs, nothing is kept and every decision works as before.
+  agent flagged or held on one of its rules. Each reason is kept with where it was given and the version of Vestiarion
+  that asked. Owners and admins see the latest ones on Insights, under "Why people went against the agent", and
+  Vestiarion's team reads them to improve the agent; the privacy page says what is kept and for how long. Before
+  migration `0120` runs, nothing is kept and every decision works as before.
   [Guide](https://www.vestiarion.xyz/docs/guides/first-payment).
 
 - **Commissions on money received.** An owner or admin sets a plan for a sales partner or referrer on file: the rate,

@@ -194,7 +194,9 @@ export async function payeeLinkSimulates(token: string): Promise<boolean> {
     const row = await platformDb().from("payee_links").select("org_id").eq("token_hash", hash).limit(1);
     const orgId = ((row.data ?? []) as Array<{ org_id?: string }>)[0]?.org_id;
     if (row.error || !orgId) return false;
-    return await withOrg(orgId, async () => simulatesPayments());
+    const org = await platformDb().from("orgs").select("mode").eq("id", orgId).limit(1);
+    const mode = ((org.data ?? []) as Array<{ mode?: string }>)[0]?.mode === "sandbox" ? "sandbox" : "live";
+    return await withOrg(orgId, async () => simulatesPayments(mode));
   } catch (error) {
     console.error("payee link: chain mode not read", error instanceof Error ? error.message : "unknown error");
     return false;
