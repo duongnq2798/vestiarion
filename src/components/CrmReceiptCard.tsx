@@ -3,6 +3,7 @@
 import { PenLine, Settings } from "lucide-react";
 import Link from "next/link";
 import { overwriteHubSpotReceiptAction, type HubSpotActionResult } from "@/app/actions/hubspot";
+import { overwritePipedriveReceiptAction } from "@/app/actions/pipedrive";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -52,7 +53,8 @@ const utc = (iso: string) => `${new Date(iso).toISOString().slice(0, 16).replace
  * Vestiarion's figures for an owner or admin, acting on exactly the conflict shown. Every member sees it.
  */
 export function CrmReceiptCard({ orgSlug, dealId, view, canManage }: { orgSlug: string; dealId: string; view: CrmReceiptView; canManage: boolean }) {
-  const { state, formProps } = useActionForm(overwriteHubSpotReceiptAction, INITIAL, { toastOnSuccess: true });
+  // Each CRM's own action: it runs that CRM's writes at once (Pipedrive connector P11).
+  const { state, formProps } = useActionForm(view.provider === "pipedrive" ? overwritePipedriveReceiptAction : overwriteHubSpotReceiptAction, INITIAL, { toastOnSuccess: true });
   const badge = BADGE[view.status](view.label);
   const settings = `/o/${orgSlug}/settings#${view.label.toLowerCase()}`;
   return (

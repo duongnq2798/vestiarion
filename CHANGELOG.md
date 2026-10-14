@@ -22,6 +22,19 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   `--yes`; it never approves or pays. Offline, it checks an audit export with the same answer as the standalone
   verifier, and a webhook delivery's signature. It is built on the TypeScript SDK and sends no telemetry.
   [Guide](https://www.vestiarion.xyz/docs/get-started/cli).
+- **Deals brought in from Pipedrive.** An owner or admin connects a Pipedrive company from Settings, and its won deals
+  come in under Deals on Bills & receivables, with their organizations and persons. Plan collections fills in the New
+  deal form from a won deal: the customer from its organization, the title, the value (US dollars as USDC and euros as
+  EURC, one for one), the won day as the start, and `pipedrive-` with the deal's id as its reference; its page then
+  shows its cash readiness and project as any deal's. Pipedrive tells Vestiarion when a deal changes, and Vestiarion
+  reads it again from Pipedrive itself; a planned deal changed there says Changed in Pipedrive, and nothing changes in
+  Vestiarion until a person does. Once an owner or admin turns on Write receipts to Pipedrive, each planned deal gets
+  what was collected, what is still owed, the last receipt and the reconciliation status, in Vestiarion's own deal
+  fields, read back before they count and never written over a change someone made there. Pipedrive does not say which
+  of its companies are developer sandboxes, so payments on Arc testnet or in shadow mode are never written to it;
+  reading and planning work in every workspace. Vestiarion sees the deals the Pipedrive user who connected can see. One
+  Pipedrive company connects to one workspace, and disconnecting uninstalls Vestiarion from it; planned deals stay. The
+  landing page lists Pipedrive, by its name, among the tools Vestiarion works with.
 
 ## [0.1.0-beta.3] - 2026-10-13
 

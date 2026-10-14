@@ -7,7 +7,12 @@ import { PROVIDER_LABELS, type AccountingProviderId, type ProviderId } from "./p
  * it agreed to. Browser-safe.
  */
 
-export const CONSENT_VERSIONS: Record<ProviderId, string> = { xero: "xero-2026-10-13", quickbooks: "quickbooks-2026-10-12", hubspot: "hubspot-2026-10-13" };
+export const CONSENT_VERSIONS: Record<ProviderId, string> = {
+  xero: "xero-2026-10-13",
+  quickbooks: "quickbooks-2026-10-12",
+  hubspot: "hubspot-2026-10-13",
+  pipedrive: "pipedrive-2026-10-14",
+};
 
 /**
  * The versions under which an accountant may approve bookings (accountant console A1): those whose words name the
@@ -31,6 +36,20 @@ const CRM_STATEMENT = (label: string) => [
 ];
 
 /**
+ * Pipedrive's statement (docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md P14): its deals with their
+ * organizations and persons, the change notices it sends, and what is written once allowed. Pipedrive names no test
+ * company, so payments on Arc testnet or in shadow mode are never written to it (P12).
+ */
+const PIPEDRIVE_STATEMENT = [
+  "Vestiarion reads the deals of the Pipedrive company you connect, with their organizations and persons: titles, values, close dates, pipeline stages, organization names and each person's email. It sees the deals the Pipedrive user who connects can see.",
+  "Pipedrive tells Vestiarion when a deal changes, and Vestiarion then reads it again from Pipedrive. What a notice says is never used as it is.",
+  "It writes to Pipedrive only once an owner or admin allows it: then, on each Pipedrive deal planned in Vestiarion, what was collected from payments confirmed on Arc, what is still owed, the last receipt, the reconciliation status and a link to the deal in Vestiarion, in Vestiarion deal fields it creates. It never changes Pipedrive's own deal fields, and never writes payments on Arc testnet or in shadow mode to Pipedrive.",
+  "They are shown to this workspace's members and to its agent. The agent's model provider may see a deal's facts to decide on its collections, and may not train on them.",
+  "Vestiarion never uses Pipedrive data to train or improve any AI model, and never passes it to anyone else without your workspace's say.",
+  "Disconnecting uninstalls Vestiarion from your Pipedrive company and stops the reading at once. Deals already planned stay in Vestiarion.",
+];
+
+/**
  * What is read, in each tool's own words: Xero's chart of accounts, QuickBooks' bank accounts only; and what is written.
  * Xero's version 2 says it books the payments a person approves (docs/superpowers/specs/2026-10-12-accounting-writeback-design.md
  * W8, W12), and version 2026-10-13 names the accountant among those who approve (accountant console A1); its first version
@@ -44,6 +63,7 @@ const WHAT_IS_READ: Record<AccountingProviderId, string> = {
 export function consentStatement(provider: ProviderId): string[] {
   const label = PROVIDER_LABELS[provider];
   if (provider === "hubspot") return CRM_STATEMENT(label);
+  if (provider === "pipedrive") return PIPEDRIVE_STATEMENT;
   return [
     WHAT_IS_READ[provider],
     `The bills you add are shown to this workspace's members and to its agent. The agent's model provider sees each bill's facts to decide on it, and may not train on them.`,

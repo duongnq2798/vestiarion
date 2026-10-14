@@ -92,10 +92,22 @@ function lineDetail(line: DealLine, record: DealRecord) {
  * Where a deal or its version came from, when a CRM brought it (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md
  * H11, H12, H19): its entries say `via` and the CRM's ids, as a bill from an accounting tool says its tool's.
  */
-export interface DealSource {
-  provider: "hubspot";
-  ids: { hubId: string; dealId: string; companyId: string | null };
+export type DealSource =
+  | { provider: "hubspot"; ids: { hubId: string; dealId: string; companyId: string | null } }
+  // A Pipedrive company (the account), its deal, and the organization it was sold to
+  // (docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md P19).
+  | { provider: "pipedrive"; ids: { companyId: string; dealId: string; organizationId: string | null } };
+
+/** The CRM's ids a customer added with a deal carries: its account, and the business the deal was sold to. */
+export function customerSource(source: DealSource): CustomerSource {
+  return source.provider === "hubspot"
+    ? { provider: "hubspot", ids: { hubId: source.ids.hubId, companyId: source.ids.companyId } }
+    : { provider: "pipedrive", ids: { companyId: source.ids.companyId, organizationId: source.ids.organizationId } };
 }
+
+export type CustomerSource =
+  | { provider: "hubspot"; ids: { hubId: string; companyId: string | null } }
+  | { provider: "pipedrive"; ids: { companyId: string; organizationId: string | null } };
 
 const sourceDetail = (source: DealSource | undefined) => (source ? { via: source.provider, [source.provider]: source.ids } : {});
 
@@ -269,7 +281,7 @@ async function resolveCustomer(actorId: string, customer: DealDraft["customer"],
     actorId,
     counterparty: counterpartyInputSchema.parse({ name: customer.name, noticeEmail: "", role: "client", address: "", jurisdiction: "", paymentLimit: "" }),
     // A customer added with a deal a CRM brought in says so, with the CRM's company (HubSpot connector H11).
-    ...(source ? { external: { provider: source.provider, ids: { hubId: source.ids.hubId, companyId: source.ids.companyId } } } : {}),
+    ...(source ? { external: customerSource(source) } : {}),
   });
   return { id: created.id, name: created.name };
 }

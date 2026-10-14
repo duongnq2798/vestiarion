@@ -1,5 +1,5 @@
 import type { ReceiptProperty } from "./crm-receipts";
-import type { ConnectingProvider, Page, PageRequest } from "./provider";
+import { providerWords, type ConnectingProvider, type Page, type PageRequest, type ProviderId } from "./provider";
 
 /**
  * What the connector core asks of a CRM (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H1, H6, H10,
@@ -39,6 +39,12 @@ export interface ExternalDeal {
   company: ExternalCompany | null;
   /** The CRM's owner of the deal, by the CRM's own id; null when it has none (collections context C5). */
   ownerId?: string | null;
+  /**
+   * The CRM says, in a page read, that the deal was deleted (Pipedrive's deleted deals, for 30 days;
+   * docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md P6): a row kept for it is marked deleted at once, and
+   * none is made. Absent means false: a CRM whose reads never return deleted deals (HubSpot) finds them by id instead.
+   */
+  deleted?: boolean;
 }
 
 /** A page of deals: a backfill of what is open (and won since `windowFrom`), or the changes since `since`. */
@@ -86,6 +92,14 @@ export type CrmFieldRead = { found: false } | { found: true; values: Record<stri
 export interface CrmReceiptWriter {
   /** The scopes writing needs beyond reading: a connection without them asks a person to allow writing first. */
   writeScopes: readonly string[];
+  /**
+   * False for a CRM that names no test account at all (Pipedrive: nothing in its API says a company is a developer
+   * sandbox; docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md P12): payments on Arc testnet or in shadow
+   * mode are then never written to it, and writing is not turned on for a workspace that makes them. Absent means true.
+   */
+  testAccounts?: false;
+  /** The words a write refused by the reality rule says, where the CRM's differ from the core's (R4). */
+  realityRefusal?: string;
   account(input: { accessToken: string; externalOrgId: string }): Promise<CrmAccountFacts>;
   /** Makes the property group and every property Vestiarion owns, where missing; never changes one that is there. */
   ensureFields(input: {
@@ -141,8 +155,18 @@ export function plannable(facts: {
   if (facts.sourceStatus === "deleted") return { ok: false, reason: `Deleted in ${label}` };
   if (facts.stage !== "won") return { ok: false, reason: "Not won yet" };
   if (facts.amount === null || Number(facts.amount) <= 0) return { ok: false, reason: `No amount in ${label}` };
-  if (!facts.companyExternalId) return { ok: false, reason: `No company in ${label}` };
+  if (!facts.companyExternalId) return { ok: false, reason: `No ${providerWords(label).customer ?? "company"} in ${label}` };
   return { ok: true };
+}
+
+/**
+ * The reference a deal planned from a CRM carries (H10, H11), unique among the workspace's deals: HubSpot's deal id as
+ * it is, Pipedrive's as `pipedrive-<id>`, since its small numbers would meet references people type
+ * (docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md P1). A reference typed by hand the same way links its
+ * deal at the next sync, as HubSpot's does.
+ */
+export function crmDealReference(provider: ProviderId, externalId: string): string {
+  return provider === "pipedrive" ? `pipedrive-${externalId}` : externalId;
 }
 
 /** The facts of a deal a change is told by (H12): kept as the baseline when a deal is planned, and compared later. */

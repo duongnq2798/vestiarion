@@ -1517,7 +1517,7 @@ and `importRow`; the invoice number starts the memo. The list itself is not kept
 `/o/[slug]/invoices` (docs/superpowers/specs/2026-10-12-bills-tabs-design.md) keeps four figures above three tabs:
 Needs you, Due in 7 days, Overdue and Receivables (what customers still owe, never called cash), each a link to the tab
 and filter behind it; **Waiting for review** only when something does (bills from Xero or QuickBooks, payments to book,
-invoices by email, HubSpot won deals); then **Bills**, **Payment plan** and **Receivables**.
+invoices by email, HubSpot or Pipedrive won deals); then **Bills**, **Payment plan** and **Receivables**.
 
 - **The address holds the view** (`src/lib/bills-view.ts`). `tab`, `filter`, `q`, `sort`, `page`, `open` (a bill's
   detail), `review` (a review list over the page) and `new` are read by `readBillsQuery` and resolved against the
@@ -1644,7 +1644,8 @@ Each open receivable gets one next step from what is known about its customer
   HubSpot receivable already overdue then is reminded as before. The tab reads the day and never sets it.
 - **HubSpot's owner.** `crm_deals.owner_external_id`, from the deal's `hubspot_owner_id` (read with
   `crm.objects.deals.read`), written apart from the deal's facts so a sync before 0110 still writes them. A receivable
-  whose deal was planned from a HubSpot deal with an owner asks before its first overdue reminder.
+  whose deal was planned from a HubSpot deal with an owner asks before its first overdue reminder. A deal planned from
+  Pipedrive has no owner here: the ask is HubSpot's only for now.
 - **Each email once (I11).** `src/lib/notifications/deliveries.ts`: a key per kind, event and recipient (hashed), the
   rules' version recorded beside it and never in it, so a retry after the rules changed keeps the key Resend knows;
   `notification_deliveries` claims it before the send (unique per workspace and key), a trigger keeps a sent row, and
@@ -2129,10 +2130,12 @@ the provider.
     (a fresh token through the serialized refresh, then one read) and marks it revoked only when QuickBooks refuses it,
     signing `accounting_disconnected` with `atProvider: true`.
 
-## Connectors: CRM (HubSpot)
+## Connectors: CRM (HubSpot and Pipedrive)
 
 A workspace can bring its customers and won deals in from HubSpot
-(docs/superpowers/specs/2026-10-12-hubspot-connector-design.md). It runs on the accounting connectors' core, which
+(docs/superpowers/specs/2026-10-12-hubspot-connector-design.md) and from Pipedrive
+(docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md, below), either or both. It runs on the accounting
+connectors' core, which
 gains a provider kind (`PROVIDER_KINDS`: `accounting` or `crm`) and no HubSpot names: `ConnectingProvider` is what the
 connect flow, the token refresh and disconnecting use of any provider, and `CrmProvider` (`src/lib/connectors/crm.ts`)
 adds a page of deals with their companies (`ExternalDeal`, `ExternalCompany`) and deals read by id. HubSpot is the first
@@ -2208,6 +2211,88 @@ reads in `api.ts`, `hubspotProvider`), wired in `src/lib/crm-providers.ts`. It i
   was written and when (`CrmReceiptCard`), the HubSpot card how the writes stand. Entries: `crm_receipt_writes_changed`,
   `crm_receipt_written`, `crm_receipt_conflict`, `crm_receipt_failed` (once per write), `crm_receipt_refused`,
   `crm_receipt_overwrite_chosen`.
+- **Pipedrive** is the second CRM, on the same core, wired in `src/lib/crm-providers.ts` beside HubSpot. It is on only
+  with `PIPEDRIVE_CLIENT_ID` and `PIPEDRIVE_CLIENT_SECRET`, from a private app in Pipedrive's Developer Hub (Callback URL
+  `<origin>/api/integrations/pipedrive/callback`; scopes `base`, `deals:full`, `contacts:read`, `deal-fields:full`,
+  `users:read`, `recents:read`, `webhooks:full`, which a person grants all at once or not at all). It differs where
+  Pipedrive does, through optional parts of the core that leave HubSpot as it was:
+  - *The core, generalized.* `ProviderId` gains `pipedrive` (kind `crm`, `exclusive`). A deal's and a customer's
+    source in their entries is either CRM's (`DealSource`); the reference a planned deal carries is the CRM's
+    (`crmDealReference`: HubSpot's deal id as it is, Pipedrive's as `pipedrive-<id>`, since its small numbers would meet
+    references people type); a deal the CRM says was deleted in a page read is marked so at once
+    (`ExternalDeal.deleted`); a CRM may name no test account (`CrmReceiptWriter.testAccounts: false`); and
+    `PROVIDER_WORDS.customer` says organization where HubSpot says company. `ConnectRefusal`
+    (`connect-refusal.ts`) lets `organisations` refuse a grant with an outcome the card says in words.
+  - *The folder*, `src/lib/pipedrive/`: `settings.ts` (the app, its scopes, the callback and webhook URLs),
+    `credential.ts`, `http.ts`, `oauth.ts`, `map.ts` (pure, from Pipedrive's JSON), `api.ts`, `receipts.ts`,
+    `webhooks.ts`, `store.ts`, `provider.ts` (`pipedriveProvider`) and `connect-deps.ts` (the connect flow's deps: the
+    readiness probe, then, after the answer, the webhook made sure of and a first sync of at most 10 pages).
+  - *Schema (migration `0116`, after 0105 and 0107).* The provider checks of `accounting_connections`,
+    `accounting_tokens` and `external_links`, the writes switch (`accounting_connections_writes_check`) and
+    `crm_receipt_writes_provider_check` take `pipedrive`, each replaced only while it does not take it yet and keeping
+    `asana` (0115), so a re-run never narrows a later widening. `accounting_connections_pipedrive_one_workspace`
+    connects a company, not revoked, to one workspace at a time. `pipedrive_connector_ready()` is the probe
+    `pipedriveReady` (`store.ts`) asks after the core's `crmReady`, before anyone is sent to Pipedrive.
+    `crm_receipt_writes_account_test_check` (0107) is left as it is, so a Pipedrive write of payments on Arc testnet or
+    in shadow mode can never reach sending, sent or written.
+  - *Connecting.* The core's flow on `/integrations/pipedrive`, `/integrations/pipedrive/connect`,
+    `POST /api/integrations/pipedrive/connect` and `GET /api/integrations/pipedrive/callback`, consent
+    `pipedrive-2026-10-14`. The authorize URL names no scope: Pipedrive's are the app's. The token answer's `scope` must
+    read deals and their organizations (`deals:read` or `deals:full`, and `contacts:read` or `contacts:full`); a grant
+    without them is revoked and refused before anything is kept (`?pipedrive=scopes`). The company is `users/me`'s
+    `company_id`, named by its `company_name`; one per grant. A company another workspace holds is refused
+    (`other_workspace`), and so is a workspace connected to another company (`other_organisation`); the same company
+    again reconnects its row. Writing is not asked for here: the card's switch is the only place it is turned on.
+  - *Tokens and the company's domain* (`credential.ts`, pure). The token answer's `api_domain` must be
+    an https host under `pipedrive.com` (`https://<name>.pipedrive.com`), and is sealed with its token as one credential (`pd1|<host>|<token>`) in both token
+    columns: every call goes to the domain of the token it carries, a refresh's new domain replaces the old one in the
+    same compare-and-set, and no token is sent to a host Pipedrive did not name with it. A refresh stores the refresh
+    token Pipedrive answers with, else the one sent, under the core's lease; `invalid_grant`, or a 400 or 401 for the
+    refresh, marks the connection needs reconnect.
+  - *Reads* (`api.ts`, `http.ts`). Deals from API v2 (`GET /api/v2/deals`), 100 a page by `update_time`: a backfill
+    reads open and won deals (`planCrmDeal` keeps out those won before `window_from`), later runs every deal changed
+    since five minutes before `since`, lost and deleted ones too. Pipedrive pages with opaque cursors and the core with
+    page numbers: a reader remembers the cursor of each page it read, and one asked for a page it has no cursor for (a
+    run resumed after its page budget) walks the cursors from page 1, at most once a run. Each page reads its
+    organizations and persons by id (two calls); stages and pipelines once a run. `map.ts` reads the status as the stage
+    state, the stage's name (a lost deal's lost reason) as its label, `local_won_date` (else `won_time`'s day) as a won
+    deal's close day, the value as an exact decimal (refused beyond six places), and the organization, with the deal
+    person's primary email, as the customer. Linked deals and won ones still offered are read again by id each run,
+    from `/api/v2/deals` and, for those not there, `/api/v2/deals/archived`; one in neither, or deleted, is `deleted`. A
+    `429` waits `Retry-After`, else `x-ratelimit-reset`, else the two-second burst window: at most five seconds once in
+    the run, a longer wait ends it at its checkpoint.
+  - *Webhooks only nudge* (`webhooks.ts`). The first sync after connecting and **Sync now** make sure
+    (`ensureWebhookInScope`) Pipedrive has one webhook for the company's deals (`event_object=deal`,
+    `event_action=*`, version 2.0) to `/api/integrations/pipedrive/webhook`, with Basic auth: the company id, and an
+    HMAC of it under a key derived (HKDF) from the master key for this purpose alone, never stored; a deployment
+    Pipedrive cannot reach (localhost) registers none. `POST /api/integrations/pipedrive/webhook` checks the Basic auth
+    in constant time against every master key before reading anything, answers at once, and after the answer runs one
+    sync of the company's connections that are not backing off, with **Sync now**'s budget, which reads the deals that
+    changed from Pipedrive itself (`NUDGE_SYNC`: never every kept deal again by id, which the sweeper does, so one notice
+    per deal change stays a small read of the company's shared API budget; notices during a run find it busy); the body
+    is never read. Pipedrive's uninstall notice, `DELETE` on the callback URL with the app's
+    client id and secret as Basic auth (compared in constant time), only names the company, and nudges the same way:
+    the refresh then fails and the card asks to reconnect. The sweeper still runs every connection every 15 minutes.
+  - *Receipts* (`receipts.ts`). The nine figures as custom deal fields Vestiarion makes once per company
+    (`POST /api/v2/dealFields`), "Vestiarion: Collected" to "Vestiarion: Evidence": numbers as `double`, the day as
+    `date`, the rest as `varchar`, the statuses in words read back into their codes. Pipedrive keys a field by a hash
+    it picks, so they are found by name; one of the same name and another type is someone else's, never changed, and
+    nothing is written. Written with `PATCH /api/v2/deals/{id}` and read back with `GET /api/v2/deals/{id}`; the
+    outbox, the read-back, field ownership and conflicts are the core's. Pipedrive's plan is not readable, so making the
+    fields is the check: a refusal (a plan's custom field limit, a user who may not add fields) is said in Pipedrive's
+    words with what to do, on the deal's receipt card and the Settings card.
+  - *The reality rule, with no sandbox signal.* Nothing in Pipedrive's API names a developer sandbox, so `account()`
+    answers `COMPANY`, never a test account: payments on Arc mainnet outside shadow mode are written once an owner or
+    admin turns writing on, and payments on Arc testnet or in shadow mode never are. The switch is not offered to such a
+    workspace (`crmReceiptsPanel` with `testAccounts: false`, `noTestAccountRule`), a write queued anyway is refused
+    with the reason, and the database refuses its sending. Reading, planning and change detection work everywhere.
+  - *Disconnecting* revokes the refresh token at Pipedrive, which uninstalls the app and its webhook, deletes the
+    tokens and turns writing off, with `accounting_disconnected`; planned deals, links and rows stay.
+  - *Entries.* No new action: `deal_signed` and `deal_revised` carry `via: "pipedrive"` and
+    `pipedrive: { companyId, dealId, organizationId }`, `create_counterparty` and `counterparty_notice_email_changed`
+    `pipedrive: { companyId, organizationId }`, and the connection, change and receipt entries `provider: "pipedrive"`.
+  - *Before 0116, or without the app*, the card says Pipedrive is not set up yet or is not there, the routes answer 404
+    without the app, and the sweeper never sees a Pipedrive connection.
 
 ## API
 
@@ -2562,7 +2647,7 @@ are built in, others come from `AGENT_LLM_PRICES`; `purpose` names what for: pay
 reminder, extraction, chat), `circle_transfer` (a live send or batch in `payments.ts`, with the chain-reported fee, and a
 live treasury move), `x402_purchase` (a payee history bought, at its price in USDC), `email` (each Resend attempt whose
 message names a `meter`; one sent outside a workspace's scope, after a payee's or a customer's request, is written into
-the workspace by `recordUsageFor`) and `connector_sync` (each Xero, QuickBooks or HubSpot sync that ran). `recordUsage`
+the workspace by `recordUsageFor`) and `connector_sync` (each Xero, QuickBooks, HubSpot or Pipedrive sync that ran). `recordUsage`
 writes through the workspace's own tenant client, records nothing outside a scope, and never throws: metering never
 stands between a send and its record. A row holds counts, tokens and a cost with its currency; never an address, an
 amount paid to someone or what an email said. Attribution and display only: nothing reads it to charge or to stop.

@@ -1,4 +1,4 @@
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup, renderToString } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/app/actions/hubspot", () => ({
@@ -146,6 +146,25 @@ describe("HubSpotDeals", () => {
     expect(viewer).not.toContain("Plan collections");
     expect(viewer).not.toContain("Use this email");
     expect(viewer).toContain("An owner or admin plans it.");
+  });
+
+  it("serves the same markup it did before the list was shared with Pipedrive: each sentence one text, never split around HubSpot's name", () => {
+    // What the server sends (renderToString), where a sentence built around a name would carry `<!-- -->` inside it.
+    const served = decode(
+      renderToString(
+        <HubSpotDeals
+          orgSlug="acme"
+          organisation="northstar-studio.example"
+          won={[row({ id: "row-3", name: "Retainer", linkedDeal: { id: "deal-1", title: "Retainer", status: "active" }, plan: { ok: false, reason: "Planned already" }, changes: ["Amount: 12,500 USD to 15,000 USD."] })]}
+          open={[row({ id: "row-4", name: "Discovery sprint", stage: "Contract Sent", plan: { ok: false, reason: "Not won yet" } })]}
+          emails={[{ counterpartyId: "cp-1", name: "Northwind Labs", email: "jane.ito@northwind.example" }]}
+          canWrite
+        />
+      )
+    );
+    expect(served).toContain("</span>Changed in HubSpot</span>");
+    expect(served).toContain(">Shown for what is coming. A deal is planned once it is won in HubSpot.</p>");
+    expect(served).toContain(">Billing emails from HubSpot</p>");
   });
 });
 

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { currentOrgId } from "../context";
 import { db, unwrap } from "../dal";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
-import { changesText, crmChanges, flagDecision, readFacts, type CrmChange, type CrmFacts, type CrmProvider, type ExternalDeal, type StagedCrmDeal, type StageState } from "./crm";
+import { changesText, crmChanges, crmDealReference, flagDecision, readFacts, type CrmChange, type CrmFacts, type CrmProvider, type ExternalDeal, type StagedCrmDeal, type StageState } from "./crm";
 import { NotSetUpError } from "./connections";
 import { receiptsInScope } from "./crm-receipts-sync";
 import { syncCrmConnection, type CrmSyncDb, type CrmSyncResult } from "./crm-sync";
@@ -136,18 +136,20 @@ export const crmStore: CrmSyncDb = {
 
   async linkReferences(connection, externalIds) {
     if (externalIds.length === 0) return;
-    const deals = unwrap(await db().from("deals").select("id, external_ref").in("external_ref", [...externalIds])) as Array<{ id: string; external_ref: string }>;
+    // Each CRM's deal as the reference a deal planned from it carries (Pipedrive connector P1): HubSpot's id as it is.
+    const byReference = new Map(externalIds.map((externalId) => [crmDealReference(connection.provider, externalId), externalId]));
+    const deals = unwrap(await db().from("deals").select("id, external_ref").in("external_ref", [...byReference.keys()])) as Array<{ id: string; external_ref: string }>;
     if (deals.length === 0) return;
     const rows = unwrap(
       await db()
         .from("crm_deals")
         .select("id, external_id, amount, currency, close_on, stage_state, stage_label")
         .eq("connection_id", connection.id)
-        .in("external_id", deals.map((deal) => deal.external_ref))
+        .in("external_id", deals.map((deal) => byReference.get(deal.external_ref) as string))
         .is("deal_id", null)
     ) as Array<Pick<CrmDealRow, "id" | "external_id" | "amount" | "currency" | "close_on" | "stage_state" | "stage_label">>;
     for (const row of rows) {
-      const deal = deals.find((candidate) => candidate.external_ref === row.external_id);
+      const deal = deals.find((candidate) => byReference.get(candidate.external_ref) === row.external_id);
       if (!deal) continue;
       // A reference typed by hand as the CRM's deal id: linked, with the CRM's facts now as its baseline (H10).
       const linked = await db()
@@ -238,7 +240,7 @@ export const crmStore: CrmSyncDb = {
  * person has writing on. Best effort: a receipts step that fails never fails the sync, and before migration 0107 it has
  * nothing to do.
  */
-export async function crmSyncInScope(connectionId: string, provider: CrmProvider, options: { maxPages?: number } = {}): Promise<CrmSyncResult> {
+export async function crmSyncInScope(connectionId: string, provider: CrmProvider, options: { maxPages?: number; recheck?: boolean } = {}): Promise<CrmSyncResult> {
   const result = await syncCrmConnection({ connectionId, provider, db: crmStore, tokens: connectionTokenStore(currentOrgId(), connectionId), ...options });
   // Metered as an accounting tool's sync is (accountant console U1).
   if (result.outcome !== "busy") await recordUsage({ kind: "connector_sync", action: provider.id, provider: provider.id, ok: result.outcome === "synced" || result.outcome === "partial" });

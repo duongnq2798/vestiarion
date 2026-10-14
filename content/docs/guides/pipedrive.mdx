@@ -1,0 +1,170 @@
+Connect Pipedrive, and your won deals come into Vestiarion with their organizations and persons, so you plan their collections without typing them again. A won deal becomes a [deal](/docs/guides/deals) with its collection schedule only when you plan it, from the New deal form filled in for you. A deal changed in Pipedrive afterwards says so, and nothing in Vestiarion changes until you do.
+
+Vestiarion reads from Pipedrive. It writes to Pipedrive only once an owner or admin allows it, and only for payments made on Arc mainnet outside shadow mode: what each planned deal collected, in deal fields of its own ([step 6](#6-receipts-back-in-pipedrive)).
+
+For one won deal, that is ten values you do not type twice and two trips between tools you do not make: the organization's name, the person's email, the deal's title, value, currency and won date go into the deal; what was collected, what is still owed, and the last receipt's date and amount go back to Pipedrive.
+
+## Before you start
+
+- **An owner or admin** of the workspace connects Pipedrive. Anyone else sees "An owner or admin connects Pipedrive."
+- **A Pipedrive company** with deals. One Pipedrive company connects to one Vestiarion workspace at a time, and a workspace connects one Pipedrive company.
+- **Who you connect as.** Vestiarion sees the deals the Pipedrive user who connected can see. Connect as a Pipedrive admin to bring every deal in. Writing receipts back also needs a user who may add deal fields in Pipedrive, which an admin can.
+- **The deals' currency.** Vestiarion plans deals in USDC or EURC. A deal in US dollars is planned in USDC, and one in euros in EURC, one for one. A deal in another currency is planned in that currency only in a workspace in [shadow mode](/docs/guides/shadow-mode), on Arc testnet; otherwise you type its total in USDC.
+- **Where your payments settle.** Reading deals and planning collections work in every workspace. Receipts go back to Pipedrive only from a workspace on Arc mainnet outside shadow mode: see [step 6](#6-receipts-back-in-pipedrive).
+
+## 1. Connect Pipedrive
+
+Open **Settings**. Under **Pipedrive**, choose **Connect Pipedrive**.
+
+The connect page has the workspace you came from already picked (if you manage several, you can pick another) and says what Vestiarion does with Pipedrive's data:
+
+- It reads the deals of the Pipedrive company you connect, with their organizations and persons: titles, values, close dates, pipeline stages, organization names and each person's email. It sees the deals the Pipedrive user who connects can see.
+- Pipedrive tells Vestiarion when a deal changes, and Vestiarion then reads it again from Pipedrive. What a notice says is never used as it is.
+- It writes to Pipedrive only once an owner or admin allows it: then, on each Pipedrive deal planned in Vestiarion, what was collected from payments confirmed on Arc, what is still owed, the last receipt, the reconciliation status and a link to the deal in Vestiarion, in Vestiarion deal fields it creates. It never changes Pipedrive's own deal fields, and never writes payments on Arc testnet or in shadow mode to Pipedrive.
+- They are shown to the workspace's members and to its agent. The agent's model provider may see a deal's facts to decide on its collections, and may not train on them.
+- Vestiarion never uses Pipedrive data to train or improve any AI model, and never passes it to anyone else without your workspace's say.
+- Disconnecting uninstalls Vestiarion from your Pipedrive company and stops the reading at once. Deals already planned stay in Vestiarion.
+
+Tick **I agree**, then choose **Continue to Pipedrive**. Pipedrive asks you to install Vestiarion in your company. It asks for every permission the app needs at once: you allow all of them or none, so there is nothing to tick there. Your agreement, with its date, is kept on the connection and in the workspace's signed ledger.
+
+Back in Settings, the card says "Pipedrive is connected. Its won deals are coming in on Bills & receivables, under Deals." The ledger records `accounting_connected`, with `provider: "pipedrive"`.
+
+From then on the card shows how the connection is doing: "Connected to" and your company's name in Pipedrive, when it last synced, such as "Last synced 5 minutes ago.", a link saying how many won deals wait, such as "2 won deals to plan", and, once a planned deal changes in Pipedrive, "1 planned deal changed in Pipedrive since." Under them it says what the connection sees: "Vestiarion sees the deals the Pipedrive user who connected can see. Connect as a Pipedrive admin to bring every deal in." An owner or admin also gets **Sync now** and **Disconnect Pipedrive**.
+
+If connecting did not finish, the card says why, and nothing is kept:
+
+- "Connecting Pipedrive was cancelled. Nothing changed." when you cancel on Pipedrive's screen.
+- "This workspace is connected to another Pipedrive company. Disconnect it first, then connect the one you want."
+- "This Pipedrive company is connected to another Vestiarion workspace. Disconnect it there first: one company connects to one workspace."
+- "Only an owner or admin connects Pipedrive, from their own browser."
+- "Pipedrive did not finish connecting. Try again in a moment."
+- "Pipedrive is not set up on this deployment yet." on a deployment where Pipedrive is not configured.
+- When Pipedrive installed Vestiarion without the permissions it reads deals with, see [Status and errors](#status-and-errors).
+
+## 2. Which deals come in
+
+The first sync starts as soon as you connect. It brings in your open deals, and the deals won from 90 days before you connected, with each deal's organization and the primary email of its person. After that, Pipedrive tells Vestiarion when a deal changes, and Vestiarion reads the deals that changed from Pipedrive itself. Every 15 minutes it also asks Pipedrive for any change it was not told about, and **Sync now** asks at once.
+
+- **A deal won before that window** stays out.
+- **A lost deal** comes in only if Vestiarion already had it.
+- **Each deal comes in once**, by its id in Pipedrive, whatever changes in it.
+- **An archived deal** is still the deal it was. A deal deleted in Pipedrive is marked deleted; nothing in Vestiarion is removed for it.
+- **Only the deals the user who connected can see** come in. If deals you expect are missing, check that user's visibility in Pipedrive, or reconnect as a Pipedrive admin.
+
+## 3. Plan a won deal's collections
+
+Open **Bills & receivables**. When a won deal waits to be planned, **Waiting for review** at the top names it and opens the **Receivables** tab at it. Under **Deals**, "From Pipedrive: 3 won deals" lists each won deal with its organization, amount and close day:
+
+- **Plan collections**, for a won deal with an amount and an organization;
+- why it cannot be planned, for one without: "No amount in Pipedrive" or "No organization in Pipedrive". A deal with a person and no organization cannot be planned in this version: add its organization in Pipedrive, and it can be at the next sync;
+- **Planned**, with **Open the deal**, for a deal you planned already. A deal is never planned twice.
+
+Below, "Not won yet: 2 deals in Pipedrive" lists the deals still open in Pipedrive, for what is coming. They cannot be planned until they are won.
+
+**Plan collections** opens the New deal form, filled in from the deal:
+
+- **Customer**: the customer this Pipedrive organization was planned for before; else the customer with the organization's name; else the organization as a new customer, added when you confirm. When two customers have the name, or the one that has it was planned for another Pipedrive organization, you choose.
+- **Deal**: the deal's title.
+- **Total** and **Currency**: the deal's value, in USDC for a deal in US dollars and EURC for one in euros. The form says "Pipedrive says 12,500 USD: planned as 12,500.00 USDC, one for one."
+- **Start date**: the day the deal was won.
+- **External reference**: `pipedrive-` and the deal's id in Pipedrive, such as `pipedrive-482`, which links the two. It cannot be changed here.
+
+Pick how it is billed (a deposit and balance, milestones, a monthly retainer or your own lines), check the schedule, and choose **Confirm deal**. The deal is signed in the ledger as any deal, as `deal_signed` with `via: "pipedrive"` and the deal's ids in Pipedrive. The organization is linked to the customer, so the next deal from it finds the customer.
+
+### Billing emails
+
+A customer linked to a Pipedrive organization that has no billing email yet is listed under "Billing emails from Pipedrive", with the primary email of the person on its deal. Choose **Use this email** if it is where invoices go: it becomes the customer's billing email, used for reminders once you turn them on for an invoice. The ledger records `counterparty_notice_email_changed` with `via: "pipedrive"`. A billing email the customer already has is never replaced, and only the email you were shown is used.
+
+## 4. The planned deal's page
+
+A deal planned from Pipedrive is a deal like any other: its schedule, its releases and its versions are those of [Turn a signed deal into a collection schedule](/docs/guides/deals). Its page also shows:
+
+- **Cash readiness**: enter what the deal will cost, and the page says the first day it would be short and by how much, or **No cash gap**. See [Plan its costs and see when it needs cash](/docs/guides/deals#5-plan-its-costs-and-see-when-it-needs-cash).
+- **Its project**, when you put it in one: the project then counts what the deal collected. See [Give each project its own budget](/docs/guides/projects).
+- **Changed in Pipedrive**, when Pipedrive changed the deal since you planned it ([step 5](#5-when-a-deal-changes-in-pipedrive)).
+- **Receipts in Pipedrive**, what was written back to the Pipedrive deal and when ([step 6](#6-receipts-back-in-pipedrive)).
+
+## 5. When a deal changes in Pipedrive
+
+A planned deal can change in Pipedrive afterwards: its value or currency, its won date, it is reopened or marked lost, or it is deleted. Vestiarion never changes the deal for it. The deal's page, and its row under **Deals**, say **Changed in Pipedrive**, with each change, such as:
+
+- "Amount: 12,000 USD to 15,000 USD."
+- "Close date: Sep 20, 2026 to Sep 30, 2026."
+- "Marked lost in Pipedrive (Budget cut). Nothing is cancelled: cancel the deal if it is off." The words in brackets are the lost reason given in Pipedrive.
+- "Deleted in Pipedrive. Nothing is cancelled: cancel the deal if it is off."
+
+The ledger records each new set of changes once, as `crm_deal_changed`. Then choose:
+
+- **Change deal**, which opens the deal's Change deal form filled in: Pipedrive's new value as the new total, a correction proposed for the lines not invoiced yet, and the changes as the reason. Check it and save it as a new version. Lines already released, and their receivables, stay as they are. The version is signed as `deal_revised` with `via: "pipedrive"`.
+- **Keep the deal as it is**, when the deal is right as it stands. The changes are marked as seen, and the ledger records `crm_deal_change_kept`.
+
+Both act on the changes the page showed you. If Pipedrive changed the deal again since you opened the page, nothing is saved: reload the page to see what changed now.
+
+A deal marked lost or deleted in Pipedrive is only flagged: its invoices, payments and receipts all stay. To stop its lines, use **Cancel deal** on its page.
+
+## 6. Receipts back in Pipedrive
+
+So sales sees whether a customer paid without asking finance, Vestiarion can write each planned deal's collections back to that deal in Pipedrive. It is off until an owner or admin turns it on.
+
+<Callout kind="important" title="Only payments on Arc mainnet go back to Pipedrive">
+Pipedrive does not say which of its companies are developer sandboxes: a sandbox looks like any other company to Vestiarion. So Vestiarion treats every Pipedrive company as a real one, and payments on Arc testnet, and every payment in shadow mode, are never written to Pipedrive. Payments on Arc mainnet outside shadow mode are, once an owner or admin turns writing on. Reading deals, planning collections and the changes from Pipedrive work in every workspace.
+</Callout>
+
+**Turn it on.** On the Pipedrive card in Settings, under **Receipts in Pipedrive**, choose **Write receipts to Pipedrive**. There is nothing to allow in Pipedrive: it granted every permission when you connected. Choose **Stop writing to Pipedrive** to turn it off; what was written stays in Pipedrive.
+
+In a workspace on Arc testnet or in shadow mode, the card offers no switch, and says why: "This workspace pays on Arc testnet, and Pipedrive does not say which of its companies are developer sandboxes: Vestiarion never writes these receipts to Pipedrive. Reading deals and planning collections work as usual." In shadow mode it begins "This workspace is in shadow mode" instead. If writing was on and the workspace turns shadow mode on later, nothing reaches Pipedrive: the deal's page says "Not written: Pipedrive does not say which of its companies are developer sandboxes, so payments on Arc testnet and in shadow mode are never written to Pipedrive."
+
+**What is written**, on each Pipedrive deal planned in Vestiarion, in deal fields that Vestiarion adds once to your company, each named after what it holds:
+
+- **Vestiarion: Collected**: money received on Arc, confirmed by Circle and applied to the deal's invoices. Nothing submitted or pending counts, and a fee a person marked is never collected. It is the deal's **Paid** in Vestiarion, the same figure.
+- **Vestiarion: Still owed**: invoiced to the customer and not paid yet. A part payment shows as partial: the rest of that invoice is still owed. Lines not invoiced yet are not in it.
+- **Vestiarion: Collection currency**, and **Vestiarion: Collection status**: Paid in full, Paid to date, Partly paid, Overdue, Awaiting payment or Nothing invoiced yet.
+- **Vestiarion: Last receipt date**, **Vestiarion: Last receipt amount**, and **Vestiarion: Last receipt**: a link to the payment's transaction on Arc's explorer.
+- **Vestiarion: Reconciliation status**: Reconciled, Needs review (an invoice is marked received without a payment on Arc, and is not counted) or No receipts yet.
+- **Vestiarion: Evidence**: a link to the deal in Vestiarion.
+
+Pipedrive's own deal fields, such as the value and the stage, are never changed. A field of one of these names that someone else made with another type is never changed either: Vestiarion writes nothing and says so (see [Status and errors](#status-and-errors)).
+
+**When.** After each sync: when Pipedrive tells Vestiarion a deal changed, every 15 minutes, or at once with **Sync now**. Each write is read back from Pipedrive, and counts as written only when Pipedrive holds the same figures. The deal's page, under **Receipts in Pipedrive**, says where its receipt stands: **Written**, **Waiting**, **Not written yet** (tried again on its own, with when), **Changed in Pipedrive**, **Not allowed yet** (writing is off) or **Not written** (refused, with the reason). The ledger records `crm_receipt_written`. The card in Settings counts the deals written, waiting and changed in Pipedrive.
+
+**When someone changed a field in Pipedrive.** Vestiarion never writes over it. The deal's page says "Not written: someone changed it in Pipedrive", field by field: what Vestiarion last wrote, what Pipedrive holds now and what Vestiarion would write. An owner or admin chooses **Write Vestiarion's figures to Pipedrive** to put them back; until someone chooses, later receipts wait too. The ledger records `crm_receipt_conflict`, and `crm_receipt_overwrite_chosen` for the choice.
+
+**When Pipedrive is down or busy.** Nothing happens to your payments. The write waits and is tried again on its own: the deal's page says "Not written to Pipedrive yet", and when it is tried again.
+
+## How Pipedrive tells Vestiarion a deal changed
+
+On the first sync after you connect, and on each **Sync now**, Vestiarion makes sure Pipedrive has one webhook for your company's deals, pointing at Vestiarion. When a deal changes, Pipedrive calls it, and Vestiarion syncs your company at once: it reads the deals from Pipedrive itself, and never takes the deal, its value or anything else from what the notice says. A notice that does not carry the password Vestiarion gave Pipedrive for your company is refused before it is read.
+
+If Pipedrive does not let the user who connected add a webhook, or stops calling it, nothing is lost: the sync every 15 minutes still reads every deal that changed, so a change shows up within 15 minutes instead of within moments.
+
+## What Vestiarion reads and writes
+
+- **It reads**, with the access of the Pipedrive user who connected: deals (title, value, currency, status, pipeline and stage, won, lost or expected close date, and lost reason), each deal's organization (its name) and person (their primary email), the company's pipelines and stages, and who connected, for the company's id and name.
+- **It writes**, once an owner or admin allows it and only for payments on Arc mainnet outside shadow mode, the nine Vestiarion fields on the deals planned from Pipedrive, and those fields themselves, once. It also keeps one webhook for your company's deals. It never changes a deal's own fields, an organization or a person.
+- **It keeps** the deals read, the organizations' names, the persons' emails, the company's id and name, the access granted and your agreement, and Pipedrive's tokens encrypted, readable only by the server and sent only to Pipedrive.
+
+## Status and errors
+
+The Pipedrive card in Settings says how the connection is doing:
+
+- **"Pipedrive needs you to reconnect"**, when Vestiarion was uninstalled in Pipedrive or its access ended there. Pipedrive tells Vestiarion when the app is uninstalled, so the card says so at the next sync. Choose **Reconnect Pipedrive**: the same company reconnects the same connection, with its deals and links.
+- **"Pipedrive asked Vestiarion to slow down. Syncing again at 14:05 UTC."** when Pipedrive's limits were reached: a daily budget for your company, and a short burst limit. Nothing is lost: the next sync goes on where this one stopped.
+- **"Pipedrive is not set up on this deployment yet."** on a deployment where Pipedrive is not configured.
+- **"Pipedrive installed Vestiarion without the permissions it reads deals and organizations with, so nothing was kept and the app was removed again. The deployment's Pipedrive app needs its scopes set in Pipedrive's Developer Hub."** when the app was granted without the permissions that read deals and organizations. Whoever runs the deployment sets the app's scopes in Pipedrive's Developer Hub, then you connect again.
+
+When Pipedrive refuses Vestiarion's deal fields, each deal's **Receipts in Pipedrive** says so in Pipedrive's words, with what to do, and the card counts the deals not written yet. Pipedrive's plan is not something Vestiarion can read, so it is never guessed:
+
+- **"Pipedrive did not let Vestiarion add its deal fields"**, followed by Pipedrive's reason: your plan's custom field limit may be reached, or the user who connected may not add fields. A Pipedrive admin makes room, or reconnects as a user who may add fields. The write is tried again on its own.
+- **"Pipedrive has a deal field named"** one of Vestiarion's names, of another type: Vestiarion never changes it, and writes nothing. Rename that field in Pipedrive, and Vestiarion adds its own.
+
+## Disconnect
+
+Choose **Disconnect Pipedrive** on the card. Vestiarion stops reading, and writing, at once, uninstalls itself from your Pipedrive company, which removes its webhook, and deletes its tokens. The card says "Pipedrive is disconnected. Deals already planned stay in Vestiarion." What it wrote stays in Pipedrive, in its fields. Deals already planned stay in Vestiarion, with their receivables. The ledger records `accounting_disconnected`.
+
+## Not in this version
+
+- Pipedrive's products and line items, and its own invoices.
+- A deal with a person and no organization: it says "No organization in Pipedrive".
+- More than one Pipedrive company in a workspace.
+- Asking a deal's owner before the first overdue reminder, which [Chase what customers owe](/docs/guides/collections) does for deals planned from HubSpot.
+- Writing receipts from Arc testnet to a Pipedrive developer sandbox: Pipedrive does not say which companies are sandboxes.

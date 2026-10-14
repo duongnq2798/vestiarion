@@ -8,6 +8,16 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 - Offline, `vestiarion ledger verify` checks an audit export as `verify-ledger-export.mjs` does, and `vestiarion webhooks verify` checks a delivery's `Vestiarion-Signature`.
 - Nothing in `/api/v1` or the webhooks changes.
 
+## 2026-10-14: Deals brought in from Pipedrive
+
+- An owner or admin can connect a workspace to a Pipedrive company, and a person plans the collections of the won deals it brings in. There is no new kind of entry: the entries HubSpot's deals use now also name Pipedrive. Each is listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:
+  - **`accounting_connected`** and **`accounting_disconnected`** with `provider: "pipedrive"`; `externalOrgId` is the Pipedrive company id and `externalOrgName` its name. A Pipedrive connection's `consent.version` is `pipedrive-2026-10-14`.
+  - **`deal_signed`**, for a deal planned from Pipedrive, and **`deal_revised`**, for a change saved from what Pipedrive changed, with `via: "pipedrive"` and `pipedrive: { companyId, dealId, organizationId }`, Pipedrive's own ids. The deal's `externalRef` is `pipedrive-` followed by Pipedrive's deal id, such as `pipedrive-482`.
+  - **`create_counterparty`**, for a customer added with such a deal, and **`counterparty_notice_email_changed`**, for a billing email filled from Pipedrive, with `via: "pipedrive"` and `pipedrive: { companyId, organizationId }`; the addresses are masked, as before.
+  - **`crm_deal_changed`** and **`crm_deal_change_kept`** with `provider: "pipedrive"`; `crmDealId` is Pipedrive's deal id, without the `pipedrive-` prefix. A `stage` change's `label` is the stage's name, or the lost reason for a deal marked lost.
+  - **`crm_receipt_writes_changed`**, **`crm_receipt_written`**, **`crm_receipt_conflict`**, **`crm_receipt_failed`**, **`crm_receipt_refused`** and **`crm_receipt_overwrite_chosen`** with `provider: "pipedrive"`. `fields` and `conflicts` use the same keys as for HubSpot (`vestiarion_collected` and the rest), whatever the fields are called in Pipedrive. `accountType` is `COMPANY`: Pipedrive names no developer sandbox, so payments on Arc testnet or in shadow mode are never written to it, and a write queued for them ends in `crm_receipt_refused` with `reason: "reality"`.
+- Nothing else in `/api/v1` changes: the Pipedrive deals not planned are not in the API.
+
 ## 2026-10-13: A reporting currency, and cash scenarios saved as versions
 
 - Two new entries, actor `human`, each listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:

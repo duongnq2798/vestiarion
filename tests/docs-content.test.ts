@@ -199,6 +199,7 @@ describe("the docs navigation", () => {
       ["guides/xero", "Bring bills in from Xero"],
       ["guides/quickbooks", "Bring bills in from QuickBooks Online"],
       ["guides/hubspot", "Bring deals in from HubSpot"],
+      ["guides/pipedrive", "Bring deals in from Pipedrive"],
       ["guides/github", "Show payments on GitHub"],
     ]);
     expect(pagesOf("Developers").slice(0, 4)).toEqual([

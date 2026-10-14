@@ -43,10 +43,23 @@ export async function crmRowForDeal(dealId: string): Promise<CrmRowRead | null> 
   return withConnection(((found.data ?? []) as unknown as CrmDealRow[])[0]);
 }
 
-/** The CRM's ids a deal's entries carry. */
+/** The CRM's ids a deal's entries carry (HubSpot connector H19, Pipedrive connector P19). */
 export function sourceOf({ row, connection }: CrmRowRead): DealSource {
+  if (connection.provider === "pipedrive") {
+    return { provider: "pipedrive", ids: { companyId: connection.externalOrgId, dealId: row.external_id, organizationId: row.company_external_id } };
+  }
   return { provider: "hubspot", ids: { hubId: connection.externalOrgId, dealId: row.external_id, companyId: row.company_external_id } };
 }
+
+/** The CRMs whose companies a customer may be linked to, for the email it may be filled from. */
+const EMAIL_PROVIDERS = ["hubspot", "pipedrive"] as const;
+
+type EmailSource = { provider: "hubspot"; ids: { hubId: string; companyId: string } } | { provider: "pipedrive"; ids: { companyId: string; organizationId: string } };
+
+const emailSource = (connection: Connection, companyId: string): EmailSource =>
+  connection.provider === "pipedrive"
+    ? { provider: "pipedrive", ids: { companyId: connection.externalOrgId, organizationId: companyId } }
+    : { provider: "hubspot", ids: { hubId: connection.externalOrgId, companyId } };
 
 /**
  * Links a row to the deal planned from it, with the CRM's facts now as its baseline, and the company to the customer
@@ -115,11 +128,11 @@ export async function keepChanges(read: CrmRowRead, deal: { id: string; title: s
  * The email a customer's billing email may be filled from (H13): its company's main contact's, from the latest deal
  * read, while the customer has none. Null otherwise.
  */
-export async function emailToFill(counterpartyId: string): Promise<{ email: string; name: string; source: { provider: "hubspot"; ids: { hubId: string; companyId: string } } } | null> {
+export async function emailToFill(counterpartyId: string): Promise<{ email: string; name: string; source: EmailSource } | null> {
   const customer = unwrap(await db().from("counterparties").select("id, name, notice_email").eq("id", counterpartyId).limit(1)) as Array<{ id: string; name: string; notice_email: string | null }>;
   if (!customer[0] || customer[0].notice_email?.trim()) return null;
   const links = unwrap(
-    await db().from("external_links").select("connection_id, external_id").eq("object_type", "company").eq("provider", "hubspot").eq("local_id", counterpartyId).limit(5)
+    await db().from("external_links").select("connection_id, external_id").eq("object_type", "company").in("provider", [...EMAIL_PROVIDERS]).eq("local_id", counterpartyId).limit(5)
   ) as Array<{ connection_id: string; external_id: string }>;
   for (const link of links) {
     const connection = await connectionById(link.connection_id);
@@ -134,7 +147,7 @@ export async function emailToFill(counterpartyId: string): Promise<{ email: stri
         .order("external_updated_at", { ascending: false })
         .limit(1)
     ) as Array<{ company_email: string }>;
-    if (rows[0]) return { email: rows[0].company_email, name: customer[0].name, source: { provider: "hubspot", ids: { hubId: connection.externalOrgId, companyId: link.external_id } } };
+    if (rows[0]) return { email: rows[0].company_email, name: customer[0].name, source: emailSource(connection, link.external_id) };
   }
   return null;
 }

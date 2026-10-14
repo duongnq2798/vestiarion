@@ -16,7 +16,7 @@ Open **Bills & receivables**, choose **New**, then **Deal**: **New deal** opens 
 - **Payment terms (days)**: each line is due this many days after its invoice day. It starts at 14.
 - **External reference**, optional: your CRM's id for the deal, for instance. Two deals of a workspace never share one.
 
-A deal won in HubSpot does not need typing: with HubSpot connected, it is listed under **Deals** on the **Receivables** tab with **Plan collections**, which opens this form filled in from it, with HubSpot's deal id as its reference. A deal changed in HubSpot after you planned it says **Changed in HubSpot** on its page. See [Bring deals in from HubSpot](/docs/guides/hubspot).
+A deal won in HubSpot or Pipedrive does not need typing: with either connected, it is listed under **Deals** on the **Receivables** tab with **Plan collections**, which opens this form filled in from it, with the deal's id there as its reference (`pipedrive-` and the id, for a deal from Pipedrive). A deal changed there after you planned it says **Changed in HubSpot** or **Changed in Pipedrive** on its page. See [Bring deals in from HubSpot](/docs/guides/hubspot) and [Bring deals in from Pipedrive](/docs/guides/pipedrive).
 
 Then choose **How it is billed**:
 
@@ -52,7 +52,7 @@ If a release is interrupted before its receivable is made, the line says **Recei
 
 **Deals** lists each deal with its total, what was **Released**, **Paid**, is **Outstanding** and is **Planned**, and its next line. A deal whose lines are all paid says **Paid in full**.
 
-**Paid** is what arrived on Arc, confirmed by Circle and applied to the deal's invoices: a part payment counts as what arrived, and a fee a person marked settles an invoice without counting as paid. **Outstanding** is what is invoiced and not paid yet. These are the same figures written to HubSpot as Collected and Still owed.
+**Paid** is what arrived on Arc, confirmed by Circle and applied to the deal's invoices: a part payment counts as what arrived, and a fee a person marked settles an invoice without counting as paid. **Outstanding** is what is invoiced and not paid yet. These are the same figures written to HubSpot or Pipedrive as Collected and Still owed.
 
 The deal's page shows the same figures, then its **Schedule**: each line with its state, **Planned**, **Released**, **Overdue**, **Paid**, or **Credit owed**. Lines a later version replaced or cancelled are folded under **Replaced and cancelled lines**. **Versions** lists every version, newest first, with its total, the difference from the one before, its reason and what it changed.
 
@@ -128,4 +128,4 @@ A [statement link](/docs/guides/customer-portal) shows a customer every receivab
 
 ## What is signed
 
-Each version is a signed entry in the workspace's ledger, which the audit log shows and webhooks deliver: `deal_signed` for version 1, `deal_revised` for a change or a reopen, `deal_cancelled` for a cancel, and `deal_auto_release_changed` for the switch. Each cost is one too: `deal_cost_added`, `deal_cost_removed` and `deal_cost_linked`, which names the bill or milestone it became. A deal planned from HubSpot, and a change saved from what HubSpot changed, say `via: "hubspot"` with the deal's ids in HubSpot. Each release is the receivable's own `create_invoice` entry, which names the deal and the line, and says whether a person or the agent released it.
+Each version is a signed entry in the workspace's ledger, which the audit log shows and webhooks deliver: `deal_signed` for version 1, `deal_revised` for a change or a reopen, `deal_cancelled` for a cancel, and `deal_auto_release_changed` for the switch. Each cost is one too: `deal_cost_added`, `deal_cost_removed` and `deal_cost_linked`, which names the bill or milestone it became. A deal planned from HubSpot, and a change saved from what HubSpot changed, say `via: "hubspot"` with the deal's ids in HubSpot; one from Pipedrive says `via: "pipedrive"` with its ids in Pipedrive. Each release is the receivable's own `create_invoice` entry, which names the deal and the line, and says whether a person or the agent released it.
