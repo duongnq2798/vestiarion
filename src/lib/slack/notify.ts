@@ -13,6 +13,8 @@ import { installFor, moveCursor, webhookUrlOf, type SlackInstall } from "./insta
 import { slackSettingsFromEnv, type SlackSettings } from "./settings";
 import { cardToken } from "./state";
 import { workspaceNetwork } from "../workspace-network";
+import { lastAttemptOf, paymentWasSent, type IntentState } from "../agent/approvals";
+import { chatConfirmText, payActionOf } from "../payment-exceptions";
 
 /**
  * The cycle's `slack` stage (Slack design S7, S8): the install's channel is told the agent's decisions after its
@@ -55,6 +57,19 @@ async function cardViews(items: ActivityItem[], install: SlackInstall, keys: Mas
       .select("id, amount, currency, status, direction, decided_at, early_pay_discount_pct, counterparties(name, address, chain, address_changed_at, address_confirmed_at)")
       .in("id", ids)
   ) as unknown as CardRow[];
+  // Each payable's payment intent, as Approvals reads it: Approve on one whose earlier transfer may exist checks it first,
+  // and the confirmation says so rather than that it pays (payment exceptions E3).
+  const intents = new Map(
+    (
+      unwrap(
+        await db()
+          .from("payment_intents")
+          .select("source_id, status, provider_tx_id, last_error, provider_state, failure_reason, payout_route, updated_at")
+          .eq("source_type", "invoice")
+          .in("source_id", ids)
+      ) as Array<IntentState & { source_id: string }>
+    ).map((intent) => [intent.source_id, intent])
+  );
   for (const row of rows) {
     if (row.direction !== "payable" || !WAITING.includes(row.status)) continue;
     const payee = row.counterparties;
@@ -74,11 +89,14 @@ async function cardViews(items: ActivityItem[], install: SlackInstall, keys: Mas
       "Slack"
     );
     const discount = row.early_pay_discount_pct !== null ? " Its early-payment discount comes off, if still due." : "";
+    const intent = intents.get(row.id) ?? null;
+    const checking = chatConfirmText(payActionOf({ paymentSent: paymentWasSent(intent), lastAttempt: lastAttemptOf(intent, currency === "EURC" ? "EURC" : "USDC") }));
+    const what = `${AMOUNT.format(Number(row.amount))} ${currency} to ${payee?.name ?? "the payee"} on ${workspaceNetwork().label}, to ${address ? shortenAddresses(address) : "no address"}.`;
     views.set(row.id, {
       invoiceId: row.id,
       token: cardToken({ org: install.orgId, invoice: row.id, decidedAt: row.decided_at, addressHash: addressHash(address) }, keys, now),
       approveRefusal: refusal ? refusal.message : null,
-      confirmText: `Pays ${AMOUNT.format(Number(row.amount))} ${currency} to ${payee?.name ?? "the payee"} on ${workspaceNetwork().label}, to ${address ? shortenAddresses(address) : "no address"}.${discount}`,
+      confirmText: checking ? `${checking} It is ${what}` : `Pays ${what}${discount}`,
     });
   }
   return views;

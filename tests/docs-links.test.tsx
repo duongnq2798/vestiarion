@@ -41,6 +41,7 @@ const SECTIONS: Array<[string, string]> = [
   ["src/app/o/[slug]/evidence/[kind]/[id]/page.tsx", "/docs/guides/evidence"],
   ["src/app/accountant/page.tsx", "/docs/guides/accountants"],
   ["src/components/UsagePanel.tsx", "/docs/guides/accountants#6-usage-and-limits"],
+  ["src/components/vx/PaymentsInFlight.tsx", "/docs/guides/payment-exceptions"],
 ];
 
 describe("DocsLink", () => {

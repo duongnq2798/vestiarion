@@ -43,6 +43,7 @@ const activity = (items: ActivityItem[], through: number): AgentActivity => ({ r
 
 let install: Record<string, unknown> | null;
 let invoices: Array<Record<string, unknown>>;
+let intents: Array<Record<string, unknown>>;
 
 function installRow(fields: Record<string, unknown> = {}) {
   const keys = parseMasterKeys(process.env.VESTIARION_MASTER_KEYS);
@@ -62,6 +63,7 @@ const heldInvoice = (fields: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   install = null;
   invoices = [];
+  intents = [];
   readActivityMock.mockReset();
 });
 
@@ -75,6 +77,7 @@ function stage(reply: (body: string) => Response = () => new Response("ok")) {
     if (sent.path === "/rest/v1/orgs") return { body: orgs.orgRow(ORG, { slug: "acme", name: "Acme" }) };
     if (sent.path === "/rest/v1/slack_installs" && sent.method === "GET") return { body: install ? [install] : [] };
     if (sent.path === "/rest/v1/invoices") return { body: invoices };
+    if (sent.path === "/rest/v1/payment_intents") return { body: intents };
     if (sent.path === "/rest/v1/rpc/append_ledger_entry") return { body: APPENDED_LEDGER_ROW };
     return { body: [] };
   });
@@ -157,6 +160,40 @@ describe("sendSlackDecisions", () => {
     expect(readCard(token, parseMasterKeys(process.env.VESTIARION_MASTER_KEYS), Date.UTC(2026, 9, 3, 12))).toEqual({
       org: ORG, invoice: INVOICE, decidedAt: "2026-10-03T11:58:00+00:00", addressHash: addressHash(ADDRESS),
     });
+  });
+
+  it("says Approve checks the earlier transfer first when one may exist, never that it pays (payment exceptions E3)", async () => {
+    install = installRow({ decisions_limit_usdc: "1" });
+    invoices = [heldInvoice()];
+    intents = [
+      {
+        source_id: INVOICE, status: "failed", provider_tx_id: null, provider_state: null, failure_reason: null, payout_route: null,
+        last_error: "Circle did not answer createTransaction within 20000 ms; the transfer may or may not have been accepted", updated_at: "2026-10-03T11:57:00+00:00",
+      },
+    ];
+    readActivityMock.mockResolvedValue(activity([HELD], 57));
+    const { fake, run, posts } = stage();
+    await run();
+
+    const read = fake.requests.find((sent) => sent.path === "/rest/v1/payment_intents");
+    expect(read?.params.get("source_type")).toBe("eq.invoice");
+    expect(read?.params.get("source_id")).toBe(`in.(${INVOICE})`);
+    const body = JSON.stringify(posts[0].body);
+    expect(body).toContain(
+      "Looks for the earlier transfer on Circle first: records it if Circle has it, and sends the payment only once Circle shows none. It is 0.50 USDC to Jiren on Arc testnet, to 0x1111…0000."
+    );
+    expect(body).not.toContain("Pays 0.50 USDC");
+  });
+
+  it("says Approve checks a transfer already in flight and sends nothing new", async () => {
+    install = installRow({ decisions_limit_usdc: "1" });
+    invoices = [heldInvoice()];
+    intents = [{ source_id: INVOICE, status: "pending", provider_tx_id: "circle-tx-1", provider_state: "SENT", failure_reason: null, payout_route: null, last_error: null, updated_at: "2026-10-03T11:57:00+00:00" }];
+    readActivityMock.mockResolvedValue(activity([HELD], 57));
+    const { run, posts } = stage();
+    await run();
+
+    expect(JSON.stringify(posts[0].body)).toContain("Checks the transfer already sent with Circle and records it: nothing new is sent. It is 0.50 USDC to Jiren on Arc testnet, to 0x1111…0000.");
   });
 
   it("leaves Approve out above the limit, and says why", async () => {

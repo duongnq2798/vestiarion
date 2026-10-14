@@ -44,7 +44,9 @@ type Paid = NonNullable<Awaited<ReturnType<typeof approveAndPay>>["paid"]>;
  * confirmed it; and, with no Circle id, a send Circle never answered, whose outcome is unknown. A send in flight is
  * never called simulated (L4).
  */
-function paidMessage(status: "paid" | "matched", paid: Paid | undefined, txRef: string | null): string {
+function paidMessage(status: "paid" | "matched", paid: Paid | undefined, txRef: string | null, lookedFor?: string): string {
+  // A send Circle never answered, looked for first and not listed yet: nothing new was sent (payment exceptions E4).
+  if (status === "matched" && !txRef && lookedFor) return `Looked for the earlier transfer${paid ? ` to ${paid.payee}` : ""} on Circle first. ${lookedFor}`;
   if (!paid) return status === "paid" ? "Paid." : "Payment submitted; waiting for Circle to confirm it.";
   const what = `${activityAmount(paid.amount, paid.currency)} to ${paid.payee}`;
   const network = workspaceNetwork().label;
@@ -116,7 +118,7 @@ export async function approvePayable(
   if (result.status === "paid") sendNoticesSoon(accessOf(actor));
   // What went out, to whom and on which network, in words and laid out with its transaction one click away; cash
   // brought back from the reserve to pay it is said too (approval cash R4).
-  const message = paidMessage(result.status, result.paid, result.txRef);
+  const message = paidMessage(result.status, result.paid, result.txRef, result.lookedFor);
   const receipt = result.paid ? paymentReceipt(result.status, result.paid, result.txRef, result.fromReserveUsdc, input.forVerdict === true) : null;
   return done(`${message}${fromReserveNote(result.fromReserveUsdc)}`, { status: result.status, txRef: result.txRef, ...(receipt ? { receipt } : {}) });
 }

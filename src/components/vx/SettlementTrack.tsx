@@ -7,6 +7,7 @@ import { bookedLine, type BookedMark } from "@/lib/connectors/booked";
 import { utcMinute } from "@/lib/copy";
 import { networkProfile, type Network } from "@/lib/network";
 import { chainById, txUrl } from "@/lib/payee-chains";
+import { needsSomeone, paymentException, runbookHref, whatToDo, type WhatToDo as Runbook } from "@/lib/payment-exceptions";
 import {
   ageText,
   GATEWAY_FAILED,
@@ -305,6 +306,54 @@ function BookingRow({ mark, orgSlug, network }: { mark: BookedMark; orgSlug: str
   );
 }
 
+/**
+ * What to do about a payment whose outcome is not clean (payment exceptions E6): who acts, what Vestiarion already did,
+ * the next step and the trail, with the runbook's section. Words, never a dialog; none for a payment that needs no one.
+ */
+export function whatToDoFor(settlement: Settlement, network: Network, now: number): Runbook | null {
+  const state = paymentException(settlement, now, networkProfile(network).stuckAfterMinutes);
+  if (!state || !needsSomeone(state, settlement.followUp)) return null;
+  return whatToDo(state, { followUp: settlement.followUp, circleState: settlement.stages.pending?.state ?? null });
+}
+
+function WhatToDo({ todo, circleId }: { todo: Runbook; circleId: string | null }) {
+  const rows: Array<[string, ReactNode]> = [
+    ["Who acts", todo.owner],
+    ["Already done", todo.done],
+    ["Next", <span key="next" className="text-ink">{todo.next}</span>],
+    [
+      "Trail",
+      <>
+        {todo.trail}
+        {circleId && (
+          <span className="mt-0.5 block">
+            Circle id <span className="break-all font-mono text-ink">{circleId}</span>
+          </span>
+        )}
+      </>,
+    ],
+  ];
+  return (
+    <section aria-label="What to do" className="rounded-md border border-held-line bg-held-soft px-3 py-2.5 text-xs leading-5 text-ink-2">
+      <p className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+        <span className="font-medium text-ink">What to do</span>
+        <span className="text-ink-3">{todo.title}</span>
+      </p>
+      <dl className="mt-1.5 grid gap-x-3 gap-y-1 sm:grid-cols-[6.5rem_minmax(0,1fr)]">
+        {rows.map(([term, detail]) => (
+          <div key={term} className="contents">
+            <dt className="text-ink-3">{term}</dt>
+            <dd className="min-w-0">{detail}</dd>
+          </div>
+        ))}
+      </dl>
+      <Link href={runbookHref(todo.state)} className="mt-1.5 inline-block font-medium text-agent underline-offset-2 hover:underline">
+        Read the runbook
+      </Link>
+    </section>
+  );
+}
+
 export function SettlementTrack({
   id,
   settlement,
@@ -335,6 +384,7 @@ export function SettlementTrack({
   const furthest = settlement.stage ? SETTLEMENT_STAGES.indexOf(settlement.stage) : -1;
   // An end, or an unknown outcome, is told where the payment stopped: after the send, or after Circle's last word.
   const stopAfter: SettlementStage = settlement.stages.pending ? "pending" : "submitted";
+  const todo = whatToDoFor(settlement, network, now);
   return (
     <details id={settlementAnchor(id)} open={defaultOpen} className="group/settlement scroll-mt-4 border-t border-line">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-sm font-medium text-ink-2 transition-colors duration-150 ease-standard hover:text-ink sm:px-5 [&::-webkit-details-marker]:hidden">
@@ -399,6 +449,7 @@ export function SettlementTrack({
         {settlement.stages.confirmed && !settlement.simulated && (
           <p className="text-xs text-ink-3">A confirmed transfer cannot be charged back or reversed. A refund would be a new transfer back, a separate payment.</p>
         )}
+        {todo && <WhatToDo todo={todo} circleId={settlement.circleId ?? null} />}
       </div>
     </details>
   );

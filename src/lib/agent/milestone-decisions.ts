@@ -385,7 +385,7 @@ export async function milestoneIntents(milestoneIds: string[]): Promise<Map<stri
   if (milestoneIds.length === 0) return new Map();
   const read = await db()
     .from("payment_intents")
-    .select("source_id, status, provider_tx_id, last_error, provider_state, failure_reason")
+    .select("source_id, status, provider_tx_id, last_error, provider_state, failure_reason, updated_at")
     .eq("source_type", "milestone")
     .in("source_id", milestoneIds);
   if (read.error) throw new Error(read.error.message);
@@ -433,7 +433,7 @@ async function loadMilestone(milestoneId: string, live: boolean): Promise<Loaded
 
   const intentRead = await db()
     .from("payment_intents")
-    .select("status, provider_tx_id, last_error, provider_state, failure_reason")
+    .select("status, provider_tx_id, last_error, provider_state, failure_reason, updated_at")
     .eq("source_type", "milestone")
     .eq("source_id", milestoneId)
     .maybeSingle();

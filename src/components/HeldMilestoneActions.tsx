@@ -18,6 +18,7 @@ import { withSuccessToast } from "@/components/withSuccessToast";
 import type { HeldReason } from "@/lib/agent/milestone-decisions";
 import { orgHref } from "@/lib/auth/org-paths";
 import { approveFirstDescription, mayApproveNow, onlyApproverOfTwo, SECOND_APPROVAL_PAYS, twoApprovalsLine, type TwoApprovalsFacts } from "@/lib/two-approvals";
+import { CHECK_FIRST_LABEL, checkFirstTitle, checksFirst, milestonePayAction } from "@/lib/payment-exceptions";
 
 const INITIAL: ActionResult = { ok: false, message: "" };
 
@@ -46,6 +47,21 @@ export function payNowDescription(kind: HeldReason["kind"]): string {
   if (kind === "unknown") return "Vestiarion looks for the earlier transfer on Circle first: it records it if Circle has it, and sends the payment only once Circle shows none. The ledger records who approved it.";
   if (kind === "transfer_failed") return "A new transfer starts as soon as you confirm, and the ledger records who approved it.";
   return "The transfer starts as soon as you confirm, and the ledger records who approved it.";
+}
+
+/**
+ * What Pay now's confirmation asks: to pay now, or, where the earlier transfer is only checked or looked for first, that
+ * instead (payment exceptions E3).
+ */
+export function payNowTitle(kind: HeldReason["kind"], milestone: { amount: number; contractorName: string }, sandbox: boolean): string {
+  const what = `${fmt(milestone.amount)} USDC to ${milestone.contractorName}`;
+  return checkFirstTitle(milestonePayAction(kind), what) ?? `Pay ${what} now?${sandbox ? " (simulated)" : ""}`;
+}
+
+/** Pay now's confirm button: Pay now, or what it does instead where the earlier transfer is checked first (E3). */
+export function payNowLabel(kind: HeldReason["kind"]): string {
+  const action = milestonePayAction(kind);
+  return checksFirst(action) ? CHECK_FIRST_LABEL[action] : "Pay now";
 }
 
 export function HeldMilestoneActions({
@@ -132,11 +148,7 @@ export function HeldMilestoneActions({
                         {willPay ? "Pay now" : "Approve"}
                       </Button>
                     }
-                    title={
-                      willPay
-                        ? `Pay ${fmt(milestone.amount)} USDC to ${milestone.contractorName} now?${sandbox ? " (simulated)" : ""}`
-                        : `Approve paying ${fmt(milestone.amount)} USDC to ${milestone.contractorName}?`
-                    }
+                    title={willPay ? payNowTitle(reason.kind, milestone, sandbox) : `Approve paying ${fmt(milestone.amount)} USDC to ${milestone.contractorName}?`}
                     description={
                       willPay
                         ? `${payNowDescription(reason.kind)}${ownEntry ? ` ${OWN_MILESTONE_RECORDED}` : ""}${two ? ` ${SECOND_APPROVAL_PAYS}` : ""}`
@@ -144,7 +156,7 @@ export function HeldMilestoneActions({
                           ? approveFirstDescription(two.above)
                           : ""
                     }
-                    confirmLabel={willPay ? "Pay now" : "Approve"}
+                    confirmLabel={willPay ? payNowLabel(reason.kind) : "Approve"}
                   />
                 </>
               )}

@@ -5,7 +5,7 @@ import { confirmCounterpartyAddress, sameAddress } from "../counterparty-address
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { listLedgerEntriesForTargets } from "../ledger";
 import { explainPayable, presentReasoning } from "../reasoning-copy";
-import { isTerminalFailure, settleUnknownSend, type UnknownSendAnswer } from "../payments";
+import { isTerminalFailure, settleUnknownSend, unknownSend, type UnknownSendAnswer } from "../payments";
 import { MAY_HAVE_BEEN_ACCEPTED } from "../circle/settlement";
 import { PAYMENTS_OFF, PaymentsDisabledError, paymentsHold } from "../payments-switch";
 import { payInvoice, syncOperatingBalance } from "./pay";
@@ -210,6 +210,11 @@ export interface IntentState {
   failure_reason?: string | null;
   /** The route a payment across chains took on its first attempt (Gateway payouts G2); every later attempt keeps it. */
   payout_route?: string | null;
+  /**
+   * When the row last changed: a `submitting` row older than its claim is a send whose answer was lost (payment safety
+   * R4, payment exceptions E2). A read without it keeps telling such a row as a send under way.
+   */
+  updated_at?: string | null;
 }
 
 /**
@@ -221,15 +226,23 @@ function failedTerminally(intent: IntentState): boolean {
   return intent.status === "failed" && intent.provider_tx_id !== null && isTerminalFailure(intent.provider_state);
 }
 
+/** What `executePayment`'s lookup of an unknown send says when Circle has not listed it yet, or could not be asked (R4). */
+const LOOKED_FOR_FIRST = "sent only if Circle has none";
+
 /**
- * Whether the intent's current attempt was sent to Circle and Circle never said what became of it (payment safety R1):
- * `failed`, no provider id, and an error in the provider's words for that — the deadline ran out, the connection
- * dropped after the request left, Circle answered 5xx or with no id. Circle may hold the transfer under the attempt's
- * key. Sending it again under that key returns it rather than repeats it, so Approve and pay settles the question;
- * until then nothing closes over it.
+ * Whether the intent's current attempt was sent to Circle and Circle never said what became of it (payment safety R1,
+ * R4): no provider id, and either `failed` with an error in the provider's words for that — the deadline ran out, the
+ * connection dropped after the request left, Circle answered 5xx or with no id — or left `submitting` past its claim,
+ * when the function that sent it stopped before Circle's answer was recorded (payment exceptions E2; `unknownSend` and
+ * the settlement track read it the same way). Circle may hold the transfer under the attempt's key: it is looked for
+ * before anything is sent again, and until it is known nothing closes over it.
  */
-export function transferUnknown(intent: IntentState | null): boolean {
-  return intent !== null && intent.status === "failed" && intent.provider_tx_id === null && (intent.last_error?.includes(MAY_HAVE_BEEN_ACCEPTED) ?? false);
+export function transferUnknown(intent: IntentState | null, now: number = Date.now()): boolean {
+  if (intent === null || intent.provider_tx_id !== null) return false;
+  if (intent.status === "failed") return intent.last_error?.includes(MAY_HAVE_BEEN_ACCEPTED) ?? false;
+  // A send left `submitting` is told only when its time was read with it: the cycle's own reads keep their answer.
+  if (intent.status !== "submitting" || typeof intent.updated_at !== "string") return false;
+  return unknownSend({ status: "submitting", providerTxId: null, lastError: intent.last_error, updatedAt: intent.updated_at }, now);
 }
 
 /**
@@ -332,7 +345,7 @@ export function lastAttemptOf(intent: IntentState | null, token: Stablecoin = "U
 async function paymentIntentOf(invoiceId: string): Promise<IntentState | null> {
   const result = await db()
     .from("payment_intents")
-    .select("status, provider_tx_id, last_error, provider_state, payout_route")
+    .select("status, provider_tx_id, last_error, provider_state, payout_route, updated_at")
     .eq("source_type", "invoice")
     .eq("source_id", invoiceId)
     .maybeSingle();
@@ -511,7 +524,7 @@ export async function listWaitingPayables(
     const found = unwrap(
       await db()
         .from("payment_intents")
-        .select("source_id, status, provider_tx_id, last_error, provider_state, failure_reason, payout_route")
+        .select("source_id, status, provider_tx_id, last_error, provider_state, failure_reason, payout_route, updated_at")
         .eq("source_type", "invoice")
         .in("source_id", rows.map((row) => row.id))
     ) as Array<IntentState & { source_id: string }>;
@@ -781,6 +794,11 @@ export async function approveAndPay(
   fromReserveUsdc?: number;
   /** What went out, to whom and in what, once the transfer did: the person's confirmation says it; `simulated` in a sandbox. */
   paid?: { amount: number; currency: string; payee: string; simulated?: true };
+  /**
+   * A send Circle never answered, looked for first and not listed yet, so nothing new was sent: what the lookup said,
+   * with when it is looked for again (payment exceptions E4).
+   */
+  lookedFor?: string;
 }> {
   const orgId = currentOrgId();
   const invoice = await loadWaitingPayable(input.invoiceId);
@@ -1119,10 +1137,17 @@ export async function approveAndPay(
     },
   });
 
+  // Looked for first and not listed yet: the execution is pending with no Circle id, and its error is the lookup's own
+  // word, which says it is sent only if Circle has none. A send made after Circle showed none, whose answer was lost
+  // again, says something else, and is told as any unanswered send.
+  const lookup = result.execution?.error ?? null;
+  const lookedFor = transferUnknown(intent) && result.status === "matched" && !result.txRef && lookup?.includes(LOOKED_FOR_FIRST) ? lookup : null;
+
   return {
     status: result.status,
     txRef: result.txRef,
     note: result.note,
+    ...(lookedFor ? { lookedFor } : {}),
     ...(fromReserveUsdc !== null ? { fromReserveUsdc } : {}),
     ...(sent
       ? {

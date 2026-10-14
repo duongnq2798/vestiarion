@@ -23,8 +23,23 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   commission off the partner's next payable; nothing is pulled back from a wallet. A member named as the partner can
   never approve their own payout, set their own plan or create their own payable. Migration `0118`.
   [Guide](https://www.vestiarion.xyz/docs/guides/commissions).
+- **What to do when a payment does not settle.** A payment slow to confirm, of unknown outcome, failed, cancelled or
+  not sent now says what to do about it where you meet it. Under the stages of **Where the payment is**, on its card,
+  a **What to do** block says who acts, what Vestiarion already did, the next step and the trail, with the transfer's
+  Circle id. On Treasury, **Payments in flight** gives each payment slow to confirm or of unknown outcome a
+  **What to do:** line, and links the runbook. The transfer watch's email links it too. A new guide lists every state
+  with the same words, including why a confirmed payment cannot be returned or reversed on Arc.
+  [Guide](https://www.vestiarion.xyz/docs/guides/payment-exceptions).
 
 ### Changed
+
+- **Paying a bill whose earlier transfer may exist says it checks first.** When a transfer was already sent, or Circle
+  never answered one, **Approve and pay** and **Pay now** no longer ask "Pay … now?": the confirmation asks to check
+  the payment already sent, or to look for the earlier one on Circle first, its button reads **Check it** or
+  **Look first**, and the notice while it runs says it is checking, never sending. Approve and pay from Slack says the
+  same before it runs. When Circle has not listed the earlier send yet, the answer says it looked first and when it
+  looks again. Nothing about what is sent changes: an earlier transfer is always reconciled before anything new goes
+  out.
 
 - **The header names the page you are on.** On a page inside a section, the line at the top that says where you are
   now ends with that page, where it stopped at the section: Commissions reads "Your workspace › Bills & receivables ›
@@ -34,6 +49,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Fixed
 
+- **A payment whose sending was cut off is no longer called sent.** When Vestiarion started a payment and stopped
+  before Circle's answer was recorded, Approvals said "A payment was already sent" and Reject and Return refused it.
+  It is now told as a payment of unknown outcome, as its track already did: Approvals and Contractors say Circle did
+  not answer, and Reject, Return and Close look for it on Circle first, so it is closed if Circle never took it.
+- **The evidence page no longer calls a payment that may still settle a failure.** Its payment step said "The transfer
+  failed." for a send Circle never answered, a transfer whose last read failed and a Gateway payout that may still be
+  minted. Each is now said as what it is, and a milestone's points to Contractors rather than Approvals.
 - **The New deal form's fields line up.** In the narrow New deal panel, the payment terms label took two lines and pushed its box below Total, Currency and Start date. It now reads **Terms (days)** and fits on one line.
 
 ## [0.1.0-beta.4] - 2026-10-14

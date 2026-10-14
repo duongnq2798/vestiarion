@@ -933,3 +933,79 @@ describe("a payable paid with its early-payment discount", () => {
     expect(held.subject.paidAmount).toBeNull();
   });
 });
+
+describe("the payment step of a payment whose outcome is not clean (payment exceptions E6)", () => {
+  const MAY_HAVE = "Circle did not answer createTransaction within 20000 ms; the transfer may or may not have been accepted";
+  const unpaid = (payment: Partial<NonNullable<EvidenceInput["payment"]>>) => {
+    const base = paidInFull();
+    const invoice = (base.subject as { invoice: object }).invoice;
+    return buildEvidenceChain({
+      ...base,
+      subject: { kind: "invoice", invoice: { ...invoice, status: "held", tx_ref: null } as never },
+      payment: { ...(base.payment as NonNullable<EvidenceInput["payment"]>), status: "failed", tx_hash: null, confirmed_at: null, ...payment },
+      receipt: null,
+      checks: { ...base.checks, onChain: null },
+    });
+  };
+  const says = (chain: ReturnType<typeof buildEvidenceChain>) => step(chain, "payment").facts[0];
+
+  it("never calls a send Circle never answered a failure, and says where it is looked for", () => {
+    const fact = says(unpaid({ provider_tx_id: null, last_error: MAY_HAVE, provider_state: null }));
+    expect(fact.text).toBe("Outcome unknown: Circle did not answer when it was sent, so it may have taken the transfer.");
+    expect(fact.fill).toBe("Approve and pay in Approvals looks for it on Circle first and sends nothing twice.");
+    expect(fact.warn).toBeUndefined();
+  });
+
+  it("leaves an unknown outcome to the agent's next cycle while it comes back to the bill", () => {
+    const base = paidInFull();
+    const invoice = (base.subject as { invoice: object }).invoice;
+    const chain = buildEvidenceChain({
+      ...base,
+      subject: { kind: "invoice", invoice: { ...invoice, status: "matched", tx_ref: null } as never },
+      payment: { ...(base.payment as NonNullable<EvidenceInput["payment"]>), status: "failed", tx_hash: null, confirmed_at: null, provider_tx_id: null, last_error: MAY_HAVE, provider_state: null },
+      receipt: null,
+      checks: { ...base.checks, onChain: null },
+    });
+    expect(step(chain, "payment").facts[0].fill).toBe("The agent's next cycle looks for it on Circle first and sends nothing twice.");
+  });
+
+  it("keeps a transfer Circle took, whose last read failed, in flight", () => {
+    const fact = says(unpaid({ provider_tx_id: "circle-tx-1", last_error: "provider unreachable", provider_state: "SENT" }));
+    expect(fact.text).toBe("Sent, not confirmed yet.");
+  });
+
+  it("says Gateway's failure may still be minted, and that nothing is sent again", () => {
+    const fact = says(unpaid({ provider_tx_id: "gateway:abc", provider_state: "GATEWAY_FAILED" }));
+    expect(fact.text).toBe("Gateway reported it failed, but it may still be minted on the payee's chain, so nothing is sent again.");
+    expect(fact.fill).toBe("Check with Circle whether it was minted; Approvals shows what to do next.");
+  });
+
+  it("names Circle's end and reason for a failure, and where to act", () => {
+    const fact = says(unpaid({ provider_tx_id: "circle-tx-1", provider_state: "FAILED", failure_reason: "FAILED_ON_CHAIN" }));
+    expect(fact.text).toBe("The transfer failed: Circle ended it (FAILED: FAILED_ON_CHAIN). The payee was not paid.");
+    expect(fact.fill).toBe("Approvals shows what to do next.");
+    expect(fact.warn).toBe(true);
+  });
+
+  it("says a payment that never reached Circle was not sent, with its reason", () => {
+    const fact = says(unpaid({ provider_tx_id: null, last_error: "Counterparty has no on-chain address.", provider_state: null }));
+    expect(fact.text).toBe("Not sent: it stopped before Circle took the transfer (Counterparty has no on-chain address). The payee was not paid.");
+    expect(fact.warn).toBe(true);
+  });
+
+  it("keeps the old words for a row read without the columns that tell these apart", () => {
+    expect(says(unpaid({})).text).toBe("The transfer failed.");
+  });
+
+  it("sends a milestone's person to Contractors, not Approvals", () => {
+    const base = paidInFull();
+    const chain = buildEvidenceChain({
+      ...base,
+      subject: { kind: "milestone", milestone: { id: MILESTONE, contractor_id: CP, title: "Fix the login redirect", amount: 12.5, status: "held", tx_ref: null } as never },
+      payment: { ...(base.payment as NonNullable<EvidenceInput["payment"]>), status: "failed", tx_hash: null, confirmed_at: null, provider_tx_id: null, last_error: MAY_HAVE, provider_state: null },
+      receipt: null,
+      checks: { ...base.checks, onChain: null },
+    });
+    expect(step(chain, "payment").facts[0].fill).toBe("Pay now on Contractors looks for it on Circle first and sends nothing twice.");
+  });
+});

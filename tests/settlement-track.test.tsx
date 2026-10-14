@@ -9,6 +9,7 @@ import type { LedgerEntry } from "@/lib/ledger";
 import type { InvoiceRow } from "@/lib/queries";
 import { reduceSettlement, type Settlement, type SettlementBooks, type SettlementFact, type SettlementInput } from "@/lib/settlement";
 import { settlementOf, type IntentRecord } from "@/lib/settlement-facts";
+import { NEXT_BY_FOLLOW_UP, OWNER_BY_FOLLOW_UP, READS_AGAIN, RUNBOOK, STUCK_AT_CIRCLE } from "@/lib/payment-exceptions";
 
 /**
  * Where a payment is, on a payable's card (settlement lifecycle L7): each stage with when, from which source, and its
@@ -172,6 +173,75 @@ describe("the track in flight", () => {
     expect(words).not.toContain("Circle could not be read just now");
     // Not a failure by colour alone, nor a green line: the summary is told in words, as an end's.
     expect(markup).toMatch(/text-held[^"]*">Gateway reported it failed/);
+  });
+});
+
+describe("what to do, under the stages (payment exceptions E6)", () => {
+  const block = (settlement: Settlement) => {
+    const markup = render(settlement);
+    const at = markup.indexOf('aria-label="What to do"');
+    return { markup, at, words: at === -1 ? "" : text(markup.slice(at)) };
+  };
+
+  it("says nothing for a payment confirmed, or in flight inside the network's wait", () => {
+    expect(block(lifecycle([...decided, pending, confirmed, recorded])).at).toBe(-1);
+    const young: SettlementFact[] = [{ kind: "submitted", at: T(35), attempt: 1 }, { ...pending, at: T(35) }];
+    expect(block(lifecycle(young, { ...open, followUp: "cycle" })).at).toBe(-1);
+  });
+
+  it("tells a payment slow to confirm who acts, what was done, what to do next and where the trail is, with the runbook", () => {
+    const settlement = { ...lifecycle([...decided, pending], { ...open, followUp: "cycle" }), circleId: "1f3c9a2e-4b5d-4e6f-8a7b-9c0d1e2f3a4b" };
+    const { markup, words } = block(settlement);
+    expect(words).toContain("What to do");
+    expect(words).toContain(RUNBOOK.stuck.title);
+    expect(words).toContain(`Who acts ${RUNBOOK.stuck.owner}`);
+    expect(words).toContain(`Already done ${RUNBOOK.stuck.done} ${READS_AGAIN.cycle}`);
+    expect(words).toContain(`Next ${RUNBOOK.stuck.next}`);
+    expect(words).toContain(`Trail ${RUNBOOK.stuck.trail}`);
+    expect(words).toContain("Circle id 1f3c9a2e-4b5d-4e6f-8a7b-9c0d1e2f3a4b");
+    expect(markup).toContain('href="/docs/guides/payment-exceptions#slow-to-confirm"');
+  });
+
+  it("names Circle's stuck state, and a stuck transfer's next step with Circle", () => {
+    expect(block(lifecycle([...decided, { ...pending, state: "STUCK" }], { ...open, followUp: "approvals" })).words).toContain(`Next ${STUCK_AT_CIRCLE}`);
+  });
+
+  it("tells an unknown outcome by who comes back to the bill", () => {
+    const unanswered: SettlementFact = { kind: "unanswered", at: T(3), attempt: 1 };
+    const cycle = block(lifecycle([...decided, unanswered], { ...open, followUp: "cycle" })).words;
+    expect(cycle).toContain(`Who acts ${OWNER_BY_FOLLOW_UP.unknown.cycle}`);
+    expect(cycle).toContain(`Next ${NEXT_BY_FOLLOW_UP.unknown.cycle}`);
+    const approvals = block(lifecycle([...decided, unanswered], { ...open, followUp: "approvals" }));
+    expect(approvals.words).toContain(`Who acts ${OWNER_BY_FOLLOW_UP.unknown.approvals}`);
+    expect(approvals.words).toContain(`Next ${NEXT_BY_FOLLOW_UP.unknown.approvals}`);
+    expect(approvals.markup).toContain('href="/docs/guides/payment-exceptions#outcome-unknown"');
+  });
+
+  it("tells a failed payment held for a person how it is sent again, and nothing once the bill is closed", () => {
+    const failed: SettlementFact = { kind: "ended", at: T(4), attempt: 1, end: "failed", state: "FAILED", reason: "INSUFFICIENT_NATIVE_TOKEN" };
+    const held = block(lifecycle([...decided, pending, failed], { ...open, followUp: "approvals" })).words;
+    expect(held).toContain(RUNBOOK.failed.title);
+    expect(held).toContain(`Next ${NEXT_BY_FOLLOW_UP.failed.approvals}`);
+    expect(block(lifecycle([...decided, pending, failed], { ...open, followUp: "contractors" })).words).toContain(`Next ${NEXT_BY_FOLLOW_UP.failed.contractors}`);
+    // Rejected, closed or paid since: no one comes back to it, and there is nothing left to do.
+    expect(block(lifecycle([...decided, pending, failed], open)).at).toBe(-1);
+    const notSent: SettlementFact = { kind: "ended", at: T(4), attempt: 1, end: "not_sent", state: null, reason: "No address." };
+    expect(block(lifecycle([...decided, notSent], { ...open, followUp: "approvals" })).words).toContain(`Next ${NEXT_BY_FOLLOW_UP.not_sent.approvals}`);
+  });
+
+  it("tells Gateway's failure to check with Circle, never to send it again", () => {
+    const words = block(lifecycle([...decided, { ...pending, state: "GATEWAY_FAILED" }], { ...open, followUp: "approvals" }, { crossChain: true })).words;
+    expect(words).toContain(RUNBOOK.gateway_failed.title);
+    expect(words).toContain(`Next ${RUNBOOK.gateway_failed.next}`);
+  });
+
+  it("carries the current attempt's Circle id from the payment intent", () => {
+    const intent: IntentRecord = {
+      status: "pending", provider: "circle", provider_mode: "live", provider_tx_id: "circle-tx-9", provider_state: "SENT", failure_reason: null, last_error: null,
+      tx_hash: null, mint_tx_hash: null, destination_chain: null, transfer_attempt: 1, previous_attempts: [], submitted_at: T(1), executed_at: T(1),
+      confirmed_at: null, created_at: T(1), updated_at: T(1), batch_key: null, network: "arc-testnet",
+    };
+    expect(settlementOf({ intent, entries: [], source: { type: "invoice", id: ID }, books: open, now: NOW }).circleId).toBe("circle-tx-9");
   });
 });
 

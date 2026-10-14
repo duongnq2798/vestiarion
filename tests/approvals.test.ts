@@ -1447,7 +1447,8 @@ describe("rejectInvoice", () => {
   it.each([
     ["confirmed", { status: "confirmed", provider_tx_id: "circle-tx-1", last_error: null }],
     ["pending", { status: "pending", provider_tx_id: "circle-tx-1", last_error: null }],
-    ["submitting", { status: "submitting", provider_tx_id: null, last_error: null }],
+    // Being sent now, inside its claim: a send left past it is looked for first (payment safety R4, R6).
+    ["submitting", { status: "submitting", provider_tx_id: null, last_error: null, updated_at: new Date().toISOString() }],
     ["unreadable at the provider", { status: "failed", provider_tx_id: "circle-tx-1", last_error: "provider unreachable" }],
     ["STUCK at Circle", { status: "pending", provider_tx_id: "circle-tx-1", last_error: null, provider_state: "STUCK" }],
     ["recorded failed while Circle's last word was STUCK", { status: "failed", provider_tx_id: "circle-tx-1", last_error: null, provider_state: "STUCK" }],
@@ -1623,7 +1624,8 @@ describe("a payment Circle never answered (payment safety R1)", () => {
 
   it("is known once Circle gave the attempt an id", () => {
     expect(transferUnknown(unanswered({ provider_tx_id: "circle-tx-1", provider_state: "FAILED" }))).toBe(false);
-    expect(transferUnknown(unanswered({ status: "submitting" }))).toBe(false);
+    // Being sent now, inside its claim: not unknown yet (a send left past it is, below).
+    expect(transferUnknown(unanswered({ status: "submitting", last_error: null, updated_at: new Date().toISOString() }))).toBe(false);
     expect(transferUnknown(null)).toBe(false);
   });
 
@@ -1721,6 +1723,122 @@ describe("a payment Circle never answered (payment safety R1)", () => {
     const [row] = await run(() => listWaitingPayables());
 
     expect(row).toMatchObject({ paymentSent: true, lastAttempt: { state: "unanswered" } });
+  });
+});
+
+/** A send left `submitting` past its claim: the function that sent it stopped before Circle's answer was recorded. */
+function leftSubmitting(overrides: Record<string, unknown> = {}) {
+  return intentRow({
+    status: "submitting",
+    provider_tx_id: null,
+    last_error: null,
+    provider_state: null,
+    failure_reason: null,
+    updated_at: new Date(Date.now() - 5 * 60_000).toISOString(),
+    ...overrides,
+  });
+}
+
+describe("a send left submitting past its claim (payment safety R4, payment exceptions E2)", () => {
+  it("is an unknown outcome, as the payment itself and its track read it", () => {
+    const intent = leftSubmitting();
+
+    expect(transferUnknown(intent)).toBe(true);
+    expect(paymentWasSent(intent)).toBe(true);
+    expect(transferExists(intent)).toBe(false);
+    expect(lastAttemptOf(intent)).toEqual({ state: "unanswered" });
+  });
+
+  it("is a payment being sent inside its claim, and keeps today's answer when it is read without its time", () => {
+    expect(transferUnknown(leftSubmitting({ updated_at: new Date(Date.now() - 60_000).toISOString() }))).toBe(false);
+    expect(lastAttemptOf(leftSubmitting({ updated_at: new Date(Date.now() - 60_000).toISOString() }))).toBeNull();
+    expect(transferUnknown({ ...leftSubmitting(), updated_at: undefined } as never)).toBe(false);
+  });
+
+  it("is looked for on Circle before Reject, never refused as sent without looking (R6)", async () => {
+    const findTransferByRef = lookingProvider(null);
+    const { fake, run } = approvalsFake({ intents: [leftSubmitting()] });
+
+    const attempt = run(() => rejectInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    await expect(attempt).rejects.toMatchObject({ code: "payment_unknown" });
+    expect(findTransferByRef).toHaveBeenCalledWith(ACCOUNT_ID, `Invoice ${INVOICE_ID}`, expect.anything(), expect.anything());
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(patchBodies(fake.requests, "/rest/v1/invoices")).toHaveLength(0);
+  });
+
+  it("is rejected once Circle has listed nothing 15 minutes after the send, recording that nothing was sent (R6)", async () => {
+    lookingProvider(null);
+    const { fake, run } = approvalsFake({ intents: [leftSubmitting({ updated_at: new Date(Date.now() - 20 * 60_000).toISOString() })] });
+
+    await run(() => rejectInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+
+    expect(patchBodies(fake.requests, "/rest/v1/payment_intents")[0]).toMatchObject({
+      status: "failed",
+      last_error: "Circle has no transfer for this payment's earlier send; nothing was sent.",
+    });
+    expect(patchBodies(fake.requests, "/rest/v1/invoices")[0].status).toBe("rejected");
+  });
+
+  it("is approved without the balance check, which the transfer may already have lowered, and never as a retry of a failure", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: execution(), note: "", operatingBalance: 0 });
+    const { run } = approvalsFake({ account: () => ({ body: accountRow("40") }), intents: [leftSubmitting()] });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).resolves.toMatchObject({ status: "paid" });
+    expect(payInvoiceMock.mock.calls[0][1]).toMatchObject({ retryTerminalFailure: false });
+  });
+
+  it("hands back what looking for it found, when Circle has not listed it yet and nothing new was sent (E4)", async () => {
+    const lookedFor = "Circle has not listed this payment's earlier send yet; it is looked for again from 10:30 UTC, and sent only if Circle has none.";
+    payInvoiceMock.mockResolvedValue({
+      status: "matched",
+      txRef: null,
+      execution: execution({ status: "pending", providerTxId: null, txHash: null, txRef: null, error: lookedFor }),
+      note: ` [${lookedFor}]`,
+      operatingBalance: 0,
+    });
+    const { run } = approvalsFake({ intents: [leftSubmitting()] });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).resolves.toMatchObject({ status: "matched", txRef: null, lookedFor });
+  });
+
+  it("hands back nothing of the kind when it was sent again after Circle showed none, and that answer was lost too", async () => {
+    payInvoiceMock.mockResolvedValue({
+      status: "matched",
+      txRef: null,
+      execution: execution({ status: "pending", providerTxId: null, txHash: null, txRef: null, error: "Circle did not answer createTransaction within 20000 ms; the transfer may or may not have been accepted" }),
+      note: "",
+      operatingBalance: 0,
+    });
+    const { run } = approvalsFake({ intents: [leftSubmitting({ updated_at: new Date(Date.now() - 20 * 60_000).toISOString() })] });
+
+    expect(await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).not.toHaveProperty("lookedFor");
+  });
+
+  it("hands back nothing of the kind for a payment whose earlier transfer was known", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "matched", txRef: null, execution: execution({ status: "pending", providerTxId: null, txHash: null, txRef: null, error: "x" }), note: "", operatingBalance: 0 });
+    const { run } = approvalsFake({ intents: [] });
+
+    const result = await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    expect(result).not.toHaveProperty("lookedFor");
+  });
+
+  it("is listed with its last attempt unanswered, so the card says it looks first", async () => {
+    const { run } = approvalsFake({ intents: [leftSubmitting()] });
+
+    const [row] = await run(() => listWaitingPayables());
+
+    expect(row).toMatchObject({ paymentSent: true, lastAttempt: { state: "unanswered" } });
+  });
+
+  it("reads each intent's time, so a send left past its claim is told apart", async () => {
+    const { fake, run } = approvalsFake({ intents: [leftSubmitting()] });
+
+    await run(() => listWaitingPayables());
+    await run(() => returnInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID })).catch(() => undefined);
+
+    const selects = fake.requests.filter((request) => request.path === "/rest/v1/payment_intents" && request.method === "GET").map((request) => request.params.get("select") ?? "");
+    expect(selects.length).toBeGreaterThanOrEqual(2);
+    for (const select of selects.filter((columns) => columns.includes("provider_state"))) expect(select).toContain("updated_at");
   });
 });
 

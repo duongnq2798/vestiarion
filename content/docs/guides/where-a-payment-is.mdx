@@ -44,6 +44,8 @@ When Circle took a transfer but could not be read the last time it was asked, th
 
 A payout through Circle Gateway that Gateway reported failed says "Gateway reported it failed". It is not counted as failed: its attestation may still be minted on the payee's chain, so nothing is sent again. Neither the agent nor the transfer watch looks at it again: "Nothing checks it on its own: check with Circle whether it was minted." **Approvals** shows it too, where a person decides the bill.
 
+Under the stages of a payment slow to confirm, of unknown outcome, failed, cancelled or not sent, a **What to do** block says who acts, what Vestiarion already did, the next step and where the trail is, with the transfer's Circle id. [When a payment does not settle](/docs/guides/payment-exceptions) is the runbook for each state.
+
 What keeps a payment from being paid twice:
 
 - A transfer Circle has taken is only ever read again, by the agent's cycle and by the transfer watch.
@@ -71,7 +73,7 @@ Under **Not matching the books** are the payments whose transfer and bill disagr
 
 <Screenshot
   src="/docs/guides/where-a-payment-is-in-flight.png"
-  alt="Payments in flight on Treasury: 3 in flight, 675.50 USDC, oldest sent 38 min ago, 1 past the 15 min wait, 1 payment not matching the books. Northwind Hosting, 120.00 USDC, pending, sent 38 min ago, Circle: STUCK, past the 15 min wait. Harbor Office Supply, 480.00 USDC, outcome unknown, checking with Circle, sent 12 min ago, with what Vestiarion does before anything else is sent. Lumen Design Co., 75.50 USDC, pending, sent 3 min ago, Circle: QUEUED. Under Not matching the books, Atlas Cloud, 42.00 USDC: confirmed, but the bill is not marked paid yet."
+  alt="Payments in flight on Treasury: 3 in flight, 675.50 USDC, oldest sent 38 min ago, 1 past the 15 min wait, 1 payment not matching the books, with a Docs link. Northwind Hosting, 120.00 USDC, pending, sent 38 min ago, Circle: STUCK, past the 15 min wait, then What to do: Circle shows it stuck: check it with Circle support. Do not pay it another way. Harbor Office Supply, 480.00 USDC, outcome unknown, checking with Circle, sent 12 min ago, with what Vestiarion does before anything else is sent, then What to do: Wait, and do not pay it another way: the agent's next cycle looks for it. Lumen Design Co., 75.50 USDC, pending, sent 3 min ago, Circle: QUEUED. Under Not matching the books, Atlas Cloud, 42.00 USDC: confirmed, but the bill is not marked paid yet: the agent's next cycle marks it."
   caption="Three payments on their way and one the books have not caught up with."
 />
 

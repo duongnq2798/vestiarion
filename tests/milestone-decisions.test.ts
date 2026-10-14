@@ -121,6 +121,12 @@ describe("what a held milestone waits for", () => {
     );
   });
 
+  it("says the same of a send left submitting past its claim, and a send inside it is a transfer to record (payment exceptions E2)", () => {
+    const left = { status: "submitting", provider_tx_id: null, last_error: null, provider_state: null, failure_reason: null, updated_at: new Date(Date.now() - 5 * 60_000).toISOString() };
+    expect(heldReason(facts({ intent: left }))).toMatchObject({ kind: "unknown", hint: "Transfer to look for", canClose: true });
+    expect(heldReason(facts({ intent: { ...left, updated_at: new Date().toISOString() } }))).toMatchObject({ kind: "in_flight", canClose: false });
+  });
+
   it("carries what would hold it with no transfer: no Pay now for a contractor screened high risk, and the agent's own hold to override", () => {
     const intent = { status: "failed", provider_tx_id: null, last_error: "Circle did not answer createTransaction within 20000 ms; the transfer may or may not have been accepted", provider_state: null, failure_reason: null };
     const risky = heldReason(facts({ intent, contractor: { riskLevel: "high" } }));

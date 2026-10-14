@@ -127,6 +127,24 @@ describe("paymentSendingToast", () => {
   });
 });
 
+describe("paymentSendingToast for a payment whose earlier transfer is checked first (payment exceptions E3)", () => {
+  it("says it is checking the transfer already sent, never sending", () => {
+    paymentSendingToast(paymentToastId("inv-2"), { amount: 4.5, currency: "USDC", payee: "Design Studio", decidedBy: "approval" }, "check");
+
+    const read = text(html(toastMock.loading.mock.calls[0][1].description));
+    expect(read).toContain("Checking the transfer already sent to Design Studio");
+    expect(read).not.toContain("Sending");
+  });
+
+  it("says it is looking for the earlier transfer on Circle first, for a send Circle never answered", () => {
+    paymentSendingToast(paymentToastId("inv-3"), { amount: 4.5, currency: "USDC", payee: "Design Studio", decidedBy: "approval" }, "look_first");
+
+    const read = text(html(toastMock.loading.mock.calls[0][1].description));
+    expect(read).toContain("Looking for the earlier transfer to Design Studio on Circle first");
+    expect(read).not.toContain("Sending");
+  });
+});
+
 describe("withPaymentReceipt", () => {
   type Result = { ok: boolean; message: string; receipt?: PaymentReceipt };
   const form = () => {

@@ -1,0 +1,92 @@
+Most payments go from the agent's decision to the payee's wallet in seconds. A few do not go through cleanly: Circle is slow to confirm a transfer, Circle never answers a send, Circle ends a transfer, or a payment stops before Circle takes it. This page is the runbook for each of them: when it applies, who acts, what Vestiarion has already done, what to do next, and where the trail is. It works the same in a workspace on Arc testnet and on Arc mainnet. To follow one payment stage by stage, see [Know where a payment is](/docs/guides/where-a-payment-is).
+
+Who can act: owners, admins and approvers can approve payments, so they are the people who decide what happens to a payment that did not go through. Accountants and viewers can read every step of it.
+
+## Where you meet these payments
+
+- **Where the payment is**, on a bill's card on **Bills & receivables**: under the stages, a **What to do** block says **Who acts**, what was **Already done**, the **Next** step and the **Trail**, with the transfer's **Circle id** when Circle gave it one. **Read the runbook** opens this page at the payment's state. A payment confirmed, or in flight inside the network's wait, has no block.
+- **Payments in flight**, on **Treasury**: each payment slow to confirm, or of unknown outcome, has a line starting **What to do:** with its next step. The **Docs** link beside the heading opens this page.
+- **Approvals**: the card of a payable whose last attempt did not go through says what happened and what **Approve and pay** does about it. A failed attempt adds "Fix what Circle names before approving, such as adding USDC to the operating wallet."
+- **Contractors**: a held milestone says what it waits for, and what **Pay now** does.
+- **Why a payment was paid**: the evidence page's payment step says "Outcome unknown", "Not sent", "Gateway reported it failed" or that the transfer failed, and where to act. See [Why a payment was paid](/docs/guides/evidence).
+- **Email**: the transfer watch's email about a payment that has not confirmed links the section of this page for it, under "What to do:".
+
+<Screenshot
+  src="/docs/guides/payment-exceptions-what-to-do.png"
+  alt="Where the payment is, opened on a payable's card, reads Pending, sent 38 min ago. Proposed, Authorized, Submitted and Pending are reached on Oct 11, 2026 at 10:02 UTC, and Pending says Circle shows it stuck: it was sent and can still be mined (Circle: STUCK, as of Oct 11, 2026, 10:20 UTC). Confirmed, In the payee's wallet and Reconciled say Not yet. Below them, a What to do block headed Slow to confirm: Who acts, owners, admins and approvers, as only Circle can move a transfer it holds; Already done, the transfer watch asks Circle once it is past the wait, records the answer in the audit log and tells owners, admins and approvers, nothing is sent again while it may still settle, and the agent's next cycle reads it again; Next, check it in Circle's console or contact Circle support with its Circle id, and do not pay it another way; Trail, where each record is, then the Circle id; and the link Read the runbook."
+  caption="A payment slow to confirm, with what to do about it."
+/>
+
+## Nothing is paid twice
+
+Every button that pays checks the earlier transfer first, and says so before it runs:
+
+- When a transfer was already sent and may still settle, or was confirmed, **Approve and pay** in Approvals and **Pay now** on Contractors only check it. The confirmation asks, for example, "Check the payment of 12.50 USDC to Jiren already sent?", its button reads **Check it**, and while it runs the notice says "Checking the transfer already sent to Jiren". Nothing new is sent.
+- When Circle never answered the send, they look for it on Circle first. The confirmation asks "Look for the earlier payment of 12.50 USDC to Jiren first?", its button reads **Look first**, and the notice says "Looking for the earlier transfer to Jiren on Circle first". When Circle has not listed it yet, the answer starts "Looked for the earlier transfer to Jiren on Circle first." and says when it is looked for again. Nothing new is sent until Circle shows none, 15 minutes after the send.
+- In Slack, **Approve and pay** asks the same before it runs: "Looks for the earlier transfer on Circle first: records it if Circle has it, and sends the payment only once Circle shows none.", or "Checks the transfer already sent with Circle and records it: nothing new is sent."
+- Only a person sends a new transfer, and only once Circle, asked right then, says the last one failed or was cancelled. The agent and the transfer watch never do.
+
+## Slow to confirm
+
+- **When:** Sent, and not confirmed by Circle after the network's wait: 15 minutes on Arc.
+- **Who acts:** Owners, admins and approvers. Only Circle can move a transfer it holds.
+- **Already done:** The transfer watch asks Circle about it once it is past the wait, records the answer in the audit log, and tells owners, admins and approvers by email, Slack, Telegram and webhooks. Nothing is sent again while it may still settle. Then, by where the bill is: for a payable the agent is paying, or a verified milestone, "The agent's next cycle reads it again."; for a payable waiting in Approvals, "Approve and pay in Approvals reads it again, and sends nothing new."; for a held milestone, "Pay now on Contractors reads it again, and sends nothing new."
+- **Next:** Wait for Circle, and do not pay it another way: a slow transfer can still settle, and the next read records it. If it stays unconfirmed, contact Circle support with its Circle id.
+- **When Circle says STUCK:** Circle shows it stuck: check it in Circle's console, or contact Circle support with its Circle id. Do not pay it another way: it can still be mined.
+- **Trail:** Circle's word for it on Where the payment is, the transfer watch's entry in the decision trail and the audit log, its Circle id, and its transaction on the explorer once it has one.
+
+## Outcome unknown
+
+- **When:** Circle did not answer when the payment was sent, so it may or may not have taken the transfer.
+- **Who acts:** Owners, admins and approvers. Who acts first depends on where the bill is:
+  - a payable the agent is paying, or a verified milestone: "The agent: each cycle checks with Circle before anything is sent again."
+  - a payable waiting in Approvals: "Owners, admins and approvers, in Approvals."
+  - a held milestone: "Owners, admins and approvers, on Contractors."
+- **Already done:** It is kept in flight, never counted as failed, and nothing is sent again until Circle answers. Past the network's wait, the transfer watch tells owners, admins and approvers that Circle never answered the send.
+- **Next:** Do not pay it another way: Vestiarion checks with Circle before anything is sent again. Then, by where the bill is:
+  - with the agent: Wait, and do not pay it another way. If the agent is paused, resume it: each cycle checks with Circle before anything is sent again.
+  - in Approvals: Press Approve and pay in Approvals: it checks with Circle for the earlier transfer first, records it if Circle has it, and never sends it twice. Reject and Return check first too. If it says to try again from a time, try again then.
+  - on Contractors: Press Pay now on Contractors: it checks with Circle for the earlier transfer first, records it if Circle has it, and never sends it twice. Close without paying checks first too. If it says to try again from a time, try again then.
+- **Trail:** The transfer watch's entry saying Circle never answered the send, in the decision trail and the audit log; once Circle lists it, its Circle id and its transaction.
+
+A send also counts as unanswered when Vestiarion started it and stopped before Circle's answer was recorded, more than two minutes ago. Approvals says "Circle did not answer when this payment was sent" of it, and Contractors "Circle did not answer when its transfer was sent", as for any send Circle never answered, and Reject, Return and Close look for it first.
+
+## Failed or cancelled
+
+- **When:** Circle ended the transfer: FAILED or DENIED, on chain or before it, or CANCELLED. The payee was not paid.
+- **Who acts:** Owners, admins and approvers. The agent never sends a failed payment again on its own.
+- **Already done:** Circle's state and reason are recorded, and the bill is held for a person.
+- **Next:** Read Circle's reason and fix its cause first. A person sends it again, as a new transfer, from Approvals, or with Pay now on Contractors for a milestone.
+  - in Approvals: Read Circle's reason on the card and fix its cause first, such as adding USDC to the operating wallet. Then Approve and pay in Approvals sends a new transfer, under a new attempt; or reject it, or return it to the agent.
+  - on Contractors: Read Circle's reason and fix its cause first, such as adding USDC to the operating wallet. Then Pay now on Contractors sends a new transfer, under a new attempt; or close it without paying.
+- **Trail:** Circle's state and reason on Where the payment is, and under Earlier attempts once it is sent again; each attempt's entry in the audit log; a transfer that failed on chain on the explorer, with the network fee it spent.
+
+A transfer that failed on chain still paid its network fee, so nothing here says no money moved. Once the bill is rejected, closed or paid, the block goes away: there is nothing left to do.
+
+## Not sent
+
+- **When:** It stopped before Circle took the transfer: Circle refused the request, a check stopped it, or Circle listed nothing 15 minutes after a send it never answered. The payee was not paid.
+- **Who acts:** Owners, admins and approvers.
+- **Already done:** The reason is recorded, and the bill is held for a person. There is no transfer to look for.
+- **Next:** Read the recorded reason and fix it first. A person sends it from Approvals, or with Pay now on Contractors for a milestone.
+  - in Approvals: Read the recorded reason and fix it first, such as a payee with no address. Then Approve and pay in Approvals sends it; or reject it, or return it to the agent.
+  - on Contractors: Read the recorded reason and fix it first, such as a contractor with no address. Then Pay now on Contractors sends it; or close it without paying.
+- **Trail:** The recorded reason on Where the payment is, and the decision's entry in the decision trail and the audit log.
+
+## Gateway reported it failed
+
+- **When:** A payout to another chain through Circle Gateway that Gateway reported failed. Its attestation may still be minted on the payee's chain.
+- **Who acts:** Owners, admins and approvers, in Approvals.
+- **Already done:** Gateway's word is recorded and nothing is sent again. Nothing checks it on its own.
+- **Next:** Check with Circle whether it was minted on the payee's chain. If it was, Approve and pay records it; if it was not, reject the invoice or return it to the agent.
+- **Trail:** Gateway's word on Where the payment is, its Circle id, and the decision's entry in the decision trail and the audit log.
+
+## Returned or reversed
+
+- **When:** Arc has no such state: a USDC transfer Circle confirmed is final, and cannot be charged back, reversed or returned by the network.
+- **Who acts:** Owners and admins.
+- **Already done:** Nothing: there is no state to watch.
+- **Next:** Agree any refund with the payee. Money they send back arrives as a new transfer into the operating wallet, a separate payment; the original payment stays paid.
+- **Trail:** The original payment keeps its track, receipt and transaction; the money sent back is its own transaction on the explorer.
+
+Where the payment is says the same under a confirmed payment: "A confirmed transfer cannot be charged back or reversed. A refund would be a new transfer back, a separate payment." **Return to agent** in Approvals is something else: it hands a bill that was never paid back to the agent's next cycle.

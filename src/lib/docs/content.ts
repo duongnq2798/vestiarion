@@ -61,6 +61,7 @@ export const PAGE_LOADERS: Record<string, () => Promise<MdxModule>> = {
   "guides/first-payment": () => import("../../../content/docs/guides/first-payment.mdx"),
   "guides/try-a-rule": () => import("../../../content/docs/guides/try-a-rule.mdx"),
   "guides/where-a-payment-is": () => import("../../../content/docs/guides/where-a-payment-is.mdx"),
+  "guides/payment-exceptions": () => import("../../../content/docs/guides/payment-exceptions.mdx"),
   "guides/import-bills": () => import("../../../content/docs/guides/import-bills.mdx"),
   "guides/pay-a-contractor": () => import("../../../content/docs/guides/pay-a-contractor.mdx"),
   "guides/get-paid": () => import("../../../content/docs/guides/get-paid.mdx"),

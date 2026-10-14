@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { HeldMilestoneActions, OWN_MILESTONE_NOTE, payNowDescription } from "@/components/HeldMilestoneActions";
+import { HeldMilestoneActions, OWN_MILESTONE_NOTE, payNowDescription, payNowLabel, payNowTitle } from "@/components/HeldMilestoneActions";
 import type { HeldReason } from "@/lib/agent/milestone-decisions";
 import { onlyApproverOfTwo } from "@/lib/two-approvals";
 
@@ -90,6 +90,22 @@ describe("the Pay now confirmation (payment safety R4)", () => {
     expect(payNowDescription("in_flight")).toBe("Nothing new is sent: Vestiarion checks the transfer already made with Circle, and the ledger records who approved it.");
     expect(payNowDescription("transfer_failed")).toBe("A new transfer starts as soon as you confirm, and the ledger records who approved it.");
     expect(payNowDescription("agent_held")).toBe("The transfer starts as soon as you confirm, and the ledger records who approved it.");
+  });
+});
+
+describe("the Pay now confirmation's title and button (payment exceptions E3)", () => {
+  it("asks to check a transfer already sent, or to look for an unanswered one first, never to pay now", () => {
+    expect(payNowTitle("in_flight", MILESTONE, false)).toBe("Check the payment of 0.30 USDC to Puka Hotel already sent?");
+    expect(payNowTitle("unknown", MILESTONE, false)).toBe("Look for the earlier payment of 0.30 USDC to Puka Hotel first?");
+    expect(payNowTitle("transfer_failed", MILESTONE, false)).toBe("Pay 0.30 USDC to Puka Hotel now?");
+    expect(payNowTitle("agent_held", MILESTONE, true)).toBe("Pay 0.30 USDC to Puka Hotel now? (simulated)");
+  });
+
+  it("names the button for what it does", () => {
+    expect(payNowLabel("in_flight")).toBe("Check it");
+    expect(payNowLabel("unknown")).toBe("Look first");
+    expect(payNowLabel("transfer_failed")).toBe("Pay now");
+    expect(payNowLabel("agent_held")).toBe("Pay now");
   });
 });
 
