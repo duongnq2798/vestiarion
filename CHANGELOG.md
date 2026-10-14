@@ -54,6 +54,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   and Asana's logo where their names were. Their Settings cards, connect pages and launch pages show Pipedrive's app
   icon beside its name and Asana's logo, as Xero, QuickBooks and HubSpot show theirs.
 
+### Fixed
+
+- **Pipedrive connects on a deployment where it is set up.** The Pipedrive card said "Pipedrive is not set up on this
+  deployment yet." even after its database update had run, so nobody could connect it. Its readiness check now takes
+  the workspace as every other check does (database update 0117).
+
 ## [0.1.0-beta.3] - 2026-10-13
 
 ### Added

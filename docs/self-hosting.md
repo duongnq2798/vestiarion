@@ -494,8 +494,8 @@ HTTP Basic auth derived from the master key; a notice only starts a sync, and a 
 so changes there come in with the 15-minute sync alone. Writing receipts back to the deals planned from Pipedrive is off
 until an owner or admin turns it on from the card; Vestiarion then adds nine "Vestiarion: …" custom deal fields once.
 Pipedrive's API says nothing that tells a developer sandbox from a real company, so payments on Arc testnet or in shadow
-mode are never written to Pipedrive. The connection needs migration 0116 (after 0105 and 0107); before it runs, the
-Pipedrive card says Pipedrive is not set up yet. See [Bring deals in from Pipedrive](https://www.vestiarion.xyz/docs/guides/pipedrive).
+mode are never written to Pipedrive. The connection needs migrations 0116 and 0117 (after 0105 and 0107); before they run,
+the Pipedrive card says Pipedrive is not set up yet. See [Bring deals in from Pipedrive](https://www.vestiarion.xyz/docs/guides/pipedrive).
 
 With `ASANA_CLIENT_ID` and `ASANA_CLIENT_SECRET` set, from an Asana OAuth app distributed to any workspace, an owner or
 admin connects a workspace to their Asana from Settings, after agreeing to what Vestiarion does with its data. A person
