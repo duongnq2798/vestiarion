@@ -132,6 +132,13 @@ async function fee(orgId: string, invoice: string, amount: number, daysBack = 0)
   );
 }
 
+/** A whole match as the cycle makes it (receipts R1): the transfer names the receivable, which it settles. */
+async function wholeMatch(orgId: string, invoice: string, amount: number, receivedDaysAgo: number): Promise<string> {
+  const paid = await transfer(orgId, amount, { receivedDaysAgo, invoiceId: invoice });
+  await db.query("update public.invoices set status = 'received', settled_at = now() where id = $1", [invoice]);
+  return paid;
+}
+
 async function reverse(orgId: string, allocationId: string): Promise<string> {
   const row = (await db.query<{ invoice_id: string; transfer_id: string | null; amount: string; currency: string }>("select * from public.receivable_allocations where id = $1", [allocationId])).rows[0];
   return one(
@@ -249,7 +256,7 @@ describe("record_commissions (0118): accruals", () => {
   it("accrues a whole match on the transfer, at its arrival", async () => {
     const w = await workspace("commission-whole");
     await planSince(w.orgId, w.pat, 5, { holdDays: 7 });
-    const paid = await transfer(w.orgId, 300, { receivedDaysAgo: 2, invoiceId: w.deposit });
+    const paid = await wholeMatch(w.orgId, w.deposit, 300, 2);
     const [line] = await record(w.orgId);
     expect(line).toMatchObject({ source: "whole_match", allocation_id: null, transfer_id: paid, base_amount: "300.000000", amount: "30.000000" });
     expect(Math.abs(line.applied_at.getTime() - (Date.now() - 2 * DAY))).toBeLessThan(60_000);
@@ -260,7 +267,7 @@ describe("record_commissions (0118): accruals", () => {
   it("covers the chosen deals only, receivables of a deal only, and money applied from the plan's start", async () => {
     const w = await workspace("commission-scope");
     await planSince(w.orgId, w.pat, 10, { deals: [w.deal] });
-    await apply(w.orgId, w.deposit, await transfer(w.orgId, 300), 300, 12); // before the plan
+    await apply(w.orgId, w.deposit, await transfer(w.orgId, 300, { receivedDaysAgo: 12 }), 300, 12); // before the plan
     await apply(w.orgId, w.balance, await transfer(w.orgId, 700), 700, 1);
     await apply(w.orgId, w.otherReceivable, await transfer(w.orgId, 500), 500, 1); // another deal
     await apply(w.orgId, w.loose, await transfer(w.orgId, 400), 400, 1); // no deal
@@ -285,7 +292,7 @@ describe("record_commissions (0118): accruals", () => {
     const b = await workspace("commission-iso-b");
     await planSince(b.orgId, b.pat, 5);
     await apply(b.orgId, b.deposit, await transfer(b.orgId, 300), 300, 1);
-    expect(await record(b.orgId, a.orgId)).toHaveLength(0);
+    await expect(record(b.orgId, a.orgId)).rejects.toThrow(/commission_other_workspace/);
     expect(await linesOf(b.orgId)).toHaveLength(0);
     expect(await record(b.orgId)).toHaveLength(1);
     expect(await asTenant(db, a.orgId, async (tx) => (await tx.query("select * from public.commission_lines")).rows)).toHaveLength(0);
@@ -343,12 +350,52 @@ describe("record_commissions (0118): adjustments", () => {
   it("adjusts a whole match the cycle released", async () => {
     const w = await workspace("commission-released");
     await planSince(w.orgId, w.pat, 5, { holdDays: 0 });
-    const paid = await transfer(w.orgId, 300, { receivedDaysAgo: 1, invoiceId: w.deposit });
+    const paid = await wholeMatch(w.orgId, w.deposit, 300, 1);
     const [accrual] = await record(w.orgId);
     await db.query("update public.incoming_transfers set invoice_id = null where id = $1", [paid]);
     const [adjustment] = await record(w.orgId);
     expect(adjustment).toMatchObject({ adjusts: accrual.id, amount: "-30.000000", reason: "whole_match_released", allocation_id: null });
+    // Matched again to the same invoice, the same money earns again, once: its next occurrence.
+    await db.query("update public.incoming_transfers set invoice_id = $2 where id = $1", [paid, w.deposit]);
+    const [again] = await record(w.orgId);
+    expect(again).toMatchObject({ kind: "accrual", source: "whole_match", transfer_id: paid, invoice_id: w.deposit, occurrence: 2, amount: "30.000000" });
+    expect(await record(w.orgId)).toHaveLength(0);
   });
+
+  it("records nothing on a transfer the cycle claimed but has not settled the receivable with yet", async () => {
+    const w = await workspace("commission-claimed");
+    await planSince(w.orgId, w.pat, 5, { holdDays: 0 });
+    // The cycle names the receivable on the transfer first, then settles it, and releases the claim if it cannot.
+    const paid = await transfer(w.orgId, 300, { receivedDaysAgo: 1, invoiceId: w.deposit });
+    expect(await record(w.orgId)).toHaveLength(0);
+    await db.query("update public.incoming_transfers set invoice_id = null where id = $1", [paid]);
+    expect(await record(w.orgId)).toHaveLength(0);
+    expect(await linesOf(w.orgId)).toHaveLength(0);
+  });
+
+  it("never lets money that arrived before the plan earn, however it is applied again", async () => {
+    const w = await workspace("commission-old-money");
+    await planSince(w.orgId, w.pat, 10, { holdDays: 0 });
+    // 300.00 arrived 20 days ago, before the plan; applied, reversed and applied again today.
+    const old = await transfer(w.orgId, 300, { receivedDaysAgo: 20 });
+    await reverse(w.orgId, await apply(w.orgId, w.deposit, old, 300, 20));
+    await apply(w.orgId, w.deposit, old, 300);
+    expect(await record(w.orgId)).toHaveLength(0);
+    // Money that arrived after the plan, applied today, earns.
+    await apply(w.orgId, w.balance, await transfer(w.orgId, 100, { receivedDaysAgo: 2 }), 100);
+    expect((await record(w.orgId)).map((line) => line.amount)).toEqual(["10.000000"]);
+  });
+
+  it("records 300 rows of a kind at most per call, so an answer stays under PostgREST's 1,000 rows; the next call records the rest", async () => {
+    const w = await workspace("commission-many");
+    const big = await dealWith(w.orgId, w.acme, [350_000]);
+    await planSince(w.orgId, w.pat, 10, { holdDays: 0 });
+    for (let index = 0; index < 350; index += 1) await apply(w.orgId, big.receivables[0], await transfer(w.orgId, 1000, { receivedDaysAgo: 2 }), 1000, 1);
+    expect(await record(w.orgId)).toHaveLength(300);
+    expect(await record(w.orgId)).toHaveLength(50);
+    expect(await record(w.orgId)).toHaveLength(0);
+    expect(await linesOf(w.orgId)).toHaveLength(350);
+  }, 60_000);
 });
 
 describe("create_commission_payout (0118)", () => {
@@ -381,7 +428,9 @@ describe("create_commission_payout (0118)", () => {
     await apply(w.orgId, w.deposit, await transfer(w.orgId, 300), 300, 2);
     const [line] = await record(w.orgId);
     const first = await payout(w.orgId, w.pat, [line.id]);
-    await expect(asTenant(db, w.orgId, (tx) => tx.query("update public.commission_lines set payout_id = null where id = $1", [line.id]))).rejects.toThrow(/commission_line_paid_out/);
+    // The tenant role writes no line; whoever can, the guard keeps a line in its live payout.
+    await expect(asTenant(db, w.orgId, (tx) => tx.query("update public.commission_lines set payout_id = null where id = $1", [line.id]))).rejects.toThrow(/permission denied/);
+    await expect(db.query("update public.commission_lines set payout_id = null where id = $1", [line.id])).rejects.toThrow(/commission_line_paid_out/);
     await expect(asTenant(db, w.orgId, (tx) => tx.query("update public.commission_lines set amount = 1 where id = $1", [line.id]))).rejects.toThrow(/permission denied/);
     await expect(db.query("update public.commission_lines set amount = 1 where id = $1", [line.id])).rejects.toThrow(/commission_line_fixed/);
     await db.query("update public.invoices set status = 'rejected' where id = $1", [first.invoiceId]);
@@ -400,16 +449,54 @@ describe("create_commission_payout (0118)", () => {
     expect((await linesOf(w.orgId))[0].payout_id).toBeNull();
   });
 
-  it("refuses a line not due yet, put in by hand", async () => {
+  it("refuses a line not due yet, or put into a payable already decided, whoever writes it", async () => {
     const w = await workspace("commission-not-due");
     await planSince(w.orgId, w.pat, 10, { holdDays: 30 });
     await apply(w.orgId, w.deposit, await transfer(w.orgId, 300), 300, 2);
     const [line] = await record(w.orgId);
+    const payable = await one(
+      "insert into public.invoices (org_id, direction, counterparty_id, amount, due_date) values ($1, 'payable', $2, 30, now()) returning id",
+      [w.orgId, w.pat]
+    );
     const payoutId = await one(
       "insert into public.commission_payouts (org_id, beneficiary_id, invoice_id, statement, currency, amount, line_count) values ($1, $2, $3, 'CS-ABCDEF12', 'USDC', 30, 1) returning id",
-      [w.orgId, w.pat, w.loose]
+      [w.orgId, w.pat, payable]
     );
-    await expect(asTenant(db, w.orgId, (tx) => tx.query("update public.commission_lines set payout_id = $1 where id = $2", [payoutId, line.id]))).rejects.toThrow(/commission_line_not_due/);
+    await expect(db.query("update public.commission_lines set payout_id = $1 where id = $2", [payoutId, line.id])).rejects.toThrow(/commission_line_not_due/);
+    await db.query("update public.invoices set status = 'held' where id = $1", [payable]);
+    await expect(db.query("update public.commission_lines set payout_id = $1 where id = $2", [payoutId, line.id])).rejects.toThrow(/commission_line_payout/);
+  });
+
+  it("keeps a paid commission when the customer, its deal or its invoice is deleted", async () => {
+    const w = await workspace("commission-kept");
+    await planSince(w.orgId, w.pat, 10, { holdDays: 0 });
+    await apply(w.orgId, w.deposit, await transfer(w.orgId, 300), 300, 2);
+    const [line] = await record(w.orgId);
+    const made = await payout(w.orgId, w.pat, [line.id]);
+    await db.query("delete from public.counterparties where id = $1", [w.acme]);
+    const [kept] = await linesOf(w.orgId);
+    expect(kept).toMatchObject({ id: line.id, invoice_id: null, deal_id: null, allocation_id: null, amount: "30.000000", payout_id: made.payoutId });
+    // Nothing to take back: a deleted invoice adjusts nothing.
+    expect(await record(w.orgId)).toHaveLength(0);
+  });
+});
+
+describe("the tenant role writes no commission directly (C1)", () => {
+  it("refuses a direct insert into every commission table: only the functions write them", async () => {
+    const w = await workspace("commission-direct");
+    const plan = await planSince(w.orgId, w.pat, 5);
+    const writes = [
+      ["insert into public.commission_plans (org_id, beneficiary_id, rate_bps, basis, scope, hold_days, started_at) values ($1, $2, 9000, 'net', 'all_deals', 0, now() - interval '400 days')", [w.orgId, w.acme]],
+      ["insert into public.commission_plan_deals (org_id, plan_id, deal_id) values ($1, $2, $3)", [w.orgId, plan, w.deal]],
+      [
+        "insert into public.commission_lines (org_id, kind, plan_id, beneficiary_id, source, basis, base_amount, rate_bps, amount, currency, applied_at, due_at) values ($1, 'accrual', $2, $3, 'payment', 'net', 1000000, 10000, 1000000, 'USDC', now(), now())",
+        [w.orgId, plan, w.pat],
+      ],
+      ["insert into public.commission_payouts (org_id, beneficiary_id, invoice_id, statement, currency, amount, line_count) values ($1, $2, $3, 'CS-ABCDEF12', 'USDC', 1, 1)", [w.orgId, w.pat, w.loose]],
+    ] as const;
+    for (const [sql, params] of writes) {
+      await expect(asTenant(db, w.orgId, (tx) => tx.query(sql, [...params]))).rejects.toThrow(/permission denied/);
+    }
   });
 });
 
@@ -434,7 +521,8 @@ describe("commission plans (0118)", () => {
     const plan = await setPlan(w.orgId, w.pat);
     await expect(asTenant(db, w.orgId, (tx) => tx.query("update public.commission_plans set rate_bps = 9000 where id = $1", [plan.id]))).rejects.toThrow(/permission denied/);
     await expect(db.query("update public.commission_plans set rate_bps = 9000 where id = $1", [plan.id])).rejects.toThrow(/commission_plan_fixed/);
-    await expect(asTenant(db, w.orgId, (tx) => tx.query("update public.commission_plans set ended_at = now() - interval '3 days' where id = $1", [plan.id]))).rejects.toThrow(/commission_plan_ended/);
+    await expect(asTenant(db, w.orgId, (tx) => tx.query("update public.commission_plans set ended_at = now() where id = $1", [plan.id]))).rejects.toThrow(/permission denied/);
+    await expect(db.query("update public.commission_plans set ended_at = now() - interval '3 days' where id = $1", [plan.id])).rejects.toThrow(/commission_plan_ended/);
     const ended = await asTenant(db, w.orgId, async (tx) => (await tx.query<{ ended_at: Date | null }>("select * from public.end_commission_plan($1, $2, null)", [w.orgId, plan.id])).rows[0]);
     expect(ended.ended_at).not.toBeNull();
     await expect(asTenant(db, w.orgId, (tx) => tx.query("select * from public.end_commission_plan($1, $2, null)", [w.orgId, plan.id]))).rejects.toThrow(/commission_plan_changed/);
@@ -526,7 +614,56 @@ describe("the partner never approves their own payout (C11)", () => {
     await expect(payout(w.orgId, w.pat, [], w.partner)).rejects.toThrow(/commission_beneficiary/);
     // Nor names themselves as the partner on a new plan.
     const self = await createUser(db, "commission-own-self@example.com");
-    await expect(setPlan(w.orgId, w.sam, { member: self, by: self })).rejects.toThrow(/commission_beneficiary/);
+    await member(w.orgId, self, "admin");
+    await expect(setPlan(w.orgId, w.sam, { member: self, by: self })).rejects.toThrow(/commission_beneficiary: /);
+    // Nor names someone who is not a member of the workspace.
+    const outsider = await createUser(db, "commission-outsider@example.com");
+    await expect(setPlan(w.orgId, w.sam, { member: outsider, by: w.owner })).rejects.toThrow(/commission_member_not_found/);
+  });
+
+  it("lets the owner who created it approve it when the partner is the only other approver, and no one else then", async () => {
+    // Owner and partner-approver only: the partner never may, so the owner, who created it, is its only approver.
+    const w = await heldPayout("commission-owner-alone");
+    await claim(w.orgId, w.owner, w.invoiceId);
+    expect((await invoiceOf(w.invoiceId)).status).toBe("processing");
+    // With another approver beside them, the owner who created it is refused, as for any bill they enter.
+    const v = await heldPayout("commission-owner-not-alone");
+    const admin = await createUser(db, "commission-owner-not-alone-admin@example.com");
+    await member(v.orgId, admin, "admin");
+    await expect(claim(v.orgId, v.owner, v.invoiceId)).rejects.toThrow(/self_approval/);
+    const alone = (orgId: string, invoiceId: string, userId: string) =>
+      asTenant(db, orgId, async (tx) => (await tx.query<{ s: boolean }>("select public.commission_sole_approver($1, $2, $3) as s", [orgId, invoiceId, userId])).rows[0].s);
+    expect(await alone(w.orgId, w.invoiceId, w.owner)).toBe(true);
+    expect(await alone(w.orgId, w.invoiceId, w.partner)).toBe(false);
+    expect(await alone(v.orgId, v.invoiceId, v.owner)).toBe(false);
+  });
+
+  it("never counts an approval the partner gave before a plan named them, and refuses one changed to them", async () => {
+    const w = await heldPayout("commission-old-approval");
+    const admin = await createUser(db, "commission-old-approval-admin@example.com");
+    const third = await createUser(db, "commission-old-approval-third@example.com");
+    await member(w.orgId, admin, "admin");
+    await member(w.orgId, third, "approver");
+    // An open approval by `third`, given while no plan named them; then the plan's next version names them.
+    await db.query(
+      "insert into public.payment_approvals (org_id, source_type, source_id, approved_by, amount, currency) values ($1, 'invoice', $2, $3, 30, 'USDC')",
+      [w.orgId, w.invoiceId, third]
+    );
+    const current = (await db.query<{ id: string }>("select id from public.commission_plans where beneficiary_id = $1 and ended_at is null", [w.pat])).rows[0].id;
+    await setPlan(w.orgId, w.pat, { member: third, holdDays: 0, replaces: current, by: w.owner });
+    // The owner created it, and the only other approval on file is a partner's: it is not another person's approval.
+    await expect(claim(w.orgId, w.owner, w.invoiceId)).rejects.toThrow(/self_approval/);
+    // An approval moved onto a partner is refused, as one inserted is.
+    const adminApproval = await one(
+      "insert into public.payment_approvals (org_id, source_type, source_id, approved_by, amount, currency) values ($1, 'invoice', $2, $3, 30, 'USDC') returning id",
+      [w.orgId, w.invoiceId, admin]
+    );
+    await expect(
+      asTenant(db, w.orgId, (tx) => tx.query("update public.payment_approvals set approved_by = $1 where id = $2", [w.partner, adminApproval]))
+    ).rejects.toThrow(/beneficiary_approval/);
+    // The admin's approval is another person's: the owner gives the second.
+    await claim(w.orgId, w.owner, w.invoiceId);
+    expect((await invoiceOf(w.invoiceId)).status).toBe("processing");
   });
 
   it("leaves the claim as it was for a payable that pays no commission", async () => {

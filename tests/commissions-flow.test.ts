@@ -141,14 +141,16 @@ describe("commissions on a real database, from plan to payable", () => {
     expect(payout.amount).toBe(40);
     await expect(create(w.owner)).rejects.toThrow(/commission_changed/);
 
-    // The agent holds it for a person (say, a first payment); Pat cannot approve it, the owner made it, so another
-    // approver must: the claim refuses both, in its own words.
+    // The agent holds it for a person (say, a first payment). Pat cannot approve it; the owner made it, but Pat is the
+    // only other person who may approve payments and never may, so the owner is its only approver and may.
     await pg.query("update public.invoices set status = 'held' where id = $1", [payout.invoiceId]);
     const claim = (by: string) =>
       asTenant(pg, w.orgId, (tx) => tx.query("select * from public.claim_invoice_decision($1, $2, $3, 'approve')", [w.orgId, payout.invoiceId, by]));
     await expect(claim(w.partnerMember)).rejects.toThrow(/beneficiary_approval/);
-    await expect(claim(w.owner)).rejects.toThrow(/self_approval/);
-    await pg.query("update public.invoices set status = 'pending' where id = $1", [payout.invoiceId]);
+    await claim(w.owner);
+    expect((await pg.query<{ status: string }>("select status from public.invoices where id = $1", [payout.invoiceId])).rows[0].status).toBe("processing");
+    // Given back to the agent, as Return to agent does, for the AP stage below.
+    await pg.query("update public.invoices set status = 'pending', reviewed_by = null, reviewed_at = null where id = $1", [payout.invoiceId]);
 
     // The first payment is then reversed (applied to the wrong invoice): the commission paid on it comes off the next one.
     await one(

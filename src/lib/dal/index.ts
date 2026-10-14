@@ -77,7 +77,7 @@ export const TENANT_RPCS = [
   // Whether migration 0116 has run (Pipedrive connector P2): it reads nothing.
   "pipedrive_connector_ready",
   // Commissions on money received (commissions C2, C5, C10, C11).
-  "set_commission_plan", "end_commission_plan", "record_commissions", "create_commission_payout", "commission_beneficiary_approval",
+  "set_commission_plan", "end_commission_plan", "record_commissions", "create_commission_payout", "commission_partner_members",
 ] as const;
 export type TenantRpc = (typeof TENANT_RPCS)[number];
 
