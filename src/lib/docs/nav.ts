@@ -101,6 +101,7 @@ export const DOCS_NAV: NavSection[] = [
     pages: [
       { slug: "get-started/quickstart", title: "Developer quickstart", description: "Create a workspace API key and make your first requests." },
       { slug: "get-started/sdk", title: "TypeScript SDK", description: "A typed client for the API and its webhooks: every page, safe retries and signature checks." },
+      { slug: "get-started/cli", title: "Command-line interface", description: "The vestiarion command: log in once, read records and the agent's decisions, add records after a confirmation, and verify exports and webhooks offline." },
       { slug: "get-started/authentication", title: "Authentication", description: "Workspace API keys: their format, scope, revocation and use." },
       { slug: "guides/api-invoices", title: "Add invoices from your own system", description: "Create a read-and-write API key, add a counterparty and an invoice through the API, confirm the address, and follow the agent's decision." },
       { slug: "guides/api-milestones", title: "Pay for merged pull requests", description: "Add a contractor, a payee link and a milestone through the API, and the agent pays once the pull request is merged. With a GitHub Actions workflow." },

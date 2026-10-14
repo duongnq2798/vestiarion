@@ -203,9 +203,10 @@ describe("the docs navigation", () => {
       ["guides/asana", "Accept contractor work from Asana"],
       ["guides/github", "Show payments on GitHub"],
     ]);
-    expect(pagesOf("Developers").slice(0, 3)).toEqual([
+    expect(pagesOf("Developers").slice(0, 4)).toEqual([
       ["get-started/quickstart", "Developer quickstart"],
       ["get-started/sdk", "TypeScript SDK"],
+      ["get-started/cli", "Command-line interface"],
       ["get-started/authentication", "Authentication"],
     ]);
   });

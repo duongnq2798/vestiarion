@@ -28,7 +28,7 @@ The product's version is its git tag, [SemVer 2.0.0](https://semver.org/spec/v2.
   alone; the tag is the source of truth.
 - Migrations are numbered files (`supabase/migrations/0106_…`), not versions. A release says which migrations it
   contains.
-- The TypeScript SDK has its own line; see [The SDK](#the-sdk).
+- The TypeScript SDK and the CLI each have their own line; see [The SDK](#the-sdk) and [The CLI](#the-cli).
 
 **Where it starts.** The first release is `v0.1.0-beta.1`: the product is live, with real users on Arc testnet and an
 Arc mainnet path that has settled real USDC, so it is past an alpha; it changes every day and its contracts are not
@@ -200,3 +200,27 @@ to be published).
 An SDK version may be tagged `sdk-vX.Y.Z` on the commit whose tarball was published, once it is on npm; for 0.3.2 that is
 `531cb1fb`, whose tarball matches npm's checksum. The release workflow refuses `sdk-v` tags: an SDK release is its npm
 publish, and a product release notes the SDK version it ships with.
+
+## The CLI
+
+[`@vestiarion/cli`](https://www.npmjs.com/package/@vestiarion/cli), the `vestiarion` command, lives in [`cli/`](../cli)
+and is versioned on its own, the same way as the SDK: `cli/package.json` and `VERSION` in `cli/src/version.ts`, which
+`tests/cli-package.test.ts` holds equal.
+
+1. Change `cli/`, raise both versions, and say what changed in `CHANGELOG.md`.
+2. Run `npm run cli:pack`. It builds `cli/dist` and packs it into `public/cli/vestiarion-cli-<version>.tgz`, and refuses
+   a version already packed. Commit the tarball in the same pull request; `tests/cli-package.test.ts` fails until the
+   committed tarball is what `cli/` builds.
+3. Once it is merged, an owner of the npm organization publishes that file, from the repository root on `main`:
+
+   ```bash
+   npm publish public/cli/vestiarion-cli-<version>.tgz --access public
+   ```
+
+   For the first version: `npm publish public/cli/vestiarion-cli-0.1.0.tgz --access public`. Check it with
+   `npm view @vestiarion/cli version`; the registry can take a few minutes to show a new version.
+
+The CLI depends on `@vestiarion/sdk` by a range (`^0.3.2` for 0.1.0), so the SDK version it needs must be on npm before
+the CLI is published. The root `devDependencies` name the same range, and `tests/cli-package.test.ts` holds the two
+equal. A CLI version may be tagged `cli-vX.Y.Z` on the commit whose tarball was published; the release workflow
+refuses such tags, as it refuses `sdk-v` ones.

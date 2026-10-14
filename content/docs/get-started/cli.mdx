@@ -1,0 +1,178 @@
+The `vestiarion` command is this API from a terminal. With it you can:
+
+- read a workspace's status, bills, invoices, counterparties, milestones and treasury;
+- read the agent's decisions, with its reasoning;
+- add records, after it shows what it will send and asks;
+- check an audit export and a webhook delivery's signature, offline.
+
+It is built on the [TypeScript SDK](/docs/get-started/sdk) and needs Node 20 or later.
+
+## Install
+
+```bash
+npm install --global @vestiarion/cli
+vestiarion --help
+```
+
+Or run it without installing:
+
+```bash
+npx @vestiarion/cli --help
+```
+
+The package is [@vestiarion/cli on npm](https://www.npmjs.com/package/@vestiarion/cli). This site serves the same package, byte for byte:
+
+```bash
+npm install --global https://www.vestiarion.xyz/cli/vestiarion-cli-0.1.0.tgz
+```
+
+## Log in
+
+Create a [workspace API key](/docs/get-started/authentication) first: an owner or an admin does it on the workspace's Settings page, under **API keys**. Then:
+
+```bash
+vestiarion login
+vestiarion whoami
+```
+
+`login` asks for the key without showing it. It checks the key with one read, `GET /api/v1/status`, and saves it only if the API accepts it. To pipe the key in instead, add `--stdin`. It never takes the key as an argument, so the key stays out of your shell history.
+
+`whoami` answers with:
+
+- the workspace's name;
+- its network, from the chain of its operating account: `ARC-TESTNET` is Arc testnet, `ARC` is Arc mainnet;
+- whether payments are `live`, `simulate` or `unavailable`, and when the agent last ran;
+- the key's prefix, and where the key came from.
+
+The API does not say whether a key may also add records. Settings lists each key as **Read only** or **Read and write**, and a write with a read-only key answers `403`.
+
+### Where the key comes from
+
+Each command takes the first key it finds:
+
+1. `--api-key`, for one command. A flag stays in your shell history, so prefer the next two.
+2. The `VESTIARION_API_KEY` environment variable.
+3. A profile saved by `vestiarion login`: the one `--profile` names, else `VESTIARION_PROFILE`, else `default`.
+
+The API is `https://www.vestiarion.xyz` unless `--base-url` or `VESTIARION_BASE_URL` names another, such as your own deployment. A profile keeps the base URL its key was checked against: only that key is sent there, and that key is sent nowhere else. With a `--base-url` or `VESTIARION_BASE_URL` that names another API, a saved key is refused (exit `3`); log in to that API under another profile. Plain `http` is refused, except to localhost.
+
+### Where profiles are saved
+
+| System | File |
+| --- | --- |
+| Windows | `%APPDATA%\vestiarion\config.json` |
+| macOS and Linux | `$XDG_CONFIG_HOME/vestiarion/config.json`, or `~/.config/vestiarion/config.json` |
+
+The file is readable by you alone. On macOS and Linux it has mode `0600`. On Windows, `%APPDATA%` is inside your user profile, whose permissions let only you, administrators and the system read it. `vestiarion logout` removes a profile from it; the key itself keeps working until an owner or an admin [revokes it](/docs/get-started/authentication#revoking-a-key).
+
+The CLI never prints a key. It names one by its prefix, `vxk_<prefix>_…`, as Settings lists it.
+
+## Commands
+
+Each command calls one or two [API operations](/docs/api), and nothing the API does not have.
+
+| Command | Operation |
+| --- | --- |
+| `vestiarion whoami` | [Get workspace status](/docs/api/get-status) and [Get the treasury](/docs/api/get-treasury) |
+| `vestiarion status` | [Get workspace status](/docs/api/get-status) |
+| `vestiarion bills list`, `vestiarion bills show` | [List invoices](/docs/api/list-invoices), payables only |
+| `vestiarion bills add` | [Add an invoice](/docs/api/create-invoice), as a payable |
+| `vestiarion invoices list`, `vestiarion invoices show` | [List invoices](/docs/api/list-invoices), receivables only |
+| `vestiarion invoices create` | [Add an invoice](/docs/api/create-invoice), as a receivable |
+| `vestiarion counterparties list` | [List counterparties](/docs/api/list-counterparties) |
+| `vestiarion counterparties show` | [Get a counterparty](/docs/api/get-counterparty) |
+| `vestiarion counterparties add` | [Add a counterparty](/docs/api/create-counterparty) |
+| `vestiarion milestones list`, `vestiarion milestones show` | [List milestones](/docs/api/list-milestones) |
+| `vestiarion milestones add` | [Add a milestone](/docs/api/create-milestone) |
+| `vestiarion payee-links create` | [Create a payee link](/docs/api/create-payee-link) |
+| `vestiarion decisions list`, `vestiarion decisions show` | [List ledger entries](/docs/api/list-ledger-entries) the agent wrote |
+| `vestiarion ledger list` | [List ledger entries](/docs/api/list-ledger-entries) |
+| `vestiarion ledger check` | [Verify the ledger](/docs/api/verify-ledger) |
+| `vestiarion treasury` | [Get the treasury](/docs/api/get-treasury) |
+| `vestiarion insights` | [Get insights](/docs/api/get-insights) |
+| `vestiarion ledger verify` | None: an audit export, checked offline |
+| `vestiarion webhooks verify` | None: a delivery, checked offline |
+
+Every command has `--help`, with its options and an example:
+
+```bash
+vestiarion bills list --status held
+vestiarion bills show 9440f32c-000d-4a63-97f1-4eb6bf78439f
+vestiarion decisions list --domain ap --all
+vestiarion counterparties list --role vendor --json
+```
+
+- **One page at a time.** A list answers one page, as the API pages it. `--limit` sets its size, up to 200. `--cursor` continues from the cursor a page printed, and `--all` reads every page.
+- **The agent's decisions.** `decisions list` reads the entries the agent signed into the ledger, oldest first, with the reasoning each one records. Store the last page's cursor to read only what is new next time.
+- **Showing one record.** The API has no single-record endpoint for invoices, milestones or ledger entries. So `bills show`, `invoices show`, `milestones show` and `decisions show` read the list page by page until they find the record. They stop looking after 10,000 records: the most recent ones, or for `decisions show` the agent's first 10,000 entries. `list --all --json` reads further.
+- **What it does not do.** The API does not list webhook endpoints: an owner or an admin manages them in Settings. And no key approves, rejects or pays, so neither does the CLI.
+
+## Add records
+
+A key with [write access](/docs/get-started/authentication#scopes) adds bills, invoices, counterparties, milestones and payee links:
+
+```bash
+vestiarion counterparties add --name "Quill Studio" --role vendor --address 0x5b2d8c1f0e7a4936b8d1c0e2f3a4b5c6d7e8f901 --payment-limit 500
+vestiarion bills add --counterparty dc5e5751-3287-46c9-8bd1-83a42ab02699 --amount 420.00 --due 2026-10-31 --po PO-4012 --goods-received --idempotency-key billing-inv-42
+vestiarion milestones add --contractor 26d6ffed-356d-474a-8d42-89bc942f6b4e --title "CSV export for EURC" --amount 150.00 --verification-source https://github.com/acme/app/pull/42
+vestiarion payee-links create --counterparty 26d6ffed-356d-474a-8d42-89bc942f6b4e
+```
+
+Before it sends a write, the CLI prints the method, the URL, the key's prefix and the body, says what follows, and asks `Send it? [y/N]`:
+
+- `--yes` sends without asking.
+- Without a terminal to ask in, and without `--yes`, it sends nothing and exits with `2`.
+
+<Callout kind="important" title="An added bill is decided by the agent">
+The agent decides a bill added from the CLI as it decides one typed into the console, with every guardrail. Within its limits it may pay it, on the workspace's network. That is the agent's decision under the workspace's rules; the CLI itself never approves or pays.
+</Callout>
+
+- **An address waits.** An address added this way, or entered by a payee through a link, waits for a person in the workspace to confirm it. Until then the agent pays nothing to it.
+- **A milestone starts pending.** GitHub verifies it once its pull request is merged, or a person does; then the agent decides.
+- **Reruns are safe with your own id.** `--idempotency-key` is sent as the `Idempotency-Key`, so running the same command again cannot add the record twice. Without it, each run sends a new key.
+- **A payee link takes no key.** Its link is printed once: the API keeps only its hash.
+
+## Output and exit codes
+
+Text is for reading. `--json` prints the API's answer as it came: `data`, and `page` for a list, ready for `jq`. `whoami --json` prints the workspace, its network, the key's prefix and source, and the base URL. An error goes to stderr, as JSON with `--json`.
+
+| Exit code | Meaning |
+| --- | --- |
+| `0` | Done. |
+| `1` | A usage error: an unknown command or option, or a missing argument or value. |
+| `2` | The API answered with an error, a check did not pass, or a write was not confirmed. |
+| `3` | No key, a key not shaped like one, or a key the API refused with `401` or `403`. |
+
+The API's own error message is printed as it is, with its status and [code](/docs/get-started/errors). A command that failed never prints a result.
+
+## Offline checks
+
+Neither needs a key or a network.
+
+`vestiarion ledger verify` checks an [audit export](/docs/guides/audit-export):
+
+```bash
+vestiarion ledger verify vestiarion-your-workspace-ledger-392.json --public-key workspace-key.pem
+```
+
+- It checks every entry with the SDK's `verifyLedgerEntry`: its body hash, its Ed25519 signature and its chain hash. Then it checks the links from the first entry and the head.
+- It gives the same answer as [verify-ledger-export.mjs](/tools/verify-ledger-export.mjs), word for word: **VALID**, **BROKEN** at an entry, or **NOT CHECKED**.
+- It exits `0` for **VALID**, and `2` for the other two.
+- Without `--public-key`, the file vouches for itself. Compare the key id and head hash it prints with the workspace's Audit log page. After a key rotation, pass every key: repeat `--public-key`.
+
+`vestiarion webhooks verify` checks a delivery's `Vestiarion-Signature` header, as [Verifying signatures](/docs/webhooks/verify) describes:
+
+```bash
+export VESTIARION_WEBHOOK_SECRET="..."
+vestiarion webhooks verify --signature "t=1760000000,v1=5f2b..." --body delivery.json
+```
+
+- The secret is the endpoint's signing secret, from `--secret` or `VESTIARION_WEBHOOK_SECRET`.
+- Pass the body byte for byte as it arrived, from a file, or from stdin with `--body -`.
+- A signature more than 300 seconds from now is refused. To check a delivery saved earlier, pass a larger `--tolerance`, in seconds.
+
+## What it sends
+
+- **The key** goes in `Authorization: Bearer`, never in a URL.
+- **Every request** carries `User-Agent: vestiarion-cli/` and the CLI's version, then the SDK's own.
+- **Nothing else.** It sends no telemetry and checks for no updates.
