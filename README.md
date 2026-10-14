@@ -290,6 +290,7 @@ run in production, with its ledger entries and transactions.
 | **[Telegram](https://www.vestiarion.xyz/docs/guides/telegram)** | Each member's own chat: decisions with reasons, `/today`, `/waiting`, `/ledger`, invoices read from a PDF. The bot never approves or pays |
 | **[REST API](https://www.vestiarion.xyz/docs/api)** | `/api/v1` with per-member keys: read everything, and with write access add counterparties, invoices, milestones and payee links. A key never approves or pays |
 | **[TypeScript SDK](https://www.vestiarion.xyz/docs/get-started/sdk)** | [`@vestiarion/sdk`](https://www.npmjs.com/package/@vestiarion/sdk): a typed client for every `/api/v1` operation, plus webhook and ledger verification |
+| **[CLI](https://www.vestiarion.xyz/docs/get-started/cli)** | [`@vestiarion/cli`](https://www.npmjs.com/package/@vestiarion/cli): the `vestiarion` command for every `/api/v1` operation, asking before each write, plus offline checks of audit exports and webhook signatures |
 | **[MCP server](https://www.vestiarion.xyz/docs/ai-integration/mcp)** | `/api/mcp`, whose tools are the `/api/v1` operations, for AI agents |
 | **[Webhooks](https://www.vestiarion.xyz/docs/webhooks)** | Up to 5 HTTPS endpoints per workspace receive every ledger entry, signed, with retries |
 | **[GitHub](https://www.vestiarion.xyz/docs/guides/github)** | Milestone verification from merged pull requests, bounties, and payment comments |
@@ -298,12 +299,21 @@ run in production, with its ledger entries and transactions.
 | **[Xero](https://www.vestiarion.xyz/docs/guides/xero)** | Bills approved in Xero come in for review every 15 minutes, through the same check as a bill list, and become payables when a person adds them; once paid on Arc, each payment is drafted as a booking against its bill, which an owner or admin reviews field by field and approves before anything is written to Xero. A payment on Arc testnet or in shadow mode is booked only into a Xero demo company. [Watch it](https://www.vestiarion.xyz/docs/guides/xero#watch-it) (1:52) |
 | **[QuickBooks Online](https://www.vestiarion.xyz/docs/guides/quickbooks)** | Open bills in QuickBooks come in for review every 15 minutes, and sooner when QuickBooks says one changed, through the same check; a bill partly paid there comes in at what is left; read-only, with the bank account payments will be booked to chosen ahead |
 
-There is no standalone CLI; operators run the repository's scripts (`npm run cycle`, `npm run status`, …), listed in
-[docs/self-hosting.md](docs/self-hosting.md#scripts).
+```bash
+npm install @vestiarion/sdk            # the typed client
+npm install --global @vestiarion/cli   # the vestiarion command
+```
+
+The `vestiarion` command works with a workspace from a terminal, with a key from Settings → API keys:
 
 ```bash
-npm install @vestiarion/sdk
+vestiarion login                                            # asks for the key, checks it, saves it for your user
+vestiarion bills list --status held                         # what the agent held; bills show <id> says why
+vestiarion ledger verify vestiarion-acme-ledger-1042.json   # an audit export, checked offline
 ```
+
+Operators of a deployment of their own also run the repository's scripts (`npm run cycle`, `npm run status`, …), listed
+in [docs/self-hosting.md](docs/self-hosting.md#scripts).
 
 ## Primitives for Arc builders
 
@@ -390,8 +400,8 @@ What each one is for, the wallets around them, and the USDC of the chains payees
 | --- | --- |
 | **Start** | [See your first decision](https://www.vestiarion.xyz/docs/guides/try-it) · [How payments are controlled](https://www.vestiarion.xyz/docs/guides/controls) · [Go live](https://www.vestiarion.xyz/docs/guides/go-live) · [Your first payment](https://www.vestiarion.xyz/docs/guides/first-payment) · [Shadow mode](https://www.vestiarion.xyz/docs/guides/shadow-mode) |
 | **Guides** | [Payment plan](https://www.vestiarion.xyz/docs/guides/payment-plan) · [Where a payment is](https://www.vestiarion.xyz/docs/guides/where-a-payment-is) · [Workspace report](https://www.vestiarion.xyz/docs/guides/report) · [Try a limit first](https://www.vestiarion.xyz/docs/guides/try-a-rule) · [Pay a contractor](https://www.vestiarion.xyz/docs/guides/pay-a-contractor) · [Get paid](https://www.vestiarion.xyz/docs/guides/get-paid) · [Why a payment was paid](https://www.vestiarion.xyz/docs/guides/evidence) · [Cash scenarios](https://www.vestiarion.xyz/docs/guides/cash-scenarios) · [Deals](https://www.vestiarion.xyz/docs/guides/deals) · [Projects](https://www.vestiarion.xyz/docs/guides/projects) · [Audit export](https://www.vestiarion.xyz/docs/guides/audit-export) |
-| **Developers** | [Quickstart](https://www.vestiarion.xyz/docs/get-started/quickstart) · [API reference](https://www.vestiarion.xyz/docs/api) · [SDK](https://www.vestiarion.xyz/docs/get-started/sdk) · [Webhooks](https://www.vestiarion.xyz/docs/webhooks) · [MCP](https://www.vestiarion.xyz/docs/ai-integration/mcp) · [Changelog](https://www.vestiarion.xyz/docs/changelog) |
-| **This repository** | [ARCHITECTURE.md](ARCHITECTURE.md) · [Running it yourself](docs/self-hosting.md) · [Feature designs](docs/superpowers/specs) · [Contracts](contracts) · [SDK source](sdk) · [Changelog](CHANGELOG.md) · [Releasing](docs/RELEASING.md) |
+| **Developers** | [Quickstart](https://www.vestiarion.xyz/docs/get-started/quickstart) · [API reference](https://www.vestiarion.xyz/docs/api) · [SDK](https://www.vestiarion.xyz/docs/get-started/sdk) · [CLI](https://www.vestiarion.xyz/docs/get-started/cli) · [Webhooks](https://www.vestiarion.xyz/docs/webhooks) · [MCP](https://www.vestiarion.xyz/docs/ai-integration/mcp) · [Changelog](https://www.vestiarion.xyz/docs/changelog) |
+| **This repository** | [ARCHITECTURE.md](ARCHITECTURE.md) · [Running it yourself](docs/self-hosting.md) · [Feature designs](docs/superpowers/specs) · [Contracts](contracts) · [SDK source](sdk) · [CLI source](cli) · [Changelog](CHANGELOG.md) · [Releasing](docs/RELEASING.md) |
 
 ## Development
 

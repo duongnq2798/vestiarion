@@ -1,0 +1,14 @@
+{
+  "name": "@vestiarion/cli",
+  "version": "0.1.0",
+  "description": "The Vestiarion API from a terminal: a workspace's status, bills, invoices, counterparties, milestones and the agent's decisions, plus offline checks of audit exports and webhook signatures.",
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "bin": { "vestiarion": "dist/bin.js" },
+  "files": ["dist", "README.md", "LICENSE"],
+  "dependencies": { "@vestiarion/sdk": "^0.3.2" },
+  "homepage": "https://www.vestiarion.xyz/docs/get-started/cli",
+  "repository": { "type": "git", "url": "git+https://github.com/duongnq2798/vestiarion.git", "directory": "cli" },
+  "keywords": ["vestiarion", "cli", "stablecoin", "treasury", "arc", "usdc", "accounts-payable"]
+}

@@ -35,6 +35,8 @@ It answers with one of three results:
 - **BROKEN** (exit code 1): it names the first entry that fails and why: its content was changed, its signature does not verify, an entry is missing or out of order, or an entry is malformed, such as a missing field or a hash that is not hex.
 - **NOT CHECKED** (exit code 2): it could not check the file at all. The file is not an export, an entry names a key the file does not hold, or an entry was signed by a key you did not pass with `--public-key`.
 
+The [command-line interface](/docs/get-started/cli) gives the same answer with `vestiarion ledger verify`, which takes the same file and `--public-key`. It exits 0 for **VALID**, and 2 for **BROKEN** or **NOT CHECKED**.
+
 ## 4. Compare the key id and the head
 
 A file can only show that it agrees with itself. Someone who rewrote the entries could re-sign them with a key of their own and put that key in the file. So, before relying on a **VALID** result, compare the key id and head hash the verifier prints with the workspace's **Audit log** page. The key id is shown beside **Ledger signing public key**, and the head hash has a copy button. The page says: "Compare this key id and the head hash with the ones a verified export prints."

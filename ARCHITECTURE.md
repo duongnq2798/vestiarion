@@ -2352,7 +2352,31 @@ npm publish public/sdk/vestiarion-sdk-<version>.tgz --access public
 Both installs then get the same bytes. The next version's `sdk/README.md` should name `npm install @vestiarion/sdk`
 first; 0.1.0's README, inside its immutable tarball, names the site's URL.
 
-The SDK's version is its own. The product's version is a git tag, `vX.Y.Z` or `vX.Y.Z-beta.N`, published as a GitHub
+The CLI lives in `cli/` (`@vestiarion/cli`, whose `bin` is `vestiarion`). It is ESM for Node 20 or later, parses its
+arguments with `node:util` `parseArgs`, and depends on `@vestiarion/sdk` and nothing else. The root `devDependencies`
+name the same SDK range as `cli/package.json`, so the CLI is type-checked, linted and tested against the SDK as npm
+serves it, not against `sdk/src`. It is held to the code in four ways:
+
+- Each command names the operations it calls in its help (`cli/src/commands/`). `tests/cli.test.ts` holds every one to
+  an operation of the OpenAPI document, and runs each command against the recorded answers in
+  `content/docs/examples/`: its text, its `--json`, its exit code and the request it sends.
+- The same test checks the key's precedence (`--api-key`, `VESTIARION_API_KEY`, then a profile), the config file's
+  place and mode, the confirmation before a write and its refusal without a terminal, and that no output and no URL
+  ever holds a key.
+- `vestiarion ledger verify` checks an audit export with the SDK's `verifyLedgerEntry` (`cli/src/ledger-export.ts`).
+  `tests/cli-ledger-verify.test.ts` runs it and `public/tools/verify-ledger-export.mjs` on the same exports, and
+  requires the same words and verdict.
+- `npm run cli:pack` builds it into `public/cli/vestiarion-cli-<version>.tgz`, committed and never repacked, as the
+  SDK's is. `tests/cli-package.test.ts` holds that tarball to a fresh build, runs its `bin` unpacked beside the SDK's
+  tarball, and runs `npx` against it.
+
+An owner of the `@vestiarion` npm organization publishes the CLI from that file, as the SDK:
+
+```text
+npm publish public/cli/vestiarion-cli-<version>.tgz --access public
+```
+
+The SDK's and the CLI's versions are their own. The product's version is a git tag, `vX.Y.Z` or `vX.Y.Z-beta.N`, published as a GitHub
 Release by `.github/workflows/release.yml`, which a maintainer starts by hand once the tag is pushed; `CHANGELOG.md`
 says what each release changed for the people using it. A tag deploys nothing: Vercel deploys `main`. How to release,
 sign a tag and fix a wrong release is in `docs/RELEASING.md`.
