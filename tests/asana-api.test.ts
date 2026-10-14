@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ProviderError } from "@/lib/connectors/provider";
 import { freshAccessToken, type StoredTokens, type TokenStore } from "@/lib/connectors/tokens";
-import { asanaReader } from "@/lib/asana/api";
+import { WEBHOOK_FILTERS, asanaReader } from "@/lib/asana/api";
 import { authorizeUrl, exchangeCode, grantUser, refreshTokens, revokeToken } from "@/lib/asana/oauth";
 import { asanaProvider } from "@/lib/asana/provider";
 import { AsanaAccessError, asanaSession } from "@/lib/asana/session";
@@ -178,7 +178,17 @@ describe("the reads", () => {
     const { sent, fetchImpl } = http(() => json({ data: { gid: "8800001", resource: { gid: "1219477646404728" }, active: true } }, 201, { "x-hook-secret": "secret-from-asana" }));
     const reader = asanaReader({ fetchImpl });
     expect(await reader.createWebhook("t", { resource: "1219477646404728", target: "https://www.vestiarion.xyz/api/integrations/asana/webhook/abc" })).toEqual({ gid: "8800001", secret: "secret-from-asana" });
-    expect(JSON.parse(String(sent[0].init.body))).toEqual({ data: { resource: "1219477646404728", target: "https://www.vestiarion.xyz/api/integrations/asana/webhook/abc" } });
+    // Filtered to the task, its stories and its attachments: each kind has a read scope the connection asks for, and
+    // Asana refuses a webhook that would deliver a kind without one (time tracking entries, unfiltered).
+    expect(JSON.parse(String(sent[0].init.body))).toEqual({
+      data: {
+        resource: "1219477646404728",
+        target: "https://www.vestiarion.xyz/api/integrations/asana/webhook/abc",
+        filters: [{ resource_type: "task" }, { resource_type: "story" }, { resource_type: "attachment" }],
+      },
+    });
+    const readScopes = { task: "tasks:read", story: "stories:read", attachment: "attachments:read" } as const;
+    for (const filter of WEBHOOK_FILTERS) expect(ASANA_SCOPES).toContain(readScopes[filter.resource_type]);
     await expect(reader.createWebhook("t", { resource: "1219477646404728", target: "http://localhost:3000/x" })).rejects.toBeInstanceOf(ProviderError);
   });
 
