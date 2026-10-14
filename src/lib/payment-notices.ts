@@ -207,7 +207,7 @@ export async function changeCounterpartyNoticeEmail(input: {
   counterpartyId: string;
   email: string | null;
   /** The CRM the email came from, confirmed by a person (HubSpot connector H13): the entry says so. */
-  source?: { provider: "hubspot"; ids: { hubId: string; companyId: string } };
+  source?: { provider: "hubspot"; ids: { hubId: string; companyId: string } } | { provider: "pipedrive"; ids: { companyId: string; organizationId: string } };
   onlyIfEmpty?: boolean;
 }): Promise<{ name: string; email: string | null; role: string }> {
   const orgId = currentOrgId();

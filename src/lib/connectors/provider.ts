@@ -5,11 +5,11 @@
  * either. Pure types and one error class: no I/O.
  */
 
-export const PROVIDERS = ["xero", "quickbooks", "hubspot", "asana"] as const;
+export const PROVIDERS = ["xero", "quickbooks", "hubspot", "pipedrive", "asana"] as const;
 export type ProviderId = (typeof PROVIDERS)[number];
 
 /** A provider's name in copy. */
-export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quickbooks: "QuickBooks", hubspot: "HubSpot", asana: "Asana" };
+export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quickbooks: "QuickBooks", hubspot: "HubSpot", pipedrive: "Pipedrive", asana: "Asana" };
 
 /**
  * What a provider brings in (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H1): an accounting tool its
@@ -17,7 +17,7 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quick
  * (docs/superpowers/specs/2026-10-14-asana-acceptance-design.md A1). The core's words follow it.
  */
 export type ProviderKind = "accounting" | "crm" | "work";
-export const PROVIDER_KINDS: Record<ProviderId, ProviderKind> = { xero: "accounting", quickbooks: "accounting", hubspot: "crm", asana: "work" };
+export const PROVIDER_KINDS: Record<ProviderId, ProviderKind> = { xero: "accounting", quickbooks: "accounting", hubspot: "crm", pipedrive: "crm", asana: "work" };
 
 /** The kind of a provider named by its id or its label; accounting for a name neither is. */
 export function providerKind(provider: string): ProviderKind {
@@ -42,6 +42,11 @@ export interface ProviderWords {
   bills: string;
   /** What a bill being in the tool does not mean, under the review list. */
   approval: string;
+  /**
+   * A CRM's word for the business a deal is sold to (HubSpot's company, Pipedrive's organization), for its lists:
+   * "No organization in Pipedrive" (docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md P1). Absent: company.
+   */
+  customer?: string;
 }
 
 export const PROVIDER_WORDS: Record<ProviderId, ProviderWords> = {
@@ -73,6 +78,19 @@ export const PROVIDER_WORDS: Record<ProviderId, ProviderWords> = {
     idleDays: 0,
     bills: "won deals",
     approval: "A deal won in HubSpot becomes a deal in Vestiarion only when you plan it.",
+    customer: "company",
+  },
+  // Pipedrive (docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md P1): a company is the account, an
+  // organization the business a deal is sold to. Its refresh token lapses after 60 days unused, and every sync uses it.
+  pipedrive: {
+    possessive: "Pipedrive's",
+    organisation: "company",
+    contacts: "organizations",
+    accounts: "no accounts",
+    idleDays: 0,
+    bills: "won deals",
+    approval: "A deal won in Pipedrive becomes a deal in Vestiarion only when you plan it.",
+    customer: "organization",
   },
   // A work tool (Asana acceptance A1): a person's Asana, its tasks linked to milestones; no chart, and a refresh token
   // that lasts while the app stays authorized, so no idle days.
@@ -341,5 +359,8 @@ export type ConnectingProvider = Pick<
   "id" | "label" | "scopes" | "authorizeUrl" | "exchangeCode" | "organisations" | "refresh" | "revoke" | "exclusive" | "callbackOrganisationParam"
 >;
 
+/** The CRMs among the providers: those that bring deals in (HubSpot connector H1, Pipedrive connector P1). */
+export type CrmProviderId = "hubspot" | "pipedrive";
+
 /** The accounting tools among the providers: those that bring bills in (HubSpot connector H1; Asana acceptance A1). */
-export type AccountingProviderId = Exclude<ProviderId, "hubspot" | "asana">;
+export type AccountingProviderId = Exclude<ProviderId, CrmProviderId | "asana">;

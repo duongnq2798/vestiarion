@@ -87,7 +87,7 @@ export default function TermsPage() {
           </li>
           <li>who you invite to your workspace, and the role you give them;</li>
           <li>the accounting tool you connect, such as a Xero organisation or a QuickBooks company: connect only one you may give a workspace access to;</li>
-          <li>the CRM you connect, such as a HubSpot account: connect only one you may give a workspace access to;</li>
+          <li>the CRM you connect, such as a HubSpot account or a Pipedrive company: connect only one you may give a workspace access to;</li>
           <li>
             the work tool you connect, such as your Asana, and the acceptance criteria you write: a person in your workspace, never Asana, accepts a
             contractor&apos;s work against them;
@@ -128,6 +128,21 @@ export default function TermsPage() {
           it to anyone else without the workspace&apos;s say. A deal won in HubSpot becomes a deal in Vestiarion only when a person plans it, and a
           change made in HubSpot afterwards changes nothing in Vestiarion until a person does. One HubSpot account connects to one workspace at a
           time. Disconnecting stops the reading at once; the deals already planned stay with the workspace.
+        </p>
+        <p>
+          When an owner or admin connects Pipedrive to a workspace, they agree, for the workspace, that Vestiarion reads the deals of the Pipedrive
+          company they connect, with their organizations and persons: titles, values, close dates, pipeline stages, organization names and each
+          person&apos;s email, as far as the Pipedrive user who connects can see them. Pipedrive tells Vestiarion when a deal changes, and Vestiarion
+          then reads it again from Pipedrive. It writes to Pipedrive only once an owner or admin allows it: then, on each Pipedrive deal planned in
+          Vestiarion, what was collected from payments confirmed on Arc, what is still owed, the last receipt, the reconciliation status and a link to
+          the deal in Vestiarion, in deal fields Vestiarion creates, never Pipedrive&apos;s own fields. Pipedrive does not say which of its companies
+          are developer sandboxes, so only payments made on Arc mainnet outside shadow mode are written to Pipedrive. A field someone changed in Pipedrive
+          is not written over until a person in Vestiarion chooses to. They are shown to the workspace&apos;s members and to its agent; the
+          agent&apos;s model provider may see a deal&apos;s facts to decide on its collections, and may not train on them. Vestiarion never uses
+          Pipedrive data to train or improve any AI model, and never passes it to anyone else without the workspace&apos;s say. A deal won in
+          Pipedrive becomes a deal in Vestiarion only when a person plans it, and a change made in Pipedrive afterwards changes nothing in Vestiarion
+          until a person does. One Pipedrive company connects to one workspace at a time. Disconnecting uninstalls Vestiarion from the Pipedrive
+          company and stops the reading at once; the deals already planned stay with the workspace.
         </p>
         <p>
           When an owner or admin connects Asana to a workspace, they agree, for the workspace, that Vestiarion reads Asana as them: the workspaces,

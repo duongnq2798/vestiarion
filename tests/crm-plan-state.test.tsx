@@ -53,11 +53,14 @@ describe("PlannedFromCrm", () => {
     expect(renderToStaticMarkup(<PlanFromCrmForm rowId="row-1">form</PlanFromCrmForm>)).toBe("<div>form</div>");
   });
 
-  it("is what Receivables shows for ?hubspot= naming a deal planned already, and the form remembers being sent", () => {
+  it("is what Receivables shows for ?hubspot= or ?pipedrive= naming a deal planned already, and the form remembers being sent", () => {
     const page = readFileSync(path.join(process.cwd(), "src/app/o/[slug]/invoices/page.tsx"), "utf8");
-    expect(page).toContain("const crmPlan = fromHubSpot.state === \"list\" ? crmPlanState(view.hubspot, fromHubSpot.won) : null;");
-    expect(page).toContain('crmPlan?.kind === "form" && canWrite && Array.isArray(deals)');
-    expect(page).toContain("<PlannedFromCrm rowId={crmPlan.rowId}");
-    expect(page).toContain("<PlanFromCrmForm rowId={planFromHubSpot.rowId}>");
+    // Each CRM's own address (HubSpot connector H11, Pipedrive connector P9).
+    expect(page).toContain('["hubspot", fromHubSpot, view.hubspot]');
+    expect(page).toContain('["pipedrive", fromPipedrive, view.pipedrive ?? null]');
+    expect(page).toContain('const plan = from.state === "list" ? crmPlanState(asked, from.won) : null;');
+    expect(page).toContain('plan?.kind === "form" && canWrite && Array.isArray(deals)');
+    expect(page).toContain("<PlannedFromCrm rowId={plan.rowId}");
+    expect(page).toContain("<PlanFromCrmForm rowId={prefill.rowId}>");
   });
 });

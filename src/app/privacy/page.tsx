@@ -323,6 +323,24 @@ export default function PrivacyPage() {
             ids, names, amounts and masked emails.
           </li>
           <li>
+            <strong>Pipedrive</strong>, for a workspace an owner or admin connects to a Pipedrive company after agreeing to it, is read from, and
+            written to only once an owner or admin allows it: then each Pipedrive deal planned in Vestiarion receives, in deal fields Vestiarion
+            creates, what was collected on it from payments confirmed on Arc, what is still owed, the last receipt&apos;s day, amount and transaction
+            link, the reconciliation status and a link to the deal in Vestiarion, and nothing else. Pipedrive does not say which of its companies are
+            developer sandboxes, so only payments made on Arc mainnet outside shadow mode are written to it. Vestiarion reads that company&apos;s open deals and the deals won from 90 days before it was connected, then the deals
+            that change (each one&apos;s title, value, currency, status, pipeline and stage, its won, lost or expected close date and its lost
+            reason), each deal&apos;s organization (its name) and person (their primary email), and the company&apos;s id and name; it sees only the
+            deals the Pipedrive user who connected can see. Pipedrive tells Vestiarion when a deal changes; Vestiarion does not read what the
+            notice says, and reads the deals from Pipedrive itself. It keeps the deals read, the organizations&apos; names, the persons&apos;
+            emails, the company&apos;s id and name, the access granted and the agreement given, and Pipedrive&apos;s tokens encrypted, readable
+            only by the server and never shown in the browser, a log, a model&apos;s prompt or a webhook. A person&apos;s email becomes a
+            customer&apos;s billing email only when someone in the workspace confirms it. The deals are shown to the workspace&apos;s members and its
+            agent; the agent&apos;s model provider may see a deal&apos;s facts to decide on its collections, and may not train on them. Vestiarion
+            never uses Pipedrive data to train or improve any AI model, and never passes it to anyone else without the workspace&apos;s say. One
+            Pipedrive company connects to one workspace at a time. Disconnecting uninstalls Vestiarion from the Pipedrive company and deletes the
+            tokens; the deals already read stay with the workspace, and the signed ledger keeps only ids, names, amounts and masked emails.
+          </li>
+          <li>
             <strong>Asana</strong>, for a workspace an owner or admin connects to their Asana after agreeing to it, is read from, as that person, and
             written to only to make and delete the webhooks on the tasks linked to milestones. Vestiarion reads the workspaces, projects and tasks a
             member opens to link a task, and for each linked task its name, whether and when it was completed and by whom (their name), its assignee

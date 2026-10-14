@@ -125,6 +125,19 @@ describe("the core's tables take Asana", () => {
     expect(await connection(await createOrg(db, "asana-wider"), "pipedrive", "77")).toBeTruthy();
   });
 
+  it("keeps Pipedrive's 0116 in every check it widened when 0115 runs again after it, and 0116 keeps asana", async () => {
+    await applyMigrations(db, (file) => file.startsWith("0116_"));
+    await applyMigrations(db, (file) => file.startsWith("0115_"));
+    const checks = await db.query<{ conname: string; def: string }>(
+      `select conname, pg_get_constraintdef(oid) as def from pg_constraint
+        where conname in ('accounting_connections_provider_check', 'accounting_tokens_provider_check', 'external_links_provider_check')`
+    );
+    expect(checks.rows.map((row) => row.conname).sort()).toEqual(["accounting_connections_provider_check", "accounting_tokens_provider_check", "external_links_provider_check"]);
+    for (const row of checks.rows) {
+      for (const provider of ["xero", "quickbooks", "hubspot", "pipedrive", "asana"]) expect(row.def, `${row.conname} ${provider}`).toContain(`'${provider}'`);
+    }
+  });
+
   it("lets a milestone be verified by an Asana acceptance, and keeps the other methods", async () => {
     const orgId = await createOrg(db, "asana-method");
     const id = await milestone(orgId);

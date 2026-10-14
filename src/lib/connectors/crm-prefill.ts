@@ -12,6 +12,8 @@ import { dayWords, moneyWords, type CrmChange } from "./crm";
 /** What of a deal the form is filled from. */
 export interface PrefillDeal {
   externalId: string;
+  /** The reference the deal carries, where it is not the CRM's id itself (`pipedrive-<id>`, Pipedrive connector P1). */
+  reference?: string;
   name: string;
   amount: string | null;
   currency: string | null;
@@ -125,7 +127,7 @@ export function dealPrefill(input: {
     total: total ?? "",
     currency,
     startsOn: deal.closeOn ?? input.today,
-    externalRef: deal.externalId,
+    externalRef: deal.reference ?? deal.externalId,
     notes,
   };
 }

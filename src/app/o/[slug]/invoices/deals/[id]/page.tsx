@@ -44,7 +44,7 @@ export const metadata: Metadata = { title: "Deal" };
 
 type DealPageProps = {
   params: Promise<{ slug: string; id: string }>;
-  /** `from=hubspot`: Change deal opens filled in from HubSpot's changes (HubSpot connector H12). */
+  /** `from=hubspot` or `from=pipedrive`: Change deal opens filled in from the CRM's changes (HubSpot connector H12, Pipedrive connector P10). */
   searchParams: Promise<{ from?: string | string[] }>;
 };
 
@@ -84,10 +84,10 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
     const { facts, digits } = deal;
     // What HubSpot changed since the deal was planned from it (HubSpot connector H12). Best effort: the page stands without it.
     const crm: CrmChangesRead | null = await crmChangesFor({ id: facts.id, status: facts.status, currency: facts.currency }).catch((error: unknown) => {
-      console.error("deal: changes from HubSpot not read", error instanceof Error ? error.message : error);
+      console.error("deal: changes from the CRM not read", error instanceof Error ? error.message : error);
       return null;
     });
-    const changeFromCrm = crm !== null && from === "hubspot" && facts.status === "active";
+    const changeFromCrm = crm !== null && from === crm.provider && facts.status === "active";
     // The deal's costs, each with what it became (deal cash readiness K2). Best effort: before migration 0108, or when
     // they cannot be read, the page stands without them and the margin says there is not enough data.
     const costs: DealCost[] | null = await readDealCosts([deal], db(), facts.id)
@@ -114,7 +114,11 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
           ])
         : [[], []];
     // What was written back to the CRM it was planned from, and when (CRM receipts R8). Best effort, as the changes.
-    const receipt: CrmReceiptView | null = await crmReceiptFor(facts.id, (connection) => crmProvider(connection.provider)?.receipts?.writeScopes ?? null).catch((error: unknown) => {
+    const receipt: CrmReceiptView | null = await crmReceiptFor(
+      facts.id,
+      (connection) => crmProvider(connection.provider)?.receipts?.writeScopes ?? null,
+      (connection) => crmProvider(connection.provider)?.receipts?.testAccounts
+    ).catch((error: unknown) => {
       console.error("deal: receipts in the CRM not read", error instanceof Error ? error.message : error);
       return null;
     });
@@ -144,7 +148,18 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
         <DealFigures deal={deal} today={today} collected={collected} />
 
         <div className="space-y-8">
-          {crm && <CrmDealChanges orgSlug={slug} dealId={facts.id} label={crm.label} words={crm.words} seen={crm.seen} canWrite={canWrite} active={facts.status === "active"} />}
+          {crm && (
+            <CrmDealChanges
+              orgSlug={slug}
+              dealId={facts.id}
+              label={crm.label}
+              words={crm.words}
+              seen={crm.seen}
+              canWrite={canWrite}
+              active={facts.status === "active"}
+              from={crm.provider === "pipedrive" ? "pipedrive" : "hubspot"}
+            />
+          )}
           {receipt && <CrmReceiptCard orgSlug={slug} dealId={facts.id} view={receipt} canManage={canManage} />}
           <DealCashReadiness
             facts={facts}

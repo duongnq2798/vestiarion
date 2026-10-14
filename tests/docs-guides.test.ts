@@ -39,6 +39,7 @@ type GuideSlug =
   | "guides/xero"
   | "guides/quickbooks"
   | "guides/hubspot"
+  | "guides/pipedrive"
   | "guides/asana"
   | "guides/audit-export"
   | "guides/evidence"
@@ -159,7 +160,8 @@ const CRM_RECEIPTS = "src/lib/connectors/crm-receipts.ts";
 const DEAL_COLLECTION = "src/lib/deals/collection.ts";
 const CRM_RECEIPTS_VIEW = "src/lib/connectors/crm-receipts-view.ts";
 const CRM_RECEIPTS_RUN = "src/lib/connectors/crm-receipts-run.ts";
-const HUBSPOT_DEALS = "src/components/HubSpotDeals.tsx";
+// A CRM's won deals on Bills & receivables, HubSpot's and Pipedrive's alike (Pipedrive connector P20).
+const HUBSPOT_DEALS = "src/components/CrmDeals.tsx";
 const HUBSPOT_CONNECT_PAGE = "src/app/integrations/hubspot/connect/page.tsx";
 // Asana's card, a milestone's Asana card, and the connect page (Asana acceptance A16).
 const ASANA_PANEL = "src/components/AsanaPanel.tsx";
@@ -170,6 +172,12 @@ const ASANA_COMMANDS = "src/lib/commands/asana.ts";
 const ASANA_READS = "src/lib/asana/reads.ts";
 const CRM_WORDS = "src/lib/connectors/crm.ts";
 const CRM_CHANGES = "src/components/CrmDealChanges.tsx";
+// Pipedrive's card and connect page are its own; its list is the CRM list HubSpot's uses, in Pipedrive's words (Pipedrive connector P20).
+const PIPEDRIVE_PANEL = "src/components/PipedrivePanel.tsx";
+const PIPEDRIVE_CONNECT_PAGE = "src/app/integrations/pipedrive/connect/page.tsx";
+const PIPEDRIVE_ACTIONS = "src/app/actions/pipedrive.ts";
+const PIPEDRIVE_RECEIPTS = "src/lib/pipedrive/receipts.ts";
+const PIPEDRIVE_DEALS = "src/components/CrmDeals.tsx";
 // Booking payments made on Arc in the tool (accounting write-back).
 const BOOKINGS = "src/components/AccountingBookings.tsx";
 const BOOKING_RUN = "src/lib/connectors/booking-run.ts";
@@ -1699,10 +1707,10 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["This HubSpot account is connected to another Vestiarion workspace.", HUBSPOT_PANEL],
     ["accounting_connected", ACCOUNTING_CONNECTIONS],
     ["Sync now", HUBSPOT_PANEL],
-    ["From HubSpot: 4 won deals", HUBSPOT_DEALS, "`From HubSpot: ${won.length} won deals`"],
+    ["From HubSpot: 4 won deals", HUBSPOT_DEALS, "`From ${label}: ${won.length} won deals`"],
     ["Plan collections", HUBSPOT_DEALS],
     ["No amount in HubSpot", CRM_WORDS, "`No amount in ${label}`"],
-    ["No company in HubSpot", CRM_WORDS, "`No company in ${label}`"],
+    ["No company in HubSpot", CRM_WORDS, "`No ${providerWords(label).customer ?? \"company\"} in ${label}`"],
     ["Open the deal", HUBSPOT_DEALS],
     ["Not won yet", HUBSPOT_DEALS],
     ["HubSpot says 12,500 USD: planned as 12,500.00 USDC, one for one.", "src/lib/connectors/crm-prefill.ts", "says ${theirs}: planned as"],
@@ -1713,7 +1721,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["crm_deal_changed", "src/lib/connectors/crm-store.ts"],
     ["Keep the deal as it is", CRM_CHANGES],
     ["crm_deal_change_kept", "src/lib/connectors/crm-store.ts"],
-    ["Billing emails from HubSpot", HUBSPOT_DEALS],
+    ["Billing emails from HubSpot", HUBSPOT_DEALS, "`Billing emails from ${label}`"],
     ["Use this email", HUBSPOT_DEALS],
     ["counterparty_notice_email_changed", "src/lib/payment-notices.ts"],
     ["HubSpot needs you to reconnect", ACCOUNTING_STATUS, "needs you to reconnect"],
@@ -1756,6 +1764,110 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
       CRM_RECEIPTS,
       "Not written: payments on Arc testnet and in shadow mode are written only to a ${label} developer test account or sandbox, never to a real ${label} account.",
     ],
+  ],
+  "guides/pipedrive": [
+    // Connecting (Pipedrive connector P4, P13, P14).
+    ["Connect Pipedrive", PIPEDRIVE_PANEL],
+    ["An owner or admin connects Pipedrive.", PIPEDRIVE_PANEL],
+    ["One Pipedrive company connects to one Vestiarion workspace at a time", PIPEDRIVE_CONNECT_PAGE],
+    ["I agree", ACCOUNTING_CONSENT],
+    ["titles, values, close dates, pipeline stages, organization names and each person's email", ACCOUNTING_CONSENT],
+    ["It sees the deals the Pipedrive user who connects can see.", ACCOUNTING_CONSENT],
+    ["Pipedrive tells Vestiarion when a deal changes, and Vestiarion then reads it again from Pipedrive. What a notice says is never used as it is.", ACCOUNTING_CONSENT],
+    ["what was collected from payments confirmed on Arc, what is still owed, the last receipt, the reconciliation status and a link to the deal in Vestiarion, in Vestiarion deal fields it creates", ACCOUNTING_CONSENT],
+    ["never writes payments on Arc testnet or in shadow mode to Pipedrive", ACCOUNTING_CONSENT],
+    ["may not train on them", ACCOUNTING_CONSENT],
+    ["Vestiarion never uses Pipedrive data to train or improve any AI model", ACCOUNTING_CONSENT],
+    ["Disconnecting uninstalls Vestiarion from your Pipedrive company and stops the reading at once.", ACCOUNTING_CONSENT],
+    ["Continue to Pipedrive", PIPEDRIVE_CONNECT_PAGE],
+    ["Pipedrive is connected. Its won deals are coming in on Bills & receivables, under Deals.", PIPEDRIVE_PANEL],
+    ["accounting_connected", ACCOUNTING_CONNECTIONS],
+    ["Last synced 5 minutes ago.", ACCOUNTING_STATUS, "`Last synced ${"],
+    ["2 won deals to plan", PIPEDRIVE_PANEL, "`${view.toPlan} won deals to plan`"],
+    ["1 planned deal changed in Pipedrive since.", PIPEDRIVE_PANEL],
+    ["Vestiarion sees the deals the Pipedrive user who connected can see. Connect as a Pipedrive admin to bring every deal in.", PIPEDRIVE_PANEL],
+    ["Sync now", PIPEDRIVE_PANEL],
+    ["Connecting Pipedrive was cancelled. Nothing changed.", PIPEDRIVE_PANEL],
+    ["This workspace is connected to another Pipedrive company. Disconnect it first, then connect the one you want.", PIPEDRIVE_PANEL],
+    ["This Pipedrive company is connected to another Vestiarion workspace. Disconnect it there first: one company connects to one workspace.", PIPEDRIVE_PANEL],
+    ["Only an owner or admin connects Pipedrive, from their own browser.", PIPEDRIVE_PANEL],
+    ["Pipedrive did not finish connecting. Try again in a moment.", PIPEDRIVE_PANEL],
+    ["Pipedrive is not set up on this deployment yet.", PIPEDRIVE_PANEL],
+    [
+      "Pipedrive installed Vestiarion without the permissions it reads deals and organizations with, so nothing was kept and the app was removed again. The deployment's Pipedrive app needs its scopes set in Pipedrive's Developer Hub.",
+      PIPEDRIVE_PANEL,
+    ],
+    // Won deals to plan (P9), the list HubSpot's uses.
+    ["From Pipedrive: 3 won deals", PIPEDRIVE_DEALS, "`From ${label}: ${won.length} won deals`"],
+    ["Plan collections", PIPEDRIVE_DEALS],
+    ["No amount in Pipedrive", CRM_WORDS, "`No amount in ${label}`"],
+    ["No organization in Pipedrive", CRM_WORDS, "`No ${providerWords(label).customer ?? \"company\"} in ${label}`"],
+    ["No organization in Pipedrive", ACCOUNTING_WORDS, 'customer: "organization"'],
+    ["Open the deal", PIPEDRIVE_DEALS],
+    ["Not won yet: 2 deals in Pipedrive", PIPEDRIVE_DEALS, "`Not won yet: ${open.length} deals in ${label}`"],
+    ["Pipedrive says 12,500 USD: planned as 12,500.00 USDC, one for one.", "src/lib/connectors/crm-prefill.ts", "says ${theirs}: planned as"],
+    ["pipedrive-482", CRM_WORDS, "`pipedrive-${externalId}`"],
+    ["Confirm deal", "src/components/deals/DealForm.tsx"],
+    ["Billing emails from Pipedrive", PIPEDRIVE_DEALS, "`Billing emails from ${label}`"],
+    ["Use this email", PIPEDRIVE_DEALS],
+    ["counterparty_notice_email_changed", "src/lib/payment-notices.ts"],
+    // The planned deal's page.
+    ["Cash readiness", DEAL_CASH],
+    ["No cash gap", DEAL_CASH],
+    // Changes from Pipedrive (P10).
+    ["Changed in Pipedrive", CRM_CHANGES, "Changed in ${label}"],
+    ["Amount: 12,000 USD to 15,000 USD.", CRM_WORDS, "`Amount: ${from} to ${to}.`"],
+    ["Marked lost in Pipedrive", CRM_WORDS, "`Marked lost in ${label}"],
+    ["Deleted in Pipedrive. Nothing is cancelled: cancel the deal if it is off.", CRM_WORDS, "`Deleted in ${label}. ${NOTHING_CANCELLED}`"],
+    ["Nothing is cancelled: cancel the deal if it is off.", CRM_WORDS],
+    ["crm_deal_changed", "src/lib/connectors/crm-store.ts"],
+    ["Keep the deal as it is", CRM_CHANGES],
+    ["crm_deal_change_kept", "src/lib/connectors/crm-store.ts"],
+    // Receipts back in Pipedrive, and the reality rule (P11, P12).
+    ["Receipts in Pipedrive", PIPEDRIVE_PANEL],
+    ["Receipts in Pipedrive", CRM_RECEIPT_CARD, "Receipts in {view.label}"],
+    ["Write receipts to Pipedrive", PIPEDRIVE_PANEL],
+    ["Stop writing to Pipedrive", PIPEDRIVE_PANEL],
+    [
+      "This workspace pays on Arc testnet, and Pipedrive does not say which of its companies are developer sandboxes: Vestiarion never writes these receipts to Pipedrive. Reading deals and planning collections work as usual.",
+      CRM_RECEIPTS_VIEW,
+      "and ${label} does not say which of its companies are developer sandboxes: Vestiarion never writes these receipts to ${label}. Reading deals and planning collections work as usual.",
+    ],
+    ["This workspace is in shadow mode", CRM_RECEIPTS_VIEW],
+    [
+      "Not written: Pipedrive does not say which of its companies are developer sandboxes, so payments on Arc testnet and in shadow mode are never written to Pipedrive.",
+      PIPEDRIVE_RECEIPTS,
+    ],
+    ["Vestiarion: Collected", PIPEDRIVE_RECEIPTS, "`Vestiarion: ${property.label}`"],
+    ["Vestiarion: Collected", CRM_RECEIPTS, 'label: "Collected"'],
+    ["Vestiarion: Still owed", CRM_RECEIPTS, 'label: "Still owed"'],
+    ["Vestiarion: Collection currency", CRM_RECEIPTS, 'label: "Collection currency"'],
+    ["Vestiarion: Collection status", CRM_RECEIPTS, 'label: "Collection status"'],
+    ["Vestiarion: Last receipt date", CRM_RECEIPTS, 'label: "Last receipt date"'],
+    ["Vestiarion: Last receipt amount", CRM_RECEIPTS, 'label: "Last receipt amount"'],
+    ["Vestiarion: Last receipt", CRM_RECEIPTS, 'label: "Last receipt"'],
+    ["Vestiarion: Reconciliation status", CRM_RECEIPTS, 'label: "Reconciliation status"'],
+    ["Vestiarion: Evidence", CRM_RECEIPTS, 'label: "Evidence"'],
+    ["Paid in full, Paid to date, Partly paid, Overdue, Awaiting payment or Nothing invoiced yet", DEAL_COLLECTION, 'nothing_invoiced: "Nothing invoiced yet"'],
+    ["Needs review", DEAL_COLLECTION, 'needs_review: "Needs review"'],
+    ["Not written yet", CRM_RECEIPT_CARD],
+    ["Not allowed yet", CRM_RECEIPT_CARD],
+    ["crm_receipt_written", CRM_RECEIPTS_RUN],
+    ["Not written: someone changed it in Pipedrive", CRM_RECEIPTS_VIEW, "Not written: someone changed it in ${label}"],
+    ["Write Vestiarion's figures to Pipedrive", CRM_RECEIPT_CARD, "Write Vestiarion&apos;s figures to {view.label}"],
+    ["crm_receipt_conflict", CRM_RECEIPTS_RUN],
+    ["crm_receipt_overwrite_chosen", "src/lib/connectors/crm-receipts-actions.ts"],
+    ["Not written to Pipedrive yet", CRM_RECEIPTS_VIEW, "Not written to ${label} yet"],
+    // Status, errors and disconnecting (P5, P8, P13, P15).
+    ["Pipedrive needs you to reconnect", ACCOUNTING_STATUS, "needs you to reconnect"],
+    ["Reconnect Pipedrive", PIPEDRIVE_PANEL],
+    ["Pipedrive asked Vestiarion to slow down. Syncing again at", ACCOUNTING_STATUS, "asked Vestiarion to slow down. Syncing again at"],
+    ["Pipedrive did not let Vestiarion add its deal fields", PIPEDRIVE_RECEIPTS],
+    ["Pipedrive has a deal field named", PIPEDRIVE_RECEIPTS],
+    ["Rename that field in Pipedrive, and Vestiarion adds its own.", PIPEDRIVE_RECEIPTS],
+    ["Disconnect Pipedrive", PIPEDRIVE_PANEL],
+    ["Pipedrive is disconnected. Deals already planned stay in Vestiarion.", PIPEDRIVE_ACTIONS],
+    ["accounting_disconnected", ACCOUNTING_CONNECTIONS],
   ],
   "guides/asana": [
     ["Connect Asana", ASANA_PANEL],
@@ -2481,6 +2593,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/xero": 20,
   "guides/quickbooks": 20,
   "guides/hubspot": 20,
+  "guides/pipedrive": 20,
   "guides/asana": 20,
   "guides/audit-export": 5,
   "guides/evidence": 20,

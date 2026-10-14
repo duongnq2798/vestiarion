@@ -132,7 +132,7 @@ describe("the privacy page", () => {
   const body = text(renderToStaticMarkup(<PrivacyPage />));
 
   it("names each service that receives data", () => {
-    for (const name of ["Supabase", "Vercel", "Circle", "Resend", "Google Analytics", "Anthropic", "OpenAI", "DeepSeek", "OpenSanctions", "GitHub", "Telegram", "Product Hunt", "Xero", "QuickBooks", "Intuit", "HubSpot"]) {
+    for (const name of ["Supabase", "Vercel", "Circle", "Resend", "Google Analytics", "Anthropic", "OpenAI", "DeepSeek", "OpenSanctions", "GitHub", "Telegram", "Product Hunt", "Xero", "QuickBooks", "Intuit", "HubSpot", "Pipedrive"]) {
       expect(body, name).toContain(name);
     }
   });

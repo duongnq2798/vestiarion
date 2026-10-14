@@ -152,9 +152,11 @@ describe("a brand mark", () => {
   });
 
   it("gives each connector its own mark, and Intuit's name alone no mark: no place stands for Intuit itself", () => {
-    // Asana's name stands alone until its owner's file is in public/brands.
-    expect(Object.keys(PROVIDER_MARKS).sort()).toEqual(PROVIDERS.filter((provider) => provider !== "asana").sort());
+    // Pipedrive shows its name alone: no logo of its own is used (Pipedrive connector P20); Asana's name stands alone until
+    // its owner's file is in public/brands.
+    expect(Object.keys(PROVIDER_MARKS).sort()).toEqual(PROVIDERS.filter((provider) => provider !== "pipedrive" && provider !== "asana").sort());
     expect(PROVIDER_MARKS).toEqual({ xero: "xero", quickbooks: "quickbooks", hubspot: "hubspot" });
+    expect(readdirSync(path.join(process.cwd(), "public/brands")).some((file) => /pipedrive/i.test(file))).toBe(false);
     expect(readdirSync(path.join(process.cwd(), "public/brands")).some((file) => /^intuit/i.test(file))).toBe(false);
   });
 
@@ -201,7 +203,7 @@ describe("the landing page's built on and works with", () => {
 
   it("names each service beside its mark, and links to the evidence, Arc and Circle to their own sites as well", () => {
     const page = text(markup);
-    for (const name of ["Arc", "Circle", "Xero", "QuickBooks Online", "HubSpot", "Asana", "Slack", "Telegram", "npm"]) expect(page).toContain(name);
+    for (const name of ["Arc", "Circle", "Xero", "QuickBooks Online", "HubSpot", "Pipedrive", "Asana", "Slack", "Telegram", "npm"]) expect(page).toContain(name);
     const hrefs = [...markup.matchAll(/<a [^>]*href="([^"]+)"/g)].map((match) => match[1]);
     expect(hrefs).toEqual([
       "/open",
@@ -211,6 +213,7 @@ describe("the landing page's built on and works with", () => {
       "/docs/guides/xero",
       "/docs/guides/quickbooks",
       "/docs/guides/hubspot",
+      "/docs/guides/pipedrive",
       "/docs/guides/asana",
       "/docs/guides/slack",
       "/docs/guides/telegram",
@@ -230,18 +233,20 @@ describe("the landing page's built on and works with", () => {
     expect(markup).toContain('<span class="sr-only">npm</span>');
     expect(markup).toContain('<span class="sr-only">Xero</span>');
     expect(markup).toMatch(/data-brand="quickbooks-lockup"[^>]*\/><span class="sr-only">QuickBooks Online<\/span>/);
+    // Pipedrive is named in words alone: no logo of Pipedrive's is used (Pipedrive connector P20).
+    expect(markup).toMatch(/font-semibold text-ink"><span>Pipedrive<\/span><\/p>/);
   });
 
-  it("lists nine services, two to a row with the last across both, and three from a laptop's width, so no row is left with one", () => {
+  it("lists ten services, two to a row below a laptop's width and five from it, so every row is full", () => {
     const items = [...markup.matchAll(/<li class="([^"]*)"/g)].map((match) => match[1]);
-    expect(items).toHaveLength(9);
-    expect(markup).toContain('<ul class="grid grid-cols-2 lg:grid-cols-3">');
-    expect(markup).not.toMatch(/grid-cols-(4|5)/);
-    // Three to a row: the first of each row starts without a rule, and the rows after the first have one above them.
-    for (const item of items) expect(item).toContain("lg:nth-[3n+1]:border-l-0");
-    for (const item of items) expect(item).toContain("lg:nth-[n+4]:border-t");
-    // Two to a row below that: the ninth, alone in its row, spans both.
-    for (const item of items) expect(item).toContain("max-lg:last:odd:col-span-2");
+    expect(items).toHaveLength(10);
+    expect(markup).toContain('<ul class="grid grid-cols-2 lg:grid-cols-5">');
+    expect(markup).not.toMatch(/grid-cols-(3|4)/);
+    // Five to a row: the first of each row starts without a rule, and the rows after the first have one above them.
+    for (const item of items) expect(item).toContain("lg:nth-[5n+1]:border-l-0");
+    for (const item of items) expect(item).toContain("lg:nth-[n+6]:border-t");
+    // Ten fill every row of two and of five: none spans.
+    for (const item of items) expect(item).not.toMatch(/col-span/);
     // A name too long for a phone's half width moves under its mark instead of running into the line below.
     expect(markup).toContain("min-h-5 flex-wrap");
     expect(markup).not.toMatch(/flex h-5 /);
@@ -262,20 +267,20 @@ describe("the landing page's built on and works with", () => {
     // The trademark notice npm's policy asks for, Intuit's owner named, and that the marks are not an endorsement.
     expect(page).toContain("npm is a registered trademark of npm, inc.");
     expect(page).toContain("intuit and quickbooks are trademarks of intuit inc.");
-    expect(page).toContain("arc, circle, slack, telegram, xero, hubspot and asana are trademarks of their respective owners.");
+    expect(page).toContain("arc, circle, slack, telegram, xero, hubspot, pipedrive and asana are trademarks of their respective owners.");
     expect(page).toContain("not an endorsement");
   });
 });
 
 describe("the landing page's answer to how bills come in", () => {
-  it("names the bill list, Xero, QuickBooks Online and HubSpot beside the form, PDF, email, Telegram and the API", async () => {
+  it("names the bill list, Xero, QuickBooks Online, HubSpot and Pipedrive beside the form, PDF, email, Telegram and the API", async () => {
     const { landingFaq } = await import("@/components/landing/Faq");
     const answer = landingFaq(true).find((entry) => entry.question === "Does it fit how we already work?")?.answer;
     expect(typeof answer).toBe("string");
-    for (const way of ["form", "PDF", "a bill list from your spreadsheet", "email", "Telegram", "the API", "Xero", "QuickBooks Online", "HubSpot"]) {
+    for (const way of ["form", "PDF", "a bill list from your spreadsheet", "email", "Telegram", "the API", "Xero", "QuickBooks Online", "HubSpot", "Pipedrive"]) {
       expect(answer).toContain(way);
     }
-    expect(answer).toContain("Won deals come in from HubSpot to plan their collections.");
+    expect(answer).toContain("Won deals come in from HubSpot or Pipedrive to plan their collections.");
     expect(answer).toContain("Contractor work delivered in Asana is paid once a person accepts it against its criteria.");
   });
 });

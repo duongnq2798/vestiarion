@@ -25,10 +25,13 @@ export function CrmDealChanges({
   seen,
   canWrite,
   active,
+  from = "hubspot",
 }: {
   orgSlug: string;
   dealId: string;
   label: string;
+  /** The CRM, for the address Change deal opens with (`?from=<provider>`, Pipedrive connector P10). */
+  from?: "hubspot" | "pipedrive";
   words: string[];
   /** The key of the changes shown: Keep the deal as it is keeps these alone. */
   seen: string;
@@ -47,7 +50,7 @@ export function CrmDealChanges({
       {canWrite && active ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button asChild size="sm">
-            <Link href={`/o/${orgSlug}/invoices/deals/${dealId}?from=hubspot#change`}>
+            <Link href={`/o/${orgSlug}/invoices/deals/${dealId}?from=${from}#change`}>
               <GitBranch aria-hidden />
               Change deal
             </Link>

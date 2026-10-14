@@ -6,6 +6,7 @@ import GoLivePanel from "@/components/GoLivePanel";
 import GitHubPanel from "@/components/GitHubPanel";
 import AsanaPanel from "@/components/AsanaPanel";
 import HubSpotPanel from "@/components/HubSpotPanel";
+import PipedrivePanel from "@/components/PipedrivePanel";
 import LedgerKeyPanel from "@/components/LedgerKeyPanel";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import { SettingsSections, type SettingsGroup } from "@/components/SettingsSections";
@@ -40,9 +41,12 @@ import { slackPanelView } from "@/lib/slack/panel";
 import { slackSettingsFromEnv } from "@/lib/slack/settings";
 import { accountingPanelView } from "@/lib/connectors/panel";
 import { accountingProvider, accountingProviderOn } from "@/lib/accounting-providers";
-import { crmPanelView } from "@/lib/connectors/crm-review";
+import { crmPanelView, type CrmPanelView } from "@/lib/connectors/crm-review";
+import { NotSetUpError } from "@/lib/connectors/connections";
 import { asanaPanelFor } from "@/lib/asana/panel";
 import { hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
+import { pipedriveSettingsFromEnv } from "@/lib/pipedrive/settings";
+import { pipedriveReady } from "@/lib/pipedrive/store";
 import { crmReceiptsPanelFor } from "@/lib/connectors/crm-receipts-view";
 import { crmProvider } from "@/lib/crm-providers";
 import { linkFor as telegramLinkFor } from "@/lib/telegram/links";
@@ -62,7 +66,7 @@ export default async function SettingsPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ slack?: string | string[]; github?: string | string[]; xero?: string | string[]; quickbooks?: string | string[]; hubspot?: string | string[] }>;
+  searchParams: Promise<{ slack?: string | string[]; github?: string | string[]; xero?: string | string[]; quickbooks?: string | string[]; hubspot?: string | string[]; pipedrive?: string | string[] }>;
 }) {
   const { slug } = await params;
   const access = await requireMembership(slug);
@@ -79,7 +83,7 @@ export default async function SettingsPage({
     // How connecting Slack went, from its way back (Slack design S3); only the codes the panel knows are shown.
     // And how connecting GitHub went (GitHub App design G2).
     // And how connecting Xero or QuickBooks went (Xero connector X4; QuickBooks connector Q4), and HubSpot (HubSpot H4).
-    const { slack: slackOutcome, github: githubOutcome, xero: xeroOutcome, quickbooks: quickBooksOutcome, hubspot: hubspotOutcome } = await searchParams;
+    const { slack: slackOutcome, github: githubOutcome, xero: xeroOutcome, quickbooks: quickBooksOutcome, hubspot: hubspotOutcome, pipedrive: pipedriveOutcome } = await searchParams;
     const inboxSettings = inboxSettingsFromEnv();
     const [goLive, apiKeys, webhookEndpoints, ledgerKey, dashboardStats, deletion, usyc, slack, notifySwitch, telegramLink, inbox, github, twoApprovals, shadow, xero, quickBooks, hubspot, usage, limits, reportingCurrency] = await Promise.all([
       goLiveStatus(membership.orgId),
@@ -179,6 +183,27 @@ export default async function SettingsPage({
       hubspot?.state === "connection" && hubspotWriteScopes
         ? await crmReceiptsPanelFor(hubspot.connectionId, hubspotWriteScopes).catch((error: unknown) => {
             console.error("settings: HubSpot receipts not loaded", error instanceof Error ? error.message : error);
+            return null;
+          })
+        : null;
+    // Pipedrive's card (Pipedrive connector P16, P17), on a deployment where Pipedrive is configured; best effort. Before
+    // migration 0116 it says Pipedrive is not set up yet.
+    const pipedrive: CrmPanelView | null = pipedriveSettingsFromEnv()
+      ? await pipedriveReady()
+          .then(() => crmPanelView("pipedrive"))
+          .catch((error: unknown): CrmPanelView | null => {
+            if (error instanceof NotSetUpError) return { state: "not_set_up" };
+            console.error("settings: Pipedrive status not loaded", error instanceof Error ? error.message : error);
+            return null;
+          })
+      : null;
+    // Receipts written to Pipedrive (P11, P12): Pipedrive names no test company, so the panel says when this workspace
+    // never writes to it.
+    const pipedriveWriter = crmProvider("pipedrive")?.receipts ?? null;
+    const pipedriveReceipts =
+      pipedrive?.state === "connection" && pipedriveWriter
+        ? await crmReceiptsPanelFor(pipedrive.connectionId, pipedriveWriter.writeScopes, { testAccounts: pipedriveWriter.testAccounts }).catch((error: unknown) => {
+            console.error("settings: Pipedrive receipts not loaded", error instanceof Error ? error.message : error);
             return null;
           })
         : null;
@@ -323,6 +348,19 @@ export default async function SettingsPage({
                 canManage={canManageIntegrations}
                 notice={typeof hubspotOutcome === "string" ? hubspotOutcome : null}
                 receipts={hubspotReceipts}
+              />
+            ) : null,
+          },
+          {
+            id: "pipedrive-title",
+            title: "Pipedrive",
+            content: pipedrive ? (
+              <PipedrivePanel
+                orgSlug={slug}
+                view={pipedrive}
+                canManage={canManageIntegrations}
+                notice={typeof pipedriveOutcome === "string" ? pipedriveOutcome : null}
+                receipts={pipedriveReceipts}
               />
             ) : null,
           },

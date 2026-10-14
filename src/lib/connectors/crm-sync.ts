@@ -69,6 +69,11 @@ export async function syncCrmConnection(input: {
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
   maxPages?: number;
+  /**
+   * False for a run a CRM's change notice starts (Pipedrive connector P7): it reads what changed, and leaves reading every
+   * kept deal again by id to the sweeper's next run, so one notice never costs hundreds of reads. Absent means true.
+   */
+  recheck?: boolean;
 }): Promise<CrmSyncResult> {
   const now = input.now ?? Date.now;
   const sleep = input.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
@@ -126,8 +131,18 @@ export async function syncCrmConnection(input: {
       if (deals.length === 0) return [];
       const staged = await db.staged(connection!.id, deals.map((deal) => deal.externalId));
       const linked: string[] = [];
+      const gone: string[] = [];
       for (const deal of deals) {
         const row = staged.get(deal.externalId) ?? null;
+        if (deal.deleted) {
+          // The CRM says it was deleted (Pipedrive connector P6): a row kept says so, its history and its deal stay; none
+          // is made for a deal never kept.
+          if (row) {
+            if (row.sourceStatus === "present") gone.push(deal.externalId);
+            if (row.dealId) linked.push(deal.externalId);
+          }
+          continue;
+        }
         const plan = planCrmDeal(row, deal, connection!.windowFrom);
         if (plan.kind === "insert") {
           await db.insertDeal(connection!, deal);
@@ -138,7 +153,9 @@ export async function syncCrmConnection(input: {
         }
         if (row?.dealId) linked.push(deal.externalId);
       }
-      await db.linkReferences(connection!, deals.map((deal) => deal.externalId));
+      if (gone.length > 0) result.deleted += await db.markDeleted(connection!, gone);
+      const present = deals.filter((deal) => !deal.deleted).map((deal) => deal.externalId);
+      if (present.length > 0) await db.linkReferences(connection!, present);
       return linked;
     }
 
@@ -167,7 +184,7 @@ export async function syncCrmConnection(input: {
     }
 
     // Deleted deals never come back in a search: the linked ones, and the won ones still offered, are read by id (H6).
-    const recheck = await db.recheckDeals(connection.id, MAX_RECHECK);
+    const recheck = input.recheck === false ? [] : await db.recheckDeals(connection.id, MAX_RECHECK);
     for (let at = 0; at < recheck.length; at += BATCH) {
       const ids = recheck.slice(at, at + BATCH).map((deal) => deal.externalId);
       const read = await call((token) => provider.dealsById({ accessToken: token, externalOrgId: connection.externalOrgId, ids }));

@@ -157,7 +157,7 @@ export default function AccountingPanel({
                   {view.waiting === 0 ? (
                     "No bills waiting for review."
                   ) : (
-                    <Link className="font-medium text-agent underline-offset-4 hover:underline" href={`/o/${orgSlug}${billsHref({ tab: "bills", review: provider })}`}>
+                    <Link className="font-medium text-agent underline-offset-4 hover:underline" href={`/o/${orgSlug}${billsHref({ tab: "bills", review: provider === "xero" || provider === "quickbooks" ? provider : null })}`}>
                       {view.waiting === 1 ? "1 bill waiting for review" : `${view.waiting} bills waiting for review`}
                     </Link>
                   )}

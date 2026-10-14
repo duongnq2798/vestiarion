@@ -73,6 +73,8 @@ export const TENANT_RPCS = [
   "create_deal", "revise_deal",
   "reserve_project_budget", "project_figures",
   "accept_asana_task", "hold_asana_acceptance",
+  // Whether migration 0116 has run (Pipedrive connector P2): it reads nothing.
+  "pipedrive_connector_ready",
 ] as const;
 export type TenantRpc = (typeof TENANT_RPCS)[number];
 

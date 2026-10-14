@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Handshake } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import InboxEmails from "@/components/InboxEmails";
 import { AccountingBillsReview } from "@/components/AccountingBillsReview";
@@ -89,7 +89,7 @@ import { DealForm } from "@/components/deals/DealForm";
 import { DealsSection } from "@/components/deals/DealsSection";
 import { crmPlanState } from "@/components/deals/crm-plan";
 import { PlanFromCrmForm, PlannedFromCrm } from "@/components/deals/PlannedFromCrm";
-import { HubSpotDeals } from "@/components/HubSpotDeals";
+import { CrmDeals, type CrmListProvider } from "@/components/CrmDeals";
 import { crmPrefillFor, crmReady, crmReview, type CrmPrefillRead, type CrmReviewView } from "@/lib/connectors/crm-review";
 import { readDealCosts } from "@/lib/deals/costs-read";
 import { exceptionFacts } from "@/lib/exceptions";
@@ -97,6 +97,8 @@ import { invoiceDiscount } from "@/lib/agent/payment-timing";
 import { readDealCollections } from "@/lib/deals/collection-read";
 import { dealLinksOf, plannedLinesOf, readDeals, type DealLink } from "@/lib/deals/read";
 import { hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
+import { pipedriveSettingsFromEnv } from "@/lib/pipedrive/settings";
+import { pipedriveReady } from "@/lib/pipedrive/store";
 import { FromCustomers } from "@/components/portal/FromCustomers";
 import { StatementLinks } from "@/components/portal/StatementLinks";
 import { listPortalLinks, type PortalLink } from "@/lib/customer-portal/links";
@@ -123,7 +125,7 @@ type InvoicePageProps = {
    * The view (docs/superpowers/specs/2026-10-12-bills-tabs-design.md B3, B4): `tab`, `filter`, `q` (a search by id, invoice
    * number, purchase order, counterparty, amount or a payment's reference, I09), `sort`, `page`, `open` (a bill's
    * detail), `review` (a review list over the page), `new` and the palette's `add` (a New form), `hubspot` (a HubSpot
-   * deal to plan, H11); and, from before the tabs, `history=all` and `status`, read by `readBillsQuery`.
+   * deal to plan, H11) and `pipedrive` (a Pipedrive deal to plan, Pipedrive connector P9); and, from before the tabs, `history=all` and `status`, read by `readBillsQuery`.
    */
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
@@ -164,7 +166,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     const raw = await searchParams;
     const query = readBillsQuery(raw);
     // Every tab: what the figures, the strip and the New forms need (B5).
-    const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, canReconcile, schedules, deciding, emailed, fromXero, fromQuickBooks, dealsRead, fromHubSpot] = await Promise.all([
+    const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, canReconcile, schedules, deciding, emailed, fromXero, fromQuickBooks, dealsRead, fromHubSpot, fromPipedrive] = await Promise.all([
       listInvoices(),
       listCounterparties(),
       listLedgerEntries(1),
@@ -208,6 +210,18 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
             })
             .catch((error: unknown): CrmReviewView => {
               if (!(error instanceof NotSetUpError)) console.error("invoices: deals from HubSpot not loaded", error instanceof Error ? error.message : error);
+              return { state: "hidden" };
+            })
+        : ({ state: "hidden" } as CrmReviewView),
+      // Pipedrive's won deals the same way (Pipedrive connector P20): hidden before migration 0116 and without a connection.
+      pipedriveSettingsFromEnv()
+        ? connectionFor("pipedrive")
+            .then(async (connection) => {
+              await pipedriveReady();
+              return crmReview(connection);
+            })
+            .catch((error: unknown): CrmReviewView => {
+              if (!(error instanceof NotSetUpError)) console.error("invoices: deals from Pipedrive not loaded", error instanceof Error ? error.message : error);
               return { state: "hidden" };
             })
         : ({ state: "hidden" } as CrmReviewView),
@@ -649,12 +663,13 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         node: <InboxEmails orgSlug={slug} emails={emailed} canAdd={canWrite} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} />,
       };
     }
-    if (fromHubSpot.state === "list") {
-      const toPlan = fromHubSpot.won.filter((row) => row.linkedDeal === null && row.plan.ok).length;
-      const changed = fromHubSpot.won.filter((row) => row.changes.length > 0).length;
-      const href = orgHref(slug, `${billsHref({ tab: "receivables" })}#from-hubspot`);
-      if (toPlan > 0) waitingItems.push({ key: "hubspot", href, label: `${toPlan} won ${plural(toPlan, "deal", "deals")} in HubSpot` });
-      else if (changed > 0) waitingItems.push({ key: "hubspot", href, label: `${changed} changed in HubSpot` });
+    for (const [key, from] of [["hubspot", fromHubSpot], ["pipedrive", fromPipedrive]] as const) {
+      if (from.state !== "list") continue;
+      const toPlan = from.won.filter((row) => row.linkedDeal === null && row.plan.ok).length;
+      const changed = from.won.filter((row) => row.changes.length > 0).length;
+      const href = orgHref(slug, `${billsHref({ tab: "receivables" })}#from-${key}`);
+      if (toPlan > 0) waitingItems.push({ key, href, label: `${toPlan} won ${plural(toPlan, "deal", "deals")} in ${from.label}` });
+      else if (changed > 0) waitingItems.push({ key, href, label: `${changed} changed in ${from.label}` });
     }
 
     if (openRequests.length > 0) {
@@ -700,16 +715,65 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         plan: <PaymentPlanSection plan={paymentPlan} outcomes={paymentOutcomes} orgSlug={slug} canDecide={canDecide} viewerId={access.user.id} soleApprover={soleApprover} />,
       };
     } else {
-      // A HubSpot deal picked to plan: the New deal form filled in from it (HubSpot connector H11). Read again on confirm.
-      // One planned already, right after its Plan collections or from an old link, shows the deal it became instead.
-      const crmPlan = fromHubSpot.state === "list" ? crmPlanState(view.hubspot, fromHubSpot.won) : null;
-      const planFromHubSpot: CrmPrefillRead | null =
-        crmPlan?.kind === "form" && canWrite && Array.isArray(deals)
-          ? await crmPrefillFor({ rowId: crmPlan.rowId, customers, workspace: { shadowOn: verdicts.shadow !== null }, today }).catch((error: unknown): CrmPrefillRead => {
-              console.error("invoices: a HubSpot deal was not read to plan", error instanceof Error ? error.message : error);
-              return { ok: false, message: "That deal could not be read. Reload the page in a moment." };
-            })
-          : null;
+      // A CRM's deal picked to plan: the New deal form filled in from it (HubSpot connector H11, Pipedrive connector P9).
+      // Read again on confirm. One planned already, right after its Plan collections or from an old link, shows the deal
+      // it became instead.
+      const crmPlans = await Promise.all(
+        ([["hubspot", fromHubSpot, view.hubspot], ["pipedrive", fromPipedrive, view.pipedrive ?? null]] as const).map(async ([provider, from, asked]) => {
+          const plan = from.state === "list" ? crmPlanState(asked, from.won) : null;
+          const prefill: CrmPrefillRead | null =
+            plan?.kind === "form" && canWrite && Array.isArray(deals)
+              ? await crmPrefillFor({ rowId: plan.rowId, customers, workspace: { shadowOn: verdicts.shadow !== null }, today }).catch((error: unknown): CrmPrefillRead => {
+                  console.error("invoices: a CRM deal was not read to plan", provider, error instanceof Error ? error.message : error);
+                  return { ok: false, message: "That deal could not be read. Reload the page in a moment." };
+                })
+              : null;
+          return { provider, from, plan, prefill };
+        })
+      );
+      /** A CRM's part of Deals: its deal being planned, or planned already, and its list. */
+      const crmSection = ({ provider, from, plan, prefill }: (typeof crmPlans)[number]) =>
+        from.state === "list" ? (
+          <Fragment key={provider}>
+            {plan?.kind === "planned" && (
+              <div id={`plan-from-${provider}`} className="scroll-mt-6">
+                <PlannedFromCrm rowId={plan.rowId} title={plan.title} cancelled={plan.cancelled} dealHref={orgHref(slug, `/invoices/deals/${plan.dealId}`)} />
+              </div>
+            )}
+            {prefill && (
+              <div id={`plan-from-${provider}`} className="scroll-mt-6">
+                {prefill.ok ? (
+                  <IntakeFold label={`Plan collections: ${prefill.name}`} meta={`from ${prefill.label}: pick how it is billed, check the rest, and confirm`} defaultOpen>
+                    <PlanFromCrmForm rowId={prefill.rowId}>
+                      <DealForm
+                        orgSlug={slug}
+                        customers={customers}
+                        currencies={dealCurrencies.includes(prefill.prefill.currency) ? dealCurrencies : [...dealCurrencies, prefill.prefill.currency]}
+                        idempotencyKey={randomUUID()}
+                        today={today}
+                        prefill={{ crmRowId: prefill.rowId, label: prefill.label, ...prefill.prefill }}
+                      />
+                    </PlanFromCrmForm>
+                  </IntakeFold>
+                ) : (
+                  <Callout tone="held" className="mb-6">
+                    {prefill.message}
+                  </Callout>
+                )}
+              </div>
+            )}
+            <CrmDeals
+              provider={provider satisfies CrmListProvider}
+              orgSlug={slug}
+              organisation={from.organisation}
+              won={from.won}
+              open={from.open}
+              emails={from.emails}
+              canWrite={canWrite}
+            />
+          </Fragment>
+        ) : null;
+      const crmSections = crmPlans.filter((part) => part.from.state === "list");
       // Customer statements (customer portal P8, P9): the links not stopped, and what customers said, each with its next
       // step. Best effort: a read that fails hides only these parts.
       const portalLinks = await listPortalLinks(db(), asOf).catch((error: unknown) => {
@@ -771,40 +835,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
                 orgSlug={slug}
                 today={today}
                 collected={dealsCollected}
-                fromCrm={
-                  fromHubSpot.state === "list" ? (
-                    <>
-                      {crmPlan?.kind === "planned" && (
-                        <div id="plan-from-hubspot" className="scroll-mt-6">
-                          <PlannedFromCrm rowId={crmPlan.rowId} title={crmPlan.title} cancelled={crmPlan.cancelled} dealHref={orgHref(slug, `/invoices/deals/${crmPlan.dealId}`)} />
-                        </div>
-                      )}
-                      {planFromHubSpot && (
-                        <div id="plan-from-hubspot" className="scroll-mt-6">
-                          {planFromHubSpot.ok ? (
-                            <IntakeFold label={`Plan collections: ${planFromHubSpot.name}`} meta={`from ${planFromHubSpot.label}: pick how it is billed, check the rest, and confirm`} defaultOpen>
-                              <PlanFromCrmForm rowId={planFromHubSpot.rowId}>
-                                <DealForm
-                                  orgSlug={slug}
-                                  customers={customers}
-                                  currencies={dealCurrencies.includes(planFromHubSpot.prefill.currency) ? dealCurrencies : [...dealCurrencies, planFromHubSpot.prefill.currency]}
-                                  idempotencyKey={randomUUID()}
-                                  today={today}
-                                  prefill={{ crmRowId: planFromHubSpot.rowId, label: planFromHubSpot.label, ...planFromHubSpot.prefill }}
-                                />
-                              </PlanFromCrmForm>
-                            </IntakeFold>
-                          ) : (
-                            <Callout tone="held" className="mb-6">
-                              {planFromHubSpot.message}
-                            </Callout>
-                          )}
-                        </div>
-                      )}
-                      <HubSpotDeals orgSlug={slug} organisation={fromHubSpot.organisation} won={fromHubSpot.won} open={fromHubSpot.open} emails={fromHubSpot.emails} canWrite={canWrite} />
-                    </>
-                  ) : undefined
-                }
+                fromCrm={crmSections.length > 0 ? <>{crmSections.map(crmSection)}</> : undefined}
               />
             </div>
           ),

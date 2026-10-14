@@ -11,6 +11,7 @@ export const CONSENT_VERSIONS: Record<ProviderId, string> = {
   xero: "xero-2026-10-13",
   quickbooks: "quickbooks-2026-10-12",
   hubspot: "hubspot-2026-10-13",
+  pipedrive: "pipedrive-2026-10-14",
   asana: "asana-2026-10-14",
 };
 
@@ -33,6 +34,20 @@ const CRM_STATEMENT = (label: string) => [
   `They are shown to this workspace's members and to its agent. The agent's model provider may see a deal's facts to decide on its collections, and may not train on them.`,
   `Vestiarion never uses ${label} data to train or improve any AI model, and never passes it to anyone else without your workspace's say.`,
   `Disconnecting stops the reading at once. Deals already planned stay in Vestiarion.`,
+];
+
+/**
+ * Pipedrive's statement (docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md P14): its deals with their
+ * organizations and persons, the change notices it sends, and what is written once allowed. Pipedrive names no test
+ * company, so payments on Arc testnet or in shadow mode are never written to it (P12).
+ */
+const PIPEDRIVE_STATEMENT = [
+  "Vestiarion reads the deals of the Pipedrive company you connect, with their organizations and persons: titles, values, close dates, pipeline stages, organization names and each person's email. It sees the deals the Pipedrive user who connects can see.",
+  "Pipedrive tells Vestiarion when a deal changes, and Vestiarion then reads it again from Pipedrive. What a notice says is never used as it is.",
+  "It writes to Pipedrive only once an owner or admin allows it: then, on each Pipedrive deal planned in Vestiarion, what was collected from payments confirmed on Arc, what is still owed, the last receipt, the reconciliation status and a link to the deal in Vestiarion, in Vestiarion deal fields it creates. It never changes Pipedrive's own deal fields, and never writes payments on Arc testnet or in shadow mode to Pipedrive.",
+  "They are shown to this workspace's members and to its agent. The agent's model provider may see a deal's facts to decide on its collections, and may not train on them.",
+  "Vestiarion never uses Pipedrive data to train or improve any AI model, and never passes it to anyone else without your workspace's say.",
+  "Disconnecting uninstalls Vestiarion from your Pipedrive company and stops the reading at once. Deals already planned stay in Vestiarion.",
 ];
 
 /**
@@ -61,6 +76,7 @@ const WORK_STATEMENT = (label: string) => [
 export function consentStatement(provider: ProviderId): string[] {
   const label = PROVIDER_LABELS[provider];
   if (provider === "hubspot") return CRM_STATEMENT(label);
+  if (provider === "pipedrive") return PIPEDRIVE_STATEMENT;
   if (provider === "asana") return WORK_STATEMENT(label);
   return [
     WHAT_IS_READ[provider],
