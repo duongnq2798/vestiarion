@@ -28,6 +28,7 @@ type GuideSlug =
   | "guides/payment-plan"
   | "guides/deals"
   | "guides/projects"
+  | "guides/commissions"
   | "guides/pay-a-contractor"
   | "guides/get-paid"
   | "guides/telegram"
@@ -281,6 +282,10 @@ const PROJECT_VIEWS = "src/components/projects/ProjectViews.tsx";
 const PROJECT_PAGE = "src/app/o/[slug]/projects/[id]/page.tsx";
 const PROJECTS_PAGE = "src/app/o/[slug]/projects/page.tsx";
 const PROJECT_WRITE = "src/lib/projects/write.ts";
+const COMMISSION_FORMS = "src/components/commissions/CommissionForms.tsx";
+const COMMISSION_VIEWS = "src/components/commissions/CommissionViews.tsx";
+const COMMISSION_SCREEN = "src/components/commissions/CommissionsScreen.tsx";
+const COMMISSION_MODEL = "src/lib/commissions/model.ts";
 const BILLS_VIEW = "src/lib/bills-view.ts";
 const BILLS_SUMMARY = "src/components/bills/BillsSummary.tsx";
 const BILL_NEXT_STEP = "src/components/vx/bill-next-step.ts";
@@ -822,6 +827,54 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["project_created", "src/lib/projects/model.ts"],
     ["project_changed", "src/lib/projects/model.ts"],
     ["project_assigned", "src/lib/projects/model.ts"],
+  ],
+  // Commissions on money received (commissions C2-C12).
+  "guides/commissions": [
+    ["Bills & receivables", APP_NAV],
+    ["Receivables", INVOICES_PAGE],
+    ["Open commissions", COMMISSION_VIEWS],
+    ["Only an owner or admin of this workspace can set a commission plan or create a payable from it.", COMMISSION_SCREEN],
+    ["Commissions are not set up on this deployment yet.", "src/app/o/[slug]/invoices/commissions/page.tsx"],
+    ["A client pays this business, so it earns no commission. Choose a vendor or contractor.", COMMISSION_MODEL],
+    ["New plan", COMMISSION_SCREEN],
+    ["A vendor or contractor on file who earns the commission.", COMMISSION_FORMS],
+    ["Rate (%)", COMMISSION_FORMS],
+    ["Hold window (days)", COMMISSION_FORMS],
+    ["How long after the money is applied a commission waits before it can be paid.", COMMISSION_FORMS],
+    ["Commission on", COMMISSION_FORMS],
+    ["Net: the money that arrived on Arc", COMMISSION_MODEL],
+    ["Gross: also what was recorded as a fee on the invoice", COMMISSION_MODEL],
+    ["A few cents lost on the way still earn their commission.", COMMISSION_FORMS],
+    ["Deals it covers", COMMISSION_FORMS],
+    ["Every deal", COMMISSION_FORMS],
+    ["Chosen deals", COMMISSION_FORMS],
+    ["The agreement's name or number, named on each payable.", COMMISSION_FORMS],
+    ["Member who is this partner", COMMISSION_FORMS],
+    ["That person can never approve this partner's payout, nor change its plan.", COMMISSION_FORMS],
+    ["Save plan", COMMISSION_FORMS],
+    ["Change plan", COMMISSION_SCREEN],
+    ["Save new version", COMMISSION_FORMS],
+    ["End plan", COMMISSION_FORMS],
+    ["Ended plans", COMMISSION_SCREEN],
+    ["Apply payments", "src/components/ApplyPayments.tsx"],
+    ["To review", COMMISSION_SCREEN],
+    ["Due now", COMMISSION_VIEWS],
+    ["Held", COMMISSION_VIEWS],
+    ["In payables", COMMISSION_VIEWS],
+    ["Waiting for the agent", COMMISSION_VIEWS],
+    ["Waiting in Approvals", COMMISSION_VIEWS],
+    ["Rejected: back to review", COMMISSION_VIEWS],
+    ["Create payable", COMMISSION_FORMS],
+    ["One payable for every commission due now. The agent decides it like any other bill, under every guardrail, and the partner cannot approve it.", COMMISSION_FORMS],
+    ["The commissions due changed since this page was read. Reload the page to see them as they are now.", COMMISSION_MODEL],
+    ["Carried forward", COMMISSION_VIEWS],
+    ["This payable pays your own commission, so someone else must approve it.", "src/lib/agent/approvals.ts"],
+    ["This commission is yours, so someone else sets its plan and creates its payable.", COMMISSION_MODEL],
+    ["commission_plan_set", COMMISSION_MODEL],
+    ["commission_plan_ended", COMMISSION_MODEL],
+    ["commission_accrued", COMMISSION_MODEL],
+    ["commission_adjusted", COMMISSION_MODEL],
+    ["commission_payable_created", COMMISSION_MODEL],
   ],
   // Deals on Bills & receivables (deal schedule design D1-D16).
   "guides/deals": [
@@ -2582,6 +2635,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/payment-plan": 20,
   "guides/deals": 20,
   "guides/projects": 20,
+  "guides/commissions": 20,
   "guides/pay-a-contractor": 20,
   "guides/get-paid": 20,
   "guides/telegram": 20,

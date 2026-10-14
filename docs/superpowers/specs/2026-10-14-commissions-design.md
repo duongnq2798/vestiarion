@@ -148,10 +148,12 @@ Each decision names what it costs if it turns out wrong.
   exactly the lines the person saw, refuses when they changed since the page was read (`commission_changed`), when
   they add up to nothing (`commission_nothing_due`) or when the person is the partner (C11), inserts the payable, the
   payout row and the lines' link, and answers the payable's id. Two people pressing at once create one payable.
-- The payable: the partner as counterparty, the net amount and currency, the memo "Commission statement CS-… for N
-  payments received", the statement number as its purchase order, goods received (the review is the receipt of the
-  work), due today, created by the person who reviewed it. It is an ordinary payable: it shows on Bills, its
-  `create_invoice` entry carries `via: "commission"`, and nothing else about it is special.
+- The payable: the partner as counterparty, the net amount and currency, the memo "Commissions on money received: N
+  commissions and M adjustments under <reference>", the statement number as its purchase order (unique per payout, so
+  two payouts of the same amount are never taken for a duplicate bill), goods received (the review is the receipt of
+  the work), due today, created by the person who reviewed it. It is an ordinary payable: it shows on Bills, its
+  `create_invoice` entry carries `via: "commission"`, and nothing else about it is special. The payable, not the line,
+  is what the agent pays, so every guardrail holds whatever wrote the lines.
 - A payable rejected in Approvals gives its lines back to the review (`commission_lines_guard` lets a line move from a
   payout whose payable is rejected to a new one, and nowhere else). Paid, it keeps them.
 - `commission_lines_guard` keeps every term of a line; only `payout_id` changes, from none, or from a rejected payable.
@@ -175,7 +177,7 @@ Each decision names what it costs if it turns out wrong.
   rateBps, ratePercent, basis, scope, dealIds, holdDays, reference, startedAt }`.
 - `commission_plan_ended` (actor `human`): `{ by, planId, beneficiaryId, beneficiaryName, endedAt }`.
 - `commission_accrued` (actor `agent`): `{ lineId, planId, beneficiaryId, receivableId, dealId, source, allocationId,
-  transferId, base, rateBps, basis, amount, currency, appliedAt, dueAt, formula }`.
+  transferId, base, rateBps, ratePercent, basis, amount, currency, appliedAt, dueAt, formula }`.
 - `commission_adjusted` (actor `agent`): `{ lineId, adjusts, planId, beneficiaryId, receivableId, dealId, source,
   reversalId, transferId, amount, currency, appliedAt, dueAt, carriedForward, reason }`, `reason` being
   `allocation_reversed` or `whole_match_released`.
@@ -199,6 +201,17 @@ Each decision names what it costs if it turns out wrong.
 **C15. The API and webhooks.**
 - No new endpoint. The new entries are listed by `GET /api/v1/ledger` and sent as `ledger.appended`; a commission
   payable is in `GET /api/v1/invoices` as any payable. The API changelog says so.
+
+## Tests
+
+- `tests/commissions-migration.test.ts` (PGlite, 0118): a part payment, rounding, net and gross, a whole match, the
+  chosen deals and the plan's start, versions, a replay and a direct second insert (no double accrual), a reversal
+  before and after a payout, a whole match released, the payout and its refusals, a rejected or deleted payable giving
+  its lines back, plan versions fixed and ended once, and the partner refused in the claim (sole approver too), in
+  `payment_approvals` and on their own plan.
+- `tests/commissions-flow.test.ts`: the whole path on PGlite, then the payable the database wrote paid by the AP stage.
+- `tests/commissions-model.test.ts`, `tests/commissions-write.test.ts`, `tests/commissions-shots.test.tsx`, and the
+  partner's refusal in `tests/approvals.test.ts`.
 
 ## Not in this change
 

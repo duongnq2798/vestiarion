@@ -180,6 +180,7 @@ describe("the docs navigation", () => {
       ["guides/apply-payments", "Apply money received to invoices"],
       ["guides/projects", "Give each project its own budget"],
       ["guides/deals", "Turn a signed deal into a collection schedule"],
+      ["guides/commissions", "Pay commissions on money received"],
       ["guides/customer-portal", "Share a statement with a customer"],
       ["guides/collections", "Chase what customers owe"],
       ["guides/accountants", "Work across clients as an accountant"],
@@ -257,7 +258,8 @@ describe("the docs navigation", () => {
     expect(neighbours("guides/currencies").next?.slug).toBe("guides/apply-payments");
     expect(neighbours("guides/apply-payments").next?.slug).toBe("guides/projects");
     expect(neighbours("guides/projects").next?.slug).toBe("guides/deals");
-    expect(neighbours("guides/deals").next?.slug).toBe("guides/customer-portal");
+    expect(neighbours("guides/deals").next?.slug).toBe("guides/commissions");
+    expect(neighbours("guides/commissions").next?.slug).toBe("guides/customer-portal");
     expect(neighbours("guides/customer-portal").next?.slug).toBe("guides/collections");
     expect(neighbours("guides/collections").next?.slug).toBe("guides/accountants");
     expect(neighbours("guides/accountants").next?.slug).toBe("guides/get-paid");
