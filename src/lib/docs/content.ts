@@ -83,6 +83,7 @@ export const PAGE_LOADERS: Record<string, () => Promise<MdxModule>> = {
   "guides/currencies": () => import("../../../content/docs/guides/currencies.mdx"),
   "guides/apply-payments": () => import("../../../content/docs/guides/apply-payments.mdx"),
   "guides/deals": () => import("../../../content/docs/guides/deals.mdx"),
+  "guides/commissions": () => import("../../../content/docs/guides/commissions.mdx"),
   "guides/projects": () => import("../../../content/docs/guides/projects.mdx"),
   "guides/customer-portal": () => import("../../../content/docs/guides/customer-portal.mdx"),
   "guides/collections": () => import("../../../content/docs/guides/collections.mdx"),

@@ -63,6 +63,7 @@ export const TENANT_TABLES = [
   "reporting_currencies", "cash_scenario_versions", "fx_rates", "fx_variances",
   "onboarding_marks",
   "asana_task_links",
+  "commission_plans", "commission_plan_deals", "commission_payouts", "commission_lines",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
@@ -75,6 +76,8 @@ export const TENANT_RPCS = [
   "accept_asana_task", "hold_asana_acceptance",
   // Whether migration 0116 has run (Pipedrive connector P2): it reads nothing.
   "pipedrive_connector_ready",
+  // Commissions on money received (commissions C2, C5, C10, C11).
+  "set_commission_plan", "end_commission_plan", "record_commissions", "create_commission_payout", "commission_partner_members",
 ] as const;
 export type TenantRpc = (typeof TENANT_RPCS)[number];
 

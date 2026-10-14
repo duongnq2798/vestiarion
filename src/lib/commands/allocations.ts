@@ -1,5 +1,6 @@
 import { applyPayment, reverseAllocation, type ApplyInput } from "../allocations/apply";
 import { AllocationError, amountWords } from "../allocations/model";
+import { recordCommissionsAfterApplication } from "../commissions/record";
 import { plural } from "../copy";
 import type { Actor } from "./actor";
 import { done, refused, TRY_AGAIN, type CommandOutcome } from "./outcome";
@@ -8,7 +9,8 @@ import { gate } from "./policy";
 /**
  * Applying money received to receivables, and reversing it (docs/superpowers/specs/2026-10-12-allocations-design.md
  * L10): the receivables bookkeeping, so `receivables.reconcile` (owners, admins and accountants; accountant console A1),
- * from the console only. A refusal
+ * from the console only. The commissions the money earns, or loses, are recorded right after, best effort
+ * (docs/superpowers/specs/2026-10-14-commissions-design.md C5). A refusal
  * from the model or the database reads in its own words; anything else is logged and said as a failure.
  */
 
@@ -20,6 +22,8 @@ export async function applyReceivedPayment(
   if (refusal) return refusal;
   try {
     const result = await applyPayment({ ...input, actorId: actor.userId });
+    // Commissions on the money applied, recorded at once rather than at the next cycle (commissions C5).
+    await recordCommissionsAfterApplication();
     const payments = result.rows.filter((row) => row.kind === "payment");
     const fees = result.rows.filter((row) => row.kind === "fee");
     const settled = new Set(result.rows.filter((row) => row.outstandingAfter === 0).map((row) => row.invoiceId)).size;
@@ -48,6 +52,8 @@ export async function reverseAppliedPayment(
   if (refusal) return refusal;
   try {
     const result = await reverseAllocation({ ...input, actorId: actor.userId });
+    // A commission on the money taken back is adjusted at once (commissions C7).
+    await recordCommissionsAfterApplication();
     const fees = result.rows.length - 1;
     const withFees = fees > 0 ? `, with the ${plural(fees, "fee", "fees")} recorded beside it` : "";
     return done(`Reversed${withFees}. ${amountWords(result.outstandingAfter, result.currency)} is owed on ${result.label}.`, {

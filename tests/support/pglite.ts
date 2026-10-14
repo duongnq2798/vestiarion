@@ -112,6 +112,7 @@ export const TENANT_TABLES = [
   "reporting_currencies", "cash_scenario_versions", "fx_rates", "fx_variances",
   "onboarding_marks",
   "asana_task_links",
+  "commission_plans", "commission_plan_deals", "commission_payouts", "commission_lines",
 ] as const;
 
 export interface SeededRows {
@@ -267,6 +268,22 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
   await db.query(
     "insert into receivable_allocations (org_id, kind, invoice_id, transfer_id, amount, currency, basis) values ($1, 'payment', $2, $3, 1, 'USDC', 'person')",
     [orgId, receivableId, paymentId]
+  );
+  // A partner's commission plan on the deal, an accrual on that payment, in a payout of the payable (0118).
+  const commissionPlanId = await one(
+    "insert into commission_plans (org_id, beneficiary_id, rate_bps, basis, scope, hold_days) values ($1, $2, 1000, 'net', 'chosen_deals', 0) returning id",
+    [orgId, counterpartyId]
+  );
+  await db.query("insert into commission_plan_deals (org_id, plan_id, deal_id) values ($1, $2, $3)", [orgId, commissionPlanId, dealId]);
+  const commissionPayoutId = await one(
+    "insert into commission_payouts (org_id, beneficiary_id, invoice_id, statement, currency, amount, line_count) values ($1, $2, $3, 'CS-0000AB12', 'USDC', 0.1, 1) returning id",
+    [orgId, counterpartyId, invoiceId]
+  );
+  await db.query(
+    `insert into commission_lines (org_id, kind, plan_id, beneficiary_id, invoice_id, deal_id, source, allocation_id, transfer_id, basis, base_amount, rate_bps, amount, currency, applied_at, due_at, payout_id)
+     select $1, 'accrual', $2, $3, a.invoice_id, $4, 'payment', a.id, a.transfer_id, 'net', a.amount, 1000, 0.1, 'USDC', a.created_at, a.created_at, $5
+       from receivable_allocations a where a.org_id = $1 and a.invoice_id = $6`,
+    [orgId, commissionPlanId, counterpartyId, dealId, commissionPayoutId, receivableId]
   );
   const approver = await one("insert into auth.users (id, email) values (gen_random_uuid(), $1) returning id", [`approver-${tag}-${crypto.randomUUID()}@example.com`]);
   await db.query(

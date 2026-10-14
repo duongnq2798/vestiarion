@@ -12,6 +12,18 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+### Added
+
+- **Commissions on money received.** An owner or admin sets a plan for a sales partner or referrer on file: the rate,
+  net or gross of what was recorded as a fee on the invoice, every deal or chosen deals, and a hold window. When a
+  customer's payment on Arc is applied to an invoice of a covered deal, the commission on exactly that money is
+  recorded with its formula, so a part payment earns its part and the same payment never counts twice. After the hold
+  window, Bills & receivables › Receivables › Commissions shows what each partner is due, and Create payable makes one
+  payable for it, which the agent decides and pays under every guardrail. A payment reversed afterwards takes its
+  commission off the partner's next payable; nothing is pulled back from a wallet. A member named as the partner can
+  never approve their own payout, set their own plan or create their own payable. Migration `0118`.
+  [Guide](https://www.vestiarion.xyz/docs/guides/commissions).
+
 ## [0.1.0-beta.4] - 2026-10-14
 
 ### Added

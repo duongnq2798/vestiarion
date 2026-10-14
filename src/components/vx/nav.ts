@@ -79,6 +79,8 @@ const NESTED: ReadonlyArray<readonly [RegExp, NavKey]> = [
   [/^\/o\/[^/]+\/evidence\/milestone(?:\/|$)/, "contractors"],
   // A deal's page sits inside Bills & receivables, where its Deals are listed (deal schedule).
   [/^\/o\/[^/]+\/invoices\/deals(?:\/|$)/, "invoices"],
+  // Commissions sit inside Bills & receivables too, linked from its Receivables (commissions C10).
+  [/^\/o\/[^/]+\/invoices\/commissions(?:\/|$)/, "invoices"],
   // A project's page sits inside Projects, where every project is listed (project budgets).
   [/^\/o\/[^/]+\/projects\/[^/]+/, "projects"],
 ];

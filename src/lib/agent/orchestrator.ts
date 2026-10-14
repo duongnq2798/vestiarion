@@ -48,6 +48,7 @@ import {
 } from "./duplicates";
 import { milestoneVerification } from "./milestone-evidence";
 import { recordIncomingTransfers } from "./receipts";
+import { recordCommissions } from "../commissions/record";
 import { createRecurringInvoices } from "./recurring";
 import { releaseDueDealLines } from "../deals/write";
 import { proposeLimitChanges } from "./proposals";
@@ -3119,6 +3120,15 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   if (provider.mode === "live") {
     const operatingId = (unwrap(await db.from("accounts").select("id").eq("kind", "operating").limit(1)) as Array<{ id: string }>)[0]?.id;
     if (operatingId) lines.push(...(await recordIncomingTransfers(db, provider, operatingId)).lines);
+  }
+  // The commissions money applied to a deal's receivables earned, and those of money taken back, recorded once each
+  // (docs/superpowers/specs/2026-10-14-commissions-design.md C5). Best effort, in every mode: a failure is a line, and
+  // the next cycle records what this one missed.
+  try {
+    lines.push(...(await recordCommissions(db)).log);
+  } catch (error) {
+    console.error("commissions not recorded", db.orgId, error instanceof Error ? error.message : error);
+    lines.push({ domain: "ap", message: "Commissions on money received could not be recorded. The next cycle tries again." });
   }
   });
 

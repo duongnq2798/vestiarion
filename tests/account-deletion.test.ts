@@ -120,6 +120,11 @@ describe("0023 is idempotent", () => {
         { tbl: "collection_policies", col: "created_by", action: "n" },
         { tbl: "collection_tasks", col: "assignee", action: "n" },
         { tbl: "collection_tasks", col: "resolved_by", action: "n" },
+        // Commissions (0118): who made a payout, set or ended a plan, and the member a plan names as its partner.
+        { tbl: "commission_payouts", col: "created_by", action: "n" },
+        { tbl: "commission_plans", col: "beneficiary_member", action: "n" },
+        { tbl: "commission_plans", col: "created_by", action: "n" },
+        { tbl: "commission_plans", col: "ended_by", action: "n" },
         { tbl: "crm_deals", col: "reviewed_by", action: "n" },
         { tbl: "crm_receipt_writes", col: "overwrite_by", action: "n" },
         { tbl: "customer_portal_links", col: "created_by", action: "n" },

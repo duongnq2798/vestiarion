@@ -1,0 +1,79 @@
+A sales partner or a referrer is usually paid when a deal is won, and asked for the money back when the customer pays late, pays part or never pays. In Vestiarion a commission is earned on money instead: when a customer's payment on Arc is applied to an invoice of a deal the partner's plan covers, the commission on exactly that money is recorded, with its formula. After a hold window you review what each partner is due and create one payable, which the agent decides and pays like any other bill. It works the same in a workspace on Arc testnet and on Arc mainnet.
+
+<Callout kind="important" title="Paid on money that arrived, never taken back from a wallet">
+A commission follows money applied to an invoice: a part payment earns its part, and nothing is earned on an invoice marked received with no payment on Arc. When an application is undone, the commission on it comes off the partner's next payable. Vestiarion never pulls money back from a partner's wallet.
+</Callout>
+
+## Before you start
+
+- **An owner or admin** sets plans and creates payables, as for adding a bill. Every member reads **Commissions**; anyone else sees "Only an owner or admin of this workspace can set a commission plan or create a payable from it."
+- **The partner is on file** on **Counterparties** as a vendor or contractor, with the address it is paid at. A client pays the business, so it earns no commission: "A client pays this business, so it earns no commission. Choose a vendor or contractor."
+- **Your customers' invoices come from deals.** A commission follows the invoices a deal releases. See [Turn a signed deal into a collection schedule](/docs/guides/deals).
+- **Commissions are set up on your deployment.** Until they are, the page says "Commissions are not set up on this deployment yet." and nothing else changes.
+
+## 1. Set a partner's plan
+
+On **Bills & receivables**, open **Receivables**, then **Open commissions** under **Commissions**. Choose **New plan** and fill in:
+
+- **Partner**: "A vendor or contractor on file who earns the commission."
+- **Rate (%)**: such as 10 or 12.5, up to two decimals.
+- **Hold window (days)**: "How long after the money is applied a commission waits before it can be paid." 30 days when left empty, up to 365.
+- **Commission on**: **Net: the money that arrived on Arc**, or **Gross: also what was recorded as a fee on the invoice**: "A few cents lost on the way still earn their commission."
+- **Deals it covers**: **Every deal**, or **Chosen deals** and tick each one.
+- **Reference**, optional: "The agreement's name or number, named on each payable."
+- **Member who is this partner**, optional: when the partner is also a member of the workspace, name them. "That person can never approve this partner's payout, nor change its plan."
+
+Then choose **Save plan**. A partner has one plan in force. A plan covers money that arrives on Arc from the moment it is saved: a payment that arrived before earns nothing under it, however late it is applied, or applied again.
+
+**Change plan** on a plan's card saves its next version with **Save new version**: the old one ends as the new one starts, and money that arrived before keeps the terms it was earned under. **End plan** stops it: what it earned stays to review. Ended versions are listed under **Ended plans**.
+
+## 2. How a commission is earned
+
+Each time a customer's payment on Arc is applied to an invoice of a covered deal, by the agent or by a person under **Apply payments** (see [Apply money received to invoices](/docs/guides/apply-payments)), the commission on exactly that money is recorded within a minute, or at the agent's next cycle:
+
+- A payment matched to an invoice in full earns the rate on all of it, once the invoice is marked received.
+- A part payment earns the rate on the part: 400.00 USDC applied to a 1,000.00 USDC invoice at 10% earns 40.00 USDC, and the 600.00 USDC that pays the rest earns 60.00 USDC when it comes.
+- **Gross** also counts a difference a person recorded as a fee on the invoice. On a 1,000.00 USDC invoice paid with 999.50 USDC and a 0.50 USDC fee, 10% net is 99.95 USDC and 10% gross is 100.00 USDC.
+- The amount is the rate times the money, rounded down to the millionth, in the currency of the money: USDC or EURC, never added together.
+
+The same payment is never counted twice, however often it is looked at.
+
+## 3. Review what each partner is due
+
+**To review** has a card for each partner and currency, every line with its formula, such as "400.00 USDC received × 10% = 40.00 USDC", and the invoice it was earned on:
+
+- **Due now**: commissions past their hold window, and adjustments.
+- **Held**: commissions still in their window, each with the day it falls due.
+- **In payables**: each payable made for the partner, by its statement number, with how many lines it pays and where it stands: **Waiting for the agent**, **Waiting in Approvals**, **Paid**, or **Rejected: back to review**.
+
+When what is due now adds up to more than zero, **Create payable** creates one payable for it, after you confirm: "One payable for every commission due now. The agent decides it like any other bill, under every guardrail, and the partner cannot approve it." If something changed since the page was read, nothing is created: "The commissions due changed since this page was read. Reload the page to see them as they are now."
+
+## 4. The agent pays it
+
+The payable is a bill like any other on **Bills & receivables**: to the partner, for the amount due, due today. Its purchase order is the commission statement's number (CS- and eight characters) and its goods are marked received, since your review is the receipt. The agent decides it within seconds, under every check it always runs: the partner's payment limit, its screening, a first payment to a new address, the spending limit and two approvals. One it holds waits in **Approvals**. A payable rejected there gives its commissions back to the review, to pay later.
+
+## 5. When money is taken back
+
+When a payment or a fee applied to an invoice is reversed under **Apply payments**, the commission on it is adjusted by exactly minus itself:
+
+- If that commission was not in a payable yet, the two cancel out, and nothing is paid for it.
+- If it was, the payable stands as it was approved, and the adjustment is **Carried forward**: it comes off the partner's next payable. When what is due adds up to zero or less, there is nothing to pay until the partner's next commissions cover it.
+
+A commission already paid stays on record even if the customer, its deal or its invoice is deleted later: the line keeps its figures, and says the invoice is no longer on file.
+
+Nothing else takes a commission back by itself. A USDC transfer on Arc has no chargeback, a refund you send a customer as a payable names no invoice, and a deal whose price you lowered moves no money. To take back the commission on money you refunded, reverse the payment's application on the invoice.
+
+## The partner never approves their own payout
+
+A member named as the partner on a plan can read their commissions, and nothing more about them:
+
+- They cannot approve the payable that pays them, nor give one of two approvals, even as the workspace's only approver: "This payable pays your own commission, so someone else must approve it." The database refuses it too, whichever way it is tried.
+- They cannot create their own payable, nor set, change or end their own plan: "This commission is yours, so someone else sets its plan and creates its payable."
+- Whoever created the payable is refused its approval, as for any bill they enter, unless they are the only person in the workspace who can approve payments. See [How payments are controlled](/docs/guides/controls).
+- An approval the partner gave before a plan named them does not count, as one approval or as either of two.
+
+So when the only people who can approve payments are you, creating the payable, and the partner it pays, a payable the agent holds can be approved by neither of you. The review says so beside **Create payable**: "If the agent holds this payable, no one can approve it: you create it, and the only other person who can approve payments is the partner it pays. Give the partner a role that does not approve payments, or add another approver. The agent can still pay it on its own, within your limits." Change the partner's role on **Members**, or invite another approver, before or after you create it.
+
+## In the audit log
+
+Each step is a signed entry in the [audit log](/docs/guides/audit-export): `commission_plan_set` and `commission_plan_ended` for a plan, `commission_accrued` for each commission with its formula, `commission_adjusted` for each adjustment, and `commission_payable_created` with the payable's own `create_invoice` entry. They are listed by the API's ledger and sent to webhooks like every entry.
