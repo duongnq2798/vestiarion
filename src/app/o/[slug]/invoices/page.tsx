@@ -86,6 +86,7 @@ import { readInvoicePayments, type PaymentRecord } from "@/lib/settlement-read";
 import { workspaceNetwork } from "@/lib/workspace-network";
 import { shellStatus } from "@/lib/shell-status";
 import { DealForm } from "@/components/deals/DealForm";
+import { CommissionsLink } from "@/components/commissions/CommissionViews";
 import { DealsSection } from "@/components/deals/DealsSection";
 import { crmPlanState } from "@/components/deals/crm-plan";
 import { PlanFromCrmForm, PlannedFromCrm } from "@/components/deals/PlannedFromCrm";
@@ -837,6 +838,8 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
                 collected={dealsCollected}
                 fromCrm={crmSections.length > 0 ? <>{crmSections.map(crmSection)}</> : undefined}
               />
+              {/* What partners earn on the money these deals bring in (commissions C10). */}
+              <CommissionsLink href={orgHref(slug, "/invoices/commissions")} />
             </div>
           ),
         },
