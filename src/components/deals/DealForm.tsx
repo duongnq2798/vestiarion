@@ -213,7 +213,7 @@ export function DealForm({
           <Field id="deal-starts" label="Start date" error={error("startsOn")}>
             <Input name="startsOn" type="date" required value={startsOn} onChange={(event) => setStartsOn(event.target.value)} />
           </Field>
-          <Field id="deal-terms" label="Payment terms (days)" error={error("termsDays")}>
+          <Field id="deal-terms" label="Terms (days)" error={error("termsDays")}>
             <Input name="termsDays" inputMode="numeric" value={termsDays} onChange={(event) => setTermsDays(event.target.value)} />
           </Field>
         </div>

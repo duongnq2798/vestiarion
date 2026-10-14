@@ -888,7 +888,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["New deal", NEW_MENU],
     ["Only an owner or admin of this workspace can release, change or cancel a deal.", DEAL_PAGE],
     ["Deals are not set up on this deployment yet.", DEALS_SECTION],
-    ["Payment terms (days)", DEAL_FORM],
+    ["Terms (days)", DEAL_FORM],
     ["External reference", DEAL_FORM],
     ["How it is billed", DEAL_FORM],
     ["Deposit and balance", DEAL_FORM],
