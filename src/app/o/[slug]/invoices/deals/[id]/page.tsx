@@ -133,7 +133,7 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
     const stopping = inForce(facts.lines).filter((line) => line.status === "planned" && line.kind === "charge");
 
     return (
-      <ProductShell {...shell}>
+      <ProductShell {...shell} crumb={deal.title}>
         <PageHead
           title={deal.title}
           sub={<DealHeadSub deal={deal} today={today} />}

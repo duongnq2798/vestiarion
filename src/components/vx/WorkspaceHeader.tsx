@@ -12,7 +12,7 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { orgHref } from "@/lib/auth/org-paths";
 import { CONTENT_FRAME } from "./frame";
 import { useFrame } from "./FrameContext";
-import { HOME_PATH, insideSection, navItemForPathname } from "./nav";
+import { HOME_PATH, navItemForPathname, subpageLabel } from "./nav";
 import { statusChips, statusRows, statusSummary, type PageStatus, type StatusChip, type StatusRow, type StatusTone } from "./workspace-status";
 
 /**
@@ -22,15 +22,20 @@ import { statusChips, statusRows, statusSummary, type PageStatus, type StatusChi
  *
  * It is not a heading: each page keeps its own `<h1>`. The status comes from two places — the layout's platform facts
  * (through `useFrame`) and the page's own (`page`), which a loading or error state does not have, and then says less.
+ *
+ * The breadcrumb is the workspace, then the section, then — on a page inside a section, such as Commissions or a
+ * deal — that page: the section links back and the page is current. A page showing one record names it (`crumb`, a
+ * deal's title); without it, as while loading, the page goes by its kind (`subpageLabel`: Deal).
  */
-export function WorkspaceHeader({ page, activity }: { page?: PageStatus; activity?: ReactNode }) {
+export function WorkspaceHeader({ page, activity, crumb }: { page?: PageStatus; activity?: ReactNode; crumb?: string }) {
   const { workspace, platform, sidebarCollapsed, toggleSidebar } = useFrame();
   const pathname = usePathname();
   const section = navItemForPathname(pathname);
-  // A page inside a section without being under its path, such as a payment's evidence (evidence chain E1): the
-  // section is the way back to it, not the current page.
-  const sectionHref = section ? orgHref(workspace.slug, section.path) : null;
-  const inside = sectionHref !== null && insideSection(pathname);
+  const subpage = section ? subpageLabel(pathname) : undefined;
+  // On a page inside a section, its own crumb after the section's: the record's name the page passed (`named`), or the
+  // page's kind. Undefined on a section's own page, which is the current crumb itself.
+  const named = subpage === undefined ? undefined : crumb?.trim() || undefined;
+  const current = named ?? subpage;
   const chips = statusChips(platform, page);
   const rows = statusRows(platform, page);
 
@@ -61,26 +66,33 @@ export function WorkspaceHeader({ page, activity }: { page?: PageStatus; activit
           </Tooltip>
           <nav aria-label="Breadcrumb" className="min-w-0">
             <ol className="flex min-w-0 items-center gap-1.5 text-sm">
-              <li className="min-w-0">
+              {/* Where room is short, the workspace's name gives way first: the sidebar beside it, when open, names it too. */}
+              <li className="min-w-0 shrink-3">
                 <Link href={orgHref(workspace.slug, HOME_PATH)} className="block truncate rounded-md text-ink-3 transition-colors duration-150 ease-standard hover:text-ink" title={workspace.name}>
                   {workspace.name}
                 </Link>
               </li>
               {section && (
                 <>
-                  <li aria-hidden className="text-line-strong">
-                    <ChevronRight className="size-3.5" />
-                  </li>
-                  {inside ? (
-                    <li className="shrink-0">
-                      <Link href={sectionHref} className="rounded-md font-medium text-ink-2 transition-colors duration-150 ease-standard hover:text-ink">
-                        {section.label}
-                      </Link>
-                    </li>
-                  ) : (
+                  <CrumbSeparator />
+                  {current === undefined ? (
                     <li aria-current="page" className="shrink-0 font-medium text-ink">
                       {section.label}
                     </li>
+                  ) : (
+                    <>
+                      <li className="shrink-0">
+                        <Link href={orgHref(workspace.slug, section.path)} className="rounded-md text-ink-3 transition-colors duration-150 ease-standard hover:text-ink">
+                          {section.label}
+                        </Link>
+                      </li>
+                      <CrumbSeparator />
+                      {/* A page's kind is short and stays whole. A record's name can be long: it is cut short, more so beside an
+                          open sidebar, and whole in its title. */}
+                      <li aria-current="page" className={cn("font-medium text-ink", named ? "min-w-0 max-w-40 truncate xl:max-w-64" : "shrink-0")} title={named}>
+                        {current}
+                      </li>
+                    </>
                   )}
                 </>
               )}
@@ -92,6 +104,15 @@ export function WorkspaceHeader({ page, activity }: { page?: PageStatus; activit
         <StatusButton chips={chips} rows={rows} />
       </div>
     </header>
+  );
+}
+
+/** The chevron between two crumbs: drawn, never read, so the list is only its crumbs. */
+function CrumbSeparator() {
+  return (
+    <li aria-hidden className="text-line-strong">
+      <ChevronRight className="size-3.5" />
+    </li>
   );
 }
 

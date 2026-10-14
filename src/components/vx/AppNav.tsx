@@ -25,7 +25,7 @@ import { AccountMenu } from "./AccountMenu";
 import { BrandMark } from "./Brand";
 import { useCommandPalette, useShortcutLabel } from "./CommandPalette";
 import { useFrame, WIDE } from "./FrameContext";
-import { DOCS_LINK, insideSection, NAV_GROUPS, navItemForPathname, sectionPathOf } from "./nav";
+import { DOCS_LINK, insideSection, NAV_GROUPS, navItemForPathname, sectionPathOf, subpageLabel } from "./nav";
 import { NAV_ICONS } from "./nav-icons";
 import type { WorkspaceSummary } from "./workspace";
 import { WorkspaceMeta } from "./WorkspaceMeta";
@@ -315,7 +315,8 @@ export function Sidebar({ home, workspaces, email }: { home: string; workspaces:
 }
 
 /**
- * Below `lg`: a compact bar naming the section and workspace, a drawer with
+ * Below `lg`: a compact bar naming the section and workspace (or, on a page
+ * inside a section, the page and its section), a drawer with
  * the same panel the sidebar shows, and the command palette's search button.
  * The drawer is open for one URL: following any link closes it without an
  * effect, and so does growing the window past `lg`.
@@ -333,6 +334,8 @@ export function MobileNav({
 }) {
   const pathname = usePathname();
   const section = navItemForPathname(pathname);
+  // A page inside a section, such as Commissions or a deal, is named by its kind, with its section under it.
+  const subpage = section ? subpageLabel(pathname) : undefined;
   const palette = useCommandPalette();
   const [openAt, setOpenAt] = useState<string | null>(null);
   const open = openAt === pathname;
@@ -372,8 +375,8 @@ export function MobileNav({
           <span className="sr-only">Vestiarion — {workspace.name} home</span>
         </Link>
         <div className="min-w-0 flex-1 pl-1">
-          <p className="truncate text-[0.9375rem] font-semibold leading-5 text-ink">{section?.label ?? workspace.name}</p>
-          {section && <p className="truncate text-xs leading-4 text-ink-3">{workspace.name}</p>}
+          <p className="truncate text-[0.9375rem] font-semibold leading-5 text-ink">{subpage ?? section?.label ?? workspace.name}</p>
+          {section && <p className="truncate text-xs leading-4 text-ink-3">{subpage ? section.label : workspace.name}</p>}
         </div>
         <Button variant="ghost" size="icon" aria-label="Search or jump to" onClick={palette.open}>
           <Search />

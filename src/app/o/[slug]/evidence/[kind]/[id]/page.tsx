@@ -39,7 +39,7 @@ export default async function EvidencePage({ params }: EvidencePageProps) {
     const download = `/api/evidence?org=${encodeURIComponent(slug)}&kind=${subject.kind}&id=${subject.id}`;
 
     return (
-      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()} status={await shellStatus()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()} status={await shellStatus()} crumb={subject.title}>
         <PageHead
           title={evidenceLinkLabel(subject.paid)}
           sub={evidenceSub(subject)}

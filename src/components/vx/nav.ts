@@ -71,23 +71,30 @@ export const DOCS_LINK = { href: "/docs", label: "Docs" } as const;
 export const HOME_PATH = NAV_ITEMS[0].path;
 
 /**
- * Pages that sit inside a section without starting with its path: a payable's evidence is part of Bills & receivables,
- * a milestone's of Contractors (evidence chain E1).
+ * Pages that sit inside a section rather than being its own page, each with the section it is in and its name: a
+ * payable's evidence is part of Bills & receivables, a milestone's of Contractors (evidence chain E1), though neither
+ * starts with its section's path. The name is the page's title in the browser tab and in the phone bar, and the
+ * header's last crumb wherever the page has not named the record it shows, as in the loading and error states.
+ * `tests/navigation.test.ts` holds every page below a section's own page to a row here.
  */
-const NESTED: ReadonlyArray<readonly [RegExp, NavKey]> = [
-  [/^\/o\/[^/]+\/evidence\/invoice(?:\/|$)/, "invoices"],
-  [/^\/o\/[^/]+\/evidence\/milestone(?:\/|$)/, "contractors"],
+const SUBPAGES: ReadonlyArray<{ pattern: RegExp; section: NavKey; label: string }> = [
+  { pattern: /^\/o\/[^/]+\/evidence\/invoice(?:\/|$)/, section: "invoices", label: "Payment evidence" },
+  { pattern: /^\/o\/[^/]+\/evidence\/milestone(?:\/|$)/, section: "contractors", label: "Payment evidence" },
   // A deal's page sits inside Bills & receivables, where its Deals are listed (deal schedule).
-  [/^\/o\/[^/]+\/invoices\/deals(?:\/|$)/, "invoices"],
+  { pattern: /^\/o\/[^/]+\/invoices\/deals(?:\/|$)/, section: "invoices", label: "Deal" },
   // Commissions sit inside Bills & receivables too, linked from its Receivables (commissions C10).
-  [/^\/o\/[^/]+\/invoices\/commissions(?:\/|$)/, "invoices"],
+  { pattern: /^\/o\/[^/]+\/invoices\/commissions(?:\/|$)/, section: "invoices", label: "Commissions" },
   // A project's page sits inside Projects, where every project is listed (project budgets).
-  [/^\/o\/[^/]+\/projects\/[^/]+/, "projects"],
+  { pattern: /^\/o\/[^/]+\/projects\/[^/]+/, section: "projects", label: "Project" },
 ];
+
+function subpageOf(pathname: string) {
+  return SUBPAGES.find(({ pattern }) => pattern.test(pathname));
+}
 
 /** The section a workspace pathname is in: `/o/acme/audit` → Audit log, `/o/acme/evidence/invoice/<id>` → Bills & receivables. */
 export function navItemForPathname(pathname: string): NavItem | undefined {
-  const nested = NESTED.find(([pattern]) => pattern.test(pathname))?.[1];
+  const nested = subpageOf(pathname)?.section;
   if (nested) return NAV_ITEMS.find((item) => item.key === nested);
   const section = /^\/o\/[^/]+(\/[^/]+)/.exec(pathname)?.[1];
   return NAV_ITEMS.find((item) => item.path === section);
@@ -95,11 +102,19 @@ export function navItemForPathname(pathname: string): NavItem | undefined {
 
 /**
  * Whether a pathname is a page inside a section rather than the section's own page, such as a payment's evidence: the
- * sidebar marks the section current (`aria-current="true"`) and the header links back to it, but neither calls it the
- * page being read.
+ * sidebar marks the section current (`aria-current="true"`), and the header links back to it, then names the page.
  */
 export function insideSection(pathname: string): boolean {
-  return NESTED.some(([pattern]) => pattern.test(pathname));
+  return subpageOf(pathname) !== undefined;
+}
+
+/**
+ * The name of a page inside a section, `/o/acme/invoices/commissions` → Commissions and `/o/acme/invoices/deals/<id>` →
+ * Deal, or undefined for a section's own page and anything else. A page that shows one record names that record in the
+ * header instead (`ProductShell`'s `crumb`); this is its name without one.
+ */
+export function subpageLabel(pathname: string): string | undefined {
+  return subpageOf(pathname)?.label;
 }
 
 /** The section the URL is in, or the workspace's home — where a switch to another workspace lands. */

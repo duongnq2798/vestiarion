@@ -814,14 +814,25 @@ Every page under `/o/[slug]` sits in one frame (spec `2026-10-10-workspace-shell
 - **Sections** are `NAV_GROUPS` in `nav.ts`: Treasury and Approvals, then Operations, Controls, Analytics and Workspace.
   The sidebar, the drawer, the palette and each page's title read that one list.
 - **Header, drawn by the page.** `ProductShell` (`src/components/vx/Shell.tsx`) draws `WorkspaceHeader`: the toggle,
-  the workspace and section, the agent's last cycle (`AgentActivity`, mounted once at every width so its toasts always
-  come) and three chips, network, payments and agent, which open a "Workspace status" panel. The chips combine the
+  the breadcrumb, the agent's last cycle (`AgentActivity`, mounted once at every width so its toasts always come) and
+  three chips, network, payments and agent, which open a "Workspace status" panel. The chips combine the
   layout's `PlatformStatus` with the page's `PageStatus`, which only the page can read, inside `inOrg`:
   `chainModes={shellModes()}` and `status={await shellStatus()}` (`src/lib/shell-status.ts`: shadow mode, and the
   workspace's own screening, which read out of scope would be the deployment's). `workspace-status.ts` turns both into
   chips and rows, pure and tested; payments off wins, then held, shadow mode, simulated, live. A fact the layout or the
   page could not read (the switch, the pause, shadow mode) shows as not known, never as its healthy value, since the
   payment gates refuse on the same failure; the agent shows as stopped while payments are off or held.
+- **Breadcrumb.** The workspace (linking home), then the section; on a page inside a section, the section links back
+  and the page is the current crumb (`aria-current="page"`, the only one). `SUBPAGES` in `nav.ts` lists those pages
+  (Commissions and a deal under Bills & receivables, a project under Projects, a payment's evidence under its record's
+  section) with each one's name, which is also its tab title: `navItemForPathname` files each under its section,
+  `insideSection` has the sidebar mark the section `aria-current="true"`, and `subpageLabel` names it. A page showing
+  one record passes its name as `ProductShell`'s `crumb` (a deal's title, a project's name, the evidence's bill or
+  milestone); the loading and error states, and the phone bar, which the layout draws, name it by its kind (Deal).
+  Where the row is short (`lg` beside the open sidebar) the workspace's name gives way first (`shrink-3`), the
+  section's and a page's kind stay whole, and a record's name is cut at 10rem, 16rem from `xl`, whole in its `title`;
+  the agent's activity takes what is left. `tests/navigation.test.ts` fails on a page below a section's own page that
+  `SUBPAGES` does not list.
 - **Banners** (Arc mainnet, payments switched off, agent paused) are read by the layout and drawn by each page under its
   header (`FrameBanners`). The loading and error states draw the same header with the layout's facts alone, and the
   same `CONTENT_FRAME` width (`frame.ts`, 90rem).
@@ -1331,9 +1342,9 @@ payable the agent decides.
 `/o/[slug]/evidence/invoice|milestone/<id>` (spec `2026-10-10-evidence-chain-design.md`) gives every member one page
 per payable or contractor milestone: what was agreed, what was delivered, the bill, the payee, the decision, the people,
 the payment, the receipt and the signatures. `navItemForPathname` files it under its record's section (Bills &
-receivables, or Contractors), and the header's breadcrumb links back there. Every payable's and milestone's card footer
-links it (`Decision.chain`, set by `invoiceDecision` and `milestoneDecision`; `src/lib/evidence-paths.ts`), and so
-does the decision trail's last line.
+receivables, or Contractors), and the header's breadcrumb links back there, then names the bill or milestone. Every
+payable's and milestone's card footer links it (`Decision.chain`, set by `invoiceDecision` and `milestoneDecision`;
+`src/lib/evidence-paths.ts`), and so does the decision trail's last line.
 
 - **Pure, then read.** `buildEvidenceChain` (`src/lib/evidence-chain.ts`) is pure: it takes the record, its
   counterparty, the entries, the screening check, the payment intent, the receipt, the members' emails and the checks'

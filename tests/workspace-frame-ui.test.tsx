@@ -2,7 +2,7 @@ import type { ReactElement, ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
-import { NavPanel } from "@/components/vx/AppNav";
+import { MobileNav, NavPanel } from "@/components/vx/AppNav";
 import { CommandPaletteProvider } from "@/components/vx/CommandPalette";
 import { FrameProvider } from "@/components/vx/FrameContext";
 import { NAV_ITEMS } from "@/components/vx/nav";
@@ -42,7 +42,25 @@ function frame(node: ReactNode, collapsed = false) {
 }
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
 /** `null`: no page status yet, as the loading and error states draw it. */
-const header = (collapsed = false, page: PageStatus | null = PAGE): string => frame(<WorkspaceHeader page={page ?? undefined} activity={<span>Last cycle</span>} />, collapsed);
+const header = (collapsed = false, page: PageStatus | null = PAGE, crumb?: string): string =>
+  frame(<WorkspaceHeader page={page ?? undefined} activity={<span>Last cycle</span>} crumb={crumb} />, collapsed);
+const phoneBar = (): string => frame(<MobileNav home="/o/acme/console" workspace={WORKSPACE} workspaces={[WORKSPACE]} email="ada@example.com" />);
+/** The breadcrumb's list, and each crumb's words in order. */
+const breadcrumb = (markup: string) => {
+  const list = /<nav aria-label="Breadcrumb"[^>]*><ol[^>]*>([\s\S]*?)<\/ol><\/nav>/.exec(markup)?.[1] ?? "";
+  const items = [...list.matchAll(/<li([^>]*)>([\s\S]*?)<\/li>/g)].map(([, attributes, inner]) => ({ attributes, words: text(inner) }));
+  return { list, crumbs: items.filter((item) => !item.attributes.includes('aria-hidden="true"')), separators: items.filter((item) => item.attributes.includes('aria-hidden="true"')) };
+};
+const ID = "5f1e2d3c-0000-4000-8000-000000000001";
+/** Renders at a pathname, then puts the route back. */
+function at<T>(pathname: string, render: () => T): T {
+  route.pathname = pathname;
+  try {
+    return render();
+  } finally {
+    route.pathname = "/o/acme/approvals";
+  }
+}
 const panel = (collapsed: boolean): string => frame((<NavPanel home="/o/acme/console" workspace={WORKSPACE} workspaces={[WORKSPACE]} email="ada@example.com" layoutId="test" collapsed={collapsed} />) as ReactElement);
 
 describe("the workspace header", () => {
@@ -60,14 +78,67 @@ describe("the workspace header", () => {
   });
 
   it("links the section from a page inside it, which is not the section's own page (evidence chain E1)", () => {
-    route.pathname = "/o/acme/evidence/invoice/5f1e2d3c-0000-4000-8000-000000000001";
-    try {
-      const markup = header();
-      expect(markup).toMatch(/<a[^>]*href="\/o\/acme\/invoices"[^>]*>Bills &amp; receivables<\/a>/);
-      expect(markup).not.toContain('aria-current="page"');
-    } finally {
-      route.pathname = "/o/acme/approvals";
-    }
+    const markup = at(`/o/acme/evidence/invoice/${ID}`, () => header(false, PAGE, "Design retainer, October"));
+    expect(markup).toMatch(/<a[^>]*href="\/o\/acme\/invoices"[^>]*>Bills &amp; receivables<\/a>/);
+    expect(breadcrumb(markup).crumbs.map((crumb) => crumb.words)).toEqual(["Acme Studio", "Bills & receivables", "Design retainer, October"]);
+  });
+
+  it("names a page inside a section after it, as the current page, with its section a link back (Commissions)", () => {
+    const markup = at("/o/acme/invoices/commissions", () => header());
+    const { list, crumbs, separators } = breadcrumb(markup);
+    expect(crumbs.map((crumb) => crumb.words)).toEqual(["Acme Studio", "Bills & receivables", "Commissions"]);
+    expect(list).toMatch(/<a[^>]*href="\/o\/acme\/invoices"[^>]*>Bills &amp; receivables<\/a>/);
+    expect(list).toMatch(/<li aria-current="page"[^>]*>Commissions<\/li>/);
+    // Only the last crumb is the current page; the chevrons between them are drawn, not read.
+    expect(markup.match(/aria-current="page"/g)).toHaveLength(1);
+    expect(crumbs.slice(0, 2).every((crumb) => !crumb.attributes.includes("aria-current"))).toBe(true);
+    expect(separators).toHaveLength(2);
+  });
+
+  it("names the record a page inside a section shows, and its kind while the record is not known", () => {
+    const deal = `/o/acme/invoices/deals/${ID}`;
+    const named = breadcrumb(at(deal, () => header(false, PAGE, "Northwind retainer"))).crumbs.at(-1);
+    expect(named?.words).toBe("Northwind retainer");
+    expect(named?.attributes).toContain('aria-current="page"');
+    expect(named?.attributes).toContain('title="Northwind retainer"');
+    // The loading and error states draw the header without the page's props.
+    expect(breadcrumb(at(deal, () => header(false, null))).crumbs.map((crumb) => crumb.words)).toEqual(["Acme Studio", "Bills & receivables", "Deal"]);
+    expect(breadcrumb(at(deal, () => header(false, PAGE, "  "))).crumbs.at(-1)?.words).toBe("Deal");
+    expect(breadcrumb(at(`/o/acme/projects/${ID}`, () => header(false, PAGE, "Office fit-out"))).crumbs.map((crumb) => crumb.words)).toEqual([
+      "Acme Studio",
+      "Projects",
+      "Office fit-out",
+    ]);
+    expect(breadcrumb(at(`/o/acme/evidence/milestone/${ID}`, () => header(false, null))).crumbs.map((crumb) => crumb.words)).toEqual([
+      "Acme Studio",
+      "Contractors",
+      "Payment evidence",
+    ]);
+  });
+
+  it("cuts a long name short with an ellipsis, whole in its title, rather than push the chips aside", () => {
+    const name = "Northwind Traders annual retainer with quarterly milestones and a deposit paid in two parts";
+    const { crumbs } = breadcrumb(at(`/o/acme/invoices/deals/${ID}`, () => header(false, PAGE, name)));
+    const classes = (attributes: string | undefined) => /class="([^"]*)"/.exec(attributes ?? "")?.[1].split(" ") ?? [];
+    expect(crumbs.at(-1)?.attributes).toContain(`title="${name}"`);
+    expect(classes(crumbs.at(-1)?.attributes)).toEqual(expect.arrayContaining(["min-w-0", "max-w-40", "xl:max-w-64", "truncate"]));
+    // Where room is short the workspace's name gives way first; the section's stays whole.
+    expect(classes(crumbs[0].attributes)).toEqual(expect.arrayContaining(["min-w-0", "shrink-3"]));
+    expect(classes(crumbs[1].attributes)).toContain("shrink-0");
+  });
+
+  it("keeps a page's kind whole, with no title to repeat it", () => {
+    const current = breadcrumb(at("/o/acme/invoices/commissions", () => header())).crumbs.at(-1);
+    expect(current?.attributes).toContain("shrink-0");
+    expect(current?.attributes).not.toContain("truncate");
+    expect(current?.attributes).not.toContain("title=");
+  });
+
+  it("keeps a section's own page the current crumb, whatever name it is handed", () => {
+    const { crumbs, separators } = breadcrumb(at("/o/acme/invoices", () => header(false, PAGE, "Not a subpage")));
+    expect(crumbs.map((crumb) => crumb.words)).toEqual(["Acme Studio", "Bills & receivables"]);
+    expect(crumbs[1].attributes).toContain('aria-current="page"');
+    expect(separators).toHaveLength(1);
   });
 
   it("names the sidebar toggle by what it will do, and ties it to the sidebar", () => {
@@ -92,6 +163,22 @@ describe("the workspace header", () => {
 
   it("says less, not a guess, while the page's own status is still loading", () => {
     expect(header(false, null)).toContain('aria-label="Workspace status: Arc testnet, Payments, Agent on"');
+  });
+});
+
+describe("the phone bar", () => {
+  const titles = (markup: string) => [...markup.matchAll(/<p class="truncate [^"]*">([^<]*)<\/p>/g)].map(([, words]) => words.replace(/&amp;/g, "&"));
+
+  it("names the section, and the workspace under it", () => {
+    expect(titles(phoneBar())).toEqual(["Approvals", "Acme Studio"]);
+  });
+
+  it("names a page inside a section after it, as the breadcrumb does, and its section under it", () => {
+    expect(at("/o/acme/invoices/commissions", phoneBar).match(/<p class="truncate [^"]*">[^<]*<\/p>/g)).toHaveLength(2);
+    expect(titles(at("/o/acme/invoices/commissions", phoneBar))).toEqual(["Commissions", "Bills & receivables"]);
+    expect(titles(at(`/o/acme/invoices/deals/${ID}`, phoneBar))).toEqual(["Deal", "Bills & receivables"]);
+    expect(titles(at(`/o/acme/projects/${ID}`, phoneBar))).toEqual(["Project", "Projects"]);
+    expect(titles(at(`/o/acme/evidence/milestone/${ID}`, phoneBar))).toEqual(["Payment evidence", "Contractors"]);
   });
 });
 
