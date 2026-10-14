@@ -2348,7 +2348,9 @@ exclusive. Consent `asana-2026-10-14`.
   20, then sends on the acceptances as they stand and the cycle says so), since the cycle's read can be seconds old by
   then: on Arc testnet a task reopened 3 seconds after that read had its release sent 6 seconds later.
 - **Webhooks** (`webhook.ts`, `webhook-store.ts`, `POST /api/integrations/asana/webhook/<id>`): a link's webhook row is
-  made first, then Asana is asked (`POST /webhooks`, after the answer, only on an https origin); the `X-Hook-Secret`
+  made first, then Asana is asked (`POST /webhooks`, after the answer, only on an https origin, filtered to the task, its
+  stories and its attachments: Asana refuses a webhook that would deliver a kind the connection has no read scope for,
+  and an unfiltered one delivers time tracking entries too); the `X-Hook-Secret`
   handshake is taken once, for a row still pending, within two minutes, sealed and echoed (a webhook Asana refuses
   to make is logged with Asana's own reason, from `reasonOf` in `http.ts`, any address in it replaced); the secret in
   Asana's 201 (the

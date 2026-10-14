@@ -46,6 +46,18 @@ const STORY_FIELDS = "resource_subtype,type,text,created_at";
 const PICKER_PAGES = 5;
 const STORY_PAGES = 3;
 
+/**
+ * What a linked task's webhook is told about: the task, its stories (comments among them) and its attachments, the
+ * three kinds a re-read looks at, each with a read scope the connection has. Asana asks a read scope for every kind a
+ * webhook delivers; one with no filters delivers time tracking entries too, and was refused for want of
+ * `time_tracking_entries:read`.
+ */
+export const WEBHOOK_FILTERS: ReadonlyArray<{ resource_type: "task" | "story" | "attachment" }> = [
+  { resource_type: "task" },
+  { resource_type: "story" },
+  { resource_type: "attachment" },
+];
+
 function requireGid(value: string, what: string): string {
   if (!GID.test(value)) throw new ProviderError("bad_response", `Asana ${what}: not an id`);
   return value;
@@ -142,7 +154,7 @@ export function asanaReader(deps: AsanaHttp = {}): AsanaReader {
         {
           method: "POST",
           headers: { authorization: `Bearer ${accessToken}`, accept: "application/json", "content-type": "application/json" },
-          body: JSON.stringify({ data: { resource, target: target.toString() } }),
+          body: JSON.stringify({ data: { resource, target: target.toString(), filters: WEBHOOK_FILTERS } }),
         },
         "webhook",
         deps
