@@ -1,6 +1,6 @@
 import { db, unwrap } from "../dal";
 import { connectionById, connectionFor, isNotSetUp, NotSetUpError, type Connection } from "./connections";
-import { crmChangeWords, moneyWords, plannable, type CrmChange } from "./crm";
+import { crmChangeWords, crmDealReference, moneyWords, plannable, type CrmChange } from "./crm";
 import { changePrefill, dealPrefill, type ChangePrefill, type DealPrefill } from "./crm-prefill";
 import { amountText, changesKey, CRM_DEAL_COLUMNS, rowChanges, type CrmDealRow } from "./crm-store";
 import { pagesRead, type SyncCursor } from "./cursors";
@@ -219,6 +219,8 @@ export async function crmPanelView(provider: ProviderId, nowMs: number = Date.no
 /** A planned deal's changes in the CRM, for its page (H12): what changed, in words, and the Change deal form's start. */
 export interface CrmDealChanges {
   rowId: string;
+  /** The CRM, for the address Change deal opens with (`?from=<provider>`). */
+  provider: ProviderId;
   label: string;
   changes: CrmChange[];
   words: string[];
@@ -242,6 +244,7 @@ export async function crmChangesFor(deal: { id: string; status: "active" | "canc
   if (changes.length === 0) return null;
   return {
     rowId: row.id,
+    provider: connection.provider,
     label,
     changes,
     words: changes.map((change) => crmChangeWords(change, label)),
@@ -287,6 +290,7 @@ export async function crmPrefillFor(input: {
   const prefill = dealPrefill({
     deal: {
       externalId: row.external_id,
+      reference: crmDealReference(connection.provider, row.external_id),
       name: row.name,
       amount,
       currency: row.currency,

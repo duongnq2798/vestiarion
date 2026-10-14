@@ -43,7 +43,9 @@ export async function createCounterparty(input: {
    */
   external?:
     | { provider: "xero" | "quickbooks"; ids: { tenantId: string; contactId: string | null } }
-    | { provider: "hubspot"; ids: { hubId: string; companyId: string | null } };
+    | { provider: "hubspot"; ids: { hubId: string; companyId: string | null } }
+    // Pipedrive's company (the account) and the organization the deal was sold to (Pipedrive connector P19).
+    | { provider: "pipedrive"; ids: { companyId: string; organizationId: string | null } };
   now?: () => string;
 }): Promise<CreatedCounterparty> {
   const { actorId, counterparty, via, apiKeyId, github, purchaseOrderRequired, external } = input;

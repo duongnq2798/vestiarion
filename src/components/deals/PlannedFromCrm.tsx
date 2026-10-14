@@ -44,7 +44,7 @@ function justPlanned(rowId: string): boolean {
 }
 
 /**
- * A CRM deal the address asks to plan (`?hubspot=<row>`) that is planned already: never an error, but the deal it
+ * A CRM deal the address asks to plan (`?hubspot=<row>`, `?pipedrive=<row>`) that is planned already: never an error, but the deal it
  * became, with Open the deal. Right after its own Plan collections, the page goes on to that deal; either way the
  * address stops asking, so a refresh shows Receivables as it is.
  */
@@ -56,8 +56,9 @@ export function PlannedFromCrm({ rowId, title, dealHref, cancelled = false }: { 
       return;
     }
     const params = new URLSearchParams(window.location.search);
-    if (!params.has("hubspot")) return;
+    if (!params.has("hubspot") && !params.has("pipedrive")) return;
     params.delete("hubspot");
+    params.delete("pipedrive");
     const query = params.toString();
     window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
   }, [rowId, dealHref, router]);

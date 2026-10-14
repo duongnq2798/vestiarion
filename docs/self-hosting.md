@@ -381,8 +381,8 @@ waiting. Supabase Cron runs them from the database instead:
   webhooks and by email. It sends nothing.
 - `POST /api/platform/webhooks`, every 10 minutes: webhook retries and anything still queued.
 - `POST /api/platform/accounting-sync`, every 15 minutes: bills from the Xero organisations and QuickBooks companies
-  workspaces connected, deals from the HubSpot accounts they connected, and the connections nobody finished choosing an
-  organisation for, revoked and deleted.
+  workspaces connected, deals from the HubSpot accounts and Pipedrive companies they connected, and the connections nobody
+  finished choosing an organisation for, revoked and deleted.
 
 To set them up, run `supabase/cron/watches.sql` once in the Supabase SQL editor, with your
 deployment's origin in place of `https://www.vestiarion.xyz`. Its header lists what comes first:
@@ -475,6 +475,23 @@ Then, in HubSpot's developer account, open the app's **Auth** tab for its client
 `HUBSPOT_CLIENT_ID` and `HUBSPOT_CLIENT_SECRET`. A deployment on another origin edits the redirect URLs in
 `app-hsmeta.json` and uploads again: HubSpot refuses a redirect URL the config does not list, and an authorize URL whose
 scopes differ from the config's required scopes.
+
+With `PIPEDRIVE_CLIENT_ID` and `PIPEDRIVE_CLIENT_SECRET` set, from a private app made in Pipedrive's Developer Hub, an
+owner or admin connects a workspace to one Pipedrive company from Settings, after agreeing to what Vestiarion does with
+its data. Its won deals come in with their organizations and persons under Deals on Bills & receivables, and a person
+plans each one's collections from the New deal form filled in from it. One Pipedrive company connects to one workspace
+at a time. In Developer Hub, set the app's Callback URL to `<origin>/api/integrations/pipedrive/callback` (Pipedrive also
+sends its uninstall notice there) and its scopes to `deals:full`, `contacts:read`, `deal-fields:full`, `users:read`,
+`recents:read` and `webhooks:full` (with `base`, always on): a person accepts all of them or none, and a grant without
+the scopes that read deals and organizations is refused. Each token is kept encrypted under `VESTIARION_MASTER_KEYS`
+together with the company's own API domain that Pipedrive named with it, and is only ever sent there. On connecting and on
+Sync now, Vestiarion registers a webhook for the company's deals at `<origin>/api/integrations/pipedrive/webhook`, with
+HTTP Basic auth derived from the master key; a notice only starts a sync, and a deployment on localhost registers none,
+so changes there come in with the 15-minute sync alone. Writing receipts back to the deals planned from Pipedrive is off
+until an owner or admin turns it on from the card; Vestiarion then adds nine "Vestiarion: …" custom deal fields once.
+Pipedrive's API says nothing that tells a developer sandbox from a real company, so payments on Arc testnet or in shadow
+mode are never written to Pipedrive. The connection needs migration 0116 (after 0105 and 0107); before it runs, the
+Pipedrive card says Pipedrive is not set up yet. See [Bring deals in from Pipedrive](https://www.vestiarion.xyz/docs/guides/pipedrive).
 
 ### Measurement provenance
 

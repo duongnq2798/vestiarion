@@ -53,8 +53,11 @@ export const BRAND_FILES: Readonly<Record<Brand, string>> = Object.fromEntries(O
 /** True when the mark spells the name itself (npm's, Xero's, QuickBooks' lockup), so the name beside it is for screen readers only. */
 export const isWordmark = (brand: Brand) => MARKS[brand].wordmark === true;
 
-/** The mark each connector shows beside its name in Settings and on its connect and launch pages. */
-export const PROVIDER_MARKS: Readonly<Record<ProviderId, Brand>> = { xero: "xero", quickbooks: "quickbooks", hubspot: "hubspot" };
+/**
+ * The mark each connector shows beside its name in Settings and on its connect and launch pages. Pipedrive shows its
+ * name alone: no logo of Pipedrive's is used (docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md P20).
+ */
+export const PROVIDER_MARKS: Readonly<Record<Exclude<ProviderId, "pipedrive">, Brand>> = { xero: "xero", quickbooks: "quickbooks", hubspot: "hubspot" };
 
 /**
  * A brand's mark, `size` pixels tall. A file that carries clear space around

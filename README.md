@@ -25,6 +25,7 @@
 [![Xero](https://img.shields.io/badge/Xero-bills_%26_bookings-13B5EA?style=flat-square&logo=xero&logoColor=white)](https://www.vestiarion.xyz/docs/guides/xero)
 [![QuickBooks Online](https://img.shields.io/badge/QuickBooks_Online-bills-2CA01C?style=flat-square&logo=quickbooks&logoColor=white)](https://www.vestiarion.xyz/docs/guides/quickbooks)
 [![HubSpot](https://img.shields.io/badge/HubSpot-deals_%26_receipts-FF7A59?style=flat-square&logo=hubspot&logoColor=white)](https://www.vestiarion.xyz/docs/guides/hubspot)
+[![Pipedrive](https://img.shields.io/badge/Pipedrive-deals_%26_receipts-1f2937?style=flat-square)](https://www.vestiarion.xyz/docs/guides/pipedrive)
 [![GitHub](https://img.shields.io/badge/GitHub-bounties-181717?style=flat-square&logo=github&logoColor=white)](https://www.vestiarion.xyz/docs/guides/github)
 
 **[Open the app](https://www.vestiarion.xyz)** · **[Watch the demo](https://www.youtube.com/watch?v=UqfvCkkYGlk)** · **[See your first decision](https://www.vestiarion.xyz/docs/guides/try-it)** · **[Open numbers](https://www.vestiarion.xyz/open)** · **[Docs](https://www.vestiarion.xyz/docs)** · **[@vestiarionhq](https://x.com/vestiarionhq)**
@@ -295,6 +296,7 @@ run in production, with its ledger entries and transactions.
 | **[GitHub](https://www.vestiarion.xyz/docs/guides/github)** | Milestone verification from merged pull requests, bounties, and payment comments |
 | **[Email](https://www.vestiarion.xyz/docs/guides/email-invoices)** | A workspace address that reads forwarded invoices into drafts a person adds |
 | **[HubSpot](https://www.vestiarion.xyz/docs/guides/hubspot)** | Won deals come in with their customers every 15 minutes; Plan collections fills in the New deal form, and a deal changed in HubSpot afterwards is flagged on its deal for a person to change or keep; once allowed, each planned deal's receipts are written back to it (collected, still owed, last receipt, reconciliation), read back, never over a person's change; one account per workspace. [Watch it](https://www.vestiarion.xyz/docs/guides/hubspot#watch-it) (1:55) |
+| **[Pipedrive](https://www.vestiarion.xyz/docs/guides/pipedrive)** | Won deals come in with their organizations and persons as soon as Pipedrive says a deal changed, and every 15 minutes; Plan collections fills in the New deal form, and a deal changed in Pipedrive afterwards is flagged on its deal for a person to change or keep; once allowed, each planned deal's receipts are written back to it in Vestiarion's own deal fields, read back, never over a person's change. Pipedrive names no developer sandbox, so only payments on Arc mainnet outside shadow mode are written; one company per workspace |
 | **[Xero](https://www.vestiarion.xyz/docs/guides/xero)** | Bills approved in Xero come in for review every 15 minutes, through the same check as a bill list, and become payables when a person adds them; once paid on Arc, each payment is drafted as a booking against its bill, which an owner or admin reviews field by field and approves before anything is written to Xero. A payment on Arc testnet or in shadow mode is booked only into a Xero demo company. [Watch it](https://www.vestiarion.xyz/docs/guides/xero#watch-it) (1:52) |
 | **[QuickBooks Online](https://www.vestiarion.xyz/docs/guides/quickbooks)** | Open bills in QuickBooks come in for review every 15 minutes, and sooner when QuickBooks says one changed, through the same check; a bill partly paid there comes in at what is left; read-only, with the bank account payments will be booked to chosen ahead |
 
@@ -422,7 +424,7 @@ simulated.
 
 ## License
 
-[MIT](LICENSE). Arc, Circle, Slack, Telegram, Xero, QuickBooks, HubSpot and npm are trademarks of their respective owners; their names show what
-Vestiarion is built on and connects to, not an endorsement.
+[MIT](LICENSE). Arc, Circle, Slack, Telegram, Xero, QuickBooks, HubSpot, Pipedrive and npm are trademarks of their respective
+owners; their names show what Vestiarion is built on and connects to, not an endorsement.
 
 <a href="https://www.producthunt.com/products/vestiarion?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-vestiarion"><img alt="Vestiarion on Product Hunt" width="200" height="43" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1269583&theme=light"></a>

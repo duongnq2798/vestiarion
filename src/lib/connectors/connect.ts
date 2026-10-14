@@ -6,6 +6,7 @@ import { getSessionUser } from "../auth/session";
 import { platformDb } from "../dal";
 import { withOrg } from "../dal/scope";
 import { masterKeysFromEnv, type MasterKey } from "../secrets";
+import { ConnectRefusal } from "./connect-refusal";
 import { connectedElsewhere, connectionFor, NotSetUpError, saveConnection, type Connection } from "./connections";
 import { CONSENT_VERSIONS } from "./consent";
 import type { ConnectingProvider, ExternalOrganisation, ProviderTokens } from "./provider";
@@ -244,6 +245,8 @@ export async function finishConnect(request: Request, deps: ConnectDeps): Promis
     );
   } catch (error) {
     if (error instanceof NotSetUpError) return back("not_set_up");
+    // A grant the provider's own rules say cannot be connected (Pipedrive connector P4): its words on the card.
+    if (error instanceof ConnectRefusal) return back(error.outcome);
     // The message names the call and a status, never a token.
     console.error("connector: connecting failed", deps.provider.id, error instanceof Error ? error.message : "unknown error");
     return back("failed");

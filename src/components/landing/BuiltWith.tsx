@@ -12,10 +12,13 @@ const REPOSITORY = "https://github.com/duongnq2798/vestiarion";
  * and "works with", never "partners" or "trusted by": none of them vouches for
  * Vestiarion. Arc and Circle also link to their own sites, beside the evidence,
  * in a new tab. QuickBooks Online shows Intuit's QuickBooks lockup, which spells
- * QuickBooks, so its body names QuickBooks Online in full.
+ * QuickBooks, so its body names QuickBooks Online in full. Pipedrive shows its
+ * name alone: no logo of Pipedrive's is used
+ * (docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md P20).
  */
 const SERVICES: ReadonlyArray<{
-  brand: Brand;
+  /** The service's mark, beside its name; absent for a service named in words alone. */
+  brand?: Brand;
   name: string;
   role: string;
   body: string;
@@ -46,6 +49,13 @@ const SERVICES: ReadonlyArray<{
     check: "Read the guide",
   },
   { brand: "hubspot", name: "HubSpot", role: "Works with", body: "Won deals come in with their customers, to plan as collection schedules; what each collected goes back to the deal.", href: "/docs/guides/hubspot", check: "Read the guide" },
+  {
+    name: "Pipedrive",
+    role: "Works with",
+    body: "Won deals come in with their organizations, to plan as collection schedules; what each collected on Arc mainnet goes back to the deal.",
+    href: "/docs/guides/pipedrive",
+    check: "Read the guide",
+  },
   { brand: "slack", name: "Slack", role: "Works with", body: "The agent's decisions in a channel your team picks.", href: "/docs/guides/slack", check: "Read the guide" },
   { brand: "telegram", name: "Telegram", role: "Works with", body: "The agent's decisions in your own chat. The bot never pays.", href: "/docs/guides/telegram", check: "Read the guide" },
   { brand: "npm", name: "npm", role: "SDK on", body: "@vestiarion/sdk, a typed client for every endpoint.", href: "/docs/get-started/sdk", check: "Read the docs" },
@@ -58,20 +68,25 @@ export function BuiltWith() {
         <h2 id="built-with-title" className="border-b border-line py-3 font-mono text-xs uppercase tracking-[0.1em] text-ink-3">
           Built on, and works with
         </h2>
-        {/* Eight services: two to a row up to a laptop's width, then four, so no row is left with one. */}
-        <ul className="grid grid-cols-2 lg:grid-cols-4">
+        {/*
+          Nine services: three to a row from a tablet's width, so every row is full. On a phone, two to a row, and the
+          last one, which would sit alone, spans both, so no row is left half empty.
+        */}
+        <ul className="grid grid-cols-2 md:grid-cols-3">
           {SERVICES.map((service) => {
             const external = service.href.startsWith("https://");
             return (
               <li
                 key={service.name}
-                className="min-w-0 border-line py-4 pr-4 lg:border-l lg:pl-5 lg:nth-[4n+1]:border-l-0 lg:nth-[4n+1]:pl-0 lg:nth-[n+5]:border-t"
+                className="min-w-0 border-line py-4 pr-4 max-md:last:col-span-2 md:border-l md:pl-5 md:nth-[3n+1]:border-l-0 md:nth-[3n+1]:pl-0 md:nth-[n+4]:border-t"
               >
                 <Link href={service.href} className="group block" {...(external ? { target: "_blank", rel: "noreferrer" } : {})}>
                   <p className="font-mono text-[0.6875rem] uppercase tracking-[0.1em] text-ink-3">{service.role}</p>
                   <p className="mt-2 flex min-h-5 flex-wrap items-center gap-x-2 gap-y-1 text-[0.9375rem] leading-5 font-semibold text-ink">
-                    <BrandMark brand={service.brand} size={service.lockup ? 23 : undefined} className={service.lockup ? "-mt-1.5 -mb-0.5" : undefined} />
-                    <span className={isWordmark(service.brand) ? "sr-only" : undefined}>{service.name}</span>
+                    {service.brand && (
+                      <BrandMark brand={service.brand} size={service.lockup ? 23 : undefined} className={service.lockup ? "-mt-1.5 -mb-0.5" : undefined} />
+                    )}
+                    <span className={service.brand && isWordmark(service.brand) ? "sr-only" : undefined}>{service.name}</span>
                   </p>
                   <p className="mt-1.5 text-xs leading-relaxed text-ink-2">{service.body}</p>
                   <span className="mt-2 inline-block font-mono text-xs font-semibold text-agent group-hover:underline">
@@ -93,8 +108,9 @@ export function BuiltWith() {
           })}
         </ul>
         <p className="border-t border-line py-3 text-[0.6875rem] leading-relaxed text-ink-3">
-          npm is a registered trademark of npm, Inc. Intuit and QuickBooks are trademarks of Intuit Inc. Arc, Circle, Slack, Telegram, Xero and
-          HubSpot are trademarks of their respective owners. Their marks show what Vestiarion is built on and connects to, not an endorsement.
+          npm is a registered trademark of npm, Inc. Intuit and QuickBooks are trademarks of Intuit Inc. Arc, Circle, Slack, Telegram, Xero,
+          HubSpot and Pipedrive are trademarks of their respective owners. Their names and marks show what Vestiarion is built on and connects to,
+          not an endorsement.
         </p>
       </div>
     </section>
