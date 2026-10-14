@@ -1713,7 +1713,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["crm_deal_changed", "src/lib/connectors/crm-store.ts"],
     ["Keep the deal as it is", CRM_CHANGES],
     ["crm_deal_change_kept", "src/lib/connectors/crm-store.ts"],
-    ["Billing emails from HubSpot", HUBSPOT_DEALS, "Billing emails from {label}"],
+    ["Billing emails from HubSpot", HUBSPOT_DEALS, "`Billing emails from ${label}`"],
     ["Use this email", HUBSPOT_DEALS],
     ["counterparty_notice_email_changed", "src/lib/payment-notices.ts"],
     ["HubSpot needs you to reconnect", ACCOUNTING_STATUS, "needs you to reconnect"],
@@ -1800,7 +1800,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Pipedrive says 12,500 USD: planned as 12,500.00 USDC, one for one.", "src/lib/connectors/crm-prefill.ts", "says ${theirs}: planned as"],
     ["pipedrive-482", CRM_WORDS, "`pipedrive-${externalId}`"],
     ["Confirm deal", "src/components/deals/DealForm.tsx"],
-    ["Billing emails from Pipedrive", PIPEDRIVE_DEALS, "Billing emails from {label}"],
+    ["Billing emails from Pipedrive", PIPEDRIVE_DEALS, "`Billing emails from ${label}`"],
     ["Use this email", PIPEDRIVE_DEALS],
     ["counterparty_notice_email_changed", "src/lib/payment-notices.ts"],
     // The planned deal's page.

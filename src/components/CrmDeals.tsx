@@ -114,7 +114,7 @@ export function CrmDeals({
                   {row.changes.length > 0 && (
                     <div className="space-y-1 pt-1">
                       <Badge size="sm" tone="held" dot>
-                        Changed in {label}
+                        {`Changed in ${label}`}
                       </Badge>
                       <ul className="list-disc space-y-0.5 pl-5 text-xs text-held">
                         {row.changes.map((words) => (
@@ -167,12 +167,12 @@ export function CrmDeals({
                 </li>
               ))}
             </ul>
-            <p className="mt-2 text-xs text-ink-3">Shown for what is coming. A deal is planned once it is won in {label}.</p>
+            <p className="mt-2 text-xs text-ink-3">{`Shown for what is coming. A deal is planned once it is won in ${label}.`}</p>
           </Disclosure>
         )}
         {emails.length > 0 && (
           <div className="space-y-2 border-t border-line pt-4">
-            <p className="text-sm font-medium text-ink">Billing emails from {label}</p>
+            <p className="text-sm font-medium text-ink">{`Billing emails from ${label}`}</p>
             <p className="text-xs text-ink-3">{emailWords}</p>
             {canWrite ? (
               emails.map((email) => <FillEmail key={email.counterpartyId} orgSlug={orgSlug} email={email} />)
