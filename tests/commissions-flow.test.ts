@@ -233,7 +233,7 @@ class Chain implements ChainProvider {
 }
 
 /** The payable as the AP stage reads it: the database's row, with its counterparty embedded. */
-function billRow(row: Record<string, unknown>) {
+function billRow(row: Record<string, unknown>): Record<string, unknown> {
   const iso = (value: unknown) => (value instanceof Date ? value.toISOString() : String(value));
   return {
     ...row,
