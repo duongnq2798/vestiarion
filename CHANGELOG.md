@@ -32,6 +32,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   or milestone's name, and the section's name takes you back to the section. A long name is cut short, and pointing at
   it shows it whole. On a phone, the bar at the top names the page, with its section under it.
 
+### Fixed
+
+- **The New deal form's fields line up.** In the narrow New deal panel, the payment terms label took two lines and pushed its box below Total, Currency and Start date. It now reads **Terms (days)** and fits on one line.
+
 ## [0.1.0-beta.4] - 2026-10-14
 
 ### Added
