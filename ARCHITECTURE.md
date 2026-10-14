@@ -2231,8 +2231,10 @@ reads in `api.ts`, `hubspotProvider`), wired in `src/lib/crm-providers.ts`. It i
     `accounting_tokens` and `external_links`, the writes switch (`accounting_connections_writes_check`) and
     `crm_receipt_writes_provider_check` take `pipedrive`, each replaced only while it does not take it yet and keeping
     `asana` (0115), so a re-run never narrows a later widening. `accounting_connections_pipedrive_one_workspace`
-    connects a company, not revoked, to one workspace at a time. `pipedrive_connector_ready()` is the probe
-    `pipedriveReady` (`store.ts`) asks after the core's `crmReady`, before anyone is sent to Pipedrive.
+    connects a company, not revoked, to one workspace at a time. `pipedrive_connector_ready(p_org_id)` (0117) is the
+    probe `pipedriveReady` (`store.ts`) asks after the core's `crmReady`, before anyone is sent to Pipedrive: the data
+    layer sends `p_org_id` to every tenant function, so 0116's version without it was never found, and
+    `tests/tenant-rpcs-migration.test.ts` holds every function in `TENANT_RPCS` to taking it.
     `crm_receipt_writes_account_test_check` (0107) is left as it is, so a Pipedrive write of payments on Arc testnet or
     in shadow mode can never reach sending, sent or written.
   - *Connecting.* The core's flow on `/integrations/pipedrive`, `/integrations/pipedrive/connect`,
@@ -2291,7 +2293,7 @@ reads in `api.ts`, `hubspotProvider`), wired in `src/lib/crm-providers.ts`. It i
   - *Entries.* No new action: `deal_signed` and `deal_revised` carry `via: "pipedrive"` and
     `pipedrive: { companyId, dealId, organizationId }`, `create_counterparty` and `counterparty_notice_email_changed`
     `pipedrive: { companyId, organizationId }`, and the connection, change and receipt entries `provider: "pipedrive"`.
-  - *Before 0116, or without the app*, the card says Pipedrive is not set up yet or is not there, the routes answer 404
+  - *Before 0116 and 0117, or without the app*, the card says Pipedrive is not set up yet or is not there, the routes answer 404
     without the app, and the sweeper never sees a Pipedrive connection.
 
 ## Contractor work accepted from Asana
