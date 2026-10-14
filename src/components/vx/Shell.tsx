@@ -32,6 +32,7 @@ export function ProductShell({
   chainModes,
   network,
   status,
+  crumb,
   children,
 }: {
   day: number;
@@ -43,6 +44,11 @@ export function ProductShell({
   network: Network;
   /** Shadow mode and screening, read in the workspace's scope (`shellStatus()`). */
   status: ShellStatus;
+  /**
+   * On a page inside a section that shows one record, its name for the header's last crumb: a deal's title, a project's
+   * name. Without it the crumb names the page by its kind (`subpageLabel`: Deal); a section's own page needs none.
+   */
+  crumb?: string;
   children: ReactNode;
 }) {
   return (
@@ -51,6 +57,7 @@ export function ProductShell({
         page={{ chain: chainModes, shadow: status.shadow, screening: status.screening, clock: { mode: clockMode, day } }}
         // When the last cycle ran, or that one is running now; and a toast for each decision as it lands.
         activity={<AgentActivity lastCycleAt={lastCycleAt} />}
+        crumb={crumb}
       />
       <div className={cn(CONTENT_FRAME, "pb-10 pt-4 motion-safe:animate-arrive sm:pt-6 lg:pt-7")}>
         <FrameBanners />

@@ -24,6 +24,14 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   never approve their own payout, set their own plan or create their own payable. Migration `0118`.
   [Guide](https://www.vestiarion.xyz/docs/guides/commissions).
 
+### Changed
+
+- **The header names the page you are on.** On a page inside a section, the line at the top that says where you are
+  now ends with that page, where it stopped at the section: Commissions reads "Your workspace › Bills & receivables ›
+  Commissions". A deal, a project or a payment's evidence ends with the deal's title, the project's name or the bill's
+  or milestone's name, and the section's name takes you back to the section. A long name is cut short, and pointing at
+  it shows it whole. On a phone, the bar at the top names the page, with its section under it.
+
 ## [0.1.0-beta.4] - 2026-10-14
 
 ### Added

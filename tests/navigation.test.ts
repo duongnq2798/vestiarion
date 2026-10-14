@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { DOCS_LINK, HOME_PATH, NAV_GROUPS, NAV_ITEMS, navItemForPathname, sectionPathOf, sectionTitle } from "@/components/vx/nav";
+import { DOCS_LINK, HOME_PATH, insideSection, NAV_GROUPS, NAV_ITEMS, navItemForPathname, sectionPathOf, sectionTitle, subpageLabel } from "@/components/vx/nav";
 import { LEGACY_PRODUCT_PATHS } from "@/lib/auth/org-paths";
 
 /**
@@ -123,5 +123,71 @@ describe("sectionPathOf", () => {
 
   it("falls back to the workspace's home", () => {
     expect(sectionPathOf("/o/acme")).toBe(HOME_PATH);
+  });
+});
+
+describe("subpageLabel — the page inside a section, named after it", () => {
+  const ID = "5f1e2d3c-0000-4000-8000-000000000001";
+
+  it.each([
+    ["/o/pinecrest-studio/invoices/commissions", "invoices", "Commissions"],
+    [`/o/acme/invoices/deals/${ID}`, "invoices", "Deal"],
+    [`/o/acme/projects/${ID}`, "projects", "Project"],
+    [`/o/acme/evidence/invoice/${ID}`, "invoices", "Payment evidence"],
+    [`/o/acme/evidence/milestone/${ID}`, "contractors", "Payment evidence"],
+  ])("%s is inside %s, as %s", (pathname, key, label) => {
+    expect(navItemForPathname(pathname)?.key).toBe(key);
+    expect(insideSection(pathname)).toBe(true);
+    expect(subpageLabel(pathname)).toBe(label);
+  });
+
+  it.each(["/o/acme/invoices", "/o/acme/projects", "/o/acme/contractors", "/o/acme/console", "/o/acme", "/onboarding", "/"])(
+    "%s is no page inside a section",
+    (pathname) => {
+      expect(insideSection(pathname)).toBe(false);
+      expect(subpageLabel(pathname)).toBeUndefined();
+    }
+  );
+
+  // Every page.tsx below a section's own page, as the pathnames a person opens: a dynamic segment takes each value
+  // it is opened with. A page added without a row in nav.ts would show its section as the current page.
+  const SAMPLES: Record<string, readonly string[]> = { "[id]": [ID], "[kind]": ["invoice", "milestone"] };
+  function pathnamesOf(file: string): string[] {
+    return file
+      .split("/")
+      .slice(0, -1)
+      .reduce<string[]>((paths, segment) => {
+        const values = segment.startsWith("[") ? SAMPLES[segment] : [segment];
+        if (!values) throw new Error(`no sample value for ${segment} in ${file}: add one to SAMPLES`);
+        return paths.flatMap((base) => values.map((value) => `${base}/${value}`));
+      }, ["/o/acme"]);
+  }
+  const NESTED_PAGES = (readdirSync(WORKSPACE, { recursive: true }) as string[])
+    .map((file) => file.split(path.sep).join("/"))
+    .filter((file) => file.endsWith("/page.tsx") && file.split("/").length > 2);
+
+  it("finds the pages inside sections there are", () => {
+    expect(NESTED_PAGES).toEqual(
+      expect.arrayContaining(["evidence/[kind]/[id]/page.tsx", "invoices/commissions/page.tsx", "invoices/deals/[id]/page.tsx", "projects/[id]/page.tsx"])
+    );
+  });
+
+  it.each(NESTED_PAGES)("%s is inside its section, named as in the browser tab", (file) => {
+    const source = readFileSync(path.join(WORKSPACE, file), "utf8");
+    const title = /export const metadata: Metadata = \{ title: "([^"]+)" \};/.exec(source)?.[1];
+    expect(title).toBeDefined();
+    for (const pathname of pathnamesOf(file)) {
+      expect(navItemForPathname(pathname)).toBeDefined();
+      expect(subpageLabel(pathname)).toBe(title);
+    }
+  });
+
+  // A page showing one record names it in the header, rather than its kind (`ProductShell`'s crumb).
+  it.each([
+    ["invoices/deals/[id]/page.tsx", "crumb={deal.title}"],
+    ["projects/[id]/page.tsx", "crumb={project.name}"],
+    ["evidence/[kind]/[id]/page.tsx", "crumb={subject.title}"],
+  ])("%s names its record in the breadcrumb", (file, crumb) => {
+    expect(readFileSync(path.join(WORKSPACE, file), "utf8")).toContain(crumb);
   });
 });

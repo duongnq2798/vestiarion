@@ -87,7 +87,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
     const decimal = (minor: number) => minorToDecimal(minor, PROJECT_DIGITS);
 
     return (
-      <ProductShell {...shell}>
+      <ProductShell {...shell} crumb={project.name}>
         <PageHead
           title={project.name}
           sub={archived ? <Badge size="sm">Archived</Badge> : "A budget in USDC: the agent sets each bill's money aside here before paying it."}

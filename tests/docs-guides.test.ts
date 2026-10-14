@@ -509,6 +509,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Report", APP_NAV],
     ["Members", APP_NAV],
     ["Settings", APP_NAV],
+    // A page inside a section, named in the breadcrumb after its section.
+    ["Commissions", APP_NAV],
     ["Live", "src/components/vx/WorkspaceMeta.tsx"],
     ["Sandbox", "src/components/vx/WorkspaceMeta.tsx"],
     ["Not live yet", "src/components/vx/WorkspaceMeta.tsx"],
