@@ -22,8 +22,12 @@ export const LINE_COLUMNS =
   "id, kind, plan_id, beneficiary_id, invoice_id, deal_id, source, allocation_id, transfer_id, adjusts, basis, base_amount, rate_bps, amount, currency, applied_at, due_at, reason, payout_id";
 export const PAYOUT_COLUMNS = "id, beneficiary_id, invoice_id, statement, currency, amount, line_count, created_by, created_at";
 
-/** How many lines a page reads: a small business's years of commissions. */
-export const LINES_READ = 5000;
+/** PostgREST's `max_rows`: a page of rows is at most this many (as `LEDGER_PAGE_SIZE`). */
+export const PAGE_SIZE = 1000;
+/** How many pages of one list a read takes, at most: tens of thousands of lines, years of a small business's commissions. */
+export const PAGES_READ = 50;
+/** How many ids one `in` filter names, so its address stays short. */
+export const IDS_PER_READ = 100;
 
 export interface PlanDbRow {
   id: string;
@@ -45,8 +49,8 @@ export interface LineDbRow {
   kind: "accrual" | "adjustment";
   plan_id: string;
   beneficiary_id: string;
-  invoice_id: string;
-  deal_id: string;
+  invoice_id: string | null;
+  deal_id: string | null;
   source: CommissionSource;
   allocation_id: string | null;
   transfer_id: string | null;
@@ -72,6 +76,8 @@ interface PayoutDbRow {
   line_count: number;
   created_by: string | null;
   created_at: string;
+  /** The payable, embedded through the payout's foreign key. */
+  invoices?: { status: string } | null;
 }
 
 export const toPlan = (row: PlanDbRow, dealIds: string[] = []): CommissionPlan => ({
@@ -138,14 +144,39 @@ export interface CommissionsData {
 
 export type CommissionsRead = { available: false } | CommissionsData;
 
-class NotReady extends Error {}
+/** Commissions are not set up yet (before 0118): every read says so rather than fail. */
+export class NotReady extends Error {}
 
-function rowsOf<T>(result: { data: unknown; error: { code?: string; message?: string } | null }): T[] {
+type Answer = { data: unknown; error: { code?: string; message?: string } | null };
+
+function rowsOf<T>(result: Answer): T[] {
   if (result.error) {
     if (commissionsNotReady(result.error)) throw new NotReady();
     throw new Error(result.error.message ?? "commissions not read");
   }
   return (result.data ?? []) as T[];
+}
+
+/**
+ * Every row of an ordered list, a page of `PAGE_SIZE` at a time, since PostgREST answers no more than that to one read:
+ * a list past it would otherwise lose its newest rows without a word. Up to `PAGES_READ` pages.
+ */
+export async function everyPage<T>(page: (from: number, to: number) => PromiseLike<Answer>): Promise<T[]> {
+  const rows: T[] = [];
+  for (let index = 0; index < PAGES_READ; index += 1) {
+    const batch = rowsOf<T>(await page(index * PAGE_SIZE, (index + 1) * PAGE_SIZE - 1));
+    rows.push(...batch);
+    if (batch.length < PAGE_SIZE) break;
+  }
+  return rows;
+}
+
+/** Rows by id, `IDS_PER_READ` ids to a read, so no address grows past what a server takes. */
+export async function byIds<T>(ids: readonly string[], read: (some: string[]) => PromiseLike<Answer>): Promise<T[]> {
+  const unique = [...new Set(ids)];
+  const reads: Array<PromiseLike<Answer>> = [];
+  for (let start = 0; start < unique.length; start += IDS_PER_READ) reads.push(read(unique.slice(start, start + IDS_PER_READ)));
+  return (await Promise.all(reads)).flatMap((answer) => rowsOf<T>(answer));
 }
 
 /** How a receivable is named on the page: its memo's first words, else its short id. */
@@ -157,28 +188,39 @@ export function receivableLabel(invoice: { id: string; memo: string | null }): s
 /** Everything the commissions page shows, in the organization in scope. */
 export async function readCommissions(orgDb: OrgDb = db()): Promise<CommissionsRead> {
   try {
-    const [planRows, dealRows, lineRows, payoutRows] = await Promise.all([
-      orgDb.from("commission_plans").select(PLAN_COLUMNS).order("started_at", { ascending: false }).then(rowsOf<PlanDbRow>),
-      orgDb.from("commission_plan_deals").select("plan_id, deal_id").then(rowsOf<{ plan_id: string; deal_id: string }>),
-      orgDb.from("commission_lines").select(LINE_COLUMNS).order("applied_at", { ascending: true }).limit(LINES_READ).then(rowsOf<LineDbRow>),
-      orgDb.from("commission_payouts").select(PAYOUT_COLUMNS).order("created_at", { ascending: false }).then(rowsOf<PayoutDbRow>),
+    // Only what the review shows: every payout (with its payable's status), and the open lines, those in no payout and
+    // those in a payout whose payable was rejected. A line in a live payout is counted by the payout's own line_count.
+    const [planRows, dealRows, payoutRows, freeLines] = await Promise.all([
+      everyPage<PlanDbRow>((from, to) => orgDb.from("commission_plans").select(PLAN_COLUMNS).order("started_at", { ascending: false }).order("id").range(from, to)),
+      everyPage<{ plan_id: string; deal_id: string }>((from, to) => orgDb.from("commission_plan_deals").select("plan_id, deal_id").order("id").range(from, to)),
+      everyPage<PayoutDbRow>((from, to) =>
+        orgDb.from("commission_payouts").select(`${PAYOUT_COLUMNS}, invoices(status)`).order("created_at", { ascending: false }).order("id").range(from, to)
+      ),
+      everyPage<LineDbRow>((from, to) => orgDb.from("commission_lines").select(LINE_COLUMNS).is("payout_id", null).order("applied_at").order("id").range(from, to)),
     ]);
-    const lines = lineRows.map(toLine);
-    const payoutInvoices = payoutRows.map((row) => row.invoice_id);
-    const receivableIds = [...new Set(lines.map((line) => line.invoiceId))];
-    const [statuses, receivableRows, counterpartyRows, deals] = await Promise.all([
-      payoutInvoices.length > 0 ? orgDb.from("invoices").select("id, status").in("id", payoutInvoices).then(rowsOf<{ id: string; status: string }>) : [],
-      receivableIds.length > 0
-        ? orgDb.from("invoices").select("id, memo, amount, currency, counterparty_id").in("id", receivableIds).then(rowsOf<{ id: string; memo: string | null; amount: string; currency: string | null; counterparty_id: string }>)
-        : [],
-      orgDb.from("counterparties").select("id, name, role").order("name", { ascending: true }).then(rowsOf<{ id: string; name: string; role: string }>),
-      orgDb
-        .from("deals")
-        .select("id, title, status, counterparty_id, created_at")
-        .order("created_at", { ascending: false })
-        .then((result) => (result.error ? [] : ((result.data ?? []) as Array<{ id: string; title: string; status: string; counterparty_id: string }>))),
+    const rejected = payoutRows.filter((row) => row.invoices?.status === "rejected").map((row) => row.id);
+    const reopened = (
+      await Promise.all(
+        [...new Set(rejected)].map((payoutId) =>
+          everyPage<LineDbRow>((from, to) => orgDb.from("commission_lines").select(LINE_COLUMNS).eq("payout_id", payoutId).order("id").range(from, to))
+        )
+      )
+    ).flat();
+    const lines = [...freeLines, ...reopened].map(toLine);
+    const receivableIds = lines.flatMap((line) => (line.invoiceId ? [line.invoiceId] : []));
+    const [receivableRows, counterpartyRows, deals] = await Promise.all([
+      byIds<{ id: string; memo: string | null; amount: string; currency: string | null; counterparty_id: string }>(receivableIds, (some) =>
+        orgDb.from("invoices").select("id, memo, amount, currency, counterparty_id").in("id", some)
+      ),
+      everyPage<{ id: string; name: string; role: string }>((from, to) => orgDb.from("counterparties").select("id, name, role").order("name").order("id").range(from, to)),
+      everyPage<{ id: string; title: string; status: string; counterparty_id: string }>((from, to) =>
+        orgDb.from("deals").select("id, title, status, counterparty_id, created_at").order("created_at", { ascending: false }).order("id").range(from, to)
+      ).catch((error: unknown) => {
+        // Deals not read (before 0104, say) leave the plan form without deals; the page still shows the commissions.
+        if (error instanceof NotReady) return [];
+        throw error;
+      }),
     ]);
-    const statusOf = new Map(statuses.map((row) => [row.id, row.status]));
     const names = new Map(counterpartyRows.map((row) => [row.id, row.name]));
     const dealsOf = new Map<string, string[]>();
     for (const row of dealRows) dealsOf.set(row.plan_id, [...(dealsOf.get(row.plan_id) ?? []), row.deal_id]);
@@ -196,7 +238,7 @@ export async function readCommissions(orgDb: OrgDb = db()): Promise<CommissionsR
         lineCount: row.line_count,
         createdBy: row.created_by,
         createdAt: iso(row.created_at),
-        invoiceStatus: statusOf.get(row.invoice_id) ?? null,
+        invoiceStatus: row.invoices?.status ?? null,
       })),
       counterparties: counterpartyRows,
       deals: deals.map((deal) => ({ id: deal.id, title: deal.title, status: deal.status, customer: names.get(deal.counterparty_id) ?? "a customer" })),

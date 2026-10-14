@@ -66,8 +66,16 @@ const ADJUSTED = lineRow({
   applied_at: "2026-10-12T08:00:00+00:00", due_at: "2026-10-12T08:00:00+00:00",
 });
 
-function world(answers: { record?: FakeReply; payout?: FakeReply; end?: FakeReply; lines?: unknown[] } = {}) {
+function world(
+  answers: { record?: FakeReply | ((call: number) => FakeReply); payout?: FakeReply; end?: FakeReply; lines?: unknown[] | ((request: RecordedRequest) => unknown[]) } = {}
+) {
+  let recordCalls = 0;
   const fake = fakeSupabase((request: RecordedRequest) => {
+    if (request.path === "/rest/v1/rpc/record_commissions" && typeof answers.record === "function") {
+      recordCalls += 1;
+      return answers.record(recordCalls);
+    }
+    if (request.path === "/rest/v1/commission_lines" && typeof answers.lines === "function") return { body: answers.lines(request) };
     if (request.path === "/rest/v1/orgs") {
       return {
         body: {
@@ -77,7 +85,7 @@ function world(answers: { record?: FakeReply; payout?: FakeReply; end?: FakeRepl
         },
       };
     }
-    if (request.path === "/rest/v1/rpc/record_commissions") return answers.record ?? { body: [] };
+    if (request.path === "/rest/v1/rpc/record_commissions") return (answers.record as FakeReply | undefined) ?? { body: [] };
     if (request.path === "/rest/v1/rpc/create_commission_payout") return answers.payout ?? { body: {} };
     if (request.path === "/rest/v1/rpc/end_commission_plan") return answers.end ?? { body: {} };
     if (request.path === "/rest/v1/counterparties") return { body: [{ id: PAT, name: "Pat Referrals" }] };
@@ -128,11 +136,24 @@ describe("recordCommissions", () => {
     const { run } = world({ record: { status: 500, body: { code: "XX000", message: "connection reset" } } });
     await expect(run(() => recordCommissions(db()))).rejects.toThrow("connection reset");
   });
+
+  it("calls again while an answer may have left rows, each statement taking 300 at most, and signs every row", async () => {
+    const many = Array.from({ length: 300 }, (_, index) => lineRow({ id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}` }));
+    const { fake, run, entries } = world({ record: (call) => ({ body: call === 1 ? many : call === 2 ? [lineRow({ id: ADJUSTMENT })] : [] }) });
+    const result = await run(() => recordCommissions(db()));
+    expect(fake.requests.filter((request) => request.path === "/rest/v1/rpc/record_commissions")).toHaveLength(2);
+    expect(result.lines).toHaveLength(301);
+    expect(entries()).toHaveLength(301);
+    // Names are read a hundred ids at a time at most.
+    for (const request of fake.requests.filter((sent) => sent.params.get("id")?.startsWith("in."))) {
+      expect((request.params.get("id") as string).split(",").length).toBeLessThanOrEqual(100);
+    }
+  });
 });
 
 describe("createPayable", () => {
   it("makes the payable through the database, then signs its create_invoice and commission_payable_created", async () => {
-    const payout = { payoutId: "payout-1", invoiceId: "bill-1", statement: "CS-0A1B2C3D", amount: 30, currency: "USDC", lineCount: 1 };
+    const payout = { payoutId: "payout-1", invoiceId: "bill-1", statement: "CS-0A1B2C3D", amount: 30, currency: "USDC", lineCount: 1, accrued: 30, adjusted: 0 };
     const { fake, run, entries } = world({ payout: { body: payout }, lines: [lineRow({ due_at: "2026-10-10T10:00:00+00:00" })] });
     const made = await run(() => createPayable({ actorId: OWNER, beneficiaryId: PAT, currency: "USDC", lineIds: [ACCRUAL] }));
     expect(made).toMatchObject({ invoiceId: "bill-1", statement: "CS-0A1B2C3D", amount: 30, partner: "Pat Referrals" });
@@ -171,6 +192,20 @@ describe("createPayable", () => {
     const { fake, run } = world({ lines: [] });
     await expect(run(() => createPayable({ actorId: OWNER, beneficiaryId: PAT, currency: "USDC", lineIds: [ACCRUAL] }))).rejects.toThrow(/changed since this page was read/);
     expect(fake.requests.some((request) => request.path === "/rest/v1/rpc/create_commission_payout")).toBe(false);
+  });
+
+  it("reads a payable's many lines a hundred ids at a time, so no address grows too long", async () => {
+    const ids = Array.from({ length: 250 }, (_, index) => `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`);
+    const payout = { payoutId: "payout-1", invoiceId: "bill-1", statement: "CS-0A1B2C3D", amount: 250, currency: "USDC", lineCount: 250, accrued: 250, adjusted: 0 };
+    const { fake, run } = world({
+      payout: { body: payout },
+      lines: (request) => (request.params.get("id")?.slice(4, -1).split(",") ?? []).map((one) => ({ id: one, kind: "accrual" })),
+    });
+    const made = await run(() => createPayable({ actorId: OWNER, beneficiaryId: PAT, currency: "USDC", lineIds: ids }));
+    expect(made.lineCount).toBe(250);
+    const reads = fake.requests.filter((request) => request.path === "/rest/v1/commission_lines");
+    expect(reads.map((request) => (request.params.get("id") as string).split(",").length)).toEqual([100, 100, 50]);
+    expect(fake.requests.find((request) => request.path === "/rest/v1/rpc/create_commission_payout")?.body).toMatchObject({ p_line_ids: ids });
   });
 });
 

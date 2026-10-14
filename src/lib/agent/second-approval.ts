@@ -168,11 +168,13 @@ export async function mayGiveApproval(input: {
   actorId: string;
   excluded: Array<string | null | undefined>;
   given: ReadonlyArray<{ by: string }>;
+  /** Members who may approve payments but never this one, such as a commission's partner (commissions C11): not independent. */
+  notIndependent?: ReadonlyArray<string>;
 }): Promise<boolean> {
   // Members only: a first payment's address may have been given by the payee ("payee"), who is no one here.
   const excluded = memberIds(input.excluded);
   if (!excluded.includes(input.actorId)) return true;
-  const slots = excludedSlots(await approversBesides(excluded));
+  const slots = excludedSlots(await approversBesides(memberIds([...excluded, ...(input.notIndependent ?? [])])));
   return mayApproveNow({ excluded, excludedSlots: slots, approvals: input.given.map(({ by }) => ({ by, at: "" })) }, input.actorId);
 }
 

@@ -122,9 +122,13 @@ function LineRow({ line, receivable, deal, after, receivableHref }: { line: Comm
       <span className="min-w-0 text-sm">
         <span className="block text-ink">{formulaWords(line)}</span>
         <span className="block text-xs text-ink-3">
-          <Link className="underline decoration-line-strong underline-offset-2 hover:text-ink" href={receivableHref(line.invoiceId)}>
-            {receivable?.label ?? "An invoice"}
-          </Link>
+          {line.invoiceId ? (
+            <Link className="underline decoration-line-strong underline-offset-2 hover:text-ink" href={receivableHref(line.invoiceId)}>
+              {receivable?.label ?? "An invoice"}
+            </Link>
+          ) : (
+            "An invoice no longer on file"
+          )}
           {of}
           {receivable ? `, ${receivable.customer}` : ""}
           {deal ? ` · ${deal}` : ""}
@@ -164,7 +168,14 @@ export function PartnerReviewCard({
   note?: string;
 }) {
   const row = (line: CommissionLine, after?: ReactNode) => (
-    <LineRow key={line.id} line={line} receivable={receivables.get(line.invoiceId)} deal={dealTitles.get(line.dealId)} after={after} receivableHref={receivableHref} />
+    <LineRow
+      key={line.id}
+      line={line}
+      receivable={line.invoiceId ? receivables.get(line.invoiceId) : undefined}
+      deal={line.dealId ? dealTitles.get(line.dealId) : undefined}
+      after={after}
+      receivableHref={receivableHref}
+    />
   );
   const { currency } = review;
   return (
@@ -202,7 +213,7 @@ export function PartnerReviewCard({
             <section>
               <h4 className="text-sm font-semibold text-ink">In payables</h4>
               <ul className="divide-y divide-line">
-                {review.paidOut.map(({ payout, lines }) => {
+                {review.paidOut.map((payout) => {
                   const standing = payableStanding(payout.invoiceStatus);
                   return (
                     <li key={payout.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2.5 text-sm">
@@ -212,7 +223,7 @@ export function PartnerReviewCard({
                         </Link>
                         <span className="text-ink-3">
                           {" "}
-                          · {day(payout.createdAt)} · {lines.length === 1 ? "1 line" : `${lines.length} lines`}
+                          · {day(payout.createdAt)} · {payout.lineCount === 1 ? "1 line" : `${payout.lineCount} lines`}
                         </span>
                       </span>
                       <span className="flex items-baseline gap-3">

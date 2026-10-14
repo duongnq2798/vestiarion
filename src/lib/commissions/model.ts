@@ -155,8 +155,9 @@ export interface CommissionLine {
   kind: "accrual" | "adjustment";
   planId: string;
   beneficiaryId: string;
-  invoiceId: string;
-  dealId: string;
+  /** The receivable and the deal it was earned on; null once either was deleted (the line and its figures stay). */
+  invoiceId: string | null;
+  dealId: string | null;
   source: CommissionSource;
   allocationId: string | null;
   transferId: string | null;
@@ -198,11 +199,13 @@ export function formulaWords(line: Pick<CommissionLine, "kind" | "source" | "bas
   return `${amountWords(line.base, line.currency)} ${what} × ${rate} = ${amountWords(line.amount, line.currency)}`;
 }
 
-/** A line is open while it is in no payout, or only in one whose payable was rejected (C10). */
+/**
+ * A line is open while it is in no payout, or only in one whose payable was rejected (C10). A line in a payout that was
+ * not read is not open: the page never offers to pay what it cannot see is free, and the database decides either way.
+ */
 export function lineOpen(line: Pick<CommissionLine, "payoutId">, payouts: ReadonlyMap<string, CommissionPayout>): boolean {
   if (!line.payoutId) return true;
-  const payout = payouts.get(line.payoutId);
-  return !payout || payout.invoiceStatus === "rejected";
+  return payouts.get(line.payoutId)?.invoiceStatus === "rejected";
 }
 
 export interface PartnerReview {
@@ -216,8 +219,8 @@ export interface PartnerReview {
   heldTotal: number;
   /** When the next held line falls due, or null. */
   nextDueAt: string | null;
-  /** Each payable made for this partner in this currency, newest first, with the lines it pays. */
-  paidOut: Array<{ payout: CommissionPayout; lines: CommissionLine[] }>;
+  /** Each payable made for this partner in this currency, newest first; each says how many lines it pays. */
+  paidOut: CommissionPayout[];
   /** What is due adds up to more than zero: a payable can be made. */
   payable: boolean;
   /** What is due adds up to less than zero: carried to the next payable (C7, C9). */
@@ -245,26 +248,21 @@ export function reviewCommissions(
     return found;
   };
   const at = now.getTime();
-  const inPayout = new Map<string, CommissionLine[]>();
+  // Only open lines are reviewed; a payout says how many lines it pays (the page reads no line in a payout).
   for (const line of lines) {
+    if (!lineOpen(line, payoutsById)) continue;
     const review = group(line.beneficiaryId, line.currency);
-    if (!lineOpen(line, payoutsById)) {
-      inPayout.set(line.payoutId as string, [...(inPayout.get(line.payoutId as string) ?? []), line]);
-      continue;
-    }
     if (Date.parse(line.dueAt) <= at) review.due.push(line);
     else review.held.push(line);
   }
-  for (const payout of payouts) {
-    group(payout.beneficiaryId, payout.currency).paidOut.push({ payout, lines: (inPayout.get(payout.id) ?? []).sort((a, b) => byTime(a, b, "appliedAt")) });
-  }
+  for (const payout of payouts) group(payout.beneficiaryId, payout.currency).paidOut.push(payout);
   for (const review of groups.values()) {
     review.due.sort((a, b) => byTime(a, b, "appliedAt"));
     review.held.sort((a, b) => byTime(a, b, "dueAt"));
     review.dueTotal = review.due.reduce((total, line) => total + line.amount, 0);
     review.heldTotal = review.held.reduce((total, line) => total + line.amount, 0);
     review.nextDueAt = review.held[0]?.dueAt ?? null;
-    review.paidOut.sort((a, b) => b.payout.createdAt.localeCompare(a.payout.createdAt) || b.payout.id.localeCompare(a.payout.id));
+    review.paidOut.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
     review.payable = review.due.length > 0 && review.dueTotal > 0;
     review.carriedForward = review.dueTotal < 0 ? review.dueTotal : 0;
   }

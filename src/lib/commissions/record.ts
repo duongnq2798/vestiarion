@@ -3,7 +3,7 @@ import { db, type OrgDb } from "../dal";
 import { assertLedgerCanSign } from "../ledger";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { amountWords, COMMISSION_ACTIONS, commissionsNotReady, formulaWords, ratePercent, units, type CommissionLine } from "./model";
-import { receivableLabel, toLine, type LineDbRow } from "./read";
+import { byIds, receivableLabel, toLine, type LineDbRow } from "./read";
 
 /**
  * Commissions recorded (docs/superpowers/specs/2026-10-14-commissions-design.md C5, C7, C12): `record_commissions`
@@ -20,6 +20,14 @@ export interface RecordResult {
 
 const NOTHING: RecordResult = { lines: [], log: [] };
 
+/**
+ * The most rows each of `record_commissions`'s three inserts takes in one call (0118), so an answer stays under
+ * PostgREST's 1,000 rows: an answer of this many or more may have left some, and is called again.
+ */
+export const RECORDED_PER_STATEMENT = 300;
+/** How many calls one recording makes at most; the next one records the rest. */
+const CALLS = 10;
+
 export async function recordCommissions(orgDb: OrgDb = db()): Promise<RecordResult> {
   // With no key to sign them, nothing is recorded: the next call records them, signed.
   try {
@@ -27,25 +35,45 @@ export async function recordCommissions(orgDb: OrgDb = db()): Promise<RecordResu
   } catch {
     return NOTHING;
   }
-  const answer = await orgDb.rpc("record_commissions", {});
-  if (answer.error) {
-    if (commissionsNotReady(answer.error)) return NOTHING;
-    throw new Error(answer.error.message ?? "commissions not recorded");
+  const result: RecordResult = { lines: [], log: [] };
+  for (let call = 0; call < CALLS; call += 1) {
+    const answer = await orgDb.rpc("record_commissions", {});
+    if (answer.error) {
+      if (commissionsNotReady(answer.error)) return result;
+      throw new Error(answer.error.message ?? "commissions not recorded");
+    }
+    const lines = ((answer.data ?? []) as LineDbRow[]).map(toLine);
+    if (lines.length > 0) result.log.push(...(await sign(orgDb, lines)));
+    result.lines.push(...lines);
+    if (lines.length < RECORDED_PER_STATEMENT) break;
   }
-  const lines = ((answer.data ?? []) as LineDbRow[]).map(toLine);
-  if (lines.length === 0) return NOTHING;
+  return result;
+}
 
-  const [partners, receivables] = await Promise.all([
-    orgDb.from("counterparties").select("id, name").in("id", [...new Set(lines.map((line) => line.beneficiaryId))]),
-    orgDb.from("invoices").select("id, memo").in("id", [...new Set(lines.map((line) => line.invoiceId))]),
-  ]);
-  const nameOf = new Map(((partners.data ?? []) as Array<{ id: string; name: string }>).map((row) => [row.id, row.name]));
-  const labelOf = new Map(((receivables.data ?? []) as Array<{ id: string; memo: string | null }>).map((row) => [row.id, receivableLabel(row)]));
+/** The names a summary gives, best effort: a failed read leaves the entry with plainer words, never unsigned. */
+async function namesOf(orgDb: OrgDb, lines: readonly CommissionLine[]) {
+  try {
+    const [partners, receivables] = await Promise.all([
+      byIds<{ id: string; name: string }>(lines.map((line) => line.beneficiaryId), (some) => orgDb.from("counterparties").select("id, name").in("id", some)),
+      byIds<{ id: string; memo: string | null }>(
+        lines.flatMap((line) => (line.invoiceId ? [line.invoiceId] : [])),
+        (some) => orgDb.from("invoices").select("id, memo").in("id", some)
+      ),
+    ]);
+    return { partners: new Map(partners.map((row) => [row.id, row.name])), labels: new Map(receivables.map((row) => [row.id, receivableLabel(row)])) };
+  } catch (error) {
+    console.error("commissions: names not read", error instanceof Error ? error.message : error);
+    return { partners: new Map<string, string>(), labels: new Map<string, string>() };
+  }
+}
 
+/** One signed entry for each row recorded. */
+async function sign(orgDb: OrgDb, lines: readonly CommissionLine[]): Promise<RecordResult["log"]> {
+  const { partners: nameOf, labels: labelOf } = await namesOf(orgDb, lines);
   const log: RecordResult["log"] = [];
   for (const line of lines) {
     const partner = nameOf.get(line.beneficiaryId) ?? "the partner";
-    const label = labelOf.get(line.invoiceId) ?? "an invoice";
+    const label = (line.invoiceId ? labelOf.get(line.invoiceId) : undefined) ?? "an invoice";
     const formula = formulaWords(line);
     if (line.kind === "accrual") {
       const summary = `Commission of ${amountWords(line.amount, line.currency)} for ${partner} on ${label}: ${formula}, due ${line.dueAt.slice(0, 10)}`;
@@ -105,7 +133,7 @@ export async function recordCommissions(orgDb: OrgDb = db()): Promise<RecordResu
       log.push({ domain: "ap", message: summary });
     }
   }
-  return { lines, log };
+  return log;
 }
 
 /**

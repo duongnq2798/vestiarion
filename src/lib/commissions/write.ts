@@ -9,12 +9,11 @@ import {
   commissionErrorFromDb,
   payableMemo,
   ratePercent,
-  units,
   type CommissionCurrency,
   type CommissionPlan,
   type PlanDraft,
 } from "./model";
-import { LINE_COLUMNS, PLAN_COLUMNS, toLine, toPlan, type LineDbRow, type PlanDbRow } from "./read";
+import { byIds, NotReady, PLAN_COLUMNS, toPlan, type PlanDbRow } from "./read";
 
 /**
  * Commission plans and payouts, written (docs/superpowers/specs/2026-10-14-commissions-design.md C2, C10-C12): a plan
@@ -122,14 +121,18 @@ export interface PayableCreated {
 export async function createPayable(input: { actorId: string; beneficiaryId: string; currency: CommissionCurrency; lineIds: readonly string[] }): Promise<PayableCreated> {
   const { actorId, beneficiaryId, currency } = input;
   const partner = await partnerName(beneficiaryId);
-  const [lineRead, planRead] = await Promise.all([
-    input.lineIds.length > 0 ? db().from("commission_lines").select(LINE_COLUMNS).in("id", [...input.lineIds]) : null,
+  // The kinds of the lines, for the memo, read a hundred ids at a time so no address grows too long; the database
+  // checks the lines themselves.
+  const [kinds, planRead] = await Promise.all([
+    byIds<{ id: string; kind: "accrual" | "adjustment" }>(input.lineIds, (some) => db().from("commission_lines").select("id, kind").in("id", some)).catch((error: unknown) => {
+      if (error instanceof NotReady) throw new CommissionError("not_ready");
+      throw error;
+    }),
     db().from("commission_plans").select(PLAN_COLUMNS).eq("beneficiary_id", beneficiaryId).is("ended_at", null).limit(1),
   ]);
-  if (lineRead?.error) failed(lineRead.error);
   if (planRead.error) failed(planRead.error);
-  const lines = ((lineRead?.data ?? []) as LineDbRow[]).map(toLine);
-  if (lines.length !== input.lineIds.length) throw new CommissionError("changed");
+  const lines = kinds;
+  if (lines.length !== new Set(input.lineIds).size) throw new CommissionError("changed");
   const reference = ((planRead.data ?? []) as PlanDbRow[])[0]?.reference ?? null;
   const memo = payableMemo(lines, reference);
   assertLedgerCanSign();
@@ -142,10 +145,10 @@ export async function createPayable(input: { actorId: string; beneficiaryId: str
     p_by: actorId,
   });
   if (answer.error) failed(answer.error);
-  const made = answer.data as { payoutId: string; invoiceId: string; statement: string; amount: number | string; lineCount: number };
+  const made = answer.data as {
+    payoutId: string; invoiceId: string; statement: string; amount: number | string; lineCount: number; accrued: number | string; adjusted: number | string;
+  };
   const amount = Number(made.amount);
-  const accrued = lines.filter((line) => line.kind === "accrual").reduce((total, line) => total + line.amount, 0);
-  const adjusted = lines.filter((line) => line.kind === "adjustment").reduce((total, line) => total + line.amount, 0);
   const dueDate = new Date().toISOString().slice(0, 10);
 
   await appendLedgerEntryBestEffort(currentOrgId(), {
@@ -182,8 +185,8 @@ export async function createPayable(input: { actorId: string; beneficiaryId: str
       amount,
       currency,
       lineIds: lines.map((line) => line.id).sort(),
-      accrued: units(accrued),
-      adjusted: units(adjusted),
+      accrued: Number(made.accrued),
+      adjusted: Number(made.adjusted),
     },
   });
   return { payoutId: made.payoutId, invoiceId: made.invoiceId, statement: made.statement, amount, currency, partner, lineCount: made.lineCount };

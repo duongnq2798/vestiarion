@@ -179,8 +179,8 @@ function approvalsFake(options: {
   ledgerTargets?: Array<Record<string, unknown>>;
   /** `sole_approver`'s reply (migration 0061); unset falls through to the default `[]`, which is not `true`. */
   soleApprover?: FakeReply;
-  /** `commission_beneficiary_approval`'s reply (migration 0118); unset falls through to the default `[]`, which is not `true`. */
-  commissionPartner?: FakeReply;
+  /** `commission_partner_members`'s reply (migration 0118): the members a commission payable pays; unset, the default `[]`. */
+  commissionPartners?: FakeReply;
   /** The counterparty's entries that set or confirmed its address, newest first (new payee check N2); none by default. */
   addressEntries?: Array<Record<string, unknown>>;
   /** The workspace's figure above which a payment needs two approvals (two approvals T1); none by default. */
@@ -296,7 +296,7 @@ function approvalsFake(options: {
     if (request.path === "/rest/v1/decision_verdicts" && request.method === "GET") return { body: options.verdict ? [options.verdict] : [] };
     if (request.path === "/rest/v1/shadow_modes" && request.method === "GET") return { body: options.shadow ? [options.shadow] : [] };
     if (request.path === "/rest/v1/rpc/sole_approver" && options.soleApprover) return options.soleApprover;
-    if (request.path === "/rest/v1/rpc/commission_beneficiary_approval" && options.commissionPartner) return options.commissionPartner;
+    if (request.path === "/rest/v1/rpc/commission_partner_members" && options.commissionPartners) return options.commissionPartners;
     if (request.path === "/rest/v1/approval_policies") return { body: options.twoApprovals ? [{ two_approvals_above: String(options.twoApprovals) }] : [] };
     if (request.path === "/rest/v1/payment_approvals" && request.method === "GET") return { body: options.approvals ?? [] };
     if (request.path === "/rest/v1/payment_approvals" && request.method === "POST") {
@@ -382,15 +382,55 @@ describe("approveAndPay", () => {
   });
 
   it("refuses the partner a commission payable pays, before any claim or approval, sole approver or not (commissions C11)", async () => {
-    const { fake, run } = approvalsFake({ commissionPartner: { body: true }, soleApprover: { body: true }, twoApprovals: 10 });
+    const { fake, run } = approvalsFake({ commissionPartners: { body: [ACTOR] }, soleApprover: { body: true }, twoApprovals: 10 });
 
     const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
     await expect(attempt).rejects.toBeInstanceOf(ApprovalError);
     await expect(attempt).rejects.toThrow("This payable pays your own commission, so someone else must approve it.");
-    expect(rpcBodies(fake.requests, "commission_beneficiary_approval")).toEqual([{ p_org_id: ORG, p_invoice_id: INVOICE_ID, p_user_id: ACTOR }]);
+    expect(rpcBodies(fake.requests, "commission_partner_members")).toEqual([{ p_org_id: ORG, p_invoice_id: INVOICE_ID }]);
     expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
     expect(fake.requests.filter((request) => request.path === "/rest/v1/payment_approvals" && request.method === "POST")).toHaveLength(0);
     expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("lets whoever created a commission payable approve it when the partner is the only other approver (commissions C11)", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 0 });
+    const PARTNER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000c9";
+    // Not the workspace's sole approver (the partner may approve payments), but no one else besides the partner.
+    const { fake, run } = approvalsFake({ commissionPartners: { body: [PARTNER] }, soleApprover: { body: false }, approversBesides: (excluded) => (excluded.includes(PARTNER) ? 0 : 1) });
+
+    const result = await run(() => approveAndPay({ actorId: CREATOR, invoiceId: INVOICE_ID }));
+    expect(result.status).toBe("paid");
+    expect(rpcBodies(fake.requests, "approvers_besides")).toEqual([{ p_org_id: ORG, p_excluded: [CREATOR, PARTNER] }]);
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(1);
+  });
+
+  it("still refuses whoever created a commission payable while another person besides the partner may approve it", async () => {
+    const PARTNER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000c9";
+    const { fake, run } = approvalsFake({ commissionPartners: { body: [PARTNER] }, soleApprover: { body: false }, approversBesides: 1 });
+    await expect(run(() => approveAndPay({ actorId: CREATOR, invoiceId: INVOICE_ID }))).rejects.toThrow("You created this invoice, so someone else must approve it.");
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+  });
+
+  it("counts no partner among the two approvers, nor a partner's approval on file (commissions C11)", async () => {
+    const PARTNER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000c9";
+    // Above the figure, with the creator and the partner the only people who may approve payments: it could never be
+    // paid by two, so no approval is taken, rather than one no one could complete.
+    const alone = approvalsFake({ commissionPartners: { body: [PARTNER] }, twoApprovals: 10, approversBesides: (excluded) => (excluded.includes(PARTNER) ? 1 : 2) });
+    await expect(alone.run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toThrow(/two/);
+    expect(rpcBodies(alone.fake.requests, "approvers_besides")[0]).toEqual({ p_org_id: ORG, p_excluded: [PARTNER] });
+    expect(alone.fake.requests.filter((request) => request.path === "/rest/v1/payment_approvals" && request.method === "POST")).toHaveLength(0);
+
+    // With a third approver, a partner's approval given before the plan named them does not stand as the first of two.
+    const third = approvalsFake({
+      commissionPartners: { body: [PARTNER] },
+      twoApprovals: 10,
+      approversBesides: 3,
+      approvals: [{ id: "appr-partner", approved_by: PARTNER, approved_at: "2026-10-04T09:00:00.000Z", amount: "150", currency: "USDC", address: null }],
+    });
+    const outcome = await third.run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    expect(outcome.status).toBe("approved");
+    expect(rpcBodies(third.fake.requests, "claim_invoice_decision")).toHaveLength(0);
   });
 
   it("reads the claim's own refusal of the partner in the same words", async () => {

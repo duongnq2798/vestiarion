@@ -24,6 +24,8 @@ export interface CommissionActionResult {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const RELOAD = "Reload the page and try again.";
+/** The most lines one payable pays: years of a partner's commissions, each id 36 characters and a comma in the form. */
+const MAX_LINES = 10_000;
 
 function formString(formData: FormData, key: string, max = 200): string {
   const value = formData.get(key);
@@ -70,8 +72,8 @@ export async function createCommissionPayableAction(_previous: CommissionActionR
   return inOrg(auth, async () => {
     const beneficiaryId = formString(formData, "beneficiaryId", 64);
     const currency = formString(formData, "currency", 10);
-    const lineIds = formString(formData, "lineIds", 40_000).split(",").filter(Boolean);
-    if (!UUID.test(beneficiaryId) || (currency !== "USDC" && currency !== "EURC") || lineIds.length === 0 || lineIds.length > 1000 || !lineIds.every((id) => UUID.test(id))) {
+    const lineIds = formString(formData, "lineIds", MAX_LINES * 37).split(",").filter(Boolean);
+    if (!UUID.test(beneficiaryId) || (currency !== "USDC" && currency !== "EURC") || lineIds.length === 0 || lineIds.length > MAX_LINES || !lineIds.every((id) => UUID.test(id))) {
       return { ok: false, message: RELOAD };
     }
     return consoleAnswer(await createCommissionPayable(consoleActor(auth), { beneficiaryId, currency, lineIds }));

@@ -178,11 +178,16 @@ describe("a partner's review (C10)", () => {
     const after = line({ kind: "adjustment", amount: -30_000_000, adjusts: paidOut.id, reason: "allocation_reversed", dueAt: "2026-10-12T00:00:00.000Z" });
     const carried = reviewCommissions([paidOut, after], [payout({})], now)[0];
     expect(carried).toMatchObject({ dueTotal: -30_000_000, payable: false, carriedForward: -30_000_000 });
-    expect(carried.paidOut).toHaveLength(1);
-    expect(carried.paidOut[0].lines.map((entry) => entry.id)).toEqual([paidOut.id]);
+    expect(carried.paidOut.map((each) => each.statement)).toEqual(["CS-0A1B2C3D"]);
+    expect([...carried.due, ...carried.held].map((entry) => entry.id)).not.toContain(paidOut.id);
 
     const next = line({ amount: 50_000_000, dueAt: "2026-10-13T00:00:00.000Z" });
     expect(reviewCommissions([paidOut, after, next], [payout({})], now)[0]).toMatchObject({ dueTotal: 20_000_000, payable: true });
+  });
+
+  it("never offers to pay a line in a payout it did not read", () => {
+    const unread = line({ payoutId: "payout-not-read", dueAt: "2026-10-10T00:00:00.000Z" });
+    expect(reviewCommissions([unread], [], now)).toEqual([]);
   });
 
   it("gives a rejected payable's lines back to what is due", () => {
