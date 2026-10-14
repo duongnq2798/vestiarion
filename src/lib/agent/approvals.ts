@@ -820,6 +820,11 @@ export async function approveAndPay(
   fromReserveUsdc?: number;
   /** What went out, to whom and in what, once the transfer did: the person's confirmation says it; `simulated` in a sandbox. */
   paid?: { amount: number; currency: string; payee: string; simulated?: true };
+  /**
+   * The approval read an earlier transfer, or asked Circle for it again under its key, rather than deciding a new
+   * payment (payment exceptions E3): no reason for paying a held bill is kept for it (capability and reasons R10).
+   */
+  checkedFirst?: true;
 }> {
   const orgId = currentOrgId();
   const invoice = await loadWaitingPayable(input.invoiceId);
@@ -943,7 +948,7 @@ export async function approveAndPay(
           ...input.provenance,
         },
       });
-      return { status: "approved", txRef: null, note: "" };
+      return { status: "approved", txRef: null, note: "", ...(mayExist ? { checkedFirst: true as const } : {}) };
     }
     // Another person's approval stands, so this one pays. Nothing of it is stored before the claim: a refusal on the way
     // leaves no approval behind, and the ledger entry is its record (T6).
@@ -1174,6 +1179,7 @@ export async function approveAndPay(
     txRef: result.txRef,
     note: result.note,
     ...(fromReserveUsdc !== null ? { fromReserveUsdc } : {}),
+    ...(mayExist ? { checkedFirst: true as const } : {}),
     ...(sent
       ? {
           paid: {
@@ -1293,8 +1299,11 @@ export async function rejectInvoice(input: { actorId: string; invoiceId: string;
   });
 }
 
-/** `provenance`, when given, names the surface the person acted from (integrations design R3); the console gives none. */
-export async function returnInvoice(input: { actorId: string; invoiceId: string; provenance?: Provenance; forVerdict?: boolean }): Promise<void> {
+/**
+ * `provenance`, when given, names the surface the person acted from (integrations design R3); the console gives none.
+ * `reason`, when the person gave one, is kept in the ledger as a rejection's is (capability and reasons R10).
+ */
+export async function returnInvoice(input: { actorId: string; invoiceId: string; reason?: string; provenance?: Provenance; forVerdict?: boolean }): Promise<void> {
   const orgId = currentOrgId();
   if (!input.forVerdict) await refuseUntilVerdict(input.invoiceId, "return");
   await refuseIfPaymentSent(input.invoiceId);
@@ -1315,12 +1324,13 @@ export async function returnInvoice(input: { actorId: string; invoiceId: string;
   }
   await clearApprovalsAfter(input.invoiceId);
 
+  const reason = trimReason(input.reason);
   await appendLedgerEntryBestEffort(orgId, {
     actor: "human",
     domain: "ap",
     action: "approval_returned",
     summary: "An invoice was returned, undecided",
-    detail: { by: input.actorId, invoiceId: input.invoiceId, ...input.provenance },
+    detail: { by: input.actorId, invoiceId: input.invoiceId, ...(reason === undefined ? {} : { reason }), ...input.provenance },
   });
 }
 

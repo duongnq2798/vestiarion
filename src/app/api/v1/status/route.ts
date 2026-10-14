@@ -1,6 +1,8 @@
 import { describeConfig, type VestiarionConfig } from "@/lib/config";
 import { currentConfig } from "@/lib/context";
-import { chainModes, paymentsHeld } from "@/lib/circle";
+import { apiPayments } from "@/lib/capability";
+import { readCapability } from "@/lib/capability-read";
+import { chainModes } from "@/lib/circle";
 import { networkOf, networkProfile } from "@/lib/network";
 import { screeningMode } from "@/lib/compliance";
 import { stats } from "@/lib/queries";
@@ -28,7 +30,9 @@ export interface StatusPayload {
    * credentials are stored but could not be read (R12); or it is on Arc
    * mainnet with no Circle account connected yet, or not live yet; or Arc
    * mainnet is switched off on this deployment (mainnet limits L7, mainnet
-   * copy C12). Cycles refuse to pay then rather than simulate, so neither leg
+   * copy C12); or payments are switched off for every workspace, or whether
+   * they are could not be read (capability and reasons R4). Cycles refuse to
+   * pay then rather than simulate, so neither leg
    * is live or simulated. Yield is also `unavailable` on a network with no
    * yield reserve.
    */
@@ -71,19 +75,24 @@ export async function GET(request: Request) {
     // never come.
     // Nothing pays while the workspace has no provider, or while its network
     // holds it (Arc mainnet switched off, or the workspace not live there):
-    // mainnet copy C12. The shell reads the same rule and says Held.
-    const noPayments = paymentsHeld(config);
+    // mainnet copy C12; nor while payments are switched off, or the switch
+    // could not be read. The workspace's capability says all of it, as the
+    // header does (capability and reasons R4); shadow mode is not a reason:
+    // a payment someone agrees to is paid as the chain mode says, so it is
+    // not read here.
+    const capability = await readCapability({ shadow: false });
     // A network with no yield reserve has nothing to earn in, live or not.
     const noReserve = !networkProfile(networkOf(config.network)).usyc;
     const modes = chainModes();
+    const payments = apiPayments(capability, modes.mode);
     const snapshot = await stats();
 
     return {
       data: {
         businessName: config.businessName,
         provenance: {
-          payments: noPayments ? "unavailable" : modes.mode,
-          yield: noPayments || noReserve ? "unavailable" : modes.earnMode,
+          payments,
+          yield: payments === "unavailable" || noReserve ? "unavailable" : modes.earnMode,
           screening: screeningMode(),
         },
         clock: {

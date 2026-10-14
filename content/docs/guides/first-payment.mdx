@@ -358,8 +358,11 @@ A payment Vestiarion recorded as failed is told too when it may still have moved
 Owners, admins and approvers decide each one:
 
 - **Approve and pay** starts the transfer. A dialog asks you to confirm, and **Pay now** sends it at once. When a transfer for it was already sent, or Circle never answered one, the dialog asks to check that transfer instead, its button reads **Check it** or **Look first**, and the notice says it is checking the earlier transfer: nothing new is sent before Circle answers. The ledger records who approved it. While it is sent, a notice in the corner says **Payment approved**, with the amount and the payee. It then turns into **Payment confirmed** once Circle confirms the transfer: the amount, who it was paid to, that you approved it, "Confirmed by Circle on" the workspace's network, and **View transaction** to open it on the explorer. If Circle has not confirmed it yet, the notice says **Payment processing** instead, with the payment submitted to Circle, and the payment is not called confirmed until it is. In a sandbox, it says **Payment simulated**.
-- **Reject** marks it not paid. You can give a reason, which is kept in the ledger.
-- **Return to agent** sends it back to pending, and the agent usually decides it again within a minute.
+- **Reject** marks it not paid. It asks **Why reject it?**: you can give a reason, which is kept in the ledger.
+- **Return to agent** sends it back to pending, and the agent usually decides it again within a minute. Its confirmation asks **Why return it?**
+- On a payment the agent flagged or held on one of its rules, the confirmation of **Approve and pay** asks **Why pay it anyway?**, unless it checks an earlier transfer first, which sends nothing new.
+
+Each of these reasons is optional, one line, and never stops what you are doing. A reason you give is kept with where you gave it and the version of Vestiarion that asked. Owners and admins see the latest ones on **Insights**, under **Why people went against the agent**, and Vestiarion's team reads them to improve the agent: [Privacy](/privacy#decision-reasons) says what is kept and for how long.
 
 <Screenshot
   src="/docs/guides/first-payment-approval.png"

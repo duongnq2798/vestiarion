@@ -57,7 +57,8 @@ const PRESENTED = `vxk_abcdefgh_${"A".repeat(43)}`;
 const AUTHORIZATION = `Bearer ${PRESENTED}`;
 const PLATFORM_TOKEN = "mcp-route-platform-token";
 const ORIGIN = "https://vestiarion.invalid";
-const PLATFORM_PATHS = new Set(["/rest/v1/orgs", "/rest/v1/api_keys"]);
+// The payments switch is the platform's, read by the status tool as every page reads it (capability and reasons R4).
+const PLATFORM_PATHS = new Set(["/rest/v1/orgs", "/rest/v1/api_keys", "/rest/v1/platform_controls"]);
 const CHALLENGE = 'Bearer realm="vestiarion"';
 const UNAUTHORIZED = { error: { code: "unauthorized", message: "A valid API key is required." } };
 const MODERN = "2026-07-28";

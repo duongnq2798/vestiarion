@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm, type ActionResult } from "@/components/ui/useActionForm";
 import { withSuccessToast } from "@/components/withSuccessToast";
+import { agreedPaymentLine, type Capability } from "@/lib/capability";
 import { utcMinute } from "@/lib/copy";
 import type { Network } from "@/lib/network";
 import { SHADOW_CURRENCIES, type ShadowMode } from "@/lib/shadow-currency";
@@ -29,6 +30,8 @@ export interface ShadowModePanelProps {
   mode: ShadowMode | null;
   network: Network;
   canChange: boolean;
+  /** What the workspace's payments do now (`readCapability()`): what agreeing pays is said in its words (capability and reasons R5). */
+  capability?: Capability;
 }
 
 const INITIAL: ActionResult = { ok: false, message: "" };
@@ -87,7 +90,7 @@ function TurnOff({ orgSlug }: { orgSlug: string }) {
   );
 }
 
-export default function ShadowModePanel({ orgSlug, mode, network, canChange }: ShadowModePanelProps) {
+export default function ShadowModePanel({ orgSlug, mode, network, canChange, capability }: ShadowModePanelProps) {
   const mainnet = network === "arc-mainnet";
   return (
     <section aria-labelledby="shadow-mode-title">
@@ -100,8 +103,9 @@ export default function ShadowModePanel({ orgSlug, mode, network, canChange }: S
               : "Off: the agent pays on its own, within its limits."}
           </p>
           <p className="text-sm text-ink-2">
-            Keep paying your bills as you do today. The agent decides on the same bills, and you agree or disagree with each decision. Each payment you
-            agree to is made in USDC on Arc testnet, at the bill&apos;s amount in USDC.
+            {`Keep paying your bills as you do today. The agent decides on the same bills, and you agree or disagree with each decision. ${
+              capability ? agreedPaymentLine(capability) : "A payment you agree to is made in USDC."
+            } It is the bill's amount in USDC.`}
           </p>
         </div>
         <div className="border-t border-line pt-4">

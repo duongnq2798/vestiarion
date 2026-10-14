@@ -22,6 +22,11 @@ export interface ConfirmDialogProps {
   formId?: string;
   /** For a confirmation that is not a form submission. */
   onConfirm?: () => void;
+  /**
+   * Anything asked alongside the confirmation, under the description: an optional one-line reason, say. It never
+   * blocks the confirm button; a value it holds reaches the form through the caller's own state.
+   */
+  children?: ReactNode;
 }
 
 /**
@@ -29,7 +34,7 @@ export interface ConfirmDialogProps {
  * close it — the person chooses. Confirming closes it at once; the control
  * that opened it shows the work in progress.
  */
-export function ConfirmDialog({ trigger, title, description, confirmLabel, cancelLabel = "Cancel", tone = "danger", formId, onConfirm }: ConfirmDialogProps) {
+export function ConfirmDialog({ trigger, title, description, confirmLabel, cancelLabel = "Cancel", tone = "danger", formId, onConfirm, children }: ConfirmDialogProps) {
   const danger = tone === "danger";
   return (
     <AlertDialogPrimitive.Root>
@@ -48,6 +53,7 @@ export function ConfirmDialog({ trigger, title, description, confirmLabel, cance
               <AlertDialogPrimitive.Description className="text-sm leading-relaxed text-ink-2">{description}</AlertDialogPrimitive.Description>
             </div>
           </div>
+          {children && <div className="mt-4">{children}</div>}
           <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <AlertDialogPrimitive.Cancel asChild>
               <Button variant="secondary">{cancelLabel}</Button>

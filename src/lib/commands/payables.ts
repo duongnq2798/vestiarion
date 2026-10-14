@@ -8,6 +8,7 @@ import { done, refused, TRY_AGAIN, type CommandOutcome, type Refused } from "./o
 import { gate } from "./policy";
 import { APPROVAL_RECORDED } from "../two-approvals";
 import { activityAmount } from "../agent-activity";
+import { recordDecisionReason } from "../decision-reasons";
 import { txUrl } from "../payee-chains";
 import { SIMULATED_NETWORK, type PaymentReceipt } from "../payment-receipt";
 import { workspaceNetwork } from "../workspace-network";
@@ -21,6 +22,12 @@ import { workspaceNetwork } from "../workspace-network";
  * first (src/lib/commands/chat-decisions.ts, Slack design S10); an approval then pays the address those rules checked.
  * A payable held in shadow mode for a person's verdict is settled through one (shadow mode S4): the verdict's own
  * settling passes `forVerdict`, and the approvals library refuses every other before a verdict is given.
+ *
+ * Paying, rejecting or returning what the agent stopped goes against it: a reason the person gave, which is never
+ * required, is kept once the decision is made (capability and reasons R10, R11). Only the console's: it is the one
+ * surface that says, where the reason is typed, that Vestiarion's team reads it. Slack sends no reason today, and the
+ * other surfaces decide no payable; a reason one ever sends still goes into the decision's own ledger entry, as before,
+ * and nowhere else. A verdict keeps its own (src/lib/verdicts.ts), so a decision settling one keeps none here.
  */
 
 /** The chat's rules for a decision from any surface but the console; the console's decisions pass untouched. */
@@ -32,6 +39,15 @@ async function chatRules(actor: Actor, decision: "approve" | "reject" | "return"
 
 /** The verdict's own settling of a payable held for one, passed on only when it is that (shadow mode S4). */
 const verdictSettles = (input: { forVerdict?: boolean }) => (input.forVerdict ? { forVerdict: true } : {});
+
+/**
+ * Keeps the reason given in the console for a decision on a payable, unless a verdict settles it, which keeps its own.
+ * Never throws.
+ */
+async function keepReason(actor: Actor, source: "approvals.pay_held" | "approvals.reject" | "approvals.return", input: { invoiceId: string; reason?: string | null; forVerdict?: boolean }) {
+  if (input.forVerdict || actor.surface.kind !== "console") return;
+  await recordDecisionReason({ source, surface: actor.surface.kind, subject: "invoice", subjectId: input.invoiceId, reason: input.reason, givenBy: actor.userId });
+}
 
 /** A transaction on chain, which the explorer opens; Circle's own ids before it is on chain are not. */
 const TX_HASH = /^0x[0-9a-fA-F]{64}$/;
@@ -94,7 +110,7 @@ export function heldMessage(note: string): string {
 
 export async function approvePayable(
   actor: Actor,
-  input: { invoiceId: string; shownAddress?: string; card?: ShownCard; forVerdict?: boolean }
+  input: { invoiceId: string; shownAddress?: string; card?: ShownCard; forVerdict?: boolean; reason?: string }
 ): Promise<CommandOutcome<{ status: "paid" | "matched" | "approved"; txRef: string | null; receipt?: PaymentReceipt }>> {
   const refusal = gate(actor, "payable.approve");
   if (refusal) return refusal;
@@ -110,6 +126,9 @@ export async function approvePayable(
   // A failed transfer leaves the invoice held with the provider's reason: something changed, and it is still a failure.
   // Cash brought back from the reserve for it stays in the operating wallet, which is said too (review finding 8).
   if (result.status === "held") return refused("transfer_failed", `${heldMessage(result.note)}${fromReserveStaysNote(result.fromReserveUsdc)}`, { changed: true });
+  // A reason for paying a held bill, only where this approval decided a new payment: not where it read an earlier transfer,
+  // or asked Circle for it again under its key, which pays nothing new (payment exceptions E3).
+  if (!result.checkedFirst) await keepReason(actor, "approvals.pay_held", input);
   // Above the workspace's figure, the first of two approvals is recorded and sends nothing (two approvals T4, T8).
   if (result.status === "approved") return done(APPROVAL_RECORDED, { status: "approved", txRef: null });
   // A confirmed payment's payee hears of it now, not at the next cycle (payment notices R5).
@@ -131,19 +150,21 @@ export async function rejectPayable(actor: Actor, input: { invoiceId: string; re
   } catch (error) {
     return approvalRefusal(error);
   }
+  await keepReason(actor, "approvals.reject", input);
   return done("Rejected.");
 }
 
-export async function returnPayable(actor: Actor, input: { invoiceId: string; card?: ShownCard; forVerdict?: boolean }): Promise<CommandOutcome> {
+export async function returnPayable(actor: Actor, input: { invoiceId: string; card?: ShownCard; forVerdict?: boolean; reason?: string }): Promise<CommandOutcome> {
   const refusal = gate(actor, "payable.return");
   if (refusal) return refusal;
   try {
     const chat = await chatRules(actor, "return", input.invoiceId, input.card);
     if (!chat.ok) return chat.refusal;
-    await returnInvoice({ actorId: actor.userId, invoiceId: input.invoiceId, ...provenanceOf(actor), ...verdictSettles(input) });
+    await returnInvoice({ actorId: actor.userId, invoiceId: input.invoiceId, ...(input.reason ? { reason: input.reason } : {}), ...provenanceOf(actor), ...verdictSettles(input) });
   } catch (error) {
     return approvalRefusal(error);
   }
+  await keepReason(actor, "approvals.return", input);
   runCycleSoon(cycleEventOf(actor, "payable_returned"));
   return done("Returned to the agent. It usually decides it again within a minute.");
 }

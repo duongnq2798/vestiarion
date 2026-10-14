@@ -35,7 +35,8 @@ import { CASH_SHORTFALL, SHADOW_VERDICT } from "@/lib/next-step";
 import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { can } from "@/lib/auth/roles";
-import { chainModes, paymentsHeld } from "@/lib/circle";
+import { readCapability } from "@/lib/capability-read";
+import { chainModes, paymentsHeld, paymentsHoldReason } from "@/lib/circle";
 import { readGatewayState } from "@/lib/circle/gateway-funding";
 import { spendingLimitStatus } from "@/lib/circle/spending-limit-setup";
 import { readServiceBudget } from "@/lib/service-budget";
@@ -171,13 +172,18 @@ export default async function DashboardPage({
     const canDecide = can(access.membership.role, "approval.decide");
     // In shadow mode, each card carries a person's verdict on the agent's decision (shadow mode S3), and the console
     // says how often people agreed (S5). Best effort, like the reads above.
-    const [verdicts, shadow] = await Promise.all([
+    const [verdicts, shadowRead] = await Promise.all([
       verdictFacts(db(), invoiceEntries, canDecide),
       readShadowMode(db()).catch((error: unknown) => {
         console.error("console: shadow mode not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
-        return null;
+        return undefined;
       }),
     ]);
+    // Shadow mode not read is not known, never off: the capability then says so, and the agent pays nothing on a guess.
+    const shadowKnown = shadowRead === undefined ? null : shadowRead !== null;
+    const shadow = shadowRead ?? null;
+    // What the workspace's payments do now, in the words every surface uses (capability and reasons R1).
+    const capability = verdicts.capability ?? (await readCapability({ shadow: shadowKnown }));
     // In shadow mode the section also offers test USDC for what the open bills need (test USDC T8); best effort too.
     const [shadowSummary, testUsdcWeek] = shadow
       ? await Promise.all([
@@ -406,7 +412,7 @@ export default async function DashboardPage({
     const sampleLoaded = counterparties.some((counterparty) => counterparty.sample);
 
     return (
-      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={{ ...modes, held: paymentsHeld() }} status={await shellStatus()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={{ ...modes, held: paymentsHeld(), hold: paymentsHoldReason() }} status={await shellStatus()}>
         <PageHead
           title={sectionTitle("treasury")}
           sub="What the agent holds, what it decided, and why."
@@ -457,7 +463,7 @@ export default async function DashboardPage({
           <div className="mb-8 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 @4xl:grid-cols-4 @5xl:grid-cols-[repeat(3,minmax(0,1fr))_22rem] @5xl:gap-6 @7xl:grid-cols-[repeat(3,minmax(0,1fr))_24rem]">
             <BalanceTile
               accounts={accounts}
-              mode={balanceTileMode(modes.mode, accountsRows, walletHost)}
+              mode={balanceTileMode(modes.mode, accountsRows, walletHost, capability)}
               orgSlug={slug}
               refreshAction={refreshOnChainBalanceAction}
               syncedAt={accountsRows.find((account) => account.kind === "operating" && (account.circle_wallet_id || (walletHost === "external" && account.address)))?.balance_synced_at ?? null}
@@ -476,7 +482,7 @@ export default async function DashboardPage({
 
           <div className="grid grid-cols-1 gap-8 @5xl:grid-cols-[minmax(0,1fr)_22rem] @5xl:gap-6 @7xl:grid-cols-[minmax(0,1fr)_24rem]">
             <div className="min-w-0 space-y-8">
-              {shadow && shadowSummary && <ShadowModeSummary orgSlug={slug} mode={shadow} summary={shadowSummary} testUsdc={testUsdc} simulated={modes.mode !== "live" && !paymentsHeld()} />}
+              {shadow && shadowSummary && <ShadowModeSummary orgSlug={slug} mode={shadow} summary={shadowSummary} testUsdc={testUsdc} capability={capability} />}
 
               {stopped.length > 0 && (
                 <section>

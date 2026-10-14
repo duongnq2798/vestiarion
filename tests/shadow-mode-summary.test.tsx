@@ -2,6 +2,7 @@ import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import ShadowModeSummary from "@/components/ShadowModeSummary";
+import { capabilityOf } from "@/lib/capability";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 
 vi.mock("@/app/actions/test-usdc", () => ({ addTestUsdcAction: vi.fn() }));
@@ -14,7 +15,9 @@ vi.mock("@/app/actions/test-usdc", () => ({ addTestUsdcAction: vi.fn() }));
 const html = (node: ReactElement) => renderToStaticMarkup(<TooltipProvider>{node}</TooltipProvider>);
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").replace(/&#x27;/g, "'").trim();
 const MODE = { currency: "VND", startedAt: "2026-10-07T12:00:00Z", startedBy: null };
-const panel = (summary: { agreed: number; disagreed: number; waiting: number }) => html(<ShadowModeSummary orgSlug="northstar" mode={MODE} summary={summary} />);
+const LIVE_SHADOW = capabilityOf({ network: "arc-testnet", payments: { state: "on" }, hold: null, chainMode: "live", shadow: true });
+const panel = (summary: { agreed: number; disagreed: number; waiting: number }, capability = LIVE_SHADOW) =>
+  html(<ShadowModeSummary orgSlug="northstar" mode={MODE} summary={summary} capability={capability} />);
 
 describe("ShadowModeSummary", () => {
   it("says how often people agreed with the agent, out of the verdicts given", () => {
@@ -22,7 +25,7 @@ describe("ShadowModeSummary", () => {
     expect(words).toContain("Shadow mode");
     expect(words).toContain("for bills in VND");
     expect(words).toContain("You agreed with 9 of 11 decisions (82%).");
-    expect(words).toContain("Each payment you agree to is made in USDC on Arc testnet.");
+    expect(words).toContain("A payment you agree to is sent in USDC on Arc testnet.");
     expect(words).not.toContain("wait for your verdict");
   });
 
@@ -37,12 +40,21 @@ describe("ShadowModeSummary", () => {
   it("says what to do before any verdict is given", () => {
     expect(text(panel({ agreed: 0, disagreed: 0, waiting: 2 }))).toContain("No verdicts yet: agree or disagree with each decision as the agent makes it.");
   });
+
+  it("says what agreeing pays in the capability's words: simulated, or nothing while payments are off", () => {
+    const simulated = capabilityOf({ network: "arc-testnet", payments: { state: "on" }, hold: null, chainMode: "simulate", shadow: true });
+    expect(text(panel({ agreed: 0, disagreed: 0, waiting: 0 }, simulated))).toContain("A payment you agree to is simulated: nothing is sent on chain.");
+    const off = capabilityOf({ network: "arc-testnet", payments: { state: "off", reason: null }, hold: null, chainMode: "live", shadow: true });
+    const words = text(panel({ agreed: 0, disagreed: 0, waiting: 0 }, off));
+    expect(words).toContain("Nothing is paid when you agree right now.");
+    expect(words).not.toContain("on Arc testnet");
+  });
 });
 
 /** Test USDC for shadow mode (docs/superpowers/specs/2026-10-08-shadow-test-usdc-design.md T8): the line and the button. */
 describe("ShadowModeSummary: test USDC", () => {
   const withTestUsdc = (testUsdc: Parameters<typeof ShadowModeSummary>[0]["testUsdc"]) =>
-    html(<ShadowModeSummary orgSlug="northstar" mode={MODE} summary={{ agreed: 0, disagreed: 0, waiting: 0 }} testUsdc={testUsdc} />);
+    html(<ShadowModeSummary orgSlug="northstar" mode={MODE} summary={{ agreed: 0, disagreed: 0, waiting: 0 }} testUsdc={testUsdc} capability={LIVE_SHADOW} />);
 
   it("says how much the open bills need beyond the wallet, and offers to add it", () => {
     const markup = withTestUsdc({ view: { need: 480.01, action: "add", amount: 480.01 }, latest: null, operatingAddress: "0xabc", latestTxUrl: null });

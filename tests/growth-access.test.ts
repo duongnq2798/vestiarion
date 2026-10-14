@@ -41,6 +41,9 @@ vi.mock("@/lib/dal", () => ({
 
 const EMPTY_SIDE = { opened: 0, withRealBill: 0, withDecision: 0, withPayment: 0, paidOnTwoDays: 0, withVerdict: 0, withTwoPeople: 0 };
 vi.mock("@/lib/growth/read", () => ({
+  readGrowthReasons: vi.fn(async () => [
+    { slug: "northwind", side: "customers", feature: "approvals", decision: "return", surface: "console", reason: "Waiting on the corrected invoice.", appVersion: "abc1234def56", givenAt: "2026-10-14T09:00:00Z" },
+  ]),
   readGrowth: vi.fn(async () => ({
     ready: true,
     campaigns: [],

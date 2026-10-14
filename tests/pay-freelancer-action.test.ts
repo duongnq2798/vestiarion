@@ -65,6 +65,8 @@ describe("payFreelancerAction", () => {
     const answer = await payFreelancerAction(empty, form());
     expect(setUpMock).toHaveBeenCalledWith({
       name: "Linh", email: "linh@example.com", work: "10 Canva posts", amount: "12.5", evidence: null, actorId: USER, orgName: "Mai Studio",
+      // The workspace's mode, which says whether its payments are simulated while its chain mode cannot be told (capability and reasons R5).
+      mode: "live",
     });
     expect(answer).toMatchObject({ ok: true, url: URL, name: "Linh", emailed: true });
     expect(answer.message).toContain("Emailed Linh a link");

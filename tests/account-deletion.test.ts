@@ -138,6 +138,7 @@ describe("0023 is idempotent", () => {
         { tbl: "deal_versions", col: "created_by", action: "n" },
         { tbl: "deals", col: "auto_release_by", action: "n" },
         { tbl: "deals", col: "created_by", action: "n" },
+        { tbl: "decision_reasons", col: "given_by", action: "n" },
         { tbl: "decision_verdicts", col: "decided_by", action: "n" },
         { tbl: "escrow_contracts", col: "created_by", action: "n" },
         { tbl: "fx_rates", col: "recorded_by", action: "n" },

@@ -18,7 +18,7 @@ import { fakeSupabase, orgTestContext } from "./support/fake-supabase";
 
 const { authorizeMock, lib } = vi.hoisted(() => ({
   authorizeMock: vi.fn(),
-  lib: { createPayeeLink: vi.fn(), revokePayeeLink: vi.fn(), payeeLinkStatus: vi.fn(), submitPayeeAddress: vi.fn() },
+  lib: { createPayeeLink: vi.fn(), revokePayeeLink: vi.fn(), payeeLinkStatus: vi.fn(), submitPayeeAddress: vi.fn(), payeeLinkSimulates: vi.fn(async () => false) },
 }));
 
 vi.mock("server-only", () => ({}));

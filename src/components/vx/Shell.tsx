@@ -39,7 +39,7 @@ export function ProductShell({
   clockMode: CycleClockMode;
   lastCycleAt: string | null;
   /** The page's modes, and whether nothing can pay now (`shellModes()`), which the header says as held (final review I2). */
-  chainModes: { mode: "live" | "simulate"; earnMode: "live" | "simulate"; held: boolean };
+  chainModes: { mode: "live" | "simulate"; earnMode: "live" | "simulate"; held: boolean; hold?: string | null };
   /** The workspace's network, which the footer names (mainnet copy C1). */
   network: Network;
   /** Shadow mode and screening, read in the workspace's scope (`shellStatus()`). */

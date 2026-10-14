@@ -94,9 +94,14 @@ describe("giveVerdict", () => {
     expect(ledgerMock).not.toHaveBeenCalled();
   });
 
-  it("needs a reason to disagree, of at most 280 characters", async () => {
+  it("takes a disagreement with no reason, and a reason of at most 280 characters (capability and reasons R9)", async () => {
     fake = fakeSupabase(workspace());
-    await expect(run(() => giveVerdict({ actorId: PERSON, entrySeq: 41, verdict: "disagree", reason: "  " }, actions()))).rejects.toMatchObject({ code: "reason_required" });
+    const result = await run(() => giveVerdict({ actorId: PERSON, entrySeq: 41, verdict: "disagree", reason: "  " }, actions()));
+    expect(result).toEqual({ given: { verdict: "disagree", reason: null }, already: false, recorded: true });
+    expect(inserted()[0].body).toMatchObject({ verdict: "disagree", reason: null });
+    // No reason given, none kept beside the others.
+    expect(fake.requests.some((r) => r.path === "/rest/v1/decision_reasons")).toBe(false);
+    fake = fakeSupabase(workspace());
     await expect(run(() => giveVerdict({ actorId: PERSON, entrySeq: 41, verdict: "disagree", reason: "x".repeat(281) }, actions()))).rejects.toMatchObject({ code: "reason_too_long" });
     await expect(run(() => giveVerdict({ actorId: PERSON, entrySeq: 41, verdict: "agree", reason: "x".repeat(281) }, actions()))).rejects.toMatchObject({ code: "reason_too_long" });
     expect(inserted()).toHaveLength(0);
@@ -213,7 +218,34 @@ describe("giveVerdict", () => {
   });
 
   it("says each refusal in words a person reads", () => {
-    expect(new VerdictError("reason_required").message).toBe("Say why you disagree, in a few words.");
+    expect(new VerdictError("reason_too_long").message).toBe("Keep the reason to 280 characters.");
+  });
+
+  it("keeps a disagreement's reason beside the other reasons people give, with where it came from and the build", async () => {
+    fake = fakeSupabase(workspace());
+    await run(() => giveVerdict({ actorId: PERSON, entrySeq: 41, verdict: "disagree", reason: "  Paid on the due date already. " }, actions()));
+    const kept = fake.requests.filter((r) => r.path === "/rest/v1/decision_reasons" && r.method === "POST");
+    expect(kept).toHaveLength(1);
+    expect(kept[0].body).toMatchObject({
+      org_id: ORG,
+      feature: "shadow_mode",
+      decision: "disagree",
+      surface: "console",
+      subject: "invoice",
+      subject_id: INVOICE,
+      reason: "Paid on the due date already.",
+      given_by: PERSON,
+    });
+    expect(typeof (kept[0].body as { app_version: string }).app_version).toBe("string");
+  });
+
+  it("never fails a disagreement over a reason that cannot be kept, before migration 0120 runs", async () => {
+    const base = workspace();
+    fake = fakeSupabase((r) =>
+      r.path === "/rest/v1/decision_reasons" ? { status: 404, body: { code: "PGRST205", message: "Could not find the table public.decision_reasons in the schema cache" } } : base(r)
+    );
+    const result = await run(() => giveVerdict({ actorId: PERSON, entrySeq: 41, verdict: "disagree", reason: "Wrong amount" }, actions()));
+    expect(result).toMatchObject({ given: { verdict: "disagree", reason: "Wrong amount" }, recorded: true });
   });
 });
 
@@ -259,7 +291,7 @@ describe("verdictFacts", () => {
     expect(facts.given.get(41)).toEqual({ verdict: "agree", reason: null });
     expect(facts.canGive).toBe(true);
     // No Circle account of its own: its payments, a verdict's included, are simulated, and Agree and pay says so.
-    expect(facts.simulated).toBe(true);
+    expect(facts.capability).toMatchObject({ situation: "shadow", afterVerdict: "simulated" });
     const asked = fake.requests.find((r) => r.path === "/rest/v1/decision_verdicts" && r.method === "GET");
     expect(asked?.params.get("entry_seq")).toBe("in.(41)");
   });

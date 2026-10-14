@@ -102,7 +102,9 @@ describe("readSharedReport", () => {
     const now = new Date("2026-10-11T12:00:00.000Z");
     const shown = await readSharedReport(generateReportShareToken().token, now);
     expect(scopes).toEqual([{ orgId: ORG }]);
-    expect(reads.report).toHaveBeenCalledWith(expect.anything(), "arc-testnet", { sandbox: false }, now);
+    // Simulated as the workspace's capability says, not its mode: this one pays through no Circle account, so its
+    // payments are simulated although it is live (capability and reasons R5).
+    expect(reads.report).toHaveBeenCalledWith(expect.anything(), "arc-testnet", { sandbox: true }, now);
     expect(reads.actuals).toHaveBeenCalled();
     expect(reads.baseline).toHaveBeenCalled();
     expect(shown).toMatchObject({

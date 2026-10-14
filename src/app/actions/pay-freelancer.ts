@@ -42,7 +42,7 @@ export async function payFreelancerAction(_previous: PayFreelancerResult, formDa
     if (!parsed.ok) return { ok: false, message: parsed.message };
 
     try {
-      const result = await setUpFreelancerPayment({ ...parsed.value, actorId: auth.user.id, orgName: auth.membership.name });
+      const result = await setUpFreelancerPayment({ ...parsed.value, actorId: auth.user.id, orgName: auth.membership.name, mode: auth.membership.mode });
       revalidateOrgPages();
       // A sandbox pays simulated at once; a live workspace waits for the address and its confirmation (R5),
       // whose own event starts the cycle that pays.

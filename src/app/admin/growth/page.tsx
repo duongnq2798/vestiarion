@@ -17,7 +17,8 @@ import { DEFINITIONS } from "@/lib/growth/definitions";
 import { ALL_STAGES, REVENUE_WORDS, REVIEW_STATUSES, REVIEW_WORDS, STAGE_WORDS, words } from "@/lib/growth/fields";
 import { growthTeamUser } from "@/lib/growth/gate";
 import { breakdown, furthestStages, growthMetrics, NOT_ENOUGH_DATA } from "@/lib/growth/metrics";
-import { readGrowth } from "@/lib/growth/read";
+import { readGrowth, readGrowthReasons } from "@/lib/growth/read";
+import { REASON_SOURCES, SURFACE_WORDS, type ReasonSource } from "@/lib/decision-reasons";
 import { growthHref, parseGrowthView } from "@/lib/growth/view";
 import { NETWORK_IDS, networkOf, networkProfile } from "@/lib/network";
 
@@ -45,7 +46,7 @@ export default async function GrowthPage({ searchParams }: GrowthPageProps) {
   if (!user) notFound();
   const now = new Date();
   const view = parseGrowthView(await searchParams, now);
-  const data = await readGrowth(view.sinceAt);
+  const [data, reasons] = await Promise.all([readGrowth(view.sinceAt), readGrowthReasons(view.sinceAt)]);
 
   const inWindow = <T,>(rows: T[], day: (row: T) => string) => rows.filter((row) => day(row).slice(0, 10) >= view.since);
   const windowLeads = inWindow(data.leads, (lead) => lead.created_at);
@@ -162,6 +163,39 @@ export default async function GrowthPage({ searchParams }: GrowthPageProps) {
           <EmptyState compact title={view.side === "ours" ? "None of ours opened in the window" : "No customer workspace opened in the window"} />
         ) : (
           <WorkspacesTable workspaces={workspaces} now={now} />
+        )}
+      </Section>
+
+      <Section id="reasons" title="Why people went against the agent" meta={reasons ? `${reasons.length} since ${view.since}, newest first` : undefined}>
+        {reasons === null ? (
+          <Callout tone="held">The reasons could not be read. They are kept once migration 0120 has run.</Callout>
+        ) : reasons.length === 0 ? (
+          <EmptyState compact title="No reasons given in the window" />
+        ) : (
+          <Card className="overflow-x-auto p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Given</TableHead>
+                  <TableHead>Workspace</TableHead>
+                  <TableHead>Where</TableHead>
+                  <TableHead>Reason</TableHead>
+                  <TableHead>Build</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {reasons.map((reason, index) => (
+                  <TableRow key={`${reason.givenAt}-${index}`}>
+                    <TableCell className="whitespace-nowrap text-ink-3">{utcMinute(reason.givenAt)}</TableCell>
+                    <TableCell>{`${reason.slug}${reason.side === "ours" ? " (ours)" : ""}`}</TableCell>
+                    <TableCell className="whitespace-nowrap">{`${REASON_SOURCES[`${reason.feature}.${reason.decision}` as ReasonSource] ?? `${reason.feature} ${reason.decision}`} · ${SURFACE_WORDS[reason.surface as keyof typeof SURFACE_WORDS] ?? reason.surface}`}</TableCell>
+                    <TableCell className="min-w-64 [overflow-wrap:anywhere]">{reason.reason}</TableCell>
+                    <TableCell className="font-mono text-xs">{reason.appVersion}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
         )}
       </Section>
 

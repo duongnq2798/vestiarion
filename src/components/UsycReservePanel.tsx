@@ -15,6 +15,7 @@ import { Money } from "@/components/vx/Primitives";
 import { utcMinute } from "@/lib/copy";
 import type { UsycReserveStatus } from "@/lib/platform/usyc-reserve";
 import { DocsLink } from "@/components/DocsLink";
+import type { Capability } from "@/lib/capability";
 
 const INITIAL: UsycReserveActionResult = { ok: false, message: "" };
 
@@ -24,7 +25,10 @@ const INITIAL: UsycReserveActionResult = { ok: false, message: "" };
  * which checks the allowlist on chain first. On: since when, what the reserve holds, and, for an owner or admin,
  * Bring cash back, to the operating wallet now (reserve cash back R2).
  */
-export function UsycReservePanel({ orgSlug, status, canManage }: { orgSlug: string; status: UsycReserveStatus; canManage: boolean }) {
+export function UsycReservePanel({ orgSlug, status, canManage, capability }: { orgSlug: string; status: UsycReserveStatus; canManage: boolean; capability?: Capability }) {
+  // While nothing can be paid, nothing moves in or out of the reserve either: Held, as the header's Reserve row says
+  // (capability and reasons R4).
+  const held = capability?.situation === "unavailable" && capability.cause !== "shadow-unread";
   return (
     <Card asChild className="overflow-hidden">
       <section aria-labelledby="usyc-reserve-title">
@@ -36,7 +40,19 @@ export function UsycReservePanel({ orgSlug, status, canManage }: { orgSlug: stri
             action={
               <div className="flex items-center gap-3">
                 <DocsLink href="/docs/guides/go-live#earn-on-idle-cash-with-usyc" topic="the USYC reserve" />
-                {status.liveAt ? <Badge tone="proof" dot>Live</Badge> : <Badge tone="simulated">Simulated</Badge>}
+                {status.liveAt ? (
+                  held ? (
+                    <Badge tone="held" dot>
+                      Held
+                    </Badge>
+                  ) : (
+                    <Badge tone="proof" dot>
+                      Live
+                    </Badge>
+                  )
+                ) : (
+                  <Badge tone="simulated">Simulated</Badge>
+                )}
               </div>
             }
           />

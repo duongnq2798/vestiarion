@@ -64,6 +64,8 @@ export const TENANT_TABLES = [
   "onboarding_marks",
   "asana_task_links",
   "commission_plans", "commission_plan_deals", "commission_payouts", "commission_lines",
+  // Why a person went against the agent, asked in the moment (migration 0120).
+  "decision_reasons",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
@@ -103,6 +105,7 @@ export const PLATFORM_RPCS = [
   "payment_receipt_by_token", "report_share_by_token", "pay_link_preview", "enable_usyc_reserve", "payee_history",
   "telegram_claim_code", "telegram_activate", "slack_link_member",
   "growth_team_member", "growth_workspaces", "growth_update_lead", "growth_import_leads", "record_org_attribution",
+  "growth_decision_reasons",
   "accounting_token_lease", "accounting_token_store", "accounting_token_release", "accounting_connections_due",
   "accounting_connections_by_external",
   "customer_portal_by_token", "customer_portal_submit", "customer_portal_reply",

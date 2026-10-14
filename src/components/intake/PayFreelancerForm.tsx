@@ -8,6 +8,7 @@ import { FormMessage } from "@/components/ui/FormMessage";
 import { Input } from "@/components/ui/Input";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
+import { paysSimulated, type Capability } from "@/lib/capability";
 import { utcDay } from "@/lib/copy";
 
 const INITIAL: PayFreelancerResult = { ok: false, message: "" };
@@ -15,9 +16,18 @@ const INITIAL: PayFreelancerResult = { ok: false, message: "" };
 /**
  * Pay a freelancer in one step (docs/superpowers/specs/2026-10-01-pay-a-freelancer-design.md):
  * who, for what and how much; the link they add their address through is
- * emailed to them, and shown here once to copy.
+ * emailed to them, and shown here once to copy. What paying them does is said in the words of the workspace's capability
+ * (capability and reasons R5): a sandbox that simulates its payments pays them simulated, at once; one that pays on
+ * chain waits for their address, as a live workspace does; while nothing can be paid, it says why. Without a
+ * capability (`live` only), the workspace's mode decides, as it did before.
  */
-export default function PayFreelancerForm({ orgSlug, live }: { orgSlug: string; live: boolean }) {
+export function payFreelancerNote(live: boolean, capability?: Capability): string {
+  if (capability?.situation === "unavailable") return capability.why ?? "Nothing can be paid from this workspace right now.";
+  const simulated = capability ? paysSimulated(capability) : !live;
+  return simulated ? "This is a sandbox: the agent pays them simulated, within a minute." : "Nothing is paid until they add an address and someone here confirms it.";
+}
+
+export default function PayFreelancerForm({ orgSlug, live, capability }: { orgSlug: string; live: boolean; capability?: Capability }) {
   const { state, formProps } = useActionForm(payFreelancerAction, INITIAL, { resetOnSuccess: true });
 
   return (
@@ -49,9 +59,7 @@ export default function PayFreelancerForm({ orgSlug, live }: { orgSlug: string; 
         </div>
         <p className="text-xs leading-5 text-ink-3">
           Adds them as a contractor with this amount as their limit, and records that you confirmed the work was delivered.{" "}
-          {live
-            ? "Nothing is paid until they add an address and someone here confirms it."
-            : "This is a sandbox: the agent pays them simulated, within a minute."}
+          {payFreelancerNote(live, capability)}
         </p>
       </form>
       {state.ok && state.url && state.expiresAt && <PaymentLinkReady message={state.message} url={state.url} expiresAt={state.expiresAt} />}

@@ -4,6 +4,7 @@ import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import GoLivePanel, { GO_LIVE_CONSEQUENCES, goLiveConsequences, type GoLivePanelProps } from "@/components/GoLivePanel";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { GoLiveStatus } from "@/lib/platform/go-live";
+import type { Capability } from "@/lib/capability";
 
 /**
  * The Go live section of Settings, as the markup it renders on the server
@@ -436,6 +437,8 @@ describe("GoLivePanel's props", () => {
       | "status"
       | "canAdminister"
       | "sampleBalance"
+      | "capability"
+      | keyof Capability
       | keyof GoLiveStatus
       | keyof GoLiveStatus["wallets"][number]
       | keyof NonNullable<GoLiveStatus["walletTreasury"]>

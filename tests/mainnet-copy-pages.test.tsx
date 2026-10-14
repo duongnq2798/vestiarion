@@ -51,7 +51,7 @@ describe("the shell on the workspace's network (mainnet copy C1, C3; workspace s
   });
 
   it.each(PAGES)("is handed whether nothing can pay by the %s page", (name) => {
-    expect(squash(page(name))).toMatch(/<ProductShell [^>]*chainModes=\{(shellModes\(\)|\{ \.\.\.modes, held: paymentsHeld\(\) \})\}/);
+    expect(squash(page(name))).toMatch(/<ProductShell [^>]*chainModes=\{(shellModes\(\)|\{ \.\.\.modes, held: paymentsHeld\(\), hold: paymentsHoldReason\(\) \})\}/);
   });
 
   // Shadow mode and screening are read inside the workspace's scope (workspace shell design S5): out of it, screening
@@ -60,8 +60,9 @@ describe("the shell on the workspace's network (mainnet copy C1, C3; workspace s
     expect(squash(page(name))).toMatch(/<ProductShell [^>]*status=\{await shellStatus\(\)\}/);
   });
 
-  it("reads Held from the rule the status API reads", () => {
-    expect(squash(source("src/app/api/v1/status/route.ts"))).toContain("const noPayments = paymentsHeld(config);");
+  it("reads Held from the rule the status API reads: the workspace's capability (capability and reasons R4)", () => {
+    expect(squash(source("src/app/api/v1/status/route.ts"))).toContain("const capability = await readCapability({ shadow: false });");
+    expect(squash(source("src/app/api/v1/status/route.ts"))).toContain("const payments = apiPayments(capability, modes.mode);");
   });
 
   it.each(PAGES)("is handed the workspace's network by the %s page", (name) => {

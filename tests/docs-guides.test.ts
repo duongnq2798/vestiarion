@@ -210,6 +210,8 @@ const LINK_CHECK = "src/lib/evidence-links/check.ts";
 const ROLE_CHECKLISTS = "src/lib/onboarding/role-checklists.ts";
 const SHADOW_LIBRARY = "src/lib/shadow-mode.ts";
 const SHADOW_SUMMARY = "src/components/ShadowModeSummary.tsx";
+/** The words every surface uses for what a payment does (capability and reasons R1). */
+const CAPABILITY = "src/lib/capability.ts";
 const TEST_USDC_CONTROL = "src/components/TestUsdcControl.tsx";
 const TEST_USDC_ACTION = "src/app/actions/test-usdc.ts";
 const TEST_USDC_LIBRARY = "src/lib/test-usdc.ts";
@@ -521,11 +523,11 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Expand sidebar", "src/components/vx/WorkspaceHeader.tsx"],
     ["Workspace status", "src/components/vx/WorkspaceHeader.tsx"],
     ["Arc mainnet", "src/lib/network.ts"],
-    ["Payments off", "src/components/vx/workspace-status.ts"],
-    ["Payments held", "src/components/vx/workspace-status.ts"],
-    ["Shadow mode", "src/components/vx/workspace-status.ts"],
-    ["Payments simulated", "src/components/vx/workspace-status.ts"],
-    ["Payments live", "src/components/vx/workspace-status.ts"],
+    ["Payments off", CAPABILITY],
+    ["Payments held", CAPABILITY],
+    ["Shadow mode", CAPABILITY],
+    ["Payments simulated", CAPABILITY],
+    ["Payments live", CAPABILITY],
     ["Agent on", "src/components/vx/workspace-status.ts"],
     ["Agent paused", "src/components/vx/workspace-status.ts"],
     ["Agent stopped", "src/components/vx/workspace-status.ts"],
@@ -586,7 +588,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Chain intact", VERIFY_BADGE],
     ["Do you agree with the agent?", VERDICT],
     ["Agree and pay", VERDICT],
-    ["You agree with the agent, and it is paid now, simulated in this sandbox", VERDICT],
+    ["You agree with the agent, and it is paid now, simulated: nothing is sent on chain", CAPABILITY],
     ["Disagree", VERDICT],
     ["Try it with sample data", SAMPLE_PANEL],
     ["Load sample data", SAMPLE_PANEL],
@@ -2455,7 +2457,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Your workspace is ready, but shadow mode did not turn on.", "src/app/o/[slug]/console/page.tsx"],
     ["To pay on Arc", GETTING_STARTED],
     ["Does this supplier send you purchase orders?", COUNTERPARTY_FORM],
-    ["You agree with the agent, and it is paid now, simulated in this sandbox", VERDICT],
+    ["You agree with the agent, and it is paid now, simulated: nothing is sent on chain", CAPABILITY],
     ["Shadow mode: it waits for a person to agree.", "src/components/vx/decision-signals.ts"],
     ["Paid later by a person", "src/lib/traction-digest.ts"],
     ["Shadow mode runs on Arc testnet. On Arc mainnet the agent pays your real bills.", SHADOW_LIBRARY],
@@ -2468,7 +2470,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Approvals", APP_NAV],
     ["Do you agree with the agent?", VERDICT],
     ["Agree and pay", VERDICT],
-    ["You agree with the agent, and it is paid in USDC on Arc testnet now", VERDICT],
+    ["Agree records your verdict; it can be paid in Approvals later.", VERDICT],
     ["Approve and pay", APPROVAL_CARD],
     ["Disagree", VERDICT],
     ["Why do you disagree?", VERDICT],
@@ -2527,7 +2529,6 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["A cycle is running. Try again in a minute, once it has finished.", SHADOW_LIBRARY],
     ["Verdicts are given in shadow mode. An owner turns it on in Settings.", VERDICTS],
     ["That decision came before shadow mode started.", VERDICTS],
-    ["Say why you disagree, in a few words.", VERDICTS],
     ["Keep the reason to 280 characters.", VERDICTS],
     ["It no longer waits for your verdict, so nothing was paid.", VERDICTS],
     ["A verdict was given on this decision already", "src/app/actions/verdicts.ts"],

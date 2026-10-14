@@ -1,9 +1,10 @@
 import { AGENT_DECISION_ACTIONS } from "./agent/shadow-hold";
 import { currentOrgId } from "./context";
 import { db, unwrap, type OrgDb } from "./dal";
+import { readCapabilitySafely } from "./capability-read";
+import { recordDecisionReason } from "./decision-reasons";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
 import { isReclaimable } from "./agent/claim-age";
-import { getChainProvider, hasNoProvider } from "./circle";
 import { awaitsVerdict } from "./next-step";
 import type { PaymentReceipt } from "./payment-receipt";
 import { readShadowMode, type ShadowMode } from "./shadow-mode";
@@ -11,7 +12,8 @@ import type { VerdictFacts } from "./verdict-view";
 
 /**
  * A person's verdict on a decision of the agent's, in shadow mode (docs/superpowers/specs/2026-10-07-shadow-mode-design.md
- * S3–S5): Agree or Disagree, once per decision entry, a reason for every disagreement. Only on the agent's decisions
+ * S3–S5): Agree or Disagree, once per decision entry, with a reason when the person gives one: asked for as they
+ * disagree, and never required (capability and reasons R9). Only on the agent's decisions
  * about a payable written since shadow mode started. Each is a row in `decision_verdicts`, which keeps it once, and a
  * signed `decision_verdict` entry. Agreeing to a payment held for the verdict pays it, through Approve and pay;
  * disagreeing returns the payable to the agent or rejects it, when the person asks. Every export runs inside an
@@ -28,7 +30,6 @@ export type VerdictErrorCode =
   | "not_in_shadow"
   | "not_a_decision"
   | "before_shadow"
-  | "reason_required"
   | "reason_too_long"
   | "pay_needs_agreement"
   | "settle_needs_disagreement";
@@ -37,7 +38,6 @@ const MESSAGES: Record<VerdictErrorCode, string> = {
   not_in_shadow: "Verdicts are given in shadow mode. An owner turns it on in Settings.",
   not_a_decision: "That is not a decision of the agent's about a bill.",
   before_shadow: "That decision came before shadow mode started.",
-  reason_required: "Say why you disagree, in a few words.",
   reason_too_long: "Keep the reason to 280 characters.",
   pay_needs_agreement: "Only an agreement pays it.",
   settle_needs_disagreement: "Only a disagreement returns or rejects it.",
@@ -83,10 +83,10 @@ const LEFT_AS_IS: ActionOutcome = { ok: false, message: "It no longer waits for 
 
 type DecisionEntry = { seq: number; ts: string; actor: string; action: string; summary: string; detail: Record<string, unknown> };
 
-function readReason(verdict: Verdict, typed: string | undefined): string | null {
+/** The reason given with a verdict, or null: optional for an agreement and a disagreement alike, and nothing waits on it. */
+function readReason(typed: string | undefined): string | null {
   const reason = (typed ?? "").trim();
   if (reason.length > REASON_MAX) throw new VerdictError("reason_too_long");
-  if (verdict === "disagree" && reason === "") throw new VerdictError("reason_required");
   return reason === "" ? null : reason;
 }
 
@@ -193,7 +193,7 @@ export async function giveVerdict(
   if (!shadow) throw new VerdictError("not_in_shadow");
   if (input.then === "pay" && input.verdict !== "agree") throw new VerdictError("pay_needs_agreement");
   if ((input.then === "return" || input.then === "reject") && input.verdict !== "disagree") throw new VerdictError("settle_needs_disagreement");
-  const reason = readReason(input.verdict, input.reason);
+  const reason = readReason(input.reason);
 
   const entry = (
     unwrap(await db().from("ledger_entries").select("seq, ts, actor, action, summary, detail").eq("seq", input.entrySeq).limit(1)) as DecisionEntry[]
@@ -232,6 +232,10 @@ export async function giveVerdict(
       // The payable is its subject, never its invoiceId: the card keeps showing the decision, not the verdict on it.
       detail: { by: input.actorId, entrySeq: input.entrySeq, subject: "invoice", subjectId: invoiceId, agentAction: entry.action, verdict: input.verdict, reason },
     });
+    // Why the person disagreed, beside the other reasons people give for going against the agent (R11). Best effort.
+    if (input.verdict === "disagree") {
+      await recordDecisionReason({ source: "shadow_mode.disagree", surface: "console", subject: "invoice", subjectId: invoiceId, reason, givenBy: input.actorId });
+    }
     return null;
   };
   const kept = async () => {
@@ -300,18 +304,6 @@ export async function readShadowSummary(orgDb: OrgDb, shadow: ShadowMode): Promi
 }
 
 /**
- * Whether a payment agreed to here is simulated: a sandbox with no Circle account of its own simulates its payments, so
- * Agree and pay says so. False where nothing can pay, or the provider cannot be read: the payment then says why itself.
- */
-function simulatesPayments(): boolean {
-  try {
-    return !hasNoProvider() && getChainProvider().mode === "simulate";
-  } catch {
-    return false;
-  }
-}
-
-/**
  * What the cards need to show and offer verdicts (S3): the workspace's shadow mode, and the verdicts on the agent's
  * decisions among `entries`. Best effort: facts that cannot be read show no verdict at all, and offer none, rather than
  * offer one that may be given already.
@@ -322,7 +314,9 @@ export async function verdictFacts(orgDb: OrgDb, entries: Array<{ seq: number; a
     const decisions = entries.filter((entry) => entry.actor === "agent" && (AGENT_DECISION_ACTIONS as readonly string[]).includes(entry.action)).map((entry) => entry.seq);
     const read = await readVerdicts(orgDb, decisions);
     const given = new Map([...read].map(([seq, verdict]) => [seq, { verdict: verdict.verdict, reason: verdict.reason }] as const));
-    return { shadow: shadow ? { startedAt: shadow.startedAt, currency: shadow.currency } : null, given, canGive, simulated: simulatesPayments() };
+    // What agreeing pays, in the words of the workspace's capability: on chain, simulated, or nothing right now and why.
+    const capability = await readCapabilitySafely({ shadow: shadow !== null });
+    return { shadow: shadow ? { startedAt: shadow.startedAt, currency: shadow.currency } : null, given, canGive, ...(capability ? { capability } : {}) };
   } catch (error) {
     console.error("verdicts not read", error instanceof Error ? error.message : error);
     return { shadow: null, given: new Map(), canGive: false };

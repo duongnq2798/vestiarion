@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { simulatesPayments } from "../capability-read";
 import { changeCounterpartyAddress, CounterpartyAddressError, parseAddressInput } from "../counterparty-address";
 import { platformDb, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
@@ -178,6 +179,28 @@ export async function payeeLinkStatus(token: string): Promise<PayeeLinkStatus | 
     scheduledFor: typeof payment.scheduledFor === "string" ? payment.scheduledFor : null,
   }));
   return { ...row, payments };
+}
+
+/**
+ * Whether the paying workspace simulates its payments, for the payee's page to say so in the words the workspace's own
+ * pages use (capability and reasons R5). Read inside the workspace's scope, through the link's own row; false when the
+ * link is unknown or anything could not be read, and the page then says what it said before. The payee's page never
+ * says why a payment cannot be made now (payee links R3).
+ */
+export async function payeeLinkSimulates(token: string): Promise<boolean> {
+  const hash = payeeLinkHash(token);
+  if (!hash) return false;
+  try {
+    const row = await platformDb().from("payee_links").select("org_id").eq("token_hash", hash).limit(1);
+    const orgId = ((row.data ?? []) as Array<{ org_id?: string }>)[0]?.org_id;
+    if (row.error || !orgId) return false;
+    const org = await platformDb().from("orgs").select("mode").eq("id", orgId).limit(1);
+    const mode = ((org.data ?? []) as Array<{ mode?: string }>)[0]?.mode === "sandbox" ? "sandbox" : "live";
+    return await withOrg(orgId, async () => simulatesPayments(mode));
+  } catch (error) {
+    console.error("payee link: chain mode not read", error instanceof Error ? error.message : "unknown error");
+    return false;
+  }
 }
 
 export type PayeeSubmission =

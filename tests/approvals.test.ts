@@ -1025,6 +1025,8 @@ describe("approveAndPay while payments are switched off (payment safety S4)", ()
 
     expect(result.status).toBe("paid");
     expect(payInvoiceMock.mock.calls[0][1]).toMatchObject({ retryTerminalFailure: false });
+    // It only read the earlier transfer, so no reason for paying a held bill is kept for it (capability and reasons R10).
+    expect(result.checkedFirst).toBe(true);
   });
 });
 

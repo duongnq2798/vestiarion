@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/Card";
 import { cn } from "@/components/ui/cn";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { orgHref } from "@/lib/auth/org-paths";
+import { agreedPaymentLine, type Capability } from "@/lib/capability";
 import type { ShadowMode } from "@/lib/shadow-currency";
 import type { TestUsdcWeek } from "@/lib/test-usdc";
 import type { TestUsdcView } from "@/lib/test-usdc-rules";
@@ -18,7 +19,8 @@ const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: 
  * The console's shadow mode panel (docs/superpowers/specs/2026-10-07-shadow-mode-design.md S5): how often people agreed
  * with the agent, out of the verdicts given, and how many payables' decisions wait for one, with the page to give it.
  * The agreement rate leads as a figure, beside the verdicts given and the decisions waiting (workspace shell design S8);
- * the last line says what agreeing does: a payment in USDC, or, where payments are simulated, a simulated one.
+ * the last line says what agreeing does, in the words of the workspace's capability (capability and reasons R5): a
+ * payment in USDC on Arc, a simulated one, or nothing while payments cannot be made, and why.
  * When the open bills need more than the operating wallet holds, it says how much, and offers an owner or admin that
  * much test USDC from Vestiarion's float (docs/superpowers/specs/2026-10-08-shadow-test-usdc-design.md T8).
  */
@@ -27,13 +29,13 @@ export default function ShadowModeSummary({
   mode,
   summary,
   testUsdc,
-  simulated = false,
+  capability,
 }: {
   orgSlug: string;
   mode: ShadowMode;
   summary: { agreed: number; disagreed: number; waiting: number };
-  /** Whether a payment someone agrees to is simulated (the workspace pays through no wallet yet). */
-  simulated?: boolean;
+  /** What the workspace's payments do now (`readCapability()`). */
+  capability: Capability;
   testUsdc?: { view: TestUsdcView | null; latest: TestUsdcWeek["latest"]; operatingAddress: string | null; latestTxUrl: string | null };
 }) {
   const given = summary.agreed + summary.disagreed;
@@ -89,7 +91,7 @@ export default function ShadowModeSummary({
           </p>
         )}
         <p className="text-xs text-ink-3">
-          {simulated ? "Each payment you agree to is simulated: nothing is sent on chain." : "Each payment you agree to is made in USDC on Arc testnet."}
+          {agreedPaymentLine(capability)}
         </p>
       </Card>
     </section>

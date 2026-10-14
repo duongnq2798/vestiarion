@@ -21,7 +21,8 @@ import { BrowserCheck } from "./BrowserCheck";
 function routeText(facts: ReceiptFacts): string {
   const fee = facts.feeUsdc != null ? `, with a ${facts.feeUsdc} USDC fee` : "";
   if (facts.route === "gateway") return `From a Circle Gateway balance${fee}`;
-  if (facts.route === "cctp") return `Through CCTP from Arc testnet${fee}`;
+  // The network the payment left, by name: a mainnet payout's burn is on Arc mainnet (capability and reasons R8).
+  if (facts.route === "cctp") return `Through CCTP from ${homeChain(networkOfChain(facts.chain)).label}${fee}`;
   return `A transfer on ${homeChain(networkOfChain(facts.chain)).label}`;
 }
 
@@ -93,7 +94,7 @@ export function ReceiptView({ view }: { view: ReceiptViewData }) {
           </dd>
           {facts.sourceTxHash && (
             <>
-              <dt className="mt-2 text-ink-3 first:mt-0 sm:mt-0">Burn on Arc testnet</dt>
+              <dt className="mt-2 text-ink-3 first:mt-0 sm:mt-0">{`Burn on ${homeChain(networkOfChain(facts.chain)).label}`}</dt>
               <dd>
                 <Hash value={facts.sourceTxHash} href={`${homeChain(networkOfChain(facts.chain)).explorerTx}${facts.sourceTxHash}`} />
               </dd>

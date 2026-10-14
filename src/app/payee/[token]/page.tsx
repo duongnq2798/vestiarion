@@ -4,7 +4,7 @@ import { PayeeJourney } from "@/components/payee/PayeeJourney";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { homeChain, networkOfChain } from "@/lib/payee-chains";
-import { payeeLinkStatus } from "@/lib/platform/payee-links";
+import { payeeLinkSimulates, payeeLinkStatus } from "@/lib/platform/payee-links";
 import type { PayeeLinkStatus } from "@/lib/payee-journey";
 import { linkSocialMetadata } from "@/lib/link-previews";
 
@@ -26,7 +26,8 @@ type PayeePageProps = {
  * 2026-10-02-freelancer-journey-design.md). No session: the link is the credential. A usable link
  * asks for the payee's address; a link used within 30 days shows that payee's status, step by step,
  * up to the payment (R1). A revoked, expired or unknown link shows one sentence and names no one.
- * Opening it changes nothing; only the submitted form uses the link.
+ * Opening it changes nothing; only the submitted form uses the link. A payment from a workspace that simulates its
+ * payments is said to be simulated, as the workspace's own pages say it (capability and reasons R5).
  */
 export default async function PayeePage({ params }: PayeePageProps) {
   const { token } = await params;
@@ -38,6 +39,8 @@ export default async function PayeePage({ params }: PayeePageProps) {
     console.error("payee link status failed");
     failed = true;
   }
+  // Best effort: a chain mode that cannot be read leaves the page as it was.
+  const simulated = status ? await payeeLinkSimulates(token) : false;
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -49,7 +52,7 @@ export default async function PayeePage({ params }: PayeePageProps) {
           ) : !status ? (
             <EmptyState icon={<Unlink />} titleAs="h1" title="This link is no longer valid. Ask the business that sent it for a new one." />
           ) : (
-            <PayeeJourney token={token} status={status} />
+            <PayeeJourney token={token} status={status} simulated={simulated} />
           )}
         </div>
       </main>

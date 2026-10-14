@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Hash, Money } from "@/components/vx/Primitives";
 import { utcDay, utcMinute } from "@/lib/copy";
-import { amountsLine, maskAddress, payeeStage, paymentState, type PayeeLinkStatus, type PayeePayment, type PaymentTone, type PayeeStage } from "@/lib/payee-journey";
+import { SIMULATED_PAYMENT } from "@/lib/capability";
+import { amountsLine, maskAddress, payeeStage, paymentSimulated, paymentState, type PayeeLinkStatus, type PayeePayment, type PaymentTone, type PayeeStage } from "@/lib/payee-journey";
 import { chainById, homeChain, networkOfChain, paidAcrossChains } from "@/lib/payee-chains";
 import { passkeyWalletConfig, passkeyWalletOffered } from "@/lib/passkey-wallet";
 import { PayeeSteps } from "./PayeeSteps";
@@ -17,7 +18,9 @@ import { PayeeSteps } from "./PayeeSteps";
  * A payee link's page, one screen per step (docs/superpowers/specs/2026-10-02-freelancer-journey-design.md
  * §4): the address, the business confirming it, the payments, and the confirmation once paid. Each
  * screen names its step and has at most one primary action; a screen waiting on someone else
- * refreshes itself (R5).
+ * refreshes itself (R5). A payment from a sandbox that simulates its payments is said to be simulated on every screen,
+ * in the words the workspace's own pages use (capability and reasons R5): `simulated` from the workspace's capability,
+ * and each paid payment's own reference besides.
  */
 
 /** Only the page knows its link; the screens are the same for a screenshot, which has none. */
@@ -28,16 +31,16 @@ export const NO_SECRETS = "Vestiarion only needs your address. It never asks for
 
 const TONE: Record<PaymentTone, "neutral" | "agent" | "held" | "proof"> = { waiting: "neutral", progress: "agent", review: "held", done: "proof" };
 
-export function PayeeJourney({ token, status, refresh = true }: { token: string; status: PayeeLinkStatus; refresh?: boolean }) {
+export function PayeeJourney({ token, status, refresh = true, simulated = false }: { token: string; status: PayeeLinkStatus; refresh?: boolean; simulated?: boolean }) {
   const stage = payeeStage(status);
   return (
     <section className="rounded-2xl border border-line bg-surface p-6 shadow-surface">
       <PayeeSteps stage={stage} />
       <div className="mt-5">
-        {stage === "address" && <AddressStep token={token} status={status} />}
+        {stage === "address" && <AddressStep token={token} status={status} simulated={simulated} />}
         {stage === "confirming" && <ConfirmingStep status={status} />}
-        {stage === "paying" && <PayingStep status={status} />}
-        {stage === "paid" && <PaidStep status={status} />}
+        {stage === "paying" && <PayingStep status={status} simulated={simulated} />}
+        {stage === "paid" && <PaidStep status={status} simulated={simulated} />}
       </div>
       {refresh && waitsOnSomeone(stage) && <AutoRefresh intervalMs={PAYEE_REFRESH_MS} />}
     </section>
@@ -54,7 +57,7 @@ function Footnote({ children }: { children: ReactNode }) {
   return <p className="mt-5 border-t border-line pt-4 text-xs leading-5 text-ink-3">{children}</p>;
 }
 
-function AddressStep({ token, status }: { token: string; status: PayeeLinkStatus }) {
+function AddressStep({ token, status, simulated }: { token: string; status: PayeeLinkStatus; simulated: boolean }) {
   const chain = chainById(status.chain).label;
   const owed = amountsLine(status.payments);
   // A passkey wallet, the secondary way, for a payee paid on Arc testnet when Modular Wallets are set up (P1, P6).
@@ -64,9 +67,7 @@ function AddressStep({ token, status }: { token: string; status: PayeeLinkStatus
       <Heading>
         {status.orgName} wants to pay you{owed ? ` ${owed}` : ""}
       </Heading>
-      <p className="mt-2 text-sm text-ink-2">
-        For {status.payeeName}, on {chain}.
-      </p>
+      <p className="mt-2 text-sm text-ink-2">{simulated ? `For ${status.payeeName}. ${SIMULATED_PAYMENT}` : `For ${status.payeeName}, on ${chain}.`}</p>
       {status.payments.length > 0 && <PaymentList payments={status.payments} />}
       <div className="mt-5">
         <PayeeAddressForm
@@ -78,7 +79,7 @@ function AddressStep({ token, status }: { token: string; status: PayeeLinkStatus
             <ol className="mb-2 grid gap-2 text-sm leading-6 text-ink-2">
               <HowStep n={1}>Add the wallet address you want to be paid at.</HowStep>
               <HowStep n={2}>{status.orgName} confirms it. A person checks every new address before money is sent to it.</HowStep>
-              <HowStep n={3}>You&apos;re paid on {chain}, usually within a minute of that.</HowStep>
+              <HowStep n={3}>{simulated ? "You're paid, simulated, usually within a minute of that: no USDC is sent." : `You're paid on ${chain}, usually within a minute of that.`}</HowStep>
             </ol>
           }
         />
@@ -131,13 +132,14 @@ function ConfirmingStep({ status }: { status: PayeeLinkStatus }) {
   );
 }
 
-function PayingStep({ status }: { status: PayeeLinkStatus }) {
+function PayingStep({ status, simulated }: { status: PayeeLinkStatus; simulated: boolean }) {
   const inReview = status.payments.some((payment) => paymentState(payment, status.orgName).tone === "review");
   return (
     <>
       <Heading>Your address is confirmed</Heading>
       <p className="mt-3 text-sm leading-6 text-ink-2">
-        {status.orgName} pays you at <span className="font-mono">{maskAddress(status.address ?? "")}</span> on {chainById(status.chain).label}.
+        {status.orgName} pays you at <span className="font-mono">{maskAddress(status.address ?? "")}</span>
+        {simulated ? ", simulated: no USDC is sent." : ` on ${chainById(status.chain).label}.`}
       </p>
       {status.payments.length > 0 ? (
         <PaymentList payments={status.payments} orgName={status.orgName} withState />
@@ -154,8 +156,12 @@ function PayingStep({ status }: { status: PayeeLinkStatus }) {
   );
 }
 
-function PaidStep({ status }: { status: PayeeLinkStatus }) {
+function PaidStep({ status, simulated: workspaceSimulates }: { status: PayeeLinkStatus; simulated: boolean }) {
   const paid = [...status.payments].sort((a, b) => (a.settledAt ?? "").localeCompare(b.settledAt ?? ""));
+  // Each payment's own record first: one with a transaction on chain was real, every one the simulator's was simulated;
+  // without either, the workspace's capability says.
+  const onChain = paid.some((payment) => payment.txRef?.startsWith("0x"));
+  const simulated = !onChain && ((paid.length > 0 && paid.every(paymentSimulated)) || workspaceSimulates);
   const latest = paid[paid.length - 1];
   const chain = chainById(status.chain).label;
   const onArc = !paidAcrossChains(status.chain);
@@ -168,7 +174,7 @@ function PaidStep({ status }: { status: PayeeLinkStatus }) {
     <>
       <p className="flex items-center gap-1.5 text-sm font-semibold text-proof">
         <CircleCheck aria-hidden className="size-4" />
-        Paid
+        {simulated ? "Paid (simulated)" : "Paid"}
       </p>
       <Heading>You&apos;ve been paid {amountsLine(paid)}</Heading>
       <dl className="mt-5 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2.5 text-sm">
@@ -177,7 +183,7 @@ function PaidStep({ status }: { status: PayeeLinkStatus }) {
         <ReceiptRow term="To">
           <span className="font-mono">{maskAddress(status.address ?? "")}</span>
         </ReceiptRow>
-        <ReceiptRow term="Network">{chain}</ReceiptRow>
+        <ReceiptRow term="Network">{simulated ? "Simulated: no USDC was sent" : chain}</ReceiptRow>
         {latest?.settledAt && <ReceiptRow term="Paid on">{utcMinute(latest.settledAt)}</ReceiptRow>}
         {paid.map((payment, index) =>
           payment.txRef?.startsWith("0x") ? (
@@ -196,22 +202,26 @@ function PaidStep({ status }: { status: PayeeLinkStatus }) {
           </a>
         </Button>
       )}
-      <Footnote>
-        Not in your wallet yet? Check that your wallet shows {chain} and its USDC.{" "}
-        {onArc
-          ? `A payment on ${home} is final within seconds; the transaction above is the record that it was sent.`
-          : `It was sent from ${home} and arrives on ${chain} a few minutes later; the transaction above is the record that it was sent.`}
-        {passkeyWalletOffered(status.chain, passkeyWalletConfig()) && (
-          <>
-            {" "}
-            Made your wallet with a passkey on this page?{" "}
-            <Link href="/wallet" className="font-medium text-agent underline-offset-4 hover:underline">
-              Open your wallet
-            </Link>
-            .
-          </>
-        )}
-      </Footnote>
+      {simulated ? (
+        <Footnote>{`This payment was simulated by ${status.orgName}'s sandbox workspace: no USDC was sent to your wallet.`}</Footnote>
+      ) : (
+        <Footnote>
+          Not in your wallet yet? Check that your wallet shows {chain} and its USDC.{" "}
+          {onArc
+            ? `A payment on ${home} is final within seconds; the transaction above is the record that it was sent.`
+            : `It was sent from ${home} and arrives on ${chain} a few minutes later; the transaction above is the record that it was sent.`}
+          {passkeyWalletOffered(status.chain, passkeyWalletConfig()) && (
+            <>
+              {" "}
+              Made your wallet with a passkey on this page?{" "}
+              <Link href="/wallet" className="font-medium text-agent underline-offset-4 hover:underline">
+                Open your wallet
+              </Link>
+              .
+            </>
+          )}
+        </Footnote>
+      )}
     </>
   );
 }

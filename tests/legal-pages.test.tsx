@@ -11,6 +11,7 @@ import { ARC_MAINNET, ARC_TESTNET } from "@/lib/network";
 import { loginRedirectFor, requiresSession } from "@/lib/auth/routes";
 import { FIRST_TOUCH_COOKIE, FIRST_TOUCH_DAYS, TAG_KEYS, TAG_MAX } from "@/lib/growth/attribution";
 import { CONSENT, MESSAGE_MAX } from "@/lib/growth/guided-setup";
+import { REASON_MAX } from "@/lib/decision-reasons";
 import { SANDBOX_IDLE_DAYS, WEBHOOK_DELIVERY_RETENTION_DAYS } from "@/lib/platform/cleanup";
 import { PREVIEW_MAX } from "@/lib/email/customer-wrote";
 import { publicOrigin } from "@/lib/public-origin";
@@ -200,6 +201,34 @@ describe("the privacy page", () => {
     const cookie = source("src/lib/growth/attribution.ts");
     expect(cookie).toContain('"Path=/", "SameSite=Lax"');
     expect(cookie).not.toMatch(/Domain=/);
+  });
+
+  it("describes the reasons people give as the code keeps them: what, who sees them, how long, and what deleting does", () => {
+    const section = text(renderToStaticMarkup(<PrivacyPage />).split('id="decision-reasons"')[1]?.split('id="retention"')[0] ?? "");
+    for (const phrase of [
+      "in one line you may leave empty",
+      `up to ${REASON_MAX} characters`,
+      "your account's id",
+      "the version of Vestiarion that asked",
+      "signed ledger",
+      "owners and admins see the latest ones on Insights, without your name",
+      "The Vestiarion team sees the latest ones across workspaces, with the workspace's slug and never your name or email",
+      "not shared with anyone else",
+      "kept until the workspace is deleted, and deleted with it",
+      "In a workspace that stays, a reason stays without your account's id",
+    ]) {
+      expect(section, phrase).toContain(phrase);
+    }
+    // As migration 0120 keeps them: the reason's length, gone with the workspace, unnamed when the account goes.
+    const migration = source("supabase/migrations/0120_decision_reasons.sql");
+    expect(migration).toContain("char_length(reason) between 1 and 280");
+    expect(migration).toContain("references public.orgs(id) on delete cascade");
+    expect(migration).toContain("given_by     uuid references auth.users(id) on delete set null");
+    // The team's list names no person, and only the console asks, where it says the team reads it.
+    expect(migration.split("growth_decision_reasons(p_since timestamptz) returns jsonb")[1]).not.toMatch(/given_by|email/);
+    expect(source("src/lib/commands/payables.ts")).toContain('actor.surface.kind !== "console"');
+    // Insights shows them to owners and admins only.
+    expect(source("src/app/o/[slug]/insights/page.tsx")).toContain('access.membership.role === "owner" || access.membership.role === "admin"');
   });
 
   it("describes the guided setup form as the code reads and keeps it: its fields, why, where, who sees it, never shared", () => {

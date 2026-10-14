@@ -18,6 +18,8 @@ import { isSoleApprover } from "@/lib/agent/sole-approver";
 import { exceptionFacts } from "@/lib/exceptions";
 import { requireMembership } from "@/lib/auth/membership";
 import { can } from "@/lib/auth/roles";
+import { paysSimulated } from "@/lib/capability";
+import { readCapability } from "@/lib/capability-read";
 import { shellModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
 import { listMembers } from "@/lib/platform/members";
@@ -54,6 +56,9 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
       payable.verdictEntry ? [{ seq: payable.verdictEntry.seq, ts: payable.verdictEntry.ts, actor: "agent" as const, action: "ap_pay", detail: { invoiceId: payable.id } }] : []
     );
     const verdicts = verdictEntries.length > 0 ? await verdictFacts(db(), verdictEntries, canDecide) : null;
+    // Whether Approve and pay is simulated: the workspace's capability, not its mode, since a sandbox connected to Circle
+    // pays for real (capability and reasons R5).
+    const capability = verdicts?.capability ?? (await readCapability());
     const verdictFor = (payable: (typeof waiting)[number]) =>
       verdicts
         ? verdictView(payable.id, verdictEntries.filter((entry) => entry.detail.invoiceId === payable.id), verdicts, payable.heldForVerdict === true, {
@@ -123,7 +128,7 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
                 payable={payable}
                 canDecide={canDecide}
                 viewerId={user.id}
-                sandbox={membership.mode === "sandbox"}
+                sandbox={paysSimulated(capability)}
                 soleApprover={soleApprover}
                 canEdit={can(membership.role, "records.write")}
                 memberEmails={memberEmails}

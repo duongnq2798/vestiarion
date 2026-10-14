@@ -14,6 +14,14 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Asking why, in the moment.** When you go against the agent, Vestiarion asks why right there, in one optional line
+  that never stops you: disagreeing in shadow mode, rejecting a bill, returning one to the agent, or paying a bill the
+  agent flagged or held on one of its rules. Each reason is kept with where it was given and the version of Vestiarion
+  that asked. Owners and admins see the latest ones on Insights, under "Why people went against the agent", and
+  Vestiarion's team reads them to improve the agent; the privacy page says what is kept and for how long. Before
+  migration `0120` runs, nothing is kept and every decision works as before.
+  [Guide](https://www.vestiarion.xyz/docs/guides/first-payment).
+
 - **Commissions on money received.** An owner or admin sets a plan for a sales partner or referrer on file: the rate,
   net or gross of what was recorded as a fee on the invoice, every deal or chosen deals, and a hold window. When a
   customer's payment on Arc is applied to an invoice of a covered deal, the commission on exactly that money is
@@ -33,6 +41,16 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- **One answer to "is this real money?", everywhere.** Every page that says what a payment does now says it the way
+  the header does, from the same facts: live on Arc mainnet, live on Arc testnet, simulated, shadow mode, or
+  unavailable (switched off or held). Agree and pay no longer says "on Arc testnet now" while payments are off or held,
+  and offers Agree alone then; Go live no longer says "paying" for a workspace whose payments are off, held or in shadow
+  mode; a sandbox connected to Circle is no longer called simulated on Approvals, contractor payments or the report; a
+  held Arc mainnet workspace's balance is no longer called a sandbox's; and a payee paid from a sandbox that simulates is
+  told the payment is simulated, on their page and in their email. Live on Arc mainnet is in the brand colour on every
+  surface. [Guide](https://www.vestiarion.xyz/docs/guides/workspace).
+- **Disagreeing in shadow mode no longer needs a reason.** Why do you disagree? is still asked in the same step, and a
+  reason given is kept with the verdict; leaving it empty no longer stops you.
 - **Paying a bill whose earlier transfer may exist says it checks first.** When a transfer was already sent, or Circle
   never answered one, **Approve and pay** and **Pay now** no longer ask "Pay … now?": the confirmation asks to check
   the payment already sent, or to look for the earlier one on Circle first, its button reads **Check it** or
