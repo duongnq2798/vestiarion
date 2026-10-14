@@ -190,6 +190,23 @@ describe("the reads", () => {
     const none = asanaReader({ fetchImpl: http(() => json({ data: { gid: "8800002" } }, 201)).fetchImpl });
     expect(await none.createWebhook("t", { resource: "1219477646404728", target: "https://www.vestiarion.xyz/api/integrations/asana/webhook/abc" })).toEqual({ gid: "8800002", secret: null });
   });
+
+  it("says Asana's own reason when it refuses to make or delete a webhook, without any address in it", async () => {
+    const target = "https://www.vestiarion.xyz/api/integrations/asana/webhook/abc";
+    const refused = (body: unknown, status = 403) => asanaReader({ fetchImpl: http(() => (typeof body === "string" ? new Response(body, { status }) : json(body, status))).fetchImpl });
+    const said = await refused({ errors: [{ message: `Forbidden: the target ${target} is not allowed`, help: "https://developers.asana.com/docs/errors" }] })
+      .createWebhook("t", { resource: "1219477646404728", target })
+      .catch((error: unknown) => error);
+    expect(said).toBeInstanceOf(ProviderError);
+    expect(said).toMatchObject({ failure: "forbidden", message: "Asana webhook: 403: Forbidden: the target [an address] is not allowed" });
+    // Long words are cut and control characters dropped; no reason, or a body that is not JSON, leaves the status alone.
+    const long = await refused({ errors: [{ message: `Too\nmany ${"x".repeat(400)}` }] }, 400).createWebhook("t", { resource: "1", target }).catch((error: Error) => error.message);
+    expect(long).toMatch(/^Asana webhook: 400: Too many x+…$/);
+    expect(long.length).toBe("Asana webhook: 400: ".length + 200);
+    expect(await refused("<html>blocked</html>").createWebhook("t", { resource: "1", target }).catch((error: Error) => error.message)).toBe("Asana webhook: 403");
+    expect(await refused({ errors: [] }).createWebhook("t", { resource: "1", target }).catch((error: Error) => error.message)).toBe("Asana webhook: 403");
+    expect(await refused({ errors: [{ message: "Not Authorized" }] }, 401).deleteWebhook("t", "8800001").catch((error: Error) => error.message)).toBe("Asana webhook delete: 401: Not Authorized");
+  });
 });
 
 /** A token row in memory, with the core's lease and compare-and-set. */

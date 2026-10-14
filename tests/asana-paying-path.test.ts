@@ -10,8 +10,9 @@ import { fakeSupabase, orgTestContext } from "./support/fake-supabase";
 /**
  * Nothing on the paying or deciding path changes for Asana except through the milestone's existing verification state
  * (docs/superpowers/specs/2026-10-14-asana-acceptance-design.md A12), pinned as source structure:
- * - the agent reaches Asana through one call, `refreshAcceptedWork`, beside GitHub's check, before the contractor stage,
- *   and that stage still pays only milestones `verified` and in status `verified`;
+ * - the agent reaches Asana through two calls, `refreshAcceptedWork`, beside GitHub's check, before the contractor stage,
+ *   and `recheckAcceptedWork`, on the releases the stage is about to send, right before its still-verified check; and
+ *   that stage still pays only milestones `verified` and in status `verified`;
  * - the payments, the held milestone decisions and the escrow never name Asana;
  * - Asana's code writes a milestone only through 0115's two functions (its verification) and its criteria, never an
  *   amount, a payee, an address or a payment intent;
@@ -28,7 +29,7 @@ const read = (file: string) => readFileSync(path.join(root, file), "utf8");
 const IMPORTS_ASANA = /from "(?:\.\.?\/)+(?:lib\/)?asana\/|from "@\/lib\/asana\//;
 
 describe("the agent and the payments", () => {
-  it("never import Asana, but for the one refresh of accepted work beside GitHub's check", () => {
+  it("never import Asana, but for the reads of accepted work beside GitHub's check and before sending", () => {
     const watched = [
       ...files(path.join(root, "src", "lib", "agent")),
       ...files(path.join(root, "src", "lib", "circle")),
@@ -39,7 +40,7 @@ describe("the agent and the payments", () => {
     ];
     for (const file of watched) expect(readFileSync(file, "utf8"), path.relative(root, file)).not.toMatch(IMPORTS_ASANA);
     const orchestrator = read("src/lib/agent/orchestrator.ts");
-    expect(orchestrator).toContain('import { refreshAcceptedWork, refreshGitHubMilestones } from "../milestone-verification";');
+    expect(orchestrator).toContain('import { recheckAcceptedWork, refreshAcceptedWork, refreshGitHubMilestones } from "../milestone-verification";');
     // Read before the contractor stage, as GitHub's pull requests are.
     expect(orchestrator.indexOf("await refreshAcceptedWork()")).toBeGreaterThan(orchestrator.indexOf("await refreshGitHubMilestones()"));
     expect(orchestrator.indexOf("await refreshAcceptedWork()")).toBeLessThan(orchestrator.indexOf('await stage("contractors"'));
@@ -56,6 +57,13 @@ describe("the agent and the payments", () => {
     const check = stage.indexOf("await stillVerified(db, planned.map((entry) => entry.milestone.id))");
     expect(check).toBeGreaterThan(stage.lastIndexOf("planned.push("));
     expect(check).toBeLessThan(stage.indexOf("await releaseMilestones("));
+    // The accepted Asana tasks of exactly those releases are read once more first, so a task reopened while the stage
+    // decided takes its verification back before the check (on Arc testnet, Oct 14: a task reopened 3 seconds after the
+    // cycle's read had its release sent 6 seconds later).
+    const recheck = stage.indexOf("await recheckAcceptedWork(planned.map((entry) => entry.milestone.id))");
+    expect(recheck).toBeGreaterThan(stage.lastIndexOf("planned.push("));
+    expect(recheck).toBeLessThan(check);
+    expect(stage.match(/recheckAcceptedWork\(/g)).toHaveLength(1);
     expect(stage).toMatch(/const sending = planned\.filter\(\(entry\) => verifiedNow\.has\(entry\.milestone\.id\)\);/);
     expect(stage).toMatch(/await releaseMilestones\(\s*sending\.map\(/);
     expect(stage).toMatch(/for \(const \[position, entry\] of sending\.entries\(\)\)/);

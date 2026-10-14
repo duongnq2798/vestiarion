@@ -10,7 +10,7 @@ import { currentOrgId } from "../context";
 import { db } from "../dal";
 import { withOrg } from "../dal/scope";
 import { recordUsage } from "../usage/record";
-import { AsanaNotSetUpError, asanaReady, linkById, linksOfMilestones, milestonesForAcceptance, type TaskLink } from "./links";
+import { AsanaNotSetUpError, asanaReady, linkById, linksOfMilestones, liveLinks, milestonesForAcceptance, type TaskLink } from "./links";
 import { asanaProviderFromEnv, type AsanaProvider } from "./provider";
 import { readLinks, type ReadSummary } from "./reads";
 import { AsanaAccessError, asanaSession, type AsanaSession } from "./session";
@@ -141,17 +141,47 @@ export const CYCLE_BUDGET_MS = 30_000;
  * a failure leaves the acceptance as it was, and the webhook and the sweeper read it again.
  */
 export async function refreshAsanaMilestones(given?: AsanaProvider | null): Promise<ReadSummary & { checked: number }> {
+  // Read with the workspace's connection now, whichever connection linked them: a task the person who connected Asana
+  // since cannot see is held, never left accepted unwatched. Only the acceptances the agent may still pay: those of
+  // milestones verified (the contractor stage's) first, then held; never the paid ones, whose links stay accepted.
+  return readAccepted(given, () => linksOfMilestones({ statuses: ["verified", "held"], method: "asana", states: ["accepted"], limit: CYCLE_READS }), CYCLE_BUDGET_MS, "the cycle's read");
+}
+
+/** The reads made right before the contractor stage sends its releases stop starting after this long. */
+export const SEND_BUDGET_MS = 10_000;
+const SEND_ID_CHUNK = 100;
+
+/**
+ * Right before the contractor stage sends its releases (A10), the accepted tasks of exactly those milestones are read
+ * once more: the read before the stage can be seconds old by the time the stage has decided, and a task reopened or
+ * changed in between takes its acceptance back here, which the stage's still-verified check then holds to. Asana's
+ * webhook says so too, but only once Asana delivers it. Never throws: a read that fails leaves the acceptance as it was.
+ */
+export async function recheckBeforeSending(milestoneIds: readonly string[], given?: AsanaProvider | null): Promise<ReadSummary & { checked: number }> {
+  return readAccepted(
+    given,
+    async () => {
+      const links: TaskLink[] = [];
+      for (let at = 0; at < milestoneIds.length; at += SEND_ID_CHUNK) {
+        links.push(...(await liveLinks({ milestoneIds: milestoneIds.slice(at, at + SEND_ID_CHUNK), states: ["accepted"], limit: SEND_ID_CHUNK })));
+      }
+      return links;
+    },
+    SEND_BUDGET_MS,
+    "the read before sending"
+  );
+}
+
+/** Reads accepted links with the workspace's connection, within a budget; never throws. */
+async function readAccepted(given: AsanaProvider | null | undefined, find: () => Promise<TaskLink[]>, budgetMs: number, what: string): Promise<ReadSummary & { checked: number }> {
   const none = { checked: 0, read: 0, failed: 0, ready: 0, withdrawn: 0, deferred: 0 };
   try {
     const context = await asanaContext(given);
     if ("missing" in context) return none;
-    // Read with the workspace's connection now, whichever connection linked them: a task the person who connected Asana
-    // since cannot see is held, never left accepted unwatched. Only the acceptances the agent may still pay: those of
-    // milestones verified (the contractor stage's) first, then held; never the paid ones, whose links stay accepted.
-    const links = await linksOfMilestones({ statuses: ["verified", "held"], method: "asana", states: ["accepted"], limit: CYCLE_READS });
+    const links = await find();
     if (links.length === 0) return none;
     try {
-      const summary = await readLinks(links, { session: context.session, reader: context.provider.reader, budgetMs: CYCLE_BUDGET_MS });
+      const summary = await readLinks(links, { session: context.session, reader: context.provider.reader, budgetMs });
       return { ...summary, checked: links.length };
     } catch (error) {
       if (needsReconnect(error)) await markReconnect(context.connection, new Date().toISOString());
@@ -159,7 +189,7 @@ export async function refreshAsanaMilestones(given?: AsanaProvider | null): Prom
     }
   } catch (error) {
     if (error instanceof AsanaNotSetUpError || error instanceof NotSetUpError) return none;
-    console.error("asana: the cycle's read failed", error instanceof Error ? error.message : "unknown error");
+    console.error(`asana: ${what} failed`, error instanceof Error ? error.message : "unknown error");
     return none;
   }
 }

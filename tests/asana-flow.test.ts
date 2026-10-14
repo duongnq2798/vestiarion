@@ -9,7 +9,7 @@ import type { StoredTokens, TokenStore } from "@/lib/connectors/tokens";
 import { paysOwnPayout } from "@/lib/asana/identities";
 import { asanaProvider } from "@/lib/asana/provider";
 import type { StoredWebhook } from "@/lib/asana/webhook-store";
-import { refreshAsanaMilestones, rereadInScope, syncAsanaConnection } from "@/lib/asana/workspace";
+import { recheckBeforeSending, refreshAsanaMilestones, rereadInScope, syncAsanaConnection } from "@/lib/asana/workspace";
 import { carriesOrg, fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
 /**
@@ -198,6 +198,7 @@ function world(options: { payeeEmail?: string | null; ownerAsanaIsPayee?: boolea
   const asanaUsers: Record<string, string> = { "mai@fernhill.example": options.ownerAsanaIsPayee ? OWNER_ASANA : "5550001", "admin@business.example": "5550002" };
   const asanaCalls: string[] = [];
   let validToken = "access-1";
+  let down = false;
   const asanaFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
     asanaCalls.push(`${init?.method ?? "GET"} ${url.pathname}`);
@@ -207,6 +208,7 @@ function world(options: { payeeEmail?: string | null; ownerAsanaIsPayee?: boolea
       return json({ access_token: validToken, expires_in: 3600, token_type: "bearer" });
     }
     if (new Headers(init?.headers).get("authorization") !== `Bearer ${validToken}`) return json({ errors: [{ message: "Not Authorized" }] }, 401);
+    if (down) return json({ errors: [{ message: "Server Error" }] }, 503);
     const task = /^\/api\/1\.0\/tasks\/(\d+)$/.exec(url.pathname);
     if (task) {
       const one = tasks.get(task[1]);
@@ -272,7 +274,12 @@ function world(options: { payeeEmail?: string | null; ownerAsanaIsPayee?: boolea
   const expireToken = () => {
     token = { ...token, accessToken: "expired", expiresAt: 0 };
   };
-  return { fake, tables, tasks, run, provider, link, milestone, complete, accept, asanaCalls, expireToken, token: () => token };
+  /** The task reads Asana answered or refused so far. */
+  const asanaReads = () => asanaCalls.filter((call) => /^GET \/api\/1\.0\/tasks\/\d+$/.test(call)).length;
+  const asanaDown = (value: boolean) => {
+    down = value;
+  };
+  return { fake, tables, tasks, run, provider, link, milestone, complete, accept, asanaCalls, asanaReads, asanaDown, expireToken, token: () => token };
 }
 
 const entries = (action: string) => ledger.mock.calls.filter(([, input]) => input.action === action).map(([, input]) => input);
@@ -401,6 +408,34 @@ describe("a task reopened after acceptance", () => {
     Object.assign(sweep.tasks.get(LOGO_TASK) as AsanaTask, { completed: false, completedAt: null, completedBy: null });
     expect(await sweep.run(() => syncAsanaConnection("conn-asana", sweep.provider, { now: () => NOW }))).toMatchObject({ outcome: "synced", summary: { withdrawn: 1 } });
     expect(sweep.milestone(LOGO)).toMatchObject({ status: "pending", verified: false });
+  });
+
+  it("is held by the read right before the release is sent, when it was reopened after the cycle's read", async () => {
+    // As on Arc testnet on Oct 14: the cycle read the task completed, and it was reopened while the stage decided.
+    const w = world();
+    await acceptedLogo(w);
+    expect(await w.run(() => refreshAsanaMilestones(w.provider))).toMatchObject({ checked: 1, withdrawn: 0 });
+    expect(w.milestone(LOGO)).toMatchObject({ status: "verified", verified: true });
+    Object.assign(w.tasks.get(LOGO_TASK) as AsanaTask, { completed: false, completedAt: null, completedBy: null });
+    // Only the milestones about to be paid are read: the other one, not accepted, is not.
+    const reads = w.asanaReads();
+    expect(await w.run(() => recheckBeforeSending([LOGO, POSTS], w.provider))).toMatchObject({ checked: 1, read: 1, withdrawn: 1 });
+    expect(w.asanaReads() - reads).toBe(1);
+    expect(w.milestone(LOGO)).toMatchObject({ status: "pending", verified: false, verification_status: "unverified" });
+    expect(w.link(LOGO)).toMatchObject({ state: "held", held_reason: "reopened", after_payment: false });
+    // None to send, or none accepted from Asana: nothing is read.
+    expect(await w.run(() => recheckBeforeSending([], w.provider))).toMatchObject({ checked: 0 });
+    expect(await w.run(() => recheckBeforeSending([POSTS], w.provider))).toMatchObject({ checked: 0 });
+    expect(w.asanaReads() - reads).toBe(1);
+  });
+
+  it("is left accepted by the read right before sending when Asana cannot be read, as the acceptance stands", async () => {
+    const w = world();
+    await acceptedLogo(w);
+    w.asanaDown(true);
+    expect(await w.run(() => recheckBeforeSending([LOGO], w.provider))).toMatchObject({ checked: 1, failed: 1, withdrawn: 0 });
+    expect(w.milestone(LOGO)).toMatchObject({ status: "verified", verified: true });
+    expect(w.link(LOGO)).toMatchObject({ state: "accepted" });
   });
 
   it("after its payment was sent, holds only the link, as a dispute, and leaves the payment alone", async () => {

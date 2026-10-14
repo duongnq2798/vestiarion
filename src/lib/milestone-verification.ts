@@ -1,4 +1,4 @@
-import { refreshAsanaMilestones } from "./asana/workspace";
+import { recheckBeforeSending, refreshAsanaMilestones } from "./asana/workspace";
 import { parseGitHubPullRequestUrl, verifyGitHubPullRequest } from "./github-verification";
 import { pullRequestTokens } from "./github/tokens";
 import { appendLedgerEntry } from "./ledger";
@@ -116,5 +116,16 @@ export interface AcceptedWorkRefresh {
  */
 export async function refreshAcceptedWork(): Promise<AcceptedWorkRefresh> {
   const summary = await refreshAsanaMilestones();
+  return { checked: summary.checked, withdrawn: summary.withdrawn, failed: summary.failed };
+}
+
+/**
+ * The accepted Asana work of the releases the contractor stage is about to send, read once more just before they are
+ * sent (docs/superpowers/specs/2026-10-14-asana-acceptance-design.md A10): a task reopened or changed while the stage
+ * decided takes its acceptance back through the milestone's verification, and the stage's still-verified check then
+ * holds that release. Nothing else of Asana reaches the agent. Never throws.
+ */
+export async function recheckAcceptedWork(milestoneIds: readonly string[]): Promise<AcceptedWorkRefresh> {
+  const summary = await recheckBeforeSending(milestoneIds);
   return { checked: summary.checked, withdrawn: summary.withdrawn, failed: summary.failed };
 }

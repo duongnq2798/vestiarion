@@ -67,7 +67,7 @@ const WHAT_IS_READ: Record<AccountingProviderId, string> = {
  */
 const WORK_STATEMENT = (label: string) => [
   `Vestiarion reads, as the ${label} user who connects, the workspaces, projects and tasks you open to link a task to a milestone. For each linked task it reads its name, whether and when it was completed and by whom, its assignee, and the links in its description, attachments and comments. It keeps the links and names, not the words of the description or the comments.`,
-  `It makes a ${label} webhook on each linked task, so a change there is read again within a minute, and deletes it when the task is unlinked or ${label} is disconnected. It looks up a member's or a payee's email in ${label} only to refuse an acceptance by the payee. It writes nothing else to ${label}.`,
+  `It makes a webhook in ${label} on each linked task, so a change there is read again within a minute, and deletes it when the task is unlinked or ${label} is disconnected. It looks up a member's or a payee's email in ${label} only to refuse an acceptance by the payee. It writes nothing else to ${label}.`,
   `A task completed in ${label} is never by itself a reason to pay: a person here accepts the work against the milestone's criteria, and the agent then decides the payment under every guardrail. Nothing from ${label} sets an amount or a payee.`,
   `Vestiarion never uses ${label} data to train or improve any AI model, and never passes it to anyone else without your workspace's say.`,
   `Disconnecting stops the reading at once and deletes the webhooks. Acceptances already recorded stay in Vestiarion's signed ledger.`,

@@ -37,8 +37,10 @@ completed.
   acceptance and before payment: `hold_asana_acceptance` takes the verification back and holds the link for review.
   After a payment was sent, only the link is held, as a dispute. A held link stays held until a person accepts again.
 - **A11 Re-reads.** Signed webhook deliveries (X-Hook-Secret handshake once, X-Hook-Signature HMAC-SHA256 compared in
-  constant time) only nudge a read. Reads also run in the cycle before the contractor stage, every 15 minutes, on
-  Check Asana now and before an acceptance, with the connection's token.
+  constant time) only nudge a read. Reads also run in the cycle before the contractor stage, again for the accepted
+  tasks of the releases the stage is about to send (right before its still-verified check), every 15 minutes, on
+  Check Asana now and before an acceptance, with the connection's token. A webhook Asana refuses to make is logged with
+  Asana's own reason (any address in it replaced).
 - **A12 Nothing from Asana moves money.** No amount, payee, address or payment intent is written from Asana. The paying
   and deciding path changes only through the milestone's verification state.
 - **A13 Evidence links.** `app.asana.com` task and attachment links are checked at Asana's API, built from the id, with
@@ -63,9 +65,11 @@ are run after the merge, on production, once migration 0115 is applied.
   Pay now's check is by email only, so an approver whose Asana account is the payee's is not recognised there.
 - **Reads fail open.** An acceptance stands while Asana cannot be read (down, rate-limited, disconnected, needing
   reconnect); a change made then is seen only by the next read that succeeds, which may come after the payment. The
-  cycle reads at most 20 accepted tasks, in 30 seconds, before the contractor stage.
-- **The decide-then-send window.** The contractor stage holds each release to the milestone as it is just before
-  sending; a hold landing between that read and the payment intent (milliseconds) is treated as after payment. An
+  cycle reads at most 20 accepted tasks, in 30 seconds, before the contractor stage, and the read before sending stops
+  starting reads after 10 seconds.
+- **The decide-then-send window.** The contractor stage reads the accepted tasks of its releases once more, then holds
+  each release to the milestone as it is just before sending; a task reopened after that read (about a second before
+  the payment intent), or a hold landing between the check and the intent (milliseconds), is treated as after payment. An
   intent that exists but whose transfer was never submitted counts as under way: the hold only marks the link, and the
   reconciler may still send it. A hold landing while the stage decides a milestone it then holds by a guardrail leaves
   it `held` and unverified; a person closes it, or unlinks the task and verifies it by hand.
