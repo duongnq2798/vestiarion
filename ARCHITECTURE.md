@@ -2324,9 +2324,8 @@ exclusive. Consent `asana-2026-10-14`.
   a dispute), it is closed, or a person claimed its decision in the last ten minutes (then nothing changes, and the next
   read tries again). Neither writes an amount, a payee, an address or a payment. `tests/asana-paying-path.test.ts` pins
   that the agent, the payments and the money commands reach Asana only through `refreshAcceptedWork` and
-  `recheckAcceptedWork`, that the
-  contractor stage still pays only `verified` milestones, and that Asana's code writes a milestone only through these
-  functions and its criteria.
+  `recheckAcceptedWork`, that the contractor stage still pays only `verified` milestones, and that Asana's code writes
+  a milestone only through these functions and its criteria.
 - **Reads** (`reads.ts`, `acceptance.ts`, pure `planRead`): the task, its attachments (`/attachments?parent=`) and its
   comments (stories of subtype `comment_added`), the deliverables (`deliverables.ts`: attachments by gid and upload
   time, https links in the description and comments; renaming changes nothing) and their fingerprint. A completed task
@@ -2345,8 +2344,9 @@ exclusive. Consent `asana-2026-10-14`.
   verification back while the contractor stage decided (a read here, or a person revoking it), the stage holds each
   planned release to the milestone as it is just before sending (`stillVerified`) and sends none no longer verified.
   Right before that check it reads the accepted Asana tasks of exactly those releases once more
-  (`recheckAcceptedWork`, `recheckBeforeSending` in `workspace.ts`, 10 seconds), since the cycle's read can be seconds
-  old by then: on Arc testnet a task reopened 3 seconds after that read had its release sent 6 seconds later.
+  (`recheckAcceptedWork`, `recheckBeforeSending` in `workspace.ts`: reads start for 10 seconds, the stage waits at most
+  20, then sends on the acceptances as they stand and the cycle says so), since the cycle's read can be seconds old by
+  then: on Arc testnet a task reopened 3 seconds after that read had its release sent 6 seconds later.
 - **Webhooks** (`webhook.ts`, `webhook-store.ts`, `POST /api/integrations/asana/webhook/<id>`): a link's webhook row is
   made first, then Asana is asked (`POST /webhooks`, after the answer, only on an https origin); the `X-Hook-Secret`
   handshake is taken once, for a row still pending, within two minutes, sealed and echoed (a webhook Asana refuses

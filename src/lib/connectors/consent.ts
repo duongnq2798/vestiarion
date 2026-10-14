@@ -3,8 +3,8 @@ import { PROVIDER_LABELS, type AccountingProviderId, type ProviderId } from "./p
 /**
  * What a person agrees to before connecting an accounting tool (docs/superpowers/specs/2026-10-12-xero-connector-design.md
  * X12, docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q13), in plain words, with the version recorded
- * on the connection and in its signed entry. A change to these words is a new version; a connection keeps the version
- * it agreed to. Browser-safe.
+ * on the connection and in its signed entry. A change to what these words say is a new version (a grammar fix that
+ * says the same is not); a connection keeps the version it agreed to. Browser-safe.
  */
 
 export const CONSENT_VERSIONS: Record<ProviderId, string> = {

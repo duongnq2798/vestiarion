@@ -65,11 +65,13 @@ are run after the merge, on production, once migration 0115 is applied.
   Pay now's check is by email only, so an approver whose Asana account is the payee's is not recognised there.
 - **Reads fail open.** An acceptance stands while Asana cannot be read (down, rate-limited, disconnected, needing
   reconnect); a change made then is seen only by the next read that succeeds, which may come after the payment. The
-  cycle reads at most 20 accepted tasks, in 30 seconds, before the contractor stage, and the read before sending stops
-  starting reads after 10 seconds.
+  cycle reads at most 20 accepted tasks, in 30 seconds, before the contractor stage; the read before sending stops
+  starting reads after 10 seconds and the stage waits for it at most 20, then sends on the acceptances as they stand
+  and the cycle says not every task was read again.
 - **The decide-then-send window.** The contractor stage reads the accepted tasks of its releases once more, then holds
-  each release to the milestone as it is just before sending; a task reopened after that read (about a second before
-  the payment intent), or a hold landing between the check and the intent (milliseconds), is treated as after payment. An
+  each release to the milestone as it is just before sending; a task reopened after its own read (a second or so
+  before sending with one release, up to the read's budget with many), or a hold landing between the check and the
+  intent (milliseconds), is treated as after payment. An
   intent that exists but whose transfer was never submitted counts as under way: the hold only marks the link, and the
   reconciler may still send it. A hold landing while the stage decides a milestone it then holds by a guardrail leaves
   it `held` and unverified; a person closes it, or unlinks the task and verifies it by hand.

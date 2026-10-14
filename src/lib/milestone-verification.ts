@@ -123,9 +123,10 @@ export async function refreshAcceptedWork(): Promise<AcceptedWorkRefresh> {
  * The accepted Asana work of the releases the contractor stage is about to send, read once more just before they are
  * sent (docs/superpowers/specs/2026-10-14-asana-acceptance-design.md A10): a task reopened or changed while the stage
  * decided takes its acceptance back through the milestone's verification, and the stage's still-verified check then
- * holds that release. Nothing else of Asana reaches the agent. Never throws.
+ * holds that release. Nothing else of Asana reaches the agent. Never throws, and waits at most 20 seconds; `complete`
+ * is false when a task was not read again by then, whose acceptance then stands as it was.
  */
-export async function recheckAcceptedWork(milestoneIds: readonly string[]): Promise<AcceptedWorkRefresh> {
+export async function recheckAcceptedWork(milestoneIds: readonly string[]): Promise<AcceptedWorkRefresh & { complete: boolean }> {
   const summary = await recheckBeforeSending(milestoneIds);
-  return { checked: summary.checked, withdrawn: summary.withdrawn, failed: summary.failed };
+  return { checked: summary.checked, withdrawn: summary.withdrawn, failed: summary.failed, complete: summary.complete };
 }

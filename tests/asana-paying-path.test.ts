@@ -64,6 +64,8 @@ describe("the agent and the payments", () => {
     expect(recheck).toBeGreaterThan(stage.lastIndexOf("planned.push("));
     expect(recheck).toBeLessThan(check);
     expect(stage.match(/recheckAcceptedWork\(/g)).toHaveLength(1);
+    // A read not done by its deadline leaves the acceptance as it was, and the cycle says so.
+    expect(stage).toMatch(/if \(!recheck\.complete\) \{\s*lines\.push\(/);
     expect(stage).toMatch(/const sending = planned\.filter\(\(entry\) => verifiedNow\.has\(entry\.milestone\.id\)\);/);
     expect(stage).toMatch(/await releaseMilestones\(\s*sending\.map\(/);
     expect(stage).toMatch(/for \(const \[position, entry\] of sending\.entries\(\)\)/);

@@ -3908,7 +3908,12 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   // reopened or changed after acceptance (Asana acceptance A10). The accepted Asana tasks of these releases are read once
   // more first, since the read before the stage can be seconds old by now. Each release is then held to the milestone as
   // it is now, just before it is sent: one no longer verified is not sent, and its row is left as the taking back left it.
-  if (planned.length > 0 && operating) await recheckAcceptedWork(planned.map((entry) => entry.milestone.id));
+  if (planned.length > 0 && operating) {
+    const recheck = await recheckAcceptedWork(planned.map((entry) => entry.milestone.id));
+    if (!recheck.complete) {
+      lines.push({ domain: "contractor", message: "Asana: not every accepted task could be read again just before sending; those acceptances stand as given" });
+    }
+  }
   const verifiedNow = planned.length > 0 && operating ? await stillVerified(db, planned.map((entry) => entry.milestone.id)) : new Set<string>();
   const sending = planned.filter((entry) => verifiedNow.has(entry.milestone.id));
   for (const entry of planned) {

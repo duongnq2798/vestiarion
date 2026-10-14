@@ -199,6 +199,7 @@ function world(options: { payeeEmail?: string | null; ownerAsanaIsPayee?: boolea
   const asanaCalls: string[] = [];
   let validToken = "access-1";
   let down = false;
+  let hung = false;
   const asanaFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
     asanaCalls.push(`${init?.method ?? "GET"} ${url.pathname}`);
@@ -209,6 +210,7 @@ function world(options: { payeeEmail?: string | null; ownerAsanaIsPayee?: boolea
     }
     if (new Headers(init?.headers).get("authorization") !== `Bearer ${validToken}`) return json({ errors: [{ message: "Not Authorized" }] }, 401);
     if (down) return json({ errors: [{ message: "Server Error" }] }, 503);
+    if (hung) return new Promise<Response>(() => undefined);
     const task = /^\/api\/1\.0\/tasks\/(\d+)$/.exec(url.pathname);
     if (task) {
       const one = tasks.get(task[1]);
@@ -279,7 +281,10 @@ function world(options: { payeeEmail?: string | null; ownerAsanaIsPayee?: boolea
   const asanaDown = (value: boolean) => {
     down = value;
   };
-  return { fake, tables, tasks, run, provider, link, milestone, complete, accept, asanaCalls, asanaReads, asanaDown, expireToken, token: () => token };
+  const asanaHung = (value: boolean) => {
+    hung = value;
+  };
+  return { fake, tables, tasks, run, provider, link, milestone, complete, accept, asanaCalls, asanaReads, asanaDown, asanaHung, expireToken, token: () => token };
 }
 
 const entries = (action: string) => ledger.mock.calls.filter(([, input]) => input.action === action).map(([, input]) => input);
@@ -419,13 +424,13 @@ describe("a task reopened after acceptance", () => {
     Object.assign(w.tasks.get(LOGO_TASK) as AsanaTask, { completed: false, completedAt: null, completedBy: null });
     // Only the milestones about to be paid are read: the other one, not accepted, is not.
     const reads = w.asanaReads();
-    expect(await w.run(() => recheckBeforeSending([LOGO, POSTS], w.provider))).toMatchObject({ checked: 1, read: 1, withdrawn: 1 });
+    expect(await w.run(() => recheckBeforeSending([LOGO, POSTS], w.provider))).toMatchObject({ checked: 1, read: 1, withdrawn: 1, complete: true });
     expect(w.asanaReads() - reads).toBe(1);
     expect(w.milestone(LOGO)).toMatchObject({ status: "pending", verified: false, verification_status: "unverified" });
     expect(w.link(LOGO)).toMatchObject({ state: "held", held_reason: "reopened", after_payment: false });
     // None to send, or none accepted from Asana: nothing is read.
-    expect(await w.run(() => recheckBeforeSending([], w.provider))).toMatchObject({ checked: 0 });
-    expect(await w.run(() => recheckBeforeSending([POSTS], w.provider))).toMatchObject({ checked: 0 });
+    expect(await w.run(() => recheckBeforeSending([], w.provider))).toMatchObject({ checked: 0, complete: true });
+    expect(await w.run(() => recheckBeforeSending([POSTS], w.provider))).toMatchObject({ checked: 0, complete: true });
     expect(w.asanaReads() - reads).toBe(1);
   });
 
@@ -433,7 +438,18 @@ describe("a task reopened after acceptance", () => {
     const w = world();
     await acceptedLogo(w);
     w.asanaDown(true);
-    expect(await w.run(() => recheckBeforeSending([LOGO], w.provider))).toMatchObject({ checked: 1, failed: 1, withdrawn: 0 });
+    expect(await w.run(() => recheckBeforeSending([LOGO], w.provider))).toMatchObject({ checked: 1, failed: 1, withdrawn: 0, complete: false });
+    expect(w.milestone(LOGO)).toMatchObject({ status: "verified", verified: true });
+    expect(w.link(LOGO)).toMatchObject({ state: "accepted" });
+  });
+
+  it("does not hold the payment past its deadline when Asana does not answer, and leaves the acceptance as it was", async () => {
+    const w = world();
+    await acceptedLogo(w);
+    w.asanaHung(true);
+    const started = Date.now();
+    expect(await w.run(() => recheckBeforeSending([LOGO], w.provider, { deadlineMs: 50 }))).toMatchObject({ withdrawn: 0, complete: false });
+    expect(Date.now() - started).toBeLessThan(2_000);
     expect(w.milestone(LOGO)).toMatchObject({ status: "verified", verified: true });
     expect(w.link(LOGO)).toMatchObject({ state: "accepted" });
   });

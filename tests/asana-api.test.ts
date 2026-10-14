@@ -199,13 +199,20 @@ describe("the reads", () => {
       .catch((error: unknown) => error);
     expect(said).toBeInstanceOf(ProviderError);
     expect(said).toMatchObject({ failure: "forbidden", message: "Asana webhook: 403: Forbidden: the target [an address] is not allowed" });
+    const messageOf = (call: Promise<unknown>) => call.then(() => "answered", (error: Error) => error.message);
     // Long words are cut and control characters dropped; no reason, or a body that is not JSON, leaves the status alone.
-    const long = await refused({ errors: [{ message: `Too\nmany ${"x".repeat(400)}` }] }, 400).createWebhook("t", { resource: "1", target }).catch((error: Error) => error.message);
+    const long = await messageOf(refused({ errors: [{ message: `Too\nmany ${"x".repeat(400)}` }] }, 400).createWebhook("t", { resource: "1", target }));
     expect(long).toMatch(/^Asana webhook: 400: Too many x+…$/);
     expect(long.length).toBe("Asana webhook: 400: ".length + 200);
-    expect(await refused("<html>blocked</html>").createWebhook("t", { resource: "1", target }).catch((error: Error) => error.message)).toBe("Asana webhook: 403");
-    expect(await refused({ errors: [] }).createWebhook("t", { resource: "1", target }).catch((error: Error) => error.message)).toBe("Asana webhook: 403");
-    expect(await refused({ errors: [{ message: "Not Authorized" }] }, 401).deleteWebhook("t", "8800001").catch((error: Error) => error.message)).toBe("Asana webhook delete: 401: Not Authorized");
+    expect(await messageOf(refused("<html>blocked</html>").createWebhook("t", { resource: "1", target }))).toBe("Asana webhook: 403");
+    expect(await messageOf(refused({ errors: [] }).createWebhook("t", { resource: "1", target }))).toBe("Asana webhook: 403");
+    expect(await messageOf(refused({ errors: [{ message: "Not Authorized" }] }, 401).deleteWebhook("t", "8800001"))).toBe("Asana webhook delete: 401: Not Authorized");
+    // The webhook's own address is taken out even without its scheme.
+    expect(await messageOf(refused({ errors: [{ message: "Invalid target www.vestiarion.xyz/api/integrations/asana/webhook/abc-123 here" }] }, 400).createWebhook("t", { resource: "1", target }))).toBe(
+      "Asana webhook: 400: Invalid target [an address] here"
+    );
+    // Only the start of a long body is read for the reason.
+    expect(await messageOf(refused(`{"errors":[{"message":"${"y".repeat(5000)}"}]}`).createWebhook("t", { resource: "1", target }))).toBe("Asana webhook: 403");
   });
 });
 

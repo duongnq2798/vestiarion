@@ -18,9 +18,10 @@ import { activateWebhook, liveWebhooks, markWebhookDeleted, newWebhook, webhookS
 
 /**
  * A workspace's Asana, as every path uses it (docs/superpowers/specs/2026-10-14-asana-acceptance-design.md A2, A11):
- * its connection and a session on the connection's own token; the webhooks made on linked tasks; and the three ways a
- * linked task is read again without a person: before the agent decides contractors, every 15 minutes from the sweeper,
- * and after a signed webhook delivery. All of it in the workspace's own scope.
+ * its connection and a session on the connection's own token; the webhooks made on linked tasks; and the four ways a
+ * linked task is read again without a person: before the agent decides contractors, right before it sends their
+ * releases, every 15 minutes from the sweeper, and after a signed webhook delivery. All of it in the workspace's own
+ * scope.
  */
 
 export interface AsanaContext {
@@ -147,18 +148,28 @@ export async function refreshAsanaMilestones(given?: AsanaProvider | null): Prom
   return readAccepted(given, () => linksOfMilestones({ statuses: ["verified", "held"], method: "asana", states: ["accepted"], limit: CYCLE_READS }), CYCLE_BUDGET_MS, "the cycle's read");
 }
 
-/** The reads made right before the contractor stage sends its releases stop starting after this long. */
+/**
+ * The reads made right before the contractor stage sends its releases stop starting after `SEND_BUDGET_MS`, and the
+ * stage waits for them at most `SEND_DEADLINE_MS`: one read can take several calls, each with its own timeout.
+ */
 export const SEND_BUDGET_MS = 10_000;
+export const SEND_DEADLINE_MS = 20_000;
 const SEND_ID_CHUNK = 100;
 
 /**
  * Right before the contractor stage sends its releases (A10), the accepted tasks of exactly those milestones are read
  * once more: the read before the stage can be seconds old by the time the stage has decided, and a task reopened or
  * changed in between takes its acceptance back here, which the stage's still-verified check then holds to. Asana's
- * webhook says so too, but only once Asana delivers it. Never throws: a read that fails leaves the acceptance as it was.
+ * webhook says so too, but only once Asana delivers it. Never throws, and never waits past the deadline: a read that
+ * fails or is not done by then leaves the acceptance as it was, and `complete` is false. A read still going on after
+ * the deadline finishes on its own; what it finds after the payment is sent only holds the link, as a dispute.
  */
-export async function recheckBeforeSending(milestoneIds: readonly string[], given?: AsanaProvider | null): Promise<ReadSummary & { checked: number }> {
-  return readAccepted(
+export async function recheckBeforeSending(
+  milestoneIds: readonly string[],
+  given?: AsanaProvider | null,
+  options: { deadlineMs?: number } = {}
+): Promise<ReadSummary & { checked: number; complete: boolean }> {
+  const reading = readAccepted(
     given,
     async () => {
       const links: TaskLink[] = [];
@@ -169,7 +180,16 @@ export async function recheckBeforeSending(milestoneIds: readonly string[], give
     },
     SEND_BUDGET_MS,
     "the read before sending"
-  );
+  ).then((summary) => ({ ...summary, complete: summary.failed === 0 && summary.read >= summary.checked }));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<ReadSummary & { checked: number; complete: boolean }>((resolve) => {
+    timer = setTimeout(() => resolve({ checked: 0, read: 0, failed: 0, ready: 0, withdrawn: 0, deferred: 0, complete: false }), options.deadlineMs ?? SEND_DEADLINE_MS);
+  });
+  try {
+    return await Promise.race([reading, late]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Reads accepted links with the workspace's connection, within a budget; never throws. */
