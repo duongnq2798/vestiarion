@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { siteOrigin } from "../auth/env";
 import { failureDelayMs } from "../connectors/backoff";
 import { connectionFor, NotSetUpError, type Connection } from "../connectors/connections";
@@ -9,7 +10,7 @@ import { currentOrgId } from "../context";
 import { db } from "../dal";
 import { withOrg } from "../dal/scope";
 import { recordUsage } from "../usage/record";
-import { AsanaNotSetUpError, asanaReady, linkById, liveLinks, milestonesForAcceptance, type TaskLink } from "./links";
+import { AsanaNotSetUpError, asanaReady, linkById, linksOfMilestones, milestonesForAcceptance, type TaskLink } from "./links";
 import { asanaProviderFromEnv, type AsanaProvider } from "./provider";
 import { readLinks, type ReadSummary } from "./reads";
 import { AsanaAccessError, asanaSession, type AsanaSession } from "./session";
@@ -72,6 +73,13 @@ export async function markReconnect(connection: Connection, nowIso: string): Pro
 export const needsReconnect = (error: unknown) =>
   error instanceof AsanaAccessError ? error.outcome.reason === "reconnect" || error.outcome.reason === "missing" : false;
 
+/** Two secrets compared in constant time. */
+function secretsEqual(a: string, b: string): boolean {
+  const left = Buffer.from(a, "utf8");
+  const right = Buffer.from(b, "utf8");
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
 /**
  * Makes the webhook for a linked task (A11): a row first, so the handshake finds it, then Asana is asked, then the
  * secret in Asana's answer is held to the one the handshake kept. Best effort: a link works without one, read again by
@@ -91,8 +99,9 @@ export async function startWebhook(link: TaskLink, ctx: AsanaContext, origin: st
     return false;
   }
   const kept = await webhookSecret(orgId, id);
-  // The secret Asana answered with must be the one its handshake sent here; anything else is not Asana's handshake.
-  if (!kept || (made.secret !== null && made.secret !== kept) || !(await activateWebhook(orgId, id, made.gid))) {
+  // The secret Asana answered with must be the one its handshake sent here; anything else, or none, is not Asana's
+  // handshake: someone who learned the address could have answered it first.
+  if (!kept || made.secret === null || !secretsEqual(made.secret, kept) || !(await activateWebhook(orgId, id, made.gid))) {
     console.error("asana: a webhook's handshake did not match, so it is deleted", link.id);
     await ctx.session.call((token) => ctx.provider.reader.deleteWebhook(token, made.gid)).catch(() => false);
     await markWebhookDeleted(orgId, id, nowIso());
@@ -126,10 +135,10 @@ export const CYCLE_READS = 20;
 export const CYCLE_BUDGET_MS = 30_000;
 
 /**
- * Before the agent decides contractors (A11), as GitHub's pull requests are read: each accepted task whose milestone is
- * not paid is read again, so a task reopened or changed since takes the acceptance back in this same cycle, before the
- * contractor stage reads which milestones are verified. Never throws: a failure leaves the acceptance as it was, and the
- * webhook and the sweeper read it again.
+ * Before the agent decides contractors (A11), as GitHub's pull requests are read: each accepted task whose milestone the
+ * agent may still pay (verified, or held) is read again, at most `CYCLE_READS`, so a task reopened or changed since takes
+ * the acceptance back in this same cycle, before the contractor stage reads which milestones are verified. Never throws:
+ * a failure leaves the acceptance as it was, and the webhook and the sweeper read it again.
  */
 export async function refreshAsanaMilestones(given?: AsanaProvider | null): Promise<ReadSummary & { checked: number }> {
   const none = { checked: 0, read: 0, failed: 0, ready: 0, withdrawn: 0, deferred: 0 };
@@ -137,8 +146,9 @@ export async function refreshAsanaMilestones(given?: AsanaProvider | null): Prom
     const context = await asanaContext(given);
     if ("missing" in context) return none;
     // Read with the workspace's connection now, whichever connection linked them: a task the person who connected Asana
-    // since cannot see is held, never left accepted unwatched.
-    const links = await liveLinks({ states: ["accepted"], limit: CYCLE_READS });
+    // since cannot see is held, never left accepted unwatched. Only the acceptances the agent may still pay: those of
+    // milestones verified (the contractor stage's) first, then held; never the paid ones, whose links stay accepted.
+    const links = await linksOfMilestones({ statuses: ["verified", "held"], method: "asana", states: ["accepted"], limit: CYCLE_READS });
     if (links.length === 0) return none;
     try {
       const summary = await readLinks(links, { session: context.session, reader: context.provider.reader, budgetMs: CYCLE_BUDGET_MS });
@@ -178,13 +188,9 @@ export async function syncAsanaConnection(connectionId: string, provider: AsanaP
     return { outcome: kind === "rate_limited" ? "rate_limited" : kind === "failed" ? "failed" : "unavailable" };
   };
   try {
-    // One Asana connection per workspace: every live link is read with it, whichever connection linked it.
-    const links = await liveLinks({ limit: SWEEP_READS });
-    const open = await milestonesForAcceptance([...new Set(links.map((link) => link.milestoneId))]);
-    const toRead = links.filter((link) => {
-      const status = open.get(link.milestoneId)?.status;
-      return status !== undefined && status !== "paid" && status !== "closed";
-    });
+    // One Asana connection per workspace: every live link is read with it, whichever connection linked it. Only those of
+    // milestones still open, verified ones first: a paid or closed milestone's link stays live, as its history.
+    const toRead = await linksOfMilestones({ statuses: ["verified", "held", "pending"], limit: SWEEP_READS });
     const session = asanaSession({ provider, tokens: connectionTokenStore(currentOrgId(), connectionId), now });
     const summary = await readLinks(toRead, { session, reader: provider.reader, now, budgetMs: SWEEP_LINK_BUDGET_MS });
     await syncStore.finish(connection.id, { kind: "synced", at: iso(now()) });

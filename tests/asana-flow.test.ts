@@ -162,7 +162,9 @@ function world(options: { payeeEmail?: string | null; ownerAsanaIsPayee?: boolea
     if (!rows) return { body: [] };
     const single = (sent.headers.get("accept") ?? "").includes("vnd.pgrst.object");
     if (sent.method === "GET") {
-      const found = rows.filter((row) => matches(row, sent.params));
+      // The limit a read asks for is kept, in the rows' own order: a read that stops early stops here too.
+      const limit = Number(sent.params.get("limit") ?? "0");
+      const found = rows.filter((row) => matches(row, sent.params)).slice(0, limit > 0 ? limit : undefined);
       return { body: single ? found[0] : found };
     }
     if (sent.method === "POST") {
@@ -369,6 +371,36 @@ describe("a task reopened after acceptance", () => {
     expect(w.milestone(LOGO)).toMatchObject({ status: "pending", verified: false });
     expect(await w.accept(LOGO)).toMatchObject({ ok: true });
     expect(w.milestone(LOGO)).toMatchObject({ status: "verified", verified: true });
+  });
+
+  it("is read by the cycle and by the sweeper however many milestones accepted from Asana were paid before it", async () => {
+    // Paid milestones keep their accepted links, as their history: 120 of them, linked before this one.
+    const paidLinks = (w: ReturnType<typeof world>) => {
+      for (let n = 0; n < 120; n += 1) {
+        const id = crypto.randomUUID();
+        w.tables.milestones.push({ id, org_id: ORG, title: `Paid ${n}`, amount: "10", contractor_id: FERNHILL, status: "paid", verified: true, verification_method: "asana", verification_source: null, acceptance_criteria: "Done.", decision_claimed_at: null });
+        w.tables.asana_task_links.push({
+          id: crypto.randomUUID(), org_id: ORG, milestone_id: id, connection_id: "conn-asana", workspace_gid: WORKSPACE, project_gid: PROJECT, task_gid: String(1300000000000000 + n),
+          task_name: `Paid ${n}`, task_url: null, state: "accepted", held_reason: null, after_payment: false, held_at: null, completed: true, completed_at: "2026-09-01T00:00:00.000Z",
+          completed_by_gid: null, completed_by_name: null, assignee_name: null, deliverables: [], deliverable_fingerprint: "f".repeat(64), last_read_at: null, read_error: null,
+          accepted_by: OWNER, accepted_at: "2026-09-01T00:00:00.000Z", accepted_fingerprint: "f".repeat(64), accepted_completed_at: "2026-09-01T00:00:00.000Z", accepted_deliverables: [],
+          linked_at: "2026-09-01T00:00:00.000Z", unlinked_at: null,
+        });
+      }
+    };
+    const cycle = world();
+    paidLinks(cycle);
+    await acceptedLogo(cycle);
+    Object.assign(cycle.tasks.get(LOGO_TASK) as AsanaTask, { completed: false, completedAt: null, completedBy: null });
+    expect(await cycle.run(() => refreshAsanaMilestones(cycle.provider))).toMatchObject({ checked: 1, withdrawn: 1 });
+    expect(cycle.milestone(LOGO)).toMatchObject({ status: "pending", verified: false });
+
+    const sweep = world();
+    paidLinks(sweep);
+    await acceptedLogo(sweep);
+    Object.assign(sweep.tasks.get(LOGO_TASK) as AsanaTask, { completed: false, completedAt: null, completedBy: null });
+    expect(await sweep.run(() => syncAsanaConnection("conn-asana", sweep.provider, { now: () => NOW }))).toMatchObject({ outcome: "synced", summary: { withdrawn: 1 } });
+    expect(sweep.milestone(LOGO)).toMatchObject({ status: "pending", verified: false });
   });
 
   it("after its payment was sent, holds only the link, as a dispute, and leaves the payment alone", async () => {

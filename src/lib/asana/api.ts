@@ -151,8 +151,11 @@ export function asanaReader(deps: AsanaHttp = {}): AsanaReader {
         await response.body?.cancel().catch(() => {});
         throw failureOf(response, "webhook", now());
       }
-      const secret = response.headers.get("x-hook-secret");
-      return { ...mapWebhook(await jsonOf(response, "webhook")), secret: secret && secret.length <= 500 ? secret : null };
+      // Asana documents the secret at the top of the 201's body, beside `data`; a header is taken too.
+      const body = await jsonOf(response, "webhook");
+      const inBody = typeof body === "object" && body !== null ? (body as Record<string, unknown>)["X-Hook-Secret"] : undefined;
+      const secret = typeof inBody === "string" && inBody.length > 0 ? inBody : response.headers.get("x-hook-secret");
+      return { ...mapWebhook(body), secret: secret && secret.length <= 500 ? secret : null };
     },
 
     async deleteWebhook(accessToken, webhookGid) {

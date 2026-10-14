@@ -181,6 +181,15 @@ describe("the reads", () => {
     expect(JSON.parse(String(sent[0].init.body))).toEqual({ data: { resource: "1219477646404728", target: "https://www.vestiarion.xyz/api/integrations/asana/webhook/abc" } });
     await expect(reader.createWebhook("t", { resource: "1219477646404728", target: "http://localhost:3000/x" })).rejects.toBeInstanceOf(ProviderError);
   });
+
+  it("reads the secret where Asana documents it, at the top of the 201's body beside data", async () => {
+    const { fetchImpl } = http(() => json({ data: { gid: "8800001", resource: { gid: "1219477646404728" }, active: true }, "X-Hook-Secret": "secret-in-the-body" }, 201));
+    const reader = asanaReader({ fetchImpl });
+    expect(await reader.createWebhook("t", { resource: "1219477646404728", target: "https://www.vestiarion.xyz/api/integrations/asana/webhook/abc" })).toEqual({ gid: "8800001", secret: "secret-in-the-body" });
+    // Neither in the body nor in a header: no secret, which the caller takes as no handshake of Asana's.
+    const none = asanaReader({ fetchImpl: http(() => json({ data: { gid: "8800002" } }, 201)).fetchImpl });
+    expect(await none.createWebhook("t", { resource: "1219477646404728", target: "https://www.vestiarion.xyz/api/integrations/asana/webhook/abc" })).toEqual({ gid: "8800002", secret: null });
+  });
 });
 
 /** A token row in memory, with the core's lease and compare-and-set. */

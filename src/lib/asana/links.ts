@@ -150,6 +150,36 @@ export async function liveLinks(filter: { milestoneIds?: readonly string[]; conn
   return ((result.data ?? []) as unknown as LinkRow[]).map(toTaskLink);
 }
 
+/** How many milestones one look for links to read goes through, and how many ids one read of links names. */
+const MILESTONE_SCAN = 1000;
+const ID_CHUNK = 100;
+
+/**
+ * The live links of the milestones in `statuses` (and, with `method`, verified that way), at most `limit`: those of the
+ * milestones in the first status first. The milestones are found before their links because a paid milestone's link
+ * stays live, as its history: a limit taken over every live link would, once enough milestones were paid, hold none of
+ * the open ones, and nothing open would be read again.
+ */
+export async function linksOfMilestones(filter: { statuses: readonly string[]; method?: "asana"; states?: readonly LinkState[]; limit: number }): Promise<TaskLink[]> {
+  let query = db().from("milestones").select("id, status").in("status", [...filter.statuses]);
+  if (filter.method) query = query.eq("verification_method", filter.method);
+  const result = await query.order("created_at", { ascending: true }).limit(MILESTONE_SCAN);
+  if (result.error) raise(result.error);
+  const rank = (status: string) => filter.statuses.indexOf(status);
+  const ids = ((result.data ?? []) as Array<{ id: string; status: string }>).sort((a, b) => rank(a.status) - rank(b.status)).map((row) => row.id);
+  const links: TaskLink[] = [];
+  for (let at = 0; at < ids.length && links.length < filter.limit; at += ID_CHUNK) {
+    const chunk = ids.slice(at, at + ID_CHUNK);
+    // One live link per milestone (0115), kept in the milestones' order.
+    const found = new Map((await liveLinks({ milestoneIds: chunk, ...(filter.states ? { states: filter.states } : {}), limit: ID_CHUNK })).map((link) => [link.milestoneId, link]));
+    for (const id of chunk) {
+      const link = found.get(id);
+      if (link && links.length < filter.limit) links.push(link);
+    }
+  }
+  return links;
+}
+
 export async function linkById(id: string): Promise<TaskLink | null> {
   const result = await db().from("asana_task_links").select(LINK_COLUMNS).eq("id", id).is("unlinked_at", null).limit(1);
   if (result.error) raise(result.error);
