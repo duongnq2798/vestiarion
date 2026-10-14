@@ -1,3 +1,4 @@
+import { simulatesPayments } from "../capability-read";
 import { z } from "zod";
 import { readActualsFacts } from "../actual-payments";
 import { db, platformDb, unwrap, type OrgDb } from "../dal";
@@ -97,7 +98,9 @@ export async function readSharedReport(token: string, now: Date = new Date()): P
 
   return withOrg(found.orgId, async () => {
     const [facts, actuals, baseline, knownNames, texts] = await Promise.all([
-      readReportFacts(db(), network, { sandbox: found.mode === "sandbox" }, now),
+      // Simulated as the workspace's capability says, not its mode: a sandbox connected to Circle pays for real (capability
+      // and reasons R5).
+      readReportFacts(db(), network, { sandbox: simulatesPayments() }, now),
       readActualsFacts(db()),
       readBaseline(db()),
       counterpartyNames(db()),

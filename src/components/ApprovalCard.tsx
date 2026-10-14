@@ -15,7 +15,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from "@/components/ui/Dialog";
 import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
-import { Textarea } from "@/components/ui/Input";
+import { Input, Textarea } from "@/components/ui/Input";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm, type ActionResult } from "@/components/ui/useActionForm";
 import { Money, fmt } from "@/components/vx/Primitives";
@@ -94,6 +94,19 @@ export function payConfirmDescription(payable: Pick<WaitingPayable, "paymentSent
   }
   return `The transfer starts as soon as you confirm, and the ledger records who approved it.${own}`;
 }
+
+/**
+ * Whether paying this payable goes against the agent's own judgement, so Approve and pay asks why (capability and
+ * reasons R10): the agent flagged it, or held it on one of its rules. Not a payment held for cash, which the agent would
+ * have paid, nor one held for a verdict, whose reason the verdict asks for.
+ */
+export function overridesHold(payable: Pick<WaitingPayable, "status" | "guardrailRule" | "heldForCash" | "heldForVerdict">): boolean {
+  if (payable.heldForCash || payable.heldForVerdict) return false;
+  return payable.status === "flagged" || payable.guardrailRule !== null;
+}
+
+/** The optional reason's field: one line, never required, kept with where it was given and the app's version (R10, R11). */
+export const REASON_HINT = "Optional. One line helps the team improve the agent.";
 
 /** The confirmation of an approval that pays nothing yet, the first of two (two approvals T8). */
 export function approveFirstTitle(payable: Pick<WaitingPayable, "amount" | "counterpartyName"> & Partial<Pick<WaitingPayable, "currency">>): string {
@@ -370,6 +383,11 @@ function Decisions({
 }) {
   const approveForm = useActionForm(approve, INITIAL);
   const returnForm = useActionForm(giveBack, INITIAL);
+  // Why the person goes against the agent, asked in the confirmation itself and never required (R10). Each reaches its
+  // form through a hidden field, since the dialog renders outside it.
+  const [payReason, setPayReason] = useState("");
+  const [returnReason, setReturnReason] = useState("");
+  const askWhyPaid = overridesHold(payable);
   // Both forms report in one place: whichever was submitted last.
   const [last, setLast] = useState<"approve" | "return" | null>(null);
   const shown = last === "approve" ? approveForm.state : last === "return" ? returnForm.state : INITIAL;
@@ -402,6 +420,7 @@ function Decisions({
           <input type="hidden" name="orgSlug" value={orgSlug} />
           <input type="hidden" name="invoiceId" value={payable.id} />
           <input type="hidden" name="address" value={payable.address ?? ""} />
+          {askWhyPaid && <input type="hidden" name="reason" value={payReason} />}
         </form>
         <ConfirmDialog
           formId={approveId}
@@ -416,6 +435,15 @@ function Decisions({
             willPay ? `${payConfirmDescription(payable, ownEntry)}${two ? ` ${SECOND_APPROVAL_PAYS}` : ""}` : two ? approveFirstDescription(two.above) : ""
           }
           confirmLabel={willPay ? "Pay now" : "Approve"}
+          {...(askWhyPaid
+            ? {
+                children: (
+                  <Field id={`${approveId}-reason`} label="Why pay it anyway?" optional description={REASON_HINT}>
+                    <Input value={payReason} onChange={(event) => setPayReason(event.target.value)} maxLength={280} autoComplete="off" />
+                  </Field>
+                ),
+              }
+            : {})}
           // Approved and being sent, until the payment's confirmation replaces it (payment confirmation).
           onConfirm={
             willPay
@@ -436,6 +464,7 @@ function Decisions({
             <form id={returnId} className="contents" {...returnForm.formProps} onSubmit={submitting("return", returnForm.formProps.onSubmit)}>
               <input type="hidden" name="orgSlug" value={orgSlug} />
               <input type="hidden" name="invoiceId" value={payable.id} />
+              <input type="hidden" name="reason" value={returnReason} />
             </form>
             <ConfirmDialog
               formId={returnId}
@@ -448,7 +477,11 @@ function Decisions({
               title={`Return ${payable.counterpartyName}'s invoice to the agent?`}
               description="It goes back to pending, and the agent's next cycle decides it again."
               confirmLabel="Return to agent"
-            />
+            >
+              <Field id={`${returnId}-reason`} label="Why return it?" optional description={REASON_HINT}>
+                <Input value={returnReason} onChange={(event) => setReturnReason(event.target.value)} maxLength={280} autoComplete="off" />
+              </Field>
+            </ConfirmDialog>
           </>
         )}
       </div>
@@ -524,7 +557,7 @@ function RejectDialog({ orgSlug, payable }: { orgSlug: string; payable: WaitingP
         <form {...formProps} className="grid gap-5">
           <input type="hidden" name="orgSlug" value={orgSlug} />
           <input type="hidden" name="invoiceId" value={payable.id} />
-          <Field id={reasonId} label="Reason" optional description="At most 280 characters.">
+          <Field id={reasonId} label="Why reject it?" optional description={`${REASON_HINT} At most 280 characters.`}>
             <Textarea name="reason" maxLength={280} rows={3} />
           </Field>
           <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.ok ? null : state.message}</FormMessage>

@@ -1243,8 +1243,11 @@ export async function rejectInvoice(input: { actorId: string; invoiceId: string;
   });
 }
 
-/** `provenance`, when given, names the surface the person acted from (integrations design R3); the console gives none. */
-export async function returnInvoice(input: { actorId: string; invoiceId: string; provenance?: Provenance; forVerdict?: boolean }): Promise<void> {
+/**
+ * `provenance`, when given, names the surface the person acted from (integrations design R3); the console gives none.
+ * `reason`, when the person gave one, is kept in the ledger as a rejection's is (capability and reasons R10).
+ */
+export async function returnInvoice(input: { actorId: string; invoiceId: string; reason?: string; provenance?: Provenance; forVerdict?: boolean }): Promise<void> {
   const orgId = currentOrgId();
   if (!input.forVerdict) await refuseUntilVerdict(input.invoiceId, "return");
   await refuseIfPaymentSent(input.invoiceId);
@@ -1265,12 +1268,13 @@ export async function returnInvoice(input: { actorId: string; invoiceId: string;
   }
   await clearApprovalsAfter(input.invoiceId);
 
+  const reason = trimReason(input.reason);
   await appendLedgerEntryBestEffort(orgId, {
     actor: "human",
     domain: "ap",
     action: "approval_returned",
     summary: "An invoice was returned, undecided",
-    detail: { by: input.actorId, invoiceId: input.invoiceId, ...input.provenance },
+    detail: { by: input.actorId, invoiceId: input.invoiceId, ...(reason === undefined ? {} : { reason }), ...input.provenance },
   });
 }
 

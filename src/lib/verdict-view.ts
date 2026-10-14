@@ -1,4 +1,5 @@
 import { AGENT_DECISION_ACTIONS } from "./agent/shadow-hold";
+import type { Capability } from "./capability";
 import type { LedgerEntry } from "./ledger";
 
 /**
@@ -18,8 +19,8 @@ export interface VerdictView {
   heldForVerdict: boolean;
   /** What agreeing pays, as the card shows it: the address goes with the payment, as Approve and pay's does (review C1). */
   payment?: VerdictPayment;
-  /** The workspace simulates its payments (a sandbox with no Circle account): Agree and pay says so. */
-  simulated?: boolean;
+  /** What the workspace's payments do now (src/lib/capability.ts): Agree and pay says so, in the words every surface uses. */
+  capability?: Capability;
 }
 
 export interface VerdictPayment {
@@ -35,8 +36,8 @@ export interface VerdictFacts {
   given: Map<number, { verdict: "agree" | "disagree"; reason: string | null }>;
   /** Whether the viewer may decide payments (`approval.decide`). */
   canGive: boolean;
-  /** Whether the workspace simulates its payments. */
-  simulated?: boolean;
+  /** What the workspace's payments do now; absent when it could not be read. */
+  capability?: Capability;
 }
 
 const DECISIONS: readonly string[] = AGENT_DECISION_ACTIONS;
@@ -57,5 +58,5 @@ export function verdictView(
   const given = facts.given.get(decision.seq) ?? null;
   const inShadow = facts.shadow !== null && Date.parse(decision.ts) >= Date.parse(facts.shadow.startedAt);
   if (!given && !inShadow) return undefined;
-  return { entrySeq: decision.seq, agentAction: decision.action, given, open: !given && inShadow && facts.canGive, heldForVerdict, ...(payment ? { payment } : {}), ...(facts.simulated ? { simulated: true } : {}) };
+  return { entrySeq: decision.seq, agentAction: decision.action, given, open: !given && inShadow && facts.canGive, heldForVerdict, ...(payment ? { payment } : {}), ...(facts.capability ? { capability: facts.capability } : {}) };
 }

@@ -136,6 +136,36 @@ export async function readWorkspaces(since: Date): Promise<WorkspaceRow[] | null
   }
 }
 
+const reasonSchema = z.object({
+  slug: z.string(),
+  side: z.enum(["customers", "ours"]),
+  feature: z.string(),
+  decision: z.string(),
+  surface: z.string(),
+  reason: z.string(),
+  appVersion: z.string(),
+  givenAt: z.string(),
+});
+
+/** A reason someone gave as they went against the agent, in any workspace (migration 0120): no person. */
+export type GrowthReason = z.infer<typeof reasonSchema>;
+
+/**
+ * The latest reasons people gave as they went against the agent, across workspaces, since `since` (capability and
+ * reasons R14): what to fix first, by the feature and the build they came from. Null when growth_decision_reasons
+ * could not be read, as before migration 0120 runs.
+ */
+export async function readGrowthReasons(since: Date): Promise<GrowthReason[] | null> {
+  try {
+    const { data, error } = await platformDb().rpc("growth_decision_reasons", { p_since: since.toISOString() });
+    if (error) throw new Error(error.message);
+    return z.array(reasonSchema).parse(data ?? []);
+  } catch (error) {
+    console.error("growth: growth_decision_reasons not read", error instanceof Error ? error.message : "unknown error");
+    return null;
+  }
+}
+
 /** The slugs of these workspaces, by id. */
 async function readSlugs(ids: string[]): Promise<Record<string, string>> {
   if (ids.length === 0) return {};

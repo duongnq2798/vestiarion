@@ -1,3 +1,4 @@
+import { capabilityOf, NO_WALLET, paymentSentence, situationLook, type Capability, type StatusTone } from "@/lib/capability";
 import type { CycleClockMode } from "@/lib/clock";
 import { utcMinute } from "@/lib/copy";
 import { networkHold } from "@/lib/mainnet";
@@ -12,6 +13,9 @@ import { networkProfile, type Network } from "@/lib/network";
  * Only the page, inside the workspace's scope, knows the rest (whether payments are live, simulated or held, shadow
  * mode, screening, the clock); a loading or error state has none of them and says less rather than guess. A fact that
  * could not be read is said as such, never as its healthy value: the payment gates refuse on the same failure.
+ *
+ * What payments do is the workspace's capability (src/lib/capability.ts), the one source every other surface reads
+ * too: the chips and the Payments row take its words and tones, never their own (capability and reasons R1, R4).
  */
 
 /** What the workspace layout reads: platform data only, no organization rows. */
@@ -32,8 +36,8 @@ export interface PlatformStatus {
 
 /** What the page reads inside the workspace's scope and hands to `ProductShell`. */
 export interface PageStatus {
-  /** `shellModes()`: the provider's modes, and whether nothing can pay now. */
-  chain: { mode: "live" | "simulate"; earnMode: "live" | "simulate"; held: boolean };
+  /** `shellModes()`: the provider's modes, whether nothing can pay now, and why. */
+  chain: { mode: "live" | "simulate"; earnMode: "live" | "simulate"; held: boolean; hold?: string | null };
   /** Whether shadow mode is on; null when it could not be read. */
   shadow: boolean | null;
   /** The workspace's own screening, read in its scope: live, and which source ("OpenSanctions", "bundled list", "no service"). */
@@ -41,12 +45,8 @@ export interface PageStatus {
   clock: { mode: CycleClockMode; day: number };
 }
 
-/**
- * How a chip or row is drawn. `quiet` is a fact that needs no attention; `good` a working state, shown by a jade dot
- * only; `mainnet` is real money; `shadow` is the agent waiting for people; `simulated` is drawn dashed; `held` and
- * `stopped` ask for attention; `unknown` is not known on this screen.
- */
-export type StatusTone = "quiet" | "good" | "mainnet" | "shadow" | "simulated" | "held" | "stopped" | "unknown";
+/** How a chip or row is drawn: the capability's tones (src/lib/capability.ts). */
+export type { StatusTone };
 
 export interface StatusChip {
   key: "network" | "payments" | "agent";
@@ -62,21 +62,24 @@ export interface StatusRow {
   tone: StatusTone;
 }
 
-type PaymentsState = "off" | "unread" | "held" | "shadow-unread" | "shadow" | "simulated" | "live" | "unknown";
-
 const holdOf = (platform: PlatformStatus) => networkHold(platform.network, platform.mode, { mainnetEnabled: platform.mainnetEnabled });
 
-function paymentsState(platform: PlatformStatus, page: PageStatus | undefined): PaymentsState {
-  if (platform.paymentsOff) return "off";
-  if (platform.paymentsUnread) return "unread";
+/**
+ * The workspace's capability from what this screen knows, or null when it is not known here: without the page's facts
+ * (loading, error), only the switch and the network's hold can be said.
+ */
+export function headerCapability(platform: PlatformStatus, page: PageStatus | undefined): Capability | null {
+  const payments = platform.paymentsOff ? { state: "off" as const, reason: platform.paymentsOff.reason } : platform.paymentsUnread ? { state: "unread" as const } : { state: "on" as const };
   // The network hold needs nothing from the page: Arc mainnet switched off on this deployment, or not live yet.
-  if (holdOf(platform)) return "held";
-  if (!page) return "unknown";
-  if (page.chain.held) return "held";
-  // The agent pays nothing on a guess: a shadow mode it cannot read stops its payments too.
-  if (page.shadow === null) return "shadow-unread";
-  if (page.shadow) return "shadow";
-  return page.chain.mode === "live" ? "live" : "simulated";
+  const networkHeld = holdOf(platform);
+  if (!page && payments.state === "on" && !networkHeld) return null;
+  return capabilityOf({
+    network: platform.network,
+    payments,
+    hold: networkHeld ?? (page?.chain.held ? (page.chain.hold ?? NO_WALLET) : null),
+    chainMode: page?.chain.mode ?? "simulate",
+    shadow: page ? page.shadow : false,
+  });
 }
 
 type AgentState = "stopped" | "held" | "unread" | "paused" | "on";
@@ -88,17 +91,6 @@ function agentState(platform: PlatformStatus, page: PageStatus | undefined): Age
   if (platform.pauseUnread) return "unread";
   return platform.pause ? "paused" : "on";
 }
-
-const PAYMENTS_CHIP: Record<PaymentsState, { label: string; tone: StatusTone }> = {
-  off: { label: "Payments off", tone: "stopped" },
-  unread: { label: "Payments", tone: "unknown" },
-  held: { label: "Payments held", tone: "held" },
-  "shadow-unread": { label: "Payments", tone: "unknown" },
-  shadow: { label: "Shadow mode", tone: "shadow" },
-  simulated: { label: "Payments simulated", tone: "simulated" },
-  live: { label: "Payments live", tone: "good" },
-  unknown: { label: "Payments", tone: "unknown" },
-};
 
 const AGENT_CHIP: Record<AgentState, { label: string; tone: StatusTone }> = {
   stopped: { label: "Agent stopped", tone: "held" },
@@ -113,9 +105,15 @@ export function statusChips(platform: PlatformStatus, page?: PageStatus): Status
   const network = networkProfile(platform.network);
   return [
     { key: "network", label: network.label, tone: platform.network === "arc-mainnet" ? "mainnet" : "quiet" },
-    { key: "payments", ...PAYMENTS_CHIP[paymentsState(platform, page)] },
+    { key: "payments", ...paymentsChip(headerCapability(platform, page)) },
     { key: "agent", ...AGENT_CHIP[agentState(platform, page)] },
   ];
+}
+
+function paymentsChip(capability: Capability | null): { label: string; tone: StatusTone } {
+  if (!capability) return { label: "Payments", tone: "unknown" };
+  const look = situationLook(capability);
+  return { label: look.chip, tone: look.tone };
 }
 
 /** The chips as one sentence, for the button that opens the panel. */
@@ -126,44 +124,11 @@ export function statusSummary(chips: readonly StatusChip[]): string {
 const NOT_KNOWN = "Not known on this screen: open or reload a section to see it.";
 
 function paymentsRow(platform: PlatformStatus, page: PageStatus | undefined): StatusRow {
-  const network = networkProfile(platform.network).label;
   const base = { key: "payments" as const, label: "Payments" };
-  switch (paymentsState(platform, page)) {
-    case "off":
-      return {
-        ...base,
-        value: "Off",
-        tone: "stopped",
-        detail: `Payments are switched off for every workspace${platform.paymentsOff?.reason ? `: ${platform.paymentsOff.reason}` : ""}. Nothing is paid, moved or locked until they are back on.`,
-      };
-    case "unread":
-      return { ...base, value: "Could not be read", tone: "unknown", detail: "Whether payments are switched on could not be read, and every payment is refused until it can be." };
-    case "held":
-      return { ...base, value: "Held", tone: "held", detail: holdOf(platform) ?? "Nothing can be paid from this workspace right now: its wallet cannot be reached." };
-    case "shadow-unread":
-      return { ...base, value: "Not known", tone: "unknown", detail: "Whether shadow mode is on could not be read, and the agent pays nothing until it can." };
-    case "shadow":
-      return {
-        ...base,
-        value: page?.chain.mode === "live" ? "Live, after your verdict" : "Simulated, after your verdict",
-        tone: "shadow",
-        detail:
-          page?.chain.mode === "live"
-            ? `Nothing is paid until a person agrees with the agent. A payment you agree to is sent in USDC on ${network}.`
-            : "Nothing is paid until a person agrees with the agent. A payment you agree to is simulated: nothing is sent on chain.",
-      };
-    case "simulated":
-      return { ...base, value: "Simulated", tone: "simulated", detail: "Payments are recorded here and nothing is sent on chain." };
-    case "live":
-      return {
-        ...base,
-        value: "Live",
-        tone: platform.network === "arc-mainnet" ? "mainnet" : "good",
-        detail: platform.network === "arc-mainnet" ? `Approved payments move real USDC on ${network}.` : `Approved payments are sent in USDC on ${network}.`,
-      };
-    case "unknown":
-      return { ...base, value: "Not known yet", tone: "unknown", detail: NOT_KNOWN };
-  }
+  const capability = headerCapability(platform, page);
+  if (!capability) return { ...base, value: "Not known yet", tone: "unknown", detail: NOT_KNOWN };
+  const look = situationLook(capability);
+  return { ...base, value: look.value, tone: look.tone, detail: paymentSentence(capability) };
 }
 
 function agentRow(platform: PlatformStatus, page: PageStatus | undefined): StatusRow {
@@ -211,7 +176,8 @@ export function statusRows(platform: PlatformStatus, page?: PageStatus): StatusR
   }
   rows.push(agentRow(platform, page));
   if (page && profile.usyc) {
-    const held = page.chain.held;
+    // Switched off, nothing moves in or out of the reserve either, as nothing is paid (capability and reasons R4).
+    const held = page.chain.held || platform.paymentsOff !== null || platform.paymentsUnread === true;
     const live = !held && page.chain.earnMode === "live";
     rows.push({
       key: "reserve",

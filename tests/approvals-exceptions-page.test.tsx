@@ -33,6 +33,9 @@ vi.mock("@/lib/platform/members", () => ({ listMembers }));
 vi.mock("@/lib/shell-status", () => ({ shellStatus: vi.fn(async () => null) }));
 vi.mock("@/lib/circle", () => ({ shellModes: () => ({}) }));
 vi.mock("@/lib/verdicts", () => ({ verdictFacts: vi.fn() }));
+vi.mock("@/lib/capability-read", () => ({
+  readCapability: vi.fn(async () => ({ situation: "live-testnet", network: "arc-testnet", afterVerdict: null, cause: null, why: null })),
+}));
 vi.mock("@/components/AutoRefresh", () => ({ AutoRefresh: () => null }));
 vi.mock("@/components/ProposalCard", () => ({ ProposalCard: () => null }));
 vi.mock("@/components/vx/Shell", () => ({

@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import ShadowModePanel from "@/components/ShadowModePanel";
 import { TooltipProvider } from "@/components/ui/Tooltip";
+import { capabilityOf, type Capability } from "@/lib/capability";
 
 /**
  * The "Shadow mode" section of Settings (docs/superpowers/specs/2026-10-07-shadow-mode-design.md S1), as server-rendered
@@ -17,8 +18,9 @@ vi.mock("@/app/actions/shadow-mode", () => ({ setShadowModeAction: vi.fn() }));
 const html = (node: ReactElement) => renderToStaticMarkup(<TooltipProvider>{node}</TooltipProvider>);
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").replace(/&#x27;/g, "'").trim();
 const ON = { currency: "VND", startedAt: "2026-10-07T12:00:00Z", startedBy: "owner-1" };
-const panel = (mode: typeof ON | null, options: { canChange?: boolean; network?: "arc-testnet" | "arc-mainnet" } = {}) =>
-  html(<ShadowModePanel orgSlug="northstar" mode={mode} network={options.network ?? "arc-testnet"} canChange={options.canChange ?? true} />);
+const LIVE = capabilityOf({ network: "arc-testnet", payments: { state: "on" }, hold: null, chainMode: "live", shadow: false });
+const panel = (mode: typeof ON | null, options: { canChange?: boolean; network?: "arc-testnet" | "arc-mainnet"; capability?: Capability } = {}) =>
+  html(<ShadowModePanel orgSlug="northstar" mode={mode} network={options.network ?? "arc-testnet"} canChange={options.canChange ?? true} capability={options.capability ?? LIVE} />);
 
 describe("ShadowModePanel", () => {
   it("is a section titled Shadow mode", () => {
@@ -32,8 +34,12 @@ describe("ShadowModePanel", () => {
     const words = text(markup);
     expect(words).toContain("Off: the agent pays on its own, within its limits.");
     expect(words).toContain(
-      "Keep paying your bills as you do today. The agent decides on the same bills, and you agree or disagree with each decision. Each payment you agree to is made in USDC on Arc testnet, at the bill's amount in USDC."
+      "Keep paying your bills as you do today. The agent decides on the same bills, and you agree or disagree with each decision. A payment you agree to is sent in USDC on Arc testnet. It is the bill's amount in USDC."
     );
+    // In the capability's words, as the header says it (capability and reasons R5): simulated where the workspace simulates.
+    const simulated = capabilityOf({ network: "arc-testnet", payments: { state: "on" }, hold: null, chainMode: "simulate", shadow: false });
+    expect(text(panel(null, { capability: simulated }))).toContain("A payment you agree to is simulated: nothing is sent on chain.");
+    expect(text(panel(null, { capability: simulated }))).not.toContain("on Arc testnet");
     expect(words).toContain("Your currency");
     expect(words).toContain("USDC, or the currency your bills are written in. A bill in another currency is paid in USDC at the day's rate.");
     // USDC is chosen until the owner picks another.

@@ -171,7 +171,7 @@ export default async function OpenPage({ searchParams }: OpenPageProps) {
                 <li>Sample data that a workspace loads to try the product never counts.</li>
               </Method>
               <Method title="Payments and money">
-                <li>A payment counts once Circle confirms it on its network. Sandbox workspaces simulate their payments, and those never count.</li>
+                <li>A payment counts once Circle confirms it on its network. A simulated payment, which a sandbox makes until it pays through a wallet, never counts.</li>
                 <li>
                   A workspace&apos;s first payment is the first one Circle confirms on its network, and the time to it runs from when the
                   workspace was opened. A workspace holding payments from before it was opened counts, but not towards the time.

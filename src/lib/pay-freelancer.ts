@@ -1,3 +1,4 @@
+import { simulatesPayments } from "./capability-read";
 import { z } from "zod";
 import { screenCounterparty } from "./compliance";
 import { currentOrgId } from "./context";
@@ -172,6 +173,8 @@ export async function setUpFreelancerPayment(
 
   let emailed: boolean | null = null;
   if (input.email) {
+    // A sandbox that simulates its payments says so, and names no network (capability and reasons R5).
+    const simulated = simulatesPayments();
     const email = payeeLinkEmail({
       orgName: input.orgName,
       payeeName: counterparty.name,
@@ -181,6 +184,7 @@ export async function setUpFreelancerPayment(
       expiresAt: new Date(link.expiresAt),
       origin,
       network: workspaceNetwork().id,
+      ...(simulated ? { simulated: true } : {}),
     });
     try {
       emailed = (await sendEmail({ to: input.email, ...email, meter: "freelancer" })).sent;

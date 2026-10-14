@@ -2,6 +2,7 @@ import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { RefreshBalanceResult } from "@/app/actions/treasury";
+import type { Capability } from "@/lib/capability";
 import type { WalletHost } from "@/lib/config";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
@@ -21,13 +22,17 @@ export { StatTile };
  * and the operating account holds a real wallet. The workspace's mode is not
  * the test — a sandbox that connected Circle or took a hosted wallet pays for
  * real on a hand-run cycle, while one connected but not yet provisioned still
- * holds only simulated balances.
+ * holds only simulated balances. A workspace that cannot pay now because it is held (Arc mainnet off or not live, no
+ * Circle account, a wallet that cannot be reached) is neither: its figure is not read from the chain, and it is no
+ * sandbox (capability and reasons R6).
  */
 export function balanceTileMode(
   chainMode: "live" | "simulate",
   accounts: ReadonlyArray<{ kind: string; circle_wallet_id?: string | null; address?: string | null }>,
-  walletHost?: WalletHost | null
-): "sandbox" | "live" {
+  walletHost?: WalletHost | null,
+  capability?: Capability
+): BalanceTileMode {
+  if (capability?.situation === "unavailable" && capability.cause === "held") return "held";
   // A workspace paying from its owner's own wallet: its operating account has the wallet's address and no Circle wallet
   // (wallet treasury W12).
   const operatingHasWallet = accounts.some(
@@ -45,12 +50,16 @@ export function balanceTileMode(
  * component) by returning `sub: null` when there is a simulated reserve to
  * mention.
  */
-export function balanceTileCopy(mode: "sandbox" | "live", simulatedReserve: number): { label: string; sub: string | null } {
+export function balanceTileCopy(mode: BalanceTileMode, simulatedReserve: number): { label: string; sub: string | null } {
+  if (mode === "held") return { label: "Balance", sub: "Payments are held here, so this figure is not read from the chain" };
   if (mode === "sandbox") {
     return { label: "Balance (simulated)", sub: "Sandbox workspace: these funds are simulated, nothing is on-chain" };
   }
   return { label: "Balance on-chain", sub: simulatedReserve > 0 ? null : "All funds shown are on-chain" };
 }
+
+/** Which wording the balance tile uses: on chain, a sandbox's simulated funds, or a held workspace's stored figure. */
+export type BalanceTileMode = "sandbox" | "live" | "held";
 
 /** What remounts the live balance tile: the stored figures the page rendered it with. */
 export function liveBalanceTileKey(syncedAt: string | null, initialBalance: number): string {
@@ -71,7 +80,7 @@ export function BalanceTile({
   syncedAt = null,
 }: {
   accounts: Account[];
-  mode: "sandbox" | "live";
+  mode: BalanceTileMode;
   orgSlug?: string;
   /** `refreshOnChainBalanceAction`, passed by the page: the action module is the server's, never imported here. */
   refreshAction?: (orgSlug: string) => Promise<RefreshBalanceResult>;

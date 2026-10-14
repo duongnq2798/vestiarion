@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import VerdictControl from "@/components/VerdictControl";
 import { TooltipProvider } from "@/components/ui/Tooltip";
+import { capabilityOf } from "@/lib/capability";
 import type { VerdictView } from "@/lib/verdict-view";
 
 /**
@@ -36,12 +37,21 @@ describe("VerdictControl", () => {
     expect(words).toContain("Agree and pay");
     expect(words).toContain("Disagree");
     expect(source).toContain('title="Agree and pay?"');
-    expect(source).toContain("You agree with the agent, and it is paid in USDC on Arc testnet now.");
+    // What it pays is said in the words of the workspace's capability (capability and reasons R5).
+    expect(source).toContain("agreeAndPayLine(view.capability)");
   });
 
-  it("says the payment is simulated where the workspace simulates its payments (a sandbox with no Circle account)", () => {
-    expect(source).toContain('const AGREE_AND_PAY_SIMULATED = "You agree with the agent, and it is paid now, simulated in this sandbox.";');
-    expect(source).toContain("view.simulated ? AGREE_AND_PAY_SIMULATED : AGREE_AND_PAY");
+  it("offers Agree alone while nothing can be paid, and says why (capability and reasons R5)", () => {
+    const off = capabilityOf({ network: "arc-testnet", payments: { state: "off", reason: null }, hold: null, chainMode: "live", shadow: true });
+    const words = control({ heldForVerdict: true, capability: off });
+    expect(words).not.toContain("Agree and pay");
+    expect(words).toContain("Payments are switched off for every workspace. Nothing is paid, moved or locked until they are back on. Agree records your verdict; it can be paid in Approvals later.");
+  });
+
+  it("asks why in the same step, and never makes the reason required (capability and reasons R9)", () => {
+    expect(source).toContain('label="Why do you disagree?" optional');
+    expect(source).not.toMatch(/<Textarea[^>]*required/);
+    expect(source).not.toContain('disabled={reason.trim() === ""}');
   });
 
   it("asks why a person disagrees, and what to do with a payment held for the verdict", () => {
@@ -55,6 +65,7 @@ describe("VerdictControl", () => {
   it("shows the verdict given, with its reason", () => {
     expect(control({ given: { verdict: "agree", reason: null }, open: false })).toBe("You agreed.");
     expect(control({ given: { verdict: "disagree", reason: "Paid on the due date" }, open: false })).toBe("You disagreed: Paid on the due date");
+    expect(control({ given: { verdict: "disagree", reason: null }, open: false })).toBe("You disagreed.");
   });
 
   it("tells someone who may not decide payments that it waits", () => {

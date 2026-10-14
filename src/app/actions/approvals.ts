@@ -25,6 +25,12 @@ function formString(formData: FormData, key: string): string {
   return typeof value === "string" ? value : "";
 }
 
+/** The one-line reason a person gave for going against the agent, when they gave one (capability and reasons R10). */
+function reasonOf(formData: FormData): { reason?: string } {
+  const reason = formString(formData, "reason").trim();
+  return reason ? { reason } : {};
+}
+
 /**
  * The Approvals buttons. Each authorizes the session first, then runs the command every surface shares
  * (src/lib/commands/payables.ts), which raises what follows the decision; the console refreshes its pages whenever
@@ -37,7 +43,8 @@ export async function approveInvoiceAction(_previous: ApprovalActionResult, form
     const parsed = invoiceIdSchema.safeParse(formString(formData, "invoiceId"));
     if (!parsed.success) return { ok: false, message: "That invoice is not waiting for a decision." };
     // The address the card showed goes with the approval, so a changed one is refused rather than paid unseen.
-    const outcome = await approvePayable(consoleActor(auth), { invoiceId: parsed.data, shownAddress: formString(formData, "address") });
+    // A reason for paying what the agent held, when the person gave one: optional, and never what the payment waits on.
+    const outcome = await approvePayable(consoleActor(auth), { invoiceId: parsed.data, shownAddress: formString(formData, "address"), ...reasonOf(formData) });
     return { ...consoleAnswer(outcome), ...(outcome.ok && outcome.receipt ? { receipt: outcome.receipt } : {}) };
   });
 }
@@ -58,7 +65,7 @@ export async function returnInvoiceAction(_previous: ApprovalActionResult, formD
   return inOrg(auth, async () => {
     const parsed = invoiceIdSchema.safeParse(formString(formData, "invoiceId"));
     if (!parsed.success) return { ok: false, message: "That invoice is not waiting for a decision." };
-    return consoleAnswer(await returnPayable(consoleActor(auth), { invoiceId: parsed.data }));
+    return consoleAnswer(await returnPayable(consoleActor(auth), { invoiceId: parsed.data, ...reasonOf(formData) }));
   });
 }
 

@@ -113,6 +113,7 @@ export const TENANT_TABLES = [
   "onboarding_marks",
   "asana_task_links",
   "commission_plans", "commission_plan_deals", "commission_payouts", "commission_lines",
+  "decision_reasons",
 ] as const;
 
 export interface SeededRows {
@@ -384,6 +385,12 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
   );
   // A member's checklist mark: Approvals opened while a bill waited there (0114).
   await db.query("insert into onboarding_marks (org_id, user_id, mark) values ($1, $2, 'approvals_opened')", [orgId, approver]);
+  // A reason a member gave for rejecting a bill (0120).
+  await db.query(
+    `insert into decision_reasons (org_id, feature, decision, surface, subject, subject_id, reason, app_version, given_by)
+     values ($1, 'approvals', 'reject', 'console', 'invoice', $2, $3, 'v0.1.0', $4)`,
+    [orgId, invoiceId, `reason-${tag}`, approver]
+  );
   const key = crypto.generateKeyPairSync("ed25519");
   await appendSignedForOrg(db, orgId, { actor: "system", domain: "system", action: "note", summary: tag, detail: { tag } }, key.privateKey);
   return { counterpartyId, accountId, invoiceId, cycleRunId, idempotencyKey };

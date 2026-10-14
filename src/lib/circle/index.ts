@@ -20,6 +20,7 @@ import type { VestiarionConfig } from "../config";
 import { paymentsHold } from "../payments-switch";
 import { FeatureOffError, networkOf, networkProfile, type NetworkProfile } from "../network";
 import { MAINNET_NOT_CONNECTED } from "../mainnet";
+import { NO_WALLET } from "../capability";
 
 /**
  * Payments settle on Arc testnet through Circle's Developer-Controlled
@@ -182,9 +183,23 @@ export function paymentsHeld(config: VestiarionConfig = currentOrgConfig()): boo
   return hasNoProvider(config) || Boolean(config.chain.networkHold);
 }
 
-/** What the shell shows about payments and yield: the page's modes, and whether nothing can pay now (final review I2). */
-export function shellModes(): { mode: "live" | "simulate"; earnMode: "live" | "simulate"; held: boolean } {
-  return { ...chainModes(), held: paymentsHeld() };
+/**
+ * Why nothing can pay in the organization now, in the words every surface shows (capability and reasons R3), or null:
+ * its network's hold, a mainnet workspace with no Circle account, or a wallet that cannot be reached.
+ */
+export function paymentsHoldReason(config: VestiarionConfig = currentOrgConfig()): string | null {
+  if (!paymentsHeld(config)) return null;
+  if (config.chain.networkHold) return config.chain.networkHold;
+  if (!config.chain.credentialsUnreadable && networkOf(config.network) === "arc-mainnet") return MAINNET_NOT_CONNECTED;
+  return NO_WALLET;
+}
+
+/**
+ * What the shell shows about payments and yield: the page's modes, whether nothing can pay now (final review I2), and
+ * why (capability and reasons R3).
+ */
+export function shellModes(): { mode: "live" | "simulate"; earnMode: "live" | "simulate"; held: boolean; hold: string | null } {
+  return { ...chainModes(), held: paymentsHeld(), hold: paymentsHoldReason() };
 }
 
 /** What a page shows about payments and yield, computed inside the organization's scope. */

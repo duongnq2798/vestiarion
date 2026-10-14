@@ -117,8 +117,8 @@ describe("giveVerdictAction", () => {
       message: "A verdict was given on this decision already: disagreed.",
       given: { verdict: "disagree", reason: "Later" },
     });
-    giveVerdictMock.mockRejectedValue(new VerdictError("reason_required"));
-    expect(await giveVerdictAction("northstar", { entrySeq: 41, verdict: "disagree" })).toEqual({ ok: false, message: "Say why you disagree, in a few words." });
+    giveVerdictMock.mockRejectedValue(new VerdictError("reason_too_long"));
+    expect(await giveVerdictAction("northstar", { entrySeq: 41, verdict: "disagree" })).toEqual({ ok: false, message: "Keep the reason to 280 characters." });
     giveVerdictMock.mockRejectedValue(new Error("connection reset"));
     expect(await giveVerdictAction("northstar", { entrySeq: 41, verdict: "agree" })).toEqual({ ok: false, message: "That did not work. Try again in a moment." });
   });

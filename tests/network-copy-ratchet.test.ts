@@ -59,15 +59,14 @@ const ALLOWED: Record<string, number> = {
   "src/components/UsycReservePanel.tsx": 5,
   "src/lib/platform/usyc-reserve.ts": 1,
   "src/lib/agent/liquidity.ts": 1,
-  // Shadow mode, only on Arc testnet (shadow mode S1): its Settings panel and the refusal it shows on Arc mainnet, the
-  // console's summary and the verdict's Agree and pay, both shown only while a workspace is in it.
-  "src/components/ShadowModePanel.tsx": 2,
-  "src/components/VerdictControl.tsx": 1,
+  // Shadow mode, only on Arc testnet (shadow mode S1): the refusal its Settings panel shows on Arc mainnet. What agreeing
+  // pays is said from the workspace's capability (src/lib/capability.ts), which names its network from its profile.
+  "src/components/ShadowModePanel.tsx": 1,
   "src/lib/shadow-mode.ts": 1,
-  // Test USDC for shadow mode, only on Arc testnet (test USDC T2): the console summary's line and where to buy more, its
+  // Test USDC for shadow mode, only on Arc testnet (test USDC T2): where the console summary says to buy more, its
   // button's line, the action's word that Arc testnet still confirms it and where else testnet USDC comes from, and the
   // library's refusals and its ledger summaries, a recovered transfer's among them.
-  "src/components/ShadowModeSummary.tsx": 2,
+  "src/components/ShadowModeSummary.tsx": 1,
   "src/components/TestUsdcControl.tsx": 1,
   "src/app/actions/test-usdc.ts": 3,
   "src/lib/test-usdc.ts": 5,
@@ -79,8 +78,8 @@ const ALLOWED: Record<string, number> = {
   // Passkey wallets, offered only to a payee on Arc testnet (`modularWallets`).
   "src/components/payee/PasskeyWalletOption.tsx": 1,
   "src/components/wallet/PasskeyWallet.tsx": 1,
-  // CCTP, Gateway, the spending-limit contract and the USDC/EURC swap, only on Arc testnet: their refusals and reasons, and
-  // the receipt's CCTP route and burn. The live provider's faucet clause is its branch for a network with a faucet.
+  // CCTP, Gateway, the spending-limit contract and the USDC/EURC swap, only on Arc testnet: their refusals and reasons.
+  // The live provider's faucet clause is its branch for a network with a faucet.
   "src/lib/circle/liveProvider.ts": 6,
   "src/lib/circle/simulateProvider.ts": 1,
   "src/lib/agent/orchestrator.ts": 1,
@@ -88,7 +87,6 @@ const ALLOWED: Record<string, number> = {
   "src/lib/fx/errors.ts": 1,
   "src/lib/fx/swap-service.ts": 1,
   "src/lib/fx/swap.ts": 1,
-  "src/components/receipt/ReceiptView.tsx": 2,
   // Branches that run only on a network with a faucet or hosted wallets (C2): the Go live panel's hosted-wallet and
   // faucet steps and its Arc testnet status line, getting-started's faucet step, and the EURC guardrail's faucet clause.
   "src/components/GoLivePanel.tsx": 11,

@@ -17,6 +17,7 @@ import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
 import { can } from "@/lib/auth/roles";
 import { readStatementSetup } from "@/lib/bank-statements";
+import { simulatesPayments } from "@/lib/capability-read";
 import { shellModes } from "@/lib/circle";
 import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
@@ -60,7 +61,9 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
   return inOrg(access, async () => {
     const query = await searchParams;
     const [facts, actuals, dashboardStats, canRecord, shares, baseline] = await Promise.all([
-      readReportFacts(db(), workspaceNetwork().id, { sandbox: access.membership.mode === "sandbox" }),
+      // Simulated as the workspace's capability says, not its mode: a sandbox connected to Circle pays for real (capability
+      // and reasons R5).
+      readReportFacts(db(), workspaceNetwork().id, { sandbox: simulatesPayments() }),
       readActualsFacts(db()),
       stats(),
       viewerCan(slug, "records.write"),

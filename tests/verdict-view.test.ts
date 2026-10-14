@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LedgerEntry } from "@/lib/ledger";
+import { capabilityOf } from "@/lib/capability";
 import { verdictView, type VerdictFacts } from "@/lib/verdict-view";
 
 /**
@@ -46,8 +47,9 @@ describe("verdictView", () => {
     expect(verdictView(INVOICE, [entry(42, "ap_pay", "agent")], facts({ canGive: false }), true)).toMatchObject({ given: null, open: false });
   });
 
-  it("carries whether the workspace simulates its payments, so Agree and pay can say so", () => {
-    expect(verdictView(INVOICE, [entry(42, "ap_pay", "agent")], facts({ simulated: true }), true)?.simulated).toBe(true);
-    expect(verdictView(INVOICE, [entry(42, "ap_pay", "agent")], facts(), true)).not.toHaveProperty("simulated");
+  it("carries what the workspace's payments do now, so Agree and pay says it in the capability's words", () => {
+    const capability = capabilityOf({ network: "arc-testnet", payments: { state: "on" }, hold: null, chainMode: "simulate", shadow: true });
+    expect(verdictView(INVOICE, [entry(42, "ap_pay", "agent")], facts({ capability }), true)?.capability).toEqual(capability);
+    expect(verdictView(INVOICE, [entry(42, "ap_pay", "agent")], facts(), true)).not.toHaveProperty("capability");
   });
 });

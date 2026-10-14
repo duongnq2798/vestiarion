@@ -27,6 +27,7 @@ import { SubmitButton } from "@/components/ui/SubmitButton";
 import { cn } from "@/components/ui/cn";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { fmt } from "@/components/vx/Primitives";
+import { paysOnChain, paysSimulated, situationBadgeTone, situationPhrase, type Capability } from "@/lib/capability";
 import { utcMinute } from "@/lib/copy";
 import { FUNDING_WATCH_INTERVAL_MS, shouldReadBalanceAgain } from "@/lib/funding-watch";
 import { MAINNET_OFF } from "@/lib/mainnet";
@@ -62,6 +63,8 @@ export interface GoLivePanelProps {
    * call; Settings leaves it unset, and the step reads the chain as it appears.
    */
   sampleBalance?: number;
+  /** What the workspace's payments do now (`readCapability()`), which the line beside the title says (capability and reasons R7). */
+  capability?: Capability;
 }
 
 const INITIAL: GoLiveActionResult = { ok: false, message: "" };
@@ -112,6 +115,7 @@ function ExternalLink({ href, children }: { href: string; children: ReactNode })
 }
 
 type StatusTone = "proof" | "held" | "simulated";
+type GoLiveBadgeTone = ReturnType<typeof situationBadgeTone>;
 
 /**
  * Once Circle is connected, a sandbox's own cycles already pay through it
@@ -148,15 +152,28 @@ function hostedStatusLine(status: GoLiveStatus): { tone: StatusTone; label: stri
   };
 }
 
-function StatusLine({ status }: { status: GoLiveStatus }) {
+/**
+ * The line beside Go live's title. Its standing (sandbox, live, not live) comes from the go-live steps; what payments do
+ * comes from the workspace's capability, as the header says it (capability and reasons R7): a live workspace whose
+ * payments are off, held or in shadow mode says so, never "paying".
+ */
+export function goLiveStatusLine(status: GoLiveStatus, capability?: Capability): { tone: GoLiveBadgeTone; label: string } {
   // Arc mainnet switched off holds every mainnet workspace, a live one included (mainnet limits L7).
-  const { tone, label } = status.mainnetOff
-    ? { tone: "held" as const, label: "Arc mainnet switched off" }
-    : onMainnet(status)
-    ? MAINNET_STATUS_LINE[status.step]
-    : status.host === "hosted" && status.step !== "connect"
-      ? hostedStatusLine(status)
-      : STATUS_LINE[status.step];
+  if (status.mainnetOff) return { tone: "held", label: "Arc mainnet switched off" };
+  const standing = status.step === "live" ? "Live" : onMainnet(status) ? "Not live" : "Sandbox";
+  const line = onMainnet(status) ? MAINNET_STATUS_LINE[status.step] : status.host === "hosted" && status.step !== "connect" ? hostedStatusLine(status) : STATUS_LINE[status.step];
+  if (!capability) return line;
+  // The step's own line stands while it agrees with the capability: simulated words only where payments are simulated,
+  // paying words only where they move on chain, and neither while payments are unavailable or in shadow mode.
+  const saysSimulated = /simulated/i.test(line.label);
+  const saysPaying = /paying|you run by hand pay/.test(line.label);
+  const agrees =
+    capability.situation !== "unavailable" && capability.situation !== "shadow" && saysSimulated === paysSimulated(capability) && (!saysPaying || paysOnChain(capability));
+  return agrees ? line : { tone: situationBadgeTone(capability), label: `${standing} · ${situationPhrase(capability)}` };
+}
+
+function StatusLine({ status, capability }: { status: GoLiveStatus; capability?: Capability }) {
+  const { tone, label } = goLiveStatusLine(status, capability);
   return (
     // A long line wraps inside the badge at 360 px instead of overflowing the header.
     <Badge tone={tone} size="sm" dot className={cn(label.length > 30 && "whitespace-normal rounded-lg text-left")}>
@@ -563,7 +580,7 @@ function LiveDetails({ orgSlug, status, canAdminister }: { orgSlug: string; stat
   );
 }
 
-export default function GoLivePanel({ orgSlug, status, canAdminister, sampleBalance }: GoLivePanelProps) {
+export default function GoLivePanel({ orgSlug, status, canAdminister, sampleBalance, capability }: GoLivePanelProps) {
   const live = status.step === "live";
 
   const hosted = status.host === "hosted";
@@ -640,7 +657,7 @@ export default function GoLivePanel({ orgSlug, status, canAdminister, sampleBala
 
   return (
     <section aria-labelledby="go-live-title">
-      <SectionHeader id="go-live-title" title="Go live" meta={<StatusLine status={status} />} action={<DocsLink href="/docs/guides/go-live" topic="going live" />} />
+      <SectionHeader id="go-live-title" title="Go live" meta={<StatusLine status={status} capability={capability} />} action={<DocsLink href="/docs/guides/go-live" topic="going live" />} />
       <div className="space-y-4">
         {body}
         {canReplace && <ReplaceCredentials orgSlug={orgSlug} status={status} />}

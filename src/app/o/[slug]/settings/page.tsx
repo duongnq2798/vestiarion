@@ -23,6 +23,7 @@ import { sectionTitle } from "@/components/vx/nav";
 import { twoApprovalsStatus } from "@/lib/approval-policy";
 import { requireMembership } from "@/lib/auth/membership";
 import { can } from "@/lib/auth/roles";
+import { readCapability } from "@/lib/capability-read";
 import { shellModes } from "@/lib/circle";
 import { db, platformDb, unwrap } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
@@ -177,6 +178,9 @@ export default async function SettingsPage({
         return null;
       }),
     ]);
+    // What the workspace's payments do now, which Go live and Shadow mode say in the header's words (capability and
+    // reasons R5, R7). Shadow mode as read above; null when it could not be.
+    const capability = await readCapability({ shadow: shadow ? shadow.mode !== null : null });
     // Receipts written to HubSpot (CRM receipts R8): once connected, best effort; nothing before migration 0107.
     const hubspotWriteScopes = crmProvider("hubspot")?.receipts?.writeScopes ?? null;
     const hubspotReceipts =
@@ -246,12 +250,12 @@ export default async function SettingsPage({
         label: "Workspace",
         sections: [
           // goLiveStatus carries no credential and no wallet id, so the whole status can cross into the client component.
-          { id: "go-live-title", title: "Go live", content: <GoLivePanel orgSlug={slug} status={goLive} canAdminister={canAdminister} /> },
+          { id: "go-live-title", title: "Go live", content: <GoLivePanel orgSlug={slug} status={goLive} canAdminister={canAdminister} capability={capability} /> },
           {
             id: "shadow-mode-title",
             title: "Shadow mode",
             content: shadow ? (
-              <ShadowModePanel orgSlug={slug} mode={shadow.mode} network={membership.network} canChange={can(membership.role, "approval.policy")} />
+              <ShadowModePanel orgSlug={slug} mode={shadow.mode} network={membership.network} canChange={can(membership.role, "approval.policy")} capability={capability} />
             ) : null,
           },
           {
@@ -269,7 +273,7 @@ export default async function SettingsPage({
           {
             id: "usyc-reserve-title",
             title: "USYC reserve",
-            content: usyc ? <UsycReservePanel orgSlug={slug} status={usyc} canManage={can(membership.role, "treasury.manage")} /> : null,
+            content: usyc ? <UsycReservePanel orgSlug={slug} status={usyc} canManage={can(membership.role, "treasury.manage")} capability={capability} /> : null,
           },
           // What the workspace used this month and its limits, for every member (accountant console U3, U4).
           { id: "usage-title", title: "Usage this month", content: <UsagePanel orgSlug={slug} usage={usage} limits={limits} /> },

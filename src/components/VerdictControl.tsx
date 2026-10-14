@@ -12,20 +12,22 @@ import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { Textarea } from "@/components/ui/Input";
 import { RadioGroup } from "@/components/ui/RadioGroup";
+import { agreeAndPayLine } from "@/lib/capability";
 import type { VerdictView } from "@/lib/verdict-view";
 
 /**
  * A person's verdict on the agent's decision, on its card (docs/superpowers/specs/2026-10-07-shadow-mode-design.md
- * S3–S5): Agree, or Disagree with a reason. On a payment held for the verdict, agreeing pays it, after a confirmation,
- * and disagreeing returns it to the agent or rejects it. A verdict given is shown in its place; someone who may not
- * decide payments reads that one is awaited.
+ * S3–S5): Agree, or Disagree, asked why in the same step: the reason is optional and never stops the disagreement
+ * (capability and reasons R9). On a payment held for the verdict, agreeing pays it, after a confirmation, and
+ * disagreeing returns it to the agent or rejects it. What the payment does is said in the workspace's capability's words
+ * (R5): sent on chain, simulated, or, while nothing can be paid, not offered: Agree then records the verdict only. A
+ * verdict given is shown in its place; someone who may not decide payments reads that one is awaited.
  */
 
 type After = "pay" | "return" | "reject";
 
-/** What Agree and pay does, said before it does it: in a sandbox with no Circle account, the payment is simulated. */
-const AGREE_AND_PAY = "You agree with the agent, and it is paid in USDC on Arc testnet now.";
-const AGREE_AND_PAY_SIMULATED = "You agree with the agent, and it is paid now, simulated in this sandbox.";
+/** What Agree and pay says when the workspace's capability could not be read: the payment then says what it did itself. */
+const AGREE_AND_PAY = "You agree with the agent, and it is paid now.";
 type Note = { tone: "neutral" | "error"; text: string } | null;
 
 const SETTLE_OPTIONS = [
@@ -46,10 +48,20 @@ export default function VerdictControl({ orgSlug, view, payBlocked = null }: { o
   const [settle, setSettle] = useState<"return" | "reject">("return");
 
   if (view.given) {
-    const said = view.given.verdict === "agree" ? (view.given.reason ? `You agreed: ${view.given.reason}` : "You agreed.") : `You disagreed: ${view.given.reason ?? ""}`;
+    const said =
+      view.given.verdict === "agree"
+        ? view.given.reason
+          ? `You agreed: ${view.given.reason}`
+          : "You agreed."
+        : view.given.reason
+          ? `You disagreed: ${view.given.reason}`
+          : "You disagreed.";
     return <p className="text-sm text-ink-2">{said}</p>;
   }
   if (!view.open) return <p className="text-sm text-ink-2">Waits for a person&apos;s verdict.</p>;
+  // Nothing can be paid now (payments off, held, or a fact not read): Agree records the verdict, and pays nothing.
+  const unavailable = view.capability?.situation === "unavailable" ? (view.capability.why ?? null) : null;
+  const agreeAndPay = view.capability ? (agreeAndPayLine(view.capability) ?? AGREE_AND_PAY) : AGREE_AND_PAY;
 
   const give = (verdict: "agree" | "disagree", then?: After, typed?: string, onDone?: () => void) =>
     startTransition(async () => {
@@ -82,7 +94,7 @@ export default function VerdictControl({ orgSlug, view, payBlocked = null }: { o
       <p className="text-sm font-medium text-ink">Do you agree with the agent?</p>
       {view.heldForVerdict && view.payment && <p className="text-sm text-ink-2">{paysLine(view.payment)}</p>}
       <div className="flex flex-wrap gap-2">
-        {view.heldForVerdict && !payBlocked ? (
+        {view.heldForVerdict && !payBlocked && !unavailable ? (
           <ConfirmDialog
             tone="primary"
             trigger={
@@ -91,7 +103,7 @@ export default function VerdictControl({ orgSlug, view, payBlocked = null }: { o
               </Button>
             }
             title="Agree and pay?"
-            description={`${view.simulated ? AGREE_AND_PAY_SIMULATED : AGREE_AND_PAY}${view.payment ? ` ${paysLine(view.payment)}` : ""}`}
+            description={`${agreeAndPay}${view.payment ? ` ${paysLine(view.payment)}` : ""}`}
             confirmLabel="Agree and pay"
             onConfirm={() => give("agree", "pay")}
           />
@@ -106,10 +118,10 @@ export default function VerdictControl({ orgSlug, view, payBlocked = null }: { o
               Disagree
             </Button>
           </DialogTrigger>
-          <DialogContent title="Disagree with the agent?" description="Your reason is kept with the verdict in the ledger.">
+          <DialogContent title="Disagree with the agent?" description="A reason, if you give one, is kept with the verdict in the ledger and helps the team improve the agent.">
             <form onSubmit={submitDisagreement} className="grid gap-5">
-              <Field id={`verdict-reason-${view.entrySeq}`} label="Why do you disagree?" description="At most 280 characters.">
-                <Textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={280} rows={3} required />
+              <Field id={`verdict-reason-${view.entrySeq}`} label="Why do you disagree?" optional description="One line is enough. At most 280 characters.">
+                <Textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={280} rows={2} />
               </Field>
               {view.heldForVerdict && (
                 <RadioGroup legend="Then" options={SETTLE_OPTIONS} value={settle} onValueChange={(value) => setSettle(value === "reject" ? "reject" : "return")} />
@@ -119,7 +131,7 @@ export default function VerdictControl({ orgSlug, view, payBlocked = null }: { o
                 <DialogClose asChild>
                   <Button variant="secondary">Cancel</Button>
                 </DialogClose>
-                <Button type="submit" loading={pending} disabled={reason.trim() === ""}>
+                <Button type="submit" loading={pending}>
                   Disagree
                 </Button>
               </DialogFooter>
@@ -127,6 +139,7 @@ export default function VerdictControl({ orgSlug, view, payBlocked = null }: { o
           </DialogContent>
         </Dialog>
       </div>
+      {view.heldForVerdict && unavailable && !payBlocked && <p className="text-sm text-ink-2">{`${unavailable} Agree records your verdict; it can be paid in Approvals later.`}</p>}
       {view.heldForVerdict && payBlocked && (
         <p className="text-sm text-ink-2">{`${payBlocked}: Agree records your verdict, and another person pays it in Approvals.`}</p>
       )}

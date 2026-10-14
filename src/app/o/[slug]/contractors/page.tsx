@@ -28,6 +28,8 @@ import { decisionEntryOf, heldMilestonesTwoApprovals, heldReason, milestoneInten
 import { isSoleApprover } from "@/lib/agent/sole-approver";
 import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
+import { paysSimulated } from "@/lib/capability";
+import { readCapability } from "@/lib/capability-read";
 import { shellModes } from "@/lib/circle";
 import { readEscrowContract } from "@/lib/circle/escrow-setup";
 import { addressUnconfirmed, payeeNotReady } from "@/lib/counterparty-address";
@@ -60,6 +62,9 @@ export default async function ContractorsPage({ params, searchParams }: { params
     const network = workspaceNetwork().id;
     const showAllPaid = (await searchParams).history === "all";
     const live = access.membership.mode === "live";
+    // What paying a contractor does now, in the header's words: simulated, on chain, or nothing and why (capability and
+    // reasons R5). Not the workspace's mode: a sandbox connected to Circle pays for real.
+    const capability = await readCapability();
     const [milestones, counterparties, headEntries, dashboardStats, canWrite, canManageTreasury, canDecide, escrow] = await Promise.all([
       listMilestones(),
       listCounterparties(),
@@ -253,7 +258,7 @@ export default async function ContractorsPage({ params, searchParams }: { params
             canDecide={canDecide}
             selfAdded={Boolean(milestone.created_by) && milestone.created_by === access.user.id}
             soleApprover={soleApprover}
-            sandbox={!live}
+            sandbox={paysSimulated(capability)}
             twoApprovals={twoApprovals.get(milestone.id)}
             viewerId={access.user.id}
             memberEmails={memberEmails}
@@ -321,7 +326,7 @@ export default async function ContractorsPage({ params, searchParams }: { params
               {/* Both stay mounted, so switching tabs never loses what was typed. */}
               <TabsContent value="freelancer" forceMount className="data-[state=inactive]:hidden">
                 <p className="mb-4 text-[0.8125rem] text-ink-3">One form: they get a link, you confirm their address, the agent pays.</p>
-                <PayFreelancerForm orgSlug={slug} live={live} />
+                <PayFreelancerForm orgSlug={slug} live={live} capability={capability} />
               </TabsContent>
               <TabsContent value="milestone" forceMount className="data-[state=inactive]:hidden">
                 <p className="mb-4 text-[0.8125rem] text-ink-3">Work a contractor on file is paid for once it is verified.</p>

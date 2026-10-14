@@ -46,11 +46,17 @@ export function payeeStage(status: PayeeLinkStatus): PayeeStage {
 
 export type PaymentTone = "waiting" | "progress" | "review" | "done";
 
+/** A payment the simulator made: its reference is the simulator's (`sim_…`), never a transaction on chain. */
+export function paymentSimulated(payment: Pick<PayeePayment, "status" | "txRef">): boolean {
+  return payment.status === "paid" && (payment.txRef?.startsWith("sim_") ?? false);
+}
+
 /** A payment's state for its payee. A hold never says why (R3): that is the business's to discuss. */
 export function paymentState(payment: PayeePayment, orgName: string): { label: string; tone: PaymentTone } {
   switch (payment.status) {
     case "paid":
-      return { label: "Paid", tone: "done" };
+      // A sandbox's payment is simulated, and says so, as the workspace's own pages do (capability and reasons R5).
+      return { label: paymentSimulated(payment) ? "Paid (simulated)" : "Paid", tone: "done" };
     case "matched":
       return { label: "On its way", tone: "progress" };
     case "scheduled":

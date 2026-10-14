@@ -25,10 +25,12 @@ Your browser remembers the choice for the next page and the next visit, in one c
 From the left, the header names the workspace and the section you are in; the workspace's name takes you back to **Treasury**. On a page inside a section it then names that page: **Commissions**, or a deal's title, a project's name or the bill or milestone a payment's evidence is about, and the section's name takes you back to the section. On the right it says when the agent's last cycle ran, or "The agent is working · *n* s" while one runs, and three chips:
 
 - **The network**: **Arc testnet**, or **Arc mainnet** in blue, where payments move real USDC.
-- **What happens to payments**, the first that holds: **Payments off** while the platform has switched payments off for every workspace; **Payments held** when nothing can be paid from this workspace, for example a workspace on Arc mainnet that is not live yet; **Shadow mode** when each payment waits for a person to agree with the agent; **Payments simulated** in a sandbox that pays through no wallet yet; **Payments live** otherwise.
+- **What happens to payments**, the first that holds: **Payments off** while the platform has switched payments off for every workspace; **Payments held** when nothing can be paid from this workspace, for example a workspace on Arc mainnet that is not live yet; **Shadow mode** when each payment waits for a person to agree with the agent; **Payments simulated** in a sandbox that pays through no wallet yet; **Payments live** otherwise, in blue on Arc mainnet.
 - **The agent**: **Agent on**, **Agent paused**, or **Agent stopped** while payments are off or held, when the agent runs no cycle.
 
 A fact that could not be read is said as such, never as its usual value.
+
+Every page that says what a payment does uses the same words, worked out from the same facts: Settings (**Go live** and **Shadow mode**), the console's balance and shadow mode summary, **Approve and pay** and **Agree and pay**, **Pay a freelancer**, a payee's page and email, the report and its shared link, and `GET /api/v1/status`. A sandbox that pays through a Circle account says its payments are live, not simulated; a live workspace whose payments are switched off or held never says it is paying; and a payee paid from a sandbox that simulates is told so.
 
 Choose the chips to open **Workspace status**, which says each of them in a sentence, with the reserve, screening and the clock:
 
