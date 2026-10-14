@@ -30,7 +30,7 @@ export function landingFaq(mainnetForEveryone: boolean): ReadonlyArray<{ questio
     {
       question: "Does it fit how we already work?",
       answer:
-        "Bills come in by form, PDF, a bill list from your spreadsheet, email, Telegram or the API, or from Xero and QuickBooks Online for you to review. Won deals come in from HubSpot or Pipedrive to plan their collections. Your team sees the agent's decisions in Slack or Telegram, and can pause it from Slack. Developers get a REST API, a TypeScript SDK and webhooks.",
+        "Bills come in by form, PDF, a bill list from your spreadsheet, email, Telegram or the API, or from Xero and QuickBooks Online for you to review. Won deals come in from HubSpot or Pipedrive to plan their collections. Contractor work delivered in Asana is paid once a person accepts it against its criteria. Your team sees the agent's decisions in Slack or Telegram, and can pause it from Slack. Developers get a REST API, a TypeScript SDK and webhooks.",
     },
     {
       question: "Is it live with real money?",

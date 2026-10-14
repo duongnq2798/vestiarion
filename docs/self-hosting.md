@@ -497,6 +497,18 @@ Pipedrive's API says nothing that tells a developer sandbox from a real company,
 mode are never written to Pipedrive. The connection needs migration 0116 (after 0105 and 0107); before it runs, the
 Pipedrive card says Pipedrive is not set up yet. See [Bring deals in from Pipedrive](https://www.vestiarion.xyz/docs/guides/pipedrive).
 
+With `ASANA_CLIENT_ID` and `ASANA_CLIENT_SECRET` set, from an Asana OAuth app distributed to any workspace, an owner or
+admin connects a workspace to their Asana from Settings, after agreeing to what Vestiarion does with its data. A person
+links a milestone to the Asana task its work is delivered in, writes the acceptance criteria from the agreement, and
+accepts the work once the task is completed; a completed task alone never verifies a milestone. Register the redirect URL
+`<origin>/api/integrations/asana/callback` exactly, and the scopes `workspaces:read projects:read tasks:read
+attachments:read stories:read users:read webhooks:read webhooks:write webhooks:delete`: the authorize URL asks for exactly
+these. Webhooks are made on linked tasks only when the origin is https, at `<origin>/api/integrations/asana/webhook/<id>`;
+without them a linked task is read again before each agent cycle once accepted, and every 15 minutes by the accounting
+sync. The connection needs migration 0115; before it runs, the Asana card says Asana is not set up yet. Its tokens and
+each webhook's secret are kept encrypted under `VESTIARION_MASTER_KEYS`. See [Accept contractor work from
+Asana](https://www.vestiarion.xyz/docs/guides/asana).
+
 ### Measurement provenance
 
 Every newly executed payment intent records its target, transaction reference, chain, provider

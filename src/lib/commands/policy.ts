@@ -33,6 +33,13 @@ export const COMMAND_PERMISSIONS = {
   /** A bill list, each of its rows then added through `invoice.add` (import design B12); the console only. */
   "invoice.import": "records.write",
   "milestone.add": "records.write",
+  // Contractor work accepted from Asana: linking a milestone to its task, writing the criteria it is held to, and
+  // accepting the work against them are what verifying a milestone by hand is, a record (Asana acceptance A4, A5, A8).
+  "milestone.link_task": "records.write",
+  "milestone.unlink_task": "records.write",
+  "milestone.set_criteria": "records.write",
+  "milestone.accept": "records.write",
+  "milestone.check_task": "records.write",
   "payee_link.create": "records.write",
   // A deal on the receivables side, its versions, and the switch that releases its lines on their days: records, as a
   // receivable is (deal schedule D13). Releasing a line adds a receivable, so it needs what adding one needs today.

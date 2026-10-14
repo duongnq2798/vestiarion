@@ -12,6 +12,7 @@ export const CONSENT_VERSIONS: Record<ProviderId, string> = {
   quickbooks: "quickbooks-2026-10-12",
   hubspot: "hubspot-2026-10-13",
   pipedrive: "pipedrive-2026-10-14",
+  asana: "asana-2026-10-14",
 };
 
 /**
@@ -60,10 +61,23 @@ const WHAT_IS_READ: Record<AccountingProviderId, string> = {
   quickbooks: "Vestiarion reads the bills, vendors and bank accounts of the QuickBooks company you connect. It writes nothing to QuickBooks.",
 };
 
+/**
+ * A work tool's statement (docs/superpowers/specs/2026-10-14-asana-acceptance-design.md A2, A15): what is read of the
+ * tasks linked to milestones, the webhooks it makes on them, and that nothing from it moves money.
+ */
+const WORK_STATEMENT = (label: string) => [
+  `Vestiarion reads, as the ${label} user who connects, the workspaces, projects and tasks you open to link a task to a milestone. For each linked task it reads its name, whether and when it was completed and by whom, its assignee, and the links in its description, attachments and comments. It keeps the links and names, not the words of the description or the comments.`,
+  `It makes a ${label} webhook on each linked task, so a change there is read again within a minute, and deletes it when the task is unlinked or ${label} is disconnected. It looks up a member's or a payee's email in ${label} only to refuse an acceptance by the payee. It writes nothing else to ${label}.`,
+  `A task completed in ${label} is never by itself a reason to pay: a person here accepts the work against the milestone's criteria, and the agent then decides the payment under every guardrail. Nothing from ${label} sets an amount or a payee.`,
+  `Vestiarion never uses ${label} data to train or improve any AI model, and never passes it to anyone else without your workspace's say.`,
+  `Disconnecting stops the reading at once and deletes the webhooks. Acceptances already recorded stay in Vestiarion's signed ledger.`,
+];
+
 export function consentStatement(provider: ProviderId): string[] {
   const label = PROVIDER_LABELS[provider];
   if (provider === "hubspot") return CRM_STATEMENT(label);
   if (provider === "pipedrive") return PIPEDRIVE_STATEMENT;
+  if (provider === "asana") return WORK_STATEMENT(label);
   return [
     WHAT_IS_READ[provider],
     `The bills you add are shown to this workspace's members and to its agent. The agent's model provider sees each bill's facts to decide on it, and may not train on them.`,

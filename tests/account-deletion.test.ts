@@ -110,6 +110,10 @@ describe("0023 is idempotent", () => {
         { tbl: "agent_budgets", col: "updated_by", action: "n" },
         { tbl: "api_keys", col: "created_by", action: "n" },
         { tbl: "approval_policies", col: "updated_by", action: "n" },
+        // Who linked, unlinked and accepted an Asana task (0115): the record stays, without the person.
+        { tbl: "asana_task_links", col: "accepted_by", action: "n" },
+        { tbl: "asana_task_links", col: "linked_by", action: "n" },
+        { tbl: "asana_task_links", col: "unlinked_by", action: "n" },
         { tbl: "bank_statement_lines", col: "imported_by", action: "n" },
         { tbl: "cash_scenario_versions", col: "created_by", action: "n" },
         { tbl: "collection_policies", col: "account_owner", action: "n" },
@@ -141,6 +145,7 @@ describe("0023 is idempotent", () => {
         { tbl: "invoices", col: "reviewed_by", action: "n" },
         { tbl: "memberships", col: "invited_by", action: "n" },
         { tbl: "memberships", col: "user_id", action: "c" },
+        { tbl: "milestones", col: "acceptance_criteria_by", action: "n" },
         { tbl: "milestones", col: "closed_by", action: "n" },
         { tbl: "milestones", col: "created_by", action: "n" },
         { tbl: "milestones", col: "decision_claimed_by", action: "n" },

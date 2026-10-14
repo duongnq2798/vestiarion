@@ -103,7 +103,7 @@ for adding, testing and removing a workspace's own webhook endpoints — `owner`
 every other member sees the endpoint list with each URL reduced to its host — see
 [Webhooks security](https://www.vestiarion.xyz/docs/webhooks/security#who-sees-what)), and `integrations.manage` (`src/app/actions/slack.ts`,
 `/api/slack/install`, `src/app/actions/github.ts` and `/api/github/install`, `src/app/actions/xero.ts` and
-`/api/integrations/xero/*`, for connecting and removing the workspace's Slack, GitHub and Xero — `owner` and `admin` hold it; the
+`/api/integrations/xero/*`, and `src/app/actions/asana.ts` and `/api/integrations/asana/*`, for connecting and removing the workspace's Slack, GitHub, Xero and Asana — `owner` and `admin` hold it; the
 limit on deciding payments from Slack takes `org.administer`, an owner's). The remaining permissions — `workspace.read` (beyond
 the leaving case above) and `org.administer` — and `canAssignRole`'s rule that an admin may grant
 `approver`, `accountant` or `viewer` but nothing at its own rank or above while only an owner assigns `admin` or
@@ -2294,6 +2294,80 @@ reads in `api.ts`, `hubspotProvider`), wired in `src/lib/crm-providers.ts`. It i
   - *Before 0116, or without the app*, the card says Pipedrive is not set up yet or is not there, the routes answer 404
     without the app, and the sweeper never sees a Pipedrive connection.
 
+## Contractor work accepted from Asana
+
+A milestone's work can be delivered in an Asana task and accepted there against its criteria
+(docs/superpowers/specs/2026-10-14-asana-acceptance-design.md). Asana is a third provider kind on the connector core,
+`work` (`PROVIDER_KINDS`), connected, refreshed and disconnected through `ConnectingProvider` like HubSpot, with no bills
+or deals: `src/lib/asana/` holds its settings (`ASANA_CLIENT_ID`, `ASANA_CLIENT_SECRET`; off otherwise), HTTP (every
+request to `app.asana.com`, at an address built from digit-only ids), OAuth (exactly the app's nine registered scopes,
+`%20`-delimited; a refresh keeps the refresh token Asana does not send back), the pure mapping, the reads and the
+provider. A grant is one Asana user's: `external_org_id` is their gid, and the connection reads what they can see. Not
+exclusive. Consent `asana-2026-10-14`.
+
+- **Schema (migration `0115`).** The core's provider checks take `asana`, and `milestones.verification_method` takes
+  `asana`, each replaced only while it does not take the value yet. `milestones.acceptance_criteria` (3 to 2000
+  characters, with who and when) is written by a person, never by Asana. `asana_task_links`, a tenant table (RLS, the
+  restrictive guard, composite foreign keys to the milestone and the connection; read, insert and update, never
+  delete): one live link per milestone and per task, what Asana says of the task as last read (completed, when, by
+  whom, the assignee, the deliverables' links and their fingerprint), its state (`waiting`, `ready`, `accepted`,
+  `held` with a reason, `after_payment`) and the version accepted. `asana_webhooks`, a platform table as
+  `accounting_tokens` (RLS on, no policy): one webhook per linked task, the id in its target address, the handshake's
+  secret sealed under the master key bound to the workspace, the column and the row.
+- **The two moves on a milestone**, each a database function under the link's and the milestone's row locks, invoker
+  rights for the tenant role: `accept_asana_task` verifies a `pending` milestone (`verified`, status `verified`, method
+  `asana`) only while the task last read is completed, its fingerprint is the one the person saw and the criteria's
+  SHA-256 is the one they saw; `hold_asana_acceptance` takes an acceptance back (`verified` false, status `pending`)
+  unless a payment intent for the milestone is not `failed` or it is paid (then only the link is held, `after_payment`,
+  a dispute), it is closed, or a person claimed its decision in the last ten minutes (then nothing changes, and the next
+  read tries again). Neither writes an amount, a payee, an address or a payment. `tests/asana-paying-path.test.ts` pins
+  that the agent, the payments and the money commands reach Asana only through `refreshAcceptedWork`, that the
+  contractor stage still pays only `verified` milestones, and that Asana's code writes a milestone only through these
+  functions and its criteria.
+- **Reads** (`reads.ts`, `acceptance.ts`, pure `planRead`): the task, its attachments (`/attachments?parent=`) and its
+  comments (stories of subtype `comment_added`), the deliverables (`deliverables.ts`: attachments by gid and upload
+  time, https links in the description and comments; renaming changes nothing) and their fingerprint. A completed task
+  is `ready` with criteria and `held` (`no_criteria`) without; never accepted. An accepted task reopened (or reopened and
+  completed again: its `completed_at` differs), with another fingerprint, or no longer shown (404, 403) is withdrawn
+  through `hold_asana_acceptance`, `milestone_acceptance_withdrawn`. A link held after an acceptance stays held until a
+  person accepts again. Reads happen after a signed webhook delivery, in the cycle right after GitHub's check and before
+  the contractor stage (`refreshAcceptedWork` in `milestone-verification.ts`: the accepted links of milestones verified
+  by `asana` and still `verified` or `held`, verified first, at most 20, 30 seconds), every 15 minutes from the sweeper
+  (`sweepAccounting({ work })`, under the connection's sync lease, the live links of open milestones, verified first, at
+  most 100), on **Check Asana now**, and right before an acceptance. Both pick the milestones first
+  (`linksOfMilestones`): a paid milestone's link stays live and accepted, as its history, and a limit over every live
+  link would in time hold none of the open ones. Each uses the connection's token through `asanaSession`
+  (`freshAccessToken` under the token row's lease; a 401 refreshes once; a short rate limit is waited once). A refused
+  refresh marks the connection to reconnect. A read that fails leaves an acceptance as it was. Whatever took a
+  verification back while the contractor stage decided (a read here, or a person revoking it), the stage holds each
+  planned release to the milestone as it is just before sending (`stillVerified`) and sends none no longer verified.
+- **Webhooks** (`webhook.ts`, `webhook-store.ts`, `POST /api/integrations/asana/webhook/<id>`): a link's webhook row is
+  made first, then Asana is asked (`POST /webhooks`, after the answer, only on an https origin); the `X-Hook-Secret`
+  handshake is taken once, for a row still pending, within two minutes, sealed and echoed; the secret in Asana's 201 (the
+  top-level `X-Hook-Secret` of its body, as Asana documents it) must be the one kept, compared in constant time, or the
+  webhook is deleted, as it is when the answer carries none. Each delivery's `X-Hook-Signature` (hex HMAC-SHA256 of the raw body) is
+  compared in constant time before anything else; the body is never parsed or believed, and a signed delivery only reads
+  the linked task again in `after()`. A deleted or unknown row answers 410, which makes Asana delete the webhook;
+  unlinking, a paid or closed milestone, and disconnecting delete them.
+- **Commands** (`src/lib/commands/asana.ts`, `records.write`, the console only): `milestone.link_task` (a pasted link
+  read for its ids by `taskRefOf`, never opened; or the picker's workspace, project and task, read live through
+  `asanaChoicesAction`), `milestone.set_criteria`, `milestone.accept` (the checkbox, the fingerprint and the criteria's
+  hash the page showed, a fresh read, then the self-acceptance check, then `accept_asana_task`, then
+  `milestone_accepted` and a cycle soon), `milestone.unlink_task` and `milestone.check_task`. Self-acceptance
+  (`selfAcceptance`, `identities.ts`): the member's email against the payee's notice email, and, where Asana has them,
+  the member's Asana user (the connection's own for whoever connected it, else by their email) against the Asana user
+  with the payee's email. Pay now on an Asana-linked milestone is refused to its payee (`paysOwnPayout`, by email
+  only: Pay now never waits on Asana); Verify manually is refused on one (revoking stays). The check is only as good as
+  the identities it has: a payee who is a member under another email, with no notice email or no Asana user under it,
+  is not recognised, and an owner or admin can still unlink a task and verify by hand, which has no payee check.
+- **Where it shows.** Contractors: `AsanaTaskCard` under each milestone waiting for verification (or a linked one); ready and held links
+  count under **Needs you**. Settings: `AsanaPanel`, with the last 30 days' figures (`acceptanceKpis`: acceptances,
+  acceptances taken back, the median time from an acceptance to the agent's first `milestone_release` or
+  `milestone_hold` after it). The evidence page: `deliveredFromAsana`, Asana's word that the task was completed (verified
+  outside, its link checked through Asana's API) beside the person's acceptance.
+- **Before migration 0115**, reads answer not set up (42P01, PGRST205, 42703 and the function codes): no card, no
+  controls, the cycle and the sweeper read nothing, and the connect flow sends no one to Asana.
+
 ## API
 
 The versioned API boundary lives under `src/app/api/v1/`:
@@ -2561,16 +2635,19 @@ as a short checklist, ticked from what happened, rendered by one component (`Get
 
 `docs/superpowers/specs/2026-10-13-role-onboarding-evidence-access-design.md` (E1 to E4); `src/lib/evidence-links/`.
 
-- **The allow-list** (`allow-list.ts`, pure). `checkTargetOf` takes a pull request or a comment on `github.com`, and a
-  signed link (`/storage/v1/object/sign/...?token=`) to the workspace's own Supabase (`storageHostOf`, https and a public
-  name only), and builds the request address itself: GitHub's API from the link's owner, repository and number. Anything
+- **The allow-list** (`allow-list.ts`, pure). `checkTargetOf` takes a pull request or a comment on `github.com`, an
+  Asana task or attachment on `app.asana.com`, and a signed link (`/storage/v1/object/sign/...?token=`) to the
+  workspace's own Supabase (`storageHostOf`, https and a public name only), and builds the request address itself:
+  GitHub's API from the link's owner, repository and number; Asana's `/api/1.0/tasks/<id>` or `/api/1.0/attachments/<id>`
+  from the id alone. Anything
   else is `notChecked` with its reason: another scheme, credentials, a port, an IP literal in any notation, a local name,
   another host, another path. `requestAllowed` checks every address again before a request, a redirect's included.
 - **The check** (`check.ts`). `checkEvidenceLinks(hrefs)` answers `open` (public, or a private repository the
   workspace's own connection reads), `cannot_open` (with the reason: deleted, private and not the workspace's, refused,
   expired), `not_checked` or `no_answer`. Each host is resolved and the request dropped unless every
   address is public (`isPublicAddress`, as webhooks use it); `redirect: "manual"`, five seconds, at most one redirect and
-  only GitHub's API to itself; at most 25 links a call. GitHub is asked with the workspace's own connection
+  only GitHub's API to itself; at most 25 links a call. Asana is asked with the workspace's own Asana connection's token
+  alone, sent to Asana's API only, and without one an Asana link is not checked. GitHub is asked with the workspace's own connection
   (`pullRequestTokens`), else the deployment's `GITHUB_TOKEN`, sent to `api.github.com` only; a private repository seen
   only through the deployment's token, or a 403 to that token, answers as not public, as a deleted one does, after as
   many requests (a comment's repository is asked first) and kept as long. A signed link's expiry is read from

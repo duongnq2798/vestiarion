@@ -12,7 +12,7 @@ import type { ProviderId } from "./provider";
  * a provider with `booking` on its `AccountingProvider`. Browser-safe, for the preview; a provider that adds booking sets
  * it here too. A CRM books nothing (HubSpot connector H1).
  */
-export const BOOKS_PAYMENTS: Record<ProviderId, boolean> = { xero: true, quickbooks: false, hubspot: false, pipedrive: false };
+export const BOOKS_PAYMENTS: Record<ProviderId, boolean> = { xero: true, quickbooks: false, hubspot: false, pipedrive: false, asana: false };
 
 export interface BookingAccount {
   name: string;

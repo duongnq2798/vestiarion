@@ -14,6 +14,18 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Accept contractor work from Asana.** An owner or admin connects Asana in Settings. On Contractors, a milestone is
+  linked to the Asana task its work is delivered in, by pasting the task's link or choosing workspace, project and
+  task, and holds the acceptance criteria from the agreement, written in Vestiarion. When the task is completed in
+  Asana, the milestone is **ready for acceptance**: a person checks the deliverables (the task's attachments and the
+  links in its description and comments) against the criteria and accepts the work, and only then is it verified and
+  decided by the agent under every guardrail. A completed task alone never pays, a completed task without criteria is
+  held, and an acceptance or Pay now by the payee is refused, matched by email and, where Asana can tell, by Asana
+  account. If the task is reopened, or its deliverables change, after acceptance and Vestiarion reads that before the
+  payment is sent, the acceptance is taken back and the milestone is held for review; the agent's release checks
+  again, just before sending, that the milestone is still verified. Asana's webhooks only have the task read again, as
+  do the agent's cycle and a check every 15 minutes. The Asana card counts acceptances, disputes and the time from
+  acceptance to the agent's decision. Migration `0115`. SDK 0.3.3 accepts `asana` as a milestone's verification method.
 - **A command-line interface, `vestiarion` (`@vestiarion/cli` 0.1.0).** Developers and operators work with a workspace
   from a terminal: `vestiarion login` checks a workspace API key with one read and saves it for the user alone, and
   `whoami` names the workspace, its network and where the key came from. It reads bills, invoices, counterparties,

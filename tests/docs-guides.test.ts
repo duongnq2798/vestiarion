@@ -40,6 +40,7 @@ type GuideSlug =
   | "guides/quickbooks"
   | "guides/hubspot"
   | "guides/pipedrive"
+  | "guides/asana"
   | "guides/audit-export"
   | "guides/evidence"
   | "guides/controls"
@@ -162,6 +163,13 @@ const CRM_RECEIPTS_RUN = "src/lib/connectors/crm-receipts-run.ts";
 // A CRM's won deals on Bills & receivables, HubSpot's and Pipedrive's alike (Pipedrive connector P20).
 const HUBSPOT_DEALS = "src/components/CrmDeals.tsx";
 const HUBSPOT_CONNECT_PAGE = "src/app/integrations/hubspot/connect/page.tsx";
+// Asana's card, a milestone's Asana card, and the connect page (Asana acceptance A16).
+const ASANA_PANEL = "src/components/AsanaPanel.tsx";
+const ASANA_CARD = "src/components/AsanaTaskCard.tsx";
+const ASANA_CONNECT_PAGE = "src/app/integrations/asana/connect/page.tsx";
+const ASANA_ACCEPTANCE = "src/lib/asana/acceptance.ts";
+const ASANA_COMMANDS = "src/lib/commands/asana.ts";
+const ASANA_READS = "src/lib/asana/reads.ts";
 const CRM_WORDS = "src/lib/connectors/crm.ts";
 const CRM_CHANGES = "src/components/CrmDealChanges.tsx";
 // Pipedrive's card and connect page are its own; its list is the CRM list HubSpot's uses, in Pipedrive's words (Pipedrive connector P20).
@@ -1861,6 +1869,56 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Pipedrive is disconnected. Deals already planned stay in Vestiarion.", PIPEDRIVE_ACTIONS],
     ["accounting_disconnected", ACCOUNTING_CONNECTIONS],
   ],
+  "guides/asana": [
+    ["Connect Asana", ASANA_PANEL],
+    ["An owner or admin connects Asana.", ASANA_PANEL],
+    ["I agree", ACCOUNTING_CONSENT],
+    ["Continue to Asana", ASANA_CONNECT_PAGE],
+    ["It keeps the links and names, not the words of the description or the comments.", ACCOUNTING_CONSENT],
+    ["Nothing from Asana sets an amount or a payee.", ACCOUNTING_CONSENT, "Nothing from ${label} sets an amount or a payee."],
+    ["Asana is connected. Link a milestone to its Asana task on Contractors.", ASANA_PANEL],
+    ["accounting_connected", ACCOUNTING_CONNECTIONS],
+    ["Accept from Asana", ASANA_CARD],
+    ["Link the task", ASANA_CARD],
+    ["Vestiarion reads the task through Asana with this workspace's connection, never by opening the link.", ASANA_CARD, "Vestiarion reads the task through Asana with this workspace&apos;s connection, never by opening the link."],
+    ["Choose the task in Asana instead", ASANA_CARD],
+    ["Link this task", ASANA_CARD],
+    ["That Asana task is linked to another milestone already: one task verifies one milestone.", ASANA_COMMANDS],
+    ["asana_task_linked", ASANA_COMMANDS],
+    ["Unlink the task", ASANA_CARD],
+    ["asana_task_unlinked", ASANA_COMMANDS],
+    ["Acceptance criteria, from the agreement", ASANA_CARD],
+    ["Add the criteria", ASANA_CARD],
+    ["The task is completed, but the milestone has no acceptance criteria. Add the criteria from the agreement, then accept the work.", ASANA_ACCEPTANCE],
+    ["milestone_criteria_set", ASANA_COMMANDS],
+    ["Waiting for the task", ASANA_ACCEPTANCE],
+    ["Ready for acceptance", ASANA_ACCEPTANCE],
+    ["Held for review", ASANA_ACCEPTANCE],
+    ["Check Asana now", ASANA_CARD],
+    ["asana_task_ready", ASANA_READS],
+    ["Deliverables in Asana", ASANA_CARD],
+    ["I checked each criterion against these deliverables, as shown here.", ASANA_CARD],
+    ["Accept the work", ASANA_CARD],
+    ["Accepted. The agent decides on pay within a minute, under every guardrail.", ASANA_COMMANDS],
+    ["The deliverables changed in Asana since you opened this. Look at them again before accepting.", ASANA_COMMANDS],
+    ["milestone_accepted", ASANA_COMMANDS],
+    ["You are this milestone's payee, so someone else accepts the work.", ASANA_ACCEPTANCE],
+    ["Your Asana account is this milestone's payee, so someone else accepts the work.", ASANA_ACCEPTANCE],
+    ["You are this milestone's payee, so someone else approves paying it.", MILESTONE_COMMAND],
+    ["milestone_acceptance_withdrawn", ASANA_READS],
+    ["Changed after payment", ASANA_ACCEPTANCE],
+    ["The task changed in Asana after the payment was sent. Review it with the contractor: Vestiarion does not take a payment back.", ASANA_ACCEPTANCE],
+    ["Evidence checked by a person", ASANA_PANEL],
+    ["Disputes", ASANA_PANEL],
+    ["From acceptance to the agent's decision", ASANA_PANEL, "From acceptance to the agent&apos;s decision"],
+    ["Asana reported the task completed.", EVIDENCE_CHAIN],
+    ["Reconnect Asana", ASANA_PANEL],
+    ["Asana did not answer just now. It is read again within 15 minutes.", ASANA_READS],
+    ["Asana is not set up on this deployment yet.", ASANA_PANEL],
+    ["Disconnect Asana", ASANA_PANEL],
+    ["accounting_disconnected", ACCOUNTING_CONNECTIONS],
+    ["Acceptances already recorded stay in Vestiarion's signed ledger.", ACCOUNTING_CONSENT],
+  ],
   "guides/xero": [
     ["Connect Xero", ACCOUNTING_PANEL, "`Connect ${label}`"],
     ["An owner or admin connects Xero.", ACCOUNTING_PANEL, "An owner or admin connects {label}."],
@@ -2536,6 +2594,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/quickbooks": 20,
   "guides/hubspot": 20,
   "guides/pipedrive": 20,
+  "guides/asana": 20,
   "guides/audit-export": 5,
   "guides/evidence": 20,
   "guides/apply-payments": 20,

@@ -4,6 +4,7 @@ import "server-only";
 
 import { z } from "zod";
 import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
+import { AsanaNotSetUpError, liveLinks } from "@/lib/asana/links";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { db } from "@/lib/dal";
@@ -57,6 +58,16 @@ export async function createMilestoneAction(
   });
 }
 
+/** Whether a milestone is linked to an Asana task; never, before migration 0115. */
+async function asanaLinked(milestoneId: string): Promise<boolean> {
+  try {
+    return (await liveLinks({ milestoneIds: [milestoneId] })).length > 0;
+  } catch (error) {
+    if (error instanceof AsanaNotSetUpError) return false;
+    throw error;
+  }
+}
+
 const manualVerificationSchema = z.object({
   milestoneId: z.string().uuid(),
   intent: z.enum(["verify", "revoke"]),
@@ -94,6 +105,11 @@ export async function manualMilestoneVerificationAction(
     // Closed without paying is final: verifying it again would have the agent pay it.
     if (milestone.status === "closed") {
       return { ok: false, message: "This milestone was closed without paying. Add it again if the work is still owed." };
+    }
+    // Work delivered in Asana is accepted against its criteria, as the version a person saw, never verified around that
+    // (Asana acceptance A8). Revoking stays open.
+    if (intent === "verify" && (await asanaLinked(milestone.id))) {
+      return { ok: false, message: "This milestone's work is accepted from its Asana task. Accept it there against its criteria, or unlink the task first." };
     }
 
     const verified = intent === "verify";

@@ -1,5 +1,18 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-14: Contractor work accepted from Asana
+
+- A milestone's `verificationMethod` may now be **`asana`**, in `GET /api/v1/milestones` and on its own page: the work was accepted by a person against the milestone's acceptance criteria once its Asana task was completed. Its `verificationDetail` is `{ note, asanaTask, taskGid, completedAt, fingerprint, criteriaSha256, acceptedBy }`; once an acceptance is taken back it also carries `heldReason` and `heldAt`, `verified` is false, `verificationStatus` is `unverified` and `status` is `pending` again. The TypeScript SDK 0.3.3 accepts the value.
+- Six new entries, domain `contractor`, each listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:
+  - **`asana_task_linked`**, actor `human`: `{ by, milestoneId, linkId, taskGid, workspaceGid, projectGid, taskUrl, completed, fingerprint }`.
+  - **`asana_task_unlinked`**, actor `human`: `{ by, milestoneId, linkId, taskGid, withdrewAcceptance }`.
+  - **`milestone_criteria_set`**, actor `human`: `{ by, milestoneId, criteria, criteriaSha256, previousSha256 }`. `previousSha256` is null the first time.
+  - **`asana_task_ready`**, actor `system`: `{ milestoneId, linkId, taskGid, completedAt, completedByName, fingerprint, deliverables }`, when a linked task is completed in Asana and the milestone has criteria. It verifies nothing: `deliverables` is a count.
+  - **`milestone_accepted`**, actor `human`: `{ by, milestoneId, linkId, taskGid, taskUrl, completedAt, completedByName, fingerprint, deliverables, criteriaSha256, payeeAsanaMapped }`, when a person accepted the work. `deliverables` lists each `{ kind, label, href }` accepted, `kind` being `attachment`, `link` or `comment_link`; `fingerprint` is the SHA-256 of that set.
+  - **`milestone_acceptance_withdrawn`**, actor `system`: `{ milestoneId, linkId, taskGid, reason, afterPayment, acceptedFingerprint, fingerprint, completed, completedAt }`, when the task was reopened, its deliverables changed or Asana no longer showed it after the work was accepted. `reason` is `reopened`, `deliverable_changed` or `task_unreachable`. With `afterPayment: false` the milestone lost its verification before any payment; with `afterPayment: true` a payment was already sent, and is not taken back.
+- A new Asana connection's **`accounting_connected`** carries `provider: "asana"` and `consent.version` `asana-2026-10-14`; its `externalOrgId` is the Asana user who connected.
+- Nothing else in `/api/v1` changes: a milestone is not linked to an Asana task through the API, and the write API still adds a milestone pending.
+
 ## 2026-10-14: A command-line interface over the API
 
 - **`@vestiarion/cli` 0.1.0**, the `vestiarion` command, calls `/api/v1` with a workspace API key, through the [TypeScript SDK](/docs/get-started/sdk). Each command is one or two existing operations; the [CLI page](/docs/get-started/cli#commands) maps each command to its operation. It adds no endpoint and changes none.

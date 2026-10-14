@@ -71,6 +71,8 @@ const KEEP_UPDATE: Record<string, { column: string; expr: string }> = {
   accounting_postings: { column: "message", expr: "'changed'" },
   // The receipts written back to HubSpot (0107).
   crm_receipt_writes: { column: "message", expr: "'changed'" },
+  // An Asana task linked to a milestone is unlinked, never deleted (0115).
+  asana_task_links: { column: "read_error", expr: "'changed'" },
   // A customer's statement link is stopped, and what the customer said is closed, never deleted (0109).
   customer_portal_links: { column: "revoked_at", expr: "now()" },
   customer_requests: { column: "outcome", expr: "'resolved'" },

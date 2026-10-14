@@ -4,7 +4,7 @@ import { withOrg } from "../dal/scope";
 import { bookingInScope } from "./booking-sync";
 import { isNotSetUp, NotSetUpError } from "./connections";
 import type { CrmProvider } from "./crm";
-import type { AccountingProvider, ProviderId } from "./provider";
+import type { AccountingProvider, ConnectingProvider, ProviderId } from "./provider";
 import { syncConnection, type SyncResult } from "./sync";
 import { syncStore } from "./sync-store";
 import { connectionTokenStore, deleteTokens, expiredPendingGrants, refreshTokenOf } from "./token-store";
@@ -52,13 +52,18 @@ export async function syncInScope(connectionId: string, provider: AccountingProv
   return result;
 }
 
-export async function sweepAccounting(deps: {
+export async function sweepAccounting<P extends ConnectingProvider = ConnectingProvider>(deps: {
   providerFor: (id: ProviderId) => AccountingProvider | null;
   /**
    * A CRM's provider, and its runner, for a connection of one (HubSpot connector H7): the sweeper syncs it with the CRM
    * runner instead. A deployment without one leaves CRM connections alone.
    */
   crm?: { providerFor: (id: ProviderId) => CrmProvider | null; sync: (connectionId: string, provider: CrmProvider) => Promise<{ outcome: SyncResult["outcome"] }> };
+  /**
+   * A work tool's provider, and its runner (docs/superpowers/specs/2026-10-14-asana-acceptance-design.md A11): Asana's
+   * tasks linked to milestones are read again, the webhooks' fallback. A deployment without one leaves them alone.
+   */
+  work?: { providerFor: (id: ProviderId) => P | null; sync: (connectionId: string, provider: P) => Promise<{ outcome: string }> };
   now?: () => number;
   budgetMs?: number;
 }): Promise<SweepSummary> {
@@ -73,12 +78,17 @@ export async function sweepAccounting(deps: {
   for (const row of (due.data ?? []) as Array<{ org_id: string; connection_id: string; provider: ProviderId }>) {
     if (now() - started > (deps.budgetMs ?? SWEEP_BUDGET_MS)) break;
     const crmProvider = deps.crm?.providerFor(row.provider) ?? null;
-    const provider = crmProvider ? null : deps.providerFor(row.provider);
-    if (!provider && !crmProvider) continue;
+    const workProvider = crmProvider ? null : (deps.work?.providerFor(row.provider) ?? null);
+    const provider = crmProvider || workProvider ? null : deps.providerFor(row.provider);
+    if (!provider && !crmProvider && !workProvider) continue;
     summary.connections += 1;
     try {
       const result = await withOrg(row.org_id, () =>
-        crmProvider && deps.crm ? deps.crm.sync(row.connection_id, crmProvider) : syncInScope(row.connection_id, provider as AccountingProvider)
+        crmProvider && deps.crm
+          ? deps.crm.sync(row.connection_id, crmProvider)
+          : workProvider && deps.work
+            ? deps.work.sync(row.connection_id, workProvider)
+            : syncInScope(row.connection_id, provider as AccountingProvider)
       );
       if (result.outcome === "synced") summary.synced += 1;
       else if (result.outcome === "partial") summary.partial += 1;
@@ -94,7 +104,7 @@ export async function sweepAccounting(deps: {
     try {
       await withOrg(grant.orgId, async () => {
         const refreshToken = await refreshTokenOf(grant.orgId, { tokenId: grant.tokenId });
-        const provider = deps.providerFor(grant.provider) ?? deps.crm?.providerFor(grant.provider) ?? null;
+        const provider = deps.providerFor(grant.provider) ?? deps.crm?.providerFor(grant.provider) ?? deps.work?.providerFor(grant.provider) ?? null;
         if (refreshToken && provider) await provider.revoke(refreshToken);
         await deleteTokens(grant.orgId, { tokenId: grant.tokenId });
       });

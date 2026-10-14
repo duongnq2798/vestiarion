@@ -14,10 +14,12 @@ const REPOSITORY = "https://github.com/duongnq2798/vestiarion";
  * in a new tab. QuickBooks Online shows Intuit's QuickBooks lockup, which spells
  * QuickBooks, so its body names QuickBooks Online in full. Pipedrive shows its
  * name alone: no logo of Pipedrive's is used
- * (docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md P20).
+ * (docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md P20), and Asana its
+ * name alone until its owner's mark is in public/brands
+ * (docs/superpowers/specs/2026-10-14-asana-acceptance-design.md A1).
  */
 const SERVICES: ReadonlyArray<{
-  /** The service's mark, beside its name; absent for a service named in words alone. */
+  /** The service's mark, beside its name; absent for a service named in words alone (Pipedrive), or whose owner's mark is not in public/brands yet (Asana). */
   brand?: Brand;
   name: string;
   role: string;
@@ -56,6 +58,7 @@ const SERVICES: ReadonlyArray<{
     href: "/docs/guides/pipedrive",
     check: "Read the guide",
   },
+  { name: "Asana", role: "Works with", body: "Contractor work completed in a task is paid once a person accepts it against its criteria.", href: "/docs/guides/asana", check: "Read the guide" },
   { brand: "slack", name: "Slack", role: "Works with", body: "The agent's decisions in a channel your team picks.", href: "/docs/guides/slack", check: "Read the guide" },
   { brand: "telegram", name: "Telegram", role: "Works with", body: "The agent's decisions in your own chat. The bot never pays.", href: "/docs/guides/telegram", check: "Read the guide" },
   { brand: "npm", name: "npm", role: "SDK on", body: "@vestiarion/sdk, a typed client for every endpoint.", href: "/docs/get-started/sdk", check: "Read the docs" },
@@ -69,16 +72,15 @@ export function BuiltWith() {
           Built on, and works with
         </h2>
         {/*
-          Nine services: three to a row from a tablet's width, so every row is full. On a phone, two to a row, and the
-          last one, which would sit alone, spans both, so no row is left half empty.
+          Ten services: five to a row from a laptop's width, and two to a row below it, so every row is full.
         */}
-        <ul className="grid grid-cols-2 md:grid-cols-3">
+        <ul className="grid grid-cols-2 lg:grid-cols-5">
           {SERVICES.map((service) => {
             const external = service.href.startsWith("https://");
             return (
               <li
                 key={service.name}
-                className="min-w-0 border-line py-4 pr-4 max-md:last:col-span-2 md:border-l md:pl-5 md:nth-[3n+1]:border-l-0 md:nth-[3n+1]:pl-0 md:nth-[n+4]:border-t"
+                className="min-w-0 border-line py-4 pr-4 lg:border-l lg:pl-5 lg:nth-[5n+1]:border-l-0 lg:nth-[5n+1]:pl-0 lg:nth-[n+6]:border-t"
               >
                 <Link href={service.href} className="group block" {...(external ? { target: "_blank", rel: "noreferrer" } : {})}>
                   <p className="font-mono text-[0.6875rem] uppercase tracking-[0.1em] text-ink-3">{service.role}</p>
@@ -109,8 +111,8 @@ export function BuiltWith() {
         </ul>
         <p className="border-t border-line py-3 text-[0.6875rem] leading-relaxed text-ink-3">
           npm is a registered trademark of npm, Inc. Intuit and QuickBooks are trademarks of Intuit Inc. Arc, Circle, Slack, Telegram, Xero,
-          HubSpot and Pipedrive are trademarks of their respective owners. Their names and marks show what Vestiarion is built on and connects to,
-          not an endorsement.
+          HubSpot, Pipedrive and Asana are trademarks of their respective owners. Their names and marks show what Vestiarion is built on and connects
+          to, not an endorsement.
         </p>
       </div>
     </section>

@@ -1,3 +1,4 @@
+import { refreshAsanaMilestones } from "./asana/workspace";
 import { parseGitHubPullRequestUrl, verifyGitHubPullRequest } from "./github-verification";
 import { pullRequestTokens } from "./github/tokens";
 import { appendLedgerEntry } from "./ledger";
@@ -99,4 +100,21 @@ export async function refreshGitHubMilestones(): Promise<VerificationRefreshResu
   }
 
   return totals;
+}
+
+export interface AcceptedWorkRefresh {
+  checked: number;
+  withdrawn: number;
+  failed: number;
+}
+
+/**
+ * Work accepted from Asana, read again before the contractor release pass (docs/superpowers/specs/2026-10-14-asana-
+ * acceptance-design.md A11), as merged pull requests are above: a task reopened or changed since its acceptance takes
+ * the acceptance back here, through the milestone's verification, so this cycle's contractor stage never releases it.
+ * Nothing else of Asana reaches the agent. Never throws.
+ */
+export async function refreshAcceptedWork(): Promise<AcceptedWorkRefresh> {
+  const summary = await refreshAsanaMilestones();
+  return { checked: summary.checked, withdrawn: summary.withdrawn, failed: summary.failed };
 }

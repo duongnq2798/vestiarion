@@ -88,6 +88,10 @@ export default function TermsPage() {
           <li>who you invite to your workspace, and the role you give them;</li>
           <li>the accounting tool you connect, such as a Xero organisation or a QuickBooks company: connect only one you may give a workspace access to;</li>
           <li>the CRM you connect, such as a HubSpot account or a Pipedrive company: connect only one you may give a workspace access to;</li>
+          <li>
+            the work tool you connect, such as your Asana, and the acceptance criteria you write: a person in your workspace, never Asana, accepts a
+            contractor&apos;s work against them;
+          </li>
           <li>using the service lawfully where you and the people you pay are, including any rules on paying in stablecoins.</li>
         </ul>
       </LegalSection>
@@ -139,6 +143,18 @@ export default function TermsPage() {
           Pipedrive becomes a deal in Vestiarion only when a person plans it, and a change made in Pipedrive afterwards changes nothing in Vestiarion
           until a person does. One Pipedrive company connects to one workspace at a time. Disconnecting uninstalls Vestiarion from the Pipedrive
           company and stops the reading at once; the deals already planned stay with the workspace.
+        </p>
+        <p>
+          When an owner or admin connects Asana to a workspace, they agree, for the workspace, that Vestiarion reads Asana as them: the workspaces,
+          projects and tasks a member opens to link a task to a milestone, and for each linked task whether and when it was completed and by whom,
+          its assignee, and the links in its description, attachments and comments. Vestiarion makes a webhook on each linked task and deletes it when
+          the task is unlinked or Asana is disconnected; it writes nothing else to Asana. A task completed in Asana is never by itself a reason to pay:
+          a person in the workspace accepts the work against the milestone&apos;s criteria, an acceptance by a member Vestiarion can tell is the
+          payee is refused, and the agent then decides the payment within the workspace&apos;s guardrails. Nothing from Asana sets an amount or a
+          payee, and a task reopened or changed after it was accepted is held for review when Vestiarion reads that before the payment is sent;
+          keeping anyone else from accepting their own work stays the workspace&apos;s. Vestiarion never uses Asana data to train or improve any AI model, and never
+          passes it to anyone else without the workspace&apos;s say. Disconnecting stops the reading at once; acceptances already recorded stay with
+          the workspace.
         </p>
       </LegalSection>
 

@@ -194,7 +194,8 @@ make sure `git config user.email` is a verified email on the account. `git tag -
 own: `sdk/package.json` and `VERSION` in `sdk/src/version.ts`. A new version is packed with `npm run sdk:pack` into
 `public/sdk/vestiarion-sdk-<version>.tgz`, committed, and published from that file by an owner of the npm organization
 (`npm publish public/sdk/vestiarion-sdk-<version>.tgz --access public`), as [ARCHITECTURE.md](../ARCHITECTURE.md#developer-docs)
-describes. On npm today: 0.1.0, 0.2.0 and 0.3.2 (0.3.0 and 0.3.1 were packed but not published).
+describes. On npm today: 0.1.0, 0.2.0 and 0.3.2 (0.3.0 and 0.3.1 were packed but not published; 0.3.3 is packed and waits
+to be published).
 
 An SDK version may be tagged `sdk-vX.Y.Z` on the commit whose tarball was published, once it is on npm; for 0.3.2 that is
 `531cb1fb`, whose tarball matches npm's checksum. The release workflow refuses `sdk-v` tags: an SDK release is its npm
