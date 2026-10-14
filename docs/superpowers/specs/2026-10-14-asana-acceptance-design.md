@@ -36,7 +36,8 @@ completed.
 - **A10 Invalidation.** Reopened (or reopened and completed again), a deliverable changed, or the task gone, after
   acceptance and before payment: `hold_asana_acceptance` takes the verification back and holds the link for review.
   After a payment was sent, only the link is held, as a dispute. A held link stays held until a person accepts again.
-- **A11 Re-reads.** Signed webhook deliveries (X-Hook-Secret handshake once, X-Hook-Signature HMAC-SHA256 compared in
+- **A11 Re-reads.** Signed webhook deliveries (filtered to the task, its stories and its attachments, each covered by a
+  read scope the connection has; X-Hook-Secret handshake once, X-Hook-Signature HMAC-SHA256 compared in
   constant time) only nudge a read. Reads also run in the cycle before the contractor stage, again for the accepted
   tasks of the releases the stage is about to send (right before its still-verified check), every 15 minutes, on
   Check Asana now and before an acceptance, with the connection's token. A webhook Asana refuses to make is logged with
