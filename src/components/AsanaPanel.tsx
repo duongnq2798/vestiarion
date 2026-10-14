@@ -10,6 +10,7 @@ import { FormMessage } from "@/components/ui/FormMessage";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
+import { BrandName } from "@/components/vx/BrandMarks";
 import type { AsanaPanelView } from "@/lib/asana/views";
 
 const INITIAL: AsanaActionResult = { ok: false, message: "" };
@@ -68,13 +69,20 @@ const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : 
  * in business words; the tasks linked to milestones by where they stand, linking to Contractors; the last 30 days'
  * figures (acceptances, which are each a person's check of the evidence; acceptances taken back; the time from an
  * acceptance to the agent's decision); Check linked tasks now and Disconnect Asana. Every member sees the status; an
- * owner or admin gets the controls. Asana's name stands alone: its mark is not in this repository yet.
+ * owner or admin gets the controls. Headed by Asana's logo, which spells its name (the name is kept for screen
+ * readers).
  */
 export default function AsanaPanel({ orgSlug, view, canManage, notice }: { orgSlug: string; view: AsanaPanelView; canManage: boolean; notice: string | null }) {
   const told = notice ? ASANA_NOTICES[notice] : undefined;
   return (
     <section aria-labelledby="asana-title" id="asana">
-      <SectionHeader id="asana-title" className="items-center" title="Asana" action={<DocsLink href="/docs/guides/asana" topic="Asana" />} />
+      <SectionHeader
+        id="asana-title"
+        // The mark has no text baseline: the title is a flex row, centred, so Docs sits level with it.
+        className="items-center"
+        title={<BrandName brand="asana-lockup" name="Asana" />}
+        action={<DocsLink href="/docs/guides/asana" topic="Asana" />}
+      />
       <Card className="space-y-4 p-5">
         {told && (
           <p role="status" className={told.tone === "success" ? "text-sm text-ink" : "text-sm text-refused"}>

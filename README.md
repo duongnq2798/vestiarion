@@ -434,7 +434,7 @@ simulated.
 
 ## License
 
-[MIT](LICENSE). Arc, Circle, Slack, Telegram, Xero, QuickBooks, HubSpot, Pipedrive and npm are trademarks of their respective
-owners; their names show what Vestiarion is built on and connects to, not an endorsement.
+[MIT](LICENSE). Arc, Circle, Slack, Telegram, Xero, QuickBooks, HubSpot, Pipedrive, Asana and npm are trademarks of their
+respective owners; their names show what Vestiarion is built on and connects to, not an endorsement.
 
 <a href="https://www.producthunt.com/products/vestiarion?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-vestiarion"><img alt="Vestiarion on Product Hunt" width="200" height="43" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1269583&theme=light"></a>

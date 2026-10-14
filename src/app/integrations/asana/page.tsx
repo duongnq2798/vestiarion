@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { BrandName } from "@/components/vx/BrandMarks";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { asanaSettingsFromEnv } from "@/lib/asana/settings";
 import { membershipsOf } from "@/lib/auth/membership";
@@ -15,7 +16,8 @@ export const dynamic = "force-dynamic";
 /**
  * Asana for a signed-in person (docs/superpowers/specs/2026-10-14-asana-acceptance-design.md A2): their workspace's Asana
  * settings, at once when they have one workspace, and a pick when they have several. A signed-out visitor signs in and
- * comes back here. Not there unless Asana is configured.
+ * comes back here. Not there unless Asana is configured. Headed by Asana's logo, which spells its name (the name is
+ * kept for screen readers).
  */
 export default async function AsanaIntegrationPage() {
   const user = await verifySession("/integrations/asana");
@@ -42,7 +44,9 @@ export default async function AsanaIntegrationPage() {
             />
           ) : (
             <>
-              <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Asana</h1>
+              <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">
+                <BrandName brand="asana-lockup" name="Asana" size={24} className="gap-3" />
+              </h1>
               <p className="mt-3 text-sm text-ink-2">Pick the workspace whose Asana settings you want.</p>
               <ul className="mt-6 divide-y divide-line rounded-lg border border-line">
                 {memberships.map((membership) => (

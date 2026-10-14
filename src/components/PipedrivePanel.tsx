@@ -10,6 +10,7 @@ import { FormMessage } from "@/components/ui/FormMessage";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
+import { BrandName } from "@/components/vx/BrandMarks";
 import type { CrmPanelView } from "@/lib/connectors/crm-review";
 import type { CrmReceiptsPanel } from "@/lib/connectors/crm-receipts-view";
 import { billsHref } from "@/lib/bills-view";
@@ -133,7 +134,7 @@ function Receipts({ orgSlug, receipts, canManage }: { orgSlug: string; receipts:
 
 /**
  * The Pipedrive section of Settings (docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md P16, P17, P20),
- * headed by Pipedrive's name alone: its status in business words, never "connected" while the last sync failed; the won
+ * headed by Pipedrive's app icon and its name: its status in business words, never "connected" while the last sync failed; the won
  * deals to plan and the planned deals changed in Pipedrive, each linking to Bills & receivables; what the connection
  * sees; a reconnect when Pipedrive no longer takes the connection; Sync now and Disconnect Pipedrive. Every member sees
  * the status; an owner or admin gets the controls. `view` carries no token.
@@ -156,7 +157,13 @@ export default function PipedrivePanel({
   const deals = `/o/${orgSlug}${billsHref({ tab: "receivables" })}#from-pipedrive`;
   return (
     <section aria-labelledby="pipedrive-title" id="pipedrive">
-      <SectionHeader id="pipedrive-title" className="items-center" title="Pipedrive" action={<DocsLink href="/docs/guides/pipedrive" topic="Pipedrive" />} />
+      <SectionHeader
+        id="pipedrive-title"
+        // The mark has no text baseline: the title is a flex row, centred, so Docs sits level with it.
+        className="items-center"
+        title={<BrandName brand="pipedrive" name="Pipedrive" />}
+        action={<DocsLink href="/docs/guides/pipedrive" topic="Pipedrive" />}
+      />
       <Card className="space-y-4 p-5">
         {told && (
           <p role="status" className={told.tone === "success" ? "text-sm text-ink" : "text-sm text-refused"}>

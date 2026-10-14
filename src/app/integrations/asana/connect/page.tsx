@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { NativeCheckbox, NativeRadioGroup } from "@/components/ui/NativeChoice";
+import { BrandMark } from "@/components/vx/BrandMarks";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { asanaSettingsFromEnv } from "@/lib/asana/settings";
 import { membershipsOf } from "@/lib/auth/membership";
@@ -63,7 +64,12 @@ export default async function AsanaConnectPage({ searchParams }: ConnectPageProp
             />
           ) : (
             <>
-              <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Connect Asana</h1>
+              <h1 className="flex items-start gap-3 text-2xl font-semibold tracking-[-0.02em] text-ink">
+                <span className="flex h-8 shrink-0 items-center">
+                  <BrandMark brand="asana-lockup" size={24} />
+                </span>
+                <span>Connect Asana</span>
+              </h1>
               <p className="mt-3 text-sm text-ink-2">
                 Pay contractors for work delivered in Asana. You link a milestone to its Asana task; when the task is completed, a person accepts the work
                 against the milestone&apos;s criteria, and only then does the agent decide on pay, under every guardrail.

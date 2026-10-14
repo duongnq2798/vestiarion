@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { NativeCheckbox, NativeRadioGroup } from "@/components/ui/NativeChoice";
+import { BrandMark } from "@/components/vx/BrandMarks";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { membershipsOf } from "@/lib/auth/membership";
 import { can } from "@/lib/auth/roles";
@@ -64,7 +65,12 @@ export default async function PipedriveConnectPage({ searchParams }: ConnectPage
             />
           ) : (
             <>
-              <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Connect Pipedrive</h1>
+              <h1 className="flex items-start gap-3 text-2xl font-semibold tracking-[-0.02em] text-ink">
+                <span className="flex h-8 shrink-0 items-center">
+                  <BrandMark brand="pipedrive" size={24} />
+                </span>
+                <span>Connect Pipedrive</span>
+              </h1>
               <p className="mt-3 text-sm text-ink-2">
                 Bring your won deals in from Pipedrive, with their organizations and persons. Each won deal waits for you on Bills & receivables, and becomes a
                 deal with its collection schedule only when you plan it.

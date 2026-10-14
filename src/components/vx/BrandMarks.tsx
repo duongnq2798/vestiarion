@@ -7,7 +7,8 @@ import type { ProviderId } from "@/lib/connectors/provider";
  * docs/superpowers/specs/2026-10-12-integration-marks-design.md): Arc, where
  * payments settle; Circle, whose wallets carry them; Slack and Telegram, where
  * the agent asks and reports; npm, where the SDK is published; Xero and
- * QuickBooks Online, whose bills come in; HubSpot, whose won deals come in.
+ * QuickBooks Online, whose bills come in; HubSpot and Pipedrive, whose won deals
+ * come in; Asana, where contractors deliver the work they are paid for.
  *
  * Each is its owner's file, served unaltered from public/brands/ in its own
  * colours: no recolouring, cropping or redrawing, as the owners' guidelines
@@ -18,10 +19,23 @@ import type { ProviderId } from "@/lib/connectors/provider";
  * empty alt text; whatever renders it writes the name.
  *
  * Every mark is an `<img>`: each file is its own document, so the ids inside
- * one (the lockup's clip paths) never meet another mark's or the page's.
+ * one (the QuickBooks lockup's clip paths, Pipedrive's masks, the class names on
+ * Asana's lockup) never meet another mark's or the page's.
  */
 
-export type Brand = "arc" | "circle" | "slack" | "telegram" | "npm" | "xero" | "quickbooks" | "quickbooks-lockup" | "hubspot";
+export type Brand =
+  | "arc"
+  | "circle"
+  | "slack"
+  | "telegram"
+  | "npm"
+  | "xero"
+  | "quickbooks"
+  | "quickbooks-lockup"
+  | "hubspot"
+  | "pipedrive"
+  | "pipedrive-lockup"
+  | "asana-lockup";
 
 /**
  * `aspect` is the file's width over its height. `inset` is clear space the file carries on every side, as a share of
@@ -45,21 +59,36 @@ const MARKS: Record<Brand, { name: string; file: string; aspect: number; inset?:
   // Its circle is 227.5 of its 274 high, so it is drawn 274 / 227.5 of `size` tall: the circle at `size`.
   "quickbooks-lockup": { name: "QuickBooks", file: "/brands/quickbooks-lockup.svg", aspect: 955 / 274, scale: 274 / 227.502, wordmark: true },
   hubspot: { name: "HubSpot", file: "/brands/hubspot.svg", aspect: 22 / 26 },
+  // Pipedrive's app icon, the white "p" on its green square, for small places, as Arc's icon is drawn: edge to edge.
+  pipedrive: { name: "Pipedrive", file: "/brands/pipedrive.jpeg", aspect: 1 },
+  // Pipedrive's wordmark in its dark colour, for the landing page. The file keeps 76 of its 304 clear on every side.
+  "pipedrive-lockup": { name: "Pipedrive", file: "/brands/pipedrive-lockup.svg", aspect: 820 / 304, inset: 76 / 304, wordmark: true },
+  // Asana's logo, the coral dots then "asana", wherever Asana is shown. Its dots fill the file's height, so at `size`
+  // they stand as tall as the other symbols. The kit's dots alone come on an opaque white square, which on the site's
+  // cream ground would show as a box around them, so they are not used.
+  "asana-lockup": { name: "Asana", file: "/brands/asana-lockup.svg", aspect: 112 / 22, wordmark: true },
 };
 
 /** The files every mark is served from, for the tests that hold them to their owners' originals. */
 export const BRAND_FILES: Readonly<Record<Brand, string>> = Object.fromEntries(Object.entries(MARKS).map(([brand, mark]) => [brand, mark.file])) as Record<Brand, string>;
 
-/** True when the mark spells the name itself (npm's, Xero's, QuickBooks' lockup), so the name beside it is for screen readers only. */
+/**
+ * True when the mark spells the name itself (npm's, Xero's, the QuickBooks, Pipedrive and Asana lockups), so the name
+ * beside it is for screen readers only.
+ */
 export const isWordmark = (brand: Brand) => MARKS[brand].wordmark === true;
 
 /**
- * The mark each connector shows beside its name in Settings and on its connect and launch pages. Pipedrive shows its
- * name alone: no logo of Pipedrive's is used (docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md P20). Asana
- * has none here yet: its mark is shown only once its owner's file, from Asana's brand kit, is in public/brands; until then
- * its name stands alone (docs/superpowers/specs/2026-10-14-asana-acceptance-design.md A16).
+ * The mark each connector shows beside its name in Settings and on its connect and launch pages: a symbol, except
+ * Xero's wordmark (its kit has no other) and Asana's logo (its dots alone come on a white square).
  */
-export const PROVIDER_MARKS: Readonly<Record<Exclude<ProviderId, "pipedrive" | "asana">, Brand>> = { xero: "xero", quickbooks: "quickbooks", hubspot: "hubspot" };
+export const PROVIDER_MARKS: Readonly<Record<ProviderId, Brand>> = {
+  xero: "xero",
+  quickbooks: "quickbooks",
+  hubspot: "hubspot",
+  pipedrive: "pipedrive",
+  asana: "asana-lockup",
+};
 
 /**
  * A brand's mark, `size` pixels tall. A file that carries clear space around
@@ -91,9 +120,9 @@ export function BrandMark({ brand, size = 16, className }: { brand: Brand; size?
 
 /**
  * A brand's mark with the name it stands beside, for a heading or a label. A
- * wordmark that spells the name (npm's, Xero's, QuickBooks' lockup) shows in its
- * place, the name kept for screen readers; any other mark is decoration before
- * the written name.
+ * wordmark that spells the name (npm's, Xero's, a lockup) shows in its place,
+ * the name kept for screen readers; any other mark is decoration before the
+ * written name.
  */
 export function BrandName({ brand, name, size, className }: { brand: Brand; name: string; size?: number; className?: string }) {
   return (

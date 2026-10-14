@@ -9,7 +9,8 @@ completed.
 
 - **A1 Provider.** Asana is a provider of a third kind, `work`, on the connector core (`ConnectingProvider`): connect,
   token lease and refresh, consent version, disconnect, the 15-minute sweeper. No bills, no deals. On only with
-  `ASANA_CLIENT_ID` and `ASANA_CLIENT_SECRET`. Its mark is not shown until Asana's own file is in `public/brands`.
+  `ASANA_CLIENT_ID` and `ASANA_CLIENT_SECRET`. Since 2026-10-14 Asana's logo, from its brand kit, heads its card and its
+  connect and launch pages (integration marks I14).
 - **A2 Connecting.** An owner or admin (`integrations.manage`) connects with OAuth, asking exactly the nine registered
   scopes, at `https://www.vestiarion.xyz/api/integrations/asana/callback`. A grant is one Asana user's; the connection
   reads what that person can see. Consent `asana-2026-10-14`.
