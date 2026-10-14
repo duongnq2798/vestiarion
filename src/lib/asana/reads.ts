@@ -10,7 +10,8 @@ import { AsanaAccessError, type AsanaSession } from "./session";
 /**
  * Reading a linked task again (docs/superpowers/specs/2026-10-14-asana-acceptance-design.md A6, A7, A10, A11): the
  * one path every re-read takes, whatever asked for it (a signed webhook delivery, the agent's cycle before it decides
- * contractors, the sweeper every 15 minutes, Check Asana now, or a person about to accept). The task is read through
+ * contractors, the contractor stage right before it sends releases, the sweeper every 15 minutes, Check Asana now, or a
+ * person about to accept). The task is read through
  * Asana's API with the connection's token; its facts are written on the link; the plan moves the link; and an
  * acceptance the task no longer bears out is taken back through `hold_asana_acceptance`, which holds the milestone for
  * review before any payment executes. A read that fails changes nothing but the words on the link.

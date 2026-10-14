@@ -48,7 +48,7 @@ The card says where the task stands:
 | **Accepted** | A person accepted the work against its criteria. The agent decides on pay. |
 | **Held for review** | Reopened or changed after acceptance, no longer readable, or completed without criteria. |
 
-Vestiarion reads the task again when Asana's webhook says it changed, before each of the agent's cycles once the work is accepted, and every 15 minutes. **Check Asana now** reads it at once. When the task becomes ready, the ledger records `asana_task_ready`, with when it was completed and by whom.
+Vestiarion reads the task again when Asana's webhook says it changed, before each of the agent's cycles once the work is accepted and again right before the agent sends its payment, and every 15 minutes. **Check Asana now** reads it at once. When the task becomes ready, the ledger records `asana_task_ready`, with when it was completed and by whom.
 
 Under **Deliverables in Asana**, the card lists each attachment, each link in the description and each link in a comment. A file in Asana is checked through Asana's API with the workspace's connection before it is offered; a link to another site is shown as given and never opened by Vestiarion.
 
@@ -64,7 +64,7 @@ From here the agent decides on the release as for any verified milestone: the co
 
 ## 6. Reopened or changed after acceptance
 
-If the task is reopened in Asana, its deliverables change (a file added, removed or uploaded again, a link changed), or Asana no longer shows it, after the work was accepted, the acceptance is taken back when Vestiarion reads that before the payment is sent: on Asana's webhook, right before the agent decides on contractors, every 15 minutes, or on **Check Asana now**. The milestone waits for verification again and the card says **Held for review**. If Asana cannot be read at those times, the acceptance stands as the person gave it; and what a link to another site points at is never read, so a change there is not seen. The ledger records `milestone_acceptance_withdrawn`, with why. Accept the work again once the task is completed, against what Asana shows now.
+If the task is reopened in Asana, its deliverables change (a file added, removed or uploaded again, a link changed), or Asana no longer shows it, after the work was accepted, the acceptance is taken back when Vestiarion reads that before the payment is sent: on Asana's webhook, right before the agent decides on contractors, once more right before it sends the payment, every 15 minutes, or on **Check Asana now**. The milestone waits for verification again and the card says **Held for review**. If Asana cannot be read at those times, the acceptance stands as the person gave it; and what a link to another site points at is never read, so a change there is not seen. The ledger records `milestone_acceptance_withdrawn`, with why. Accept the work again once the task is completed, against what Asana shows now.
 
 If the payment was sent already, the card says **Changed after payment**: "The task changed in Asana after the payment was sent. Review it with the contractor: Vestiarion does not take a payment back."
 

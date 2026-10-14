@@ -22,8 +22,8 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   decided by the agent under every guardrail. A completed task alone never pays, a completed task without criteria is
   held, and an acceptance or Pay now by the payee is refused, matched by email and, where Asana can tell, by Asana
   account. If the task is reopened, or its deliverables change, after acceptance and Vestiarion reads that before the
-  payment is sent, the acceptance is taken back and the milestone is held for review; the agent's release checks
-  again, just before sending, that the milestone is still verified. Asana's webhooks only have the task read again, as
+  payment is sent, the acceptance is taken back and the milestone is held for review; the agent reads the accepted
+  task once more right before sending, then checks that the milestone is still verified. Asana's webhooks only have the task read again, as
   do the agent's cycle and a check every 15 minutes. The Asana card counts acceptances, disputes and the time from
   acceptance to the agent's decision. Migration `0115`. SDK 0.3.3 accepts `asana` as a milestone's verification method.
 - **A command-line interface, `vestiarion` (`@vestiarion/cli` 0.1.0).** Developers and operators work with a workspace

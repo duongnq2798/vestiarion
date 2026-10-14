@@ -2323,9 +2323,9 @@ exclusive. Consent `asana-2026-10-14`.
   unless a payment intent for the milestone is not `failed` or it is paid (then only the link is held, `after_payment`,
   a dispute), it is closed, or a person claimed its decision in the last ten minutes (then nothing changes, and the next
   read tries again). Neither writes an amount, a payee, an address or a payment. `tests/asana-paying-path.test.ts` pins
-  that the agent, the payments and the money commands reach Asana only through `refreshAcceptedWork`, that the
-  contractor stage still pays only `verified` milestones, and that Asana's code writes a milestone only through these
-  functions and its criteria.
+  that the agent, the payments and the money commands reach Asana only through `refreshAcceptedWork` and
+  `recheckAcceptedWork`, that the contractor stage still pays only `verified` milestones, and that Asana's code writes
+  a milestone only through these functions and its criteria.
 - **Reads** (`reads.ts`, `acceptance.ts`, pure `planRead`): the task, its attachments (`/attachments?parent=`) and its
   comments (stories of subtype `comment_added`), the deliverables (`deliverables.ts`: attachments by gid and upload
   time, https links in the description and comments; renaming changes nothing) and their fingerprint. A completed task
@@ -2343,9 +2343,15 @@ exclusive. Consent `asana-2026-10-14`.
   refresh marks the connection to reconnect. A read that fails leaves an acceptance as it was. Whatever took a
   verification back while the contractor stage decided (a read here, or a person revoking it), the stage holds each
   planned release to the milestone as it is just before sending (`stillVerified`) and sends none no longer verified.
+  Right before that check it reads the accepted Asana tasks of exactly those releases once more
+  (`recheckAcceptedWork`, `recheckBeforeSending` in `workspace.ts`: reads start for 10 seconds, the stage waits at most
+  20, then sends on the acceptances as they stand and the cycle says so), since the cycle's read can be seconds old by
+  then: on Arc testnet a task reopened 3 seconds after that read had its release sent 6 seconds later.
 - **Webhooks** (`webhook.ts`, `webhook-store.ts`, `POST /api/integrations/asana/webhook/<id>`): a link's webhook row is
   made first, then Asana is asked (`POST /webhooks`, after the answer, only on an https origin); the `X-Hook-Secret`
-  handshake is taken once, for a row still pending, within two minutes, sealed and echoed; the secret in Asana's 201 (the
+  handshake is taken once, for a row still pending, within two minutes, sealed and echoed (a webhook Asana refuses
+  to make is logged with Asana's own reason, from `reasonOf` in `http.ts`, any address in it replaced); the secret in
+  Asana's 201 (the
   top-level `X-Hook-Secret` of its body, as Asana documents it) must be the one kept, compared in constant time, or the
   webhook is deleted, as it is when the answer carries none. Each delivery's `X-Hook-Signature` (hex HMAC-SHA256 of the raw body) is
   compared in constant time before anything else; the body is never parsed or believed, and a signed delivery only reads

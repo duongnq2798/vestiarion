@@ -1,5 +1,5 @@
 import { ProviderError } from "../connectors/provider";
-import { ASANA_API, GID, apiGet, asanaFetch, failureOf, jsonOf, type AsanaHttp } from "./http";
+import { ASANA_API, GID, apiGet, asanaFetch, failureOf, jsonOf, reasonOf, type AsanaHttp } from "./http";
 import {
   attachmentOf,
   choiceOf,
@@ -147,10 +147,8 @@ export function asanaReader(deps: AsanaHttp = {}): AsanaReader {
         "webhook",
         deps
       );
-      if (!response.ok) {
-        await response.body?.cancel().catch(() => {});
-        throw failureOf(response, "webhook", now());
-      }
+      // Asana's reason is kept: a refused webhook leaves a link read only by the agent's cycle and the sweeper.
+      if (!response.ok) throw failureOf(response, "webhook", now(), await reasonOf(response));
       // Asana documents the secret at the top of the 201's body, beside `data`; a header is taken too.
       const body = await jsonOf(response, "webhook");
       const inBody = typeof body === "object" && body !== null ? (body as Record<string, unknown>)["X-Hook-Secret"] : undefined;
@@ -161,9 +159,11 @@ export function asanaReader(deps: AsanaHttp = {}): AsanaReader {
     async deleteWebhook(accessToken, webhookGid) {
       const gid = requireGid(webhookGid, "webhook");
       const response = await asanaFetch(`${ASANA_API}/webhooks/${gid}`, { method: "DELETE", headers: { authorization: `Bearer ${accessToken}`, accept: "application/json" } }, "webhook delete", deps);
-      await response.body?.cancel().catch(() => {});
-      if (response.ok || response.status === 404) return true;
-      throw failureOf(response, "webhook delete", now());
+      if (response.ok || response.status === 404) {
+        await response.body?.cancel().catch(() => {});
+        return true;
+      }
+      throw failureOf(response, "webhook delete", now(), await reasonOf(response));
     },
   };
 }
