@@ -119,7 +119,9 @@ async function check(file: string, pinPaths: string[]): Promise<ExportCheck> {
   const known = trustedKeys(doc, pinPaths);
   if (known.size === 0) stop("not_checked", "NOT CHECKED: no public key to check the signatures with");
   const trusted = [...known.keys()].join(", ");
-  const keys = Object.fromEntries(known);
+  // The SDK checks Ed25519 keys alone, and gives up on an entry at a key of another type. Such a key cannot have signed
+  // an entry, so, as the script finds, a signature it would have to verify does not verify.
+  const keys = Object.fromEntries([...known].filter(([, pem]) => createPublicKey(pem).asymmetricKeyType === "ed25519"));
 
   let last: ExportEntry | undefined;
   try {
@@ -134,6 +136,10 @@ async function check(file: string, pinPaths: string[]): Promise<ExportCheck> {
       const linkBroken = entry.prev_hash !== expectedPrev;
       if (result.ok === null) {
         if (/not known/.test(result.reason)) {
+          const named = typeof entry.signing_key_id === "string" && entry.signing_key_id !== "" ? entry.signing_key_id : null;
+          if (named === null ? known.size > 0 : known.has(named)) {
+            stop("broken", `BROKEN at ${at}: its signature does not verify against the trusted keys (${trusted})`);
+          }
           stop("not_checked", `NOT CHECKED: ${at} was signed by key ${entry.signing_key_id}, which is not among the trusted keys (${trusted})`);
         }
         stop("not_checked", `NOT CHECKED: the file could not be checked (${result.reason})`);

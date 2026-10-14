@@ -40,12 +40,15 @@ The key for a command is the first of:
 3. the profile saved by `vestiarion login`: `--profile <name>`, else `VESTIARION_PROFILE`, else `default`.
 
 The API is `https://www.vestiarion.xyz` unless `--base-url` or `VESTIARION_BASE_URL` says otherwise. A profile keeps the
-base URL its key was checked against, and only its own key is sent there. Plain `http` is refused, except to localhost.
+base URL its key was checked against: only its own key is sent there, and its key is sent nowhere else. With a
+`--base-url` or `VESTIARION_BASE_URL` that names another API, a saved key is refused (exit 3); log in to that API under
+another profile. Plain `http` is refused, except to localhost.
 
-Profiles are saved in your user config file, readable by you alone (mode 0600) where the system has file modes:
+Profiles are saved in your user config file, readable by you alone:
 
-- Windows: `%APPDATA%\vestiarion\config.json`;
-- macOS and Linux: `$XDG_CONFIG_HOME/vestiarion/config.json`, or `~/.config/vestiarion/config.json`.
+- Windows: `%APPDATA%\vestiarion\config.json`, inside your user profile, whose permissions let only you,
+  administrators and the system read it;
+- macOS and Linux: `$XDG_CONFIG_HOME/vestiarion/config.json`, or `~/.config/vestiarion/config.json`, with mode 0600.
 
 `vestiarion logout` removes a profile. The key itself keeps working until an owner or an admin revokes it in Settings.
 
@@ -81,7 +84,8 @@ vestiarion counterparties list --role vendor --json
 
 Lists answer one page, as the API pages them. `--limit` sets its size, up to 200; `--cursor` continues from the cursor a
 page printed; `--all` reads every page. The API has no single-record endpoint for invoices, milestones or ledger
-entries, so `show` reads the list page by page until it finds the record.
+entries, so `show` reads the list page by page until it finds the record. It stops looking after 10,000 records (the
+most recent ones, or the agent's first 10,000 entries for `decisions show`); `list --all --json` reads further.
 
 The API does not list webhook endpoints, and no key approves, rejects or pays anything, so neither does the CLI.
 

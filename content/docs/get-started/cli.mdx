@@ -54,7 +54,7 @@ Each command takes the first key it finds:
 2. The `VESTIARION_API_KEY` environment variable.
 3. A profile saved by `vestiarion login`: the one `--profile` names, else `VESTIARION_PROFILE`, else `default`.
 
-The API is `https://www.vestiarion.xyz` unless `--base-url` or `VESTIARION_BASE_URL` names another, such as your own deployment. A profile keeps the base URL its key was checked against, and only that key is sent there. Plain `http` is refused, except to localhost.
+The API is `https://www.vestiarion.xyz` unless `--base-url` or `VESTIARION_BASE_URL` names another, such as your own deployment. A profile keeps the base URL its key was checked against: only that key is sent there, and that key is sent nowhere else. With a `--base-url` or `VESTIARION_BASE_URL` that names another API, a saved key is refused (exit `3`); log in to that API under another profile. Plain `http` is refused, except to localhost.
 
 ### Where profiles are saved
 
@@ -63,7 +63,7 @@ The API is `https://www.vestiarion.xyz` unless `--base-url` or `VESTIARION_BASE_
 | Windows | `%APPDATA%\vestiarion\config.json` |
 | macOS and Linux | `$XDG_CONFIG_HOME/vestiarion/config.json`, or `~/.config/vestiarion/config.json` |
 
-The file is readable by you alone, mode `0600`, where the system has file modes. `vestiarion logout` removes a profile from it; the key itself keeps working until an owner or an admin [revokes it](/docs/get-started/authentication#revoking-a-key).
+The file is readable by you alone. On macOS and Linux it has mode `0600`. On Windows, `%APPDATA%` is inside your user profile, whose permissions let only you, administrators and the system read it. `vestiarion logout` removes a profile from it; the key itself keeps working until an owner or an admin [revokes it](/docs/get-started/authentication#revoking-a-key).
 
 The CLI never prints a key. It names one by its prefix, `vxk_<prefix>_…`, as Settings lists it.
 
@@ -104,7 +104,7 @@ vestiarion counterparties list --role vendor --json
 
 - **One page at a time.** A list answers one page, as the API pages it. `--limit` sets its size, up to 200. `--cursor` continues from the cursor a page printed, and `--all` reads every page.
 - **The agent's decisions.** `decisions list` reads the entries the agent signed into the ledger, oldest first, with the reasoning each one records. Store the last page's cursor to read only what is new next time.
-- **Showing one record.** The API has no single-record endpoint for invoices, milestones or ledger entries. So `bills show`, `invoices show`, `milestones show` and `decisions show` read the list page by page until they find the record.
+- **Showing one record.** The API has no single-record endpoint for invoices, milestones or ledger entries. So `bills show`, `invoices show`, `milestones show` and `decisions show` read the list page by page until they find the record. They stop looking after 10,000 records: the most recent ones, or for `decisions show` the agent's first 10,000 entries. `list --all --json` reads further.
 - **What it does not do.** The API does not list webhook endpoints: an owner or an admin manages them in Settings. And no key approves, rejects or pays, so neither does the CLI.
 
 ## Add records

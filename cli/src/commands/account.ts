@@ -21,7 +21,8 @@ export const ACCOUNT_COMMANDS: Command[] = [
     summary: "Check an API key with one read, then save it for a profile",
     description: [
       "Reads the key from a hidden prompt, or from stdin with --stdin, so it never sits in your shell history. It checks the key with GET /api/v1/status, a read that changes nothing, and saves it only if the API accepts it.",
-      "The key is saved in your user config file, %APPDATA%\\vestiarion\\config.json on Windows and $XDG_CONFIG_HOME/vestiarion/config.json (or ~/.config/vestiarion/config.json) elsewhere, readable by you alone (mode 0600) where the system has file modes.",
+      "The key is saved in your user config file, %APPDATA%\\vestiarion\\config.json on Windows and $XDG_CONFIG_HOME/vestiarion/config.json (or ~/.config/vestiarion/config.json) elsewhere, readable by you alone: mode 0600 where the system has file modes, and on Windows your user profile's permissions, which let only you, administrators and the system read it.",
+      "The profile keeps the API the key was checked against, and the key is sent to no other: for another --base-url or VESTIARION_BASE_URL, log in again under another profile.",
       "Create a key on the workspace's Settings page, under API keys.",
     ],
     options: { stdin: STDIN },

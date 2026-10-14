@@ -30,6 +30,11 @@ export function maskKey(key: string): string {
   return prefix ? `vxk_${prefix}_…` : "a value that is not a Vestiarion key";
 }
 
+/** `text` with anything shaped like a key cut to its prefix: for a message that repeats what was typed. */
+export function redactKeys(text: string): string {
+  return text.replace(/vxk_([a-z2-7]{8})_[A-Za-z0-9_-]+/g, "vxk_$1_…");
+}
+
 export function describeSource(credentials: Credentials): string {
   if (credentials.source === "flag") return "--api-key";
   if (credentials.source === "env") return "VESTIARION_API_KEY";
@@ -61,14 +66,28 @@ export function resolveBaseUrl(flags: AuthFlags, io: Pick<Io, "env">, fallback?:
 
 /**
  * The key for this run: `--api-key`, else `VESTIARION_API_KEY`, else the profile's saved key. A profile's base URL goes
- * with its key only, so a key from the flag or the environment is never sent to the API a saved profile names.
+ * with its key only, both ways: a key from the flag or the environment is never sent to the API a saved profile names,
+ * and a saved key is never sent to another API than the one it was checked against, whatever `--base-url` or
+ * `VESTIARION_BASE_URL` says.
  */
 export function resolveCredentials(flags: AuthFlags, io: Io): Credentials {
   const profile = profileName(flags.profile, io);
   if (flags["api-key"] !== undefined) return { apiKey: flags["api-key"].trim(), source: "flag", profile, baseUrl: resolveBaseUrl(flags, io) };
   if (io.env.VESTIARION_API_KEY) return { apiKey: io.env.VESTIARION_API_KEY.trim(), source: "env", profile, baseUrl: resolveBaseUrl(flags, io) };
   const saved = readConfig(configPath(io)).profiles[profile];
-  if (saved) return { apiKey: saved.apiKey, source: "profile", profile, baseUrl: resolveBaseUrl(flags, io, saved.baseUrl) };
+  if (saved) {
+    const own = saved.baseUrl ? checkBaseUrl(saved.baseUrl, "The profile's base URL") : DEFAULT_BASE_URL;
+    const asked = resolveBaseUrl(flags, io, own);
+    if (asked !== own) {
+      const from = flags["base-url"] !== undefined ? "--base-url" : "VESTIARION_BASE_URL";
+      throw new CliError(
+        EXIT.AUTH,
+        `The key saved for profile "${profile}" was checked against ${own}, so it is not sent to ${asked} (from ${from}). ` +
+          `For that API, run \`vestiarion login --profile <name> --base-url ${asked}\`, or set VESTIARION_API_KEY.`
+      );
+    }
+    return { apiKey: saved.apiKey, source: "profile", profile, baseUrl: own };
+  }
   const named = flags.profile !== undefined || io.env.VESTIARION_PROFILE !== undefined;
   throw new CliError(
     EXIT.AUTH,

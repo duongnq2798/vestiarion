@@ -10,5 +10,6 @@
   "dependencies": { "@vestiarion/sdk": "^0.3.2" },
   "homepage": "https://www.vestiarion.xyz/docs/get-started/cli",
   "repository": { "type": "git", "url": "git+https://github.com/duongnq2798/vestiarion.git", "directory": "cli" },
+  "publishConfig": { "access": "public" },
   "keywords": ["vestiarion", "cli", "stablecoin", "treasury", "arc", "usdc", "accounts-payable"]
 }

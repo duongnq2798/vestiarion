@@ -34,6 +34,7 @@ Read from the code on `main` at `3d5eac0`.
 
 There is no product CLI. The npm scripts (`cycle`, `numbers`, `org:*`, `telegram:setup`) are operator tools. A
 TypeScript SDK over the OpenAPI document is the planned second half of the write API; a CLI would sit on that SDK.
+(Since 2026-10-14 one does: `@vestiarion/cli`, the `vestiarion` command, in `cli/`.)
 
 ## 3. Review
 

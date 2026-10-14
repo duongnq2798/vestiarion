@@ -43,23 +43,27 @@ export function profileName(flag: string | undefined, io: Pick<Io, "env">): stri
   return name;
 }
 
+/** No profile is inherited: a profile named `constructor` or `toString` is one saved under that name, or none. */
+const noProfiles = (): Record<string, Profile> => Object.create(null) as Record<string, Profile>;
+
 export function readConfig(file: string): ConfigFile {
   let text: string;
   try {
     text = readFileSync(file, "utf8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { profiles: {} };
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { profiles: noProfiles() };
     throw usageError(`The config file ${file} could not be read (${(error as Error).message}).`);
   }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(text);
+    // A file fixed by hand on Windows often starts with a byte order mark: Windows PowerShell 5.1 writes one.
+    parsed = JSON.parse(text.replace(/^\uFEFF/, ""));
   } catch {
     throw usageError(`The config file ${file} is not JSON. Fix it, or delete it and log in again.`);
   }
   const profiles = (parsed as { profiles?: unknown } | null)?.profiles;
-  if (typeof profiles !== "object" || profiles === null || Array.isArray(profiles)) return { profiles: {} };
-  const kept: Record<string, Profile> = {};
+  if (typeof profiles !== "object" || profiles === null || Array.isArray(profiles)) return { profiles: noProfiles() };
+  const kept = noProfiles();
   for (const [name, profile] of Object.entries(profiles as Record<string, unknown>)) {
     const p = profile as Partial<Profile> | null;
     if (p && typeof p.apiKey === "string") kept[name] = p as Profile;
@@ -73,7 +77,9 @@ export function writeConfig(file: string, config: ConfigFile): void {
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const temporary = `${file}.${process.pid}.tmp`;
   try {
-    writeFileSync(temporary, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+    // A new file, never one already there: a leftover, or a link to another file, would get the key in its own mode.
+    rmSync(temporary, { force: true });
+    writeFileSync(temporary, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600, flag: "wx" });
     // A mode given to writeFileSync applies only to a file it creates, and a umask may narrow it: set it outright.
     chmodSync(temporary, 0o600);
     renameSync(temporary, file);

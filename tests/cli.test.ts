@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildOpenApiDocument } from "@/lib/api/openapi";
@@ -140,6 +140,47 @@ describe("the API key and the base URL", () => {
     expect(fromEnv.sent[0].url).toBe("https://www.vestiarion.xyz/api/v1/status");
   });
 
+  describe("sends each key only where it may go, for every source of the key and of the base URL", () => {
+    const EVIL = "https://evil.example";
+    const STAGING = "https://staging.example.com";
+    type Case = { key: "flag" | "env" | "profile"; saved?: string; flag?: string; env?: string; to: string | null };
+    // `to`: where the key is sent, or null when nothing may be sent.
+    const cases: Case[] = [
+      { key: "flag", saved: EVIL, to: "https://www.vestiarion.xyz" },
+      { key: "env", saved: EVIL, to: "https://www.vestiarion.xyz" },
+      { key: "flag", saved: EVIL, env: STAGING, to: STAGING },
+      { key: "env", saved: EVIL, flag: STAGING, to: STAGING },
+      { key: "profile", to: "https://www.vestiarion.xyz" },
+      { key: "profile", saved: STAGING, to: STAGING },
+      { key: "profile", saved: STAGING, env: `${STAGING}/`, to: STAGING },
+      { key: "profile", flag: "https://www.vestiarion.xyz/", to: "https://www.vestiarion.xyz" },
+      { key: "profile", env: EVIL, to: null },
+      { key: "profile", flag: EVIL, to: null },
+      { key: "profile", saved: STAGING, env: EVIL, to: null },
+      { key: "profile", saved: STAGING, flag: EVIL, to: null },
+      { key: "profile", saved: STAGING, flag: "https://www.vestiarion.xyz", to: null },
+      { key: "profile", saved: "http://localhost:3000", env: "http://127.0.0.1:3000", to: null },
+    ];
+    it.each(cases)("%j", async ({ key, saved, flag, env, to }) => {
+      const h = harness({
+        env: { ...(key === "env" ? { VESTIARION_API_KEY: OTHER_KEY } : {}), ...(env ? { VESTIARION_BASE_URL: env } : {}) },
+        routes: status,
+      });
+      saveProfiles(h, { default: { apiKey: KEY, ...(saved ? { baseUrl: saved } : {}) } });
+      const code = await h.run("status", ...(key === "flag" ? ["--api-key", THIRD_KEY] : []), ...(flag ? ["--base-url", flag] : []));
+      if (to === null) {
+        expect(code).toBe(3);
+        expect(h.sent).toEqual([]);
+        expect(h.stderr).toContain(`The key saved for profile "default" was checked against ${saved ?? "https://www.vestiarion.xyz"}, so it is not sent to`);
+        expect(h.stderr).not.toContain(SECRET);
+      } else {
+        expect(code).toBe(0);
+        expect(h.sent.map((request) => request.url)).toEqual([`${to}/api/v1/status`]);
+        expect(bearer(h)).toBe(`Bearer ${key === "flag" ? THIRD_KEY : key === "env" ? OTHER_KEY : KEY}`);
+      }
+    });
+  });
+
   it("takes --base-url over VESTIARION_BASE_URL over the default", async () => {
     const both = harness({ env: { ...ENV_KEY, VESTIARION_BASE_URL: "https://staging.example.com" }, routes: status });
     await both.run("status", "--base-url", "http://127.0.0.1:3000/");
@@ -242,6 +283,43 @@ describe("login and logout", () => {
     const again = harness();
     expect(await again.run("logout")).toBe(0);
     expect(again.stdout).toContain("nothing to remove");
+  });
+
+  it("reads a config file edited by hand on Windows, which starts with a byte order mark", async () => {
+    const h = harness({ routes: status });
+    const file = configPath(h.io);
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, `\uFEFF${JSON.stringify({ profiles: { default: { apiKey: KEY } } })}\r\n`);
+    expect(await h.run("status")).toBe(0);
+    expect(h.sent[0].headers.authorization).toBe(`Bearer ${KEY}`);
+  });
+
+  it("finds no profile under a name every object answers to, such as constructor or toString", async () => {
+    for (const saved of [false, true]) {
+      const logout = harness();
+      if (saved) saveProfiles(logout, { default: { apiKey: KEY } });
+      expect(await logout.run("logout", "--profile", "constructor")).toBe(0);
+      expect(logout.stdout).toContain('No key is saved for profile "constructor": nothing to remove');
+      const read = harness();
+      if (saved) saveProfiles(read, { default: { apiKey: KEY } });
+      expect(await read.run("status", "--profile", "toString")).toBe(3);
+      expect(read.stderr).toContain('No key is saved for profile "toString"');
+      expect(read.sent).toEqual([]);
+    }
+  });
+
+  it("writes the key into a new file, never into one already at the temporary path", async () => {
+    const h = harness({ stdin: KEY, routes: status });
+    const file = configPath(h.io);
+    mkdirSync(path.dirname(file), { recursive: true });
+    // A second name for another file, where the CLI writes before it renames: the key must not reach that file.
+    const elsewhere = path.join(h.home, "elsewhere.txt");
+    writeFileSync(elsewhere, "someone else's file\n");
+    linkSync(elsewhere, `${file}.${process.pid}.tmp`);
+    expect(await h.run("login", "--stdin")).toBe(0);
+    expect(readFileSync(elsewhere, "utf8")).toBe("someone else's file\n");
+    expect(JSON.parse(readFileSync(file, "utf8")).profiles.default.apiKey).toBe(KEY);
+    expect(existsSync(`${file}.${process.pid}.tmp`)).toBe(false);
   });
 });
 
@@ -352,6 +430,33 @@ describe("the commands, against the API's recorded answers", () => {
     expect(h.stdout).toContain("immediate release is justified");
   });
 
+  it("stops a list that comes back to a cursor it gave before (exit 2), with --all and in show", async () => {
+    const looping = {
+      "GET /api/v1/invoices": (url: URL) => ({
+        status: 200,
+        body: { data: [], page: { nextCursor: url.searchParams.get("cursor") === "a" ? "b" : "a", hasMore: true, count: 0 } },
+      }),
+    };
+    for (const argv of [["bills", "list", "--all"], ["bills", "show", "no-such-id"]]) {
+      const h = harness({ env: ENV_KEY, routes: looping });
+      expect(await h.run(...argv)).toBe(2);
+      expect(h.stderr).toContain("The API gave a page cursor it had already given");
+      expect(h.stdout).toBe("");
+      expect(h.sent).toHaveLength(3);
+    }
+  });
+
+  it("stops looking for a record after the 10000 most recent (exit 2), and says how to look further", async () => {
+    let n = 0;
+    const endless = { "GET /api/v1/invoices": () => ({ status: 200, body: { data: [], page: { nextCursor: `c${++n}`, hasMore: true, count: 0 } } }) };
+    const h = harness({ env: ENV_KEY, routes: endless });
+    expect(await h.run("bills", "show", "no-such-id")).toBe(2);
+    expect(h.sent).toHaveLength(50);
+    expect(h.stderr).toContain("No bill with id no-such-id in the 10000 most recent bills");
+    expect(h.stderr).toContain("vestiarion bills list --all --json");
+    expect(h.stdout).toBe("");
+  });
+
   describe("decisions", () => {
     const entry = (recorded("list-ledger-entries") as { data: Array<Record<string, unknown>> }).data[0];
     const decision = {
@@ -384,6 +489,15 @@ describe("the commands, against the API's recorded answers", () => {
       expect(JSON.parse(json.stdout)).toEqual({ data: decision });
       const missing = harness({ env: ENV_KEY, routes: { "GET /api/v1/ledger": { status: 200, body: page } } });
       expect(await missing.run("decisions", "show", "7")).toBe(2);
+    });
+
+    it("stops looking after the agent's first 10000 entries (exit 2)", async () => {
+      let n = 0;
+      const endless = { "GET /api/v1/ledger": () => ({ status: 200, body: { data: [{ ...decision, seq: ++n }], page: { nextCursor: `c${n}`, hasMore: true, count: 1 } } }) };
+      const h = harness({ env: ENV_KEY, routes: endless });
+      expect(await h.run("decisions", "show", "999999")).toBe(2);
+      expect(h.sent).toHaveLength(50);
+      expect(h.stderr).toContain("The agent's first 10000 ledger entries hold no entry 999999");
     });
   });
 
@@ -522,6 +636,16 @@ describe("writes", () => {
 });
 
 describe("the key", () => {
+  it("is cut to its prefix when an error repeats what was typed, such as a key pasted where a command goes", async () => {
+    for (const argv of [[KEY], ["bills", KEY], ["help", KEY], [KEY, "--json"], ["bills", `${KEY}xyz`]]) {
+      const h = harness();
+      expect(await h.run(...argv)).toBe(1);
+      expect(h.stderr, argv.join(" ")).toContain("vxk_abcdefgh_…");
+      expect(h.stderr, argv.join(" ")).not.toContain(SECRET.slice(0, 12));
+      expect(h.sent).toEqual([]);
+    }
+  });
+
   it("is never printed, never in a URL, and always a bearer header, whatever the command and however it ends", async () => {
     const routes = {
       "GET /api/v1/status": ok("get-status"),

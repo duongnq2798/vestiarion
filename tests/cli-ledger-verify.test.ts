@@ -26,6 +26,7 @@ const signer = crypto.generateKeyPairSync("ed25519");
 const stranger = crypto.generateKeyPairSync("ed25519");
 const keyA = crypto.generateKeyPairSync("ed25519");
 const keyB = crypto.generateKeyPairSync("ed25519");
+const ecKey = crypto.generateKeyPairSync("ec", { namedCurve: "P-256" });
 const KEY_ID = ledgerKeyId(signer.publicKey);
 const ring: LedgerKeyring = { active: signer.publicKey, retired: [] };
 const rotatedRing: LedgerKeyring = { active: keyB.publicKey, retired: [keyA.publicKey] };
@@ -91,6 +92,21 @@ const CASES: Array<[string, () => { target: string; pins?: string[] }]> = [
   ["a rotation, each key pinned", () => ({ target: exportOf(rotated(), rotatedRing), pins: [file("a.pem", pem(keyA.publicKey)), file("b.pem", pem(keyB.publicKey))] })],
   ["a rotation, both keys in one file", () => ({ target: exportOf(rotated(), rotatedRing), pins: [file("both.pem", `${pem(keyA.publicKey)}\n${pem(keyB.publicKey)}`)] })],
   ["a rotation, only the newer key pinned", () => ({ target: exportOf(rotated(), rotatedRing), pins: [file("b.pem", pem(keyB.publicKey))] })],
+  // A key of another type than Ed25519 cannot have signed an entry: its signature does not verify, and the others' do.
+  ["entries from before key ids, a pinned key that is not Ed25519", () => ({ target: exportOf(buildChain(INPUTS, signer.privateKey)), pins: [file("ec.pem", pem(ecKey.publicKey))] })],
+  [
+    "entries from before key ids, a pinned file with another kind of key beside the right one",
+    () => ({ target: exportOf(buildChain(INPUTS, signer.privateKey)), pins: [file("mixed.pem", `${pem(ecKey.publicKey)}\n${pem(signer.publicKey)}`)] }),
+  ],
+  [
+    "entries naming a key the file holds that is not Ed25519",
+    () => ({
+      target: exportOf(intact(), ring, (d) => {
+        d.keys = [{ keyId: ledgerKeyId(ecKey.publicKey), publicKeyPem: pem(ecKey.publicKey) }];
+        for (const entry of entries(d)) entry.signing_key_id = ledgerKeyId(ecKey.publicKey);
+      }),
+    }),
+  ],
   ["a private key pinned", () => ({ target: exportOf(intact()), pins: [file("private.pem", signer.privateKey.export({ type: "pkcs8", format: "pem" }).toString())] })],
   ["a pinned file with no PEM block", () => ({ target: exportOf(intact()), pins: [file("empty.pem", "not a key\n")] })],
   ["a pinned file that does not exist", () => ({ target: exportOf(intact()), pins: [path.join(dir, "missing.pem")] })],

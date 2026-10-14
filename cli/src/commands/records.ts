@@ -19,27 +19,66 @@ import { amountOf, day, orDash, pairs, table, wrap } from "../output.js";
 
 type PageParams = { limit?: number; cursor?: string };
 
+/** `show` reads pages of the API's largest size, and at most this many records, before it stops looking. */
+const SHOW_PAGE_SIZE = 200;
+const SHOW_MAX_PAGES = 50;
+const SHOW_LIMIT = SHOW_PAGE_SIZE * SHOW_MAX_PAGES;
+
+/**
+ * Every page from `params.cursor` on. The SDK stops at a cursor the API repeats at once; this also stops at one it
+ * gave earlier, so a list that loops back on itself is never read forever.
+ */
+async function* pagesOf<T, P extends PageParams>(collection: Collection<T, P>, params: P): AsyncGenerator<List<T>> {
+  const seen = new Set<string>(params.cursor ? [params.cursor] : []);
+  for await (const page of collection.pages(params)) {
+    yield page;
+    const next = page.page.nextCursor;
+    if (!page.page.hasMore || next === null) return;
+    if (seen.has(next)) throw new CliError(EXIT.FAILED, "The API gave a page cursor it had already given: stopped rather than read the same pages again.");
+    seen.add(next);
+  }
+}
+
 /** One page, or with `--all` every page from `--cursor` on, as one `{ data, page }`. */
 async function readList<T, P extends PageParams>(ctx: Context, collection: Collection<T, P>, filters: Omit<P, keyof PageParams>): Promise<List<T>> {
   const params = { ...filters, limit: ctx.count("limit"), cursor: ctx.string("cursor") } as P;
   if (ctx.values.all !== true) return ctx.call(() => collection.list(params));
   const data: T[] = [];
   await ctx.call(async () => {
-    for await (const page of collection.pages(params)) data.push(...page.data);
+    for await (const page of pagesOf(collection, params)) data.push(...page.data);
   });
   return { data, page: { nextCursor: null, hasMore: false, count: data.length } };
 }
 
 /**
- * A record by id, read from its list page by page: these collections have no single-record endpoint. Stops at the
- * first match.
+ * The first item `isIt` picks, read page by page from the start of the list: null once the list ends, or once `isPast`
+ * says the item would have come already; "stopped" when SHOW_LIMIT items were read and more remain.
  */
-async function findById<T extends { id: string }, P extends PageParams>(ctx: Context, collection: Collection<T, P>, filters: Omit<P, keyof PageParams>, id: string, noun: string): Promise<T> {
-  const found = await ctx.call(async () => {
-    for await (const item of collection.listAll({ ...filters, limit: 200 } as P)) if (item.id === id) return item;
+async function search<T, P extends PageParams>(ctx: Context, collection: Collection<T, P>, filters: Omit<P, keyof PageParams>, isIt: (item: T) => boolean, isPast: (item: T) => boolean = () => false): Promise<T | null | "stopped"> {
+  return ctx.call(async () => {
+    let read = 0;
+    for await (const page of pagesOf(collection, { ...filters, limit: SHOW_PAGE_SIZE } as P)) {
+      for (const item of page.data) {
+        if (isIt(item)) return item;
+        if (isPast(item)) return null;
+      }
+      read += 1;
+      if (read >= SHOW_MAX_PAGES && page.page.hasMore) return "stopped" as const;
+    }
     return null;
   });
-  if (!found) throw new CliError(EXIT.FAILED, `No ${noun} with id ${id} in this workspace.`);
+}
+
+/**
+ * A record by id, read from its list page by page: these collections have no single-record endpoint. Stops at the
+ * first match, or after the SHOW_LIMIT most recent records.
+ */
+async function findById<T extends { id: string }, P extends PageParams>(ctx: Context, collection: Collection<T, P>, filters: Omit<P, keyof PageParams>, id: string, nouns: [string, string], group: string): Promise<T> {
+  const found = await search(ctx, collection, filters, (item) => item.id === id);
+  if (found === "stopped") {
+    throw new CliError(EXIT.FAILED, `No ${nouns[0]} with id ${id} in the ${SHOW_LIMIT} most recent ${nouns[1]}: show stops looking there. Look further with \`vestiarion ${group} list --all --json\`.`);
+  }
+  if (!found) throw new CliError(EXIT.FAILED, `No ${nouns[0]} with id ${id} in this workspace.`);
   return found;
 }
 
@@ -121,7 +160,7 @@ function invoiceCommands(group: "bills" | "invoices"): Command[] {
       ],
       examples: [`vestiarion ${group} show 9440f32c-000d-4a63-97f1-4eb6bf78439f`],
       async run(ctx) {
-        const invoice = await findById(ctx, ctx.client().invoices, { direction }, ctx.args[0], nouns[0]);
+        const invoice = await findById(ctx, ctx.client().invoices, { direction }, ctx.args[0], nouns, group);
         return ctx.print({ data: invoice }, (answer) => invoiceDetail(answer.data, payable ? "Bill" : "Invoice"));
       },
     },
@@ -350,7 +389,7 @@ const milestoneCommands: Command[] = [
     description: ["GET /api/v1/milestones, page by page until the id is found: the API has no single-milestone endpoint."],
     examples: ["vestiarion milestones show d01b2b49-2ca3-45fe-898c-f2c0128f6188"],
     async run(ctx) {
-      const milestone = await findById(ctx, ctx.client().milestones, {}, ctx.args[0], "milestone");
+      const milestone = await findById(ctx, ctx.client().milestones, {}, ctx.args[0], ["milestone", "milestones"], "milestones");
       return ctx.print({ data: milestone }, (answer) => milestoneDetail(answer.data));
     },
   },
@@ -469,13 +508,11 @@ const decisionCommands: Command[] = [
       const raw = ctx.args[0].replace(/^#/, "");
       if (!/^\d+$/.test(raw)) throw usageError("<seq> is the entry's number in the ledger, such as 1042.");
       const seq = Number(raw);
-      const entry = await ctx.call(async () => {
-        for await (const item of ctx.client().ledger.listAll({ actor: "agent", limit: 200 })) {
-          if (item.seq === seq) return item;
-          if (item.seq > seq) break;
-        }
-        return null;
-      });
+      // Oldest first: past the number, it is not there.
+      const entry = await search(ctx, ctx.client().ledger, { actor: "agent" }, (item) => item.seq === seq, (item) => item.seq > seq);
+      if (entry === "stopped") {
+        throw new CliError(EXIT.FAILED, `The agent's first ${SHOW_LIMIT} ledger entries hold no entry ${seq}: show stops looking there. Look further with \`vestiarion decisions list --all --json\`.`);
+      }
       if (!entry) throw new CliError(EXIT.FAILED, `The agent wrote no ledger entry ${seq} in this workspace.`);
       return ctx.print({ data: entry }, (answer) =>
         pairs([

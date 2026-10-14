@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { redactKeys } from "./auth.js";
 import { Context, type Command, type OptionSpec, type Values } from "./command.js";
 import { ACCOUNT_COMMANDS } from "./commands/account.js";
 import { RECORD_COMMANDS } from "./commands/records.js";
@@ -204,7 +205,9 @@ export async function run(argv: string[], io: Io): Promise<number> {
     return (await command.run(new Context(io, command, parsed.values, args))) ?? EXIT.OK;
   } catch (error) {
     const failure = error instanceof CliError ? error : new CliError(EXIT.FAILED, error instanceof Error ? error.message : String(error));
-    io.stderr(json ? `${JSON.stringify({ error: { message: failure.message, exitCode: failure.exitCode } })}\n` : `Error: ${failure.message}\n`);
+    // A message may repeat what was typed, such as a key pasted where a command goes: it is printed without the secret.
+    const message = redactKeys(failure.message);
+    io.stderr(json ? `${JSON.stringify({ error: { message, exitCode: failure.exitCode } })}\n` : `Error: ${message}\n`);
     return failure.exitCode;
   }
 }

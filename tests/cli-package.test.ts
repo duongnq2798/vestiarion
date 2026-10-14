@@ -85,9 +85,14 @@ describe("the CLI package", () => {
       engines: { node: ">=20" },
       bin: { vestiarion: "dist/bin.js" },
       files: ["dist", "README.md", "LICENSE"],
+      repository: { type: "git", url: "git+https://github.com/duongnq2798/vestiarion.git", directory: "cli" },
+      // A scoped package is private on npm unless it says otherwise.
+      publishConfig: { access: "public" },
     });
     expect(Object.keys(pkg.dependencies)).toEqual(["@vestiarion/sdk"]);
     expect(pkg.devDependencies).toBeUndefined();
+    // Nothing runs when it is installed.
+    expect(Object.keys((pkg.scripts as Record<string, string> | undefined) ?? {})).toEqual([]);
   });
 
   it("is built and tested against the SDK range it depends on, as npm serves it", () => {
@@ -179,6 +184,16 @@ describe("the tarball npm publishes", () => {
 });
 
 describe("the docs", () => {
+  it.each([
+    ["the docs page", "content/docs/get-started/cli.mdx"],
+    ["the README", "cli/README.md"],
+  ])("%s says what keeps the saved key private on each system, and that a saved key goes to its own API alone", (_label, file) => {
+    const text = readFileSync(file, "utf8").replace(/\s+/g, " ");
+    expect(text).toContain("0600");
+    expect(text).toContain("user profile, whose permissions let only you, administrators and the system read it");
+    expect(text).toContain("a saved key is refused (exit");
+  });
+
   it.each([
     ["the docs page", "content/docs/get-started/cli.mdx"],
     ["the README", "cli/README.md"],

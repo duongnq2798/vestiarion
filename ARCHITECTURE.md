@@ -2360,9 +2360,10 @@ serves it, not against `sdk/src`. It is held to the code in four ways:
 - Each command names the operations it calls in its help (`cli/src/commands/`). `tests/cli.test.ts` holds every one to
   an operation of the OpenAPI document, and runs each command against the recorded answers in
   `content/docs/examples/`: its text, its `--json`, its exit code and the request it sends.
-- The same test checks the key's precedence (`--api-key`, `VESTIARION_API_KEY`, then a profile), the config file's
-  place and mode, the confirmation before a write and its refusal without a terminal, and that no output and no URL
-  ever holds a key.
+- The same test checks the key's precedence (`--api-key`, `VESTIARION_API_KEY`, then a profile), that a saved key goes
+  only to the API it was checked against and no other key goes there, the config file's place and mode, the
+  confirmation before a write and its refusal without a terminal, that `show` stops paging after 10,000 records or at
+  a cursor the API already gave, and that no output and no URL ever holds a key.
 - `vestiarion ledger verify` checks an audit export with the SDK's `verifyLedgerEntry` (`cli/src/ledger-export.ts`).
   `tests/cli-ledger-verify.test.ts` runs it and `public/tools/verify-ledger-export.mjs` on the same exports, and
   requires the same words and verdict.
