@@ -109,6 +109,12 @@ export interface PaymentIntentStore {
   recordResult(idempotencyKey: string, result: TransferResult): Promise<PaymentIntent>;
   recordError(idempotencyKey: string, error: string): Promise<PaymentIntent>;
   /**
+   * Records that Circle has no transfer for an unknown send (`NO_EARLIER_SEND`), only while the row is still the one the
+   * lookup read: the same status and `updated_at`, and no Circle id. Null when it is not: another request concluded
+   * first and claimed it since, and its send is never written over (payment exceptions review).
+   */
+  recordNotSent(idempotencyKey: string, seen: { status: string; updatedAt: string }): Promise<PaymentIntent | null>;
+  /**
    * Moves the intent to its next attempt, under that attempt's key, when its
    * current attempt is still `intent`'s and Circle ended it in a terminal
    * failure; null when nothing matched (another request moved it first, or
@@ -375,6 +381,20 @@ export class SupabasePaymentIntentStore implements PaymentIntentStore, PaymentBa
     }).eq("idempotency_key", idempotencyKey);
     if (update.error) throw new Error(update.error.message);
     return this.get(idempotencyKey);
+  }
+
+  async recordNotSent(idempotencyKey: string, seen: { status: string; updatedAt: string }): Promise<PaymentIntent | null> {
+    const result = await db()
+      .from("payment_intents")
+      .update({ status: "failed", last_error: NO_EARLIER_SEND, updated_at: new Date().toISOString() })
+      .eq("idempotency_key", idempotencyKey)
+      .eq("status", seen.status)
+      .eq("updated_at", seen.updatedAt)
+      .is("provider_tx_id", null)
+      .select("*");
+    if (result.error) throw new Error(result.error.message);
+    const rows = (result.data ?? []) as PaymentIntentRow[];
+    return rows.length > 0 ? fromRow(rows[0]) : null;
   }
 
   async markSending(idempotencyKey: string, sentWalletId: string | null): Promise<void> {
@@ -701,7 +721,10 @@ async function lookForUnknownSend(
       `Circle has not listed this payment's earlier send yet; it is looked for again from ${utcClock(sentAt + UNKNOWN_SEND_GRACE_MS)} UTC, and sent only if Circle has none.`
     );
   }
-  await store.recordError(intent.idempotencyKey, NO_EARLIER_SEND);
+  // Written only while the row is still the one this lookup read (payment exceptions review): another request that
+  // concluded first may have claimed it since and be sending it now, and that send is never written over.
+  const marked = await store.recordNotSent(intent.idempotencyKey, { status: intent.status, updatedAt: intent.updatedAt });
+  if (!marked) return undecided("Another request is settling this payment's earlier send right now; it is looked for again, and sent only if Circle has none.");
   return NOT_SENT;
 }
 

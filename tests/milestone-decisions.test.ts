@@ -288,6 +288,8 @@ function world(options: {
   org?: Record<string, unknown>;
   /** The workspace's spending limit contract row (wallet treasury W11); none by default. */
   spendingLimit?: Record<string, unknown> | null;
+  /** No operating account at all; one by default. */
+  noOperatingAccount?: boolean;
 } = {}) {
   let intentRow: Record<string, unknown> | null = options.intent === undefined ? FAILED_INTENT : options.intent;
   const fake = fakeSupabase((request: RecordedRequest) => {
@@ -299,13 +301,18 @@ function world(options: {
     if (request.path === "/rest/v1/milestones" && request.method === "GET") return { body: milestoneRow(options.milestone) };
     if (request.path === "/rest/v1/milestones" && request.method === "PATCH") return { body: [{ id: MILESTONE }] };
     if (request.path === "/rest/v1/payment_intents" && request.method === "PATCH") {
-      intentRow = { ...(intentRow as Record<string, unknown>), ...(request.body as Record<string, unknown>) };
-      return { body: [] };
+      // A compare-and-set names the row's status and time too, as PostgREST filters them (payment exceptions review).
+      const status = request.params.get("status");
+      const updatedAt = request.params.get("updated_at");
+      const row = intentRow as Record<string, unknown>;
+      if ((status && status !== `eq.${row.status}`) || (updatedAt && updatedAt !== `eq.${row.updated_at}`)) return { body: [] };
+      intentRow = { ...row, ...(request.body as Record<string, unknown>) };
+      return { body: [intentRow] };
     }
     if (request.path === "/rest/v1/payment_intents") return { body: intentRow };
     if (request.path === "/rest/v1/rpc/ledger_entries_for_targets") return { body: options.entries ?? [options.last ?? entryRow("milestone_release", {})] };
     if (request.path === "/rest/v1/accounts" && request.params.get("kind") === "eq.reserve") return { body: options.reserve ?? null };
-    if (request.path === "/rest/v1/accounts") return { body: { id: "acct-1", balance: options.balance ?? "8" } };
+    if (request.path === "/rest/v1/accounts") return { body: options.noOperatingAccount ? null : { id: "acct-1", balance: options.balance ?? "8" } };
     if (request.path === "/rest/v1/rpc/claim_milestone_decision") return options.claim ? options.claim() : { body: milestoneRow() };
     if (request.path === "/rest/v1/rpc/sole_approver" && options.soleApprover) return options.soleApprover;
     if (request.path === "/rest/v1/approval_policies") return { body: options.twoApprovals ? [{ two_approvals_above: String(options.twoApprovals) }] : [] };
@@ -506,6 +513,14 @@ describe("Pay now", () => {
         expect(claimed()).toBe(false);
       }
       expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
+    });
+
+    it("refuses with no_operating_account, never 'try again', when the workspace has no operating account to look from (review)", async () => {
+      const findTransferByRef = looking();
+      const { run, claimed } = world({ intent: unknownSince(20), noOperatingAccount: true });
+      expect(await refusal(run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE })))).toBe("no_operating_account");
+      expect(findTransferByRef).not.toHaveBeenCalled();
+      expect(claimed()).toBe(false);
     });
 
     it("checks the balance for that new payment", async () => {

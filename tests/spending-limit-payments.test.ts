@@ -63,6 +63,11 @@ class Store implements PaymentIntentStore, PaymentBatchStore {
   async recordError(key: string, error: string) {
     return this.put({ ...this.byKey(key), status: "failed", lastError: error });
   }
+  async recordNotSent(key: string, seen: { status: string; updatedAt: string }) {
+    const row = this.byKey(key);
+    if (row.status !== seen.status || row.updatedAt !== seen.updatedAt || row.providerTxId) return null;
+    return this.put({ ...row, status: "failed", lastError: "Circle has no transfer for this payment's earlier send; nothing was sent." });
+  }
   async beginRetry() {
     return null;
   }

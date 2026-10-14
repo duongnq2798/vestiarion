@@ -370,16 +370,20 @@ async function refuseIfPaymentSent(invoiceId: string): Promise<void> {
   let intent = await paymentIntentOf(invoiceId);
   if (transferUnknown(intent)) {
     const looked = await lookForUnknownSend("invoice", invoiceId);
+    if (looked.answer === "no_operating_account") throw new ApprovalError("payment_unknown", unknownSendMessage("invoice", null));
     if (looked.answer === "undecided") throw new ApprovalError("payment_unknown", unknownSendMessage("invoice", looked.retryAt, { unlookable: looked.unlookable }));
     intent = await paymentIntentOf(invoiceId);
   }
   if (paymentWasSent(intent)) raise("payment_in_flight");
 }
 
-/** Looks for a source's unknown send on Circle from the operating wallet, sending nothing (R6). */
-export async function lookForUnknownSend(type: "invoice" | "milestone", id: string): Promise<UnknownSendAnswer> {
+/**
+ * Looks for a source's unknown send on Circle from the operating wallet, sending nothing (R6). With no operating account
+ * there is nothing to look from: a pay action refuses with `no_operating_account`, as it would for any payment.
+ */
+export async function lookForUnknownSend(type: "invoice" | "milestone", id: string): Promise<UnknownSendAnswer | { answer: "no_operating_account" }> {
   const operating = await operatingAccount();
-  if (!operating) return { answer: "undecided", retryAt: null };
+  if (!operating) return { answer: "no_operating_account" };
   return settleUnknownSend({ type, id }, { provider: getChainProvider(), fromAccountId: operating.id });
 }
 
@@ -827,6 +831,7 @@ export async function approveAndPay(
   // which Circle takes only once, as before. Not where the network holds payments, which refuses below.
   if (transferUnknown(intent) && !currentConfig().chain.networkHold) {
     const looked = await lookForUnknownSend("invoice", invoice.id);
+    if (looked.answer === "no_operating_account") raise("no_operating_account");
     if (looked.answer === "undecided" && !looked.unlookable) throw new ApprovalError("payment_unknown", unknownSendMessage("invoice", looked.retryAt, { paying: true }));
     intent = await paymentIntentOf(invoice.id);
   }

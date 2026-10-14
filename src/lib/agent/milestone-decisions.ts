@@ -553,6 +553,7 @@ export async function payHeldMilestone(input: {
   // applies to it, the funds' included; not listed yet, nothing is claimed and nothing is sent.
   if (transferUnknown(milestone.facts.intent)) {
     const looked = await lookForUnknownSend("milestone", milestone.id);
+    if (looked.answer === "no_operating_account") raise("no_operating_account");
     if (looked.answer === "undecided") raise("payment_unknown", unknownSendMessage("milestone", looked.retryAt, { paying: true, unlookable: looked.unlookable }));
     milestone = await loadMilestone(input.milestoneId, provider.mode === "live");
   }
@@ -809,6 +810,7 @@ export async function closeMilestone(input: { actorId: string; milestoneId: stri
   // A send Circle never answered is looked for first, sending nothing (payment safety R6).
   if (transferUnknown(intent)) {
     const looked = await lookForUnknownSend("milestone", milestone.id);
+    if (looked.answer === "no_operating_account") raise("payment_unknown", unknownSendMessage("milestone", null));
     if (looked.answer === "undecided") raise("payment_unknown", unknownSendMessage("milestone", looked.retryAt, { unlookable: looked.unlookable }));
     intent = (await loadMilestone(input.milestoneId, getChainProvider().mode === "live")).facts.intent;
   }

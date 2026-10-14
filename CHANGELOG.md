@@ -43,8 +43,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   sent. Not listed yet, nothing is claimed or sent, and the answer says when to try again; before, the approval went
   ahead and the agent's cycle looked for it later. Once Circle shows none, 15 minutes after the send, the payment is a
   new one, and every check a new payment gets applies: screening and limits, two approvals, the funds, and in shadow
-  mode the verdict on the agent's decision. A payout to another chain, which Circle cannot list this way, is still
-  asked for again under its own payment key, which Circle takes only once.
+  mode the verdict on the agent's decision. Two people approving at once never both conclude it was never sent: the
+  second is asked to try again. A payout to another chain, which Circle cannot list this way, is still asked for again
+  under its own payment key, which Circle takes only once.
 
 - **The header names the page you are on.** On a page inside a section, the line at the top that says where you are
   now ends with that page, where it stopped at the section: Commissions reads "Your workspace › Bills & receivables ›

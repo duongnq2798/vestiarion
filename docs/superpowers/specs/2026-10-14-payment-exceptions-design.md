@@ -141,6 +141,20 @@ parts of E1-E4 they name.
   its answer was lost" of it. No behaviour changes: it is looked for first, and nothing concludes while Circle has not
   listed it.
 
+A second review (2026-10-15) added two rulings:
+
+- **R7. "Never sent" is written only over the row the lookup read.** Two approvals at once (the console and Slack, or a
+  double submit) on an unknown send 15 minutes old could both conclude it was never sent; the second write could land
+  after the first request's claim and overwrite its send in flight with `failed`, so a later Reject would close over a
+  transfer Circle had. `recordNotSent` now writes `NO_EARLIER_SEND` only while the row has the status and `updated_at`
+  the lookup read and no Circle id. A lost compare-and-set answers undecided: nothing is sent, and the person tries
+  again, by when the other request's send is recorded.
+- **R8. No operating account says so.** With no operating account, nothing can be looked up nor paid: Approve and pay
+  and Pay now refuse with `no_operating_account` ("This workspace has no operating account."), never "try again".
+
+The re-ask of a payout to another chain under its own key (R5) stays as it is: it skips the funds check and the verdict
+gate, since sending under the same key is the only thing that settles it, and shadow mode pays on Arc only.
+
 ## Docs
 
 - New guide **When a payment does not settle** (`content/docs/guides/payment-exceptions.mdx`), under Everyday work after

@@ -4,7 +4,9 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import {
   executePayment,
+  NO_EARLIER_SEND,
   paymentIdempotencyKey,
+  settleUnknownSend,
   SupabasePaymentIntentStore,
   type PaymentIntent,
   type PaymentIntentStore,
@@ -120,6 +122,14 @@ class MemoryStore implements PaymentIntentStore {
   async recordError(key: string, error: string): Promise<PaymentIntent> {
     this.calls.push(`recordError:${key}`);
     this.intent = { ...this.current(key), status: "failed", lastError: error };
+    return { ...this.intent };
+  }
+
+  async recordNotSent(key: string, seen: { status: string; updatedAt: string }): Promise<PaymentIntent | null> {
+    this.calls.push(`recordNotSent:${key}`);
+    const row = this.current(key);
+    if (row.status !== seen.status || row.updatedAt !== seen.updatedAt || row.providerTxId) return null;
+    this.intent = { ...row, status: "failed", lastError: NO_EARLIER_SEND };
     return { ...this.intent };
   }
 
@@ -795,6 +805,26 @@ describe("SupabasePaymentIntentStore by source, and its attempts", () => {
     expect(body(onArc.fake)).not.toHaveProperty("payout_route");
   });
 
+  it("records that nothing was sent only while the row is still the one the lookup read: status and time (payment exceptions review)", async () => {
+    const written = inOrganization(
+      (sent) => ({ body: sent.method === "PATCH" ? [intentRow({ status: "failed", last_error: NO_EARLIER_SEND })] : intentRow({ status: "failed", last_error: NO_EARLIER_SEND }) }),
+      () => new SupabasePaymentIntentStore().recordNotSent(KEY, { status: "submitting", updatedAt: "2026-10-05T04:00:00.000Z" })
+    );
+    expect(await written.result).toMatchObject({ status: "failed", lastError: NO_EARLIER_SEND });
+    const patch = written.fake.requests.find((sent) => sent.method === "PATCH")!;
+    expect(patch.body).toMatchObject({ status: "failed", last_error: NO_EARLIER_SEND });
+    expect(patch.params.get("idempotency_key")).toBe(`eq.${KEY}`);
+    expect(patch.params.get("status")).toBe("eq.submitting");
+    expect(patch.params.get("updated_at")).toBe("eq.2026-10-05T04:00:00.000Z");
+    expect(patch.params.get("provider_tx_id")).toBe("is.null");
+
+    const lost = inOrganization(
+      () => ({ body: [] }),
+      () => new SupabasePaymentIntentStore().recordNotSent(KEY, { status: "submitting", updatedAt: "2026-10-05T04:00:00.000Z" })
+    );
+    expect(await lost.result).toBeNull();
+  });
+
   it("keeps the chain it knows when a reconcile cannot say which chain a Gateway payout is on (review M3)", async () => {
     const respond = (sent: RecordedRequest) => ({ body: sent.path === "/rest/v1/payment_intents" && sent.method === "GET" ? intentRow({ status: "pending" }) : [] });
     const recorded = inOrganization(respond, () => new SupabasePaymentIntentStore().recordResult("k-1", { ...transferResult("pending"), chain: "" }));
@@ -955,8 +985,44 @@ describe("executePayment after a send Circle never answered (payment safety R4)"
 
     expect(provider.transfers).toHaveLength(1);
     expect(provider.transfers[0].idempotencyKey).toBe(paymentIdempotencyKey("invoice", request.sourceId));
-    expect(store.calls).toContain(`recordError:${paymentIdempotencyKey("invoice", request.sourceId)}`);
+    expect(store.calls).toContain(`recordNotSent:${paymentIdempotencyKey("invoice", request.sourceId)}`);
     expect(result).toMatchObject({ status: "confirmed", providerTxId: "circle-tx-2" });
+  });
+
+  /** Another request concludes first and claims the payment while this one is still asking Circle. */
+  function claimedWhileLooking(store: MemoryStore, provider: FakeProvider) {
+    const look = provider.findTransferByRef.bind(provider);
+    provider.findTransferByRef = async (...args: Parameters<FakeProvider["findTransferByRef"]>) => {
+      const answer = await look(...args);
+      store.intent = { ...store.intent!, status: "submitting", attemptCount: store.intent!.attemptCount + 1, updatedAt: "2026-10-05T04:16:30.000Z" };
+      return answer;
+    };
+  }
+
+  it("never writes over a send another request started while it looked, and sends nothing (payment exceptions review)", async () => {
+    const store = await unknownSend();
+    const provider = new FakeProvider();
+    provider.found.push(null);
+    claimedWhileLooking(store, provider);
+
+    const result = await executePayment(request, { provider, store, now: Date.parse(SENT_AT) + 16 * MINUTE });
+
+    expect(provider.transfers).toEqual([]);
+    expect(result.status).toBe("pending");
+    expect(store.intent).toMatchObject({ status: "submitting", updatedAt: "2026-10-05T04:16:30.000Z" });
+    expect(store.intent?.lastError).not.toBe(NO_EARLIER_SEND);
+  });
+
+  it("answers undecided to Reject, Return and Close when that happens, so nothing closes over the send", async () => {
+    const store = await unknownSend();
+    const provider = new FakeProvider();
+    provider.found.push(null);
+    claimedWhileLooking(store, provider);
+
+    const answer = await settleUnknownSend({ type: "invoice", id: request.sourceId }, { provider, fromAccountId: "account-1", store, now: Date.parse(SENT_AT) + 16 * MINUTE });
+
+    expect(answer).toMatchObject({ answer: "undecided" });
+    expect(store.intent?.status).toBe("submitting");
   });
 
   it("sends nothing, and keeps it unknown, when Circle cannot be asked", async () => {

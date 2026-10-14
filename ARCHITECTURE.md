@@ -284,7 +284,10 @@ and decide nothing:
   status or error (`batch_key`, `transfer_attempt`). Reject, Return and Close then look for it first (payment safety R6)
   rather than refuse it as sent; the cycle's own reads, which do not select these columns, keep their answer.
   `settleUnknownSend` looks a batch member up by the batch's refId (`resolveLostBatch`), as `executePayment` does, never
-  by the member's memo, so nothing concludes a batch member was never sent while Circle may have the batch;
+  by the member's memo, so nothing concludes a batch member was never sent while Circle may have the batch. "Never
+  sent" (`NO_EARLIER_SEND`) is written by `recordNotSent`, a compare-and-set on the row's status and `updated_at` as the
+  lookup read them: a request that lost it, because another one concluded first and claimed the payment, answers
+  undecided and sends nothing. With no operating account, a pay action refuses with `no_operating_account`;
 - `paymentException` maps a lifecycle to the runbook's states, slow to confirm (in flight for the network's
   `stuckAfterMinutes`), outcome unknown, failed or cancelled, not sent, and Gateway's failure, and `whatToDo` gives who
   acts and the next step by who comes back to the bill (`followUpOf`). The track's **What to do** block, Treasury's

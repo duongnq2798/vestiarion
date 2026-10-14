@@ -244,8 +244,12 @@ function approvalsFake(options: {
     }
     if (request.path === "/rest/v1/payment_intents" && request.method === "PATCH") {
       const row = intents.find((intent) => intent.idempotency_key === eq(request, "idempotency_key"));
-      if (row) Object.assign(row, request.body as Record<string, unknown>);
-      return { body: [] };
+      // A compare-and-set names the row's status and time too, as PostgREST filters them (payment exceptions review).
+      const status = eq(request, "status");
+      const updatedAt = eq(request, "updated_at");
+      if (!row || (status !== undefined && row.status !== status) || (updatedAt !== undefined && row.updated_at !== updatedAt)) return { body: [] };
+      Object.assign(row, request.body as Record<string, unknown>);
+      return { body: [{ ...row }] };
     }
     if (request.path === "/rest/v1/rpc/claim_payment_intent") {
       const row = intents.find((intent) => intent.idempotency_key === (request.body as Record<string, unknown>).p_idempotency_key);
@@ -1812,6 +1816,16 @@ describe("a send left submitting past its claim (payment safety R4, payment exce
     expect(patchBodies(fake.requests, "/rest/v1/payment_intents")[0]).toMatchObject({ last_error: "Circle has no transfer for this payment's earlier send; nothing was sent." });
     expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
     expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses with no_operating_account, never 'try again', when the workspace has no operating account to look from (review)", async () => {
+    const findTransferByRef = lookingProvider(null);
+    const { fake, run } = approvalsFake({ account: () => ({ body: null }), intents: [leftSubmitting()] });
+
+    const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    await expect(attempt).rejects.toMatchObject({ code: "no_operating_account", message: "This workspace has no operating account." });
+    expect(findTransferByRef).not.toHaveBeenCalled();
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
   });
 
   it("sends that new payment as one, every check passed", async () => {
