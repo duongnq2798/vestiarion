@@ -1294,16 +1294,15 @@ payable the agent decides.
   and inserts the payable (the partner, the net, due now, its statement number as `po_reference`, goods received,
   `created_by` the reviewer), the payout and the lines' link in one transaction.
 - **The partner never approves their own payout.** `commission_partner_members(p_org_id, p_invoice_id)` names every
-  member a plan of the payout's partner ever named. 0118 redefines `claim_invoice_decision` as 0077's with three
-  changes, each a no-op for a payable that pays no commission: such a member's approval is refused
-  (`beneficiary_approval`), sole approver or not; their open approval is not another person's; and whoever created the
-  payable may approve it when everyone else who may approve payments is such a partner (`commission_sole_approver`), so
-  an owner and a partner-approver are never stuck. `payment_approvals_not_beneficiary` refuses their approval row,
-  inserted or updated; a later redefinition of the claim keeps all of it. `approveAndPay` reads the partners first
-  (`commissionPartnersOf`, `src/lib/commissions/beneficiary.ts`), refuses one before any claim or first approval, leaves
-  them out of `approvers_besides` for the sole-approver question, the two-approvals count and `mayGiveApproval`
-  (`notIndependent`), and drops their standing approvals; an unreadable answer is none there, since the database
-  refuses either way.
+  member a plan of the payout's partner ever named. 0118 redefines `claim_invoice_decision` as 0077's with two changes,
+  each a no-op for a payable that pays no commission: such a member's approval is refused (`beneficiary_approval`), sole
+  approver or not, and their open approval is not another person's. `payment_approvals_not_beneficiary` refuses their
+  approval row, inserted or updated; a later redefinition of the claim keeps both. `approveAndPay` reads the partners
+  first (`commissionPartnersOf`, `src/lib/commissions/beneficiary.ts`), refuses one before any claim or first approval,
+  and drops their standing approvals; an unreadable answer is none there, since the database refuses either way.
+  Whoever created a payout is treated as whoever created any payable, partners counted as approvers: naming a partner
+  asks nothing of them, so it never lifts the separation. When the creator and a partner are the only approvers, a
+  held payout waits for another one, and the review says so beside Create payable (`NO_OTHER_APPROVER`).
 - **Recording** (`src/lib/commissions/record.ts`). `recordCommissions` checks the signing key, calls
   `record_commissions` and signs each row it was answered as `commission_accrued` or `commission_adjusted` (domain `ap`,
   actor `agent`, the receivable as `receivableId` so no reader takes it for a decision on it). The cycle calls it in its

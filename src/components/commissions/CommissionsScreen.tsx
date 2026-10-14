@@ -7,6 +7,12 @@ import type { CommissionsData } from "@/lib/commissions/read";
 import { CommissionPlanForm, CreatePayableButton, EndPlanButton } from "./CommissionForms";
 import { EndedPlans, NoCommissionsYet, PartnerReviewCard, PlanCard, PlanTerms } from "./CommissionViews";
 
+const APPROVER_ROLES: ReadonlySet<string> = new Set(["owner", "admin", "approver"]);
+
+/** Said beside Create payable when, held, the payable would have no one to approve it (C11). */
+export const NO_OTHER_APPROVER =
+  "If the agent holds this payable, no one can approve it: you create it, and the only other person who can approve payments is the partner it pays. Give the partner a role that does not approve payments, or add another approver. The agent can still pay it on its own, within your limits.";
+
 /** What the page says it is, above its plans; /docs-shots/commissions says the same. */
 export const COMMISSIONS_SUB =
   "What each partner earns on money your customers paid on Arc, applied to the invoices of the deals their plan covers. Each commission is held for its window, then paid as one payable the agent decides like any other bill.";
@@ -30,8 +36,8 @@ export function CommissionsScreen({
   read: CommissionsData;
   canWrite: boolean;
   viewerId: string;
-  /** The workspace's members, for an owner or admin; null when not read. */
-  members: Array<{ userId: string; email: string }> | null;
+  /** The workspace's members, with their roles, for an owner or admin; null when not read. */
+  members: Array<{ userId: string; email: string; role: string }> | null;
   now: Date;
   invoiceHref: (invoiceId: string) => string;
 }) {
@@ -47,6 +53,16 @@ export function CommissionsScreen({
   const dealOptions = read.deals.filter((deal) => deal.status === "active").map(({ id, title, customer }) => ({ id, title, customer }));
   const order = [...read.counterparties].sort((a, b) => a.name.localeCompare(b.name)).map((counterparty) => counterparty.id);
   const reviews = reviewCommissions(read.lines, read.payouts, now, order);
+  // Who may approve payments, besides this person (C11): whoever creates a payable never approves it unless no one else
+  // may, and a partner never approves their own commission. When everyone else who may is this partner, a payout the
+  // agent holds waits for another approver, and the page says so before it is created.
+  const otherApprovers = (members ?? []).filter((member) => APPROVER_ROLES.has(member.role) && member.userId !== viewerId).map((member) => member.userId);
+  const partnerMembers = (beneficiaryId: string) => new Set(read.plans.filter((plan) => plan.beneficiaryId === beneficiaryId && plan.memberId).map((plan) => plan.memberId as string));
+  const noOtherApprover = (beneficiaryId: string) => {
+    if (!members || otherApprovers.length === 0) return false;
+    const partnersHere = partnerMembers(beneficiaryId);
+    return otherApprovers.every((userId) => partnersHere.has(userId));
+  };
 
   return (
     <>
@@ -144,6 +160,7 @@ export function CommissionsScreen({
                   payableHref={invoiceHref}
                   action={action}
                   note={review.payable && mine ? "These are your own commissions, so someone else creates their payable and approves it." : undefined}
+                  warning={action && noOtherApprover(review.beneficiaryId) ? NO_OTHER_APPROVER : undefined}
                 />
               );
             })}

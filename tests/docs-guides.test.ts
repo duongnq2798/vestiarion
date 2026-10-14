@@ -869,6 +869,10 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["The commissions due changed since this page was read. Reload the page to see them as they are now.", COMMISSION_MODEL],
     ["Carried forward", COMMISSION_VIEWS],
     ["This payable pays your own commission, so someone else must approve it.", "src/lib/agent/approvals.ts"],
+    [
+      "If the agent holds this payable, no one can approve it: you create it, and the only other person who can approve payments is the partner it pays. Give the partner a role that does not approve payments, or add another approver. The agent can still pay it on its own, within your limits.",
+      COMMISSION_SCREEN,
+    ],
     ["This commission is yours, so someone else sets its plan and creates its payable.", COMMISSION_MODEL],
     ["commission_plan_set", COMMISSION_MODEL],
     ["commission_plan_ended", COMMISSION_MODEL],

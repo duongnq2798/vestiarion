@@ -786,18 +786,12 @@ export async function approveAndPay(
   const invoice = await loadWaitingPayable(input.invoiceId);
   const intent = await paymentIntentOf(invoice.id);
   if (!input.forVerdict) await refuseUntilVerdict(invoice.id, "approve", { status: invoice.status, transferSent: transferExists(intent) || transferUnknown(intent) });
-  // The partner a commission pays never approves it, sole approver or not, nor gives one of two approvals
-  // (docs/superpowers/specs/2026-10-14-commissions-design.md C11); the claim asks the database again. Since they never
-  // may, they count as no one else who may approve it either: none for a payable that pays no commission.
+  // The partner a commission pays never approves it, sole approver or not, nor gives one of two approvals, and an
+  // approval they gave before a plan named them does not stand (docs/superpowers/specs/2026-10-14-commissions-design.md
+  // C11); the claim asks the database again. None for a payable that pays no commission. Whoever created it is treated
+  // as whoever created any payable: naming someone a partner never lets anyone approve what they created.
   const partners = await commissionPartnersOf(invoice.id);
   if (partners.includes(input.actorId)) raise("beneficiary_approval");
-  // Whether this person is the only one who may approve it: the workspace's sole approver, or, for a commission payable,
-  // the only one besides the partners it pays. Fails closed, as isSoleApprover does (sole approver R3).
-  const aloneToApprove = async (): Promise<boolean> => {
-    if (await isSoleApprover(input.actorId)) return true;
-    if (partners.length === 0) return false;
-    return approversBesides([input.actorId, ...partners]).then((others) => others === 0, () => false);
-  };
   // A transfer that already exists is reconciled, never sent again.
   const alreadySent = transferExists(intent);
   const firstPayment = await firstPaymentTo(invoice);
@@ -824,23 +818,20 @@ export async function approveAndPay(
     // No approval is taken while another person's payment of it is being decided.
     if (invoice.status === "processing" && !isReclaimable(invoice.status, invoice.reviewedAt, Date.now())) raise("already_decided");
     // With fewer than two people who can approve payments, it could never be paid: no approval is taken (T5).
-    // A commission's partners never approve it, so they are not counted (commissions C11).
-    if ((await approversBesides(partners)) < 2) throw new ApprovalError("needs_second_approver", needsSecondApprover(above as number));
+    if ((await approversBesides([])) < 2) throw new ApprovalError("needs_second_approver", needsSecondApprover(above as number));
     standing = (await standingApprovals(source, payment)).filter((approval) => !partners.includes(approval.by));
     // Whoever entered it, or gave its address, gives only the approvals no one independent of it can (T5).
     if (excluded.includes(input.actorId)) {
-      if (!(await mayGiveApproval({ actorId: input.actorId, excluded, given: standing, notIndependent: partners }))) {
-        raise(invoice.createdBy === input.actorId ? "self_approval" : "new_payee_self");
-      }
+      if (!(await mayGiveApproval({ actorId: input.actorId, excluded, given: standing }))) raise(invoice.createdBy === input.actorId ? "self_approval" : "new_payee_self");
       fewApprovers = true;
     }
   } else {
     // Whoever entered the invoice may approve it only as the workspace's sole
     // approver; the claim asks the database the same question again.
     soleApprover = invoice.createdBy === input.actorId;
-    if (soleApprover && !(await aloneToApprove())) raise("self_approval");
+    if (soleApprover && !(await isSoleApprover(input.actorId))) raise("self_approval");
     // A first payment to an address needs someone other than whoever gave it, unless they decide alone (new payee check N4).
-    if (firstPayment?.addressBy === input.actorId && !(await aloneToApprove())) raise("new_payee_self");
+    if (firstPayment?.addressBy === input.actorId && !(await isSoleApprover(input.actorId))) raise("new_payee_self");
   }
   if (invoice.riskLevel === "high") raise("high_risk");
   // Nothing to pay where payments are real: refused before any claim, as the agent holds it (counterparty.no_address).

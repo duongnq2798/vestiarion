@@ -59,6 +59,8 @@ describe("/docs-shots/commissions/<state>", () => {
     expect(page).toContain("Paid");
     expect(page.match(/Create payable/g)).toHaveLength(2);
     expect(page).toContain("End plan");
+    // Adam is the only other approver, and Brightline's partner: held, its payout would have no one to approve it.
+    expect(page.match(/If the agent holds this payable, no one can approve it/g)).toHaveLength(1);
   });
 
   it("shows the member who is a partner their own commissions, and lets them change none", async () => {

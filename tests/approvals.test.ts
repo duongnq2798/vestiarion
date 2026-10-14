@@ -393,35 +393,20 @@ describe("approveAndPay", () => {
     expect(payInvoiceMock).not.toHaveBeenCalled();
   });
 
-  it("lets whoever created a commission payable approve it when the partner is the only other approver (commissions C11)", async () => {
-    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 0 });
+  it("refuses whoever created a commission payable, whoever it names as the partner (commissions C11)", async () => {
     const PARTNER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000c9";
-    // Not the workspace's sole approver (the partner may approve payments), but no one else besides the partner.
+    // The creator named someone else the partner, and no one besides that partner may approve payments: still refused,
+    // as whoever creates any payable is. Naming a partner asks nothing of them, so it never lifts the separation.
     const { fake, run } = approvalsFake({ commissionPartners: { body: [PARTNER] }, soleApprover: { body: false }, approversBesides: (excluded) => (excluded.includes(PARTNER) ? 0 : 1) });
-
-    const result = await run(() => approveAndPay({ actorId: CREATOR, invoiceId: INVOICE_ID }));
-    expect(result.status).toBe("paid");
-    expect(rpcBodies(fake.requests, "approvers_besides")).toEqual([{ p_org_id: ORG, p_excluded: [CREATOR, PARTNER] }]);
-    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(1);
-  });
-
-  it("still refuses whoever created a commission payable while another person besides the partner may approve it", async () => {
-    const PARTNER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000c9";
-    const { fake, run } = approvalsFake({ commissionPartners: { body: [PARTNER] }, soleApprover: { body: false }, approversBesides: 1 });
     await expect(run(() => approveAndPay({ actorId: CREATOR, invoiceId: INVOICE_ID }))).rejects.toThrow("You created this invoice, so someone else must approve it.");
+    expect(rpcBodies(fake.requests, "approvers_besides")).toHaveLength(0);
     expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
   });
 
-  it("counts no partner among the two approvers, nor a partner's approval on file (commissions C11)", async () => {
+  it("never counts a partner's approval on file among two approvals (commissions C11)", async () => {
     const PARTNER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000c9";
-    // Above the figure, with the creator and the partner the only people who may approve payments: it could never be
-    // paid by two, so no approval is taken, rather than one no one could complete.
-    const alone = approvalsFake({ commissionPartners: { body: [PARTNER] }, twoApprovals: 10, approversBesides: (excluded) => (excluded.includes(PARTNER) ? 1 : 2) });
-    await expect(alone.run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toThrow(/two/);
-    expect(rpcBodies(alone.fake.requests, "approvers_besides")[0]).toEqual({ p_org_id: ORG, p_excluded: [PARTNER] });
-    expect(alone.fake.requests.filter((request) => request.path === "/rest/v1/payment_approvals" && request.method === "POST")).toHaveLength(0);
-
-    // With a third approver, a partner's approval given before the plan named them does not stand as the first of two.
+    // A partner's approval given before the plan named them does not stand as the first of two.
     const third = approvalsFake({
       commissionPartners: { body: [PARTNER] },
       twoApprovals: 10,

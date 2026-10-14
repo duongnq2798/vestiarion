@@ -20,11 +20,11 @@
 -- workspace themselves, since a definer is not held by row-level security.
 --
 -- The partner never approves their own payout (C11): claim_invoice_decision is 0077's, with an approval refused to any
--- member a plan of the payout's partner ever named (commission_partner_members), their open approvals not counted as
--- another person's, and the payout's creator its only approver when everyone else who may approve payments is such a
--- partner (commission_sole_approver). payment_approvals refuses their approval row, inserted or changed. This file sorts
--- after 0077, so every full replay ends with this definition of the claim; a later migration that redefines the claim
--- keeps these checks.
+-- member a plan of the payout's partner ever named (commission_partner_members), and their open approvals not counted
+-- as another person's. Whoever created a payout is treated as whoever created any payable (sole approver R1): naming a
+-- member as the partner asks nothing of that member, so it never lets anyone approve what they created.
+-- payment_approvals refuses the partner's approval row, inserted or changed. This file sorts after 0077, so every full
+-- replay ends with this definition of the claim; a later migration that redefines the claim keeps these checks.
 --
 -- Additive, and idempotent throughout: scripts/migrate.ts re-runs every migration each time.
 
@@ -282,24 +282,10 @@ $$;
 revoke execute on function public.commission_beneficiary_approval(uuid, uuid, uuid) from public, anon, authenticated;
 grant execute on function public.commission_beneficiary_approval(uuid, uuid, uuid) to vestiarion_tenant, service_role;
 
--- Whether this person is the only one left who may approve a commission payable: everyone else who may approve payments
--- is a partner it pays (C11), who never may. Then whoever created the payable approves it, as a workspace's sole approver
--- approves what they entered (sole approver R1); false for a payable that pays no commission, which sole_approver answers.
-create or replace function public.commission_sole_approver(p_org_id uuid, p_invoice_id uuid, p_user_id uuid) returns boolean
-language sql stable
-set search_path = ''
-as $$
-  select coalesce(
-    cardinality(m.members) > 0
-      and not (p_user_id = any(m.members))
-      and p_user_id = any(public.approvers_among(p_org_id, array[p_user_id]))
-      and public.approvers_besides(p_org_id, array[p_user_id] || m.members) = 0,
-    false)
-    from (select public.commission_partner_members(p_org_id, p_invoice_id) as members) m
-$$;
-
-revoke execute on function public.commission_sole_approver(uuid, uuid, uuid) from public, anon, authenticated;
-grant execute on function public.commission_sole_approver(uuid, uuid, uuid) to vestiarion_tenant, service_role;
+-- An earlier draft of this file let a payout's creator approve it beside a partner-approver; anyone can name a member
+-- as a partner, so that let an admin approve a payout they created. The draft ran only against test databases; this
+-- removes its function wherever it might have been created, so every run ends without it.
+drop function if exists public.commission_sole_approver(uuid, uuid, uuid);
 
 -- A partner's plan, set or changed (C2): under a lock per partner, the version in force (the one the person changed,
 -- or none) ends and the next starts at the same instant, with the deals it covers. A definer, since the tenant role does
@@ -629,9 +615,9 @@ $$;
 revoke execute on function public.create_commission_payout(uuid, uuid, text, uuid[], text, uuid) from public, anon, authenticated;
 grant execute on function public.create_commission_payout(uuid, uuid, text, uuid[], text, uuid) to vestiarion_tenant, service_role;
 
--- 0077's claim, with C11: the partner a commission payout pays never claims its approval, sole approver or not; their
--- open approval is not another person's; and whoever created a commission payout approves it when everyone else who may
--- approve payments is a partner it pays. For a payable that pays no commission, each of these is a no-op.
+-- 0077's claim, with C11: the partner a commission payout pays never claims its approval, sole approver or not, and
+-- their open approval is not another person's. Whoever created it is treated as 0077 treats whoever created any payable.
+-- For a payable that pays no commission, both are no-ops.
 create or replace function public.claim_invoice_decision(
   p_org_id uuid, p_invoice_id uuid, p_by uuid, p_decision text
 ) returns public.invoices
@@ -652,7 +638,6 @@ begin
           or (i.status = 'processing' and coalesce(i.reviewed_at, '-infinity'::timestamptz) < now() - interval '10 minutes'))
      and (p_decision <> 'approve' or not public.commission_beneficiary_approval(p_org_id, p_invoice_id, p_by))
      and (p_decision <> 'approve' or i.created_by is distinct from p_by or public.sole_approver(p_org_id, p_by)
-          or public.commission_sole_approver(p_org_id, p_invoice_id, p_by)
           or exists (
             select 1 from public.payment_approvals a
              where a.org_id = p_org_id and a.source_type = 'invoice' and a.source_id = p_invoice_id
@@ -676,7 +661,7 @@ begin
     if public.commission_beneficiary_approval(p_org_id, p_invoice_id, p_by) then
       raise exception 'beneficiary_approval: the partner a commission pays cannot approve it';
     end if;
-    if v.created_by = p_by and not public.sole_approver(p_org_id, p_by) and not public.commission_sole_approver(p_org_id, p_invoice_id, p_by) then
+    if v.created_by = p_by and not public.sole_approver(p_org_id, p_by) then
       raise exception 'self_approval: the person who created an invoice cannot approve it';
     end if;
   end if;
@@ -716,7 +701,6 @@ notify pgrst, 'reload schema';
 -- drop function if exists public.record_commissions(uuid);
 -- drop function if exists public.end_commission_plan(uuid, uuid, uuid);
 -- drop function if exists public.set_commission_plan(uuid, uuid, integer, text, text, uuid[], integer, text, uuid, uuid, uuid);
--- drop function if exists public.commission_sole_approver(uuid, uuid, uuid);
 -- drop function if exists public.commission_beneficiary_approval(uuid, uuid, uuid);
 -- drop function if exists public.commission_partner_members(uuid, uuid);
 -- drop table if exists public.commission_lines;

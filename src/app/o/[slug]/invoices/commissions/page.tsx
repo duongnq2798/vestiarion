@@ -66,7 +66,7 @@ export default async function CommissionsPage({ params }: { params: Promise<{ sl
             read={read}
             canWrite={canWrite}
             viewerId={access.user.id}
-            members={members ? members.map(({ userId, email }) => ({ userId, email })) : null}
+            members={members ? members.map(({ userId, email, role }) => ({ userId, email, role })) : null}
             now={new Date()}
             invoiceHref={(invoiceId) => orgHref(slug, invoiceHref(invoiceId))}
           />

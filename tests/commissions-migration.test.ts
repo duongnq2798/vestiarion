@@ -621,21 +621,26 @@ describe("the partner never approves their own payout (C11)", () => {
     await expect(setPlan(w.orgId, w.sam, { member: outsider, by: w.owner })).rejects.toThrow(/commission_member_not_found/);
   });
 
-  it("lets the owner who created it approve it when the partner is the only other approver, and no one else then", async () => {
-    // Owner and partner-approver only: the partner never may, so the owner, who created it, is its only approver.
-    const w = await heldPayout("commission-owner-alone");
+  it("never lets whoever created a payout approve it by naming someone else the partner", async () => {
+    // An admin sets a plan on a vendor they control naming the owner as "the partner", and creates its payout: the
+    // owner is refused as the partner, and the admin, who created it, is refused as for any bill they enter.
+    const w = await heldPayout("commission-abuse", { owner: "admin", partner: "owner" });
+    await expect(claim(w.orgId, w.owner, w.invoiceId)).rejects.toThrow(/self_approval/);
+    await expect(claim(w.orgId, w.partner, w.invoiceId)).rejects.toThrow(/beneficiary_approval/);
+    expect((await invoiceOf(w.invoiceId)).status).toBe("held");
+    // No function anywhere relaxes it.
+    expect((await db.query("select 1 from pg_proc where proname = 'commission_sole_approver'")).rows).toHaveLength(0);
+  });
+
+  it("leaves a held payout of an owner beside a partner-approver for another approver", async () => {
+    // The owner created it and the partner is the only other approver: neither may, so it waits for another approver.
+    const w = await heldPayout("commission-owner-partner");
+    await expect(claim(w.orgId, w.owner, w.invoiceId)).rejects.toThrow(/self_approval/);
+    await expect(claim(w.orgId, w.partner, w.invoiceId)).rejects.toThrow(/beneficiary_approval/);
+    // Given a role that approves no payments, the partner leaves the owner as the workspace's sole approver.
+    await db.query("update public.memberships set role = 'viewer' where org_id = $1 and user_id = $2", [w.orgId, w.partner]);
     await claim(w.orgId, w.owner, w.invoiceId);
     expect((await invoiceOf(w.invoiceId)).status).toBe("processing");
-    // With another approver beside them, the owner who created it is refused, as for any bill they enter.
-    const v = await heldPayout("commission-owner-not-alone");
-    const admin = await createUser(db, "commission-owner-not-alone-admin@example.com");
-    await member(v.orgId, admin, "admin");
-    await expect(claim(v.orgId, v.owner, v.invoiceId)).rejects.toThrow(/self_approval/);
-    const alone = (orgId: string, invoiceId: string, userId: string) =>
-      asTenant(db, orgId, async (tx) => (await tx.query<{ s: boolean }>("select public.commission_sole_approver($1, $2, $3) as s", [orgId, invoiceId, userId])).rows[0].s);
-    expect(await alone(w.orgId, w.invoiceId, w.owner)).toBe(true);
-    expect(await alone(w.orgId, w.invoiceId, w.partner)).toBe(false);
-    expect(await alone(v.orgId, v.invoiceId, v.owner)).toBe(false);
   });
 
   it("never counts an approval the partner gave before a plan named them, and refuses one changed to them", async () => {

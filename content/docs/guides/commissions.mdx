@@ -69,8 +69,10 @@ A member named as the partner on a plan can read their commissions, and nothing 
 
 - They cannot approve the payable that pays them, nor give one of two approvals, even as the workspace's only approver: "This payable pays your own commission, so someone else must approve it." The database refuses it too, whichever way it is tried.
 - They cannot create their own payable, nor set, change or end their own plan: "This commission is yours, so someone else sets its plan and creates its payable."
-- Whoever created the payable is refused its approval, as for any bill they enter, unless no one else may approve it. Since the partner never may, they count for no one here: in a workspace of an owner and a partner who is an approver, the owner approves the payable they created. See [How payments are controlled](/docs/guides/controls).
-- Above the figure where two people approve, the partner is not one of the two, and an approval they gave before a plan named them does not count. With fewer than two other people who can approve payments, approving it is refused at once, and an owner raises the figure or adds an approver.
+- Whoever created the payable is refused its approval, as for any bill they enter, unless they are the only person in the workspace who can approve payments. See [How payments are controlled](/docs/guides/controls).
+- An approval the partner gave before a plan named them does not count, as one approval or as either of two.
+
+So when the only people who can approve payments are you, creating the payable, and the partner it pays, a payable the agent holds can be approved by neither of you. The review says so beside **Create payable**: "If the agent holds this payable, no one can approve it: you create it, and the only other person who can approve payments is the partner it pays. Give the partner a role that does not approve payments, or add another approver. The agent can still pay it on its own, within your limits." Change the partner's role on **Members**, or invite another approver, before or after you create it.
 
 ## In the audit log
 

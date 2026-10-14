@@ -97,6 +97,6 @@ export const COMMISSIONS: CommissionsData = {
 };
 
 export const COMMISSION_MEMBERS = [
-  { userId: "docs-sample-owner", email: "olivia@northstar.example" },
-  { userId: MEMBER, email: "adam@northstar.example" },
+  { userId: "docs-sample-owner", email: "olivia@northstar.example", role: "owner" },
+  { userId: MEMBER, email: "adam@northstar.example", role: "admin" },
 ];

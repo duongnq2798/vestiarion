@@ -188,15 +188,17 @@ Each decision names what it costs if it turns out wrong.
     (`commission_partner_members`), and `payment_approvals_not_beneficiary` refuses their approval row, inserted or
     changed. Being the workspace's sole approver does not lift it;
   - cannot create their own payable from the review, nor set, change or end their own plan.
-- Whoever created the payable is already refused its approval unless they are the sole approver (sole approver R1).
-  Since the partner never may, they count as no one who may approve it: whoever created it is its only approver when
-  everyone else who may approve payments is a partner it pays (`commission_sole_approver`, and the same count in
-  `approveAndPay`). So an owner and a partner who is an approver are never stuck: the owner approves the payout they
-  created.
-- Above the two-approvals figure, the partners are not counted among those who may give the two (`approvers_besides`
-  leaves them out, in `approveAndPay` and in `mayGiveApproval`): with fewer than two others it is refused at once as
-  needing a second approver (two approvals T5), rather than taking a first approval no one could complete. An open
-  approval a partner gave before a plan named them never counts, in the claim or in `approveAndPay`.
+- Whoever created the payable is treated exactly as whoever created any payable: refused its approval unless they are
+  the workspace's sole approver (sole approver R1), and counted as two approvals count them (two approvals T5). A
+  partner who is an approver still counts as an approver there. Naming a member as the partner asks nothing of that
+  member, so it must never let anyone approve what they created: were the partner left out of those counts, an admin
+  could name the owner as the partner of a vendor the admin controls and approve its payout alone.
+- An open approval a partner gave before a plan named them never counts, in the claim or in `approveAndPay`.
+- **So a held payout can wait for another approver.** When the only people who may approve payments are whoever creates
+  the payout and a partner it pays, a payout the agent holds can be approved by neither. The rule, and what to do: give
+  the partner a role that does not approve payments (then whoever created it is the sole approver and may), or add
+  another approver. The agent still pays a payout it does not hold, under the workspace's limits. The review says so
+  beside **Create payable** before the payable is made, when it is so for the person reviewing.
 - The agent may still pay it on its own, within every guardrail, since the agent is nobody's partner.
 - Cost if wrong: a refusal a business must route around by naming another approver, which is the point.
 

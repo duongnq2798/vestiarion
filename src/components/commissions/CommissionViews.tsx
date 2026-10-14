@@ -155,6 +155,7 @@ export function PartnerReviewCard({
   payableHref,
   action,
   note,
+  warning,
 }: {
   review: PartnerReview;
   partner: string;
@@ -166,6 +167,8 @@ export function PartnerReviewCard({
   action?: ReactNode;
   /** Why there is no Create payable for this person, when there is something to pay. */
   note?: string;
+  /** What to know before creating the payable, said beside Create payable. */
+  warning?: string;
 }) {
   const row = (line: CommissionLine, after?: ReactNode) => (
     <LineRow
@@ -239,7 +242,12 @@ export function PartnerReviewCard({
             </section>
           )}
         </CardContent>
-        {(action || note) && <CardFooter>{action ?? <p className="text-sm text-ink-2">{note}</p>}</CardFooter>}
+        {(action || note) && (
+          <CardFooter>
+            {warning && <p className="w-full text-sm text-held">{warning}</p>}
+            {action ?? <p className="text-sm text-ink-2">{note}</p>}
+          </CardFooter>
+        )}
       </li>
     </Card>
   );
