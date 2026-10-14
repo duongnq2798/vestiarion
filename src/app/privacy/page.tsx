@@ -330,7 +330,7 @@ export default function PrivacyPage() {
             tasks&apos; names and links, the names of who completed and was assigned each one, the deliverables&apos; names and links and their
             fingerprint, the Asana user&apos;s id and name the connection acts as, the access granted and the agreement given, each webhook&apos;s
             secret and Asana&apos;s tokens encrypted, readable only by the server and never shown in the browser, a log, a model&apos;s prompt or a
-            webhook; it does not keep the words of a task&apos;s description or comments. To stop anyone accepting their own work, it asks Asana
+            webhook; it does not keep the words of a task&apos;s description or comments. To refuse an acceptance by the payee, it asks Asana
             whether a member&apos;s email, or the email a contractor&apos;s payment notices go to, belongs to an Asana user, and keeps only the answer
             for that check. A webhook from Asana carries no task&apos;s facts that Vestiarion keeps: it only has the task read again. Vestiarion never
             uses Asana data to train or improve any AI model, and never passes it to anyone else without the workspace&apos;s say. Disconnecting

@@ -88,7 +88,7 @@ export default function AsanaPanel({ orgSlug, view, canManage, notice }: { orgSl
             <p className="text-sm text-ink-2">
               Pay contractors for work delivered in Asana. Link a milestone to its Asana task; when the task is completed, a person accepts the work
               against the milestone&apos;s criteria, and only then does the agent decide on pay. A completed task alone never pays, and a task reopened or
-              changed after acceptance is held for review before any payment.
+              changed after acceptance is held for review when Vestiarion reads it before the payment is sent.
             </p>
             {canManage ? <ConnectButton orgSlug={orgSlug} label="Connect Asana" /> : <p className="text-sm text-ink-3">An owner or admin connects Asana.</p>}
           </div>

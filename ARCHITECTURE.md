@@ -2246,15 +2246,21 @@ exclusive. Consent `asana-2026-10-14`.
   completed again: its `completed_at` differs), with another fingerprint, or no longer shown (404, 403) is withdrawn
   through `hold_asana_acceptance`, `milestone_acceptance_withdrawn`. A link held after an acceptance stays held until a
   person accepts again. Reads happen after a signed webhook delivery, in the cycle right after GitHub's check and before
-  the contractor stage (`refreshAcceptedWork` in `milestone-verification.ts`: accepted links only, at most 20, 30
-  seconds), every 15 minutes from the sweeper (`sweepAccounting({ work })`, under the connection's sync lease, every
-  live link of an open milestone), on **Check Asana now**, and right before an acceptance. Each uses the connection's
-  token through `asanaSession` (`freshAccessToken` under the token row's lease; a 401 refreshes once; a short rate limit
-  is waited once). A refused refresh marks the connection to reconnect.
+  the contractor stage (`refreshAcceptedWork` in `milestone-verification.ts`: the accepted links of milestones verified
+  by `asana` and still `verified` or `held`, verified first, at most 20, 30 seconds), every 15 minutes from the sweeper
+  (`sweepAccounting({ work })`, under the connection's sync lease, the live links of open milestones, verified first, at
+  most 100), on **Check Asana now**, and right before an acceptance. Both pick the milestones first
+  (`linksOfMilestones`): a paid milestone's link stays live and accepted, as its history, and a limit over every live
+  link would in time hold none of the open ones. Each uses the connection's token through `asanaSession`
+  (`freshAccessToken` under the token row's lease; a 401 refreshes once; a short rate limit is waited once). A refused
+  refresh marks the connection to reconnect. A read that fails leaves an acceptance as it was. Whatever took a
+  verification back while the contractor stage decided (a read here, or a person revoking it), the stage holds each
+  planned release to the milestone as it is just before sending (`stillVerified`) and sends none no longer verified.
 - **Webhooks** (`webhook.ts`, `webhook-store.ts`, `POST /api/integrations/asana/webhook/<id>`): a link's webhook row is
   made first, then Asana is asked (`POST /webhooks`, after the answer, only on an https origin); the `X-Hook-Secret`
-  handshake is taken once, for a row still pending, within two minutes, sealed and echoed; the secret in Asana's 201 must
-  be the one kept, or the webhook is deleted. Each delivery's `X-Hook-Signature` (hex HMAC-SHA256 of the raw body) is
+  handshake is taken once, for a row still pending, within two minutes, sealed and echoed; the secret in Asana's 201 (the
+  top-level `X-Hook-Secret` of its body, as Asana documents it) must be the one kept, compared in constant time, or the
+  webhook is deleted, as it is when the answer carries none. Each delivery's `X-Hook-Signature` (hex HMAC-SHA256 of the raw body) is
   compared in constant time before anything else; the body is never parsed or believed, and a signed delivery only reads
   the linked task again in `after()`. A deleted or unknown row answers 410, which makes Asana delete the webhook;
   unlinking, a paid or closed milestone, and disconnecting delete them.
@@ -2265,8 +2271,10 @@ exclusive. Consent `asana-2026-10-14`.
   `milestone_accepted` and a cycle soon), `milestone.unlink_task` and `milestone.check_task`. Self-acceptance
   (`selfAcceptance`, `identities.ts`): the member's email against the payee's notice email, and, where Asana has them,
   the member's Asana user (the connection's own for whoever connected it, else by their email) against the Asana user
-  with the payee's email. Pay now on an Asana-linked milestone is refused to its payee (`paysOwnPayout`); Verify
-  manually is refused on one (revoking stays).
+  with the payee's email. Pay now on an Asana-linked milestone is refused to its payee (`paysOwnPayout`, by email
+  only: Pay now never waits on Asana); Verify manually is refused on one (revoking stays). The check is only as good as
+  the identities it has: a payee who is a member under another email, with no notice email or no Asana user under it,
+  is not recognised, and an owner or admin can still unlink a task and verify by hand, which has no payee check.
 - **Where it shows.** Contractors: `AsanaTaskCard` under each milestone waiting for verification (or a linked one); ready and held links
   count under **Needs you**. Settings: `AsanaPanel`, with the last 30 days' figures (`acceptanceKpis`: acceptances,
   acceptances taken back, the median time from an acceptance to the agent's first `milestone_release` or

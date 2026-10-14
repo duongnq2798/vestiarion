@@ -1,6 +1,6 @@
 Pay contractors for work they deliver in Asana. You link a milestone to the Asana task its work is delivered in. When the task is completed in Asana, the milestone is **ready for acceptance**: a person checks the deliverables against the milestone's acceptance criteria and accepts the work. Only then is the milestone verified, and the agent decides the payment under every guardrail, as it does for any [milestone](/docs/guides/pay-a-contractor), on the workspace's network: Arc testnet or Arc mainnet.
 
-A task completed in Asana is never by itself a reason to pay, and nothing from Asana sets an amount or a payee. If the task is reopened, or its deliverables change, after the work was accepted and before the payment is sent, the acceptance is taken back and the milestone is held for review.
+A task completed in Asana is never by itself a reason to pay, and nothing from Asana sets an amount or a payee. If the task is reopened, or its deliverables change, after the work was accepted, and Vestiarion reads that before the payment is sent, the acceptance is taken back and the milestone is held for review.
 
 ## Before you start
 
@@ -58,13 +58,13 @@ When the task is ready, read the deliverables against the criteria. Tick "I chec
 
 Vestiarion reads the task again first. If its deliverables changed since you opened the page, nothing is accepted: "The deliverables changed in Asana since you opened this. Look at them again before accepting." The milestone is verified only for the version you saw: the ledger records `milestone_accepted`, with the deliverables, their fingerprint and the criteria's hash.
 
-The contractor never accepts their own work. A member whose email is the payee's (the email the contractor's payment notices go to) is refused with "You are this milestone's payee, so someone else accepts the work." Where the payee has an Asana account, a member whose Asana account is the payee's is refused too: "Your Asana account is this milestone's payee, so someone else accepts the work." On such a milestone, **Pay now** is refused to the payee as well: "You are this milestone's payee, so someone else approves paying it."
+Vestiarion refuses an acceptance by the payee, as far as it can tell who the payee is. A member whose email is the payee's (the email the contractor's payment notices go to) is refused with "You are this milestone's payee, so someone else accepts the work." Where the payee has an Asana account, a member whose Asana account is the payee's is refused too: "Your Asana account is this milestone's payee, so someone else accepts the work." On such a milestone, **Pay now** is refused to the payee as well: "You are this milestone's payee, so someone else approves paying it." Vestiarion cannot tell a payee who joined the workspace under another email and whose notice email is no Asana user's, or a payee with no notice email: whoever may verify a milestone by hand, an owner or admin, may accept, and the ledger names who did.
 
 From here the agent decides on the release as for any verified milestone: the contractor's screening, their limit, the workspace's spending limit, two approvals above its figure, and a confirmed address.
 
 ## 6. Reopened or changed after acceptance
 
-If the task is reopened in Asana, its deliverables change (a file added, removed or uploaded again, a link changed), or Asana no longer shows it, after the work was accepted and before the payment is sent, the acceptance is taken back: the milestone waits for verification again and the card says **Held for review**. The ledger records `milestone_acceptance_withdrawn`, with why. Accept the work again once the task is completed, against what Asana shows now.
+If the task is reopened in Asana, its deliverables change (a file added, removed or uploaded again, a link changed), or Asana no longer shows it, after the work was accepted, the acceptance is taken back when Vestiarion reads that before the payment is sent: on Asana's webhook, right before the agent decides on contractors, every 15 minutes, or on **Check Asana now**. The milestone waits for verification again and the card says **Held for review**. If Asana cannot be read at those times, the acceptance stands as the person gave it; and what a link to another site points at is never read, so a change there is not seen. The ledger records `milestone_acceptance_withdrawn`, with why. Accept the work again once the task is completed, against what Asana shows now.
 
 If the payment was sent already, the card says **Changed after payment**: "The task changed in Asana after the payment was sent. Review it with the contractor: Vestiarion does not take a payment back."
 

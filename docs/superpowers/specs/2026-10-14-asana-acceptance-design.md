@@ -53,6 +53,26 @@ completed.
 The live OAuth run, the webhook handshake against Asana, and the test tasks (`1219477646404728`, `1219477646404730`)
 are run after the merge, on production, once migration 0115 is applied.
 
+## Residual risks (review, 2026-10-14)
+
+- **Self-acceptance** is matched by identity only: the member's email against the payee's notice email, and Asana users
+  where Asana maps them. A payee who joined under another email (or an alias), whose notice email is empty or no Asana
+  user's, is not recognised. Any owner or admin can also unlink the task and verify by hand, or add a milestone and
+  verify it by hand, neither of which has a payee check; a workspace trusts its owners and admins with that already.
+  Pay now's check is by email only, so an approver whose Asana account is the payee's is not recognised there.
+- **Reads fail open.** An acceptance stands while Asana cannot be read (down, rate-limited, disconnected, needing
+  reconnect); a change made then is seen only by the next read that succeeds, which may come after the payment. The
+  cycle reads at most 20 accepted tasks, in 30 seconds, before the contractor stage.
+- **The decide-then-send window.** The contractor stage holds each release to the milestone as it is just before
+  sending; a hold landing between that read and the payment intent (milliseconds) is treated as after payment. An
+  intent that exists but whose transfer was never submitted counts as under way: the hold only marks the link, and the
+  reconciler may still send it. A hold landing while the stage decides a milestone it then holds by a guardrail leaves
+  it `held` and unverified; a person closes it, or unlinks the task and verifies it by hand.
+- **Deliverables** beyond the first 50 count in the fingerprint by number only, comments beyond the first 300 and
+  attachments beyond the first 100 are not read, and a change to what an outside link points at is never seen.
+- **Webhooks** are not coalesced: each signed delivery reads the task once (three Asana calls), so whoever can edit the
+  task can spend the connection's Asana rate limit; the cycle's read before paying is the backstop.
+
 ## Screens
 
 At 1440 and 390 px, from `/docs-shots/asana/<state>` (sample data, `DOCS_SCREENSHOTS=1` only), in `asana-shots/`:

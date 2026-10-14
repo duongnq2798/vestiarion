@@ -134,9 +134,10 @@ export default function TermsPage() {
           projects and tasks a member opens to link a task to a milestone, and for each linked task whether and when it was completed and by whom,
           its assignee, and the links in its description, attachments and comments. Vestiarion makes a webhook on each linked task and deletes it when
           the task is unlinked or Asana is disconnected; it writes nothing else to Asana. A task completed in Asana is never by itself a reason to pay:
-          a person in the workspace accepts the work against the milestone&apos;s criteria, the contractor never accepts their own, and the agent
-          then decides the payment within the workspace&apos;s guardrails. Nothing from Asana sets an amount or a payee, and a task reopened or changed
-          after it was accepted is held for review before any payment. Vestiarion never uses Asana data to train or improve any AI model, and never
+          a person in the workspace accepts the work against the milestone&apos;s criteria, an acceptance by a member Vestiarion can tell is the
+          payee is refused, and the agent then decides the payment within the workspace&apos;s guardrails. Nothing from Asana sets an amount or a
+          payee, and a task reopened or changed after it was accepted is held for review when Vestiarion reads that before the payment is sent;
+          keeping anyone else from accepting their own work stays the workspace&apos;s. Vestiarion never uses Asana data to train or improve any AI model, and never
           passes it to anyone else without the workspace&apos;s say. Disconnecting stops the reading at once; acceptances already recorded stay with
           the workspace.
         </p>
