@@ -47,10 +47,9 @@ const PICKER_PAGES = 5;
 const STORY_PAGES = 3;
 
 /**
- * What a linked task's webhook is told about: the task, its stories (comments among them) and its attachments, the
- * three kinds a re-read looks at, each with a read scope the connection has. Asana asks a read scope for every kind a
- * webhook delivers; one with no filters delivers time tracking entries too, and was refused for want of
- * `time_tracking_entries:read`.
+ * What a linked task's webhook is told about: the task, its stories (its activity and comments, attachments added among
+ * them) and its attachments, the three kinds a re-read looks at, each with a read scope the connection has. Asana
+ * refused every webhook made without filters, naming `time_tracking_entries:read` as the scope it lacked.
  */
 export const WEBHOOK_FILTERS: ReadonlyArray<{ resource_type: "task" | "story" | "attachment" }> = [
   { resource_type: "task" },
