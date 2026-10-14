@@ -19,6 +19,7 @@ import { bridgeFee, type BridgeFee } from "../circle/cctp";
 import { gatewayQuoter, type GatewayQuote } from "../circle/gateway-quote";
 import { choosePayoutRoute, payoutFundsShort, type GatewayFigures } from "../payout-route";
 import type { CrossChainRoute } from "../circle/types";
+import { paysOwnCommission } from "../commissions/beneficiary";
 import { isSoleApprover } from "./sole-approver";
 import { newPayeeCheck } from "../new-payee";
 import { firstPaymentCheck, loadNewPayeeFacts } from "../new-payee-facts";
@@ -97,6 +98,7 @@ export type ApprovalErrorCode =
   | "invoice_not_found"
   | "already_decided"
   | "self_approval"
+  | "beneficiary_approval"
   | "new_payee_self"
   | "high_risk"
   | "insufficient_funds"
@@ -122,6 +124,7 @@ export type ApprovalErrorCode =
 const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds" | "needs_second_approver" | "chain_off_network">, string> = {
   already_decided: "Someone else decided this invoice a moment ago.",
   self_approval: "You created this invoice, so someone else must approve it.",
+  beneficiary_approval: "This payable pays your own commission, so someone else must approve it.",
   new_payee_self: "You gave this payee's address, so someone else must approve its first payment.",
   high_risk: "This counterparty is screened high risk. Clear it in Compliance first.",
   no_operating_account: "This workspace has no operating account.",
@@ -165,8 +168,8 @@ async function refuseUntilVerdict(invoiceId: string, decision: "approve" | "reje
 
 /**
  * `claim_invoice_decision` raises `invalid_decision`, `invoice_not_found`,
- * `self_approval` or `already_decided` as `"<code>: <detail>"` (the 0021
- * pattern `memberErrorFrom` also reads). Only the three this library can
+ * `self_approval`, `beneficiary_approval` (0118) or `already_decided` as `"<code>: <detail>"` (the 0021
+ * pattern `memberErrorFrom` also reads). Only the four this library can
  * actually meet are mapped; `invalid_decision` never fires here since the
  * decision is always one of this module's own literals, and anything else
  * (a connection error) is rethrown as-is rather than misreported as one of
@@ -174,7 +177,7 @@ async function refuseUntilVerdict(invoiceId: string, decision: "approve" | "reje
  */
 function raiseFromClaim(error: { message: string }): never {
   const code = /^([a-z_]+):/.exec(error.message)?.[1];
-  if (code === "already_decided" || code === "self_approval" || code === "invoice_not_found") {
+  if (code === "already_decided" || code === "self_approval" || code === "beneficiary_approval" || code === "invoice_not_found") {
     throw new ApprovalError(code, MESSAGES[code]);
   }
   throw new Error(error.message);
@@ -783,6 +786,9 @@ export async function approveAndPay(
   const invoice = await loadWaitingPayable(input.invoiceId);
   const intent = await paymentIntentOf(invoice.id);
   if (!input.forVerdict) await refuseUntilVerdict(invoice.id, "approve", { status: invoice.status, transferSent: transferExists(intent) || transferUnknown(intent) });
+  // The partner a commission pays never approves it, sole approver or not, nor gives one of two approvals
+  // (docs/superpowers/specs/2026-10-14-commissions-design.md C11); the claim asks the database again.
+  if (await paysOwnCommission(invoice.id, input.actorId)) raise("beneficiary_approval");
   // A transfer that already exists is reconciled, never sent again.
   const alreadySent = transferExists(intent);
   const firstPayment = await firstPaymentTo(invoice);

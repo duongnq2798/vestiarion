@@ -96,6 +96,11 @@ export const COMMAND_PERMISSIONS = {
   // how the money is reported and planned, an owner's or admin's, never what is paid (currency provenance M4, M7).
   "workspace.reporting_currency": "reporting.manage",
   "cash_scenario.save": "reporting.manage",
+  // A partner's commission plan, ending it, and the payable made from what a partner is due: records, as a deal and a
+  // bill are, so owners and admins; an accountant reads them and creates no payable (commissions C13).
+  "commission.set_plan": "records.write",
+  "commission.end_plan": "records.write",
+  "commission.create_payable": "records.write",
 } as const satisfies Record<string, Permission>;
 
 export type CommandName = keyof typeof COMMAND_PERMISSIONS;
