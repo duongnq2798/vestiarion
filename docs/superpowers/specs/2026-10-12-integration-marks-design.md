@@ -100,3 +100,50 @@ not committed: they are identical to these (I6).
 - The connect and launch pages need a signed-in session, so they are held by render tests and were looked at once in a
   throwaway local page with the same markup, not photographed.
 - Only Edge (Chromium) was used to look; the marks are plain images, so other engines should draw them alike.
+
+## Asana and Pipedrive (2026-10-14)
+
+Pipedrive and Asana shipped with their names alone (Pipedrive connector P20, Asana acceptance A1), until their owners'
+files were in hand. The partner downloaded them from each company's brand kit; I1-I12 hold for them.
+
+- **I13 — Pipedrive: its app icon in small places, its wordmark on the landing page.** `pipedrive.jpeg`, the kit's
+  app icon (a white "p" on Pipedrive's green square, 200 x 200), heads the Settings card and the connect and launch
+  pages, drawn edge to edge at 16 and 24 px as Arc's icon is. `pipedrive-lockup.svg`, the "pipedrive" wordmark in its
+  dark grey (820 x 304, with 76 clear on every side, so `inset` 76 / 304), stands in the name's place on the landing
+  strip, its letters 16 px from ascender to descender (70 x 16), the name kept for screen readers, as QuickBooks'
+  lockup is there and its circle elsewhere. The kit's "p" letter logo is drawn in white (`#FFFFFF`; "dark" in its name
+  means the ground it is for), so on the site's light grounds it would not show: it is not shipped (I6).
+- **I14 — Asana: its logo everywhere.** `asana-lockup.svg`, the coral dots then "asana" in near-black (112 x 22), stands
+  in the name's place on the landing strip, the Settings card and the connect and launch pages, the name kept for
+  screen readers, as Xero's wordmark does. Its dots fill its height, so at `size` they stand as tall as the other
+  symbols (81 x 16 in a card, 122 x 24 beside an h1), and its letters stand 11 px tall at 16, near Xero's 12. The
+  kit's dots alone (`asana.jpeg`, 480 x 480) come on an opaque white square. Drawn at the symbols' size with its clear
+  space pulled in, as Slack's is, the square showed as a 26 px white box on the cream ground, larger than the slot and
+  past the column's edge; drawn edge to edge, the dots were 10 px, lighter than every other symbol. So it is not
+  shipped. A transparent file of the dots from Asana's kit would take its place as the symbol in small places, at
+  `aspect` 1.
+- **I15 — Asana's file as it comes.** Its paths carry class names from Asana's website (`styles_logo-link__…`). The
+  file has no stylesheet, and an `<img>` lets none in, so the fills draw as written: checked on its own in Edge at
+  112 x 22, 102 x 20 and 224 x 44, coral dots and near-black letters on the page's ground, the card's surface and
+  white. It has no `viewBox`; Edge scales it from its width and height to the size it is drawn at. It is served
+  unaltered, held to its SHA-256 like every mark. Its title ("Asana Home") is not read out: the image has an empty alt
+  and is hidden from assistive technology.
+- **I16 — the landing strip keeps its rows.** Ten services, two to a row below 1024 px and five from it: Pipedrive's
+  wordmark and Asana's logo sit in the 20 px row as Xero's does, centred on it, so every card's text stays level. Neither
+  needs QuickBooks' larger drawing (I7): their letters read at the row's size. Checked at 1440 and 390 px, with no
+  horizontal scroll, and with `prefers-color-scheme: dark` pixel for pixel the same as light (I6).
+- **I17 — colours, measured.** Pipedrive's dark grey `#26292C` is 12.8:1 on the page's ground and 14.5:1 on a card's
+  surface; its white "p" 5.7:1 on its green `#007737`. Asana's letters `#0D0E10` are 16.9:1 on the ground; its coral
+  dots `#F06A6A` 2.6:1 on the ground and 3.0:1 on a card's surface, decoration beside the name (I11). The trademark
+  notice on the landing page already named Pipedrive and Asana among the marks of their owners; the README's now names
+  Asana too.
+
+Tests: `tests/brand-marks.test.tsx` holds the three files to their SHA-256, their sizes, proportions and colours, that
+the white "p" and the dots on white are not shipped, each connector's mark, the wordmarks named for screen readers, and
+the landing strip's marks; `tests/integration-marks.test.tsx` the Pipedrive and Asana Settings cards, connect pages and
+launch pages; `tests/pipedrive-render.test.tsx` the Pipedrive card's icon beside its name.
+
+Screenshots, in `integration-marks-shots/`: `landing-works-with-1440.png` and `landing-works-with-390.png` taken again
+with ten services, and `settings-pipedrive-<width>.png` and `settings-asana-<width>.png` at 1440 and 390 px through
+`/docs-shots/pipedrive/settings` and `/docs-shots/asana/settings`. The Asana and Pipedrive guides have no Settings
+screenshot and no place for a mark at the top (I12), so they are unchanged.

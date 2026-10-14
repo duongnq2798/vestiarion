@@ -52,3 +52,7 @@ and `/open` tests check the mark beside each name.
   row), their Settings cards, and their connect and launch pages. Decisions, including the one derived file (the
   QuickBooks circle, taken from the lockup's own paths) and why no dark variants ship, in
   `docs/superpowers/specs/2026-10-12-integration-marks-design.md`.
+- **2026-10-14.** Pipedrive and Asana, named in words alone since their connectors shipped, show their marks from their
+  brand kits: Pipedrive's dark wordmark on the landing strip (ten services, five to a row) and its app icon in Settings
+  and on its connect and launch pages; Asana's logo in all of them. Decisions I13-I17 in
+  `docs/superpowers/specs/2026-10-12-integration-marks-design.md`.

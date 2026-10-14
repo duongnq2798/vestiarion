@@ -15,7 +15,20 @@ import { PROVIDERS } from "@/lib/connectors/provider";
  * worded as an endorsement.
  */
 
-const BRANDS: Brand[] = ["arc", "circle", "slack", "telegram", "npm", "xero", "quickbooks", "quickbooks-lockup", "hubspot"];
+const BRANDS: Brand[] = [
+  "arc",
+  "circle",
+  "slack",
+  "telegram",
+  "npm",
+  "xero",
+  "quickbooks",
+  "quickbooks-lockup",
+  "hubspot",
+  "pipedrive",
+  "pipedrive-lockup",
+  "asana-lockup",
+];
 
 const text = (markup: string) =>
   markup
@@ -42,6 +55,10 @@ const OFFICIAL_SHA256: Record<Brand, string> = {
   quickbooks: "ec993a3485cbe0bdf4a7ac1527a2976be78a3267084df11ac526d3924eafdfee",
   "quickbooks-lockup": "d5cac311a6a1de8e7df8af756c6db7aa4a50120a5d0dd4ae2d543947e39d176a",
   hubspot: "789c8d1786fa8364ccce35f9f7fdf8cd489cbf99ade53ee631c95a085d5cb550",
+  // Pipedrive's app icon and its dark wordmark, and Asana's logo, from their brand kits.
+  pipedrive: "45f867120bc5459c83f3148b5f0f9678e8228f6820940e1d8262756a6979b3e5",
+  "pipedrive-lockup": "9f3315ca31f3698bd1e73ebd6430e8d0bbb23b84bfcada5261bbab0dcfdd594a",
+  "asana-lockup": "8a951a5126a6b1de833f5354102ba995eec1003cc76e79dd8401c890d987c1b5",
 };
 
 const brandFile = (brand: Brand) => readFileSync(path.join(process.cwd(), "public", BRAND_FILES[brand]), "utf8");
@@ -102,6 +119,39 @@ describe("a brand mark", () => {
     expect(renderToStaticMarkup(<BrandMark brand="hubspot" size={24} />)).toMatch(/width="20" height="24"/);
   });
 
+  it("draws Pipedrive's and Asana's marks at the symbols' height, Pipedrive's wordmark with its clear space pulled in", () => {
+    // Pipedrive's app icon is drawn edge to edge, as Arc's is.
+    expect(renderToStaticMarkup(<BrandMark brand="pipedrive" />)).toMatch(/width="16" height="16"(?![^>]*style)/);
+    expect(renderToStaticMarkup(<BrandMark brand="pipedrive" size={24} />)).toMatch(/width="24" height="24"(?![^>]*style)/);
+    // Pipedrive's wordmark is 820:304 with 76 clear on every side: its letters, ascender to descender, 16 px tall.
+    const wordmark = renderToStaticMarkup(<BrandMark brand="pipedrive-lockup" />);
+    expect(wordmark).toMatch(/width="86" height="32"/);
+    expect(wordmark).toMatch(/style="margin:-8px"/);
+    // Asana's logo is 112:22 and its dots fill the height: 16 px tall, the dots as tall as the symbols; 24 beside an h1.
+    expect(renderToStaticMarkup(<BrandMark brand="asana-lockup" />)).toMatch(/width="81" height="16"(?![^>]*style)/);
+    expect(renderToStaticMarkup(<BrandMark brand="asana-lockup" size={24} />)).toMatch(/width="122" height="24"(?![^>]*style)/);
+  });
+
+  it("draws Pipedrive's and Asana's files at their own proportions", () => {
+    const bytes = (brand: Brand) => readFileSync(path.join(process.cwd(), "public", BRAND_FILES[brand]));
+    // Pipedrive's icon is a JPEG, 200 x 200 (a frame's height, then its width, follow its marker).
+    const jpegSize = (data: Buffer) => {
+      expect([data[0], data[1]]).toEqual([0xff, 0xd8]);
+      for (let at = 2; at < data.length; ) {
+        const marker = data[at + 1];
+        if (marker === 0xc0 || marker === 0xc2) return [data.readUInt16BE(at + 7), data.readUInt16BE(at + 5)];
+        at += 2 + data.readUInt16BE(at + 2);
+      }
+      throw new Error("no frame");
+    };
+    expect(jpegSize(bytes("pipedrive"))).toEqual([200, 200]);
+    expect(brandFile("pipedrive-lockup")).toMatch(/^<svg width="820px" height="304px" viewBox="0 0 820 304"/);
+    // Asana's logo has no viewBox: its width and height are its frame, and an image scales it to the size it is drawn at.
+    expect(brandFile("asana-lockup")).toMatch(/^<svg width="112" height="22" fill="none"/);
+    // Its class names are Asana's website's; the file has no stylesheet for them, so its fills draw as written.
+    expect(brandFile("asana-lockup")).not.toMatch(/<style|style=/);
+  });
+
   it("takes QuickBooks' symbol from Intuit's lockup as it is: the green circle's two paths, framed by the lockup's own clip", () => {
     const symbol = brandFile("quickbooks");
     const lockup = brandFile("quickbooks-lockup");
@@ -135,14 +185,39 @@ describe("a brand mark", () => {
     expect(contrast("#ffffff", "#2ca01c")).toBeGreaterThan(3);
   });
 
+  it("ships Pipedrive's and Asana's marks for a light ground: the dark wordmark, the dark-lettered logo, never the white letter", () => {
+    const shipped = readdirSync(path.join(process.cwd(), "public/brands"));
+    // Pipedrive's wordmark draws every letter in its dark grey; its kit's white "p", for a dark ground, is not shipped.
+    const uses = [...brandFile("pipedrive-lockup").matchAll(/<use [^>]*fill="(#[0-9A-Fa-f]{6})"/g)].map((match) => match[1].toLowerCase());
+    expect(uses).toEqual(Array(11).fill("#26292c"));
+    expect(shipped.some((file) => /pipedrive-letter/i.test(file))).toBe(false);
+    // Asana's logo: "asana" in near-black, the dots in coral, on no ground of its own. The kit's dots alone come on an
+    // opaque white square, which would show as a box on the page's cream ground: not shipped.
+    expect(fills("asana-lockup")).toEqual(["#0d0e10", "#f06a6a"]);
+    expect(brandFile("asana-lockup")).not.toMatch(/<rect/);
+    expect(shipped.filter((file) => file.startsWith("asana"))).toEqual(["asana-lockup.svg"]);
+    const GROUNDS = ["#f3f0e7", "#fffefa"];
+    for (const ground of GROUNDS) {
+      expect(contrast("#26292c", ground), `Pipedrive's wordmark on ${ground}`).toBeGreaterThan(12);
+      expect(contrast("#0d0e10", ground), `Asana's letters on ${ground}`).toBeGreaterThan(16);
+      // The coral dots are decoration beside the name, so no contrast floor binds them: Asana's colour, measured.
+      expect(contrast("#f06a6a", ground), `Asana's dots on ${ground}`).toBeGreaterThan(2.6);
+    }
+    // Pipedrive's icon carries its own ground: the white "p" on its green.
+    expect(contrast("#ffffff", "#007737")).toBeGreaterThan(5.5);
+  });
+
   it("exists only for services the code integrates with: no Gmail, whose inbox is reached by forwarding", () => {
     const source = readFileSync(path.join(process.cwd(), "src/components/vx/BrandMarks.tsx"), "utf8");
     expect(source).not.toMatch(/gmail|google/i);
     expect(readdirSync(path.join(process.cwd(), "public/brands")).sort()).toEqual([
       "arc.jpeg",
+      "asana-lockup.svg",
       "circle.svg",
       "hubspot.svg",
       "npm.svg",
+      "pipedrive-lockup.svg",
+      "pipedrive.jpeg",
       "quickbooks-lockup.svg",
       "quickbooks.svg",
       "slack.svg",
@@ -152,11 +227,10 @@ describe("a brand mark", () => {
   });
 
   it("gives each connector its own mark, and Intuit's name alone no mark: no place stands for Intuit itself", () => {
-    // Pipedrive shows its name alone: no logo of its own is used (Pipedrive connector P20); Asana's name stands alone until
-    // its owner's file is in public/brands.
-    expect(Object.keys(PROVIDER_MARKS).sort()).toEqual(PROVIDERS.filter((provider) => provider !== "pipedrive" && provider !== "asana").sort());
-    expect(PROVIDER_MARKS).toEqual({ xero: "xero", quickbooks: "quickbooks", hubspot: "hubspot" });
-    expect(readdirSync(path.join(process.cwd(), "public/brands")).some((file) => /pipedrive/i.test(file))).toBe(false);
+    expect(Object.keys(PROVIDER_MARKS).sort()).toEqual([...PROVIDERS].sort());
+    expect(PROVIDER_MARKS).toEqual({ xero: "xero", quickbooks: "quickbooks", hubspot: "hubspot", pipedrive: "pipedrive", asana: "asana-lockup" });
+    // A connector's mark is a symbol before its written name, but Xero's wordmark and Asana's logo, which spell theirs.
+    for (const provider of PROVIDERS) expect(isWordmark(PROVIDER_MARKS[provider]), provider).toBe(provider === "xero" || provider === "asana");
     expect(readdirSync(path.join(process.cwd(), "public/brands")).some((file) => /^intuit/i.test(file))).toBe(false);
   });
 
@@ -172,6 +246,9 @@ describe("a brand mark", () => {
       quickbooks: "QuickBooks",
       "quickbooks-lockup": "QuickBooks",
       hubspot: "HubSpot",
+      pipedrive: "Pipedrive",
+      "pipedrive-lockup": "Pipedrive",
+      "asana-lockup": "Asana",
     };
     const walk = (dir: string): string[] =>
       readdirSync(dir, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? walk(path.join(dir, entry.name)) : [path.join(dir, entry.name)]));
@@ -184,8 +261,8 @@ describe("a brand mark", () => {
     }
   });
 
-  it("knows npm's and Xero's marks and QuickBooks' lockup spell their names, and QuickBooks' circle does not", () => {
-    expect(BRANDS.filter(isWordmark)).toEqual(["npm", "xero", "quickbooks-lockup"]);
+  it("knows npm's and Xero's marks and the QuickBooks, Pipedrive and Asana lockups spell their names, and the symbols do not", () => {
+    expect(BRANDS.filter(isWordmark)).toEqual(["npm", "xero", "quickbooks-lockup", "pipedrive-lockup", "asana-lockup"]);
   });
 
   it("names a mark beside its name: a wordmark stands in its place with the name for screen readers, any other before it", () => {
@@ -195,6 +272,10 @@ describe("a brand mark", () => {
     expect(quickbooks).toMatch(/<img src="\/brands\/quickbooks\.svg" alt="" aria-hidden="true"[^>]*\/><span>QuickBooks<\/span>/);
     const hubspot = renderToStaticMarkup(<BrandName brand="hubspot" name="HubSpot" size={24} />);
     expect(hubspot).toMatch(/<img src="\/brands\/hubspot\.svg" alt="" aria-hidden="true"[^>]*width="20" height="24"[^>]*\/><span>HubSpot<\/span>/);
+    const pipedrive = renderToStaticMarkup(<BrandName brand="pipedrive" name="Pipedrive" />);
+    expect(pipedrive).toMatch(/<img src="\/brands\/pipedrive\.jpeg" alt="" aria-hidden="true"[^>]*\/><span>Pipedrive<\/span>/);
+    const lockup = renderToStaticMarkup(<BrandName brand="asana-lockup" name="Asana" />);
+    expect(lockup).toMatch(/<img src="\/brands\/asana-lockup\.svg" alt="" aria-hidden="true"[^>]*\/><span class="sr-only">Asana<\/span>/);
   });
 });
 
@@ -225,16 +306,21 @@ describe("the landing page's built on and works with", () => {
       "xero",
       "quickbooks-lockup",
       "hubspot",
+      "pipedrive-lockup",
+      "asana-lockup",
       "slack",
       "telegram",
       "npm",
     ]);
-    // npm's and Xero's marks and QuickBooks' lockup are their names, so the written names are for screen readers.
+    // npm's and Xero's marks and the QuickBooks, Pipedrive and Asana lockups are their names, so the written names are
+    // for screen readers.
     expect(markup).toContain('<span class="sr-only">npm</span>');
     expect(markup).toContain('<span class="sr-only">Xero</span>');
     expect(markup).toMatch(/data-brand="quickbooks-lockup"[^>]*\/><span class="sr-only">QuickBooks Online<\/span>/);
-    // Pipedrive is named in words alone: no logo of Pipedrive's is used (Pipedrive connector P20).
-    expect(markup).toMatch(/font-semibold text-ink"><span>Pipedrive<\/span><\/p>/);
+    expect(markup).toMatch(/data-brand="pipedrive-lockup"[^>]*\/><span class="sr-only">Pipedrive<\/span>/);
+    expect(markup).toMatch(/data-brand="asana-lockup"[^>]*\/><span class="sr-only">Asana<\/span>/);
+    // Every service shows its mark: none is named in words alone.
+    expect(markup).not.toMatch(/font-semibold text-ink"><span>/);
   });
 
   it("lists ten services, two to a row below a laptop's width and five from it, so every row is full", () => {

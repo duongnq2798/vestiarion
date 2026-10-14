@@ -28,8 +28,8 @@ import { noTestAccountRule } from "@/lib/connectors/crm-receipts-view";
 
 /**
  * Pipedrive's card in Settings, its won deals on Bills & receivables, and a deal's changes
- * (docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md P4, P11, P12, P13, P16, P20): Pipedrive's name and
- * never its logo; the reality rule said, and no switch, for a workspace that never writes; what the connection sees. And
+ * (docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md P4, P11, P12, P13, P16, P20): Pipedrive's app icon
+ * beside its name; the reality rule said, and no switch, for a workspace that never writes; what the connection sees. And
  * nothing that moves money imports the CRM code.
  */
 
@@ -60,10 +60,10 @@ const panel = (view: CrmPanelView, options: { canManage?: boolean; notice?: stri
   decode(renderToStaticMarkup(<PipedrivePanel orgSlug="cedar" view={view} canManage={options.canManage ?? true} notice={options.notice ?? null} receipts={options.receipts ?? null} />));
 
 describe("PipedrivePanel", () => {
-  it("names Pipedrive without a logo, and connects through the connect page", () => {
+  it("names Pipedrive beside its app icon, and connects through the connect page", () => {
     const markup = panel({ state: "not_connected" });
-    expect(markup).toContain(">Pipedrive<");
-    expect(markup).not.toMatch(/<img/);
+    expect(markup).toMatch(/<img src="\/brands\/pipedrive\.jpeg" alt="" aria-hidden="true"[^>]*\/><span>Pipedrive<\/span>/);
+    expect(markup.match(/<img/g)).toHaveLength(1);
     expect(markup).toContain('href="/integrations/pipedrive/connect?org=cedar"');
     expect(markup).toContain('href="/docs/guides/pipedrive"');
     expect(panel({ state: "not_connected" }, { canManage: false })).toContain("An owner or admin connects Pipedrive.");

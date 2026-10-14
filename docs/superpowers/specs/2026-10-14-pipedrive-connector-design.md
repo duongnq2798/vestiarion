@@ -217,9 +217,10 @@ dealId, organizationId }`; `create_counterparty` and `counterparty_notice_email_
 organizationId }`; `accounting_connected`, `accounting_disconnected`, `crm_deal_changed`, `crm_deal_change_kept` and the
 `crm_receipt_*` entries with `provider: "pipedrive"`. They reach webhooks as `ledger.appended`.
 
-**P20. Where it shows.** Settings, **Pipedrive** (`PipedrivePanel`, with the name and no logo); Bills & receivables,
-Deals, **From Pipedrive: N won deals** (`CrmDeals`, the HubSpot list made generic); a deal's page, **Changed in
-Pipedrive** and **Receipts in Pipedrive**, beside its cash readiness and project.
+**P20. Where it shows.** Settings, **Pipedrive** (`PipedrivePanel`, its name beside Pipedrive's app icon since
+2026-10-14: integration marks I13); Bills & receivables, Deals, **From Pipedrive: N won deals** (`CrmDeals`, the HubSpot
+list made generic); a deal's page, **Changed in Pipedrive** and **Receipts in Pipedrive**, beside its cash readiness and
+project.
 
 ## Not in this version
 

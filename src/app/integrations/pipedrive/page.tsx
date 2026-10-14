@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { BrandName } from "@/components/vx/BrandMarks";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { membershipsOf } from "@/lib/auth/membership";
 import { verifySession } from "@/lib/auth/session";
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
 /**
  * Pipedrive for a signed-in person (docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md P4): their
  * workspace's Pipedrive settings, at once when they have one workspace, and a pick when they have several. A signed-out
- * visitor signs in and comes back here. Not there unless Pipedrive is configured. Pipedrive's name, never its logo.
+ * visitor signs in and comes back here. Not there unless Pipedrive is configured. Headed by Pipedrive's app icon and name.
  */
 export default async function PipedriveIntegrationPage() {
   const user = await verifySession("/integrations/pipedrive");
@@ -42,7 +43,9 @@ export default async function PipedriveIntegrationPage() {
             />
           ) : (
             <>
-              <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Pipedrive</h1>
+              <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">
+                <BrandName brand="pipedrive" name="Pipedrive" size={24} className="gap-3" />
+              </h1>
               <p className="mt-3 text-sm text-ink-2">Pick the workspace whose Pipedrive settings you want.</p>
               <ul className="mt-6 divide-y divide-line rounded-lg border border-line">
                 {memberships.map((membership) => (

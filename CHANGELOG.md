@@ -46,7 +46,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   of its companies are developer sandboxes, so payments on Arc testnet or in shadow mode are never written to it;
   reading and planning work in every workspace. Vestiarion sees the deals the Pipedrive user who connected can see. One
   Pipedrive company connects to one workspace, and disconnecting uninstalls Vestiarion from it; planned deals stay. The
-  landing page lists Pipedrive, by its name, among the tools Vestiarion works with.
+  landing page lists Pipedrive among the tools Vestiarion works with.
+
+### Changed
+
+- **Asana and Pipedrive show their marks.** On the landing page, "Built on, and works with" shows Pipedrive's wordmark
+  and Asana's logo where their names were. Their Settings cards, connect pages and launch pages show Pipedrive's app
+  icon beside its name and Asana's logo, as Xero, QuickBooks and HubSpot show theirs.
 
 ## [0.1.0-beta.3] - 2026-10-13
 
