@@ -124,7 +124,16 @@ describe("what a held milestone waits for", () => {
   it("says the same of a send left submitting past its claim, and a send inside it is a transfer to record (payment exceptions E2)", () => {
     const left = { status: "submitting", provider_tx_id: null, last_error: null, provider_state: null, failure_reason: null, updated_at: new Date(Date.now() - 5 * 60_000).toISOString() };
     expect(heldReason(facts({ intent: left }))).toMatchObject({ kind: "unknown", hint: "Transfer to look for", canClose: true });
+    // It may still be sending: never only that Circle did not answer (payment exceptions review 6).
+    expect(heldReason(facts({ intent: left })).text).toMatch(
+      /^Vestiarion started sending its transfer and Circle has not answered for over two minutes: it may still be sending, or its answer was lost\. Pay now and Close look for it on Circle first/
+    );
     expect(heldReason(facts({ intent: { ...left, updated_at: new Date().toISOString() } }))).toMatchObject({ kind: "in_flight", canClose: false });
+  });
+
+  it("says a release sent in a batch whose answer was lost is a transfer to look for, whatever its error (payment exceptions review 1)", () => {
+    const member = { status: "failed", provider_tx_id: null, last_error: "Batch transfer failed", provider_state: null, failure_reason: null, batch_key: "batch-key-1", transfer_attempt: 1 };
+    expect(heldReason(facts({ intent: member }))).toMatchObject({ kind: "unknown", canClose: true });
   });
 
   it("carries what would hold it with no transfer: no Pay now for a contractor screened high risk, and the agent's own hold to override", () => {
@@ -409,7 +418,10 @@ describe("Pay now", () => {
     const result = await run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }));
 
     expect(result.status).toBe("paid");
-    expect(releaseHeldMilestoneMock).toHaveBeenCalledWith({ milestoneId: MILESTONE, destination: ADDRESS, amount: 0.3 }, { provider: expect.anything(), operatingAccountId: "acct-1" });
+    expect(releaseHeldMilestoneMock).toHaveBeenCalledWith(
+      { milestoneId: MILESTONE, destination: ADDRESS, amount: 0.3 },
+      { provider: expect.anything(), operatingAccountId: "acct-1", retryTerminalFailure: true }
+    );
     const update = patch();
     expect(update?.params.get("status")).toBe("eq.held");
     expect(update?.body).toMatchObject({ status: "paid", tx_ref: PAID.txRef, decision_claimed_by: null, decision_claimed_at: null });
@@ -453,30 +465,75 @@ describe("Pay now", () => {
     expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
   });
 
-  describe("over a transfer Circle never answered (payment safety R1)", () => {
-    const UNKNOWN = { status: "failed", provider_tx_id: null, last_error: "Circle did not answer createTransaction within 20000 ms; the transfer may or may not have been accepted", provider_state: null, failure_reason: null };
+  describe("over a transfer Circle never answered (payment safety R1, payment exceptions review 2)", () => {
+    const unknownSince = (minutesAgo: number) => ({
+      status: "failed",
+      idempotency_key: "key-1",
+      previous_attempts: [],
+      provider_tx_id: null,
+      last_error: "Circle did not answer createTransaction within 20000 ms; the transfer may or may not have been accepted",
+      provider_state: null,
+      failure_reason: null,
+      updated_at: new Date(Date.now() - minutesAgo * 60_000).toISOString(),
+    });
+    const looking = (found: Record<string, unknown> | null = null) => {
+      const findTransferByRef = vi.fn(async () => found);
+      getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003, findTransferByRef });
+      return findTransferByRef;
+    };
 
-    it("refuses what the agent's release refuses, since sending it again may be a new payment", async () => {
+    it("looks for it on Circle first, and refuses, saying when to try again, while Circle has not listed it", async () => {
+      const findTransferByRef = looking();
+      const { run, claimed } = world({ intent: unknownSince(5) });
+      const attempt = run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }));
+      expect(await refusal(attempt)).toBe("payment_unknown");
+      await expect(attempt).rejects.toThrow(/^Vestiarion looked for the earlier transfer on Circle first: Circle has not listed it yet, so nothing was sent\. Try again from \d\d:\d\d UTC/);
+      expect(findTransferByRef).toHaveBeenCalledWith("acct-1", `Milestone ${MILESTONE}`, expect.anything(), expect.anything());
+      expect(claimed()).toBe(false);
+      expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
+    });
+
+    it("refuses what the agent's release refuses once Circle is known never to have taken it: it is then a new payment", async () => {
       const cases: Array<[Record<string, unknown>, string]> = [
         [{ risk_level: "high" }, "high_risk"],
         [{ payment_limit: "0.25", risk_notes: "Matched a politically exposed person" }, "above_limit"],
         [{ address_changed_at: "2026-10-02T09:00:00Z" }, "address_unconfirmed"],
       ];
       for (const [contractor, code] of cases) {
-        const { run, claimed } = world({ intent: UNKNOWN, milestone: { counterparties: { ...milestoneRow().counterparties, ...contractor } } });
+        looking();
+        const { run, claimed } = world({ intent: unknownSince(20), milestone: { counterparties: { ...milestoneRow().counterparties, ...contractor } } });
         expect(await refusal(run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))), code).toBe(code);
         expect(claimed()).toBe(false);
       }
       expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
     });
 
-    it("sends it again under its key without the balance check, which the transfer may already have lowered", async () => {
-      releaseHeldMilestoneMock.mockResolvedValue(PAID);
-      const { run } = world({ intent: UNKNOWN, balance: "0" });
-
-      await expect(run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))).resolves.toMatchObject({ status: "paid" });
-      expect(releaseHeldMilestoneMock).toHaveBeenCalledTimes(1);
+    it("checks the balance for that new payment", async () => {
+      looking();
+      syncOperatingBalanceMock.mockResolvedValue(0);
+      const { run } = world({ intent: unknownSince(20), balance: "0" });
+      expect(await refusal(run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE })))).toBe("insufficient_funds");
+      expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
     });
+
+    it("records the transfer Circle has without the balance check, and never sends a new one", async () => {
+      looking({
+        providerTxId: "circle-tx-7", txHash: null, txRef: "circle-tx-7", chain: "ARC-TESTNET", status: "pending", feeUsd: 0.003,
+        feeSource: "provider_estimate", providerMode: "live", settledInMs: null, providerState: "SENT", failureReason: null,
+      });
+      releaseHeldMilestoneMock.mockResolvedValue({ ...PAID, status: "verified", txRef: null });
+      const { run } = world({ intent: unknownSince(5), balance: "0" });
+
+      await run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }));
+      expect(releaseHeldMilestoneMock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ retryTerminalFailure: false }));
+    });
+  });
+
+  it("only checks a transfer already sent: one Circle now reports failed is held again, never sent anew without the checks (payment exceptions review 2)", async () => {
+    releaseHeldMilestoneMock.mockResolvedValue({ ...PAID, status: "held", txRef: null, reasoningSuffix: " [transfer failed: FAILED]" });
+    const { run } = world({ intent: { ...FAILED_INTENT, status: "pending", provider_state: "SENT", failure_reason: null } });
+    await run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }));
+    expect(releaseHeldMilestoneMock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ retryTerminalFailure: false }));
   });
 
   it("needs someone other than whoever added it to override the agent's own hold", async () => {

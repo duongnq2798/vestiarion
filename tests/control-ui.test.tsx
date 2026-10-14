@@ -397,6 +397,23 @@ describe("ApprovalCard", () => {
     expect(payConfirmLabel(payable({ paymentSent: true, lastAttempt: { state: "unanswered" } }))).toBe("Look first");
   });
 
+  it("says a send cut off mid-way may still be sending, never only that Circle did not answer (payment exceptions review 6)", () => {
+    const words = card({ paymentSent: true, lastAttempt: { state: "unanswered", sending: true } }).replace(/&#x27;/g, "'");
+    expect(words).toContain("Vestiarion started sending this payment and Circle has not answered for over two minutes: it may still be sending, or its answer was lost.");
+    expect(words).not.toContain("Circle did not answer when this payment was sent");
+  });
+
+  it("says a payout to another chain is asked for again under its key, and that Reject and Return wait (payment exceptions review 5)", () => {
+    const words = card({ paymentSent: true, lastAttempt: { state: "unanswered" }, payeeChain: "BASE-SEPOLIA" }).replace(/&#x27;/g, "'");
+    expect(words).toContain(
+      "A payout to another chain cannot be looked up on Circle: Approve and pay asks Circle for it again under the same payment key, which Circle takes only once, so it is never paid twice. Reject and Return wait until Circle has answered."
+    );
+    expect(words).not.toContain("Reject and Return look for it on Circle first");
+    expect(payConfirmDescription({ paymentSent: true, lastAttempt: { state: "unanswered" }, payeeChain: "BASE-SEPOLIA" })).toBe(
+      "Vestiarion asks Circle for the earlier transfer again under the same payment key, which Circle takes only once: it records it if Circle has it, and only otherwise is this the payment. The ledger records who approved it."
+    );
+  });
+
   it("names, for a failed attempt, what to fix before approving sends a new transfer (payment exceptions E6)", () => {
     const markup = card({ lastAttempt: { state: "failed", reason: "the operating wallet does not hold enough USDC for the network fee (Circle: INSUFFICIENT_NATIVE_TOKEN)" } });
     expect(markup.replace(/&#x27;/g, "'")).toContain(

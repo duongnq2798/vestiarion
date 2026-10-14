@@ -196,6 +196,47 @@ describe("sendSlackDecisions", () => {
     expect(JSON.stringify(posts[0].body)).toContain("Checks the transfer already sent with Circle and records it: nothing new is sent. It is 0.50 USDC to Jiren on Arc testnet, to 0x1111…0000.");
   });
 
+  /** The confirmation on the posted card's Approve and pay button. */
+  const approveConfirm = (body: Record<string, unknown>) => {
+    const blocks = (body.blocks ?? []) as Array<{ elements?: Array<{ action_id?: string; confirm?: { title: { text: string }; text: { text: string }; confirm: { text: string } } }> }>;
+    return blocks.flatMap((block) => block.elements ?? []).find((element) => element.action_id === "vx_approve")?.confirm;
+  };
+
+  it("titles and labels the confirmation for what Approve does when it checks first (payment exceptions review 4)", async () => {
+    install = installRow({ decisions_limit_usdc: "1" });
+    invoices = [heldInvoice()];
+    readActivityMock.mockResolvedValue(activity([HELD], 57));
+    intents = [{ source_id: INVOICE, status: "pending", provider_tx_id: "circle-tx-1", provider_state: "SENT", failure_reason: null, payout_route: null, last_error: null, updated_at: "2026-10-03T11:57:00+00:00" }];
+    const checking = stage();
+    await checking.run();
+    expect(approveConfirm(checking.posts[0].body)).toMatchObject({ title: { text: "Check the payment already sent?" }, confirm: { text: "Check it" } });
+
+    intents = [{ ...intents[0], status: "failed", provider_tx_id: null, provider_state: null, last_error: "the transfer may or may not have been accepted" }];
+    const looking = stage();
+    await looking.run();
+    expect(approveConfirm(looking.posts[0].body)).toMatchObject({ title: { text: "Look for the earlier payment first?" }, confirm: { text: "Look first" } });
+
+    intents = [];
+    const paying = stage();
+    await paying.run();
+    expect(approveConfirm(paying.posts[0].body)).toMatchObject({ title: { text: "Approve and pay?" }, confirm: { text: "Approve and pay" } });
+  });
+
+  it("keeps the confirmation within Slack's 300 characters whatever the payee's name (payment exceptions review 4)", async () => {
+    install = installRow({ decisions_limit_usdc: "1" });
+    const name = "Northwind Hosting & Data Services International Holdings ".repeat(8).trim();
+    invoices = [heldInvoice({ early_pay_discount_pct: "2", counterparties: { name, address: ADDRESS, chain: null, address_changed_at: null, address_confirmed_at: null } })];
+    intents = [{ source_id: INVOICE, status: "failed", provider_tx_id: null, provider_state: null, failure_reason: null, payout_route: null, last_error: "the transfer may or may not have been accepted", updated_at: "2026-10-03T11:57:00+00:00" }];
+    readActivityMock.mockResolvedValue(activity([HELD], 57));
+    const { run, posts } = stage();
+    await run();
+
+    const confirm = approveConfirm(posts[0].body);
+    expect(confirm?.text.text.length).toBeLessThanOrEqual(300);
+    expect(confirm?.text.text).toMatch(/^Looks for the earlier transfer on Circle first/);
+    expect(confirm?.text.text).toContain("Northwind Hosting");
+  });
+
   it("leaves Approve out above the limit, and says why", async () => {
     install = installRow({ decisions_limit_usdc: "1" });
     invoices = [heldInvoice({ amount: "5" })];

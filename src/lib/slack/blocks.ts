@@ -35,6 +35,15 @@ function clip(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`;
 }
 
+/** A confirmation dialog's text: Slack refuses the whole message past 300 characters (payment exceptions review 4). */
+export const CONFIRM_TEXT_MAX = 300;
+
+/** Mrkdwn cut short, never through one of its escapes (`&amp;`, `&lt;`, `&gt;`), which Slack would show as typed. */
+function clipMrkdwn(text: string, max: number): string {
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 1).replace(/&[a-z]*$/, "").trimEnd()}…`;
+}
+
 const link = (url: string, label: string) => `<${url}|${mrkdwn(label)}>`;
 const orgUrl = (origin: string, slug: string, path: string) => `${origin}${orgHref(slug, path)}`;
 const amountText = (amount: number | string, currency: string) => `${AMOUNT.format(Number(amount))} ${currency}`;
@@ -67,6 +76,12 @@ export interface CardView {
   approveRefusal: string | null;
   /** What Approve and pay will do, for Slack's confirmation: the amount, the payee, the address shortened. */
   confirmText: string;
+  /**
+   * The confirmation's title and button where Approve checks an earlier transfer first rather than paying (payment
+   * exceptions E3): "Approve and pay?" and "Approve and pay" when absent.
+   */
+  confirmTitle?: string;
+  confirmLabel?: string;
 }
 
 function itemBlocks(item: ActivityItem, workspace: { slug: string }, origin: string, card: CardView | undefined): unknown[] {
@@ -86,7 +101,12 @@ function itemBlocks(item: ActivityItem, workspace: { slug: string }, origin: str
       text: plain("Approve and pay"),
       style: "primary",
       value: card.token,
-      confirm: { title: plain("Approve and pay?"), text: { type: "mrkdwn", text: mrkdwn(card.confirmText) }, confirm: plain("Approve and pay"), deny: plain("Cancel") },
+      confirm: {
+        title: plain(card.confirmTitle ?? "Approve and pay?"),
+        text: { type: "mrkdwn", text: clipMrkdwn(mrkdwn(card.confirmText), CONFIRM_TEXT_MAX) },
+        confirm: plain(card.confirmLabel ?? "Approve and pay"),
+        deny: plain("Cancel"),
+      },
     });
   }
   buttons.push({

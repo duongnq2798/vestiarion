@@ -217,8 +217,12 @@ function reasonOf(facts: HeldFacts): Omit<HeldReason, "hint"> {
   // again may be a new payment, so whatever would hold it with no transfer still holds Pay now, and its override.
   if (transferUnknown(intent)) {
     const underlying = reasonOf({ ...facts, intent: null });
-    const looks =
-      "Circle did not answer when its transfer was sent, so it may have taken it. Pay now and Close look for it on Circle first: Pay now records it if Circle has it, and sends it only once Circle shows none.";
+    // A send left `submitting` may still be under way: it is never said only that Circle did not answer (review 6).
+    const lead =
+      intent?.status === "submitting"
+        ? "Vestiarion started sending its transfer and Circle has not answered for over two minutes: it may still be sending, or its answer was lost."
+        : "Circle did not answer when its transfer was sent, so it may have taken it.";
+    const looks = `${lead} Pay now and Close look for it on Circle first: Pay now records it if Circle has it, and sends it only once Circle shows none.`;
     return {
       kind: "unknown",
       text: underlying.canPay ? looks : `${looks} ${underlying.text}`,
@@ -385,7 +389,7 @@ export async function milestoneIntents(milestoneIds: string[]): Promise<Map<stri
   if (milestoneIds.length === 0) return new Map();
   const read = await db()
     .from("payment_intents")
-    .select("source_id, status, provider_tx_id, last_error, provider_state, failure_reason, updated_at")
+    .select("source_id, status, provider_tx_id, last_error, provider_state, failure_reason, updated_at, batch_key, transfer_attempt")
     .eq("source_type", "milestone")
     .in("source_id", milestoneIds);
   if (read.error) throw new Error(read.error.message);
@@ -433,7 +437,7 @@ async function loadMilestone(milestoneId: string, live: boolean): Promise<Loaded
 
   const intentRead = await db()
     .from("payment_intents")
-    .select("status, provider_tx_id, last_error, provider_state, failure_reason, updated_at")
+    .select("status, provider_tx_id, last_error, provider_state, failure_reason, updated_at, batch_key, transfer_attempt")
     .eq("source_type", "milestone")
     .eq("source_id", milestoneId)
     .maybeSingle();
@@ -540,10 +544,18 @@ export async function payHeldMilestone(input: {
   const networkHeld = currentConfig().chain.networkHold;
   if (networkHeld) raise("payments_off", networkHeld);
   const provider = getChainProvider();
-  const milestone = await loadMilestone(input.milestoneId, provider.mode === "live");
+  let milestone = await loadMilestone(input.milestoneId, provider.mode === "live");
   const contractorAddress = milestone.facts.contractor.address;
   if (milestone.status !== "held") raise("not_held");
   if (!milestone.verified) raise("not_verified");
+  // A send Circle never answered is looked for first, as Close looks for it (payment safety R6; payment exceptions review
+  // 2, 3): found, it is only recorded; never taken, what follows is a new payment, and every check a new payment gets
+  // applies to it, the funds' included; not listed yet, nothing is claimed and nothing is sent.
+  if (transferUnknown(milestone.facts.intent)) {
+    const looked = await lookForUnknownSend("milestone", milestone.id);
+    if (looked.answer === "undecided") raise("payment_unknown", unknownSendMessage("milestone", looked.retryAt, { paying: true, unlookable: looked.unlookable }));
+    milestone = await loadMilestone(input.milestoneId, provider.mode === "live");
+  }
 
   const reason = heldReason(milestone.facts);
   const alreadySent = transferExists(milestone.facts.intent);
@@ -712,7 +724,10 @@ export async function payHeldMilestone(input: {
       amount: milestone.amount,
       ...(throughContract ? { spendingLimit: throughContract } : {}),
     },
-    { provider, operatingAccountId: operatingId }
+    // Circle's terminal failure is sent again, as a new transfer, only by a Pay now that ran a new payment's checks: one
+    // that only checked a transfer already sent records the failure, holds the milestone again, and sends nothing new
+    // (payment exceptions review 2), as Approve and pay does for an invoice.
+    { provider, operatingAccountId: operatingId, retryTerminalFailure: !(alreadySent || unknown) }
   );
 
   // A submitted transfer goes back to `verified`, which the agent's cycle reconciles until Circle confirms it.
@@ -794,7 +809,7 @@ export async function closeMilestone(input: { actorId: string; milestoneId: stri
   // A send Circle never answered is looked for first, sending nothing (payment safety R6).
   if (transferUnknown(intent)) {
     const looked = await lookForUnknownSend("milestone", milestone.id);
-    if (looked.answer === "undecided") raise("payment_unknown", unknownSendMessage("milestone", looked.retryAt));
+    if (looked.answer === "undecided") raise("payment_unknown", unknownSendMessage("milestone", looked.retryAt, { unlookable: looked.unlookable }));
     intent = (await loadMilestone(input.milestoneId, getChainProvider().mode === "live")).facts.intent;
   }
   if (paymentWasSent(intent)) raise("payment_in_flight");

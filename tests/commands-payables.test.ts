@@ -112,24 +112,6 @@ describe("approvePayable", () => {
     expect((unanswered as { message: string }).message).not.toMatch(/\b(sent|paid)\b/i);
   });
 
-  it("says Approve and pay looked for the earlier transfer first, and when it looks again, while Circle has not listed it (payment exceptions E4)", async () => {
-    mocks.approveAndPay.mockResolvedValueOnce({
-      status: "matched",
-      txRef: null,
-      note: "",
-      lookedFor: "Circle has not listed this payment's earlier send yet; it is looked for again from 10:30 UTC, and sent only if Circle has none.",
-      paid: { amount: 13.5, currency: "USDC", payee: "Design Studio" },
-    });
-    const looked = await run(() => approvePayable(approver(), { invoiceId: INVOICE }));
-    expect(looked).toMatchObject({
-      ok: true,
-      message:
-        "Looked for the earlier transfer to Design Studio on Circle first. Circle has not listed this payment's earlier send yet; it is looked for again from 10:30 UTC, and sent only if Circle has none.",
-      receipt: { state: "confirming", outcomeUnknown: true },
-    });
-    expect((looked as { message: string }).message).not.toMatch(/^Submitted/);
-  });
-
   it("says a payment agreed to in shadow mode was the agent's decision, and cash the reserve gave back", async () => {
     mocks.approveAndPay.mockResolvedValueOnce({ status: "paid", txRef: "0xabc", note: "", fromReserveUsdc: 1.2, paid: { amount: 4.5, currency: "USDC", payee: "Design Studio" } });
     const paid = await run(() => approvePayable(approver(), { invoiceId: INVOICE, forVerdict: true }));

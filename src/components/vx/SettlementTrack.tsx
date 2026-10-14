@@ -313,7 +313,7 @@ function BookingRow({ mark, orgSlug, network }: { mark: BookedMark; orgSlug: str
 export function whatToDoFor(settlement: Settlement, network: Network, now: number): Runbook | null {
   const state = paymentException(settlement, now, networkProfile(network).stuckAfterMinutes);
   if (!state || !needsSomeone(state, settlement.followUp)) return null;
-  return whatToDo(state, { followUp: settlement.followUp, circleState: settlement.stages.pending?.state ?? null });
+  return whatToDo(state, { followUp: settlement.followUp, circleState: settlement.stages.pending?.state ?? null, crossChain: settlement.crossChain });
 }
 
 function WhatToDo({ todo, circleId }: { todo: Runbook; circleId: string | null }) {

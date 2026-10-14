@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readSource } from "@/lib/docs/content";
 import { slugifyHeadings } from "@/lib/docs/headings";
 import {
+  ACROSS_CHAINS,
   EXCEPTION_ANCHOR,
   checkFirstTitle,
   chatConfirmText,
@@ -159,6 +160,16 @@ describe("what to do, by who comes back to the bill (E5)", () => {
     expect(STUCK_AT_CIRCLE).toContain("Do not pay it another way");
   });
 
+  it("says what really happens to a payout to another chain, which cannot be looked up by its reference (payment exceptions review 5)", () => {
+    expect(whatToDo("unknown", { followUp: "cycle", crossChain: true })).toMatchObject({ done: ACROSS_CHAINS.done, next: ACROSS_CHAINS.next.cycle });
+    expect(whatToDo("unknown", { followUp: "approvals", crossChain: true })).toMatchObject({ done: ACROSS_CHAINS.done, next: ACROSS_CHAINS.next.approvals });
+    expect(whatToDo("unknown", { followUp: null, crossChain: true })).toMatchObject({ done: ACROSS_CHAINS.done, next: RUNBOOK.unknown.next });
+    expect(ACROSS_CHAINS.done).toContain("asked for again under the same payment key, which Circle takes only once");
+    expect(ACROSS_CHAINS.next.approvals).toContain("Reject and Return wait until Circle has answered");
+    expect(inFlightNext("unknown", { followUp: "approvals", crossChain: true })).toBe("Approve and pay in Approvals: it asks Circle again under the same payment key, which Circle takes only once.");
+    expect(inFlightNext("unknown", { followUp: "cycle", crossChain: true })).toBe("Wait, and do not pay it another way: the agent's next cycle asks Circle again under the same payment key.");
+  });
+
   it("gives a payment in flight on Treasury a short next step", () => {
     expect(inFlightNext("stuck", { followUp: "cycle", circleState: "STUCK" })).toBe("Circle shows it stuck: check it with Circle support. Do not pay it another way.");
     expect(inFlightNext("stuck", { followUp: "cycle", circleState: "SENT" })).toBe("Wait for Circle, and do not pay it another way.");
@@ -192,6 +203,8 @@ describe("the runbook guide (E5, I27)", () => {
     const variants = [
       ...Object.values(READS_AGAIN),
       STUCK_AT_CIRCLE,
+      ACROSS_CHAINS.done,
+      ...Object.values(ACROSS_CHAINS.next),
       ...Object.values(OWNER_BY_FOLLOW_UP).flatMap((byFollowUp) => Object.values(byFollowUp)),
       ...Object.values(NEXT_BY_FOLLOW_UP).flatMap((byFollowUp) => Object.values(byFollowUp)),
     ];

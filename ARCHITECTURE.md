@@ -268,13 +268,23 @@ and decide nothing:
 - `payActionOf` (a payable's `paymentSent` and `lastAttempt`) and `milestonePayAction` (a held milestone's reason) name
   what a person's pay action does with an earlier attempt: send, send again after Circle ended it, check a transfer
   that exists, or look for a send Circle never answered first. For the last two, Approve and pay and Pay now never
-  ask "Pay … now?": the confirmation's title and button, the notice raised while it runs and Slack's confirmation say
-  it checks first. `approveAndPay` hands back what looking found (`lookedFor`) when Circle has not listed the send yet,
-  and the answer says so. What is sent is still `executePayment`'s alone;
+  ask "Pay … now?": the confirmation's title and button, the notice raised while it runs and Slack's confirmation (its
+  title, text and button, the text clipped to Slack's 300 characters) say it checks first;
+- `approveAndPay` and `payHeldMilestone` look for a send Circle never answered (`lookForUnknownSend`) before any other
+  check, as Reject, Return and Close do: found, it is only recorded; not listed yet, or Circle could not be asked, they
+  refuse before any claim (`payment_unknown`, with when to try again); never taken, what follows is a new payment and
+  every check applies, the shadow verdict gate and the funds included. A payout to another chain, which cannot be
+  looked up by its reference (`settleUnknownSend` answers `unlookable`), is asked for again under its key, as before,
+  and Reject and Return say so. `releaseHeldMilestone` takes `retryTerminalFailure`: only a Pay now that ran a new
+  payment's checks sends Circle's terminal failure again; one that only checked a transfer already sent records it and
+  holds the milestone again, as `approveAndPay` does;
 - `transferUnknown` reads a row left `submitting` past its 2-minute claim as an unknown send, as `unknownSend` and the
   track already did, when the row's `updated_at` was read with it (Approvals, Approve and pay, Reject, Return, Add
-  details, Pay now and Close select it). Reject, Return and Close then look for it first (payment safety R6) rather than
-  refuse it as sent; the cycle's own reads, which do not select it, keep their answer;
+  details, Pay now and Close select it), and a first attempt sent in a batch with no Circle id as one whatever its
+  status or error (`batch_key`, `transfer_attempt`). Reject, Return and Close then look for it first (payment safety R6)
+  rather than refuse it as sent; the cycle's own reads, which do not select these columns, keep their answer.
+  `settleUnknownSend` looks a batch member up by the batch's refId (`resolveLostBatch`), as `executePayment` does, never
+  by the member's memo, so nothing concludes a batch member was never sent while Circle may have the batch;
 - `paymentException` maps a lifecycle to the runbook's states, slow to confirm (in flight for the network's
   `stuckAfterMinutes`), outcome unknown, failed or cancelled, not sent, and Gateway's failure, and `whatToDo` gives who
   acts and the next step by who comes back to the bill (`followUpOf`). The track's **What to do** block, Treasury's

@@ -517,7 +517,7 @@ export const BATCH_LOOKUP_GRACE_MS = 15 * 60_000;
  */
 async function resolveLostBatch(
   intent: PaymentIntent,
-  request: PaymentRequest,
+  request: Pick<PaymentRequest, "fromAccountId">,
   provider: ChainProvider,
   store: PaymentIntentStore,
   now = Date.now()
@@ -713,8 +713,11 @@ export type UnknownSendAnswer =
   | { answer: "found" }
   /** Circle never took it, now recorded: the payment was never sent. */
   | { answer: "not_sent" }
-  /** Not listed yet (`retryAt`: when it can be told), Circle could not be asked, or this route cannot be looked up. */
-  | { answer: "undecided"; retryAt: string | null };
+  /**
+   * Not listed yet (`retryAt`: when it can be told), or Circle could not be asked; `unlookable` when this route cannot be
+   * looked up at all (a payout to another chain), so only sending it again under its own key settles it.
+   */
+  | { answer: "undecided"; retryAt: string | null; unlookable?: true };
 
 /**
  * Looks for a source's send Circle never answered, sending nothing (payment safety R6): what Reject, Return, Add
@@ -728,8 +731,27 @@ export async function settleUnknownSend(
   const store = deps.store ?? new SupabasePaymentIntentStore();
   const now = deps.now ?? Date.now();
   if (!store.findBySource) throw new Error("this payment store cannot find an intent by its source");
-  const intent = await store.findBySource(source.type, source.id);
-  if (!intent || !unknownSend(intent, now)) return { answer: "known" };
+  let intent = await store.findBySource(source.type, source.id);
+  if (!intent) return { answer: "known" };
+  // A first attempt sent in a batch whose answer was lost (batch payouts R5): Circle lists it under the batch's refId,
+  // never its own memo, so it is looked for as `executePayment` looks for it. Found, it is recorded; not listed yet, or
+  // not asked, nothing concludes; never taken, the batch is left, and this payment was never sent on its own either.
+  if (inLostBatch(intent)) {
+    const batchSentAt = Date.parse(intent.batchSentAt ?? "");
+    const resolved = await resolveLostBatch(intent, { fromAccountId: deps.fromAccountId }, deps.provider, store, now);
+    if (resolved?.providerTxId) return { answer: "found" };
+    if (resolved) {
+      const listedBy = resolved.error?.startsWith("Its batch is not on Circle yet") && !Number.isNaN(batchSentAt) ? new Date(batchSentAt + BATCH_LOOKUP_GRACE_MS).toISOString() : null;
+      return { answer: "undecided", retryAt: listedBy };
+    }
+    intent = await store.get(intent.idempotencyKey);
+    if (!unknownSend(intent, now)) return { answer: "not_sent" };
+  }
+  if (!unknownSend(intent, now)) return { answer: "known" };
+  // A payout to another chain is not looked up this way: it is asked for again under its own key, which Circle takes once.
+  if (intent.route === "gateway" || intent.route === "cctp" || paidAcrossChains(intent.destinationChain ?? undefined)) {
+    return { answer: "undecided", retryAt: null, unlookable: true };
+  }
   const looked = await lookForUnknownSend(
     intent,
     { fromAccountId: deps.fromAccountId, memo: paymentMemo(source.type, source.id), destinationChain: intent.destinationChain ?? undefined },

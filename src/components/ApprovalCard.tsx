@@ -85,8 +85,12 @@ export function payConfirmTitle(
  * safety R4). A sole approver approving what they
  * entered is told the ledger records that too (sole approver R5).
  */
-export function payConfirmDescription(payable: Pick<WaitingPayable, "paymentSent" | "lastAttempt">, ownEntry = false): string {
+export function payConfirmDescription(payable: Pick<WaitingPayable, "paymentSent" | "lastAttempt"> & Partial<Pick<WaitingPayable, "payeeChain">>, ownEntry = false): string {
   const own = ownEntry ? ` ${OWN_ENTRY_RECORDED}` : "";
+  // A payout to another chain cannot be looked up on Circle: it is asked for again under its own key (review 5).
+  if (payable.lastAttempt?.state === "unanswered" && paidAcrossChains(payable.payeeChain)) {
+    return `Vestiarion asks Circle for the earlier transfer again under the same payment key, which Circle takes only once: it records it if Circle has it, and only otherwise is this the payment. The ledger records who approved it.${own}`;
+  }
   if (payable.lastAttempt?.state === "unanswered") {
     return `Vestiarion looks for the earlier transfer on Circle first: it records it if Circle has it, and sends the payment only once Circle shows none. The ledger records who approved it.${own}`;
   }
@@ -103,6 +107,23 @@ export function payConfirmDescription(payable: Pick<WaitingPayable, "paymentSent
 export function payConfirmLabel(payable: Pick<WaitingPayable, "paymentSent" | "lastAttempt">): string {
   const action = payActionOf(payable);
   return checksFirst(action) ? CHECK_FIRST_LABEL[action] : "Pay now";
+}
+
+/**
+ * What the card says of a send Circle never answered: one left `submitting` may still be under way (payment exceptions
+ * review 6); a payout to another chain is asked for again under its own key, and Reject and Return wait for Circle's
+ * answer (review 5); a first approval of two looks nothing up and sends nothing, the approval that pays it does (T6).
+ */
+export function unansweredLine(attempt: { sending?: true }, acrossChains: boolean, firstOfTwo: boolean): string {
+  const lead = attempt.sending
+    ? "Vestiarion started sending this payment and Circle has not answered for over two minutes: it may still be sending, or its answer was lost."
+    : "Circle did not answer when this payment was sent, so it may have taken the transfer.";
+  if (acrossChains) {
+    return `${lead} A payout to another chain cannot be looked up on Circle: Approve and pay asks Circle for it again under the same payment key, which Circle takes only once, so it is never paid twice. Reject and Return wait until Circle has answered.`;
+  }
+  return firstOfTwo
+    ? `${lead} The approval that pays it looks for it on Circle first: it records it if Circle has it, and sends it only once Circle shows none.`
+    : `${lead} Approve and pay, Reject and Return look for it on Circle first: Approve and pay records it if Circle has it, and sends it only once Circle shows none.`;
 }
 
 /** The confirmation of an approval that pays nothing yet, the first of two (two approvals T8). */
@@ -276,10 +297,7 @@ export default function ApprovalCard({
           )}
           {payable.lastAttempt?.state === "unanswered" && (
             <Callout tone="held" className="mt-2">
-              {/* A first approval of two looks nothing up and sends nothing: the approval that pays it does (two approvals T6). */}
-              {two && !two.approvals.some((approval) => approval.by !== viewerId)
-                ? "Circle did not answer when this payment was sent, so it may have taken the transfer. The approval that pays it looks for it on Circle first: it records it if Circle has it, and sends it only once Circle shows none."
-                : "Circle did not answer when this payment was sent, so it may have taken the transfer. Approve and pay, Reject and Return look for it on Circle first: Approve and pay records it if Circle has it, and sends it only once Circle shows none."}
+              {unansweredLine(payable.lastAttempt, paidAcrossChains(payable.payeeChain), Boolean(two && !two.approvals.some((approval) => approval.by !== viewerId)))}
             </Callout>
           )}
         </CardContent>

@@ -60,7 +60,7 @@ function Row({ row, orgSlug, children }: { row: FlightRow; orgSlug: string; chil
 /** What to do next about a payment slow to confirm, or of unknown outcome, in a line, with its section of the runbook. */
 function NextStep({ row }: { row: FlightRow }) {
   const state = row.settlement.status === "unknown" ? "unknown" : "stuck";
-  const next = inFlightNext(state, { followUp: row.settlement.followUp, circleState: row.settlement.stages.pending?.state ?? null });
+  const next = inFlightNext(state, { followUp: row.settlement.followUp, circleState: row.settlement.stages.pending?.state ?? null, crossChain: row.settlement.crossChain });
   return (
     <p className="mt-0.5 text-xs text-ink-2">
       <Link href={runbookHref(state)} className="font-medium text-ink underline-offset-2 hover:underline">

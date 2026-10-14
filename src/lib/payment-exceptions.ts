@@ -60,6 +60,9 @@ export function runningLine(action: PayAction, payee: string): string {
   return `Sending to ${payee}`;
 }
 
+/** A chat confirmation's title for an action that checks first, kept within Slack's 100 characters by naming no payee. */
+export const CHAT_CONFIRM_TITLE = { check: "Check the payment already sent?", look_first: "Look for the earlier payment first?" } as const;
+
 /** What a chat's confirmation of Approve and pay says first, for an action that checks first; null for one that pays. */
 export function chatConfirmText(action: PayAction): string | null {
   if (action === "check") return "Checks the transfer already sent with Circle and records it: nothing new is sent.";
@@ -193,6 +196,19 @@ export const NEXT_BY_FOLLOW_UP: {
 };
 
 /**
+ * A payout to another chain whose send Circle never answered (payment exceptions review 5): Circle cannot list it by the
+ * payment's reference, so nothing looks it up; it is asked for again under the same payment key, which Circle takes only
+ * once, and Reject and Return wait until Circle has answered.
+ */
+export const ACROSS_CHAINS: { done: string; next: Record<"cycle" | "approvals", string> } = {
+  done: "It is kept in flight, never counted as failed. A payout to another chain cannot be looked up on Circle by its reference: it is asked for again under the same payment key, which Circle takes only once, so it is never paid twice. Past the network's wait, the transfer watch tells owners, admins and approvers that Circle never answered the send.",
+  next: {
+    cycle: "Wait, and do not pay it another way. If the agent is paused, resume it: each cycle asks Circle for the payout again under the same payment key.",
+    approvals: "Press Approve and pay in Approvals: it asks Circle for the payout again under the same payment key, which Circle takes only once, and records what Circle answers. Reject and Return wait until Circle has answered: if it should not be paid, ask Circle support whether it took the payout first.",
+  },
+};
+
+/**
  * The exceptional state a payment is in, from its lifecycle, or null: slow to confirm once in flight for the network's
  * wait or longer (Treasury's own count), an unknown outcome however young, an end, or Gateway's failure.
  */
@@ -232,16 +248,23 @@ export interface WhatToDo {
   trail: string;
 }
 
-/** One state's runbook for this payment: who acts and what to do next follow who comes back to its bill. */
-export function whatToDo(state: PaymentException, context: { followUp: FollowUp | null; circleState?: string | null }): WhatToDo {
+/**
+ * One state's runbook for this payment: who acts and what to do next follow who comes back to its bill, and, for an
+ * unknown outcome, whether it is a payout to another chain, which is asked for again rather than looked up.
+ */
+export function whatToDo(state: PaymentException, context: { followUp: FollowUp | null; circleState?: string | null; crossChain?: boolean }): WhatToDo {
   const entry = RUNBOOK[state];
   const { followUp } = context;
   const base = { state, title: entry.title, owner: entry.owner, done: entry.done, next: entry.next, trail: entry.trail };
   switch (state) {
     case "stuck":
       return { ...base, done: followUp ? `${entry.done} ${READS_AGAIN[followUp]}` : entry.done, next: context.circleState === "STUCK" ? STUCK_AT_CIRCLE : entry.next };
-    case "unknown":
-      return followUp ? { ...base, owner: OWNER_BY_FOLLOW_UP.unknown[followUp], next: NEXT_BY_FOLLOW_UP.unknown[followUp] } : base;
+    case "unknown": {
+      const owned = followUp ? { ...base, owner: OWNER_BY_FOLLOW_UP.unknown[followUp], next: NEXT_BY_FOLLOW_UP.unknown[followUp] } : base;
+      if (!context.crossChain) return owned;
+      const next = followUp === "cycle" || followUp === "approvals" ? ACROSS_CHAINS.next[followUp] : owned.next;
+      return { ...owned, done: ACROSS_CHAINS.done, next };
+    }
     case "failed":
     case "not_sent":
       return followUp === "approvals" || followUp === "contractors" ? { ...base, next: NEXT_BY_FOLLOW_UP[state][followUp] } : base;
@@ -251,8 +274,11 @@ export function whatToDo(state: PaymentException, context: { followUp: FollowUp 
 }
 
 /** Treasury's one line of what to do for a payment in flight that is slow to confirm or of unknown outcome. */
-export function inFlightNext(state: "stuck" | "unknown", context: { followUp: FollowUp | null; circleState?: string | null }): string {
+export function inFlightNext(state: "stuck" | "unknown", context: { followUp: FollowUp | null; circleState?: string | null; crossChain?: boolean }): string {
   if (state === "stuck") return context.circleState === "STUCK" ? "Circle shows it stuck: check it with Circle support. Do not pay it another way." : "Wait for Circle, and do not pay it another way.";
+  // A payout to another chain is asked for again under its key, never looked up (review 5).
+  if (context.crossChain && context.followUp === "cycle") return "Wait, and do not pay it another way: the agent's next cycle asks Circle again under the same payment key.";
+  if (context.crossChain && context.followUp === "approvals") return "Approve and pay in Approvals: it asks Circle again under the same payment key, which Circle takes only once.";
   switch (context.followUp) {
     case "cycle":
       return "Wait, and do not pay it another way: the agent's next cycle looks for it.";

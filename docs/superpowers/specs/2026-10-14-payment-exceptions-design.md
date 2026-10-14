@@ -58,9 +58,9 @@ in flight, confirmed, or Gateway's failure, which is only read) or `look_first` 
 - Slack's Approve and pay confirmation says the same, from the payable's payment intent read with its card.
 The card's own button keeps its name (Approve and pay, Pay now): it is how the guides and the people name it.
 
-**E4. After acting.** Approve and pay on an unknown outcome whose earlier send Circle has not listed yet answers
-"Looked for the earlier transfer to Jiren on Circle first: …" with the lookup's own words (when it is looked for again,
-and that it is sent only if Circle has none), not "Submitted".
+**E4. After acting.** Approve and pay, or Pay now, on an unknown outcome looks for the earlier send first (review
+R2 below). While Circle has not listed it yet, it refuses before any claim: "Vestiarion looked for the earlier transfer
+on Circle first: Circle has not listed it yet, so nothing was sent. Try again from 10:30 UTC: …", never "Submitted".
 
 **E5. One runbook, in code.** `src/lib/payment-exceptions.ts` defines the exceptional states and, for each, who acts,
 what Vestiarion already did, the next step and where the trail is. The screens and the guide read the same words
@@ -104,6 +104,42 @@ webhook change, so no API changelog entry.
 - `tests/evidence-chain.test.ts`: the payment step for each intent state.
 - `tests/docs-content.test.ts`, `tests/docs-links.test.tsx`, `tests/docs-guides.test.ts`: the guide's place, its links,
   and the app text it quotes.
+
+## After review (2026-10-15)
+
+An independent review of the first version found one important gap and five smaller ones. These rulings replace the
+parts of E1-E4 they name.
+
+- **R1. A batch member is looked for by its batch.** The agent releases milestones in one Arc transaction whose refId is
+  the batch's key (batch payouts R5). `settleUnknownSend`, which Reject, Return, Close and now Approve and pay and Pay
+  now ask first, looked a member up by its own memo, so 15 minutes after a lost batch it could record "never sent" and
+  let Close finish on a milestone the batch had paid. It now looks a first attempt with a `batch_key` and no Circle id
+  up as `executePayment` does (`resolveLostBatch`): found, every member records it; not listed yet, or not asked,
+  nothing concludes; Circle has no batch 15 minutes after it, the batch is left and the member was never sent alone.
+  `transferUnknown` reads such a member as unknown whatever its status or error, from `batch_key` and
+  `transfer_attempt`, which the people's reads now select. Before this, a member recorded `failed` with the batch's own
+  error was even called "not sent" there.
+- **R2. Look first, then check as a new payment.** Approve and pay and Pay now on an unknown send ask
+  `lookForUnknownSend` before any other check, and re-read the intent: found, it is only recorded (no funds check, no
+  new transfer); never taken, the payment is new, so the shadow verdict gate, screening, limits, two approvals and the
+  funds apply to it, as to any first payment; not listed yet, or not asked, they refuse before any claim with when to
+  try again. Before this they went ahead with the funds check skipped (payment safety R3), and a lookup that later
+  found nothing sent a new payment without those checks.
+- **R3. Pay now never sends anew while only checking.** `releaseHeldMilestone` takes `retryTerminalFailure`, and
+  `payHeldMilestone` passes it only when it ran a new payment's checks, as `approveAndPay` already did. A Pay now on a
+  transfer in flight that Circle reports failed by then records the failure and holds the milestone again; the next
+  Pay now sends a new transfer after every check. So "Nothing new is sent" is true.
+- **R4. Slack's confirmation within Slack's limits.** Its text is clipped to 300 characters, never through an escape,
+  the payee's name to 60, and its title and button say what it does: "Check the payment already sent?" / **Check it**,
+  "Look for the earlier payment first?" / **Look first**.
+- **R5. A payout to another chain, said as it is.** It cannot be looked up by its reference, so it is asked for again
+  under its own payment key, which Circle takes only once. `settleUnknownSend` answers `unlookable` for it; Reject and
+  Return say so and that Approve and pay settles it; the runbook, Treasury's line, the card and Approve and pay's
+  confirmation say it is asked for again, never that it is looked up.
+- **R6. A send that may still be running says so.** A send's tick can take about two to four minutes, so a row left
+  `submitting` for over two minutes may still be under way. Approvals and Contractors say "it may still be sending, or
+  its answer was lost" of it. No behaviour changes: it is looked for first, and nothing concludes while Circle has not
+  listed it.
 
 ## Docs
 

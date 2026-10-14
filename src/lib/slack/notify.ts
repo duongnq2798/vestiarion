@@ -14,7 +14,7 @@ import { slackSettingsFromEnv, type SlackSettings } from "./settings";
 import { cardToken } from "./state";
 import { workspaceNetwork } from "../workspace-network";
 import { lastAttemptOf, paymentWasSent, type IntentState } from "../agent/approvals";
-import { chatConfirmText, payActionOf } from "../payment-exceptions";
+import { CHAT_CONFIRM_TITLE, CHECK_FIRST_LABEL, chatConfirmText, checksFirst, payActionOf } from "../payment-exceptions";
 
 /**
  * The cycle's `slack` stage (Slack design S7, S8): the install's channel is told the agent's decisions after its
@@ -33,6 +33,9 @@ export interface SlackNotifyDeps {
 }
 
 const WAITING = ["held", "flagged", "awaiting_info"];
+/** How much of a payee's name the confirmation names: Slack refuses a confirmation past 300 characters (review 4). */
+const NAME_MAX = 60;
+const shortName = (name: string) => (name.length <= NAME_MAX ? name : `${name.slice(0, NAME_MAX - 1).trimEnd()}…`);
 const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 
 interface CardRow {
@@ -64,7 +67,7 @@ async function cardViews(items: ActivityItem[], install: SlackInstall, keys: Mas
       unwrap(
         await db()
           .from("payment_intents")
-          .select("source_id, status, provider_tx_id, last_error, provider_state, failure_reason, payout_route, updated_at")
+          .select("source_id, status, provider_tx_id, last_error, provider_state, failure_reason, payout_route, updated_at, batch_key, transfer_attempt")
           .eq("source_type", "invoice")
           .in("source_id", ids)
       ) as Array<IntentState & { source_id: string }>
@@ -90,13 +93,15 @@ async function cardViews(items: ActivityItem[], install: SlackInstall, keys: Mas
     );
     const discount = row.early_pay_discount_pct !== null ? " Its early-payment discount comes off, if still due." : "";
     const intent = intents.get(row.id) ?? null;
-    const checking = chatConfirmText(payActionOf({ paymentSent: paymentWasSent(intent), lastAttempt: lastAttemptOf(intent, currency === "EURC" ? "EURC" : "USDC") }));
-    const what = `${AMOUNT.format(Number(row.amount))} ${currency} to ${payee?.name ?? "the payee"} on ${workspaceNetwork().label}, to ${address ? shortenAddresses(address) : "no address"}.`;
+    const action = payActionOf({ paymentSent: paymentWasSent(intent), lastAttempt: lastAttemptOf(intent, currency === "EURC" ? "EURC" : "USDC") });
+    const what = `${AMOUNT.format(Number(row.amount))} ${currency} to ${shortName(payee?.name ?? "the payee")} on ${workspaceNetwork().label}, to ${address ? shortenAddresses(address) : "no address"}.`;
     views.set(row.id, {
       invoiceId: row.id,
       token: cardToken({ org: install.orgId, invoice: row.id, decidedAt: row.decided_at, addressHash: addressHash(address) }, keys, now),
       approveRefusal: refusal ? refusal.message : null,
-      confirmText: checking ? `${checking} It is ${what}` : `Pays ${what}${discount}`,
+      ...(checksFirst(action)
+        ? { confirmText: `${chatConfirmText(action)} It is ${what}`, confirmTitle: CHAT_CONFIRM_TITLE[action], confirmLabel: CHECK_FIRST_LABEL[action] }
+        : { confirmText: `Pays ${what}${discount}` }),
     });
   }
   return views;
