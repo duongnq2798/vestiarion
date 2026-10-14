@@ -2267,8 +2267,10 @@ reads in `api.ts`, `hubspotProvider`), wired in `src/lib/crm-providers.ts`. It i
     HMAC of it under a key derived (HKDF) from the master key for this purpose alone, never stored; a deployment
     Pipedrive cannot reach (localhost) registers none. `POST /api/integrations/pipedrive/webhook` checks the Basic auth
     in constant time against every master key before reading anything, answers at once, and after the answer runs one
-    sync of the company's connections that are not backing off, with **Sync now**'s budget, which reads the deals from
-    Pipedrive itself; the body is never read. Pipedrive's uninstall notice, `DELETE` on the callback URL with the app's
+    sync of the company's connections that are not backing off, with **Sync now**'s budget, which reads the deals that
+    changed from Pipedrive itself (`NUDGE_SYNC`: never every kept deal again by id, which the sweeper does, so one notice
+    per deal change stays a small read of the company's shared API budget; notices during a run find it busy); the body
+    is never read. Pipedrive's uninstall notice, `DELETE` on the callback URL with the app's
     client id and secret as Basic auth (compared in constant time), only names the company, and nudges the same way:
     the refresh then fails and the card asks to reconnect. The sweeper still runs every connection every 15 minutes.
   - *Receipts* (`receipts.ts`). The nine figures as custom deal fields Vestiarion makes once per company

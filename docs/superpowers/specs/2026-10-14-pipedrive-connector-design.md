@@ -137,8 +137,12 @@ Write Vestiarion's figures is `integrations.manage`. Every member sees the card 
   second registration is never made. A deployment on localhost registers none.
 - `POST /api/integrations/pipedrive/webhook` compares the Basic auth in constant time against every master key, before
   reading the body, and answers at once. An event authenticated for a company starts one sync of that company's
-  connections after the answer (Sync now's budget), which reads the deals from Pipedrive itself. The body is never
-  trusted: not its deal, not its amounts. A connection waiting out a rate limit or an outage is not nudged.
+  connections after the answer (Sync now's budget), which reads the deals that changed from Pipedrive itself. The body
+  is never trusted: not its deal, not its amounts. A connection waiting out a rate limit or an outage is not nudged.
+- A notice costs a read of what changed, never a read of every kept deal by id (`NUDGE_SYNC`): Pipedrive sends one notice
+  per deal change, and its API budget is the company's own, shared with its other tools. Reading the linked and offered
+  deals again by id is the sweeper's, every 15 minutes. Notices that arrive while a sync runs find it busy (the core's
+  lease) and start nothing.
 - Pipedrive's uninstall notice (`DELETE` on the callback URL, Basic auth with the app's id and secret, compared in
   constant time) nudges the company's connections the same way: the refresh then fails and the card asks to reconnect.
 - The sweeper still runs every connection every 15 minutes: a webhook lost, banned or never registered (Pipedrive

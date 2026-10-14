@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { ExternalMatch } from "@/lib/connectors/connections";
 import type { MasterKey } from "@/lib/secrets";
-import { ensureWebhook, handlePipedriveUninstall, handlePipedriveWebhook, reachable, verifyClientAuth, verifyWebhookAuth, webhookPassword } from "@/lib/pipedrive/webhooks";
+import { ensureWebhook, handlePipedriveUninstall, handlePipedriveWebhook, NUDGE_SYNC, reachable, verifyClientAuth, verifyWebhookAuth, webhookPassword } from "@/lib/pipedrive/webhooks";
 import { API_DOMAIN, COMPANY_ID, fakePipedrive } from "./support/fake-pipedrive";
 
 /**
@@ -101,6 +103,13 @@ describe("POST /api/integrations/pipedrive/webhook", () => {
     const { deps } = nudges();
     const request = new Request(`${ORIGIN}/api/integrations/pipedrive/webhook`, { method: "POST", headers: { "content-length": "999999999", authorization: basic(COMPANY, webhookPassword(COMPANY, KEY_NOW)) }, body: "{}" });
     expect((await handlePipedriveWebhook(request, { ...deps, keys: [KEY_NOW] })).status).toBe(413);
+  });
+
+  it("starts a sync of what changed, never a read of every kept deal by id: one notice per deal change stays cheap", () => {
+    expect(NUDGE_SYNC).toEqual({ maxPages: 5, recheck: false });
+    // The route runs each nudge with it (`tests/pipedrive-sync.test.ts` runs a sync with it against Pipedrive).
+    const route = readFileSync(path.join(process.cwd(), "src/app/api/integrations/pipedrive/webhook/route.ts"), "utf8");
+    expect(route).toContain("crmSyncInScope(match.connectionId, provider, NUDGE_SYNC)");
   });
 });
 

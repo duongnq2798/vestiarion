@@ -7,6 +7,7 @@ import type { ProviderTokens } from "@/lib/connectors/provider";
 import type { SyncFinish } from "@/lib/connectors/sync";
 import { freshAccessToken, type StoredTokens, type TokenStore } from "@/lib/connectors/tokens";
 import { pipedriveProvider } from "@/lib/pipedrive/provider";
+import { NUDGE_SYNC } from "@/lib/pipedrive/webhooks";
 import { API_DOMAIN, COMPANY_ID, fakePipedrive } from "./support/fake-pipedrive";
 
 /**
@@ -217,5 +218,50 @@ describe("won deals in from Pipedrive", () => {
     const memory = memoryDb();
     expect((await run(slow, memory.db)).outcome).toBe("rate_limited");
     expect(memory.finishes.at(-1)).toMatchObject({ kind: "failed", error: expect.stringContaining("Pipedrive asked Vestiarion to slow down") });
+  });
+});
+
+describe("a sync a webhook starts", () => {
+  /** A company with 250 won deals kept, one of them planned, as the sweeper and webhooks find it. */
+  async function company() {
+    const fake = fakePipedrive();
+    for (let id = 1; id <= 250; id += 1) fake.addDeal({ id, title: `Deal ${id}`, value: 100, status: "won", local_won_date: "2026-10-14", update_time: "2026-10-14T08:00:00Z" });
+    const memory = memoryDb();
+    await run(fake, memory.db);
+    const planned = memory.rows.get("7") as Row;
+    memory.rows.set("7", { ...planned, dealId: "deal-7", baseline: planned.deal });
+    return { fake, memory };
+  }
+  const byId = (fake: ReturnType<typeof fakePipedrive>, since: number) =>
+    fake.requests.slice(since).filter((request) => request.path.startsWith("/api/v2/deals") && request.query.has("ids"));
+
+  it("reads only what changed, never every kept deal again by id: one notice is one small read, not hundreds", async () => {
+    const { fake, memory } = await company();
+    fake.deals.set(7, { ...fake.deals.get(7)!, value: 150, update_time: "2026-10-14T09:30:00Z" });
+    const before = fake.requests.length;
+    const later = Date.parse("2026-10-14T09:31:00.000Z");
+    const tokens = leasedStore({ accessToken: `pd1|${HOST}|v1u:access-a`, refreshToken: `pd1|${HOST}|1:1:refresh-a`, expiresAt: later + 3_000_000 });
+    const nudged = await syncCrmConnection({
+      connectionId: connection.id,
+      provider: pipedriveProvider(settings, { fetchImpl: fake.fetchImpl, now: () => later }),
+      db: memory.db,
+      tokens: tokens.store,
+      now: () => later,
+      sleep: async () => undefined,
+      ...NUDGE_SYNC,
+    });
+    expect(nudged.outcome).toBe("synced");
+    // The planned deal's change is still found, from the changes since the last run.
+    expect(memory.flagged.flat()).toContain("7");
+    expect((memory.rows.get("7") as Row).deal.amount).toBe("150");
+    expect(byId(fake, before)).toHaveLength(0);
+    expect(fake.requests.length - before).toBeLessThanOrEqual(6);
+  });
+
+  it("leaves the read by id of every kept deal to the sweeper's run, which still does it", async () => {
+    const { fake, memory } = await company();
+    const before = fake.requests.length;
+    await run(fake, memory.db, Date.parse("2026-10-14T09:31:00.000Z"));
+    expect(byId(fake, before).length).toBeGreaterThanOrEqual(3);
   });
 });

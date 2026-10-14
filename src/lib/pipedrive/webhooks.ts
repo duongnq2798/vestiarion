@@ -21,6 +21,13 @@ const COMPANY = /^[1-9]\d{0,19}$/;
 export const MAX_BODY_BYTES = 256_000;
 /** The syncs a nudge starts stop starting after this long; the sweeper takes the rest within 15 minutes. */
 export const NUDGE_BUDGET_MS = 60_000;
+/**
+ * The sync a deal notice starts: Sync now's page budget, over what changed since the last run, and never every kept deal
+ * read again by id. Pipedrive sends one notice per deal change, and its API budget is the company's, shared with its other
+ * tools: a notice costs a read of the changes, not hundreds. The sweeper's run, every 15 minutes, reads them by id. Notices
+ * that arrive while a sync runs find it busy, and start nothing.
+ */
+export const NUDGE_SYNC = { maxPages: 5, recheck: false } as const;
 
 /** The webhook's password for a company, under one master key: an HMAC of the company id, keyed by HKDF for this purpose. */
 export function webhookPassword(companyId: string, master: MasterKey): string {

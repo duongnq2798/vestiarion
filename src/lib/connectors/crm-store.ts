@@ -240,7 +240,7 @@ export const crmStore: CrmSyncDb = {
  * person has writing on. Best effort: a receipts step that fails never fails the sync, and before migration 0107 it has
  * nothing to do.
  */
-export async function crmSyncInScope(connectionId: string, provider: CrmProvider, options: { maxPages?: number } = {}): Promise<CrmSyncResult> {
+export async function crmSyncInScope(connectionId: string, provider: CrmProvider, options: { maxPages?: number; recheck?: boolean } = {}): Promise<CrmSyncResult> {
   const result = await syncCrmConnection({ connectionId, provider, db: crmStore, tokens: connectionTokenStore(currentOrgId(), connectionId), ...options });
   // Metered as an accounting tool's sync is (accountant console U1).
   if (result.outcome !== "busy") await recordUsage({ kind: "connector_sync", action: provider.id, provider: provider.id, ok: result.outcome === "synced" || result.outcome === "partial" });
