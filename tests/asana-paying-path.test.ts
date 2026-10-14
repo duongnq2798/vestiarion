@@ -1,6 +1,11 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { stillVerified } from "@/lib/agent/orchestrator";
+import { configFromEnv } from "@/lib/config";
+import { runWith } from "@/lib/context";
+import { db } from "@/lib/dal";
+import { fakeSupabase, orgTestContext } from "./support/fake-supabase";
 
 /**
  * Nothing on the paying or deciding path changes for Asana except through the milestone's existing verification state
@@ -41,6 +46,32 @@ describe("the agent and the payments", () => {
     // The contractor stage decides only what is verified, by the existing state.
     const stage = orchestrator.slice(orchestrator.indexOf('await stage("contractors"'));
     expect(stage.slice(0, 600)).toMatch(/\.from\("milestones"\)[\s\S]*?\.eq\("verified", true\)\s*\.eq\("status", "verified"\)/);
+  });
+
+  it("send a release only for a milestone still verified just before it is sent, after every decision of the stage", () => {
+    // A task reopened while the stage decides (a webhook's read, say) takes the verification back; the release the stage
+    // planned before that is held to the milestone as it is now, and one no longer verified is neither sent nor written.
+    const orchestrator = read("src/lib/agent/orchestrator.ts");
+    const stage = orchestrator.slice(orchestrator.indexOf('await stage("contractors"'), orchestrator.indexOf('await stage("treasury"'));
+    const check = stage.indexOf("await stillVerified(db, planned.map((entry) => entry.milestone.id))");
+    expect(check).toBeGreaterThan(stage.lastIndexOf("planned.push("));
+    expect(check).toBeLessThan(stage.indexOf("await releaseMilestones("));
+    expect(stage).toMatch(/const sending = planned\.filter\(\(entry\) => verifiedNow\.has\(entry\.milestone\.id\)\);/);
+    expect(stage).toMatch(/await releaseMilestones\(\s*sending\.map\(/);
+    expect(stage).toMatch(/for \(const \[position, entry\] of sending\.entries\(\)\)/);
+  });
+
+  it("read which milestones are still verified, and waiting to be paid, from the milestones themselves", async () => {
+    const ORG = "1c8e7a3d-9b2f-4e5c-8a1d-0000000a5a99";
+    const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
+    const fake = fakeSupabase((sent) => (sent.path === "/rest/v1/milestones" ? { body: [{ id: "m-still" }] } : { body: [] }));
+    const found = await runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), () => stillVerified(db(), ["m-still", "m-taken-back"]));
+    expect([...found]).toEqual(["m-still"]);
+    const sent = fake.requests.find((one) => one.path === "/rest/v1/milestones");
+    expect(sent?.params.get("id")).toBe("in.(m-still,m-taken-back)");
+    expect(sent?.params.get("verified")).toBe("eq.true");
+    expect(sent?.params.get("status")).toBe("eq.verified");
+    expect(await runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), () => stillVerified(db(), []))).toEqual(new Set());
   });
 
   it("call Asana from Pay now only to refuse its payee", () => {

@@ -2503,6 +2503,17 @@ export async function releaseMilestones(
  * than pay again. Mirrors `payInvoice` (src/lib/agent/pay.ts) for invoices.
  */
 /**
+ * Which of these milestones are still verified and waiting to be paid, read now: what the contractor stage holds each
+ * release to just before sending it, since a person, or a task reopened in Asana, can take a verification back while the
+ * stage decides. A read that fails throws, and the stage sends nothing.
+ */
+export async function stillVerified(orgDb: OrgDb, ids: readonly string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const rows = unwrap(await orgDb.from("milestones").select("id").in("id", [...ids]).eq("verified", true).eq("status", "verified")) as Array<{ id: string }>;
+  return new Set(rows.map((row) => row.id));
+}
+
+/**
  * The amounts of the open milestones the treasury and payment timing count as owed. A milestone whose hold is
  * funded is not: its USDC already left the operating wallet (milestone escrow, review I2). Before migration 0047
  * there are no escrow columns, and every one counts, as it always did.
@@ -3893,10 +3904,21 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     });
   }
 
+  // A milestone's verification can be taken back while the stage decides: a person revokes it, or its Asana task is
+  // reopened or changed after acceptance (Asana acceptance A10). Each release is held to the milestone as it is now, just
+  // before it is sent: one no longer verified is not sent, and its row is left as the taking back left it.
+  const verifiedNow = planned.length > 0 && operating ? await stillVerified(db, planned.map((entry) => entry.milestone.id)) : new Set<string>();
+  const sending = planned.filter((entry) => verifiedNow.has(entry.milestone.id));
+  for (const entry of planned) {
+    if (!verifiedNow.has(entry.milestone.id)) {
+      lines.push({ domain: "contractor", message: `${entry.milestone.counterparties.name}: "${entry.milestone.title}" not released, its verification was taken back while it was decided` });
+    }
+  }
+
   // Every release decided above goes out now: together in one Arc transaction where it can (batch payouts §2).
-  if (planned.length > 0 && operating) {
+  if (sending.length > 0 && operating) {
     const outcomes = await releaseMilestones(
-      planned.map(({ milestone, amount, onChainLimit: check }) => ({
+      sending.map(({ milestone, amount, onChainLimit: check }) => ({
         milestoneId: milestone.id,
         destination: payoutAddress(milestone.counterparties.address, milestone.counterparties.id),
         amount,
@@ -3904,7 +3926,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       })),
       { provider, operatingAccountId: operating.id, operatingBalance }
     );
-    for (const [position, entry] of planned.entries()) {
+    for (const [position, entry] of sending.entries()) {
       const outcome = outcomes[position];
       if (outcome.operatingBalance !== null) operatingBalance = outcome.operatingBalance;
       await writeDecision({ ...entry, guardrailBlocked: false, guardrailRule: null, outcome });
