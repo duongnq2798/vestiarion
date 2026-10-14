@@ -179,6 +179,8 @@ function approvalsFake(options: {
   ledgerTargets?: Array<Record<string, unknown>>;
   /** `sole_approver`'s reply (migration 0061); unset falls through to the default `[]`, which is not `true`. */
   soleApprover?: FakeReply;
+  /** `commission_beneficiary_approval`'s reply (migration 0118); unset falls through to the default `[]`, which is not `true`. */
+  commissionPartner?: FakeReply;
   /** The counterparty's entries that set or confirmed its address, newest first (new payee check N2); none by default. */
   addressEntries?: Array<Record<string, unknown>>;
   /** The workspace's figure above which a payment needs two approvals (two approvals T1); none by default. */
@@ -294,6 +296,7 @@ function approvalsFake(options: {
     if (request.path === "/rest/v1/decision_verdicts" && request.method === "GET") return { body: options.verdict ? [options.verdict] : [] };
     if (request.path === "/rest/v1/shadow_modes" && request.method === "GET") return { body: options.shadow ? [options.shadow] : [] };
     if (request.path === "/rest/v1/rpc/sole_approver" && options.soleApprover) return options.soleApprover;
+    if (request.path === "/rest/v1/rpc/commission_beneficiary_approval" && options.commissionPartner) return options.commissionPartner;
     if (request.path === "/rest/v1/approval_policies") return { body: options.twoApprovals ? [{ two_approvals_above: String(options.twoApprovals) }] : [] };
     if (request.path === "/rest/v1/payment_approvals" && request.method === "GET") return { body: options.approvals ?? [] };
     if (request.path === "/rest/v1/payment_approvals" && request.method === "POST") {
@@ -376,6 +379,25 @@ describe("approveAndPay", () => {
     await expect(attempt).rejects.toThrow("You created this invoice, so someone else must approve it.");
     expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
     expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses the partner a commission payable pays, before any claim or approval, sole approver or not (commissions C11)", async () => {
+    const { fake, run } = approvalsFake({ commissionPartner: { body: true }, soleApprover: { body: true }, twoApprovals: 10 });
+
+    const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    await expect(attempt).rejects.toBeInstanceOf(ApprovalError);
+    await expect(attempt).rejects.toThrow("This payable pays your own commission, so someone else must approve it.");
+    expect(rpcBodies(fake.requests, "commission_beneficiary_approval")).toEqual([{ p_org_id: ORG, p_invoice_id: INVOICE_ID, p_user_id: ACTOR }]);
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(fake.requests.filter((request) => request.path === "/rest/v1/payment_approvals" && request.method === "POST")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("reads the claim's own refusal of the partner in the same words", async () => {
+    const { run } = approvalsFake({
+      claim: () => ({ status: 400, body: { code: "P0001", message: "beneficiary_approval: the partner a commission pays cannot approve it", details: null, hint: null } }),
+    });
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toThrow("This payable pays your own commission, so someone else must approve it.");
   });
 
   it("lets the workspace's sole approver approve and pay an invoice they entered, and the ledger says so", async () => {
