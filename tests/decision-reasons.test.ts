@@ -129,6 +129,14 @@ describe("the payable commands keep the reason given, with the surface it came f
     ]);
   });
 
+  it("keeps no reason for paying a held bill where the approval only checked an earlier transfer (payment exceptions E3)", async () => {
+    mocks.approveAndPay.mockResolvedValueOnce({ status: "paid", txRef: "0xabc", note: "", checkedFirst: true });
+    await run(() => approvePayable(actor(), { invoiceId: INVOICE, reason: "Pay it anyway" }));
+    mocks.approveAndPay.mockResolvedValueOnce({ status: "approved", txRef: null, note: "", checkedFirst: true });
+    await run(() => approvePayable(actor(), { invoiceId: INVOICE, reason: "First of two" }));
+    expect(kept()).toEqual([]);
+  });
+
   it("keeps nothing when no reason was given, for a verdict's own settling, or when the decision was refused", async () => {
     await run(() => returnPayable(actor(), { invoiceId: INVOICE }));
     await run(() => rejectPayable(actor(), { invoiceId: INVOICE, reason: "Said in the verdict", forVerdict: true }));

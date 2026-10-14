@@ -244,8 +244,12 @@ function approvalsFake(options: {
     }
     if (request.path === "/rest/v1/payment_intents" && request.method === "PATCH") {
       const row = intents.find((intent) => intent.idempotency_key === eq(request, "idempotency_key"));
-      if (row) Object.assign(row, request.body as Record<string, unknown>);
-      return { body: [] };
+      // A compare-and-set names the row's status and time too, as PostgREST filters them (payment exceptions review).
+      const status = eq(request, "status");
+      const updatedAt = eq(request, "updated_at");
+      if (!row || (status !== undefined && row.status !== status) || (updatedAt !== undefined && row.updated_at !== updatedAt)) return { body: [] };
+      Object.assign(row, request.body as Record<string, unknown>);
+      return { body: [{ ...row }] };
     }
     if (request.path === "/rest/v1/rpc/claim_payment_intent") {
       const row = intents.find((intent) => intent.idempotency_key === (request.body as Record<string, unknown>).p_idempotency_key);
@@ -1021,6 +1025,8 @@ describe("approveAndPay while payments are switched off (payment safety S4)", ()
 
     expect(result.status).toBe("paid");
     expect(payInvoiceMock.mock.calls[0][1]).toMatchObject({ retryTerminalFailure: false });
+    // It only read the earlier transfer, so no reason for paying a held bill is kept for it (capability and reasons R10).
+    expect(result.checkedFirst).toBe(true);
   });
 });
 
@@ -1447,7 +1453,8 @@ describe("rejectInvoice", () => {
   it.each([
     ["confirmed", { status: "confirmed", provider_tx_id: "circle-tx-1", last_error: null }],
     ["pending", { status: "pending", provider_tx_id: "circle-tx-1", last_error: null }],
-    ["submitting", { status: "submitting", provider_tx_id: null, last_error: null }],
+    // Being sent now, inside its claim: a send left past it is looked for first (payment safety R4, R6).
+    ["submitting", { status: "submitting", provider_tx_id: null, last_error: null, updated_at: new Date().toISOString() }],
     ["unreadable at the provider", { status: "failed", provider_tx_id: "circle-tx-1", last_error: "provider unreachable" }],
     ["STUCK at Circle", { status: "pending", provider_tx_id: "circle-tx-1", last_error: null, provider_state: "STUCK" }],
     ["recorded failed while Circle's last word was STUCK", { status: "failed", provider_tx_id: "circle-tx-1", last_error: null, provider_state: "STUCK" }],
@@ -1623,7 +1630,8 @@ describe("a payment Circle never answered (payment safety R1)", () => {
 
   it("is known once Circle gave the attempt an id", () => {
     expect(transferUnknown(unanswered({ provider_tx_id: "circle-tx-1", provider_state: "FAILED" }))).toBe(false);
-    expect(transferUnknown(unanswered({ status: "submitting" }))).toBe(false);
+    // Being sent now, inside its claim: not unknown yet (a send left past it is, below).
+    expect(transferUnknown(unanswered({ status: "submitting", last_error: null, updated_at: new Date().toISOString() }))).toBe(false);
     expect(transferUnknown(null)).toBe(false);
   });
 
@@ -1694,10 +1702,12 @@ describe("a payment Circle never answered (payment safety R1)", () => {
     expect(patchBodies(fake.requests, "/rest/v1/invoices")[0].status).toBe("rejected");
   });
 
-  it("confirms the shown address it pays to, since sending it again may be a new payment", async () => {
+  it("confirms the shown address it pays to once Circle is known never to have taken it: it is then a new payment", async () => {
+    lookingProvider(null);
+    syncOperatingBalanceMock.mockResolvedValue(500);
     payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: execution(), note: "", operatingBalance: 0 });
     const { fake, run } = approvalsFake({
-      intents: [unanswered()],
+      intents: [unanswered({ updated_at: new Date(Date.now() - 20 * 60_000).toISOString() })],
       counterparty: { id: COUNTERPARTY_ID, name: "Acme Supplies", address: "0xdead", address_changed_at: "2026-09-30T12:00:00+00:00", address_confirmed_at: null },
     });
 
@@ -1706,11 +1716,16 @@ describe("a payment Circle never answered (payment safety R1)", () => {
     expect(fake.requests.filter((r) => r.path === "/rest/v1/counterparties" && r.method === "PATCH")).toHaveLength(1);
   });
 
-  it("approves it without the balance check, which the transfer may already have lowered, and never as a retry of a failure", async () => {
-    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: execution(), note: "", operatingBalance: 0 });
+  it("records the transfer Circle has without the balance check, which it already lowered, and never as a retry of a failure", async () => {
+    const findTransferByRef = lookingProvider({
+      providerTxId: "circle-tx-7", txHash: null, txRef: "circle-tx-7", chain: "ARC-TESTNET", status: "pending", feeUsd: 0.003,
+      feeSource: "provider_estimate", providerMode: "live", settledInMs: null, providerState: "SENT", failureReason: null,
+    });
+    payInvoiceMock.mockResolvedValue({ status: "matched", txRef: "circle-tx-7", execution: execution({ status: "pending" }), note: "", operatingBalance: 0 });
     const { run } = approvalsFake({ account: () => ({ body: accountRow("40") }), intents: [unanswered()] });
 
-    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).resolves.toMatchObject({ status: "paid" });
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).resolves.toMatchObject({ status: "matched" });
+    expect(findTransferByRef).toHaveBeenCalledTimes(1);
     expect(payInvoiceMock).toHaveBeenCalledTimes(1);
     expect(payInvoiceMock.mock.calls[0][1]).toMatchObject({ retryTerminalFailure: false });
   });
@@ -1721,6 +1736,180 @@ describe("a payment Circle never answered (payment safety R1)", () => {
     const [row] = await run(() => listWaitingPayables());
 
     expect(row).toMatchObject({ paymentSent: true, lastAttempt: { state: "unanswered" } });
+  });
+});
+
+/** A send left `submitting` past its claim: the function that sent it stopped before Circle's answer was recorded. */
+function leftSubmitting(overrides: Record<string, unknown> = {}) {
+  return intentRow({
+    status: "submitting",
+    provider_tx_id: null,
+    last_error: null,
+    provider_state: null,
+    failure_reason: null,
+    updated_at: new Date(Date.now() - 5 * 60_000).toISOString(),
+    ...overrides,
+  });
+}
+
+describe("a send left submitting past its claim (payment safety R4, payment exceptions E2)", () => {
+  it("is an unknown outcome, as the payment itself and its track read it", () => {
+    const intent = leftSubmitting();
+
+    expect(transferUnknown(intent)).toBe(true);
+    expect(paymentWasSent(intent)).toBe(true);
+    expect(transferExists(intent)).toBe(false);
+    // It may still be sending, which the card says (payment exceptions review 6).
+    expect(lastAttemptOf(intent)).toEqual({ state: "unanswered", sending: true });
+  });
+
+  it("is a payment being sent inside its claim, and keeps today's answer when it is read without its time", () => {
+    expect(transferUnknown(leftSubmitting({ updated_at: new Date(Date.now() - 60_000).toISOString() }))).toBe(false);
+    expect(lastAttemptOf(leftSubmitting({ updated_at: new Date(Date.now() - 60_000).toISOString() }))).toBeNull();
+    expect(transferUnknown({ ...leftSubmitting(), updated_at: undefined } as never)).toBe(false);
+  });
+
+  it("is looked for on Circle before Reject, never refused as sent without looking (R6)", async () => {
+    const findTransferByRef = lookingProvider(null);
+    const { fake, run } = approvalsFake({ intents: [leftSubmitting()] });
+
+    const attempt = run(() => rejectInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    await expect(attempt).rejects.toMatchObject({ code: "payment_unknown" });
+    expect(findTransferByRef).toHaveBeenCalledWith(ACCOUNT_ID, `Invoice ${INVOICE_ID}`, expect.anything(), expect.anything());
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(patchBodies(fake.requests, "/rest/v1/invoices")).toHaveLength(0);
+  });
+
+  it("is rejected once Circle has listed nothing 15 minutes after the send, recording that nothing was sent (R6)", async () => {
+    lookingProvider(null);
+    const { fake, run } = approvalsFake({ intents: [leftSubmitting({ updated_at: new Date(Date.now() - 20 * 60_000).toISOString() })] });
+
+    await run(() => rejectInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+
+    expect(patchBodies(fake.requests, "/rest/v1/payment_intents")[0]).toMatchObject({
+      status: "failed",
+      last_error: "Circle has no transfer for this payment's earlier send; nothing was sent.",
+    });
+    expect(patchBodies(fake.requests, "/rest/v1/invoices")[0].status).toBe("rejected");
+  });
+
+  it("looks for it on Circle before Approve and pay, and refuses, saying when to try again, while Circle has not listed it (E4)", async () => {
+    const findTransferByRef = lookingProvider(null);
+    const sentAt = new Date(Date.now() - 5 * 60_000);
+    const { fake, run } = approvalsFake({ intents: [leftSubmitting({ updated_at: sentAt.toISOString() })] });
+
+    const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    await expect(attempt).rejects.toMatchObject({ code: "payment_unknown" });
+    const at = new Date(sentAt.getTime() + 15 * 60_000).toISOString().slice(11, 16);
+    await expect(attempt).rejects.toThrow(
+      `Vestiarion looked for the earlier transfer on Circle first: Circle has not listed it yet, so nothing was sent. Try again from ${at} UTC: by then Vestiarion can tell whether Circle took it.`
+    );
+    expect(findTransferByRef).toHaveBeenCalledWith(ACCOUNT_ID, `Invoice ${INVOICE_ID}`, expect.anything(), expect.anything());
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("is paid as a new payment, with the balance check, once Circle is known never to have taken it (review 3)", async () => {
+    lookingProvider(null);
+    syncOperatingBalanceMock.mockResolvedValue(40);
+    const { fake, run } = approvalsFake({ account: () => ({ body: accountRow("40") }), intents: [leftSubmitting({ updated_at: new Date(Date.now() - 20 * 60_000).toISOString() })] });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toMatchObject({ code: "insufficient_funds" });
+    expect(patchBodies(fake.requests, "/rest/v1/payment_intents")[0]).toMatchObject({ last_error: "Circle has no transfer for this payment's earlier send; nothing was sent." });
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses with no_operating_account, never 'try again', when the workspace has no operating account to look from (review)", async () => {
+    const findTransferByRef = lookingProvider(null);
+    const { fake, run } = approvalsFake({ account: () => ({ body: null }), intents: [leftSubmitting()] });
+
+    const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    await expect(attempt).rejects.toMatchObject({ code: "no_operating_account", message: "This workspace has no operating account." });
+    expect(findTransferByRef).not.toHaveBeenCalled();
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+  });
+
+  it("sends that new payment as one, every check passed", async () => {
+    lookingProvider(null);
+    syncOperatingBalanceMock.mockResolvedValue(500);
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: execution(), note: "", operatingBalance: 0 });
+    const { run } = approvalsFake({ intents: [leftSubmitting({ updated_at: new Date(Date.now() - 20 * 60_000).toISOString() })] });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).resolves.toMatchObject({ status: "paid" });
+    expect(payInvoiceMock.mock.calls[0][1]).toMatchObject({ retryTerminalFailure: true });
+  });
+
+  it("is listed with its last attempt unanswered, so the card says it looks first", async () => {
+    const { run } = approvalsFake({ intents: [leftSubmitting()] });
+
+    const [row] = await run(() => listWaitingPayables());
+
+    expect(row).toMatchObject({ paymentSent: true, lastAttempt: { state: "unanswered" } });
+  });
+
+  it("reads each intent's time, so a send left past its claim is told apart", async () => {
+    const { fake, run } = approvalsFake({ intents: [leftSubmitting()] });
+
+    await run(() => listWaitingPayables());
+    await run(() => returnInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID })).catch(() => undefined);
+
+    const selects = fake.requests.filter((request) => request.path === "/rest/v1/payment_intents" && request.method === "GET").map((request) => request.params.get("select") ?? "");
+    expect(selects.length).toBeGreaterThanOrEqual(2);
+    for (const select of selects.filter((columns) => columns.includes("provider_state"))) expect(select).toContain("updated_at");
+  });
+});
+
+describe("a first attempt sent in a batch whose answer was lost (payment exceptions review 1)", () => {
+  const member = (overrides: Record<string, unknown> = {}) =>
+    intentRow({ status: "failed", provider_tx_id: null, provider_state: null, last_error: "Batch transfer failed", batch_key: "batch-key-1", transfer_attempt: 1, ...overrides });
+
+  it("is an unknown outcome whatever its error, as its track and the payment read it: Circle may have the batch", () => {
+    for (const intent of [member(), member({ status: "submitting", updated_at: new Date().toISOString() }), member({ last_error: "Circle did not answer; the transfer may or may not have been accepted" })]) {
+      expect(transferUnknown(intent), intent.status).toBe(true);
+      expect(paymentWasSent(intent)).toBe(true);
+      expect(lastAttemptOf(intent)).toMatchObject({ state: "unanswered" });
+    }
+  });
+
+  it("is known once Circle gave it an id, and a later attempt is its own transfer", () => {
+    expect(transferUnknown(member({ provider_tx_id: "circle-batch-1", provider_state: "COMPLETE", status: "confirmed" }))).toBe(false);
+    expect(transferUnknown(member({ transfer_attempt: 2 }))).toBe(false);
+  });
+
+  it("reads the batch with each intent", async () => {
+    const { fake, run } = approvalsFake({ intents: [member()] });
+    await run(() => listWaitingPayables());
+    const select = fake.requests.find((request) => request.path === "/rest/v1/payment_intents" && request.method === "GET")?.params.get("select") ?? "";
+    expect(select).toContain("batch_key");
+    expect(select).toContain("transfer_attempt");
+  });
+});
+
+describe("a payout to another chain whose send Circle never answered (payment exceptions review 5)", () => {
+  const onBase = (r: RecordedRequest) =>
+    r.params.get("id") ? { body: invoiceRow({ counterparties: { name: "Acme Supplies", risk_level: "medium", address: "0xdead", chain: "BASE-SEPOLIA" } }) } : undefined;
+
+  it("refuses Reject, saying it cannot be looked up and what settles it, and never looks by its reference", async () => {
+    const findTransferByRef = lookingProvider(null);
+    const { run } = approvalsFake({ invoice: onBase, intents: [unanswered({ payout_route: "cctp", destination_chain: "BASE-SEPOLIA" })] });
+
+    const attempt = run(() => rejectInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    await expect(attempt).rejects.toMatchObject({ code: "payment_unknown" });
+    await expect(attempt).rejects.toThrow(
+      "Circle did not answer when this invoice's payment was sent, and a payout to another chain cannot be looked up on Circle. Approve and pay asks Circle for it again under the same payment key, which Circle takes only once; once Circle has answered, it can be rejected or returned."
+    );
+    expect(findTransferByRef).not.toHaveBeenCalled();
+  });
+
+  it("is asked for again under its key by Approve and pay, as before, without looking it up first", async () => {
+    const findTransferByRef = lookingProvider(null);
+    payInvoiceMock.mockResolvedValue({ status: "matched", txRef: "0xburn", execution: null, note: "", operatingBalance: null, amountPaid: 150, discountTaken: 0 });
+    const { run } = approvalsFake({ invoice: onBase, intents: [unanswered({ payout_route: "cctp", destination_chain: "BASE-SEPOLIA" })] });
+
+    await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }, { bridgeFee: vi.fn(async () => ({ feeUsdc: 0.05, maxFeeUnits: BigInt(50000), domain: 6 })), gatewayQuote: vi.fn(async () => null) }));
+    expect(findTransferByRef).not.toHaveBeenCalled();
+    expect(payInvoiceMock).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -2935,6 +3124,19 @@ describe("a payable held for a person's verdict (shadow mode S4)", () => {
 
     await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).resolves.toMatchObject({ status: "paid" });
     expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("is not paid after someone disagreed once looking for an unanswered send finds Circle never took it (payment exceptions review 3)", async () => {
+    lookingProvider(null);
+    const { run } = approvalsFake({
+      decision: shadowHold,
+      shadow: on,
+      verdict: { verdict: "disagree", reason: "Not our bill" },
+      intents: [intentRow({ status: "submitting", provider_tx_id: null, provider_state: null, last_error: null, updated_at: new Date(Date.now() - 20 * 60_000).toISOString() })],
+    });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toMatchObject({ code: "verdict_disagreed" });
+    expect(payInvoiceMock).not.toHaveBeenCalled();
   });
 
   it("records a transfer that already left, even after someone disagreed: the money moved (review I2)", async () => {

@@ -24,6 +24,7 @@ type GuideSlug =
   | "guides/first-payment"
   | "guides/try-a-rule"
   | "guides/where-a-payment-is"
+  | "guides/payment-exceptions"
   | "guides/import-bills"
   | "guides/payment-plan"
   | "guides/deals"
@@ -247,6 +248,8 @@ const PLAN_APPLY = "src/lib/payment-plan-apply.ts";
 const DECISION_TRAIL = "src/lib/decision-trail.ts";
 const SETTLEMENT_TRACK = "src/components/vx/SettlementTrack.tsx";
 const IN_FLIGHT = "src/components/vx/PaymentsInFlight.tsx";
+const PAYMENT_EXCEPTIONS = "src/lib/payment-exceptions.ts";
+const STUCK_EMAIL = "src/lib/email/payment-stuck.ts";
 const RECEIPT_STATUS = "src/lib/receipts/status.ts";
 const REPORT_VALUE = "src/components/vx/ReportValue.tsx";
 const BASELINE_CONTROL = "src/components/ReportBaselineControl.tsx";
@@ -1086,6 +1089,47 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["A check below does not pass, so it is not reconciled.", RECEIPT_STATUS],
     ["Agent vs what really happened", ACTUALS],
   ],
+  // The runbook for payments that do not settle (payment exceptions E5, E6): where they show, and what paying does first.
+  // Each state's own words are pinned against src/lib/payment-exceptions.ts by tests/payment-exceptions.test.ts.
+  "guides/payment-exceptions": [
+    ["Bills & receivables", APP_NAV],
+    ["Where the payment is", SETTLEMENT_TRACK],
+    ["What to do", SETTLEMENT_TRACK],
+    ["Who acts", SETTLEMENT_TRACK],
+    ["Already done", SETTLEMENT_TRACK],
+    ["Trail", SETTLEMENT_TRACK],
+    ["Circle id", SETTLEMENT_TRACK],
+    ["Read the runbook", SETTLEMENT_TRACK],
+    ["Treasury", APP_NAV],
+    ["Payments in flight", IN_FLIGHT],
+    ["What to do:", IN_FLIGHT],
+    ["Approvals", APP_NAV],
+    ["Approve and pay", APPROVAL_CARD],
+    ["Fix what Circle names before approving, such as adding USDC to the operating wallet.", APPROVAL_CARD],
+    ["Circle did not answer when this payment was sent", APPROVAL_CARD],
+    ["Return to agent", APPROVAL_CARD],
+    ["Contractors", APP_NAV],
+    ["Pay now", HELD_ACTIONS],
+    ["Close without paying", HELD_ACTIONS],
+    ["Circle did not answer when its transfer was sent", MILESTONE_DECISIONS],
+    ["Outcome unknown", EVIDENCE_CHAIN],
+    ["Not sent", EVIDENCE_CHAIN],
+    ["Gateway reported it failed", EVIDENCE_CHAIN],
+    ["What to do:", STUCK_EMAIL],
+    ["Check the payment of 12.50 USDC to Jiren already sent?", PAYMENT_EXCEPTIONS, "Check the payment of ${what} already sent?"],
+    ["Check it", PAYMENT_EXCEPTIONS],
+    ["Checking the transfer already sent to Jiren", PAYMENT_EXCEPTIONS, "Checking the transfer already sent to ${payee}"],
+    ["Look for the earlier payment of 12.50 USDC to Jiren first?", PAYMENT_EXCEPTIONS, "Look for the earlier payment of ${what} first?"],
+    ["Look first", PAYMENT_EXCEPTIONS],
+    ["Looking for the earlier transfer to Jiren on Circle first", PAYMENT_EXCEPTIONS, "Looking for the earlier transfer to ${payee} on Circle first"],
+    ["Vestiarion looked for the earlier transfer on Circle first: Circle has not listed it yet, so nothing was sent.", "src/lib/agent/approvals.ts", "${looked}: Circle has not listed it yet, so nothing was sent."],
+    ["Vestiarion started sending this payment and Circle has not answered for over two minutes: it may still be sending, or its answer was lost.", APPROVAL_CARD],
+    ["Check the payment already sent?", PAYMENT_EXCEPTIONS],
+    ["Look for the earlier payment first?", PAYMENT_EXCEPTIONS],
+    ["Looks for the earlier transfer on Circle first: records it if Circle has it, and sends the payment only once Circle shows none.", PAYMENT_EXCEPTIONS],
+    ["Checks the transfer already sent with Circle and records it: nothing new is sent.", PAYMENT_EXCEPTIONS],
+    ["A confirmed transfer cannot be charged back or reversed. A refund would be a new transfer back, a separate payment.", SETTLEMENT_TRACK],
+  ],
   "guides/try-a-rule": [
     ["Try it on past decisions", RULE_TRIAL_COPY],
     ["Counterparties", APP_NAV],
@@ -1396,7 +1440,10 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     [
       "Circle did not answer when this payment was sent, so it may have taken the transfer. Approve and pay, Reject and Return look for it on Circle first: Approve and pay records it if Circle has it, and sends it only once Circle shows none.",
       APPROVAL_CARD,
+      // Its lead and the rest are put together by `unansweredLine` (payment exceptions review 5, 6).
+      "${lead} Approve and pay, Reject and Return look for it on Circle first: Approve and pay records it if Circle has it, and sends it only once Circle shows none.",
     ],
+    ["Circle did not answer when this payment was sent, so it may have taken the transfer.", APPROVAL_CARD],
     ["This address's capital letters do not match its checksum, so a character is likely wrong.", "src/lib/address-checksum.ts"],
     ["Payments are switched off for every workspace right now.", "src/lib/payments-switch.ts"],
     ["Audit log", APP_NAV],
@@ -2638,6 +2685,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/first-payment": 20,
   "guides/try-a-rule": 20,
   "guides/where-a-payment-is": 20,
+  "guides/payment-exceptions": 20,
   "guides/import-bills": 20,
   "guides/payment-plan": 20,
   "guides/deals": 20,

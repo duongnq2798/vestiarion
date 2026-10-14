@@ -60,7 +60,7 @@ export function evidenceRequest(kind: unknown, id: unknown): EvidenceRequest | n
 }
 
 const INTENT_COLUMNS =
-  "status, provider, provider_mode, token, amount, destination, tx_hash, chain, destination_chain, mint_tx_hash, bridge_fee, payout_route, confirmed_at, network";
+  "status, provider, provider_mode, token, amount, destination, tx_hash, chain, destination_chain, mint_tx_hash, bridge_fee, payout_route, confirmed_at, network, provider_tx_id, provider_state, failure_reason, last_error";
 
 /** The counterparty entries the chain words: who gave and confirmed the address, purchase orders, dismissed matches. */
 const COMPLIANCE_ACTIONS = [

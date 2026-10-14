@@ -2574,13 +2574,17 @@ async function escrowReleaseOf(
  */
 export async function releaseHeldMilestone(
   input: { milestoneId: string; destination: string; amount: number; spendingLimit?: SpendingLimitPayment },
-  deps: { provider: ChainProvider; operatingAccountId: string }
+  /**
+   * `retryTerminalFailure`: whether a transfer Circle ended may be sent again as a new one. Only a Pay now that ran a new
+   * payment's checks passes true; one that only checked a transfer already sent passes false (payment exceptions review 2).
+   */
+  deps: { provider: ChainProvider; operatingAccountId: string; retryTerminalFailure: boolean }
 ): Promise<PayStepOutcome> {
   // A person's payment goes through the agent's spending limit contract only from a workspace paying from its owner's own
   // wallet, which can be paid from no other way (wallet treasury W11); never otherwise (onchain spending limit R6).
   return releaseMilestone(
     { milestoneId: input.milestoneId, destination: input.destination, amount: input.amount, ...(input.spendingLimit ? { spendingLimit: input.spendingLimit } : {}) },
-    { ...deps, retryTerminalFailure: true }
+    deps
   );
 }
 

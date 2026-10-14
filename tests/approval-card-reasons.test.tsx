@@ -179,6 +179,23 @@ describe("Approvals asks why, in the dialog, and the reason reaches the action",
     expect(sent(actions.approve)?.has("reason")).toBe(false);
   });
 
+  it("Approve and pay that checks an earlier transfer first asks nothing, since it sends nothing new (payment exceptions E3)", async () => {
+    for (const payable of [
+      { ...PAYABLE, lastAttempt: { state: "unanswered" as const } },
+      { ...PAYABLE, paymentSent: true },
+    ]) {
+      render(payable);
+      const dialog = open("Approve and pay");
+      expect(dialog.textContent).not.toContain("Why pay it anyway?");
+      expect(buttonNamed("Look first", dialog) ?? buttonNamed("Check it", dialog)).toBeDefined();
+      await confirm(dialog, buttonNamed("Look first", dialog) ? "Look first" : "Check it");
+      expect(sent(actions.approve)?.has("reason")).toBe(false);
+      actions.approve.mockClear();
+      act(() => root.render(<></>));
+      document.querySelectorAll('[role="alertdialog"]').forEach((node) => node.remove());
+    }
+  });
+
   it("Reject: asks why it is rejected, optional, and sends the reason", async () => {
     render();
     const dialog = open("Reject");

@@ -217,6 +217,7 @@ export function settlementOf(input: {
     bridge: bridgeOf(intent),
     simulated: simulatedIntent(intent),
     recordingsComplete: input.entriesComplete ?? true,
+    circleId: intent.provider_tx_id,
   });
 }
 

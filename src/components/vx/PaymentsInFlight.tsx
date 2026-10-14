@@ -1,10 +1,12 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { DocsLink } from "@/components/DocsLink";
 import { Card } from "@/components/ui/Card";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { orgHref } from "@/lib/auth/org-paths";
 import { plural } from "@/lib/copy";
 import type { Network } from "@/lib/network";
+import { inFlightNext, runbookHref } from "@/lib/payment-exceptions";
 import { ageText, paymentsInFlight, type PaymentsInFlight as Summary } from "@/lib/settlement";
 import type { FlightRow } from "@/lib/settlement-facts";
 import { invoiceHref } from "@/lib/bills-view";
@@ -16,6 +18,9 @@ import { mismatchSentence, settlementSummary, stepConfirmedLine, unknownOutcome 
  * sent and not confirmed, the oldest first, with how long ago it was sent and where it is, and every payment whose books
  * do not match its transfer. The line over it gives the pending-aging and outstanding-mismatch figures. A payment past
  * the network's wait says so in words, never by colour alone. Hidden when there is nothing to show.
+ *
+ * A payment slow to confirm, or of unknown outcome, says what to do next in a line, and the heading links the runbook
+ * for payments that do not settle (docs/superpowers/specs/2026-10-14-payment-exceptions-design.md E6).
  */
 
 /** The section's line: how many, the sum per currency, the oldest's age, how many are past the wait, how many do not match. */
@@ -52,6 +57,20 @@ function Row({ row, orgSlug, children }: { row: FlightRow; orgSlug: string; chil
   );
 }
 
+/** What to do next about a payment slow to confirm, or of unknown outcome, in a line, with its section of the runbook. */
+function NextStep({ row }: { row: FlightRow }) {
+  const state = row.settlement.status === "unknown" ? "unknown" : "stuck";
+  const next = inFlightNext(state, { followUp: row.settlement.followUp, circleState: row.settlement.stages.pending?.state ?? null, crossChain: row.settlement.crossChain });
+  return (
+    <p className="mt-0.5 text-xs text-ink-2">
+      <Link href={runbookHref(state)} className="font-medium text-ink underline-offset-2 hover:underline">
+        What to do:
+      </Link>{" "}
+      {next}
+    </p>
+  );
+}
+
 export function PaymentsInFlight({
   payments,
   now,
@@ -74,7 +93,12 @@ export function PaymentsInFlight({
     <Card asChild className="overflow-hidden">
       <section aria-labelledby="payments-in-flight-title">
         <div className="px-4 pt-4 sm:px-5">
-          <SectionHeader id="payments-in-flight-title" title="Payments in flight" meta={<span className="tabular-nums">{flightLine(summary, stuckAfterMinutes)}</span>} />
+          <SectionHeader
+            id="payments-in-flight-title"
+            title="Payments in flight"
+            meta={<span className="tabular-nums">{flightLine(summary, stuckAfterMinutes)}</span>}
+            action={<DocsLink href="/docs/guides/payment-exceptions" topic="what to do when a payment does not settle" />}
+          />
           <p className="-mt-1 mb-3 text-xs text-ink-3">Sent and not confirmed by Circle yet, the oldest first. Nothing here is in the payee&apos;s wallet until Circle confirms it.</p>
         </div>
         {summary.inFlight.length > 0 && (
@@ -92,6 +116,7 @@ export function PaymentsInFlight({
                     {row.late && <span className="font-medium text-held">{` · past the ${stuckAfterMinutes} min wait`}</span>}
                   </p>
                   {row.settlement.status === "unknown" && <p className="mt-0.5 text-xs text-ink-2">{unknownOutcome(row.settlement)}</p>}
+                  {(row.settlement.status === "unknown" || row.late) && <NextStep row={row} />}
                 </Row>
               );
             })}

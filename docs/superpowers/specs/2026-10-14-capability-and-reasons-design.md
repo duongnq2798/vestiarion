@@ -75,8 +75,9 @@ record.
   is recorded; the reason, when given, stays in `decision_verdicts` and the signed `decision_verdict` entry.
 - **R10. Approvals.** Reject asks "Why reject it?" (it already took an optional reason); Return to agent's confirmation
   asks "Why return it?"; Approve and pay's confirmation asks "Why pay it anyway?" on a payable the agent flagged or held
-  on one of its rules (not one held for cash or for a verdict). All optional, one line, at most 280 characters, never
-  blocking. A return's reason is kept in its `approval_returned` entry, as a rejection's is.
+  on one of its rules (not one held for cash or for a verdict, and not where it checks an earlier transfer first, as
+  payment exceptions E3 says: it then sends nothing new, and `approvePayable` keeps no reason where `approveAndPay`
+  reports `checkedFirst`). All optional, one line, at most 280 characters, never blocking. A return's reason is kept in its `approval_returned` entry, as a rejection's is.
 - **R11. Kept with where it came from.** Each reason given is a row in `decision_reasons` (migration `0120`): the
   feature and decision (`shadow_mode.disagree`, `approvals.reject`, `approvals.return`, `approvals.pay_held`), the
   surface (console, Slack, Telegram, API, GitHub, from the command's actor), the subject, who gave it, when, and the

@@ -126,7 +126,9 @@ export async function approvePayable(
   // A failed transfer leaves the invoice held with the provider's reason: something changed, and it is still a failure.
   // Cash brought back from the reserve for it stays in the operating wallet, which is said too (review finding 8).
   if (result.status === "held") return refused("transfer_failed", `${heldMessage(result.note)}${fromReserveStaysNote(result.fromReserveUsdc)}`, { changed: true });
-  await keepReason(actor, "approvals.pay_held", input);
+  // A reason for paying a held bill, only where this approval decided a new payment: not where it read an earlier transfer,
+  // or asked Circle for it again under its key, which pays nothing new (payment exceptions E3).
+  if (!result.checkedFirst) await keepReason(actor, "approvals.pay_held", input);
   // Above the workspace's figure, the first of two approvals is recorded and sends nothing (two approvals T4, T8).
   if (result.status === "approved") return done(APPROVAL_RECORDED, { status: "approved", txRef: null });
   // A confirmed payment's payee hears of it now, not at the next cycle (payment notices R5).
