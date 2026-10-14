@@ -126,8 +126,18 @@ export async function syncCrmConnection(input: {
       if (deals.length === 0) return [];
       const staged = await db.staged(connection!.id, deals.map((deal) => deal.externalId));
       const linked: string[] = [];
+      const gone: string[] = [];
       for (const deal of deals) {
         const row = staged.get(deal.externalId) ?? null;
+        if (deal.deleted) {
+          // The CRM says it was deleted (Pipedrive connector P6): a row kept says so, its history and its deal stay; none
+          // is made for a deal never kept.
+          if (row) {
+            if (row.sourceStatus === "present") gone.push(deal.externalId);
+            if (row.dealId) linked.push(deal.externalId);
+          }
+          continue;
+        }
         const plan = planCrmDeal(row, deal, connection!.windowFrom);
         if (plan.kind === "insert") {
           await db.insertDeal(connection!, deal);
@@ -138,7 +148,9 @@ export async function syncCrmConnection(input: {
         }
         if (row?.dealId) linked.push(deal.externalId);
       }
-      await db.linkReferences(connection!, deals.map((deal) => deal.externalId));
+      if (gone.length > 0) result.deleted += await db.markDeleted(connection!, gone);
+      const present = deals.filter((deal) => !deal.deleted).map((deal) => deal.externalId);
+      if (present.length > 0) await db.linkReferences(connection!, present);
       return linked;
     }
 

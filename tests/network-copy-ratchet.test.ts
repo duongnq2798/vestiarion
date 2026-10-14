@@ -36,9 +36,11 @@ const ALLOWED: Record<string, number> = {
   "src/components/AccountingBookings.tsx": 1,
   // The same rule for receipts written to a CRM (CRM receipts R4): payments on Arc testnet or in shadow mode are written
   // only to a HubSpot developer test account or sandbox, in the refusal, the consent statement, the connect page's choice
-  // and the terms; and the pictures' sample refusal and rule.
+  // and the terms; and the pictures' sample refusal and rule. Pipedrive's (Pipedrive connector P12): never, since it names no
+  // test company, in its consent statement and its refusal.
   "src/lib/connectors/crm-receipts.ts": 1,
-  "src/lib/connectors/consent.ts": 1,
+  "src/lib/connectors/consent.ts": 2,
+  "src/lib/pipedrive/receipts.ts": 1,
   "src/app/integrations/hubspot/connect/page.tsx": 1,
   "src/app/docs-shots/crm-receipts-fixture.ts": 2,
   // Demo data, which exists on Arc testnet: the design page's fixtures, and the research replay's default for decisions

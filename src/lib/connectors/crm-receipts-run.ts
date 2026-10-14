@@ -265,7 +265,7 @@ async function sendOne(
   const reality = receiptReality({ network: row.network, shadow: row.shadow }, facts ? facts.test : null);
   if (!reality.ok && !reality.refused) return "waiting";
   if (!reality.ok) {
-    const message = receiptRealityRefusal(label);
+    const message = writer.realityRefusal ?? receiptRealityRefusal(label);
     const refused = await store.move(
       row,
       ["queued", "failed", "sending"],

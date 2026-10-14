@@ -68,6 +68,8 @@ export interface BillsQuery {
   review: ReviewPanel | null;
   new: NewKind | null;
   hubspot: string | null;
+  /** `?pipedrive=<row>`: a Pipedrive deal to plan (Pipedrive connector P9). Absent means none. */
+  pipedrive?: string | null;
   /** `?history=all`, from before the tabs: every settled bill. */
   history: boolean;
   /** `?status=…`, from before the tabs: the invoices of one status. */
@@ -97,6 +99,8 @@ export interface BillsView {
   review: ReviewPanel | null;
   new: NewKind | null;
   hubspot: string | null;
+  /** A Pipedrive deal to plan; absent means none. */
+  pipedrive?: string | null;
 }
 
 type Raw = Record<string, string | string[] | undefined>;
@@ -112,6 +116,7 @@ export function readBillsQuery(raw: Raw): BillsQuery {
   const q = (first(raw.q) ?? "").trim();
   const open = first(raw.open);
   const hubspot = first(raw.hubspot);
+  const pipedrive = first(raw.pipedrive);
   const add = first(raw.add);
   return {
     tab: oneOf(BILLS_TABS, first(raw.tab)),
@@ -124,6 +129,7 @@ export function readBillsQuery(raw: Raw): BillsQuery {
     // `?add` is the command palette's "Add a bill" (workspace shell design S9); `?add=deal` opened New deal.
     new: oneOf(NEW_KINDS, first(raw.new)) ?? (add === undefined ? null : add === "deal" ? "deal" : "bill"),
     hubspot: hubspot !== undefined && hubspot !== "" ? hubspot : null,
+    pipedrive: pipedrive !== undefined && pipedrive !== "" ? pipedrive : null,
     history: first(raw.history) === "all",
     status: first(raw.status) ?? null,
   };
@@ -153,7 +159,7 @@ export function resolveBillsView(query: BillsQuery, facts: BillsFacts): BillsVie
   const tab: BillsTab =
     query.tab ??
     (openDirection === "receivable" ? "receivables" : openDirection === "payable" ? "bills" : null) ??
-    (query.hubspot || query.new === "deal" ? "receivables" : null) ??
+    (query.hubspot || query.pipedrive || query.new === "deal" ? "receivables" : null) ??
     (query.history ? "bills" : null) ??
     legacy?.tab ??
     searchTab ??
@@ -188,6 +194,7 @@ export function resolveBillsView(query: BillsQuery, facts: BillsFacts): BillsVie
     review: query.review,
     new: query.new,
     hubspot: query.hubspot,
+    pipedrive: query.pipedrive ?? null,
   };
 }
 
@@ -325,8 +332,11 @@ const REVIEW_ANCHORS: Readonly<Record<string, ReviewPanel>> = {
   "email-inbox": "email",
 };
 
-/** The Receivables tab's sections that links name; `plan-from-hubspot` comes with `?hubspot=`, which opens Receivables itself. */
-const RECEIVABLE_ANCHORS: ReadonlySet<string> = new Set(["deals", "from-hubspot", "plan-from-hubspot"]);
+/**
+ * The Receivables tab's sections that links name; `plan-from-hubspot` comes with `?hubspot=` and `plan-from-pipedrive`
+ * with `?pipedrive=`, which open Receivables themselves.
+ */
+const RECEIVABLE_ANCHORS: ReadonlySet<string> = new Set(["deals", "from-hubspot", "plan-from-hubspot", "from-pipedrive", "plan-from-pipedrive"]);
 
 /**
  * Where a fragment from before the tabs lands (B4): `#trail-<id>` and `#settlement-<id>` open that bill's detail at that
@@ -354,7 +364,7 @@ export function legacyHashHref(hash: string, search: string): string | null {
     return write(false);
   }
   if (RECEIVABLE_ANCHORS.has(anchor)) {
-    if (params.get("tab") === "receivables" || params.has("hubspot")) return null;
+    if (params.get("tab") === "receivables" || params.has("hubspot") || params.has("pipedrive")) return null;
     params.set("tab", "receivables");
     return write(true);
   }

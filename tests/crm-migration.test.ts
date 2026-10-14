@@ -64,7 +64,7 @@ describe("the core's tables take HubSpot", () => {
         [orgId, connectionId]
       )
     ).rejects.toThrow(/external_links_object_type_check/);
-    await expect(connection(orgId, "pipedrive", "x")).rejects.toThrow(/accounting_connections_provider_check/);
+    await expect(connection(orgId, "salesforce", "x")).rejects.toThrow(/accounting_connections_provider_check/);
     // Xero's and QuickBooks' values stay accepted.
     const other = await createOrg(db, "hubspot-checks-xero");
     expect(await connection(other, "xero", "tenant-1")).toBeTruthy();

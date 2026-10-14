@@ -1,7 +1,8 @@
 import { connectionFor, NotSetUpError } from "../connectors/connections";
 import { chooseOverwrite, setReceiptWrites } from "../connectors/crm-receipts-actions";
 import { writeGate } from "../connectors/crm-receipts-run";
-import { plannable } from "../connectors/crm";
+import { noTestAccountRule, realPayments, workspaceReality } from "../connectors/crm-receipts-view";
+import { crmDealReference, plannable } from "../connectors/crm";
 import { crmRow, crmRowForDeal, emailToFill, keepChanges, linkPlanned, sourceOf } from "../connectors/crm-actions";
 import { amountText, changesKey, rowChanges } from "../connectors/crm-store";
 import { PROVIDER_KINDS, PROVIDER_LABELS, type ProviderId } from "../connectors/provider";
@@ -38,7 +39,7 @@ export async function planCrmDeal(actor: Actor, input: { rowId: string; draft: D
       label
     );
     if (!check.ok) return refused("not_plannable", `${row.name} cannot be planned: ${check.reason.toLowerCase()}.`);
-    const result = await confirmDeal({ actorId: actor.userId, draft: { ...input.draft, externalRef: row.external_id }, source: sourceOf(read) });
+    const result = await confirmDeal({ actorId: actor.userId, draft: { ...input.draft, externalRef: crmDealReference(connection.provider, row.external_id) }, source: sourceOf(read) });
     if (row.deal_id && row.deal_id !== result.dealId) return refused("planned", `This ${label} deal is planned already.`);
     await linkPlanned(read, result.dealId, result.customerId);
     return done(
@@ -126,6 +127,11 @@ export async function setCrmReceiptWrites(actor: Actor, input: { provider: Provi
       const allowed = writeGate({ ...connection, writesOn: true }, provider.receipts.writeScopes);
       if (!allowed.ok && allowed.reason === "reconnect") return refused("reconnect", `${label} needs you to reconnect first.`);
       if (!allowed.ok) return refused("scope", `${label} has not allowed Vestiarion to write yet. Use Allow writing to ${label}, then try again.`);
+      // A CRM that names no test account never gets payments on Arc testnet or in shadow mode (Pipedrive connector P12).
+      if (provider.receipts.testAccounts === false) {
+        const reality = await workspaceReality();
+        if (!realPayments(reality)) return refused("reality", `Writing to ${label} stays off. ${noTestAccountRule(label, reality)}`);
+      }
     }
     const changed = await setReceiptWrites({ connection, on: input.on, by: actor.userId });
     if (!input.on) return done(changed ? `Vestiarion no longer writes to ${label}. What it wrote stays there.` : `Writing to ${label} is off already.`);
