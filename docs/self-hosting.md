@@ -142,6 +142,10 @@ Two independent upgrades from there, in either order:
 | `npm run telegram:setup -- <https origin>` | Registers the Telegram bot's webhook and command menu, once the three `TELEGRAM_*` variables are set (see `.env.example`) |
 | `npm run docs:screenshots` | Rebuilds the user guides’ step screenshots in `public/docs/guides/` with local headless Edge. Run it after changing a screen a guide shows (Go live, the counterparty or invoice form, a decision or approval card, the audit log), then look at each PNG before committing |
 
+These scripts work on the database, as its operator. To work with one workspace through its API instead, from any
+machine, use the [`vestiarion` command](https://www.vestiarion.xyz/docs/get-started/cli) with a key from that workspace
+and your deployment as its base URL: `vestiarion login --base-url https://vestiarion.example.com`.
+
 Seeded amounts scale down automatically when Circle credentials are present (`SEED_SCALE`),
 because the public faucet grants 20 testnet USDC every two hours and a demo denominated in
 thousands would never settle. The business narrative is the same; the decimal point moves.

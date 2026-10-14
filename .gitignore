@@ -47,3 +47,6 @@ next-env.d.ts
 
 # The TypeScript SDK's build output: npm run sdk:pack compiles into it, and packs it into public/sdk/.
 sdk/dist/
+
+# The CLI's build output: npm run cli:pack compiles into it, and packs it into public/cli/.
+cli/dist/

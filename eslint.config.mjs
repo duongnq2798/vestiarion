@@ -88,6 +88,8 @@ const eslintConfig = defineConfig([
     ".worktrees/**",
     // The TypeScript SDK's build output, packed into public/sdk/.
     "sdk/dist/**",
+    // The CLI's build output, packed into public/cli/.
+    "cli/dist/**",
   ]),
 ]);
 

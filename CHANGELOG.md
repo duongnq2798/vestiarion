@@ -7,12 +7,21 @@ used here.
 
 Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by entry, in the
 [API changelog](https://www.vestiarion.xyz/docs/changelog) ([source](content/docs/changelog.mdx)). The TypeScript SDK,
-[`@vestiarion/sdk`](https://www.npmjs.com/package/@vestiarion/sdk), has its own version line.
+[`@vestiarion/sdk`](https://www.npmjs.com/package/@vestiarion/sdk), and the CLI,
+[`@vestiarion/cli`](https://www.npmjs.com/package/@vestiarion/cli), each have their own version line.
 
 ## [Unreleased]
 
 ### Added
 
+- **A command-line interface, `vestiarion` (`@vestiarion/cli` 0.1.0).** Developers and operators work with a workspace
+  from a terminal: `vestiarion login` checks a workspace API key with one read and saves it for the user alone, and
+  `whoami` names the workspace, its network and where the key came from. It reads bills, invoices, counterparties,
+  milestones, the treasury and the agent's decisions with their reasoning, as text or as the API's JSON. It adds bills,
+  invoices, counterparties, milestones and payee links only after showing what it will send and asking, or with
+  `--yes`; it never approves or pays. Offline, it checks an audit export with the same answer as the standalone
+  verifier, and a webhook delivery's signature. It is built on the TypeScript SDK and sends no telemetry.
+  [Guide](https://www.vestiarion.xyz/docs/get-started/cli).
 - **Deals brought in from Pipedrive.** An owner or admin connects a Pipedrive company from Settings, and its won deals
   come in under Deals on Bills & receivables, with their organizations and persons. Plan collections fills in the New
   deal form from a won deal: the customer from its organization, the title, the value (US dollars as USDC and euros as

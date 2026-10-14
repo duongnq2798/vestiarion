@@ -1,5 +1,13 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-14: A command-line interface over the API
+
+- **`@vestiarion/cli` 0.1.0**, the `vestiarion` command, calls `/api/v1` with a workspace API key, through the [TypeScript SDK](/docs/get-started/sdk). Each command is one or two existing operations; the [CLI page](/docs/get-started/cli#commands) maps each command to its operation. It adds no endpoint and changes none.
+- Its requests are like any other client's: the key as `Authorization: Bearer`, and a `User-Agent` of `vestiarion-cli/0.1.0` followed by the SDK's own, such as `vestiarion-sdk-js/0.3.2`. A write carries an `Idempotency-Key`, the caller's own with `--idempotency-key`, except a payee link.
+- `vestiarion login` checks a key with one `GET /api/v1/status` before saving it, and `vestiarion whoami` reads `GET /api/v1/status` and `GET /api/v1/treasury`, so a key's **Last used** time in Settings moves when either runs.
+- Offline, `vestiarion ledger verify` checks an audit export as `verify-ledger-export.mjs` does, and `vestiarion webhooks verify` checks a delivery's `Vestiarion-Signature`.
+- Nothing in `/api/v1` or the webhooks changes.
+
 ## 2026-10-14: Deals brought in from Pipedrive
 
 - An owner or admin can connect a workspace to a Pipedrive company, and a person plans the collections of the won deals it brings in. There is no new kind of entry: the entries HubSpot's deals use now also name Pipedrive. Each is listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:
