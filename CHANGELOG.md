@@ -12,6 +12,8 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+## [0.1.0-beta.4] - 2026-10-14
+
 ### Added
 
 - **Accept contractor work from Asana.** An owner or admin connects Asana in Settings. On Contractors, a milestone is
@@ -321,7 +323,8 @@ public beta, on Arc testnet and Arc mainnet. Release notes:
   company.
 - HubSpot is read-only, polled every 15 minutes, and its app is not yet verified by HubSpot.
 
-[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.3...HEAD
+[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.4...HEAD
+[0.1.0-beta.4]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.4
 [0.1.0-beta.3]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.3
 [0.1.0-beta.2]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.2
 [0.1.0-beta.1]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.1
