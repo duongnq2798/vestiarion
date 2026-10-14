@@ -1269,32 +1269,41 @@ payable the agent decides.
   `scope` all deals or those in `commission_plan_deals`, `hold_days`, `reference`, the `beneficiary_member` who is this
   partner, `started_at`, `ended_at`, `replaces`), `commission_lines` (accruals, `amount > 0`, and adjustments, `amount <
   0`) and `commission_payouts` (one per payable a review made, `invoice_id` unique, with its `CS-` statement number) are
-  tenant tables with row level security as 0108 and every foreign key composite with `org_id`. The tenant role reads and
-  inserts them, and updates only a plan's `ended_at`/`ended_by` and a line's `payout_id` (column grants);
+  tenant tables with row level security as 0108 and every foreign key composite with `org_id`. The tenant role only
+  reads them: every write goes through the four functions below, definers for that reason, each refusing another
+  workspace than the request's token (`commission_other_workspace`) and filtering every read by the workspace itself.
   `commission_plans_guard` keeps a version's terms and ends it once, at the moment it is ended, and
   `commission_lines_guard` keeps a line's terms and lets `payout_id` move only from none, or from a payout whose payable
-  is `rejected`, into a payout of the same partner and currency once the line is due. A partial unique index keeps one
-  version in force per partner.
-- **Functions** (invoker rights, for the tenant role). `set_commission_plan` takes a lock per partner
+  is `rejected`, into a payout of the same partner and currency whose payable is `pending`, once the line is due. A line's
+  receivable, deal, allocation row and transfer are `on delete set null`, so paid history outlives a deleted customer,
+  deal or invoice (sample data removed, say). A partial unique index keeps one version in force per partner.
+- **Functions.** `set_commission_plan` takes a lock per partner
   (`pg_advisory_xact_lock` on the workspace and partner), refuses a client, a change from a version no longer in force
-  (`commission_plan_changed`) and the partner's own member (`commission_beneficiary`), ends the version in force and
-  starts the next at the same instant; `end_commission_plan` ends one. `record_commissions` inserts every accrual not
-  recorded yet, on `payment` rows of `receivable_allocations` (and `fee` rows under the gross basis) still in force and
-  on whole matches (`incoming_transfers.invoice_id`), for receivables with a `deal_id`, under the version in force when
-  the money was applied, at `floor(amount × rate_bps × 100) / 10^6`; then an adjustment of exactly minus each accrual whose
-  row was reversed or whose whole match was released, due with the accrual while it is in no live payout, else at once.
-  Partial unique indexes (one accrual per partner and allocation row, one per partner and whole-matched transfer, one
-  adjustment per accrual) and `on conflict do nothing` make every call idempotent, and it answers only the rows it
-  inserted. `create_commission_payout`, under the same lock, takes exactly the open lines due that the person reviewed
+  (`commission_plan_changed`), a member who is not one (`commission_member_not_found`) and the partner's own member
+  (`commission_beneficiary`), ends the version in force and starts the next at the same instant; `end_commission_plan`
+  ends one. `record_commissions` inserts every accrual not recorded yet, on `payment` rows of `receivable_allocations`
+  (and `fee` rows under the gross basis) still in force and on whole matches (`incoming_transfers.invoice_id`, once the
+  receivable is `received`), for receivables with a `deal_id`, under the version in force when the money arrived on Arc
+  (the transfer's `received_at`; a fee's, the latest payment in force beside it), at `floor(amount × rate_bps × 100) /
+  10^6`; then an adjustment of exactly minus each accrual whose row was reversed or whose transfer no longer names its
+  invoice, due with the accrual while it is in no live payout, else at once. Partial unique indexes (one accrual per
+  partner and allocation row, one per partner, transfer, invoice and `occurrence` for whole matches, one adjustment per
+  accrual) and `on conflict do nothing` make every call idempotent; it answers only the rows it inserted, at most 300
+  per insert so an answer stays under `max_rows`, and `recordCommissions` calls again while one has 300 or more. `create_commission_payout`, under the same lock, takes exactly the open lines due that the person reviewed
   (`commission_changed` otherwise), refuses a net of zero or less (`commission_nothing_due`) and the partner's member,
   and inserts the payable (the partner, the net, due now, its statement number as `po_reference`, goods received,
   `created_by` the reviewer), the payout and the lines' link in one transaction.
-- **The partner never approves their own payout.** `commission_beneficiary_approval(p_org_id, p_invoice_id,
-  p_user_id)` answers whether a plan of the payout's partner ever named this person. 0118 redefines
-  `claim_invoice_decision` as 0077's with that refusal (`beneficiary_approval`), sole approver or not, and
-  `payment_approvals_not_beneficiary` refuses their approval row; a later redefinition of the claim keeps it.
-  `approveAndPay` asks first (`paysOwnCommission`, `src/lib/commissions/beneficiary.ts`) and refuses before any claim or
-  first approval; an unreadable answer is no there, since the database refuses either way.
+- **The partner never approves their own payout.** `commission_partner_members(p_org_id, p_invoice_id)` names every
+  member a plan of the payout's partner ever named. 0118 redefines `claim_invoice_decision` as 0077's with three
+  changes, each a no-op for a payable that pays no commission: such a member's approval is refused
+  (`beneficiary_approval`), sole approver or not; their open approval is not another person's; and whoever created the
+  payable may approve it when everyone else who may approve payments is such a partner (`commission_sole_approver`), so
+  an owner and a partner-approver are never stuck. `payment_approvals_not_beneficiary` refuses their approval row,
+  inserted or updated; a later redefinition of the claim keeps all of it. `approveAndPay` reads the partners first
+  (`commissionPartnersOf`, `src/lib/commissions/beneficiary.ts`), refuses one before any claim or first approval, leaves
+  them out of `approvers_besides` for the sole-approver question, the two-approvals count and `mayGiveApproval`
+  (`notIndependent`), and drops their standing approvals; an unreadable answer is none there, since the database
+  refuses either way.
 - **Recording** (`src/lib/commissions/record.ts`). `recordCommissions` checks the signing key, calls
   `record_commissions` and signs each row it was answered as `commission_accrued` or `commission_adjusted` (domain `ap`,
   actor `agent`, the receivable as `receivableId` so no reader takes it for a decision on it). The cycle calls it in its
@@ -1302,9 +1311,11 @@ payable the agent decides.
   `reverseAppliedPayment` call it right after, best effort.
 - **Model and writes** (`src/lib/commissions/`). `model.ts` is pure and browser-safe: the plan form, the rate in basis
   points, `commissionMicros` (the SQL's rounding, in `BigInt`), the formula in words and `reviewCommissions` (per partner
-  and currency: due now, held, in payables, carried forward). `read.ts` reads the page, `write.ts` sets and ends plans
-  and creates the payable, signing `commission_plan_set`, `commission_plan_ended`, then the payable's `create_invoice`
-  (`via: "commission"`) and `commission_payable_created`.
+  and currency: due now, held, in payables, carried forward; a line in a payout not read is never due). `read.ts` reads
+  every payout (its payable's status embedded) and only the open lines, a page of 1,000 at a time (`everyPage`), and by
+  id at most 100 ids to a request (`byIds`). `write.ts` sets and ends plans and creates the payable, signing
+  `commission_plan_set`, `commission_plan_ended`, then the payable's `create_invoice` (`via: "commission"`) and
+  `commission_payable_created`, with the totals the database answered.
 - **Commands.** `commission.set_plan`, `commission.end_plan` and `commission.create_payable` need `records.write`, from
   the console only (`src/lib/commands/commissions.ts`, `src/app/actions/commissions.ts`); a payable made starts the
   agent's next look, as an invoice added does.

@@ -40,9 +40,15 @@ Each decision names what it costs if it turns out wrong.
 - `commission_payouts`: one row per payable created from a review: the partner, the payable (`invoice_id`, unique), the
   currency, the amount, how many lines, a statement number (`CS-` and 8 characters), who created it.
 - Every foreign key is composite with `org_id`, as since 0019. Row-level security as 0108: the permissive and the
-  restrictive `tenant_isolation` policies. The tenant role reads and inserts every table; it updates only a plan's
-  `ended_at` and `ended_by` and a line's `payout_id` (column grants), and the guards below hold the rest. Nothing is
-  deleted but with its workspace, its partner or its invoice.
+  restrictive `tenant_isolation` policies. The tenant role only reads the four tables: every write goes through the
+  four functions (`set_commission_plan`, `end_commission_plan`, `record_commissions`, `create_commission_payout`), which
+  are definer functions for that reason, each refusing another workspace than the request's
+  (`commission_other_workspace`) and filtering every read by the workspace itself. So no request writes a back-dated
+  plan, a client as a partner, an accrual no payment earned or a payout naming another payable. The guards below hold
+  the rest whoever writes: a plan's terms and a line's terms never change.
+- A line keeps its history: what it was earned on (the receivable, its deal, the allocation row, the transfer) is
+  `on delete set null`, so a customer, a deal or an invoice deleted later (removing sample data, say) leaves the line,
+  with its figures and its payout, in place. A line goes only with its partner, its plan or its workspace.
 - Additive and re-runnable, as every migration: `if not exists`, `create or replace`, policies and triggers dropped
   first, `notify pgrst`.
 - Cost if wrong: a later migration adds a column or a kind; the history stays.
@@ -58,7 +64,9 @@ Each decision names what it costs if it turns out wrong.
   refused (`commission_plan_changed`). Ending a plan (`end_commission_plan`) sets `ended_at`.
 - A version is never edited: `commission_plans_guard` refuses any change but ending it once, and a foreign key's own
   `set null` when a person's account is deleted.
-- A plan covers money applied from its start: never money applied before it was set.
+- The member named as the partner must be a member of the workspace (`commission_member_not_found`).
+- A plan covers money that arrived on Arc from its start: never money that arrived before it was set, however late it
+  is applied, or applied again.
 - Cost if wrong: a business wanting a back-dated plan sets it and records the earlier commissions as a payable by hand.
 
 **C3. What earns a commission: money confirmed on Arc and applied to a receivable of a covered deal.**
@@ -70,11 +78,15 @@ Each decision names what it costs if it turns out wrong.
   2. a `fee` row (allocations L7), under the gross basis only (C4);
   3. a whole match (allocations L3): a transfer matched to the receivable in full, which has no allocation row; its base
      is the transfer's amount, and its time is the transfer's arrival.
-- The plan version that counts is the one in force when the money was applied (the row's `created_at`, the whole
-  match's `received_at`). A row already reversed when the commissions are first recorded earns nothing and needs no
-  adjustment.
+- The plan version that counts is the one in force when the money arrived on Arc: a payment row's own transfer's
+  `received_at`, a fee row's the latest payment in force beside it, a whole match's `received_at`. So a payment received
+  before the plan, applied, reversed and applied again, earns nothing. A row already reversed when the commissions are
+  first recorded earns nothing and needs no adjustment.
+- A whole match earns once the receivable is settled by it (`received`): the cycle names the receivable on the
+  transfer first and settles it next, releasing the claim if it cannot, so a claim not settled earns nothing. A match
+  released and adjusted, then made again, is its next `occurrence` and earns again.
 - Nothing else earns a commission: a receivable marked received by a person with no payment on Arc, a receivable that
-  is not from a deal, a bank statement's money-in line (allocations L2), or money applied before the plan.
+  is not from a deal, a bank statement's money-in line (allocations L2), or money that arrived before the plan.
 - Cost if wrong: a business that collects outside Arc pays those commissions by hand.
 
 **C4. The formula, shown on every line.**
@@ -91,11 +103,14 @@ Each decision names what it costs if it turns out wrong.
 - Cost if wrong: one line of SQL and one of TypeScript, with the tests that hold them to each other.
 
 **C5. Recording is idempotent, in the database.**
-- `record_commissions(p_org_id)` (security invoker, for the tenant role) inserts every accrual and adjustment not
-  recorded yet, and answers the rows it inserted. A partial unique index allows one accrual per partner and allocation
-  row, one per partner and whole-matched transfer, and one adjustment per accrual, and the inserts say `on conflict do
-  nothing`: replaying the same allocation event, or two callers at once, never accrues twice, and each inserted row is
-  answered to one caller only.
+- `record_commissions(p_org_id)` inserts every accrual and adjustment not recorded yet, and answers the rows it
+  inserted. Partial unique indexes allow one accrual per partner and allocation row, one per partner, whole-matched
+  transfer, invoice and occurrence, and one adjustment per accrual, and the inserts say `on conflict do nothing`:
+  replaying the same allocation event, or two callers at once, never accrues twice, and each inserted row is answered to
+  one caller only.
+- Each of its three inserts takes at most 300 rows, oldest first, so an answer stays under PostgREST's 1,000 rows
+  (`max_rows`); the app calls again while an answer has 300 or more, up to 10 times, and the next recording takes the
+  rest.
 - It is called by the agent's cycle in its receipts stage, after money in is recorded and matched, in every mode, and
   right after a person applies or reverses a payment (allocations L8, L10), so the review shows it at once. Both are
   best effort: a failure is a log line, and the next call records what was missed.
@@ -141,13 +156,17 @@ Each decision names what it costs if it turns out wrong.
   partner's commissions per currency, in three parts:
   - **Due now**: accruals past their hold window and adjustments, not in a payable, each with its formula;
   - **Held**: accruals still in their hold window, each with the day it falls due;
-  - **In payables**: what went into each payable, by statement number, with the payable's status.
+  - **In payables**: each payable made, by statement number, with how many lines it pays and its status.
+- The page reads every payout and only the open lines (in no payout, or in one whose payable was rejected), a page of
+  1,000 at a time as PostgREST answers, and reads by id at most 100 ids to a request. A line in a payout the page did not
+  read is never offered as due, so what Create payable names is what `create_commission_payout` counts.
 - When what is due now adds up to more than zero, **Create payable** creates one payable for it. When it adds up to zero
   or less, the page says what is carried forward, and nothing can be created.
-- `create_commission_payout` (security invoker) does it in one transaction, under the same lock per partner: it takes
+- `create_commission_payout` does it in one transaction, under the same lock per partner: it takes
   exactly the lines the person saw, refuses when they changed since the page was read (`commission_changed`), when
   they add up to nothing (`commission_nothing_due`) or when the person is the partner (C11), inserts the payable, the
-  payout row and the lines' link, and answers the payable's id. Two people pressing at once create one payable.
+  payout row and the lines' link, and answers the payable's id with how many accruals and adjustments it pays and what
+  each adds up to. Two people pressing at once create one payable. A payable may pay up to 10,000 lines.
 - The payable: the partner as counterparty, the net amount and currency, the memo "Commissions on money received: N
   commissions and M adjustments under <reference>", the statement number as its purchase order (unique per payout, so
   two payouts of the same amount are never taken for a duplicate bill), goods received (the review is the receipt of
@@ -156,7 +175,8 @@ Each decision names what it costs if it turns out wrong.
   is what the agent pays, so every guardrail holds whatever wrote the lines.
 - A payable rejected in Approvals gives its lines back to the review (`commission_lines_guard` lets a line move from a
   payout whose payable is rejected to a new one, and nowhere else). Paid, it keeps them.
-- `commission_lines_guard` keeps every term of a line; only `payout_id` changes, from none, or from a rejected payable.
+- `commission_lines_guard` keeps every term of a line; only `payout_id` changes, from none, or from a rejected payable,
+  into a payout of the same partner and currency whose payable is still `pending`, once the line is due.
 - Cost if wrong: a partner paid monthly reviews monthly; a business wanting one payout per deal reviews per deal later.
 
 **C11. The partner never approves their own payout.**
@@ -164,11 +184,19 @@ Each decision names what it costs if it turns out wrong.
   - cannot approve the payout: `approveAndPay` refuses before anything is claimed or recorded
     (`beneficiary_approval`: "This payable pays your own commission, so someone else must approve it."), for one
     approval and for either of two approvals; and the database refuses it too: `claim_invoice_decision` (redefined in
-    0118, otherwise 0077's) refuses an approval of a payout by any member a plan of its partner ever named, and
-    `payment_approvals_not_beneficiary` refuses their approval row. Being the workspace's sole approver does not lift
-    it;
+    0118, otherwise 0077's) refuses an approval of a payout by any member a plan of its partner ever named
+    (`commission_partner_members`), and `payment_approvals_not_beneficiary` refuses their approval row, inserted or
+    changed. Being the workspace's sole approver does not lift it;
   - cannot create their own payable from the review, nor set, change or end their own plan.
 - Whoever created the payable is already refused its approval unless they are the sole approver (sole approver R1).
+  Since the partner never may, they count as no one who may approve it: whoever created it is its only approver when
+  everyone else who may approve payments is a partner it pays (`commission_sole_approver`, and the same count in
+  `approveAndPay`). So an owner and a partner who is an approver are never stuck: the owner approves the payout they
+  created.
+- Above the two-approvals figure, the partners are not counted among those who may give the two (`approvers_besides`
+  leaves them out, in `approveAndPay` and in `mayGiveApproval`): with fewer than two others it is refused at once as
+  needing a second approver (two approvals T5), rather than taking a first approval no one could complete. An open
+  approval a partner gave before a plan named them never counts, in the claim or in `approveAndPay`.
 - The agent may still pay it on its own, within every guardrail, since the agent is nobody's partner.
 - Cost if wrong: a refusal a business must route around by naming another approver, which is the point.
 
@@ -210,8 +238,10 @@ Each decision names what it costs if it turns out wrong.
   its lines back, plan versions fixed and ended once, and the partner refused in the claim (sole approver too), in
   `payment_approvals` and on their own plan.
 - `tests/commissions-flow.test.ts`: the whole path on PGlite, then the payable the database wrote paid by the AP stage.
-- `tests/commissions-model.test.ts`, `tests/commissions-write.test.ts`, `tests/commissions-shots.test.tsx`, and the
-  partner's refusal in `tests/approvals.test.ts`.
+- `tests/commissions-model.test.ts`, `tests/commissions-write.test.ts`, `tests/commissions-read.test.ts` (past 1,000
+  rows), `tests/commissions-shots.test.tsx`, and the partner's refusal, the owner beside a partner-approver and two
+  approvals in `tests/approvals.test.ts`. The migration tests also cover the money's arrival time, a claim not settled
+  yet, a re-made whole match, 300 rows per call, direct writes refused and paid history kept past a deletion.
 
 ## Not in this change
 
