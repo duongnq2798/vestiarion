@@ -16,6 +16,7 @@ import { networkOf, networkProfile, type Network } from "./network";
 import { chainById, homeChain } from "./payee-chains";
 import { intentFacts, recordingEntry, RECORDING_ACTIONS, type ReceiptFacts, type ReceiptIntent } from "./receipts/facts";
 import type { OnChainCheck } from "./receipts/onchain";
+import { FAILED_STATES, MAY_HAVE_BEEN_ACCEPTED } from "./circle/settlement";
 import { recordsTransaction, type EntryCheck, type PublicLedgerRow } from "./receipts/verify";
 
 /** How a fact is known: five ways of knowing, and two outcomes of a check we make (E3). */
@@ -160,8 +161,18 @@ export interface EvidenceScreening {
   created_at: string;
 }
 
-/** The record's payment intent, as the receipt reads it, and its provider. */
-export type EvidencePayment = ReceiptIntent & { provider: string };
+/**
+ * The record's payment intent, as the receipt reads it, and its provider; with what tells a payment that did not go
+ * through apart (payment exceptions E6): Circle's id, Circle's state and reason, and Vestiarion's own error. A row read
+ * without them is told as before.
+ */
+export type EvidencePayment = ReceiptIntent & {
+  provider: string;
+  provider_tx_id?: string | null;
+  provider_state?: string | null;
+  failure_reason?: string | null;
+  last_error?: string | null;
+};
 
 /** The record's receipt row (payment receipts P3); the link itself is never stored, only its hash. */
 export interface EvidenceReceipt {
@@ -362,8 +373,28 @@ function isAgentDecision(entry: EvidenceEntry): boolean {
 type PaymentView =
   | { state: "chain"; facts: ReceiptFacts; recording: EvidenceEntry | null }
   | { state: "recorded"; txHash: string; recording: EvidenceEntry | null }
-  | { state: "simulated" | "in_flight" | "failed" | "no_record" | "unpaid" }
+  | { state: "simulated" | "in_flight" | "failed" | "no_record" | "unpaid" | "unknown" | "gateway_failed" }
+  | { state: "ended"; end: "failed" | "not_sent"; why: string | null }
   | { state: "unready"; reason: string };
+
+/**
+ * What a `failed` intent is, as the settlement track tells it (settlement lifecycle L3, payment exceptions E6): a send
+ * Circle never answered is of unknown outcome, a transfer Circle took whose last read failed is still in flight,
+ * Gateway's failure may still be minted, and only Circle's end, or a send Circle never took, is an end. A row read
+ * without these columns is a failure, as it always was.
+ */
+function failedView(intent: EvidencePayment): PaymentView {
+  if (intent.provider_tx_id === undefined) return { state: "failed" };
+  if (!intent.provider_tx_id) {
+    if (intent.last_error?.includes(MAY_HAVE_BEEN_ACCEPTED)) return { state: "unknown" };
+    return { state: "ended", end: "not_sent", why: intent.last_error?.trim().replace(/\.$/, "") || null };
+  }
+  if (intent.provider_state === "GATEWAY_FAILED") return { state: "gateway_failed" };
+  if (intent.provider_state && FAILED_STATES.includes(intent.provider_state)) {
+    return { state: "ended", end: "failed", why: [intent.provider_state, intent.failure_reason].filter(Boolean).join(": ") || null };
+  }
+  return { state: "in_flight" };
+}
 
 /**
  * The payment on chain, when there is one to read: a confirmed live intent's transaction (as its receipt reads it), or a
@@ -411,7 +442,7 @@ function paymentView(input: Pick<EvidenceInput, "subject" | "payment" | "network
   if (onChain) return { state: "chain", facts: onChain, recording: recordingEntry(ref, own, onChain.txHash, onChain.sourceTxHash ?? null) };
   const intent = input.payment;
   if (intent) {
-    if (intent.status === "failed") return { state: "failed" };
+    if (intent.status === "failed") return failedView(intent);
     if (intent.status !== "confirmed") return { state: "in_flight" };
     if (intent.provider !== "circle" || intent.provider_mode !== "live") return { state: "simulated" };
     const stated = intentFacts(intent);
@@ -860,6 +891,11 @@ function paymentStep(ctx: Context, onChain: OnChainCheck | null): EvidenceStep {
   const title = "The payment";
   const view = ctx.payment;
   const live = `A live workspace pays on ${ctx.networkLabel}.`;
+  // Where a person decides what comes next: Approvals for a payable, Contractors for a milestone. A payable the agent
+  // is paying (`matched`), or a verified milestone, is the agent's cycle's to look at again (settlement lifecycle L10).
+  const where = ctx.key === "invoiceId" ? "Approvals" : "Contractors";
+  const status = ctx.input.subject.kind === "invoice" ? ctx.input.subject.invoice.status : ctx.input.subject.milestone.status;
+  const cycleComesBack = status === (ctx.key === "invoiceId" ? "matched" : "verified");
   switch (view.state) {
     case "chain": {
       const { facts } = view;
@@ -905,7 +941,33 @@ function paymentStep(ctx: Context, onChain: OnChainCheck | null): EvidenceStep {
     case "in_flight":
       return step("payment", title, [{ kind: "missing", text: "Sent, not confirmed yet.", fill: "The agent confirms it with Circle, usually within a minute.", seqs: [] }]);
     case "failed":
-      return step("payment", title, [{ kind: "missing", text: "The transfer failed.", fill: "Approvals shows what to do next.", seqs: [], warn: true }]);
+      return step("payment", title, [{ kind: "missing", text: "The transfer failed.", fill: `${where} shows what to do next.`, seqs: [], warn: true }]);
+    case "ended":
+      return step("payment", title, [
+        view.end === "failed"
+          ? { kind: "missing", text: `The transfer failed: Circle ended it${view.why ? ` (${view.why})` : ""}. The payee was not paid.`, fill: `${where} shows what to do next.`, seqs: [], warn: true }
+          : { kind: "missing", text: `Not sent: it stopped before Circle took the transfer${view.why ? ` (${view.why})` : ""}. The payee was not paid.`, fill: `${where} shows what to do next.`, seqs: [], warn: true },
+      ]);
+    case "unknown":
+      // Never a failure: Circle may hold the transfer, and it is looked for before anything is sent again (L3, R4).
+      return step("payment", title, [
+        {
+          kind: "missing",
+          text: "Outcome unknown: Circle did not answer when it was sent, so it may have taken the transfer.",
+          fill: `${cycleComesBack ? "The agent's next cycle" : ctx.key === "invoiceId" ? "Approve and pay in Approvals" : "Pay now on Contractors"} looks for it on Circle first and sends nothing twice.`,
+          seqs: [],
+        },
+      ]);
+    case "gateway_failed":
+      return step("payment", title, [
+        {
+          kind: "missing",
+          text: "Gateway reported it failed, but it may still be minted on the payee's chain, so nothing is sent again.",
+          fill: `Check with Circle whether it was minted; ${where} shows what to do next.`,
+          seqs: [],
+          warn: true,
+        },
+      ]);
     case "unready":
       return step("payment", title, [{ kind: "missing", text: view.reason || "This payment has no transaction on chain to show.", seqs: [] }]);
     case "no_record":

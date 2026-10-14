@@ -5,6 +5,7 @@ import { toast } from "@/components/ui/Toaster";
 import type { ActionResult } from "@/components/ui/useActionForm";
 import { Money } from "@/components/vx/Primitives";
 import { SIMULATED_NETWORK, type PaymentReceipt } from "@/lib/payment-receipt";
+import { runningLine, type PayAction } from "@/lib/payment-exceptions";
 
 /**
  * A person's payment, told where they made it in steps that never run ahead of the money (payment confirmation):
@@ -29,11 +30,14 @@ const DECIDED: Record<PaymentReceipt["decidedBy"], string> = {
 /** Long enough to read and to reach the transaction; hovering keeps it, and its close button ends it. */
 const SHOWN_MS: Record<PaymentReceipt["state"], number> = { confirmed: 10_000, confirming: 15_000 };
 
-/** While the action runs: approved, and being sent. It stays until the payment's confirmation replaces it, or nothing was paid. */
-export function paymentSendingToast(id: string, sending: Sending): void {
+/**
+ * While the action runs: approved, and being sent; or, where an earlier transfer is checked or looked for first, that
+ * (payment exceptions E3), never "sending". It stays until the payment's confirmation replaces it, or nothing was paid.
+ */
+export function paymentSendingToast(id: string, sending: Sending, action: PayAction = "send"): void {
   toast.loading("Payment approved", {
     id,
-    description: <PaymentToastBody amount={sending.amount} currency={sending.currency} toLine={`Sending to ${sending.payee}`} decidedBy={sending.decidedBy} />,
+    description: <PaymentToastBody amount={sending.amount} currency={sending.currency} toLine={runningLine(action, sending.payee)} decidedBy={sending.decidedBy} />,
   });
 }
 

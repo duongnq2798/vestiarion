@@ -1,4 +1,5 @@
 import { networkProfile, type Network } from "../network";
+import { runbookHref } from "../payment-exceptions";
 import { escapeHtml } from "./html";
 import { actionEmailHtml } from "./layout";
 
@@ -40,6 +41,8 @@ export function paymentStuckEmail(input: {
       : `${input.payments.length} payments have not confirmed`;
   const after = "Vestiarion sends nothing again while a payment may still settle, and checks it again at the next cycle.";
   const note = `You get this email because you can approve payments in ${input.orgName} and have email notices on.`;
+  // The runbook's section for the one payment's state, or its page for several (payment exceptions E6).
+  const runbook = `${input.origin}${input.payments.length === 1 ? runbookHref(first.sendAnswered ? "stuck" : "unknown") : runbookHref()}`;
 
   const html = actionEmailHtml({
     title: subject,
@@ -54,6 +57,7 @@ export function paymentStuckEmail(input: {
         ...(payment.txUrl ? [`<a href="${escapeHtml(payment.txUrl)}" style="color:#18211c;">View the transaction</a>`] : []),
       ]),
       escapeHtml(after),
+      `<a href="${escapeHtml(runbook)}" style="color:#18211c;">What to do when a payment does not settle</a>`,
     ],
     button: { label: "See it in Vestiarion", link: input.link },
     note,
@@ -63,7 +67,7 @@ export function paymentStuckEmail(input: {
   const blocks = input.payments.map((payment) =>
     [lead(payment), circleLine(payment), `See it in Vestiarion: ${payment.link}`, ...(payment.txUrl ? [`View the transaction: ${payment.txUrl}`] : [])].join("\n")
   );
-  const text = [blocks.join("\n\n"), "", after, "", note].join("\n");
+  const text = [blocks.join("\n\n"), "", after, `What to do: ${runbook}`, "", note].join("\n");
   return { subject, html, text };
 }
 

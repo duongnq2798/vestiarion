@@ -36,6 +36,17 @@ describe("the email about payments that have not confirmed", () => {
     expect(one.text).toContain(`View the transaction: ${payment.txUrl}`);
   });
 
+  it("links the runbook for a payment slow to confirm, or one Circle never answered (payment exceptions E6)", () => {
+    const one = email([payment]);
+    expect(one.text).toContain("What to do: https://www.vestiarion.xyz/docs/guides/payment-exceptions#slow-to-confirm");
+    expect(one.html).toContain('href="https://www.vestiarion.xyz/docs/guides/payment-exceptions#slow-to-confirm"');
+    expect(email([{ ...payment, sendAnswered: false, circleAsked: false, providerState: null, txUrl: null }]).text).toContain(
+      "What to do: https://www.vestiarion.xyz/docs/guides/payment-exceptions#outcome-unknown"
+    );
+    // Several: the runbook's page, whichever states they are in.
+    expect(email([payment, { ...payment, sendAnswered: false }]).text).toMatch(/What to do: https:\/\/www\.vestiarion\.xyz\/docs\/guides\/payment-exceptions$/m);
+  });
+
   it("lists several payments in one message", () => {
     const several = email([payment, { ...payment, payeeName: "Puka Hotel", amount: "1.00", providerState: "QUEUED", link: "https://www.vestiarion.xyz/o/acme/contractors" }]);
     expect(several.subject).toBe("2 payments have not confirmed");

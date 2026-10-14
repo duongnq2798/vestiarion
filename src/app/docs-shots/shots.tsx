@@ -126,6 +126,7 @@ export interface DocsShot {
     | "go-live"
     | "first-payment"
     | "where-a-payment-is"
+    | "payment-exceptions"
     | "import-bills"
     | "try-a-rule"
     | "pay-a-contractor"
@@ -1053,6 +1054,24 @@ const SHOT_FLIGHT: FlightRow[] = [
   ]),
 ];
 
+/**
+ * A payment slow to confirm (payment exceptions E6): sent 38 minutes ago, Circle showed it stuck when the transfer watch
+ * asked, and the agent's cycle comes back to its bill. Its track ends with the What to do block, with its Circle id.
+ */
+const SHOT_SLOW = reduceSettlement({
+  facts: [
+    { kind: "proposed", at: "2026-10-11T10:02:30.000Z", by: "agent", seq: 1204 },
+    { kind: "authorized", at: "2026-10-11T10:02:30.000Z", by: "code", seq: 1204 },
+    { kind: "submitted", at: shotAt(2), attempt: 1 },
+    { kind: "pending", at: shotAt(2), attempt: 1, state: "SENT", by: "circle" },
+    { kind: "pending", at: shotAt(20), attempt: 1, state: "STUCK", by: "watch" },
+  ],
+  books: { paid: false, txRef: null, at: null, followUp: "cycle" },
+  crossChain: false,
+  simulated: false,
+  circleId: "7c1f2a9e-5b3d-4e8a-9f60-2d4b8c1e0a37",
+});
+
 export const DOCS_SHOTS = {
   "try-it-workspace": {
     guide: "try-it",
@@ -1760,6 +1779,18 @@ export const DOCS_SHOTS = {
     guide: "where-a-payment-is",
     page: "treasury",
     render: () => <PaymentsInFlight payments={SHOT_FLIGHT} now={SHOT_NOW} stuckAfterMinutes={15} orgSlug={SLUG} network="arc-testnet" />,
+  },
+  "payment-exceptions-what-to-do": {
+    guide: "payment-exceptions",
+    page: "invoices",
+    render: function WhatToDoShot() {
+      // Where the payment is, opened on a payment slow to confirm: its stages, then what to do about it (payment exceptions E6).
+      return (
+        <Card className="overflow-hidden">
+          <SettlementTrack id="docs-slow" settlement={SHOT_SLOW} orgSlug={SLUG} network="arc-testnet" now={SHOT_NOW} defaultOpen />
+        </Card>
+      );
+    },
   },
   "xero-settings": {
     guide: "xero",

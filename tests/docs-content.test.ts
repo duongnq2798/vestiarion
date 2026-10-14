@@ -170,6 +170,7 @@ describe("the docs navigation", () => {
       ["guides/go-live", "Go live"],
       ["guides/first-payment", "Your first payment"],
       ["guides/where-a-payment-is", "Know where a payment is"],
+      ["guides/payment-exceptions", "When a payment does not settle"],
       ["guides/import-bills", "Import your bill list"],
       ["guides/pay-a-contractor", "Pay a contractor for delivered work"],
       ["guides/email-invoices", "Add invoices by email"],
@@ -241,7 +242,8 @@ describe("the docs navigation", () => {
     expect(neighbours("guides/shadow-mode").next?.slug).toBe("guides/go-live");
     expect(neighbours("guides/go-live").next?.slug).toBe("guides/first-payment");
     expect(neighbours("guides/first-payment").next?.slug).toBe("guides/where-a-payment-is");
-    expect(neighbours("guides/where-a-payment-is").next?.slug).toBe("guides/import-bills");
+    expect(neighbours("guides/where-a-payment-is").next?.slug).toBe("guides/payment-exceptions");
+    expect(neighbours("guides/payment-exceptions").next?.slug).toBe("guides/import-bills");
     expect(neighbours("guides/import-bills").next?.slug).toBe("guides/pay-a-contractor");
     expect(neighbours("guides/email-invoices").next?.slug).toBe("guides/payment-plan");
     expect(neighbours("guides/payment-plan").next?.slug).toBe("guides/report");

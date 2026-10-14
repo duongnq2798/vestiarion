@@ -8,7 +8,9 @@ import {
   batchIdempotencyKey,
   executePayment,
   executePaymentBatch,
+  NO_EARLIER_SEND,
   paymentIdempotencyKey,
+  settleUnknownSend,
   type PaymentBatchStore,
   type PaymentIntent,
   type PaymentIntentStore,
@@ -123,6 +125,11 @@ class Store implements PaymentIntentStore, PaymentBatchStore {
   async recordError(key: string, error: string) {
     return this.put({ ...this.byKey(key), status: "failed", lastError: error });
   }
+  async recordNotSent(key: string, seen: { status: string; updatedAt: string }) {
+    const row = this.byKey(key);
+    if (row.status !== seen.status || row.updatedAt !== seen.updatedAt || row.providerTxId) return null;
+    return this.put({ ...row, status: "failed", lastError: NO_EARLIER_SEND });
+  }
   async beginRetry() {
     return null;
   }
@@ -144,6 +151,10 @@ class Store implements PaymentIntentStore, PaymentBatchStore {
   }
   async batchMembers(batchKey: string) {
     return [...this.intents.values()].filter((intent) => intent.batchKey === batchKey).map((intent) => ({ ...intent }));
+  }
+  async findBySource(_type: string, sourceId: string) {
+    const found = this.intents.get(sourceId);
+    return found ? { ...found } : null;
   }
 }
 
@@ -315,6 +326,58 @@ describe("a batch whose answer was lost, paid again (R5)", () => {
     store.intents.set(request(1).sourceId, { ...store.byKey(keyOf(1)), status: "pending" });
     await executePayment(request(1), { provider: chain, store });
     expect(store.byKey(keyOf(1)).feeUsd).toBe(0.0045);
+  });
+});
+
+describe("a batch member looked for before Reject, Return or Close (payment exceptions review)", () => {
+  const MAY_HAVE = "Circle did not answer createBatch within 20000 ms; the transfer may or may not have been accepted";
+  /** Two milestones sent in one batch whose answer was lost, `sentAgoMs` ago; `as` rewrites the first member's row. */
+  async function lostBatch(sentAgoMs: number, as: Partial<PaymentIntent> = {}) {
+    const chain = new Chain();
+    chain.batchFails = new Error("no answer");
+    const store = new Store();
+    await executePaymentBatch([request(1), request(2)], { provider: chain, store });
+    const sentAt = new Date(Date.now() - sentAgoMs).toISOString();
+    for (const intent of store.intents.values()) store.intents.set(intent.sourceId, { ...intent, batchSentAt: sentAt, updatedAt: sentAt });
+    store.intents.set(request(1).sourceId, { ...store.byKey(keyOf(1)), ...as });
+    chain.batchFails = null;
+    return { chain, store, batchKey: batchIdempotencyKey([keyOf(1), keyOf(2)]), sentAt };
+  }
+  const settle = (chain: Chain, store: Store) => settleUnknownSend({ type: "milestone", id: request(1).sourceId }, { provider: chain, fromAccountId: "acct-1", store });
+
+  it.each([
+    ["recorded failed with the batch's own error", {}],
+    ["recorded failed with Circle's answer lost", { lastError: MAY_HAVE }],
+    ["left submitting when the send was cut off", { status: "submitting" as const, lastError: null }],
+  ])("is looked for by its batch's key when %s, and nothing concludes while Circle has not listed it", async (_label, as) => {
+    const { chain, store, batchKey, sentAt } = await lostBatch(5 * 60_000, as);
+    expect(await settle(chain, store)).toEqual({ answer: "undecided", retryAt: new Date(Date.parse(sentAt) + BATCH_LOOKUP_GRACE_MS).toISOString() });
+    expect(chain.lookups.map((lookup) => lookup.refId)).toEqual([batchKey]);
+    expect(store.byKey(keyOf(1))).toMatchObject({ batchKey, providerTxId: null });
+    expect(store.byKey(keyOf(1)).lastError).not.toBe(NO_EARLIER_SEND);
+    expect(chain.transfers).toEqual([]);
+  });
+
+  it("is never concluded never sent 15 minutes after its own send while only its memo was looked for: Circle has the batch", async () => {
+    const { chain, store, batchKey } = await lostBatch(BATCH_LOOKUP_GRACE_MS + 60_000, { status: "submitting", lastError: null });
+    chain.found = transferResult({ providerTxId: "circle-found" });
+    expect(await settle(chain, store)).toEqual({ answer: "found" });
+    expect(chain.lookups[0].refId).toBe(batchKey);
+    expect([...store.intents.values()].map((intent) => intent.providerTxId)).toEqual(["circle-found", "circle-found"]);
+  });
+
+  it("says nothing concludes while Circle cannot be asked about the batch", async () => {
+    const { chain, store } = await lostBatch(BATCH_LOOKUP_GRACE_MS + 60_000);
+    chain.found = new Error("Circle did not answer");
+    expect(await settle(chain, store)).toEqual({ answer: "undecided", retryAt: null });
+    expect(store.byKey(keyOf(1)).batchKey).not.toBeNull();
+  });
+
+  it("is never sent once Circle is known never to have had the batch, and leaves it", async () => {
+    const { chain, store } = await lostBatch(BATCH_LOOKUP_GRACE_MS + 60_000);
+    expect(await settle(chain, store)).toEqual({ answer: "not_sent" });
+    expect(store.byKey(keyOf(1))).toMatchObject({ batchKey: null, status: "failed", providerTxId: null });
+    expect(chain.transfers).toEqual([]);
   });
 });
 

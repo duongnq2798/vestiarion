@@ -262,6 +262,41 @@ record; it writes nothing and nothing that moves money imports it (`tests/settle
   the page's organization scope: one that fails hides only these parts. The shared receipt says Reconciled only when its
   own three checks pass, and Confirmed with the reason otherwise (`src/lib/receipts/status.ts`).
 
+**Payments that do not settle** (`src/lib/payment-exceptions.ts`,
+`docs/superpowers/specs/2026-10-14-payment-exceptions-design.md`) are words over the read model and the payment intent,
+and decide nothing:
+- `payActionOf` (a payable's `paymentSent` and `lastAttempt`) and `milestonePayAction` (a held milestone's reason) name
+  what a person's pay action does with an earlier attempt: send, send again after Circle ended it, check a transfer
+  that exists, or look for a send Circle never answered first. For the last two, Approve and pay and Pay now never
+  ask "Pay … now?": the confirmation's title and button, the notice raised while it runs and Slack's confirmation (its
+  title, text and button, the text clipped to Slack's 300 characters) say it checks first;
+- `approveAndPay` and `payHeldMilestone` look for a send Circle never answered (`lookForUnknownSend`) before any other
+  check, as Reject, Return and Close do: found, it is only recorded; not listed yet, or Circle could not be asked, they
+  refuse before any claim (`payment_unknown`, with when to try again); never taken, what follows is a new payment and
+  every check applies, the shadow verdict gate and the funds included. A payout to another chain, which cannot be
+  looked up by its reference (`settleUnknownSend` answers `unlookable`), is asked for again under its key, as before,
+  and Reject and Return say so. `releaseHeldMilestone` takes `retryTerminalFailure`: only a Pay now that ran a new
+  payment's checks sends Circle's terminal failure again; one that only checked a transfer already sent records it and
+  holds the milestone again, as `approveAndPay` does;
+- `transferUnknown` reads a row left `submitting` past its 2-minute claim as an unknown send, as `unknownSend` and the
+  track already did, when the row's `updated_at` was read with it (Approvals, Approve and pay, Reject, Return, Add
+  details, Pay now and Close select it), and a first attempt sent in a batch with no Circle id as one whatever its
+  status or error (`batch_key`, `transfer_attempt`). Reject, Return and Close then look for it first (payment safety R6)
+  rather than refuse it as sent; the cycle's own reads, which do not select these columns, keep their answer.
+  `settleUnknownSend` looks a batch member up by the batch's refId (`resolveLostBatch`), as `executePayment` does, never
+  by the member's memo, so nothing concludes a batch member was never sent while Circle may have the batch. "Never
+  sent" (`NO_EARLIER_SEND`) is written by `recordNotSent`, a compare-and-set on the row's status and `updated_at` as the
+  lookup read them: a request that lost it, because another one concluded first and claimed the payment, answers
+  undecided and sends nothing. With no operating account, a pay action refuses with `no_operating_account`;
+- `paymentException` maps a lifecycle to the runbook's states, slow to confirm (in flight for the network's
+  `stuckAfterMinutes`), outcome unknown, failed or cancelled, not sent, and Gateway's failure, and `whatToDo` gives who
+  acts and the next step by who comes back to the bill (`followUpOf`). The track's **What to do** block, Treasury's
+  **What to do:** line, the transfer watch's email and the guide `content/docs/guides/payment-exceptions.mdx` use the
+  same words, which `tests/payment-exceptions.test.ts` holds the guide to. An end shows only while a person comes back
+  to its bill. `Settlement.circleId` carries the current attempt's Circle id for the trail;
+- the evidence page reads `provider_tx_id`, `provider_state`, `failure_reason` and `last_error`, so its payment step
+  tells an unknown outcome, a failed read and Gateway's failure apart from Circle's end, as the track does.
+
 **Money received applied to invoices** (`src/lib/allocations/`, migration 0103,
 `docs/superpowers/specs/2026-10-12-allocations-design.md`) lets a person apply an incoming payment on Arc to one or more
 open receivables, settle one from several payments, keep an overpayment as the client's credit, record a difference as a

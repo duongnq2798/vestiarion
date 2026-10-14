@@ -9,6 +9,7 @@ import ApprovalCard, {
   OWN_ENTRY_RECORDED,
   OWN_INVOICE_NOTE,
   payConfirmDescription,
+  payConfirmLabel,
   payConfirmTitle,
   SELF_APPROVAL_EXPLAINED,
 } from "@/components/ApprovalCard";
@@ -370,6 +371,54 @@ describe("ApprovalCard", () => {
   it("asks to pay the full amount once the discount's day has passed", () => {
     const lapsed = payable({ amount: 400, discount: { pct: 2, deadline: "2026-10-11T12:00:00+00:00" } });
     expect(payConfirmTitle(lapsed, false, new Date("2026-10-12T00:00:00Z"))).toBe("Pay 400.00 USDC to Northwind Supply now?");
+  });
+
+  it("asks to check a transfer already sent, or to look for an unanswered one first, never to pay now (payment exceptions E3)", () => {
+    expect(payConfirmTitle(payable({ paymentSent: true, lastAttempt: { state: "in_flight" } }), false)).toBe(
+      "Check the payment of 1,250.00 USDC to Northwind Supply already sent?"
+    );
+    expect(payConfirmTitle(payable({ paymentSent: true, lastAttempt: null }), false)).toBe("Check the payment of 1,250.00 USDC to Northwind Supply already sent?");
+    expect(payConfirmTitle(payable({ paymentSent: true, lastAttempt: { state: "failed", reason: "Gateway could not mint it", resend: false } }), false)).toBe(
+      "Check the payment of 1,250.00 USDC to Northwind Supply already sent?"
+    );
+    expect(payConfirmTitle(payable({ paymentSent: true, lastAttempt: { state: "unanswered" } }), false)).toBe(
+      "Look for the earlier payment of 1,250.00 USDC to Northwind Supply first?"
+    );
+    // A payment Circle ended is a new transfer, and says what leaves.
+    expect(payConfirmTitle(payable({ lastAttempt: { state: "failed", reason: "the transfer failed on chain (Circle: FAILED_ON_CHAIN)" } }), false)).toBe(
+      "Pay 1,250.00 USDC to Northwind Supply now?"
+    );
+  });
+
+  it("names the confirm button for what it does: pay now, check it, or look first", () => {
+    expect(payConfirmLabel(payable())).toBe("Pay now");
+    expect(payConfirmLabel(payable({ lastAttempt: { state: "failed", reason: "x" } }))).toBe("Pay now");
+    expect(payConfirmLabel(payable({ paymentSent: true, lastAttempt: { state: "in_flight" } }))).toBe("Check it");
+    expect(payConfirmLabel(payable({ paymentSent: true, lastAttempt: { state: "unanswered" } }))).toBe("Look first");
+  });
+
+  it("says a send cut off mid-way may still be sending, never only that Circle did not answer (payment exceptions review 6)", () => {
+    const words = card({ paymentSent: true, lastAttempt: { state: "unanswered", sending: true } }).replace(/&#x27;/g, "'");
+    expect(words).toContain("Vestiarion started sending this payment and Circle has not answered for over two minutes: it may still be sending, or its answer was lost.");
+    expect(words).not.toContain("Circle did not answer when this payment was sent");
+  });
+
+  it("says a payout to another chain is asked for again under its key, and that Reject and Return wait (payment exceptions review 5)", () => {
+    const words = card({ paymentSent: true, lastAttempt: { state: "unanswered" }, payeeChain: "BASE-SEPOLIA" }).replace(/&#x27;/g, "'");
+    expect(words).toContain(
+      "A payout to another chain cannot be looked up on Circle: Approve and pay asks Circle for it again under the same payment key, which Circle takes only once, so it is never paid twice. Reject and Return wait until Circle has answered."
+    );
+    expect(words).not.toContain("Reject and Return look for it on Circle first");
+    expect(payConfirmDescription({ paymentSent: true, lastAttempt: { state: "unanswered" }, payeeChain: "BASE-SEPOLIA" })).toBe(
+      "Vestiarion asks Circle for the earlier transfer again under the same payment key, which Circle takes only once: it records it if Circle has it, and only otherwise is this the payment. The ledger records who approved it."
+    );
+  });
+
+  it("names, for a failed attempt, what to fix before approving sends a new transfer (payment exceptions E6)", () => {
+    const markup = card({ lastAttempt: { state: "failed", reason: "the operating wallet does not hold enough USDC for the network fee (Circle: INSUFFICIENT_NATIVE_TOKEN)" } });
+    expect(markup.replace(/&#x27;/g, "'")).toContain(
+      "Approving sends a new transfer. Fix what Circle names before approving, such as adding USDC to the operating wallet."
+    );
   });
 
   it("says the transfer starts as soon as you confirm, with no prior attempt to report", () => {

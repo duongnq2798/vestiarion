@@ -75,6 +75,17 @@ describe("Payments in flight", () => {
     expect(words).toContain("Vestiarion looks for it on Circle before anything else is sent, and sends a new transfer only once Circle shows none.");
   });
 
+  it("says what to do next on each payment slow to confirm or of unknown outcome, and nothing on one inside the wait (payment exceptions E6)", () => {
+    expect(words).toContain("What to do: Circle shows it stuck: check it with Circle support. Do not pay it another way.");
+    expect(words).toContain("What to do: Wait, and do not pay it another way: the agent's next cycle looks for it.");
+    expect(words.match(/What to do:/g)).toHaveLength(2);
+  });
+
+  it("links the runbook beside its heading", () => {
+    expect(markup).toContain('href="/docs/guides/payment-exceptions"');
+    expect(markup).toContain('aria-label="Docs: what to do when a payment does not settle"');
+  });
+
   it("lists a confirmed payment the books do not show paid yet, with why", () => {
     expect(words).toContain("Not matching the books");
     expect(words).toContain("Payee d");

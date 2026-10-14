@@ -69,14 +69,21 @@ function world() {
 }
 
 describe("a person's release of a held milestone", () => {
-  it("sends again, on its own, a batch transfer Circle failed", async () => {
+  it("sends again, on its own, a batch transfer Circle failed, when Pay now ran the checks a new transfer needs", async () => {
     const { chain, intents, within, input } = world();
-    const outcome = await within(() => releaseHeldMilestone(input, { provider: chain, operatingAccountId: "acct-1" }));
+    const outcome = await within(() => releaseHeldMilestone(input, { provider: chain, operatingAccountId: "acct-1", retryTerminalFailure: true }));
     expect(outcome.status).toBe("paid");
     expect(chain.transfers).toHaveLength(1);
     expect(chain.transfers[0]).toMatchObject({ toAddress: PAYEE, amount: 0.3 });
     expect(intents.rows[0]).toMatchObject({ transfer_attempt: 2, provider_tx_id: "circle-retry-1" });
     expect(outcome.paymentExecution?.retriedAfter).toMatchObject({ providerTxId: "circle-batch-1", providerState: "FAILED" });
+  });
+
+  it("only records the failure when Pay now checked a transfer already sent, and sends nothing new (payment exceptions review 2)", async () => {
+    const { chain, within, input } = world();
+    const outcome = await within(() => releaseHeldMilestone(input, { provider: chain, operatingAccountId: "acct-1", retryTerminalFailure: false }));
+    expect(outcome.status).toBe("held");
+    expect(chain.transfers).toEqual([]);
   });
 
   it("is not the agent's release, which records the failure and sends nothing", async () => {

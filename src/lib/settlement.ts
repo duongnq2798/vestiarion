@@ -81,6 +81,8 @@ export interface SettlementInput {
    * entry naming the transaction may exist unread: then a missing one is unknown, never a mismatch (L5). True by default.
    */
   recordingsComplete?: boolean;
+  /** Circle's id for the current attempt's transfer, carried for the trail (payment exceptions E7); null or absent with none. */
+  circleId?: string | null;
 }
 
 /** Who or what says a stage was reached. */
@@ -156,6 +158,8 @@ export interface Settlement {
   stepConfirmed: BridgeStep | null;
   /** Who comes back to the bill next, from its books; null promises no one (L5, L10). */
   followUp: FollowUp | null;
+  /** Circle's id for the current attempt's transfer, when the payment intent has one: the trail a person gives Circle. */
+  circleId?: string;
 }
 
 /** Circle's words for a transaction it confirmed. */
@@ -416,6 +420,7 @@ export function reduceSettlement(input: SettlementInput): Settlement {
     crossChain: input.crossChain,
     stepConfirmed: stepConfirmed ? { ...stepConfirmed } : null,
     followUp: input.books?.followUp ?? null,
+    ...(input.circleId ? { circleId: input.circleId } : {}),
   };
 }
 

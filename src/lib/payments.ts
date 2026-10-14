@@ -109,6 +109,12 @@ export interface PaymentIntentStore {
   recordResult(idempotencyKey: string, result: TransferResult): Promise<PaymentIntent>;
   recordError(idempotencyKey: string, error: string): Promise<PaymentIntent>;
   /**
+   * Records that Circle has no transfer for an unknown send (`NO_EARLIER_SEND`), only while the row is still the one the
+   * lookup read: the same status and `updated_at`, and no Circle id. Null when it is not: another request concluded
+   * first and claimed it since, and its send is never written over (payment exceptions review).
+   */
+  recordNotSent(idempotencyKey: string, seen: { status: string; updatedAt: string }): Promise<PaymentIntent | null>;
+  /**
    * Moves the intent to its next attempt, under that attempt's key, when its
    * current attempt is still `intent`'s and Circle ended it in a terminal
    * failure; null when nothing matched (another request moved it first, or
@@ -377,6 +383,20 @@ export class SupabasePaymentIntentStore implements PaymentIntentStore, PaymentBa
     return this.get(idempotencyKey);
   }
 
+  async recordNotSent(idempotencyKey: string, seen: { status: string; updatedAt: string }): Promise<PaymentIntent | null> {
+    const result = await db()
+      .from("payment_intents")
+      .update({ status: "failed", last_error: NO_EARLIER_SEND, updated_at: new Date().toISOString() })
+      .eq("idempotency_key", idempotencyKey)
+      .eq("status", seen.status)
+      .eq("updated_at", seen.updatedAt)
+      .is("provider_tx_id", null)
+      .select("*");
+    if (result.error) throw new Error(result.error.message);
+    const rows = (result.data ?? []) as PaymentIntentRow[];
+    return rows.length > 0 ? fromRow(rows[0]) : null;
+  }
+
   async markSending(idempotencyKey: string, sentWalletId: string | null): Promise<void> {
     const update = await db().from("payment_intents").update({ sent_wallet_id: sentWalletId }).eq("idempotency_key", idempotencyKey);
     if (update.error) throw new Error(update.error.message);
@@ -517,7 +537,7 @@ export const BATCH_LOOKUP_GRACE_MS = 15 * 60_000;
  */
 async function resolveLostBatch(
   intent: PaymentIntent,
-  request: PaymentRequest,
+  request: Pick<PaymentRequest, "fromAccountId">,
   provider: ChainProvider,
   store: PaymentIntentStore,
   now = Date.now()
@@ -701,7 +721,10 @@ async function lookForUnknownSend(
       `Circle has not listed this payment's earlier send yet; it is looked for again from ${utcClock(sentAt + UNKNOWN_SEND_GRACE_MS)} UTC, and sent only if Circle has none.`
     );
   }
-  await store.recordError(intent.idempotencyKey, NO_EARLIER_SEND);
+  // Written only while the row is still the one this lookup read (payment exceptions review): another request that
+  // concluded first may have claimed it since and be sending it now, and that send is never written over.
+  const marked = await store.recordNotSent(intent.idempotencyKey, { status: intent.status, updatedAt: intent.updatedAt });
+  if (!marked) return undecided("Another request is settling this payment's earlier send right now; it is looked for again, and sent only if Circle has none.");
   return NOT_SENT;
 }
 
@@ -713,8 +736,11 @@ export type UnknownSendAnswer =
   | { answer: "found" }
   /** Circle never took it, now recorded: the payment was never sent. */
   | { answer: "not_sent" }
-  /** Not listed yet (`retryAt`: when it can be told), Circle could not be asked, or this route cannot be looked up. */
-  | { answer: "undecided"; retryAt: string | null };
+  /**
+   * Not listed yet (`retryAt`: when it can be told), or Circle could not be asked; `unlookable` when this route cannot be
+   * looked up at all (a payout to another chain), so only sending it again under its own key settles it.
+   */
+  | { answer: "undecided"; retryAt: string | null; unlookable?: true };
 
 /**
  * Looks for a source's send Circle never answered, sending nothing (payment safety R6): what Reject, Return, Add
@@ -728,8 +754,27 @@ export async function settleUnknownSend(
   const store = deps.store ?? new SupabasePaymentIntentStore();
   const now = deps.now ?? Date.now();
   if (!store.findBySource) throw new Error("this payment store cannot find an intent by its source");
-  const intent = await store.findBySource(source.type, source.id);
-  if (!intent || !unknownSend(intent, now)) return { answer: "known" };
+  let intent = await store.findBySource(source.type, source.id);
+  if (!intent) return { answer: "known" };
+  // A first attempt sent in a batch whose answer was lost (batch payouts R5): Circle lists it under the batch's refId,
+  // never its own memo, so it is looked for as `executePayment` looks for it. Found, it is recorded; not listed yet, or
+  // not asked, nothing concludes; never taken, the batch is left, and this payment was never sent on its own either.
+  if (inLostBatch(intent)) {
+    const batchSentAt = Date.parse(intent.batchSentAt ?? "");
+    const resolved = await resolveLostBatch(intent, { fromAccountId: deps.fromAccountId }, deps.provider, store, now);
+    if (resolved?.providerTxId) return { answer: "found" };
+    if (resolved) {
+      const listedBy = resolved.error?.startsWith("Its batch is not on Circle yet") && !Number.isNaN(batchSentAt) ? new Date(batchSentAt + BATCH_LOOKUP_GRACE_MS).toISOString() : null;
+      return { answer: "undecided", retryAt: listedBy };
+    }
+    intent = await store.get(intent.idempotencyKey);
+    if (!unknownSend(intent, now)) return { answer: "not_sent" };
+  }
+  if (!unknownSend(intent, now)) return { answer: "known" };
+  // A payout to another chain is not looked up this way: it is asked for again under its own key, which Circle takes once.
+  if (intent.route === "gateway" || intent.route === "cctp" || paidAcrossChains(intent.destinationChain ?? undefined)) {
+    return { answer: "undecided", retryAt: null, unlookable: true };
+  }
   const looked = await lookForUnknownSend(
     intent,
     { fromAccountId: deps.fromAccountId, memo: paymentMemo(source.type, source.id), destinationChain: intent.destinationChain ?? undefined },

@@ -29,6 +29,7 @@ import { amountToPay } from "@/lib/agent/payment-timing";
 import type { ExceptionFacts } from "@/lib/exceptions";
 import { utcDay, utcMinute } from "@/lib/copy";
 import { chainById, homeChain, networkOfChain, paidAcrossChains } from "@/lib/payee-chains";
+import { CHECK_FIRST_LABEL, checkFirstTitle, checksFirst, payActionOf } from "@/lib/payment-exceptions";
 import { approveFirstDescription, mayApproveNow, onlyApproverOfTwo, SECOND_APPROVAL_PAYS, twoApprovalsLine } from "@/lib/two-approvals";
 import type { VerdictView } from "@/lib/verdict-view";
 
@@ -43,14 +44,17 @@ const giveBack = withSuccessToast(returnInvoiceAction);
  * same `amountToPay` rule `payInvoice` pays by), naming the discount; a
  * sandbox's payment is simulated, and says so. What the operating wallet lacks
  * comes back from the USYC reserve first, and it says about how much (approval
- * cash R5).
+ * cash R5). One whose earlier transfer is only checked, or looked for first, is
+ * never asked as "pay now" (payment exceptions E3).
  */
 export function payConfirmTitle(
   payable: Pick<WaitingPayable, "amount" | "counterpartyName" | "discount"> &
-    Partial<Pick<WaitingPayable, "currency" | "payeeChain" | "bridgeFeeUsdc" | "payoutRoute" | "fromReserve">>,
+    Partial<Pick<WaitingPayable, "currency" | "payeeChain" | "bridgeFeeUsdc" | "payoutRoute" | "fromReserve" | "paymentSent" | "lastAttempt">>,
   sandbox: boolean,
   now: Date = new Date()
 ): string {
+  const checking = checkFirstTitle(payActionOf({ paymentSent: payable.paymentSent ?? false, lastAttempt: payable.lastAttempt }), `${fmt(payable.amount)} ${payable.currency ?? "USDC"} to ${payable.counterpartyName}`);
+  if (checking) return checking;
   const { amountPaid, discountTaken } = amountToPay(payable.amount, payable.discount, now);
   const discount = discountTaken > 0 && payable.discount ? ` (${payable.discount.pct}% discount through ${utcDay(payable.discount.deadline)})` : "";
   // A payee on another chain: where the money goes, and the fee of the route it takes on top of it (CCTP payouts,
@@ -81,8 +85,12 @@ export function payConfirmTitle(
  * safety R4). A sole approver approving what they
  * entered is told the ledger records that too (sole approver R5).
  */
-export function payConfirmDescription(payable: Pick<WaitingPayable, "paymentSent" | "lastAttempt">, ownEntry = false): string {
+export function payConfirmDescription(payable: Pick<WaitingPayable, "paymentSent" | "lastAttempt"> & Partial<Pick<WaitingPayable, "payeeChain">>, ownEntry = false): string {
   const own = ownEntry ? ` ${OWN_ENTRY_RECORDED}` : "";
+  // A payout to another chain cannot be looked up on Circle: it is asked for again under its own key (review 5).
+  if (payable.lastAttempt?.state === "unanswered" && paidAcrossChains(payable.payeeChain)) {
+    return `Vestiarion asks Circle for the earlier transfer again under the same payment key, which Circle takes only once: it records it if Circle has it, and only otherwise is this the payment. The ledger records who approved it.${own}`;
+  }
   if (payable.lastAttempt?.state === "unanswered") {
     return `Vestiarion looks for the earlier transfer on Circle first: it records it if Circle has it, and sends the payment only once Circle shows none. The ledger records who approved it.${own}`;
   }
@@ -93,6 +101,29 @@ export function payConfirmDescription(payable: Pick<WaitingPayable, "paymentSent
     return `A new transfer starts as soon as you confirm, and the ledger records who approved it.${own}`;
   }
   return `The transfer starts as soon as you confirm, and the ledger records who approved it.${own}`;
+}
+
+/** The confirm button of Approve and pay: Pay now, or, where the earlier transfer is checked first, what it does instead (E3). */
+export function payConfirmLabel(payable: Pick<WaitingPayable, "paymentSent" | "lastAttempt">): string {
+  const action = payActionOf(payable);
+  return checksFirst(action) ? CHECK_FIRST_LABEL[action] : "Pay now";
+}
+
+/**
+ * What the card says of a send Circle never answered: one left `submitting` may still be under way (payment exceptions
+ * review 6); a payout to another chain is asked for again under its own key, and Reject and Return wait for Circle's
+ * answer (review 5); a first approval of two looks nothing up and sends nothing, the approval that pays it does (T6).
+ */
+export function unansweredLine(attempt: { sending?: true }, acrossChains: boolean, firstOfTwo: boolean): string {
+  const lead = attempt.sending
+    ? "Vestiarion started sending this payment and Circle has not answered for over two minutes: it may still be sending, or its answer was lost."
+    : "Circle did not answer when this payment was sent, so it may have taken the transfer.";
+  if (acrossChains) {
+    return `${lead} A payout to another chain cannot be looked up on Circle: Approve and pay asks Circle for it again under the same payment key, which Circle takes only once, so it is never paid twice. Reject and Return wait until Circle has answered.`;
+  }
+  return firstOfTwo
+    ? `${lead} The approval that pays it looks for it on Circle first: it records it if Circle has it, and sends it only once Circle shows none.`
+    : `${lead} Approve and pay, Reject and Return look for it on Circle first: Approve and pay records it if Circle has it, and sends it only once Circle shows none.`;
 }
 
 /** The confirmation of an approval that pays nothing yet, the first of two (two approvals T8). */
@@ -256,7 +287,7 @@ export default function ApprovalCard({
               The last payment attempt failed: {payable.lastAttempt.reason}.{" "}
               {payable.lastAttempt.resend === false
                 ? "Approving sends nothing new: check with Circle whether it was minted, and reject or return the invoice if it was not."
-                : "Approving sends a new transfer."}
+                : "Approving sends a new transfer. Fix what Circle names before approving, such as adding USDC to the operating wallet."}
             </Callout>
           )}
           {payable.lastAttempt?.state === "in_flight" && (
@@ -266,10 +297,7 @@ export default function ApprovalCard({
           )}
           {payable.lastAttempt?.state === "unanswered" && (
             <Callout tone="held" className="mt-2">
-              {/* A first approval of two looks nothing up and sends nothing: the approval that pays it does (two approvals T6). */}
-              {two && !two.approvals.some((approval) => approval.by !== viewerId)
-                ? "Circle did not answer when this payment was sent, so it may have taken the transfer. The approval that pays it looks for it on Circle first: it records it if Circle has it, and sends it only once Circle shows none."
-                : "Circle did not answer when this payment was sent, so it may have taken the transfer. Approve and pay, Reject and Return look for it on Circle first: Approve and pay records it if Circle has it, and sends it only once Circle shows none."}
+              {unansweredLine(payable.lastAttempt, paidAcrossChains(payable.payeeChain), Boolean(two && !two.approvals.some((approval) => approval.by !== viewerId)))}
             </Callout>
           )}
         </CardContent>
@@ -415,17 +443,22 @@ function Decisions({
           description={
             willPay ? `${payConfirmDescription(payable, ownEntry)}${two ? ` ${SECOND_APPROVAL_PAYS}` : ""}` : two ? approveFirstDescription(two.above) : ""
           }
-          confirmLabel={willPay ? "Pay now" : "Approve"}
-          // Approved and being sent, until the payment's confirmation replaces it (payment confirmation).
+          confirmLabel={willPay ? payConfirmLabel(payable) : "Approve"}
+          // Approved and being sent, or the earlier transfer being checked, until the payment's confirmation replaces it
+          // (payment confirmation; payment exceptions E3).
           onConfirm={
             willPay
               ? () =>
-                  paymentSendingToast(paymentToastId(payable.id), {
-                    amount: amountToPay(payable.amount, payable.discount, new Date()).amountPaid,
-                    currency: payable.currency ?? "USDC",
-                    payee: payable.counterpartyName,
-                    decidedBy: "approval",
-                  })
+                  paymentSendingToast(
+                    paymentToastId(payable.id),
+                    {
+                      amount: amountToPay(payable.amount, payable.discount, new Date()).amountPaid,
+                      currency: payable.currency ?? "USDC",
+                      payee: payable.counterpartyName,
+                      decidedBy: "approval",
+                    },
+                    payActionOf(payable)
+                  )
               : undefined
           }
         />

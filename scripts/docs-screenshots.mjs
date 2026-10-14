@@ -228,6 +228,7 @@ const SHOTS = {
   "evidence-access": async () => {},
   "where-a-payment-is-track": async () => {},
   "where-a-payment-is-in-flight": async () => {},
+  "payment-exceptions-what-to-do": async () => {},
   "xero-settings": async () => {},
   "xero-review": async () => {},
   "quickbooks-settings": async () => {},
