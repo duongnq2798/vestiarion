@@ -757,7 +757,8 @@ function decideMilestone(milestone: MilestoneRow, entries: LedgerEntry[], contex
   const githubSource = milestone.verification_source?.match(/^https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+\/?$/)?.[0];
   const verificationLabel = milestone.verification_method === "github"
     ? milestone.verification_status === "verified" ? "merged PR" : milestone.verification_status.replace("_", " ")
-    : milestone.verification_method === "manual" ? "manual approval" : milestone.verification_method === "seed" ? "demo fixture" : "not verified";
+    : milestone.verification_method === "manual" ? "manual approval" : milestone.verification_method === "seed" ? "demo fixture"
+      : milestone.verification_method === "asana" ? (milestone.verified ? "accepted from Asana" : "acceptance taken back") : "not verified";
   const evidenceLink = milestoneEvidenceLink(milestone.verification_source, githubSource);
   const access = (href: string) => (context.links ? (context.links.get(href) ?? { state: "not_checked" as const, reason: "" }) : undefined);
   const verifiedBy: Evidence = { label: "Verified by", value: verificationLabel, state: milestone.verified ? "ok" : "missing" };

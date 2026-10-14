@@ -2,9 +2,10 @@ import dns from "node:dns";
 import { z } from "zod";
 import { currentConfig, currentOrgId, hasScope } from "../context";
 import type { GitHubPullRequestRef } from "../github-verification";
+import { asanaAccessToken } from "../asana/workspace";
 import { pullRequestTokens } from "../github/tokens";
 import { isPublicAddress, type LookupFn } from "../webhooks/safe-url";
-import { checkTargetOf, NOT_CHECKED_WORDS, requestAllowed, storageHostOf, type CheckTarget } from "./allow-list";
+import { ASANA_HOST, checkTargetOf, NOT_CHECKED_WORDS, requestAllowed, storageHostOf, type CheckTarget } from "./allow-list";
 
 /**
  * Whether an evidence link can be opened, checked before a page says "verified" or offers it
@@ -43,6 +44,11 @@ export const LINK_WORDS = {
   storageGone: "The file is not in storage any more: it was deleted or moved.",
   storageRefused: "Storage refused the link: it expired, or its signature is no longer valid.",
   githubSilent: "GitHub did not answer just now.",
+  asanaNotConnected: "Connect Asana to this workspace to check Asana links: Vestiarion asks Asana with the workspace's own connection only.",
+  asanaNotFound: "Asana could not find it: it was deleted, or the workspace's Asana connection does not reach it.",
+  asanaRefused: "Asana refused access to it.",
+  asanaSilent: "Asana did not answer just now.",
+  asanaLimited: "Asana's rate limit was reached; it is checked again in a minute.",
   githubLimited: "GitHub's rate limit was reached; it is checked again in a minute.",
   storageSilent: "Storage did not answer just now.",
   redirected: "It was sent on to an address Vestiarion does not open.",
@@ -55,6 +61,11 @@ export interface LinkCheckOptions {
   resolve?: LookupFn;
   /** The workspace's own GitHub connection's token for a repository, where it has one (`pullRequestTokens`). */
   tokenFor?: (ref: GitHubPullRequestRef) => Promise<string | undefined>;
+  /**
+   * The workspace's own Asana connection's access token, fresh, or null without one (Asana acceptance A13). Asana is
+   * asked with it alone: never the deployment's, never the person's.
+   */
+  asanaToken?: () => Promise<string | null>;
   /** The deployment's own GitHub token; the configured one when absent. */
   fallbackToken?: string | null;
   /** The workspace's Supabase address, whose storage's signed links are checked; the configured one when absent. */
@@ -109,7 +120,10 @@ async function send(url: string, init: { headers: Record<string, string>; storag
     if (!requestAllowed(next, { storageHost: init.storageHost })) return { refused: { state: "not_checked", reason: hop === 0 ? NOT_CHECKED_WORDS.host : LINK_WORDS.redirected } };
     if (!(await hostIsPublic(next, options.resolve))) return { refused: { state: "not_checked", reason: NOT_CHECKED_WORDS.address } };
     const toGitHub = new URL(next).hostname === "api.github.com";
-    const headers = toGitHub ? init.headers : Object.fromEntries(Object.entries(init.headers).filter(([name]) => name.toLowerCase() !== "authorization"));
+    // A credential goes to GitHub's API, and the workspace's Asana token to Asana's API (whose path `requestAllowed` held
+    // to one task or attachment), and nowhere else.
+    const toAsana = new URL(next).hostname === ASANA_HOST;
+    const headers = toGitHub || toAsana ? init.headers : Object.fromEntries(Object.entries(init.headers).filter(([name]) => name.toLowerCase() !== "authorization"));
     const response = await options.fetch(next, { method: "GET", headers, redirect: "manual", cache: "no-store", signal: AbortSignal.timeout(TIMEOUT_MS) });
     if (![301, 302, 303, 307, 308].includes(response.status)) return { response };
     await response.body?.cancel().catch(() => {});
@@ -185,6 +199,23 @@ async function askGitHub(
   return "access" in comment ? comment.access : { state: "open" };
 }
 
+/** An Asana task or attachment, asked about at Asana's API with the workspace's own connection; no redirect is followed. */
+async function askAsana(
+  target: Extract<CheckTarget, { kind: "asana_task" | "asana_attachment" }>,
+  options: Required<Pick<LinkCheckOptions, "fetch" | "resolve">> & { token: string | null }
+): Promise<LinkAccess> {
+  if (!options.token) return { state: "not_checked", reason: LINK_WORDS.asanaNotConnected };
+  const sent = await send(target.request, { headers: { Accept: "application/json", Authorization: `Bearer ${options.token}` }, storageHost: null }, options);
+  if ("refused" in sent) return sent.refused;
+  const { response } = sent;
+  await response.body?.cancel().catch(() => {});
+  if (response.ok) return { state: "open" };
+  if (response.status === 404) return { state: "cannot_open", reason: LINK_WORDS.asanaNotFound };
+  if (response.status === 402 || response.status === 403) return { state: "cannot_open", reason: LINK_WORDS.asanaRefused };
+  if (response.status === 429) return { state: "no_answer", reason: LINK_WORDS.asanaLimited };
+  return { state: "no_answer", reason: LINK_WORDS.asanaSilent };
+}
+
 async function askStorage(target: Extract<CheckTarget, { kind: "signed_storage" }>, options: Required<Pick<LinkCheckOptions, "fetch" | "resolve">>, now: number): Promise<LinkAccess> {
   if (target.expiresAt !== null && target.expiresAt <= now) return { state: "cannot_open", reason: LINK_WORDS.expired(target.expiresAt) };
   // The link's own signature is its only credential: no key of Vestiarion's, and no session, is sent with it.
@@ -218,6 +249,10 @@ export async function checkEvidenceLinks(hrefs: readonly string[], options: Link
   let tokens: Promise<LinkCheckOptions["tokenFor"]> | undefined;
   const tokenFor = (): Promise<LinkCheckOptions["tokenFor"]> =>
     options.tokenFor ? Promise.resolve(options.tokenFor) : scoped ? (tokens ??= workspaceTokens()) : Promise.resolve(undefined);
+  // The workspace's own Asana connection's token, read once, and only when an Asana link is asked about.
+  let asana: Promise<string | null> | undefined;
+  const asanaToken = (): Promise<string | null> =>
+    (asana ??= (options.asanaToken ? options.asanaToken() : scoped ? asanaAccessToken() : Promise.resolve(null)).catch(() => null));
   let asked = 0;
 
   await Promise.all(
@@ -244,11 +279,15 @@ export async function checkEvidenceLinks(hrefs: readonly string[], options: Link
         pending = (async (): Promise<LinkAccess> => {
           try {
             if (target.kind === "signed_storage") return await askStorage(target, io, now);
+            if (target.kind === "asana_task" || target.kind === "asana_attachment") return await askAsana(target, { ...io, token: await asanaToken() });
             return await askGitHub(target, { ...io, tokenFor: await tokenFor(), fallbackToken });
           } catch (error) {
             // The host and the error's name only: a signed link carries its token, and is never logged.
             console.error("evidence link: check failed", new URL(target.request).hostname, error instanceof Error ? error.name : "unknown");
-            return { state: "no_answer", reason: target.kind === "signed_storage" ? LINK_WORDS.storageSilent : LINK_WORDS.githubSilent };
+            return {
+              state: "no_answer",
+              reason: target.kind === "signed_storage" ? LINK_WORDS.storageSilent : target.kind === "asana_task" || target.kind === "asana_attachment" ? LINK_WORDS.asanaSilent : LINK_WORDS.githubSilent,
+            };
           }
         })().then((access) => {
           remember(key, access, now);

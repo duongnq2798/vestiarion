@@ -4,6 +4,7 @@ import DeleteWorkspacePanel from "@/components/DeleteWorkspacePanel";
 import EmailInboxPanel from "@/components/EmailInboxPanel";
 import GoLivePanel from "@/components/GoLivePanel";
 import GitHubPanel from "@/components/GitHubPanel";
+import AsanaPanel from "@/components/AsanaPanel";
 import HubSpotPanel from "@/components/HubSpotPanel";
 import LedgerKeyPanel from "@/components/LedgerKeyPanel";
 import NotificationsPanel from "@/components/NotificationsPanel";
@@ -40,6 +41,7 @@ import { slackSettingsFromEnv } from "@/lib/slack/settings";
 import { accountingPanelView } from "@/lib/connectors/panel";
 import { accountingProvider, accountingProviderOn } from "@/lib/accounting-providers";
 import { crmPanelView } from "@/lib/connectors/crm-review";
+import { asanaPanelFor } from "@/lib/asana/panel";
 import { hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
 import { crmReceiptsPanelFor } from "@/lib/connectors/crm-receipts-view";
 import { crmProvider } from "@/lib/crm-providers";
@@ -180,6 +182,13 @@ export default async function SettingsPage({
             return null;
           })
         : null;
+    // Asana (Asana acceptance A16): only on a deployment where it is configured; best effort, like HubSpot's. Before
+    // migration 0115 the card says Asana is not set up yet. How connecting it went comes back in `?asana=`.
+    const asana = await asanaPanelFor().catch((error: unknown) => {
+      console.error("settings: Asana status not loaded", error instanceof Error ? error.message : error);
+      return null;
+    });
+    const asanaOutcome = ((await searchParams) as { asana?: string | string[] }).asana;
     const notifyEmail = notifySwitch ? (unwrap(notifySwitch) as { notify_email: boolean }).notify_email : false;
 
     const canManageIntegrations = can(membership.role, "integrations.manage");
@@ -315,6 +324,13 @@ export default async function SettingsPage({
                 notice={typeof hubspotOutcome === "string" ? hubspotOutcome : null}
                 receipts={hubspotReceipts}
               />
+            ) : null,
+          },
+          {
+            id: "asana-title",
+            title: "Asana",
+            content: asana ? (
+              <AsanaPanel orgSlug={slug} view={asana} canManage={canManageIntegrations} notice={typeof asanaOutcome === "string" ? asanaOutcome : null} />
             ) : null,
           },
           {

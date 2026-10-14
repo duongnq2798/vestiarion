@@ -38,7 +38,7 @@ const ENVELOPE = { v: 1, iv: "x", tag: "y", data: "z" };
 const PLATFORM_TABLES = [
   "memberships", "invitations", "api_keys", "webhook_endpoints", "webhook_deliveries", "payee_links", "telegram_link_codes", "telegram_links",
   "api_idempotency", "slack_installs", "slack_links", "invoice_inboxes", "github_installations", "github_bounties",
-  "growth_leads", "growth_revenue", "org_attribution", "accounting_tokens",
+  "growth_leads", "growth_revenue", "org_attribution", "accounting_tokens", "asana_webhooks",
 ] as const;
 
 const deleteOrg = (orgId: string, by: string | null = owner) =>
@@ -186,6 +186,12 @@ async function populated(slug: string): Promise<string> {
     `insert into public.accounting_tokens (id, org_id, provider, connection_id, authorized_by, access_token_enc, refresh_token_enc, access_expires_at)
      select gen_random_uuid(), $1, 'xero', id, $2, $3::jsonb, $3::jsonb, now() from public.accounting_connections where org_id = $1`,
     [orgId, member, JSON.stringify(ENVELOPE)]
+  );
+  // A linked Asana task's webhook goes with its link and connection (0115).
+  await db.query(
+    `insert into public.asana_webhooks (id, org_id, connection_id, link_id, resource_gid)
+     select gen_random_uuid(), $1, l.connection_id, l.id, l.task_gid from public.asana_task_links l where l.org_id = $1`,
+    [orgId]
   );
   await closeCycles(orgId);
   return orgId;

@@ -178,6 +178,8 @@ export interface MilestoneRow {
   /** Closed without paying by a person (held milestone actions R3): when, and why. */
   closed_at?: string | null;
   close_reason?: string | null;
+  /** What the work is held to, from the agreement, written by a person (Asana acceptance A5, 0115); absent before it. */
+  acceptance_criteria?: string | null;
 }
 
 export async function listMilestones(): Promise<MilestoneRow[]> {

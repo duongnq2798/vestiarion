@@ -10,7 +10,7 @@ export interface MilestonePayload {
   amount: number;
   status: (typeof MILESTONE_STATUSES)[number];
   verificationSource: string | null;
-  verificationMethod: "unverified" | "github" | "manual" | "seed";
+  verificationMethod: "unverified" | "github" | "manual" | "seed" | "asana";
   verificationStatus: "unverified" | "verified" | "not_merged" | "unavailable" | "failed";
   verificationCheckedAt: string | null;
   verifiedAt: string | null;

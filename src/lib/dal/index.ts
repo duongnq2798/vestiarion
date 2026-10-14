@@ -36,6 +36,10 @@ import { currentContext, currentOrgId } from "../context";
  * webhook, which names a company and no workspace, and the connect flow's check that a QuickBooks company or a HubSpot
  * account is no other workspace's; it answers ids and a status, nothing else.
  *
+ * An Asana webhook's secret (migration 0115) is one too: only `src/lib/asana/webhook-store.ts` reads or writes
+ * `asana_webhooks`, naming the workspace in scope, except the webhook route's lookup of one row by the id in Asana's
+ * target address.
+ *
  * One read reaches past those tables: the dispatcher embeds a delivery's own
  * ledger entry (`webhook_deliveries` → `ledger_entries` by foreign key), so it
  * can only ever see the entry that delivery was queued for.
@@ -58,6 +62,7 @@ export const TENANT_TABLES = [
   "collection_policies", "collection_tasks", "notification_deliveries", "collection_task_starts",
   "reporting_currencies", "cash_scenario_versions", "fx_rates", "fx_variances",
   "onboarding_marks",
+  "asana_task_links",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
@@ -67,6 +72,7 @@ export const TENANT_RPCS = [
   "sole_approver", "approvers_besides", "approvers_among",
   "create_deal", "revise_deal",
   "reserve_project_budget", "project_figures",
+  "accept_asana_task", "hold_asana_acceptance",
 ] as const;
 export type TenantRpc = (typeof TENANT_RPCS)[number];
 
@@ -77,6 +83,7 @@ export const PLATFORM_TABLES = [
   "platform_controls",
   "growth_campaigns", "growth_leads", "growth_lead_events", "growth_spend", "growth_revenue",
   "accounting_tokens",
+  "asana_webhooks",
 ] as const;
 export type PlatformTable = (typeof PLATFORM_TABLES)[number];
 

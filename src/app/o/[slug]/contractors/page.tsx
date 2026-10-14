@@ -2,6 +2,7 @@ import { Flag, ListChecks, UserPlus } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
 import AgentControls from "@/components/AgentControls";
+import { AsanaTaskCard } from "@/components/AsanaTaskCard";
 import { EscrowPanel } from "@/components/EscrowPanel";
 import { HeldMilestoneActions } from "@/components/HeldMilestoneActions";
 import { MilestoneEscrow } from "@/components/MilestoneEscrow";
@@ -42,6 +43,8 @@ import { networkProfile } from "@/lib/network";
 import { DocsLink } from "@/components/DocsLink";
 import { shellStatus } from "@/lib/shell-status";
 import { readProjectOptions } from "@/lib/projects/read";
+import { asanaOnContractors } from "@/lib/asana/contractors";
+import { asanaMilestoneView, asanaNeedsPerson } from "@/lib/asana/views";
 
 export const dynamic = "force-dynamic";
 
@@ -97,12 +100,19 @@ export default async function ContractorsPage({ params, searchParams }: { params
       const contractor = contractorsById.get(milestone.contractor_id);
       return milestone.status === "verified" && contractor ? payeeNotReady(contractor, live) : null;
     };
-    // Each milestone's evidence link, checked before its card offers it (evidence access E1): GitHub's pull requests and
-    // the workspace's own storage only, kept briefly; the open milestones' first. Any other link is shown as not checked.
+    // The Asana tasks the milestones are linked to, and whether Asana is connected (Asana acceptance A16): best effort,
+    // and nothing where Asana is not configured or migration 0115 has not run.
+    const asana = await asanaOnContractors(milestones.map((milestone) => milestone.id));
+    // Each milestone's evidence link, checked before its card offers it (evidence access E1): GitHub's pull requests,
+    // Asana's tasks and attachments (through Asana's API, with the workspace's own connection) and the workspace's own
+    // storage only, kept briefly; the open milestones' first. Any other link is shown as not checked.
     const evidenceHrefs = [
       ...milestones.filter((milestone) => milestone.status !== "paid" && milestone.status !== "closed"),
       ...milestones.filter((milestone) => milestone.status === "paid" || milestone.status === "closed"),
-    ].flatMap((milestone) => (milestone.verification_source?.startsWith("https://") ? [milestone.verification_source] : []));
+    ].flatMap((milestone) => [
+      ...(milestone.verification_source?.startsWith("https://") ? [milestone.verification_source] : []),
+      ...(asana?.links.get(milestone.id)?.deliverables.flatMap((item) => (item.href ? [item.href] : [])) ?? []),
+    ]);
     const links = await checkEvidenceLinks(evidenceHrefs).catch((error: unknown) => {
       console.error("contractors: evidence links not checked", error instanceof Error ? error.name : "unknown");
       return new Map<string, LinkAccess>();
@@ -123,11 +133,23 @@ export default async function ContractorsPage({ params, searchParams }: { params
     // The projects a new milestone may go in, and whether milestones take a purchase order yet (project budgets P3, P9).
     const projectOptions = canWrite ? await readProjectOptions() : null;
 
-    // Under a milestone's card once its row is opened: its verification, and its escrow hold.
-    const controls = (milestone: MilestoneRow) => (
+    // Under a milestone's card once its row is opened: its Asana task, its verification, and its escrow hold.
+    const controls = (milestone: MilestoneRow) => {
+      const asanaLink = asana?.links.get(milestone.id) ?? null;
+      const open = milestone.status !== "paid" && milestone.status !== "closed";
+      return (
       <>
-        {/* A paid or closed milestone is never verified again (the action refuses it), so it has no controls. */}
-        {canWrite && milestone.status !== "paid" && milestone.status !== "closed" && <MilestoneVerification orgSlug={slug} milestoneId={milestone.id} verified={milestone.verified} />}
+        {/* Work delivered in Asana is accepted there against its criteria (Asana acceptance A8): its card, open or linked. */}
+        {asana && (milestone.status === "pending" || asanaLink) && (
+          <AsanaTaskCard
+            orgSlug={slug}
+            milestoneId={milestone.id}
+            view={asanaMilestoneView({ milestone, link: asanaLink, connected: asana.connected, canWrite: canWrite && open, links, memberEmails: asana.memberEmails })}
+          />
+        )}
+        {/* A paid or closed milestone is never verified again (the action refuses it), so it has no controls; one linked to
+            an Asana task is accepted there, and keeps only Revoke once verified. */}
+        {canWrite && open && (!asanaLink || milestone.verified) && <MilestoneVerification orgSlug={slug} milestoneId={milestone.id} verified={milestone.verified} />}
         {live && (
           <MilestoneEscrow
             network={network}
@@ -168,7 +190,8 @@ export default async function ContractorsPage({ params, searchParams }: { params
           />
         )}
       </>
-    );
+      );
+    };
     // What a held milestone waits for, and a person's decisions on it (held milestone actions R1–R3).
     const waitingFor = (milestone: MilestoneRow) => {
       const contractor = contractorsById.get(milestone.contractor_id);
@@ -195,6 +218,11 @@ export default async function ContractorsPage({ params, searchParams }: { params
       const milestone = milestonesById.get(decision.id) as MilestoneRow;
       const item: DecisionRowItem = { decision, date: milestoneDate(milestone, decision.at), after: controls(milestone) };
       const waiting = waitingOf(milestone);
+      // Ready for acceptance, or held for review, in Asana: a person's to do (Asana acceptance A16).
+      const asanaLink = asana?.links.get(milestone.id);
+      if (milestone.status === "pending" && asanaLink && asanaNeedsPerson(asanaLink)) {
+        return { ...item, hint: asanaLink.state === "ready" ? "Ready for acceptance" : "Held for review" };
+      }
       if (waiting === "no_address") return { ...item, hint: "Waiting for an address" };
       if (waiting === "unconfirmed") {
         return {
@@ -241,8 +269,10 @@ export default async function ContractorsPage({ params, searchParams }: { params
       const milestone = milestonesById.get(decision.id);
       return milestone !== undefined && waitingOf(milestone) === "unconfirmed";
     };
-    const needsYou = decisions.filter((decision) => statusOf(decision) === "held" || confirming(decision) || (decision.outcome === "refused" && !done(decision)));
-    const inProgress = decisions.filter((decision) => decision.outcome !== "refused" && !confirming(decision) && ["pending", "verified"].includes(statusOf(decision)));
+    // Work in Asana ready for acceptance, or held for review, waits on a person too (Asana acceptance A16).
+    const accepting = (decision: (typeof decisions)[number]) => statusOf(decision) === "pending" && asanaNeedsPerson(asana?.links.get(decision.id));
+    const needsYou = decisions.filter((decision) => statusOf(decision) === "held" || confirming(decision) || accepting(decision) || (decision.outcome === "refused" && !done(decision)));
+    const inProgress = decisions.filter((decision) => decision.outcome !== "refused" && !confirming(decision) && !accepting(decision) && ["pending", "verified"].includes(statusOf(decision)));
     const paid = decisions.filter(done).sort((a, b) => b.at.localeCompare(a.at));
     const paidCount = milestones.filter((milestone) => milestone.status === "paid").length;
     const awaiting = milestones.filter((milestone) => milestone.status === "pending");

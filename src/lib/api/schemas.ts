@@ -205,7 +205,7 @@ export const MilestoneSchema = z
     amount: z.number(),
     status: z.enum(MILESTONE_STATUSES),
     verificationSource: z.string().nullable(),
-    verificationMethod: z.enum(["unverified", "github", "manual", "seed"]),
+    verificationMethod: z.enum(["unverified", "github", "manual", "seed", "asana"]),
     verificationStatus: z.enum(["unverified", "verified", "not_merged", "unavailable", "failed"]),
     verificationCheckedAt: z.string().nullable(),
     verifiedAt: z.string().nullable(),

@@ -225,8 +225,15 @@ export async function saveConnection(input: {
   }
   const connection = toConnection(((saved.data ?? []) as unknown as ConnectionRow[])[0]);
   const label = PROVIDER_LABELS[input.provider];
-  // A CRM's won deals come in to be planned; an accounting tool's bills to be added (HubSpot connector H19).
-  const comesIn = providerKind(input.provider) === "crm" ? "Its won deals come in to plan collections on Bills & receivables" : "Its bills come in for review on Bills & receivables";
+  // A CRM's won deals come in to be planned; an accounting tool's bills to be added (HubSpot connector H19); a work tool's
+  // tasks are linked to milestones one at a time (Asana acceptance A2).
+  const kind = providerKind(input.provider);
+  const comesIn =
+    kind === "work"
+      ? "Its tasks can be linked to milestones on Contractors"
+      : kind === "crm"
+        ? "Its won deals come in to plan collections on Bills & receivables"
+        : "Its bills come in for review on Bills & receivables";
   await appendLedgerEntryBestEffort(connection.orgId, {
     actor: "human",
     domain: "system",

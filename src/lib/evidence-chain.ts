@@ -540,6 +540,7 @@ function deliveredMilestone(ctx: Context, milestone: EvidenceMilestone): Evidenc
         return step("delivered", title, [{ kind: "missing", text: `Pull request ${name} has not been checked with GitHub yet.`, fill: "The agent asks GitHub before each payment cycle.", seqs, link: link("not_opened") }]);
     }
   }
+  if (milestone.verification_method === "asana") return deliveredFromAsana(ctx, milestone);
   if (!milestone.verified) {
     return step("delivered", title, [{ kind: "missing", text: "Not verified yet.", fill: "Verify it on Contractors, or link a merged pull request.", seqs: [] }]);
   }
@@ -552,6 +553,53 @@ function deliveredMilestone(ctx: Context, milestone: EvidenceMilestone): Evidenc
       at: by?.ts ?? milestone.verified_at,
       ...(note ? { notes: [note] } : {}),
       ...(link ? { link: { ...link, label: `The evidence they gave, on ${link.label}` } } : {}),
+    }),
+  ]);
+}
+
+const WITHDRAWN_WORDS: Record<string, string> = {
+  reopened: "was reopened in Asana",
+  deliverable_changed: "changed its deliverables in Asana",
+  task_unreachable: "could no longer be read in Asana",
+  unlinked: "was unlinked",
+};
+
+/**
+ * Work accepted from Asana (docs/superpowers/specs/2026-10-14-asana-acceptance-design.md A8, A10): Asana's word that the
+ * task was completed, verified outside, beside the person's acceptance against the criteria, which is what verifies the
+ * milestone. The task's link is checked through Asana's API before it is offered. An acceptance taken back is missing.
+ */
+function deliveredFromAsana(ctx: Context, milestone: EvidenceMilestone): EvidenceStep {
+  const title = "What was delivered";
+  const detail = milestone.verification_detail ?? {};
+  const accepted = newest(ctx.own, (entry) => entry.action === "milestone_accepted");
+  const withdrawn = newest(ctx.own, (entry) => entry.action === "milestone_acceptance_withdrawn");
+  const task = text(detail.asanaTask) ?? text(accepted?.detail.taskUrl);
+  const link: EvidenceLink | undefined = task?.startsWith("https://app.asana.com/") ? { href: task, label: "The task in Asana", state: "not_opened", given: true } : undefined;
+  if (!milestone.verified) {
+    const reason = text(detail.heldReason) ?? text(withdrawn?.detail.reason);
+    return step("delivered", title, [
+      {
+        kind: "missing",
+        text: `The acceptance was taken back before payment: the task ${(reason && WITHDRAWN_WORDS[reason]) ?? "changed in Asana"}.`,
+        fill: "A person accepts the work again on Contractors, once the task is completed, against its criteria.",
+        at: withdrawn?.ts ?? null,
+        seqs: withdrawn ? [withdrawn.seq] : [],
+        ...(link ? { link } : {}),
+        warn: true,
+      },
+    ]);
+  }
+  const completedAt = text(detail.completedAt) ?? text(accepted?.detail.completedAt);
+  const deliverables = Array.isArray(accepted?.detail.deliverables) ? accepted.detail.deliverables.length : null;
+  return step("delivered", title, [
+    { kind: "verified", text: "Asana reported the task completed.", at: completedAt, seqs: [], ...(link ? { link } : {}) },
+    stated(ctx, `The work was accepted against the milestone's acceptance criteria${accepted ? via(accepted.detail) : ""}, as the deliverables shown then.`, accepted, {
+      at: accepted?.ts ?? milestone.verified_at,
+      notes: [
+        ...(deliverables !== null ? [`${deliverables} ${deliverables === 1 ? "deliverable" : "deliverables"} accepted, by their fingerprint ${String(accepted?.detail.fingerprint ?? "").slice(0, 12)}.`] : []),
+        "A completed task alone never verifies a milestone: a person accepts it.",
+      ],
     }),
   ]);
 }

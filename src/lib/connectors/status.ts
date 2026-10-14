@@ -50,9 +50,11 @@ function clock(iso: string, nowMs: number): string {
 }
 
 const reconnectWords = (label: string) =>
-  providerKind(label) === "crm"
-    ? `${label} no longer accepts this connection: the app was uninstalled in ${label}, or its access was removed. Reconnect ${label} to go on bringing its deals in.`
-    : `${label} no longer accepts this connection: it was disconnected in ${label}, or not used for ${providerWords(label).idleDays} days. Reconnect ${label} to go on bringing its bills in.`;
+  providerKind(label) === "work"
+    ? `${label} no longer accepts this connection: the app's access was removed in ${label}. Reconnect ${label} to go on reading the tasks linked to milestones.`
+    : providerKind(label) === "crm"
+      ? `${label} no longer accepts this connection: the app was uninstalled in ${label}, or its access was removed. Reconnect ${label} to go on bringing its deals in.`
+      : `${label} no longer accepts this connection: it was disconnected in ${label}, or not used for ${providerWords(label).idleDays} days. Reconnect ${label} to go on bringing its bills in.`;
 
 export type SyncErrorKind = "rate_limited" | "unavailable" | "bad_response" | "failed" | "reconnect";
 
@@ -74,17 +76,23 @@ export function syncErrorWords(kind: SyncErrorKind, label: string, nextAt: strin
 
 export function connectionStatus(facts: ConnectionFacts, nowMs: number): StatusView {
   const label = facts.providerLabel;
-  const crm = providerKind(label) === "crm";
+  const kind = providerKind(label);
+  const crm = kind === "crm";
   const name = facts.externalOrgName ?? `your ${label} ${providerWords(label).organisation}`;
   if (facts.status === "revoked") {
-    const kept = crm ? "Deals already planned stay in Vestiarion." : "Bills already added stay in Vestiarion.";
+    const kept = kind === "work" ? "Acceptances already recorded stay in Vestiarion." : crm ? "Deals already planned stay in Vestiarion." : "Bills already added stay in Vestiarion.";
     return { tone: "off", title: `Disconnected from ${name}`, detail: [`${kept} Nothing more is read from ${label}.`], reconnect: false };
   }
   if (facts.status === "needs_reconnect") {
     return {
       tone: "error",
       title: `${label} needs you to reconnect`,
-      detail: [facts.lastError ?? `${label} no longer accepts this connection. Reconnect ${label} to go on bringing its ${crm ? "deals" : "bills"} in.`],
+      detail: [
+        facts.lastError ??
+          (kind === "work"
+            ? reconnectWords(label)
+            : `${label} no longer accepts this connection. Reconnect ${label} to go on bringing its ${crm ? "deals" : "bills"} in.`),
+      ],
       reconnect: true,
     };
   }

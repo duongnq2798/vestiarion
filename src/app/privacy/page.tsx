@@ -18,7 +18,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy"
-      updated="2026-10-13"
+      updated="2026-10-14"
       intro="Vestiarion is an autonomous treasury agent on Arc mainnet and Arc testnet. This page describes what the service stores and sends, as its code does it today. The code is public, so every statement here can be checked against it."
     >
       <LegalSection id="signing-in" title="Signing in">
@@ -321,6 +321,21 @@ export default function PrivacyPage() {
             HubSpot data to train or improve any AI model, and never passes it to anyone else without the workspace&apos;s say. Disconnecting revokes
             the app&apos;s access at HubSpot and deletes the tokens; the deals already read stay with the workspace, and the signed ledger keeps only
             ids, names, amounts and masked emails.
+          </li>
+          <li>
+            <strong>Asana</strong>, for a workspace an owner or admin connects to their Asana after agreeing to it, is read from, as that person, and
+            written to only to make and delete the webhooks on the tasks linked to milestones. Vestiarion reads the workspaces, projects and tasks a
+            member opens to link a task, and for each linked task its name, whether and when it was completed and by whom (their name), its assignee
+            (their name), its attachments (their names, upload times and links) and the links in its description and comments. It keeps the linked
+            tasks&apos; names and links, the names of who completed and was assigned each one, the deliverables&apos; names and links and their
+            fingerprint, the Asana user&apos;s id and name the connection acts as, the access granted and the agreement given, each webhook&apos;s
+            secret and Asana&apos;s tokens encrypted, readable only by the server and never shown in the browser, a log, a model&apos;s prompt or a
+            webhook; it does not keep the words of a task&apos;s description or comments. To stop anyone accepting their own work, it asks Asana
+            whether a member&apos;s email, or the email a contractor&apos;s payment notices go to, belongs to an Asana user, and keeps only the answer
+            for that check. A webhook from Asana carries no task&apos;s facts that Vestiarion keeps: it only has the task read again. Vestiarion never
+            uses Asana data to train or improve any AI model, and never passes it to anyone else without the workspace&apos;s say. Disconnecting
+            deletes the webhooks, revokes the app&apos;s access at Asana and deletes the tokens; the acceptances already recorded stay with the
+            workspace&apos;s signed ledger.
           </li>
           <li>
             <strong>Google Analytics</strong> receives page views, and which button you chose to get started, as described below.

@@ -15,7 +15,7 @@ import { BrandName, PROVIDER_MARKS } from "@/components/vx/BrandMarks";
 import { accountName } from "@/lib/connectors/booking";
 import { billsHref } from "@/lib/bills-view";
 import type { AccountingPanelView } from "@/lib/connectors/panel";
-import { PROVIDER_LABELS, PROVIDER_WORDS, type ProviderId } from "@/lib/connectors/provider";
+import { PROVIDER_LABELS, PROVIDER_WORDS, type AccountingProviderId, type ProviderId } from "@/lib/connectors/provider";
 
 const INITIAL: AccountingActionResult = { ok: false, message: "" };
 
@@ -103,7 +103,7 @@ export default function AccountingPanel({
   canManage,
   notice,
 }: {
-  provider: ProviderId;
+  provider: AccountingProviderId;
   orgSlug: string;
   view: AccountingPanelView;
   canManage: boolean;
@@ -157,7 +157,7 @@ export default function AccountingPanel({
                   {view.waiting === 0 ? (
                     "No bills waiting for review."
                   ) : (
-                    <Link className="font-medium text-agent underline-offset-4 hover:underline" href={`/o/${orgSlug}${billsHref({ tab: "bills", review: provider === "hubspot" ? null : provider })}`}>
+                    <Link className="font-medium text-agent underline-offset-4 hover:underline" href={`/o/${orgSlug}${billsHref({ tab: "bills", review: provider })}`}>
                       {view.waiting === 1 ? "1 bill waiting for review" : `${view.waiting} bills waiting for review`}
                     </Link>
                   )}

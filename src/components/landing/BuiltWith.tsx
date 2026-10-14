@@ -15,7 +15,8 @@ const REPOSITORY = "https://github.com/duongnq2798/vestiarion";
  * QuickBooks, so its body names QuickBooks Online in full.
  */
 const SERVICES: ReadonlyArray<{
-  brand: Brand;
+  /** None for a service whose owner's mark is not in public/brands yet (Asana): its name stands alone. */
+  brand?: Brand;
   name: string;
   role: string;
   body: string;
@@ -46,6 +47,7 @@ const SERVICES: ReadonlyArray<{
     check: "Read the guide",
   },
   { brand: "hubspot", name: "HubSpot", role: "Works with", body: "Won deals come in with their customers, to plan as collection schedules; what each collected goes back to the deal.", href: "/docs/guides/hubspot", check: "Read the guide" },
+  { name: "Asana", role: "Works with", body: "Contractor work completed in a task is paid once a person accepts it against its criteria.", href: "/docs/guides/asana", check: "Read the guide" },
   { brand: "slack", name: "Slack", role: "Works with", body: "The agent's decisions in a channel your team picks.", href: "/docs/guides/slack", check: "Read the guide" },
   { brand: "telegram", name: "Telegram", role: "Works with", body: "The agent's decisions in your own chat. The bot never pays.", href: "/docs/guides/telegram", check: "Read the guide" },
   { brand: "npm", name: "npm", role: "SDK on", body: "@vestiarion/sdk, a typed client for every endpoint.", href: "/docs/get-started/sdk", check: "Read the docs" },
@@ -58,20 +60,20 @@ export function BuiltWith() {
         <h2 id="built-with-title" className="border-b border-line py-3 font-mono text-xs uppercase tracking-[0.1em] text-ink-3">
           Built on, and works with
         </h2>
-        {/* Eight services: two to a row up to a laptop's width, then four, so no row is left with one. */}
-        <ul className="grid grid-cols-2 lg:grid-cols-4">
+        {/* Nine services: three to a row from a laptop's width; two below it, the last one across both, so no row is left with one. */}
+        <ul className="grid grid-cols-2 lg:grid-cols-3">
           {SERVICES.map((service) => {
             const external = service.href.startsWith("https://");
             return (
               <li
                 key={service.name}
-                className="min-w-0 border-line py-4 pr-4 lg:border-l lg:pl-5 lg:nth-[4n+1]:border-l-0 lg:nth-[4n+1]:pl-0 lg:nth-[n+5]:border-t"
+                className="min-w-0 border-line py-4 pr-4 max-lg:last:odd:col-span-2 lg:border-l lg:pl-5 lg:nth-[3n+1]:border-l-0 lg:nth-[3n+1]:pl-0 lg:nth-[n+4]:border-t"
               >
                 <Link href={service.href} className="group block" {...(external ? { target: "_blank", rel: "noreferrer" } : {})}>
                   <p className="font-mono text-[0.6875rem] uppercase tracking-[0.1em] text-ink-3">{service.role}</p>
                   <p className="mt-2 flex min-h-5 flex-wrap items-center gap-x-2 gap-y-1 text-[0.9375rem] leading-5 font-semibold text-ink">
-                    <BrandMark brand={service.brand} size={service.lockup ? 23 : undefined} className={service.lockup ? "-mt-1.5 -mb-0.5" : undefined} />
-                    <span className={isWordmark(service.brand) ? "sr-only" : undefined}>{service.name}</span>
+                    {service.brand && <BrandMark brand={service.brand} size={service.lockup ? 23 : undefined} className={service.lockup ? "-mt-1.5 -mb-0.5" : undefined} />}
+                    <span className={service.brand && isWordmark(service.brand) ? "sr-only" : undefined}>{service.name}</span>
                   </p>
                   <p className="mt-1.5 text-xs leading-relaxed text-ink-2">{service.body}</p>
                   <span className="mt-2 inline-block font-mono text-xs font-semibold text-agent group-hover:underline">
@@ -93,8 +95,8 @@ export function BuiltWith() {
           })}
         </ul>
         <p className="border-t border-line py-3 text-[0.6875rem] leading-relaxed text-ink-3">
-          npm is a registered trademark of npm, Inc. Intuit and QuickBooks are trademarks of Intuit Inc. Arc, Circle, Slack, Telegram, Xero and
-          HubSpot are trademarks of their respective owners. Their marks show what Vestiarion is built on and connects to, not an endorsement.
+          npm is a registered trademark of npm, Inc. Intuit and QuickBooks are trademarks of Intuit Inc. Arc, Circle, Slack, Telegram, Xero,
+          HubSpot and Asana are trademarks of their respective owners. Their marks show what Vestiarion is built on and connects to, not an endorsement.
         </p>
       </div>
     </section>

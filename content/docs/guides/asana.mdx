@@ -1,0 +1,91 @@
+Pay contractors for work they deliver in Asana. You link a milestone to the Asana task its work is delivered in. When the task is completed in Asana, the milestone is **ready for acceptance**: a person checks the deliverables against the milestone's acceptance criteria and accepts the work. Only then is the milestone verified, and the agent decides the payment under every guardrail, as it does for any [milestone](/docs/guides/pay-a-contractor), on the workspace's network: Arc testnet or Arc mainnet.
+
+A task completed in Asana is never by itself a reason to pay, and nothing from Asana sets an amount or a payee. If the task is reopened, or its deliverables change, after the work was accepted and before the payment is sent, the acceptance is taken back and the milestone is held for review.
+
+## Before you start
+
+- **An owner or admin** of the workspace connects Asana. Anyone else sees "An owner or admin connects Asana." Linking tasks, writing criteria and accepting work are for whoever verifies milestones by hand: an owner or admin.
+- **A milestone** for the contractor, waiting for verification. [Pay a contractor](/docs/guides/pay-a-contractor) adds one. A milestone verified by a GitHub pull request is not linked to Asana as well.
+- **An Asana task** for the work, in a project the person who connects Asana can see, with the deliverables attached or linked in its description or comments.
+
+## 1. Connect Asana
+
+Open **Settings**, then **Integrations**. Under **Asana**, choose **Connect Asana**.
+
+The connect page has the workspace you came from already picked and says what Vestiarion does with Asana's data, among it:
+
+- It reads, as the Asana user who connects, the workspaces, projects and tasks you open to link a task to a milestone. For each linked task it reads its name, whether and when it was completed and by whom, its assignee, and the links in its description, attachments and comments. It keeps the links and names, not the words of the description or the comments.
+- It makes an Asana webhook on each linked task, so a change there is read again within a minute, and deletes it when the task is unlinked or Asana is disconnected.
+- Nothing from Asana sets an amount or a payee.
+
+Tick **I agree**, then choose **Continue to Asana**. Asana asks you to allow access as yourself. Your agreement, with its date, is kept on the connection and in the workspace's signed ledger.
+
+Back in Settings, the card says "Asana is connected. Link a milestone to its Asana task on Contractors." The ledger records `accounting_connected`, with `provider: "asana"`.
+
+## 2. Link a milestone to its task
+
+On **Contractors**, open the milestone's row. Under its card, **Accept from Asana** offers two ways:
+
+- Paste the task's link from Asana (its **Copy task link**) and choose **Link the task**. Vestiarion reads the task through Asana with this workspace's connection, never by opening the link.
+- Or choose **Choose the task in Asana instead**, then the workspace, the project and the task, and **Link this task**.
+
+One task verifies one milestone: a task linked to another milestone is refused with "That Asana task is linked to another milestone already: one task verifies one milestone." The ledger records `asana_task_linked`. **Unlink the task** takes the link off, and takes back an acceptance the agent has not paid (`asana_task_unlinked`).
+
+## 3. Write the acceptance criteria
+
+The criteria are what the work is held to, taken from your agreement with the contractor. Type them in **Acceptance criteria, from the agreement** and choose **Add the criteria**. Asana never writes them: an Asana task's description is the contractor's to edit, so it is evidence, not the agreement.
+
+Without criteria, a completed task is held: "The task is completed, but the milestone has no acceptance criteria. Add the criteria from the agreement, then accept the work." Once the work is accepted, its criteria stay as they were accepted; unlink the task to change them. The ledger records `milestone_criteria_set`, with the criteria.
+
+## 4. When the task is completed
+
+The card says where the task stands:
+
+| Status | What it means |
+| --- | --- |
+| **Waiting for the task** | Not completed in Asana yet. |
+| **Ready for acceptance** | Completed in Asana, with criteria written. A person accepts the work. |
+| **Accepted** | A person accepted the work against its criteria. The agent decides on pay. |
+| **Held for review** | Reopened or changed after acceptance, no longer readable, or completed without criteria. |
+
+Vestiarion reads the task again when Asana's webhook says it changed, before each of the agent's cycles once the work is accepted, and every 15 minutes. **Check Asana now** reads it at once. When the task becomes ready, the ledger records `asana_task_ready`, with when it was completed and by whom.
+
+Under **Deliverables in Asana**, the card lists each attachment, each link in the description and each link in a comment. A file in Asana is checked through Asana's API with the workspace's connection before it is offered; a link to another site is shown as given and never opened by Vestiarion.
+
+## 5. Accept the work
+
+When the task is ready, read the deliverables against the criteria. Tick "I checked each criterion against these deliverables, as shown here." and choose **Accept the work**. The card says "Accepted. The agent decides on pay within a minute, under every guardrail."
+
+Vestiarion reads the task again first. If its deliverables changed since you opened the page, nothing is accepted: "The deliverables changed in Asana since you opened this. Look at them again before accepting." The milestone is verified only for the version you saw: the ledger records `milestone_accepted`, with the deliverables, their fingerprint and the criteria's hash.
+
+The contractor never accepts their own work. A member whose email is the payee's (the email the contractor's payment notices go to) is refused with "You are this milestone's payee, so someone else accepts the work." Where the payee has an Asana account, a member whose Asana account is the payee's is refused too: "Your Asana account is this milestone's payee, so someone else accepts the work." On such a milestone, **Pay now** is refused to the payee as well: "You are this milestone's payee, so someone else approves paying it."
+
+From here the agent decides on the release as for any verified milestone: the contractor's screening, their limit, the workspace's spending limit, two approvals above its figure, and a confirmed address.
+
+## 6. Reopened or changed after acceptance
+
+If the task is reopened in Asana, its deliverables change (a file added, removed or uploaded again, a link changed), or Asana no longer shows it, after the work was accepted and before the payment is sent, the acceptance is taken back: the milestone waits for verification again and the card says **Held for review**. The ledger records `milestone_acceptance_withdrawn`, with why. Accept the work again once the task is completed, against what Asana shows now.
+
+If the payment was sent already, the card says **Changed after payment**: "The task changed in Asana after the payment was sent. Review it with the contractor: Vestiarion does not take a payment back."
+
+## 7. The Asana card's figures
+
+The Asana card in Settings counts, over the last 30 days:
+
+- **Evidence checked by a person**: each acceptance is a person's check of the deliverables against the criteria.
+- **Disputes**: acceptances taken back because the task was reopened or changed.
+- **From acceptance to the agent's decision**: the median time from an acceptance to the agent's first decision on that milestone.
+
+## Why it was paid
+
+A milestone accepted from Asana says so on its [evidence page](/docs/guides/evidence): "Asana reported the task completed.", verified outside, beside the person who accepted the work against its criteria.
+
+## Status and errors
+
+- "Asana needs you to reconnect", when the app's access was removed in Asana. Choose **Reconnect Asana**.
+- "Asana did not answer just now. It is read again within 15 minutes." on a task the card could not read.
+- "Asana is not set up on this deployment yet." on a deployment where Asana is not configured.
+
+## Disconnect
+
+Choose **Disconnect Asana** on the card. Vestiarion deletes its webhooks, ends its access in Asana and deletes its tokens. Acceptances already recorded stay in Vestiarion's signed ledger. The ledger records `accounting_disconnected`.

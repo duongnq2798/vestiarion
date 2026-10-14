@@ -1,4 +1,5 @@
 import net from "node:net";
+import { attachmentGidOf, taskRefOf } from "../asana/urls";
 
 /**
  * Which evidence links Vestiarion may check, and how (docs/superpowers/specs/2026-10-13-role-onboarding-evidence-access-
@@ -14,6 +15,14 @@ import net from "node:net";
 export const GITHUB_WEB_HOST = "github.com";
 export const GITHUB_API_HOST = "api.github.com";
 const GITHUB_API = `https://${GITHUB_API_HOST}`;
+/**
+ * Asana's web pages and its API share one host (docs/superpowers/specs/2026-10-14-asana-acceptance-design.md A13): a
+ * task's or an attachment's link is asked about at Asana's API, `/api/1.0/tasks/<id>` or `/api/1.0/attachments/<id>`,
+ * built here from the id alone, with the workspace's own Asana connection. The page a person typed is never requested.
+ */
+export const ASANA_HOST = "app.asana.com";
+const ASANA_API = `https://${ASANA_HOST}/api/1.0`;
+const ASANA_API_PATH = /^\/api\/1\.0\/(tasks|attachments)\/[0-9]{1,32}$/;
 
 /** A signed storage link carries a long token; nothing longer is read. */
 const URL_MAX = 4000;
@@ -27,14 +36,16 @@ export const NOT_CHECKED_WORDS: Readonly<Record<NotCheckedReason, string>> = {
   credentials: "A link that carries a user name or a password is never opened.",
   port: "A link to a port other than the web's own is never opened.",
   address: "A link to a private, local or numeric address is never opened.",
-  host: "Vestiarion checks links on GitHub and on its own file storage only, and never opens other sites.",
-  path: "On GitHub, Vestiarion checks pull requests and their comments; on its own storage, signed links.",
+  host: "Vestiarion checks links on GitHub, Asana and its own file storage only, and never opens other sites.",
+  path: "On GitHub, Vestiarion checks pull requests and their comments; on Asana, tasks and attachments; on its own storage, signed links.",
 };
 
 export type CheckTarget =
   | { kind: "github_pull"; href: string; owner: string; repo: string; number: number; request: string }
   | { kind: "github_comment"; href: string; owner: string; repo: string; commentId: number; request: string; repository: string }
-  | { kind: "signed_storage"; href: string; host: string; expiresAt: number | null; request: string };
+  | { kind: "signed_storage"; href: string; host: string; expiresAt: number | null; request: string }
+  | { kind: "asana_task"; href: string; taskGid: string; request: string }
+  | { kind: "asana_attachment"; href: string; attachmentGid: string; request: string };
 
 export type TargetOf = { target: CheckTarget } | { notChecked: NotCheckedReason };
 
@@ -134,6 +145,14 @@ export function checkTargetOf(raw: string, options: { storageHost?: string | nul
     return { target: { kind: "github_pull", href: url.href, owner, repo, number, request: `${repository}/pulls/${number}` } };
   }
 
+  if (host === ASANA_HOST) {
+    const task = taskRefOf(url.href);
+    if (task) return { target: { kind: "asana_task", href: url.href, taskGid: task.taskGid, request: `${ASANA_API}/tasks/${task.taskGid}?opt_fields=gid` } };
+    const attachment = attachmentGidOf(url.href);
+    if (attachment) return { target: { kind: "asana_attachment", href: url.href, attachmentGid: attachment, request: `${ASANA_API}/attachments/${attachment}?opt_fields=gid` } };
+    return { notChecked: "path" };
+  }
+
   const storageHost = options.storageHost ?? null;
   if (storageHost && host === storageHost) {
     const token = url.searchParams.get("token");
@@ -146,13 +165,15 @@ export function checkTargetOf(raw: string, options: { storageHost?: string | nul
 
 /**
  * Whether the server may send a request to this address at all: the last check before any request, for a target and for
- * a redirect alike. Only GitHub's API, under a repository, or the workspace's own storage, signed.
+ * a redirect alike. Only GitHub's API, under a repository; Asana's API, for one task or one attachment; or the
+ * workspace's own storage, signed.
  */
 export function requestAllowed(raw: string, options: { storageHost?: string | null } = {}): boolean {
   const parsed = checkedUrl(raw);
   if ("notChecked" in parsed) return false;
   const host = parsed.url.hostname.toLowerCase();
   if (host === GITHUB_API_HOST) return parsed.url.pathname.startsWith("/repos/") || parsed.url.pathname.startsWith("/repositories/");
+  if (host === ASANA_HOST) return ASANA_API_PATH.test(parsed.url.pathname);
   const storageHost = options.storageHost ?? null;
   return Boolean(storageHost) && host === storageHost && SIGNED_PATH.test(parsed.url.pathname);
 }

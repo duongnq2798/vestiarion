@@ -4,6 +4,7 @@ export { ActorScopeError, COMMAND_PERMISSIONS, gate, SURFACE_COMMANDS, type Comm
 export { done, refused, TRY_AGAIN, type CommandOutcome, type Done, type Refused } from "./outcome";
 export { addPayableDetails, approvePayable, heldMessage, rejectPayable, returnPayable } from "./payables";
 export { addMilestone, closeMilestoneUnpaid, payMilestoneNow } from "./milestones";
+export { acceptMilestoneWork, checkAsanaTask, linkAsanaTask, setAcceptanceCriteria, unlinkAsanaTask } from "./asana";
 export { pauseWorkspaceAgent, resumeWorkspaceAgent, runWorkspaceCycle } from "./agent";
 export { addInvoice } from "./invoices";
 export { importInvoices, type ImportOutcome } from "./imports";

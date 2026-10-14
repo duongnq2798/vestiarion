@@ -54,7 +54,7 @@ async function openConnection(connectionId: string): Promise<{ connection: Conne
 
 /** The accounting tool a bill came from: never a CRM, which `openConnection` refuses. */
 function accountingProviderOf(connection: Connection): "xero" | "quickbooks" {
-  if (connection.provider === "hubspot") throw new Error("A CRM brings no bills in");
+  if (connection.provider === "hubspot" || connection.provider === "asana") throw new Error("Only an accounting tool brings bills in");
   return connection.provider;
 }
 

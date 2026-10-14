@@ -5,18 +5,19 @@
  * either. Pure types and one error class: no I/O.
  */
 
-export const PROVIDERS = ["xero", "quickbooks", "hubspot"] as const;
+export const PROVIDERS = ["xero", "quickbooks", "hubspot", "asana"] as const;
 export type ProviderId = (typeof PROVIDERS)[number];
 
 /** A provider's name in copy. */
-export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quickbooks: "QuickBooks", hubspot: "HubSpot" };
+export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quickbooks: "QuickBooks", hubspot: "HubSpot", asana: "Asana" };
 
 /**
  * What a provider brings in (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H1): an accounting tool its
- * bills, a CRM its companies and deals. The core's words follow it.
+ * bills, a CRM its companies and deals, and a work tool the tasks a contractor's milestone is delivered in
+ * (docs/superpowers/specs/2026-10-14-asana-acceptance-design.md A1). The core's words follow it.
  */
-export type ProviderKind = "accounting" | "crm";
-export const PROVIDER_KINDS: Record<ProviderId, ProviderKind> = { xero: "accounting", quickbooks: "accounting", hubspot: "crm" };
+export type ProviderKind = "accounting" | "crm" | "work";
+export const PROVIDER_KINDS: Record<ProviderId, ProviderKind> = { xero: "accounting", quickbooks: "accounting", hubspot: "crm", asana: "work" };
 
 /** The kind of a provider named by its id or its label; accounting for a name neither is. */
 export function providerKind(provider: string): ProviderKind {
@@ -72,6 +73,17 @@ export const PROVIDER_WORDS: Record<ProviderId, ProviderWords> = {
     idleDays: 0,
     bills: "won deals",
     approval: "A deal won in HubSpot becomes a deal in Vestiarion only when you plan it.",
+  },
+  // A work tool (Asana acceptance A1): a person's Asana, its tasks linked to milestones; no chart, and a refresh token
+  // that lasts while the app stays authorized, so no idle days.
+  asana: {
+    possessive: "Asana's",
+    organisation: "account",
+    contacts: "users",
+    accounts: "no accounts",
+    idleDays: 0,
+    bills: "linked tasks",
+    approval: "A task completed in Asana is never by itself a reason to pay: a person accepts the work against its criteria.",
   },
 };
 
@@ -329,5 +341,5 @@ export type ConnectingProvider = Pick<
   "id" | "label" | "scopes" | "authorizeUrl" | "exchangeCode" | "organisations" | "refresh" | "revoke" | "exclusive" | "callbackOrganisationParam"
 >;
 
-/** The accounting tools among the providers: those that bring bills in (HubSpot connector H1). */
-export type AccountingProviderId = Exclude<ProviderId, "hubspot">;
+/** The accounting tools among the providers: those that bring bills in (HubSpot connector H1; Asana acceptance A1). */
+export type AccountingProviderId = Exclude<ProviderId, "hubspot" | "asana">;

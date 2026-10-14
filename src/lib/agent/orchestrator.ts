@@ -4,7 +4,7 @@ import { appendLedgerEntry } from "../ledger";
 import { getChainProvider, type ChainProvider, type Stablecoin } from "../circle";
 import { cycleClockMode, type CycleClockMode } from "../clock";
 import { runComplianceSweep, screeningMode as complianceScreeningMode } from "../compliance";
-import { refreshGitHubMilestones } from "../milestone-verification";
+import { refreshAcceptedWork, refreshGitHubMilestones } from "../milestone-verification";
 import { sendPullRequestComments } from "../github/payment-comments";
 import { seedScale } from "../seed";
 import { executePayment, executePaymentBatch, type PaymentExecution, type PaymentSourceType } from "../payments";
@@ -3155,6 +3155,15 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     lines.push({
       domain: "contractor",
       message: `Checked ${milestoneVerification.checked} GitHub milestone${milestoneVerification.checked === 1 ? "" : "s"}: ${milestoneVerification.verified} merged, ${milestoneVerification.unavailable} unavailable, ${milestoneVerification.failed} failed`,
+    });
+  }
+  // Work accepted from Asana is read again the same way (Asana acceptance A11): a task reopened or changed since its
+  // acceptance takes the verification back here, before this cycle's contractor stage reads which milestones are verified.
+  const acceptedWork = await refreshAcceptedWork();
+  if (acceptedWork.checked > 0) {
+    lines.push({
+      domain: "contractor",
+      message: `Checked ${acceptedWork.checked} Asana task${acceptedWork.checked === 1 ? "" : "s"} accepted for milestones: ${acceptedWork.withdrawn} taken back for review, ${acceptedWork.failed} not read`,
     });
   }
 

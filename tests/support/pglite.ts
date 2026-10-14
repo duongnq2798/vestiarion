@@ -111,6 +111,7 @@ export const TENANT_TABLES = [
   "collection_policies", "collection_tasks", "notification_deliveries", "collection_task_starts",
   "reporting_currencies", "cash_scenario_versions", "fx_rates", "fx_variances",
   "onboarding_marks",
+  "asana_task_links",
 ] as const;
 
 export interface SeededRows {
@@ -352,6 +353,17 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
      values ($1, $2, 'SGD', 'USDC', 1000, '2026-10-12T15:00:00Z', 1350, 1.35, 'ExchangeRate-API', '2026-10-10T00:02:00Z', $3, 1.36,
        'ExchangeRate-API', '2026-10-12T00:02:00Z', 992.65, 7.35)`,
     [orgId, invoiceId, rateId]
+  );
+  // An Asana connection, and a task linked to the workspace's milestone (0115).
+  const asanaConnectionId = await one(
+    `insert into accounting_connections (org_id, provider, external_org_id, consent_version, consented_at, window_from)
+     values ($1, 'asana', $2, 'asana-2026-10-14', now(), '2026-07-14') returning id`,
+    [orgId, String(crypto.randomInt(1, 2 ** 40))]
+  );
+  await db.query(
+    `insert into asana_task_links (org_id, milestone_id, connection_id, workspace_gid, task_gid, task_name)
+     select $1, m.id, $2, '1204081671801519', $3, 'Logo animation' from milestones m where m.org_id = $1 and m.title = $4`,
+    [orgId, asanaConnectionId, String(crypto.randomInt(1, 2 ** 40)), `m-${tag}`]
   );
   // A member's checklist mark: Approvals opened while a bill waited there (0114).
   await db.query("insert into onboarding_marks (org_id, user_id, mark) values ($1, $2, 'approvals_opened')", [orgId, approver]);
