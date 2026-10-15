@@ -38,6 +38,7 @@
     "telegram:setup": "tsx scripts/telegram-setup.ts",
     "sdk:types": "tsx scripts/sdk-types.ts",
     "sdk:pack": "tsx scripts/sdk-pack.ts",
+    "postman:build": "tsx scripts/postman-build.ts",
     "cli:build": "tsc -p cli/tsconfig.json",
     "cli:pack": "tsx scripts/cli-pack.ts"
   },

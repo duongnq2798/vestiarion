@@ -58,6 +58,15 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
         ],
       },
+      {
+        // The Postman collections and environment (scripts/lib/postman.ts): keyless JSON that Postman imports by its
+        // URL, from the desktop app or the browser, so any origin may read it.
+        source: "/postman/:path*",
+        headers: [
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+        ],
+      },
     ];
   },
   async rewrites() {

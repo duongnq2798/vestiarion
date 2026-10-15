@@ -1,0 +1,53 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.duongnq2798/vestiarion",
+  "title": "Vestiarion",
+  "description": "An AI treasury agent paying in USDC on Arc: read its decisions, ledger and books; add invoices.",
+  "version": "1.0.0",
+  "websiteUrl": "https://www.vestiarion.xyz/docs/ai-integration/mcp",
+  "repository": {
+    "url": "https://github.com/duongnq2798/vestiarion",
+    "source": "github",
+    "id": "1384852965"
+  },
+  "icons": [
+    {
+      "src": "https://www.vestiarion.xyz/icon.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": ["any"]
+    },
+    {
+      "src": "https://www.vestiarion.xyz/icons/icon-192.png",
+      "mimeType": "image/png",
+      "sizes": ["192x192"]
+    },
+    {
+      "src": "https://www.vestiarion.xyz/icons/icon-512.png",
+      "mimeType": "image/png",
+      "sizes": ["512x512"]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://www.vestiarion.xyz/api/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "A Vestiarion workspace API key, sent as a bearer token. Use a read-only key unless the agent must add records: the write tools need a read-and-write key. No tool can approve or pay.",
+          "isRequired": true,
+          "isSecret": true,
+          "value": "Bearer {api_key}",
+          "variables": {
+            "api_key": {
+              "description": "A workspace API key, created by an owner or an admin under Settings, API keys. Leave Can also add records clear for a read-only key.",
+              "isRequired": true,
+              "isSecret": true,
+              "placeholder": "vxk_..."
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

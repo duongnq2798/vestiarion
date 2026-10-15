@@ -6,6 +6,13 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 - A connection made before keeps the version it agreed to, in its entries and on the connection. **`accounting_payment_approved`** may name an accountant in `by` on a Xero connection agreed under `xero-2026-10-13` or `xero-2026-10-15`.
 - Nothing else in `/api/v1` or the webhooks changes.
 
+## 2026-10-15: Postman collections, and the MCP server described for the MCP Registry
+
+- Two Postman collections and an environment, generated from the OpenAPI document and served under `https://www.vestiarion.xyz/postman/`. "Vestiarion: Getting Started" goes from a key to a first `200`, then adds a counterparty, at a wallet you set, and an invoice for it. "Vestiarion API reference" has every operation, with a saved example of its success and of each error it documents. Both authenticate with `{{apiKey}}` from the environment, and no file holds a key. [Use Vestiarion from Postman](/docs/get-started/postman) says how to import them. They call the endpoints as they are: no endpoint changes.
+- The example answer of [Create a payee link](/docs/api/create-payee-link), on its reference page and in `/api/v1/openapi.json`, now shows an invented token in `url` in place of a real, expired one. The answer's shape is unchanged.
+- `server.json`, at the repository root, describes the MCP server at `https://www.vestiarion.xyz/api/mcp` for the official MCP Registry, as `io.github.duongnq2798/vestiarion`, with the API key as a required, secret `Authorization` header. The server, its tools and how they authenticate are unchanged. The [MCP page](/docs/ai-integration/mcp#which-key-to-use) now says which key to use: a read-only key by default, a read-and-write key for an agent that should add records.
+- Nothing else in `/api/v1`, the MCP server or the webhooks changes.
+
 ## 2026-10-14: Status says unavailable while payments are switched off
 
 - `GET /api/v1/status` now answers `provenance.payments: "unavailable"`, and `provenance.yield: "unavailable"`, while payments are switched off for every workspace on the deployment, or while whether they are could not be read. Before, it answered the workspace's chain mode, `live` or `simulate`, although nothing was paid. The other reasons for `unavailable` are unchanged; see [Get status](/docs/api/get-status#provenance).
