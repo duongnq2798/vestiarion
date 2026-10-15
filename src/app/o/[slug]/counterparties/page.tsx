@@ -28,6 +28,7 @@ import { addressUnconfirmed } from "@/lib/counterparty-address";
 import { purchaseOrdersLabel } from "@/lib/counterparty-purchase-orders";
 import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
+import { draftSupplierName } from "@/lib/invoice-drafts/store";
 import { listLedgerEntries } from "@/lib/ledger";
 import { listActivePayeeLinks } from "@/lib/platform/payee-links";
 import { plural } from "@/lib/copy";
@@ -45,16 +46,17 @@ export default async function CounterpartiesPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ add?: string | string[]; name?: string | string[] }>;
+  searchParams: Promise<{ add?: string | string[]; draft?: string | string[] }>;
 }) {
   const { slug } = await params;
   const access = await requireMembership(slug);
   // `?add`, from an invoice with no counterparty to choose (Bills & receivables, From a document), opens Add counterparty;
-  // `&name=`, from a captured draft's supplier (invoice capture C5), fills its name in.
-  const { add, name } = await searchParams;
+  // `&draft=`, from a captured draft (invoice capture C5), fills in the supplier's name, read from that draft in this
+  // workspace: a name, often a person's, never travels in the address.
+  const { add, draft } = await searchParams;
   const adding = add !== undefined;
-  const initialName = typeof name === "string" ? name.trim().slice(0, 160) : undefined;
   return inOrg(access, async () => {
+    const initialName = typeof draft === "string" ? ((await draftSupplierName(draft).catch(() => null)) ?? undefined) : undefined;
     const network = workspaceNetwork().id;
     // A live match names the entity it matched, which Not this person dismisses (dismiss screening match R6).
     const liveScreening = screeningMode() === "live";

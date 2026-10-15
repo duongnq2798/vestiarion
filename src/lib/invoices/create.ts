@@ -56,6 +56,8 @@ export interface CapturedDraft {
  * exactly like one that does not exist, and then nothing is written.
  */
 export async function createInvoice(input: {
+  /** The row's id, when the caller chose it (a captured draft's, invoice capture I1); generated otherwise. */
+  id?: string;
   actorId: string | null;
   invoice: InvoiceInput;
   document: DocumentProvenance | null;
@@ -77,7 +79,7 @@ export async function createInvoice(input: {
   /** The draft the Chrome extension captured, which a person added from the console (invoice capture design C6). */
   captured?: CapturedDraft;
 }): Promise<{ id: string; counterpartyName: string } | null> {
-  const { actorId, invoice, document, via, apiKeyId, linkId, inboxEmailId, original, imported, deal, external, captured } = input;
+  const { id, actorId, invoice, document, via, apiKeyId, linkId, inboxEmailId, original, imported, deal, external, captured } = input;
   const lookup = await db()
     .from("counterparties")
     .select("id, name")
@@ -91,6 +93,7 @@ export async function createInvoice(input: {
     await db()
       .from("invoices")
       .insert({
+        ...(id ? { id } : {}),
         direction: invoice.direction,
         counterparty_id: counterparty.id,
         amount: invoice.amount,

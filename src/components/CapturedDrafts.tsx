@@ -1,11 +1,13 @@
 "use client";
 
-import { Trash2, UserPlus } from "lucide-react";
+import { ChevronRight, Trash2, UserPlus } from "lucide-react";
 import Link from "next/link";
-import { confirmInvoiceDraftAction, discardInvoiceDraftAction, type DraftActionResult } from "@/app/actions/invoice-drafts";
+import { useState } from "react";
+import { confirmInvoiceDraftAction, discardInvoiceDraftAction, readCapturedTextAction, type DraftActionResult } from "@/app/actions/invoice-drafts";
 import InvoiceIntake, { ADD_COUNTERPARTY_PATH, type IntakeCounterparty } from "@/components/intake/InvoiceIntake";
 import { Card } from "@/components/ui/Card";
 import { Disclosure } from "@/components/ui/Disclosure";
+import { cn } from "@/components/ui/cn";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
@@ -50,11 +52,47 @@ function Discard({ orgSlug, draftId }: { orgSlug: string; draftId: string }) {
   );
 }
 
+/**
+ * What was captured, read when it is opened (C9): the text is not part of the page, which every refresh sends again.
+ * Shown as text, whatever it holds.
+ */
+function CapturedText({ orgSlug, draftId }: { orgSlug: string; draftId: string }) {
+  const [state, setState] = useState<{ status: "idle" | "loading" | "done"; text?: string | null; message?: string }>({ status: "idle" });
+  return (
+    <details
+      className="disclosure group/disclosure rounded-2xl border border-line bg-surface shadow-surface"
+      onToggle={(event) => {
+        if (!event.currentTarget.open || state.status !== "idle") return;
+        setState({ status: "loading" });
+        void readCapturedTextAction(orgSlug, draftId)
+          .then((answer) => setState(answer.ok ? { status: "done", text: answer.text ?? null } : { status: "done", message: answer.message }))
+          .catch(() => setState({ status: "done", message: "That did not work. Try again in a moment." }));
+      }}
+    >
+      <summary className="flex cursor-pointer list-none select-none items-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium text-ink-2 transition-colors duration-150 ease-standard hover:text-ink [&::-webkit-details-marker]:hidden">
+        <ChevronRight aria-hidden className="size-4 shrink-0 text-ink-3 transition-transform duration-200 ease-standard group-open/disclosure:rotate-90" />
+        What was captured
+      </summary>
+      <div className="px-4 pb-4" aria-live="polite">
+        {state.status === "loading" && <p className="text-xs text-ink-3">Reading…</p>}
+        {state.status === "done" && state.message && <p className="text-xs text-refused">{state.message}</p>}
+        {state.status === "done" && !state.message && (
+          <pre className={cn("max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-surface-2 p-3 font-mono text-xs text-ink-2", !state.text && "font-sans")}>
+            {state.text ?? "The captured text was removed: it is kept until the draft is decided, and at most 30 days."}
+          </pre>
+        )}
+        <p className="mt-2 text-xs text-ink-3">Kept until this draft is added or discarded, and at most 30 days.</p>
+      </div>
+    </details>
+  );
+}
+
 function DraftCard({ orgSlug, draft, canAdd, counterparties, capturedBy }: { orgSlug: string; draft: CapturedDraftView; canAdd: boolean; counterparties: IntakeCounterparty[]; capturedBy: string | null }) {
   const { fields } = draft;
   const supplier = fields.supplierName;
   const matched = draft.counterpartyId && counterparties.some((counterparty) => counterparty.id === draft.counterpartyId) ? draft.counterpartyName : null;
-  const addCounterparty = `${ADD_COUNTERPARTY_PATH}${supplier ? `&name=${encodeURIComponent(supplier)}` : ""}`;
+  // The supplier's name, often a person's, stays out of the address: Counterparties reads it from the draft.
+  const addCounterparty = `${ADD_COUNTERPARTY_PATH}&draft=${encodeURIComponent(draft.id)}`;
   return (
     <Card className="space-y-3 p-4 sm:p-5" id={`captured-${draft.id}`}>
       <div className="min-w-0">
@@ -94,24 +132,19 @@ function DraftCard({ orgSlug, draft, canAdd, counterparties, capturedBy }: { org
         <div className="rounded-lg border border-refused/40 bg-refused/5 p-3 text-sm text-ink-2">
           <p className="font-medium text-refused">This may be a duplicate</p>
           <ul className="mt-1 list-disc pl-5">
-            {draft.duplicates.map((line) => (
-              <li key={line}>{line}</li>
+            {draft.duplicates.map((line, index) => (
+              <li key={index}>{line}</li>
             ))}
           </ul>
         </div>
       )}
-      {draft.warnings.map((warning) => (
-        <p key={warning} className="text-xs text-refused">
+      {draft.warnings.map((warning, index) => (
+        <p key={index} className="text-xs text-refused">
           {warning}
         </p>
       ))}
       {draft.modelNote && <p className="text-xs italic text-ink-3">The model&apos;s note: {draft.modelNote}</p>}
-      {draft.rawText && (
-        <Disclosure summary="What was captured">
-          <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-surface-2 p-3 font-mono text-xs text-ink-2">{draft.rawText}</pre>
-          <p className="mt-2 text-xs text-ink-3">Kept until this draft is added or discarded, and at most 30 days.</p>
-        </Disclosure>
-      )}
+      <CapturedText orgSlug={orgSlug} draftId={draft.id} />
       {canAdd ? (
         <>
           {!matched && (

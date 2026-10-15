@@ -1,7 +1,7 @@
 import { db } from "../dal";
 import { CaptureNotSetUpError, isMissingRelation } from "../extension/tokens";
 import { draftDuplicates, type BillRow, type OtherDraft } from "./duplicates";
-import { DRAFT_COLUMNS, fieldsOfRow, startingMemo, type DraftFields, type DraftRow, type StoredRead } from "./model";
+import { DRAFT_COLUMNS, fieldsOfRow, REVIEW_LIMIT, startingMemo, type DraftFields, type DraftRow, type StoredRead } from "./model";
 
 /**
  * Reading and writing captured drafts (invoice capture design C1, C5, C7), inside the workspace's scope. Before
@@ -75,6 +75,28 @@ export async function moveDraft(
   return (moved.data as unknown as DraftRow[])[0] ?? null;
 }
 
+/** How many drafts never sent this connection keeps, counted up to `atMost` (M8). */
+export async function unsentDraftCount(connectionId: string, atMost: number): Promise<number> {
+  const found = await db().from("invoice_drafts").select("id").eq("connection_id", connectionId).eq("state", "draft").limit(atMost);
+  if (found.error) raise(found.error);
+  return (found.data as unknown[]).length;
+}
+
+/** Whether a bill with this id is in the workspace: a captured draft's, looked for after a failure (I1). */
+export async function invoiceExists(id: string): Promise<boolean> {
+  const found = await db().from("invoices").select("id").eq("id", id).maybeSingle<{ id: string }>();
+  if (found.error) throw new Error(found.error.message);
+  return found.data !== null;
+}
+
+/** The supplier's name a draft read, for Counterparties' Add counterparty to start from (I2); null for none. */
+export async function draftSupplierName(id: string): Promise<string | null> {
+  if (!isDraftId(id)) return null;
+  const found = await db().from("invoice_drafts").select("supplier_name").eq("id", id).maybeSingle<{ supplier_name: string | null }>();
+  if (found.error) raise(found.error);
+  return found.data?.supplier_name ?? null;
+}
+
 /** The bills a draft could repeat: those of the counterparties named, every status (C7). */
 export async function billsOf(counterpartyIds: string[]): Promise<BillRow[]> {
   if (counterpartyIds.length === 0) return [];
@@ -114,27 +136,33 @@ export interface CapturedDraftView {
   modelNote: string | null;
   extracted: StoredRead["extracted"] | null;
   reader: StoredRead["reader"];
-  rawText: string | null;
   duplicates: string[];
 }
 
+/** Every column the review list reads: all but the captured text, which is read when a person opens it. */
+const REVIEW_COLUMNS = DRAFT_COLUMNS.split(", ").filter((column) => column !== "raw_text").join(", ");
+
 /**
- * The drafts sent for review, newest first, at most `limit`, each with what it may repeat. `{ available: false }`
- * before migration 0121.
+ * The drafts sent for review, newest first, at most `REVIEW_LIMIT` (`more` when there are others), each with what it
+ * may repeat. Never their captured text: the list is part of every Bills & receivables page and its refreshes, and
+ * the text is read by `capturedText` when someone opens it. `{ available: false }` before migration 0121.
  */
-export async function capturedDraftsToReview(limit = 50): Promise<{ available: true; drafts: CapturedDraftView[] } | { available: false }> {
-  const found = await db().from("invoice_drafts").select(DRAFT_COLUMNS).eq("state", "sent").order("sent_at", { ascending: false }).limit(limit);
+export async function capturedDraftsToReview(): Promise<{ available: true; drafts: CapturedDraftView[]; more: boolean } | { available: false }> {
+  const found = await db().from("invoice_drafts").select(REVIEW_COLUMNS).eq("state", "sent").order("sent_at", { ascending: false }).limit(REVIEW_LIMIT + 1);
   if (found.error) {
     if (isMissingRelation(found.error)) return { available: false };
     throw new Error(found.error.message);
   }
-  const rows = found.data as unknown as DraftRow[];
-  if (rows.length === 0) return { available: true, drafts: [] };
+  const all = found.data as unknown as DraftRow[];
+  const more = all.length > REVIEW_LIMIT;
+  const rows = all.slice(0, REVIEW_LIMIT);
+  if (rows.length === 0) return { available: true, drafts: [], more: false };
   const counterpartyIds = [...new Set(rows.map((row) => row.counterparty_id).filter((id): id is string => id !== null))];
   const numbers = [...new Set(rows.map((row) => row.invoice_number).filter((number): number is string => !!number))];
   const [bills, others] = await Promise.all([billsOf(counterpartyIds), draftsNaming(numbers)]);
   return {
     available: true,
+    more,
     drafts: rows.map((row) => {
       const fields = fieldsOfRow(row);
       return {
@@ -151,9 +179,19 @@ export async function capturedDraftsToReview(limit = 50): Promise<{ available: t
         modelNote: row.read?.modelNote ?? null,
         extracted: row.read?.extracted ?? null,
         reader: row.read?.reader ?? null,
-        rawText: row.raw_text,
         duplicates: draftDuplicates({ id: row.id, counterpartyId: row.counterparty_id, ...fields, memo: startingMemo(fields.invoiceNumber, fields.memo) }, bills, others),
       };
     }),
   };
+}
+
+/**
+ * The text a draft was read from, for the person reviewing it (C9): null when it was removed, as it is once the draft
+ * is decided or 30 days after capture, or for a draft not sent for review.
+ */
+export async function capturedText(id: string): Promise<string | null> {
+  if (!isDraftId(id)) return null;
+  const found = await db().from("invoice_drafts").select("raw_text, state").eq("id", id).maybeSingle<{ raw_text: string | null; state: string }>();
+  if (found.error) raise(found.error);
+  return found.data?.state === "sent" ? found.data.raw_text : null;
 }

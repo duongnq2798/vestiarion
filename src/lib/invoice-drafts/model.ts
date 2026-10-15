@@ -178,12 +178,14 @@ export interface DraftRow {
   sent_at: string | null;
   decided_by: string | null;
   decided_at: string | null;
+  /** The id the bill is being added with, from the moment a person starts adding it (I1). */
+  claimed_invoice_id: string | null;
   invoice_id: string | null;
 }
 
 /** Every column a draft is read with. */
 export const DRAFT_COLUMNS =
-  "id, state, source, document_kind, document_sha256, supplier_name, invoice_number, amount, currency, invoice_date, due_date, po_reference, memo, read, raw_text, counterparty_id, connection_id, idempotency_key, request_sha256, captured_by, captured_at, sent_at, decided_by, decided_at, invoice_id";
+  "id, state, source, document_kind, document_sha256, supplier_name, invoice_number, amount, currency, invoice_date, due_date, po_reference, memo, read, raw_text, counterparty_id, connection_id, idempotency_key, request_sha256, captured_by, captured_at, sent_at, decided_by, decided_at, claimed_invoice_id, invoice_id";
 
 /** A date column as a day: PostgREST answers `date` as `YYYY-MM-DD` already, a timestamp as more. */
 function dayOf(value: string | null): string | null {
@@ -243,4 +245,12 @@ export function extensionView(row: DraftRow, reviewUrl: string | null): Extensio
 export function startingMemo(invoiceNumber: string | null, memo: string | null): string | null {
   const joined = [invoiceNumber, memo].filter((part): part is string => !!part && part.trim() !== "").join(" · ");
   return joined ? joined.slice(0, 280) : null;
+}
+
+/** The most sent drafts Bills & receivables lists at once. */
+export const REVIEW_LIMIT = 50;
+
+/** What Waiting for review says of the sent drafts: their count, or "50+" past the list's limit. */
+export function capturedCountLabel(count: number, more: boolean): string {
+  return `${more ? `${REVIEW_LIMIT}+` : count} captured`;
 }

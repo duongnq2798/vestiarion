@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { takeExtensionTokenRequest } from "../rate-limit";
-import { clientAddress, corsHeaders, NOT_SET_UP, originRefused } from "./http";
+import { clientAddress, corsHeaders, NOT_SET_UP, originRefused, readCappedText } from "./http";
 import { extensionSettingsFromEnv, type ExtensionSettings } from "./settings";
 import type { OAuthErrorCode } from "./tokens";
 
@@ -37,10 +37,9 @@ export function guardOAuthRequest(request: Request): { denied: NextResponse } | 
 
 /** The request's parameters, sent as a form (as OAuth sends them) or as a JSON object; null when neither can be read. */
 export async function readOAuthParams(request: Request): Promise<Record<string, string> | null> {
-  const declared = Number(request.headers.get("content-length") ?? "0");
-  if (Number.isFinite(declared) && declared > MAX_PARAMS_BYTES) return null;
-  const raw = await request.text();
-  if (Buffer.byteLength(raw, "utf8") > MAX_PARAMS_BYTES) return null;
+  // Read no further than the limit, whether or not the request declared its length.
+  const raw = await readCappedText(request, MAX_PARAMS_BYTES);
+  if (raw === null) return null;
   const type = (request.headers.get("content-type") ?? "").toLowerCase();
   const params: Record<string, string> = {};
   if (type.includes("application/json")) {

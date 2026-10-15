@@ -37,6 +37,8 @@ export function refusedAnswer(request: Request, refusal: Refused): NextResponse 
       return extensionError(request, "conflict", refusal.message);
     case "unreadable":
       return extensionError(request, "unreadable", refusal.message);
+    case "too_many_drafts":
+      return extensionError(request, "too_many_drafts", refusal.message);
     case "rate_limited":
       return extensionError(request, "rate_limited", refusal.message, { "Retry-After": "12" });
     case "forbidden":

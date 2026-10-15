@@ -27,6 +27,8 @@ export async function addInvoice(
     external?: ExternalSource;
     /** The draft the Chrome extension captured, added from the console (invoice capture design C6). */
     captured?: CapturedDraft;
+    /** The id the invoice is added with, chosen by the caller so it can look for it after a failure (invoice capture I1). */
+    invoiceId?: string;
   }
 ): Promise<CommandOutcome<{ invoiceId: string; counterpartyName: string }>> {
   const refusal = gate(actor, "invoice.add");
@@ -34,6 +36,7 @@ export async function addInvoice(
   let created: Awaited<ReturnType<typeof createInvoice>>;
   try {
     created = await createInvoice({
+      ...(input.invoiceId ? { id: input.invoiceId } : {}),
       actorId: actor.userId,
       invoice: input.invoice,
       document: input.document,

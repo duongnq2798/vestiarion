@@ -120,7 +120,9 @@ describe("invoice_drafts (0121, C1)", () => {
     ).rows[0].id;
     const id = await draft(orgA);
     await expect(db.query("update public.invoice_drafts set counterparty_id = $2 where id = $1", [id, theirs])).rejects.toThrow(/foreign key/);
-    await expect(db.query("update public.invoice_drafts set invoice_id = $2 where id = $1", [id, theirInvoice])).rejects.toThrow(/foreign key/);
+    const confirmed = await draft(orgA, { state: "sent" });
+    await db.query("update public.invoice_drafts set state = 'confirmed' where id = $1", [confirmed]);
+    await expect(db.query("update public.invoice_drafts set invoice_id = $2 where id = $1", [confirmed, theirInvoice])).rejects.toThrow(/foreign key/);
   });
 
   it("keeps a confirmed draft when its invoice or counterparty goes, without the link", async () => {
@@ -131,8 +133,11 @@ describe("invoice_drafts (0121, C1)", () => {
         [orgA, counterparty]
       )
     ).rows[0].id;
-    const id = await draft(orgA, { state: "confirmed" });
-    await db.query("update public.invoice_drafts set counterparty_id = $2, invoice_id = $3 where id = $1", [id, counterparty, invoice]);
+    const id = await draft(orgA);
+    await db.query("update public.invoice_drafts set counterparty_id = $2 where id = $1", [id, counterparty]);
+    await db.query("update public.invoice_drafts set state = 'sent' where id = $1", [id]);
+    await db.query("update public.invoice_drafts set state = 'confirmed' where id = $1", [id]);
+    await db.query("update public.invoice_drafts set invoice_id = $2 where id = $1", [id, invoice]);
     await db.query("delete from public.invoices where id = $1", [invoice]);
     await db.query("delete from public.counterparties where id = $1", [counterparty]);
     const row = (await db.query<{ org_id: string; invoice_id: string | null; counterparty_id: string | null }>(
@@ -160,6 +165,36 @@ describe("invoice_drafts (0121, C1)", () => {
     for (const role of ["anon", "authenticated"] as const) {
       await expect(asRole(db, role, (tx) => tx.query("select 1 from public.invoice_drafts"))).rejects.toThrow(/permission denied/);
     }
+  });
+
+  it("keeps what the reader made of a capture to 64 KB", async () => {
+    const insert = (size: number) =>
+      db.query(
+        `insert into public.invoice_drafts (org_id, source, connection_id, idempotency_key, request_sha256, read)
+         values ($1, 'selection', gen_random_uuid(), gen_random_uuid()::text, repeat('a', 64), jsonb_build_object('warnings', repeat('x', $2::int)))`,
+        [orgA, size]
+      );
+    await insert(60_000);
+    await expect(insert(70_000)).rejects.toThrow(/invoice_drafts_read_check/);
+  });
+
+  it("has the indexes its list, its lookups and the sweep read by", async () => {
+    const names = (await db.query<{ indexname: string }>("select indexname from pg_indexes where schemaname = 'public' and tablename in ('invoice_drafts', 'extension_grants', 'extension_auth_codes')")).rows.map((row) => row.indexname);
+    for (const name of [
+      "invoice_drafts_review_idx",
+      "invoice_drafts_number_idx",
+      "invoice_drafts_text_idx",
+      "invoice_drafts_unsent_idx",
+      "invoice_drafts_unlinked_idx",
+      "extension_grants_member_idx",
+      "extension_grants_revoked_idx",
+      "extension_grants_refresh_expires_idx",
+      "extension_auth_codes_expires_idx",
+      "extension_auth_codes_member_idx",
+    ]) {
+      expect(names, name).toContain(name);
+    }
+    expect(names).not.toContain("invoice_drafts_org_state_idx");
   });
 
   it("goes with its workspace", async () => {
@@ -225,7 +260,21 @@ describe("extension_grants and extension_auth_codes (0121, C12-C17)", () => {
       )
     ).rejects.toThrow(/extension_grants_code_hash_key/);
     await expect(db.query("update public.extension_grants set revoked_reason = 'expired' where id = $1", [id])).rejects.toThrow(/extension_grants_revoked_reason_check/);
-    await db.query("update public.extension_grants set revoked_reason = 'reused_refresh', retired_refresh_hash = $2 where id = $1", [id, hex()]);
+    for (const reason of ["extension", "settings", "reused_code", "reused_refresh", "role_changed"]) {
+      await db.query("update public.extension_grants set revoked_reason = $2, retired_refresh_hash = $3 where id = $1", [id, reason, hex()]);
+    }
+  });
+
+  it("never lets a connection outlive 90 days from its making", async () => {
+    const id = await grant(orgA, owner);
+    await expect(db.query("update public.extension_grants set refresh_expires_at = created_at + interval '91 days' where id = $1", [id])).rejects.toThrow(/extension_grants_lifetime_check/);
+    await expect(db.query("update public.extension_grants set access_expires_at = created_at + interval '91 days' where id = $1", [id])).rejects.toThrow(/extension_grants_lifetime_check/);
+    await db.query("update public.extension_grants set refresh_expires_at = created_at + interval '90 days' where id = $1", [id]);
+  });
+
+  it("marks a code presented again after it was used", async () => {
+    await code(orgA, owner);
+    await db.query("update public.extension_auth_codes set used_at = now(), replayed_at = now() where org_id = $1", [orgA]);
   });
 });
 
@@ -233,25 +282,63 @@ describe("invoice_capture_sweep (0121, C9, C10)", () => {
   const sweep = async (now: string) =>
     (await asServiceRole(db, (tx) => tx.query<{ r: Record<string, number> }>("select public.invoice_capture_sweep($1::timestamptz) as r", [now]))).rows[0].r;
 
-  it("clears the captured text after 30 days, deletes drafts never sent after 7, and keeps the rest", async () => {
+  it("clears the captured text from 29 days, deletes drafts never sent from 6, so a daily run keeps the 30 and 7 days", async () => {
     const orgId = await createOrg(db, "capture-sweep");
-    const old = "2026-09-01T00:00:00Z";
-    const week = "2026-09-25T00:00:00Z";
-    const sentOld = await draft(orgId, { state: "sent", captured_at: old });
-    const unsentWeek = await draft(orgId, { state: "draft", captured_at: week });
-    const sentWeek = await draft(orgId, { state: "sent", captured_at: week });
-    const fresh = await draft(orgId, { state: "draft", captured_at: "2026-10-14T00:00:00Z" });
+    const now = "2026-10-15T00:00:00Z";
+    const days = (n: number, hours = 0) => new Date(Date.parse(now) - n * 86_400_000 - hours * 3_600_000).toISOString();
+    const sentOld = await draft(orgId, { state: "sent", captured_at: days(29, 1) });
+    const sentYoung = await draft(orgId, { state: "sent", captured_at: days(28, 23) });
+    const unsentOld = await draft(orgId, { state: "draft", captured_at: days(6, 1) });
+    const unsentYoung = await draft(orgId, { state: "draft", captured_at: days(5, 23) });
 
-    const result = await sweep("2026-10-15T00:00:00Z");
+    const result = await sweep(now);
     expect(result.textCleared).toBeGreaterThanOrEqual(1);
     expect(result.draftsDeleted).toBeGreaterThanOrEqual(1);
 
     const rows = (await db.query<{ id: string; raw_text: string | null }>("select id, raw_text from public.invoice_drafts where org_id = $1", [orgId])).rows;
     const byId = new Map(rows.map((row) => [row.id, row.raw_text]));
     expect(byId.get(sentOld)).toBeNull();
-    expect(byId.has(unsentWeek)).toBe(false);
-    expect(byId.get(sentWeek)).not.toBeNull();
-    expect(byId.get(fresh)).not.toBeNull();
+    expect(byId.get(sentYoung)).not.toBeNull();
+    expect(byId.has(unsentOld)).toBe(false);
+    expect(byId.get(unsentYoung)).not.toBeNull();
+  });
+
+  it("clears the text of a decided draft, whatever its age", async () => {
+    const orgId = await createOrg(db, "capture-sweep-decided");
+    const discarded = await draft(orgId, { state: "discarded" });
+    const sent = await draft(orgId, { state: "sent" });
+    await sweep(new Date().toISOString());
+    const text = async (id: string) => (await db.query<{ raw_text: string | null }>("select raw_text from public.invoice_drafts where id = $1", [id])).rows[0].raw_text;
+    expect(await text(discarded)).toBeNull();
+    expect(await text(sent)).not.toBeNull();
+  });
+
+  it("links a draft left confirmed for an hour to the bill it became, and puts one whose bill was never added back for review", async () => {
+    const orgId = await createOrg(db, "capture-sweep-stuck");
+    const counterparty = (await db.query<{ id: string }>("insert into public.counterparties (org_id, name, role) values ($1, 'Stuck', 'vendor') returning id", [orgId])).rows[0].id;
+    const claimed = crypto.randomUUID();
+    await db.query("insert into public.invoices (id, org_id, direction, counterparty_id, amount, due_date) values ($1, $2, 'payable', $3, 1, now())", [claimed, orgId, counterparty]);
+    const added = await draft(orgId, { state: "sent" });
+    const notAdded = await draft(orgId, { state: "sent" });
+    const recent = await draft(orgId, { state: "sent" });
+    const hourAgo = new Date(Date.now() - 61 * 60_000).toISOString();
+    await db.query("update public.invoice_drafts set state = 'confirmed', decided_at = $2, claimed_invoice_id = $3 where id = $1", [added, hourAgo, claimed]);
+    await db.query("update public.invoice_drafts set state = 'confirmed', decided_at = $2, claimed_invoice_id = gen_random_uuid() where id = $1", [notAdded, hourAgo]);
+    await db.query("update public.invoice_drafts set state = 'confirmed', decided_at = now(), claimed_invoice_id = gen_random_uuid() where id = $1", [recent]);
+
+    const result = await sweep(new Date().toISOString());
+    expect(result.draftsLinked).toBe(1);
+    expect(result.draftsReturned).toBe(1);
+    const rows = (
+      await db.query<{ id: string; state: string; invoice_id: string | null; decided_at: Date | null }>(
+        "select id, state, invoice_id, decided_at from public.invoice_drafts where id = any($1)",
+        [[added, notAdded, recent]]
+      )
+    ).rows;
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    expect(byId.get(added)).toMatchObject({ state: "confirmed", invoice_id: claimed });
+    expect(byId.get(notAdded)).toMatchObject({ state: "sent", invoice_id: null, decided_at: null });
+    expect(byId.get(recent)).toMatchObject({ state: "confirmed", invoice_id: null });
   });
 
   it("deletes codes a day after they expired, and connections revoked or expired 30 days ago", async () => {

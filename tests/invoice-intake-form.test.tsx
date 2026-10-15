@@ -131,10 +131,12 @@ describe("InvoiceIntake with no counterparty yet", () => {
   it("is where the Counterparties page opens Add counterparty", async () => {
     const { readFileSync } = await import("node:fs");
     const page = readFileSync("src/app/o/[slug]/counterparties/page.tsx", "utf8");
-    expect(page).toContain("const { add, name } = await searchParams;");
+    expect(page).toContain("const { add, draft } = await searchParams;");
     expect(page).toContain("const adding = add !== undefined;");
-    // A captured draft's supplier comes with its name filled in (invoice capture C5).
-    expect(page).toContain('const initialName = typeof name === "string" ? name.trim().slice(0, 160) : undefined;');
+    // A captured draft's supplier comes with its name filled in (invoice capture C5), read from the draft in this
+    // workspace: the name, often a person's, never travels in the address.
+    expect(page).toContain('typeof draft === "string" ? ((await draftSupplierName(draft).catch(() => null)) ?? undefined) : undefined;');
+    expect(page).not.toMatch(/searchParams\)\.name|\bname\b = await searchParams/);
     expect(page).toContain("defaultOpen={counterparties.length === 0 || adding}");
   });
 });

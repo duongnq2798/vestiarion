@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import CapturedDrafts from "@/components/CapturedDrafts";
+import { capturedCountLabel } from "@/lib/invoice-drafts/model";
 import ChromeExtensionPanel from "@/components/ChromeExtensionPanel";
 import { EXTENSION_CAN, EXTENSION_CANNOT, ExtensionConsentForm } from "@/components/extension/ExtensionConsentForm";
 import type { CapturedDraftView } from "@/lib/invoice-drafts/store";
@@ -12,7 +13,7 @@ import type { CapturedDraftView } from "@/lib/invoice-drafts/store";
  */
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
-vi.mock("@/app/actions/invoice-drafts", () => ({ confirmInvoiceDraftAction: vi.fn(), discardInvoiceDraftAction: vi.fn() }));
+vi.mock("@/app/actions/invoice-drafts", () => ({ confirmInvoiceDraftAction: vi.fn(), discardInvoiceDraftAction: vi.fn(), readCapturedTextAction: vi.fn() }));
 vi.mock("@/app/actions/extension", () => ({ allowExtensionAction: vi.fn(), disconnectExtensionAction: vi.fn() }));
 vi.mock("@/app/actions/intake", () => ({ createInvoiceAction: vi.fn(), createCounterpartyAction: vi.fn() }));
 
@@ -31,13 +32,12 @@ const DRAFT: CapturedDraftView = {
   modelNote: null,
   extracted: null,
   reader: "heuristic",
-  rawText: "Northwind Hosting\n<script>alert(1)</script>\nTotal due: 200.00 USDC",
   duplicates: ["Bills the same purchase order for the same 200 USDC as invoice due 2026-10-31 (already paid). Paying both would pay one obligation twice."],
 };
 const COUNTERPARTIES = [{ id: COUNTERPARTY, name: "Northwind Hosting", role: "vendor" }];
 
 describe("Captured drafts", () => {
-  it("shows what was read, who captured it, what it may repeat and the captured text as text", () => {
+  it("shows what was read, who captured it and what it may repeat, and leaves the captured text to be read when opened", () => {
     const markup = renderToStaticMarkup(<CapturedDrafts orgSlug="northstar" drafts={[DRAFT]} canAdd counterparties={COUNTERPARTIES} members={{ "user-1": "linh@example.com" }} />);
     expect(markup).toContain("Captured drafts");
     expect(markup).toContain("Northwind Hosting · INV-2207");
@@ -45,8 +45,8 @@ describe("Captured drafts", () => {
     expect(markup).toContain("This may be a duplicate");
     expect(markup).toContain("Paying both would pay one obligation twice.");
     expect(markup).toContain("What was captured");
-    expect(markup).not.toContain("<script>alert(1)</script>");
-    expect(markup).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+    // The text is loaded when its disclosure is opened, never sent with every draft on every refresh.
+    expect(markup).not.toContain("Total due");
     expect(markup).toContain("Review and add as bill");
     expect(markup).toContain("Discard");
   });
@@ -62,7 +62,24 @@ describe("Captured drafts", () => {
       <CapturedDrafts orgSlug="northstar" drafts={[{ ...DRAFT, counterpartyId: null, counterpartyName: null, duplicates: [] }]} canAdd counterparties={COUNTERPARTIES} members={{}} />
     );
     expect(markup).toContain("not in Counterparties");
-    expect(markup).toContain("/o/northstar/counterparties?add=1&amp;name=Northwind%20Hosting");
+    // The supplier's name, often a person's, never goes into an address: the page reads it from the draft.
+    expect(markup).toContain("/o/northstar/counterparties?add=1&amp;draft=7c1d6a52-2f5b-4bb0-9c62-1f1f0d4b9a10");
+    expect(markup).not.toMatch(/name=Northwind/);
+  });
+
+  it("shows the same warning twice without two children of one key", () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const markup = renderToStaticMarkup(
+      <CapturedDrafts orgSlug="northstar" drafts={[{ ...DRAFT, warnings: ["Check it.", "Check it."] }]} canAdd counterparties={COUNTERPARTIES} members={{}} />
+    );
+    expect(markup.match(/Check it\./g)).toHaveLength(2);
+    expect(errors.mock.calls.flat().join(" ")).not.toMatch(/same key/);
+    errors.mockRestore();
+  });
+
+  it("counts at most 50, then says 50+", () => {
+    expect(capturedCountLabel(3, false)).toBe("3 captured");
+    expect(capturedCountLabel(50, true)).toBe("50+ captured");
   });
 
   it("renders nothing when nothing waits", () => {

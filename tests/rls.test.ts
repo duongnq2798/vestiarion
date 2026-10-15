@@ -385,3 +385,81 @@ describe("0001's replay never reopens public reads", () => {
     }
   });
 });
+
+describe("invoice_drafts' guard (0121)", () => {
+  // A captured draft moves draft → sent → confirmed or discarded, back from confirmed only while no bill is linked; a
+  // bill is linked once, and only to a confirmed draft; what was captured never changes once the draft is sent, and
+  // the captured text is only ever removed. Under the tenant role, as the app writes it.
+  async function draft(state = "draft"): Promise<string> {
+    return (
+      await db.query<{ id: string }>(
+        `insert into public.invoice_drafts (org_id, state, source, supplier_name, amount, raw_text, connection_id, idempotency_key, request_sha256)
+         values ($1, $2, 'selection', 'Northwind Hosting', '200.00', 'Invoice INV-2207', gen_random_uuid(), gen_random_uuid()::text, repeat('a', 64)) returning id`,
+        [A, state]
+      )
+    ).rows[0].id;
+  }
+  async function bill(): Promise<string> {
+    const counterparty = (await db.query<{ id: string }>("insert into public.counterparties (org_id, name, role) values ($1, $2, 'vendor') returning id", [A, `guard-${crypto.randomUUID()}`])).rows[0].id;
+    return (
+      await db.query<{ id: string }>("insert into public.invoices (org_id, direction, counterparty_id, amount, due_date) values ($1, 'payable', $2, 1, now()) returning id", [A, counterparty])
+    ).rows[0].id;
+  }
+  const update = (id: string, set: string, params: unknown[] = []) =>
+    asTenant(db, A, (tx) => tx.query(`update public.invoice_drafts set ${set} where id = $1`, [id, ...params]));
+
+  it("allows draft → sent → confirmed, a bill linked once, and the text removed", async () => {
+    const id = await draft();
+    await update(id, "supplier_name = 'Northwind Hosting Ltd', counterparty_id = null");
+    await update(id, "state = 'sent', sent_at = now()");
+    await update(id, "state = 'confirmed', decided_at = now()");
+    await update(id, "invoice_id = $2, raw_text = null", [await bill()]);
+    const row = (await db.query<{ state: string; raw_text: string | null }>("select state, raw_text from public.invoice_drafts where id = $1", [id])).rows[0];
+    expect(row).toEqual({ state: "confirmed", raw_text: null });
+  });
+
+  it("allows a confirmed draft back to sent only while no bill is linked, and discarding a draft not yet decided", async () => {
+    const back = await draft("sent");
+    await update(back, "state = 'confirmed'");
+    await update(back, "state = 'sent', decided_at = null");
+    await update(back, "state = 'discarded'");
+    await update(await draft(), "state = 'discarded'");
+
+    const linked = await draft("sent");
+    await update(linked, "state = 'confirmed'");
+    await update(linked, "invoice_id = $2", [await bill()]);
+    await expect(update(linked, "state = 'sent', invoice_id = null")).rejects.toThrow(/invoice_draft_state/);
+    await expect(update(linked, "state = 'sent'")).rejects.toThrow(/invoice_draft_state/);
+  });
+
+  it("refuses every other move", async () => {
+    for (const [from, to] of [["sent", "draft"], ["discarded", "sent"], ["discarded", "draft"], ["confirmed", "discarded"], ["draft", "confirmed"]]) {
+      const id = await draft(from);
+      await expect(update(id, `state = '${to}'`), `${from} → ${to}`).rejects.toThrow(/invoice_draft_state/);
+    }
+  });
+
+  it("links a bill once, and only to a confirmed draft", async () => {
+    const id = await draft("sent");
+    await expect(update(id, "invoice_id = $2", [await bill()])).rejects.toThrow(/invoice_drafts_invoice_state_check/);
+    await update(id, "state = 'confirmed'");
+    const first = await bill();
+    await update(id, "invoice_id = $2", [first]);
+    await expect(update(id, "invoice_id = $2", [await bill()])).rejects.toThrow(/invoice_draft_linked/);
+    const other = await draft("sent");
+    await update(other, "state = 'confirmed'");
+    await expect(update(other, "invoice_id = $2", [first])).rejects.toThrow(/invoice_drafts_invoice_key/);
+  });
+
+  it("keeps what was captured once it is sent, and where it came from always", async () => {
+    const id = await draft("sent");
+    await expect(update(id, "amount = '1.00'")).rejects.toThrow(/invoice_draft_sent/);
+    await expect(update(id, "supplier_name = 'Someone else'")).rejects.toThrow(/invoice_draft_sent/);
+    await expect(update(id, "counterparty_id = $2", [rowsB.counterpartyId])).rejects.toThrow();
+    const editing = await draft();
+    await expect(update(editing, "source = 'file'")).rejects.toThrow(/invoice_draft_fixed/);
+    await expect(update(editing, "read = '{}'::jsonb")).rejects.toThrow(/invoice_draft_fixed/);
+    await expect(update(editing, "connection_id = gen_random_uuid()")).rejects.toThrow(/invoice_draft_fixed/);
+    await expect(update(editing, "raw_text = 'Something else'")).rejects.toThrow(/invoice_draft_text/);
+  });
+});

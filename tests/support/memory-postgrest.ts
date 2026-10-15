@@ -57,6 +57,7 @@ function compare(left: unknown, right: string): number {
 }
 
 function matches(row: Row, column: string, filter: string): boolean {
+  if (filter.startsWith("not.")) return !matches(row, column, filter.slice(4));
   const dot = filter.indexOf(".");
   const operator = filter.slice(0, dot);
   const value = filter.slice(dot + 1);
@@ -103,7 +104,15 @@ function filtered(rows: Row[], params: URLSearchParams): Row[] {
 
 const copy = (row: Row): Row => JSON.parse(JSON.stringify(row));
 
-export function memoryPostgrest(options: { specs?: Record<string, TableSpec>; rpc?: Record<string, (args: Row) => FakeReply>; seed?: Record<string, Row[]> } = {}): MemoryPostgrest {
+export function memoryPostgrest(
+  options: {
+    specs?: Record<string, TableSpec>;
+    rpc?: Record<string, (args: Row) => FakeReply>;
+    seed?: Record<string, Row[]>;
+    /** Runs before a request is answered: a test's way to let something else happen at that moment. */
+    before?: (request: RecordedRequest) => Promise<void> | void;
+  } = {}
+): MemoryPostgrest {
   const tables: Record<string, Row[]> = {};
   for (const [table, rows] of Object.entries(options.seed ?? {})) tables[table] = rows.map(copy);
   const specs = options.specs ?? {};
@@ -160,7 +169,10 @@ export function memoryPostgrest(options: { specs?: Record<string, TableSpec>; rp
     }
   };
 
-  const fake = fakeSupabase(respond);
+  const fake = fakeSupabase(async (request) => {
+    await options.before?.(request);
+    return respond(request);
+  });
   return { tables, rows: rowsOf, requests: fake.requests, client: fake.client, fetch: fake.fetch };
 }
 

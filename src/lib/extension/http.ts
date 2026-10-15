@@ -4,7 +4,7 @@ import { memberActor, type Actor } from "../commands/actor";
 import { withOrg } from "../dal/scope";
 import { takeExtensionApiToken } from "../rate-limit";
 import { allowedOrigin, EXTENSION_AUDIENCE, extensionSettingsFromEnv, type ExtensionScope, type ExtensionSettings } from "./settings";
-import { authenticateExtensionToken, CaptureNotSetUpError, touchConnection, type ExtensionPrincipal } from "./tokens";
+import { authenticateExtensionToken, CaptureNotSetUpError, revokeConnection, touchConnection, type ExtensionPrincipal } from "./tokens";
 
 /**
  * The gate and the answers of every `/api/extension/v1` route (invoice capture design C16-C22). Not the public API:
@@ -25,6 +25,7 @@ export type ExtensionErrorCode =
   | "length_required"
   | "unsupported_media_type"
   | "rate_limited"
+  | "too_many_drafts"
   | "not_set_up"
   | "internal";
 
@@ -40,6 +41,7 @@ const STATUS: Record<ExtensionErrorCode, number> = {
   length_required: 411,
   unsupported_media_type: 415,
   rate_limited: 429,
+  too_many_drafts: 429,
   not_set_up: 503,
   internal: 500,
 };
@@ -132,7 +134,13 @@ export async function guardExtensionRequest(request: Request, scope: ExtensionSc
   }
   if (!actor) return { denied: unauthorized() };
   if (!can(actor.role, "records.write")) {
-    return { denied: extensionError(request, "forbidden", "You can no longer add bills in this workspace. Ask an owner or admin.") };
+    // A role that can no longer add bills ends the connection: made an admin again, the person connects again.
+    try {
+      await revokeConnection({ orgId: principal.orgId, connectionId: principal.connectionId, by: null, reason: "role_changed" });
+    } catch (error) {
+      console.error("[extension] a connection whose member can no longer add bills was not ended", error instanceof Error ? error.message : "unknown error");
+    }
+    return { denied: extensionError(request, "forbidden", "You can no longer add bills in this workspace. Ask an owner or admin, then connect again.") };
   }
 
   const touched = principal;
@@ -166,18 +174,40 @@ export function clientAddress(request: Request): string {
 }
 
 /**
- * A JSON object body of at most `maxBytes` (C20): too large is 413 before it is parsed; another content type, 415;
- * anything but one object, 400.
+ * A body's text, read until it passes `maxBytes` and no further: a declared length over it is refused before anything
+ * is read, and a body sent without one is read chunk by chunk and given up on, its stream cancelled, the moment it is
+ * too large. Null when it is.
+ */
+export async function readCappedText(request: Request, maxBytes: number): Promise<string | null> {
+  const declared = Number(request.headers.get("content-length") ?? "0");
+  if (Number.isFinite(declared) && declared > maxBytes) return null;
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  return new TextDecoder("utf-8").decode(Buffer.concat(chunks));
+}
+
+/**
+ * A JSON object body of at most `maxBytes` (C20): too large is 413, before it is parsed and without reading past the
+ * limit; another content type, 415; anything but one object, 400.
  */
 export async function readExtensionJson(request: Request, maxBytes: number): Promise<{ value: Record<string, unknown> } | { denied: NextResponse }> {
   if (!(request.headers.get("content-type") ?? "").toLowerCase().includes("application/json")) {
     return { denied: extensionError(request, "unsupported_media_type", "Send the body as JSON.") };
   }
-  const declared = Number(request.headers.get("content-length") ?? "0");
-  const tooLarge = () => extensionError(request, "payload_too_large", `The body is larger than ${Math.round(maxBytes / 1000)} KB.`);
-  if (Number.isFinite(declared) && declared > maxBytes) return { denied: tooLarge() };
-  const raw = await request.text();
-  if (Buffer.byteLength(raw, "utf8") > maxBytes) return { denied: tooLarge() };
+  const raw = await readCappedText(request, maxBytes);
+  if (raw === null) return { denied: extensionError(request, "payload_too_large", `The body is larger than ${Math.round(maxBytes / 1000)} KB.`) };
   let value: unknown;
   try {
     value = JSON.parse(raw);

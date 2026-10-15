@@ -17,6 +17,8 @@ import { withOrg } from "@/lib/dal/scope";
 import { challengeOf } from "@/lib/extension/pkce";
 import { issueAuthorizationCode, revokeConnection } from "@/lib/extension/tokens";
 import { invoiceInputSchema } from "@/lib/intake-validation";
+import { removeMember } from "@/lib/platform/members";
+import type { RecordedRequest } from "./support/fake-supabase";
 import { memoryPostgrest, withId, type Row } from "./support/memory-postgrest";
 import { APPENDED_LEDGER_ROW, signedOrgs } from "./support/signed-org";
 
@@ -74,10 +76,11 @@ afterEach(() => {
 const now = () => new Date().toISOString();
 
 /** One workspace, its owner and an approver, a vendor, and an empty book: a fresh id each, so no limit carries over. */
-function world() {
+function world(options: { before?: (request: RecordedRequest) => Promise<void> | void; failLedger?: (action: string) => boolean } = {}) {
   const orgId = crypto.randomUUID();
   const ledger: Row[] = [];
   const db = memoryPostgrest({
+    before: options.before,
     seed: {
       orgs: [orgs.orgRow(orgId)],
       memberships: [
@@ -100,8 +103,19 @@ function world() {
     },
     rpc: {
       append_ledger_entry: (args) => {
+        if (options.failLedger?.(String(args.p_action))) {
+          return { status: 500, body: { code: "XX000", message: "the ledger could not be written", details: null, hint: null } };
+        }
         ledger.push(args);
         return { body: { ...APPENDED_LEDGER_ROW, action: args.p_action } };
+      },
+      // Ending a membership, as migration 0069 does it; 0121's foreign key takes the person's connections with it.
+      remove_member_revoking_keys: (args) => {
+        const gone = (row: Row) => row.org_id === args.p_org_id && row.user_id === args.p_user_id;
+        const role = db.rows("memberships").find(gone)?.role;
+        db.tables.memberships = db.rows("memberships").filter((row) => !gone(row));
+        db.tables.extension_grants = db.rows("extension_grants").filter((row) => !gone(row));
+        return { body: { removed_role: role, revoked_key_ids: [] } };
       },
     },
   });
@@ -294,7 +308,7 @@ describe("the code exchange (C14, C15)", () => {
     expect((await refresh(renewed.refresh_token)).status).toBe(200);
   });
 
-  it("ends the connection when a refresh token it replaced is presented again: someone else holds a copy", async () => {
+  it("ends the connection when a refresh token it replaced is used again", async () => {
     const w = world();
     const tokens = await connect(w);
     const refresh = (token: string) => w.run(() => tokenPOST(form(`${BASE}/api/extension/v1/token`, { grant_type: "refresh_token", refresh_token: token, client_id: CLIENT })));
@@ -303,6 +317,74 @@ describe("the code exchange (C14, C15)", () => {
     expect(w.db.rows("extension_grants")[0]).toMatchObject({ revoked_reason: "reused_refresh" });
     expect((await w.run(() => sessionGET(call(renewed.access_token, `${BASE}/api/extension/v1/session`)))).status).toBe(401);
     expect((await refresh(renewed.refresh_token)).status).toBe(400);
+  });
+
+  it("ends the connection when two refreshes with one token race: the extension never races itself", async () => {
+    const w = world();
+    const tokens = await connect(w);
+    const refresh = () => w.run(() => tokenPOST(form(`${BASE}/api/extension/v1/token`, { grant_type: "refresh_token", refresh_token: tokens.refresh_token, client_id: CLIENT })));
+    const statuses = (await Promise.all([refresh(), refresh()])).map((response) => response.status).sort();
+    expect(statuses).toEqual([200, 400]);
+    expect(w.db.rows("extension_grants")[0]).toMatchObject({ revoked_reason: "reused_refresh" });
+    expect(w.ledger.find((entry) => entry.p_action === "extension_disconnected")?.p_detail).toMatchObject({ reason: "reused_refresh" });
+  });
+
+  it("ends a connection whose code was presented again while it was being made", async () => {
+    let replay: (() => Promise<Response>) | null = null;
+    const w = world({
+      before: async (request) => {
+        // The moment the first exchange writes its connection, the same code arrives again.
+        if (request.path === "/rest/v1/extension_grants" && request.method === "POST" && replay) {
+          const again = replay;
+          replay = null;
+          expect((await again()).status).toBe(400);
+        }
+      },
+    });
+    const { code, verifier } = await consent(w);
+    replay = () => exchange(w, { code, code_verifier: verifier });
+    const first = await exchange(w, { code, code_verifier: verifier });
+    expect(first.status).toBe(400);
+    expect(w.db.rows("extension_auth_codes")[0].replayed_at).toBeTruthy();
+    expect(w.db.rows("extension_grants")).toHaveLength(1);
+    expect(w.db.rows("extension_grants")[0]).toMatchObject({ revoked_reason: "reused_code" });
+  });
+
+  it("leaves no connection standing when one code is exchanged twice at once", async () => {
+    const w = world();
+    const { code, verifier } = await consent(w);
+    await Promise.all([exchange(w, { code, code_verifier: verifier }), exchange(w, { code, code_verifier: verifier })]);
+    expect(w.db.rows("extension_grants").filter((grant) => grant.revoked_at === null)).toEqual([]);
+  });
+
+  it("ends the connection when the person can no longer add bills, at a refresh", async () => {
+    const w = world();
+    const tokens = await connect(w);
+    w.db.rows("memberships")[0].role = "approver";
+    const response = await w.run(() => tokenPOST(form(`${BASE}/api/extension/v1/token`, { grant_type: "refresh_token", refresh_token: tokens.refresh_token, client_id: CLIENT })));
+    expect(response.status).toBe(400);
+    expect(w.db.rows("extension_grants")[0]).toMatchObject({ revoked_reason: "role_changed" });
+    w.db.rows("memberships")[0].role = "owner";
+    expect((await w.run(() => sessionGET(call(tokens.access_token, `${BASE}/api/extension/v1/session`)))).status).toBe(401);
+  });
+
+  it("never refreshes a connection past 90 days from its making", async () => {
+    const w = world();
+    const tokens = await connect(w);
+    const [grant] = w.db.rows("extension_grants");
+    const made = Date.now() - 89.5 * 86_400_000;
+    grant.created_at = new Date(made).toISOString();
+    const response = await w.run(() => tokenPOST(form(`${BASE}/api/extension/v1/token`, { grant_type: "refresh_token", refresh_token: tokens.refresh_token, client_id: CLIENT })));
+    expect(response.status).toBe(200);
+    const end = made + 90 * 86_400_000;
+    expect(Date.parse(String(grant.refresh_expires_at))).toBeLessThanOrEqual(end);
+    expect(Date.parse(String(grant.access_expires_at))).toBeLessThanOrEqual(end);
+
+    grant.created_at = new Date(Date.now() - 91 * 86_400_000).toISOString();
+    grant.refresh_expires_at = new Date(Date.now() + 86_400_000).toISOString();
+    const renewed = await response.json();
+    const late = await w.run(() => tokenPOST(form(`${BASE}/api/extension/v1/token`, { grant_type: "refresh_token", refresh_token: renewed.refresh_token, client_id: CLIENT })));
+    expect(late.status).toBe(400);
   });
 
   it("refuses a browser origin that is not an allowed extension", async () => {
@@ -347,13 +429,17 @@ describe("what the token reaches (C16)", () => {
     expect(response.headers.get("www-authenticate")).toContain("insufficient_scope");
   });
 
-  it("refuses a person whose role no longer adds bills, read at every request", async () => {
+  it("refuses a person whose role no longer adds bills, read at every request, and ends the connection", async () => {
     const w = world();
     const { access_token: token } = await connect(w);
     w.db.rows("memberships")[0].role = "approver";
     const response = await capture(w, token, { source: "selection", text: INVOICE_TEXT });
     expect(response.status).toBe(403);
     expect(w.db.rows("invoice_drafts")).toHaveLength(0);
+    expect(w.db.rows("extension_grants")[0]).toMatchObject({ revoked_reason: "role_changed" });
+    // Made an admin again, the person connects again: the old connection stays ended.
+    w.db.rows("memberships")[0].role = "admin";
+    expect((await capture(w, token, { source: "selection", text: INVOICE_TEXT })).status).toBe(401);
   });
 
   it("answers 503 everywhere while no extension is allowed", async () => {
@@ -443,6 +529,46 @@ describe("a capture (C2-C4, C19, C20)", () => {
     expect(w.db.rows("invoice_drafts")).toHaveLength(0);
   });
 
+  it("stops reading a body sent without its length once it passes the cap", async () => {
+    const w = world();
+    const { access_token: token } = await connect(w);
+    let pulled = 0;
+    const chunk = new TextEncoder().encode("a".repeat(16_000));
+    const endless = () =>
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          pulled += 1;
+          if (pulled > 1_000) controller.close();
+          else controller.enqueue(chunk);
+        },
+      });
+    const streamed = (url: string, headers: Record<string, string>) =>
+      new Request(url, { method: "POST", headers: { origin: ORIGIN, "x-forwarded-for": address(), ...headers }, body: endless(), duplex: "half" } as RequestInit);
+
+    const draftResponse = await w.run(() =>
+      draftsPOST(
+        call(token, `${BASE}/api/extension/v1/invoice-drafts`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+          body: endless(),
+          duplex: "half",
+        } as RequestInit)
+      )
+    );
+    expect(draftResponse.status).toBe(413);
+    expect(pulled).toBeLessThan(20);
+
+    pulled = 0;
+    const tokenResponse = await w.run(() => tokenPOST(streamed(`${BASE}/api/extension/v1/token`, { "content-type": "application/x-www-form-urlencoded" })));
+    expect(tokenResponse.status).toBe(400);
+    expect(pulled).toBeLessThan(20);
+
+    pulled = 0;
+    const revokeResponse = await w.run(() => revokePOST(streamed(`${BASE}/api/extension/v1/revoke`, { "content-type": "application/x-www-form-urlencoded" })));
+    expect(revokeResponse.status).toBe(400);
+    expect(pulled).toBeLessThan(20);
+  });
+
   it("keeps text Postgres can store: no NUL, no half of a character", async () => {
     const w = world();
     const { access_token: token } = await connect(w);
@@ -522,6 +648,16 @@ describe("revocation (C17)", () => {
     expect((await w.run(() => sessionGET(call(tokens.access_token, `${BASE}/api/extension/v1/session`)))).status).toBe(401);
     expect(w.actions()).toContain("extension_disconnected");
     expect((await revoke("vxr_unknown")).status).toBe(200);
+  });
+
+  it("records the connections a membership took with it when it ended", async () => {
+    const w = world();
+    await connect(w);
+    const [grant] = w.db.rows("extension_grants");
+    await w.run(() => withOrg(w.orgId, () => removeMember({ actorId: APPROVER, userId: OWNER })));
+    expect(w.db.rows("extension_grants")).toHaveLength(0);
+    const ended = w.ledger.find((entry) => entry.p_action === "extension_disconnected");
+    expect(ended?.p_detail).toMatchObject({ by: APPROVER, connectionId: grant.id, client: CLIENT, reason: "member_removed" });
   });
 
   it("ends a connection from Settings", async () => {
@@ -629,5 +765,62 @@ describe("from draft to bill (C5-C7)", () => {
     expect(w.db.rows("invoice_drafts")[0]).toMatchObject({ state: "discarded", raw_text: null });
     expect(w.actions()).toContain("invoice_draft_discarded");
     expect(w.db.rows("invoices")).toHaveLength(0);
+  });
+
+  it("is never discarded by a viewer or an approver", async () => {
+    const w = world();
+    const draftId = await sentDraft(w);
+    for (const role of ["viewer", "approver", "accountant"] as const) {
+      const outcome = await w.run(() => withOrg(w.orgId, () => discardInvoiceDraft({ ...asOwner(w), userId: APPROVER, role }, { draftId })));
+      expect(outcome, role).toMatchObject({ ok: false, code: "forbidden" });
+    }
+    expect(w.db.rows("invoice_drafts")[0].state).toBe("sent");
+  });
+
+  it("keeps a bill that was added when its ledger entry could not be written, and never adds it twice", async () => {
+    const w = world({ failLedger: (action) => action === "create_invoice" });
+    const draftId = await sentDraft(w);
+    const outcome = await w.run(() => withOrg(w.orgId, () => confirmInvoiceDraft(asOwner(w), { draftId, invoice: bill(), notDuplicate: true })));
+    expect(outcome).toMatchObject({ ok: true });
+    expect(outcome.message).toContain("its ledger entry was not recorded");
+    const invoices = w.db.rows("invoices");
+    expect(invoices).toHaveLength(1);
+    // The bill has the id chosen when the person started adding it, and the draft names it.
+    expect(w.db.rows("invoice_drafts")[0]).toMatchObject({ state: "confirmed", invoice_id: invoices[0].id, claimed_invoice_id: invoices[0].id, raw_text: null });
+    expect(w.actions()).toContain("invoice_draft_confirmed");
+    const again = await w.run(() => withOrg(w.orgId, () => confirmInvoiceDraft(asOwner(w), { draftId, invoice: bill(), notDuplicate: true })));
+    expect(again).toMatchObject({ ok: false, code: "not_found" });
+    expect(w.db.rows("invoices")).toHaveLength(1);
+  });
+});
+
+describe("drafts kept in the extension (M8)", () => {
+  it("takes at most 50 drafts never sent per connection", async () => {
+    const w = world();
+    const { access_token: token } = await connect(w);
+    const [grant] = w.db.rows("extension_grants");
+    for (let index = 0; index < 50; index += 1) {
+      w.db.rows("invoice_drafts").push({
+        id: crypto.randomUUID(), org_id: w.orgId, state: "draft", source: "selection", connection_id: grant.id, idempotency_key: `old-${index}`,
+        request_sha256: "a".repeat(64), captured_at: now(),
+      });
+    }
+    const response = await capture(w, token, { source: "selection", text: INVOICE_TEXT });
+    expect(response.status).toBe(429);
+    expect((await response.json()).error.message).toContain("50 drafts");
+    w.db.rows("invoice_drafts")[0].state = "sent";
+    expect((await capture(w, token, { source: "selection", text: INVOICE_TEXT })).status).toBe(201);
+  });
+
+  it("forgets the matched counterparty when the supplier's name is changed, and only then", async () => {
+    const w = world();
+    const { access_token: token } = await connect(w);
+    const { data } = await (await capture(w, token, { source: "selection", text: INVOICE_TEXT })).json();
+    const row = () => w.db.rows("invoice_drafts").find((draft) => draft.id === data.id)!;
+    expect(row().counterparty_id).toBe(COUNTERPARTY);
+    expect((await patch(w, token, data.id, { ...data.fields, amount: "210.00" })).status).toBe(200);
+    expect(row().counterparty_id).toBe(COUNTERPARTY);
+    expect((await patch(w, token, data.id, { ...data.fields, supplierName: "Southwind Hosting" })).status).toBe(200);
+    expect(row().counterparty_id).toBeNull();
   });
 });

@@ -17,14 +17,18 @@ import { EXTENSION_AUDIENCE, EXTENSION_SCOPES, scopeString, type ExtensionScope 
  * entropy, as for API keys. A token is never logged, nor written to the ledger; the ledger names the connection's id.
  *
  * A connection acts for a member who can add bills: the role is read again at every exchange and refresh, and the
- * draft endpoints read it at every request (`memberActor`). Ending the membership deletes the connection (a foreign
- * key on the membership, cascading). The tables are platform tables: a request names its workspace only through its
- * token, so this module reads them before any workspace is known, and only it does.
+ * draft endpoints read it at every request (`memberActor`); a role that can no longer add bills ends the connection.
+ * Ending the membership deletes it (a foreign key on the membership, cascading). However often it is refreshed, a
+ * connection ends 90 days after it was made. A code or a refresh token used again ends the connection it belongs to:
+ * the extension never uses either twice. The tables are platform tables: a request names its workspace only through
+ * its token, so this module reads them before any workspace is known, and only it does.
  */
 
 export const CODE_TTL_MS = 5 * 60_000;
 export const ACCESS_TTL_SECONDS = 3600;
 export const REFRESH_TTL_MS = 30 * 86_400_000;
+/** The longest a connection lasts, from its making, whatever its refreshes (C15). */
+export const CONNECTION_LIFETIME_MS = 90 * 86_400_000;
 /** `last_used_at` is refreshed at most once a minute, as an API key's is. */
 const TOUCH_INTERVAL_MS = 60_000;
 
@@ -131,17 +135,20 @@ export async function workspaceOf(orgId: string): Promise<{ name: string; slug: 
   return { name: org.data.name, slug: org.data.slug };
 }
 
-function pair(now: Date) {
+/** A new pair, neither outliving the connection's end (`endsAt`, its making plus 90 days). */
+function pair(now: Date, endsAt: number) {
   const access = newToken("vxa");
   const refresh = newToken("vxr");
+  const accessEnds = Math.min(now.getTime() + ACCESS_TTL_SECONDS * 1000, endsAt);
   return {
     access,
     refresh,
+    expiresIn: Math.max(0, Math.floor((accessEnds - now.getTime()) / 1000)),
     columns: {
       access_token_hash: access.hash,
-      access_expires_at: new Date(now.getTime() + ACCESS_TTL_SECONDS * 1000).toISOString(),
+      access_expires_at: new Date(accessEnds).toISOString(),
       refresh_token_hash: refresh.hash,
-      refresh_expires_at: new Date(now.getTime() + REFRESH_TTL_MS).toISOString(),
+      refresh_expires_at: new Date(Math.min(now.getTime() + REFRESH_TTL_MS, endsAt)).toISOString(),
     },
   };
 }
@@ -150,7 +157,7 @@ function issued(tokens: ReturnType<typeof pair>, scopes: ExtensionScope[], works
   return {
     access_token: tokens.access.token,
     token_type: "Bearer",
-    expires_in: ACCESS_TTL_SECONDS,
+    expires_in: tokens.expiresIn,
     refresh_token: tokens.refresh.token,
     scope: scopeString(scopes),
     audience: EXTENSION_AUDIENCE,
@@ -190,10 +197,18 @@ export async function issueAuthorizationCode(input: {
 }
 
 /**
- * A code presented after it was used: the connection made with it, which carries the code's hash, is ended, as OAuth
- * advises (C14). A code never exchanged, or unknown, changes nothing.
+ * A code presented after it was used: it is marked, and the connection made with it, which carries the code's hash, is
+ * ended, as OAuth advises (C14). The mark ends a connection still being made too: the exchange looks for it once its
+ * connection is written. A code never exchanged, or unknown, changes nothing.
  */
-async function revokeAfterReuse(hash: string): Promise<void> {
+async function revokeAfterReuse(hash: string, now: Date): Promise<void> {
+  const marked = await platformDb()
+    .from("extension_auth_codes")
+    .update({ replayed_at: now.toISOString() })
+    .eq("code_hash", hash)
+    .not("used_at", "is", null)
+    .is("replayed_at", null);
+  if (marked.error) raise(marked.error);
   const found = await platformDb()
     .from("extension_grants")
     .select("id, org_id")
@@ -204,10 +219,17 @@ async function revokeAfterReuse(hash: string): Promise<void> {
   if (found.data) await revokeConnection({ orgId: found.data.org_id, connectionId: found.data.id, by: null, reason: "reused_code" });
 }
 
+/** Whether the code was presented again since it was used (`revokeAfterReuse`'s mark). */
+async function codeReplayed(hash: string): Promise<boolean> {
+  const found = await platformDb().from("extension_auth_codes").select("replayed_at").eq("code_hash", hash).maybeSingle<{ replayed_at: string | null }>();
+  if (found.error) raise(found.error);
+  return Boolean(found.data?.replayed_at);
+}
+
 /**
- * A refresh token presented after it was replaced: someone else holds a copy, so the connection it belongs to is
- * ended (C15), as OAuth's advice on rotating refresh tokens has it. The extension refreshes from its service worker
- * alone, one refresh at a time, so its own use never looks like this.
+ * A refresh token used again after it was replaced: the connection it belongs to is ended (C15), as OAuth's advice on
+ * rotating refresh tokens has it. The extension refreshes from its service worker alone, one refresh at a time, so its
+ * own use never looks like this.
  */
 async function revokeAfterRefreshReuse(hash: string): Promise<void> {
   const found = await platformDb()
@@ -255,7 +277,7 @@ export async function exchangeAuthorizationCode(input: {
   if (claimed.error) raise(claimed.error);
   const code = (claimed.data as ClaimedCode[])[0];
   if (!code) {
-    await revokeAfterReuse(hash);
+    await revokeAfterReuse(hash, now);
     return refusal("invalid_grant", INVALID_CODE);
   }
   if (code.client_id !== input.clientId || code.redirect_uri !== input.redirectUri) {
@@ -269,7 +291,7 @@ export async function exchangeAuthorizationCode(input: {
   // Read before the connection exists, so a failure here leaves no connection whose tokens nobody received.
   const workspace = await workspaceOf(code.org_id);
   const scopes = code.scopes.filter(isScope);
-  const tokens = pair(now);
+  const tokens = pair(now, now.getTime() + CONNECTION_LIFETIME_MS);
   // The code's hash goes in with the connection, in the one insert, so a code presented again always finds it.
   const created = await platformDb()
     .from("extension_grants")
@@ -281,6 +303,7 @@ export async function exchangeAuthorizationCode(input: {
       scopes,
       code_hash: hash,
       ...tokens.columns,
+      created_at: nowIso,
       last_used_at: nowIso,
     })
     .select("id")
@@ -294,6 +317,11 @@ export async function exchangeAuthorizationCode(input: {
     summary: "Connected the Chrome extension Vestiarion Invoice Capture",
     detail: { by: code.user_id, connectionId: created.data.id, client: code.client_id, scopes },
   });
+  // The same code presented again while this connection was being made found nothing to end: it is ended now.
+  if (await codeReplayed(hash)) {
+    await revokeConnection({ orgId: code.org_id, connectionId: created.data.id, by: null, reason: "reused_code" });
+    return refusal("invalid_grant", INVALID_CODE);
+  }
   return { ok: true, tokens: issued(tokens, scopes, workspace) };
 }
 
@@ -306,31 +334,40 @@ interface GrantRow {
   scopes: string[];
 }
 
-/** A new access token and refresh token for a refresh token still valid; the old pair stops at once (C15). */
+const INVALID_REFRESH = "The refresh token is not valid. Connect again.";
+const NO_LONGER_ALLOWED = "You can no longer add bills in this workspace. Ask an owner, then connect again.";
+
+/**
+ * A new access token and refresh token for a refresh token still valid; the old pair stops at once (C15). Neither
+ * outlives the connection's 90 days. A person who can no longer add bills ends the connection; so does a refresh token
+ * used again, after it was replaced or by two refreshes at once.
+ */
 export async function refreshExtensionTokens(input: { refreshToken: unknown; clientId: string; now?: Date }): Promise<TokenOutcome> {
   const now = input.now ?? new Date();
   const nowIso = now.toISOString();
-  if (tokenKind(input.refreshToken) !== "refresh") return refusal("invalid_grant", "The refresh token is not valid. Connect again.");
+  if (tokenKind(input.refreshToken) !== "refresh") return refusal("invalid_grant", INVALID_REFRESH);
   const hash = sha256Hex(input.refreshToken as string);
   const found = await platformDb()
     .from("extension_grants")
-    .select("id, org_id, user_id, client_id, audience, scopes")
+    .select("id, org_id, user_id, client_id, audience, scopes, created_at")
     .eq("refresh_token_hash", hash)
     .is("revoked_at", null)
     .gt("refresh_expires_at", nowIso)
-    .maybeSingle<GrantRow>();
+    .maybeSingle<GrantRow & { created_at: string }>();
   if (found.error) raise(found.error);
   const grant = found.data;
   if (!grant) {
     await revokeAfterRefreshReuse(hash);
-    return refusal("invalid_grant", "The refresh token is not valid. Connect again.");
+    return refusal("invalid_grant", INVALID_REFRESH);
   }
-  if (grant.client_id !== input.clientId) return refusal("invalid_grant", "The refresh token is not valid. Connect again.");
+  const endsAt = Date.parse(grant.created_at) + CONNECTION_LIFETIME_MS;
+  if (grant.client_id !== input.clientId || !(endsAt > now.getTime())) return refusal("invalid_grant", INVALID_REFRESH);
   if (!(await mayCapture(grant.org_id, grant.user_id))) {
-    return refusal("invalid_grant", "You can no longer add bills in this workspace. Ask an owner, then connect again.");
+    await revokeConnection({ orgId: grant.org_id, connectionId: grant.id, by: null, reason: "role_changed" });
+    return refusal("invalid_grant", NO_LONGER_ALLOWED);
   }
-  const tokens = pair(now);
-  // Guarded on the old hash: two refreshes with one token give one new pair.
+  const tokens = pair(now, endsAt);
+  // Guarded on the old hash: two refreshes with one token give one new pair, and the other ends the connection.
   const rotated = await platformDb()
     .from("extension_grants")
     .update({ ...tokens.columns, retired_refresh_hash: hash, refreshed_at: nowIso, last_used_at: nowIso })
@@ -339,7 +376,10 @@ export async function refreshExtensionTokens(input: { refreshToken: unknown; cli
     .is("revoked_at", null)
     .select("id");
   if (rotated.error) raise(rotated.error);
-  if ((rotated.data as Array<{ id: string }>).length === 0) return refusal("invalid_grant", "The refresh token is not valid. Connect again.");
+  if ((rotated.data as Array<{ id: string }>).length === 0) {
+    await revokeConnection({ orgId: grant.org_id, connectionId: grant.id, by: null, reason: "reused_refresh" });
+    return refusal("invalid_grant", INVALID_REFRESH);
+  }
   return { ok: true, tokens: issued(tokens, grant.scopes.filter(isScope), await workspaceOf(grant.org_id)) };
 }
 
@@ -400,7 +440,11 @@ export async function touchConnection(principal: ExtensionPrincipal, now: Date =
   }
 }
 
-export type RevokeReason = "extension" | "settings" | "reused_code" | "reused_refresh";
+/**
+ * Why a connection ended: its own Disconnect, Settings, a code or a refresh token used again, or a role that can no
+ * longer add bills. A membership that ends deletes its connections, recorded by `memberConnectionEnded`.
+ */
+export type RevokeReason = "extension" | "settings" | "reused_code" | "reused_refresh" | "role_changed";
 
 /**
  * Ends one connection of this workspace (C17): its tokens stop at once. False when there was none still active. The
@@ -484,4 +528,46 @@ export async function connectionOwner(orgId: string, connectionId: string): Prom
   const found = await platformDb().from("extension_grants").select("user_id").eq("org_id", orgId).eq("id", connectionId).maybeSingle<{ user_id: string }>();
   if (found.error) raise(found.error);
   return found.data?.user_id ?? null;
+}
+
+/** A connection that ending a membership deletes with it (the foreign key's cascade), as its ledger entry names it. */
+export interface MemberConnection {
+  id: string;
+  orgId: string;
+  clientId: string;
+}
+
+/**
+ * The person's active connections, in one workspace or in every one, read before a membership or an account ends and
+ * deletes them, leaving no row to say why. Best effort: before migration 0121, or when they cannot be read, none, and
+ * nothing is refused because of it.
+ */
+export async function activeConnectionsOf(userId: string, orgId?: string): Promise<MemberConnection[]> {
+  try {
+    let query = platformDb().from("extension_grants").select("id, org_id, client_id").eq("user_id", userId).is("revoked_at", null);
+    if (orgId) query = query.eq("org_id", orgId);
+    const { data, error } = await query;
+    if (error) {
+      if (!isMissingRelation(error)) console.error("a member's extension connections were not read", error.message);
+      return [];
+    }
+    return (data as Array<{ id: string; org_id: string; client_id: string }>).map((row) => ({ id: row.id, orgId: row.org_id, clientId: row.client_id }));
+  } catch (error) {
+    console.error("a member's extension connections were not read", error instanceof Error ? error.message : "unknown error");
+    return [];
+  }
+}
+
+/** How a membership ended, for the entry of each connection it took with it. */
+export type MembershipEnd = "member_removed" | "member_left" | "account_deleted";
+
+/** The `extension_disconnected` entry of a connection deleted with the membership it acted for. */
+export function memberConnectionEnded(connection: MemberConnection, reason: MembershipEnd, by: string): LedgerEntryInput {
+  return {
+    actor: "human",
+    domain: "system",
+    action: "extension_disconnected",
+    summary: "Disconnected the Chrome extension Vestiarion Invoice Capture",
+    detail: { by, connectionId: connection.id, client: connection.clientId, reason },
+  };
 }

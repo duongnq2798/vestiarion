@@ -9,6 +9,7 @@ import { consoleActor } from "@/lib/commands/actor";
 import { confirmInvoiceDraft, discardInvoiceDraft } from "@/lib/commands/invoice-drafts";
 import { inOrg } from "@/lib/dal/scope";
 import { CaptureNotSetUpError } from "@/lib/extension/tokens";
+import { capturedText } from "@/lib/invoice-drafts/store";
 import { invoiceFormRefusal, invoiceInputSchema } from "@/lib/intake-validation";
 
 /**
@@ -80,6 +81,25 @@ export async function discardInvoiceDraftAction(_previous: DraftActionResult, fo
     } catch (error) {
       if (error instanceof CaptureNotSetUpError) return { ok: false, message: NOT_SET_UP };
       console.error("discardInvoiceDraftAction failed", error instanceof Error ? error.message : "unknown error");
+      return { ok: false, message: TRY_AGAIN };
+    }
+  });
+}
+
+/**
+ * The text a sent draft was read from, read when someone opens What was captured (C9): never part of the page itself,
+ * which every refresh sends again. Any member reads it, as they read the draft.
+ */
+export async function readCapturedTextAction(orgSlug: string, draftId: string): Promise<{ ok: boolean; message: string; text?: string | null }> {
+  const auth = await authorize(orgSlug, "workspace.read");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  if (!UUID.test(draftId)) return { ok: false, message: ALREADY_DECIDED };
+  return inOrg(auth, async () => {
+    try {
+      return { ok: true, message: "", text: await capturedText(draftId) };
+    } catch (error) {
+      if (error instanceof CaptureNotSetUpError) return { ok: false, message: NOT_SET_UP };
+      console.error("readCapturedTextAction failed", error instanceof Error ? error.message : "unknown error");
       return { ok: false, message: TRY_AGAIN };
     }
   });
