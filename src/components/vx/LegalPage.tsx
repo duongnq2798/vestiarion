@@ -4,10 +4,11 @@ import { Eyebrow } from "@/components/ui/Eyebrow";
 import { SiteFooter, SiteHeader } from "./SiteChrome";
 
 /**
- * The frame of the terms and privacy pages (spec §2, F2): the site header, a
- * reading column of at most 48rem with the title and the date the page was
- * last updated, and the compact footer, like the other one-column public
- * pages. The prose takes the docs' type: 1rem at a 1.75 line height.
+ * The frame of the terms, privacy and security pages (spec §2, F2): the site
+ * header, a reading column of at most 48rem with the eyebrow, the title and the
+ * date the page was last updated, and the compact footer, like the other
+ * one-column public pages. The prose takes the docs' type: 1rem at a 1.75 line
+ * height.
  */
 
 const PROSE =
@@ -16,7 +17,19 @@ const PROSE =
 const LINK =
   "font-medium text-agent underline decoration-agent-line underline-offset-4 [overflow-wrap:anywhere] transition-colors duration-150 ease-standard hover:decoration-agent";
 
-export function LegalPage({ title, updated, intro, children }: { title: string; updated: string; intro: ReactNode; children: ReactNode }) {
+export function LegalPage({
+  title,
+  updated,
+  intro,
+  eyebrow = "Legal",
+  children,
+}: {
+  title: string;
+  updated: string;
+  intro: ReactNode;
+  eyebrow?: string;
+  children: ReactNode;
+}) {
   return (
     <div className="flex min-h-dvh flex-col">
       <SiteHeader />
@@ -24,7 +37,7 @@ export function LegalPage({ title, updated, intro, children }: { title: string; 
         <article className="mx-auto w-full max-w-3xl">
           <header className="border-b border-line pb-6">
             <p>
-              <Eyebrow className="text-agent">Legal</Eyebrow>
+              <Eyebrow className="text-agent">{eyebrow}</Eyebrow>
             </p>
             <h1 className="mt-2 text-3xl font-semibold tracking-[-0.03em] text-ink sm:text-[2.125rem]">{title}</h1>
             <p className="mt-2 font-mono text-xs text-ink-3">

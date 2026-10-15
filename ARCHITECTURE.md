@@ -50,6 +50,14 @@ key composite (`org_id, ...`) and widens `cycle_snapshots`'s unique key to
 `(org_id, cycle_run_id)`, so the database itself refuses a link into another
 organization's row.
 
+The public `/security` page (`src/app/security/page.tsx`) sets these lines out
+for security reviewers, with encryption, approvals, connector tokens, webhook
+signing, the ledger, retention and the subprocessors, and says what is not
+claimed. `tests/security-page.test.tsx` reads the figures it quotes from the
+code, and holds its subprocessors (`src/lib/subprocessors.ts`) to the privacy
+page's services, name for name. `SECURITY.md` is the policy for reporting a
+vulnerability.
+
 ## Workspaces, roles and the cron
 
 A person creates their own workspace at `/onboarding` (`createWorkspaceAction` ->

@@ -12,6 +12,21 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+### Added
+
+- **A security page for reviewers.** [vestiarion.xyz/security](https://www.vestiarion.xyz/security) sets out, as the
+  code does it today, how data moves through Vestiarion and where each boundary is: tenant isolation, what is encrypted
+  and with what, who can approve what, how connector tokens are refreshed and revoked, how webhooks are signed both
+  ways, the signed ledger, retention and deletion, how the model is used, and the services that process data, dated.
+  It ends with what we do not claim, and is linked from every footer. The repository now has a security policy,
+  [SECURITY.md](SECURITY.md), saying how to report a vulnerability without a public issue, and the README opens with
+  a five-minute path through the live app for anyone evaluating it.
+
+### Changed
+
+- **The privacy page names the Arc RPC nodes** the app reads balances, fees and receipts from: they receive wallet
+  addresses and transaction hashes, which are already public on chain, and nothing else.
+
 ## [0.1.0-beta.5] - 2026-10-15
 
 ### Added

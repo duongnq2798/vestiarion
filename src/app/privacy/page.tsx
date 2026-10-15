@@ -18,7 +18,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy"
-      updated="2026-10-14"
+      updated="2026-10-15"
       intro="Vestiarion is an autonomous treasury agent on Arc mainnet and Arc testnet. This page describes what the service stores and sends, as its code does it today. The code is public, so every statement here can be checked against it."
     >
       <LegalSection id="signing-in" title="Signing in">
@@ -270,6 +270,11 @@ export default function PrivacyPage() {
             them nowhere.
           </li>
           <li>
+            <strong>Arc RPC nodes</strong>, the Arc node this deployment reads from, and for a receipt or a payout on another chain that
+            chain&apos;s public node, receive the wallet addresses and transaction hashes whose balances, fees and receipts Vestiarion reads.
+            These are already public on chain, and nothing else about you or your workspace goes with them.
+          </li>
+          <li>
             <strong>GitHub</strong> is asked for a pull request&apos;s status when a milestone is verified by its link, and, when a page shows a pull
             request or a comment on github.com given as evidence, whether it can still be opened: only its owner, repository and number go to
             GitHub&apos;s API, with the workspace&apos;s own GitHub connection or Vestiarion&apos;s, never your sign-in. For a workspace an owner or
@@ -511,7 +516,7 @@ export default function PrivacyPage() {
       <LegalSection id="contact" title="Contact">
         <p>
           Questions and requests go to <LegalLink href={ISSUES_URL}>GitHub Issues</LegalLink>. The <LegalLink href="/terms">Terms of use</LegalLink> cover
-          using the service.
+          using the service, and <LegalLink href="/security">Security</LegalLink> says how the data is protected and how to report a vulnerability.
         </p>
       </LegalSection>
     </LegalPage>

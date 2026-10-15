@@ -36,7 +36,7 @@ const source = (file: string) => readFileSync(path.join(process.cwd(), file), "u
 
 const PAGES = [
   { path: "/terms", file: "src/app/terms/page.tsx", Page: TermsPage, metadata: termsMetadata, heading: "Terms of use", updated: "2026-10-14" },
-  { path: "/privacy", file: "src/app/privacy/page.tsx", Page: PrivacyPage, metadata: privacyMetadata, heading: "Privacy", updated: "2026-10-14" },
+  { path: "/privacy", file: "src/app/privacy/page.tsx", Page: PrivacyPage, metadata: privacyMetadata, heading: "Privacy", updated: "2026-10-15" },
 ] as const;
 
 describe.each(PAGES)("$path", ({ path: route, file, Page, metadata, heading, updated }) => {

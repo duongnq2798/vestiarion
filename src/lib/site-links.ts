@@ -9,6 +9,15 @@ export const GITHUB_URL = "https://github.com/duongnq2798/vestiarion";
 /** Support, contact and account requests: the repository's GitHub Issues. */
 export const ISSUES_URL = `${GITHUB_URL}/issues`;
 
+/**
+ * The security policy, SECURITY.md at the repository's root: how to report a vulnerability without putting it in a
+ * public issue. GitHub shows it on the repository's Security tab.
+ */
+export const SECURITY_POLICY_URL = `${GITHUB_URL}/blob/main/SECURITY.md`;
+
+/** The CI workflow every pull request and every push to main runs, and its runs. */
+export const CI_URL = `${GITHUB_URL}/actions/workflows/ci.yml`;
+
 /** The MIT License the code is released under. */
 export const LICENSE_URL = `${GITHUB_URL}/blob/main/LICENSE`;
 
