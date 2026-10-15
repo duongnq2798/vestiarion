@@ -13,7 +13,7 @@ const hostOf = (url: string) => new URL(url).host;
 
 const PROFILES = Object.values(NETWORKS);
 
-/** Arc's nodes the server reads from by default, from the network profiles; `ARC_RPC_URL` and `ARC_MAINNET_RPC_URL` replace them. */
+/** Arc's nodes the server reads from by default, from the network profiles; `ARC_RPC_URL` and `ARC_MAINNET_RPC_URL` add a node that takes some reads, while receipts stay on these. */
 export const ARC_RPC_HOSTS: readonly string[] = PROFILES.map((profile) => hostOf(profile.rpcUrl));
 
 /**
@@ -108,7 +108,7 @@ export const SUBPROCESSORS: readonly Subprocessor[] = [
     name: "RPC nodes",
     privacyEntry: "RPC nodes",
     names: ["RPC nodes", "PublicNode"],
-    purpose: `answer the server's reads of balances, fees and receipts: Arc's node (${listed(ARC_RPC_HOSTS)}, or the ones ARC_RPC_URL and ARC_MAINNET_RPC_URL set), and, for a receipt of a payout to another chain from Arc testnet, ${listed(PAYEE_CHAIN_RPC_HOSTS)}, PublicNode's among them`,
+    purpose: `answer the server's reads of balances, fees and receipts: Arc's node (${listed(ARC_RPC_HOSTS)}, and, where set, the ones ARC_RPC_URL and ARC_MAINNET_RPC_URL name, which take some reads, while receipts stay on the public node), and, for a receipt of a payout to another chain from Arc testnet, ${listed(PAYEE_CHAIN_RPC_HOSTS)}, PublicNode's among them`,
     data: "the wallet addresses and transaction hashes read, which are already public on chain",
     when: "",
   },

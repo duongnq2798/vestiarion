@@ -174,6 +174,11 @@ describe("the subprocessors", () => {
       expect(source("src/lib/config.ts"), name).toContain(`env.${name}`);
       expect(nodes, name).toContain(name);
     }
+    // A configured node adds to Arc's public node; receipts are still read from the public one.
+    for (const text of [nodes, privacyNodes]) {
+      expect(text).not.toMatch(/or the ones/);
+      expect(text).toMatch(/receipts (are always read from|stay on) (Arc's )?(the )?public node/);
+    }
     // The chains USDC can be brought from are handed to the person's own wallet; the server never calls their nodes.
     const sources: ReadonlyArray<{ rpcUrl: string }> = Object.values(NETWORKS).flatMap((profile) => profile.inbound?.sources ?? []);
     const walletOnly = new Set(sources.map((chain) => new URL(chain.rpcUrl).host).filter((host) => !served.has(host)));
@@ -401,7 +406,7 @@ describe("claims narrowed to what the code does", () => {
     for (const phrase of [
       "refuses the person who created an invoice unless they are the workspace's only owner, admin or approver, or another approver's unused approval of the same amount already stands",
       "being the only approver counts only at or below the two-approvals figure",
-      "only when exactly one other person can approve, never both",
+      "only when at most one person who neither entered it nor gave its address can approve, never both",
       "unless they are the workspace's only owner, admin or approver",
     ]) {
       expect(access, phrase).toContain(phrase);
@@ -486,7 +491,9 @@ describe("claims narrowed to what the code does", () => {
     expect(source("supabase/migrations/0039_payee_links.sql")).toContain("update public.payee_links set revoked_at = now()");
     const api = section("api");
     expect(api).toContain("Nothing in the API approves or pays directly");
-    expect(api).toContain("A payable added through it starts the agent's next cycle, and so does a milestone that names a pull request on a deployment with a GitHub token; any other milestone waits for a person to verify it");
+    expect(api).toContain("A payable added through it starts the agent's next cycle, and so does a milestone that names a pull request on a deployment with a GitHub token; any other milestone waits for the next scheduled cycle to check its pull request through the workspace's GitHub connection, or for a person to verify it");
+    // The scheduled cycle checks pull-request milestones through the workspace's GitHub connection.
+    expect(source("src/lib/agent/orchestrator.ts")).toContain("refreshGitHubMilestones");
     expect(api).toContain("replaces the counterparty's earlier one that was not used yet");
     expect(api).not.toMatch(/No request approves a payment, moves money, or changes or removes a record|A payable or a milestone added through it starts/);
   });
@@ -505,7 +512,7 @@ describe("claims narrowed to what the code does", () => {
     for (const phrase of ["invitations", "payee links", "customer statement links", "shared receipts and reports", "link a Telegram chat or a Slack account"]) {
       expect(encryption, phrase).toContain(phrase);
     }
-    expect(encryption).toContain("the token of each client pay link, so the link can be shown again");
+    expect(encryption).toContain("a client pay link's token, so the link can be shown again");
     expect(encryption).toContain("it is also hashed, and looked up by the hash");
     expect(encryption).not.toContain("client pay links, customer statement links");
     expect(source("src/lib/slack/installs.ts")).toContain('const TOKEN_COLUMN = "slack_installs.bot_token_enc";');

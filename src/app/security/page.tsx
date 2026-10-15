@@ -118,7 +118,7 @@ export default function SecurityPage() {
           <li>the OAuth access and refresh tokens of Xero, QuickBooks Online, HubSpot, Pipedrive and Asana;</li>
           <li>a Slack connection&apos;s bot token and posting address, bound to the workspace and the field;</li>
           <li>
-            the token of each client pay link, so the link can be shown again on its card and the customer&apos;s statement page and sent in
+            a client pay link&apos;s token, so the link can be shown again on its card and the customer&apos;s statement page and sent in
             reminders; it is also hashed, and looked up by the hash.
           </li>
         </ul>
@@ -151,7 +151,7 @@ export default function SecurityPage() {
             <strong>No self-approval.</strong> The database&apos;s approval function refuses the person who created an invoice unless they are the
             workspace&apos;s only owner, admin or approver, or another approver&apos;s unused approval of the same amount already stands. The app
             narrows that further: being the only approver counts only at or below the two-approvals figure, and above it the creator may give one of
-            the two approvals only when exactly one other person can approve, never both. The ledger entry says when either applied. A partner named
+            the two approvals only when at most one person who neither entered it nor gave its address can approve, never both. The ledger entry says when either applied. A partner named
             on a commission plan never approves the payable that pays them.
           </li>
           <li>
@@ -210,7 +210,7 @@ export default function SecurityPage() {
           </li>
           <li>
             Nothing in the API approves or pays directly. A payable added through it starts the agent&apos;s next cycle, and so does a milestone that
-            names a pull request on a deployment with a GitHub token; any other milestone waits for a person to verify it. The agent decides what is
+            names a pull request on a deployment with a GitHub token; any other milestone waits for the next scheduled cycle to check its pull request through the workspace&apos;s GitHub connection, or for a person to verify it. The agent decides what is
             added under the same rules and checks as in the app, so it may pay a counterparty whose address is confirmed, within its limits. An address given through the API is held as unconfirmed, so the agent pays nothing to it until a person confirms it. A new payee
             link replaces the counterparty&apos;s earlier one that was not used yet.
           </li>

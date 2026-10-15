@@ -284,8 +284,8 @@ export default function PrivacyPage() {
           </li>
           <li>
             <strong>RPC nodes</strong> receive the wallet addresses and transaction hashes whose balances, fees and receipts Vestiarion&apos;s server
-            reads: Arc&apos;s node, {ARC_RPC_HOSTS.join(" and ")}, or the ones this deployment sets with <code>ARC_RPC_URL</code> and{" "}
-            <code>ARC_MAINNET_RPC_URL</code>; and, for a receipt of a payout to another chain from Arc testnet,{" "}
+            reads: Arc&apos;s node, {ARC_RPC_HOSTS.join(" and ")}, and, where this deployment sets them, the ones named by <code>ARC_RPC_URL</code> and{" "}
+            <code>ARC_MAINNET_RPC_URL</code>, which take some of those reads; receipts are always read from Arc&apos;s public node; and, for a receipt of a payout to another chain from Arc testnet,{" "}
             {listed(PAYEE_CHAIN_RPC_HOSTS)}, PublicNode&apos;s among them. These are already public on chain, and nothing else about you or your workspace goes
             with them. The other chains&apos; nodes named for bringing USDC from another chain are handed to your own wallet in your browser; the
             server never calls them.
