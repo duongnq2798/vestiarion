@@ -702,6 +702,24 @@ describe("a payable paid in shadow mode (E3, E9)", () => {
   });
 });
 
+describe("an address the payee sent through a payee link (independent review, 2026-10-15)", () => {
+  // Alice created the link, the payee sent the address through it, and Bob confirmed it.
+  const created = entry(12, "08:10:00", "human", "payee_link_created", { by: ALICE, counterpartyId: CP, linkId: "link-1", expiresAt: "2026-10-08T08:10:00Z" }, "compliance");
+  const sent = entry(13, "08:20:00", "human", "counterparty_address_changed", { by: null, counterpartyId: CP, via: "payee_link", linkId: "link-1", from: null, to: PAYEE }, "compliance");
+  const confirmed = entry(14, "08:30:00", "human", "counterparty_address_confirmed", { by: BOB, counterpartyId: CP, address: PAYEE, via: "confirm" }, "compliance");
+  const base = paidInFull();
+  const entries = [...base.entries, created, sent, confirmed];
+  const chain = buildEvidenceChain({ ...base, entries, checks: { ...base.checks, entries: okChecks(entries) } });
+
+  it("says the payee sent the address, and names who created the link it came through", () => {
+    const facts = step(chain, "payee").facts;
+    expect(facts[0]).toMatchObject({ kind: "stated", who: "the payee", seqs: [13] });
+    expect(facts[0].text).toContain("was sent by the payee through their payee link.");
+    expect(facts[1]).toMatchObject({ kind: "stated", text: "The payee link it came through was created.", who: "alice@northstar.test", seqs: [12] });
+    expect(facts[2]).toMatchObject({ kind: "stated", who: "bob@northstar.test", seqs: [14] });
+  });
+});
+
 describe("a workspace on Arc mainnet (E9)", () => {
   it("names its own network in what fills a link, never Arc testnet", () => {
     const base = paidInFull();

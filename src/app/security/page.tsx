@@ -155,9 +155,12 @@ export default function SecurityPage() {
             on a commission plan never approves the payable that pays them.
           </li>
           <li>
-            <strong>A first payment to a new address.</strong> Where payments are real, the agent never makes a first payment to an address that only
-            the person who gave it stands behind, and that person cannot approve it, unless they are the workspace&apos;s only owner, admin or
-            approver; the ledger entry says so.
+            <strong>A first payment to a new address.</strong> Where payments are real, the agent never makes the first payment to a payee at an
+            address that only the person who gave it stands behind, even when the workspace has paid that address for someone else, and that
+            person cannot approve it, unless they are the workspace&apos;s only owner, admin or approver; the ledger entry says so. For an address a
+            payee sends through a payee link, or with /payto on a GitHub pull request, the person who created the link, or the member the bounty
+            acts as, counts as having given it, read from the workspace&apos;s signed ledger: their own confirmation is not the second person, and
+            when no one can be named, a person approves the payment.
           </li>
           <li>
             <strong>Two approvals.</strong> Above a figure the owner sets, a payment needs two different people, and one person cannot give both. A

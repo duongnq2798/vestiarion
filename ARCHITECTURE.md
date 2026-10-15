@@ -383,30 +383,39 @@ time, and payments keep their idempotent intents.
 
 **The new payee check** (`docs/superpowers/specs/2026-10-05-new-payee-check-design.md`) puts two people before the first
 payment to an address.
-- **What a first payment is** (`newPayeeCheck`, `src/lib/new-payee.ts`): one to an address that no confirmed
-  `payment_intents` row has paid.
-- **Who stands behind the address:** read from the counterparty's `compliance` ledger entries, newest first. The
-  entry that set the address (`create_counterparty`, `counterparty_address_changed`) names who gave it: a member, or
-  the payee for a payee link or GitHub. `counterparty_address_confirmed` entries after it name who confirmed it.
-- **A payee link counts as its creator's:** the entry a payee link's submission writes names the link (`linkId`), with
-  `by: null`. `loadNewPayeeFacts` reads who created each such link from its own `payee_links` row in the workspace
-  (`created_by`, migration 0039, through `platformDb`) and sets it beside the entry as `linkCreatedBy`; the ledger's
-  detail is left as written. `newPayeeCheck` keeps `addressBy: "payee"` and adds `linkCreatedBy`, and a confirmation
-  counts as a second party only when it is by someone other than the link's creator. `addressGiver` (the creator,
-  else `addressBy`) is who Approve and pay, Pay now and the two approvals leave out. Without it, one admin could
-  create a link, send their own wallet through it, confirm it, and the agent would make the first payment alone. A
-  link whose creator is no longer known (their account deleted) reads as the payee's alone, as before.
+- **What a first payment is** (`newPayeeCheck`, `src/lib/new-payee.ts`): one to a payee at an address no confirmed
+  `payment_intents` row has paid for that payee. `loadNewPayeeFacts` reads each confirmed payment's payee through its
+  invoice (`counterparty_id`) or milestone (`contractor_id`), so `paidTo` is per counterparty, lowercase: an address
+  the workspace paid for someone else is still a first payment here. `newPayeeCheckFor` asks it for one counterparty.
+- **Who stands behind the address:** read from the counterparty's ledger entries, newest first. The entry that set the
+  address (`create_counterparty`, `counterparty_address_changed`) names who gave it: a member, or the payee for a payee
+  link or GitHub. `counterparty_address_confirmed` entries after it name who confirmed it.
+- **A payee's address counts as the asking member's:** an address the payee sent, through a payee link or with
+  `/payto`, has `by: null`, so the check names the member who asked for it, from signed entries read in the same query
+  (`compliance` and `contractor` domains): the link's `payee_link_created` (`by`, matched on `linkId`), or the
+  `github_bounty_attached` of the pull request the `/payto` comment was posted on (its `commentUrl` starts with the
+  bounty's `pullRequest`), whose `by` is the member the bounty acts as. Only when a link's entry is missing is its
+  `payee_links` row read (`created_by`, migration 0039, through `platformDb`), and set beside the entry as
+  `linkCreatedBy`; the ledger's detail is left as written. The signed entry outlives the member's account, which
+  empties `created_by`. `newPayeeCheck` keeps `addressBy: "payee"` and adds `linkCreatedBy` or `bountyBy`, and a
+  confirmation counts as a second party only when it is by someone other than that member. When no one can be named,
+  `addressGiver` is null, nothing counts as a second party, and a person approves the payment. `addressGiver` is who
+  Approve and pay, Pay now and the two approvals leave out. Without this, one admin could ask for an address, send
+  their own wallet through it, confirm it, and the agent would make the first payment alone.
 - **Where it applies:** wherever payments are real, meaning the chain provider is live. Real payments follow readable
   Circle credentials, not `orgs.mode`.
 - **The agent's side:** the cycle passes the AP and contractor stages the facts (`loadNewPayeeFacts`,
-  `src/lib/new-payee-facts.ts`). Code holds a first payment one party alone stands behind as
-  `counterparty.new_payee`.
+  `src/lib/new-payee-facts.ts`; `firstPaymentFrom` for a release). Code holds a first payment one party alone stands
+  behind as `counterparty.new_payee`.
 - **A person's side:** Approve and pay, and Pay now on a milestone, refuse the member who gave the address (for a
-  payee link's address, the member who created the link) unless they are the sole approver.
+  payee's address, the member who asked for it) unless they are the sole approver, in words that say which
+  (`newPayeeSelfMessage`). The sole approver's payment records `addressGiverApproved: true` and says so in its summary
+  (`ADDRESS_GIVER_NOTE`).
 - **Recorded:** a decision on a first payment records `observed.newPayee` through `newPayeeObserved`:
-  `{ addressBy, linkCreatedBy?, confirmedBy, twoParties }`.
-- **Afterwards:** the follow-up reopens a payable held this way once its address is paid, or two parties stand behind
-  it.
+  `{ addressBy, linkCreatedBy?, bountyBy?, confirmedBy, twoParties }`. The decision trail and the evidence page say
+  when a payee link brought the address in, and the evidence page names who created the link.
+- **Afterwards:** the follow-up (`newPayeeFollowUp`) reopens a payable held this way once that payee has been paid at
+  its address, or two parties stand behind it.
 
 **No address, nothing sent.** Wherever payments are real, a pay or schedule decision for a counterparty with no
 payment address is held by `counterparty.no_address` (`enforceApGuardrails`) before any limit is read or transfer tried,

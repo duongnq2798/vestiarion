@@ -401,7 +401,8 @@ describe("claims narrowed to what the code does", () => {
     expect([excludedSlots(2), excludedSlots(1), excludedSlots(0)]).toEqual([0, 1, 2]);
     expect(approvals).toContain("...(soleApprover ? { soleApprover: true } : {}),");
     expect(approvals).toContain("...(fewApprovers ? { fewApprovers: true } : {}),");
-    expect(approvals).toContain('if (firstPayment?.addressBy === input.actorId && !(await isSoleApprover(input.actorId))) raise("new_payee_self");');
+    expect(approvals).toContain("if (addressGiver(firstPayment) === input.actorId) {");
+    expect(approvals).toContain('if (!(await isSoleApprover(input.actorId))) throw new ApprovalError("new_payee_self", newPayeeSelfMessage(firstPayment));');
     const access = section("access");
     for (const phrase of [
       "refuses the person who created an invoice unless they are the workspace's only owner, admin or approver, or another approver's unused approval of the same amount already stands",
@@ -412,6 +413,36 @@ describe("claims narrowed to what the code does", () => {
       expect(access, phrase).toContain(phrase);
     }
     expect(access).not.toContain("with two exceptions");
+  });
+
+  it("a first payment: the payee and the address together, who asked for a payee's address, and the ledger when one person pays it", () => {
+    // Keyed on the payee and the address: a payment counts for its own invoice's or milestone's payee.
+    const facts = source("src/lib/new-payee-facts.ts");
+    expect(facts).toContain('payeeOf.set(`invoice:${invoice.id}`, invoice.counterparty_id);');
+    expect(facts).toContain('payeeOf.set(`milestone:${milestone.id}`, milestone.contractor_id);');
+    // Who asked is read from the signed ledger, in the same read as the address's own entries.
+    expect(facts).toContain('"payee_link_created",');
+    expect(facts).toContain('"github_bounty_attached",');
+    const rule = source("src/lib/new-payee.ts");
+    expect(rule).toContain('entry.action === "payee_link_created" && entry.detail.linkId === linkId');
+    expect(rule).toContain('entry.action === "github_bounty_attached"');
+    // No one named: no second party, so a person approves it.
+    expect(rule).toContain("return check.addressBy === PAYEE ? (check.linkCreatedBy ?? check.bountyBy ?? null) : check.addressBy;");
+    expect(rule).toContain("const twoParties = addressBy === MIRROR || (giver !== null && other !== null);");
+    // The ledger says so when the person who gave or asked for the address pays it alone.
+    for (const file of ["src/lib/agent/approvals.ts", "src/lib/agent/milestone-decisions.ts"]) {
+      expect(source(file)).toContain("...(addressGiverApproved ? { addressGiverApproved: true } : {}),");
+    }
+    const access = section("access");
+    for (const phrase of [
+      "the agent never makes the first payment to a payee at an address that only the person who gave it stands behind, even when the workspace has paid that address for someone else",
+      "unless they are the workspace's only owner, admin or approver; the ledger entry says so",
+      "For an address a payee sends through a payee link, or with /payto on a GitHub pull request, the person who created the link, or the member the bounty acts as, counts as having given it",
+      "read from the workspace's signed ledger",
+      "their own confirmation is not the second person, and when no one can be named, a person approves the payment",
+    ]) {
+      expect(access, phrase).toContain(phrase);
+    }
   });
 
   it("screening: a match can be dismissed by whoever decides approvals, and the counterparty is screened again", () => {

@@ -7,6 +7,7 @@ import { closeMilestone, heldMilestonesTwoApprovals, heldReason, MilestoneDecisi
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 import { ARC_TESTNET } from "@/lib/network";
+import { ADDRESS_GIVER_NOTE } from "@/lib/agent/approvals";
 
 /**
  * A person decides a held milestone (docs/superpowers/specs/2026-10-02-held-milestone-actions-design.md): what
@@ -184,7 +185,7 @@ describe("what a held milestone waits for", () => {
     const reason = heldReason(facts({ lastEntry: { action: "milestone_release", detail: { guardrailBlocked: true, guardrailRule: "counterparty.new_payee" } } }));
     expect(reason).toMatchObject({ kind: "new_payee", hint: "First payment to a new address", canPay: true, canClose: true, override: true });
     expect(reason.text).toBe(
-      "This would be the first payment to Puka Hotel's address, and only one person stands behind it. Someone other than whoever gave the address pays it now; after that, the agent pays this address on its own."
+      "This would be the first payment to Puka Hotel at this address, and only one person stands behind it. Someone other than whoever gave the address, or asked for it with a payee link or a GitHub bounty, pays it now; if you are the only person here who can approve payments, pay it yourself with Pay now. After that, the agent pays Puka Hotel at this address on its own."
     );
   });
 
@@ -681,7 +682,9 @@ describe("Pay now and the first payment to an address sent through a payee link"
     live();
     releaseHeldMilestoneMock.mockResolvedValue(PAID);
     const { run, claimed } = world({ intent: null, last: heldAsNewPayee, addressEntries: sentThroughLink(ACTOR), payeeLinks: [{ id: LINK, created_by: ACTOR }] });
-    expect(await refusal(run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE })))).toBe("new_payee_self");
+    const refused = run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }));
+    await expect(refused).rejects.toThrow("You asked for this address with a payee link, so someone else must approve its first payment.");
+    expect(await refusal(refused)).toBe("new_payee_self");
     expect(claimed()).toBe(false);
     expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
   });
@@ -692,6 +695,8 @@ describe("Pay now and the first payment to an address sent through a payee link"
     const alone = world({ intent: null, last: heldAsNewPayee, addressEntries: sentThroughLink(ACTOR), payeeLinks: [{ id: LINK, created_by: ACTOR }], soleApprover: { body: true } });
     expect((await alone.run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))).status).toBe("paid");
     expect(alone.ledger()[0].p_detail).toMatchObject({ firstPayment: true, heldFor: "new_payee" });
+    // Allowed only because the database says this person is the workspace's only approver.
+    expect(alone.fake.requests.some((request) => request.path === "/rest/v1/rpc/sole_approver")).toBe(true);
 
     const other = world({ intent: null, last: heldAsNewPayee, addressEntries: sentThroughLink(CREATOR), payeeLinks: [{ id: LINK, created_by: CREATOR }] });
     expect((await other.run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))).status).toBe("paid");
@@ -712,6 +717,44 @@ describe("Pay now and the first payment to an address sent through a payee link"
     );
 
     expect(facts.get(MILESTONE)).toEqual({ above: 0.2, approvals: [], excluded: [CREATOR, GAVE], excludedSlots: 1, approvers: 3 });
+  });
+});
+
+
+/**
+ * The workspace's only approver paying the first release to an address they gave or asked for (independent review,
+ * 2026-10-15, I3): allowed, and the ledger says so, in its detail and its summary.
+ */
+describe("Pay now by the workspace's only approver, of an address they gave or asked for", () => {
+  const heldAsNewPayee = entryRow("milestone_release", { guardrailBlocked: true, guardrailRule: "counterparty.new_payee" });
+  const LINK = "7c1e2d3f-0000-4000-8000-00000000c1c1";
+  const live = () => getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003 });
+
+  it("records that the person who typed the address in, or created the link it came through, paid its first release alone", async () => {
+    live();
+    releaseHeldMilestoneMock.mockResolvedValue(PAID);
+    const typed = [{ action: "create_counterparty", detail: { by: ACTOR, counterpartyId: CONTRACTOR, address: ADDRESS } }];
+    const linked = [
+      { action: "counterparty_address_confirmed", detail: { by: ACTOR, counterpartyId: CONTRACTOR, address: ADDRESS, via: "confirm" } },
+      { action: "counterparty_address_changed", detail: { by: null, via: "payee_link", linkId: LINK, counterpartyId: CONTRACTOR, from: null, to: ADDRESS } },
+      { action: "payee_link_created", detail: { by: ACTOR, counterpartyId: CONTRACTOR, linkId: LINK } },
+    ];
+    for (const addressEntries of [typed, linked]) {
+      const alone = world({ intent: null, last: heldAsNewPayee, addressEntries, soleApprover: { body: true } });
+      expect((await alone.run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))).status).toBe("paid");
+      const [entry] = alone.ledger();
+      expect(entry.p_detail).toMatchObject({ by: ACTOR, firstPayment: true, addressGiverApproved: true });
+      expect(entry.p_summary).toContain(ADDRESS_GIVER_NOTE);
+    }
+  });
+
+  it("records nothing of the kind when someone else paid it", async () => {
+    live();
+    releaseHeldMilestoneMock.mockResolvedValue(PAID);
+    const other = world({ intent: null, last: heldAsNewPayee, addressEntries: [{ action: "create_counterparty", detail: { by: CREATOR, counterpartyId: CONTRACTOR, address: ADDRESS } }] });
+    expect((await other.run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))).status).toBe("paid");
+    expect(other.ledger()[0].p_detail).not.toHaveProperty("addressGiverApproved");
+    expect(other.ledger()[0].p_summary).not.toContain(ADDRESS_GIVER_NOTE);
   });
 });
 

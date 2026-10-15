@@ -376,17 +376,26 @@ export function payBlockedReason(payable: WaitingPayable, viewerId: string, ownE
         : !mayApproveNow(two, viewerId)
           ? payable.createdBy === viewerId
             ? "You created this invoice"
-            : "You gave this payee's address"
+            : gaveAddressReason(payable)
           : payable.riskLevel === "high"
             ? "Screened high risk"
             : null
     : payable.createdBy === viewerId && !ownEntry
       ? "You created this invoice"
       : payable.firstPaymentAddressBy === viewerId && !ownAddress
-        ? "You gave this payee's address"
+        ? gaveAddressReason(payable)
         : payable.riskLevel === "high"
           ? "Screened high risk"
           : null;
+}
+
+/** Why the viewer may not pay the first payment to this address alone: they gave it, or asked the payee for it (N4). */
+function gaveAddressReason(payable: WaitingPayable): string {
+  return payable.firstPaymentVia === "payee_link"
+    ? "You asked for this address with a payee link"
+    : payable.firstPaymentVia === "github"
+      ? "Your GitHub bounty asked for this address"
+      : "You gave this payee's address";
 }
 
 function Decisions({

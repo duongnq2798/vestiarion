@@ -53,15 +53,20 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 - **An API write's idempotency outcome is deleted after its 24 hours.** It was given back for 24 hours, as documented,
   but the row, with its response, stayed. The daily cleanup now deletes outcomes older than that, in every workspace,
   and reports how many.
-- **An address asked for with a payee link needs a second person, as a typed one does.** Whoever creates a payee link
-  now counts as having given the address the payee sends through it. When that person is also the only one who
-  confirms the address, the agent no longer makes the first payment to it on its own: it holds it as
-  `counterparty.new_payee`, and another owner, admin or approver pays it with Approve and pay, or Pay now on a
-  milestone. Before, one admin could create a link, send their own wallet through it, confirm it, and the agent would
-  pay it with no second person. When someone else confirms the address, the agent pays as before. The workspace's
-  only approver still pays that first payment themselves, as for an address they typed in. The ledger still records
-  the address as the payee's, and a decision on its first payment now also names who created the link. No migration.
+- **An address a member asked the payee for needs a second person, as a typed one does.** Whoever creates a payee
+  link now counts as having given the address the payee sends through it, and the member a GitHub bounty acts as
+  counts as having given an address sent with `/payto`. When that member is also the only one who confirms the
+  address, the agent no longer makes the first payment to it on its own: it holds it as `counterparty.new_payee`, and
+  another owner, admin or approver pays it with Approve and pay, or Pay now on a milestone. Before, one admin could
+  ask for an address, send their own wallet through it, confirm it, and the agent would pay it with no second person.
+  Who asked is read from the workspace's signed ledger, so deleting that account changes nothing, and when no one can
+  be named a person approves the first payment. When someone else confirms the address, the agent pays as before. The
+  workspace's only approver still pays that first payment themselves, and the ledger entry now says they did. The
+  card and the refusal say "You asked for this address with a payee link". No migration.
   [Guide](https://www.vestiarion.xyz/docs/guides/first-payment#ask-a-payee-for-their-address).
+- **A first payment is the first to that payee at that address.** An address the workspace had paid for someone
+  else, such as a member paid once as a contractor, let the agent pay any other counterparty pointed at it with no
+  second person. The check now counts only payments to the same counterparty.
 
 ## [0.1.0-beta.5] - 2026-10-15
 

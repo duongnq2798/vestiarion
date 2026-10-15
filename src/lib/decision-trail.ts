@@ -112,9 +112,11 @@ function checksOf(detail: Record<string, unknown>, paying: boolean): string[] {
       // A mirror address is a wallet Vestiarion made in shadow mode: no person gave it (shadow mode S7).
       newPayee.addressBy === MIRROR
         ? "✓ First payment to this address, a mirror address Vestiarion made in shadow mode"
-        : newPayee.twoParties === true
-          ? "✓ First payment to this address, with two people behind it"
-          : "✗ First payment to this address, and only one person stands behind it"
+        : askedFor(newPayee)
+          ? `${newPayee.twoParties === true ? "✓" : "✗"} First payment to this address, ${askedFor(newPayee)}`
+          : newPayee.twoParties === true
+            ? "✓ First payment to this address, with two people behind it"
+            : "✗ First payment to this address, and only one person stands behind it"
     );
   }
   const risk = text(observed.riskLevel);
@@ -128,6 +130,21 @@ function checksOf(detail: Record<string, unknown>, paying: boolean): string[] {
   if (duplicates !== null) notes.push(duplicates === 0 ? "✓ No duplicate found" : `· Resembles ${duplicates} earlier ${duplicates === 1 ? "invoice" : "invoices"}`);
   if (paying && observed.addressUnconfirmed === true) notes.push("✗ Its payment address changed and is not confirmed");
   return notes;
+}
+
+/**
+ * For an address the payee sent that a member asked for (independent review, 2026-10-15): how it came, and whether
+ * someone other than that member confirmed it, as the decision recorded it; null for any other address.
+ */
+function askedFor(newPayee: Record<string, unknown>): string | null {
+  const confirmedByOther = newPayee.twoParties === true;
+  if (typeof newPayee.linkCreatedBy === "string") {
+    return `sent through a payee link and confirmed by ${confirmedByOther ? "someone other than the member who created it" : "no one but the member who created it"}`;
+  }
+  if (typeof newPayee.bountyBy === "string") {
+    return `sent on GitHub and confirmed by ${confirmedByOther ? "someone other than the member its bounty acts as" : "no one but the member its bounty acts as"}`;
+  }
+  return null;
 }
 
 /** What code said about the decision: a guardrail's refusal, the spending-limit contract's verdict. */

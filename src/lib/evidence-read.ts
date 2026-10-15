@@ -69,6 +69,8 @@ const COMPLIANCE_ACTIONS = [
   "counterparty_address_confirmed",
   "counterparty_purchase_orders_changed",
   "screening_match_dismissed",
+  // Who created the payee link an address came through (independent review, 2026-10-15).
+  "payee_link_created",
 ];
 /** More than any counterparty has: each of these entries is a person's act or an address change. */
 const COMPLIANCE_LIMIT = 500;

@@ -21,6 +21,9 @@ Addresses that come from outside the console already wait for a person: one sent
 ## 2. Rulings
 
 - **N1. A first payment.**
+  - Amended 2026-10-15 (independent review): a first payment is keyed on the payee and the address together. A
+    confirmed payment counts for the payee its invoice or milestone was for, so an address the workspace paid for
+    someone else is still a first payment for this payee.
   - A payment to an address that has never received a confirmed payment from this workspace (`payment_intents.status =
     'confirmed'`, destination compared case-insensitively).
   - A payment in flight does not make an address paid.
@@ -32,11 +35,13 @@ Addresses that come from outside the console already wait for a person: one sent
     - `create_counterparty` (`address` is the address): its `by`.
   - A later `counterparty_address_confirmed` for that address names who confirmed it.
   - An address with no such entry (set by a script) has no known giver, and counts as one person.
-  - Amended 2026-10-15 (independent review): an address sent through a payee link also names the member who created
-    the link, read from its `payee_links` row (`created_by`). That member counts as having given the address for N3
-    and N4, so a confirmation by them alone is not a second party, and they may not approve its first payment unless
-    they are the sole approver. `addressBy` stays `"payee"`; N6's record adds `linkCreatedBy`. A link whose creator is
-    no longer known reads as the payee's alone.
+  - Amended 2026-10-15 (independent review): an address the payee sent also names the member who asked for it. For a
+    payee link, the `by` of its signed `payee_link_created` entry, or its `payee_links` row (`created_by`) only when
+    that entry is missing. For `/payto` on GitHub, the `by` of the `github_bounty_attached` entry of the pull request
+    the comment was on: the member the bounty acts as. That member counts as having given the address for N3 and N4,
+    so a confirmation by them alone is not a second party, and they may not approve its first payment unless they are
+    the sole approver. When no member can be named, nothing is a second party: a person approves it. `addressBy`
+    stays `"payee"`; N6's record adds `linkCreatedBy` or `bountyBy`.
 - **N3. Two parties before the agent pays a new address.**
   - The agent makes a first payment on its own only when two different parties stand behind the address: the payee
     gave it and a member confirmed it, or one member gave it and another member confirmed it.
@@ -50,6 +55,10 @@ Addresses that come from outside the console already wait for a person: one sent
     milestone, unless they are the workspace's sole approver (as for an invoice they entered).
   - The card says why: "You gave this payee's address, so someone else must approve its first payment."
   - Cost if wrong: in a two-person workspace, the other person approves the first payment to a vendor one of them added.
+  - Amended 2026-10-15 (independent review): for a payee's address, the member who asked for it is refused in words
+    that say so ("You asked for this address with a payee link", or that a GitHub bounty acting as them did). When the
+    sole approver pays a first payment to an address they gave or asked for, the ledger entry records
+    `addressGiverApproved: true` and its summary says so.
 - **N5. Wherever payments are real.**
   - The check applies when the workspace's payments go through Circle: its chain provider is live.
   - Payments are real in a live workspace, and also in a sandbox that has connected Circle but not yet gone live. Real

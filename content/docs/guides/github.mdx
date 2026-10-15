@@ -46,7 +46,7 @@ The pull request's author then says where to be paid:
 /payto 0xYourArcAddress
 ```
 
-Only the pull request's author can do this. The address waits for an owner, admin or approver to confirm it on **Counterparties**, as an address a payee sends through a payee link does, and they are emailed that it arrived. The agent pays nothing to it before then. A contributor paid before is paid to the address on file, and the reply says so.
+Only the pull request's author can do this. The address waits for an owner, admin or approver to confirm it on **Counterparties**, as an address a payee sends through a payee link does, and they are emailed that it arrived. The agent pays nothing to it before then. The address counts as given by the person who connected GitHub, since the bounty acts as them: if they also confirm it, its first payment waits for another person to approve it, unless they are the workspace's only approver. Have someone else confirm it. A contributor paid before is paid to the address on file, and the reply says so.
 
 Once the pull request is merged and the address confirmed, the agent decides the payment with every guardrail: screening, the contractor's payment limit, and the agent's spending limit, with its contract on Arc where the workspace has one. The app then comments that it was paid, as below.
 

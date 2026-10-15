@@ -104,7 +104,7 @@ export function ruleNextStep(rule: string | null | undefined, counterparty: { id
     case "counterparty.new_payee":
       // Two people before the first payment to an address (new payee check N3, N4): the second one decides in Approvals.
       return {
-        sentence: `It is the first payment to ${counterparty.name}'s address, and only one person stands behind it. Someone other than whoever gave the address approves it in Approvals; after that, the agent pays this address on its own.`,
+        sentence: `It is the first payment to ${counterparty.name} at this address, and only one person stands behind it. Someone other than whoever gave the address, or asked for it with a payee link or a GitHub bounty, approves it in Approvals; if you are the only person here who can approve payments, approve it yourself. After that, the agent pays ${counterparty.name} at this address on its own.`,
         fix: null,
       };
     case MATCH_INCOMPLETE:

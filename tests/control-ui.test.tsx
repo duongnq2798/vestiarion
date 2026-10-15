@@ -294,6 +294,18 @@ describe("ApprovalCard", () => {
     expect(markup).toMatch(APPROVE_DISABLED);
   });
 
+  it("says the person who asked for the address with a payee link, or whose GitHub bounty did, cannot pay its first payment", () => {
+    const linked = card({ createdBy: CREATOR, firstPaymentAddressBy: VIEWER, firstPaymentVia: "payee_link" });
+    expect(linked).toContain("You asked for this address with a payee link");
+    expect(linked).not.toContain("You gave this payee");
+    expect(linked).toMatch(APPROVE_DISABLED);
+    const bounty = card({ createdBy: CREATOR, firstPaymentAddressBy: VIEWER, firstPaymentVia: "github" });
+    expect(bounty).toContain("Your GitHub bounty asked for this address");
+    expect(bounty).toMatch(APPROVE_DISABLED);
+    // Alone in the workspace, they pay it.
+    expect(card({ createdBy: CREATOR, firstPaymentAddressBy: VIEWER, firstPaymentVia: "payee_link" }, { soleApprover: true })).not.toMatch(APPROVE_DISABLED);
+  });
+
   it("lets the workspace's sole approver pay the first payment to an address they gave, and anyone else pay it", () => {
     expect(card({ createdBy: CREATOR, firstPaymentAddressBy: VIEWER }, { soleApprover: true })).not.toMatch(APPROVE_DISABLED);
     const otherGiver = card({ createdBy: CREATOR, firstPaymentAddressBy: "someone-else" });

@@ -1168,6 +1168,10 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["The agent pays it once a person agrees, in shadow mode", REPLAY_READ],
   ],
   "guides/first-payment": [
+    // Who may not approve a first payment alone (new payee check N4; independent review, 2026-10-15).
+    ["You gave this payee's address", APPROVAL_CARD],
+    ["You asked for this address with a payee link", APPROVAL_CARD],
+    ["Your GitHub bounty asked for this address", APPROVAL_CARD],
     ["Create the workspace", GETTING_STARTED],
     ["Add or import a first bill", GETTING_STARTED],
     ["Set or confirm the limits", GETTING_STARTED],

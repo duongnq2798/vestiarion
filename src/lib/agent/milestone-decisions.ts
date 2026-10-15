@@ -2,8 +2,8 @@ import { currentConfig, currentOrgId } from "../context";
 import { db } from "../dal";
 import { chainModes, getChainProvider } from "../circle";
 import { payeeNotReady } from "../counterparty-address";
-import { firstPaymentCheck, loadNewPayeeFacts } from "../new-payee-facts";
-import { addressGiver, newPayeeCheck } from "../new-payee";
+import { firstPaymentCheck, loadNewPayeeFacts, newPayeeCheckFor } from "../new-payee-facts";
+import { addressGiver, newPayeeSelfMessage } from "../new-payee";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { listLedgerEntriesForTargets } from "../ledger";
 import type { Provenance } from "../provenance";
@@ -12,6 +12,7 @@ import {
   lookForUnknownSend,
   paymentWasSent,
   SOLE_APPROVER_NOTE,
+  ADDRESS_GIVER_NOTE,
   transferExists,
   transferUnknown,
   unknownSendMessage,
@@ -318,7 +319,7 @@ function reasonOf(facts: HeldFacts): Omit<HeldReason, "hint"> {
   if (detail.guardrailRule === "counterparty.new_payee") {
     return {
       kind: "new_payee",
-      text: `This would be the first payment to ${name}'s address, and only one person stands behind it. Someone other than whoever gave the address pays it now; after that, the agent pays this address on its own.`,
+      text: `This would be the first payment to ${name} at this address, and only one person stands behind it. Someone other than whoever gave the address, or asked for it with a payee link or a GitHub bounty, pays it now; if you are the only person here who can approve payments, pay it yourself with Pay now. After that, the agent pays ${name} at this address on its own.`,
       link: COUNTERPARTIES,
       canPay: true,
       canClose: true,
@@ -499,9 +500,7 @@ export async function heldMilestonesTwoApprovals(
     "milestone",
     held.map((milestone) => {
       const address = contractors.get(milestone.contractor_id)?.address ?? null;
-      const check = newPayeeFacts
-        ? newPayeeCheck({ address, paidTo: newPayeeFacts.paidTo, entries: newPayeeFacts.entries.get(milestone.contractor_id) ?? [] })
-        : null;
+      const check = newPayeeFacts ? newPayeeCheckFor(newPayeeFacts, { id: milestone.contractor_id, address }) : null;
       return {
         id: milestone.id,
         payment: { amount: milestone.amount, currency: "USDC", address },
@@ -580,6 +579,8 @@ export async function payHeldMilestone(input: {
   const source: PaymentSource = { type: "milestone", id: milestone.id };
   const payment = { amount: milestone.amount, currency: "USDC", address: contractorAddress };
   let soleApprover = false;
+  // The person who gave the first payment's address, or asked for it, paying it as the sole approver (N4).
+  let addressGiverApproved = false;
   let fewApprovers = false;
   let standing: GivenApproval[] = [];
   // A transfer that already exists is recorded whatever stands in the way now: nothing new can move.
@@ -601,7 +602,10 @@ export async function payHeldMilestone(input: {
       standing = await standingApprovals(source, payment);
       // Whoever added it, or gave its address, gives only the approvals no one independent of it can (T5).
       if (excluded.includes(input.actorId)) {
-        if (!(await mayGiveApproval({ actorId: input.actorId, excluded, given: standing }))) raise(milestone.createdBy === input.actorId ? "self_approval" : "new_payee_self");
+        if (!(await mayGiveApproval({ actorId: input.actorId, excluded, given: standing }))) {
+          if (milestone.createdBy === input.actorId) raise("self_approval");
+          raise("new_payee_self", newPayeeSelfMessage(firstPayment));
+        }
         fewApprovers = true;
       }
     } else if (blocking.override && milestone.createdBy === input.actorId) {
@@ -610,7 +614,10 @@ export async function payHeldMilestone(input: {
     }
   }
   // A first payment to an address needs someone other than whoever gave it, unless they decide alone (new payee check N4).
-  if (!twoNeeded && addressGiver(firstPayment) === input.actorId && !(await isSoleApprover(input.actorId))) raise("new_payee_self");
+  if (!twoNeeded && addressGiver(firstPayment) === input.actorId) {
+    if (!(await isSoleApprover(input.actorId))) raise("new_payee_self", newPayeeSelfMessage(firstPayment));
+    addressGiverApproved = true;
+  }
 
   // Two approvals (T4): the first is recorded and sends nothing; the second, by another person, pays.
   let approvals: Array<{ by: string; at: string }> = [];
@@ -756,7 +763,10 @@ export async function payHeldMilestone(input: {
 
   const name = milestone.facts.contractor.name;
   const execution = outcome.paymentExecution;
-  const own = soleApprover ? ` ${SOLE_APPROVER_NOTE}` : approvals.length > 0 ? ` ${SECOND_OF_TWO_NOTE}` : "";
+  const own =
+    approvals.length > 0
+      ? ` ${SECOND_OF_TWO_NOTE}`
+      : [soleApprover ? SOLE_APPROVER_NOTE : "", addressGiverApproved ? ADDRESS_GIVER_NOTE : ""].map((note) => (note ? ` ${note}` : "")).join("");
   await appendLedgerEntryBestEffort(orgId, {
     actor: "human",
     domain: "contractor",
@@ -781,6 +791,8 @@ export async function payHeldMilestone(input: {
       ...(execution?.retriedAfter ? { retriedAfter: execution.retriedAfter } : {}),
       // The person who added it overrode the hold, as the workspace's only approver.
       ...(soleApprover ? { soleApprover: true } : {}),
+      // The person who gave the address, or asked for it, made its first payment as the workspace's only approver.
+      ...(addressGiverApproved ? { addressGiverApproved: true } : {}),
       // The address's first payment, which this person stood behind beside whoever gave the address (new payee check N4).
       ...(firstPayment ? { firstPayment: true } : {}),
       // Above the figure: the two approvals, the earlier first (two approvals T7).
