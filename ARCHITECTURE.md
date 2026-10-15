@@ -2177,6 +2177,12 @@ the provider.
   (`saveConnection`, then the tokens, then the first sync in `after()`); several are kept as a pending grant for ten
   minutes and picked on the connect page (`POST /api/integrations/xero/choose`). A workspace connected to another
   organisation is refused; the same one reconnects its row. `accounting_connected` records the consent.
+- **Consent versions** (`consent.ts`). A change to what a statement says is a new version in `CONSENT_VERSIONS`, added
+  last to `CONSENT_HISTORY`; a connection keeps the version it agreed to until it connects again. The only gate on
+  versions is `ACCOUNTANT_BOOKING_CONSENTS`; `tests/connector-consent.test.tsx` holds every gate to taking a provider's
+  new version where it took the one before, and every version literal in `src/` to `consent.ts`. Versions `2026-10-15`
+  say the agent's model provider (DeepSeek, on the hosted service) sees the facts under its own API terms; the versions
+  before promised it would not train on them.
 - **Syncing** (`sync.ts`, `sync-store.ts`): suppliers, then bills, a page at a time in Xero's update order, each page read,
   then written, then the cursor moved, so a run stopped anywhere resumes at its page; no call to Xero happens inside a
   write. The backfill reads approved bills; later runs send `If-Modified-Since` and read every status. A run of several
@@ -2299,8 +2305,9 @@ reads in `api.ts`, `hubspotProvider`), wired in `src/lib/crm-providers.ts`. It i
   connection, with its facts, `stage_state` (`open`, `won`, `lost`), its company and that company's main contact's
   email, `source_status` (`present`, `deleted`), the Vestiarion deal it became (`deal_id`), the `baseline` it was
   planned from or last reviewed at, and the changes last recorded (`flagged`).
-- **Connecting.** The core's flow (state, nonce cookie, person, role, consent `hubspot-2026-10-13`; `hubspot-2026-10-12`
-  said it writes nothing, and a connection keeps the version it agreed to), on
+- **Connecting.** The core's flow (state, nonce cookie, person, role, consent `hubspot-2026-10-15`; `hubspot-2026-10-13`
+  said the model provider would not train on deals' facts, `hubspot-2026-10-12` that it writes nothing, and a connection
+  keeps the version it agreed to), on
   `/integrations/hubspot`, `/integrations/hubspot/connect`, `POST /api/integrations/hubspot/connect` and
   `GET /api/integrations/hubspot/callback`. The token answer's `hub_id` is the account, its introspected `hub_domain` its
   name; one account per grant. `ConnectDeps.ready` probes `crm_deals`, so before 0105 no one is sent to HubSpot. An
@@ -2388,7 +2395,7 @@ reads in `api.ts`, `hubspotProvider`), wired in `src/lib/crm-providers.ts`. It i
     in shadow mode can never reach sending, sent or written.
   - *Connecting.* The core's flow on `/integrations/pipedrive`, `/integrations/pipedrive/connect`,
     `POST /api/integrations/pipedrive/connect` and `GET /api/integrations/pipedrive/callback`, consent
-    `pipedrive-2026-10-14`. The authorize URL names no scope: Pipedrive's are the app's. The token answer's `scope` must
+    `pipedrive-2026-10-15` (`pipedrive-2026-10-14` before it). The authorize URL names no scope: Pipedrive's are the app's. The token answer's `scope` must
     read deals and their organizations (`deals:read` or `deals:full`, and `contacts:read` or `contacts:full`); a grant
     without them is revoked and refused before anything is kept (`?pipedrive=scopes`). The company is `users/me`'s
     `company_id`, named by its `company_name`; one per grant. A company another workspace holds is refused
@@ -2837,7 +2844,7 @@ the approver (`role_rank` 2, `RANK` 1): an owner or an admin may grant it, an ac
 makes `can_assign_role` answer false, never null, for a role `role_rank` does not know. Customer messages
 (`notifyCustomerWrote`) now reach an accountant whose email switch is on, and Settings' Notifications offers an accountant
 that switch as "Email me when a customer writes on its statement link". A Xero connection's consent says who approves
-what is booked: version `xero-2026-10-13` names the accountant (`ACCOUNTANT_BOOKING_CONSENTS`), and an accountant's
+what is booked: versions `xero-2026-10-13` and `xero-2026-10-15` name the accountant (`ACCOUNTANT_BOOKING_CONSENTS`), and an accountant's
 booking on a connection agreed under an earlier version is refused (`consent`) with whom to ask, until Xero is reconnected.
 "Unless the owner grants more" is a role change: one person holds one role in a workspace.
 

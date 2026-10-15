@@ -58,7 +58,7 @@ The connect page has the workspace you came from already picked (if you manage s
 
 - It reads the companies, contacts and deals of the account you connect: names, amounts, close dates, pipeline stages and each company's main contact email.
 - It writes to HubSpot only once an owner or admin allows it: then, on each HubSpot deal planned in Vestiarion, what was collected from payments confirmed on Arc, what is still owed, the last receipt, the reconciliation status and a link to the deal in Vestiarion, in a Vestiarion property group it creates. It never changes HubSpot's own deal fields, and writes payments on Arc testnet or in shadow mode only to a HubSpot developer test account or sandbox.
-- They are shown to the workspace's members and to its agent. The agent's model provider may see a deal's facts to decide on its collections, and may not train on them.
+- They are shown to the workspace's members and to its agent. The agent's model provider (DeepSeek, on the hosted service) sees a deal's facts to decide on its collections, under that provider's own API terms.
 - Vestiarion never uses HubSpot data to train or improve any AI model, and never passes it to anyone else without your workspace's say.
 
 Tick **I agree**, then choose **Continue to HubSpot**. HubSpot asks you to pick the account and to allow access. Your agreement, with its date, is kept on the connection and in the workspace's signed ledger.

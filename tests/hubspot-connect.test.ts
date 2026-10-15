@@ -119,7 +119,7 @@ describe("startConnect for HubSpot", () => {
     expect(`${to.origin}${to.pathname}`).toBe("https://app.hubspot.com/oauth/authorize");
     expect(to.searchParams.get("redirect_uri")).toBe(`${ORIGIN}/api/integrations/hubspot/callback`);
     const state = readConnectState(to.searchParams.get("state") ?? "", keys(), NOW);
-    expect(state).toMatchObject({ provider: "hubspot", org: ORG, user: USER, consent: { version: "hubspot-2026-10-13", at: "2026-10-12T08:00:00.000Z" } });
+    expect(state).toMatchObject({ provider: "hubspot", org: ORG, user: USER, consent: { version: "hubspot-2026-10-15", at: "2026-10-12T08:00:00.000Z" } });
     // Writing was not asked for: HubSpot is asked for the read scopes alone.
     expect(state?.write).toBeUndefined();
     expect(to.searchParams.get("write")).toBe("0");

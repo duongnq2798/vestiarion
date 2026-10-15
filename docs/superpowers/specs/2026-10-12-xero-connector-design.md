@@ -240,6 +240,8 @@ flood the list. Cost if wrong: an old open bill is added with the form or a list
   ticks; the route refuses without it.
 - The version (`xero-2026-10-12`) and time go into the state, the connection, and a signed `accounting_connected`
   entry. `/terms` and `/privacy` say the same.
+- *Since `xero-2026-10-15`*: the model provider sentence says the provider sees the facts under its own API terms
+  (DeepSeek's, on the hosted service). The earlier promise that it may not train on them had no basis in those terms.
 - Cost if wrong: new words and a new version; old connections keep the version they agreed to.
 
 **X13. Disconnecting.** An owner or admin presses **Disconnect Xero**: the refresh token is revoked at Xero (best

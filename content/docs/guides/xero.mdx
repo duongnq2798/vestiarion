@@ -61,7 +61,7 @@ Open **Settings**. Under **Xero**, choose **Connect Xero**.
 The connect page has the workspace you came from already picked (if you manage several, you can pick another) and says what Vestiarion does with Xero's data:
 
 - It reads the bills, suppliers and chart of accounts of the Xero organisation you pick. It writes to Xero only the payments an owner, admin or accountant approves: each payment made on Arc for a bill brought in from Xero, booked against that bill.
-- The bills you add are shown to the workspace's members and to its agent. The agent's model provider sees each bill's facts to decide on it, and may not train on them.
+- The bills you add are shown to the workspace's members and to its agent. The agent's model provider (DeepSeek, on the hosted service) sees each bill's facts to decide on it, under that provider's own API terms.
 - Vestiarion never uses Xero data to train or improve any AI model, and never passes it to anyone else without your workspace's say.
 
 Tick **I agree**, then choose **Continue to Xero**. Your agreement, with its date, is kept on the connection and in the workspace's signed ledger.
@@ -174,6 +174,6 @@ An owner or admin chooses **Disconnect Xero**. Vestiarion asks Xero to end its a
 ## Your data
 
 - Xero's tokens are kept encrypted, readable only by the server, and never shown in the browser, a log, a model's prompt or a webhook.
-- A bill's facts (supplier, number, amount, days) are shown to the workspace's members and to the agent, whose model provider may not train on them.
+- A bill's facts (supplier, number, amount, days) are shown to the workspace's members and to the agent. Its model provider sees them under that provider's own API terms: on the hosted service, [DeepSeek's](https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html).
 - To book a payment you approved, Vestiarion sends Xero the bill's id, the account's id, the day, the amount and the Arc transaction: nothing else.
 - Vestiarion never uses Xero data to train or improve any AI model. See the [privacy page](/privacy).

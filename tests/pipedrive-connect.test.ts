@@ -98,7 +98,7 @@ describe("startConnect for Pipedrive", () => {
     expect(to.searchParams.get("redirect_uri")).toBe(`${ORIGIN}/api/integrations/pipedrive/callback`);
     expect(to.searchParams.has("scope")).toBe(false);
     const state = readConnectState(to.searchParams.get("state") ?? "", keys(), NOW);
-    expect(state).toMatchObject({ provider: "pipedrive", org: ORG, user: USER, consent: { version: "pipedrive-2026-10-14" } });
+    expect(state).toMatchObject({ provider: "pipedrive", org: ORG, user: USER, consent: { version: "pipedrive-2026-10-15" } });
     const cookie = response.headers.get("set-cookie") ?? "";
     expect(cookie).toContain(`vx_pipedrive_oauth=${state?.nonce}`);
     expect(cookie).toContain("Path=/api/integrations/pipedrive");
@@ -126,7 +126,7 @@ describe("finishConnect for Pipedrive", () => {
     expect(pipedrive.requests.map((sent) => `${sent.method} ${sent.host}${sent.path}`)).toEqual(["POST oauth.pipedrive.com/oauth/token", `GET ${new URL(API_DOMAIN).host}/api/v1/users/me`]);
     expect(fake.requests.find((sent) => sent.path === "/rest/v1/rpc/accounting_connections_by_external")?.body).toEqual({ p_provider: "pipedrive", p_external_org_ids: [COMPANY] });
     expect(fake.requests.find((sent) => sent.path === "/rest/v1/accounting_connections" && sent.method === "POST")?.body).toMatchObject({
-      org_id: ORG, provider: "pipedrive", external_org_id: COMPANY, external_org_name: "Cedar & Co", consent_version: "pipedrive-2026-10-14",
+      org_id: ORG, provider: "pipedrive", external_org_id: COMPANY, external_org_name: "Cedar & Co", consent_version: "pipedrive-2026-10-15",
     });
     const tokens = fake.requests.find((sent) => sent.path === "/rest/v1/accounting_tokens" && sent.method === "POST");
     expect(tokens?.body).toMatchObject({ org_id: ORG, provider: "pipedrive", connection_id: "conn-pd" });
@@ -209,7 +209,10 @@ describe("Pipedrive's consent", () => {
     expect(words).toContain("Pipedrive tells Vestiarion when a deal changes, and Vestiarion then reads it again from Pipedrive");
     expect(words).toContain("never writes payments on Arc testnet or in shadow mode to Pipedrive");
     expect(words).toContain("Vestiarion never uses Pipedrive data to train or improve any AI model");
-    expect(words).toContain("Disconnecting uninstalls Vestiarion from your Pipedrive company");
+    expect(words).toContain("The agent's model provider (DeepSeek, on the hosted service) sees a deal's facts to decide on its collections, under that provider's own API terms.");
+    expect(words).not.toMatch(/may not train/);
+    // Disconnecting calls Pipedrive's revoke endpoint; the uninstall is what Pipedrive documents that doing.
+    expect(words).toContain("Disconnecting revokes Vestiarion's access, which, as Pipedrive documents it, uninstalls Vestiarion from your Pipedrive company");
     expect(words).not.toMatch(/VND/);
   });
 });

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { LegalLink, LegalPage, LegalSection } from "@/components/vx/LegalPage";
+import { HOSTED_MODEL_PROVIDER } from "@/lib/connectors/consent";
 import { ISSUES_URL, LICENSE_URL } from "@/lib/site-links";
 
 export const metadata: Metadata = {
@@ -101,7 +102,8 @@ export default function TermsPage() {
           When an owner or admin connects Xero to a workspace, they agree, for the workspace, that Vestiarion reads the bills, suppliers and chart of
           accounts of the Xero organisation they pick. It writes to Xero only the payments an owner, admin or accountant approves, each booked against the bill it
           paid, and books a payment on Arc testnet or in shadow mode only into a Xero demo company. The bills a person adds are shown to the workspace&apos;s members and
-          to its agent; the agent&apos;s model provider sees each bill&apos;s facts to decide on it, and may not train on them.
+          to its agent; the agent&apos;s model provider (DeepSeek, on the hosted service) sees each bill&apos;s facts to decide on it, under{" "}
+          <LegalLink href={HOSTED_MODEL_PROVIDER.terms}>that provider&apos;s own API terms</LegalLink>.
         </p>
         <p>
           Vestiarion never uses Xero data to train or improve any AI model, and never passes it to anyone else without the workspace&apos;s say. A bill
@@ -112,7 +114,8 @@ export default function TermsPage() {
           When an owner or admin connects QuickBooks Online to a workspace, they agree, for the workspace, that Vestiarion reads the bills, vendors and
           bank accounts of the QuickBooks company they connect. It writes nothing to QuickBooks, though the access Intuit grants could. A QuickBooks
           company connects to one workspace at a time. The bills a person adds are shown to the workspace&apos;s members and to its agent; the
-          agent&apos;s model provider sees each bill&apos;s facts to decide on it, and may not train on them. Vestiarion never uses QuickBooks data, or any
+          agent&apos;s model provider (DeepSeek, on the hosted service) sees each bill&apos;s facts to decide on it, under{" "}
+          <LegalLink href={HOSTED_MODEL_PROVIDER.terms}>that provider&apos;s own API terms</LegalLink>. Vestiarion never uses QuickBooks data, or any
           data from Intuit, to train or improve any AI model, and never passes it to anyone else without the workspace&apos;s say. A bill open in
           QuickBooks is not a payment approved in Vestiarion. Disconnecting, here or in QuickBooks, stops the reading at once; the bills already added
           stay with the workspace.
@@ -123,8 +126,8 @@ export default function TermsPage() {
           HubSpot only once an owner or admin allows it: then, on each HubSpot deal planned in Vestiarion, what was collected from payments confirmed
           on Arc, what is still owed, the last receipt, the reconciliation status and a link to the deal in Vestiarion, in a Vestiarion property
           group, never HubSpot&apos;s own fields; and payments on Arc testnet or in shadow mode only to a HubSpot developer test account or sandbox. A
-          field someone changed in HubSpot is not written over until a person in Vestiarion chooses to. They are shown to the workspace&apos;s members and to its agent; the agent&apos;s model provider may see a deal&apos;s facts to
-          decide on its collections, and may not train on them. Vestiarion never uses HubSpot data to train or improve any AI model, and never passes
+          field someone changed in HubSpot is not written over until a person in Vestiarion chooses to. They are shown to the workspace&apos;s members and to its agent; the agent&apos;s model provider (DeepSeek, on the hosted service) sees a deal&apos;s facts to
+          decide on its collections, under <LegalLink href={HOSTED_MODEL_PROVIDER.terms}>that provider&apos;s own API terms</LegalLink>. Vestiarion never uses HubSpot data to train or improve any AI model, and never passes
           it to anyone else without the workspace&apos;s say. A deal won in HubSpot becomes a deal in Vestiarion only when a person plans it, and a
           change made in HubSpot afterwards changes nothing in Vestiarion until a person does. One HubSpot account connects to one workspace at a
           time. Disconnecting stops the reading at once; the deals already planned stay with the workspace.
@@ -138,7 +141,8 @@ export default function TermsPage() {
           the deal in Vestiarion, in deal fields Vestiarion creates, never Pipedrive&apos;s own fields. Pipedrive does not say which of its companies
           are developer sandboxes, so only payments made on Arc mainnet outside shadow mode are written to Pipedrive. A field someone changed in Pipedrive
           is not written over until a person in Vestiarion chooses to. They are shown to the workspace&apos;s members and to its agent; the
-          agent&apos;s model provider may see a deal&apos;s facts to decide on its collections, and may not train on them. Vestiarion never uses
+          agent&apos;s model provider (DeepSeek, on the hosted service) sees a deal&apos;s facts to decide on its collections, under{" "}
+          <LegalLink href={HOSTED_MODEL_PROVIDER.terms}>that provider&apos;s own API terms</LegalLink>. Vestiarion never uses
           Pipedrive data to train or improve any AI model, and never passes it to anyone else without the workspace&apos;s say. A deal won in
           Pipedrive becomes a deal in Vestiarion only when a person plans it, and a change made in Pipedrive afterwards changes nothing in Vestiarion
           until a person does. One Pipedrive company connects to one workspace at a time. Disconnecting uninstalls Vestiarion from the Pipedrive

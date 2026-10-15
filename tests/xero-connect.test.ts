@@ -112,7 +112,7 @@ describe("startConnect", () => {
     expect(`${to.origin}${to.pathname}`).toBe("https://login.xero.com/identity/connect/authorize");
     expect(to.searchParams.get("redirect_uri")).toBe(`${ORIGIN}/api/integrations/xero/callback`);
     const state = readConnectState(to.searchParams.get("state") ?? "", keys(), NOW);
-    expect(state).toMatchObject({ provider: "xero", org: ORG, user: USER, consent: { version: "xero-2026-10-13", at: "2026-10-12T08:00:00.000Z" } });
+    expect(state).toMatchObject({ provider: "xero", org: ORG, user: USER, consent: { version: "xero-2026-10-15", at: "2026-10-12T08:00:00.000Z" } });
     const cookie = response.headers.get("set-cookie") ?? "";
     expect(cookie).toContain(`vx_xero_oauth=${state?.nonce}`);
     expect(cookie).toMatch(/HttpOnly/);
