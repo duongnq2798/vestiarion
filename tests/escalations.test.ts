@@ -66,6 +66,17 @@ describe("who can act", () => {
     expect(whoCanAct(withAccountant, null).map((member) => member.userId)).toEqual(["u-owner", "u-admin", "u-approver"]);
     expect(whoCanAct([withAccountant[0], withAccountant[4]], null)).toEqual([]);
   });
+
+  it("leaves out whoever a first payment's address leaves out, names the only approver anyway, and no one when none is left (N4)", () => {
+    // The approver confirmed an address no member answers for alone; the admin entered the bill.
+    expect(whoCanAct(members, "u-admin", ["u-approver"]).map((member) => member.userId)).toEqual(["u-owner"]);
+    expect(exceptionFacts({ dueDate: "2026-10-12", createdBy: "u-admin", leftOut: ["u-approver"] }, members, TODAY).owners).toEqual(["ana@northstar.example"]);
+    // Two who may decide: one entered it, the other confirmed it. Neither may pay it, so the card says nobody can yet.
+    const two = members.filter((member) => member.role === "owner" || member.role === "approver");
+    expect(whoCanAct(two, "u-owner", ["u-approver"])).toEqual([]);
+    // The workspace's only approver decides alone, whatever they entered, gave or confirmed.
+    expect(whoCanAct(members.filter((member) => member.role === "owner"), "u-owner", ["u-owner"]).map((member) => member.userId)).toEqual(["u-owner"]);
+  });
 });
 
 describe("the escalation email", () => {

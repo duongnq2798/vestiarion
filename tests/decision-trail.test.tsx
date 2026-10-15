@@ -98,6 +98,31 @@ describe("the decision trail", () => {
     expect(decided(true)).toContain("✓ First payment to this address, with two people behind it");
   });
 
+  it("says when a first payment's address came through a payee link or a GitHub bounty, and whether someone other than who asked for it confirmed it", () => {
+    const decided = (newPayee: Record<string, unknown>) =>
+      trailStep(
+        step(983, "02:43:00", "agent", "ap_pay", { decisionMode: "deepseek", decision: { action: "pay" }, observed: { riskLevel: "clear", amount: 0.3, newPayee } })
+      )!.notes;
+    expect(decided({ addressBy: "payee", linkCreatedBy: "m1", confirmedBy: "m1", twoParties: false })).toContain(
+      "✗ First payment to this address, sent through a payee link and confirmed only by the member who created it"
+    );
+    expect(decided({ addressBy: "payee", linkCreatedBy: "m1", confirmedBy: null, twoParties: false })).toContain(
+      "✗ First payment to this address, sent through a payee link and not confirmed yet"
+    );
+    expect(decided({ addressBy: "payee", linkCreatedBy: "m1", confirmedBy: "m2", twoParties: true })).toContain(
+      "✓ First payment to this address, sent through a payee link and confirmed by someone other than the member who created it"
+    );
+    // On GitHub no confirmation is a second person (round 2): another member approves it.
+    expect(decided({ addressBy: "payee", bountyBy: "m1", confirmedBy: "m2", twoParties: false })).toContain(
+      "✗ First payment to this address, sent on GitHub, where a member's confirmation alone is not a second person"
+    );
+    expect(decided({ addressBy: "payee", bountyBy: "m1", confirmedBy: null, twoParties: false })).toContain(
+      "✗ First payment to this address, sent on GitHub and not confirmed yet"
+    );
+    // A payee's address no member can be named as having asked for.
+    expect(decided({ addressBy: "payee", confirmedBy: "m2", twoParties: false })).toContain("✗ First payment to this address, and only one person stands behind it");
+  });
+
   it("says a first payment to a mirror address is to a wallet Vestiarion made, not one two people stand behind (shadow mode S7)", () => {
     const notes = trailStep(
       step(982, "02:42:00", "agent", "ap_pay", {

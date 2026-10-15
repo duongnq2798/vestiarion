@@ -112,9 +112,13 @@ function checksOf(detail: Record<string, unknown>, paying: boolean): string[] {
       // A mirror address is a wallet Vestiarion made in shadow mode: no person gave it (shadow mode S7).
       newPayee.addressBy === MIRROR
         ? "✓ First payment to this address, a mirror address Vestiarion made in shadow mode"
-        : newPayee.twoParties === true
-          ? "✓ First payment to this address, with two people behind it"
-          : "✗ First payment to this address, and only one person stands behind it"
+        : askedFor(newPayee)
+          ? `${newPayee.twoParties === true ? "✓" : "✗"} First payment to this address, ${askedFor(newPayee)}`
+          : newPayee.twoParties === true
+            ? "✓ First payment to this address, with two people behind it"
+            : newPayee.unanswered === true
+              ? "✗ First payment to this address, which no member answers for alone: one confirms it, another approves it"
+              : "✗ First payment to this address, and only one person stands behind it"
     );
   }
   const risk = text(observed.riskLevel);
@@ -128,6 +132,27 @@ function checksOf(detail: Record<string, unknown>, paying: boolean): string[] {
   if (duplicates !== null) notes.push(duplicates === 0 ? "✓ No duplicate found" : `· Resembles ${duplicates} earlier ${duplicates === 1 ? "invoice" : "invoices"}`);
   if (paying && observed.addressUnconfirmed === true) notes.push("✗ Its payment address changed and is not confirmed");
   return notes;
+}
+
+/**
+ * For an address the payee sent that a member asked for (independent review, 2026-10-15): how it came, and whether
+ * someone other than that member confirmed it, as the decision recorded it; null for any other address.
+ */
+function askedFor(newPayee: Record<string, unknown>): string | null {
+  const confirmed = typeof newPayee.confirmedBy === "string" && newPayee.confirmedBy.length > 0;
+  const confirmedByOther = newPayee.twoParties === true;
+  if (typeof newPayee.linkCreatedBy === "string") {
+    if (!confirmed) return "sent through a payee link and not confirmed yet";
+    return `sent through a payee link and confirmed ${confirmedByOther ? "by someone other than the member who created it" : "only by the member who created it"}`;
+  }
+  if (typeof newPayee.bountyBy === "string") {
+    if (!confirmed) return "sent on GitHub and not confirmed yet";
+    // A decision recorded before round 2 may have counted a confirmation as the second person.
+    return confirmedByOther
+      ? "sent on GitHub and confirmed by someone other than the member its bounty acts as"
+      : "sent on GitHub, where a member's confirmation alone is not a second person";
+  }
+  return null;
 }
 
 /** What code said about the decision: a guardrail's refusal, the spending-limit contract's verdict. */

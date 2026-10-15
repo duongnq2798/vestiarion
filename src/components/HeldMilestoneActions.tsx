@@ -80,7 +80,10 @@ export function HeldMilestoneActions({
   milestone: { id: string; title: string; amount: number; contractorName: string };
   reason: HeldReason;
   canDecide: boolean;
-  /** The viewer added this milestone: overriding the agent's hold on it needs someone else. */
+  /**
+   * The viewer added this milestone: overriding the agent's hold on it needs someone else. Not for a GitHub bounty's
+   * milestone held for its address alone, which the new payee check answers (`addedByBounty`).
+   */
   selfAdded: boolean;
   sandbox: boolean;
   /** The viewer is the only member of the workspace who may approve payments: they may override a hold on what they added. */
@@ -111,7 +114,7 @@ export function HeldMilestoneActions({
         ? "You approved it"
         : selfBlocked
           ? two && !selfAdded
-            ? "You gave this payee's address, so someone else must approve its first payment."
+            ? (two.leftOutWhy?.[viewerId ?? ""] ?? "You gave this payee's address, so someone else must approve its first payment.")
             : "You added this milestone, so someone else must approve paying it."
           : null;
 

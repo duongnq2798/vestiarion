@@ -5,6 +5,11 @@ import { db, platformDb, unwrap } from "../dal";
 import { decisionEscalationEmail, type EscalationItem } from "../email/decision-escalation";
 import { emailSettingsFromEnv, sendEmail } from "../email/send";
 import { decideByOf, whoCanAct } from "../exceptions";
+import { chainModes } from "../circle";
+import { membersLeftOut } from "../new-payee";
+import { firstPaymentFrom, loadNewPayeeFacts } from "../new-payee-facts";
+import { readTwoApprovalsAbove } from "../approval-policy";
+import { needsTwoApprovals } from "../two-approvals";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { listMembers } from "../platform/members";
 import { decidingRecipients, DIGEST_MAX_RECIPIENTS, DIGEST_SEND_DEADLINE_MS } from "./waiting";
@@ -44,7 +49,8 @@ interface WaitingRow {
   early_pay_discount_pct: number | string | null;
   discount_due_date: string | null;
   created_by: string | null;
-  counterparties: { name: string } | null;
+  counterparty_id: string;
+  counterparties: { name: string; address?: string | null } | null;
 }
 
 /**
@@ -74,12 +80,15 @@ export async function escalationStart(today: string): Promise<string | null> {
  * The waiting payables past their decide-by day today, each with that day; with `from`, only a day on or after it. In
  * scope.
  */
-export async function pastDecideBy(now: Date = new Date(), from?: string): Promise<Array<{ id: string; createdBy: string | null; item: EscalationItem }>> {
+export async function pastDecideBy(
+  now: Date = new Date(),
+  from?: string
+): Promise<Array<{ id: string; createdBy: string | null; counterpartyId: string; address: string | null; item: EscalationItem }>> {
   const today = now.toISOString().slice(0, 10);
   const rows = unwrap(
     await db()
       .from("invoices")
-      .select("id, amount, currency, status, due_date, early_pay_discount_pct, discount_due_date, created_by, counterparties(name)")
+      .select("id, amount, currency, status, due_date, early_pay_discount_pct, discount_due_date, created_by, counterparty_id, counterparties(name, address)")
       .eq("direction", "payable")
       .in("status", WAITING)
       .order("due_date", { ascending: true })
@@ -91,6 +100,8 @@ export async function pastDecideBy(now: Date = new Date(), from?: string): Promi
       {
         id: row.id,
         createdBy: row.created_by ?? null,
+        counterpartyId: row.counterparty_id,
+        address: row.counterparties?.address ?? null,
         item: {
           counterpartyName: row.counterparties?.name ?? "unknown",
           amount: Number(row.amount),
@@ -102,6 +113,22 @@ export async function pastDecideBy(now: Date = new Date(), from?: string): Promi
       },
     ];
   });
+}
+
+/**
+ * For each payable one approval pays whose payment would be the first to its payee's address, where payments are real:
+ * the members that address leaves out of approving it (new payee check N4). None elsewhere: above the figure for two
+ * approvals, two different people approve it, whoever they are.
+ */
+async function firstPaymentsLeftOut(
+  past: ReadonlyArray<{ id: string; counterpartyId: string; address: string | null; item: EscalationItem }>
+): Promise<Map<string, string[]>> {
+  if (past.length === 0 || chainModes().mode !== "live") return new Map();
+  const above = await readTwoApprovalsAbove(db());
+  const onOne = past.filter(({ item }) => !needsTwoApprovals({ amount: item.amount, currency: item.currency === "EURC" ? "EURC" : "USDC", usdcValue: null }, above));
+  if (onOne.length === 0) return new Map();
+  const facts = await loadNewPayeeFacts(db(), [...new Set(onOne.map(({ counterpartyId }) => counterpartyId))]);
+  return new Map(onOne.map(({ id, counterpartyId, address }) => [id, membersLeftOut(firstPaymentFrom(facts, { id: counterpartyId, address }))]));
 }
 
 /**
@@ -149,9 +176,17 @@ export async function escalateOverdueDecisions(now: Date = new Date()): Promise<
     const org = unwrap(await platformDb().from("orgs").select("name, slug").eq("id", scopedOrgId).single()) as { name: string; slug: string };
     const origin = siteOrigin();
     const link = `${origin}/o/${org.slug}/approvals`;
-    // Who may act on each payable, from every member, so whoever entered one decides it only when nobody else may (E3).
+    // Who may act on each payable, from every member, so whoever entered one decides it only when nobody else may (E3),
+    // and whoever a first payment's address leaves out does not (N4). One that leaves no one is still told to the members
+    // who may decide, as before: its card says why none of them can approve it alone.
     const members = await listMembers(scopedOrgId);
-    const actingOn = new Map(past.map(({ id, createdBy }) => [id, new Set(whoCanAct(members, createdBy).map((member) => member.userId))]));
+    const leftOut = await firstPaymentsLeftOut(past);
+    const actingOn = new Map(
+      past.map(({ id, createdBy }) => {
+        const acting = whoCanAct(members, createdBy, leftOut.get(id));
+        return [id, new Set((acting.length > 0 ? acting : whoCanAct(members, createdBy)).map((member) => member.userId))];
+      })
+    );
 
     // Claim each payable for its decide-by day: one claimed already was escalated, or is being escalated now.
     const claimed = await db()

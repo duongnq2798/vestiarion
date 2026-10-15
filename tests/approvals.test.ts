@@ -9,6 +9,7 @@ import {
   approveAndPay,
   lastAttemptOf,
   listWaitingPayables,
+  ADDRESS_GIVER_NOTE,
   paymentWasSent,
   rejectInvoice,
   returnInvoice,
@@ -183,6 +184,8 @@ function approvalsFake(options: {
   commissionPartners?: FakeReply;
   /** The counterparty's entries that set or confirmed its address, newest first (new payee check N2); none by default. */
   addressEntries?: Array<Record<string, unknown>>;
+  /** The workspace's payee links, `{ id, created_by }`, as the new payee check reads who created one; none by default. */
+  payeeLinks?: Array<{ id: string; created_by: string | null }>;
   /** The workspace's figure above which a payment needs two approvals (two approvals T1); none by default. */
   twoApprovals?: number;
   /** The invoice's open approvals (two approvals T4); none by default. */
@@ -216,6 +219,11 @@ function approvalsFake(options: {
     if (request.path === "/rest/v1/counterparties" && request.method === "GET") return { body: options.counterparty ?? null };
     if (request.path === "/rest/v1/counterparties" && request.method === "PATCH") return { body: [{ id: COUNTERPARTY_ID }] };
 
+    // The new payee check's read of which payee each paid invoice was for, by id (new-payee-facts).
+    if (request.path === "/rest/v1/invoices" && request.method === "GET" && request.params.get("select") === "id,counterparty_id") {
+      const ids = request.params.get("id") ?? "";
+      return { body: [invoiceRow()].filter((row) => ids.includes(String(row.id))) };
+    }
     if (request.path === "/rest/v1/invoices" && request.method === "GET") {
       const failure = options.invoice?.(request);
       if (failure) return failure;
@@ -297,6 +305,7 @@ function approvalsFake(options: {
     if (request.path === "/rest/v1/ledger_entries" && request.method === "GET" && request.params.has("detail->>invoiceId")) {
       return { body: options.decision ? [options.decision] : [] };
     }
+    if (request.path === "/rest/v1/payee_links" && request.method === "GET") return { body: options.payeeLinks ?? [] };
     if (request.path === "/rest/v1/decision_verdicts" && request.method === "GET") return { body: options.verdict ? [options.verdict] : [] };
     if (request.path === "/rest/v1/shadow_modes" && request.method === "GET") return { body: options.shadow ? [options.shadow] : [] };
     if (request.path === "/rest/v1/rpc/sole_approver" && options.soleApprover) return options.soleApprover;
@@ -2543,6 +2552,302 @@ describe("approveAndPay and the first payment to an address (new payee check N4)
     const addressRead = (request: RecordedRequest) => request.path === "/rest/v1/ledger_entries" && request.params.has("detail->>counterpartyId");
     expect(fake.requests.some(addressRead)).toBe(false);
     expect(rpcBodies(fake.requests, "append_ledger_entry")[0].p_detail).not.toHaveProperty("firstPayment");
+  });
+});
+
+/**
+ * An address sent through a payee link counts as given by the member who created the link (independent review,
+ * 2026-10-15): that member is refused its first payment as whoever typed an address in is, unless they decide alone.
+ */
+describe("approveAndPay and the first payment to an address sent through a payee link", () => {
+  const LINK = "7c1e2d3f-0000-4000-8000-00000000c1c1";
+  const ADMIN_A = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000d4";
+  // A created the link, the payee sent the address through it, and A confirmed it.
+  const sentThroughLink = (confirmer: string) => [
+    { action: "counterparty_address_confirmed", detail: { by: confirmer, counterpartyId: COUNTERPARTY_ID, address: "0xdead", via: "confirm" } },
+    { action: "counterparty_address_changed", detail: { by: null, via: "payee_link", linkId: LINK, counterpartyId: COUNTERPARTY_ID, from: null, to: "0xdead" } },
+  ];
+  const live = () => {
+    getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003 });
+    syncOperatingBalanceMock.mockResolvedValue(500);
+  };
+
+  it("refuses the member who created the link, before any claim, though the payee typed the address", async () => {
+    live();
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 0 });
+    const { fake, run } = approvalsFake({ addressEntries: sentThroughLink(ACTOR), payeeLinks: [{ id: LINK, created_by: ACTOR }] });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toThrow(
+      "You asked for this address with a payee link, so someone else must approve its first payment."
+    );
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses the member a GitHub bounty acts as, like anyone, an address sent with /payto that no other member confirmed", async () => {
+    live();
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 0 });
+    const pull = "https://github.com/acme/app/pull/42";
+    const { run } = approvalsFake({
+      addressEntries: [
+        { action: "counterparty_address_changed", detail: { by: null, via: "github", login: "octocat", commentUrl: `${pull}#issuecomment-9`, counterpartyId: COUNTERPARTY_ID, from: null, to: "0xdead" } },
+        { action: "github_bounty_attached", detail: { by: ACTOR, via: "github", pullRequest: pull, counterpartyId: COUNTERPARTY_ID, milestoneId: "ms-1" } },
+      ],
+    });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toThrow(
+      "Someone else must confirm this address on Counterparties before its first payment."
+    );
+    const [row] = await run(() => listWaitingPayables());
+    expect(row).toMatchObject({ firstPaymentAddressBy: ACTOR, firstPaymentVia: "github", firstPaymentUnanswered: true, firstPaymentLeftOut: [] });
+  });
+
+  it("lets another approver pay it, and records that it was the address's first payment", async () => {
+    live();
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 0 });
+    const { fake, run } = approvalsFake({ addressEntries: sentThroughLink(ADMIN_A), payeeLinks: [{ id: LINK, created_by: ADMIN_A }] });
+
+    expect((await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).status).toBe("paid");
+    expect(rpcBodies(fake.requests, "sole_approver")).toHaveLength(0);
+    expect(rpcBodies(fake.requests, "append_ledger_entry")[0].p_detail).toMatchObject({ by: ACTOR, firstPayment: true });
+  });
+
+  it("lets the workspace's only approver pay it, as for an address they typed in, and records the first payment", async () => {
+    live();
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 0 });
+    const { fake, run } = approvalsFake({ addressEntries: sentThroughLink(ACTOR), payeeLinks: [{ id: LINK, created_by: ACTOR }], soleApprover: { body: true } });
+
+    expect((await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).status).toBe("paid");
+    expect(rpcBodies(fake.requests, "sole_approver")).not.toHaveLength(0);
+    expect(rpcBodies(fake.requests, "append_ledger_entry")[0].p_detail).toMatchObject({ by: ACTOR, firstPayment: true });
+  });
+
+  it("leaves out the member who created the link from the two approvals above the figure", async () => {
+    live();
+    const { run } = approvalsFake({
+      addressEntries: sentThroughLink(ADMIN_A),
+      payeeLinks: [{ id: LINK, created_by: ADMIN_A }],
+      twoApprovals: 100,
+      approversBesides: (excluded) => (excluded.length === 0 ? 3 : 2),
+    });
+
+    const [row] = await run(() => listWaitingPayables());
+    expect(row.twoApprovals?.excluded).toEqual([CREATOR, ADMIN_A]);
+  });
+
+  it("names the member who created the link as who gave the address, on the listing", async () => {
+    live();
+    const { run } = approvalsFake({ addressEntries: sentThroughLink(ADMIN_A), payeeLinks: [{ id: LINK, created_by: ADMIN_A }] });
+
+    const [row] = await run(() => listWaitingPayables());
+    expect(row.firstPaymentAddressBy).toBe(ADMIN_A);
+    expect(row.firstPaymentVia).toBe("payee_link");
+  });
+});
+
+/**
+ * The workspace's only approver paying the first payment to an address they gave or asked for (independent review,
+ * 2026-10-15, I3): allowed, and the ledger says so, in its detail and its summary.
+ */
+describe("approveAndPay by the workspace's only approver, of an address they gave or asked for", () => {
+  const LINK = "7c1e2d3f-0000-4000-8000-00000000c1c1";
+  const typed = [{ action: "create_counterparty", detail: { by: ACTOR, counterpartyId: COUNTERPARTY_ID, address: "0xdead" } }];
+  const linked = [
+    { action: "counterparty_address_confirmed", detail: { by: ACTOR, counterpartyId: COUNTERPARTY_ID, address: "0xdead", via: "confirm" } },
+    { action: "counterparty_address_changed", detail: { by: null, via: "payee_link", linkId: LINK, counterpartyId: COUNTERPARTY_ID, from: null, to: "0xdead" } },
+    { action: "payee_link_created", detail: { by: ACTOR, counterpartyId: COUNTERPARTY_ID, linkId: LINK } },
+  ];
+  const live = () => {
+    getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003 });
+    syncOperatingBalanceMock.mockResolvedValue(500);
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", amountPaid: 150, discountTaken: 0, operatingBalance: 0 });
+  };
+
+  it("records that the person who typed the address in approved its first payment alone", async () => {
+    live();
+    const { fake, run } = approvalsFake({ addressEntries: typed, soleApprover: { body: true } });
+
+    expect((await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).status).toBe("paid");
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toMatchObject({ by: ACTOR, firstPayment: true, addressGiverApproved: true });
+    expect(append.p_summary).toBe(`Approved and paid 150 USDC to Acme Supplies ${ADDRESS_GIVER_NOTE}`);
+  });
+
+  it("records the same for the member who created the payee link it came through", async () => {
+    live();
+    const { fake, run } = approvalsFake({ addressEntries: linked, soleApprover: { body: true } });
+
+    expect((await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).status).toBe("paid");
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toMatchObject({ firstPayment: true, addressGiverApproved: true });
+    expect(append.p_summary).toContain(ADDRESS_GIVER_NOTE);
+  });
+
+  it("records nothing of the kind when someone else approved it", async () => {
+    live();
+    const someoneElse = [{ action: "create_counterparty", detail: { by: CREATOR, counterpartyId: COUNTERPARTY_ID, address: "0xdead" } }];
+    const { fake, run } = approvalsFake({ addressEntries: someoneElse });
+
+    expect((await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).status).toBe("paid");
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toMatchObject({ firstPayment: true });
+    expect(append.p_detail).not.toHaveProperty("addressGiverApproved");
+    expect(append.p_summary).not.toContain(ADDRESS_GIVER_NOTE);
+  });
+});
+
+/**
+ * A first payment is keyed on the payee and the address together (independent review, 2026-10-15, I4): an address the
+ * workspace paid for another payee is still a first payment for this one.
+ */
+describe("approveAndPay and an address the workspace paid for someone else", () => {
+  it("refuses the person who gave the address its first payment here, though the address was paid for another payee", async () => {
+    getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003 });
+    syncOperatingBalanceMock.mockResolvedValue(500);
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 0 });
+    const elsewhere = intentRow({ status: "confirmed", destination: "0xDEAD", source_id: "018f8ce0-1557-7b54-a931-4d777f6b0000" });
+    const { run } = approvalsFake({
+      intents: [elsewhere],
+      addressEntries: [{ action: "create_counterparty", detail: { by: ACTOR, counterpartyId: COUNTERPARTY_ID, address: "0xdead" } }],
+    });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toThrow("You gave this payee's address");
+    const [row] = await run(() => listWaitingPayables());
+    expect(row.firstPaymentAddressBy).toBe(ACTOR);
+  });
+});
+
+/**
+ * An address no member answers for alone (independent review, 2026-10-15, round 2): one sent with `/payto`, whose
+ * bounty acts as the member who connected GitHub whoever typed it, or one whose giver no entry names. Whoever confirmed
+ * it is left out of approving its first payment, so two different members stand behind it.
+ */
+describe("approveAndPay and an address no member answers for alone", () => {
+  const PULL = "https://github.com/acme/app/pull/42";
+  const CONNECTOR = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000c3";
+  const MEMBER_Y = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000e5";
+  // Member X (ACTOR) opened the pull request from their own GitHub account, typed /bounty on it (a self-bounty, acting as
+  // the connector), sent their own wallet with /payto, and confirmed it.
+  const selfBounty = (confirmer: string, typedBy = "x-on-github") => [
+    { action: "counterparty_address_confirmed", detail: { by: confirmer, counterpartyId: COUNTERPARTY_ID, address: "0xdead", via: "confirm" } },
+    { action: "counterparty_address_changed", detail: { by: null, via: "github", login: "x-on-github", commentUrl: `${PULL}#issuecomment-9`, counterpartyId: COUNTERPARTY_ID, from: null, to: "0xdead" } },
+    { action: "github_bounty_attached", detail: { by: CONNECTOR, via: "github", login: typedBy, author: "x-on-github", pullRequest: PULL, counterpartyId: COUNTERPARTY_ID, milestoneId: "ms-1" } },
+  ];
+  const live = () => {
+    getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003 });
+    syncOperatingBalanceMock.mockResolvedValue(500);
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", amountPaid: 150, discountTaken: 0, operatingBalance: 0 });
+  };
+
+  it("refuses the member who self-bountied and confirmed the address, before any claim", async () => {
+    live();
+    const { fake, run } = approvalsFake({ addressEntries: selfBounty(ACTOR) });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toThrow(
+      "You confirmed this address, so someone else must approve its first payment."
+    );
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("lets another member pay it", async () => {
+    live();
+    const { fake, run } = approvalsFake({ addressEntries: selfBounty(MEMBER_Y) });
+
+    expect((await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).status).toBe("paid");
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toMatchObject({ by: ACTOR, firstPayment: true });
+    expect(append.p_detail).not.toHaveProperty("addressGiverApproved");
+  });
+
+  it("leaves out exactly whoever confirmed it, so the member the bounty acts as pays it when someone else typed the bounty", async () => {
+    live();
+    const typedByMaintainer = selfBounty(ACTOR, "maintainer");
+    await expect(approvalsFake({ addressEntries: typedByMaintainer }).run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toThrow(
+      "You confirmed this address, so someone else must approve its first payment."
+    );
+    // Two different members stand behind it: one confirmed it, the other approves it. Two approvers never deadlock.
+    const { fake, run } = approvalsFake({ addressEntries: typedByMaintainer });
+    expect((await run(() => approveAndPay({ actorId: CONNECTOR, invoiceId: INVOICE_ID }))).status).toBe("paid");
+    expect(rpcBodies(fake.requests, "sole_approver")).toHaveLength(0);
+    expect(rpcBodies(fake.requests, "append_ledger_entry")[0].p_detail).not.toHaveProperty("addressGiverApproved");
+  });
+
+  it("refuses an approver who sent their own wallet with /payto and never confirmed it, though their approval would confirm it", async () => {
+    live();
+    // X (ACTOR) self-bountied and sent their wallet with /payto; no one confirmed it; another member entered the invoice.
+    const unconfirmed = selfBounty(ACTOR).slice(1);
+    const { fake, run } = approvalsFake({ addressEntries: unconfirmed });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID, shownAddress: "0xdead" }))).rejects.toThrow(
+      "Someone else must confirm this address on Counterparties before its first payment."
+    );
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    // Nothing confirms the address on the way.
+    expect(fake.requests.filter((r) => r.path === "/rest/v1/counterparties" && r.method === "PATCH")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    // Any other member is refused alike until someone confirms it on Counterparties.
+    await expect(approvalsFake({ addressEntries: unconfirmed }).run(() => approveAndPay({ actorId: MEMBER_Y, invoiceId: INVOICE_ID }))).rejects.toThrow(
+      "Someone else must confirm this address on Counterparties before its first payment."
+    );
+  });
+
+  it("lets whoever confirmed it record a transfer already sent, which pays the address nothing new, as its card says", async () => {
+    live();
+    const sent = [{ source_id: INVOICE_ID, status: "confirmed", provider_tx_id: "circle-tx-1", last_error: null }];
+    const { fake, run } = approvalsFake({ addressEntries: selfBounty(ACTOR), intents: sent });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).resolves.toMatchObject({ status: "paid" });
+    expect(rpcBodies(fake.requests, "sole_approver")).toHaveLength(0);
+    const [row] = await approvalsFake({ addressEntries: selfBounty(ACTOR), intents: sent }).run(() => listWaitingPayables());
+    expect(row).not.toHaveProperty("firstPaymentUnanswered");
+    expect(row).not.toHaveProperty("firstPaymentConfirmers");
+    expect(row).not.toHaveProperty("firstPaymentLeftOut");
+  });
+
+  it("lets the workspace's only approver pay an address no one else confirmed, and the ledger says so", async () => {
+    live();
+    const { fake, run } = approvalsFake({ addressEntries: selfBounty(ACTOR).slice(1), soleApprover: { body: true } });
+
+    expect((await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).status).toBe("paid");
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toMatchObject({ by: ACTOR, firstPayment: true, addressGiverApproved: true });
+    expect(append.p_summary).toContain(ADDRESS_GIVER_NOTE);
+  });
+
+  it("leaves whoever confirmed it out of the two approvals, and says so on the listing", async () => {
+    live();
+    const { run } = approvalsFake({ addressEntries: selfBounty(ACTOR), twoApprovals: 100, approversBesides: (excluded) => (excluded.length === 0 ? 3 : 2) });
+
+    const [row] = await run(() => listWaitingPayables());
+    expect(row.twoApprovals?.excluded).toEqual([CREATOR, ACTOR]);
+    expect(row).toMatchObject({ firstPaymentAddressBy: null, firstPaymentConfirmers: [ACTOR] });
+    // Above the figure, two different people approve it, the two approvals saying who may: who can act is not narrowed.
+    expect(row).not.toHaveProperty("firstPaymentLeftOut");
+  });
+
+  it("leaves whoever confirmed it out when no one can be named as the link's creator", async () => {
+    live();
+    const LINK = "7c1e2d3f-0000-4000-8000-00000000c1c1";
+    const unnamed = (confirmer: string) => [
+      { action: "counterparty_address_confirmed", detail: { by: confirmer, counterpartyId: COUNTERPARTY_ID, address: "0xdead", via: "confirm" } },
+      { action: "counterparty_address_changed", detail: { by: null, via: "payee_link", linkId: LINK, counterpartyId: COUNTERPARTY_ID, from: null, to: "0xdead" } },
+    ];
+    await expect(
+      approvalsFake({ addressEntries: unnamed(ACTOR), payeeLinks: [{ id: LINK, created_by: null }] }).run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))
+    ).rejects.toThrow("You confirmed this address, so someone else must approve its first payment.");
+    const other = approvalsFake({ addressEntries: unnamed(MEMBER_Y), payeeLinks: [{ id: LINK, created_by: null }] });
+    expect((await other.run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).status).toBe("paid");
+  });
+
+  it("lets the workspace's only approver pay it, and the ledger says they confirmed it and approved it alone", async () => {
+    live();
+    const { fake, run } = approvalsFake({ addressEntries: selfBounty(ACTOR), soleApprover: { body: true } });
+
+    expect((await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).status).toBe("paid");
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toMatchObject({ by: ACTOR, firstPayment: true, addressGiverApproved: true });
+    expect(append.p_summary).toContain(ADDRESS_GIVER_NOTE);
   });
 });
 

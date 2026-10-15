@@ -61,7 +61,7 @@ describe("milestoneDecision: a release held by a rule that is not a limit (2026-
       detail: { milestoneId: "ms-1", guardrailBlocked: true, guardrailRule: "counterparty.new_payee", observed: { paymentLimit: 50, riskLevel: "clear" } },
     } as unknown as LedgerEntry;
     const decision = milestoneDecision(milestone({ status: "held", verified: true }), [entry], { network: "arc-testnet" });
-    expect(decision.guardrail).toEqual({ rule: "counterparty.new_payee", attempted: 12.5, reason: "the first payment to this address, and only one person stands behind it" });
+    expect(decision.guardrail).toEqual({ rule: "counterparty.new_payee", attempted: 12.5, reason: "the first payment to this address, and two different people do not stand behind it yet" });
   });
 });
 

@@ -167,6 +167,25 @@ describe("HeldMilestoneActions above the figure for two approvals (two approvals
     expect(text(markup)).not.toContain(OWN_MILESTONE_NOTE);
   });
 
+  it("tells whoever is left out for the address why, in the words Pay now would refuse them in", () => {
+    const why = "You asked for this address with a payee link, so someone else must approve its first payment.";
+    const markup = renderToStaticMarkup(
+      <HeldMilestoneActions
+        orgSlug="testnet-2"
+        milestone={MILESTONE}
+        reason={HELD_FOR_TWO}
+        canDecide
+        selfAdded={false}
+        sandbox={false}
+        viewerId={VIEWER}
+        twoApprovals={{ above: 0.2, approvals: [], excluded: [VIEWER], excludedSlots: 0, approvers: 3, leftOutWhy: { [VIEWER]: why } }}
+      />
+    );
+    expect(markup).toMatch(button("Approve", true));
+    expect(text(markup)).toContain(why);
+    expect(text(markup)).not.toContain("You gave this payee's address");
+  });
+
   it("offers Pay now to either of two people who both approved it", () => {
     expect(renderTwo([{ by: OTHER, at: AT }, { by: VIEWER, at: AT }])).toMatch(button("Pay now", false));
   });

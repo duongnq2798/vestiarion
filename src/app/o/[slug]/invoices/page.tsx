@@ -62,8 +62,12 @@ import { isSoleApprover } from "@/lib/agent/sole-approver";
 import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
-import { shellModes } from "@/lib/circle";
+import { chainModes, shellModes } from "@/lib/circle";
 import { db } from "@/lib/dal";
+import { membersLeftOut } from "@/lib/new-payee";
+import { firstPaymentFrom, loadNewPayeeFacts } from "@/lib/new-payee-facts";
+import { readTwoApprovalsAbove } from "@/lib/approval-policy";
+import { needsTwoApprovals } from "@/lib/two-approvals";
 import { inOrg } from "@/lib/dal/scope";
 import { inboxEmailsToDecide } from "@/lib/email-inbox/list";
 import { inboxSettingsFromEnv } from "@/lib/email-inbox/settings";
@@ -527,8 +531,29 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
             return null;
           })
         : null;
+    // Whoever a first payment's address leaves out of approving it, where payments are real and one approval pays it
+    // (new payee check N4), as the Approvals card names them: read once, best effort, only while a bill waits. Above the
+    // figure for two approvals, two different people approve it, whoever they are.
+    const firstPayments =
+      members && chainModes().mode === "live"
+        ? await Promise.all([
+            readTwoApprovalsAbove(db()),
+            loadNewPayeeFacts(db(), [...new Set(invoices.filter((invoice) => waiting.has(invoice.id)).map((invoice) => invoice.counterparty_id))]),
+          ]).catch((error: unknown) => {
+            console.error("invoices: first payments not read", error instanceof Error ? error.message : error);
+            return null;
+          })
+        : null;
+    const leftOutOf = (invoice: InvoiceRow) => {
+      if (!firstPayments) return [];
+      const [above, facts] = firstPayments;
+      if (needsTwoApprovals({ amount: Number(invoice.amount), currency: invoice.currency === "EURC" ? "EURC" : "USDC", usdcValue: null }, above)) return [];
+      return membersLeftOut(firstPaymentFrom(facts, { id: invoice.counterparty_id, address: counterpartiesById.get(invoice.counterparty_id)?.address ?? null }));
+    };
     const exceptionOf = (invoice: InvoiceRow) =>
-      members && waiting.has(invoice.id) ? exceptionFacts({ dueDate: invoice.due_date, discount: invoiceDiscount(invoice), createdBy: invoice.created_by ?? null }, members, today) : null;
+      members && waiting.has(invoice.id)
+        ? exceptionFacts({ dueDate: invoice.due_date, discount: invoiceDiscount(invoice), createdBy: invoice.created_by ?? null, leftOut: leftOutOf(invoice) }, members, today)
+        : null;
     const ruleOf = (decision: Decision) => decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : decision.heldForVerdict ? SHADOW_VERDICT : null);
     const needsYouFor = (decision: Decision) => {
       const invoice = invoicesById.get(decision.id);

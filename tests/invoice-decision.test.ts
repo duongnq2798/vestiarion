@@ -261,7 +261,7 @@ describe("invoiceDecision: a rule that is not a limit names itself (2026-10-07)"
     expect(guardrail("counterparty.new_payee")).toEqual({
       rule: "counterparty.new_payee",
       attempted: 0.1,
-      reason: "the first payment to this address, and only one person stands behind it",
+      reason: "the first payment to this address, and two different people do not stand behind it yet",
     });
   });
 

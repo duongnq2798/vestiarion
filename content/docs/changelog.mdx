@@ -1,5 +1,15 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-15: Who asked for a payee's address counts as having given it
+
+- The member who created a payee link, in the console or with [Create a payee link](/docs/api/create-payee-link) (the member who issued the key), now counts as having given the address the payee sends through it. When that member is also the only one who confirmed the address, the agent holds the first payment to it with the rule `counterparty.new_payee` (`guardrailBlocked: true`, `execution.resultingStatus: "held"`), where it used to pay it. A webhook endpoint then receives that hold's entry as `ledger.appended`, in place of a payment's. When another member confirmed the address, the agent pays it as before.
+- That member is read from the link's signed `payee_link_created` entry, so deleting their account changes nothing; only when that entry is missing is the link's own record read.
+- For an address sent with `/payto` on GitHub, and for any address no member can be named as having given, no confirmation counts as the second person: the agent always holds its first payment as `counterparty.new_payee`, where it used to pay one a member confirmed. The decision records `observed.newPayee.unanswered: true`, and its reasoning says one member confirms the address and a different one approves it. A bounty typed by its pull request's own author names no member.
+- A first payment is now the first to that payee at that address. An address the workspace has paid for another counterparty no longer lets the agent skip the second person for this one, so a first payment it used to make on its own may be held as `counterparty.new_payee`.
+- A decision on the first payment to an address a member asked for records `observed.newPayee.linkCreatedBy` (a payee link) or `observed.newPayee.bountyBy` (the member a GitHub bounty acts as), beside `addressBy: "payee"`, `confirmedBy` and `twoParties`. Each is absent for an address given any other way, and when no member can be named.
+- `approval_paid` and `milestone_approval_paid` gain `addressGiverApproved: true`, and their summary a note, when the workspace's only approver made a first payment to an address no other member stands behind: one they gave, asked for or confirmed, or one no one else confirmed.
+- Nothing else in `/api/v1` or the webhooks changes. `POST /api/v1/payee-links` takes and answers the same.
+
 ## 2026-10-15: Invoices captured with the Chrome extension
 
 - An owner or admin can capture invoices with the Chrome extension Vestiarion Invoice Capture, as drafts that an owner or admin then adds as bills in the console. Five new entries, each listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:

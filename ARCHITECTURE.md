@@ -383,20 +383,59 @@ time, and payments keep their idempotent intents.
 
 **The new payee check** (`docs/superpowers/specs/2026-10-05-new-payee-check-design.md`) puts two people before the first
 payment to an address.
-- **What a first payment is** (`newPayeeCheck`, `src/lib/new-payee.ts`): one to an address that no confirmed
-  `payment_intents` row has paid.
-- **Who stands behind the address:** read from the counterparty's `compliance` ledger entries, newest first. The
-  entry that set the address (`create_counterparty`, `counterparty_address_changed`) names who gave it: a member, or
-  the payee for a payee link or GitHub. `counterparty_address_confirmed` entries after it name who confirmed it.
+- **What a first payment is** (`newPayeeCheck`, `src/lib/new-payee.ts`): one to a payee at an address no confirmed
+  `payment_intents` row has paid for that payee. `loadNewPayeeFacts` reads each confirmed payment's payee through its
+  invoice (`counterparty_id`) or milestone (`contractor_id`), so `paidTo` is per counterparty, lowercase: an address
+  the workspace paid for someone else is still a first payment here. `newPayeeCheckFor` asks it for one counterparty.
+- **Who stands behind the address:** read from the counterparty's ledger entries, newest first. The entry that set the
+  address (`create_counterparty`, `counterparty_address_changed`) names who gave it: a member, or the payee for a payee
+  link or GitHub. `counterparty_address_confirmed` entries after it name who confirmed it.
+- **A payee's address counts as the asking member's:** an address the payee sent, through a payee link or with
+  `/payto`, has `by: null`, so the check names the member who asked for it, from signed entries read in the same query
+  (`compliance` and `contractor` domains): the link's `payee_link_created` (`by`, matched on `linkId`), or the
+  `github_bounty_attached` of the pull request the `/payto` comment was posted on (its `commentUrl` starts with the
+  bounty's `pullRequest`), whose `by` is the member the bounty acts as. Only when a link's entry is missing is its
+  `payee_links` row read (`created_by`, migration 0039, through `platformDb`), and set beside the entry as
+  `linkCreatedBy`; the ledger's detail is left as written. The signed entry outlives the member's account, which
+  empties `created_by`. `newPayeeCheck` keeps `addressBy: "payee"` and adds `linkCreatedBy` or `bountyBy`, and for a
+  payee link a confirmation counts as a second party only when it is by someone other than its creator. Without this,
+  one admin could ask for an address, send their own wallet through it, confirm it, and the agent would make the first
+  payment alone.
+- **Addresses no member answers for alone:** one sent with `/payto` (a GitHub login is tied to no member, and every
+  `/bounty` acts as the member who connected GitHub, whoever typed it), and one whose giver no entry names
+  (`addressGiver` null), set by a change, or with a counterparty added through the API or GitHub, so a person can
+  confirm it (`unanswered`; one typed in as its counterparty was added, by an old entry naming no one, cannot be
+  confirmed, so it is held for a person as an unrecorded address is). For these, no confirmation counts as a
+  second party, so the agent holds the first payment, and it rests on exactly two different members: one confirms the
+  address, and another approves it. The members who confirmed it are carried as `confirmersLeftOut`, and
+  `membersLeftOut` is exactly them (for any other address, the giver): who Approve and pay, Pay now and both
+  two-approvals lists leave out. `firstPaymentRefusal` also refuses one approver alone while no member's confirmation is
+  on record, read before the approval, whose own confirmation of the address never counts. The member a bounty acts as
+  is not left out. A bounty whose `login` (who typed it) is its pull request's `author` names no member. An address no
+  entry records at all is held for a person, and no one is left out for it.
 - **Where it applies:** wherever payments are real, meaning the chain provider is live. Real payments follow readable
   Circle credentials, not `orgs.mode`.
 - **The agent's side:** the cycle passes the AP and contractor stages the facts (`loadNewPayeeFacts`,
-  `src/lib/new-payee-facts.ts`). Code holds a first payment one party alone stands behind as
-  `counterparty.new_payee`.
-- **A person's side:** Approve and pay, and Pay now on a milestone, refuse the member who gave the address unless they
-  are the sole approver.
-- **Afterwards:** the follow-up reopens a payable held this way once its address is paid, or two parties stand behind
-  it.
+  `src/lib/new-payee-facts.ts`; `firstPaymentFrom` for a release). Code holds a first payment one party alone stands
+  behind as `counterparty.new_payee`.
+- **A person's side:** Approve and pay, and Pay now on a milestone, refuse whoever `firstPaymentRefusal` names unless
+  they are the sole approver, in words that say why: they gave it or asked for it with a link (`newPayeeSelfMessage`),
+  they confirmed an address no member answers for alone, or no one has confirmed it yet. The Approvals card
+  (`firstPaymentConfirmers`, `firstPaymentUnanswered`) and the milestone's two approvals (`leftOutWhy`) say the same,
+  and "Who can act" (`whoCanAct`, on Approvals, Bills and the overdue email) leaves out `membersLeftOut`. The sole
+  approver's payment records `addressGiverApproved: true` and says so in its summary (`ADDRESS_GIVER_NOTE`). Recording
+  a transfer already sent asks no first-payment question. A GitHub bounty's milestone (`addedByBounty`: its signed
+  `github_bounty_attached` names it and its creator, the member who connected GitHub) held as `counterparty.new_payee`
+  is not refused to that creator once another member confirmed its address; a milestone a person added keeps the
+  creator rule for every hold, since the agent stops checking at the first rule that holds it. `confirmCounterpartyAddress` writes
+  its `counterparty_address_confirmed` entry strictly, undoing the confirmation when the entry cannot be written. Confirmed payments and address entries are read a page at a
+  time (`PAYMENT_PAGE`), and the invoices and milestones paid by id in chunks (`ID_CHUNK`), so PostgREST's row cap
+  never drops one.
+- **Recorded:** a decision on a first payment records `observed.newPayee` through `newPayeeObserved`:
+  `{ addressBy, linkCreatedBy?, bountyBy?, confirmedBy, unanswered?, twoParties }`. The decision trail and the evidence page say
+  when a payee link brought the address in, and the evidence page names who created the link.
+- **Afterwards:** the follow-up (`newPayeeFollowUp`) reopens a payable held this way once that payee has been paid at
+  its address, or two parties stand behind it.
 
 **No address, nothing sent.** Wherever payments are real, a pay or schedule decision for a counterparty with no
 payment address is held by `counterparty.no_address` (`enforceApGuardrails`) before any limit is read or transfer tried,

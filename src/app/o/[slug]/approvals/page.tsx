@@ -79,11 +79,13 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
         : [];
     const approverIds = new Set(waiting.flatMap((payable) => payable.twoApprovals?.approvals.map((approval) => approval.by) ?? []));
     const memberEmails: Record<string, string> = Object.fromEntries((members ?? []).filter((member) => approverIds.has(member.userId)).map((member) => [member.userId, member.email]));
-    // Each held payable's priority, the day it must be decided by, and who can act on it (E1-E3); none when the members
-    // could not be read, never "nobody can approve it".
+    // Each held payable's priority, the day it must be decided by, and who can act on it (E1-E3), less whoever a first
+    // payment's address leaves out (N4); none when the members could not be read, never "nobody can approve it".
     const today = new Date().toISOString().slice(0, 10);
     const exceptionOf = (payable: (typeof waiting)[number]) =>
-      members ? exceptionFacts({ dueDate: payable.dueDate, discount: payable.discount, createdBy: payable.createdBy }, members, today) : undefined;
+      members
+        ? exceptionFacts({ dueDate: payable.dueDate, discount: payable.discount, createdBy: payable.createdBy, leftOut: payable.firstPaymentLeftOut }, members, today)
+        : undefined;
 
     // An approver's checklist (onboarding by role R2): this page open is its first step, and a bill waiting on it, its
     // reasons on its card, the second. Both are recorded for this person (migration 0114), best effort, so the console

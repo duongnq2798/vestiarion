@@ -119,6 +119,16 @@ describe("createPayeeLink", () => {
     expect(JSON.stringify(ledgerMock.mock.calls)).not.toContain(token.slice(4));
   });
 
+  it("keeps the payee link's own id in its entry whatever surface it came from, a chat link's id never in its place", async () => {
+    const { result } = platform(
+      () => createPayeeLink({ orgId: ORG, actorId: USER, counterpartyId: PAYEE, now: NOW, provenance: { via: "telegram", linkId: "chat-link-1" } }),
+      (request) => (rpc(request, "create_payee_link") ? { body: { id: LINK, counterparty_id: PAYEE, expires_at: "2026-10-07T12:00:00+00:00" } } : { body: [] })
+    );
+    await result;
+    // The new payee check matches a payee's address to this entry by its linkId (src/lib/new-payee.ts).
+    expect(ledgerMock.mock.calls[0][1].detail).toMatchObject({ by: USER, counterpartyId: PAYEE, linkId: LINK, via: "telegram" });
+  });
+
   it("says not found for a counterparty the workspace does not hold", async () => {
     const { result } = platform(
       () => createPayeeLink({ orgId: ORG, actorId: USER, counterpartyId: PAYEE, now: NOW }),

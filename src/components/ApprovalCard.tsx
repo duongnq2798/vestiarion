@@ -223,8 +223,8 @@ export default function ApprovalCard({
   // Above the figure for two approvals: one person, sole approver or not, never pays it alone (two approvals T5).
   const two = payable.twoApprovals ?? null;
   const ownEntry = !two && soleApprover && payable.createdBy === viewerId;
-  // A sole approver paying the first payment to an address they gave themselves (new payee check N4).
-  const ownAddress = !two && soleApprover && payable.firstPaymentAddressBy === viewerId;
+  // A sole approver paying the first payment to an address they gave, asked for or confirmed (new payee check N4).
+  const ownAddress = !two && soleApprover && leftOutForAddress(payable, viewerId);
   const status = unfinished ? UNFINISHED : STATUS[payable.status];
   // Agree and pay pays it now or not at all: where this person may not, or their approval would only be the first of
   // two, they agree without paying (shadow mode review I2).
@@ -376,17 +376,38 @@ export function payBlockedReason(payable: WaitingPayable, viewerId: string, ownE
         : !mayApproveNow(two, viewerId)
           ? payable.createdBy === viewerId
             ? "You created this invoice"
-            : "You gave this payee's address"
+            : gaveAddressReason(payable, viewerId)
           : payable.riskLevel === "high"
             ? "Screened high risk"
             : null
     : payable.createdBy === viewerId && !ownEntry
       ? "You created this invoice"
-      : payable.firstPaymentAddressBy === viewerId && !ownAddress
-        ? "You gave this payee's address"
+      : leftOutForAddress(payable, viewerId) && !ownAddress
+        ? gaveAddressReason(payable, viewerId)
         : payable.riskLevel === "high"
           ? "Screened high risk"
           : null;
+}
+
+/**
+ * Whether the viewer may not pay the first payment to this address alone (N4): they gave it or asked for it; or, for one
+ * no member answers for alone, they confirmed it, or no other member has confirmed it yet.
+ */
+function leftOutForAddress(payable: WaitingPayable, viewerId: string): boolean {
+  if (payable.firstPaymentUnanswered) {
+    const confirmers = payable.firstPaymentConfirmers ?? [];
+    return confirmers.length === 0 || confirmers.includes(viewerId);
+  }
+  return payable.firstPaymentAddressBy === viewerId;
+}
+
+/** Why the viewer may not pay the first payment to this address alone, as Approve and pay refuses them (N4). */
+function gaveAddressReason(payable: WaitingPayable, viewerId: string): string {
+  if (payable.firstPaymentUnanswered) {
+    return payable.firstPaymentConfirmers?.includes(viewerId) ? "You confirmed this address" : "Another member must confirm this address first";
+  }
+  // An address a GitHub bounty asked for is one no member answers for alone, answered above.
+  return payable.firstPaymentVia === "payee_link" ? "You asked for this address with a payee link" : "You gave this payee's address";
 }
 
 function Decisions({

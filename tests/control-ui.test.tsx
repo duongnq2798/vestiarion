@@ -294,6 +294,39 @@ describe("ApprovalCard", () => {
     expect(markup).toMatch(APPROVE_DISABLED);
   });
 
+  it("says the person who asked for the address with a payee link, or whose GitHub bounty did, cannot pay its first payment", () => {
+    const linked = card({ createdBy: CREATOR, firstPaymentAddressBy: VIEWER, firstPaymentVia: "payee_link" });
+    expect(linked).toContain("You asked for this address with a payee link");
+    expect(linked).not.toContain("You gave this payee");
+    expect(linked).toMatch(APPROVE_DISABLED);
+    // An address sent with /payto is one no member answers for alone: the member its bounty acts as pays it once someone
+    // else confirmed it, as two different members then stand behind it.
+    const bounty = card({ createdBy: CREATOR, firstPaymentAddressBy: VIEWER, firstPaymentVia: "github", firstPaymentUnanswered: true, firstPaymentConfirmers: ["someone-else"] });
+    expect(bounty).not.toContain("You gave this payee");
+    expect(bounty).not.toMatch(APPROVE_DISABLED);
+    // Alone in the workspace, they pay it.
+    expect(card({ createdBy: CREATOR, firstPaymentAddressBy: VIEWER, firstPaymentVia: "payee_link" }, { soleApprover: true })).not.toMatch(APPROVE_DISABLED);
+  });
+
+  it("does not let whoever confirmed an address no member answers for alone pay its first payment, unless they decide alone", () => {
+    const unanswered = { createdBy: CREATOR, firstPaymentAddressBy: null, firstPaymentUnanswered: true as const };
+    const confirmed = card({ ...unanswered, firstPaymentVia: "github", firstPaymentConfirmers: [VIEWER] });
+    expect(confirmed).toContain("You confirmed this address");
+    expect(confirmed).toMatch(APPROVE_DISABLED);
+    expect(card({ ...unanswered, firstPaymentConfirmers: [VIEWER] }, { soleApprover: true })).not.toMatch(APPROVE_DISABLED);
+    expect(card({ ...unanswered, firstPaymentConfirmers: ["someone-else"] })).not.toMatch(APPROVE_DISABLED);
+  });
+
+  it("does not let anyone pay the first payment to an address no member answers for alone before another member confirms it", () => {
+    // Approve and pay would confirm the address itself, which never counts as the second member.
+    const unconfirmed = card({ createdBy: CREATOR, firstPaymentAddressBy: VIEWER, firstPaymentVia: "github", firstPaymentUnanswered: true });
+    expect(unconfirmed).toContain("Another member must confirm this address first");
+    expect(unconfirmed).toMatch(APPROVE_DISABLED);
+    expect(card({ createdBy: CREATOR, firstPaymentAddressBy: null, firstPaymentUnanswered: true })).toMatch(APPROVE_DISABLED);
+    // Alone in the workspace, they pay it.
+    expect(card({ createdBy: CREATOR, firstPaymentAddressBy: VIEWER, firstPaymentVia: "github", firstPaymentUnanswered: true }, { soleApprover: true })).not.toMatch(APPROVE_DISABLED);
+  });
+
   it("lets the workspace's sole approver pay the first payment to an address they gave, and anyone else pay it", () => {
     expect(card({ createdBy: CREATOR, firstPaymentAddressBy: VIEWER }, { soleApprover: true })).not.toMatch(APPROVE_DISABLED);
     const otherGiver = card({ createdBy: CREATOR, firstPaymentAddressBy: "someone-else" });

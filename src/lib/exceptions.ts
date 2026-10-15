@@ -52,14 +52,15 @@ export interface ActingMember {
 
 /**
  * E3: the members whose role may decide it, owners first, less the person who entered it (who never approves their own
- * payable) unless nobody else may.
+ * payable) and, for a first payment, the members its address leaves out (`membersLeftOut`, new payee check N4). The
+ * workspace's only deciding member is named whatever they entered, gave or confirmed; with more, none may be left.
  */
-export function whoCanAct<T extends ActingMember>(members: readonly T[], enteredBy: string | null): T[] {
+export function whoCanAct<T extends ActingMember>(members: readonly T[], enteredBy: string | null, leftOut: readonly string[] = []): T[] {
   const deciding = members
     .filter((member) => (DECIDING_ROLES as readonly string[]).includes(member.role))
     .sort((a, b) => DECIDING_ROLES.indexOf(a.role as (typeof DECIDING_ROLES)[number]) - DECIDING_ROLES.indexOf(b.role as (typeof DECIDING_ROLES)[number]) || a.email.localeCompare(b.email));
-  const others = deciding.filter((member) => member.userId !== enteredBy);
-  return others.length > 0 ? others : deciding;
+  const others = deciding.filter((member) => member.userId !== enteredBy && !leftOut.includes(member.userId));
+  return others.length > 0 || deciding.length !== 1 ? others : deciding;
 }
 
 export interface ExceptionFacts {
@@ -70,12 +71,12 @@ export interface ExceptionFacts {
 }
 
 export function exceptionFacts(
-  payable: { dueDate: string; discount?: { pct: number; deadline: string } | null; createdBy: string | null },
+  payable: { dueDate: string; discount?: { pct: number; deadline: string } | null; createdBy: string | null; leftOut?: readonly string[] },
   members: readonly ActingMember[],
   today: string
 ): ExceptionFacts {
   const decideBy = decideByOf(payable, today);
-  return { decideBy, priority: priorityOf(decideBy.day, today), owners: whoCanAct(members, payable.createdBy).map((member) => member.email) };
+  return { decideBy, priority: priorityOf(decideBy.day, today), owners: whoCanAct(members, payable.createdBy, payable.leftOut).map((member) => member.email) };
 }
 
 /** "Decide by Oct 20, 2026", with the discount named when it sets the day. */

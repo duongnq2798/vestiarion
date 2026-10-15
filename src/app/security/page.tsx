@@ -156,9 +156,17 @@ export default function SecurityPage() {
             on a commission plan never approves the payable that pays them.
           </li>
           <li>
-            <strong>A first payment to a new address.</strong> Where payments are real, the agent never makes a first payment to an address that only
-            the person who gave it stands behind, and that person cannot approve it, unless they are the workspace&apos;s only owner, admin or
-            approver; the ledger entry says so.
+            <strong>A first payment to a new address.</strong> Where payments are real, the agent never makes the first payment to a payee at an
+            address that only the person who gave it stands behind, even when the workspace has paid that address for someone else, and that
+            person cannot approve it, unless they are the workspace&apos;s only owner, admin or approver; the ledger entry says so. For an address a
+            payee sends through a payee link, the person who created the link counts as having given it, read from the link&apos;s signed entry in
+            the workspace&apos;s ledger, or from the link&apos;s own record when that entry is missing: their own confirmation is not the second person.
+            A GitHub account is tied to no member, so for an address sent with /payto on a GitHub pull request, and for one no member can be
+            named as having given, no confirmation counts as the second person: the agent holds the first payment, and two different members
+            stand behind it, one who confirms the address and another who approves the payment. Whoever confirmed it cannot approve it, and no
+            one approves it alone before another member has confirmed it, since an approval&apos;s own confirmation does not count, unless they are the
+            workspace&apos;s only owner, admin or approver.
+            A bounty typed by its own pull request&apos;s author names no member.
           </li>
           <li>
             <strong>Two approvals.</strong> Above a figure the owner sets, a payment needs two different people, and one person cannot give both. A

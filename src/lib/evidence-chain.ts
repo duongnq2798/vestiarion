@@ -745,6 +745,9 @@ function payeeStep(ctx: Context): EvidenceStep {
         at: set.ts,
         seqs: [set.seq],
       });
+      // Who asked for it, from the link's own signed entry: that member counts as having given the address.
+      const link = set.detail.via === "payee_link" ? ctx.counterparty.find((entry) => entry.action === "payee_link_created" && entry.detail.linkId === set.detail.linkId) : undefined;
+      if (link) facts.push(stated(ctx, `The payee link it came through was created${via(link.detail)}.`, link));
     } else if (addressBy && set) {
       facts.push(stated(ctx, `${short(address)} was given${via(set.detail) || " on Counterparties"}.`, set));
     } else if (set && typeof setTo === "string" && !sameAddress(setTo, address)) {

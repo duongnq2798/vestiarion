@@ -85,7 +85,8 @@ export async function createPayeeLink(input: {
     domain: "compliance",
     action: "payee_link_created",
     summary: "Created a one-time link for a payee to enter their own address",
-    detail: { by: input.actorId, counterpartyId: link.counterpartyId, linkId: link.id, expiresAt: link.expiresAt, ...input.provenance },
+    // The surface first: a chat surface's own `linkId` never takes the place of this link's, which the new payee check reads.
+    detail: { ...input.provenance, by: input.actorId, counterpartyId: link.counterpartyId, linkId: link.id, expiresAt: link.expiresAt },
   });
   return { link, token };
 }

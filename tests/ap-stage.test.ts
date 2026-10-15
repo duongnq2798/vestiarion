@@ -16,6 +16,7 @@ import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
 import { paymentIntentsBackend } from "./support/payment-intents";
 import { ARC_TESTNET } from "@/lib/network";
+import type { NewPayeeFacts } from "@/lib/new-payee-facts";
 
 /**
  * The AP stage (`runApStage`, src/lib/agent/orchestrator.ts) deciding *when*
@@ -185,7 +186,7 @@ function apFake(options: {
   /** Payables the follow-up reopened this cycle because a fresh quote cleared what held them (FX re-evaluation F6). */
   reevaluations?: Map<string, { reopenedSeq: number; trigger: string; previousDecisionSeq: number; previousAction: string | null }>;
   /** A live workspace's new payee facts (new payee check N1, N2); unchecked when absent, as in a sandbox. */
-  newPayee?: { paidTo: Set<string>; entries: Map<string, Array<{ action: string; detail: Record<string, unknown> }>> };
+  newPayee?: NewPayeeFacts;
   /** The workspace's figure above which a payment needs two approvals (two approvals T1); none when absent. */
   twoApprovals?: number;
   /** The business's currency when the workspace is in shadow mode (shadow mode S1); off when absent. */
@@ -1446,8 +1447,9 @@ describe("the AP stage and the first payment to a new payee (new payee check)", 
   const dueToday = { due_date: "2026-10-01T12:00:00+00:00", early_pay_discount_pct: null, discount_due_date: null };
   const typedIn = { action: "create_counterparty", detail: { by: "member-anna", counterpartyId: NORTHWIND, address: "0xnorth" } };
   const confirmedBy = (by: string) => ({ action: "counterparty_address_confirmed", detail: { by, counterpartyId: NORTHWIND, address: "0xnorth" } });
+  // The addresses Northwind itself was paid at, and its entries.
   const facts = (paidTo: string[], entries: Array<{ action: string; detail: Record<string, unknown> }>) => ({
-    paidTo: new Set(paidTo),
+    paidTo: new Map([[NORTHWIND, new Set(paidTo)]]),
     entries: new Map([[NORTHWIND, entries]]),
   });
 
@@ -1491,6 +1493,107 @@ describe("the AP stage and the first payment to a new payee (new payee check)", 
 
     expect(chain.transfers).toHaveLength(1);
     expect((ledger(fake.requests)[0].p_detail as { observed: Record<string, unknown> }).observed).not.toHaveProperty("newPayee");
+  });
+});
+
+
+/**
+ * An address sent through a payee link counts as given by the member who created the link (independent review,
+ * 2026-10-15): one admin who creates a link, sends their own wallet through it and confirms it has not put a second
+ * person behind it. Who created the link is read from its signed `payee_link_created` entry (tests/new-payee-facts.test.ts).
+ */
+describe("the AP stage and the first payment to an address sent through a payee link", () => {
+  const dueToday = { due_date: "2026-10-01T12:00:00+00:00", early_pay_discount_pct: null, discount_due_date: null };
+  const sentThroughLink = {
+    action: "counterparty_address_changed",
+    detail: { by: null, via: "payee_link", linkId: "link-1", counterpartyId: NORTHWIND, from: null, to: "0xnorth" },
+  };
+  const linkCreated = { action: "payee_link_created", detail: { by: "member-anna", counterpartyId: NORTHWIND, linkId: "link-1" } };
+  const confirmedBy = (by: string) => ({ action: "counterparty_address_confirmed", detail: { by, counterpartyId: NORTHWIND, address: "0xnorth", via: "confirm" } });
+  const facts = (entries: Array<{ action: string; detail: Record<string, unknown>; linkCreatedBy?: string | null }>) => ({
+    paidTo: new Map<string, Set<string>>(),
+    entries: new Map([[NORTHWIND, entries]]),
+  });
+
+  it("holds it for another person when the member who created the link is the one who confirmed the address", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "pay", payOn: null, reasoning: "Due today and within the limit; paying it.", confidence: 0.9 }));
+    const { fake, chain, stage } = apFake({ book: [payable(dueToday)], newPayee: facts([confirmedBy("member-anna"), sentThroughLink, linkCreated]) });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    expect(invoicePatches(fake.requests)[0].body).toMatchObject({ status: "held", paid_amount: null });
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({
+      guardrailBlocked: true,
+      guardrailRule: "counterparty.new_payee",
+      observed: { newPayee: { addressBy: "payee", linkCreatedBy: "member-anna", confirmedBy: "member-anna", twoParties: false } },
+      execution: { resultingStatus: "held" },
+    });
+  });
+
+  it("pays it, as before, when another member confirmed the address, and records who created the link", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "pay", payOn: null, reasoning: "Due today and within the limit; paying it.", confidence: 0.9 }));
+    const { fake, chain, stage } = apFake({ book: [payable(dueToday)], newPayee: facts([confirmedBy("member-bao"), sentThroughLink, linkCreated]) });
+
+    await stage();
+
+    expect(chain.transfers.map((transfer) => transfer.amount)).toEqual([400]);
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({
+      guardrailBlocked: false,
+      observed: { newPayee: { addressBy: "payee", linkCreatedBy: "member-anna", confirmedBy: "member-bao", twoParties: true } },
+    });
+  });
+});
+
+
+/**
+ * A first payment is keyed on the payee and the address together (independent review, 2026-10-15): an address the
+ * workspace paid for another payee is a first payment for this one.
+ */
+describe("the AP stage and an address the workspace paid for someone else", () => {
+  it("holds the first payment to Northwind at an address only another payee was paid at", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "pay", payOn: null, reasoning: "Due today and within the limit; paying it.", confidence: 0.9 }));
+    const typedIn = { action: "create_counterparty", detail: { by: "member-anna", counterpartyId: NORTHWIND, address: "0xnorth" } };
+    const elsewhere = { paidTo: new Map([["another-payee", new Set(["0xnorth"])]]), entries: new Map([[NORTHWIND, [typedIn]]]) };
+    const { fake, chain, stage } = apFake({ book: [payable({ due_date: "2026-10-01T12:00:00+00:00", early_pay_discount_pct: null, discount_due_date: null })], newPayee: elsewhere });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({ guardrailRule: "counterparty.new_payee", observed: { newPayee: { addressBy: "member-anna", twoParties: false } } });
+  });
+});
+
+
+/**
+ * An address sent with `/payto` (independent review, 2026-10-15, round 2): a GitHub login is tied to no member, so no
+ * confirmation counts as a second person, and the agent never makes its first payment on its own.
+ */
+describe("the AP stage and the first payment to an address sent on GitHub", () => {
+  it("holds it though a member other than the one the bounty acts as confirmed the address", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "pay", payOn: null, reasoning: "Due today and within the limit; paying it.", confidence: 0.9 }));
+    const pull = "https://github.com/acme/app/pull/42";
+    const entries = [
+      { action: "counterparty_address_confirmed", detail: { by: "member-x", counterpartyId: NORTHWIND, address: "0xnorth", via: "confirm" } },
+      { action: "counterparty_address_changed", detail: { by: null, via: "github", login: "x-on-github", commentUrl: `${pull}#issuecomment-9`, counterpartyId: NORTHWIND, from: null, to: "0xnorth" } },
+      { action: "github_bounty_attached", detail: { by: "member-c", login: "maintainer", author: "x-on-github", pullRequest: pull, counterpartyId: NORTHWIND } },
+    ];
+    const { fake, chain, stage } = apFake({
+      book: [payable({ due_date: "2026-10-01T12:00:00+00:00", early_pay_discount_pct: null, discount_due_date: null })],
+      newPayee: { paidTo: new Map(), entries: new Map([[NORTHWIND, entries]]) },
+    });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({
+      guardrailRule: "counterparty.new_payee",
+      observed: { newPayee: { addressBy: "payee", bountyBy: "member-c", confirmedBy: "member-x", twoParties: false } },
+    });
   });
 });
 
