@@ -19,6 +19,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   invoice capture is on, with no change on the deployment, as the downloaded copy does, which stays for where the store
   is not available. The landing page, the README and the [guide](https://www.vestiarion.xyz/docs/guides/invoice-capture#1-install-it)
   link it.
+- **A new demo and product tour.** The README links [the demo](https://youtu.be/-gMv3ipzDyA) (2:55) and
+  [the full product tour](https://youtu.be/yfDxzibSYQc) (7:15), recorded on the live product on October 15, 2026. Each
+  sentence is shown on the screen it talks about, and the tour opens how the agent decided on three decisions.
 - **Download the Chrome extension.** The invoice capture guide links a zip of Vestiarion Invoice Capture to download,
   extract and load into Chrome, until the Chrome Web Store lists it. Every downloaded copy has the same extension ID,
   set by a public key in its manifest, and Vestiarion allows it as soon as invoice capture is on, so it connects with no

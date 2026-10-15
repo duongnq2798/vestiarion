@@ -12,7 +12,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-6b7280?style=flat-square)](LICENSE)
 
 <a href="https://www.vestiarion.xyz"><img src="docs/assets/readme/open-the-app.svg" alt="Open the app: vestiarion.xyz" height="48"></a>
-<a href="https://www.youtube.com/watch?v=UqfvCkkYGlk"><img src="docs/assets/readme/watch-the-demo.svg" alt="Watch the demo: 2:59 on YouTube" height="48"></a>
+<a href="https://youtu.be/-gMv3ipzDyA"><img src="docs/assets/readme/watch-the-demo.svg" alt="Watch the demo: 2:55 on YouTube" height="48"></a>
 <a href="https://chromewebstore.google.com/detail/vestiarion-invoice-captur/jfhjgbdbolhnneomgifdnjamoldlioan"><img src="docs/assets/readme/add-to-chrome.svg" alt="Add to Chrome: Invoice Capture, on the Chrome Web Store" height="48"></a>
 <a href="https://www.npmjs.com/package/@vestiarion/sdk"><img src="docs/assets/readme/npm-sdk.svg" alt="Install from npm: @vestiarion/sdk" height="48"></a>
 
@@ -34,10 +34,11 @@ hash-chained ledger anyone in the workspace can verify.
   <sub>A bill the agent paid on Arc: its reasoning, the checks behind it, the signed audit entry and the transaction.</sub>
 </p>
 
-**Watch it work:** [the demo](https://www.youtube.com/watch?v=UqfvCkkYGlk) (2:59) or [the full product tour](https://www.youtube.com/watch?v=omER_wFsH3M)
-(4:58), both recorded on the live product on October 12, 2026: a new workspace and its first payments, a freelancer paid
-by the agent on its own, a first payment code holds for a person, shadow mode, Xero, QuickBooks Online, HubSpot and
-GitHub, treasury, Arc mainnet and the public numbers.
+**Watch it work:** [the demo](https://youtu.be/-gMv3ipzDyA) (2:55) or [the full product tour](https://youtu.be/yfDxzibSYQc)
+(7:15), both recorded on the live product on October 15, 2026, with the Arc mainnet payment from October 12: a freelancer
+the agent pays on its own once a second member confirmed the address, a new supplier's first bill the model wanted to pay
+and code refused until a second member approved, the day the agent picks to pay, shadow mode and the customers' figures,
+Arc mainnet and the proof. The tour opens how the agent decided, line by line, on three of those decisions.
 
 > *Tameion* is ancient Greek for a treasury, the room the money was kept in. In Byzantium that room grew into the
 > *vestiarion*, the department that minted the coin, held the stores and paid the army.
@@ -88,8 +89,8 @@ nothing else: no wallet, no USDC, no API key, nothing to install.
    yourself". [Mainnet proof](#mainnet-proof) walks through the first payment on Arc mainnet: held by code as a first
    payment to a new address, approved by a second person, and paid through the owner's spending-limit contract.
 
-**Watch instead:** [the demo](https://www.youtube.com/watch?v=UqfvCkkYGlk) (2:59),
-[the full product tour](https://www.youtube.com/watch?v=omER_wFsH3M) (4:58), and the
+**Watch instead:** [the demo](https://youtu.be/-gMv3ipzDyA) (2:55),
+[the full product tour](https://youtu.be/yfDxzibSYQc) (7:15), and the
 [Xero](https://www.vestiarion.xyz/docs/guides/xero#watch-it) and
 [HubSpot](https://www.vestiarion.xyz/docs/guides/hubspot#watch-it) flows, under two minutes each.
 
