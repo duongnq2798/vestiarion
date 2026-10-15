@@ -28,6 +28,7 @@ import { addressUnconfirmed } from "@/lib/counterparty-address";
 import { purchaseOrdersLabel } from "@/lib/counterparty-purchase-orders";
 import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
+import { draftSupplierName } from "@/lib/invoice-drafts/store";
 import { listLedgerEntries } from "@/lib/ledger";
 import { listActivePayeeLinks } from "@/lib/platform/payee-links";
 import { plural } from "@/lib/copy";
@@ -45,13 +46,17 @@ export default async function CounterpartiesPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ add?: string | string[] }>;
+  searchParams: Promise<{ add?: string | string[]; draft?: string | string[] }>;
 }) {
   const { slug } = await params;
   const access = await requireMembership(slug);
-  // `?add`, from an invoice with no counterparty to choose (Bills & receivables, From a document), opens Add counterparty.
-  const adding = (await searchParams).add !== undefined;
+  // `?add`, from an invoice with no counterparty to choose (Bills & receivables, From a document), opens Add counterparty;
+  // `&draft=`, from a captured draft (invoice capture C5), fills in the supplier's name, read from that draft in this
+  // workspace: a name, often a person's, never travels in the address.
+  const { add, draft } = await searchParams;
+  const adding = add !== undefined;
   return inOrg(access, async () => {
+    const initialName = typeof draft === "string" ? ((await draftSupplierName(draft).catch(() => null)) ?? undefined) : undefined;
     const network = workspaceNetwork().id;
     // A live match names the entity it matched, which Not this person dismisses (dismiss screening match R6).
     const liveScreening = screeningMode() === "live";
@@ -91,7 +96,7 @@ export default async function CounterpartiesPage({
           // Folded until it is needed; open on a workspace with no counterparty yet, where adding one is the next step,
           // or when a link asks for it.
           <IntakeFold label="Add counterparty" meta="human-entered · screened on submission" defaultOpen={counterparties.length === 0 || adding}>
-            <CounterpartyIntake orgSlug={slug} framed={false} network={network} askPurchaseOrders={shadow !== null} />
+            <CounterpartyIntake orgSlug={slug} framed={false} network={network} askPurchaseOrders={shadow !== null} initialName={initialName} />
           </IntakeFold>
         ) : (
           <Callout className="mb-8">Only an owner or admin of this workspace can add counterparties.</Callout>

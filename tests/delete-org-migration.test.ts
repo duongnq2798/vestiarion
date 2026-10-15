@@ -39,6 +39,7 @@ const PLATFORM_TABLES = [
   "memberships", "invitations", "api_keys", "webhook_endpoints", "webhook_deliveries", "payee_links", "telegram_link_codes", "telegram_links",
   "api_idempotency", "slack_installs", "slack_links", "invoice_inboxes", "github_installations", "github_bounties",
   "growth_leads", "growth_revenue", "org_attribution", "accounting_tokens", "asana_webhooks",
+  "extension_grants", "extension_auth_codes",
 ] as const;
 
 const deleteOrg = (orgId: string, by: string | null = owner) =>
@@ -193,6 +194,19 @@ async function populated(slug: string): Promise<string> {
      select gen_random_uuid(), $1, l.connection_id, l.id, l.task_gid from public.asana_task_links l where l.org_id = $1`,
     [orgId]
   );
+  // A member's Chrome extension connection, and the code it was made with, go with the membership (0121).
+  const extensionCode = crypto.randomBytes(32).toString("hex");
+  const extensionGrant = (await db.query<{ id: string }>(
+    `insert into public.extension_grants (org_id, user_id, client_id, scopes, code_hash, access_token_hash, access_expires_at, refresh_token_hash, refresh_expires_at)
+     values ($1, $2, 'abcdefghijklmnopabcdefghijklmnop', '{invoice_draft:create,invoice_draft:read}', $3, $4, now() + interval '1 hour', $5, now() + interval '30 days') returning id`,
+    [orgId, member, extensionCode, crypto.randomBytes(32).toString("hex"), crypto.randomBytes(32).toString("hex")]
+  )).rows[0].id;
+  await db.query(
+    `insert into public.extension_auth_codes (code_hash, org_id, user_id, client_id, redirect_uri, code_challenge, scopes, expires_at, used_at)
+     values ($1, $2, $3, 'abcdefghijklmnopabcdefghijklmnop', 'https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/', $4, '{invoice_draft:create}', now(), now())`,
+    [extensionCode, orgId, member, crypto.randomBytes(32).toString("base64url")]
+  );
+  expect(extensionGrant).toBeTruthy();
   await closeCycles(orgId);
   return orgId;
 }

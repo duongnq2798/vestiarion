@@ -197,6 +197,7 @@ describe("the docs navigation", () => {
     ]);
     expect(pagesOf("Connect your tools")).toEqual([
       ["guides/slack", "Get the agent's decisions in Slack"],
+      ["guides/invoice-capture", "Capture invoices from Chrome"],
       ["guides/telegram", "Get the agent's decisions in Telegram"],
       ["guides/xero", "Bring bills in from Xero"],
       ["guides/quickbooks", "Bring bills in from QuickBooks Online"],

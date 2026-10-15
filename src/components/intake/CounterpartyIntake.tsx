@@ -40,11 +40,14 @@ export default function CounterpartyIntake({
   framed = true,
   network,
   askPurchaseOrders = false,
+  initialName,
 }: {
   orgSlug: string;
   framed?: boolean;
   network: Network;
   askPurchaseOrders?: boolean;
+  /** The name to start with: a captured draft's supplier (invoice capture design C5). */
+  initialName?: string;
 }) {
   const [role, setRole] = useState("vendor");
   // The form clears on success, its role back to Vendor.
@@ -56,7 +59,7 @@ export default function CounterpartyIntake({
         <input type="hidden" name="orgSlug" value={orgSlug} />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field id="cp-name" label="Legal or trading name">
-            <Input name="name" required maxLength={160} autoComplete="organization" />
+            <Input name="name" required maxLength={160} autoComplete="organization" defaultValue={initialName} />
           </Field>
           <Field id="cp-role" label="Role">
             <Select name="role" defaultValue="vendor" onValueChange={setRole}>

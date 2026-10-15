@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { LegalLink, LegalPage, LegalSection } from "@/components/vx/LegalPage";
+import { HOSTED_MODEL_PROVIDER } from "@/lib/connectors/consent";
 import { ISSUES_URL } from "@/lib/site-links";
 import { ARC_RPC_HOSTS, listed, MODEL_PROVIDER_TERMS, PAYEE_CHAIN_RPC_HOSTS } from "@/lib/subprocessors";
 
@@ -480,6 +481,48 @@ export default function PrivacyPage() {
         </ul>
       </LegalSection>
 
+      <LegalSection id="chrome-extension" title="The Chrome extension">
+        <p>
+          Vestiarion Invoice Capture is a Chrome extension that sends an invoice from your browser to a workspace as a draft, for a person to add as a
+          bill. You connect it by signing in and allowing it on Vestiarion&apos;s own page; it never holds your password or an API key.
+        </p>
+        <ul>
+          <li>
+            It reads a page only when you press <strong>Capture selected text</strong>, or choose <strong>Capture invoice with Vestiarion</strong> on a
+            selection, and then only the text you selected, at most 20,000 characters. A file is sent only when you choose it in the extension: a PDF, a
+            text or email file, or a picture, of at most 4 MB. It never reads your browsing history or any other page. Text taken with Capture
+            invoice with Vestiarion waits in the extension&apos;s memory until you send it or drop it, and is dropped after 5 minutes.
+          </li>
+          <li>
+            What you capture goes only to Vestiarion, at www.vestiarion.xyz, which reads it the way it reads an invoice uploaded to the invoice form:
+            its text goes to the model provider ({HOSTED_MODEL_PROVIDER.name}, on the hosted service), under that provider&apos;s own{" "}
+            <LegalLink href={HOSTED_MODEL_PROVIDER.terms}>API terms</LegalLink> and <LegalLink href={HOSTED_MODEL_PROVIDER.privacy}>privacy policy</LegalLink>.
+            A picture is not read.
+          </li>
+          <li>
+            Vestiarion keeps the draft in the workspace&apos;s records: the fields read and as you edited them (supplier, invoice number, amount,
+            currency, invoice date, due date, purchase order and memo), who captured it and when, and the file&apos;s kind and SHA-256. A file itself is
+            never kept. The text it was read from is kept for the person who reviews the draft, and removed when the draft is added as a bill or
+            discarded, and 30 days after capture at the latest. A draft never sent for review is deleted within 7 days.
+          </li>
+          <li>
+            The workspace&apos;s members see a draft once it is sent for review, with the text it was read from. The extension sees only the drafts it
+            created, and never the workspace&apos;s bills, counterparties, members, wallets or keys.
+          </li>
+          <li>
+            The extension keeps its access token (an hour) in memory only, and its refresh token (30 days) in Chrome&apos;s storage for extensions
+            on your computer. Vestiarion keeps only their SHA-256, with the workspace, your account&apos;s id and the extension&apos;s id. A connection
+            lasts at most 90 days from connecting. <strong>Disconnect</strong>, in the extension or in Settings, ends it at once. If your role can no
+            longer add bills, the connection&apos;s next request is refused and the connection ends then. Leaving the workspace deletes it. Vestiarion keeps a connection&apos;s row, without any usable token, for 30 days after
+            it ended or expired, and each one-time sign-in code for a day after it expired.
+          </li>
+          <li>
+            The extension has no analytics. Nothing about an invoice you capture is sent to an analytics service, by the extension or by Vestiarion.
+          </li>
+          <li>Deleting the workspace deletes its drafts with it.</li>
+        </ul>
+      </LegalSection>
+
       <LegalSection id="retention" title="How long data is kept">
         <ul>
           <li>
@@ -487,6 +530,11 @@ export default function PrivacyPage() {
             it holds a hosted wallet, or if its owner&apos;s own wallet deployed its contract.
           </li>
           <li>A webhook delivery is deleted 30 days after it is delivered; one that failed, 30 days after it was created.</li>
+          <li>
+            Text captured with the Chrome extension is removed when its draft is added or discarded, and 30 days after capture at the latest; a
+            draft never sent for review is deleted within 7 days. A Chrome extension connection is deleted 30 days after it ended or expired, and a
+            one-time sign-in code a day after it expired.
+          </li>
           <li>
             The outcome of an API write sent with an <code>Idempotency-Key</code>, its response included, is given back for 24 hours, and deleted
             by the daily cleanup after that.

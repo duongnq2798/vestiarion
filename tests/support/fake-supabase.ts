@@ -30,7 +30,7 @@ export interface FakeReply {
   headers?: Record<string, string>;
 }
 
-export function fakeSupabase(respond: (request: RecordedRequest) => FakeReply = () => ({ body: [] })): {
+export function fakeSupabase(respond: (request: RecordedRequest) => FakeReply | Promise<FakeReply> = () => ({ body: [] })): {
   client: SupabaseClient;
   requests: RecordedRequest[];
   /** The recorder itself, for a context's `fetch`, so the tenant client a scope builds records too. */
@@ -48,7 +48,7 @@ export function fakeSupabase(respond: (request: RecordedRequest) => FakeReply = 
       headers: new Headers(init?.headers),
     };
     requests.push(request);
-    const reply = respond(request);
+    const reply = await respond(request);
     return new Response(JSON.stringify(reply.body), {
       status: reply.status ?? 200,
       headers: { "content-type": "application/json", ...reply.headers },

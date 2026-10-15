@@ -33,8 +33,9 @@ export default function SecurityPage() {
             <strong>In.</strong> People use the app in their browser, signed in through Supabase Auth with an emailed link or Google, never a password.
             Programs use the REST API, the SDK, the CLI or the MCP server with a workspace API key. Connected tools are read with the grant a workspace
             gave them, and tell Vestiarion about changes with webhooks it verifies. Scheduled jobs call their routes with the deployment&apos;s own
-            token. A request is checked by its session, its key, its signature, its token or the token of a shared link, and a person&apos;s role
-            decides what they may do.
+            token. The Chrome extension Vestiarion Invoice Capture uses a token of its own, issued when a member allows it and good for at most 90
+            days, that can only create and read the drafts it captured. A request is checked by its session, its key, its signature, its token or
+            the token of a shared link, and a person&apos;s role decides what they may do.
           </li>
           <li>
             <strong>Stored.</strong> A workspace&apos;s records are rows in Postgres, kept apart from other workspaces&apos; as{" "}
@@ -128,8 +129,8 @@ export default function SecurityPage() {
         </p>
         <p>
           Some secrets are kept only as a SHA-256 hash: an API key&apos;s 256-bit secret, beside its prefix, compared in constant time; the tokens of
-          invitations, payee links, customer statement links, and shared receipts and reports; and the codes that link a Telegram chat or a Slack
-          account. Some are never stored: the GitHub token of the person connecting GitHub is used once and dropped, a GitHub App installation&apos;s
+          invitations, payee links, customer statement links, and shared receipts and reports; the codes that link a Telegram chat or a Slack
+          account; and the Chrome extension&apos;s access and refresh tokens and its one-time sign-in codes. Some are never stored: the GitHub token of the person connecting GitHub is used once and dropped, a GitHub App installation&apos;s
           tokens are made for each run and kept in memory, and the password Pipedrive sends with its webhooks is derived from the master key for each
           company.
         </p>
@@ -219,6 +220,42 @@ export default function SecurityPage() {
           </li>
           <li>The MCP server&apos;s tools are the same operations, under the same keys, and can do nothing the API cannot.</li>
         </ul>
+      </LegalSection>
+
+      <LegalSection id="chrome-extension" title="The Chrome extension and its tokens">
+        <ul>
+          <li>
+            <strong>Connecting.</strong> The Chrome extension Vestiarion Invoice Capture connects with an OAuth authorization code and PKCE (S256
+            only), for the extension ids the deployment lists in <code>CHROME_EXTENSION_IDS</code>. Its one redirect address is exactly{" "}
+            <code>https://&lt;id&gt;.chromiumapp.org/</code>; any other client or address is refused on the page and never redirected to, and the
+            page cannot be framed. Only an owner or admin, whose role is read again, allows it, for one workspace.
+          </li>
+          <li>
+            <strong>Tokens.</strong> A one-time code (<code>vxc_</code>, 5 minutes), an access token (<code>vxa_</code>, an hour) and a refresh
+            token (<code>vxr_</code>, 30 days), each from 32 random bytes and kept only as a SHA-256 hash, in tables only the platform reads. Their
+            audience is <code>vestiarion-chrome</code> and their scopes <code>invoice_draft:create</code> and <code>invoice_draft:read</code>: they
+            create drafts and read the ones their connection made, and cannot add a bill, approve, pay or read any other record. They are not API
+            keys: <code>/api/v1</code> and the MCP server refuse them.
+          </li>
+          <li>
+            <strong>Rotation and revocation.</strong> Every refresh replaces both tokens. A code used twice, a replaced refresh token used again,
+            or two refreshes with one token end the connection. A connection lasts at most 90 days from connecting, ends when its member can no
+            longer add bills, and is deleted with the membership. The extension&apos;s Disconnect revokes it (RFC 7009), and Settings lists the
+            connections, each with Disconnect. Each connection and its end are in the ledger, never a token.
+          </li>
+          <li>
+            <strong>Its routes.</strong> The extension reaches only <code>/api/extension/v1</code>: the token and revoke endpoints and its draft
+            endpoints. Each answers CORS only for <code>chrome-extension://&lt;id&gt;</code> of an allowed id and refuses any other origin with 403,
+            authenticates by the token alone, never a cookie, checks its audience and scope, and reads the member&apos;s role again on every
+            request. A capture (<code>POST</code>) carries an <code>Idempotency-Key</code>. A JSON body is at most 100 KB, counted as it is read;
+            a file is at most 4 MB by the <code>Content-Length</code> it declares, and one sent without it is refused with 411. Draft requests from one connection come in bursts of up to 60, then one a second, and token or revoke requests from one address
+            in bursts of up to 10, then one every 6 seconds. Answers are never cached.
+          </li>
+        </ul>
+        <p>
+          A draft becomes a bill only when an owner or admin adds it in the app, through the same checks as any bill. What the extension captures, and
+          who reads it, is on the <LegalLink href="/privacy#chrome-extension">Privacy</LegalLink> page.
+        </p>
       </LegalSection>
 
       <LegalSection id="connectors" title="Connected tools and their tokens">
@@ -355,6 +392,11 @@ export default function SecurityPage() {
             failed. The outcome of an API write sent with an <code>Idempotency-Key</code>, its response included, is given back for 24 hours, and
             deleted by the daily cleanup after that. Everything else in a workspace is kept until the workspace is deleted, or until a person removes
             it: disconnecting a tool, removing sample data or turning a feature off deletes what it held.
+          </li>
+          <li>
+            Text captured with the Chrome extension is removed when its draft is added or discarded, and 30 days after capture at the latest; a
+            draft never sent for review is deleted within 7 days, and a file it sent is never kept, only its SHA-256. A Chrome extension connection is
+            deleted 30 days after it ended or expired, and a one-time sign-in code a day after it expired.
           </li>
           <li>
             An owner deletes a workspace from its Settings. Its records, ledger, API keys, webhooks, connector tokens, members and invitations are deleted
@@ -506,7 +548,10 @@ export default function SecurityPage() {
           <li>
             Rate limits are kept by each server instance, so they slow abuse rather than set a hard quota, and API reads are not limited.
           </li>
-          <li>The app does not send a Content Security Policy yet.</li>
+          <li>
+            The app does not send a Content Security Policy yet, except <code>frame-ancestors &apos;none&apos;</code> on the Chrome extension&apos;s
+            sign-in page, so that page cannot be framed.
+          </li>
         </ul>
       </LegalSection>
     </LegalPage>

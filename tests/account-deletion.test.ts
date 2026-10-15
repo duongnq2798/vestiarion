@@ -141,11 +141,16 @@ describe("0023 is idempotent", () => {
         { tbl: "decision_reasons", col: "given_by", action: "n" },
         { tbl: "decision_verdicts", col: "decided_by", action: "n" },
         { tbl: "escrow_contracts", col: "created_by", action: "n" },
+        // Who disconnected a Chrome extension (0121).
+        { tbl: "extension_grants", col: "revoked_by", action: "n" },
         { tbl: "fx_rates", col: "recorded_by", action: "n" },
         { tbl: "gateway_signers", col: "created_by", action: "n" },
         { tbl: "github_installations", col: "connected_by", action: "n" },
         { tbl: "inbox_emails", col: "decided_by", action: "n" },
         { tbl: "invitations", col: "invited_by", action: "c" },
+        // Who captured a draft with the Chrome extension and who decided it (0121).
+        { tbl: "invoice_drafts", col: "captured_by", action: "n" },
+        { tbl: "invoice_drafts", col: "decided_by", action: "n" },
         { tbl: "invoice_inboxes", col: "created_by", action: "n" },
         { tbl: "invoices", col: "created_by", action: "n" },
         { tbl: "invoices", col: "reviewed_by", action: "n" },

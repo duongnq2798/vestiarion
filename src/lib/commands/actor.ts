@@ -17,7 +17,9 @@ export type Surface =
   | { kind: "slack"; linkId: string; decisionsLimitUsdc: number | null }
   | { kind: "api"; apiKeyId: string }
   /** A comment on a pull request in an installation the workspace connected, by the GitHub user who wrote it (bounties B5). */
-  | { kind: "github"; installationId: number; login: string };
+  | { kind: "github"; installationId: number; login: string }
+  /** The Chrome extension, through the connection a member consented to (invoice capture design C16): it captures drafts and nothing else. */
+  | { kind: "chrome"; connectionId: string };
 
 export type SurfaceKind = Surface["kind"];
 
@@ -74,6 +76,8 @@ export function provenanceOf(actor: Actor): { provenance?: Provenance } {
       return { provenance: { via: "api", apiKeyId: surface.apiKeyId } };
     case "github":
       return { provenance: { via: "github", installationId: surface.installationId, login: surface.login } };
+    case "chrome":
+      return { provenance: { via: "chrome", connectionId: surface.connectionId } };
   }
 }
 

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Vestiarion Invoice Capture</title>
+    <link rel="stylesheet" href="popup.css" />
+    <script type="module" src="popup.js"></script>
+  </head>
+  <body>
+    <header class="top">
+      <img src="icons/icon-32.png" alt="" width="20" height="20" />
+      <span class="brand">Invoice Capture</span>
+      <span id="workspace" class="workspace" hidden></span>
+    </header>
+
+    <main>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+
+      <section id="first-run" hidden>
+        <h1>Before you start</h1>
+        <p>Vestiarion Invoice Capture sends an invoice to your Vestiarion workspace as a draft, for you or a colleague to check.</p>
+        <ul class="points">
+          <li>Nothing on a page is read until you press <strong>Capture selected text</strong>, or choose <strong>Capture invoice with Vestiarion</strong> on a selection. Then only the text you selected is sent.</li>
+          <li>A file is sent only when you choose it here.</li>
+          <li>What you capture goes to Vestiarion, at www.vestiarion.xyz. Vestiarion has it read into the invoice's fields by its model provider (DeepSeek, on the hosted service), under that provider's own API terms and privacy policy, as it does for an invoice you upload there, and keeps it with the draft until it is added or discarded, at most 30 days.</li>
+          <li>The extension cannot add a bill, approve or pay. A draft becomes a bill only when an owner or admin adds it in Vestiarion.</li>
+          <li>No analytics: nothing about your invoices goes to an analytics service.</li>
+        </ul>
+        <button id="first-run-ok" class="primary" type="button">Continue</button>
+      </section>
+
+      <section id="connect" hidden>
+        <h1>Connect your workspace</h1>
+        <p>Sign in to Vestiarion, choose the workspace drafts go to, and allow this extension. It never sees your password or an API key.</p>
+        <button id="connect-button" class="primary" type="button">Connect Vestiarion</button>
+      </section>
+
+      <section id="home" hidden>
+        <h1>Capture an invoice</h1>
+        <div id="pending" class="pending" hidden>
+          <p>You chose <strong>Capture invoice with Vestiarion</strong> on this text. Nothing is sent until you press Send to Vestiarion.</p>
+          <pre id="pending-text"></pre>
+          <div class="actions">
+            <button id="pending-send" class="primary" type="button">Send to Vestiarion</button>
+            <button id="pending-drop" class="secondary" type="button">Drop it</button>
+          </div>
+        </div>
+        <p>Select the invoice's text on the page, or choose its file.</p>
+        <div class="actions">
+          <button id="capture-selection" class="primary" type="button">Capture selected text</button>
+          <label class="file-button" for="file">Choose a file</label>
+          <input id="file" type="file" accept="application/pdf,.pdf,text/plain,.txt,message/rfc822,.eml,image/png,image/jpeg,image/webp,image/gif" />
+        </div>
+        <p class="hint">A PDF with text, a .txt or an .eml file of at most 4 MB is read. A picture is sent for you to type its fields.</p>
+        <p class="hint"><button id="in-tab" class="link" type="button">Choose a file in a tab instead</button>, if the file window closes this popup.</p>
+        <button id="disconnect" class="link" type="button">Disconnect</button>
+      </section>
+
+      <section id="review" hidden>
+        <h1>Check the invoice</h1>
+        <ul id="notes" class="notes"></ul>
+        <form id="draft-form" novalidate>
+          <label>Supplier <input name="supplierName" type="text" maxlength="160" autocomplete="off" /></label>
+          <label>Invoice number <input name="invoiceNumber" type="text" maxlength="100" autocomplete="off" /></label>
+          <div class="row">
+            <label>Amount <input name="amount" type="text" inputmode="decimal" maxlength="21" autocomplete="off" /></label>
+            <label>Currency
+              <select name="currency">
+                <option value="">Choose</option>
+                <option value="USDC">USDC</option>
+                <option value="EURC">EURC</option>
+              </select>
+            </label>
+          </div>
+          <div class="row">
+            <label>Invoice date <input name="invoiceDate" type="date" /></label>
+            <label>Due date <input name="dueDate" type="date" /></label>
+          </div>
+          <label>Purchase order <input name="poReference" type="text" maxlength="100" autocomplete="off" /></label>
+          <label>Memo <input name="memo" type="text" maxlength="280" autocomplete="off" /></label>
+          <ul id="missing" class="missing"></ul>
+          <div class="actions">
+            <button id="send" class="primary" type="submit">Send draft</button>
+            <button id="start-over" class="secondary" type="button">Start over</button>
+          </div>
+          <p class="hint">Sending makes a draft in Vestiarion for review. Nothing is paid until a person adds it as a bill there.</p>
+        </form>
+      </section>
+
+      <section id="sent" hidden>
+        <h1>Sent for review</h1>
+        <p id="sent-text"></p>
+        <div class="actions">
+          <button id="open" class="primary" type="button">Open in Vestiarion</button>
+          <button id="another" class="secondary" type="button">Capture another</button>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
