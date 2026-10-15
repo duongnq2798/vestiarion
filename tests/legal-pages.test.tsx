@@ -35,7 +35,7 @@ const text = (markup: string) =>
 const source = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8");
 
 const PAGES = [
-  { path: "/terms", file: "src/app/terms/page.tsx", Page: TermsPage, metadata: termsMetadata, heading: "Terms of use", updated: "2026-10-14" },
+  { path: "/terms", file: "src/app/terms/page.tsx", Page: TermsPage, metadata: termsMetadata, heading: "Terms of use", updated: "2026-10-15" },
   { path: "/privacy", file: "src/app/privacy/page.tsx", Page: PrivacyPage, metadata: privacyMetadata, heading: "Privacy", updated: "2026-10-15" },
 ] as const;
 

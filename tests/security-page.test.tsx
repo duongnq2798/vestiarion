@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import PrivacyPage from "@/app/privacy/page";
 import SecurityPage, { metadata } from "@/app/security/page";
+import TermsPage from "@/app/terms/page";
 import sitemap from "@/app/sitemap";
 import { COMPACT_FOOTER_LINKS, FOOTER_COLUMNS } from "@/components/vx/SiteChrome";
 import { IDEMPOTENCY_TTL_MS } from "@/lib/api/idempotency";
@@ -402,6 +403,12 @@ describe("claims narrowed to what the code does", () => {
     expect(connectors).toContain("best effort");
     expect(connectors).toContain("keeps its tokens, which no longer work");
     expect(connectors).toContain("as Pipedrive documents it");
+    // The privacy page and the terms say the same, never that disconnecting uninstalls the app outright.
+    const terms = text(renderToStaticMarkup(<TermsPage />));
+    for (const page of [privacy, terms]) {
+      expect(page).toContain("Disconnecting revokes Vestiarion's access, which, as Pipedrive documents it, uninstalls Vestiarion from the company");
+      expect(page).not.toContain("Disconnecting uninstalls Vestiarion from the Pipedrive company");
+    }
     expect(connectors).not.toContain("or says it was disconnected there first");
   });
 

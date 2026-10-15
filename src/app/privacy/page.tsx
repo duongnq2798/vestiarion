@@ -355,8 +355,8 @@ export default function PrivacyPage() {
             customer&apos;s billing email only when someone in the workspace confirms it. The deals are shown to the workspace&apos;s members and its
             agent; the agent&apos;s model provider may see a deal&apos;s facts to decide on its collections. Vestiarion
             never uses Pipedrive data to train or improve any AI model, and never passes it to anyone else without the workspace&apos;s say. One
-            Pipedrive company connects to one workspace at a time. Disconnecting uninstalls Vestiarion from the Pipedrive company and deletes the
-            tokens; the deals already read stay with the workspace, and the signed ledger keeps only ids, names, amounts and masked emails.
+            Pipedrive company connects to one workspace at a time. Disconnecting revokes Vestiarion&apos;s access, which, as Pipedrive documents it,
+            uninstalls Vestiarion from the company, and deletes the tokens; the deals already read stay with the workspace, and the signed ledger keeps only ids, names, amounts and masked emails.
           </li>
           <li>
             <strong>Asana</strong>, for a workspace an owner or admin connects to their Asana after agreeing to it, is read from, as that person, and
