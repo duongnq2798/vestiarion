@@ -231,7 +231,8 @@ export default function SecurityPage() {
         <ul>
           <li>
             <strong>Connecting.</strong> The Chrome extension Vestiarion Invoice Capture connects with an OAuth authorization code and PKCE (S256
-            only), for the extension ids the deployment lists in <code>CHROME_EXTENSION_IDS</code>. Its one redirect address is exactly{" "}
+            only), for the extension ids the deployment lists in <code>CHROME_EXTENSION_IDS</code>, and, once it lists any, the copy offered for
+            download, whose manifest&apos;s public key gives it one fixed id. Its one redirect address is exactly{" "}
             <code>https://&lt;id&gt;.chromiumapp.org/</code>; any other client or address is refused on the page and never redirected to, and the
             page cannot be framed. Only an owner or admin, whose role is read again, allows it, for one workspace.
           </li>

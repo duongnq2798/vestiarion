@@ -15,7 +15,19 @@ extension/            the package Chrome loads, exactly as it ships: no build st
 STORE_LISTING.md      the Chrome Web Store's fields, permission justifications and privacy answers
 ```
 
-## Load it unpacked
+## The download
+
+Until the Chrome Web Store lists it, people install the copy Vestiarion offers at
+`/downloads/vestiarion-invoice-capture.zip`. `npm run extension:download` (`scripts/build-extension-download.mjs`) builds
+it into `public/downloads/` from this folder's `extension` files, with the public key of
+`src/lib/extension/download-key.json` added to its manifest as `key`. That key gives every copy the one ID `pemkppoklecedoebjfgjlgfibbepikki`
+wherever it is extracted, and the deployment allows it once `CHROME_EXTENSION_IDS` lists any ID
+(`DOWNLOAD_EXTENSION_ID`). The package's own manifest has no `key`, since the Chrome Web Store refuses one and gives its
+copy its own ID. No private key exists or is needed: an unpacked extension is not signed. After changing the extension,
+run `npm run extension:download` and commit the zip: `tests/extension-download.test.ts` builds it again and fails while
+the committed one differs.
+
+## Load it unpacked from the repository
 
 1. In Chrome, open `chrome://extensions`, turn on **Developer mode**, choose **Load unpacked** and pick the
    `extension` folder.

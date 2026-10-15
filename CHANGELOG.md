@@ -12,6 +12,14 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+### Added
+
+- **Download the Chrome extension.** The invoice capture guide links a zip of Vestiarion Invoice Capture to download,
+  extract and load into Chrome, until the Chrome Web Store lists it. Every downloaded copy has the same extension ID,
+  set by a public key in its manifest, and Vestiarion allows it as soon as invoice capture is on, so it connects with no
+  change on the deployment. A copy loaded from the repository's own folder still has an ID of its own.
+  [Guide](https://www.vestiarion.xyz/docs/guides/invoice-capture#1-install-it).
+
 ### Fixed
 
 - **A payment sent again needs two people behind a new address too.** When the outcome of a payment's earlier send

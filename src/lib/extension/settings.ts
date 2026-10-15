@@ -1,8 +1,10 @@
+import downloadKey from "./download-key.json";
+
 /**
  * Which Chrome extensions may connect to this deployment, and what they may be granted (invoice capture design C12,
  * C15, C21). Pure: read from `CHROME_EXTENSION_IDS`, the extension ids separated by commas or spaces, such as the Web
  * Store's and an unpacked build's. Without one valid id, invoice capture is off: the authorize page says so and every
- * extension route answers 503.
+ * extension route answers 503. Once it is on, the copy offered for download is allowed too (`DOWNLOAD_EXTENSION_ID`).
  */
 
 /** The one audience an extension's token is for: the extension endpoints, never `/api/v1` (C15, C16). */
@@ -30,10 +32,19 @@ export function parseExtensionIds(raw: string | undefined): string[] {
   return [...new Set(ids)];
 }
 
-/** The settings, or null when no extension may connect. */
+/**
+ * The ID of the copy of Vestiarion Invoice Capture offered for download (`/downloads/vestiarion-invoice-capture.zip`,
+ * built by `scripts/build-extension-download.mjs`). An unpacked extension's ID is otherwise worked out from the folder
+ * it is loaded from, so each copy would have its own; the download's manifest carries the public key in
+ * `download-key.json`, which gives every copy this one ID. An ID names a client, as the Web Store's does: connecting
+ * still takes the person's sign-in and their Allow, and its tokens open only its own drafts.
+ */
+export const DOWNLOAD_EXTENSION_ID: string = downloadKey.id;
+
+/** The settings, or null when no extension may connect: the ids listed, and the download's once any is. */
 export function extensionSettingsFromEnv(raw: string | undefined = process.env.CHROME_EXTENSION_IDS): ExtensionSettings | null {
   const ids = parseExtensionIds(raw);
-  return ids.length > 0 ? { ids } : null;
+  return ids.length > 0 ? { ids: [...new Set([...ids, DOWNLOAD_EXTENSION_ID])] } : null;
 }
 
 /** The one redirect an extension's code may go to: what `chrome.identity.getRedirectURL()` returns for it. */

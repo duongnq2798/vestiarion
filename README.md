@@ -6,32 +6,19 @@
 
 **Your AI agent for bills and payments, for small businesses: it checks every bill before it is paid, pays in USDC on Arc inside limits a contract enforces, and signs every decision into a ledger you can verify.**
 
-[![Live app](https://img.shields.io/badge/Live_app-vestiarion.xyz-3048c9?style=flat-square)](https://www.vestiarion.xyz)
-[![Open numbers](https://img.shields.io/badge/Open_numbers-live_from_production-13845f?style=flat-square)](https://www.vestiarion.xyz/open)
-[![Docs](https://img.shields.io/badge/Docs-guides_%26_API-1f2937?style=flat-square)](https://www.vestiarion.xyz/docs)
-[![npm](https://img.shields.io/npm/v/%40vestiarion%2Fsdk?style=flat-square&logo=npm&label=%40vestiarion%2Fsdk)](https://www.npmjs.com/package/@vestiarion/sdk)
 [![CI](https://img.shields.io/github/actions/workflow/status/duongnq2798/vestiarion/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/duongnq2798/vestiarion/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/duongnq2798/vestiarion?include_prereleases&style=flat-square&label=release)](https://github.com/duongnq2798/vestiarion/releases)
+[![npm](https://img.shields.io/npm/v/%40vestiarion%2Fsdk?style=flat-square&logo=npm&label=%40vestiarion%2Fsdk)](https://www.npmjs.com/package/@vestiarion/sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6b7280?style=flat-square)](LICENSE)
-[![Demo video](https://img.shields.io/badge/Demo-2%3A59-b91c1c?style=flat-square&logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=UqfvCkkYGlk)
-[![Product tour](https://img.shields.io/badge/Product_tour-4%3A58-b91c1c?style=flat-square&logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=omER_wFsH3M)
 
-[![Arc mainnet](https://img.shields.io/badge/Arc_mainnet-first_payment_settled-111827?style=flat-square)](https://explorer.arc.io/tx/0xcecef38e3f751bc118f8f00cee5bb5344679e84f89123d679b986b47d7f1dee6)
-[![Arc testnet](https://img.shields.io/badge/Arc_testnet-open_to_everyone-4b5563?style=flat-square)](https://www.vestiarion.xyz/docs/guides/try-it)
-[![Circle](https://img.shields.io/badge/Built_with-Circle-3048c9?style=flat-square)](#circle-integrations)
-[![API](https://img.shields.io/badge/REST_API-%2Fapi%2Fv1-1f2937?style=flat-square)](https://www.vestiarion.xyz/docs/api)
-[![Slack](https://img.shields.io/badge/Slack-guide-4A154B?style=flat-square&logo=slack)](https://www.vestiarion.xyz/docs/guides/slack)
-[![Telegram](https://img.shields.io/badge/Telegram-guide-26A5E4?style=flat-square&logo=telegram&logoColor=white)](https://www.vestiarion.xyz/docs/guides/telegram)
+<a href="https://www.vestiarion.xyz"><img src="docs/assets/readme/open-the-app.svg" alt="Open the app: vestiarion.xyz" height="48"></a>
+<a href="https://www.youtube.com/watch?v=UqfvCkkYGlk"><img src="docs/assets/readme/watch-the-demo.svg" alt="Watch the demo: 2:59 on YouTube" height="48"></a>
+<a href="https://www.vestiarion.xyz/docs/guides/invoice-capture"><img src="docs/assets/readme/add-to-chrome.svg" alt="Add to Chrome: Invoice Capture" height="48"></a>
+<a href="https://www.npmjs.com/package/@vestiarion/sdk"><img src="docs/assets/readme/npm-sdk.svg" alt="Install from npm: @vestiarion/sdk" height="48"></a>
 
-[![Xero](https://img.shields.io/badge/Xero-bills_%26_bookings-13B5EA?style=flat-square&logo=xero&logoColor=white)](https://www.vestiarion.xyz/docs/guides/xero)
-[![QuickBooks Online](https://img.shields.io/badge/QuickBooks_Online-bills-2CA01C?style=flat-square&logo=quickbooks&logoColor=white)](https://www.vestiarion.xyz/docs/guides/quickbooks)
-[![HubSpot](https://img.shields.io/badge/HubSpot-deals_%26_receipts-FF7A59?style=flat-square&logo=hubspot&logoColor=white)](https://www.vestiarion.xyz/docs/guides/hubspot)
-[![Pipedrive](https://img.shields.io/badge/Pipedrive-deals_%26_receipts-1f2937?style=flat-square)](https://www.vestiarion.xyz/docs/guides/pipedrive)
-[![GitHub](https://img.shields.io/badge/GitHub-bounties-181717?style=flat-square&logo=github&logoColor=white)](https://www.vestiarion.xyz/docs/guides/github)
-[![Asana](https://img.shields.io/badge/Asana-acceptance-F06A6A?style=flat-square&logo=asana&logoColor=white)](https://www.vestiarion.xyz/docs/guides/asana)
-[![Chrome extension](https://img.shields.io/badge/Chrome-invoice_capture-4285F4?style=flat-square&logo=googlechrome&logoColor=white)](https://www.vestiarion.xyz/docs/guides/invoice-capture)
+**[See your first decision](https://www.vestiarion.xyz/docs/guides/try-it)** · **[Open numbers](https://www.vestiarion.xyz/open)** · **[Mainnet proof](#mainnet-proof)** · **[Docs](https://www.vestiarion.xyz/docs)** · **[MCP server](https://www.vestiarion.xyz/docs/ai-integration/mcp)** · **[Security](https://www.vestiarion.xyz/security)**
 
-**[Open the app](https://www.vestiarion.xyz)** · **[Watch the demo](https://www.youtube.com/watch?v=UqfvCkkYGlk)** · **[See your first decision](https://www.vestiarion.xyz/docs/guides/try-it)** · **[Open numbers](https://www.vestiarion.xyz/open)** · **[Docs](https://www.vestiarion.xyz/docs)** · **[@vestiarionhq](https://x.com/vestiarionhq)**
+<sub>Built on [Arc](https://www.arc.network) and [Circle](#circle-integrations) · Works with [Xero](https://www.vestiarion.xyz/docs/guides/xero) · [QuickBooks Online](https://www.vestiarion.xyz/docs/guides/quickbooks) · [HubSpot](https://www.vestiarion.xyz/docs/guides/hubspot) · [Pipedrive](https://www.vestiarion.xyz/docs/guides/pipedrive) · [Asana](https://www.vestiarion.xyz/docs/guides/asana) · [GitHub](https://www.vestiarion.xyz/docs/guides/github) · [Slack](https://www.vestiarion.xyz/docs/guides/slack) · [Telegram](https://www.vestiarion.xyz/docs/guides/telegram) · [Chrome](https://www.vestiarion.xyz/docs/guides/invoice-capture) · [@vestiarionhq](https://x.com/vestiarionhq)</sub>
 
 </div>
 
@@ -40,6 +27,12 @@ contractor pay, collects receivables and keeps idle cash working. A model propos
 whether it may happen; a person decides what code sends to them; and on Arc mainnet the money itself can only leave
 through a spending-limit contract the owner's own wallet deployed. Every outcome, refusals included, is signed into a
 hash-chained ledger anyone in the workspace can verify.
+
+<p align="center">
+  <img src="public/docs/guides/first-payment-decision.png" alt="A bill on Bills and receivables: Northstar Studio's 12.50 USDC October design retainer, settled on Arc. The card gives the agent's reasoning (the purchase order matches and the work was received, the supplier screened clear within its 50.00 USDC limit, the operating wallet holds 20.00 USDC), the checks behind it, its signed audit entry and the transaction." width="720">
+  <br>
+  <sub>A bill the agent paid on Arc: its reasoning, the checks behind it, the signed audit entry and the transaction.</sub>
+</p>
 
 **Watch it work:** [the demo](https://www.youtube.com/watch?v=UqfvCkkYGlk) (2:59) or [the full product tour](https://www.youtube.com/watch?v=omER_wFsH3M)
 (4:58), both recorded on the live product on October 12, 2026: a new workspace and its first payments, a freelancer paid
@@ -364,7 +357,7 @@ run in production, with its ledger entries and transactions.
 | **[Webhooks](https://www.vestiarion.xyz/docs/webhooks)** | Up to 5 HTTPS endpoints per workspace receive every ledger entry, signed, with retries |
 | **[GitHub](https://www.vestiarion.xyz/docs/guides/github)** | Milestone verification from merged pull requests, bounties, and payment comments |
 | **[Email](https://www.vestiarion.xyz/docs/guides/email-invoices)** | A workspace address that reads forwarded invoices into drafts a person adds |
-| **[Chrome extension](https://www.vestiarion.xyz/docs/guides/invoice-capture)** | Vestiarion Invoice Capture sends the invoice text you select on a page, or a file you choose, to your workspace as a draft: you check the fields it read and send it, and an owner or admin adds it as a bill through the same checks as any bill. It connects by signing in and allowing it, never with an API key, and can only create and read its own drafts: it never adds a bill, approves or pays. Submitted to the Chrome Web Store; until it is listed, it is loaded unpacked from [`extensions/chrome-invoice-capture`](extensions/chrome-invoice-capture) |
+| **[Chrome extension](https://www.vestiarion.xyz/docs/guides/invoice-capture)** | Vestiarion Invoice Capture sends the invoice text you select on a page, or a file you choose, to your workspace as a draft: you check the fields it read and send it, and an owner or admin adds it as a bill through the same checks as any bill. It connects by signing in and allowing it, never with an API key, and can only create and read its own drafts: it never adds a bill, approves or pays. Submitted to the Chrome Web Store; until it is listed, [download it](https://www.vestiarion.xyz/downloads/vestiarion-invoice-capture.zip) and load it unpacked, as the guide says. Its source is in [`extensions/chrome-invoice-capture`](extensions/chrome-invoice-capture) |
 | **[Asana](https://www.vestiarion.xyz/docs/guides/asana)** | A milestone linked to the Asana task its work is delivered in is ready for acceptance when the task is completed; a person checks the deliverables against the criteria and accepts it, and the agent then decides its payment as for any verified milestone. A task completed in Asana is never by itself a reason to pay, and a task reopened or changed after acceptance is flagged |
 | **[HubSpot](https://www.vestiarion.xyz/docs/guides/hubspot)** | Won deals come in with their customers every 15 minutes; Plan collections fills in the New deal form, and a deal changed in HubSpot afterwards is flagged on its deal for a person to change or keep; once allowed, each planned deal's receipts are written back to it (collected, still owed, last receipt, reconciliation), read back, never over a person's change; one account per workspace. [Watch it](https://www.vestiarion.xyz/docs/guides/hubspot#watch-it) (1:55) |
 | **[Pipedrive](https://www.vestiarion.xyz/docs/guides/pipedrive)** | Won deals come in with their organizations and persons as soon as Pipedrive says a deal changed, and every 15 minutes; Plan collections fills in the New deal form, and a deal changed in Pipedrive afterwards is flagged on its deal for a person to change or keep; once allowed, each planned deal's receipts are written back to it in Vestiarion's own deal fields, read back, never over a person's change. Pipedrive names no developer sandbox, so only payments on Arc mainnet outside shadow mode are written; one company per workspace |

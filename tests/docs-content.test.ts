@@ -38,7 +38,7 @@ const NAV_SLUGS = new Set(flatPages().map((page) => page.slug));
 /** Generated from the OpenAPI operations; they need no MDX file, and may have a notes file. */
 const GENERATED_SLUGS = new Set(OPERATIONS.map((op) => `api/${op.id}`));
 /** Internal addresses outside /docs that a page may link to. */
-const OTHER_TARGETS = new Set(["/api/v1/openapi.json", "/llms.txt", "/llms-full.txt", "/tools/verify-ledger-export.mjs"]);
+const OTHER_TARGETS = new Set(["/api/v1/openapi.json", "/llms.txt", "/llms-full.txt", "/tools/verify-ledger-export.mjs", "/downloads/vestiarion-invoice-capture.zip"]);
 
 /** Real app pages outside /docs that a docs page may link to. */
 const APP_ROUTES = new Set(["/", "/login", "/signup", "/onboarding", "/terms", "/privacy", "/security", "/open", "/studios", "/how-it-decides"]);
@@ -98,7 +98,7 @@ function linkProblems(slug: string, source: string, sourceOf: (slug: string) => 
     } else if (trimmed.startsWith("/docs/")) {
       targetSlug = trimmed.slice("/docs/".length).replace(/\.md$/, "");
     } else {
-      if (trimmed.startsWith("/api/") || trimmed.startsWith("/llms") || trimmed.startsWith("/tools/")) {
+      if (trimmed.startsWith("/api/") || trimmed.startsWith("/llms") || trimmed.startsWith("/tools/") || trimmed.startsWith("/downloads/")) {
         if (!OTHER_TARGETS.has(trimmed)) problems.push(`${link}: no such public document`);
       } else if (!APP_ROUTES.has(trimmed)) {
         problems.push(`${link}: not a docs page, a public document or a known app page`);
