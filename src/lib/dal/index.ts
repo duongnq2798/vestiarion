@@ -40,6 +40,10 @@ import { currentContext, currentOrgId } from "../context";
  * `asana_webhooks`, naming the workspace in scope, except the webhook route's lookup of one row by the id in Asana's
  * target address.
  *
+ * So are the Chrome extension's connections and one-time codes (migration 0121): a request names its workspace only
+ * through its token, as with an API key, so only `src/lib/extension/tokens.ts` reads or writes them, by a token's hash
+ * or naming the workspace.
+ *
  * One read reaches past those tables: the dispatcher embeds a delivery's own
  * ledger entry (`webhook_deliveries` → `ledger_entries` by foreign key), so it
  * can only ever see the entry that delivery was queued for.
@@ -66,6 +70,8 @@ export const TENANT_TABLES = [
   "commission_plans", "commission_plan_deals", "commission_payouts", "commission_lines",
   // Why a person went against the agent, asked in the moment (migration 0120).
   "decision_reasons",
+  // What the Chrome extension captured, until a person adds it as a bill or discards it (migration 0121).
+  "invoice_drafts",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
@@ -91,6 +97,8 @@ export const PLATFORM_TABLES = [
   "growth_campaigns", "growth_leads", "growth_lead_events", "growth_spend", "growth_revenue",
   "accounting_tokens",
   "asana_webhooks",
+  // The Chrome extension's connections and one-time codes (migration 0121): read by token before any workspace is known.
+  "extension_grants", "extension_auth_codes",
 ] as const;
 export type PlatformTable = (typeof PLATFORM_TABLES)[number];
 
@@ -109,6 +117,8 @@ export const PLATFORM_RPCS = [
   "accounting_token_lease", "accounting_token_store", "accounting_token_release", "accounting_connections_due",
   "accounting_connections_by_external",
   "customer_portal_by_token", "customer_portal_submit", "customer_portal_reply",
+  // The daily cleanup's retention for invoice capture (migration 0121).
+  "invoice_capture_sweep",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 

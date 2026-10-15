@@ -120,3 +120,30 @@ const portalActionBuckets = new Map<string, Bucket>();
 export function takePortalActionToken(key: string, now = Date.now()): boolean {
   return take(portalActionBuckets, key, 5, 12_000, now);
 }
+
+const extensionTokenBuckets = new Map<string, Bucket>();
+
+/**
+ * Ten token or revoke requests a minute per address (invoice capture design C18): a code or a refresh token is tried
+ * at no faster pace. Single-instance, like the others.
+ */
+export function takeExtensionTokenRequest(key: string, now = Date.now()): boolean {
+  return take(extensionTokenBuckets, key, 10, 6_000, now);
+}
+
+const extensionApiBuckets = new Map<string, Bucket>();
+
+/**
+ * Sixty draft requests a minute per Chrome extension connection (invoice capture design C18), keyed by the connection,
+ * never by address. The reader's own five reads a minute per workspace still apply to a capture. Single-instance.
+ */
+export function takeExtensionApiToken(connectionId: string, now = Date.now()): boolean {
+  return take(extensionApiBuckets, connectionId, 60, 1_000, now);
+}
+
+const extensionConsentBuckets = new Map<string, Bucket>();
+
+/** Ten consents a minute per person (invoice capture design C18): each issues a one-time code. Single-instance. */
+export function takeExtensionConsentToken(userId: string, now = Date.now()): boolean {
+  return take(extensionConsentBuckets, userId, 10, 6_000, now);
+}

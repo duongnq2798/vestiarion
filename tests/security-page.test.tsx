@@ -17,6 +17,10 @@ import { excludedSlots } from "@/lib/two-approvals";
 import { STATE_TTL_MS } from "@/lib/connectors/state";
 import { EXPIRY_MARGIN_MS } from "@/lib/connectors/tokens";
 import { REQUEST_TOKEN_TTL_SECONDS } from "@/lib/dal/request-token";
+import { EXTENSION_AUDIENCE, EXTENSION_SCOPES, redirectUriFor } from "@/lib/extension/settings";
+import { ACCESS_TTL_SECONDS, CODE_TTL_MS, CONNECTION_LIFETIME_MS, newToken, REFRESH_TTL_MS } from "@/lib/extension/tokens";
+import { MAX_JSON_BYTES, RAW_TEXT_DAYS, UNSENT_DRAFT_DAYS } from "@/lib/invoice-drafts/model";
+import { MAX_DOCUMENT_BYTES } from "@/lib/invoice-document/read";
 import { SVIX_TOLERANCE_S } from "@/lib/email-inbox/verify";
 import { SANDBOX_IDLE_DAYS, WEBHOOK_DELIVERY_RETENTION_DAYS } from "@/lib/platform/cleanup";
 import { loginRedirectFor, requiresSession } from "@/lib/auth/routes";
@@ -75,6 +79,7 @@ describe("/security", () => {
       ["encryption", "Encryption"],
       ["access", "Access control"],
       ["api", "API keys, the API and the MCP server"],
+      ["chrome-extension", "The Chrome extension and its tokens"],
       ["connectors", "Connected tools and their tokens"],
       ["webhooks", "Webhooks and scheduled jobs"],
       ["audit", "The signed ledger"],
@@ -272,6 +277,96 @@ describe("the figures and settings it quotes, as the code has them", () => {
     const connectors = section("connectors");
     expect(connectors).toContain("expires after 10 minutes");
     expect(connectors).toContain("refreshed a minute before it expires, under a lease");
+  });
+
+  it("the Chrome extension: its own token, kept as a hash, for at most 90 days, and what the sweep keeps", () => {
+    expect(CONNECTION_LIFETIME_MS).toBe(90 * 86_400_000);
+    expect(source("src/lib/extension/tokens.ts")).toContain('crypto.createHash("sha256")');
+    const migration = source("supabase/migrations/0121_invoice_capture.sql");
+    expect(migration).toContain(`captured_at < p_now - interval '${RAW_TEXT_DAYS - 1} days'`);
+    expect(migration).toContain(`state = 'draft' and captured_at < p_now - interval '${UNSENT_DRAFT_DAYS - 1} days'`);
+    expect(migration).toContain("delete from public.extension_auth_codes where expires_at < p_now - interval '1 day'");
+    expect(source("src/app/api/platform/cleanup/route.ts")).toContain("const capture = await sweepInvoiceCapture();");
+    expect(section("architecture")).toContain(
+      "The Chrome extension Vestiarion Invoice Capture uses a token of its own, issued when a member allows it and good for at most 90 days, that can only create and read the drafts it captured"
+    );
+    expect(section("encryption")).toContain("the Chrome extension's access and refresh tokens and its one-time sign-in codes");
+    expect(section("retention")).toContain(
+      `Text captured with the Chrome extension is removed when its draft is added or discarded, and ${RAW_TEXT_DAYS} days after capture at the latest; a draft never sent for review is deleted within ${UNSENT_DRAFT_DAYS} days`
+    );
+    expect(section("retention")).toContain("A Chrome extension connection is deleted 30 days after it ended or expired, and a one-time sign-in code a day after it expired");
+  });
+
+  it("the Chrome extension's connection, tokens, rotation and routes, as the code has them", () => {
+    // A tag leaves a space: "( vxc_ , 5 minutes)" reads "(vxc_, 5 minutes)".
+    const chrome = section("chrome-extension").replace(/\(\s+/g, "(").replace(/\s+([,;)])/g, "$1");
+    // Connecting: PKCE S256 only, the allowed ids, the one redirect address.
+    expect(source("src/lib/extension/settings.ts")).toContain("CHROME_EXTENSION_IDS");
+    expect(redirectUriFor("abcdefghijklmnopabcdefghijklmnop")).toBe("https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/");
+    expect(source("src/lib/extension/authorize-request.ts")).toContain('params.code_challenge_method !== "S256"');
+    for (const phrase of ["authorization code and PKCE (S256 only)", "CHROME_EXTENSION_IDS", "https://<id>.chromiumapp.org/", "cannot be framed"]) {
+      expect(chrome, phrase).toContain(phrase);
+    }
+    // Tokens: prefixes, lives, 32 random bytes, kept as SHA-256, audience and scopes.
+    let asked = 0;
+    const made = newToken("vxa", (n) => {
+      asked = n;
+      return Buffer.alloc(n, 1);
+    });
+    expect(asked).toBe(32);
+    expect(made.token).toMatch(/^vxa_[A-Za-z0-9_-]{43}$/);
+    expect(made.hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(CODE_TTL_MS).toBe(5 * 60_000);
+    expect(ACCESS_TTL_SECONDS).toBe(3600);
+    expect(REFRESH_TTL_MS).toBe(30 * 86_400_000);
+    expect(CONNECTION_LIFETIME_MS).toBe(90 * 86_400_000);
+    expect(EXTENSION_AUDIENCE).toBe("vestiarion-chrome");
+    expect([...EXTENSION_SCOPES]).toEqual(["invoice_draft:create", "invoice_draft:read"]);
+    for (const phrase of [
+      "one-time code (vxc_, 5 minutes)",
+      "access token (vxa_, an hour)",
+      "refresh token (vxr_, 30 days)",
+      "32 random bytes and kept only as a SHA-256 hash",
+      `audience is ${EXTENSION_AUDIENCE}`,
+      `scopes ${EXTENSION_SCOPES[0]} and ${EXTENSION_SCOPES[1]}`,
+      "/api/v1 and the MCP server refuse them",
+    ]) {
+      expect(chrome, phrase).toContain(phrase);
+    }
+    // Rotation and revocation: the reasons the code ends a connection with.
+    const tokens = source("src/lib/extension/tokens.ts");
+    for (const reason of ['"reused_code"', '"reused_refresh"', '"role_changed"']) expect(tokens).toContain(reason);
+    for (const phrase of ["Every refresh replaces both tokens", "two refreshes with one token end the connection", "at most 90 days", "(RFC 7009)"]) {
+      expect(chrome, phrase).toContain(phrase);
+    }
+    // The routes: CORS for allowed ids, no-store, the caps and the buckets.
+    expect(source("src/lib/extension/settings.ts")).toContain("chrome-extension://");
+    expect(source("src/lib/extension/http.ts")).toContain('"Cache-Control": "no-store"');
+    expect(MAX_JSON_BYTES).toBe(100_000);
+    expect(MAX_DOCUMENT_BYTES).toBe(4_000_000);
+    // Only a capture takes a key; a file is judged by its declared length, and one without it is refused with 411.
+    const captureRoute = source("src/app/api/extension/v1/invoice-drafts/route.ts");
+    expect(captureRoute).toContain('if (length === null || !Number.isFinite(declared)) return { denied: extensionError(request, "length_required"');
+    expect(source("src/lib/extension/http.ts")).toContain("length_required: 411,");
+    expect(source("src/app/api/extension/v1/invoice-drafts/[id]/route.ts")).not.toContain("Idempotency-Key");
+    const limits = source("src/lib/rate-limit.ts");
+    expect(limits).toContain("return take(extensionApiBuckets, connectionId, 60, 1_000, now);");
+    expect(limits).toContain("return take(extensionTokenBuckets, key, 10, 6_000, now);");
+    for (const phrase of [
+      "/api/extension/v1",
+      "chrome-extension://<id>",
+      "refuses any other origin with 403",
+      "never a cookie",
+      "A capture (POST) carries an Idempotency-Key",
+      `A JSON body is at most ${MAX_JSON_BYTES / 1000} KB, counted as it is read`,
+      `a file is at most ${MAX_DOCUMENT_BYTES / 1_000_000} MB by the Content-Length it declares, and one sent without it is refused with 411`,
+      "bursts of up to 60, then one a second",
+      "bursts of up to 10, then one every 6 seconds",
+      "never cached",
+    ]) {
+      expect(chrome, phrase).toContain(phrase);
+    }
+    expect(chrome).not.toContain("a minute");
   });
 
   it("webhooks: the windows Slack's and Resend's signatures are held to, and the deliveries", () => {
@@ -661,10 +756,15 @@ describe("what it does not claim, still true of the code", () => {
     expect(notClaimed).toContain("no SOC 2 report or ISO 27001 certification");
   });
 
-  it("no Content Security Policy yet: when one is added, this page says so", () => {
-    expect(source("next.config.ts")).not.toMatch(/Content-Security-Policy/i);
+  it("no Content Security Policy yet, but the extension sign-in page's frame rule: when one is added, this page says so", () => {
+    const config = source("next.config.ts");
+    // The one policy is frame-ancestors 'none', on the Chrome extension's sign-in page.
+    expect(config.match(/Content-Security-Policy[^\n]*/gi)).toEqual([`Content-Security-Policy", value: "frame-ancestors 'none'" },`]);
+    expect(config.split('source: "/extension/:path*"')[1]?.split("source:")[0]).toContain("frame-ancestors 'none'");
     expect(existsSync(path.join(process.cwd(), "vercel.json"))).toBe(false);
-    expect(notClaimed).toContain("does not send a Content Security Policy yet");
+    expect(notClaimed).toContain(
+      "does not send a Content Security Policy yet, except frame-ancestors 'none' on the Chrome extension's sign-in page, so that page cannot be framed"
+    );
   });
 
   it("review and CI before each merge, and no branch protection or required human second approval", () => {

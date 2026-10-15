@@ -1,6 +1,7 @@
 import { platformAuth, platformDb, unwrap } from "../dal";
 import { FOUNDING_ORG_ID } from "../dal/org-config";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
+import { activeConnectionsOf, memberConnectionEnded } from "../extension/tokens";
 import { apiKeyRevokedEntry } from "./api-keys";
 import { DELETE_ACCOUNT_CONFIRMATION } from "./delete-account-phrase";
 import { deleteOrgRefusal, deletionContext } from "./delete-workspace";
@@ -143,6 +144,9 @@ export async function deleteAccount(input: { userId: string; confirmText: string
 
   // Read before anything is deleted, so a failure here leaves everything as it was.
   const keys = await keysLeftBehind(input.userId, new Set(soleIds.values()));
+  // And the Chrome extension connections there, which go with the memberships (migration 0121).
+  const deletedWithAccount = new Set(soleIds.values());
+  const connections = (await activeConnectionsOf(input.userId)).filter((connection) => !deletedWithAccount.has(connection.orgId));
 
   // One at a time, stopping at the first refusal: the account stays, and so
   // does every workspace not yet reached.
@@ -173,5 +177,10 @@ export async function deleteAccount(input: { userId: string; confirmText: string
       apiKeyRevokedEntry({ reason: "account_deleted", by: input.userId, keyId: key.id }),
       { enterScope: { userId: input.userId } }
     );
+  }
+  for (const connection of connections) {
+    await appendLedgerEntryBestEffort(connection.orgId, memberConnectionEnded(connection, "account_deleted", input.userId), {
+      enterScope: { userId: input.userId },
+    });
   }
 }

@@ -2,7 +2,7 @@ import type { DecisionMode } from "../agent/decide";
 import { db, unwrap } from "../dal";
 import { extractInvoice } from "./extract";
 import { matchCounterparty, type MatchableCounterparty } from "./match";
-import { normalizeExtraction, type InvoiceDraft, type NotFoundField } from "./normalize";
+import { isRealDate, normalizeExtraction, type InvoiceDraft, type NotFoundField } from "./normalize";
 import { readDocument, type DocumentInput } from "./read";
 
 /** What one invoice document was read as: a draft of the invoice form, and what a member should check in it. */
@@ -19,13 +19,28 @@ export interface InvoiceDraftRead {
 }
 
 /**
+ * One document's full reading: the draft, and what only a capture needs besides (invoice capture design C2, C3, C9):
+ * the text that was read, the invoice's own date, and the warnings the document alone gives, apart from the
+ * counterparty match's, which name the workspace's own records.
+ */
+export interface InvoiceDocumentRead {
+  read: InvoiceDraftRead;
+  /** The text the model was shown, cut to `MAX_DOCUMENT_CHARS`. */
+  text: string;
+  /** The invoice's own date, as read, when it is a real one; null otherwise. */
+  issueDate: string | null;
+  /** The total line against the model's total, the reader's notes and the cut: never a counterparty's name or address. */
+  documentWarnings: string[];
+}
+
+/**
  * Reads an invoice document into a draft (invoice from a document D1–D9): the text, the model's reading checked
  * against it, the total line read by rule against the model's total, and the match to the workspace's counterparties.
- * Nothing is written. Shared by **From a document** and the Telegram bot (Telegram bot design R10); each keeps its own
- * authorization, size check and read limit. Runs inside the organization's scope; throws `DocumentReadError` for a
- * document it cannot read.
+ * Nothing is written. Shared by **From a document**, the Telegram bot (Telegram bot design R10), Slack, email and the
+ * Chrome extension (invoice capture design C2); each keeps its own authorization, size check and read limit. Runs
+ * inside the organization's scope; throws `DocumentReadError` for a document it cannot read.
  */
-export async function readInvoiceDraft(input: DocumentInput, today: string): Promise<InvoiceDraftRead> {
+export async function readInvoiceDocument(input: DocumentInput, today: string): Promise<InvoiceDocumentRead> {
   const document = await readDocument(input);
   const counterparties = unwrap(await db().from("counterparties").select("id, name, role, address").order("name")) as MatchableCounterparty[];
 
@@ -40,14 +55,25 @@ export async function readInvoiceDraft(input: DocumentInput, today: string): Pro
       : [];
   const match = matchCounterparty(fields, counterparties);
   const matched = counterparties.find((counterparty) => counterparty.id === match.counterpartyId);
+  const cut = document.truncated ? ["Only the first 20,000 characters were read."] : [];
 
   return {
-    draft: { ...fields, counterpartyId: match.counterpartyId },
-    counterpartyName: matched?.name ?? null,
-    warnings: [...totals, ...match.warnings, ...notes, ...(document.truncated ? ["Only the first 20,000 characters were read."] : [])],
-    notFound,
-    modelNote,
-    reader,
-    document: { kind: document.kind, sha256: document.sha256, truncated: document.truncated },
+    read: {
+      draft: { ...fields, counterpartyId: match.counterpartyId },
+      counterpartyName: matched?.name ?? null,
+      warnings: [...totals, ...match.warnings, ...notes, ...cut],
+      notFound,
+      modelNote,
+      reader,
+      document: { kind: document.kind, sha256: document.sha256, truncated: document.truncated },
+    },
+    text: document.text,
+    issueDate: isRealDate(raw.issueDate) ? raw.issueDate : null,
+    documentWarnings: [...totals, ...notes, ...cut],
   };
+}
+
+/** `readInvoiceDocument`'s draft alone, as From a document and the chats read it. */
+export async function readInvoiceDraft(input: DocumentInput, today: string): Promise<InvoiceDraftRead> {
+  return (await readInvoiceDocument(input, today)).read;
 }

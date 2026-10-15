@@ -33,7 +33,14 @@ export function addressHash(address: string | null): string | null {
   return crypto.createHash("sha256").update(address.toLowerCase(), "utf8").digest("hex").slice(0, 16);
 }
 
-const NAMES: Record<SurfaceKind, string> = { console: "the console", telegram: "Telegram", slack: "Slack", api: "the API", github: "GitHub" };
+const NAMES: Record<SurfaceKind, string> = {
+  console: "the console",
+  telegram: "Telegram",
+  slack: "Slack",
+  api: "the API",
+  github: "GitHub",
+  chrome: "the Chrome extension",
+};
 
 /** A surface by name, as a person reads it in a refusal. */
 export function surfaceName(kind: SurfaceKind): string {

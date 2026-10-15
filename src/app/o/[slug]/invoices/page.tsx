@@ -5,6 +5,9 @@ import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import InboxEmails from "@/components/InboxEmails";
+import CapturedDrafts from "@/components/CapturedDrafts";
+import { capturedCountLabel } from "@/lib/invoice-drafts/model";
+import { capturedDraftsToReview } from "@/lib/invoice-drafts/store";
 import { AccountingBillsReview } from "@/components/AccountingBillsReview";
 import { AccountingBookings } from "@/components/AccountingBookings";
 import AgentControls from "@/components/AgentControls";
@@ -249,7 +252,16 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     const saidBy = new Map<string, CustomerRequest[]>();
     for (const request of openRequests) saidBy.set(request.invoiceId, [...(saidBy.get(request.invoiceId) ?? []), request]);
     // The payments made on Arc to book in each accounting tool, for a person to review (accounting write-back W6, W10).
-    const [toBook, canBook] = await Promise.all([Promise.all(PROVIDERS.map(toBookIn)), viewerCan(slug, "accounting.book")]);
+    // And the invoices captured with the Chrome extension and sent for review (invoice capture C5). Best effort: before
+    // migration 0121, or when they cannot be read, nothing is shown.
+    const [toBook, canBook, captured] = await Promise.all([
+      Promise.all(PROVIDERS.map(toBookIn)),
+      viewerCan(slug, "accounting.book"),
+      capturedDraftsToReview().catch((error: unknown) => {
+        console.error("invoices: captured drafts not loaded", error instanceof Error ? error.message : error);
+        return { available: false as const };
+      }),
+    ]);
     // Each receivable a deal line became names its deal (deal schedule).
     const dealLinks = Array.isArray(deals) ? dealLinksOf(deals) : new Map<string, DealLink>();
     const search = parseSearch(query.q ?? undefined);
@@ -662,6 +674,22 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       reviews.email = {
         title: "From email",
         node: <InboxEmails orgSlug={slug} emails={emailed} canAdd={canWrite} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} />,
+      };
+    }
+    if (captured.available && captured.drafts.length > 0) {
+      const capturers = await listMembers(access.membership.orgId).catch(() => []);
+      waitingItems.push({ key: "captured", review: "captured", label: capturedCountLabel(captured.drafts.length, captured.more) });
+      reviews.captured = {
+        title: "Captured drafts",
+        node: (
+          <CapturedDrafts
+            orgSlug={slug}
+            drafts={captured.drafts}
+            canAdd={canWrite}
+            counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))}
+            members={Object.fromEntries(capturers.map((member) => [member.userId, member.email]))}
+          />
+        ),
       };
     }
     for (const [key, from] of [["hubspot", fromHubSpot], ["pipedrive", fromPipedrive]] as const) {

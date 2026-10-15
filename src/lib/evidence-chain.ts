@@ -278,6 +278,8 @@ function via(detail: Record<string, unknown>): string {
       return " in the review of bills from Xero";
     case "quickbooks":
       return " in the review of bills from QuickBooks";
+    case "chrome":
+      return " from a draft captured with the Chrome extension";
     default:
       return "";
   }

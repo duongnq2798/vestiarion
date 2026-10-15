@@ -36,6 +36,7 @@ export const SURFACE_WORDS: Record<SurfaceKind, string> = {
   telegram: "Telegram",
   api: "API",
   github: "GitHub",
+  chrome: "Chrome extension",
 };
 
 export interface DecisionReasonInput {

@@ -6,6 +6,7 @@ import { platformDb, unwrap } from "../dal";
 import { invitationEmail } from "../email/invitation";
 import { sendEmail } from "../email/send";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
+import { activeConnectionsOf, memberConnectionEnded } from "../extension/tokens";
 import { apiKeyRevokedEntry } from "./api-keys";
 
 /**
@@ -266,10 +267,12 @@ interface RemovedMemberRow {
  * Runs in scope: `p_org_id` comes from `currentOrgId()`. Ending a membership
  * also revokes the active API keys the person created in this workspace, in
  * the same transaction (migration 0069). The member's entry comes first, then
- * one `api_key_revoked` per key, each best effort.
+ * one `api_key_revoked` per key, each best effort. The person's Chrome extension connections in this workspace go
+ * with the membership (migration 0121's cascade); each gets its `extension_disconnected` entry, read beforehand.
  */
 export async function removeMember(input: { actorId: string; userId: string }): Promise<{ revokedKeys: number }> {
   const orgId = currentOrgId();
+  const connections = await activeConnectionsOf(input.userId, orgId);
   const result = await platformDb()
     .rpc("remove_member_revoking_keys", { p_org_id: orgId, p_actor: input.actorId, p_user_id: input.userId })
     .single<RemovedMemberRow>();
@@ -302,6 +305,9 @@ export async function removeMember(input: { actorId: string; userId: string }): 
         ? apiKeyRevokedEntry({ reason: "member_left", by: input.actorId, keyId })
         : apiKeyRevokedEntry({ reason: "member_removed", by: input.actorId, keyId, member: input.userId })
     );
+  }
+  for (const connection of connections) {
+    await appendLedgerEntryBestEffort(orgId, memberConnectionEnded(connection, left ? "member_left" : "member_removed", input.actorId));
   }
   return { revokedKeys: keyIds.length };
 }

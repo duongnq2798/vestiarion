@@ -21,7 +21,7 @@ export const LIST_SORTS = ["due", "open", "recent", "added", "amount", "name"] a
 export type ListSort = (typeof LIST_SORTS)[number];
 
 /** The review lists the Waiting for review strip opens over the page. */
-export const REVIEW_PANELS = ["xero", "quickbooks", "book-xero", "book-quickbooks", "email"] as const;
+export const REVIEW_PANELS = ["xero", "quickbooks", "book-xero", "book-quickbooks", "email", "captured"] as const;
 export type ReviewPanel = (typeof REVIEW_PANELS)[number];
 
 /** What New ▾ opens. */
@@ -330,6 +330,7 @@ const REVIEW_ANCHORS: Readonly<Record<string, ReviewPanel>> = {
   "to-book-xero": "book-xero",
   "to-book-quickbooks": "book-quickbooks",
   "email-inbox": "email",
+  "captured-drafts": "captured",
 };
 
 /**

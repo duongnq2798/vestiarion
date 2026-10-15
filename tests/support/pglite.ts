@@ -114,6 +114,7 @@ export const TENANT_TABLES = [
   "asana_task_links",
   "commission_plans", "commission_plan_deals", "commission_payouts", "commission_lines",
   "decision_reasons",
+  "invoice_drafts",
 ] as const;
 
 export interface SeededRows {
@@ -390,6 +391,12 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     `insert into decision_reasons (org_id, feature, decision, surface, subject, subject_id, reason, app_version, given_by)
      values ($1, 'approvals', 'reject', 'console', 'invoice', $2, $3, 'v0.1.0', $4)`,
     [orgId, invoiceId, `reason-${tag}`, approver]
+  );
+  // A draft the Chrome extension captured, added as that payable (0121).
+  await db.query(
+    `insert into invoice_drafts (org_id, state, source, supplier_name, amount, connection_id, idempotency_key, request_sha256, invoice_id)
+     values ($1, 'confirmed', 'selection', $2, '1', gen_random_uuid(), $3, encode(sha256(convert_to($3, 'utf8')), 'hex'), $4)`,
+    [orgId, `cp-${tag}`, `capture-${tag}`, invoiceId]
   );
   const key = crypto.generateKeyPairSync("ed25519");
   await appendSignedForOrg(db, orgId, { actor: "system", domain: "system", action: "note", summary: tag, detail: { tag } }, key.privateKey);

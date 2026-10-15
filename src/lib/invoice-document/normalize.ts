@@ -157,7 +157,8 @@ const CURRENCIES: Record<string, InvoiceCurrency> = {
   EUROS: "EURC",
 };
 
-function isRealDate(value: string | null): value is string {
+/** A real `YYYY-MM-DD` calendar day: not a malformed string, nor one rolled over like Feb 30. */
+export function isRealDate(value: string | null): value is string {
   if (value === null || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T12:00:00.000Z`);
   return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().startsWith(value);

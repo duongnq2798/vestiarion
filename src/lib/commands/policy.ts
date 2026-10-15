@@ -101,6 +101,14 @@ export const COMMAND_PERMISSIONS = {
   "commission.set_plan": "records.write",
   "commission.end_plan": "records.write",
   "commission.create_payable": "records.write",
+  // A draft the Chrome extension captured: captured, edited and sent for review through the extension, then added as a
+  // bill or discarded in the console. Each is a records write, an owner's or admin's, as adding the bill is; adding it
+  // runs `invoice.add` too (invoice capture design C1, C6, C16).
+  "invoice_draft.capture": "records.write",
+  "invoice_draft.edit": "records.write",
+  "invoice_draft.send": "records.write",
+  "invoice_draft.confirm": "records.write",
+  "invoice_draft.discard": "records.write",
 } as const satisfies Record<string, Permission>;
 
 export type CommandName = keyof typeof COMMAND_PERMISSIONS;
@@ -110,7 +118,8 @@ export type CommandName = keyof typeof COMMAND_PERMISSIONS;
  * bot design R11). The API adds records and never decides (write API R3; part 2, W4). Slack decides a held payable, under a limit
  * each workspace sets and the chat's own rules (Slack design S8, S10), pauses the agent, and adds an invoice from a
  * message; resuming, and every other command, stays in the console. A pull request comment attaches a bounty, which is a
- * milestone, and nothing else (bounties B5).
+ * milestone, and nothing else (bounties B5). The Chrome extension captures, edits and sends a draft for review: never
+ * an invoice, a decision or anything else, and the draft becomes a bill only in the console (invoice capture C16).
  */
 export const SURFACE_COMMANDS: Record<SurfaceKind, readonly CommandName[]> = {
   console: Object.keys(COMMAND_PERMISSIONS) as CommandName[],
@@ -118,6 +127,7 @@ export const SURFACE_COMMANDS: Record<SurfaceKind, readonly CommandName[]> = {
   api: ["invoice.add", "milestone.add", "payee_link.create"],
   slack: ["payable.approve", "payable.reject", "payable.return", "agent.pause", "invoice.add"],
   github: ["milestone.add"],
+  chrome: ["invoice_draft.capture", "invoice_draft.edit", "invoice_draft.send"],
 };
 
 /** A person's decisions on what the agent stopped: off on a chat whose workspace allows none there (Slack design S8). */
