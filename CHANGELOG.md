@@ -14,6 +14,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **A security page for reviewers.** [vestiarion.xyz/security](https://www.vestiarion.xyz/security) sets out, as the
+  code does it today, how data moves through Vestiarion and where each boundary is: tenant isolation, what is encrypted
+  and with what, who can approve what, how connector tokens are refreshed and revoked, how webhooks are signed both
+  ways, the signed ledger, retention and deletion, how the model is used, and the services that process data, dated.
+  It ends with what we do not claim, and is linked from every footer. The repository now has a security policy,
+  [SECURITY.md](SECURITY.md): report a vulnerability privately with GitHub's **Report a vulnerability**, never in a
+  public issue. The README opens with a five-minute path through the live app for anyone evaluating it.
 - **Try the API from Postman.** Two Postman collections and an environment, served by the site and generated from the
   API's own description, so they always match it. "Vestiarion: Getting Started" goes from a key to a first answer in
   three reads (the workspace's status, its invoices, the agent's decisions with its reasoning), then adds a
@@ -25,8 +32,27 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   says which key to use: a read-only key by default, and a read-and-write key only for an agent that should add
   records. [Guide](https://www.vestiarion.xyz/docs/ai-integration/mcp#which-key-to-use).
 
+### Changed
+
+- **The privacy page says more exactly what leaves Vestiarion.** It names each RPC node the server reads balances,
+  fees and receipts from, which receive wallet addresses and transaction hashes only, and says the other chains' nodes
+  are handed only to your own wallet. For each email to a workspace's invoice address, the model provider reads its
+  first PDF, .eml or .txt attachment or else its text, and a Slack post about one that cannot be read names its
+  sender's address. Google Analytics loads on every page, signed-in pages included. Each model provider handles
+  requests under its own API terms, now linked, in place of a promise about training the code cannot keep. Deleting
+  an account also deletes the payment approvals the person gave, which the ledger keeps, and their Slack and Telegram
+  links, and the team's own record of a business stays when its workspace is deleted.
+- **API write limits, said as they work.** Writes from one key come in bursts of up to 30, then one every 2 seconds,
+  as the limits page and the API invoices guide now say.
+
 ### Fixed
 
+- **On Arc mainnet, the agent's spending limit always stands.** A workspace whose limit was missing or empty was read
+  as having none; it is now held to the starting limit, 50 USDC a day and 150 USDC in 7 days, as a missing
+  two-approvals figure already was.
+- **An API write's idempotency outcome is deleted after its 24 hours.** It was given back for 24 hours, as documented,
+  but the row, with its response, stayed. The daily cleanup now deletes outcomes older than that, in every workspace,
+  and reports how many.
 - **Connector consent says what the model provider does under its own terms.** The statements a person agrees to
   before connecting Xero, QuickBooks, HubSpot or Pipedrive no longer promise that the agent's model provider may not
   train on the facts it sees, which its terms do not say. They now say the provider (DeepSeek, on the hosted service)

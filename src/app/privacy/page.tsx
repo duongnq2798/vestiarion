@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { LegalLink, LegalPage, LegalSection } from "@/components/vx/LegalPage";
 import { ISSUES_URL } from "@/lib/site-links";
+import { ARC_RPC_HOSTS, listed, MODEL_PROVIDER_TERMS, PAYEE_CHAIN_RPC_HOSTS } from "@/lib/subprocessors";
 
 export const metadata: Metadata = {
   title: "Privacy",
@@ -18,7 +19,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy"
-      updated="2026-10-14"
+      updated="2026-10-15"
       intro="Vestiarion is an autonomous treasury agent on Arc mainnet and Arc testnet. This page describes what the service stores and sends, as its code does it today. The code is public, so every statement here can be checked against it."
     >
       <LegalSection id="signing-in" title="Signing in">
@@ -209,8 +210,10 @@ export default function PrivacyPage() {
                 performance score, and, when the agent bought it before a first payment, how many workspaces here have paid its address, how often, and when first and last;
               </li>
               <li>
-                for an invoice document a member chooses to read (a PDF, an email or pasted text): the document&apos;s text, up to 20,000 characters, to read
-                its vendor, amounts, dates, terms and payment address into the invoice form. The document itself is not kept;
+                for an invoice document a member chooses to read (a PDF, an email or pasted text), and for each email that reaches a workspace&apos;s
+                invoice address, its first PDF, .eml or .txt attachment, or else its text: the document&apos;s text, up to 20,000 characters, to read
+                its vendor, amounts, dates, terms and payment address into the invoice form. Nothing is sent for an email that is too large, holds
+                only images, or comes while the workspace is over its rate of documents read. The document itself is not kept;
               </li>
               <li>
                 for a message a member sends the Telegram bot in plain words: the message, up to 4,000 characters, to tell which of the bot&apos;s questions it
@@ -236,7 +239,15 @@ export default function PrivacyPage() {
             </ul>
             A performance score comes with the counts it is computed from: payments paid without intervention, information requests, holds and flags,
             duplicate submissions, risk tier changes, and the holds the workspace&apos;s own limits caused. Without a model provider, a written rule-based policy
-            decides, and nothing is sent.
+            decides, and nothing is sent. Each provider handles these requests under its own API terms:{" "}
+            {MODEL_PROVIDER_TERMS.map((provider, index) => (
+              <span key={provider.name}>
+                {index > 0 ? (index === MODEL_PROVIDER_TERMS.length - 1 ? " and " : ", ") : ""}
+                <LegalLink href={provider.href}>{provider.name}</LegalLink>
+              </span>
+            ))}
+            . Someone running their own copy of Vestiarion can point <code>ANTHROPIC_BASE_URL</code>, which Anthropic&apos;s SDK reads, at another
+            Anthropic-compatible host, and <code>OPENAI_BASE_URL</code> or <code>DEEPSEEK_BASE_URL</code> at another OpenAI-compatible one.
           </li>
           <li>
             <strong>Telegram</strong>, for a member who connects their own Telegram chat to a workspace, receives what the bot sends that chat: the
@@ -247,8 +258,10 @@ export default function PrivacyPage() {
           <li>
             <strong>Slack</strong>, for a workspace an owner or admin connects to a Slack channel, receives what the app posts to that channel and its
             answers to members: the workspace&apos;s name, the agent&apos;s decisions with the counterparties&apos; names, the amounts, the reasons and links
-            to the transactions and to the app, who decided a payment from Slack, and the answers to a member&apos;s questions. It receives no email
-            address or key, and no wallet address in full: one is shortened to its first and last four characters. The app reads no message in Slack
+            to the transactions and to the app, who decided a payment from Slack, and the answers to a member&apos;s questions. When a workspace
+            with invoices by email gets an email at its invoice address that cannot be read, or in which no vendor is found, the post names the
+            sender&apos;s email address; Slack receives no other email address, no key, and no wallet address in full: one is shortened to its first
+            and last four characters. The app reads no message in Slack
             but one an owner or admin chooses to add as an invoice, read the way one uploaded to the invoice form is, without keeping it.
             It keeps the Slack workspace&apos;s and the channel&apos;s ids and names, the app&apos;s token and the channel&apos;s posting address,
             encrypted, and the Slack user id of each member who connects their own account; disconnecting Slack deletes them, and the signed ledger
@@ -268,6 +281,14 @@ export default function PrivacyPage() {
             <strong>OpenSanctions</strong>, when this deployment has it configured, receives the names and jurisdictions of a live workspace&apos;s
             counterparties to screen them. A sandbox, and any workspace on a deployment without it, checks names against a list built into the app and sends
             them nowhere.
+          </li>
+          <li>
+            <strong>RPC nodes</strong> receive the wallet addresses and transaction hashes whose balances, fees and receipts Vestiarion&apos;s server
+            reads: Arc&apos;s node, {ARC_RPC_HOSTS.join(" and ")}, and, where this deployment sets them, the ones named by <code>ARC_RPC_URL</code> and{" "}
+            <code>ARC_MAINNET_RPC_URL</code>, which take some of those reads; receipts are always read from Arc&apos;s public node; and, for a receipt of a payout to another chain from Arc testnet,{" "}
+            {listed(PAYEE_CHAIN_RPC_HOSTS)}, PublicNode&apos;s among them. These are already public on chain, and nothing else about you or your workspace goes
+            with them. The other chains&apos; nodes named for bringing USDC from another chain are handed to your own wallet in your browser; the
+            server never calls them.
           </li>
           <li>
             <strong>GitHub</strong> is asked for a pull request&apos;s status when a milestone is verified by its link, and, when a page shows a pull
@@ -290,8 +311,8 @@ export default function PrivacyPage() {
             amount due, dates and status) and its suppliers&apos; names, and its chart of accounts when an owner or admin chooses the account payments
             will be booked to. It keeps the bills read, the suppliers&apos; names, the organisation&apos;s name and id, the access granted and the
             agreement given, and Xero&apos;s tokens encrypted, readable only by the server and never shown in the browser, a log, a model&apos;s prompt
-            or a webhook. A bill reaches the agent, and so its model provider, only once a person added it as a payable, with the facts any bill has;
-            the provider may not train on them. Vestiarion never uses Xero data to train or improve any AI model, and never passes it to anyone else
+            or a webhook. A bill reaches the agent, and so its model provider, only once a person added it as a payable, with the facts any bill
+            has. Vestiarion never uses Xero data to train or improve any AI model, and never passes it to anyone else
             without the workspace&apos;s say. Disconnecting revokes the app&apos;s access at Xero and deletes the tokens; the bills already read stay with
             the workspace, and the signed ledger keeps only ids and names.
           </li>
@@ -303,7 +324,7 @@ export default function PrivacyPage() {
             the tokens encrypted, readable only by the server and never shown in the browser, a log, a model&apos;s prompt or a webhook. Intuit tells
             Vestiarion when a bill, a bill payment or a vendor changes, naming only the company and the record; Vestiarion reads the record itself and
             keeps nothing of the notice. A bill reaches the agent, and so its model provider, only once a person added it as a payable, with the facts
-            any bill has; the provider may not train on them. Vestiarion never uses QuickBooks data to train or improve any AI model, and never passes
+            any bill has. Vestiarion never uses QuickBooks data to train or improve any AI model, and never passes
             it to anyone else without the workspace&apos;s say. Disconnecting revokes the app&apos;s access at Intuit and deletes the tokens; the bills
             already read stay with the workspace, and the signed ledger keeps only ids and names.
           </li>
@@ -317,7 +338,7 @@ export default function PrivacyPage() {
             contacts&apos; emails, the account&apos;s id and domain, the access granted and the agreement given, and HubSpot&apos;s tokens encrypted,
             readable only by the server and never shown in the browser, a log, a model&apos;s prompt or a webhook. A contact&apos;s email becomes a
             customer&apos;s billing email only when a person confirms it. The deals are shown to the workspace&apos;s members and its agent; the
-            agent&apos;s model provider may see a deal&apos;s facts to decide on its collections, and may not train on them. Vestiarion never uses
+            agent&apos;s model provider may see a deal&apos;s facts to decide on its collections. Vestiarion never uses
             HubSpot data to train or improve any AI model, and never passes it to anyone else without the workspace&apos;s say. Disconnecting revokes
             the app&apos;s access at HubSpot and deletes the tokens; the deals already read stay with the workspace, and the signed ledger keeps only
             ids, names, amounts and masked emails.
@@ -335,10 +356,10 @@ export default function PrivacyPage() {
             emails, the company&apos;s id and name, the access granted and the agreement given, and Pipedrive&apos;s tokens encrypted, readable
             only by the server and never shown in the browser, a log, a model&apos;s prompt or a webhook. A person&apos;s email becomes a
             customer&apos;s billing email only when someone in the workspace confirms it. The deals are shown to the workspace&apos;s members and its
-            agent; the agent&apos;s model provider may see a deal&apos;s facts to decide on its collections, and may not train on them. Vestiarion
+            agent; the agent&apos;s model provider may see a deal&apos;s facts to decide on its collections. Vestiarion
             never uses Pipedrive data to train or improve any AI model, and never passes it to anyone else without the workspace&apos;s say. One
-            Pipedrive company connects to one workspace at a time. Disconnecting uninstalls Vestiarion from the Pipedrive company and deletes the
-            tokens; the deals already read stay with the workspace, and the signed ledger keeps only ids, names, amounts and masked emails.
+            Pipedrive company connects to one workspace at a time. Disconnecting revokes Vestiarion&apos;s access, which, as Pipedrive documents it,
+            uninstalls Vestiarion from the company, and deletes the tokens; the deals already read stay with the workspace, and the signed ledger keeps only ids, names, amounts and masked emails.
           </li>
           <li>
             <strong>Asana</strong>, for a workspace an owner or admin connects to their Asana after agreeing to it, is read from, as that person, and
@@ -356,7 +377,8 @@ export default function PrivacyPage() {
             workspace&apos;s signed ledger.
           </li>
           <li>
-            <strong>Google Analytics</strong> receives page views, and which button you chose to get started, as described below.
+            <strong>Google Analytics</strong> receives page views on every page, signed-in pages included, and which button you chose to get
+            started, as described below.
           </li>
           <li>
             <strong>Product Hunt</strong> serves the badge in the footer of the home page, the page for studios and the page on how the agent decides, so your browser loads that image from Product Hunt, which sees your IP
@@ -383,7 +405,10 @@ export default function PrivacyPage() {
           <code>cta_click</code>, with the button&apos;s name (such as <code>hero-try</code>) and the page&apos;s path, redacted the same way. Nothing you
           typed and nothing about you goes with it.
         </p>
-        <p>Google signals and ad personalization signals are turned off. Google Analytics sets its own cookies to tell visits apart.</p>
+        <p>
+          It loads on every page, signed-in pages included. Google signals and ad personalization signals are turned off. Google Analytics sets its
+          own cookies to tell visits apart, and collects what any site it runs on sends it, such as your IP address and your device and browser.
+        </p>
       </LegalSection>
 
       <LegalSection id="campaign-cookie" title="Which link brought a workspace">
@@ -462,7 +487,19 @@ export default function PrivacyPage() {
             it holds a hosted wallet, or if its owner&apos;s own wallet deployed its contract.
           </li>
           <li>A webhook delivery is deleted 30 days after it is delivered; one that failed, 30 days after it was created.</li>
-          <li>Everything else in a workspace is kept until the workspace is deleted.</li>
+          <li>
+            The outcome of an API write sent with an <code>Idempotency-Key</code>, its response included, is given back for 24 hours, and deleted
+            by the daily cleanup after that.
+          </li>
+          <li>
+            Everything else in a workspace is kept until the workspace is deleted, or until a person removes it: disconnecting a tool, removing
+            sample data or turning a feature off deletes what it held.
+          </li>
+          <li>
+            The Vestiarion team&apos;s own records of a business it is in touch with, its lead and any revenue recorded for it, are kept apart from
+            every workspace and stay when that business&apos;s workspace is deleted: their link to the workspace is cleared, and the lead&apos;s
+            history keeps the workspace&apos;s id.
+          </li>
         </ul>
       </LegalSection>
 
@@ -502,7 +539,8 @@ export default function PrivacyPage() {
         </ul>
         <p>
           If a workspace cannot be deleted, your account is not deleted. Otherwise your sign-in account is deleted, you are signed out, and your memberships and
-          the invitations you sent go with it. API keys you created stop working. Records you added in workspaces you share stay, without your name on them.
+          the invitations you sent go with it, as do the payment approvals you gave, which the ledger keeps, and your Slack and Telegram links. API
+          keys you created stop working, and stay, revoked, without your name. Records you added in workspaces you share stay, without your name on them.
           A workspace&apos;s signed ledger is append-only, so entries you caused keep your account&apos;s id (never your email). A workspace deleted with your
           account leaves its tombstone, and a tombstone keeps who deleted it, as your account&apos;s id.
         </p>
@@ -511,7 +549,7 @@ export default function PrivacyPage() {
       <LegalSection id="contact" title="Contact">
         <p>
           Questions and requests go to <LegalLink href={ISSUES_URL}>GitHub Issues</LegalLink>. The <LegalLink href="/terms">Terms of use</LegalLink> cover
-          using the service.
+          using the service, and <LegalLink href="/security">Security</LegalLink> says how the data is protected and how to report a vulnerability.
         </p>
       </LegalSection>
     </LegalPage>

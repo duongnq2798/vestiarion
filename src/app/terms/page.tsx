@@ -149,8 +149,8 @@ export default function TermsPage() {
           <LegalLink href={HOSTED_MODEL_PROVIDER.privacy}>privacy policy</LegalLink>. Vestiarion never uses
           Pipedrive data to train or improve any AI model, and never passes it to anyone else without the workspace&apos;s say. A deal won in
           Pipedrive becomes a deal in Vestiarion only when a person plans it, and a change made in Pipedrive afterwards changes nothing in Vestiarion
-          until a person does. One Pipedrive company connects to one workspace at a time. Disconnecting uninstalls Vestiarion from the Pipedrive
-          company and stops the reading at once; the deals already planned stay with the workspace.
+          until a person does. One Pipedrive company connects to one workspace at a time. Disconnecting revokes Vestiarion&apos;s access, which, as
+          Pipedrive documents it, uninstalls Vestiarion from the company, and stops the reading at once; the deals already planned stay with the workspace.
         </p>
         <p>
           When an owner or admin connects Asana to a workspace, they agree, for the workspace, that Vestiarion reads Asana as them: the workspaces,

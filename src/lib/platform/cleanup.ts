@@ -1,3 +1,4 @@
+import { IDEMPOTENCY_TTL_MS } from "../api/idempotency";
 import type { WalletHost } from "../config";
 import { currentConfig } from "../context";
 import { platformDb, unwrap } from "../dal";
@@ -202,4 +203,27 @@ export async function deleteExpiredWebhookDeliveries(now: Date = new Date()): Pr
   }
   if (deleted > 0) console.log("deleted expired webhook deliveries", deleted);
   return { deleted, failed };
+}
+
+/**
+ * Deletes the write API's idempotency outcomes claimed more than `IDEMPOTENCY_TTL_MS` (24 hours) ago, in every
+ * workspace, and counts them. An outcome is given back to a repeated key only for those 24 hours (write API R5), and it
+ * holds the full response body, so it is not kept past them. Best-effort, as the webhook retention is: it never throws;
+ * a failed delete is logged and counted in `failed`, and a later run deletes the rows.
+ */
+export async function deleteExpiredIdempotencyOutcomes(now: Date = new Date()): Promise<CleanupResult> {
+  const cutoffIso = new Date(now.getTime() - IDEMPOTENCY_TTL_MS).toISOString();
+  try {
+    const { count, error } = await platformDb().from("api_idempotency").delete({ count: "exact" }).lt("created_at", cutoffIso);
+    if (error) {
+      console.error("could not delete expired idempotency outcomes", error.message);
+      return { deleted: 0, failed: 1 };
+    }
+    const deleted = count ?? 0;
+    if (deleted > 0) console.log("deleted expired idempotency outcomes", deleted);
+    return { deleted, failed: 0 };
+  } catch (err) {
+    console.error("could not delete expired idempotency outcomes", (err as Error).message);
+    return { deleted: 0, failed: 1 };
+  }
 }

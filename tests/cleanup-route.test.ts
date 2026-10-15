@@ -7,11 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * bearer check and what the route does with what it returns.
  */
 
-const { deleteAbandonedSandboxes, deleteExpiredWebhookDeliveries } = vi.hoisted(() => ({
+const { deleteAbandonedSandboxes, deleteExpiredWebhookDeliveries, deleteExpiredIdempotencyOutcomes } = vi.hoisted(() => ({
   deleteAbandonedSandboxes: vi.fn(),
   deleteExpiredWebhookDeliveries: vi.fn(),
+  deleteExpiredIdempotencyOutcomes: vi.fn(),
 }));
-vi.mock("@/lib/platform/cleanup", () => ({ deleteAbandonedSandboxes, deleteExpiredWebhookDeliveries }));
+vi.mock("@/lib/platform/cleanup", () => ({ deleteAbandonedSandboxes, deleteExpiredWebhookDeliveries, deleteExpiredIdempotencyOutcomes }));
 
 const { POST } = await import("@/app/api/platform/cleanup/route");
 
@@ -20,6 +21,7 @@ const previousToken = process.env.AGENT_API_TOKEN;
 
 beforeEach(() => {
   deleteExpiredWebhookDeliveries.mockResolvedValue({ deleted: 0, failed: 0 });
+  deleteExpiredIdempotencyOutcomes.mockResolvedValue({ deleted: 0, failed: 0 });
 });
 
 afterEach(() => {
@@ -43,6 +45,7 @@ describe("POST /api/platform/cleanup", () => {
     expect(response.status).toBe(401);
     expect(deleteAbandonedSandboxes).not.toHaveBeenCalled();
     expect(deleteExpiredWebhookDeliveries).not.toHaveBeenCalled();
+    expect(deleteExpiredIdempotencyOutcomes).not.toHaveBeenCalled();
   });
 
   it("returns 401 for the wrong bearer", async () => {
@@ -58,7 +61,7 @@ describe("POST /api/platform/cleanup", () => {
     const response = await post(`Bearer ${TOKEN}`);
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ deleted: 2, failed: 0, webhookDeliveriesDeleted: 0, hostedUsed: 3, hostedLimit: 100 });
+    expect(await response.json()).toEqual({ deleted: 2, failed: 0, webhookDeliveriesDeleted: 0, idempotencyOutcomesDeleted: 0, hostedUsed: 3, hostedLimit: 100 });
   });
 
   it("returns 500 with the counts when any deletion failed", async () => {
@@ -67,7 +70,7 @@ describe("POST /api/platform/cleanup", () => {
     const response = await post(`Bearer ${TOKEN}`);
 
     expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({ deleted: 0, failed: 1, webhookDeliveriesDeleted: 0, hostedUsed: null, hostedLimit: 100 });
+    expect(await response.json()).toEqual({ deleted: 0, failed: 1, webhookDeliveriesDeleted: 0, idempotencyOutcomesDeleted: 0, hostedUsed: null, hostedLimit: 100 });
   });
 
   it("also deletes expired webhook deliveries, and reports how many", async () => {
@@ -77,7 +80,7 @@ describe("POST /api/platform/cleanup", () => {
     const response = await post(`Bearer ${TOKEN}`);
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ deleted: 1, failed: 0, webhookDeliveriesDeleted: 12, hostedUsed: null, hostedLimit: 100 });
+    expect(await response.json()).toEqual({ deleted: 1, failed: 0, webhookDeliveriesDeleted: 12, idempotencyOutcomesDeleted: 0, hostedUsed: null, hostedLimit: 100 });
   });
 
   it("counts a failed webhook retention delete as a failure, and still deletes sandboxes", async () => {
@@ -87,7 +90,28 @@ describe("POST /api/platform/cleanup", () => {
     const response = await post(`Bearer ${TOKEN}`);
 
     expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({ deleted: 1, failed: 1, webhookDeliveriesDeleted: 0, hostedUsed: null, hostedLimit: 100 });
+    expect(await response.json()).toEqual({ deleted: 1, failed: 1, webhookDeliveriesDeleted: 0, idempotencyOutcomesDeleted: 0, hostedUsed: null, hostedLimit: 100 });
+    expect(deleteAbandonedSandboxes).toHaveBeenCalled();
+  });
+
+  it("also deletes idempotency outcomes past their 24 hours, and reports how many", async () => {
+    deleteAbandonedSandboxes.mockResolvedValueOnce({ deleted: 0, failed: 0, hostedUsed: null, hostedLimit: 100 });
+    deleteExpiredIdempotencyOutcomes.mockResolvedValueOnce({ deleted: 5, failed: 0 });
+
+    const response = await post(`Bearer ${TOKEN}`);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ deleted: 0, failed: 0, webhookDeliveriesDeleted: 0, idempotencyOutcomesDeleted: 5, hostedUsed: null, hostedLimit: 100 });
+  });
+
+  it("counts a failed idempotency delete as a failure, and still deletes sandboxes", async () => {
+    deleteAbandonedSandboxes.mockResolvedValueOnce({ deleted: 1, failed: 0, hostedUsed: null, hostedLimit: 100 });
+    deleteExpiredIdempotencyOutcomes.mockResolvedValueOnce({ deleted: 0, failed: 1 });
+
+    const response = await post(`Bearer ${TOKEN}`);
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ deleted: 1, failed: 1, webhookDeliveriesDeleted: 0, idempotencyOutcomesDeleted: 0, hostedUsed: null, hostedLimit: 100 });
     expect(deleteAbandonedSandboxes).toHaveBeenCalled();
   });
 
