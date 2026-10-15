@@ -12,6 +12,8 @@ const { deleteAbandonedSandboxes, deleteExpiredWebhookDeliveries } = vi.hoisted(
   deleteExpiredWebhookDeliveries: vi.fn(),
 }));
 vi.mock("@/lib/platform/cleanup", () => ({ deleteAbandonedSandboxes, deleteExpiredWebhookDeliveries }));
+const { sweepInvoiceCapture } = vi.hoisted(() => ({ sweepInvoiceCapture: vi.fn() }));
+vi.mock("@/lib/invoice-drafts/retention", () => ({ sweepInvoiceCapture }));
 
 const { POST } = await import("@/app/api/platform/cleanup/route");
 
@@ -20,6 +22,7 @@ const previousToken = process.env.AGENT_API_TOKEN;
 
 beforeEach(() => {
   deleteExpiredWebhookDeliveries.mockResolvedValue({ deleted: 0, failed: 0 });
+  sweepInvoiceCapture.mockResolvedValue({ swept: null, failed: 0 });
 });
 
 afterEach(() => {
@@ -58,7 +61,7 @@ describe("POST /api/platform/cleanup", () => {
     const response = await post(`Bearer ${TOKEN}`);
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ deleted: 2, failed: 0, webhookDeliveriesDeleted: 0, hostedUsed: 3, hostedLimit: 100 });
+    expect(await response.json()).toEqual({ deleted: 2, failed: 0, webhookDeliveriesDeleted: 0, hostedUsed: 3, hostedLimit: 100, invoiceCapture: null });
   });
 
   it("returns 500 with the counts when any deletion failed", async () => {
@@ -67,7 +70,7 @@ describe("POST /api/platform/cleanup", () => {
     const response = await post(`Bearer ${TOKEN}`);
 
     expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({ deleted: 0, failed: 1, webhookDeliveriesDeleted: 0, hostedUsed: null, hostedLimit: 100 });
+    expect(await response.json()).toEqual({ deleted: 0, failed: 1, webhookDeliveriesDeleted: 0, hostedUsed: null, hostedLimit: 100, invoiceCapture: null });
   });
 
   it("also deletes expired webhook deliveries, and reports how many", async () => {
@@ -77,7 +80,7 @@ describe("POST /api/platform/cleanup", () => {
     const response = await post(`Bearer ${TOKEN}`);
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ deleted: 1, failed: 0, webhookDeliveriesDeleted: 12, hostedUsed: null, hostedLimit: 100 });
+    expect(await response.json()).toEqual({ deleted: 1, failed: 0, webhookDeliveriesDeleted: 12, hostedUsed: null, hostedLimit: 100, invoiceCapture: null });
   });
 
   it("counts a failed webhook retention delete as a failure, and still deletes sandboxes", async () => {
@@ -87,8 +90,21 @@ describe("POST /api/platform/cleanup", () => {
     const response = await post(`Bearer ${TOKEN}`);
 
     expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({ deleted: 1, failed: 1, webhookDeliveriesDeleted: 0, hostedUsed: null, hostedLimit: 100 });
+    expect(await response.json()).toEqual({ deleted: 1, failed: 1, webhookDeliveriesDeleted: 0, hostedUsed: null, hostedLimit: 100, invoiceCapture: null });
     expect(deleteAbandonedSandboxes).toHaveBeenCalled();
+  });
+
+  it("sweeps invoice capture's retention, reports its counts, and counts its failure", async () => {
+    const swept = { textCleared: 2, draftsDeleted: 1, codesDeleted: 4, connectionsDeleted: 0 };
+    deleteAbandonedSandboxes.mockResolvedValueOnce({ deleted: 0, failed: 0, hostedUsed: null, hostedLimit: 100 });
+    sweepInvoiceCapture.mockResolvedValueOnce({ swept, failed: 0 });
+    const response = await post(`Bearer ${TOKEN}`);
+    expect(response.status).toBe(200);
+    expect((await response.json()).invoiceCapture).toEqual(swept);
+
+    deleteAbandonedSandboxes.mockResolvedValueOnce({ deleted: 0, failed: 0, hostedUsed: null, hostedLimit: 100 });
+    sweepInvoiceCapture.mockResolvedValueOnce({ swept: null, failed: 1 });
+    expect((await post(`Bearer ${TOKEN}`)).status).toBe(500);
   });
 
   it("logs and returns a JSON 500 when the listing itself fails", async () => {

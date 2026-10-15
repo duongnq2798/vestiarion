@@ -1,5 +1,16 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-15: Invoices captured with the Chrome extension
+
+- An owner or admin can capture invoices with the Chrome extension Vestiarion Invoice Capture, as drafts that an owner or admin then adds as bills in the console. Five new entries, each listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:
+  - **`extension_connected`**, actor `human`, domain `system`: `{ by, connectionId, client, scopes }`, when a member allowed the extension. `client` is the Chrome extension's id; `scopes` are `invoice_draft:create` and `invoice_draft:read` or one of them. No token is ever recorded.
+  - **`extension_disconnected`**, actor `human`, domain `system`: `{ by, connectionId, client, reason }`. `reason` is `extension` (its own Disconnect), `settings` (Disconnect in Settings, `by` naming who), `reused_code` (a one-time code was presented twice, so the connection it made was ended) or `reused_refresh` (a refresh token was presented again after it was replaced, so someone else held a copy). `by` is null for the last two.
+  - **`invoice_draft_captured`**, actor `human`, domain `ap`: `{ by, draftId, source, document, connectionId }`, when a draft was sent for review. `source` is `selection` or `file`; `document` is `{ kind, sha256 }`, `kind` being `pdf`, `email`, `text` or `image`, or null. The fields and the captured text are never in it.
+  - **`invoice_draft_confirmed`**, actor `human`, domain `ap`: `{ by, draftId, invoiceId }`, after the bill's own `create_invoice`.
+  - **`invoice_draft_discarded`**, actor `human`, domain `ap`: `{ by, draftId }`.
+- A `create_invoice` entry for a bill added from a captured draft names `via: "chrome"`, `invoiceDraftId` and, when one was read, `invoiceNumber`, with `document` as one added from a document carries it.
+- Nothing changes in `/api/v1`: a draft is not an invoice, and `GET /api/v1/invoices` lists a captured invoice only once a person added it. The extension's own endpoints, under `/api/extension/v1`, take only its tokens; they are not part of this API, and an extension token is refused by `/api/v1` and the MCP server.
+
 ## 2026-10-14: Status says unavailable while payments are switched off
 
 - `GET /api/v1/status` now answers `provenance.payments: "unavailable"`, and `provenance.yield: "unavailable"`, while payments are switched off for every workspace on the deployment, or while whether they are could not be read. Before, it answered the workspace's chain mode, `live` or `simulate`, although nothing was paid. The other reasons for `unavailable` are unchanged; see [Get status](/docs/api/get-status#provenance).

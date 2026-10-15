@@ -1,0 +1,79 @@
+Vestiarion Invoice Capture is a Chrome extension that brings an invoice from your browser into your workspace as a draft: the text you select on a supplier's portal, in a web mail or in a PDF, or a file you choose. You check the fields it read, send the draft, and it waits on **Bills & receivables** until an owner or admin adds it as a bill or discards it. The extension never adds a bill, approves or pays: once a person adds the draft, the agent decides the bill as any other, and pays on the workspace's network, Arc mainnet or Arc testnet, under every check it applies.
+
+<Callout kind="note" title="Installed by hand for now">
+Until it is in the Chrome Web Store, the extension is loaded unpacked from the repository's `extensions/chrome-invoice-capture/extension` folder, and its ID must be allowed by the deployment, as the last section says.
+</Callout>
+
+## 1. Install it
+
+1. Get the `extensions/chrome-invoice-capture/extension` folder from the Vestiarion repository.
+2. In Chrome, open `chrome://extensions`, turn on **Developer mode** and choose **Load unpacked**, then pick that folder.
+3. Pin Vestiarion Invoice Capture to the toolbar, so its icon is one click away.
+
+The extension asks for five permissions and one site, each for one reason: `activeTab` and `scripting` to read the text you selected when you press Capture, `storage` to keep its connection on this computer, `identity` to open Vestiarion's sign-in window, `contextMenus` for the menu on a selection, and `https://www.vestiarion.xyz/*`, the only server it talks to.
+
+## 2. Connect it to your workspace
+
+Sign in to Vestiarion in a tab first. Then click the extension's icon.
+
+1. The first time, **Before you start** says what is sent and when. Choose **Continue**.
+2. Choose **Connect Vestiarion**. Chrome opens Vestiarion's page **Connect Vestiarion Invoice Capture** in a small window.
+3. Pick the workspace drafts go to. Only workspaces where you are an owner or admin are offered, since adding a bill is theirs.
+4. Read what it can and cannot do, and choose **Allow**. The window closes, and the popup names the workspace.
+
+The page says what the extension can do: "Create drafts here, and read and change the drafts it created until you send them." And what it cannot: "Add a bill, approve or pay anything, or touch a wallet." It never sees your password or an API key: Vestiarion gives it a token that opens its own drafts and nothing else, for an hour at a time, renewed while it is in use.
+
+If the window says **Sign in to connect the extension**, sign in to Vestiarion in a tab, come back to the window and choose **Continue**. With Google, you can sign in in the window itself.
+
+## 3. Capture an invoice
+
+- **Capture selected text**: select the invoice's text on the page, click the icon and press it. Only the selected text is sent.
+- **Capture invoice with Vestiarion**: the same from the menu you get by right-clicking a selection, which works in Chrome's PDF viewer too.
+- **Choose a file**: a PDF with text, a `.txt` or an `.eml` file of at most 4 MB is read as **From a document** reads one. A picture is sent, not read: "A picture is not read. Type the invoice's fields from it, then send the draft."
+
+Vestiarion reads the supplier, the invoice number, the amount, the currency, the invoice date, the due date, the purchase order and a memo, checking each figure against the document. The popup shows them to edit, and says what is still missing, for instance "No due date was read. Add the day it is due." Notes about the document come with them, such as a date that can be read two ways.
+
+Choose **Send draft**. **Sent for review** says where it waits, and **Open in Vestiarion** opens it there. A draft not sent stays in the popup until you send it or start over.
+
+## 4. Add it as a bill in Vestiarion
+
+On **Bills & receivables**, **Waiting for review** names the drafts sent, such as "2 captured", which opens **Captured drafts** beside the page. Each shows what was read, who captured it and when, the counterparty it matched, what to check, and the text it was read from under **What was captured**.
+
+An owner or admin chooses:
+
+- **Review and add as bill**: the invoice form opens with what was read. Choose the counterparty, fix any field, tick **Goods or services received** if you have them, and choose **Add as bill**. It is added through the same command as every bill, so the counterparty's screening, the form's checks and the agent's decision apply exactly as to one typed in. A supplier not yet in Counterparties has a link to add it, with its name filled in.
+- **Discard**: the draft leaves the list.
+
+A draft that may repeat a bill already in the workspace, or another captured draft with the same invoice number, says **This may be a duplicate** and names it. Adding it then needs **This is not a duplicate** ticked, and the check runs again with the counterparty, amount and due date you chose.
+
+## What it can and cannot do
+
+| The extension can | It cannot |
+| --- | --- |
+| Send text you select, or a file you choose, to your workspace to be read | Read a page unless you press Capture in it |
+| Create drafts, and read and change its own until they are sent | Add a bill, approve, pay or touch a wallet |
+| Show you the fields read and what is missing | See bills, counterparties, members, wallets, API keys or anything else |
+
+A person's role is read again at every request: an owner or admin who becomes an approver can no longer send drafts, and leaving the workspace ends the connection.
+
+## What is kept, and for how long
+
+- The draft's fields, who captured it and when, and what became of it are kept with the workspace.
+- The text it was read from is kept for the reviewer until the draft is added or discarded, and at most 30 days.
+- A draft never sent is deleted after 7 days.
+- A file is never kept, only its SHA-256.
+- Nothing about an invoice goes anywhere but your workspace: the extension has no analytics.
+
+## Disconnect it
+
+**Disconnect** in the popup ends the connection at once. In Vestiarion, **Settings** lists each connected extension under **Chrome extension**: yours, or for an owner or admin everyone's in the workspace, each with **Disconnect**.
+
+## What the ledger records
+
+- `extension_connected` and `extension_disconnected`, with the connection's id, never a token.
+- `invoice_draft_captured` when a draft is sent for review: the draft, where it came from and the document's hash, never the text.
+- `invoice_draft_confirmed` and `invoice_draft_discarded` when a person decides it. The bill's own `create_invoice` entry names `via: "chrome"`, the draft and the invoice number, and the fields changed from what was read.
+
+## For the person who runs the deployment
+
+Set `CHROME_EXTENSION_IDS` to the extension IDs allowed to connect, separated by commas: the ID `chrome://extensions` shows for an unpacked copy, and the Chrome Web Store's once it is published. Migration `0121_invoice_capture.sql` adds the drafts and the connections. Without either, the extension's endpoints answer 503, the consent page says invoice capture is not set up, and nothing else changes.

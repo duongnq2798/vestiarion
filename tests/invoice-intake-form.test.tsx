@@ -131,7 +131,10 @@ describe("InvoiceIntake with no counterparty yet", () => {
   it("is where the Counterparties page opens Add counterparty", async () => {
     const { readFileSync } = await import("node:fs");
     const page = readFileSync("src/app/o/[slug]/counterparties/page.tsx", "utf8");
-    expect(page).toContain("const adding = (await searchParams).add !== undefined;");
+    expect(page).toContain("const { add, name } = await searchParams;");
+    expect(page).toContain("const adding = add !== undefined;");
+    // A captured draft's supplier comes with its name filled in (invoice capture C5).
+    expect(page).toContain('const initialName = typeof name === "string" ? name.trim().slice(0, 160) : undefined;');
     expect(page).toContain("defaultOpen={counterparties.length === 0 || adding}");
   });
 });
@@ -150,7 +153,7 @@ describe("the counterparty form's chain (CCTP payouts X1)", () => {
     const source = readFileSync("src/components/intake/CounterpartyIntake.tsx", "utf8");
     expect(source).toContain('<Select name="chain" defaultValue={homeChain(network).id}>');
     expect(source).toContain("chainsOn(network).map");
-    expect(readFileSync("src/app/o/[slug]/counterparties/page.tsx", "utf8")).toContain("<CounterpartyIntake orgSlug={slug} framed={false} network={network} askPurchaseOrders={shadow !== null} />");
+    expect(readFileSync("src/app/o/[slug]/counterparties/page.tsx", "utf8")).toContain("<CounterpartyIntake orgSlug={slug} framed={false} network={network} askPurchaseOrders={shadow !== null} initialName={initialName} />");
   });
 });
 

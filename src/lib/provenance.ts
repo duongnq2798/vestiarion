@@ -7,4 +7,6 @@ export type Provenance =
   | { via: "telegram" | "slack"; linkId: string }
   | { via: "api"; apiKeyId: string }
   /** A pull request comment: the installation it came through, and the GitHub user who wrote it (bounties B5). */
-  | { via: "github"; installationId: number; login: string };
+  | { via: "github"; installationId: number; login: string }
+  /** The Chrome extension, through one person's connection (invoice capture design C16). */
+  | { via: "chrome"; connectionId: string };

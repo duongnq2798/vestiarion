@@ -36,6 +36,16 @@ const nextConfig: NextConfig = {
     return [
       { source: "/docs-md/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex" }] },
       {
+        // The Chrome extension's consent page (invoice capture design C13): never inside another site's frame, where a
+        // click on Allow could be borrowed, and its address, which carries the request, never sent on as a referrer.
+        source: "/extension/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+          { key: "Referrer-Policy", value: "same-origin" },
+        ],
+      },
+      {
         source: "/tools/:path*",
         headers: [
           { key: "Content-Disposition", value: "attachment" },

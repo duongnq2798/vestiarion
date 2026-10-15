@@ -28,6 +28,10 @@ afterAll(async () => {
 const CROSS: Array<[string, (b: SeededRows) => [string, unknown[]]]> = [
   ["inbox_emails → another organization's invoice", (b) => [
     "insert into inbox_emails (org_id, resend_email_id, invoice_id) values ($1, 're-cross', $2)", [A, b.invoiceId]]],
+  ["invoice_drafts → another organization's invoice", (b) => [
+    "insert into invoice_drafts (org_id, source, connection_id, idempotency_key, request_sha256, invoice_id) values ($1, 'selection', gen_random_uuid(), 'cross-invoice', repeat('a', 64), $2)", [A, b.invoiceId]]],
+  ["invoice_drafts → another organization's counterparty", (b) => [
+    "insert into invoice_drafts (org_id, source, connection_id, idempotency_key, request_sha256, counterparty_id) values ($1, 'selection', gen_random_uuid(), 'cross-counterparty', repeat('a', 64), $2)", [A, b.counterpartyId]]],
   ["invoices → another organization's counterparty", (b) => [
     "insert into invoices (org_id, direction, counterparty_id, amount, due_date) values ($1, 'payable', $2, 1, now())", [A, b.counterpartyId]]],
   ["milestones → another organization's contractor", (b) => [

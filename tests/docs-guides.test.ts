@@ -35,6 +35,7 @@ type GuideSlug =
   | "guides/telegram"
   | "guides/slack"
   | "guides/email-invoices"
+  | "guides/invoice-capture"
   | "guides/api-invoices"
   | "guides/api-milestones"
   | "guides/github"
@@ -308,6 +309,20 @@ const TRIAGE = "src/lib/accountant/triage.ts";
 const USAGE_MODEL = "src/lib/usage/model.ts";
 const USAGE_PANEL = "src/components/UsagePanel.tsx";
 const ROLES = "src/lib/auth/roles.ts";
+
+/** Invoice capture for Chrome (docs/superpowers/specs/2026-10-15-invoice-capture-design.md): the extension, the consent, the review. */
+const CAPTURE_POPUP = "extensions/chrome-invoice-capture/extension/popup.html";
+const CAPTURE_BACKGROUND = "extensions/chrome-invoice-capture/extension/background.js";
+const CAPTURE_AUTHORIZE = "src/app/extension/authorize/page.tsx";
+const CAPTURE_CONSENT = "src/components/extension/ExtensionConsentForm.tsx";
+const CAPTURE_MODEL = "src/lib/invoice-drafts/model.ts";
+const CAPTURE_REVIEW = "src/components/CapturedDrafts.tsx";
+const CAPTURE_SETTINGS = "src/app/o/[slug]/settings/page.tsx";
+const CAPTURE_PANEL = "src/components/ChromeExtensionPanel.tsx";
+const CAPTURE_COMMANDS = "src/lib/commands/invoice-drafts.ts";
+const CAPTURE_TOKENS = "src/lib/extension/tokens.ts";
+const CAPTURE_ENV = "src/lib/extension/settings.ts";
+const CAPTURE_MANIFEST = "extensions/chrome-invoice-capture/extension/manifest.json";
 
 const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   "guides/collections": [
@@ -1697,6 +1712,49 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["RESEND_INBOUND_WEBHOOK_SECRET", INBOX_SETTINGS],
     ["RESEND_RECEIVING_API_KEY", INBOX_SETTINGS],
   ],
+  "guides/invoice-capture": [
+    ["Bills & receivables", APP_NAV],
+    ["Settings", APP_NAV],
+    ["From a document", NEW_MENU],
+    ["Waiting for review", BILLS_SUMMARY],
+    ["Before you start", CAPTURE_POPUP],
+    ["Continue", CAPTURE_POPUP],
+    ["Connect Vestiarion", CAPTURE_POPUP],
+    ["Connect Vestiarion Invoice Capture", CAPTURE_AUTHORIZE],
+    ["Allow", CAPTURE_CONSENT],
+    ["Create drafts here, and read and change the drafts it created until you send them.", CAPTURE_CONSENT],
+    ["Add a bill, approve or pay anything, or touch a wallet.", CAPTURE_CONSENT],
+    ["Sign in to connect the extension", CAPTURE_AUTHORIZE],
+    ["Capture selected text", CAPTURE_POPUP],
+    ["Capture invoice with Vestiarion", CAPTURE_BACKGROUND],
+    ["Choose a file", CAPTURE_POPUP],
+    ["A picture is not read. Type the invoice's fields from it, then send the draft.", CAPTURE_MODEL],
+    ["No due date was read. Add the day it is due.", CAPTURE_MODEL],
+    ["Send draft", CAPTURE_POPUP],
+    ["Sent for review", CAPTURE_POPUP],
+    ["Open in Vestiarion", CAPTURE_POPUP],
+    ["Captured drafts", CAPTURE_REVIEW],
+    ["What was captured", CAPTURE_REVIEW],
+    ["Review and add as bill", CAPTURE_REVIEW],
+    ["Goods or services received", INVOICE_FORM],
+    ["Add as bill", CAPTURE_REVIEW],
+    ["Discard", CAPTURE_REVIEW],
+    ["This may be a duplicate", CAPTURE_REVIEW],
+    ["This is not a duplicate", INVOICE_FORM],
+    ["Disconnect", CAPTURE_POPUP],
+    ["Disconnect", CAPTURE_PANEL],
+    ["Chrome extension", CAPTURE_SETTINGS],
+    ["`activeTab`", CAPTURE_MANIFEST, '"activeTab"'],
+    ["`contextMenus`", CAPTURE_MANIFEST, '"contextMenus"'],
+    ["`https://www.vestiarion.xyz/*`", CAPTURE_MANIFEST, '"https://www.vestiarion.xyz/*"'],
+    ["extension_connected", CAPTURE_TOKENS],
+    ["extension_disconnected", CAPTURE_TOKENS],
+    ["invoice_draft_captured", CAPTURE_COMMANDS],
+    ["invoice_draft_confirmed", CAPTURE_COMMANDS],
+    ["invoice_draft_discarded", CAPTURE_COMMANDS],
+    ['via: "chrome"', "src/lib/commands/invoices.ts"],
+    ["CHROME_EXTENSION_IDS", CAPTURE_ENV],
+  ],
   "guides/slack": [
     ["One more approval, by another person, pays it.", "src/lib/slack/blocks.ts"],
     ["Give your verdict", "src/lib/agent-activity.ts"],
@@ -2696,6 +2754,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/telegram": 20,
   "guides/slack": 20,
   "guides/email-invoices": 20,
+  "guides/invoice-capture": 20,
   "guides/api-invoices": 10,
   "guides/api-milestones": 10,
   "guides/github": 10,

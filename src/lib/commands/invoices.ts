@@ -1,6 +1,6 @@
 import { runCycleSoon } from "../agent/cycle-soon";
 import type { DocumentProvenance } from "../invoice-document/provenance";
-import { createInvoice, type ExternalSource, type ImportedRow, type InvoiceInput } from "../invoices/create";
+import { createInvoice, type CapturedDraft, type ExternalSource, type ImportedRow, type InvoiceInput } from "../invoices/create";
 import type { OriginalBill } from "../shadow-bills";
 import { cycleEventOf, type Actor } from "./actor";
 import { done, refused, type CommandOutcome } from "./outcome";
@@ -25,6 +25,8 @@ export async function addInvoice(
     imported?: ImportedRow;
     /** The accounting tool's bill it was brought in from (Xero connector X11). */
     external?: ExternalSource;
+    /** The draft the Chrome extension captured, added from the console (invoice capture design C6). */
+    captured?: CapturedDraft;
   }
 ): Promise<CommandOutcome<{ invoiceId: string; counterpartyName: string }>> {
   const refusal = gate(actor, "invoice.add");
@@ -45,6 +47,8 @@ export async function addInvoice(
       ...(input.imported ? { via: "import" as const, imported: input.imported } : {}),
       // A bill brought in from an accounting tool, named by the tool's own ids (Xero connector X11).
       ...(input.external ? { external: input.external } : {}),
+      // A draft the Chrome extension captured, named by its id and its invoice number (invoice capture design C6).
+      ...(input.captured ? { via: "chrome" as const, captured: input.captured } : {}),
     });
   } catch (error) {
     console.error("adding an invoice failed", actor.orgId, error instanceof Error ? error.message : "unknown error");

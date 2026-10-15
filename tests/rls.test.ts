@@ -78,6 +78,8 @@ const KEEP_UPDATE: Record<string, { column: string; expr: string }> = {
   customer_requests: { column: "outcome", expr: "'resolved'" },
   // A collection task is resolved, never deleted (0110).
   collection_tasks: { column: "notified_at", expr: "now()" },
+  // A captured draft is confirmed or discarded, never deleted by a tenant (0121).
+  invoice_drafts: { column: "memo", expr: "'changed'" },
   // Projects are changed and archived, never deleted; a reservation is only released (0111).
   projects: { column: "name", expr: "name || '-changed'" },
   project_reservations: { column: "release_reason", expr: "'changed'" },

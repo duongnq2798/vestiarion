@@ -18,6 +18,10 @@ import { UsycReservePanel } from "@/components/UsycReservePanel";
 import UsagePanel from "@/components/UsagePanel";
 import WebhooksPanel from "@/components/WebhooksPanel";
 import AccountingPanel from "@/components/AccountingPanel";
+import ChromeExtensionPanel, { type ConnectionView } from "@/components/ChromeExtensionPanel";
+import { extensionSettingsFromEnv } from "@/lib/extension/settings";
+import { listConnections } from "@/lib/extension/tokens";
+import { listMembers } from "@/lib/platform/members";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import { twoApprovalsStatus } from "@/lib/approval-policy";
@@ -218,6 +222,34 @@ export default async function SettingsPage({
       return null;
     });
     const asanaOutcome = ((await searchParams) as { asana?: string | string[] }).asana;
+    // The Chrome extensions connected to this workspace (invoice capture C17), on a deployment that allows one: a
+    // person's own, or everyone's for an owner or admin. Best effort; before migration 0121 the section says it is not
+    // set up yet.
+    const seesEveryoneExtension = can(membership.role, "integrations.manage");
+    const extensions: { available: boolean; connections: ConnectionView[] } | null = extensionSettingsFromEnv()
+      ? await listConnections(membership.orgId, seesEveryoneExtension ? {} : { userId: access.user.id })
+          .then(async (listed) => {
+            if (!listed.available) return { available: false, connections: [] };
+            const emails = seesEveryoneExtension && listed.connections.some((connection) => connection.userId !== access.user.id)
+              ? new Map((await listMembers(membership.orgId)).map((member) => [member.userId, member.email]))
+              : new Map<string, string>();
+            return {
+              available: true,
+              connections: listed.connections.map((connection) => ({
+                id: connection.id,
+                member: emails.get(connection.userId) ?? null,
+                mine: connection.userId === access.user.id,
+                client: connection.clientId,
+                connectedAt: connection.connectedAt,
+                lastUsedAt: connection.lastUsedAt,
+              })),
+            };
+          })
+          .catch((error: unknown) => {
+            console.error("settings: Chrome extensions not loaded", error instanceof Error ? error.message : error);
+            return null;
+          })
+      : null;
     const notifyEmail = notifySwitch ? (unwrap(notifySwitch) as { notify_email: boolean }).notify_email : false;
 
     const canManageIntegrations = can(membership.role, "integrations.manage");
@@ -373,6 +405,13 @@ export default async function SettingsPage({
             title: "Asana",
             content: asana ? (
               <AsanaPanel orgSlug={slug} view={asana} canManage={canManageIntegrations} notice={typeof asanaOutcome === "string" ? asanaOutcome : null} />
+            ) : null,
+          },
+          {
+            id: "chrome-extension-title",
+            title: "Chrome extension",
+            content: extensions ? (
+              <ChromeExtensionPanel orgSlug={slug} available={extensions.available} connections={extensions.connections} seesEveryone={seesEveryoneExtension} />
             ) : null,
           },
           {

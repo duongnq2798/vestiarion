@@ -18,7 +18,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy"
-      updated="2026-10-14"
+      updated="2026-10-15"
       intro="Vestiarion is an autonomous treasury agent on Arc mainnet and Arc testnet. This page describes what the service stores and sends, as its code does it today. The code is public, so every statement here can be checked against it."
     >
       <LegalSection id="signing-in" title="Signing in">
@@ -455,6 +455,43 @@ export default function PrivacyPage() {
         </ul>
       </LegalSection>
 
+      <LegalSection id="chrome-extension" title="The Chrome extension">
+        <p>
+          Vestiarion Invoice Capture is a Chrome extension that sends an invoice from your browser to a workspace as a draft, for a person to add as a
+          bill. You connect it by signing in and allowing it on Vestiarion&apos;s own page; it never holds your password or an API key.
+        </p>
+        <ul>
+          <li>
+            It reads a page only when you press <strong>Capture selected text</strong>, or choose <strong>Capture invoice with Vestiarion</strong> on a
+            selection, and then only the text you selected, at most 20,000 characters. A file is sent only when you choose it in the extension: a PDF, a
+            text or email file, or a picture, of at most 4 MB. It never reads your browsing history or any other page.
+          </li>
+          <li>
+            What you capture goes only to Vestiarion, at www.vestiarion.xyz. It is read the way an invoice uploaded to the invoice form is read, so a
+            model provider, when this deployment has one, receives its text as described above; a picture is not read.
+          </li>
+          <li>
+            Vestiarion keeps the draft in the workspace&apos;s records: the fields read and as you edited them (supplier, invoice number, amount,
+            currency, invoice date, due date, purchase order and memo), who captured it and when, and the file&apos;s kind and SHA-256. A file itself is
+            never kept. The text it was read from is kept for the person who reviews the draft, and removed when the draft is added as a bill or
+            discarded, and 30 days after capture at the latest. A draft never sent for review is deleted after 7 days.
+          </li>
+          <li>
+            The workspace&apos;s members see a draft once it is sent for review, with the text it was read from. The extension sees only the drafts it
+            created, and never the workspace&apos;s bills, counterparties, members, wallets or keys.
+          </li>
+          <li>
+            The extension keeps its access token (an hour) and refresh token (30 days) in Chrome&apos;s storage for extensions on your computer.
+            Vestiarion keeps only their SHA-256, with the workspace, your account&apos;s id and the extension&apos;s id. <strong>Disconnect</strong>, in
+            the extension or in Settings, ends them at once; leaving the workspace deletes them.
+          </li>
+          <li>
+            The extension has no analytics. Nothing about an invoice you capture is sent to an analytics service, by the extension or by Vestiarion.
+          </li>
+          <li>Deleting the workspace deletes its drafts with it.</li>
+        </ul>
+      </LegalSection>
+
       <LegalSection id="retention" title="How long data is kept">
         <ul>
           <li>
@@ -462,6 +499,10 @@ export default function PrivacyPage() {
             it holds a hosted wallet, or if its owner&apos;s own wallet deployed its contract.
           </li>
           <li>A webhook delivery is deleted 30 days after it is delivered; one that failed, 30 days after it was created.</li>
+          <li>
+            Text captured with the Chrome extension is removed when its draft is added or discarded, and 30 days after capture at the latest; a
+            draft never sent for review is deleted after 7 days.
+          </li>
           <li>Everything else in a workspace is kept until the workspace is deleted.</li>
         </ul>
       </LegalSection>

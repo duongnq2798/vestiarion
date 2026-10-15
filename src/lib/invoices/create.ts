@@ -38,6 +38,12 @@ export interface ExternalSource {
   ids: { tenantId: string; billId: string; contactId: string | null; invoiceNumber: string | null };
 }
 
+/** The draft the Chrome extension captured that a person added as this bill (invoice capture design C6). */
+export interface CapturedDraft {
+  invoiceDraftId: string;
+  invoiceNumber: string | null;
+}
+
 /**
  * Adds one invoice: the row, and the `create_invoice` entry that says who added it, and where it came from when it
  * was read from a document (invoice from a document D8), added from the Telegram bot (Telegram bot design R10) or from
@@ -53,7 +59,7 @@ export async function createInvoice(input: {
   actorId: string | null;
   invoice: InvoiceInput;
   document: DocumentProvenance | null;
-  via?: "telegram" | "slack" | "email" | "api" | "import";
+  via?: "telegram" | "slack" | "email" | "api" | "import" | "chrome";
   /** The key that sent it, when it came through the API. */
   apiKeyId?: string;
   /** The member's Slack link, when it was added from Slack (Slack design S15). */
@@ -68,8 +74,10 @@ export async function createInvoice(input: {
   deal?: DealRelease;
   /** The accounting tool's bill it was brought in from (Xero connector X11): `via` is the provider's name. */
   external?: ExternalSource;
+  /** The draft the Chrome extension captured, which a person added from the console (invoice capture design C6). */
+  captured?: CapturedDraft;
 }): Promise<{ id: string; counterpartyName: string } | null> {
-  const { actorId, invoice, document, via, apiKeyId, linkId, inboxEmailId, original, imported, deal, external } = input;
+  const { actorId, invoice, document, via, apiKeyId, linkId, inboxEmailId, original, imported, deal, external, captured } = input;
   const lookup = await db()
     .from("counterparties")
     .select("id, name")
@@ -130,6 +138,7 @@ export async function createInvoice(input: {
       ...(imported ? { importFile: imported.file, importRow: imported.row, ...(imported.invoiceNumber ? { invoiceNumber: imported.invoiceNumber } : {}) } : {}),
       ...(deal ? { via: "deal", deal } : {}),
       ...(external ? { via: external.provider, [external.provider]: external.ids } : {}),
+      ...(captured ? { invoiceDraftId: captured.invoiceDraftId, ...(captured.invoiceNumber ? { invoiceNumber: captured.invoiceNumber } : {}) } : {}),
     },
   });
   return { id: row.id, counterpartyName: counterparty.name };

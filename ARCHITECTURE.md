@@ -1600,7 +1600,8 @@ workspace's mode for that action, never from a link, a key or a button. A
 `addProject`, `changeProjectCommand`, `assignToProjectCommand`,
 `shareCustomerStatement`, `stopCustomerStatement`, `replyToCustomerRequest`, `closeCustomerRequestCommand`,
 `setCollectionPolicy`, `resolveCollectionTaskCommand`, `setCommissionPlan`, `endCommissionPlan`,
-`createCommissionPayable` — whose
+`createCommissionPayable`, `captureInvoiceDraft`, `editInvoiceDraft`, `sendInvoiceDraft`, `confirmInvoiceDraft`,
+`discardInvoiceDraft` — whose
 first statement is
 `gate(actor, "<command>")`:
 
@@ -1611,7 +1612,8 @@ first statement is
   the permission map);
 - the surface must be one that may run it (`SURFACE_COMMANDS`): the console runs
   everything; Telegram adds invoices and decides nothing; Slack approves, rejects
-  or returns a payable, pauses the agent and adds invoices; the API adds records;
+  or returns a payable, pauses the agent and adds invoices; the API adds records; the Chrome extension captures, edits
+  and sends a draft for review, and nothing else;
 - a chat's decisions are off until an owner sets that chat's limit
   (`decisions_off`).
 
@@ -1666,7 +1668,8 @@ and `importRow`; the invoice number starts the memo. The list itself is not kept
 `/o/[slug]/invoices` (docs/superpowers/specs/2026-10-12-bills-tabs-design.md) keeps four figures above three tabs:
 Needs you, Due in 7 days, Overdue and Receivables (what customers still owe, never called cash), each a link to the tab
 and filter behind it; **Waiting for review** only when something does (bills from Xero or QuickBooks, payments to book,
-invoices by email, HubSpot or Pipedrive won deals); then **Bills**, **Payment plan** and **Receivables**.
+invoices by email, invoices captured with the Chrome extension, HubSpot or Pipedrive won deals); then **Bills**,
+**Payment plan** and **Receivables**.
 
 - **The address holds the view** (`src/lib/bills-view.ts`). `tab`, `filter`, `q`, `sort`, `page`, `open` (a bill's
   detail), `review` (a review list over the page) and `new` are read by `readBillsQuery` and resolved against the
@@ -2556,7 +2559,9 @@ it (migration `0069`). A missing, malformed, unknown, or
 revoked key answers `401 unauthorized`; a key without the route's scope
 answers `403 forbidden`. `AGENT_API_TOKEN` does not authenticate this surface
 — it remains only the cron secret for `/api/agent/tick`,
-`/api/platform/cleanup`, and `/api/agent/reset`. Resource-specific pure
+`/api/platform/cleanup`, and `/api/agent/reset` — and neither does the Chrome
+extension's token, whose own endpoints are under `/api/extension/v1` (see
+"Invoice capture for Chrome"). Resource-specific pure
 mapping and validation live in `src/lib/api/counterparties.ts`,
 `src/lib/api/invoices.ts`, `src/lib/api/milestones.ts`, and
 `src/lib/api/treasury.ts` so null preservation and chain-hash rules can be
@@ -2616,6 +2621,60 @@ is pinned to the addresses checked, which closes the DNS-rebinding gap a
 separate check would leave. Full detail — the payload, retries, the endpoint
 limit, and how to verify both the delivery's signature and the ledger entry's
 own — is in the [webhooks docs](https://www.vestiarion.xyz/docs/webhooks).
+
+## Invoice capture for Chrome
+
+The Chrome extension Vestiarion Invoice Capture (`extensions/chrome-invoice-capture/`;
+docs/superpowers/specs/2026-10-15-invoice-capture-design.md) sends an invoice a person selects in a page, or a file
+they choose, to their workspace as a draft. Its single purpose ends there: a draft becomes a bill only in the console.
+
+**Drafts.** Migration `0121` adds `invoice_drafts`, a tenant table under the usual isolation and guard, which the
+tenant role reads, adds and changes and never deletes. A draft holds the fields read (supplier, invoice number, amount,
+currency, invoice date, due date, purchase order, memo), its source (`selection` or `file`) and the document's kind and
+SHA-256, what the reader made of it (`read`: every warning for the console, the document's own notes for the extension,
+the counterparty matched, the fields as read), who captured it through which connection, and its state: `draft`,
+`sent`, `confirmed` with the invoice it became, or `discarded`. Reading reuses `readInvoiceDocument`
+(`src/lib/invoice-document/draft.ts`), the reader of From a document, the chats and email, which now also returns the
+text read, the invoice date and the document's own warnings; `readInvoiceDraft` is its draft alone, as before. A
+picture is captured blank, not read. The commands are in `src/lib/commands/invoice-drafts.ts`:
+`invoice_draft.capture`, `.edit` and `.send` run on the new `chrome` surface, and `invoice_draft.confirm` and
+`.discard` in the console. Confirm claims a `sent` draft in one guarded update and calls `addInvoice`, so every check of
+a bill applies; the `create_invoice` entry names `via: "chrome"`, the draft and its invoice number; a draft that may
+repeat a bill or another draft (`src/lib/invoice-drafts/duplicates.ts`, the agent's `findDuplicates` and the invoice
+number) needs the person's **This is not a duplicate**. Bills & receivables lists the sent drafts as the review panel
+`captured`. The captured text (`raw_text`) goes when the draft is decided; `invoice_capture_sweep()`, run by the daily
+cleanup (`src/lib/invoice-drafts/retention.ts`), clears it 30 days after capture and deletes drafts never sent after 7.
+
+**Authorization without an API key.** `/extension/authorize` is an OAuth authorization endpoint with PKCE (S256 only)
+for the extension ids in `CHROME_EXTENSION_IDS` (`src/lib/extension/settings.ts`), whose one redirect address is
+`https://<id>.chromiumapp.org/`; any other client or address is refused on the page, never redirected to. The signed-in
+person picks a workspace where they hold `records.write` and allows it; `allowExtensionAction` issues a one-time code
+(`extension_auth_codes`, SHA-256, five minutes). `POST /api/extension/v1/token` uses the code up in one guarded update,
+then compares the client, the redirect address and the verifier and reads the role again; the connection is inserted
+with the code's hash, so a code presented twice always finds and revokes it. It answers an access token (`vxa_…`, an
+hour) and a refresh token (`vxr_…`, thirty days, replaced on every refresh, the one replaced kept as
+`retired_refresh_hash`: presented again, it revokes the connection) for the audience `vestiarion-chrome` and the scopes
+`invoice_draft:create` and `invoice_draft:read` only, kept as SHA-256 on the connection (`extension_grants`). The
+extension refreshes from its service worker, one refresh at a time. Both tables are platform tables,
+like API keys, read only by `src/lib/extension/tokens.ts`; a connection cascades with its membership.
+`POST /api/extension/v1/revoke` (RFC 7009) and Settings' **Chrome extension** section end one.
+
+**The extension's endpoints are under `/api/extension/v1`, not `/api/v1`.** They are not in the OpenAPI document, the
+SDK, the CLI or the MCP server, and they take no API key, as `/api/v1` takes no extension token (an extension token is
+not `vxk_…`, so `authenticateApiKey` refuses it before any lookup). `guardExtensionRequest`
+(`src/lib/extension/http.ts`) checks the origin (CORS answers only `chrome-extension://<id>` of the allowed ids), the
+token, its audience and scope, sixty requests a minute per connection, and the member's role read now through
+`memberActor` on the `chrome` surface. `POST invoice-drafts` takes `{ source: "selection", text }` (at most 20,000
+characters in 100 KB) or a file of at most 4 MB, with a required `Idempotency-Key` kept on the draft (unique per
+connection); `GET`, `PATCH` and `POST …/send` reach only the connection's own drafts. Before migration `0121`, or without
+`CHROME_EXTENSION_IDS`, they answer 503 and the console shows nothing new.
+
+**The extension** is plain JavaScript modules shipped as they are (`extension/`): Manifest V3 with exactly `activeTab`,
+`scripting`, `storage`, `identity` and `contextMenus` and the one host `https://www.vestiarion.xyz/*`, no content
+scripts, no remote code. It reads a selection only when a person presses Capture or uses the context menu, connects
+through `chrome.identity.launchWebAuthFlow` from its service worker, and keeps its tokens in `chrome.storage.local`.
+`tests/chrome-extension-manifest.test.ts` holds the manifest and the code to that; `tests/invoice-capture-flow.test.ts`
+runs every call it makes against the routes in-process, over an in-memory PostgREST (`tests/support/memory-postgrest.ts`).
 
 ## Developer docs
 

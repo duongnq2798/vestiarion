@@ -44,6 +44,8 @@ export interface IntakeActionResult {
   verdict?: string;
   /** The invoice form's refused fields, each with its first error, shown under the field. */
   fieldErrors?: Partial<Record<InvoiceField, string>>;
+  /** Refused as a possible duplicate of a bill already in the workspace: the form then asks the person to say it is not one. */
+  duplicate?: true;
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

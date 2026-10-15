@@ -45,12 +45,15 @@ export default async function CounterpartiesPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ add?: string | string[] }>;
+  searchParams: Promise<{ add?: string | string[]; name?: string | string[] }>;
 }) {
   const { slug } = await params;
   const access = await requireMembership(slug);
-  // `?add`, from an invoice with no counterparty to choose (Bills & receivables, From a document), opens Add counterparty.
-  const adding = (await searchParams).add !== undefined;
+  // `?add`, from an invoice with no counterparty to choose (Bills & receivables, From a document), opens Add counterparty;
+  // `&name=`, from a captured draft's supplier (invoice capture C5), fills its name in.
+  const { add, name } = await searchParams;
+  const adding = add !== undefined;
+  const initialName = typeof name === "string" ? name.trim().slice(0, 160) : undefined;
   return inOrg(access, async () => {
     const network = workspaceNetwork().id;
     // A live match names the entity it matched, which Not this person dismisses (dismiss screening match R6).
@@ -91,7 +94,7 @@ export default async function CounterpartiesPage({
           // Folded until it is needed; open on a workspace with no counterparty yet, where adding one is the next step,
           // or when a link asks for it.
           <IntakeFold label="Add counterparty" meta="human-entered · screened on submission" defaultOpen={counterparties.length === 0 || adding}>
-            <CounterpartyIntake orgSlug={slug} framed={false} network={network} askPurchaseOrders={shadow !== null} />
+            <CounterpartyIntake orgSlug={slug} framed={false} network={network} askPurchaseOrders={shadow !== null} initialName={initialName} />
           </IntakeFold>
         ) : (
           <Callout className="mb-8">Only an owner or admin of this workspace can add counterparties.</Callout>

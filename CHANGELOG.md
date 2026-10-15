@@ -12,6 +12,17 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+### Added
+
+- **Capture invoices from Chrome.** Vestiarion Invoice Capture, a Chrome extension, sends an invoice you select on a
+  page, or a file you choose, to your workspace as a draft: you check the fields it read, with what is missing named,
+  and send it. It waits under **Captured drafts** on Bills & receivables until an owner or admin adds it as a bill,
+  through the same add-invoice step as any bill, or discards it; a possible duplicate is said first. The extension
+  connects by signing in and allowing it, never with an API key, and can only create and read its own drafts: it never
+  adds a bill, approves or pays. Settings lists connected extensions under **Chrome extension**, with Disconnect. The
+  captured text is kept until the draft is decided, 30 days at most. Loaded unpacked for now; it needs migration
+  `0121` and `CHROME_EXTENSION_IDS`. [Guide](https://www.vestiarion.xyz/docs/guides/invoice-capture).
+
 ## [0.1.0-beta.5] - 2026-10-15
 
 ### Added
