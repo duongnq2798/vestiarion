@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { agentOutflowUsdc, budgetGate, budgetRoom, budgetWindows, parseBudgetForm } from "@/lib/agent/outflow-budget";
+import { agentOutflowUsdc, budgetGate, budgetRoom, budgetWindows, parseBudgetForm, readOutflowBudget } from "@/lib/agent/outflow-budget";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
+import { MAINNET_STARTING_BUDGET } from "@/lib/mainnet";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
 /** The agent's spending limit (docs/superpowers/specs/2026-10-02-outflow-budget-design.md R1–R5). */
@@ -125,6 +126,45 @@ describe("budgetGate (R5, R8)", () => {
     fake = fakeSupabase(workspace([], [], true));
     await run(async () => {
       await expect(budgetGate(db(), () => NOW).room()).rejects.toThrow(/connection reset/);
+    });
+  });
+
+  describe("on Arc mainnet, where a figure always stands (mainnet limits L1, L2)", () => {
+    const onMainnet = <T,>(fn: () => Promise<T>) =>
+      runWith(orgTestContext({ config: { ...config, network: "arc-mainnet" }, client: fake.client, orgId: ORG }), fn);
+    const starting = { dailyUsdc: MAINNET_STARTING_BUDGET.dailyUsdc, weeklyUsdc: MAINNET_STARTING_BUDGET.weeklyUsdc };
+
+    it("reads the starting figures when the workspace's row is missing, never no limit", async () => {
+      fake = fakeSupabase(workspace([], [{ ts: "2026-10-02T01:00:00Z", ...pay({ amountPaid: 30 }) }]));
+      await onMainnet(async () => {
+        expect(await readOutflowBudget(db())).toEqual(starting);
+        expect(await budgetGate(db(), () => NOW).room()).toMatchObject({
+          ...starting,
+          spentToday: 30,
+          remaining: MAINNET_STARTING_BUDGET.dailyUsdc - 30,
+        });
+      });
+    });
+
+    it("reads the starting figures when the row holds neither figure", async () => {
+      fake = fakeSupabase(workspace([{ daily_usdc: null, weekly_usdc: null }], []));
+      await onMainnet(async () => {
+        expect(await readOutflowBudget(db())).toEqual(starting);
+      });
+    });
+
+    it("keeps the workspace's own figures when it has them", async () => {
+      fake = fakeSupabase(workspace([{ daily_usdc: "20.000000", weekly_usdc: null }], []));
+      await onMainnet(async () => {
+        expect(await readOutflowBudget(db())).toEqual({ dailyUsdc: 20, weeklyUsdc: null });
+      });
+    });
+
+    it("leaves Arc testnet with no limit when none is set", async () => {
+      fake = fakeSupabase(workspace([], []));
+      await run(async () => {
+        expect(await readOutflowBudget(db())).toBeNull();
+      });
     });
   });
 });

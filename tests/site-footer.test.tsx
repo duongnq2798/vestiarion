@@ -70,10 +70,11 @@ describe("the full footer's columns", () => {
     ]);
   });
 
-  it("put Terms, Privacy and Contact (GitHub Issues) under Legal", () => {
+  it("put Terms, Privacy, Security and Contact (GitHub Issues) under Legal", () => {
     expect(FOOTER_COLUMNS[3].links).toEqual([
       { href: "/terms", label: "Terms" },
       { href: "/privacy", label: "Privacy" },
+      { href: "/security", label: "Security" },
       { href: ISSUES_URL, label: "Contact" },
     ]);
   });
@@ -136,11 +137,12 @@ describe("the compact footer", () => {
   const markup = renderToStaticMarkup(<SiteFooter compact />);
   const links = anchors(markup);
 
-  it("links the docs, the terms, the privacy page, GitHub and X", () => {
+  it("links the docs, the terms, the privacy page, the security page, GitHub and X", () => {
     expect(COMPACT_FOOTER_LINKS).toEqual([
       { href: "/docs", label: "Docs" },
       { href: "/terms", label: "Terms" },
       { href: "/privacy", label: "Privacy" },
+      { href: "/security", label: "Security" },
       { href: GITHUB_URL, label: "GitHub" },
       { href: X_URL, label: "X" },
     ]);
@@ -192,7 +194,7 @@ describe("the GitHub addresses", () => {
   });
 
   it("are written only in src/lib/site-links.ts, so they change in one place", () => {
-    for (const file of ["src/components/vx/SiteChrome.tsx", "src/app/terms/page.tsx", "src/app/privacy/page.tsx", "src/components/vx/LegalPage.tsx"]) {
+    for (const file of ["src/components/vx/SiteChrome.tsx", "src/app/terms/page.tsx", "src/app/privacy/page.tsx", "src/app/security/page.tsx", "src/components/vx/LegalPage.tsx"]) {
       expect(readFileSync(path.join(process.cwd(), file), "utf8"), file).not.toContain("github.com/duongnq2798");
     }
   });
