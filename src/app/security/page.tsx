@@ -345,6 +345,10 @@ export default function SecurityPage() {
             requests, and Vercel deploys <code>main</code>.
           </li>
           <li>
+            Each change is reviewed by an independent AI code reviewer before merge, and every defect it finds is fixed with a test that fails first.
+            Each change must pass CI before it is merged.
+          </li>
+          <li>
             <LegalLink href={CI_URL}>CI</LegalLink> runs on every pull request and every push to <code>main</code>: it checks that the lockfile
             describes the dependencies, type-checks, lints, runs the test suite and builds the app. It needs no secret.
           </li>
@@ -406,8 +410,8 @@ export default function SecurityPage() {
             not rewritten by someone in control of the server.
           </li>
           <li>
-            Merging to <code>main</code> is not gated by branch protection: changes go through pull requests and CI, and no second reviewer is required.
-            Dependencies are not updated automatically.
+            <code>main</code> has no branch protection and no required human second approval: the independent AI review and CI before each merge
+            are how the team works, not a rule GitHub enforces. Dependencies are not updated automatically.
           </li>
           <li>Rate limits are kept by each server instance, so they slow abuse rather than set a hard quota, and API reads are not limited.</li>
           <li>The app does not send a Content Security Policy yet.</li>

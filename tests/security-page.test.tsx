@@ -267,6 +267,21 @@ describe("what it does not claim, still true of the code", () => {
     expect(notClaimed).toContain("does not send a Content Security Policy yet");
   });
 
+  it("review and CI before each merge, and no branch protection or required human second approval", () => {
+    const development = section("development");
+    expect(development).toContain("Each change is reviewed by an independent AI code reviewer before merge");
+    expect(development).toContain("Each change must pass CI before it is merged");
+    expect(notClaimed).toContain("main has no branch protection and no required human second approval");
+    expect(notClaimed).not.toMatch(/no independent review|not reviewed|no second reviewer/i);
+    // The release notes say the same of every feature since the second beta, and CI runs on every pull request.
+    const releases = readdirSync(path.join(process.cwd(), "docs/releases")).filter((name) => /^v0\.1\.0-beta\.([2-9]|\d{2,})\.md$/.test(name));
+    expect(releases.length).toBeGreaterThan(0);
+    for (const notes of releases) {
+      expect(source(`docs/releases/${notes}`).replace(/\s+/g, " "), notes).toContain("reviewed by an independent reviewer before merge");
+    }
+    expect(source(".github/workflows/ci.yml")).toMatch(/^on:\s*\n\s+push:\s*\n\s+branches: \[main\]\s*\n\s+pull_request:/m);
+  });
+
   it("no automated dependency updates: when they are turned on, this page says so", () => {
     expect(existsSync(path.join(process.cwd(), ".github/dependabot.yml"))).toBe(false);
     expect(notClaimed).toContain("Dependencies are not updated automatically");
