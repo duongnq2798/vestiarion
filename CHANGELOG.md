@@ -12,6 +12,8 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+## [0.1.0-beta.6] - 2026-10-15
+
 ### Added
 
 - **Capture invoices from Chrome.** Vestiarion Invoice Capture, a Chrome extension, sends an invoice you select on a
@@ -501,7 +503,8 @@ public beta, on Arc testnet and Arc mainnet. Release notes:
   company.
 - HubSpot is read-only, polled every 15 minutes, and its app is not yet verified by HubSpot.
 
-[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.5...HEAD
+[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.6...HEAD
+[0.1.0-beta.6]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.6
 [0.1.0-beta.5]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.5
 [0.1.0-beta.4]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.4
 [0.1.0-beta.3]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.3
