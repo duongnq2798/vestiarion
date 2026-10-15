@@ -55,10 +55,12 @@ Addresses that come from outside the console already wait for a person: one sent
   - Amended 2026-10-15 (independent review, round 4): only an address that waited for a confirmation (a change, or one
     that came with a counterparty added through the API or GitHub) can be confirmed, so only such an address is one no
     member answers for alone; one an old `create_counterparty` typed in without naming who is held for a person as an
-    address no entry records. A milestone's creator is not refused Pay now for a hold about its address
-    alone (`counterparty.new_payee`): the agent would have paid what they added, and N4 says who may pay it. So a GitHub
-    bounty, which the member who connected GitHub adds, never waits for a third approver once another member confirmed
-    its address. A confirmation whose ledger entry cannot be written is undone and refused.
+    address no entry records. A GitHub bounty's milestone, added as the member who connected GitHub (its signed
+    `github_bounty_attached` names the milestone and them), is not refused to them as its creator for a hold about its
+    address alone (`counterparty.new_payee`): N4 says who may pay it, so a bounty never waits for a third approver once
+    another member confirmed its address. A milestone a person added keeps the creator rule for every hold, since the
+    agent stops checking at the first rule that holds it. A confirmation whose ledger entry cannot be written is undone
+    and refused.
 - **N3. Two parties before the agent pays a new address.**
   - The agent makes a first payment on its own only when two different parties stand behind the address: the payee
     gave it and a member confirmed it, or one member gave it and another member confirmed it.

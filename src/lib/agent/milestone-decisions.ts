@@ -411,7 +411,28 @@ interface LoadedMilestone {
   /** When a person last claimed its decision: under 10 minutes ago, someone is deciding it. */
   decisionClaimedAt: string | null;
   contractorId: string;
+  /** Added by a GitHub bounty, as the member who connected GitHub (`addedByBounty`). */
+  addedByBounty: boolean;
   facts: HeldFacts;
+}
+
+/**
+ * Whether a GitHub bounty added this milestone, as the member who created it (bounties B7): its signed
+ * `github_bounty_attached` entry names it and them. A bounty's milestone is added as the member who connected GitHub,
+ * whoever typed `/bounty`, so for a hold about its address alone that member is not refused Pay now as its creator: the
+ * new payee check says who may pay it, or every bounty would wait for a third approver once the other one confirmed its
+ * address. A milestone a person added keeps the creator rule for every hold, since the agent stops checking at the
+ * first rule that holds it.
+ */
+export function addedByBounty(
+  milestoneId: string,
+  createdBy: string | null,
+  entries: ReadonlyArray<{ action: string; detail: Record<string, unknown> }>
+): boolean {
+  return (
+    createdBy !== null &&
+    entries.some((entry) => entry.action === "github_bounty_attached" && entry.detail.milestoneId === milestoneId && entry.detail.by === createdBy)
+  );
 }
 
 /**
@@ -445,6 +466,7 @@ async function loadMilestone(milestoneId: string, live: boolean): Promise<Loaded
   if (intentRead.error) throw new Error(intentRead.error.message);
   const entries = await listLedgerEntriesForTargets({ milestoneIds: [milestoneId] });
   const last = decisionEntryOf(entries);
+  const createdBy = (milestone.created_by as string | null) ?? null;
 
   const amount = num(milestone.amount);
   const agentReasoning = (milestone.agent_reasoning as string | null) ?? null;
@@ -454,12 +476,13 @@ async function loadMilestone(milestoneId: string, live: boolean): Promise<Loaded
     amount,
     status: String(milestone.status),
     verified: milestone.verified === true,
-    createdBy: (milestone.created_by as string | null) ?? null,
+    createdBy,
     agentReasoning,
     escrowState: (milestone.escrow_state as string | null) ?? null,
     escrowRefundAfter: (milestone.escrow_refund_after as string | null) ?? null,
     decisionClaimedAt: (milestone.decision_claimed_at as string | null) ?? null,
     contractorId: String(contractor.id),
+    addedByBounty: addedByBounty(milestoneId, createdBy, entries),
     facts: {
       amount,
       agentReasoning,
@@ -618,10 +641,8 @@ export async function payHeldMilestone(input: {
         }
         fewApprovers = true;
       }
-    } else if (blocking.override && blocking.kind !== "new_payee" && milestone.createdBy === input.actorId) {
-      // A hold for its address alone is the new payee check's to answer, below: the agent would have paid what was added,
-      // and who may pay it is whoever its address does not rest on. Otherwise every GitHub bounty, which the member who
-      // connected GitHub adds, would wait for a third approver once the other one confirmed its address.
+    } else if (blocking.override && milestone.createdBy === input.actorId && !(blocking.kind === "new_payee" && milestone.addedByBounty)) {
+      // A bounty's milestone held for its address alone is the new payee check's to answer, below (`addedByBounty`).
       if (!(await isSoleApprover(input.actorId))) raise("self_approval");
       soleApprover = true;
     }

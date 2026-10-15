@@ -812,12 +812,19 @@ describe("Pay now and an address no member answers for alone", () => {
     live();
     releaseHeldMilestoneMock.mockResolvedValue(PAID);
     // A bounty's milestone is added as the member who connected GitHub; a hold for its address alone is not theirs to be
-    // refused as its creator, or two approvers would wait for a third.
-    const { run, fake } = world({ milestone: { created_by: CONNECTOR }, intent: null, last: heldAsNewPayee, addressEntries: selfBounty(ACTOR) });
+    // refused as its creator, or two approvers would wait for a third. Its own signed entry says a bounty added it.
+    const bountyAdded = entryRow("github_bounty_attached", { by: CONNECTOR, via: "github", pullRequest: PULL, counterpartyId: CONTRACTOR });
+    const asBounty = { milestone: { created_by: CONNECTOR }, intent: null, entries: [heldAsNewPayee, bountyAdded] };
+    const { run, fake } = world({ ...asBounty, addressEntries: selfBounty(ACTOR) });
     expect((await run(() => payHeldMilestone({ actorId: CONNECTOR, milestoneId: MILESTONE }))).status).toBe("paid");
     expect(fake.requests.some((request) => request.path === "/rest/v1/rpc/sole_approver")).toBe(false);
+    // A milestone they added themselves keeps the creator rule: the agent stopped checking at the first rule that held it.
+    const byHand = world({ milestone: { created_by: CONNECTOR }, intent: null, last: heldAsNewPayee, addressEntries: selfBounty(ACTOR) });
+    await expect(byHand.run(() => payHeldMilestone({ actorId: CONNECTOR, milestoneId: MILESTONE }))).rejects.toThrow(
+      "You added this milestone"
+    );
     // Had they confirmed it themselves, they would be refused.
-    const confirmedIt = world({ milestone: { created_by: CONNECTOR }, intent: null, last: heldAsNewPayee, addressEntries: selfBounty(CONNECTOR) });
+    const confirmedIt = world({ ...asBounty, addressEntries: selfBounty(CONNECTOR) });
     await expect(confirmedIt.run(() => payHeldMilestone({ actorId: CONNECTOR, milestoneId: MILESTONE }))).rejects.toThrow(
       "You confirmed this address, so someone else must approve its first payment."
     );

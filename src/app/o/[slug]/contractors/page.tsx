@@ -24,7 +24,7 @@ import { milestoneDecision } from "@/components/vx/map";
 import { checkEvidenceLinks, type LinkAccess } from "@/lib/evidence-links/check";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
-import { decisionEntryOf, heldMilestonesTwoApprovals, heldReason, milestoneIntents } from "@/lib/agent/milestone-decisions";
+import { addedByBounty, decisionEntryOf, heldMilestonesTwoApprovals, heldReason, milestoneIntents } from "@/lib/agent/milestone-decisions";
 import { isSoleApprover } from "@/lib/agent/sole-approver";
 import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
@@ -256,7 +256,11 @@ export default async function ContractorsPage({ params, searchParams }: { params
             milestone={{ id: milestone.id, title: milestone.title, amount: milestone.amount, contractorName: milestone.contractor_name }}
             reason={reason}
             canDecide={canDecide}
-            selfAdded={Boolean(milestone.created_by) && milestone.created_by === access.user.id}
+            selfAdded={
+              Boolean(milestone.created_by) &&
+              milestone.created_by === access.user.id &&
+              !(reason.kind === "new_payee" && addedByBounty(milestone.id, milestone.created_by, entries))
+            }
             soleApprover={soleApprover}
             sandbox={paysSimulated(capability)}
             twoApprovals={twoApprovals.get(milestone.id)}

@@ -208,7 +208,14 @@ export async function confirmCounterpartyAddress(input: {
       detail: { by: input.actorId, counterpartyId: current.id, address: current.address, via: input.via },
     });
   } catch (error) {
-    await db().from("counterparties").update({ address_confirmed_at: current.address_confirmed_at }).eq("id", current.id).eq("address_confirmed_at", confirmedAt);
+    const undone = await db()
+      .from("counterparties")
+      .update({ address_confirmed_at: current.address_confirmed_at })
+      .eq("id", current.id)
+      .eq("address_confirmed_at", confirmedAt)
+      .select("id");
+    // Left confirmed with no entry: only re-entering the address lets someone confirm it again. Said by id alone.
+    if (undone.error || (undone.data ?? []).length === 0) console.error("address confirmation not undone", currentOrgId(), current.id);
     throw error;
   }
   return true;

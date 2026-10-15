@@ -80,7 +80,10 @@ export function HeldMilestoneActions({
   milestone: { id: string; title: string; amount: number; contractorName: string };
   reason: HeldReason;
   canDecide: boolean;
-  /** The viewer added this milestone: overriding the agent's hold on it needs someone else. */
+  /**
+   * The viewer added this milestone: overriding the agent's hold on it needs someone else. Not for a GitHub bounty's
+   * milestone held for its address alone, which the new payee check answers (`addedByBounty`).
+   */
   selfAdded: boolean;
   sandbox: boolean;
   /** The viewer is the only member of the workspace who may approve payments: they may override a hold on what they added. */
@@ -99,8 +102,7 @@ export function HeldMilestoneActions({
   // Above the figure: the viewer's approval pays it only when someone else approved it first (two approvals T8).
   const viewerApproved = two?.approvals.some((approval) => approval.by === viewerId) ?? false;
   const willPay = !two || two.approvals.some((approval) => approval.by !== viewerId);
-  // A hold for its address alone is not overriding what the viewer added: Pay now asks who the address rests on instead.
-  const ownOverride = reason.canPay && reason.override && reason.kind !== "new_payee" && selfAdded;
+  const ownOverride = reason.canPay && reason.override && selfAdded;
   // Whoever added it, or gave its address, gives only the approvals no one independent of it can; one person never pays
   // it alone (two approvals T5).
   const selfBlocked = two ? !mayApproveNow(two, viewerId ?? "") : ownOverride && !soleApprover;

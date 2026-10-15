@@ -424,9 +424,10 @@ payment to an address.
   (`firstPaymentConfirmers`, `firstPaymentUnanswered`) and the milestone's two approvals (`leftOutWhy`) say the same,
   and "Who can act" (`whoCanAct`, on Approvals, Bills and the overdue email) leaves out `membersLeftOut`. The sole
   approver's payment records `addressGiverApproved: true` and says so in its summary (`ADDRESS_GIVER_NOTE`). Recording
-  a transfer already sent asks no first-payment question. A milestone's creator is not refused Pay now for a
-  `counterparty.new_payee` hold, which is about the address alone, so a GitHub bounty's milestone, which the member who
-  connected GitHub adds, is paid by them once another member confirmed its address. `confirmCounterpartyAddress` writes
+  a transfer already sent asks no first-payment question. A GitHub bounty's milestone (`addedByBounty`: its signed
+  `github_bounty_attached` names it and its creator, the member who connected GitHub) held as `counterparty.new_payee`
+  is not refused to that creator once another member confirmed its address; a milestone a person added keeps the
+  creator rule for every hold, since the agent stops checking at the first rule that holds it. `confirmCounterpartyAddress` writes
   its `counterparty_address_confirmed` entry strictly, undoing the confirmation when the entry cannot be written. Confirmed payments and address entries are read a page at a
   time (`PAYMENT_PAGE`), and the invoices and milestones paid by id in chunks (`ID_CHUNK`), so PostgREST's row cap
   never drops one.
