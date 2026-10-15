@@ -4,7 +4,7 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
 import { withOrg } from "@/lib/dal/scope";
-import { reconcileApInvoice, reconcileMilestone } from "@/lib/agent/orchestrator";
+import { existingMilestoneIntents, reconcileApInvoice, reconcileMilestone } from "@/lib/agent/orchestrator";
 import type { BalanceSnapshot, ChainProvider, EarnResult, TransferParams, TransferResult } from "@/lib/circle";
 import { MAY_HAVE_BEEN_ACCEPTED } from "@/lib/circle/settlement";
 import { NO_EARLIER_SEND, paymentIdempotencyKey } from "@/lib/payments";
@@ -93,7 +93,9 @@ class FakeProvider implements ChainProvider {
  * A workspace whose payment was sent half an hour ago and never answered, for a counterparty now high risk: by default
  * an invoice's claim that went stale; `failed` with Circle's "may or may not have been accepted" for a send that timed out.
  */
-function workspace(source: { type: "invoice" | "milestone"; id: string; failed?: true } = { type: "invoice", id: INVOICE_ID }) {
+function workspace(
+  source: { type: "invoice" | "milestone"; id: string; failed?: true; escrow?: Record<string, unknown> } = { type: "invoice", id: INVOICE_ID }
+) {
   const intents = paymentIntentsBackend(ORG);
   const row = intents.insert({
     source_type: source.type, source_id: source.id, idempotency_key: paymentIdempotencyKey(source.type, source.id),
@@ -110,13 +112,15 @@ function workspace(source: { type: "invoice" | "milestone"; id: string; failed?:
     if (request.path === "/rest/v1/rpc/append_ledger_entry") return { body: LEDGER_ROW };
     if (request.path === "/rest/v1/counterparties" && request.method === "GET") return { body: { risk_level: "high" } };
     if (request.path === "/rest/v1/rpc/agent_paused") return { body: false };
+    // The milestone's escrow hold, when it is locked in one.
+    if (request.path === "/rest/v1/milestones" && request.method === "GET" && source.escrow) return { body: source.escrow };
     if (request.path === "/rest/v1/payment_intents" || request.path.startsWith("/rest/v1/rpc/")) return intents.respond(request);
     return { body: [] };
   });
   const run = <T>(fn: () => Promise<T>) => runWith({ config, db: fake.client, fetch: fake.fetch }, () => withOrg(ORG, fn));
   const invoicePatch = () => fake.requests.find((r) => r.path === "/rest/v1/invoices" && r.method === "PATCH")?.body as Record<string, unknown> | undefined;
   const milestonePatch = () => fake.requests.find((r) => r.path === "/rest/v1/milestones" && r.method === "PATCH")?.body as Record<string, unknown> | undefined;
-  return { row, fake, run, invoicePatch, milestonePatch };
+  return { row, intents, fake, run, invoicePatch, milestonePatch };
 }
 
 const invoice = {
@@ -198,5 +202,91 @@ describe("reconcileMilestone over the real payment step — a release that timed
     expect(milestonePatch()).toBeUndefined();
     expect(fake.requests.some((r) => r.path === "/rest/v1/counterparties")).toBe(false);
     expect(fake.requests.some((r) => r.path === "/rest/v1/rpc/append_ledger_entry")).toBe(false);
+  });
+});
+
+/**
+ * A first attempt sent in a batch whose answer was lost (batch payouts R5) is looked for by the batch's refId. Found, the
+ * lookup records every member still without its Circle id. The batch's other milestones, reconciled later in the same
+ * cycle with the intents the stage read before it, find their send already recorded: reconciled now, as found, rather
+ * than left pending as if another request were still settling them.
+ */
+/**
+ * A release from escrow that timed out, which Circle took, from a hold locked for the contractor's old address
+ * (milestone escrow E4, review C1). The release went where the hold pays: it is only read and recorded, and the hold is
+ * marked released. The hold's own address check is for a new release, and its "refund it and pay again" would have a
+ * person pay a release that already went out.
+ */
+describe("reconcileMilestone over the real payment step — an escrow release Circle took, after the address changed", () => {
+  const MILESTONE_ID = "018f8ce0-1557-7b54-a931-4d777f6be00c";
+  const OLD = "0x0000000000000000000000000000000000000a1d";
+  const hold = { escrow_state: "funded", escrow_amount: "150", escrow_payee: OLD, escrow_refund_after: "2026-10-31T00:00:00Z" };
+  // The contractor's address as it stands now, since changed and confirmed.
+  const milestone = {
+    id: MILESTONE_ID, title: "Checkout redesign", amount: 150, contractorId: COUNTERPARTY_ID, contractorName: "Lena Ortiz",
+    address: "0xdead", reasoning: "Verified via github.", txRef: null,
+  };
+
+  it("records it paid, marks the hold released, and sends nothing, with no advice to pay again", async () => {
+    const provider = new FakeProvider({ ...confirmed("circle-release-found"), route: "escrow" });
+    const { row, fake, run } = workspace({ type: "milestone", id: MILESTONE_ID, failed: true, escrow: hold });
+    Object.assign(row, { destination: OLD, payout_route: "escrow" });
+
+    const outcome = await run(async () => {
+      const intent = (await existingMilestoneIntents(db(), [{ id: MILESTONE_ID, status: "verified" }])).get(MILESTONE_ID);
+      expect(intent).toEqual({ providerTxId: null, status: "failed", unanswered: true });
+      return reconcileMilestone(milestone, intent!, { db: db(), provider, operating: { id: ACCOUNT_ID } });
+    });
+
+    expect(provider.transfers).toHaveLength(0);
+    expect(row).toMatchObject({ status: "confirmed", provider_tx_id: "circle-release-found" });
+    expect(outcome.status).toBe("paid");
+    const patches = fake.requests.filter((r) => r.path === "/rest/v1/milestones" && r.method === "PATCH").map((r) => r.body as Record<string, unknown>);
+    expect(patches).toContainEqual({ escrow_state: "released", escrow_release_tx_hash: "0xhash" });
+    expect(patches.find((patch) => "status" in patch)).toMatchObject({ status: "paid", tx_ref: "0xhash" });
+    const entries = fake.requests.filter((r) => r.path === "/rest/v1/rpc/append_ledger_entry").map((r) => r.body as Record<string, unknown>);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].p_detail).toMatchObject({ reconciled: true, execution: { resultingStatus: "paid" } });
+    expect(JSON.stringify([patches, entries])).not.toContain("pay again");
+  });
+});
+
+describe("reconcileMilestone over the real payment step — a lost batch's other releases (batch payouts R5)", () => {
+  const FIRST = "018f8ce0-1557-7b54-a931-4d777f6be00a";
+  const SECOND = "018f8ce0-1557-7b54-a931-4d777f6be00b";
+  const release = (id: string) => ({
+    id, title: `Milestone ${id.slice(-1)}`, amount: 150, contractorId: COUNTERPARTY_ID, contractorName: "Lena Ortiz",
+    address: "0xdead", reasoning: "Verified via github.", txRef: null,
+  });
+  // As the stage read both before the loop: claimed, no Circle id.
+  const asReadBefore = { providerTxId: null, status: "submitting" };
+
+  it("records every release of a batch Circle took in the cycle that found it, with one lookup and nothing sent", async () => {
+    const provider = new FakeProvider(confirmed("circle-tx-batch"));
+    const { row, intents, fake, run } = workspace({ type: "milestone", id: FIRST });
+    const second = intents.insert({
+      source_type: "milestone", source_id: SECOND, idempotency_key: paymentIdempotencyKey("milestone", SECOND),
+      provider: "circle", provider_mode: "live", amount: 150, destination: "0xdead",
+    });
+    const sentAt = row.updated_at as string;
+    for (const member of [row, second]) {
+      Object.assign(member, { status: "submitting", attempt_count: 1, updated_at: sentAt, batch_key: "batch-1", batch_size: 2, batch_sent_at: sentAt });
+    }
+
+    const first = await run(() => reconcileMilestone(release(FIRST), asReadBefore, { db: db(), provider, operating: { id: ACCOUNT_ID } }));
+    const next = await run(() => reconcileMilestone(release(SECOND), asReadBefore, { db: db(), provider, operating: { id: ACCOUNT_ID } }));
+
+    expect(provider.lookups.map((lookup) => lookup.refId)).toEqual(["batch-1"]);
+    expect(provider.transfers).toHaveLength(0);
+    expect(second).toMatchObject({ status: "confirmed", provider_tx_id: "circle-tx-batch" });
+    expect(first.status).toBe("paid");
+    expect(next.status).toBe("paid");
+    const patches = fake.requests.filter((r) => r.path === "/rest/v1/milestones" && r.method === "PATCH");
+    expect(patches.map((patch) => [patch.params.get("id"), (patch.body as Record<string, unknown>).status])).toEqual([
+      [`eq.${FIRST}`, "paid"],
+      [`eq.${SECOND}`, "paid"],
+    ]);
+    const entries = fake.requests.filter((r) => r.path === "/rest/v1/rpc/append_ledger_entry").map((r) => r.body as Record<string, unknown>);
+    expect(entries.map((entry) => (entry.p_detail as Record<string, unknown>).reconciled)).toEqual([true, true]);
   });
 });

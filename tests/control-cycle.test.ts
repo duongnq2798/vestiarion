@@ -1128,6 +1128,19 @@ describe("reconcileApInvoice — a send never recorded is looked for on Circle b
     });
   });
 
+  it("reconciles a send another lookup has recorded since the stage read it, such as a lost batch's other member, in this cycle", async () => {
+    settleMock.mockResolvedValue({ answer: "known", recorded: true });
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", note: "", operatingBalance: 350, execution: { providerMode: "live", reconciled: true } });
+    const { fake, run } = highRisk();
+
+    const outcome = await run(() => reconcileApInvoice(invoice, neverRecorded, { db: db(), provider, operating: { id: ACCOUNT_ID } }));
+
+    expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+    expect(outcome.status).toBe("paid");
+    expect(counterpartyReads(fake.requests)).toHaveLength(0);
+    expect(rpcBodies(fake.requests, "append_ledger_entry")[0].p_detail).toMatchObject({ reconciled: true });
+  });
+
   it("weighs a send Circle never took as a new one, only once the lookup said so", async () => {
     let checkedBefore = -1;
     const world = highRisk();

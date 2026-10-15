@@ -745,8 +745,11 @@ async function lookForUnknownSend(
 
 /** What looking for a source's unknown send found (payment safety R6). */
 export type UnknownSendAnswer =
-  /** The source's send is not unknown: nothing was looked for. */
-  | { answer: "known" }
+  /**
+   * The source's send is not unknown: nothing was looked for. `recorded` when it already carries its Circle id, or is
+   * confirmed: another lookup recorded it since it was read, such as its batch's found while looking for another member.
+   */
+  | { answer: "known"; recorded?: true }
   /** Circle has the transfer, now recorded. */
   | { answer: "found" }
   /** Circle never took it, now recorded: the payment was never sent. */
@@ -786,7 +789,7 @@ export async function settleUnknownSend(
     intent = await store.get(intent.idempotencyKey);
     if (!unknownSend(intent, now)) return { answer: "not_sent" };
   }
-  if (!unknownSend(intent, now)) return { answer: "known" };
+  if (!unknownSend(intent, now)) return intent.providerTxId || intent.status === "confirmed" ? { answer: "known", recorded: true } : { answer: "known" };
   // A payout to another chain is not looked up this way: it is asked for again under its own key, which Circle takes once.
   if (intent.route === "gateway" || intent.route === "cctp" || paidAcrossChains(intent.destinationChain ?? undefined)) {
     return { answer: "undecided", retryAt: null, unlookable: true };

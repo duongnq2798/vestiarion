@@ -1031,6 +1031,20 @@ describe("executePayment after a send Circle never answered (payment safety R4)"
     expect(store.intent?.status).toBe("submitting");
   });
 
+  it("says a send another lookup has already recorded is known and recorded, looking nothing up", async () => {
+    // A lost batch's member found while looking for another member: its Circle id is already on its intent.
+    const store = await unknownSend({ status: "pending", providerTxId: "circle-tx-batch", lastError: null });
+    const provider = new FakeProvider();
+
+    const answer = await settleUnknownSend({ type: "invoice", id: request.sourceId }, { provider, fromAccountId: "account-1", store, now: Date.parse(SENT_AT) + 16 * MINUTE });
+
+    expect(answer).toEqual({ answer: "known", recorded: true });
+    expect(provider.lookups).toHaveLength(0);
+    // A send under way, with no Circle id yet, is known but not recorded.
+    const sending = await unknownSend({ status: "submitting", lastError: null, updatedAt: new Date(Date.parse(SENT_AT) + 15 * MINUTE).toISOString() });
+    expect(await settleUnknownSend({ type: "invoice", id: request.sourceId }, { provider, fromAccountId: "account-1", store: sending, now: Date.parse(SENT_AT) + 16 * MINUTE })).toEqual({ answer: "known" });
+  });
+
   it("refuses a payout to another chain asked for again under its key to another address than the first send's, sending nothing (review M1)", async () => {
     // Circle answers a key it holds with the transfer it took, which went where the first send asked: recording another
     // address for it would name the wrong payee.
