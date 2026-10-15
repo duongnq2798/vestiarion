@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="186" height="52" viewBox="0 0 186 52" role="img" aria-label="install from npm: @vestiarion/sdk">
+  <rect x="0.5" y="0.5" width="185" height="51" rx="10" fill="#18181B" stroke="#3F3F46"/>
+  <g transform="translate(14 14)"><rect x="2" y="2" width="20" height="20" rx="2" fill="#CB3837"/><path d="M6 6h12v12h-3V9h-3v9H6z" fill="#fff"/></g>
+  <text x="50" y="21" fill="#A1A1AA" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="8.5" font-weight="600" letter-spacing="0.8">INSTALL FROM NPM</text>
+  <text x="50" y="38" fill="#FAFAFA" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="700">@vestiarion/sdk</text>
+</svg>
