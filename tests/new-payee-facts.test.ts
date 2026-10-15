@@ -3,7 +3,7 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
 import { withOrg } from "@/lib/dal/scope";
-import { loadNewPayeeFacts, newPayeeCheckFor } from "@/lib/new-payee-facts";
+import { ID_CHUNK, loadNewPayeeFacts, newPayeeCheckFor, PAYMENT_PAGE } from "@/lib/new-payee-facts";
 import { PAYEE } from "@/lib/new-payee";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
@@ -74,11 +74,18 @@ describe("loadNewPayeeFacts", () => {
     const intents = requests.find((request) => request.path === "/rest/v1/payment_intents");
     expect(intents?.params.get("status")).toBe("eq.confirmed");
     expect(intents?.params.get("select")).toBe("source_type,source_id,destination");
+    // Read a page at a time, in a stable order, so the row cap never drops a payment.
+    expect(intents?.params.get("order")).toBe("id.asc");
+    expect(intents?.params.get("offset")).toBe("0");
+    expect(intents?.params.get("limit")).toBe(String(PAYMENT_PAGE));
+    // Each paid invoice and milestone by its own id, and only for the payees asked about.
     const invoices = requests.find((request) => request.path === "/rest/v1/invoices");
     expect(invoices?.params.get("select")).toBe("id,counterparty_id");
+    expect(invoices?.params.get("id")).toBe("in.(inv-2,inv-elsewhere)");
     expect(invoices?.params.get("counterparty_id")).toBe("in.(cp-1,cp-2)");
     const milestones = requests.find((request) => request.path === "/rest/v1/milestones");
     expect(milestones?.params.get("select")).toBe("id,contractor_id");
+    expect(milestones?.params.get("id")).toBe("in.(ms-1)");
     expect(milestones?.params.get("contractor_id")).toBe("in.(cp-1,cp-2)");
     const ledger = requests.find((request) => request.path === "/rest/v1/ledger_entries");
     expect(ledger?.params.get("domain")).toBe("in.(compliance,contractor)");
@@ -95,6 +102,28 @@ describe("loadNewPayeeFacts", () => {
     expect(facts.entries.size).toBe(0);
     expect(facts.paidTo.size).toBe(0);
     expect(workspaceFake.requests.filter((request) => request.path !== "/rest/v1/orgs")).toEqual([]);
+  });
+
+  it("reads every page of confirmed payments, and the invoices they paid in chunks, so the row cap never drops one", async () => {
+    const elsewhere = Array.from({ length: PAYMENT_PAGE }, (_, index) => ({ source_type: "invoice", source_id: `inv-x${index}`, destination: "0x9990000000000000000000000000000000000009" }));
+    const paged = fake((request) => {
+      if (request.path === "/rest/v1/payment_intents") {
+        // A full first page, then the payment that paid cp-1, alone on the second.
+        return { body: request.params.get("offset") === "0" ? elsewhere : [{ source_type: "invoice", source_id: "inv-1", destination: PAID }] };
+      }
+      if (request.path === "/rest/v1/invoices") {
+        const asked = request.params.get("id") ?? "";
+        return { body: asked.includes("inv-1,") || asked.endsWith("inv-1)") ? [{ id: "inv-1", counterparty_id: "cp-1" }] : [] };
+      }
+      return undefined;
+    });
+    const facts = await load(paged, ["cp-1"]);
+    expect([...(facts.paidTo.get("cp-1") ?? [])]).toEqual([PAID.toLowerCase()]);
+    const pages = paged.requests.filter((request) => request.path === "/rest/v1/payment_intents").map((request) => request.params.get("offset"));
+    expect(pages).toEqual(["0", String(PAYMENT_PAGE)]);
+    const chunks = paged.requests.filter((request) => request.path === "/rest/v1/invoices").map((request) => (request.params.get("id") ?? "").split(",").length);
+    expect(Math.max(...chunks)).toBeLessThanOrEqual(ID_CHUNK);
+    expect(chunks.reduce((sum, size) => sum + size, 0)).toBe(PAYMENT_PAGE + 1);
   });
 
   it("asks which payee a payment was for only when a payment was confirmed", async () => {

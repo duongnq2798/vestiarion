@@ -306,6 +306,14 @@ describe("ApprovalCard", () => {
     expect(card({ createdBy: CREATOR, firstPaymentAddressBy: VIEWER, firstPaymentVia: "payee_link" }, { soleApprover: true })).not.toMatch(APPROVE_DISABLED);
   });
 
+  it("does not let whoever confirmed an address no member answers for alone pay its first payment, unless they decide alone", () => {
+    const confirmed = card({ createdBy: CREATOR, firstPaymentAddressBy: null, firstPaymentVia: "github", firstPaymentConfirmers: [VIEWER] });
+    expect(confirmed).toContain("You confirmed this address");
+    expect(confirmed).toMatch(APPROVE_DISABLED);
+    expect(card({ createdBy: CREATOR, firstPaymentAddressBy: null, firstPaymentConfirmers: [VIEWER] }, { soleApprover: true })).not.toMatch(APPROVE_DISABLED);
+    expect(card({ createdBy: CREATOR, firstPaymentAddressBy: null, firstPaymentConfirmers: ["someone-else"] })).not.toMatch(APPROVE_DISABLED);
+  });
+
   it("lets the workspace's sole approver pay the first payment to an address they gave, and anyone else pay it", () => {
     expect(card({ createdBy: CREATOR, firstPaymentAddressBy: VIEWER }, { soleApprover: true })).not.toMatch(APPROVE_DISABLED);
     const otherGiver = card({ createdBy: CREATOR, firstPaymentAddressBy: "someone-else" });

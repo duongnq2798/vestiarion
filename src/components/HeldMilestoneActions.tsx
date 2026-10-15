@@ -111,7 +111,7 @@ export function HeldMilestoneActions({
         ? "You approved it"
         : selfBlocked
           ? two && !selfAdded
-            ? "You gave this payee's address, so someone else must approve its first payment."
+            ? (two.leftOutWhy?.[viewerId ?? ""] ?? "You gave this payee's address, so someone else must approve its first payment.")
             : "You added this milestone, so someone else must approve paying it."
           : null;
 

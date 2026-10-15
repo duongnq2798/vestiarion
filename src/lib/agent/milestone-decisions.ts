@@ -3,7 +3,7 @@ import { db } from "../dal";
 import { chainModes, getChainProvider } from "../circle";
 import { payeeNotReady } from "../counterparty-address";
 import { firstPaymentCheck, loadNewPayeeFacts, newPayeeCheckFor } from "../new-payee-facts";
-import { addressGiver, newPayeeSelfMessage } from "../new-payee";
+import { membersLeftOut, newPayeeSelfMessage, type NewPayeeCheck } from "../new-payee";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { listLedgerEntriesForTargets } from "../ledger";
 import type { Provenance } from "../provenance";
@@ -496,21 +496,30 @@ export async function heldMilestonesTwoApprovals(
   // The page's modes, never the provider: a mainnet workspace with none still lists its milestones (final review I2).
   const live = chainModes().mode === "live";
   const newPayeeFacts = live ? await loadNewPayeeFacts(db(), [...new Set(held.map((milestone) => milestone.contractor_id))]) : null;
-  return twoApprovalsFacts(
+  const firstPayments = new Map<string, NewPayeeCheck>();
+  const facts = await twoApprovalsFacts(
     "milestone",
     held.map((milestone) => {
       const address = contractors.get(milestone.contractor_id)?.address ?? null;
       const check = newPayeeFacts ? newPayeeCheckFor(newPayeeFacts, { id: milestone.contractor_id, address }) : null;
+      if (check?.firstPayment) firstPayments.set(milestone.id, check);
       return {
         id: milestone.id,
         payment: { amount: milestone.amount, currency: "USDC", address },
         weighed: milestone.amount,
-        excluded: [milestone.created_by, check?.firstPayment ? addressGiver(check) : null],
+        excluded: [milestone.created_by, ...(check?.firstPayment ? membersLeftOut(check) : [])],
         sent: transferExists(intents.get(milestone.id) ?? null),
       };
     }),
     above
   );
+  // Each member left out for a first payment's address, told why as Pay now would refuse them.
+  for (const [id, two] of facts) {
+    const check = firstPayments.get(id);
+    const leftOut = check ? membersLeftOut(check) : [];
+    if (check && leftOut.length > 0) facts.set(id, { ...two, leftOutWhy: Object.fromEntries(leftOut.map((by) => [by, newPayeeSelfMessage(check, by)])) });
+  }
+  return facts;
 }
 
 /** `claim_milestone_decision` raises `<code>: <detail>` (the 0025 pattern); anything else is rethrown as is. */
@@ -574,8 +583,9 @@ export async function payHeldMilestone(input: {
   const twoNeeded = above !== null && milestone.amount > above;
   // A first payment to an address, and who gave it (new payee check N4).
   const firstPayment = !alreadySent && provider.mode === "live" ? await firstPaymentCheck(db(), { id: milestone.contractorId, address: contractorAddress }) : null;
-  // Whoever added it, and whoever gave a first payment's address: for one sent through a payee link, its creator.
-  const excluded = [milestone.createdBy, addressGiver(firstPayment)];
+  // Whoever added it, and whoever a first payment's address rests on: who gave it or asked for it, and, for one no member
+  // answers for alone, who confirmed it.
+  const excluded = [milestone.createdBy, ...membersLeftOut(firstPayment)];
   const source: PaymentSource = { type: "milestone", id: milestone.id };
   const payment = { amount: milestone.amount, currency: "USDC", address: contractorAddress };
   let soleApprover = false;
@@ -604,7 +614,7 @@ export async function payHeldMilestone(input: {
       if (excluded.includes(input.actorId)) {
         if (!(await mayGiveApproval({ actorId: input.actorId, excluded, given: standing }))) {
           if (milestone.createdBy === input.actorId) raise("self_approval");
-          raise("new_payee_self", newPayeeSelfMessage(firstPayment));
+          raise("new_payee_self", newPayeeSelfMessage(firstPayment, input.actorId));
         }
         fewApprovers = true;
       }
@@ -614,8 +624,8 @@ export async function payHeldMilestone(input: {
     }
   }
   // A first payment to an address needs someone other than whoever gave it, unless they decide alone (new payee check N4).
-  if (!twoNeeded && addressGiver(firstPayment) === input.actorId) {
-    if (!(await isSoleApprover(input.actorId))) raise("new_payee_self", newPayeeSelfMessage(firstPayment));
+  if (!twoNeeded && membersLeftOut(firstPayment).includes(input.actorId)) {
+    if (!(await isSoleApprover(input.actorId))) raise("new_payee_self", newPayeeSelfMessage(firstPayment, input.actorId));
     addressGiverApproved = true;
   }
 

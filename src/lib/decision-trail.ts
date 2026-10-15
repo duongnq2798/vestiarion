@@ -137,12 +137,18 @@ function checksOf(detail: Record<string, unknown>, paying: boolean): string[] {
  * someone other than that member confirmed it, as the decision recorded it; null for any other address.
  */
 function askedFor(newPayee: Record<string, unknown>): string | null {
+  const confirmed = typeof newPayee.confirmedBy === "string" && newPayee.confirmedBy.length > 0;
   const confirmedByOther = newPayee.twoParties === true;
   if (typeof newPayee.linkCreatedBy === "string") {
-    return `sent through a payee link and confirmed by ${confirmedByOther ? "someone other than the member who created it" : "no one but the member who created it"}`;
+    if (!confirmed) return "sent through a payee link and not confirmed yet";
+    return `sent through a payee link and confirmed ${confirmedByOther ? "by someone other than the member who created it" : "only by the member who created it"}`;
   }
   if (typeof newPayee.bountyBy === "string") {
-    return `sent on GitHub and confirmed by ${confirmedByOther ? "someone other than the member its bounty acts as" : "no one but the member its bounty acts as"}`;
+    if (!confirmed) return "sent on GitHub and not confirmed yet";
+    // A decision recorded before round 2 may have counted a confirmation as the second person.
+    return confirmedByOther
+      ? "sent on GitHub and confirmed by someone other than the member its bounty acts as"
+      : "sent on GitHub, where a member's confirmation alone is not a second person";
   }
   return null;
 }

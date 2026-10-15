@@ -1187,6 +1187,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["You gave this payee's address", APPROVAL_CARD],
     ["You asked for this address with a payee link", APPROVAL_CARD],
     ["Your GitHub bounty asked for this address", APPROVAL_CARD],
+    ["You confirmed this address", APPROVAL_CARD],
     ["Create the workspace", GETTING_STARTED],
     ["Add or import a first bill", GETTING_STARTED],
     ["Set or confirm the limits", GETTING_STARTED],

@@ -98,27 +98,54 @@ export async function loadNewPayeeFacts(db: OrgDb, counterpartyIds: readonly str
   return { paidTo, entries };
 }
 
+/** How many confirmed payments are read at a time: PostgREST's row cap, so no page is ever cut short by it. */
+export const PAYMENT_PAGE = 1000;
+/** How many invoice or milestone ids one read names, to keep its address short. */
+export const ID_CHUNK = 100;
+
+type PaymentRow = { source_type: string; source_id: string; destination: string | null };
+
+/** Every confirmed payment of the workspace, a page at a time in a stable order, so the row cap never drops one. */
+async function allConfirmedPayments(db: OrgDb): Promise<PaymentRow[]> {
+  const rows: PaymentRow[] = [];
+  for (let from = 0; ; from += PAYMENT_PAGE) {
+    const page = unwrap(
+      await db
+        .from("payment_intents")
+        .select("source_type, source_id, destination")
+        .eq("status", "confirmed")
+        .order("id", { ascending: true })
+        .range(from, from + PAYMENT_PAGE - 1)
+    ) as PaymentRow[];
+    rows.push(...page);
+    if (page.length < PAYMENT_PAGE) return rows;
+  }
+}
+
+/** Which of these counterparties each invoice or milestone id belongs to, read by id in chunks: none is dropped. */
+async function payeesOf(db: OrgDb, table: "invoices" | "milestones", sourceIds: string[], ids: string[]): Promise<Array<[string, string]>> {
+  const column = table === "invoices" ? "counterparty_id" : "contractor_id";
+  const found: Array<[string, string]> = [];
+  for (let start = 0; start < sourceIds.length; start += ID_CHUNK) {
+    const rows = unwrap(
+      await db.from(table).select(`id, ${column}`).in("id", sourceIds.slice(start, start + ID_CHUNK)).in(column, ids)
+    ) as Array<Record<string, string>>;
+    for (const row of rows) found.push([row.id, row[column]]);
+  }
+  return found;
+}
+
 /**
  * Each confirmed payment to these counterparties, as `[counterpartyId, address]`, the address lowercase. A payment is
  * read as its invoice's or milestone's payee's. Which payee a payment was for is asked only when one was confirmed.
  */
 async function confirmedPayments(db: OrgDb, ids: string[]): Promise<Array<[string, string]>> {
-  const paid = unwrap(await db.from("payment_intents").select("source_type, source_id, destination").eq("status", "confirmed")) as Array<{
-    source_type: string;
-    source_id: string;
-    destination: string | null;
-  }>;
-  const withAddress = paid.filter((row) => typeof row.destination === "string" && row.destination.length > 0);
+  const withAddress = (await allConfirmedPayments(db)).filter((row) => typeof row.destination === "string" && row.destination.length > 0);
   if (withAddress.length === 0) return [];
+  const sources = (type: string) => [...new Set(withAddress.filter((row) => row.source_type === type).map((row) => row.source_id))];
   const payeeOf = new Map<string, string>();
-  if (withAddress.some((row) => row.source_type === "invoice")) {
-    const invoices = unwrap(await db.from("invoices").select("id, counterparty_id").in("counterparty_id", ids)) as Array<{ id: string; counterparty_id: string }>;
-    for (const invoice of invoices) payeeOf.set(`invoice:${invoice.id}`, invoice.counterparty_id);
-  }
-  if (withAddress.some((row) => row.source_type === "milestone")) {
-    const milestones = unwrap(await db.from("milestones").select("id, contractor_id").in("contractor_id", ids)) as Array<{ id: string; contractor_id: string }>;
-    for (const milestone of milestones) payeeOf.set(`milestone:${milestone.id}`, milestone.contractor_id);
-  }
+  for (const [id, payee] of await payeesOf(db, "invoices", sources("invoice"), ids)) payeeOf.set(`invoice:${id}`, payee);
+  for (const [id, payee] of await payeesOf(db, "milestones", sources("milestone"), ids)) payeeOf.set(`milestone:${id}`, payee);
   return withAddress.flatMap((row): Array<[string, string]> => {
     const payee = payeeOf.get(`${row.source_type}:${row.source_id}`);
     return payee ? [[payee, (row.destination as string).toLowerCase()]] : [];

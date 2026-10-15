@@ -716,7 +716,14 @@ describe("Pay now and the first payment to an address sent through a payee link"
       heldMilestonesTwoApprovals([{ id: MILESTONE, amount: 0.3, created_by: CREATOR, contractor_id: CONTRACTOR }], new Map([[CONTRACTOR, { address: ADDRESS }]]), new Map())
     );
 
-    expect(facts.get(MILESTONE)).toEqual({ above: 0.2, approvals: [], excluded: [CREATOR, GAVE], excludedSlots: 1, approvers: 3 });
+    expect(facts.get(MILESTONE)).toEqual({
+      above: 0.2,
+      approvals: [],
+      excluded: [CREATOR, GAVE],
+      excludedSlots: 1,
+      approvers: 3,
+      leftOutWhy: { [GAVE]: "You asked for this address with a payee link, so someone else must approve its first payment." },
+    });
   });
 });
 
@@ -755,6 +762,68 @@ describe("Pay now by the workspace's only approver, of an address they gave or a
     expect((await other.run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))).status).toBe("paid");
     expect(other.ledger()[0].p_detail).not.toHaveProperty("addressGiverApproved");
     expect(other.ledger()[0].p_summary).not.toContain(ADDRESS_GIVER_NOTE);
+  });
+});
+
+
+/**
+ * An address no member answers for alone (independent review, 2026-10-15, round 2), on a milestone: whoever confirmed
+ * an address sent with `/payto` is left out of paying its first release, so two different members stand behind it.
+ */
+describe("Pay now and an address no member answers for alone", () => {
+  const heldAsNewPayee = entryRow("milestone_release", { guardrailBlocked: true, guardrailRule: "counterparty.new_payee" });
+  const PULL = "https://github.com/acme/app/pull/42";
+  const CONNECTOR = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000c3";
+  const MEMBER_Y = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000e5";
+  // Member X (ACTOR) self-bountied their own pull request, which acts as the connector, and confirmed the address.
+  const selfBounty = (confirmer: string) => [
+    { action: "counterparty_address_confirmed", detail: { by: confirmer, counterpartyId: CONTRACTOR, address: ADDRESS, via: "confirm" } },
+    { action: "counterparty_address_changed", detail: { by: null, via: "github", login: "x-on-github", commentUrl: `${PULL}#issuecomment-9`, counterpartyId: CONTRACTOR, from: null, to: ADDRESS } },
+    { action: "github_bounty_attached", detail: { by: CONNECTOR, via: "github", login: "x-on-github", author: "x-on-github", pullRequest: PULL, counterpartyId: CONTRACTOR, milestoneId: MILESTONE } },
+  ];
+  const live = () => getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003 });
+
+  it("refuses the member who self-bountied and confirmed the address, before any claim", async () => {
+    live();
+    releaseHeldMilestoneMock.mockResolvedValue(PAID);
+    const { run, claimed } = world({ intent: null, last: heldAsNewPayee, addressEntries: selfBounty(ACTOR) });
+    const refused = run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }));
+    await expect(refused).rejects.toThrow("You confirmed this address, so someone else must approve its first payment.");
+    expect(await refusal(refused)).toBe("new_payee_self");
+    expect(claimed()).toBe(false);
+    expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
+  });
+
+  it("lets another member pay it, and the only approver, which the ledger records", async () => {
+    live();
+    releaseHeldMilestoneMock.mockResolvedValue(PAID);
+    const other = world({ intent: null, last: heldAsNewPayee, addressEntries: selfBounty(MEMBER_Y) });
+    expect((await other.run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))).status).toBe("paid");
+    expect(other.ledger()[0].p_detail).not.toHaveProperty("addressGiverApproved");
+
+    const alone = world({ intent: null, last: heldAsNewPayee, addressEntries: selfBounty(ACTOR), soleApprover: { body: true } });
+    expect((await alone.run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))).status).toBe("paid");
+    expect(alone.fake.requests.some((request) => request.path === "/rest/v1/rpc/sole_approver")).toBe(true);
+    expect(alone.ledger()[0].p_detail).toMatchObject({ firstPayment: true, addressGiverApproved: true });
+    expect(alone.ledger()[0].p_summary).toContain(ADDRESS_GIVER_NOTE);
+  });
+
+  it("leaves whoever confirmed it out of the two approvals, with the words Pay now would refuse them in", async () => {
+    live();
+    const { run } = world({ twoApprovals: 0.2, addressEntries: selfBounty(ACTOR), approversBesides: (excluded) => (excluded.length === 0 ? 3 : 1) });
+
+    const facts = await run(() =>
+      heldMilestonesTwoApprovals([{ id: MILESTONE, amount: 0.3, created_by: CREATOR, contractor_id: CONTRACTOR }], new Map([[CONTRACTOR, { address: ADDRESS }]]), new Map())
+    );
+
+    expect(facts.get(MILESTONE)).toEqual({
+      above: 0.2,
+      approvals: [],
+      excluded: [CREATOR, ACTOR],
+      excludedSlots: 1,
+      approvers: 3,
+      leftOutWhy: { [ACTOR]: "You confirmed this address, so someone else must approve its first payment." },
+    });
   });
 });
 
@@ -921,7 +990,14 @@ describe("heldMilestonesTwoApprovals (two approvals T8)", () => {
 
     const facts = await run(() => heldMilestonesTwoApprovals([HELD_ROW], CONTRACTORS, new Map()));
 
-    expect(facts.get(MILESTONE)).toEqual({ above: 0.2, approvals: [], excluded: [CREATOR, GAVE], excludedSlots: 1, approvers: 3 });
+    expect(facts.get(MILESTONE)).toEqual({
+      above: 0.2,
+      approvals: [],
+      excluded: [CREATOR, GAVE],
+      excludedSlots: 1,
+      approvers: 3,
+      leftOutWhy: { [GAVE]: "You gave this payee's address, so someone else must approve its first payment." },
+    });
   });
 
   it("reads nothing more than the figure when none is set", async () => {

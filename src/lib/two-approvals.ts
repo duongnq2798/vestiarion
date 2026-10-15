@@ -53,6 +53,11 @@ export interface TwoApprovalsFacts {
   excludedSlots: number;
   /** How many people can approve payments in the workspace: with fewer than two, nothing above the figure can be paid. */
   approvers: number;
+  /**
+   * For a first payment, each member left out for its address, and why, in the words a refused approval gives them
+   * (new payee check N4). Absent when no one is left out for the address.
+   */
+  leftOutWhy?: Record<string, string>;
 }
 
 /**

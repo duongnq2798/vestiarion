@@ -42,6 +42,11 @@ Addresses that come from outside the console already wait for a person: one sent
     so a confirmation by them alone is not a second party, and they may not approve its first payment unless they are
     the sole approver. When no member can be named, nothing is a second party: a person approves it. `addressBy`
     stays `"payee"`; N6's record adds `linkCreatedBy` or `bountyBy`.
+  - Amended 2026-10-15 (independent review, round 2): a GitHub login is tied to no member, and every bounty acts as the
+    member who connected GitHub, whoever typed it. So for an address sent with `/payto`, and for any address whose giver
+    no entry names, no confirmation counts as a second party (N3), and the members who confirmed it are left out of
+    approving its first payment beside its giver (N4), unless they are the sole approver. A bounty typed by its own pull
+    request's author names no member.
 - **N3. Two parties before the agent pays a new address.**
   - The agent makes a first payment on its own only when two different parties stand behind the address: the payee
     gave it and a member confirmed it, or one member gave it and another member confirmed it.

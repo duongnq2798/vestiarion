@@ -1568,6 +1568,36 @@ describe("the AP stage and an address the workspace paid for someone else", () =
 });
 
 
+/**
+ * An address sent with `/payto` (independent review, 2026-10-15, round 2): a GitHub login is tied to no member, so no
+ * confirmation counts as a second person, and the agent never makes its first payment on its own.
+ */
+describe("the AP stage and the first payment to an address sent on GitHub", () => {
+  it("holds it though a member other than the one the bounty acts as confirmed the address", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "pay", payOn: null, reasoning: "Due today and within the limit; paying it.", confidence: 0.9 }));
+    const pull = "https://github.com/acme/app/pull/42";
+    const entries = [
+      { action: "counterparty_address_confirmed", detail: { by: "member-x", counterpartyId: NORTHWIND, address: "0xnorth", via: "confirm" } },
+      { action: "counterparty_address_changed", detail: { by: null, via: "github", login: "x-on-github", commentUrl: `${pull}#issuecomment-9`, counterpartyId: NORTHWIND, from: null, to: "0xnorth" } },
+      { action: "github_bounty_attached", detail: { by: "member-c", login: "maintainer", author: "x-on-github", pullRequest: pull, counterpartyId: NORTHWIND } },
+    ];
+    const { fake, chain, stage } = apFake({
+      book: [payable({ due_date: "2026-10-01T12:00:00+00:00", early_pay_discount_pct: null, discount_due_date: null })],
+      newPayee: { paidTo: new Map(), entries: new Map([[NORTHWIND, entries]]) },
+    });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({
+      guardrailRule: "counterparty.new_payee",
+      observed: { newPayee: { addressBy: "payee", bountyBy: "member-c", confirmedBy: "member-x", twoParties: false } },
+    });
+  });
+});
+
+
 describe("the AP stage and a counterparty with no payment address", () => {
   const plain = { early_pay_discount_pct: null, discount_due_date: null };
   const noAddress = () => payable({ amount: "300", ...plain, counterparties: counterparty({ address: null }) });

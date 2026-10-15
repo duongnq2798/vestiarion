@@ -106,6 +106,26 @@ describe("the contractor stage and the follow-up, for an address sent through a 
     expect(firstRelease !== null && !firstRelease.twoParties).toBe(false);
   });
 
+  it("the contractor stage holds the first release to an address a member self-bountied on GitHub, whoever confirmed it", () => {
+    const pull = "https://github.com/acme/app/pull/42";
+    const facts = {
+      paidTo: new Map<string, Set<string>>(),
+      entries: new Map([
+        [
+          PAYEE_ID,
+          [
+            { action: "counterparty_address_confirmed", detail: { by: BAO, counterpartyId: PAYEE_ID, address: ADDRESS, via: "confirm" } },
+            { action: "counterparty_address_changed", detail: { by: null, via: "github", login: "bao-on-github", commentUrl: `${pull}#issuecomment-9`, counterpartyId: PAYEE_ID, to: ADDRESS } },
+            { action: "github_bounty_attached", detail: { by: ANNA, login: "bao-on-github", author: "bao-on-github", pullRequest: pull, counterpartyId: PAYEE_ID } },
+          ],
+        ],
+      ]),
+    };
+    const firstRelease = firstPaymentFrom(facts, contractor);
+    expect(firstRelease).toMatchObject({ twoParties: false, confirmersLeftOut: [BAO] });
+    expect(firstRelease !== null && !firstRelease.twoParties).toBe(true);
+  });
+
   describe("the follow-up", () => {
     const NOW = Date.parse("2026-10-15T12:00:00.000Z");
     const heldAsNewPayee: DecisionFacts = { poReference: "PO-1", goodsReceived: true, riskLevel: "clear", paymentLimit: 2, newPayeeHeld: true };

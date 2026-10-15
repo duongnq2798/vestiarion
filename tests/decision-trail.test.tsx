@@ -104,13 +104,20 @@ describe("the decision trail", () => {
         step(983, "02:43:00", "agent", "ap_pay", { decisionMode: "deepseek", decision: { action: "pay" }, observed: { riskLevel: "clear", amount: 0.3, newPayee } })
       )!.notes;
     expect(decided({ addressBy: "payee", linkCreatedBy: "m1", confirmedBy: "m1", twoParties: false })).toContain(
-      "✗ First payment to this address, sent through a payee link and confirmed by no one but the member who created it"
+      "✗ First payment to this address, sent through a payee link and confirmed only by the member who created it"
+    );
+    expect(decided({ addressBy: "payee", linkCreatedBy: "m1", confirmedBy: null, twoParties: false })).toContain(
+      "✗ First payment to this address, sent through a payee link and not confirmed yet"
     );
     expect(decided({ addressBy: "payee", linkCreatedBy: "m1", confirmedBy: "m2", twoParties: true })).toContain(
       "✓ First payment to this address, sent through a payee link and confirmed by someone other than the member who created it"
     );
-    expect(decided({ addressBy: "payee", bountyBy: "m1", confirmedBy: "m1", twoParties: false })).toContain(
-      "✗ First payment to this address, sent on GitHub and confirmed by no one but the member its bounty acts as"
+    // On GitHub no confirmation is a second person (round 2): another member approves it.
+    expect(decided({ addressBy: "payee", bountyBy: "m1", confirmedBy: "m2", twoParties: false })).toContain(
+      "✗ First payment to this address, sent on GitHub, where a member's confirmation alone is not a second person"
+    );
+    expect(decided({ addressBy: "payee", bountyBy: "m1", confirmedBy: null, twoParties: false })).toContain(
+      "✗ First payment to this address, sent on GitHub and not confirmed yet"
     );
     // A payee's address no member can be named as having asked for.
     expect(decided({ addressBy: "payee", confirmedBy: "m2", twoParties: false })).toContain("✗ First payment to this address, and only one person stands behind it");

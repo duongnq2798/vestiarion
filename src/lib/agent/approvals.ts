@@ -21,7 +21,7 @@ import { choosePayoutRoute, payoutFundsShort, type GatewayFigures } from "../pay
 import type { CrossChainRoute } from "../circle/types";
 import { commissionPartnersOf } from "../commissions/beneficiary";
 import { isSoleApprover } from "./sole-approver";
-import { addressGiver, askedVia, newPayeeSelfMessage, type NewPayeeCheck } from "../new-payee";
+import { addressGiver, askedVia, membersLeftOut, newPayeeSelfMessage, type NewPayeeCheck } from "../new-payee";
 import { firstPaymentCheck, loadNewPayeeFacts, newPayeeCheckFor } from "../new-payee-facts";
 import { addedSince, latestDecision, recordedFacts, type AddedDetails } from "../added-details";
 import { awaitsVerdict, heldForCash } from "../next-step";
@@ -484,6 +484,11 @@ export interface WaitingPayable {
   /** How the payee sent that address, when a member asked for it: through a payee link, or on GitHub. Absent otherwise. */
   firstPaymentVia?: "payee_link" | "github";
   /**
+   * For an address no member answers for alone (sent on GitHub, or with no giver named): the members who confirmed it,
+   * who may not approve its first payment unless they decide alone. Absent otherwise.
+   */
+  firstPaymentConfirmers?: string[];
+  /**
    * Above the workspace's figure for two approvals (two approvals T8): the figure, the approvals given that still count,
    * and whether whoever entered it, or gave its address, may give one. Absent when one approval pays it, or its transfer
    * was already sent.
@@ -577,7 +582,7 @@ export async function listWaitingPayables(
         id: row.id,
         payment: { amount: num(row.amount), currency, address: row.counterparties?.address ?? null },
         weighed: currency === "USDC" ? num(row.amount) : typeof usdcValue === "number" ? usdcValue : null,
-        excluded: [row.created_by, newPayee?.firstPayment ? addressGiver(newPayee) : null],
+        excluded: [row.created_by, ...(newPayee?.firstPayment ? membersLeftOut(newPayee) : [])],
         sent: transferExists(intents.get(row.id) ?? null),
       };
     })
@@ -651,7 +656,13 @@ export async function listWaitingPayables(
         ? { heldForVerdict: true, verdictEntry: { seq: Number(decision.seq), ts: decision.ts } }
         : {}),
       ...(balances && fromReserveUsdc !== null ? { fromReserve: { operatingUsdc: balances.operating, amountUsdc: fromReserveUsdc } } : {}),
-      ...(newPayee?.firstPayment ? { firstPaymentAddressBy: addressGiver(newPayee), ...(askedFor ? { firstPaymentVia: askedFor } : {}) } : {}),
+      ...(newPayee?.firstPayment
+        ? {
+            firstPaymentAddressBy: addressGiver(newPayee),
+            ...(askedFor ? { firstPaymentVia: askedFor } : {}),
+            ...(newPayee.confirmersLeftOut ? { firstPaymentConfirmers: newPayee.confirmersLeftOut } : {}),
+          }
+        : {}),
       ...(twoApprovals.has(row.id) ? { twoApprovals: twoApprovals.get(row.id) } : {}),
     };
   });
@@ -865,9 +876,9 @@ export async function approveAndPay(
   const above = alreadySent ? null : await readTwoApprovalsAbove(db());
   const usdcValue = above !== null && invoice.currency === "EURC" ? await usdcValueOfLatestDecision(invoice.id) : null;
   const twoNeeded = above !== null && needsTwoApprovals({ amount: invoice.amount, currency: invoice.currency, usdcValue }, above);
-  // Whoever entered it, and whoever gave a first payment's address: for one sent through a payee link, the member who
-  // created the link (new payee check N4).
-  const excluded = [invoice.createdBy, addressGiver(firstPayment)];
+  // Whoever entered it, and whoever a first payment's address rests on: who gave it or asked for it, and, for one no
+  // member answers for alone, who confirmed it (new payee check N4).
+  const excluded = [invoice.createdBy, ...membersLeftOut(firstPayment)];
   const source: PaymentSource = { type: "invoice", id: invoice.id };
   const payment = { amount: invoice.amount, currency: invoice.currency, address: invoice.address };
 
@@ -892,7 +903,7 @@ export async function approveAndPay(
     if (excluded.includes(input.actorId)) {
       if (!(await mayGiveApproval({ actorId: input.actorId, excluded, given: standing }))) {
         if (invoice.createdBy === input.actorId) raise("self_approval");
-        throw new ApprovalError("new_payee_self", newPayeeSelfMessage(firstPayment));
+        throw new ApprovalError("new_payee_self", newPayeeSelfMessage(firstPayment, input.actorId));
       }
       fewApprovers = true;
     }
@@ -901,9 +912,9 @@ export async function approveAndPay(
     // approver; the claim asks the database the same question again.
     soleApprover = invoice.createdBy === input.actorId;
     if (soleApprover && !(await isSoleApprover(input.actorId))) raise("self_approval");
-    // A first payment to an address needs someone other than whoever gave it, unless they decide alone (new payee check N4).
-    if (addressGiver(firstPayment) === input.actorId) {
-      if (!(await isSoleApprover(input.actorId))) throw new ApprovalError("new_payee_self", newPayeeSelfMessage(firstPayment));
+    // A first payment to an address needs someone other than whoever it rests on, unless they decide alone (new payee check N4).
+    if (membersLeftOut(firstPayment).includes(input.actorId)) {
+      if (!(await isSoleApprover(input.actorId))) throw new ApprovalError("new_payee_self", newPayeeSelfMessage(firstPayment, input.actorId));
       addressGiverApproved = true;
     }
   }

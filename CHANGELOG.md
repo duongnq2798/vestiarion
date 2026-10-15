@@ -78,16 +78,22 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   A connect page left open while the words changed now says so and shows them again, instead of recording words the
   person did not read.
 - **An address a member asked the payee for needs a second person, as a typed one does.** Whoever creates a payee
-  link now counts as having given the address the payee sends through it, and the member a GitHub bounty acts as
-  counts as having given an address sent with `/payto`. When that member is also the only one who confirms the
-  address, the agent no longer makes the first payment to it on its own: it holds it as `counterparty.new_payee`, and
-  another owner, admin or approver pays it with Approve and pay, or Pay now on a milestone. Before, one admin could
-  ask for an address, send their own wallet through it, confirm it, and the agent would pay it with no second person.
-  Who asked is read from the workspace's signed ledger, so deleting that account changes nothing, and when no one can
-  be named a person approves the first payment. When someone else confirms the address, the agent pays as before. The
-  workspace's only approver still pays that first payment themselves, and the ledger entry now says they did. The
-  card and the refusal say "You asked for this address with a payee link". No migration.
+  link now counts as having given the address the payee sends through it. When that person is also the only one who
+  confirms the address, the agent no longer makes the first payment to it on its own: it holds it as
+  `counterparty.new_payee`, and another owner, admin or approver pays it with Approve and pay, or Pay now on a
+  milestone. Before, one admin could ask for an address, send their own wallet through it, confirm it, and the agent
+  would pay it with no second person. Who created the link is read from the workspace's signed ledger, so deleting that
+  account changes nothing. When someone else confirms the address, the agent pays as before. The card and the refusal
+  say "You asked for this address with a payee link". No migration.
   [Guide](https://www.vestiarion.xyz/docs/guides/first-payment#ask-a-payee-for-their-address).
+- **An address sent on GitHub always waits for a second person.** A GitHub account is tied to no member, and every
+  bounty acts as the person who connected GitHub, whoever typed it, so any member who could write to the repository
+  could have bountied their own pull request, sent their own wallet and confirmed it. For an address sent with
+  `/payto`, and for any address no member can be named as having given, a confirmation no longer counts as the second
+  person: the agent holds the first payment, and whoever confirmed the address cannot approve it either. A bounty
+  typed by the pull request's own author names no member.
+- **The only approver's own first payment is on the record.** The workspace's only approver still pays a first payment
+  to an address they gave, asked for or confirmed, and its ledger entry now says they did it alone.
 - **A first payment is the first to that payee at that address.** An address the workspace had paid for someone
   else, such as a member paid once as a contractor, let the agent pay any other counterparty pointed at it with no
   second person. The check now counts only payments to the same counterparty.
