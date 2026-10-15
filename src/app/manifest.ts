@@ -13,10 +13,10 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "Vestiarion — Accounts payable agent for small teams",
+    name: "Vestiarion — Your AI agent for bills and payments",
     short_name: "Vestiarion",
     description:
-      "An accounts payable agent for small teams: it checks every bill before it is paid, pays in USDC within the limits you set, and signs every decision into a record you can verify.",
+      "Your AI agent for bills and payments, for small businesses: it checks every bill before it is paid, pays in USDC within the limits you set, and signs every decision into a record you can verify.",
     start_url: "/onboarding",
     scope: "/",
     display: "minimal-ui",

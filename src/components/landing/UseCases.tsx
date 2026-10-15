@@ -115,7 +115,7 @@ export function UseCases() {
         <div className="max-w-3xl">
           <Eyebrow className="text-agent">Who it&apos;s for</Eyebrow>
           <h2 id="who-its-for-title" className="mt-3 text-balance text-3xl font-semibold leading-tight tracking-[-0.04em] text-ink sm:text-5xl">
-            For small teams that pay people for their work.
+            For small businesses that pay people for their work.
           </h2>
           <p className="mt-4 max-w-2xl text-pretty text-[0.9375rem] leading-relaxed text-ink-2 sm:text-lg">
             If you pay contractors, freelancers or suppliers and check each invoice by hand, the agent does the checking and shows its work.

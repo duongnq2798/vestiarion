@@ -272,8 +272,8 @@ export function SiteFooter({ compact = false, networkLabel = "Arc" }: { compact?
           <div className="col-span-2 sm:col-span-4 lg:col-span-2">
             <Wordmark />
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-ink-2">
-              An accounts payable agent for small teams. It checks every bill before it is paid, pays within the limits you set, and signs every
-              decision into a record anyone can verify.
+              Your AI agent for bills and payments, for small businesses. It checks every bill before it is paid, pays within the limits you
+              set, and signs every decision into a record anyone can verify.
             </p>
             {/* What it runs on, each named and linked to its own site, in a new tab. */}
             <p className="mt-3 text-sm text-ink-2">

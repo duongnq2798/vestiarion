@@ -4,7 +4,7 @@
 
 # Vestiarion
 
-**An AI treasury agent that pays a business's bills in USDC on Arc, inside limits a contract enforces and a signed ledger proves.**
+**Your AI agent for bills and payments, for small businesses: it checks every bill before it is paid, pays in USDC on Arc inside limits a contract enforces, and signs every decision into a ledger you can verify.**
 
 [![Live app](https://img.shields.io/badge/Live_app-vestiarion.xyz-3048c9?style=flat-square)](https://www.vestiarion.xyz)
 [![Open numbers](https://img.shields.io/badge/Open_numbers-live_from_production-13845f?style=flat-square)](https://www.vestiarion.xyz/open)

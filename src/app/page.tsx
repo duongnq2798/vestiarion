@@ -25,7 +25,7 @@ import { X_HANDLE } from "@/lib/site-links";
 
 export const dynamic = "force-dynamic";
 
-const TITLE = "Vestiarion — An accounts payable agent for small teams";
+const TITLE = "Vestiarion — Your AI agent for bills and payments";
 const DESCRIPTION =
   "Vestiarion's agent checks every invoice from your contractors and suppliers, says pay, wait or stop and why, and pays in USDC within the limits you set. Try it on your real bills in shadow mode, with no wallet or funds to start.";
 

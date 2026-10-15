@@ -44,6 +44,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   links, and the team's own record of a business stays when its workspace is deleted.
 - **API write limits, said as they work.** Writes from one key come in bursts of up to 30, then one every 2 seconds,
   as the limits page and the API invoices guide now say.
+- **The site says what Vestiarion is in plain words: your AI agent for bills and payments, for small businesses.** The
+  landing page, the page titles and descriptions, the link preview image, the footer, the docs overview and the README
+  lead with it, in place of "an accounts payable agent for small teams".
 
 ### Fixed
 
