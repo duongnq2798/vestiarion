@@ -4,6 +4,7 @@ import { bearerToken } from "@/lib/agent-security";
 import { guardApiRequest } from "@/lib/api/guard";
 import { callOperation } from "@/lib/mcp/call";
 import { MCP_TOOLS } from "@/lib/mcp/tools";
+import { MCP_SERVER_VERSION } from "@/lib/mcp/version";
 
 /**
  * The remote MCP server: the `/api/v1` operations as tools an AI agent can
@@ -60,7 +61,7 @@ const serve = createMcpHandler(
     }
   },
   {
-    serverInfo: { name: "vestiarion", version: "1.0.0" },
+    serverInfo: { name: "vestiarion", version: MCP_SERVER_VERSION },
     // `registerTool` advertises `listChanged: true` unless told otherwise, and
     // a 2026-era `subscriptions/listen` for it would then hold an SSE stream
     // open on keep-alives until `maxDuration`. The tool list is fixed at

@@ -20,9 +20,10 @@ workspace is a person's task, done once, then repeated when the API changes.
       read a workspace's ledger, books and the agent's decisions; add counterparties, invoices and milestones."
 - [ ] **Import** each of the three URLs (paste the link). Import the Getting Started collection first, so it is listed
       first.
-- [ ] Before publishing, open the **Vestiarion** environment and check `apiKey`: its type is secret and its initial
-      value is empty. Never paste a key into this workspace's copy, not even as a current value: send test requests
-      from a private copy instead.
+- [ ] Before publishing, open the **Vestiarion** environment and check `apiKey`: its type is secret, and both its value
+      and its shared value are empty. Check the same for `vendorName` and `vendorAddress` in the Getting Started
+      collection's variables. Never paste a key into this workspace's copy, not even as a local value: send test
+      requests from a private copy instead.
 - [ ] In each collection's overview, check the description renders and links the guide.
 - [ ] Optional: add the workspace to the Postman API Network, if Postman offers it for the team's public workspace,
       with the category Finance.

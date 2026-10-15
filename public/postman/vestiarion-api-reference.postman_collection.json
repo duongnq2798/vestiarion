@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "8c2d4e61-7a95-4b3f-8e10-4f6a9b2c7d35",
     "name": "Vestiarion API reference",
-    "description": "Read a workspace's ledger, books, counterparties, milestones, treasury and insights, and add counterparties, invoices, milestones and payee links, with a workspace API key.\n\nEvery `/api/v1` operation, generated from the OpenAPI document at https://www.vestiarion.xyz/api/v1/openapi.json: one request per operation, in a folder per tag, with its parameters, its body and a saved example of each answer it documents. Optional parameters are listed and switched off; tick one to send it.\n\n**Authentication.** Each request sends `{{apiKey}}` as `Authorization: Bearer`. Import the Vestiarion environment, choose it, and paste a workspace API key into `apiKey` as its current value. A read-only key reads everything; the `POST` requests need a read-and-write key. No request can approve, reject or pay: no API call can.\n\nNew to the API? Start with the \"Vestiarion: Getting Started\" collection. Guide: https://www.vestiarion.xyz/docs/get-started/postman",
+    "description": "Read a workspace's ledger, books, counterparties, milestones, treasury and insights, and add counterparties, invoices, milestones and payee links, with a workspace API key.\n\nEvery `/api/v1` operation, generated from the OpenAPI document at https://www.vestiarion.xyz/api/v1/openapi.json: one request per operation, in a folder per tag, with its parameters, its body and a saved example of each answer it documents. Optional parameters are listed and switched off; tick one to send it.\n\n**Authentication.** Each request sends `{{apiKey}}` as `Authorization: Bearer`. Import the Vestiarion environment, choose it, and paste a workspace API key as the value of `apiKey`. That value stays on your machine: never share it, and leave the variable's shared value empty. A read-only key reads everything; the `POST` requests need a read-and-write key. No request can approve, reject or pay: no API call can.\n\nNew to the API? Start with the \"Vestiarion: Getting Started\" collection. Guide: https://www.vestiarion.xyz/docs/get-started/postman",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -22,7 +22,7 @@
         "type": "text/javascript",
         "exec": [
           "if (!pm.variables.get(\"apiKey\")) {",
-          "  throw new Error(\"apiKey is empty. Choose the Vestiarion environment, top right, and paste a workspace API key into apiKey as its current value.\");",
+          "  throw new Error(\"apiKey is empty. Choose the Vestiarion environment, top right, and paste a workspace API key as the value of apiKey. That value stays on this machine: never share it.\");",
           "}"
         ]
       }
@@ -2501,7 +2501,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\n  \"data\": {\n    \"id\": \"0810c2f3-dc6b-487e-aff5-63297ad33813\",\n    \"counterpartyId\": \"26d6ffed-356d-474a-8d42-89bc942f6b4e\",\n    \"url\": \"https://www.vestiarion.xyz/payee/vxp_avUyHXYqUlnt1OMB323j4N6Xv3H5lKzjZRNvbm1hfc4\",\n    \"expiresAt\": \"2026-10-10T15:42:04.28+00:00\"\n  }\n}"
+              "body": "{\n  \"data\": {\n    \"id\": \"0810c2f3-dc6b-487e-aff5-63297ad33813\",\n    \"counterpartyId\": \"26d6ffed-356d-474a-8d42-89bc942f6b4e\",\n    \"url\": \"https://www.vestiarion.xyz/payee/vxp_ExampleOnly_NotARealPayeeLinkToken_Examples\",\n    \"expiresAt\": \"2026-10-10T15:42:04.28+00:00\"\n  }\n}"
             },
             {
               "name": "400 invalid_request",

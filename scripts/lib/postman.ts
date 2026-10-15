@@ -110,7 +110,7 @@ interface Operation {
   tag: string;
   summary: string;
   description: string;
-  /** A `POST` adds records and needs a read-and-write key; every `GET` reads (tests/openapi.test.ts holds both). */
+  /** Anything but a `GET` adds records and needs a read-and-write key; every `GET` reads (tests/openapi.test.ts holds both). */
   write: boolean;
   params: OpenApiParameter[];
   body?: Record<string, unknown>;
@@ -138,7 +138,7 @@ function operationsOf(doc: OpenApiDoc): Operation[] {
         tag: op.tags[0],
         summary: op.summary,
         description: op.description,
-        write: method === "post",
+        write: method !== "get",
         params: op.parameters,
         body: op.requestBody?.content["application/json"].example,
         status: success[0],
@@ -277,7 +277,7 @@ function itemOf(op: Operation, origin: string, options: ItemOptions = {}) {
 /** Every request sends `{{apiKey}}` as a bearer token: stop before sending one without it, and say where it goes. */
 const KEY_CHECK = [
   'if (!pm.variables.get("apiKey")) {',
-  '  throw new Error("apiKey is empty. Choose the Vestiarion environment, top right, and paste a workspace API key into apiKey as its current value.");',
+  '  throw new Error("apiKey is empty. Choose the Vestiarion environment, top right, and paste a workspace API key as the value of apiKey. That value stays on this machine: never share it.");',
   "}",
 ];
 
@@ -308,11 +308,24 @@ function reference(doc: OpenApiDoc, ops: Operation[], origin: string) {
   const description = [
     `${doc.info.description}`,
     `Every \`/api/v1\` operation, generated from the OpenAPI document at ${origin}/api/v1/openapi.json: one request per operation, in a folder per tag, with its parameters, its body and a saved example of each answer it documents. Optional parameters are listed and switched off; tick one to send it.`,
-    "**Authentication.** Each request sends `{{apiKey}}` as `Authorization: Bearer`. Import the Vestiarion environment, choose it, and paste a workspace API key into `apiKey` as its current value. A read-only key reads everything; the `POST` requests need a read-and-write key. No request can approve, reject or pay: no API call can.",
+    "**Authentication.** Each request sends `{{apiKey}}` as `Authorization: Bearer`. Import the Vestiarion environment, choose it, and paste a workspace API key as the value of `apiKey`. That value stays on your machine: never share it, and leave the variable's shared value empty. A read-only key reads everything; the `POST` requests need a read-and-write key. No request can approve, reject or pay: no API call can.",
     `New to the API? Start with the "Vestiarion: Getting Started" collection. Guide: ${origin}/docs/get-started/postman`,
   ].join("\n\n");
   return collection(IDS.reference, "Vestiarion API reference", description, origin, folders, []);
 }
+
+/**
+ * Steps 4 and 5 add a counterparty at an address the person running them controls, never the reference example's:
+ * neither sends until both variables are set.
+ */
+const VENDOR_CHECK = [
+  'if (!pm.variables.get("vendorAddress")) {',
+  '  throw new Error("Set vendorAddress to a wallet you control, in this collection\'s Variables. Never confirm an address you do not own.");',
+  "}",
+  'if (!pm.variables.get("vendorName")) {',
+  '  throw new Error("Set vendorName, in this collection\'s Variables, to the name of the vendor at vendorAddress.");',
+  "}",
+];
 
 function gettingStarted(ops: Operation[], origin: string) {
   const status = operation(ops, "get-status");
@@ -335,21 +348,23 @@ function gettingStarted(ops: Operation[], origin: string) {
       }),
       itemOf(ledger, origin, {
         name: "3. List the agent's decisions, with its reasoning",
-        query: { actor: "agent", limit: "10" },
+        query: { actor: "agent", limit: "200" },
         queryOff: { domain: "ap" },
-        lead: "Every decision the agent signed into the ledger, oldest first. An entry's `detail` holds what it decided, and its reasoning where the decision records one. Tick `domain` for payables only. The saved example is the reference page's: one entry, of any actor.",
+        lead: "The entries the agent signed into the ledger, with what it decided and, where the decision records one, its reasoning, in `detail`. The ledger answers oldest first, and has no newest-first order: it is a stream to resume from. To reach the latest decisions, send `page.nextCursor` back as `cursor`, ticked under **Params**, until `hasMore` is `false`; keep the last cursor, and the next read starts there. Tick `domain` for payables only. For the latest decisions on bills at once, step 2 is newest first, and each invoice carries the agent's reasoning. The saved example is the reference page's: one entry, of any actor.",
       }),
     ],
   };
   const write = {
     name: "2. Add records, with a read-and-write key",
     description:
-      "Steps 4 and 5 add records, and need a key created with **Can also add records** ticked: switch `apiKey` to one. A read-only key gets `403 forbidden`, as the saved examples show.\n\nAdding is all a key does. The agent decides the invoice as one typed into the console, under every guardrail, and pays nothing to the counterparty's address until a person in the workspace confirms it. The `Idempotency-Key` header makes each step safe to send twice: a repeat within 24 hours gets the first answer back and adds nothing.",
+      "Steps 4 and 5 add records, and need a key created with **Can also add records** ticked: switch `apiKey` to one. A read-only key gets `403 forbidden`, as the saved examples show.\n\n**First set `vendorName` and `vendorAddress`**, in this collection's **Variables**, to a wallet you control. Step 4 adds a counterparty at that address, and neither step sends until both are set. The address waits for a person in the workspace to confirm it, and the agent pays nothing to it until then. Never confirm an address you do not own: once confirmed, it may be paid, in real USDC on a workspace on Arc mainnet.\n\nAdding is all a key does. The agent decides the invoice as one typed into the console, under every guardrail. The `Idempotency-Key` header makes each step safe to send twice: a repeat within 24 hours gets the first answer back and adds nothing.",
     item: [
       itemOf(addCounterparty, origin, {
         name: "4. Add a counterparty",
-        headers: { "Idempotency-Key": "postman-getting-started-counterparty" },
-        lead: "Adds a vendor, screened as one added in the console. Its post-response script keeps its `id` as `{{counterpartyId}}` for step 5.",
+        headers: { "Idempotency-Key": "postman-getting-started-counterparty-{{vendorAddress}}" },
+        body: { name: "{{vendorName}}", address: "{{vendorAddress}}" },
+        lead: "Adds a vendor, screened as one added in the console, at `{{vendorAddress}}`. **Use a wallet you control:** set `vendorName` and `vendorAddress` in the collection's **Variables** before sending. The address waits for a person in the workspace to confirm it; do not confirm an address you do not own. The post-response script keeps the counterparty's `id` as `{{counterpartyId}}` for step 5.",
+        prerequest: VENDOR_CHECK,
         test: [
           "if (pm.response.code === 201) {",
           '  pm.collectionVariables.set("counterpartyId", pm.response.json().data.id);',
@@ -358,31 +373,33 @@ function gettingStarted(ops: Operation[], origin: string) {
       }),
       itemOf(addInvoice, origin, {
         name: "5. Add an invoice for it",
-        headers: { "Idempotency-Key": "postman-getting-started-invoice-{{counterpartyId}}" },
+        headers: { "Idempotency-Key": "postman-getting-started-invoice-{{counterpartyId}}-{{dueDate}}" },
         body: { counterpartyId: "{{counterpartyId}}", dueDate: "{{dueDate}}" },
-        lead: "Adds a payable from the counterparty step 4 added, due in 14 days. Follow the agent's decision on it with step 2, or in the console.",
+        lead: "Adds a payable from the counterparty step 4 added, due 14 days from the day it is sent. Follow the agent's decision on it with step 2, or in the console.",
         prerequest: [
+          ...VENDOR_CHECK,
           'if (!pm.collectionVariables.get("counterpartyId")) {',
           '  throw new Error("Send step 4 first: it keeps the new counterparty\'s id for this step.");',
           "}",
-          'if (!pm.collectionVariables.get("dueDate")) {',
-          '  pm.collectionVariables.set("dueDate", new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));',
-          "}",
+          "// Due 14 days from the day this is sent, as YYYY-MM-DD.",
+          'pm.collectionVariables.set("dueDate", new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));',
         ],
       }),
     ],
   };
   const description = [
     "From a workspace API key to a first `200`, then a first write.",
-    `1. **Set the key.** Import the Vestiarion environment, ${origin}/postman/${POSTMAN_FILES.environment}, choose it at the top right, and paste a workspace API key into \`apiKey\` as its current value. Start with a read-only key.`,
+    `1. **Set the key.** Import the Vestiarion environment, ${origin}/postman/${POSTMAN_FILES.environment}, choose it at the top right, and paste a workspace API key as the value of \`apiKey\`, which stays on your machine. Never share it. Start with a read-only key.`,
     "2. **Send steps 1 to 3.** They read the workspace's status, its invoices and the agent's decisions with its reasoning.",
-    "3. **Steps 4 and 5 add a counterparty and an invoice**, with a read-and-write key.",
+    "3. **Steps 4 and 5 add a counterparty and an invoice**, with a read-and-write key. Set `vendorName` and `vendorAddress` in this collection's **Variables** first, to a wallet you control, and never confirm an address you do not own.",
     "Each request has saved examples: its success, and each error it can answer, with the API's own message. No request can approve, reject or pay: no API call can.",
     `Every other operation is in the "Vestiarion API reference" collection. Guide: ${origin}/docs/get-started/postman`,
   ].join("\n\n");
   return collection(IDS.gettingStarted, "Vestiarion: Getting Started", description, origin, [read, write], [
+    { key: "vendorName", value: "", description: "Set it before step 4: the name of the vendor step 4 adds, whose wallet is vendorAddress." },
+    { key: "vendorAddress", value: "", description: "Set it before step 4: a wallet you control, which step 4 adds as the vendor's address. Never confirm an address you do not own." },
     { key: "counterpartyId", value: "", description: "Set by step 4's post-response script: the counterparty step 5 adds an invoice for." },
-    { key: "dueDate", value: "", description: "Set by step 5's pre-request script, the first time: 14 days from that day, as YYYY-MM-DD." },
+    { key: "dueDate", value: "", description: "Set by step 5's pre-request script each time it is sent: 14 days from that day, as YYYY-MM-DD." },
   ]);
 }
 
@@ -392,7 +409,8 @@ function environment(origin: string) {
     name: "Vestiarion",
     values: [
       { key: "baseUrl", value: origin, type: "default", enabled: true },
-      // Empty, and secret: Postman masks what is typed here. A key is pasted as the current value, which stays local.
+      // Empty, and secret: Postman masks what is typed here. A key is pasted as the variable's value, which stays local;
+      // its shared value stays empty, so sharing the environment never shares a key.
       { key: "apiKey", value: "", type: "secret", enabled: true },
     ],
     _postman_variable_scope: "environment",

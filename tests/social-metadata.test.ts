@@ -74,6 +74,10 @@ describe("proxy matcher", () => {
     expect(matches(path)).toBe(false);
   });
 
+  it.each(["/postman/vestiarion-getting-started.postman_collection.json", "/postman/vestiarion.postman_environment.json"])("skips the Postman file %s", (path) => {
+    expect(matches(path)).toBe(false);
+  });
+
   it.each(["/", "/docs/webhooks/verify", "/docs/guides/xero", "/o/acme/console"])("still runs on the page %s", (path) => {
     expect(matches(path)).toBe(true);
   });

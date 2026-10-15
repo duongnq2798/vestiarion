@@ -19,7 +19,7 @@ https://www.vestiarion.xyz/postman/vestiarion-api-reference.postman_collection.j
 https://www.vestiarion.xyz/postman/vestiarion.postman_environment.json
 ```
 
-You can also download the files from the table above and drop them on **Import**.
+You can also open or save the files from the table above and drop them on **Import**.
 
 ## 2. Set a read-only key
 
@@ -27,7 +27,7 @@ Start with a read-only key. It reads everything, so it is enough for the first t
 
 1. [Create a key](/docs/get-started/quickstart#1-create-an-api-key) with **Can also add records** left clear, and copy it.
 2. In Postman, choose the **Vestiarion** environment at the top right.
-3. Open the environment, and paste the key into the **current value** of `apiKey`. Leave its initial value empty: Postman syncs an initial value to its servers and shares it with anyone you share the environment with, while a current value stays on your machine. `apiKey` is a secret variable, so Postman masks it on screen.
+3. Open the environment, and paste the key as the value of `apiKey`. That value stays on your machine. Never share it: leave the variable's shared value empty, so sharing the environment never shares the key. `apiKey` is a secret variable, so Postman masks it on screen. To keep the key out of the environment altogether, store it in Postman Vault, Postman's local store for secrets, and refer to it from `apiKey`.
 
 Every request sends `{{apiKey}}` as `Authorization: Bearer`, from the collection's **Authorization** tab. A request sent while `apiKey` is empty stops before it leaves Postman, and says where the key goes.
 
@@ -38,23 +38,24 @@ Open **Vestiarion: Getting Started**, then **1. Read, with a read-only key**, an
 Then send the next two:
 
 - **2. List invoices** returns the ten newest, each with the agent's verdict and why, in `agentReasoning`. To read the next ten, tick `cursor` under **Params** and paste the answer's `page.nextCursor` into it.
-- **3. List the agent's decisions, with its reasoning** returns the entries the agent signed into the ledger, oldest first, with `actor=agent`. Tick `domain` for the payables' decisions only.
+- **3. List the agent's decisions, with its reasoning** returns the entries the agent signed into the ledger, with `actor=agent`, 200 at a time. The ledger answers oldest first, and has no newest-first order: it is a stream to resume from. To reach the latest decisions, tick `cursor` and send each answer's `page.nextCursor` back in it until `hasMore` is `false`; keep the last cursor, and your next read starts there. Tick `domain` for the payables' decisions only. For the latest decisions on bills at once, **2. List invoices** is newest first, with the agent's reasoning on each.
 
-Each request checks its status in its post-response script, under **Scripts**, so running the folder in the Collection Runner shows at once whether every read answers. A `401 unauthorized` means the key is missing, mistyped or revoked: check the current value. [Errors](/docs/get-started/errors) lists every code.
+Each request checks its status in its post-response script, under **Scripts**, so running the folder in the Collection Runner shows at once whether every read answers. A `401 unauthorized` means the key is missing, mistyped or revoked: check the value of `apiKey`. [Errors](/docs/get-started/errors) lists every code.
 
 ## 4. Add records with a read-and-write key
 
 The second folder, **2. Add records, with a read-and-write key**, adds a counterparty and an invoice for it. A read-only key gets `403 forbidden` there.
 
 1. Create a key with **Can also add records** ticked. Name it for Postman, so you can revoke it on its own later.
-2. Paste it into the current value of `apiKey`, in place of the read-only key.
-3. Send **4. Add a counterparty**. Its post-response script keeps the new counterparty's `id` as the collection variable `counterpartyId`.
-4. Send **5. Add an invoice for it**: a 0.10 USDC payable from that counterparty, due 14 days from the day you first send it.
+2. Paste it as the value of `apiKey`, in place of the read-only key.
+3. Open the collection's **Variables**, and set `vendorAddress` to a wallet you control and `vendorName` to its owner's name. Neither write sends until both are set.
+4. Send **4. Add a counterparty**. It adds a vendor at `vendorAddress`, and its post-response script keeps the new counterparty's `id` as the collection variable `counterpartyId`.
+5. Send **5. Add an invoice for it**: a 0.10 USDC payable from that counterparty, due 14 days from the day you send it.
 
-Both requests send an `Idempotency-Key`, so sending one twice adds one record: the repeat, within 24 hours, gets the first answer back with `Idempotent-Replayed: true`. Changing the body and sending it with the same key answers `409 conflict`. Change the key in **Headers** to add another record.
+Both requests send an `Idempotency-Key`, so sending one twice adds one record: the repeat, within 24 hours, gets the first answer back with `Idempotent-Replayed: true`. Step 4's key is made from `vendorAddress`, and step 5's from the counterparty and the due date, so another address, or another day, adds another record. Changing the body and sending it with the same key answers `409 conflict`.
 
-<Callout kind="real-money" title="The example address is not yours">
-Step 4 adds the counterparty from the [Add a counterparty](/docs/api/create-counterparty) example, with that example's wallet address. The address waits for a person in the workspace to confirm it on **Counterparties**, and until then the agent pays nothing to it: it holds the invoice from step 5. Do not confirm this address. To follow a payment through, put your own counterparty's name and address in step 4's **Body** before you send it.
+<Callout kind="real-money" title="Use a wallet you control">
+The address step 4 adds waits for a person in the workspace to confirm it on **Counterparties**, and until then the agent pays nothing to it: it holds the invoice from step 5. Once it is confirmed, the agent may pay it: in real USDC, on a workspace on Arc mainnet. Set `vendorAddress` to a wallet you control, and never confirm an address you do not own, such as one copied from an example.
 </Callout>
 
 The agent decides the invoice as it decides one typed into the console, with every guardrail, usually within a minute. Send **2. List invoices** again to read its decision, or open it in the console. [Add invoices from your own system](/docs/guides/api-invoices) walks through the same path with `curl`.
@@ -64,7 +65,7 @@ The agent decides the invoice as it decides one typed into the console, with eve
 **Vestiarion API reference** has one request per operation, in a folder per tag: Workspace, Ledger, Payables and receivables, Counterparties, Milestones, Treasury and Insights. Each request's description is its reference page's, with a link to it, and says which key it needs.
 
 - **Parameters.** Every query parameter is listed with its description and allowed values, and switched off. Tick one under **Params** to send it.
-- **Writes.** A `POST` has the reference page's example body and an example `Idempotency-Key`. Edit both before you send it.
+- **Writes.** A `POST` has the reference page's example body. Every `POST` but **Create a payee link**, which keeps no outcome for a key, also has an example `Idempotency-Key`. Replace the example's values with your own before you send one: an address in an example is not yours.
 - **Examples.** Under each request, the saved examples show its success and each documented error, with the status and the body the API answers with.
 
 ## Keeping them current

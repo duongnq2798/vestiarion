@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "5f0c8a52-3d47-4e0b-9a6c-1b2e7d9f4a10",
     "name": "Vestiarion: Getting Started",
-    "description": "From a workspace API key to a first `200`, then a first write.\n\n1. **Set the key.** Import the Vestiarion environment, https://www.vestiarion.xyz/postman/vestiarion.postman_environment.json, choose it at the top right, and paste a workspace API key into `apiKey` as its current value. Start with a read-only key.\n\n2. **Send steps 1 to 3.** They read the workspace's status, its invoices and the agent's decisions with its reasoning.\n\n3. **Steps 4 and 5 add a counterparty and an invoice**, with a read-and-write key.\n\nEach request has saved examples: its success, and each error it can answer, with the API's own message. No request can approve, reject or pay: no API call can.\n\nEvery other operation is in the \"Vestiarion API reference\" collection. Guide: https://www.vestiarion.xyz/docs/get-started/postman",
+    "description": "From a workspace API key to a first `200`, then a first write.\n\n1. **Set the key.** Import the Vestiarion environment, https://www.vestiarion.xyz/postman/vestiarion.postman_environment.json, choose it at the top right, and paste a workspace API key as the value of `apiKey`, which stays on your machine. Never share it. Start with a read-only key.\n\n2. **Send steps 1 to 3.** They read the workspace's status, its invoices and the agent's decisions with its reasoning.\n\n3. **Steps 4 and 5 add a counterparty and an invoice**, with a read-and-write key. Set `vendorName` and `vendorAddress` in this collection's **Variables** first, to a wallet you control, and never confirm an address you do not own.\n\nEach request has saved examples: its success, and each error it can answer, with the API's own message. No request can approve, reject or pay: no API call can.\n\nEvery other operation is in the \"Vestiarion API reference\" collection. Guide: https://www.vestiarion.xyz/docs/get-started/postman",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -22,7 +22,7 @@
         "type": "text/javascript",
         "exec": [
           "if (!pm.variables.get(\"apiKey\")) {",
-          "  throw new Error(\"apiKey is empty. Choose the Vestiarion environment, top right, and paste a workspace API key into apiKey as its current value.\");",
+          "  throw new Error(\"apiKey is empty. Choose the Vestiarion environment, top right, and paste a workspace API key as the value of apiKey. That value stays on this machine: never share it.\");",
           "}"
         ]
       }
@@ -36,6 +36,18 @@
       "description": "Where the API is. The Vestiarion environment sets the same value."
     },
     {
+      "key": "vendorName",
+      "value": "",
+      "description": "Set it before step 4: the name of the vendor step 4 adds, whose wallet is vendorAddress.",
+      "type": "string"
+    },
+    {
+      "key": "vendorAddress",
+      "value": "",
+      "description": "Set it before step 4: a wallet you control, which step 4 adds as the vendor's address. Never confirm an address you do not own.",
+      "type": "string"
+    },
+    {
       "key": "counterpartyId",
       "value": "",
       "description": "Set by step 4's post-response script: the counterparty step 5 adds an invoice for.",
@@ -44,7 +56,7 @@
     {
       "key": "dueDate",
       "value": "",
-      "description": "Set by step 5's pre-request script, the first time: 14 days from that day, as YYYY-MM-DD.",
+      "description": "Set by step 5's pre-request script each time it is sent: 14 days from that day, as YYYY-MM-DD.",
       "type": "string"
     }
   ],
@@ -592,7 +604,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/ledger?limit=10&actor=agent",
+              "raw": "{{baseUrl}}/api/v1/ledger?limit=200&actor=agent",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -604,7 +616,7 @@
               "query": [
                 {
                   "key": "limit",
-                  "value": "10",
+                  "value": "200",
                   "description": "How many items to return. Defaults to 50; a larger value is capped at 200."
                 },
                 {
@@ -626,7 +638,7 @@
                 }
               ]
             },
-            "description": "Every decision the agent signed into the ledger, oldest first. An entry's `detail` holds what it decided, and its reasoning where the decision records one. Tick `domain` for payables only. The saved example is the reference page's: one entry, of any actor.\n\nThe audit chain, oldest first, as a resumable stream. Because the ledger is append-only and ascending by `seq`, a stored `page.nextCursor` is a watermark: a request from it never returns an entry before it. Persist the last non-null `nextCursor` only after processing every entry in the responses read, and resume from it; the last page, which had no cursor of its own, is returned again, so de-duplicate on `seq`.\n\n`seq` is monotonic within a workspace but not gap-free; continuity is proven by the hash chain, not by `seq`.\n\n**Key:** any workspace API key; a read-only one is enough.\n\nReference: https://www.vestiarion.xyz/docs/api/list-ledger-entries"
+            "description": "The entries the agent signed into the ledger, with what it decided and, where the decision records one, its reasoning, in `detail`. The ledger answers oldest first, and has no newest-first order: it is a stream to resume from. To reach the latest decisions, send `page.nextCursor` back as `cursor`, ticked under **Params**, until `hasMore` is `false`; keep the last cursor, and the next read starts there. Tick `domain` for payables only. For the latest decisions on bills at once, step 2 is newest first, and each invoice carries the agent's reasoning. The saved example is the reference page's: one entry, of any actor.\n\nThe audit chain, oldest first, as a resumable stream. Because the ledger is append-only and ascending by `seq`, a stored `page.nextCursor` is a watermark: a request from it never returns an entry before it. Persist the last non-null `nextCursor` only after processing every entry in the responses read, and resume from it; the last page, which had no cursor of its own, is returned again, so de-duplicate on `seq`.\n\n`seq` is monotonic within a workspace but not gap-free; continuity is proven by the hash chain, not by `seq`.\n\n**Key:** any workspace API key; a read-only one is enough.\n\nReference: https://www.vestiarion.xyz/docs/api/list-ledger-entries"
           },
           "response": [
             {
@@ -910,11 +922,25 @@
     },
     {
       "name": "2. Add records, with a read-and-write key",
-      "description": "Steps 4 and 5 add records, and need a key created with **Can also add records** ticked: switch `apiKey` to one. A read-only key gets `403 forbidden`, as the saved examples show.\n\nAdding is all a key does. The agent decides the invoice as one typed into the console, under every guardrail, and pays nothing to the counterparty's address until a person in the workspace confirms it. The `Idempotency-Key` header makes each step safe to send twice: a repeat within 24 hours gets the first answer back and adds nothing.",
+      "description": "Steps 4 and 5 add records, and need a key created with **Can also add records** ticked: switch `apiKey` to one. A read-only key gets `403 forbidden`, as the saved examples show.\n\n**First set `vendorName` and `vendorAddress`**, in this collection's **Variables**, to a wallet you control. Step 4 adds a counterparty at that address, and neither step sends until both are set. The address waits for a person in the workspace to confirm it, and the agent pays nothing to it until then. Never confirm an address you do not own: once confirmed, it may be paid, in real USDC on a workspace on Arc mainnet.\n\nAdding is all a key does. The agent decides the invoice as one typed into the console, under every guardrail. The `Idempotency-Key` header makes each step safe to send twice: a repeat within 24 hours gets the first answer back and adds nothing.",
       "item": [
         {
           "name": "4. Add a counterparty",
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get(\"vendorAddress\")) {",
+                  "  throw new Error(\"Set vendorAddress to a wallet you control, in this collection's Variables. Never confirm an address you do not own.\");",
+                  "}",
+                  "if (!pm.variables.get(\"vendorName\")) {",
+                  "  throw new Error(\"Set vendorName, in this collection's Variables, to the name of the vendor at vendorAddress.\");",
+                  "}"
+                ]
+              }
+            },
             {
               "listen": "test",
               "script": {
@@ -939,13 +965,13 @@
               },
               {
                 "key": "Idempotency-Key",
-                "value": "postman-getting-started-counterparty",
+                "value": "postman-getting-started-counterparty-{{vendorAddress}}",
                 "description": "Makes a retry safe: up to 255 printable ASCII characters, unique to the record being added, such as its id in your own system. A repeat with the same key and the same body within 24 hours gets the first answer back, with `Idempotent-Replayed: true`, and adds nothing. The same key with a different body answers `409`."
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"API Test Vendor\",\n  \"role\": \"vendor\",\n  \"address\": \"0x6b3A4C65f362b818bb7FD6f999477A03CE07e51a\",\n  \"paymentLimit\": \"1\"\n}",
+              "raw": "{\n  \"name\": \"{{vendorName}}\",\n  \"role\": \"vendor\",\n  \"address\": \"{{vendorAddress}}\",\n  \"paymentLimit\": \"1\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -963,7 +989,7 @@
                 "counterparties"
               ]
             },
-            "description": "Adds a vendor, screened as one added in the console. Its post-response script keeps its `id` as `{{counterpartyId}}` for step 5.\n\nAdds a vendor, contractor or client, checked by the rules of the console's form and screened as one added there: the answer's `riskLevel` is the screening's verdict, or `unscreened` when screening could not finish. It is recorded in the ledger as `create_counterparty` with `via: \"api\"` and the key's id.\n\nAn address added through the API waits for a person. The agent pays nothing to it until an owner, admin or approver confirms it on Counterparties, so a key can add records but cannot point the agent's payments at a new address.\n\n**Key:** a read-and-write key. A read-only key gets `403 forbidden`.\n\nReference: https://www.vestiarion.xyz/docs/api/create-counterparty"
+            "description": "Adds a vendor, screened as one added in the console, at `{{vendorAddress}}`. **Use a wallet you control:** set `vendorName` and `vendorAddress` in the collection's **Variables** before sending. The address waits for a person in the workspace to confirm it; do not confirm an address you do not own. The post-response script keeps the counterparty's `id` as `{{counterpartyId}}` for step 5.\n\nAdds a vendor, contractor or client, checked by the rules of the console's form and screened as one added there: the answer's `riskLevel` is the screening's verdict, or `unscreened` when screening could not finish. It is recorded in the ledger as `create_counterparty` with `via: \"api\"` and the key's id.\n\nAn address added through the API waits for a person. The agent pays nothing to it until an owner, admin or approver confirms it on Counterparties, so a key can add records but cannot point the agent's payments at a new address.\n\n**Key:** a read-and-write key. A read-only key gets `403 forbidden`.\n\nReference: https://www.vestiarion.xyz/docs/api/create-counterparty"
           },
           "response": [
             {
@@ -1316,12 +1342,17 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "if (!pm.variables.get(\"vendorAddress\")) {",
+                  "  throw new Error(\"Set vendorAddress to a wallet you control, in this collection's Variables. Never confirm an address you do not own.\");",
+                  "}",
+                  "if (!pm.variables.get(\"vendorName\")) {",
+                  "  throw new Error(\"Set vendorName, in this collection's Variables, to the name of the vendor at vendorAddress.\");",
+                  "}",
                   "if (!pm.collectionVariables.get(\"counterpartyId\")) {",
                   "  throw new Error(\"Send step 4 first: it keeps the new counterparty's id for this step.\");",
                   "}",
-                  "if (!pm.collectionVariables.get(\"dueDate\")) {",
-                  "  pm.collectionVariables.set(\"dueDate\", new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));",
-                  "}"
+                  "// Due 14 days from the day this is sent, as YYYY-MM-DD.",
+                  "pm.collectionVariables.set(\"dueDate\", new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));"
                 ]
               }
             },
@@ -1346,7 +1377,7 @@
               },
               {
                 "key": "Idempotency-Key",
-                "value": "postman-getting-started-invoice-{{counterpartyId}}",
+                "value": "postman-getting-started-invoice-{{counterpartyId}}-{{dueDate}}",
                 "description": "Makes a retry safe: up to 255 printable ASCII characters, unique to the record being added, such as its id in your own system. A repeat with the same key and the same body within 24 hours gets the first answer back, with `Idempotent-Replayed: true`, and adds nothing. The same key with a different body answers `409`."
               }
             ],
@@ -1370,7 +1401,7 @@
                 "invoices"
               ]
             },
-            "description": "Adds a payable from the counterparty step 4 added, due in 14 days. Follow the agent's decision on it with step 2, or in the console.\n\nAdds a payable or a receivable, checked by the rules of the console's invoice form, and recorded in the ledger as `create_invoice` with `via: \"api\"` and the key's id. It is added as the key's issuer's: if the agent holds it, the issuer cannot approve it, unless they are the workspace's only approver.\n\nThe agent decides a payable as one typed in, with every guardrail and the workspace's limits, usually within a minute. The API never approves or pays. A `counterpartyId` the workspace does not hold, including another workspace's, answers `400`.\n\n**Key:** a read-and-write key. A read-only key gets `403 forbidden`.\n\nReference: https://www.vestiarion.xyz/docs/api/create-invoice"
+            "description": "Adds a payable from the counterparty step 4 added, due 14 days from the day it is sent. Follow the agent's decision on it with step 2, or in the console.\n\nAdds a payable or a receivable, checked by the rules of the console's invoice form, and recorded in the ledger as `create_invoice` with `via: \"api\"` and the key's id. It is added as the key's issuer's: if the agent holds it, the issuer cannot approve it, unless they are the workspace's only approver.\n\nThe agent decides a payable as one typed in, with every guardrail and the workspace's limits, usually within a minute. The API never approves or pays. A `counterpartyId` the workspace does not hold, including another workspace's, answers `400`.\n\n**Key:** a read-and-write key. A read-only key gets `403 forbidden`.\n\nReference: https://www.vestiarion.xyz/docs/api/create-invoice"
           },
           "response": [
             {

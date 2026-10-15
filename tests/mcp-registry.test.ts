@@ -1,11 +1,13 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { readSource } from "@/lib/docs/content";
+import { MCP_SERVER_VERSION } from "@/lib/mcp/version";
+import { POST } from "@/app/api/mcp/route";
 
 /**
  * server.json, the remote MCP server's entry for the official MCP Registry (registry.modelcontextprotocol.io), which
- * `mcp-publisher publish` sends from the repository root. docs/distribution/mcp-registry.md says how it is published.
+ * `mcp-publisher publish` sends. docs/distribution/mcp-registry.md says how it is published.
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- server.json and its schema are read as the JSON they are */
@@ -63,8 +65,8 @@ describe("server.json", () => {
 
   it("points at the remote MCP server, over Streamable HTTP, the transport it serves", () => {
     expect(server().remotes.map((remote: Json) => [remote.type, remote.url])).toEqual([["streamable-http", "https://www.vestiarion.xyz/api/mcp"]]);
-    expect(existsSync("src/app/api/mcp/route.ts")).toBe(true);
-    expect(readFileSync("src/app/api/mcp/route.ts", "utf8")).toMatch(/export \{[^}]*handler as POST/);
+    // The route at /api/mcp answers a POST, where a Streamable HTTP client sends every message.
+    expect(typeof POST).toBe("function");
   });
 
   it("asks for a workspace API key as a required, secret Authorization header, and holds none", () => {
@@ -84,8 +86,7 @@ describe("server.json", () => {
   });
 
   it("states the version the server reports in its MCP handshake", () => {
-    const reported = /serverInfo: \{ name: "vestiarion", version: "([^"]+)" \}/.exec(readFileSync("src/app/api/mcp/route.ts", "utf8"));
-    expect(reported?.[1]).toBe(server().version);
+    expect(server().version).toBe(MCP_SERVER_VERSION);
   });
 
   it("has a description the MCP docs page agrees with: a read-only key by default, a read-and-write key to add records", () => {

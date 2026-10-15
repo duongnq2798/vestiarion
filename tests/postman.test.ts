@@ -14,6 +14,8 @@ import { COLLECTION_SCHEMA, POSTMAN_FILES, renderPostman, type OpenApiDoc } from
  */
 
 const ORIGIN = "https://www.vestiarion.xyz";
+/** The invented payee-link token of the Create a payee link example (content/docs/examples/create-payee-link.json). */
+const EXAMPLE_PAYEE_TOKEN = "vxp_ExampleOnly_NotARealPayeeLinkToken_Examples";
 const doc = () => structuredClone(buildOpenApiDocument(ORIGIN)) as unknown as OpenApiDoc;
 const committed = (name: string) => readFileSync(path.join("public", "postman", name), "utf8");
 const lf = (text: string) => text.replace(/\r\n/g, "\n");
@@ -93,7 +95,10 @@ describe("the Postman files in public/postman/", () => {
       expect(text, name).not.toMatch(/vxk_[a-z2-7]{8}_[A-Za-z0-9_-]+/);
       expect(text, name).not.toMatch(/Bearer\s+(?!\{\{apiKey\}\}|\{api_key\})\S/);
       expect(text, name).not.toMatch(/\b(?:sk_live_|sk-ant-|ghp_|github_pat_|xox[abp]-|AKIA[0-9A-Z]{16})/);
+      // A payee link's token opens its page: the only one written anywhere is the reference example's invented one.
+      for (const [token] of text.matchAll(/vxp_[A-Za-z0-9_-]{43}/g)) expect(token, name).toBe(EXAMPLE_PAYEE_TOKEN);
     }
+    expect(strings(reference()).join("\n")).toContain(EXAMPLE_PAYEE_TOKEN);
     for (const collection of [reference(), gettingStarted()]) {
       expect(collection.auth).toEqual({ type: "bearer", bearer: [{ key: "token", value: "{{apiKey}}", type: "string" }] });
       for (const { item } of requests(collection.item)) {
@@ -252,7 +257,34 @@ describe("the Getting Started collection", () => {
       ["2. Add records, with a read-and-write key", "4. Add a counterparty", "POST /api/v1/counterparties"],
       ["2. Add records, with a read-and-write key", "5. Add an invoice for it", "POST /api/v1/invoices"],
     ]);
-    expect(step(3).request.url.raw).toBe("{{baseUrl}}/api/v1/ledger?limit=10&actor=agent");
+    expect(step(3).request.url.raw).toBe("{{baseUrl}}/api/v1/ledger?limit=200&actor=agent");
+    // The ledger has no newest-first order: the step says so, and how to page to the latest decisions.
+    expect(step(3).request.description).toContain("The ledger answers oldest first");
+    expect(step(3).request.description).toContain("send `page.nextCursor` back as `cursor`");
+  });
+
+  it("sends no wallet address of its own: the counterparty's is the one the person running it sets", () => {
+    // A literal address here would be a stranger's, which a later confirmation could let the agent pay.
+    for (const { item } of steps()) expect(JSON.stringify(item.request), item.name).not.toMatch(/0x[0-9a-fA-F]{40}/);
+    const vendor = Object.fromEntries(gettingStarted().variable.map((variable: Json) => [variable.key, variable.value]));
+    expect(vendor).toMatchObject({ vendorName: "", vendorAddress: "" });
+    expect(JSON.parse(step(4).request.body.raw)).toEqual({
+      ...operationById("create-counterparty")!.requestExample,
+      name: "{{vendorName}}",
+      address: "{{vendorAddress}}",
+    });
+    // Neither write sends until both are set, and each says why.
+    for (const n of [4, 5]) {
+      const prerequest = step(n).event.find((event: Json) => event.listen === "prerequest").script.exec.join("\n");
+      expect(prerequest, `step ${n}`).toContain('if (!pm.variables.get("vendorAddress")) {');
+      expect(prerequest, `step ${n}`).toContain("Set vendorAddress to a wallet you control");
+      expect(prerequest, `step ${n}`).toContain('if (!pm.variables.get("vendorName")) {');
+    }
+    expect(step(4).request.description).toContain("**Use a wallet you control:**");
+    expect(step(4).request.description).toContain("do not confirm an address you do not own");
+    const folder = gettingStarted().item.find((candidate: Json) => candidate.name === "2. Add records, with a read-and-write key");
+    expect(folder.description).toContain("to a wallet you control");
+    expect(folder.description).toContain("Never confirm an address you do not own");
   });
 
   it("starts the reads with a read-only key, and says the writes need a read-and-write one", () => {
@@ -261,14 +293,18 @@ describe("the Getting Started collection", () => {
     for (const n of [4, 5]) expect(step(n).request.description).toContain("A read-only key gets `403 forbidden`.");
   });
 
-  it("adds the invoice for the counterparty step 4 added, with a key that makes each write safe to repeat", () => {
+  it("adds the invoice for the counterparty step 4 added, due 14 days from the day it is sent, with keys that make each write safe to repeat", () => {
     expect(strings(step(4).event).join("\n")).toContain('pm.collectionVariables.set("counterpartyId", pm.response.json().data.id);');
     const body = JSON.parse(step(5).request.body.raw);
     expect(body).toEqual({ ...operationById("create-invoice")!.requestExample, counterpartyId: "{{counterpartyId}}", dueDate: "{{dueDate}}" });
-    expect(JSON.parse(step(4).request.body.raw)).toEqual(operationById("create-counterparty")!.requestExample);
-    for (const n of [4, 5]) {
-      expect(step(n).request.header.find((header: Json) => header.key === "Idempotency-Key").value).toMatch(/^postman-getting-started-/);
-    }
+    // Set on every send, never kept from an earlier day.
+    const prerequest: string[] = step(5).event.find((event: Json) => event.listen === "prerequest").script.exec;
+    expect(prerequest).toContain('pm.collectionVariables.set("dueDate", new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));');
+    expect(prerequest.join("\n")).not.toContain('pm.collectionVariables.get("dueDate")');
+    const key = (n: number) => step(n).request.header.find((header: Json) => header.key === "Idempotency-Key").value;
+    // The same vendor, or the same invoice on the same day, is added once; another is a new record.
+    expect(key(4)).toBe("postman-getting-started-counterparty-{{vendorAddress}}");
+    expect(key(5)).toBe("postman-getting-started-invoice-{{counterpartyId}}-{{dueDate}}");
   });
 
   it("saves the same examples as the reference collection, its success and every error", () => {
