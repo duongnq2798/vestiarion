@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
-import { releaseMilestoneIfNotPaused } from "@/lib/agent/orchestrator";
+import { releaseHeldMilestone, releaseMilestoneIfNotPaused } from "@/lib/agent/orchestrator";
 import { holdId } from "@/lib/circle/escrow-holds";
 import { paymentIdempotencyKey } from "@/lib/payments";
 import type { BalanceSnapshot, ChainProvider, EarnResult, TransferParams, TransferResult } from "@/lib/circle";
@@ -101,6 +101,26 @@ describe("releasing a milestone locked in escrow", () => {
     expect(outcome.status).toBe("held");
     expect(outcome.reasoningSuffix).toBe(` [not paid: the escrow hold pays ${OLD}, which is no longer this contractor's address; refund it from 31 Oct 2026 and pay again]`);
     expect(chain.transfers).toEqual([]);
+  });
+
+  it("only reads a release from the hold already sent, records it and marks the hold released, though the address changed since", async () => {
+    // Pay now that checks a transfer already sent: it went where the hold pays, so the hold's address check, which is
+    // for a new release, does not stand before it, and nothing says to refund it and pay again.
+    const OLD = "0x0000000000000000000000000000000000000a1d";
+    const { fake, chain } = world(
+      { escrow_state: "funded", escrow_amount: "2", escrow_payee: OLD, escrow_refund_after: "2026-10-31T00:00:00Z" },
+      { intent: { status: "pending", provider_tx_id: "circle-release-1", payout_route: "escrow", destination: OLD } }
+    );
+
+    const outcome = await runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), () =>
+      releaseHeldMilestone({ milestoneId: MILESTONE, destination: PAYEE, amount: 2 }, { provider: chain, operatingAccountId: "acct-1", retryTerminalFailure: false, onlyRead: true })
+    );
+
+    expect(outcome.status).toBe("paid");
+    expect(outcome.reasoningSuffix).not.toContain("pay again");
+    expect(chain.transfers).toEqual([]);
+    const patch = fake.requests.find((r) => r.path === "/rest/v1/milestones" && r.method === "PATCH");
+    expect(patch?.body).toEqual({ escrow_state: "released", escrow_release_tx_hash: `0x${"7".repeat(64)}` });
   });
 
   it("holds while the milestone is being locked, and sends nothing (review I1)", async () => {

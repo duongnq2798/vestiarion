@@ -2683,9 +2683,10 @@ export async function releaseHeldMilestone(
   input: { milestoneId: string; destination: string; amount: number; spendingLimit?: SpendingLimitPayment },
   /**
    * `retryTerminalFailure`: whether a transfer Circle ended may be sent again as a new one. Only a Pay now that ran a new
-   * payment's checks passes true; one that only checked a transfer already sent passes false (payment exceptions review 2).
+   * payment's checks passes true; one that only checked a transfer already sent passes false (payment exceptions review 2),
+   * and `onlyRead`, so a hold's checks for a new release do not stand before the release it already sent.
    */
-  deps: { provider: ChainProvider; operatingAccountId: string; retryTerminalFailure: boolean }
+  deps: { provider: ChainProvider; operatingAccountId: string; retryTerminalFailure: boolean; onlyRead?: boolean }
 ): Promise<PayStepOutcome> {
   // A person's payment goes through the agent's spending limit contract only from a workspace paying from its owner's own
   // wallet, which can be paid from no other way (wallet treasury W11); never otherwise (onchain spending limit R6).
@@ -2695,18 +2696,41 @@ export async function releaseHeldMilestone(
   );
 }
 
+/**
+ * Whether the milestone's escrow hold is still locked (`funded`): a release from it already sent, once confirmed,
+ * releases it. False before migration 0047, when no hold can exist.
+ */
+async function lockedInEscrow(milestoneId: string): Promise<boolean> {
+  const found = await db().from("milestones").select("escrow_state").eq("id", milestoneId).maybeSingle();
+  if (found.error?.code === "42703") return false;
+  if (found.error) throw new Error(found.error.message);
+  return (found.data as { escrow_state?: string | null } | null)?.escrow_state === "funded";
+}
+
 async function releaseMilestone(
   input: MilestoneRelease,
-  deps: { provider: ChainProvider; operatingAccountId: string; retryTerminalFailure?: boolean }
+  /**
+   * `onlyRead`: a transfer already exists for the milestone (recorded with its Circle id, found by a lookup, or
+   * confirmed), so it is read and recorded, never sent. A hold's checks are for a new release: one already sent went
+   * where its hold pays, whatever the contractor's address or the milestone's amount says now.
+   */
+  deps: { provider: ChainProvider; operatingAccountId: string; retryTerminalFailure?: boolean; onlyRead?: boolean }
 ): Promise<PayStepOutcome> {
   let result;
   let escrow: { contract: string; holdId: string } | null = null;
+  // The hold a confirmed release from escrow releases.
+  let locked = false;
   try {
-    const found = await escrowReleaseOf(input.milestoneId, input.amount, input.destination);
-    if (found && "held" in found) {
-      return { status: "held", txRef: null, paymentExecution: null, reasoningSuffix: found.held, heldBecausePaused: false, operatingBalance: null };
+    if (deps.onlyRead) {
+      locked = await lockedInEscrow(input.milestoneId);
+    } else {
+      const found = await escrowReleaseOf(input.milestoneId, input.amount, input.destination);
+      if (found && "held" in found) {
+        return { status: "held", txRef: null, paymentExecution: null, reasoningSuffix: found.held, heldBecausePaused: false, operatingBalance: null };
+      }
+      escrow = found;
+      locked = found !== null;
     }
-    escrow = found;
     result = await executePayment(
       {
         sourceType: "milestone",
@@ -2736,7 +2760,7 @@ async function releaseMilestone(
   const status = result.status === "confirmed" ? "paid" : result.status === "pending" ? "verified" : "held";
   // A confirmed release from escrow: the milestone's hold is released, with its transaction (milestone escrow E4).
   // Best effort, as the balance sync below: the payment is real whatever this write does.
-  if (escrow && result.status === "confirmed" && result.route === "escrow") {
+  if (locked && result.status === "confirmed" && result.route === "escrow") {
     try {
       const released = await db()
         .from("milestones")
@@ -2906,7 +2930,8 @@ export async function reconcileMilestone(
   let outcome: PayStepOutcome;
   let notResubmitted: "counterparty.high_risk" | "counterparty.new_payee" | "workspace.two_approvals" | null = null;
   if (sent) {
-    const result = await releaseMilestone(release, { provider: deps.provider, operatingAccountId: operating.id });
+    // Only read: it went where its hold, if any, pays, so a hold for the contractor's old address does not stand before it.
+    const result = await releaseMilestone(release, { provider: deps.provider, operatingAccountId: operating.id, onlyRead: true });
     const execution = result.paymentExecution;
     const incomplete =
       execution === null

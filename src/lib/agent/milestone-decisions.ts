@@ -772,7 +772,8 @@ export async function payHeldMilestone(input: {
     // Circle's terminal failure is sent again, as a new transfer, only by a Pay now that ran a new payment's checks: one
     // that only checked a transfer already sent records the failure, holds the milestone again, and sends nothing new
     // (payment exceptions review 2), as Approve and pay does for an invoice.
-    { provider, operatingAccountId: operatingId, retryTerminalFailure: !(alreadySent || unknown) }
+    // A transfer already sent is only read, so an escrow hold's checks for a new release do not stand before it.
+    { provider, operatingAccountId: operatingId, retryTerminalFailure: !(alreadySent || unknown), ...(alreadySent ? { onlyRead: true } : {}) }
   );
 
   // A submitted transfer goes back to `verified`, which the agent's cycle reconciles until Circle confirms it.

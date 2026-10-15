@@ -54,6 +54,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   them, but the others were left pending, as if another request were still settling them, and recorded paid only on
   the next cycle. They are now reconciled in the same cycle.
   [Runbook](https://www.vestiarion.xyz/docs/guides/payment-exceptions#outcome-unknown).
+- **A release from escrow already sent is recorded, whatever the contractor's address says now.** A milestone whose
+  release went out from its escrow hold, locked for the contractor's old address, stayed verified every cycle, and its
+  audit entry said to refund the hold and pay again, though the money had gone where the hold pays. The release is now
+  recorded as paid and the hold as released, by the agent and by a Pay now that only checks it. Only a new release
+  from such a hold waits for a person.
 
 ## [0.1.0-beta.6] - 2026-10-15
 
