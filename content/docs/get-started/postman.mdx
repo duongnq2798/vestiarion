@@ -10,6 +10,22 @@ Every request has saved examples: the answer its reference page shows, and each 
 
 ## 1. Import the collections
 
+There are two ways in. The public workspace is the quickest. Importing by link always gets the latest version.
+
+### From the public workspace
+
+Both collections are in a public Postman workspace, [Vestiarion API](https://www.postman.com/vestiarion/vestiarion-api).
+
+1. Open the workspace, signed in to Postman.
+2. On each collection, choose **Fork**, and fork it into a workspace of your own. Set your key and send requests from your fork: the public copy is there to read and fork.
+3. Import the environment by its link, as below. It is where your key goes.
+
+To be told when a collection changes, choose **Watch** on it in the public workspace. You can watch a collection without forking it. A fork does not change on its own: to bring a change into yours, choose **Pull changes** on it.
+
+### By link
+
+The files on the site are regenerated with the API and served from the same deploy, so importing them by link always gets the latest version. The public workspace's copy is updated by hand after an API change, so for a while it can be behind.
+
 1. In Postman, choose **Import**.
 2. Paste each of these URLs, one at a time, and import it:
 
@@ -70,6 +86,6 @@ The agent decides the invoice as it decides one typed into the console, with eve
 
 ## Keeping them current
 
-The collections are rebuilt from the OpenAPI document whenever an operation, a parameter, an example or an error changes, and served from the same URLs. To update yours, import the same URL again: Postman recognizes the collection and offers to replace it. The [changelog](/docs/changelog) says what changed in the API.
+The collections are rebuilt from the OpenAPI document whenever an operation, a parameter, an example or an error changes, and served from the same URLs. To update yours, import the same URL again: Postman recognizes the collection and offers to replace it. A fork from the [public workspace](#from-the-public-workspace) takes the change with **Pull changes**, once the workspace's copy has been updated too. The [changelog](/docs/changelog) says what changed in the API.
 
 Prefer code? The [TypeScript SDK](/docs/get-started/sdk) and the [command-line interface](/docs/get-started/cli) make the same requests.

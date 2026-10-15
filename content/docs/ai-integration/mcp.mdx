@@ -12,6 +12,16 @@ https://www.vestiarion.xyz/api/mcp
 - **Protocol versions:** the 2026-07-28 revision of MCP, and clients on the earlier revisions, such as 2025-06-18 and 2025-11-25, at the same URL.
 - **Surface:** tools only. The server has no resources and no prompts.
 
+## In the MCP Registry
+
+The server is listed in the official [MCP Registry](https://registry.modelcontextprotocol.io) as `io.github.duongnq2798/vestiarion`. Look it up at:
+
+```text
+https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.duongnq2798/vestiarion
+```
+
+A client that reads the registry can find the server there, with its URL and the `Authorization` header it needs. The entry holds no key: the client still sends a [workspace API key](#which-key-to-use) as the bearer token, a read-only one unless the agent must add records.
+
 ## Authentication
 
 Send a [workspace API key](/docs/get-started/authentication) in the `Authorization` header, exactly as for `/api/v1`:
