@@ -25,12 +25,16 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   anything, so a transfer Circle took is recorded rather than sent twice. A transfer recorded with its Circle
   transaction id is only checked, as before.
   [Guide](https://www.vestiarion.xyz/docs/guides/first-payment#6-approve-a-held-payment).
-- **The agent looks for an unanswered send before holding it.** A payment whose first send had no answer recorded may
-  have reached Circle anyway, but the agent checked the payee's screening, address, first payment and two approvals
-  before looking. So a transfer Circle had already taken could be recorded as held. Now the agent looks on Circle
-  first, sending nothing: a transfer Circle has is recorded as paid, one not listed yet waits for the next cycle, and
-  only a send Circle never took goes through those checks, for bills and milestones alike. With no operating account
-  to look from, the bill or milestone now stays where it is rather than held.
+- **The agent looks for an unanswered send before holding it.** When Circle never answered a payment's send (the call
+  ran out of time, Circle answered with an error or no id, or the send stopped before its answer was recorded), the
+  transfer may have gone through anyway. The agent checked the payee's screening, address, first payment and two
+  approvals before looking, or decided the bill again with every guardrail, so a payment that had moved could be
+  recorded as held or flagged. Now the agent looks on Circle first, sending nothing: a transfer Circle has is recorded
+  as paid, one not listed yet waits for the next cycle, and only a send Circle never took goes on to the checks or a
+  new decision, for bills and milestones alike. A payout to another chain cannot be looked up this way, so it still
+  gets those checks first, and can be held while Circle may hold it; Approve and pay then asks Circle for it under the
+  same payment key, which Circle takes only once. With no operating account to look from, the bill or milestone stays
+  where it is rather than held.
   [Runbook](https://www.vestiarion.xyz/docs/guides/payment-exceptions#outcome-unknown).
 - **A payment counts as paid at the address it went to.** A payment sent again to a payee's new address, such as a
   held bill paid once the payee gave a new one, was recorded at the address its first attempt asked for. The new

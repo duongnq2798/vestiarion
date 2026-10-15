@@ -4,8 +4,9 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
 import { withOrg } from "@/lib/dal/scope";
-import { reconcileApInvoice } from "@/lib/agent/orchestrator";
+import { reconcileApInvoice, reconcileMilestone } from "@/lib/agent/orchestrator";
 import type { BalanceSnapshot, ChainProvider, EarnResult, TransferParams, TransferResult } from "@/lib/circle";
+import { MAY_HAVE_BEEN_ACCEPTED } from "@/lib/circle/settlement";
 import { NO_EARLIER_SEND, paymentIdempotencyKey } from "@/lib/payments";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { ARC_TESTNET } from "@/lib/network";
@@ -88,30 +89,34 @@ class FakeProvider implements ChainProvider {
   async withdrawFromEarn(): Promise<EarnResult> { throw new Error("not used"); }
 }
 
-/** A workspace whose invoice's send was claimed half an hour ago and never answered, for a counterparty now high risk. */
-function workspace() {
+/**
+ * A workspace whose payment was sent half an hour ago and never answered, for a counterparty now high risk: by default
+ * an invoice's claim that went stale; `failed` with Circle's "may or may not have been accepted" for a send that timed out.
+ */
+function workspace(source: { type: "invoice" | "milestone"; id: string; failed?: true } = { type: "invoice", id: INVOICE_ID }) {
   const intents = paymentIntentsBackend(ORG);
   const row = intents.insert({
-    source_type: "invoice", source_id: INVOICE_ID, idempotency_key: paymentIdempotencyKey("invoice", INVOICE_ID),
+    source_type: source.type, source_id: source.id, idempotency_key: paymentIdempotencyKey(source.type, source.id),
     provider: "circle", provider_mode: "live", amount: 150, destination: "0xdead",
   });
-  Object.assign(row, { status: "submitting", attempt_count: 1, updated_at: new Date(Date.now() - 30 * 60_000).toISOString() });
+  Object.assign(row, {
+    status: source.failed ? "failed" : "submitting",
+    attempt_count: 1,
+    updated_at: new Date(Date.now() - 30 * 60_000).toISOString(),
+    ...(source.failed ? { last_error: `no answer within 20000 ms; the transfer ${MAY_HAVE_BEEN_ACCEPTED}` } : {}),
+  });
   const fake = fakeSupabase((request: RecordedRequest) => {
     if (request.path === "/rest/v1/orgs") return { body: ORG_ROW };
     if (request.path === "/rest/v1/rpc/append_ledger_entry") return { body: LEDGER_ROW };
     if (request.path === "/rest/v1/counterparties" && request.method === "GET") return { body: { risk_level: "high" } };
     if (request.path === "/rest/v1/rpc/agent_paused") return { body: false };
-    // A write that asks for its row back (recordNotSent) gets the row it wrote.
-    if (request.path === "/rest/v1/payment_intents" && request.method === "PATCH" && request.params.has("select")) {
-      intents.respond(request);
-      return { body: [{ ...row }] };
-    }
     if (request.path === "/rest/v1/payment_intents" || request.path.startsWith("/rest/v1/rpc/")) return intents.respond(request);
     return { body: [] };
   });
   const run = <T>(fn: () => Promise<T>) => runWith({ config, db: fake.client, fetch: fake.fetch }, () => withOrg(ORG, fn));
   const invoicePatch = () => fake.requests.find((r) => r.path === "/rest/v1/invoices" && r.method === "PATCH")?.body as Record<string, unknown> | undefined;
-  return { row, fake, run, invoicePatch };
+  const milestonePatch = () => fake.requests.find((r) => r.path === "/rest/v1/milestones" && r.method === "PATCH")?.body as Record<string, unknown> | undefined;
+  return { row, fake, run, invoicePatch, milestonePatch };
 }
 
 const invoice = {
@@ -151,5 +156,47 @@ describe("reconcileApInvoice over the real payment step — a send never recorde
     expect(row).toMatchObject({ status: "failed", provider_tx_id: null, last_error: NO_EARLIER_SEND });
     expect(outcome.status).toBe("held");
     expect(invoicePatch()).toMatchObject({ status: "held" });
+  });
+});
+
+/**
+ * A send that timed out is recorded `failed` with "may or may not have been accepted", and the stage hands it to the
+ * reconcile (`unanswered`) rather than deciding it again: looked up first, recorded when Circle took it, and handed back
+ * to be decided only when Circle never did.
+ */
+describe("reconcileMilestone over the real payment step — a release that timed out (payment safety R4)", () => {
+  const MILESTONE_ID = "018f8ce0-1557-7b54-a931-4d777f6be009";
+  const milestone = {
+    id: MILESTONE_ID, title: "Checkout redesign", amount: 150, contractorId: COUNTERPARTY_ID, contractorName: "Lena Ortiz",
+    address: "0xdead", reasoning: "Verified via github.", txRef: null,
+  };
+  const timedOut = { providerTxId: null, status: "failed", unanswered: true as const };
+
+  it("records the release Circle took as paid, sending nothing again, though the contractor is now high risk", async () => {
+    const provider = new FakeProvider(confirmed("circle-tx-found"));
+    const { row, fake, run, milestonePatch } = workspace({ type: "milestone", id: MILESTONE_ID, failed: true });
+
+    const outcome = await run(() => reconcileMilestone(milestone, timedOut, { db: db(), provider, operating: { id: ACCOUNT_ID } }));
+
+    expect(provider.lookups.map((lookup) => lookup.refId)).toEqual([`Milestone ${MILESTONE_ID}`]);
+    expect(provider.transfers).toHaveLength(0);
+    expect(fake.requests.some((r) => r.path === "/rest/v1/counterparties")).toBe(false);
+    expect(row).toMatchObject({ status: "confirmed", provider_tx_id: "circle-tx-found" });
+    expect(outcome.status).toBe("paid");
+    expect(milestonePatch()).toMatchObject({ status: "paid", tx_ref: "0xhash" });
+  });
+
+  it("hands a release Circle never took back to be decided, writing nothing to the milestone", async () => {
+    const provider = new FakeProvider(null);
+    const { row, fake, run, milestonePatch } = workspace({ type: "milestone", id: MILESTONE_ID, failed: true });
+
+    const outcome = await run(() => reconcileMilestone(milestone, timedOut, { db: db(), provider, operating: { id: ACCOUNT_ID } }));
+
+    expect(outcome.decideAgain).toBe(true);
+    expect(provider.transfers).toHaveLength(0);
+    expect(row).toMatchObject({ status: "failed", last_error: NO_EARLIER_SEND });
+    expect(milestonePatch()).toBeUndefined();
+    expect(fake.requests.some((r) => r.path === "/rest/v1/counterparties")).toBe(false);
+    expect(fake.requests.some((r) => r.path === "/rest/v1/rpc/append_ledger_entry")).toBe(false);
   });
 });

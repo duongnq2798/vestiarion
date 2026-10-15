@@ -83,7 +83,10 @@ Addresses that come from outside the console already wait for a person: one sent
   - Amended 2026-10-15 (independent review of the reconcile change): this check, and the reconcile's others, used to
     run before the lookup, so a transfer Circle had taken could be recorded held. The send is now looked for first,
     sending nothing: found, it is reconciled as a transfer that exists; not listed yet, or Circle could not be asked,
-    the payment waits for the next cycle; only one Circle never took is asked.
+    the payment waits for the next cycle; only one Circle never took is asked. A send recorded failed with Circle's
+    answer lost is looked up the same way before the stage decides it again. A payout to another chain cannot be
+    looked up by its reference, so it is asked before it is asked for again under its key, and can be held while
+    Circle may hold the transfer.
 - **N4. A person's payment.**
   - Approve and pay in Approvals refuses a first payment to an address the person gave themselves, as does Pay now on a
     milestone, unless they are the workspace's sole approver (as for an invoice they entered).

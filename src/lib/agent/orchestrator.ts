@@ -704,7 +704,9 @@ async function earlierSend(
   const looked = await settleUnknownSend(source, { provider: deps.provider, fromAccountId: deps.operating.id });
   if (looked.answer === "found") return { answer: "sent" };
   if (looked.answer === "not_sent" || (looked.answer === "undecided" && looked.unlookable)) return { answer: "not_sent" };
-  if (looked.answer === "known") return { answer: "waiting", reason: "another request is settling this payment's send right now; it is reconciled next cycle" };
+  if (looked.answer === "known" || (looked.answer === "undecided" && looked.settling)) {
+    return { answer: "waiting", reason: "another request is settling this payment's send right now; it is reconciled next cycle" };
+  }
   return {
     answer: "waiting",
     reason: looked.retryAt
@@ -713,10 +715,27 @@ async function earlierSend(
   };
 }
 
+/**
+ * What a reconcile did: the source's status now and the cycle's line, or `decideAgain`, when a send that failed with
+ * Circle's answer lost never reached Circle and the stage decides the source again as a payment never sent.
+ */
+export interface ReconcileOutcome {
+  status: string;
+  operatingBalance: number | null;
+  line: CycleLogLine;
+  decideAgain?: true;
+}
+
 /** The payment intent a payable already has: enough to tell whether a transfer exists. */
 export interface ExistingPaymentIntent {
   providerTxId: string | null;
   status: string;
+  /**
+   * A send recorded `failed` with Circle's answer lost (`transferUnknown`): the call ran out of time, Circle answered
+   * 5xx or with no id, or a first attempt's batch went unanswered. Circle may hold the transfer, so it is reconciled to
+   * look it up first; once Circle is known never to have taken it, its source is decided again (`decideAgain`).
+   */
+  unanswered?: true;
 }
 
 /**
@@ -749,21 +768,6 @@ export async function existingMilestoneIntents(
   return paymentIntentsFor(orgDb, "milestone", milestones, "verified");
 }
 
-/**
- * The `verified` milestones whose last send Circle never answered (`transferUnknown`): left out of
- * `existingMilestoneIntents`, they are decided again, and their release goes out under the same key, which finds the
- * transfer at Circle if it took it. The money may have moved already, so the cash check leaves them to that lookup
- * rather than holding a payment that happened for want of the cash it spent (mainnet pre-flight review).
- */
-export async function unansweredMilestoneSends(orgDb: OrgDb, milestones: Array<{ id: string; status: string }>): Promise<Set<string>> {
-  const ids = milestones.filter((milestone) => milestone.status === "verified").map((milestone) => milestone.id);
-  if (ids.length === 0) return new Set();
-  const rows = unwrap(
-    await orgDb.from("payment_intents").select("source_id, provider_tx_id, status, last_error").eq("source_type", "milestone").in("source_id", ids)
-  ) as Array<{ source_id: string; provider_tx_id: string | null; status: string; last_error: string | null }>;
-  return new Set(rows.filter((row) => transferUnknown({ ...row, provider_state: null })).map((row) => row.source_id));
-}
-
 async function paymentIntentsFor(
   orgDb: OrgDb,
   sourceType: PaymentSourceType,
@@ -775,22 +779,24 @@ async function paymentIntentsFor(
   const rows = unwrap(
     await orgDb
       .from("payment_intents")
-      .select("source_id, provider_tx_id, status")
+      .select("source_id, provider_tx_id, status, last_error, batch_key, transfer_attempt")
       .eq("source_type", sourceType)
       .in("source_id", ids)
-  ) as Array<{ source_id: string; provider_tx_id: string | null; status: string }>;
+  ) as Array<{ source_id: string; provider_tx_id: string | null; status: string; last_error?: string | null; batch_key?: string | null; transfer_attempt?: number | null }>;
   // An intent with no provider id that is `created` (never claimed) or
   // `failed` (the submission failed before the provider returned an id) has
   // no transfer to reconcile by: `executePayment` would claim it and submit.
   // Left out, its source is decided again — model and guardrails — so a
-  // payment limit cut or a risk change since is respected. Should the lost
-  // submission have reached the provider after all, a resubmission reuses the
-  // same idempotency key. A `failed` intent with a provider id is a real
+  // payment limit cut or a risk change since is respected. A `failed` one
+  // whose send Circle never answered may have reached Circle, though: it is
+  // reconciled (`unanswered`), so it is looked up before anything decides it
+  // again (payment safety R4). A `failed` intent with a provider id is a real
   // transfer the provider reported on, and is still reconciled by that id.
+  const unanswered = (row: (typeof rows)[number]) => row.status === "failed" && transferUnknown({ ...row, last_error: row.last_error ?? null, provider_state: null });
   const inFlight = rows.filter(
-    (row) => !(row.provider_tx_id === null && (row.status === "failed" || row.status === "created"))
+    (row) => unanswered(row) || !(row.provider_tx_id === null && (row.status === "failed" || row.status === "created"))
   );
-  return new Map(inFlight.map((row) => [row.source_id, { providerTxId: row.provider_tx_id, status: row.status }]));
+  return new Map(inFlight.map((row) => [row.source_id, { providerTxId: row.provider_tx_id, status: row.status, ...(unanswered(row) ? { unanswered: true as const } : {}) }]));
 }
 
 /**
@@ -887,7 +893,7 @@ export async function reconcileApInvoice(
     /** The stage's new payee check, wherever payments are real (new payee check N5); absent in a sandbox. */
     newPayee?: NewPayeeCheckOf;
   }
-): Promise<{ status: string; operatingBalance: number | null; line: CycleLogLine }> {
+): Promise<ReconcileOutcome> {
   const input = {
     invoiceId: invoice.id,
     counterpartyId: invoice.counterpartyId,
@@ -946,6 +952,11 @@ export async function reconcileApInvoice(
   // transfer that exists; not settled yet, the invoice waits for the next cycle.
   const earlier = transferExists ? null : await earlierSend({ type: "invoice", id: invoice.id }, { provider: deps.provider, operating });
   if (earlier?.answer === "waiting") return leftPending(earlier.reason, null, "its earlier send is not settled on Circle yet, left pending for the next cycle");
+  // A send that failed with Circle's answer lost, which Circle never took, is a payment never sent: handed back to be
+  // decided again, through the model and every guardrail, as one that failed before Circle took it is. Nothing is written.
+  if (earlier?.answer === "not_sent" && intent.unanswered) {
+    return { status: "matched", operatingBalance: null, line: { domain: "ap", message: `${name}: its earlier send never reached Circle, decided again (${invoice.amount} ${currency})` }, decideAgain: true };
+  }
   const sent = transferExists || earlier?.answer === "sent";
 
   let outcome: PayStepOutcome;
@@ -2377,7 +2388,9 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   };
 
   // A `matched` payable with a payment intent already has a payment in
-  // flight: it is reconciled, not decided again (see reconcileApInvoice).
+  // flight: it is reconciled, not decided again (see reconcileApInvoice). One
+  // whose send failed with Circle's answer lost is decided again only once the
+  // reconcile found Circle never took it (`decideAgain`).
   const inFlight = await existingPaymentIntents(db, payables);
 
   for (const invoice of payables) {
@@ -2405,11 +2418,13 @@ export async function runApStage(input: ApStageInput): Promise<number> {
         // its check, so it goes again to an address never paid only with two parties behind it (new payee check N3).
         { db, provider, operating, onChainLimit, twoApprovalsAbove, newPayee: newPayeeOf }
       );
-      if (reconciled.operatingBalance !== null) operatingBalance = reconciled.operatingBalance;
-      metrics.recordInvoice(reconciled.status, false);
-      record(invoice.id, reconciled.status, null);
-      lines.push(reconciled.line);
-      continue;
+      if (!reconciled.decideAgain) {
+        if (reconciled.operatingBalance !== null) operatingBalance = reconciled.operatingBalance;
+        metrics.recordInvoice(reconciled.status, false);
+        record(invoice.id, reconciled.status, null);
+        lines.push(reconciled.line);
+        continue;
+      }
     }
 
     // Its swap is still in flight at Circle: decided once it ends (S7).
@@ -2809,7 +2824,7 @@ export async function reconcileMilestone(
     /** The stage's new payee check, wherever payments are real (new payee check N5); absent in a sandbox. */
     newPayee?: NewPayeeCheckOf;
   }
-): Promise<{ status: string; operatingBalance: number | null; line: CycleLogLine }> {
+): Promise<ReconcileOutcome> {
   const transferExists = intent.providerTxId !== null || intent.status === "confirmed";
   const name = milestone.contractorName;
   const amount = milestone.amount;
@@ -2859,6 +2874,11 @@ export async function reconcileMilestone(
   // R4): found, it is a transfer that exists; not settled yet, the milestone waits for the next cycle.
   const earlier = transferExists ? null : await earlierSend({ type: "milestone", id: milestone.id }, { provider: deps.provider, operating });
   if (earlier?.answer === "waiting") return leftPending(earlier.reason, null, "its earlier release is not settled on Circle yet, left pending for the next cycle");
+  // A release that failed with Circle's answer lost, which Circle never took: handed back to be decided again, as the
+  // invoice's twin is. Nothing is written.
+  if (earlier?.answer === "not_sent" && intent.unanswered) {
+    return { status: "verified", operatingBalance: null, line: { domain: "contractor", message: `${name}: its earlier release never reached Circle, decided again (${amount} USDC)` }, decideAgain: true };
+  }
   const sent = transferExists || earlier?.answer === "sent";
 
   // A release Circle never took would be sent again to the contractor's
@@ -3647,10 +3667,10 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   }>;
 
   // A `verified` milestone with a payment intent already has a release in
-  // flight: it is reconciled, not decided again (see reconcileMilestone).
+  // flight: it is reconciled, not decided again (see reconcileMilestone). One
+  // whose send failed with Circle's answer lost is looked up there first, and
+  // decided again, cash check included, only once Circle never took it.
   const releasesInFlight = await existingMilestoneIntents(db, milestones);
-  // Those whose last send Circle never answered, which the cash check leaves to the send's own lookup.
-  const unanswered = await unansweredMilestoneSends(db, milestones);
   /** A release locked in escrow, paid from the escrow rather than the operating wallet. */
   const escrowedRelease = (milestone: (typeof milestones)[number]) => ["funded", "funding"].includes(String((milestone as { escrow_state?: string | null }).escrow_state ?? ""));
   // Releases from the wallet still in flight from earlier cycles: not yet mined, they have not left its balance.
@@ -3834,11 +3854,13 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         // its check, so it goes again to an address never paid only with two parties behind it (new payee check N3).
         { db, provider, operating: operating ? { id: operating.id } : null, onChainLimit, twoApprovalsAbove, newPayee: firstReleaseTo }
       );
-      if (reconciled.operatingBalance !== null) operatingBalance = reconciled.operatingBalance;
-      if (reconciled.status === "verified" && !escrowedRelease(milestone)) inFlightUsdc += amount;
-      metrics.recordMilestone(reconciled.status, false);
-      lines.push(reconciled.line);
-      continue;
+      if (!reconciled.decideAgain) {
+        if (reconciled.operatingBalance !== null) operatingBalance = reconciled.operatingBalance;
+        if (reconciled.status === "verified" && !escrowedRelease(milestone)) inFlightUsdc += amount;
+        metrics.recordMilestone(reconciled.status, false);
+        lines.push(reconciled.line);
+        continue;
+      }
     }
     // A contractor whose address a person changed, and no one has confirmed
     // since, is not paid (spec 2026-09-30-counterparty-address-edit E4); nor,
@@ -3996,9 +4018,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         // A release from the operating wallet needs its cash there, after the releases planned before it this cycle and
         // those still in flight (mainnet pre-flight): sent anyway, it would only fail at Circle or on chain. Short, it is
         // held for want of cash, and the follow-up stage reopens it once cash comes in. One from escrow is paid from the
-        // escrow; one Circle never answered goes out under its key, which finds the transfer if the money already moved.
+        // escrow. One Circle never answered reaches here only once the reconcile found Circle never took it: a new send.
         const plannedUsdc = inFlightUsdc + planned.reduce((sum, entry) => sum + (entry.fromEscrow ? 0 : entry.amount), 0);
-        heldForCash = escrowed || unanswered.has(milestone.id) ? null : releaseCashShort({ amount, operatingBalance, plannedUsdc });
+        heldForCash = escrowed ? null : releaseCashShort({ amount, operatingBalance, plannedUsdc });
         if (heldForCash) {
           reasoning += ` [not released: the operating wallet had ${heldForCash.available} USDC for it, less than its ${amount} USDC — decided again once cash comes in]`;
         } else {

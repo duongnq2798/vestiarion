@@ -1026,8 +1026,30 @@ describe("executePayment after a send Circle never answered (payment safety R4)"
 
     const answer = await settleUnknownSend({ type: "invoice", id: request.sourceId }, { provider, fromAccountId: "account-1", store, now: Date.parse(SENT_AT) + 16 * MINUTE });
 
-    expect(answer).toMatchObject({ answer: "undecided" });
+    // Said as it is: another request is settling it, not that Circle could not be asked (review M3).
+    expect(answer).toEqual({ answer: "undecided", retryAt: null, settling: true });
     expect(store.intent?.status).toBe("submitting");
+  });
+
+  it("refuses a payout to another chain asked for again under its key to another address than the first send's, sending nothing (review M1)", async () => {
+    // Circle answers a key it holds with the transfer it took, which went where the first send asked: recording another
+    // address for it would name the wrong payee.
+    const store = await unknownSend({ route: "cctp", destinationChain: "BASE-SEPOLIA" });
+    const provider = new FakeProvider();
+
+    const result = await executePayment({ ...request, destination: "0x9999", destinationChain: "BASE-SEPOLIA" }, { provider, store, now: Date.parse(SENT_AT) + 30 * MINUTE });
+
+    expect(provider.transfers).toEqual([]);
+    expect(result.status).toBe("pending");
+    expect(store.intent?.destination).toBe(request.destination);
+    expect(store.intent?.lastError).toContain("was first sent to another address under this payment's key");
+    expect(store.intent?.lastError).toContain("may or may not have been accepted");
+    expect(store.calls.some((call) => call.startsWith("markDestination"))).toBe(false);
+
+    // To the address it was first sent to, it is asked for again under its key, as before.
+    provider.transferResults.push(transferResult("confirmed", "circle-tx-cctp"));
+    await executePayment({ ...request, destinationChain: "BASE-SEPOLIA" }, { provider, store, now: Date.parse(SENT_AT) + 31 * MINUTE });
+    expect(provider.transfers).toHaveLength(1);
   });
 
   it("sends nothing, and keeps it unknown, when Circle cannot be asked", async () => {

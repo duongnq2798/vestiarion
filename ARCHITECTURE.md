@@ -424,7 +424,8 @@ payment to an address.
   behind as `counterparty.new_payee`. The stages hand the same check to `reconcileApInvoice` and `reconcileMilestone`
   (`newPayee`). The reconcile's send-again path only ever sees a `submitting` intent with no Circle id: a send whose
   outcome was never recorded (a stale claim, or a lost batch). It looks that send up at Circle first, sending nothing
-  (`earlierSend`, below), and asks only once Circle is known never to have taken it. Sent again, it goes to the address
+  (`earlierSend`, below), and asks only once Circle is known never to have taken it, or, for a payout to another chain,
+  which cannot be looked up by its reference, before it is asked for again under its key. Sent again, it goes to the address
   as it stands now, so a member who changed it to their own wallet and confirmed it alone while the payment was stuck
   would not have put a second person behind it. When that would be a first payment with `twoParties` false, the
   reconcile holds it (`newPayeeResendBlocker`), after the high risk and unconfirmed address checks and before two
@@ -756,14 +757,22 @@ would find.
   - Gateway and CCTP are not looked up. They keep their own safety, and their marker survives a later failure.
   - Reject, Return, Add details and a milestone's Close run the same lookup first (`settleUnknownSend`). A held
     milestone shows an `unknown` state.
-  - So do the cycle's reconciles of a `submitting` intent with no Circle id (`earlierSend` in `reconcileApInvoice` and
-    `reconcileMilestone`), before any check that would hold the payment it would send again:
-    - Found: reconciled as a transfer that exists, so it is recorded paid, never held over a check a resend would fail.
-    - Never taken: only then are the resend checks read (high risk, unconfirmed address, new payee, two approvals).
-      So is a payout to another chain, which is then asked for again under its key, as before.
-    - Not listed yet, not asked, or settled by another request right now: the invoice stays `matched` (the milestone
-      `verified`), nothing is written to it, and `ap_reconcile` (`milestone_reconcile`) records `reconciled: false`
-      with the reason. With no operating account nothing is looked for, and it stays as it is.
+  - So do the cycle's reconciles (`earlierSend` in `reconcileApInvoice` and `reconcileMilestone`), before any check
+    that would hold the payment or decision that would pay it again. They see a `submitting` intent with no Circle id,
+    and a `failed` one Circle never answered (`transferUnknown`), which `paymentIntentsFor` hands them as `unanswered`
+    rather than leaving its source to be decided again unlooked:
+    - Found: reconciled as a transfer that exists, so it is recorded paid, never held or flagged over a check a resend
+      or a new decision would fail.
+    - Never taken: a `submitting` one goes on to the resend checks (high risk, unconfirmed address, new payee, two
+      approvals) and is sent again; an `unanswered` one is handed back (`decideAgain`), writing nothing, and the stage
+      decides it again through the model and every guardrail, cash check included.
+    - A payout to another chain cannot be looked up (`unlookable`) and is taken as never taken: checked, or decided
+      again, before it is asked for again under its key, so it can be held while Circle may hold the transfer.
+    - Not listed yet, not asked, or settled by another request right now (`settling`): the invoice stays `matched`
+      (the milestone `verified`), nothing is written to it, and `ap_reconcile` (`milestone_reconcile`) records
+      `reconciled: false` with the reason. With no operating account nothing is looked for, and it stays as it is.
+  - A send asked for again under a key Circle may hold (an unknown send no lookup could settle) is refused when it
+    names another address than the one recorded: Circle would answer with the first transfer (review M1).
   - A bridge's approve, and a Gateway connection never made, are not marked.
 - **Screening that fails closed:** `orgConfig` marks a live workspace on a deployment with no screening service
   (`compliance.serviceRequired`). `screenName` then gives no verdict rather than the bundled list's, so its
@@ -1592,8 +1601,9 @@ has not listed yet — leaves the invoice `matched` for the next cycle rather
 than demoting it. When no transfer is recorded, the send may still have
 reached Circle, so it is looked for there first, sending nothing: found, it
 is reconciled as a transfer that exists. Only when Circle never took it can
-it be resubmitted, and then the counterparty's risk level is read again
-first, and a counterparty now screened high risk is not paid.
+it be resubmitted (a payout to another chain, which cannot be looked up this
+way, is resubmitted under its key), and then the counterparty's risk level
+is read again first, and a counterparty now screened high risk is not paid.
 Nor is a resubmission that would be the first payment to the counterparty's
 current address with two different people not behind it: it is held as
 `counterparty.new_payee` for a person, as the stage holds a decision (the
@@ -1604,9 +1614,11 @@ model again, so a change of mind cannot record a released payment as held.
 Only a payment with something to reconcile is reconciled. An intent with no
 provider id that was never claimed, or whose submission failed before the
 provider returned an id, has no transfer to look up. So its invoice or
-milestone is decided again, through the model and the guardrails. If a lost
-submission did reach the provider, a resubmission reuses the same idempotency
-key.
+milestone is decided again, through the model and the guardrails. One whose
+send failed with Circle's answer lost (it may or may not have been accepted)
+is reconciled first, so it is looked up before anything decides it, and is
+decided again only once Circle never took it. A resubmission reuses the same
+idempotency key.
 
 **Waiting for Circle never guesses.** Every Circle request made by the live
 provider carries a deadline, because the SDK has no HTTP timeout: transfer

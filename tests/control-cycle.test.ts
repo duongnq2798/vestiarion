@@ -10,6 +10,7 @@ import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 import { ARC_TESTNET } from "@/lib/network";
 import { newPayeeCheckFor } from "@/lib/new-payee-facts";
+import { MAY_HAVE_BEEN_ACCEPTED } from "@/lib/circle/settlement";
 
 /**
  * Two cycle seams the control work leans on, each tested directly rather
@@ -385,10 +386,12 @@ describe("existingPaymentIntents — which payables the AP stage reconciles inst
       r.path === "/rest/v1/payment_intents"
         ? {
             body: [
-              { source_id: "failed-no-id", provider_tx_id: null, status: "failed" },
+              { source_id: "failed-no-id", provider_tx_id: null, status: "failed", last_error: "Circle: the wallet's balance is insufficient" },
               { source_id: "failed-by-provider", provider_tx_id: "circle-tx-2", status: "failed" },
               { source_id: "submitting", provider_tx_id: null, status: "submitting" },
               { source_id: "created-no-id", provider_tx_id: null, status: "created" },
+              { source_id: "timed-out", provider_tx_id: null, status: "failed", last_error: `no answer within 20000 ms; the transfer ${MAY_HAVE_BEEN_ACCEPTED}` },
+              { source_id: "lost-batch", provider_tx_id: null, status: "failed", last_error: "write failed", batch_key: "batch-1", transfer_attempt: 1 },
             ],
           }
         : undefined
@@ -400,6 +403,8 @@ describe("existingPaymentIntents — which payables the AP stage reconciles inst
         { id: "failed-by-provider", status: "matched" },
         { id: "submitting", status: "matched" },
         { id: "created-no-id", status: "matched" },
+        { id: "timed-out", status: "matched" },
+        { id: "lost-batch", status: "matched" },
       ])
     );
 
@@ -409,6 +414,9 @@ describe("existingPaymentIntents — which payables the AP stage reconciles inst
     // A transfer Circle reported failed is a real transfer, still reconciled by its id.
     expect(intents.get("failed-by-provider")).toEqual({ providerTxId: "circle-tx-2", status: "failed" });
     expect(intents.get("submitting")).toEqual({ providerTxId: null, status: "submitting" });
+    // A send whose answer was lost may have reached Circle: reconciled, so it is looked up before it is decided again.
+    expect(intents.get("timed-out")).toEqual({ providerTxId: null, status: "failed", unanswered: true });
+    expect(intents.get("lost-batch")).toEqual({ providerTxId: null, status: "failed", unanswered: true });
   });
 
   it("asks nothing when no payable is matched", async () => {
@@ -1089,6 +1097,11 @@ describe("reconcileApInvoice — a send never recorded is looked for on Circle b
       { answer: "known" },
       "another request is settling this payment's send right now; it is reconciled next cycle",
     ],
+    [
+      "another request concluded the lookup first",
+      { answer: "undecided", retryAt: null, settling: true },
+      "another request is settling this payment's send right now; it is reconciled next cycle",
+    ],
   ])("leaves the invoice matched, holding and sending nothing, while %s", async (_, answer, reason) => {
     settleMock.mockResolvedValue(answer);
     const { fake, run } = highRisk();
@@ -1145,6 +1158,49 @@ describe("reconcileApInvoice — a send never recorded is looked for on Circle b
     });
     await run(() => reconcileApInvoice({ ...invoice, destinationChain: "BASE-SEPOLIA" }, neverRecorded, { db: db(), provider, operating: { id: ACCOUNT_ID } }));
     expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+  });
+
+  describe("a send that failed with Circle's answer lost (`unanswered`)", () => {
+    const timedOut = { providerTxId: null, status: "failed", unanswered: true as const };
+
+    it("records it as paid when Circle took it, as a send never recorded is", async () => {
+      settleMock.mockResolvedValue({ answer: "found" });
+      payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", note: "", operatingBalance: 350, execution: { providerMode: "live", reconciled: true } });
+      const { fake, run } = highRisk();
+
+      const outcome = await run(() => reconcileApInvoice(invoice, timedOut, { db: db(), provider, operating: { id: ACCOUNT_ID } }));
+
+      expect(outcome.status).toBe("paid");
+      expect(outcome.decideAgain).toBeUndefined();
+      expect(counterpartyReads(fake.requests)).toHaveLength(0);
+    });
+
+    it.each([
+      ["Circle never took it", { answer: "not_sent" }],
+      ["it is a payout to another chain, which cannot be looked up this way", { answer: "undecided", retryAt: null, unlookable: true }],
+    ])("hands it back to be decided again, through the model and every guardrail, writing nothing, when %s", async (_, answer) => {
+      settleMock.mockResolvedValue(answer);
+      const { fake, run } = highRisk();
+
+      const outcome = await run(() => reconcileApInvoice(invoice, timedOut, { db: db(), provider, operating: { id: ACCOUNT_ID } }));
+
+      expect(outcome.decideAgain).toBe(true);
+      expect(payInvoiceMock).not.toHaveBeenCalled();
+      expect(counterpartyReads(fake.requests)).toHaveLength(0);
+      expect(invoicePatches(fake.requests)).toHaveLength(0);
+      expect(rpcBodies(fake.requests, "append_ledger_entry")).toHaveLength(0);
+    });
+
+    it("leaves it matched while Circle has not listed it yet", async () => {
+      settleMock.mockResolvedValue({ answer: "undecided", retryAt: "2026-10-15T10:15:00.000Z" });
+      const { fake, run } = highRisk();
+
+      const outcome = await run(() => reconcileApInvoice(invoice, timedOut, { db: db(), provider, operating: { id: ACCOUNT_ID } }));
+
+      expect(outcome.status).toBe("matched");
+      expect(outcome.decideAgain).toBeUndefined();
+      expect(invoicePatches(fake.requests)).toHaveLength(0);
+    });
   });
 
   it("leaves it matched, without looking or holding, when there is no operating account to look from", async () => {

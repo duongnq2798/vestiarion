@@ -83,6 +83,18 @@ export function paymentIntentsBackend(orgId: string) {
       }
       if (sent.method === "PATCH") {
         const row = byKey(eq(sent.params.get("idempotency_key")));
+        // A write that asks for its rows back (`recordNotSent`'s compare-and-set) is applied only where its other filters
+        // match, as PostgREST applies it, and answers with the row it wrote.
+        if (sent.params.has("select")) {
+          const matches = row !== undefined && [...sent.params.entries()].every(([column, filter]) => {
+            if (column === "idempotency_key" || column === "select") return true;
+            if (filter === "is.null") return row[column] === null;
+            return filter.startsWith("eq.") ? String(row[column]) === filter.slice(3) : true;
+          });
+          if (!matches) return { body: [] };
+          Object.assign(row, sent.body as Record<string, unknown>);
+          return { body: [{ ...row }] };
+        }
         if (row) Object.assign(row, sent.body as Record<string, unknown>);
         return { body: [] };
       }
