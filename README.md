@@ -11,6 +11,7 @@
 [![Docs](https://img.shields.io/badge/Docs-guides_%26_API-1f2937?style=flat-square)](https://www.vestiarion.xyz/docs)
 [![npm](https://img.shields.io/npm/v/%40vestiarion%2Fsdk?style=flat-square&logo=npm&label=%40vestiarion%2Fsdk)](https://www.npmjs.com/package/@vestiarion/sdk)
 [![CI](https://img.shields.io/github/actions/workflow/status/duongnq2798/vestiarion/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/duongnq2798/vestiarion/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/duongnq2798/vestiarion?include_prereleases&style=flat-square&label=release)](https://github.com/duongnq2798/vestiarion/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6b7280?style=flat-square)](LICENSE)
 [![Demo video](https://img.shields.io/badge/Demo-2%3A59-b91c1c?style=flat-square&logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=UqfvCkkYGlk)
 [![Product tour](https://img.shields.io/badge/Product_tour-4%3A58-b91c1c?style=flat-square&logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=omER_wFsH3M)
@@ -27,6 +28,8 @@
 [![HubSpot](https://img.shields.io/badge/HubSpot-deals_%26_receipts-FF7A59?style=flat-square&logo=hubspot&logoColor=white)](https://www.vestiarion.xyz/docs/guides/hubspot)
 [![Pipedrive](https://img.shields.io/badge/Pipedrive-deals_%26_receipts-1f2937?style=flat-square)](https://www.vestiarion.xyz/docs/guides/pipedrive)
 [![GitHub](https://img.shields.io/badge/GitHub-bounties-181717?style=flat-square&logo=github&logoColor=white)](https://www.vestiarion.xyz/docs/guides/github)
+[![Asana](https://img.shields.io/badge/Asana-acceptance-F06A6A?style=flat-square&logo=asana&logoColor=white)](https://www.vestiarion.xyz/docs/guides/asana)
+[![Chrome extension](https://img.shields.io/badge/Chrome-invoice_capture-4285F4?style=flat-square&logo=googlechrome&logoColor=white)](https://www.vestiarion.xyz/docs/guides/invoice-capture)
 
 **[Open the app](https://www.vestiarion.xyz)** · **[Watch the demo](https://www.youtube.com/watch?v=UqfvCkkYGlk)** · **[See your first decision](https://www.vestiarion.xyz/docs/guides/try-it)** · **[Open numbers](https://www.vestiarion.xyz/open)** · **[Docs](https://www.vestiarion.xyz/docs)** · **[@vestiarionhq](https://x.com/vestiarionhq)**
 
@@ -112,6 +115,7 @@ tenant isolation, encryption, access control, connector tokens, webhooks, the su
 | [`contracts`](contracts) | `VestiarionSpendingLimit` and `VestiarionEscrow`, in Solidity |
 | [`sdk`](sdk) and [`cli`](cli) | `@vestiarion/sdk` and `@vestiarion/cli`: the TypeScript client and the `vestiarion` command |
 | [`integrations`](integrations) | The Slack app manifest and the HubSpot app project |
+| [`extensions`](extensions) | Vestiarion Invoice Capture, the Chrome extension that sends an invoice from the browser as a draft, with its store listing |
 | [`content/docs`](content/docs) | The docs site's pages, in MDX |
 | [`scripts`](scripts) | Operator commands: migrations, a cycle, the payments switch, contract builds, research replays |
 | [`tests`](tests) | The Vitest suite `npm run verify` runs, every migration included, on an in-process Postgres |
@@ -219,9 +223,9 @@ flowchart LR
 | Layer | What it guarantees |
 | --- | --- |
 | **Guardrails in code** | Never pay a counterparty screened high risk, above its limit, a duplicate of a settled invoice, or with an incomplete match. A refusal records the model's argument and the rule that overruled it |
-| **New-payee check** | The first payment to a payee at an address needs two people behind it: the agent never makes one that only the person who gave the address stands behind, and that person cannot approve it either. Whoever creates a payee link counts as having given the address the payee sends, read from the link's signed ledger entry, or from the link's own record when that entry is missing. For an address sent on GitHub, or one no member can be named as having given, no confirmation counts as the second person: one member confirms it and a different one approves its first payment, and no one approves it alone before another member has confirmed it |
+| **New-payee check** | The first payment to a payee at an address needs two people behind it: the agent never makes one that only the person who gave the address stands behind, and that person cannot approve it either. Whoever creates a payee link counts as having given the address the payee sends, read from the link's signed ledger entry, or from the link's own record when that entry is missing. For an address sent on GitHub, or one no member can be named as having given, no confirmation counts as the second person: one member confirms it and a different one approves its first payment, and no one approves it alone before another member has confirmed it. The agent asks the same before it sends a payment again whose earlier send was never recorded, so an address changed while a payment waited does not slip past it |
 | **Two approvals** | Above a figure the owner sets, a payment needs two different people. Arc mainnet workspaces start at 100 USDC, and the owner can raise it but not turn it off there |
-| **Maker and checker** | Roles are owner, admin, approver and viewer. No one approves an invoice they created; only Compliance clears a high-risk counterparty |
+| **Maker and checker** | Roles are owner, admin, approver, viewer and accountant, who books and reads but decides no payment. No one approves an invoice they created; only Compliance clears a high-risk counterparty |
 | **Agent spending limit** | A daily and a 7-day figure, checked in code and, where enforced, by the contract. Arc mainnet workspaces start at 50 USDC a day and 150 USDC in 7 days |
 | **Project budgets** | A bill or milestone in a project has its money set aside in the project's budget, under a database lock, before the agent pays or schedules it; one the budget cannot cover waits for a person. An earmark in Vestiarion, never money locked on chain. A bill and a milestone for the same purchase order or delivered work are one obligation: the second waits for a person |
 | **Try a limit first** | A new payment limit, two-approvals figure or spending limit can be tried on the agent's past 30 or 90 days of decisions: the code's checks replayed on what each recorded, in order, with no model call. Applying it is the setting's own change, refused if the setting moved since, and its signed entry records the replay |
@@ -288,19 +292,24 @@ run in production, with its ledger entries and transactions.
 
 ## Product capabilities
 
-- **AP automation** — invoices typed in, imported from a bill list in its own columns, dates and currency, read from a PDF, forwarded by email, or sent through the
-  API; recurring payables; early-payment discounts taken when they pay.
+- **AP automation** — invoices typed in, imported from a bill list in its own columns, dates and currency, read from a PDF, forwarded by email, captured
+  from the browser with the Chrome extension, or sent through the API; recurring payables; early-payment discounts taken when they pay.
 - **Approvals inbox** — approve and pay, reject, or return to the agent; claims keep two people from deciding the
   same row.
 - **Try a limit first** — see which past bills a new payment limit, two-approvals figure or spending limit would have
   held or let through, then apply it from the result.
-- **Contractor milestones** — verified by a merged pull request or a person; GitHub bounties with `/bounty` and
-  `/payto`; a pull request comment once paid.
+- **Contractor milestones** — verified by a merged pull request, by a person accepting the Asana task the work was
+  delivered in, or by a person; GitHub bounties with `/bounty` and `/payto`; a pull request comment once paid.
 - **Payee links** — a payee enters and confirms their own address, or creates a passkey wallet to be paid in.
 - **Receivables** — pay links on Arc, matched receipts, payments applied to several invoices or part of one with the
   agent's suggestions, credit and fees kept apart, reversals appended, reminders for what is still owed that follow
   the customer's context (a dispute, a claim, a promise, its own rules, its HubSpot deal's owner), and a search by
   invoice number, id, purchase order, amount or transaction.
+- **Customer statements** — a link per customer to a page of what it owes, where it can say it paid, promise a day or
+  dispute an invoice; the agent's reminders wait while a promise or a dispute stands.
+- **Commissions** — a sales partner or referrer earns only on money a customer actually paid on Arc, for exactly the
+  amount applied; a person turns what is due into a payable the agent pays like any bill, and the partner never
+  approves their own payout.
 - **Deals** — a signed deal (a deposit and the balance, milestones, a retainer or custom lines) as a schedule that adds
   up to its total exactly; each line released as a receivable on its day, by a person or the agent; a price change or
   a cancel is a signed new version that never rewrites what was invoiced or paid.
@@ -317,7 +326,10 @@ run in production, with its ledger entries and transactions.
   have paid, each figure linked to its signed entry. Value keeps measured, estimated and not-counted figures apart, and
   an owner or admin can share a live copy by a revocable link, with suppliers as labels and amounts hidden if they
   choose.
-- **Workspaces and members** — per-network workspaces, invitations, four roles, per-member notifications.
+- **Workspaces and members** — per-network workspaces, invitations, five roles, per-member notifications; an
+  accountant console across the businesses an outside accountant looks after.
+- **When a payment does not settle** — each exceptional state says who acts, what Vestiarion already did and what to do
+  next; paying again always looks for the earlier transfer first.
 - **Why it was paid** — one page per payment, link by link from the purchase order to the receipt, each fact marked
   checked by code, verified outside or stated by a person; entries checked again in the browser, and a JSON download.
 - **Audit** — the signed ledger, one-click verification, exports, and signed webhooks.
@@ -352,6 +364,8 @@ run in production, with its ledger entries and transactions.
 | **[Webhooks](https://www.vestiarion.xyz/docs/webhooks)** | Up to 5 HTTPS endpoints per workspace receive every ledger entry, signed, with retries |
 | **[GitHub](https://www.vestiarion.xyz/docs/guides/github)** | Milestone verification from merged pull requests, bounties, and payment comments |
 | **[Email](https://www.vestiarion.xyz/docs/guides/email-invoices)** | A workspace address that reads forwarded invoices into drafts a person adds |
+| **[Chrome extension](https://www.vestiarion.xyz/docs/guides/invoice-capture)** | Vestiarion Invoice Capture sends the invoice text you select on a page, or a file you choose, to your workspace as a draft: you check the fields it read and send it, and an owner or admin adds it as a bill through the same checks as any bill. It connects by signing in and allowing it, never with an API key, and can only create and read its own drafts: it never adds a bill, approves or pays. Submitted to the Chrome Web Store; until it is listed, it is loaded unpacked from [`extensions/chrome-invoice-capture`](extensions/chrome-invoice-capture) |
+| **[Asana](https://www.vestiarion.xyz/docs/guides/asana)** | A milestone linked to the Asana task its work is delivered in is ready for acceptance when the task is completed; a person checks the deliverables against the criteria and accepts it, and the agent then decides its payment as for any verified milestone. A task completed in Asana is never by itself a reason to pay, and a task reopened or changed after acceptance is flagged |
 | **[HubSpot](https://www.vestiarion.xyz/docs/guides/hubspot)** | Won deals come in with their customers every 15 minutes; Plan collections fills in the New deal form, and a deal changed in HubSpot afterwards is flagged on its deal for a person to change or keep; once allowed, each planned deal's receipts are written back to it (collected, still owed, last receipt, reconciliation), read back, never over a person's change; one account per workspace. [Watch it](https://www.vestiarion.xyz/docs/guides/hubspot#watch-it) (1:55) |
 | **[Pipedrive](https://www.vestiarion.xyz/docs/guides/pipedrive)** | Won deals come in with their organizations and persons as soon as Pipedrive says a deal changed, and every 15 minutes; Plan collections fills in the New deal form, and a deal changed in Pipedrive afterwards is flagged on its deal for a person to change or keep; once allowed, each planned deal's receipts are written back to it in Vestiarion's own deal fields, read back, never over a person's change. Pipedrive names no developer sandbox, so only payments on Arc mainnet outside shadow mode are written; one company per workspace |
 | **[Xero](https://www.vestiarion.xyz/docs/guides/xero)** | Bills approved in Xero come in for review every 15 minutes, through the same check as a bill list, and become payables when a person adds them; once paid on Arc, each payment is drafted as a booking against its bill, which an owner or admin reviews field by field and approves before anything is written to Xero. A payment on Arc testnet or in shadow mode is booked only into a Xero demo company. [Watch it](https://www.vestiarion.xyz/docs/guides/xero#watch-it) (1:52) |
@@ -459,9 +473,9 @@ What each one is for, the wallets around them, and the USDC of the chains payees
 | | |
 | --- | --- |
 | **Start** | [See your first decision](https://www.vestiarion.xyz/docs/guides/try-it) · [How payments are controlled](https://www.vestiarion.xyz/docs/guides/controls) · [Go live](https://www.vestiarion.xyz/docs/guides/go-live) · [Your first payment](https://www.vestiarion.xyz/docs/guides/first-payment) · [Shadow mode](https://www.vestiarion.xyz/docs/guides/shadow-mode) |
-| **Guides** | [Payment plan](https://www.vestiarion.xyz/docs/guides/payment-plan) · [Where a payment is](https://www.vestiarion.xyz/docs/guides/where-a-payment-is) · [Workspace report](https://www.vestiarion.xyz/docs/guides/report) · [Try a limit first](https://www.vestiarion.xyz/docs/guides/try-a-rule) · [Pay a contractor](https://www.vestiarion.xyz/docs/guides/pay-a-contractor) · [Get paid](https://www.vestiarion.xyz/docs/guides/get-paid) · [Why a payment was paid](https://www.vestiarion.xyz/docs/guides/evidence) · [Cash scenarios](https://www.vestiarion.xyz/docs/guides/cash-scenarios) · [Deals](https://www.vestiarion.xyz/docs/guides/deals) · [Projects](https://www.vestiarion.xyz/docs/guides/projects) · [Audit export](https://www.vestiarion.xyz/docs/guides/audit-export) |
+| **Guides** | [Payment plan](https://www.vestiarion.xyz/docs/guides/payment-plan) · [Where a payment is](https://www.vestiarion.xyz/docs/guides/where-a-payment-is) · [Workspace report](https://www.vestiarion.xyz/docs/guides/report) · [Try a limit first](https://www.vestiarion.xyz/docs/guides/try-a-rule) · [Pay a contractor](https://www.vestiarion.xyz/docs/guides/pay-a-contractor) · [Asana acceptance](https://www.vestiarion.xyz/docs/guides/asana) · [Invoice capture](https://www.vestiarion.xyz/docs/guides/invoice-capture) · [Get paid](https://www.vestiarion.xyz/docs/guides/get-paid) · [Customer statements](https://www.vestiarion.xyz/docs/guides/customer-portal) · [Commissions](https://www.vestiarion.xyz/docs/guides/commissions) · [When a payment does not settle](https://www.vestiarion.xyz/docs/guides/payment-exceptions) · [Accountants](https://www.vestiarion.xyz/docs/guides/accountants) · [Why a payment was paid](https://www.vestiarion.xyz/docs/guides/evidence) · [Cash scenarios](https://www.vestiarion.xyz/docs/guides/cash-scenarios) · [Deals](https://www.vestiarion.xyz/docs/guides/deals) · [Projects](https://www.vestiarion.xyz/docs/guides/projects) · [Audit export](https://www.vestiarion.xyz/docs/guides/audit-export) |
 | **Developers** | [Quickstart](https://www.vestiarion.xyz/docs/get-started/quickstart) · [API reference](https://www.vestiarion.xyz/docs/api) · [SDK](https://www.vestiarion.xyz/docs/get-started/sdk) · [CLI](https://www.vestiarion.xyz/docs/get-started/cli) · [Postman](https://www.vestiarion.xyz/docs/get-started/postman) · [Webhooks](https://www.vestiarion.xyz/docs/webhooks) · [MCP](https://www.vestiarion.xyz/docs/ai-integration/mcp) · [Changelog](https://www.vestiarion.xyz/docs/changelog) |
-| **This repository** | [ARCHITECTURE.md](ARCHITECTURE.md) · [Running it yourself](docs/self-hosting.md) · [Feature designs](docs/superpowers/specs) · [Contracts](contracts) · [SDK source](sdk) · [CLI source](cli) · [Changelog](CHANGELOG.md) · [Releasing](docs/RELEASING.md) · [Distribution](docs/distribution) |
+| **This repository** | [ARCHITECTURE.md](ARCHITECTURE.md) · [Running it yourself](docs/self-hosting.md) · [Feature designs](docs/superpowers/specs) · [Contracts](contracts) · [SDK source](sdk) · [CLI source](cli) · [Changelog](CHANGELOG.md) · [Releases](https://github.com/duongnq2798/vestiarion/releases) · [Releasing](docs/RELEASING.md) · [Distribution](docs/distribution) |
 
 ## Development
 
