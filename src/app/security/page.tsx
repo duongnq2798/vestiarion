@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { LegalLink, LegalPage, LegalSection } from "@/components/vx/LegalPage";
-import { CI_URL, GITHUB_URL, ISSUES_URL, SECURITY_POLICY_URL } from "@/lib/site-links";
-import { SUBPROCESSORS, SUBPROCESSORS_AS_OF, WHEN_WORDS } from "@/lib/subprocessors";
+import { CI_URL, GITHUB_URL, SECURITY_ADVISORY_URL, SECURITY_POLICY_URL } from "@/lib/site-links";
+import { MODEL_PROVIDER_TERMS, SUBPROCESSORS, SUBPROCESSORS_AS_OF } from "@/lib/subprocessors";
 
 export const metadata: Metadata = {
   title: "Security",
@@ -32,11 +32,12 @@ export default function SecurityPage() {
           <li>
             <strong>In.</strong> People use the app in their browser, signed in through Supabase Auth with an emailed link or Google, never a password.
             Programs use the REST API, the SDK, the CLI or the MCP server with a workspace API key. Connected tools are read with the grant a workspace
-            gave them, and tell Vestiarion about changes with signed webhooks. A request is checked by its session, its key, its signature or the
-            token of a shared link before it reaches any data, and a person&apos;s role decides what they may do.
+            gave them, and tell Vestiarion about changes with webhooks it verifies. Scheduled jobs call their routes with the deployment&apos;s own
+            token. A request is checked by its session, its key, its signature, its token or the token of a shared link, and a person&apos;s role
+            decides what they may do.
           </li>
           <li>
-            <strong>Stored.</strong> A workspace&apos;s records are rows in Postgres that only a request for that workspace can reach, as{" "}
+            <strong>Stored.</strong> A workspace&apos;s records are rows in Postgres, kept apart from other workspaces&apos; as{" "}
             <a href="#isolation">Tenant isolation</a> describes. Secrets are encrypted before they are stored.
           </li>
           <li>
@@ -56,25 +57,33 @@ export default function SecurityPage() {
       </LegalSection>
 
       <LegalSection id="isolation" title="Tenant isolation">
-        <p>One workspace&apos;s data never reaches another&apos;s request, by two independent lines:</p>
+        <p>
+          No request for one workspace reads or changes another workspace&apos;s records. Two answers cross workspaces, and name no workspace and no
+          amount: the <LegalLink href="/open">open numbers</LegalLink>, counts and totals across all workspaces, and payee history, sold over x402,
+          which says for one address how many workspaces paid it, how many such payments were confirmed, and when the first and the last were made.
+        </p>
         <ul>
           <li>
-            <strong>In the server.</strong> Workspace data is read and written only through one data access layer, which adds the workspace to every
-            query and every insert, and refuses a row that names another workspace. Linting forbids importing the database&apos;s service-role client
-            anywhere else.
+            <strong>In the server.</strong> Workspace tables are reached through <code>db()</code>, which adds the workspace to every query and every
+            insert and refuses a row that names another workspace. The service-role client, <code>platformDb()</code>, reaches only an allowlist of
+            platform tables and functions, such as memberships, API keys, webhook endpoints and connector tokens, many of which hold rows for every
+            workspace; the code that uses it, in about 70 files, names the workspace in each query itself. A lint rule forbids importing the raw
+            database client anywhere in <code>src</code> outside the data access layer and the module that makes it.
           </li>
           <li>
-            <strong>In the database.</strong> Each request for a workspace runs as a dedicated Postgres role, with a token the server signs for that
-            request alone: it names the workspace and the person, and expires after 5 minutes. There is no fallback to the service role. Every
-            workspace table that role can reach has row-level security with a restrictive policy that holds it to the token&apos;s workspace,
-            whatever other policy is added later.
+            <strong>In the database.</strong> Each request through <code>db()</code> runs as a dedicated Postgres role, with a token the server signs
+            for that request alone: it names the workspace and the person, or <code>system</code> for scheduled jobs and scripts, and expires after 5
+            minutes. <code>db()</code> never falls back to the service role. Every workspace table that role can reach has row-level security with a
+            restrictive policy that holds it to the token&apos;s workspace, whatever other policy is added later. A few database functions run only as
+            the service role and write workspace rows after their own checks, such as pausing the agent, a customer&apos;s message on a
+            statement link, turning on the USYC reserve and deleting a workspace.
           </li>
         </ul>
         <p>
-          The roles a browser session or an anonymous visitor carries hold no privileges on the tables at all. Links between workspace records are
-          foreign keys that include the workspace, so the database refuses a link into another workspace&apos;s row. The platform&apos;s own tables,
-          such as memberships, API keys and connector tokens, are reached with the service role through an allowlist of tables and functions, and
-          grant the workspace role nothing.
+          The roles a browser session or an anonymous visitor carries hold no privileges on the tables at all, and the platform&apos;s own tables grant
+          the workspace role nothing. Links between workspace records carry the workspace in their foreign key, so the database refuses a link into
+          another workspace&apos;s row; the one exception is a EURC swap&apos;s link to its invoice, which row-level security still keeps out of
+          another workspace&apos;s reach.
         </p>
       </LegalSection>
 
@@ -82,14 +91,14 @@ export default function SecurityPage() {
         <p>
           The app and its API are served over HTTPS. Secrets are encrypted in the app before they reach the database, with AES-256-GCM and a fresh
           96-bit IV for each one, under a master key the deployment holds as a secret. Each ciphertext is bound to its workspace and its field, and
-          connector tokens and webhook secrets to their row too, so a copy moved anywhere else does not decrypt. Encrypted this way:
+          OAuth tokens and webhook secrets to their row too, so a copy moved into another workspace or field does not decrypt. Encrypted this way:
         </p>
         <ul>
           <li>the Circle API key and entity secret a workspace connects;</li>
           <li>each workspace&apos;s Ed25519 ledger signing key;</li>
           <li>each webhook endpoint&apos;s signing secret, and the secret of each webhook Asana sends;</li>
           <li>the OAuth access and refresh tokens of Xero, QuickBooks Online, HubSpot, Pipedrive and Asana;</li>
-          <li>a Slack connection&apos;s bot token and posting address;</li>
+          <li>a Slack connection&apos;s bot token and posting address, bound to the workspace and the field;</li>
           <li>the token of a client&apos;s pay link kept for its reminders.</li>
         </ul>
         <p>
@@ -97,10 +106,11 @@ export default function SecurityPage() {
           added without breaking what an older one sealed.
         </p>
         <p>
-          Some secrets are kept only as a SHA-256 hash: an API key&apos;s 256-bit secret, beside its prefix, compared in constant time, and the
-          tokens of shared receipt, report and payee links. Some are never stored: the GitHub token of the person connecting GitHub is used once and
-          dropped, a GitHub App installation&apos;s tokens are made for each run and kept in memory, and the password Pipedrive sends with its webhooks
-          is derived from the master key for each company.
+          Some secrets are kept only as a SHA-256 hash: an API key&apos;s 256-bit secret, beside its prefix, compared in constant time; the tokens of
+          invitations, payee links, client pay links, customer statement links, and shared receipts and reports; and the codes that link a Telegram
+          chat. Some are never stored: the GitHub token of the person connecting GitHub is used once and dropped, a GitHub App installation&apos;s
+          tokens are made for each run and kept in memory, and the password Pipedrive sends with its webhooks is derived from the master key for each
+          company.
         </p>
       </LegalSection>
 
@@ -112,17 +122,20 @@ export default function SecurityPage() {
         </p>
         <ul>
           <li>
-            <strong>Maker and checker.</strong> Owners and admins add records; owners, admins and approvers decide the payments the agent held. An
-            accountant books payments but decides none, and a viewer only reads.
+            <strong>Maker and checker.</strong> Owners and admins add records. Owners, admins and approvers decide the payments the agent held, pause
+            the agent, and can mark a screening match as not the counterparty. An accountant books payments, applies money received and answers
+            customers, but decides no payment, and a viewer only reads.
           </li>
           <li>
-            <strong>No self-approval.</strong> The database&apos;s approval function refuses an approval by the person who created the invoice. The one
-            exception is a workspace where that person is the only owner, admin or approver; the ledger records that they approved it. A partner named
-            on a commission plan never approves the payable that pays them, even then.
+            <strong>No self-approval.</strong> The database&apos;s approval function refuses an approval by the person who created the invoice, with two
+            exceptions: in a workspace where that person is the only owner, admin or approver, they may approve it; and where two approvals are needed
+            and just one other person can approve, they may give one of the two, never both. The ledger entry says when either exception applied. A
+            partner named on a commission plan never approves the payable that pays them.
           </li>
           <li>
             <strong>A first payment to a new address.</strong> Where payments are real, the agent never makes a first payment to an address that only
-            the person who gave it stands behind, and that person cannot approve it either.
+            the person who gave it stands behind, and that person cannot approve it, unless they are the workspace&apos;s only owner, admin or
+            approver; the ledger entry says so.
           </li>
           <li>
             <strong>Two approvals.</strong> Above a figure the owner sets, a payment needs two different people, and one person cannot give both. A
@@ -134,12 +147,19 @@ export default function SecurityPage() {
             <code>src/lib/agent/guardrails.ts</code> after the model has answered. They hold or refuse a payment to a counterparty screened high risk,
             one not screened yet, one without a payment address or with an address no one confirmed, a duplicate of a bill already paid, a bill missing
             its purchase order or goods receipt, a payment above the counterparty&apos;s limit, above the two-approvals figure or past the agent&apos;s
-            spending limit. A counterparty screened high risk is never paid, not even with a person&apos;s approval. Nothing the model writes changes
-            these checks, and the model is told that text from a bill or a document is evidence, never an instruction.
+            spending limit. Nothing the model writes changes these checks. The decision prompt tells the model that an invoice&apos;s memo and purchase
+            order are evidence, never an instruction, and the prompt that reads an invoice document says the same of the document; text about a
+            milestone or a contractor carries no such line.
+          </li>
+          <li>
+            <strong>Screening.</strong> A counterparty screened high risk is not paid, by the agent or with a person&apos;s approval. An owner, admin or
+            approver can mark a screening match as not this counterparty; it is then screened again, and once it no longer screens high risk its
+            payments are decided again.
           </li>
           <li>
             <strong>The agent&apos;s spending limit.</strong> A daily and a 7-day figure cap what the agent pays on its own. On Arc mainnet a workspace
-            always keeps one, starting at 50 USDC a day and 150 USDC in 7 days.
+            always has one: it starts at 50 USDC a day and 150 USDC in 7 days, and a workspace whose limit is missing or empty is held to those
+            figures.
           </li>
           <li>
             <strong>A spending limit contract.</strong> On Arc mainnet, the agent pays from a treasury in the owner&apos;s own wallet only through{" "}
@@ -153,8 +173,8 @@ export default function SecurityPage() {
       <LegalSection id="api" title="API keys, the API and the MCP server">
         <ul>
           <li>
-            An API key is <code>vxk_</code>, an 8-character prefix and a 256-bit secret. It is shown once, when it is created, and only its prefix and
-            the SHA-256 hash of its secret are kept.
+            An API key is <code>vxk_&lt;prefix&gt;_&lt;secret&gt;</code>: an 8-character prefix and a 256-bit secret. It is shown once, when it is
+            created, and only its prefix and the SHA-256 hash of its secret are kept.
           </li>
           <li>
             A key reaches only its own workspace, with <code>read</code> or <code>read</code> and <code>write</code> access. Only owners and admins
@@ -162,8 +182,13 @@ export default function SecurityPage() {
           </li>
           <li>
             Most requests read. Four add a record, with a write key whose creator can still add records: a counterparty, an invoice, a milestone or a
-            payee link. Writes are limited to 30 a minute for each key. No request approves a payment, moves money, or changes or removes a record, and
-            an address given through the API is held as unconfirmed, so the agent pays nothing to it until a person confirms it.
+            payee link. Writes from one key come in bursts of up to 30, then one every 2 seconds.
+          </li>
+          <li>
+            Nothing in the API approves or pays directly. A payable or a milestone added through it starts the agent&apos;s next cycle, and the agent
+            decides it under the same rules and checks as one added in the app, so it may pay a counterparty whose address is confirmed, within its
+            limits. An address given through the API is held as unconfirmed, so the agent pays nothing to it until a person confirms it. A new payee
+            link replaces the counterparty&apos;s earlier one that was not used yet.
           </li>
           <li>The MCP server&apos;s tools are the same operations, under the same keys, and can do nothing the API cannot.</li>
         </ul>
@@ -187,9 +212,15 @@ export default function SecurityPage() {
             for a connection, and a new token is stored only against the version that was read.
           </li>
           <li>
-            <strong>Disconnecting.</strong> Disconnecting revokes the grant at the provider, then deletes the tokens and records the disconnection in
-            the ledger. Pipedrive&apos;s revocation uninstalls Vestiarion from the company, and Asana&apos;s webhooks are deleted before its grant is
-            revoked. The tokens are deleted even when the provider cannot be reached, or says it was disconnected there first.
+            <strong>Disconnecting.</strong> <strong>Disconnect</strong> revokes the grant at the provider, then deletes the tokens, even when the
+            provider could not be reached, and records the disconnection in the ledger, best effort: a ledger write that fails does not stop it.
+            Asana&apos;s webhooks are deleted before its grant is revoked, and revoking Pipedrive&apos;s grant uninstalls the app from the company, as
+            Pipedrive documents it.
+          </li>
+          <li>
+            <strong>Disconnected on the provider&apos;s side.</strong> When someone disconnects QuickBooks Online at Intuit, its Disconnect page asks
+            Intuit whether the connection still works, and deletes the tokens once Intuit refuses them. Pipedrive&apos;s notice that the app was
+            uninstalled marks the connection to be connected again and keeps its tokens, which no longer work.
           </li>
           <li>
             <strong>Slack</strong> keeps its bot token and posting address encrypted. Disconnecting uninstalls the app from the Slack workspace, which
@@ -200,8 +231,8 @@ export default function SecurityPage() {
             app&apos;s access ends when it is uninstalled on GitHub.
           </li>
           <li>
-            <strong>Deleting a workspace</strong> deletes its tokens with it, without calling the providers, so disconnect a tool first to revoke its
-            grant there.
+            <strong>Deleting a workspace</strong>, from its Settings or with its last member&apos;s account, deletes its tokens, its Slack connection and
+            its GitHub record without calling any provider or uninstalling the Slack app, so disconnect each tool first to revoke its grant there.
           </li>
         </ul>
         <p>
@@ -210,17 +241,21 @@ export default function SecurityPage() {
         </p>
       </LegalSection>
 
-      <LegalSection id="webhooks" title="Webhooks">
-        <p>Every webhook Vestiarion receives is verified before it is acted on, and shared-secret signatures are compared in constant time:</p>
+      <LegalSection id="webhooks" title="Webhooks and scheduled jobs">
+        <p>Each webhook Vestiarion receives is checked as follows, and every shared secret is compared in constant time:</p>
         <ul>
           <li>
-            <strong>Circle</strong>: an ECDSA P-256 signature over the body, checked against Circle&apos;s public key for the key id it names;
+            <strong>Circle</strong>: an ECDSA P-256 signature over the body, checked against Circle&apos;s public key for the key id it names. Circle&apos;s
+            test notification is answered without a check and starts nothing. For any other, the body names the payment or wallet, which is looked up
+            first; a cycle starts only after the signature verifies;
           </li>
           <li>
             <strong>QuickBooks Online</strong>: an HMAC-SHA256 of the body, under the app&apos;s verifier token;
           </li>
           <li>
-            <strong>Pipedrive</strong>: HTTP Basic credentials derived for each company, checked before the body is read, and the body is never used;
+            <strong>Pipedrive</strong>: a deal notice carries HTTP Basic credentials derived for each company, checked before the body is read, and its
+            body is never used; the notice that the app was uninstalled carries the app&apos;s own client id and secret as HTTP Basic credentials, and
+            only its company id is read;
           </li>
           <li>
             <strong>Asana</strong>: the handshake secret, accepted once, for a webhook Vestiarion just created, then an HMAC-SHA256 of each body under
@@ -241,6 +276,11 @@ export default function SecurityPage() {
         </ul>
         <p>Xero and HubSpot send Vestiarion no webhooks: their records are read on a schedule.</p>
         <p>
+          The scheduled routes, the agent&apos;s tick, the FX and transfer watches, the demo reset, webhook delivery, accounting sync, the cleanup and
+          the FX rates, take the deployment&apos;s <code>AGENT_API_TOKEN</code> as a bearer token, compared as SHA-256 digests in constant time. The
+          demo reset also needs a typed confirmation, and is refused in production unless the deployment allows it.
+        </p>
+        <p>
           The webhooks Vestiarion sends carry <code>Vestiarion-Signature</code>, an HMAC-SHA256 over a timestamp and the body under the
           endpoint&apos;s 256-bit secret, which is encrypted at rest. An endpoint must be HTTPS on port 443, with no credentials in its address, and
           every address it resolves to must be public: the address is checked and pinned when each delivery connects, and redirects are not followed,
@@ -258,16 +298,19 @@ export default function SecurityPage() {
             entry&apos;s hash, its body hash and its signature, so changing any entry breaks every link after it.
           </li>
           <li>
-            The database role a workspace&apos;s requests run as can only read and add ledger entries, never change or delete one, and a database
-            trigger refuses an entry that does not extend the chain.
+            The database role a workspace&apos;s requests run as can only read and add ledger entries, never change or delete one. For that role, a
+            database trigger takes the workspace&apos;s ledger lock and refuses an entry whose previous hash is not the current head, or whose hash is
+            not the hash of its previous hash, body hash and signature. The trigger does not check the signature, the body hash or the sequence
+            number; the verifier does.
           </li>
           <li>
             Any member can check the whole chain with <strong>Verify hash chain</strong> on the Audit log, and an API key can ask the same through{" "}
             <code>GET /api/v1/ledger/verify</code>.
           </li>
           <li>
-            The ledger exports as signed JSON, and a <LegalLink href="/docs/guides/audit-export">standalone verifier</LegalLink>, one file with no
-            dependencies, checks an export without Vestiarion; so does the CLI. Each export is itself recorded in the ledger.
+            The ledger exports as JSON, each entry with its signature and the public keys that vouch for them; the file itself is not signed. A{" "}
+            <LegalLink href="/docs/guides/audit-export">standalone verifier</LegalLink>, one file with no dependencies, checks an export without
+            Vestiarion, and so does the CLI. Each export is recorded in the ledger, best effort.
           </li>
           <li>
             An owner can rotate a workspace&apos;s signing key. The retired public keys are kept, so earlier entries still verify, and the rotation is
@@ -281,18 +324,19 @@ export default function SecurityPage() {
           <li>
             A sandbox workspace with no activity for 60 days is deleted by a daily cleanup, unless it holds Circle credentials, a hosted wallet or a
             contract its owner&apos;s wallet deployed. A webhook delivery is deleted 30 days after it is delivered, or after it was created if it
-            failed. Everything else in a workspace is kept until the workspace is deleted.
+            failed. The outcome of an API write sent with an <code>Idempotency-Key</code> is kept for 24 hours, after which the same key replaces it.
+            Everything else in a workspace is kept until the workspace is deleted.
           </li>
           <li>
             An owner deletes a workspace from its Settings. Its records, ledger, API keys, webhooks, connector tokens, members and invitations are deleted
             in one step. A tombstone only the platform reads keeps its slug and name, who deleted it and when, and its ledger&apos;s length, head hash
-            and signing key id. Its wallets and their USDC stay where they are held.
+            and signing key id. Its wallets and their USDC stay where they are held. The Vestiarion team&apos;s own records of a business it is in
+            touch with, its lead and any revenue recorded for it, stay; only their link to the workspace is cleared.
           </li>
           <li>
             Anyone can delete their own account from the account menu, within the rules Privacy gives. A workspace where they are the only member is
-            deleted with it; their
-            memberships, invitations and API keys go; records they added in shared workspaces stay without their name. In a workspace that stays,
-            the ledger entries they caused keep their account&apos;s id, never their email, because the ledger is append-only.
+            deleted with it, as above. In a workspace they share, their membership and the invitations they sent go; the API keys they created are
+            revoked and kept without their name; and the connections they made and the records they added stay, without their name. The ledger entries they caused keep their account&apos;s id, never their email, because the ledger is append-only.
           </li>
           <li>
             After a tool is disconnected, the records already read from it stay with the workspace, and the ledger keeps only ids and names from it.
@@ -307,17 +351,29 @@ export default function SecurityPage() {
       <LegalSection id="ai" title="AI use">
         <ul>
           <li>
-            The agent&apos;s model provider is Anthropic, OpenAI or DeepSeek, whichever this deployment configures. It receives, through its API,
-            only what <LegalLink href="/privacy#services">Privacy</LegalLink> lists: the facts of each decision it is asked about, and a document or a
-            message a member chooses to have read. Without a provider, a written rule-based policy decides, and nothing is sent.
+            The agent&apos;s model provider is Anthropic, OpenAI or DeepSeek, whichever this deployment configures. It receives what{" "}
+            <LegalLink href="/privacy#services">Privacy</LegalLink> lists: the facts of each decision it is asked about, every email that reaches a
+            workspace&apos;s invoice address, and each document or message a member has it read. Without a provider, a written rule-based policy
+            decides, and nothing is sent.
+          </li>
+          <li>
+            Each provider handles these requests under its own API terms:{" "}
+            {MODEL_PROVIDER_TERMS.map((provider, index) => (
+              <span key={provider.name}>
+                {index > 0 ? (index === MODEL_PROVIDER_TERMS.length - 1 ? " and " : ", ") : ""}
+                <LegalLink href={provider.href}>{provider.name}</LegalLink>
+              </span>
+            ))}
+            . Someone running their own copy can point <code>OPENAI_BASE_URL</code> or <code>DEEPSEEK_BASE_URL</code> at another OpenAI-compatible
+            host.
           </li>
           <li>
             A model&apos;s answer must parse against a fixed schema. An answer that does not is shown its error once, and if it still fails, the
             rule-based policy decides and the ledger says so. Either way, the answer is a proposal the rules in code check.
           </li>
           <li>
-            Vestiarion trains and fine-tunes no model. It never uses data from Xero, QuickBooks, HubSpot, Pipedrive or Asana to train or improve any AI
-            model, and the provider may not train on the facts of a bill or a deal it sees.
+            Vestiarion trains and fine-tunes no model, and never uses data from Xero, QuickBooks, HubSpot, Pipedrive or Asana to train or improve any AI
+            model.
           </li>
         </ul>
       </LegalSection>
@@ -332,7 +388,7 @@ export default function SecurityPage() {
           {SUBPROCESSORS.map((service) => (
             <li key={service.name}>
               <strong>{service.name}</strong>: {service.purpose}
-              {WHEN_WORDS[service.when] ? `, ${WHEN_WORDS[service.when]}` : ""}. Data: {service.data}.
+              {service.when ? `, ${service.when}` : ""}. Data: {service.data}.
             </li>
           ))}
         </ul>
@@ -358,8 +414,8 @@ export default function SecurityPage() {
             checked against the figures and settings they quote.
           </li>
           <li>
-            Secrets live in the deployment&apos;s environment, never in the repository: environment files are ignored by git, and only an example with
-            empty values is committed. GitHub secret scanning, with push protection, is on for the repository.
+            Secrets live in the deployment&apos;s environment, never in the repository: environment files are ignored by git, and the one committed
+            example holds placeholders and no secrets. GitHub secret scanning, with push protection, is on for the repository.
           </li>
         </ul>
       </LegalSection>
@@ -369,11 +425,12 @@ export default function SecurityPage() {
         <ul>
           <li>
             Payments can be switched off for every workspace from the database, which every running deployment reads within 10 seconds, with no
-            redeploy, or by the deployment&apos;s environment. Payments on Arc mainnet can be held on their own. Reads and every page keep working.
+            redeploy, or by the deployment&apos;s environment. While they are off, nothing moves money, a person&apos;s approval included. Payments on Arc
+            mainnet can be held on their own. Reads and every page keep working.
           </li>
           <li>
-            In a workspace, any owner, admin or approver can pause the agent; it then runs no cycle and moves no money. On Arc mainnet, an owner&apos;s
-            wallet can set its approval for the spending limit contract to 0.
+            In a workspace, any owner, admin or approver can pause the agent: it then runs no cycle and pays nothing on its own, while a person can
+            still approve and pay. On Arc mainnet, an owner&apos;s wallet can set its approval for the spending limit contract to 0.
           </li>
           <li>
             An owner can rotate the workspace&apos;s ledger signing key, an owner or admin can revoke an API key, and disconnecting a tool revokes its
@@ -385,10 +442,9 @@ export default function SecurityPage() {
 
       <LegalSection id="report" title="Reporting a vulnerability">
         <p>
-          Please do not put the details of a vulnerability in a public issue. Open an issue on{" "}
-          <LegalLink href={ISSUES_URL}>GitHub Issues</LegalLink> titled <strong>Security contact</strong>, with no details, and a maintainer opens a
-          private GitHub security advisory and invites you to it, where you send the details. The{" "}
-          <LegalLink href={SECURITY_POLICY_URL}>security policy</LegalLink> says what is in scope and what to expect.
+          Please report a vulnerability privately, with <LegalLink href={SECURITY_ADVISORY_URL}>Report a vulnerability</LegalLink> under the
+          repository&apos;s Security tab on GitHub, and not in a public issue. The <LegalLink href={SECURITY_POLICY_URL}>security policy</LegalLink>{" "}
+          says what is in scope and what to expect.
         </p>
       </LegalSection>
 
@@ -413,7 +469,9 @@ export default function SecurityPage() {
             <code>main</code> has no branch protection and no required human second approval: the independent AI review and CI before each merge
             are how the team works, not a rule GitHub enforces. Dependencies are not updated automatically.
           </li>
-          <li>Rate limits are kept by each server instance, so they slow abuse rather than set a hard quota, and API reads are not limited.</li>
+          <li>
+            Rate limits are kept by each server instance, so they slow abuse rather than set a hard quota, and API reads are not limited.
+          </li>
           <li>The app does not send a Content Security Policy yet.</li>
         </ul>
       </LegalSection>

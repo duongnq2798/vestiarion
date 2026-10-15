@@ -8,7 +8,7 @@ data and money it handles is on [www.vestiarion.xyz/security](https://www.vestia
 | Version | Supported |
 | --- | --- |
 | The hosted service at [www.vestiarion.xyz](https://www.vestiarion.xyz), which runs `main` | Yes |
-| The latest beta release, on [Releases](https://github.com/duongnq2798/vestiarion/releases/latest) | Yes |
+| The latest beta release, on [Releases](https://github.com/duongnq2798/vestiarion/releases) | Yes |
 | Earlier beta releases | No: fixes land on `main` and in the next release |
 | The latest [`@vestiarion/sdk`](https://www.npmjs.com/package/@vestiarion/sdk) and [`@vestiarion/cli`](https://www.npmjs.com/package/@vestiarion/cli) | Yes |
 
@@ -19,20 +19,19 @@ back-ported fixes to older tags.
 
 **Please do not put the details of a vulnerability in a public issue, a pull request or a discussion.**
 
-1. Open an issue on [GitHub Issues](https://github.com/duongnq2798/vestiarion/issues) titled **Security contact**,
-   saying only which part is affected (the app, the API, a contract, the SDK or the CLI) and nothing about the
-   vulnerability itself.
-2. A maintainer opens a private [GitHub security advisory](https://docs.github.com/en/code-security/security-advisories/working-with-repository-security-advisories/about-repository-security-advisories)
-   for it and invites you, then closes the issue.
-3. Send the details in the advisory: what is affected, how to reproduce it, and what an attacker could do with it.
+Report it privately on GitHub: under the repository's **Security** tab, choose **Report a vulnerability**, or go
+straight to [github.com/duongnq2798/vestiarion/security/advisories/new](https://github.com/duongnq2798/vestiarion/security/advisories/new).
+The report is a private [security advisory](https://docs.github.com/en/code-security/security-advisories/working-with-repository-security-advisories/about-repository-security-advisories)
+that only you and the maintainers can see. Say what is affected (the app, the API, a contract, the SDK or the CLI), how
+to reproduce it, and what an attacker could do with it.
 
 Please test only against workspaces you created yourself, on Arc testnet where you can. Do not read, change or delete
 another workspace's data, do not move money that is not yours, and do not run tests that degrade the service for others.
 
 ## What to expect
 
-- We aim to answer the issue within 3 working days and to tell you, in the advisory, within 10 working days whether we
-  can reproduce the report and what we will do.
+- We aim to answer your report within 3 working days, and to tell you in the advisory within 10 working days whether
+  we can reproduce it and what we will do.
 - We fix confirmed vulnerabilities on `main`, credit you in the advisory and the release notes if you wish, and publish
   the advisory once the fix is deployed.
 - When a vulnerability affected workspaces, we tell their owners what happened and what we changed.

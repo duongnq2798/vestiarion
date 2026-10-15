@@ -625,7 +625,10 @@ phase 1b).
   action checks again. `createWorkspace({ network })` has `create_org` write the row's network on insert (0081),
   before the first account; 0078's lock then refuses any change once an account exists.
   - A mainnet workspace starts with one empty "Operating" account on `ARC`, no reserve, and an agent spending limit
-    of 50 USDC a day and 150 USDC in 7 days. `changeAgentBudget` keeps a figure there.
+    of 50 USDC a day and 150 USDC in 7 days (`MAINNET_STARTING_BUDGET`, `src/lib/mainnet.ts`). `changeAgentBudget`
+    keeps a figure there, and `readOutflowBudget` reads the starting limit for a mainnet workspace whose
+    `agent_budgets` row is missing or holds neither figure, since the tenant role can delete that row: the agent
+    never pays on Arc mainnet without a limit, as `readTwoApprovalsAbove` never reads no figure there.
   - It also starts with two approvals above 100 USDC (`approval_policies`, phase 2b), which `changeTwoApprovals` keeps
     on there. `org_created` records the starting limits.
 - **Held until live.** `orgConfig` sets `chain.networkHold`: `MAINNET_OFF` while the deployment has it off (and the

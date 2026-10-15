@@ -15,6 +15,12 @@ export const ISSUES_URL = `${GITHUB_URL}/issues`;
  */
 export const SECURITY_POLICY_URL = `${GITHUB_URL}/blob/main/SECURITY.md`;
 
+/** Where a vulnerability is reported privately: GitHub's "Report a vulnerability", under the repository's Security tab. */
+export const SECURITY_ADVISORY_URL = `${GITHUB_URL}/security/advisories/new`;
+
+/** Every release, prereleases included. `/releases/latest` names none while every release is a prerelease. */
+export const RELEASES_URL = `${GITHUB_URL}/releases`;
+
 /** The CI workflow every pull request and every push to main runs, and its runs. */
 export const CI_URL = `${GITHUB_URL}/actions/workflows/ci.yml`;
 

@@ -73,8 +73,8 @@ nothing else: no wallet, no USDC, no API key, nothing to install.
    (a **Test workspace**, on Arc testnet, if you are asked). It starts as a sandbox: payments are simulated and nothing
    reaches a chain.
 2. **Load sample data and run the agent.** On **Treasury**, the console, choose **Load sample data**: six
-   counterparties, seven bills and two contractor milestones, chosen so that one cycle shows every outcome. Then choose
-   **Run cycle now**. To try one of your own bills instead, follow
+   counterparties, seven invoices (six to pay and one to collect) and two contractor milestones, chosen so that one cycle
+   shows every outcome. Then choose **Run cycle now**. To try one of your own bills instead, follow
    [See your first decision](https://www.vestiarion.xyz/docs/guides/try-it).
 3. **Read the decisions and the refusals.** On **Bills & receivables**, each bill shows what the agent decided: pay it,
    pay it on its discount's last day, ask for a missing purchase order, hold it above its supplier's limit, or flag it as

@@ -19,13 +19,24 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   and with what, who can approve what, how connector tokens are refreshed and revoked, how webhooks are signed both
   ways, the signed ledger, retention and deletion, how the model is used, and the services that process data, dated.
   It ends with what we do not claim, and is linked from every footer. The repository now has a security policy,
-  [SECURITY.md](SECURITY.md), saying how to report a vulnerability without a public issue, and the README opens with
-  a five-minute path through the live app for anyone evaluating it.
+  [SECURITY.md](SECURITY.md): report a vulnerability privately with GitHub's **Report a vulnerability**, never in a
+  public issue. The README opens with a five-minute path through the live app for anyone evaluating it.
 
 ### Changed
 
-- **The privacy page names the Arc RPC nodes** the app reads balances, fees and receipts from: they receive wallet
-  addresses and transaction hashes, which are already public on chain, and nothing else.
+- **The privacy page says more exactly what leaves Vestiarion.** It names the RPC nodes the app reads balances, fees
+  and receipts from, on Arc and on payees' chains, which receive wallet addresses and transaction hashes only. Every
+  email that reaches a workspace's invoice address is read by the model provider, and a Slack post about one that
+  cannot be read names its sender's address. Google Analytics loads on every page, signed-in pages included. Each
+  model provider handles requests under its own API terms, now linked, in place of a promise about training the code
+  cannot keep. An API write's idempotency record is kept for 24 hours, and the team's own record of a business stays
+  when its workspace is deleted.
+
+### Fixed
+
+- **On Arc mainnet, the agent's spending limit always stands.** A workspace whose limit was missing or empty was read
+  as having none; it is now held to the starting limit, 50 USDC a day and 150 USDC in 7 days, as a missing
+  two-approvals figure already was.
 
 ## [0.1.0-beta.5] - 2026-10-15
 
