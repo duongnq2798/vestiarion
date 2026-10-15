@@ -11,11 +11,11 @@
 [![npm](https://img.shields.io/npm/v/%40vestiarion%2Fsdk?style=flat-square&logo=npm&label=%40vestiarion%2Fsdk)](https://www.npmjs.com/package/@vestiarion/sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6b7280?style=flat-square)](LICENSE)
 
-<a href="https://www.vestiarion.xyz"><img src="docs/assets/readme/open-the-app.svg" alt="Open the app: vestiarion.xyz" height="52"></a>
-<a href="https://www.youtube.com/watch?v=UqfvCkkYGlk"><img src="docs/assets/readme/watch-the-demo.svg" alt="Watch the demo: 2:59 on YouTube" height="52"></a>
-<a href="https://www.vestiarion.xyz/docs/guides/invoice-capture"><img src="docs/assets/readme/add-to-chrome.svg" alt="Add to Chrome: Invoice Capture" height="52"></a>
-<a href="https://www.npmjs.com/package/@vestiarion/sdk"><img src="docs/assets/readme/npm-sdk.svg" alt="Install from npm: @vestiarion/sdk" height="52"></a>
-<a href="https://www.vestiarion.xyz/docs/ai-integration/mcp"><img src="docs/assets/readme/mcp-server.svg" alt="For AI agents: MCP server" height="52"></a>
+<a href="https://www.vestiarion.xyz"><img src="docs/assets/readme/open-the-app.svg" alt="Open the app: vestiarion.xyz" height="48"></a>
+<a href="https://www.youtube.com/watch?v=UqfvCkkYGlk"><img src="docs/assets/readme/watch-the-demo.svg" alt="Watch the demo: 2:59 on YouTube" height="48"></a>
+<a href="https://www.vestiarion.xyz/docs/guides/invoice-capture"><img src="docs/assets/readme/add-to-chrome.svg" alt="Add to Chrome: Invoice Capture" height="48"></a>
+<a href="https://www.npmjs.com/package/@vestiarion/sdk"><img src="docs/assets/readme/npm-sdk.svg" alt="Install from npm: @vestiarion/sdk" height="48"></a>
+<a href="https://www.vestiarion.xyz/docs/ai-integration/mcp"><img src="docs/assets/readme/mcp-server.svg" alt="For AI agents: MCP server" height="48"></a>
 
 **[See your first decision](https://www.vestiarion.xyz/docs/guides/try-it)** · **[Open numbers](https://www.vestiarion.xyz/open)** · **[Mainnet proof](#mainnet-proof)** · **[Docs](https://www.vestiarion.xyz/docs)** · **[Security](https://www.vestiarion.xyz/security)**
 
@@ -30,9 +30,9 @@ through a spending-limit contract the owner's own wallet deployed. Every outcome
 hash-chained ledger anyone in the workspace can verify.
 
 <p align="center">
-  <img src="public/docs/guides/first-payment-stopped.png" alt="A payable on Treasury: the agent decided to pay Northstar Studio 75.00 USDC, and a rule in code refused it before anything was signed or sent, because it is above the payee's 50.00 USDC limit. The card shows the rule, what was attempted and allowed, what the agent argued, and the checks behind it." width="720">
+  <img src="public/docs/guides/first-payment-decision.png" alt="A bill on Bills and receivables: Northstar Studio's 12.50 USDC October design retainer, settled on Arc. The card gives the agent's reasoning (the purchase order matches and the work was received, the supplier screened clear within its 50.00 USDC limit, the operating wallet holds 20.00 USDC), the checks behind it, its signed audit entry and the transaction." width="720">
   <br>
-  <sub>The model proposed a payment; code refused it before anything was signed or sent, and the card says which rule and why.</sub>
+  <sub>A bill the agent paid on Arc: its reasoning, the checks behind it, the signed audit entry and the transaction.</sub>
 </p>
 
 **Watch it work:** [the demo](https://www.youtube.com/watch?v=UqfvCkkYGlk) (2:59) or [the full product tour](https://www.youtube.com/watch?v=omER_wFsH3M)

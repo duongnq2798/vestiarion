@@ -36,15 +36,15 @@ const BUTTONS = [
   { file: "mcp-server.svg", icon: "mcp", caption: "FOR AI AGENTS", label: "MCP server" },
 ];
 
-const WIDTH = 186;
-const HEIGHT = 52;
+const WIDTH = 162;
+const HEIGHT = 48;
 
 function button({ icon, caption, label }) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}" role="img" aria-label="${caption.toLowerCase()}: ${label}">
   <rect x="0.5" y="0.5" width="${WIDTH - 1}" height="${HEIGHT - 1}" rx="10" fill="#18181B" stroke="#3F3F46"/>
-  <g transform="translate(14 14)">${ICONS[icon]}</g>
-  <text x="50" y="21" fill="#A1A1AA" font-family="${FONT}" font-size="8.5" font-weight="600" letter-spacing="0.8">${caption}</text>
-  <text x="50" y="38" fill="#FAFAFA" font-family="${FONT}" font-size="15" font-weight="700">${label.replace(/&/g, "&amp;")}</text>
+  <g transform="translate(12 12)">${ICONS[icon]}</g>
+  <text x="44" y="19" fill="#A1A1AA" font-family="${FONT}" font-size="8" font-weight="600" letter-spacing="0.8">${caption}</text>
+  <text x="44" y="35" fill="#FAFAFA" font-family="${FONT}" font-size="13.5" font-weight="700">${label.replace(/&/g, "&amp;")}</text>
 </svg>
 `;
 }
