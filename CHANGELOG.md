@@ -34,19 +34,25 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
-- **The privacy page says more exactly what leaves Vestiarion.** It names the RPC nodes the app reads balances, fees
-  and receipts from, on Arc and on payees' chains, which receive wallet addresses and transaction hashes only. Every
-  email that reaches a workspace's invoice address is read by the model provider, and a Slack post about one that
-  cannot be read names its sender's address. Google Analytics loads on every page, signed-in pages included. Each
-  model provider handles requests under its own API terms, now linked, in place of a promise about training the code
-  cannot keep. An API write's idempotency record is kept for 24 hours, and the team's own record of a business stays
-  when its workspace is deleted.
+- **The privacy page says more exactly what leaves Vestiarion.** It names each RPC node the server reads balances,
+  fees and receipts from, which receive wallet addresses and transaction hashes only, and says the other chains' nodes
+  are handed only to your own wallet. For each email to a workspace's invoice address, the model provider reads its
+  first PDF, .eml or .txt attachment or else its text, and a Slack post about one that cannot be read names its
+  sender's address. Google Analytics loads on every page, signed-in pages included. Each model provider handles
+  requests under its own API terms, now linked, in place of a promise about training the code cannot keep. Deleting
+  an account also deletes the payment approvals the person gave, which the ledger keeps, and their Slack and Telegram
+  links, and the team's own record of a business stays when its workspace is deleted.
+- **API write limits, said as they work.** Writes from one key come in bursts of up to 30, then one every 2 seconds,
+  as the limits page and the API invoices guide now say.
 
 ### Fixed
 
 - **On Arc mainnet, the agent's spending limit always stands.** A workspace whose limit was missing or empty was read
   as having none; it is now held to the starting limit, 50 USDC a day and 150 USDC in 7 days, as a missing
   two-approvals figure already was.
+- **An API write's idempotency outcome is deleted after its 24 hours.** It was given back for 24 hours, as documented,
+  but the row, with its response, stayed. The daily cleanup now deletes outcomes older than that, in every workspace,
+  and reports how many.
 
 ## [0.1.0-beta.5] - 2026-10-15
 

@@ -7,9 +7,13 @@ import SecurityPage, { metadata } from "@/app/security/page";
 import TermsPage from "@/app/terms/page";
 import sitemap from "@/app/sitemap";
 import { COMPACT_FOOTER_LINKS, FOOTER_COLUMNS } from "@/components/vx/SiteChrome";
+import { ESLint } from "eslint";
 import { IDEMPOTENCY_TTL_MS } from "@/lib/api/idempotency";
+import { SERVICE_DAILY_CAP_USDC } from "@/lib/agent/services";
 import { PERMISSIONS } from "@/lib/auth/roles";
 import { MAINNET_STARTING_BUDGET, MAINNET_STARTING_TWO_APPROVALS } from "@/lib/mainnet";
+import { NETWORKS } from "@/lib/network";
+import { excludedSlots } from "@/lib/two-approvals";
 import { STATE_TTL_MS } from "@/lib/connectors/state";
 import { EXPIRY_MARGIN_MS } from "@/lib/connectors/tokens";
 import { REQUEST_TOKEN_TTL_SECONDS } from "@/lib/dal/request-token";
@@ -155,17 +159,35 @@ describe("the subprocessors", () => {
     }
   });
 
-  it("name each RPC node a receipt is read from, as network.ts lists them, on both pages", () => {
-    const network = source("src/lib/network.ts");
-    for (const host of ["rpc.testnet.arc.network", "rpc.mainnet.arc.io", "publicnode.com", "g.alchemy.com", "base.org", "arbitrum.io", "optimism.io", "avax", "rpc.linea.build", "unichain.org"]) {
-      expect(network, host).toContain(host);
-    }
+  it("name each RPC node the server reads from, as the network profiles list them, and no node only a wallet is handed", () => {
     const rpc = SUBPROCESSORS.find((service) => service.name === "RPC nodes");
-    for (const name of ["PublicNode", "Alchemy", "Base", "Arbitrum", "Optimism", "Avalanche", "Linea", "Unichain"]) {
-      expect(rpc?.purpose, name).toContain(name);
-      expect(privacyEntry("RPC nodes"), name).toContain(name);
+    const nodes = `${rpc?.purpose}`;
+    const privacyNodes = privacyEntry("RPC nodes");
+    // The server reads receipts on the payee chains only (src/lib/receipts/onchain.ts), and Arc's node is configurable.
+    expect(source("src/lib/receipts/onchain.ts")).toContain("return chainById(chain).rpcUrl;");
+    const served = new Set(Object.values(NETWORKS).flatMap((profile) => [profile.rpcUrl, ...profile.payeeChains.map((chain) => chain.rpcUrl)]).map((url) => new URL(url).host));
+    for (const host of served) {
+      expect(nodes, host).toContain(host);
+      expect(privacyNodes, host).toContain(host);
     }
-    expect(privacy).not.toContain("that chain's public node");
+    for (const name of ["ARC_RPC_URL", "ARC_MAINNET_RPC_URL"]) {
+      expect(source("src/lib/config.ts"), name).toContain(`env.${name}`);
+      expect(nodes, name).toContain(name);
+    }
+    // The chains USDC can be brought from are handed to the person's own wallet; the server never calls their nodes.
+    const sources: ReadonlyArray<{ rpcUrl: string }> = Object.values(NETWORKS).flatMap((profile) => profile.inbound?.sources ?? []);
+    const walletOnly = new Set(sources.map((chain) => new URL(chain.rpcUrl).host).filter((host) => !served.has(host)));
+    expect(walletOnly.size).toBeGreaterThan(0);
+    for (const host of walletOnly) {
+      expect(nodes, host).not.toContain(host);
+      expect(privacyNodes, host).not.toContain(host);
+    }
+    for (const name of ["Alchemy", "Polygon", "Optimism", "Avalanche", "Linea", "Unichain", "World Chain"]) {
+      expect(nodes, name).not.toContain(name);
+      expect(privacyNodes, name).not.toContain(name);
+    }
+    expect(privacyNodes).toContain("handed to your own wallet in your browser; the server never calls them");
+    expect(source("src/lib/inbound-usdc.ts")).toContain("It all runs in the browser");
   });
 
   it("ask GitHub only when a pull request is named, as the privacy page says", () => {
@@ -200,6 +222,9 @@ describe("the figures and settings it quotes, as the code has them", () => {
     expect(tenant).toContain("createClient(database.url, database.anonKey, {");
     expect(tenant).not.toContain("serviceRoleKey");
     expect(source("src/lib/dal/request-token.ts")).toContain('sub: userId ?? "system"');
+    // An API key's request (and so the MCP server's) opens its workspace's scope with no person: its token names system.
+    expect(source("src/lib/api/guard.ts")).toContain("const result = await withOrg(key.orgId, handler);");
+    expect(section("isolation")).toContain("or system for scheduled jobs, scripts, and requests made with an API key, through the MCP server or by a webhook");
   });
 
   it("the restrictive policy and the browser roles, as the migrations write them", () => {
@@ -253,7 +278,8 @@ describe("the figures and settings it quotes, as the code has them", () => {
     expect(webhooks).toContain(`waits at most ${WEBHOOK_TIMEOUT_MS / 1000} seconds and is tried up to ${WEBHOOK_MAX_ATTEMPTS} times`);
     expect(webhooks).toContain(`fails ${WEBHOOK_DISABLE_AFTER} times in a row is disabled`);
     expect(source("src/lib/platform/webhooks.ts")).toContain("already has 5 webhook endpoints");
-    expect(webhooks).toContain("at most 5 endpoints");
+    expect(source("src/lib/platform/webhooks.ts")).toContain("organization to 5 active endpoints");
+    expect(webhooks).toContain("at most 5 active endpoints");
     expect(source("src/lib/webhooks/sign.ts")).toContain("Vestiarion-Signature");
     expect(source("src/lib/circle/notifications.ts")).toContain("ECDSA P-256");
   });
@@ -276,52 +302,111 @@ describe("the figures and settings it quotes, as the code has them", () => {
     const retention = section("retention");
     expect(retention).toContain(`${SANDBOX_IDLE_DAYS} days`);
     expect(retention).toContain(`${WEBHOOK_DELIVERY_RETENTION_DAYS} days`);
+    // Given back for 24 hours, then deleted by the daily cleanup, which the cleanup route runs.
     expect(IDEMPOTENCY_TTL_MS).toBe(24 * 3_600_000);
-    expect(retention).toContain("kept for 24 hours");
-    expect(privacy).toContain("kept for 24 hours, after which the same key replaces it");
+    expect(source("src/lib/platform/cleanup.ts")).toContain('.from("api_idempotency").delete({ count: "exact" }).lt("created_at", cutoffIso)');
+    expect(source("src/app/api/platform/cleanup/route.ts")).toContain("const idempotency = await deleteExpiredIdempotencyOutcomes();");
+    for (const page of [retention, privacy]) {
+      expect(page).toContain("is given back for 24 hours, and deleted by the daily cleanup after that");
+      expect(page).not.toContain("after which the same key replaces it");
+    }
     const growth = source("supabase/migrations/0099_growth.sql");
     expect(growth).toContain("org_id              uuid references public.orgs (id) on delete set null");
     expect(growth).toContain("org_id      uuid references public.orgs (id) on delete set null");
-    expect(retention).toContain("only their link to the workspace is cleared");
-    expect(privacy).toContain("only their link to the workspace is cleared");
+    expect(growth).toContain("values (new.id, 'org_id', old.org_id::text, new.org_id::text, v_note, v_by);");
+    for (const page of [retention, privacy]) {
+      expect(page).toContain("their link to the workspace is cleared, and the lead's history keeps the workspace's id");
+      expect(page).toContain("removing sample data or turning a feature off deletes what it held");
+    }
   });
 });
 
 describe("claims narrowed to what the code does", () => {
-  it("isolation names the answers that cross workspaces, and never says a workspace's data never reaches another", () => {
+  it("isolation lists the answers that cross workspaces, with what each carries", () => {
     const isolation = section("isolation");
-    expect(isolation).not.toMatch(/never reaches another/);
+    expect(isolation).not.toMatch(/never reaches another|name no workspace and no amount/);
+    // /open: USDC totals across workspaces, and the team's own payments listed with amounts.
+    const open = source("supabase/migrations/0075_network.sql");
+    for (const field of ["'usdcPaid'", "'usdcInWallets'", "'oursUsdc'", "'ourPayments'", "limit 20"]) expect(open, field).toContain(field);
+    // The home page's latest decisions, from the team's own workspaces; whether a USYC reserve runs live.
+    expect(source("src/lib/platform/latest-decision.ts")).toContain('platformDb().rpc("latest_team_decision")');
+    expect(source("src/lib/platform/recent-decisions.ts")).toContain('platformDb().rpc("recent_team_decisions"');
+    expect(source("src/lib/platform/usyc-reserve.ts")).toContain('.eq("mode", "live").not("usyc_live_at", "is", null)');
     expect(source("src/lib/platform/payee-history.ts")).toMatch(/workspacesPaid: number;\s+paymentsConfirmed: number;\s+firstPaidAt: string \| null;\s+lastPaidAt: string \| null;/);
-    for (const phrase of ["name no workspace and no amount", "open numbers", "payee history", "how many workspaces paid it"]) expect(isolation, phrase).toContain(phrase);
+    for (const phrase of [
+      "counts and USDC totals across workspaces",
+      "the team's own workspaces' payments, up to the latest 20 with their amounts and transactions",
+      "the latest decisions on the home page and the page for studios, the team's own workspaces' only",
+      "whether any live workspace runs a real USYC reserve",
+      "with no amount",
+      "Only the team's own workspaces' payments are ever listed, with amounts",
+    ]) {
+      expect(isolation, phrase).toContain(phrase);
+    }
   });
 
-  it("db() scopes queries; platformDb() code names the workspace itself; the lint rule covers src only", () => {
+  it("db() scopes queries; platformDb() code names the workspace except for token lookups and cross-workspace jobs; the lint rule covers src", async () => {
     const isolation = section("isolation");
     expect(isolation).toContain("db() , which adds the workspace to every query");
-    expect(isolation).toContain("names the workspace in each query itself");
+    expect(isolation).toContain("except where it looks a row up by a token or a key prefix, or runs a job across workspaces");
+    expect(isolation).not.toContain("names the workspace in each query itself");
     expect(isolation).toContain("db() never falls back to the service role");
-    expect(isolation).not.toContain("There is no fallback to the service role");
-    expect(source("eslint.config.mjs")).toContain('files: ["src/**/*.{ts,tsx}"]');
+    // A cross-workspace job: webhook delivery claims rows across workspaces, and the cleanup lists every sandbox.
+    expect(source("src/lib/webhooks/deliver.ts")).toContain('platformDb().rpc("claim_webhook_deliveries", {');
+    expect(source("src/lib/platform/cleanup.ts")).toContain('.from("orgs")\n      .select("id, wallet_host")\n      .eq("mode", "sandbox")');
+    // platformDb refuses any table off its list.
     expect(source("src/lib/dal/index.ts")).toContain("is not a platform table");
     for (const fn of ["pause_agent", "customer_portal_submit", "enable_usyc_reserve", "delete_org"]) expect(source("src/lib/dal/index.ts"), fn).toContain(`"${fn}"`);
-  });
+    // The lint rule, as ESLint resolves it: on in src, off in the data access layer and outside src.
+    const eslint = new ESLint({ cwd: process.cwd() });
+    const ruleFor = async (file: string) => ((await eslint.calculateConfigForFile(file)) as { rules?: Record<string, unknown> }).rules?.["no-restricted-imports"];
+    const level = (rule: unknown) => (Array.isArray(rule) ? rule[0] : rule);
+    expect([2, "error"]).toContain(level(await ruleFor("src/app/page.tsx")));
+    expect([2, "error"]).toContain(level(await ruleFor("src/lib/agent/orchestrator.ts")));
+    expect([undefined, 0, "off"]).toContain(level(await ruleFor("src/lib/dal/index.ts")));
+    expect([undefined, 0, "off"]).toContain(level(await ruleFor("scripts/migrate.ts")));
+    expect(isolation).toContain("anywhere in src outside the data access layer");
+  }, 30_000);
 
-  it("foreign keys carry the workspace, but for the one link that does not", () => {
+  it("foreign keys carry the workspace, but for the links named, and polymorphic ids have none", () => {
     expect(source("supabase/migrations/0048_fx_swaps.sql")).toContain("invoice_id      uuid not null references public.invoices(id) on delete cascade");
-    expect(section("isolation")).toContain("the one exception is a EURC swap's link to its invoice");
+    const deliveries = source("supabase/migrations/0028_webhooks.sql");
+    expect(deliveries).toContain("endpoint_id     uuid not null references public.webhook_endpoints(id) on delete cascade");
+    expect(deliveries).toContain("ledger_entry_id uuid references public.ledger_entries(id) on delete cascade");
+    expect(source("supabase/migrations/0076_two_approvals.sql")).toMatch(/^\s+source_id\s+uuid not null,$/m);
+    const isolation = section("isolation");
+    expect(isolation).toContain("a webhook delivery's links to its endpoint and its ledger entry");
+    expect(isolation).toContain("has no foreign key at all");
+    expect(isolation).not.toContain("the one exception");
   });
 
-  it("self-approval has two exceptions, both in the ledger, and a sole approver may approve a first payment to their own address", () => {
-    expect(source("supabase/migrations/0118_commissions.sql")).toContain("if v.created_by = p_by and not public.sole_approver(p_org_id, p_by) then");
+  it("self-approval: what the database allows, what the app narrows, both in the ledger", () => {
+    // The database: the creator only as the sole approver, or once another approver's unused approval of the same amount stands.
+    const claim = source("supabase/migrations/0118_commissions.sql");
+    expect(claim).toContain("and (p_decision <> 'approve' or i.created_by is distinct from p_by or public.sole_approver(p_org_id, p_by)");
+    expect(claim).toContain("where a.org_id = p_org_id and a.source_type = 'invoice' and a.source_id = p_invoice_id");
+    expect(claim).toContain("and a.approved_by <> p_by and a.used_at is null");
+    expect(claim).toContain("and a.amount = i.amount and a.currency = coalesce(i.currency, 'USDC')");
+    // The app: the sole-approver exception only at or below the figure; above it, slots for those left out.
     const approvals = source("src/lib/agent/approvals.ts");
+    const branch = approvals.slice(approvals.indexOf("  if (twoNeeded) {"), approvals.indexOf("if (invoice.riskLevel === \"high\") raise(\"high_risk\");"));
+    expect(branch.indexOf("mayGiveApproval")).toBeGreaterThan(-1);
+    expect(branch.indexOf("} else {")).toBeLessThan(branch.indexOf("soleApprover = invoice.createdBy === input.actorId;"));
+    expect(branch.indexOf("mayGiveApproval")).toBeLessThan(branch.indexOf("} else {"));
+    expect([excludedSlots(2), excludedSlots(1), excludedSlots(0)]).toEqual([0, 1, 2]);
     expect(approvals).toContain("...(soleApprover ? { soleApprover: true } : {}),");
     expect(approvals).toContain("...(fewApprovers ? { fewApprovers: true } : {}),");
     expect(approvals).toContain('if (firstPayment?.addressBy === input.actorId && !(await isSoleApprover(input.actorId))) raise("new_payee_self");');
     const access = section("access");
-    expect(access).toContain("with two exceptions");
-    expect(access).toContain("they may give one of the two, never both");
-    expect(access).toContain("unless they are the workspace's only owner, admin or approver");
-    expect(access).not.toContain("The one exception");
+    for (const phrase of [
+      "refuses the person who created an invoice unless they are the workspace's only owner, admin or approver, or another approver's unused approval of the same amount already stands",
+      "being the only approver counts only at or below the two-approvals figure",
+      "only when exactly one other person can approve, never both",
+      "unless they are the workspace's only owner, admin or approver",
+    ]) {
+      expect(access, phrase).toContain(phrase);
+    }
+    expect(access).not.toContain("with two exceptions");
   });
 
   it("screening: a match can be dismissed by whoever decides approvals, and the counterparty is screened again", () => {
@@ -337,22 +422,51 @@ describe("claims narrowed to what the code does", () => {
     expect(section("access")).toContain("text about a milestone or a contractor carries no such line");
   });
 
-  it("the roles do what roles.ts lets them", () => {
+  it("guardrails.ts checks bills; a milestone's checks are written into the cycle", () => {
+    const orchestrator = source("src/lib/agent/orchestrator.ts");
+    expect(orchestrator).toContain('guardrailRule = highRisk ? "counterparty.high_risk" : unscreened ? "counterparty.unscreened" : "counterparty.payment_limit";');
+    const access = section("access");
+    expect(access).toContain("every bill the agent would pay passes the checks in src/lib/agent/guardrails.ts");
+    expect(access).toContain("A contractor's milestone passes checks of its own, written into the cycle in src/lib/agent/orchestrator.ts");
+    expect(access).not.toContain("Every payment the agent would make passes the checks");
+  });
+
+  it("the roles do what roles.ts lets them, and a viewer only reads the workspace", () => {
     expect(PERMISSIONS["receivables.reconcile"]).toContain("accountant");
     expect(PERMISSIONS["agent.pause"]).toContain("approver");
+    const viewer = Object.entries(PERMISSIONS).filter(([, roles]) => (roles as readonly string[]).includes("viewer")).map(([permission]) => permission);
+    expect(viewer).toEqual(["workspace.read"]);
     const access = section("access");
     expect(access).toContain("applies money received and answers customers");
     expect(access).toContain("pause the agent");
+    expect(access).toContain("A viewer reads, and changes only their own settings and links");
   });
 
-  it("the pause holds the agent, not a person; the payments switch holds both", () => {
-    expect(source("src/lib/agent/liquidity.ts")).toContain("since the pause holds the agent and not a person");
+  it("the mainnet two-approvals figure can be lowered as well as raised, and x402 purchases have their own cap", () => {
+    expect(source("src/lib/approval-policy.ts")).toContain("const tighter = to !== null && (from === null || to < from);");
+    expect(section("access")).toContain("can be raised or lowered but not turned off");
+    expect(SERVICE_DAILY_CAP_USDC).toBe(0.05);
+    expect(section("access")).toContain(`a cap of their own, ${SERVICE_DAILY_CAP_USDC} USDC a day`);
+  });
+
+  it("the pause holds the agent, not a person; the payments switch holds what Vestiarion sends", () => {
+    // The cycle consults the pause before it pays; a person's approval never does.
+    expect(source("src/lib/agent/orchestrator.ts")).toContain("const pauseNote = await pausedPaymentNote();");
+    const approvals = source("src/lib/agent/approvals.ts");
+    expect(approvals).not.toMatch(/agentPaused\(|pausedPaymentNote\(/);
+    // The switch is not consulted by an x402 sale, and mainnet's own hold is the deployment's MAINNET_ENABLED.
+    expect(source("src/lib/platform/payee-history.ts")).not.toContain("payments-switch");
+    expect(source("src/lib/config.ts")).toContain("MAINNET_ENABLED");
     const incidents = section("incidents");
     expect(incidents).toContain("while a person can still approve and pay");
-    expect(incidents).toContain("nothing moves money, a person's approval included");
+    expect(incidents).toContain("Vestiarion sends nothing that moves money, a person's approval included");
+    expect(incidents).toContain("what an owner's own wallet signs in their browser, and payments made to Vestiarion over x402, are not stopped by it");
+    expect(incidents).toContain("Payments on Arc mainnet can be held on their own, by an environment change and a redeploy");
+    expect(incidents).toContain("except GitHub, whose app is uninstalled on GitHub");
+    expect(incidents).not.toContain("nothing moves money");
   });
 
-  it("the API approves and pays nothing directly, but what it adds is decided by the agent", () => {
+  it("the API approves and pays nothing directly, and what starts a cycle is said with its condition", () => {
     const routes = (dir: string): string[] =>
       readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
         const full = path.join(dir, entry.name);
@@ -365,25 +479,35 @@ describe("claims narrowed to what the code does", () => {
       "milestones",
       "payee-links",
     ]);
-    expect(source("src/app/api/v1/invoices/route.ts")).toContain('runCycleSoon(cycleEventOf(guard.actor, "invoice_added"))');
-    expect(source("src/lib/commands/milestones.ts")).toContain('runCycleSoon(cycleEventOf(actor, "milestone_added"))');
+    expect(source("src/app/api/v1/invoices/route.ts")).toContain('if (invoice.direction === "payable") runCycleSoon(cycleEventOf(guard.actor, "invoice_added"));');
+    // A milestone starts a cycle only when it names a pull request and the deployment has a GitHub token.
+    expect(source("src/lib/commands/milestones.ts")).toMatch(/if \(created\.pullRequest && currentConfig\(\)\.githubToken\) \{\s+runCycleSoon\(cycleEventOf\(actor, "milestone_added"\)\);/);
+    expect(source("src/lib/commands/milestones.ts").match(/runCycleSoon\(/g)).toHaveLength(1);
     expect(source("supabase/migrations/0039_payee_links.sql")).toContain("update public.payee_links set revoked_at = now()");
     const api = section("api");
     expect(api).toContain("Nothing in the API approves or pays directly");
-    expect(api).toContain("starts the agent's next cycle");
+    expect(api).toContain("A payable added through it starts the agent's next cycle, and so does a milestone that names a pull request on a deployment with a GitHub token; any other milestone waits for a person to verify it");
     expect(api).toContain("replaces the counterparty's earlier one that was not used yet");
-    expect(api).not.toMatch(/No request approves a payment, moves money, or changes or removes a record/);
+    expect(api).not.toMatch(/No request approves a payment, moves money, or changes or removes a record|A payable or a milestone added through it starts/);
   });
 
-  it("names every token kept only as a hash, and binds only OAuth tokens and webhook secrets to their row", () => {
+  it("names every token kept only as a hash; pay links are hashed and encrypted; only OAuth tokens and webhook secrets are row-bound", () => {
     expect(source("supabase/migrations/0109_customer_portal.sql")).toContain("token_hash");
-    expect(source("supabase/migrations/0050_receivables.sql")).toContain("token_hash");
     expect(source("supabase/migrations/0015_tenancy.sql")).toContain("token_hash");
     expect(source("supabase/migrations/0064_telegram.sql")).toContain("code_hash");
+    expect(source("src/lib/slack/links.ts")).toContain('const hashOf = (code: string) => crypto.createHash("sha256").update(code).digest("hex");');
+    // A pay link: hashed for lookup, and its token encrypted so it can be shown again.
+    const payLinks = source("src/lib/platform/pay-links.ts");
+    expect(payLinks).toContain("token_hash: sha256hex(secret),");
+    expect(payLinks).toContain("token_enc: tokenEnc,");
+    expect(payLinks).toContain("encryptSecret(token, { orgId: currentOrgId(), column: TOKEN_COLUMN }, keys)");
     const encryption = section("encryption");
-    for (const phrase of ["invitations", "payee links", "client pay links", "customer statement links", "shared receipts and reports", "link a Telegram chat"]) {
+    for (const phrase of ["invitations", "payee links", "customer statement links", "shared receipts and reports", "link a Telegram chat or a Slack account"]) {
       expect(encryption, phrase).toContain(phrase);
     }
+    expect(encryption).toContain("the token of each client pay link, so the link can be shown again");
+    expect(encryption).toContain("it is also hashed, and looked up by the hash");
+    expect(encryption).not.toContain("client pay links, customer statement links");
     expect(source("src/lib/slack/installs.ts")).toContain('const TOKEN_COLUMN = "slack_installs.bot_token_enc";');
     expect(encryption).toContain("OAuth tokens and webhook secrets to their row too");
     expect(encryption).not.toContain("connector tokens and webhook secrets to their row");
@@ -398,21 +522,25 @@ describe("claims narrowed to what the code does", () => {
   it("disconnecting: what the button does, what a provider's notice does, and a best-effort ledger entry", () => {
     const connections = source("src/lib/connectors/connections.ts");
     expect(connections.split("export async function disconnectConnection")[1]).toContain("appendLedgerEntryBestEffort");
-    expect(source("src/lib/connectors/disconnected.ts")).toContain("marks it revoked only when the provider refuses it");
+    // QuickBooks' Disconnect page deletes the tokens only when the provider refuses the connection.
+    const page = source("src/lib/connectors/disconnected.ts");
+    expect(page).toContain('if (check === "accepted") return { ...base, outcome: "still_connected" };');
+    expect(page).toContain('if (check === "unknown") return { ...base, outcome: "unknown" };');
+    expect(page).toContain("await disconnectConnection({ connection, by: input.userId, revoke: deps.provider.revoke, atProvider: true, nowMs: input.nowMs });");
     const connectors = section("connectors");
     expect(connectors).toContain("best effort");
     expect(connectors).toContain("keeps its tokens, which no longer work");
     expect(connectors).toContain("as Pipedrive documents it");
+    expect(connectors).not.toContain("or says it was disconnected there first");
     // The privacy page and the terms say the same, never that disconnecting uninstalls the app outright.
     const terms = text(renderToStaticMarkup(<TermsPage />));
-    for (const page of [privacy, terms]) {
-      expect(page).toContain("Disconnecting revokes Vestiarion's access, which, as Pipedrive documents it, uninstalls Vestiarion from the company");
-      expect(page).not.toContain("Disconnecting uninstalls Vestiarion from the Pipedrive company");
+    for (const words of [privacy, terms]) {
+      expect(words).toContain("Disconnecting revokes Vestiarion's access, which, as Pipedrive documents it, uninstalls Vestiarion from the company");
+      expect(words).not.toContain("Disconnecting uninstalls Vestiarion from the Pipedrive company");
     }
-    expect(connectors).not.toContain("or says it was disconnected there first");
   });
 
-  it("names Pipedrive's uninstall notice, Circle's unchecked test, and the scheduled routes' token", () => {
+  it("names Pipedrive's uninstall notice, Circle's unchecked test, the scheduled routes' token, and the demo reset apart", () => {
     expect(source("src/app/api/integrations/pipedrive/callback/route.ts")).toMatch(/export (async function|const) DELETE\b/);
     expect(source("src/lib/circle/notify.ts")).toContain('if (envelope?.notificationType === "webhooks.test") return { status: 200 };');
     const webhooks = section("webhooks");
@@ -434,20 +562,29 @@ describe("claims narrowed to what the code does", () => {
     }
     expect(source("src/lib/agent-security.ts")).toContain("return timingSafeEqual(digest(candidate), digest(expected));");
     expect(webhooks).toContain("AGENT_API_TOKEN");
+    expect(webhooks).toContain("So does the demo reset, which is not scheduled");
+    expect(webhooks).not.toMatch(/The scheduled routes, [^.]*the demo reset/);
     expect(body).not.toContain("CRON_SECRET");
   });
 
-  it("account deletion: keys revoked and kept without a name, connections kept, nothing revoked at a provider", () => {
+  it("account deletion: keys revoked and kept without a name, approvals and links gone, connections kept, nothing revoked at a provider", () => {
     expect(source("supabase/migrations/0101_accounting_connectors.sql")).toContain("authorized_by      uuid references auth.users(id) on delete set null");
-    expect(source("supabase/migrations/0069_member_api_keys.sql")).toContain("Deleting an account clears created_by on its keys");
+    // A key whose creator's account is deleted is revoked by the trigger, and the row stays.
+    const keys = source("supabase/migrations/0069_member_api_keys.sql");
+    expect(keys).toContain("if old.created_by is not null and new.created_by is null and new.revoked_at is null then");
+    expect(keys).toContain("new.revoked_at := now();");
+    expect(source("supabase/migrations/0076_two_approvals.sql")).toContain("approved_by uuid not null references auth.users(id) on delete cascade");
+    expect(source("supabase/migrations/0064_telegram.sql")).toContain("references public.memberships (org_id, user_id) on delete cascade");
     const retention = section("retention");
+    expect(retention).toContain("the payment approvals they gave and their Slack and Telegram links go");
     expect(retention).toContain("the API keys they created are revoked and kept without their name");
     expect(retention).toContain("the connections they made and the records they added stay, without their name");
     expect(retention).not.toMatch(/API keys go/);
+    expect(privacy).toContain("as do the payment approvals you gave, which the ledger keeps, and your Slack and Telegram links");
     expect(section("connectors")).toContain("without calling any provider or uninstalling the Slack app");
   });
 
-  it("AI: no training promise for a provider, the providers' own terms linked, and every invoice email read", () => {
+  it("AI: no training promise for a provider, the providers' own terms linked, base URLs named, and exactly what is read", () => {
     for (const page of [body, privacy]) expect(page).not.toContain("may not train");
     expect(MODEL_PROVIDER_TERMS.map((provider) => provider.name)).toEqual(["Anthropic", "OpenAI", "DeepSeek"]);
     for (const provider of MODEL_PROVIDER_TERMS) {
@@ -455,29 +592,53 @@ describe("claims narrowed to what the code does", () => {
       expect(privacyMarkup, provider.name).toContain(`href="${provider.href}"`);
     }
     const config = source("src/lib/config.ts");
-    for (const name of ["OPENAI_BASE_URL", "DEEPSEEK_BASE_URL"]) {
-      expect(config, name).toContain(name);
+    for (const name of ["OPENAI_BASE_URL", "DEEPSEEK_BASE_URL"]) expect(config, name).toContain(name);
+    // Anthropic's SDK reads ANTHROPIC_BASE_URL itself, and the client is made without a base URL of its own.
+    expect(source("src/lib/agent/decide.ts")).toContain("client = new Anthropic({ apiKey: settings.apiKey });");
+    expect(source("node_modules/@anthropic-ai/sdk/client.js")).toContain("readEnv)('ANTHROPIC_BASE_URL')");
+    for (const name of ["ANTHROPIC_BASE_URL", "OPENAI_BASE_URL", "DEEPSEEK_BASE_URL"]) {
       expect(section("ai"), name).toContain(name);
+      expect(privacy, name).toContain(name);
     }
-    expect(source("src/lib/email-inbox/receive.ts")).toContain("read = await readInvoiceDraft(");
-    expect(section("ai")).toContain("every email that reaches a workspace's invoice address");
-    expect(privacy).toContain("and for every email that reaches a workspace's invoice address");
+    // An invoice email: its first PDF, .eml or .txt attachment, or else its text; nothing for one too large, only images, or over the rate.
+    const receive = source("src/lib/email-inbox/receive.ts");
+    expect(receive).toContain('const READABLE_TYPES = ["application/pdf", "message/rfc822", "text/plain"];');
+    expect(receive).toContain("/\\.(pdf|eml|txt)$/i.test(attachment.filename)");
+    expect(receive).toContain("if (email.text.trim()) return { ok: true, input: { text: email.text } };");
+    expect(receive).toContain("} else if (!takeDocumentReadToken(inbox.orgId)) {");
+    // Each plain-text message a linked member sends the bot.
+    expect(source("src/lib/telegram/updates.ts")).toContain("const { intent } = await routeText(text, workspaceNetwork().id);");
+    const ai = section("ai");
+    expect(ai).toContain("its first PDF, .eml or .txt attachment, or else its text, and nothing for one that is too large, holds only images or comes over the workspace's rate");
+    expect(ai).toContain("each plain-text message a linked member sends the Telegram bot");
+    expect(ai).not.toContain("every email that reaches");
+    expect(privacy).toContain("its first PDF, .eml or .txt attachment, or else its text");
   });
 
-  it("the export: each entry signed, the file not, its own entry best effort", () => {
-    expect(source("src/app/api/ledger/export/route.ts")).toContain("appendLedgerEntryBestEffort");
-    const audit = section("audit");
-    expect(audit).toContain("the file itself is not signed");
-    expect(audit).toContain("recorded in the ledger, best effort");
-    expect(audit).not.toContain("exports as signed JSON");
-  });
-
-  it("the chain trigger: for the workspace role only, and what it does and does not check", () => {
+  it("the ledger: what its hashes cover, what the trigger and the verifiers check, and the export", () => {
+    expect(source("src/lib/ledger.ts")).toMatch(/canonicalJson\(\{\s+actor: input\.actor,\s+domain: input\.domain,\s+action: input\.action,\s+summary: input\.summary,\s+detail: input\.detail,\s+\}\)/);
     const trigger = source("supabase/migrations/0077_payment_integrity.sql");
     expect(trigger).toContain("if current_user <> 'vestiarion_tenant' then");
     expect(trigger).toContain("if new.prev_hash is distinct from v_head");
+    // Neither verifier checks that sequence numbers follow on: the offline one checks each is an integer, and the head.
+    const offline = source("public/tools/verify-ledger-export.mjs");
+    expect(offline).toContain('if (!Number.isSafeInteger(entry.seq)) invalidField(entry, position, "seq");');
+    expect(offline).not.toMatch(/seq\s*!==\s*\w+\.seq\s*\+\s*1|seq\s*\+\s*1\s*!==/);
+    const verifier = source("src/lib/ledger.ts").split("function verifyRows(")[1]?.split("\n}\n")[0] ?? "";
+    // It names an entry by its seq in what it reports, and never compares one seq with another.
+    expect(verifier).toContain("brokenAt: row.seq,");
+    expect(verifier).not.toMatch(/\.seq\s*(!==|===|<|>|\+|-)/);
+    expect(source("src/app/api/ledger/export/route.ts")).toContain("appendLedgerEntryBestEffort");
     const audit = section("audit");
-    expect(audit).toContain("The trigger does not check the signature, the body hash or the sequence number; the verifier does.");
+    expect(audit).toContain("canonical JSON of its actor, domain, action, summary and detail");
+    expect(audit).toContain("An entry's time, sequence number and signing key id are outside the hashes");
+    expect(audit).toContain("The trigger does not check the signature or the body hash; the verifier does.");
+    expect(audit).toContain("The sequence number is assigned by the database, and gaps in it are normal");
+    expect(audit).not.toContain("changing any entry breaks every link after it");
+    expect(audit).not.toMatch(/sequence number; the verifier does/);
+    expect(audit).toContain("the file itself is not signed");
+    expect(audit).toContain("recorded in the ledger, best effort");
+    expect(audit).not.toContain("exports as signed JSON");
   });
 });
 

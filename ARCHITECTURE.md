@@ -9,8 +9,11 @@ available for screening and reserve operations.
 
 ## Isolation: two lines
 
-One organization's data never reaches another's request, by two independent
-mechanisms (spec §5.6):
+No request for one organization reads or changes another's records, by two
+independent mechanisms (spec §5.6). The answers that do cross organizations are
+aggregates or the team's own: /open's counts and USDC totals and the team's own
+payments, the landing's latest team decisions, and payee history over x402,
+which carries no amount.
 
 **Line 1 — the Data Access Layer.** `db()` adds `.eq('org_id', ...)` to every
 query and sets `org_id` on every insert; `no-restricted-imports` forbids
@@ -156,7 +159,8 @@ not a sandbox, and re-checks `last_active_at` against the cutoff before deleting
 that became active between the listing and the delete survives. A `live` organization is never
 deleted automatically. `POST /api/platform/cleanup`, bearer-guarded the same way as the cron, lists
 and deletes candidates; `.github/workflows/sandbox-cleanup.yml` calls it once a day and on manual
-dispatch.
+dispatch. The same run deletes webhook deliveries past their 30 days and the write API's idempotency
+outcomes past their 24 hours, across workspaces, and reports how many.
 
 **Deleting a workspace** is an owner's call from the danger zone at the bottom of Settings
 (`deleteWorkspaceAction`, `org.administer`, after typing the slug): `delete_org(p_org_id, p_by)`
@@ -2589,11 +2593,13 @@ the link, which only this answer ever does, so that route keeps no outcome for
 an `Idempotency-Key` and answers with `Cache-Control: no-store`. An address added this way is
 stored as an unconfirmed change, so the agent holds payments to it until a
 person confirms it. A payable starts a cycle with `runCycleSoon`. Writes are
-counted per key (`takeApiWriteToken`, 30 a minute) after the scope check.
+counted per key (`takeApiWriteToken`, a burst of 30, then one every 2 seconds) after the scope check.
 `withIdempotency` (`src/lib/api/idempotency.ts`) claims an
 `Idempotency-Key` in `api_idempotency`, a platform table only the service role
-reaches, after the body validates: the first outcome is kept for 24 hours
-and replayed with `Idempotent-Replayed: true`, a different body or a request
+reaches, after the body validates: the first outcome is given back for 24 hours
+and replayed with `Idempotent-Replayed: true` (the daily cleanup,
+`deleteExpiredIdempotencyOutcomes` in `src/lib/platform/cleanup.ts`, deletes it
+after that, response body and all), a different body or a request
 still in flight answers `409 conflict`, and a `5xx` releases the claim so a
 retry runs again. A claim left without an outcome for 10 minutes
 (`IN_FLIGHT_TIMEOUT_MS`, longer than any function runs) is taken over by the

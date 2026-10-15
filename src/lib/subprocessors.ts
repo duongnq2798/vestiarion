@@ -4,8 +4,29 @@
  * one and not the other fails there.
  */
 
+import { NETWORKS } from "./network";
+
 /** The day this list was last checked against the code. */
 export const SUBPROCESSORS_AS_OF = "2026-10-15";
+
+const hostOf = (url: string) => new URL(url).host;
+
+const PROFILES = Object.values(NETWORKS);
+
+/** Arc's nodes the server reads from by default, from the network profiles; `ARC_RPC_URL` and `ARC_MAINNET_RPC_URL` replace them. */
+export const ARC_RPC_HOSTS: readonly string[] = PROFILES.map((profile) => hostOf(profile.rpcUrl));
+
+/**
+ * The other nodes the server reads from: those of the chains a payee is paid on, where a receipt of a payout is read
+ * (`src/lib/receipts/onchain.ts`). The chains USDC can be brought from are handed to the person's wallet instead.
+ */
+export const PAYEE_CHAIN_RPC_HOSTS: readonly string[] = PROFILES.flatMap((profile) => profile.payeeChains)
+  .map((chain) => hostOf(chain.rpcUrl))
+  .filter((host, index, hosts) => !ARC_RPC_HOSTS.includes(host) && hosts.indexOf(host) === index);
+
+/** "a, b and c". */
+export const listed = (items: readonly string[]) =>
+  items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 
 /** When a service receives anything, in words: nothing for always, or the condition. */
 export const ONLY_IF_CONFIGURED = "when this deployment configures it";
@@ -64,7 +85,7 @@ export const SUBPROCESSORS: readonly Subprocessor[] = [
     privacyEntry: "A model provider",
     names: ["Anthropic", "OpenAI", "DeepSeek"],
     purpose: "proposes the agent's decisions and reads invoices",
-    data: "the facts of each decision the agent asks it about, every email that reaches a workspace's invoice address, and a document or message a member has read",
+    data: "the facts of each decision the agent asks it about; for each email to a workspace's invoice address, its first PDF, .eml or .txt attachment, or else its text; each document a member has it read; and each plain-text message a linked member sends the Telegram bot",
     when: ONLY_IF_CONFIGURED,
   },
   {
@@ -86,9 +107,8 @@ export const SUBPROCESSORS: readonly Subprocessor[] = [
   {
     name: "RPC nodes",
     privacyEntry: "RPC nodes",
-    names: ["RPC nodes", "PublicNode", "Alchemy"],
-    purpose:
-      "answer reads of balances, fees and receipts: Arc's own nodes unless this deployment sets another, and for a receipt on another chain PublicNode (Ethereum and Polygon), Alchemy (World Chain) and the public nodes of Base, Arbitrum, Optimism, Avalanche, Linea and Unichain",
+    names: ["RPC nodes", "PublicNode"],
+    purpose: `answer the server's reads of balances, fees and receipts: Arc's node (${listed(ARC_RPC_HOSTS)}, or the ones ARC_RPC_URL and ARC_MAINNET_RPC_URL set), and, for a receipt of a payout to another chain from Arc testnet, ${listed(PAYEE_CHAIN_RPC_HOSTS)}, PublicNode's among them`,
     data: "the wallet addresses and transaction hashes read, which are already public on chain",
     when: "",
   },

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { LegalLink, LegalPage, LegalSection } from "@/components/vx/LegalPage";
 import { ISSUES_URL } from "@/lib/site-links";
-import { MODEL_PROVIDER_TERMS } from "@/lib/subprocessors";
+import { ARC_RPC_HOSTS, listed, MODEL_PROVIDER_TERMS, PAYEE_CHAIN_RPC_HOSTS } from "@/lib/subprocessors";
 
 export const metadata: Metadata = {
   title: "Privacy",
@@ -210,9 +210,10 @@ export default function PrivacyPage() {
                 performance score, and, when the agent bought it before a first payment, how many workspaces here have paid its address, how often, and when first and last;
               </li>
               <li>
-                for an invoice document a member chooses to read (a PDF, an email or pasted text), and for every email that reaches a workspace&apos;s
-                invoice address: the document&apos;s text, up to 20,000 characters, to read its vendor, amounts, dates, terms and payment address into
-                the invoice form. The document itself is not kept;
+                for an invoice document a member chooses to read (a PDF, an email or pasted text), and for each email that reaches a workspace&apos;s
+                invoice address, its first PDF, .eml or .txt attachment, or else its text: the document&apos;s text, up to 20,000 characters, to read
+                its vendor, amounts, dates, terms and payment address into the invoice form. Nothing is sent for an email that is too large, holds
+                only images, or comes while the workspace is over its rate of documents read. The document itself is not kept;
               </li>
               <li>
                 for a message a member sends the Telegram bot in plain words: the message, up to 4,000 characters, to tell which of the bot&apos;s questions it
@@ -245,8 +246,8 @@ export default function PrivacyPage() {
                 <LegalLink href={provider.href}>{provider.name}</LegalLink>
               </span>
             ))}
-            . Someone running their own copy of Vestiarion can point <code>OPENAI_BASE_URL</code> or <code>DEEPSEEK_BASE_URL</code> at another
-            OpenAI-compatible host.
+            . Someone running their own copy of Vestiarion can point <code>ANTHROPIC_BASE_URL</code>, which Anthropic&apos;s SDK reads, at another
+            Anthropic-compatible host, and <code>OPENAI_BASE_URL</code> or <code>DEEPSEEK_BASE_URL</code> at another OpenAI-compatible one.
           </li>
           <li>
             <strong>Telegram</strong>, for a member who connects their own Telegram chat to a workspace, receives what the bot sends that chat: the
@@ -282,10 +283,12 @@ export default function PrivacyPage() {
             them nowhere.
           </li>
           <li>
-            <strong>RPC nodes</strong> receive the wallet addresses and transaction hashes whose balances, fees and receipts Vestiarion reads: Arc&apos;s
-            own nodes, unless this deployment sets another, and for a receipt on another chain PublicNode (Ethereum and Polygon), Alchemy (World
-            Chain) and the public nodes of Base, Arbitrum, Optimism, Avalanche, Linea and Unichain. These are already public on chain, and nothing
-            else about you or your workspace goes with them.
+            <strong>RPC nodes</strong> receive the wallet addresses and transaction hashes whose balances, fees and receipts Vestiarion&apos;s server
+            reads: Arc&apos;s node, {ARC_RPC_HOSTS.join(" and ")}, or the ones this deployment sets with <code>ARC_RPC_URL</code> and{" "}
+            <code>ARC_MAINNET_RPC_URL</code>; and, for a receipt of a payout to another chain from Arc testnet,{" "}
+            {listed(PAYEE_CHAIN_RPC_HOSTS)}, PublicNode&apos;s among them. These are already public on chain, and nothing else about you or your workspace goes
+            with them. The other chains&apos; nodes named for bringing USDC from another chain are handed to your own wallet in your browser; the
+            server never calls them.
           </li>
           <li>
             <strong>GitHub</strong> is asked for a pull request&apos;s status when a milestone is verified by its link, and, when a page shows a pull
@@ -485,12 +488,17 @@ export default function PrivacyPage() {
           </li>
           <li>A webhook delivery is deleted 30 days after it is delivered; one that failed, 30 days after it was created.</li>
           <li>
-            The outcome of an API write sent with an <code>Idempotency-Key</code> is kept for 24 hours, after which the same key replaces it.
+            The outcome of an API write sent with an <code>Idempotency-Key</code>, its response included, is given back for 24 hours, and deleted
+            by the daily cleanup after that.
           </li>
-          <li>Everything else in a workspace is kept until the workspace is deleted.</li>
+          <li>
+            Everything else in a workspace is kept until the workspace is deleted, or until a person removes it: disconnecting a tool, removing
+            sample data or turning a feature off deletes what it held.
+          </li>
           <li>
             The Vestiarion team&apos;s own records of a business it is in touch with, its lead and any revenue recorded for it, are kept apart from
-            every workspace and stay when that business&apos;s workspace is deleted; only their link to the workspace is cleared.
+            every workspace and stay when that business&apos;s workspace is deleted: their link to the workspace is cleared, and the lead&apos;s
+            history keeps the workspace&apos;s id.
           </li>
         </ul>
       </LegalSection>
@@ -531,7 +539,8 @@ export default function PrivacyPage() {
         </ul>
         <p>
           If a workspace cannot be deleted, your account is not deleted. Otherwise your sign-in account is deleted, you are signed out, and your memberships and
-          the invitations you sent go with it. API keys you created stop working. Records you added in workspaces you share stay, without your name on them.
+          the invitations you sent go with it, as do the payment approvals you gave, which the ledger keeps, and your Slack and Telegram links. API
+          keys you created stop working, and stay, revoked, without your name. Records you added in workspaces you share stay, without your name on them.
           A workspace&apos;s signed ledger is append-only, so entries you caused keep your account&apos;s id (never your email). A workspace deleted with your
           account leaves its tombstone, and a tombstone keeps who deleted it, as your account&apos;s id.
         </p>
