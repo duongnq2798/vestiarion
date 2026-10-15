@@ -19,11 +19,11 @@ Give an agent `llms-full.txt` when it needs the whole API at once, and `llms.txt
 
 ## The OpenAPI document
 
-[`/api/v1/openapi.json`](/api/v1/openapi.json) is an OpenAPI 3.1 document for every `/api/v1` endpoint: its parameters with their types, defaults and allowed values, its response schema, its errors, and the bearer authentication. It is built from the same schemas the API's tests check every endpoint's responses against. Use it to generate a client, or to give an agent exact types.
+[`/api/v1/openapi.json`](/api/v1/openapi.json) is an OpenAPI 3.1 document for every `/api/v1` endpoint: its parameters with their types, defaults and allowed values, its response schema, its errors, and the bearer authentication. It is built from the same schemas the API's tests check every endpoint's responses against. Use it to generate a client, or to give an agent exact types. The [Postman collections](/docs/get-started/postman) are generated from it too.
 
 ## MCP server
 
-The pages above help an agent write code against the API. To let an agent read your workspace's records directly, connect it to the [MCP server](/docs/ai-integration/mcp) at `https://www.vestiarion.xyz/api/mcp` with a workspace API key. Its tools are the API's read operations, one each, and none of them writes. The page has setup for Claude Code, Cursor, Codex and clients that only start local servers.
+The pages above help an agent write code against the API. To let an agent read your workspace's records directly, connect it to the [MCP server](/docs/ai-integration/mcp) at `https://www.vestiarion.xyz/api/mcp` with a workspace API key. Its tools are the API's operations, one each. With a read-only key, the one to start with, they read; with a read-and-write key, the write tools also add records. None approves or pays. The page has setup for Claude Code, Cursor, Codex and clients that only start local servers.
 
 ## Setup for coding agents
 

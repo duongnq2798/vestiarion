@@ -50,3 +50,10 @@ sdk/dist/
 
 # The CLI's build output: npm run cli:pack compiles into it, and packs it into public/cli/.
 cli/dist/
+
+# The MCP Registry publisher (docs/distribution/mcp-registry.md) is installed outside the repository; never commit a
+# copy of it, its archive, or the token files older versions wrote to the folder they ran in.
+mcp-publisher
+mcp-publisher.exe
+mcp-publisher*.tar.gz
+.mcpregistry_*

@@ -47,6 +47,7 @@ export const config = {
   // public build artifacts; crawlers must never pay for a Supabase session
   // refresh while fetching a link preview. The guides' videos under
   // docs/videos/ are public files fetched in many range requests while one
-  // plays; none of them reads or refreshes a session, or sets a cookie.
-  matcher: ["/((?!api/|_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|opengraph-image|twitter-image|og/|manifest.webmanifest|icons/|docs/videos/).*)"],
+  // plays; none of them reads or refreshes a session, or sets a cookie. Nor
+  // do the Postman collections under postman/, which Postman fetches by URL.
+  matcher: ["/((?!api/|_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|opengraph-image|twitter-image|og/|manifest.webmanifest|icons/|docs/videos/|postman/).*)"],
 };
