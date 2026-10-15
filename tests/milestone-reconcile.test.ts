@@ -11,6 +11,7 @@ import type { PaymentExecution } from "@/lib/payments";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 import { ARC_TESTNET } from "@/lib/network";
+import { firstPaymentFrom } from "@/lib/new-payee-facts";
 
 /**
  * The contractor stage's twin of the AP stage's in-flight reconcile (see
@@ -582,5 +583,111 @@ describe("reconcileMilestone — a release the agent never sent, above the figur
 
     expect(executePaymentMock).toHaveBeenCalledTimes(1);
     expect(outcome.status).toBe("paid");
+  });
+});
+
+/**
+ * The twin of the AP reconcile's new payee hold (tests/control-cycle.test.ts): a release never sent goes to the
+ * contractor's address as it stands now, so its first release there needs two different people behind it (new payee
+ * check N3), and is held as the contractor stage holds it.
+ */
+describe("reconcileMilestone — a release never sent, now the first payment to its address (new payee check)", () => {
+  const XAVIER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000a1";
+  const YARA = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000b2";
+  // Xavier changed the address to his own wallet and confirmed it himself, newest first.
+  const changedByXavier = { action: "counterparty_address_changed", detail: { by: XAVIER, counterpartyId: CONTRACTOR_ID, from: "0xold", to: "0xbeef" } };
+  const confirmedBy = (by: string) => ({ action: "counterparty_address_confirmed", detail: { by, counterpartyId: CONTRACTOR_ID, address: "0xbeef", via: "confirm" } });
+  // The contractor stage's check: the first release to this contractor at its address, or null.
+  const firstReleaseFrom = (entries: Array<{ action: string; detail: Record<string, unknown> }>) => {
+    const facts = { paidTo: new Map([[CONTRACTOR_ID, new Set(["0xold"])]]), entries: new Map([[CONTRACTOR_ID, entries]]) };
+    return vi.fn((contractor: { id: string; address: string | null }) => firstPaymentFrom(facts, contractor));
+  };
+  const world = () =>
+    cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") {
+        return { body: { risk_level: "low", address_changed_at: "2026-10-15T08:00:00+00:00", address_confirmed_at: "2026-10-15T08:01:00+00:00" } };
+      }
+      if (r.path === "/rest/v1/rpc/agent_paused") return { body: false };
+      if (r.path === "/rest/v1/payment_approvals" && r.method === "GET") return { body: [] };
+      return undefined;
+    });
+
+  it("holds it as a new payee rather than releasing it to an address one person alone stands behind", async () => {
+    const newPayee = firstReleaseFrom([confirmedBy(XAVIER), changedByXavier]);
+    const { fake, run } = world();
+
+    const outcome = await run(() =>
+      reconcileMilestone({ ...milestone, txRef: null }, neverSubmitted, { db: db(), provider, operating: { id: ACCOUNT_ID }, newPayee, twoApprovalsAbove: 200 })
+    );
+
+    expect(newPayee).toHaveBeenCalledWith({ id: CONTRACTOR_ID, address: "0xbeef" });
+    expect(executePaymentMock).not.toHaveBeenCalled();
+    expect(decideMock).not.toHaveBeenCalled();
+    expect(outcome.status).toBe("held");
+    expect(outcome.line.message).toBe("Lena Ortiz: not resubmitted, the first payment to this address and two different people do not stand behind it (250 USDC)");
+    const body = milestonePatches(fake.requests)[0].body as Record<string, unknown>;
+    expect(body.status).toBe("held");
+    expect(body.tx_ref).toBeNull();
+    expect(body.agent_reasoning).toBe(
+      `${milestone.reasoning} [not resubmitted: this is the first payment to this address, and only one person stands behind it — another person approves it]`
+    );
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_action).toBe("milestone_reconcile");
+    // Recorded as the contractor stage records the hold, so Contractors names it as the first payment to a new address.
+    expect(append.p_detail).toMatchObject({
+      notResubmittedBecause: "counterparty.new_payee",
+      guardrailBlocked: true,
+      guardrailRule: "counterparty.new_payee",
+      newPayee: { addressBy: XAVIER, confirmedBy: XAVIER, twoParties: false },
+      execution: { resultingStatus: "held" },
+    });
+    // Held before two approvals are asked about, as the stage holds it.
+    expect(fake.requests.some((r) => r.path === "/rest/v1/payment_approvals")).toBe(false);
+  });
+
+  it("releases it again once another member confirmed the address", async () => {
+    executePaymentMock.mockResolvedValue(execution({ status: "confirmed", txHash: "0xhash", txRef: "0xhash", reconciled: false }));
+    syncMock.mockResolvedValue(200);
+    const { fake, run } = world();
+
+    const outcome = await run(() =>
+      reconcileMilestone({ ...milestone, txRef: null }, neverSubmitted, {
+        db: db(), provider, operating: { id: ACCOUNT_ID }, newPayee: firstReleaseFrom([confirmedBy(YARA), confirmedBy(XAVIER), changedByXavier]),
+      })
+    );
+
+    expect(executePaymentMock).toHaveBeenCalledTimes(1);
+    expect(outcome.status).toBe("paid");
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).not.toHaveProperty("notResubmittedBecause");
+    expect(append.p_detail).not.toHaveProperty("guardrailRule");
+  });
+
+  it("only reads a release that already exists, without asking who stands behind the address", async () => {
+    executePaymentMock.mockResolvedValue(execution({ status: "confirmed", txHash: "0xhash", txRef: "0xhash" }));
+    syncMock.mockResolvedValue(200);
+    const newPayee = firstReleaseFrom([confirmedBy(XAVIER), changedByXavier]);
+    const { run } = world();
+
+    const outcome = await run(() => reconcileMilestone(milestone, inFlight, { db: db(), provider, operating: { id: ACCOUNT_ID }, newPayee }));
+
+    expect(newPayee).not.toHaveBeenCalled();
+    expect(outcome.status).toBe("paid");
+  });
+
+  it("waits, as before, while the changed address is unconfirmed, without asking", async () => {
+    const newPayee = firstReleaseFrom([changedByXavier]);
+    const { fake, run } = cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") {
+        return { body: { risk_level: "low", address_changed_at: "2026-10-15T08:00:00+00:00", address_confirmed_at: null } };
+      }
+      return undefined;
+    });
+
+    const outcome = await run(() => reconcileMilestone({ ...milestone, txRef: null }, neverSubmitted, { db: db(), provider, operating: { id: ACCOUNT_ID }, newPayee }));
+
+    expect(outcome.status).toBe("verified");
+    expect(newPayee).not.toHaveBeenCalled();
+    expect(milestonePatches(fake.requests)).toHaveLength(0);
   });
 });

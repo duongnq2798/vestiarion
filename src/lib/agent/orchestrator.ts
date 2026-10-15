@@ -631,6 +631,39 @@ async function resubmissionBlocker(
   return null;
 }
 
+/** The stage's new payee check for a counterparty at its address (new payee check N3); absent where payments are not real (N5). */
+type NewPayeeCheckOf = (counterparty: { id: string; address: string | null }) => NewPayeeCheck | null;
+
+/**
+ * The check, when sending again would be the first payment to this payee at its current address and two different
+ * parties do not stand behind it (new payee check N3): a resubmission pays the address as it stands now, so a member
+ * who changed it and confirmed it alone while a payment was stuck has not put a second person behind it. Held as the
+ * AP and contractor stages hold it. Null otherwise, and where the stage passed no check.
+ */
+function newPayeeResendBlocker(newPayee: NewPayeeCheckOf | undefined, counterparty: { id: string; address: string | null }): NewPayeeCheck | null {
+  const check = newPayee?.(counterparty) ?? null;
+  return check?.firstPayment && !check.twoParties ? check : null;
+}
+
+/** Appended to a held payable's or milestone's reasoning when sending it again would be a first payment one party alone stands behind. */
+function notResubmittedNewPayeeNote(check: NewPayeeCheck): string {
+  return check.unanswered
+    ? " [not resubmitted: this is the first payment to this address, and no member answers for this address alone — one member confirms it and a different one approves it]"
+    : " [not resubmitted: this is the first payment to this address, and only one person stands behind it — another person approves it]";
+}
+
+/**
+ * What a reconcile entry records beside `notResubmittedBecause` for a new payee hold: the rule and who stood behind the
+ * address, as the stages record the hold (N6). A held milestone's card reads its newest entry, so Contractors names it
+ * the first payment to a new address, as it names the stage's own hold.
+ */
+function newPayeeHoldDetail(check: NewPayeeCheck | null): Record<string, unknown> {
+  return check ? { guardrailBlocked: true, guardrailRule: "counterparty.new_payee", newPayee: newPayeeObserved(check) } : {};
+}
+
+/** The cycle's line for a resubmission held as a new payee. */
+const NOT_RESUBMITTED_NEW_PAYEE_LINE = "not resubmitted, the first payment to this address and two different people do not stand behind it";
+
 /** Appended to a held payable's or milestone's reasoning when the agent will not send again on its own what needs two approvals. */
 function notResubmittedTwoApprovalsNote(above: number): string {
   return ` [not resubmitted: payments above ${above} USDC need two approvals — held for two people to approve]`;
@@ -770,7 +803,10 @@ function withNote(reasoning: string | null, note: string): string {
  *
  * Before a possible resubmission, the counterparty's current risk level is
  * read again: a counterparty screened high risk since the payment was
- * decided is not paid, and the invoice is held with a note instead.
+ * decided is not paid, and the invoice is held with a note instead. So is a
+ * resubmission that would be the first payment to the counterparty's current
+ * address with two different people not behind it (new payee check N3): it
+ * is recorded as the stage records that hold, `counterparty.new_payee`.
  *
  * A reconcile that did not complete is not an outcome: when there is no
  * operating account to reconcile against, when the reconcile could not read
@@ -814,6 +850,8 @@ export async function reconcileApInvoice(
     onChainLimit?: OnChainLimitGate;
     /** The workspace's figure above which a payment needs two approvals, as the stage read it; null or absent when off. */
     twoApprovalsAbove?: number | null;
+    /** The stage's new payee check, wherever payments are real (new payee check N5); absent in a sandbox. */
+    newPayee?: NewPayeeCheckOf;
   }
 ): Promise<{ status: string; operatingBalance: number | null; line: CycleLogLine }> {
   const input = {
@@ -840,14 +878,18 @@ export async function reconcileApInvoice(
   }
 
   let outcome: PayStepOutcome;
-  let notResubmitted: "counterparty.high_risk" | "counterparty.address_unconfirmed" | "workspace.two_approvals" | null = null;
+  let notResubmitted: "counterparty.high_risk" | "counterparty.address_unconfirmed" | "counterparty.new_payee" | "workspace.two_approvals" | null = null;
   // `undefined` leaves the invoice's recorded paid amount as it is.
   let paidAmount: number | null | undefined;
-  // A payment never sent is sent again only to a counterparty still fit to pay, and only on its own when one approval
-  // may pay it (payment integrity I4).
+  // A payment never sent is sent again only to a counterparty still fit to pay, at an address two different parties
+  // stand behind if it was never paid there (new payee check N3), and only on its own when one approval may pay it
+  // (payment integrity I4).
+  const riskOrAddress = transferExists ? null : await resubmissionBlocker(deps.db, invoice.counterpartyId);
+  const newPayeeHeld = transferExists || riskOrAddress ? null : newPayeeResendBlocker(deps.newPayee, { id: invoice.counterpartyId, address: invoice.address });
   const blocker = transferExists
     ? null
-    : ((await resubmissionBlocker(deps.db, invoice.counterpartyId)) ??
+    : (riskOrAddress ??
+      (newPayeeHeld ? ("counterparty.new_payee" as const) : null) ??
       (await twoApprovalsResendBlocker({ type: "invoice", id: invoice.id }, { amount: invoice.amount, currency, address: invoice.address }, deps.twoApprovalsAbove)));
   if (transferExists) {
     const result = await payInvoice(input, { provider: deps.provider, operating: deps.operating });
@@ -916,7 +958,9 @@ export async function reconcileApInvoice(
           ? NOT_RESUBMITTED_HIGH_RISK_NOTE
           : blocker === "workspace.two_approvals"
             ? notResubmittedTwoApprovalsNote(deps.twoApprovalsAbove as number)
-            : NOT_RESUBMITTED_ADDRESS_NOTE,
+            : newPayeeHeld
+              ? notResubmittedNewPayeeNote(newPayeeHeld)
+              : NOT_RESUBMITTED_ADDRESS_NOTE,
       heldBecausePaused: false,
       operatingBalance: null,
     };
@@ -977,6 +1021,7 @@ export async function reconcileApInvoice(
       reconciled: true,
       previousStatus: "matched",
       ...(notResubmitted ? { notResubmittedBecause: notResubmitted } : {}),
+      ...newPayeeHoldDetail(notResubmitted === "counterparty.new_payee" ? newPayeeHeld : null),
       execution: {
         txRef,
         chainMode: execution?.providerMode ?? deps.provider.mode,
@@ -1000,6 +1045,8 @@ export async function reconcileApInvoice(
       ? `${name}: not resubmitted, the counterparty is now screened high risk (${invoice.amount} ${currency})`
       : notResubmitted === "counterparty.address_unconfirmed"
       ? `${name}: not resubmitted, the counterparty's address changed and no one has confirmed it (${invoice.amount} ${currency})`
+      : notResubmitted === "counterparty.new_payee"
+      ? `${name}: ${NOT_RESUBMITTED_NEW_PAYEE_LINE} (${invoice.amount} ${currency})`
       : notResubmitted === "workspace.two_approvals"
       ? `${name}: not resubmitted, payments above ${deps.twoApprovalsAbove} USDC need two approvals (${invoice.amount} ${currency})`
       : status === "paid"
@@ -1327,7 +1374,7 @@ async function decideApPayable(
     /** Why the follow-up reopened this payable this cycle, when a fresh quote cleared what held it (FX re-evaluation F6). */
     reevaluation?: (invoiceId: string) => ApReevaluation | null;
     /** In a live workspace, whether this is the first payment to the address and who stands behind it (new payee check N1–N3). */
-    newPayee?: (counterparty: { id: string; address: string | null }) => NewPayeeCheck | null;
+    newPayee?: NewPayeeCheckOf;
     /** The figure above which a payment needs two people's approval, null when none is set (two approvals T3). */
     twoApprovalsAbove?: number | null;
     /** The workspace's shadow mode, null when it is off (shadow mode S2): a payment then waits for a person to agree. */
@@ -2207,6 +2254,8 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   const payables = loaded.filter((row) => dueForDecision(row, now));
   // Read once for the stage, in a live workspace: which addresses were paid before, and who stands behind the others.
   const newPayeeFacts = input.newPayee && payables.length > 0 ? await input.newPayee.load([...new Set(payables.map((row) => row.counterparty_id))]) : null;
+  // Asked by each decision, and by each resubmission of a payment never sent, which pays the address as it stands now.
+  const newPayeeOf: NewPayeeCheckOf = (counterparty) => (newPayeeFacts ? newPayeeCheckFor(newPayeeFacts, counterparty) : null);
   // The figure above which a payment needs two people (two approvals T3): read once for the stage, when anything is decided.
   const twoApprovalsAbove = input.twoApprovalsAbove !== undefined ? input.twoApprovalsAbove : payables.length > 0 ? await readTwoApprovalsAbove(db) : null;
   // Whether the workspace is in shadow mode (shadow mode S2): read once for the stage, when anything is decided.
@@ -2306,8 +2355,9 @@ export async function runApStage(input: ApStageInput): Promise<number> {
           decidedAt: invoice.decided_at ?? null,
         },
         intent,
-        // The stage's figure, so a payment it never sent goes again on its own only when one approval may pay it (I4).
-        { db, provider, operating, onChainLimit, twoApprovalsAbove }
+        // The stage's figure, so a payment it never sent goes again on its own only when one approval may pay it (I4), and
+        // its check, so it goes again to an address never paid only with two parties behind it (new payee check N3).
+        { db, provider, operating, onChainLimit, twoApprovalsAbove, newPayee: newPayeeOf }
       );
       if (reconciled.operatingBalance !== null) operatingBalance = reconciled.operatingBalance;
       metrics.recordInvoice(reconciled.status, false);
@@ -2341,7 +2391,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       onChainLimit,
       addressHistory: (counterpartyId) => input.addressHistory?.get(counterpartyId) ?? null,
       reevaluation: (invoiceId) => input.reevaluations?.get(invoiceId) ?? null,
-      newPayee: (counterparty) => (newPayeeFacts ? newPayeeCheckFor(newPayeeFacts, counterparty) : null),
+      newPayee: newPayeeOf,
       twoApprovalsAbove,
       shadow,
       obligations,
@@ -2668,7 +2718,9 @@ async function releaseMilestone(
  * When a transfer already exists — a provider id, or a confirmed intent —
  * nothing new can move, so the pause is not consulted. When none does yet,
  * `executePayment` may submit it: the contractor's current risk level is read
- * again first (a contractor now screened high risk is held, not paid), then
+ * again first (a contractor now screened high risk is held, not paid), and a
+ * first release to its current address that two different people do not
+ * stand behind is held as the stage holds it (new payee check N3); then
  * the release goes through `releaseMilestoneIfNotPaused`, which holds while
  * the agent is paused (D6). With no operating account there, the milestone
  * is held and noted, as `payInvoice` does for an invoice.
@@ -2703,6 +2755,8 @@ export async function reconcileMilestone(
     onChainLimit?: OnChainLimitGate;
     /** The workspace's figure above which a payment needs two approvals, as the stage read it; null or absent when off. */
     twoApprovalsAbove?: number | null;
+    /** The stage's new payee check, wherever payments are real (new payee check N5); absent in a sandbox. */
+    newPayee?: NewPayeeCheckOf;
   }
 ): Promise<{ status: string; operatingBalance: number | null; line: CycleLogLine }> {
   const transferExists = intent.providerTxId !== null || intent.status === "confirmed";
@@ -2732,14 +2786,16 @@ export async function reconcileMilestone(
     };
   }
 
-  // Sent again on its own only when one approval may pay it (payment integrity I4).
+  // A first release to the address as it stands now needs two different people behind it, as the stage's own does (new
+  // payee check N3); and it is sent again on its own only when one approval may pay it (payment integrity I4).
+  const newPayeeHeld = transferExists || blocker ? null : newPayeeResendBlocker(deps.newPayee, { id: milestone.contractorId, address: milestone.address });
   const twoApprovals =
-    transferExists || blocker
+    transferExists || blocker || newPayeeHeld
       ? null
       : await twoApprovalsResendBlocker({ type: "milestone", id: milestone.id }, { amount, currency: "USDC", address: milestone.address }, deps.twoApprovalsAbove);
 
   let outcome: PayStepOutcome;
-  let notResubmitted: "counterparty.high_risk" | "workspace.two_approvals" | null = null;
+  let notResubmitted: "counterparty.high_risk" | "counterparty.new_payee" | "workspace.two_approvals" | null = null;
   if (transferExists && deps.operating) {
     const result = await releaseMilestone(release, { provider: deps.provider, operatingAccountId: deps.operating.id });
     const execution = result.paymentExecution;
@@ -2783,6 +2839,16 @@ export async function reconcileMilestone(
       txRef: null,
       paymentExecution: null,
       reasoningSuffix: NOT_RESUBMITTED_HIGH_RISK_NOTE,
+      heldBecausePaused: false,
+      operatingBalance: null,
+    };
+  } else if (newPayeeHeld) {
+    notResubmitted = "counterparty.new_payee";
+    outcome = {
+      status: "held",
+      txRef: null,
+      paymentExecution: null,
+      reasoningSuffix: notResubmittedNewPayeeNote(newPayeeHeld),
       heldBecausePaused: false,
       operatingBalance: null,
     };
@@ -2836,6 +2902,7 @@ export async function reconcileMilestone(
       reconciled: true,
       previousStatus: "verified",
       ...(notResubmitted ? { notResubmittedBecause: notResubmitted } : {}),
+      ...newPayeeHoldDetail(notResubmitted === "counterparty.new_payee" ? newPayeeHeld : null),
       execution: {
         txRef,
         chainMode: execution?.providerMode ?? deps.provider.mode,
@@ -2855,6 +2922,8 @@ export async function reconcileMilestone(
     ? `${name}: not paid, the agent was paused (${amount} USDC)`
     : notResubmitted === "workspace.two_approvals"
       ? `${name}: not resubmitted, payments above ${deps.twoApprovalsAbove} USDC need two approvals (${amount} USDC)`
+      : notResubmitted === "counterparty.new_payee"
+      ? `${name}: ${NOT_RESUBMITTED_NEW_PAYEE_LINE} (${amount} USDC)`
       : notResubmitted
       ? `${name}: not resubmitted, the contractor is now screened high risk (${amount} USDC)`
       : status === "paid"
@@ -3707,8 +3776,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           txRef: milestone.tx_ref,
         },
         intent,
-        // The stage's figure, so a release it never sent goes again on its own only when one approval may pay it (I4).
-        { db, provider, operating: operating ? { id: operating.id } : null, onChainLimit, twoApprovalsAbove }
+        // The stage's figure, so a release it never sent goes again on its own only when one approval may pay it (I4), and
+        // its check, so it goes again to an address never paid only with two parties behind it (new payee check N3).
+        { db, provider, operating: operating ? { id: operating.id } : null, onChainLimit, twoApprovalsAbove, newPayee: firstReleaseTo }
       );
       if (reconciled.operatingBalance !== null) operatingBalance = reconciled.operatingBalance;
       if (reconciled.status === "verified" && !escrowedRelease(milestone)) inFlightUsdc += amount;
