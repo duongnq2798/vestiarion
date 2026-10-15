@@ -73,6 +73,8 @@ function addressFake(options: {
   row?: Record<string, unknown> | null;
   /** The PATCH's reply; by default one row matched. */
   patch?: (request: RecordedRequest) => FakeReply | undefined;
+  /** The ledger refuses every entry. */
+  ledgerFails?: boolean;
 } = {}) {
   const row = options.row === undefined ? counterpartyRow() : options.row;
   const fake = fakeSupabase((request) => {
@@ -82,6 +84,7 @@ function addressFake(options: {
       return options.patch?.(request) ?? { body: [{ id: COUNTERPARTY_ID }] };
     }
     if (request.path === "/rest/v1/rpc/append_ledger_entry") {
+      if (options.ledgerFails) return { status: 500, body: { message: "ledger unavailable" } };
       return {
         body: {
           seq: 1, id: "e1", ts: "2026-09-30T00:00:00Z", actor: "human", domain: "compliance", action: "x",
@@ -361,6 +364,18 @@ describe("confirmCounterpartyAddress", () => {
     expect(confirmed).toBe(false);
     expect(patches(fake.requests)).toHaveLength(0);
     expect(ledgerBodies(fake.requests)).toHaveLength(0);
+  });
+
+  it("undoes a confirmation whose entry could not be written, and refuses it, so it can be given again", async () => {
+    const { fake, run } = addressFake({ row: unconfirmed(), ledgerFails: true });
+
+    await expect(run(() => confirmCounterpartyAddress({ actorId: ACTOR, counterpartyId: COUNTERPARTY_ID, shownAddress: NEW, via: "confirm" }))).rejects.toThrow();
+    const [confirm, undo] = patches(fake.requests);
+    const stamped = (confirm.body as { address_confirmed_at: string }).address_confirmed_at;
+    // Only this confirmation is undone, back to what it was: none.
+    expect(undo.body).toEqual({ address_confirmed_at: null });
+    expect(undo.params.get("address_confirmed_at")).toBe(`eq.${stamped}`);
+    expect(undo.params.get("id")).toBe(`eq.${COUNTERPARTY_ID}`);
   });
 
   it("confirms a cleared address with nothing shown", async () => {

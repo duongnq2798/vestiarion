@@ -164,7 +164,7 @@ export default function SecurityPage() {
             A GitHub account is tied to no member, so for an address sent with /payto on a GitHub pull request, and for one no member can be
             named as having given, no confirmation counts as the second person: the agent holds the first payment, and two different members
             stand behind it, one who confirms the address and another who approves the payment. Whoever confirmed it cannot approve it, and no
-            one approves it before a member has confirmed it, since an approval&apos;s own confirmation does not count, unless they are the
+            one approves it alone before another member has confirmed it, since an approval&apos;s own confirmation does not count, unless they are the
             workspace&apos;s only owner, admin or approver.
             A bounty typed by its own pull request&apos;s author names no member.
           </li>

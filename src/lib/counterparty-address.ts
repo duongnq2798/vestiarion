@@ -2,6 +2,7 @@ import { CHECKSUM_MISMATCH, addressProblem, ARC_ADDRESS, NOT_AN_ARC_ADDRESS } fr
 import { currentOrgId } from "./context";
 import { db, unwrap } from "./dal";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
+import { appendLedgerEntry } from "./ledger";
 
 /**
  * Changing and confirming a counterparty's Arc address (spec
@@ -188,23 +189,27 @@ export async function confirmCounterpartyAddress(input: {
   if (!sameAddress(current.address, shown === "" ? null : shown)) throw new CounterpartyAddressError("stale");
   if (!addressUnconfirmed(current.address_changed_at, current.address_confirmed_at)) return false;
 
-  const update = db()
-    .from("counterparties")
-    // Never earlier than the change it confirms, even if this server's clock
-    // runs behind the one that stamped the change.
-    .update({ address_confirmed_at: new Date(Math.max(Date.now(), Date.parse(current.address_changed_at as string) + 1)).toISOString() })
-    .eq("id", current.id)
-    .eq("address_changed_at", current.address_changed_at as string);
+  // Never earlier than the change it confirms, even if this server's clock runs behind the one that stamped the change.
+  const confirmedAt = new Date(Math.max(Date.now(), Date.parse(current.address_changed_at as string) + 1)).toISOString();
+  const update = db().from("counterparties").update({ address_confirmed_at: confirmedAt }).eq("id", current.id).eq("address_changed_at", current.address_changed_at as string);
   const guarded = current.address === null ? update.is("address", null) : update.eq("address", current.address);
   const rows = unwrap(await guarded.select("id")) as Array<{ id: string }>;
   if (rows.length === 0) throw new CounterpartyAddressError("stale");
 
-  await appendLedgerEntryBestEffort(currentOrgId(), {
-    actor: "human",
-    domain: "compliance",
-    action: "counterparty_address_confirmed",
-    summary: `Confirmed ${current.name}'s new payment address`,
-    detail: { by: input.actorId, counterpartyId: current.id, address: current.address, via: input.via },
-  });
+  // Who confirmed it is what the new payee check reads (new payee check N2): a confirmation no entry names would leave a
+  // first payment no one but the only approver may pay, and could not be given again. So one whose entry was not
+  // written is undone, and refused.
+  try {
+    await appendLedgerEntry({
+      actor: "human",
+      domain: "compliance",
+      action: "counterparty_address_confirmed",
+      summary: `Confirmed ${current.name}'s new payment address`,
+      detail: { by: input.actorId, counterpartyId: current.id, address: current.address, via: input.via },
+    });
+  } catch (error) {
+    await db().from("counterparties").update({ address_confirmed_at: current.address_confirmed_at }).eq("id", current.id).eq("address_confirmed_at", confirmedAt);
+    throw error;
+  }
   return true;
 }

@@ -527,7 +527,7 @@ describe("claims narrowed to what the code does", () => {
     expect(rule).toContain("const selfBounty = bounty !== undefined && sameLogin(bounty.detail.login, bounty.detail.author);");
     // Sent on GitHub, or no one named: no confirmation is a second party, exactly whoever confirmed it is left out, and no
     // one approves it alone before another member confirmed it.
-    expect(rule).toContain("const unanswered = recorded && addressBy !== MIRROR && (giver === null || bountyBy !== undefined);");
+    expect(rule).toContain("const unanswered = changed && addressBy !== MIRROR && (giver === null || bountyBy !== undefined);");
     expect(rule).toContain("const twoParties = addressBy === MIRROR || (!unanswered && giver !== null && other !== null);");
     expect(rule).toContain("if (check.unanswered) return [...new Set(check.confirmersLeftOut ?? [])];");
     expect(rule).toContain("return confirmers.length === 0 ? CONFIRM_FIRST : null;");
@@ -545,7 +545,7 @@ describe("claims narrowed to what the code does", () => {
       "For an address a payee sends through a payee link, the person who created the link counts as having given it, read from the link's signed entry in the workspace's ledger, or from the link's own record when that entry is missing: their own confirmation is not the second person",
       "A GitHub account is tied to no member, so for an address sent with /payto on a GitHub pull request, and for one no member can be named as having given, no confirmation counts as the second person",
       "the agent holds the first payment, and two different members stand behind it, one who confirms the address and another who approves the payment",
-      "Whoever confirmed it cannot approve it, and no one approves it before a member has confirmed it, since an approval's own confirmation does not count, unless they are the workspace's only owner, admin or approver.",
+      "Whoever confirmed it cannot approve it, and no one approves it alone before another member has confirmed it, since an approval's own confirmation does not count, unless they are the workspace's only owner, admin or approver.",
       "A bounty typed by its own pull request's author names no member.",
     ]) {
       expect(access, phrase).toContain(phrase);

@@ -185,7 +185,7 @@ describe("what a held milestone waits for", () => {
     const reason = heldReason(facts({ lastEntry: { action: "milestone_release", detail: { guardrailBlocked: true, guardrailRule: "counterparty.new_payee" } } }));
     expect(reason).toMatchObject({ kind: "new_payee", hint: "First payment to a new address", canPay: true, canClose: true, override: true });
     expect(reason.text).toBe(
-      "This would be the first payment to Puka Hotel at this address, and only one person stands behind it. Someone other than whoever gave the address, or asked for it with a payee link, pays it now; for an address sent on GitHub, one member confirms it on Counterparties and a different one pays it. If you are the only person here who can approve payments, pay it yourself with Pay now. After that, the agent pays Puka Hotel at this address on its own."
+      "This would be the first payment to Puka Hotel at this address, and two different people do not stand behind it yet. Someone other than whoever gave the address, or asked for it with a payee link, pays it now; for an address sent on GitHub, or one no one can be named as having given, one member confirms it on Counterparties and a different one pays it. If you are the only person here who can approve payments, pay it yourself with Pay now. After that, the agent pays Puka Hotel at this address on its own."
     );
   });
 
@@ -808,11 +808,19 @@ describe("Pay now and an address no member answers for alone", () => {
     expect(alone.ledger()[0].p_summary).toContain(ADDRESS_GIVER_NOTE);
   });
 
-  it("lets the member the bounty acts as pay it once someone else confirmed it: two different members", async () => {
+  it("lets the member the bounty acts as, who added its milestone, pay it once someone else confirmed it: two different members", async () => {
     live();
     releaseHeldMilestoneMock.mockResolvedValue(PAID);
-    const { run } = world({ intent: null, last: heldAsNewPayee, addressEntries: selfBounty(ACTOR) });
+    // A bounty's milestone is added as the member who connected GitHub; a hold for its address alone is not theirs to be
+    // refused as its creator, or two approvers would wait for a third.
+    const { run, fake } = world({ milestone: { created_by: CONNECTOR }, intent: null, last: heldAsNewPayee, addressEntries: selfBounty(ACTOR) });
     expect((await run(() => payHeldMilestone({ actorId: CONNECTOR, milestoneId: MILESTONE }))).status).toBe("paid");
+    expect(fake.requests.some((request) => request.path === "/rest/v1/rpc/sole_approver")).toBe(false);
+    // Had they confirmed it themselves, they would be refused.
+    const confirmedIt = world({ milestone: { created_by: CONNECTOR }, intent: null, last: heldAsNewPayee, addressEntries: selfBounty(CONNECTOR) });
+    await expect(confirmedIt.run(() => payHeldMilestone({ actorId: CONNECTOR, milestoneId: MILESTONE }))).rejects.toThrow(
+      "You confirmed this address, so someone else must approve its first payment."
+    );
   });
 
   it("refuses anyone but the only approver when no entry says who confirmed it, though its row reads confirmed", async () => {

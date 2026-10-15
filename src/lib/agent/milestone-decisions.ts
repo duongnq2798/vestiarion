@@ -315,11 +315,11 @@ function reasonOf(facts: HeldFacts): Omit<HeldReason, "hint"> {
       override: true,
     };
   }
-  // The first payment to an address one person alone stands behind (new payee check N3): someone else pays it now.
+  // The first payment to an address two different people do not stand behind yet (new payee check N3): someone else pays it now.
   if (detail.guardrailRule === "counterparty.new_payee") {
     return {
       kind: "new_payee",
-      text: `This would be the first payment to ${name} at this address, and only one person stands behind it. Someone other than whoever gave the address, or asked for it with a payee link, pays it now; for an address sent on GitHub, one member confirms it on Counterparties and a different one pays it. If you are the only person here who can approve payments, pay it yourself with Pay now. After that, the agent pays ${name} at this address on its own.`,
+      text: `This would be the first payment to ${name} at this address, and two different people do not stand behind it yet. Someone other than whoever gave the address, or asked for it with a payee link, pays it now; for an address sent on GitHub, or one no one can be named as having given, one member confirms it on Counterparties and a different one pays it. If you are the only person here who can approve payments, pay it yourself with Pay now. After that, the agent pays ${name} at this address on its own.`,
       link: COUNTERPARTIES,
       canPay: true,
       canClose: true,
@@ -618,7 +618,10 @@ export async function payHeldMilestone(input: {
         }
         fewApprovers = true;
       }
-    } else if (blocking.override && milestone.createdBy === input.actorId) {
+    } else if (blocking.override && blocking.kind !== "new_payee" && milestone.createdBy === input.actorId) {
+      // A hold for its address alone is the new payee check's to answer, below: the agent would have paid what was added,
+      // and who may pay it is whoever its address does not rest on. Otherwise every GitHub bounty, which the member who
+      // connected GitHub adds, would wait for a third approver once the other one confirmed its address.
       if (!(await isSoleApprover(input.actorId))) raise("self_approval");
       soleApprover = true;
     }

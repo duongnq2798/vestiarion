@@ -493,7 +493,10 @@ export interface WaitingPayable {
    * first payment, so while no one has confirmed it, no one approves it alone. Absent otherwise.
    */
   firstPaymentUnanswered?: true;
-  /** Every member left out of approving its first payment (`membersLeftOut`), for who can act. Absent otherwise. */
+  /**
+   * Every member left out of approving its first payment (`membersLeftOut`), for who can act, when one approval pays it.
+   * Absent otherwise: above the figure for two approvals, `twoApprovals` says who may give one.
+   */
   firstPaymentLeftOut?: string[];
   /**
    * Above the workspace's figure for two approvals (two approvals T8): the figure, the approvals given that still count,
@@ -575,8 +578,11 @@ export async function listWaitingPayables(
   const newPayeeFacts =
     rows.length > 0 && chainModes().mode === "live" ? await loadNewPayeeFacts(db(), [...new Set(rows.map((row) => row.counterparty_id))]) : null;
 
+  // A transfer already sent is only recorded, which asks no first-payment question (as Approve and pay reads it).
   const newPayeeOf = (row: (typeof rows)[number]) =>
-    newPayeeFacts ? newPayeeCheckFor(newPayeeFacts, { id: row.counterparty_id, address: row.counterparties?.address ?? null }) : null;
+    newPayeeFacts && !transferExists(intents.get(row.id) ?? null)
+      ? newPayeeCheckFor(newPayeeFacts, { id: row.counterparty_id, address: row.counterparties?.address ?? null })
+      : null;
 
   // Above the workspace's figure: the approvals given, and whether those left out may give one (two approvals T8).
   const twoApprovals = await twoApprovalsFacts(
@@ -669,7 +675,8 @@ export async function listWaitingPayables(
             ...(askedFor ? { firstPaymentVia: askedFor } : {}),
             ...(newPayee.confirmersLeftOut ? { firstPaymentConfirmers: newPayee.confirmersLeftOut } : {}),
             ...(newPayee.unanswered ? { firstPaymentUnanswered: true as const } : {}),
-            firstPaymentLeftOut: membersLeftOut(newPayee),
+            // One approval pays it: above the figure, two different people approve it, the two approvals saying who may.
+            ...(twoApprovals.has(row.id) ? {} : { firstPaymentLeftOut: membersLeftOut(newPayee) }),
           }
         : {}),
       ...(twoApprovals.has(row.id) ? { twoApprovals: twoApprovals.get(row.id) } : {}),

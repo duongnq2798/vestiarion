@@ -91,10 +91,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   could have bountied their own pull request, sent their own wallet and confirmed it. For an address sent with
   `/payto`, and for any address no member can be named as having given, a confirmation no longer counts as the second
   person: the agent holds the first payment, and two different members stand behind it, one who confirms the address on
-  Counterparties and another who approves it. Whoever confirmed it cannot approve it, and no one approves it before a
-  member has confirmed it, since Approve and pay would confirm it itself. The member the bounty acts as may approve it
-  once someone else confirmed it, so two approvers are never both left out. "Who can act" and the overdue email leave
-  out whoever cannot approve it. A bounty typed by the pull request's own author names no member.
+  Counterparties and another who approves it. Whoever confirmed it cannot approve it, and no one approves it alone
+  before another member has confirmed it, since Approve and pay would confirm it itself. The member the bounty acts as,
+  who adds the bounty's milestone, may pay it with Pay now once someone else confirmed it: a hold for the address alone
+  is not theirs to be refused as the milestone's creator. "Who can act" and the overdue email leave out whoever cannot
+  approve it. A bounty typed by the pull request's own author names no member.
+- **Confirming an address always says who confirmed it.** A confirmation whose ledger entry could not be written is
+  undone and refused, so it can be given again, rather than leaving a first payment no one could approve.
 - **The only approver's own first payment is on the record.** The workspace's only approver still pays a first payment
   to an address they gave, asked for or confirmed, or that no one else confirmed, and its ledger entry now says they
   did it alone.

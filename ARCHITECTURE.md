@@ -403,7 +403,9 @@ payment to an address.
   payment alone.
 - **Addresses no member answers for alone:** one sent with `/payto` (a GitHub login is tied to no member, and every
   `/bounty` acts as the member who connected GitHub, whoever typed it), and one whose giver no entry names
-  (`addressGiver` null), though an entry records who set it (`unanswered`). For these, no confirmation counts as a
+  (`addressGiver` null), set by a change, or with a counterparty added through the API or GitHub, so a person can
+  confirm it (`unanswered`; one typed in as its counterparty was added, by an old entry naming no one, cannot be
+  confirmed, so it is held for a person as an unrecorded address is). For these, no confirmation counts as a
   second party, so the agent holds the first payment, and it rests on exactly two different members: one confirms the
   address, and another approves it. The members who confirmed it are carried as `confirmersLeftOut`, and
   `membersLeftOut` is exactly them (for any other address, the giver): who Approve and pay, Pay now and both
@@ -422,7 +424,10 @@ payment to an address.
   (`firstPaymentConfirmers`, `firstPaymentUnanswered`) and the milestone's two approvals (`leftOutWhy`) say the same,
   and "Who can act" (`whoCanAct`, on Approvals, Bills and the overdue email) leaves out `membersLeftOut`. The sole
   approver's payment records `addressGiverApproved: true` and says so in its summary (`ADDRESS_GIVER_NOTE`). Recording
-  a transfer already sent asks no first-payment question. Confirmed payments and address entries are read a page at a
+  a transfer already sent asks no first-payment question. A milestone's creator is not refused Pay now for a
+  `counterparty.new_payee` hold, which is about the address alone, so a GitHub bounty's milestone, which the member who
+  connected GitHub adds, is paid by them once another member confirmed its address. `confirmCounterpartyAddress` writes
+  its `counterparty_address_confirmed` entry strictly, undoing the confirmation when the entry cannot be written. Confirmed payments and address entries are read a page at a
   time (`PAYMENT_PAGE`), and the invoices and milestones paid by id in chunks (`ID_CHUNK`), so PostgREST's row cap
   never drops one.
 - **Recorded:** a decision on a first payment records `observed.newPayee` through `newPayeeObserved`:

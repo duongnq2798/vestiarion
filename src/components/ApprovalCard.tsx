@@ -406,11 +406,8 @@ function gaveAddressReason(payable: WaitingPayable, viewerId: string): string {
   if (payable.firstPaymentUnanswered) {
     return payable.firstPaymentConfirmers?.includes(viewerId) ? "You confirmed this address" : "Another member must confirm this address first";
   }
-  return payable.firstPaymentVia === "payee_link"
-    ? "You asked for this address with a payee link"
-    : payable.firstPaymentVia === "github"
-      ? "Your GitHub bounty asked for this address"
-      : "You gave this payee's address";
+  // An address a GitHub bounty asked for is one no member answers for alone, answered above.
+  return payable.firstPaymentVia === "payee_link" ? "You asked for this address with a payee link" : "You gave this payee's address";
 }
 
 function Decisions({

@@ -302,7 +302,7 @@ describe("ApprovalCard", () => {
     // An address sent with /payto is one no member answers for alone: the member its bounty acts as pays it once someone
     // else confirmed it, as two different members then stand behind it.
     const bounty = card({ createdBy: CREATOR, firstPaymentAddressBy: VIEWER, firstPaymentVia: "github", firstPaymentUnanswered: true, firstPaymentConfirmers: ["someone-else"] });
-    expect(bounty).not.toContain("Your GitHub bounty asked for this address");
+    expect(bounty).not.toContain("You gave this payee");
     expect(bounty).not.toMatch(APPROVE_DISABLED);
     // Alone in the workspace, they pay it.
     expect(card({ createdBy: CREATOR, firstPaymentAddressBy: VIEWER, firstPaymentVia: "payee_link" }, { soleApprover: true })).not.toMatch(APPROVE_DISABLED);

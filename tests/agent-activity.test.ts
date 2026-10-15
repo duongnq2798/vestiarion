@@ -358,10 +358,10 @@ describe("what to do about a payable code stopped", () => {
   it("sends the first payment to an address one person alone stands behind to someone else, in Approvals (new payee check N3)", () => {
     expect(ruleNextStep("counterparty.new_payee", counterparty)).toEqual({
       sentence:
-        "It is the first payment to CME at this address, and only one person stands behind it. Someone other than whoever gave the address, or asked for it with a payee link, approves it in Approvals; for an address sent on GitHub, one member confirms it on Counterparties and a different one approves it. If you are the only person here who can approve payments, approve it yourself. After that, the agent pays CME at this address on its own.",
+        "It is the first payment to CME at this address, and two different people do not stand behind it yet. Someone other than whoever gave the address, or asked for it with a payee link, approves it in Approvals; for an address sent on GitHub, or one no one can be named as having given, one member confirms it on Counterparties and a different one approves it. If you are the only person here who can approve payments, approve it yourself. After that, the agent pays CME at this address on its own.",
       fix: null,
     });
-    expect(ruleInBrief("counterparty.new_payee")).toBe("it would be the first payment to an address only one person stands behind");
+    expect(ruleInBrief("counterparty.new_payee")).toBe("it would be the first payment to an address two different people do not stand behind yet");
     expect(agentResumes("counterparty.new_payee")).toBe("The agent decides it again on its own once another payment to this address goes through.");
   });
 

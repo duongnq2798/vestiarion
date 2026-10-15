@@ -44,8 +44,8 @@ export function heldForVerdict(detail: Record<string, unknown> | null | undefine
 /**
  * Whether a person settles this AP decision through a verdict (shadow mode S4): shadow mode held the agent's payment,
  * or the agent decided to pay in shadow mode (`shadow` on its entry) and a check in code held it, such as a first
- * payment to an address only one person stands behind. Either way the agent decided to pay, and a person agrees or
- * disagrees before anything moves, so every payment made in shadow mode carries a verdict.
+ * payment to an address two different people do not stand behind yet. Either way the agent decided to pay, and a
+ * person agrees or disagrees before anything moves, so every payment made in shadow mode carries a verdict.
  */
 export function awaitsVerdict(detail: Record<string, unknown> | null | undefined): boolean {
   if (heldForVerdict(detail)) return true;
@@ -104,7 +104,7 @@ export function ruleNextStep(rule: string | null | undefined, counterparty: { id
     case "counterparty.new_payee":
       // Two people before the first payment to an address (new payee check N3, N4): the second one decides in Approvals.
       return {
-        sentence: `It is the first payment to ${counterparty.name} at this address, and only one person stands behind it. Someone other than whoever gave the address, or asked for it with a payee link, approves it in Approvals; for an address sent on GitHub, one member confirms it on Counterparties and a different one approves it. If you are the only person here who can approve payments, approve it yourself. After that, the agent pays ${counterparty.name} at this address on its own.`,
+        sentence: `It is the first payment to ${counterparty.name} at this address, and two different people do not stand behind it yet. Someone other than whoever gave the address, or asked for it with a payee link, approves it in Approvals; for an address sent on GitHub, or one no one can be named as having given, one member confirms it on Counterparties and a different one approves it. If you are the only person here who can approve payments, approve it yourself. After that, the agent pays ${counterparty.name} at this address on its own.`,
         fix: null,
       };
     case MATCH_INCOMPLETE:
@@ -225,7 +225,7 @@ export function ruleInBrief(rule: string | null | undefined): string | null {
     case MATCH_INCOMPLETE:
       return "its three-way match is incomplete";
     case "counterparty.new_payee":
-      return "it would be the first payment to an address only one person stands behind";
+      return "it would be the first payment to an address two different people do not stand behind yet";
     case "workspace.two_approvals":
       return "payments above the workspace's figure need two people's approval";
     case SHADOW_VERDICT:

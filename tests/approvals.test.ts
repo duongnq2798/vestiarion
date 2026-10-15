@@ -2792,13 +2792,17 @@ describe("approveAndPay and an address no member answers for alone", () => {
     );
   });
 
-  it("lets whoever confirmed it record a transfer already sent, which pays the address nothing new", async () => {
+  it("lets whoever confirmed it record a transfer already sent, which pays the address nothing new, as its card says", async () => {
     live();
     const sent = [{ source_id: INVOICE_ID, status: "confirmed", provider_tx_id: "circle-tx-1", last_error: null }];
     const { fake, run } = approvalsFake({ addressEntries: selfBounty(ACTOR), intents: sent });
 
     await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).resolves.toMatchObject({ status: "paid" });
     expect(rpcBodies(fake.requests, "sole_approver")).toHaveLength(0);
+    const [row] = await approvalsFake({ addressEntries: selfBounty(ACTOR), intents: sent }).run(() => listWaitingPayables());
+    expect(row).not.toHaveProperty("firstPaymentUnanswered");
+    expect(row).not.toHaveProperty("firstPaymentConfirmers");
+    expect(row).not.toHaveProperty("firstPaymentLeftOut");
   });
 
   it("lets the workspace's only approver pay an address no one else confirmed, and the ledger says so", async () => {
@@ -2818,6 +2822,8 @@ describe("approveAndPay and an address no member answers for alone", () => {
     const [row] = await run(() => listWaitingPayables());
     expect(row.twoApprovals?.excluded).toEqual([CREATOR, ACTOR]);
     expect(row).toMatchObject({ firstPaymentAddressBy: null, firstPaymentConfirmers: [ACTOR] });
+    // Above the figure, two different people approve it, the two approvals saying who may: who can act is not narrowed.
+    expect(row).not.toHaveProperty("firstPaymentLeftOut");
   });
 
   it("leaves whoever confirmed it out when no one can be named as the link's creator", async () => {

@@ -62,6 +62,13 @@ describe("HeldMilestoneActions", () => {
     expect(text(markup)).toContain("You added this milestone, so someone else must approve paying it.");
   });
 
+  it("does not keep Pay now from whoever added it when the hold is about its address alone, which Pay now asks about itself", () => {
+    // A GitHub bounty's milestone is added as the member who connected GitHub: they pay it once another member confirmed it.
+    const markup = render({ ...FAILED, kind: "new_payee", override: true }, { selfAdded: true });
+    expect(markup).not.toMatch(/<button[^>]*disabled=""[^>]*aria-describedby="pay-held-m-1-blocked"/);
+    expect(text(markup)).not.toContain("You added this milestone");
+  });
+
   it("lets the workspace's sole approver override the hold on a milestone they added, and says the ledger records it", () => {
     const markup = render({ ...FAILED, kind: "agent_held", override: true }, { selfAdded: true, soleApprover: true });
     expect(markup).not.toMatch(/<button[^>]*disabled=""/);

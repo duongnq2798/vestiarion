@@ -90,13 +90,13 @@ describe("DecisionCard", () => {
       action: "Pay",
       outcome: "refused",
       amount: 0.1,
-      guardrail: { rule: "counterparty.new_payee", attempted: 0.1, reason: "the first payment to this address, and only one person stands behind it" },
+      guardrail: { rule: "counterparty.new_payee", attempted: 0.1, reason: "the first payment to this address, and two different people do not stand behind it yet" },
       auditSeq: 1806,
     };
     const markup = html(<DecisionCard decision={refused} orgSlug="acme" />);
     expect(markup).toContain('title="counterparty.new_payee">A first payment to a new address needs two people<');
     expect(markup).toContain(">Why<");
-    expect(markup).toContain("the first payment to this address, and only one person stands behind it");
+    expect(markup).toContain("the first payment to this address, and two different people do not stand behind it yet");
     expect(markup).not.toContain(">Allowed<");
   });
 

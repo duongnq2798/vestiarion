@@ -292,6 +292,16 @@ describe("membersLeftOut and newPayeeSelfMessage: who may not approve a first pa
     }
   });
 
+  it("holds for a person, and refuses no one, an address an old entry set when its counterparty was added, naming no one", () => {
+    // Counterparties offers no confirmation of an address set when the counterparty was added, so none could be asked for.
+    const legacy = newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries: [created(null, ADDRESS)] });
+    expect(legacy).toEqual({ firstPayment: true, addressBy: null, confirmedBy: null, twoParties: false });
+    expect(membersLeftOut(legacy)).toEqual([]);
+    expect(firstPaymentRefusal(legacy, BAO)).toBeNull();
+    // One a change set, naming no one, can be confirmed: two different members then stand behind it.
+    expect(newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries: [changed(null, ADDRESS)] })).toMatchObject({ unanswered: true, twoParties: false });
+  });
+
   it("refuses one approver alone: whoever gave it; for an address no member answers for, whoever confirmed it, or anyone while no one else has", () => {
     const typed = newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries: [confirmed(BAO, ADDRESS), created(ANNA, ADDRESS)] });
     expect(firstPaymentRefusal(typed, ANNA)).toBe("You gave this payee's address, so someone else must approve its first payment.");

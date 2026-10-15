@@ -116,7 +116,9 @@ function checksOf(detail: Record<string, unknown>, paying: boolean): string[] {
           ? `${newPayee.twoParties === true ? "✓" : "✗"} First payment to this address, ${askedFor(newPayee)}`
           : newPayee.twoParties === true
             ? "✓ First payment to this address, with two people behind it"
-            : "✗ First payment to this address, and only one person stands behind it"
+            : newPayee.unanswered === true
+              ? "✗ First payment to this address, which no member answers for alone: one confirms it, another approves it"
+              : "✗ First payment to this address, and only one person stands behind it"
     );
   }
   const risk = text(observed.riskLevel);

@@ -8,6 +8,8 @@ import { decideByOf, whoCanAct } from "../exceptions";
 import { chainModes } from "../circle";
 import { membersLeftOut } from "../new-payee";
 import { firstPaymentFrom, loadNewPayeeFacts } from "../new-payee-facts";
+import { readTwoApprovalsAbove } from "../approval-policy";
+import { needsTwoApprovals } from "../two-approvals";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { listMembers } from "../platform/members";
 import { decidingRecipients, DIGEST_MAX_RECIPIENTS, DIGEST_SEND_DEADLINE_MS } from "./waiting";
@@ -114,13 +116,19 @@ export async function pastDecideBy(
 }
 
 /**
- * For each payable whose payment would be the first to its payee's address, where payments are real: the members that
- * address leaves out of approving it (new payee check N4). None elsewhere.
+ * For each payable one approval pays whose payment would be the first to its payee's address, where payments are real:
+ * the members that address leaves out of approving it (new payee check N4). None elsewhere: above the figure for two
+ * approvals, two different people approve it, whoever they are.
  */
-async function firstPaymentsLeftOut(past: ReadonlyArray<{ id: string; counterpartyId: string; address: string | null }>): Promise<Map<string, string[]>> {
+async function firstPaymentsLeftOut(
+  past: ReadonlyArray<{ id: string; counterpartyId: string; address: string | null; item: EscalationItem }>
+): Promise<Map<string, string[]>> {
   if (past.length === 0 || chainModes().mode !== "live") return new Map();
-  const facts = await loadNewPayeeFacts(db(), [...new Set(past.map(({ counterpartyId }) => counterpartyId))]);
-  return new Map(past.map(({ id, counterpartyId, address }) => [id, membersLeftOut(firstPaymentFrom(facts, { id: counterpartyId, address }))]));
+  const above = await readTwoApprovalsAbove(db());
+  const onOne = past.filter(({ item }) => !needsTwoApprovals({ amount: item.amount, currency: item.currency === "EURC" ? "EURC" : "USDC", usdcValue: null }, above));
+  if (onOne.length === 0) return new Map();
+  const facts = await loadNewPayeeFacts(db(), [...new Set(onOne.map(({ counterpartyId }) => counterpartyId))]);
+  return new Map(onOne.map(({ id, counterpartyId, address }) => [id, membersLeftOut(firstPaymentFrom(facts, { id: counterpartyId, address }))]));
 }
 
 /**

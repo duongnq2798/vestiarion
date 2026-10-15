@@ -99,7 +99,8 @@ export function HeldMilestoneActions({
   // Above the figure: the viewer's approval pays it only when someone else approved it first (two approvals T8).
   const viewerApproved = two?.approvals.some((approval) => approval.by === viewerId) ?? false;
   const willPay = !two || two.approvals.some((approval) => approval.by !== viewerId);
-  const ownOverride = reason.canPay && reason.override && selfAdded;
+  // A hold for its address alone is not overriding what the viewer added: Pay now asks who the address rests on instead.
+  const ownOverride = reason.canPay && reason.override && reason.kind !== "new_payee" && selfAdded;
   // Whoever added it, or gave its address, gives only the approvals no one independent of it can; one person never pays
   // it alone (two approvals T5).
   const selfBlocked = two ? !mayApproveNow(two, viewerId ?? "") : ownOverride && !soleApprover;
