@@ -238,6 +238,9 @@ train or improve any AI model, and never passes it to anyone else without the wo
 the reading at once. Recorded in the state, the connection and `accounting_connected` (X12). `/terms` and `/privacy`
 name QuickBooks beside Xero. The scope Intuit grants can write, so the statement says what Vestiarion does, not what
 the scope allows. Cost if wrong: new words and a new version.
+*Since `quickbooks-2026-10-15`*: the model provider sentence says the provider sees each bill's facts under its own API
+terms (DeepSeek's, on the hosted service), and the connect page links its API terms and privacy policy. The earlier
+promise that it may not train on them had no basis in those terms.
 
 **Q14. Disconnecting from Vestiarion.** **Disconnect QuickBooks** revokes the refresh token at Intuit (which ends the
 app's access to the company), deletes the tokens, marks the connection revoked and signs `accounting_disconnected`

@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { Link2, Lock } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ConnectorConsent } from "@/components/ConnectorConsent";
 import { Button } from "@/components/ui/Button";
-import { Callout } from "@/components/ui/Callout";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { NativeCheckbox, NativeRadioGroup } from "@/components/ui/NativeChoice";
 import { BrandMark } from "@/components/vx/BrandMarks";
@@ -11,7 +11,7 @@ import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { membershipsOf } from "@/lib/auth/membership";
 import { can } from "@/lib/auth/roles";
 import { verifySession } from "@/lib/auth/session";
-import { CONSENT_LABEL, consentStatement } from "@/lib/connectors/consent";
+import { CONSENT_LABEL } from "@/lib/connectors/consent";
 import { hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
 import { HUBSPOT_WRITE_STEPS } from "@/lib/hubspot/write-steps";
 import { networkProfile } from "@/lib/network";
@@ -105,13 +105,7 @@ export default async function HubSpotConnectPage({ searchParams }: ConnectPagePr
                     }))}
                   />
                 )}
-                <Callout title="What Vestiarion does with HubSpot's data">
-                  <ul className="list-disc space-y-1 pl-5">
-                    {consentStatement("hubspot").map((line) => (
-                      <li key={line}>{line}</li>
-                    ))}
-                  </ul>
-                </Callout>
+                <ConnectorConsent provider="hubspot" title="What Vestiarion does with HubSpot's data" changed={one(params.consent) === "changed"} />
                 <p className="text-sm text-ink-2">One HubSpot account connects to one Vestiarion workspace at a time.</p>
                 <NativeCheckbox
                   name="write"

@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { Link2, Lock } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ConnectorConsent } from "@/components/ConnectorConsent";
 import { Button } from "@/components/ui/Button";
-import { Callout } from "@/components/ui/Callout";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { NativeCheckbox, NativeRadioGroup } from "@/components/ui/NativeChoice";
 import { BrandMark } from "@/components/vx/BrandMarks";
@@ -12,7 +12,7 @@ import { asanaSettingsFromEnv } from "@/lib/asana/settings";
 import { membershipsOf } from "@/lib/auth/membership";
 import { can } from "@/lib/auth/roles";
 import { verifySession } from "@/lib/auth/session";
-import { CONSENT_LABEL, consentStatement } from "@/lib/connectors/consent";
+import { CONSENT_LABEL } from "@/lib/connectors/consent";
 import { networkProfile } from "@/lib/network";
 
 export const metadata: Metadata = { title: "Connect Asana" };
@@ -100,13 +100,7 @@ export default async function AsanaConnectPage({ searchParams }: ConnectPageProp
                     }))}
                   />
                 )}
-                <Callout title="What Vestiarion does with Asana's data">
-                  <ul className="list-disc space-y-1 pl-5">
-                    {consentStatement("asana").map((line) => (
-                      <li key={line}>{line}</li>
-                    ))}
-                  </ul>
-                </Callout>
+                <ConnectorConsent provider="asana" title="What Vestiarion does with Asana's data" changed={one(params.consent) === "changed"} />
                 <p className="text-sm text-ink-2">Asana asks you to allow access as yourself: Vestiarion sees the tasks you can see, and reads only the ones linked to milestones.</p>
                 <NativeCheckbox
                   name="consent"
