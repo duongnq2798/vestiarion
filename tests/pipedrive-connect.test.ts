@@ -117,6 +117,21 @@ describe("startConnect for Pipedrive", () => {
 });
 
 describe("finishConnect for Pipedrive", () => {
+  it("sends an install started in the Pipedrive Marketplace, which carries no state, to the connect page, exchanging nothing", async () => {
+    const { run, deps, pipedrive, fake } = world();
+    const installed = await run(() => finishConnect(callback({ code: "from-the-marketplace" }, null), deps()));
+    expect(installed.status).toBe(302);
+    expect(location(installed).toString()).toBe(`${ORIGIN}/integrations/pipedrive/connect?installed=1`);
+    // Cancelled on Pipedrive's consent: the same page, with nothing said about an install.
+    const cancelled = await run(() => finishConnect(callback({ error: "user_denied" }, null), deps()));
+    expect(location(cancelled).toString()).toBe(`${ORIGIN}/integrations/pipedrive/connect?`);
+    // A state that is there but not ours is still refused.
+    expect((await run(() => finishConnect(callback({ code: "c", state: "" }, NONCE), deps()))).status).toBe(400);
+    // Nothing was exchanged with Pipedrive, and nothing kept.
+    expect(pipedrive.requests).toHaveLength(0);
+    expect(fake.requests.filter((sent) => sent.method === "POST")).toHaveLength(0);
+  });
+
   it("connects the company of the grant, keeps its tokens sealed with its domain, records the consent, then the first sync", async () => {
     const { fake, pipedrive, run, deps, later, firstSync } = world();
     const response = await run(() => finishConnect(callback({ code: "the-code", state: signed() }, NONCE), deps()));

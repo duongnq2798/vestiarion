@@ -19,8 +19,16 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   set by a public key in its manifest, and Vestiarion allows it as soon as invoice capture is on, so it connects with no
   change on the deployment. A copy loaded from the repository's own folder still has an ID of its own.
   [Guide](https://www.vestiarion.xyz/docs/guides/invoice-capture#1-install-it).
+- **Ready for the Pipedrive Marketplace and the Asana App Directory.** What to submit to each, field by field within
+  their limits, with the scopes and why each is needed, the reviewers' path, a demo script, the listing images and the
+  icons, is in [docs/distribution](docs/distribution).
 
 ### Fixed
+
+- **Installing Vestiarion from Pipedrive leads to the connect page.** An install started in Pipedrive, such as Install
+  now in the Pipedrive Marketplace, came back with no state of Vestiarion's and was refused as an expired link. It now
+  opens the connect page, which says Vestiarion was installed from Pipedrive: pick the workspace, agree, and Pipedrive
+  asks once more. Nothing is exchanged with Pipedrive before that. The same holds for every connector.
 
 - **A payment sent again needs two people behind a new address too.** When the outcome of a payment's earlier send
   was never recorded, the agent looks the send up at Circle and, if Circle has none, sends the payment again to the

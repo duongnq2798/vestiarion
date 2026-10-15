@@ -2475,8 +2475,11 @@ reads in `api.ts`, `hubspotProvider`), wired in `src/lib/crm-providers.ts`. It i
 - **Pipedrive** is the second CRM, on the same core, wired in `src/lib/crm-providers.ts` beside HubSpot. It is on only
   with `PIPEDRIVE_CLIENT_ID` and `PIPEDRIVE_CLIENT_SECRET`, from a private app in Pipedrive's Developer Hub (Callback URL
   `<origin>/api/integrations/pipedrive/callback`; scopes `base`, `deals:full`, `contacts:read`, `deal-fields:full`,
-  `users:read`, `recents:read`, `webhooks:full`, which a person grants all at once or not at all). It differs where
-  Pipedrive does, through optional parts of the core that leave HubSpot as it was:
+  `users:read`, `recents:read`, `webhooks:full`, which a person grants all at once or not at all; the Marketplace
+  submission, `docs/distribution/pipedrive-marketplace.md`, drops the last two, which nothing reads). An install started
+  in Pipedrive comes back to the callback with no state of ours: `finishConnect` exchanges nothing and sends the person
+  to the connect page (`?installed=1`), which is also the app's Installation URL. It differs where Pipedrive does,
+  through optional parts of the core that leave HubSpot as it was:
   - *The core, generalized.* `ProviderId` gains `pipedrive` (kind `crm`, `exclusive`). A deal's and a customer's
     source in their entries is either CRM's (`DealSource`); the reference a planned deal carries is the CRM's
     (`crmDealReference`: HubSpot's deal id as it is, Pipedrive's as `pipedrive-<id>`, since its small numbers would meet
