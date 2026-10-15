@@ -1,14 +1,16 @@
 Vestiarion Invoice Capture is a Chrome extension that brings an invoice from your browser into your workspace as a draft: the text you select on a supplier's portal, in a web mail or in a PDF, or a file you choose. You check the fields it read, send the draft, and it waits on **Bills & receivables** until an owner or admin adds it as a bill or discards it. The extension never adds a bill, approves or pays: once a person adds the draft, the agent decides the bill as any other, and pays on the workspace's network, Arc mainnet or Arc testnet, under every check it applies.
 
-<Callout kind="note" title="Installed by hand for now">
-Until it is in the Chrome Web Store, the extension is loaded unpacked from the repository's `extensions/chrome-invoice-capture/extension` folder, and its ID must be allowed by the deployment, as the last section says.
+<Callout kind="note" title="Downloaded for now">
+Until it is in the Chrome Web Store, you download the extension from Vestiarion and load it into Chrome yourself. Every downloaded copy has the same ID, `pemkppoklecedoebjfgjlgfibbepikki`, which Vestiarion already allows.
 </Callout>
 
 ## 1. Install it
 
-1. Get the `extensions/chrome-invoice-capture/extension` folder from the Vestiarion repository.
-2. In Chrome, open `chrome://extensions`, turn on **Developer mode** and choose **Load unpacked**, then pick that folder.
+1. Download [vestiarion-invoice-capture.zip](/downloads/vestiarion-invoice-capture.zip) and extract it. Keep the folder it gives you where it is: Chrome loads the extension from it each time it starts.
+2. In Chrome, open `chrome://extensions`, turn on **Developer mode** and choose **Load unpacked**, then pick that folder, the one with `manifest.json` in it. Under the extension's name, Chrome shows its ID, `pemkppoklecedoebjfgjlgfibbepikki`.
 3. Pin Vestiarion Invoice Capture to the toolbar, so its icon is one click away.
+
+To update it, download the zip again, replace the folder's files with the new ones, and choose the reload arrow on its card in `chrome://extensions`. Its connection stays.
 
 The extension asks for six permissions, each for one reason, and for no site: `activeTab` and `scripting` to read the text you selected when you press Capture, `storage` to keep its connection on this computer, `identity` to open Vestiarion's sign-in window, `contextMenus` for the menu on a selection, and `alarms` to drop a selection taken from that menu after 5 minutes. It talks to www.vestiarion.xyz alone, which answers this extension by its ID, and never sends your cookies.
 
@@ -79,4 +81,4 @@ A person's role is read again at every request: an owner or admin who becomes an
 
 ## For the person who runs the deployment
 
-Set `CHROME_EXTENSION_IDS` to the extension IDs allowed to connect, separated by commas: the ID `chrome://extensions` shows for an unpacked copy, and the Chrome Web Store's once it is published. Migration `0121_invoice_capture.sql` adds the drafts and the connections. Without either, the extension's endpoints answer 503, the consent page says invoice capture is not set up, and nothing else changes.
+Set `CHROME_EXTENSION_IDS` to the extension IDs allowed to connect, separated by commas: the Chrome Web Store's once it is published, and the ID `chrome://extensions` shows for a copy loaded from the repository's own `extensions/chrome-invoice-capture/extension` folder, which comes from the folder's path. Once any ID is listed, the downloaded copy's, `pemkppoklecedoebjfgjlgfibbepikki`, is allowed too: its manifest carries a public key, which gives every copy that one ID. After changing the extension, run `npm run extension:download` and commit `public/downloads/vestiarion-invoice-capture.zip`; a test fails until the zip matches the extension's files. Migration `0121_invoice_capture.sql` adds the drafts and the connections. Without either, the extension's endpoints answer 503, the consent page says invoice capture is not set up, and nothing else changes.

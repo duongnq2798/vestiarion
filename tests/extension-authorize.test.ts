@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { checkAuthorizeRequest, redirectWith } from "@/lib/extension/authorize-request";
 import { challengeOf, isVerifier, verifierMatches } from "@/lib/extension/pkce";
-import { allowedClient, allowedOrigin, extensionSettingsFromEnv, parseExtensionIds, parseScopes, redirectUriFor } from "@/lib/extension/settings";
+import { allowedClient, allowedOrigin, DOWNLOAD_EXTENSION_ID, extensionSettingsFromEnv, parseExtensionIds, parseScopes, redirectUriFor } from "@/lib/extension/settings";
 import { newToken, tokenKind } from "@/lib/extension/tokens";
 import { COMMAND_PERMISSIONS, SURFACE_COMMANDS } from "@/lib/commands/policy";
 import nextConfig from "../next.config";
@@ -23,7 +23,9 @@ describe("CHROME_EXTENSION_IDS (C12)", () => {
     ]);
     expect(extensionSettingsFromEnv(undefined)).toBeNull();
     expect(extensionSettingsFromEnv("nothing useful")).toBeNull();
-    expect(extensionSettingsFromEnv(CLIENT)).toEqual(settings);
+    // Once any id is listed, the copy offered for download is allowed too, by the one id its manifest's key gives it.
+    expect(extensionSettingsFromEnv(CLIENT)).toEqual({ ids: [CLIENT, DOWNLOAD_EXTENSION_ID] });
+    expect(extensionSettingsFromEnv(`${CLIENT} ${DOWNLOAD_EXTENSION_ID}`)).toEqual({ ids: [CLIENT, DOWNLOAD_EXTENSION_ID] });
   });
 
   it("allows an extension's own redirect address, exactly, and its own origin", () => {
