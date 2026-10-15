@@ -186,6 +186,10 @@ async function connectOne(
 /** `GET /api/integrations/<provider>/callback`: where the provider sends the person back. */
 export async function finishConnect(request: Request, deps: ConnectDeps): Promise<Response> {
   const params = new URL(request.url).searchParams;
+  // An install started at the provider, from its app marketplace, comes back with no state of ours (Pipedrive's
+  // installation flows): nothing is exchanged. The person picks the workspace and agrees on the connect page first,
+  // then the provider is asked again; one who cancelled there lands on the same page, to start when they choose.
+  if (!params.has("state")) return redirect(connectPage(deps, params.get("error") ? {} : { installed: "1" }), undefined, 302);
   const keys = deps.keys ?? masterKeysFromEnv();
   const now = (deps.now ?? Date.now)();
   const state = readConnectState(params.get("state") ?? "", keys, now);

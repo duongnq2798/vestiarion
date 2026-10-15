@@ -19,7 +19,7 @@ export const metadata: Metadata = { title: "Connect Pipedrive" };
 export const dynamic = "force-dynamic";
 
 type ConnectPageProps = {
-  searchParams: Promise<{ org?: string | string[]; consent?: string | string[]; error?: string | string[] }>;
+  searchParams: Promise<{ org?: string | string[]; consent?: string | string[]; error?: string | string[]; installed?: string | string[] }>;
 };
 
 const one = (value: string | string[] | undefined) => (typeof value === "string" ? value : "");
@@ -35,7 +35,8 @@ const ERRORS: Record<string, string> = {
  * names in `?org=`, or the only one, picked already), reads what Vestiarion does with Pipedrive's data and ticks I agree
  * (real inputs with labels); Continue to Pipedrive posts to the connect route, which checks all of it again. Pipedrive
  * asks the person to install the app in their company, with all of its scopes or none. Writing is not asked for here:
- * the Settings card's switch turns it on (P11).
+ * the Settings card's switch turns it on (P11). It is also the app's Installation URL in Developer Hub, and where an
+ * install started in the Pipedrive Marketplace lands (`?installed=1`), so the workspace and the agreement come first.
  */
 export default async function PipedriveConnectPage({ searchParams }: ConnectPageProps) {
   const params = await searchParams;
@@ -75,6 +76,12 @@ export default async function PipedriveConnectPage({ searchParams }: ConnectPage
                 Bring your won deals in from Pipedrive, with their organizations and persons. Each won deal waits for you on Bills & receivables, and becomes a
                 deal with its collection schedule only when you plan it.
               </p>
+              {one(params.installed) === "1" && (
+                <p role="status" className="mt-4 text-sm text-ink-2">
+                  You installed Vestiarion from the Pipedrive Marketplace. Choose the workspace it connects to and agree below, then Pipedrive asks you to
+                  confirm once more.
+                </p>
+              )}
               {error && (
                 <p role="alert" className="mt-4 text-sm text-refused">
                   {error}
