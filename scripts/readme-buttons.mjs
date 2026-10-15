@@ -24,8 +24,6 @@ const ICONS = {
     <circle cx="12" cy="12" r="4.6" fill="#fff"/><circle cx="12" cy="12" r="3.5" fill="#4285F4"/>`,
   // npm's red square and its letter.
   npm: `<rect x="2" y="2" width="20" height="20" rx="2" fill="#CB3837"/><path d="M6 6h12v12h-3V9h-3v9H6z" fill="#fff"/>`,
-  // Two connected nodes: a server agents call.
-  mcp: `<g fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"><rect x="2.5" y="3" width="8" height="8" rx="2"/><rect x="13.5" y="13" width="8" height="8" rx="2"/><path d="M10.5 7h3.5a2.5 2.5 0 0 1 2.5 2.5V13M13.5 17H10a2.5 2.5 0 0 1-2.5-2.5V11"/></g>`,
 };
 
 const BUTTONS = [
@@ -33,7 +31,6 @@ const BUTTONS = [
   { file: "watch-the-demo.svg", icon: "play", caption: "WATCH THE DEMO", label: "2:59 on YouTube" },
   { file: "add-to-chrome.svg", icon: "chrome", caption: "ADD TO CHROME", label: "Invoice Capture" },
   { file: "npm-sdk.svg", icon: "npm", caption: "INSTALL FROM NPM", label: "@vestiarion/sdk" },
-  { file: "mcp-server.svg", icon: "mcp", caption: "FOR AI AGENTS", label: "MCP server" },
 ];
 
 const WIDTH = 162;
