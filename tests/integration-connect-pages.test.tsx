@@ -26,6 +26,8 @@ vi.mock("@/lib/auth/session", () => ({ verifySession: vi.fn(async () => ({ id: "
 vi.mock("@/lib/auth/membership", () => ({ membershipsOf: vi.fn(async () => memberships.value) }));
 vi.mock("@/lib/accounting-providers", () => ({ accountingProviderOn: () => true }));
 vi.mock("@/lib/hubspot/settings", () => ({ hubspotSettingsFromEnv: () => ({}) }));
+vi.mock("@/lib/pipedrive/settings", async (original) => ({ ...(await original<typeof import("@/lib/pipedrive/settings")>()), pipedriveSettingsFromEnv: () => ({}) }));
+vi.mock("@/lib/asana/settings", async (original) => ({ ...(await original<typeof import("@/lib/asana/settings")>()), asanaSettingsFromEnv: () => ({}) }));
 vi.mock("@/lib/connectors/token-store", () => ({ pendingChoice: vi.fn(async () => pending.value) }));
 vi.mock("@/lib/dal/scope", () => ({ withOrg: (_org: string, fn: () => Promise<unknown>) => fn() }));
 vi.mock("@/components/vx/SiteChrome", () => ({ SiteHeader: () => null, SiteFooter: () => null }));
@@ -41,6 +43,10 @@ import AccountingPanel from "@/components/AccountingPanel";
 import HubSpotPanel from "@/components/HubSpotPanel";
 import { AccountingConnect } from "@/app/integrations/_accounting/AccountingConnect";
 import HubSpotConnectPage from "@/app/integrations/hubspot/connect/page";
+import PipedriveConnectPage from "@/app/integrations/pipedrive/connect/page";
+import AsanaConnectPage from "@/app/integrations/asana/connect/page";
+import { CONSENT_CHANGED, CONSENT_VERSIONS, consentStatement, HOSTED_MODEL_PROVIDER, namesModelProvider } from "@/lib/connectors/consent";
+import type { ProviderId } from "@/lib/connectors/provider";
 import type { AccountingPanelView } from "@/lib/connectors/panel";
 import type { CrmPanelView } from "@/lib/connectors/crm-review";
 
@@ -190,5 +196,50 @@ describe("the organisation pick after Xero", () => {
     expect(radios.map((radio) => radio.value)).toEqual(["tenant-1", "tenant-2"]);
     expect(radios.map((radio) => labelFor(markup, radio.id))).toEqual(["Demo Company (Global)", "Northstar Studio Pte Ltd"]);
     expect(radios.every((radio) => radio.name === "organisation" && "required" in radio)).toBe(true);
+  });
+});
+
+const anyConnectPage = async (provider: ProviderId, query: Record<string, string> = {}) => {
+  const searchParams = Promise.resolve(query);
+  if (provider === "pipedrive") return renderToStaticMarkup(await PipedriveConnectPage({ searchParams }));
+  if (provider === "asana") return renderToStaticMarkup(await AsanaConnectPage({ searchParams }));
+  return connectPage(provider, query);
+};
+
+const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+describe.each(["xero", "quickbooks", "hubspot", "pipedrive", "asana"] as const)("the %s connect page's statement", (provider) => {
+  it("posts the version it shows, inside the form", async () => {
+    memberships.value = [workspace("acme")];
+    const form = (await anyConnectPage(provider)).match(/<form[^>]*>[^]*?<\/form>/)?.[0] ?? "";
+    expect(form).toContain(`action="/api/integrations/${provider}/connect"`);
+    expect(inputs(form).filter((input) => input.name === "consent_version")).toEqual([
+      expect.objectContaining({ type: "hidden", name: "consent_version", value: CONSENT_VERSIONS[provider] }),
+    ]);
+  });
+
+  it("links the model provider's API terms and privacy policy on the line that names it, and nowhere else", async () => {
+    memberships.value = [workspace("acme")];
+    const markup = await anyConnectPage(provider);
+    const terms = `<a href="${escape(HOSTED_MODEL_PROVIDER.terms)}" target="_blank" rel="noopener noreferrer"[^>]*>API terms</a>`;
+    const privacy = `<a href="${escape(HOSTED_MODEL_PROVIDER.privacy)}" target="_blank" rel="noopener noreferrer"[^>]*>privacy policy</a>`;
+    const naming = consentStatement(provider).filter(namesModelProvider);
+    // Every tool whose facts the agent decides on names it; Asana's statement does not.
+    expect(naming).toHaveLength(provider === "asana" ? 0 : 1);
+    expect(markup.match(new RegExp(terms, "g")) ?? []).toHaveLength(naming.length);
+    expect(markup.match(new RegExp(privacy, "g")) ?? []).toHaveLength(naming.length);
+    for (const line of naming) {
+      const item = markup.match(/<li>([^]*?)<\/li>/g)?.find((li) => li.replace(/&#x27;/g, "'").includes(line)) ?? "";
+      expect(item).toMatch(new RegExp(terms));
+      expect(item).toMatch(new RegExp(privacy));
+      expect(item.replace(/<[^>]+>/g, "").replace(/&#x27;/g, "'")).toContain(`Read ${HOSTED_MODEL_PROVIDER.name}'s API terms and privacy policy.`);
+    }
+  });
+
+  it("says the statement changed when the connect route sent the page back, and only then", async () => {
+    memberships.value = [workspace("acme")];
+    const alert = new RegExp(`<p role="alert"[^>]*>${escape(CONSENT_CHANGED)}</p>`);
+    expect(await anyConnectPage(provider, { org: "acme", consent: "changed" })).toMatch(alert);
+    expect(await anyConnectPage(provider, { org: "acme" })).not.toMatch(alert);
   });
 });

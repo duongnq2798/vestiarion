@@ -21,9 +21,9 @@ The connect page has the workspace you came from already picked (if you manage s
 - It reads the deals of the Pipedrive company you connect, with their organizations and persons: titles, values, close dates, pipeline stages, organization names and each person's email. It sees the deals the Pipedrive user who connects can see.
 - Pipedrive tells Vestiarion when a deal changes, and Vestiarion then reads it again from Pipedrive. What a notice says is never used as it is.
 - It writes to Pipedrive only once an owner or admin allows it: then, on each Pipedrive deal planned in Vestiarion, what was collected from payments confirmed on Arc, what is still owed, the last receipt, the reconciliation status and a link to the deal in Vestiarion, in Vestiarion deal fields it creates. It never changes Pipedrive's own deal fields, and never writes payments on Arc testnet or in shadow mode to Pipedrive.
-- They are shown to the workspace's members and to its agent. The agent's model provider may see a deal's facts to decide on its collections, and may not train on them.
+- They are shown to the workspace's members and to its agent. The agent's model provider (DeepSeek, on the hosted service) may see a deal's facts to decide on its collections, under that provider's own API terms. Read DeepSeek's [API terms](https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html) and [privacy policy](https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html).
 - Vestiarion never uses Pipedrive data to train or improve any AI model, and never passes it to anyone else without your workspace's say.
-- Disconnecting uninstalls Vestiarion from your Pipedrive company and stops the reading at once. Deals already planned stay in Vestiarion.
+- Disconnecting stops the reading at once and revokes Vestiarion's access, which, as Pipedrive documents it, uninstalls Vestiarion from your Pipedrive company. Deals already planned stay in Vestiarion.
 
 Tick **I agree**, then choose **Continue to Pipedrive**. Pipedrive asks you to install Vestiarion in your company. It asks for every permission the app needs at once: you allow all of them or none, so there is nothing to tick there. Your agreement, with its date, is kept on the connection and in the workspace's signed ledger.
 
@@ -159,7 +159,7 @@ When Pipedrive refuses Vestiarion's deal fields, each deal's **Receipts in Piped
 
 ## Disconnect
 
-Choose **Disconnect Pipedrive** on the card. Vestiarion stops reading, and writing, at once, uninstalls itself from your Pipedrive company, which removes its webhook, and deletes its tokens. The card says "Pipedrive is disconnected. Deals already planned stay in Vestiarion." What it wrote stays in Pipedrive, in its fields. Deals already planned stay in Vestiarion, with their receivables. The ledger records `accounting_disconnected`.
+Choose **Disconnect Pipedrive** on the card. Vestiarion stops reading, and writing, at once, revokes its access, which, as Pipedrive documents it, uninstalls Vestiarion from your Pipedrive company and so removes its webhook, and deletes its tokens. The card says "Pipedrive is disconnected. Deals already planned stay in Vestiarion." What it wrote stays in Pipedrive, in its fields. Deals already planned stay in Vestiarion, with their receivables. The ledger records `accounting_disconnected`.
 
 ## Not in this version
 

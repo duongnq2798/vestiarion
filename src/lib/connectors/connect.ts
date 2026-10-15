@@ -17,9 +17,11 @@ import { attachPending, pendingChoice, saveTokens } from "./token-store";
  * Connecting a workspace to an accounting provider (docs/superpowers/specs/2026-10-12-xero-connector-design.md X3, X4,
  * X12), for any provider: the person picks the workspace and agrees on the connect page, which posts here; they go to
  * the provider with a signed state whose nonce is also in an HttpOnly cookie; on the way back the state, the cookie,
- * the person, their membership and role, and their consent are all checked again before the code is exchanged. One
- * organisation is connected at once; several are offered on the connect page, the tokens kept as a pending grant for
- * ten minutes. Every way back lands on Settings (`?<provider>=<outcome>#<provider>`) or the connect page.
+ * the person, their membership and role, and their consent are all checked again before the code is exchanged. The
+ * consent recorded is the version the page showed, posted with the form; a page older than the current words is
+ * refused and shown again (`?consent=changed`). One organisation is connected at once; several are offered on the
+ * connect page, the tokens kept as a pending grant for ten minutes. Every way back lands on Settings
+ * (`?<provider>=<outcome>#<provider>`) or the connect page.
  */
 
 export interface ConnectDeps {
@@ -112,6 +114,13 @@ export async function startConnect(request: Request, deps: ConnectDeps): Promise
   const membership = await manager(slug, user.id);
   if (!membership) return redirect(connectPage(deps, { org: slug, error: "forbidden" }));
   if (text(form, "consent") !== "yes") return redirect(connectPage(deps, { org: slug, consent: "missing" }));
+  // Allowing writes is the person's own choice on the connect page, offered only by a provider that writes on it.
+  const write = deps.allowWrites !== undefined && text(form, "write") === "yes";
+  // The version is the one the page showed: words changed since it loaded are shown again, never agreed to unread.
+  const version = CONSENT_VERSIONS[deps.provider.id];
+  if (text(form, "consent_version") !== version) {
+    return redirect(connectPage(deps, { org: slug, consent: "changed", ...(write ? { write: "1" } : {}) }));
+  }
   try {
     await withOrg(
       membership.orgId,
@@ -128,9 +137,7 @@ export async function startConnect(request: Request, deps: ConnectDeps): Promise
 
   const now = (deps.now ?? Date.now)();
   const nonce = newNonce();
-  const consent: Consent = { version: CONSENT_VERSIONS[deps.provider.id], at: new Date(now).toISOString() };
-  // Allowing writes is the person's own choice on the connect page, offered only by a provider that writes on it.
-  const write = deps.allowWrites !== undefined && text(form, "write") === "yes";
+  const consent: Consent = { version, at: new Date(now).toISOString() };
   const state = connectState({ provider: deps.provider.id, org: membership.orgId, user: user.id, nonce, consent, write }, deps.keys ?? masterKeysFromEnv(), now);
   return redirect(deps.provider.authorizeUrl({ state, redirectUri: redirectUri(deps), write }), cookie(deps, nonce, STATE_TTL_MS / 1000));
 }

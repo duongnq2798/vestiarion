@@ -1,8 +1,8 @@
 import { Clock, Link2, Lock } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ConnectorConsent } from "@/components/ConnectorConsent";
 import { Button } from "@/components/ui/Button";
-import { Callout } from "@/components/ui/Callout";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { NativeCheckbox, NativeRadioGroup } from "@/components/ui/NativeChoice";
 import { BrandMark, PROVIDER_MARKS } from "@/components/vx/BrandMarks";
@@ -11,7 +11,7 @@ import { accountingProviderOn } from "@/lib/accounting-providers";
 import { membershipsOf } from "@/lib/auth/membership";
 import { can } from "@/lib/auth/roles";
 import { verifySession } from "@/lib/auth/session";
-import { CONSENT_LABEL, consentStatement } from "@/lib/connectors/consent";
+import { CONSENT_LABEL } from "@/lib/connectors/consent";
 import { PROVIDER_LABELS, PROVIDER_WORDS, type AccountingProviderId } from "@/lib/connectors/provider";
 import { pendingChoice } from "@/lib/connectors/token-store";
 import { withOrg } from "@/lib/dal/scope";
@@ -170,13 +170,7 @@ export async function AccountingConnect({ provider, searchParams }: { provider: 
                     }))}
                   />
                 )}
-                <Callout title={`What Vestiarion does with ${label}'s data`}>
-                  <ul className="list-disc space-y-1 pl-5">
-                    {consentStatement(provider).map((line) => (
-                      <li key={line}>{line}</li>
-                    ))}
-                  </ul>
-                </Callout>
+                <ConnectorConsent provider={provider} title={`What Vestiarion does with ${label}'s data`} changed={one(params.consent) === "changed"} />
                 <NativeCheckbox
                   name="consent"
                   value="yes"

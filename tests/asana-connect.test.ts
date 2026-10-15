@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { finishConnect, startConnect, type ConnectDeps } from "@/lib/connectors/connect";
+import { CONSENT_VERSIONS } from "@/lib/connectors/consent";
 import { NotSetUpError } from "@/lib/connectors/connections";
 import { connectState, readConnectState } from "@/lib/connectors/state";
 import { asanaProvider } from "@/lib/asana/provider";
@@ -84,7 +85,7 @@ function world(respond: (sent: RecordedRequest) => FakeReply | undefined = () =>
 
 const location = (response: Response) => new URL(response.headers.get("location") ?? "", ORIGIN);
 const form = (fields: Record<string, string>) =>
-  new Request(`${ORIGIN}/api/integrations/asana/connect`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", origin: ORIGIN }, body: new URLSearchParams(fields).toString() });
+  new Request(`${ORIGIN}/api/integrations/asana/connect`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", origin: ORIGIN }, body: new URLSearchParams({ consent_version: CONSENT_VERSIONS.asana, ...fields }).toString() });
 const callback = (query: Record<string, string>, nonce: string | null) =>
   new Request(`${ORIGIN}/api/integrations/asana/callback?${new URLSearchParams(query).toString()}`, { headers: nonce ? { cookie: `vx_asana_oauth=${nonce}` } : {} });
 const signed = () => connectState({ provider: "asana", org: ORG, user: USER, nonce: NONCE, consent: CONSENT }, keys(), NOW);

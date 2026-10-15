@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { finishConnect, startConnect, type ConnectDeps } from "@/lib/connectors/connect";
+import { CONSENT_VERSIONS } from "@/lib/connectors/consent";
 import type { AccountingProvider, ExternalOrganisation } from "@/lib/connectors/provider";
 import { connectState, readConnectState } from "@/lib/connectors/state";
 import { quickBooksProvider } from "@/lib/quickbooks/provider";
@@ -99,7 +100,7 @@ function form(fields: Record<string, string>, origin: string | null = ORIGIN): R
   return new Request(`${ORIGIN}/api/integrations/quickbooks/connect`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded", ...(origin ? { origin } : {}) },
-    body: new URLSearchParams(fields).toString(),
+    body: new URLSearchParams({ consent_version: CONSENT_VERSIONS.quickbooks, ...fields }).toString(),
   });
 }
 
@@ -123,7 +124,7 @@ describe("startConnect for QuickBooks", () => {
     expect(`${to.origin}${to.pathname}`).toBe("https://appcenter.intuit.com/connect/oauth2");
     expect(to.searchParams.get("redirect_uri")).toBe(`${ORIGIN}/api/integrations/quickbooks/callback`);
     const state = readConnectState(to.searchParams.get("state") ?? "", keys(), NOW);
-    expect(state).toMatchObject({ provider: "quickbooks", org: ORG, user: USER, consent: { version: "quickbooks-2026-10-12", at: "2026-10-12T08:00:00.000Z" } });
+    expect(state).toMatchObject({ provider: "quickbooks", org: ORG, user: USER, consent: { version: "quickbooks-2026-10-15", at: "2026-10-12T08:00:00.000Z" } });
     const cookie = response.headers.get("set-cookie") ?? "";
     expect(cookie).toContain(`vx_quickbooks_oauth=${state?.nonce}`);
     expect(cookie).toContain("Path=/api/integrations/quickbooks");
