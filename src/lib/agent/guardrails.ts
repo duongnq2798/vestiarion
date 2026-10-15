@@ -79,7 +79,7 @@ export interface ApGuardrailInput {
    * For the first payment to the counterparty's address in a live workspace: whether two different parties stand
    * behind the address (new payee check N3). Null or absent for a payment that is not a first, or in a sandbox.
    */
-  newPayee?: { twoParties: boolean } | null;
+  newPayee?: { twoParties: boolean; unanswered?: boolean } | null;
   /**
    * The workspace's figure above which a payment needs two people's approval (two approvals T3), in USDC; null or absent
    * when none is set. `amount` is weighed against it, a EURC payment's USDC value included.
@@ -269,14 +269,19 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       reasoning: `${input.reasoning} [guardrail override: the three-way match is incomplete: ${gaps} — ${verb} refused before execution; it waits for the details in Approvals]`,
     };
   }
-  // The first payment to an address one party alone stands behind (new payee check N3): code never makes it. A person
-  // other than whoever gave the address approves it, and after that the agent pays the address on its own.
+  // The first payment to an address two different people do not stand behind yet (new payee check N3): code never makes
+  // it. For one a member gave or asked for, a person other than them approves it; for one no member answers for alone
+  // (sent on GitHub, or with no giver named), one member confirms it and a different one approves it. After that the
+  // agent pays the address on its own.
   if (input.newPayee && !input.newPayee.twoParties) {
+    const why = input.newPayee.unanswered
+      ? `no member answers for this address alone — ${verb} refused before execution; one member confirms it and a different one approves it`
+      : `only one person stands behind it — ${verb} refused before execution; another person approves it`;
     return {
       blocked: true,
       status: "held",
       rule: "counterparty.new_payee",
-      reasoning: `${input.reasoning} [guardrail override: this is the first payment to this address, and only one person stands behind it — ${verb} refused before execution; another person approves it]`,
+      reasoning: `${input.reasoning} [guardrail override: this is the first payment to this address, and ${why}]`,
     };
   }
   // A EURC payable with no quote has no USDC value, so its limit cannot be

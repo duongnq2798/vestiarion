@@ -2584,7 +2584,7 @@ describe("approveAndPay and the first payment to an address sent through a payee
     expect(payInvoiceMock).not.toHaveBeenCalled();
   });
 
-  it("refuses the member a GitHub bounty acts as for an address sent with /payto, in its own words", async () => {
+  it("refuses the member a GitHub bounty acts as, like anyone, an address sent with /payto that no other member confirmed", async () => {
     live();
     payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 0 });
     const pull = "https://github.com/acme/app/pull/42";
@@ -2596,10 +2596,10 @@ describe("approveAndPay and the first payment to an address sent through a payee
     });
 
     await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toThrow(
-      "This address came through a GitHub bounty that acts as you, so someone else must approve its first payment."
+      "Someone else must confirm this address on Counterparties before its first payment."
     );
     const [row] = await run(() => listWaitingPayables());
-    expect(row).toMatchObject({ firstPaymentAddressBy: ACTOR, firstPaymentVia: "github" });
+    expect(row).toMatchObject({ firstPaymentAddressBy: ACTOR, firstPaymentVia: "github", firstPaymentUnanswered: true, firstPaymentLeftOut: [] });
   });
 
   it("lets another approver pay it, and records that it was the address's first payment", async () => {
@@ -2760,15 +2760,55 @@ describe("approveAndPay and an address no member answers for alone", () => {
     expect(append.p_detail).not.toHaveProperty("addressGiverApproved");
   });
 
-  it("leaves out both whoever confirmed it and the member the bounty acts as, when someone else typed the bounty", async () => {
+  it("leaves out exactly whoever confirmed it, so the member the bounty acts as pays it when someone else typed the bounty", async () => {
     live();
     const typedByMaintainer = selfBounty(ACTOR, "maintainer");
     await expect(approvalsFake({ addressEntries: typedByMaintainer }).run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toThrow(
       "You confirmed this address, so someone else must approve its first payment."
     );
-    await expect(approvalsFake({ addressEntries: typedByMaintainer }).run(() => approveAndPay({ actorId: CONNECTOR, invoiceId: INVOICE_ID }))).rejects.toThrow(
-      "This address came through a GitHub bounty that acts as you, so someone else must approve its first payment."
+    // Two different members stand behind it: one confirmed it, the other approves it. Two approvers never deadlock.
+    const { fake, run } = approvalsFake({ addressEntries: typedByMaintainer });
+    expect((await run(() => approveAndPay({ actorId: CONNECTOR, invoiceId: INVOICE_ID }))).status).toBe("paid");
+    expect(rpcBodies(fake.requests, "sole_approver")).toHaveLength(0);
+    expect(rpcBodies(fake.requests, "append_ledger_entry")[0].p_detail).not.toHaveProperty("addressGiverApproved");
+  });
+
+  it("refuses an approver who sent their own wallet with /payto and never confirmed it, though their approval would confirm it", async () => {
+    live();
+    // X (ACTOR) self-bountied and sent their wallet with /payto; no one confirmed it; another member entered the invoice.
+    const unconfirmed = selfBounty(ACTOR).slice(1);
+    const { fake, run } = approvalsFake({ addressEntries: unconfirmed });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID, shownAddress: "0xdead" }))).rejects.toThrow(
+      "Someone else must confirm this address on Counterparties before its first payment."
     );
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    // Nothing confirms the address on the way.
+    expect(fake.requests.filter((r) => r.path === "/rest/v1/counterparties" && r.method === "PATCH")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    // Any other member is refused alike until someone confirms it on Counterparties.
+    await expect(approvalsFake({ addressEntries: unconfirmed }).run(() => approveAndPay({ actorId: MEMBER_Y, invoiceId: INVOICE_ID }))).rejects.toThrow(
+      "Someone else must confirm this address on Counterparties before its first payment."
+    );
+  });
+
+  it("lets whoever confirmed it record a transfer already sent, which pays the address nothing new", async () => {
+    live();
+    const sent = [{ source_id: INVOICE_ID, status: "confirmed", provider_tx_id: "circle-tx-1", last_error: null }];
+    const { fake, run } = approvalsFake({ addressEntries: selfBounty(ACTOR), intents: sent });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).resolves.toMatchObject({ status: "paid" });
+    expect(rpcBodies(fake.requests, "sole_approver")).toHaveLength(0);
+  });
+
+  it("lets the workspace's only approver pay an address no one else confirmed, and the ledger says so", async () => {
+    live();
+    const { fake, run } = approvalsFake({ addressEntries: selfBounty(ACTOR).slice(1), soleApprover: { body: true } });
+
+    expect((await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).status).toBe("paid");
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toMatchObject({ by: ACTOR, firstPayment: true, addressGiverApproved: true });
+    expect(append.p_summary).toContain(ADDRESS_GIVER_NOTE);
   });
 
   it("leaves whoever confirmed it out of the two approvals, and says so on the listing", async () => {

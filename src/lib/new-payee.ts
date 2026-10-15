@@ -14,11 +14,14 @@
  * bounty acts as. Otherwise one admin could ask for an address, send their own wallet through it, confirm it, and have
  * the agent make its first payment alone. That member is read from the workspace's own signed entries.
  *
- * Some addresses no member answers for alone: one sent with `/payto` on GitHub, since every bounty acts as the member
- * who connected GitHub whoever typed it, and a GitHub login is tied to no member; and one whose giver no entry names.
- * For those, no confirmation counts as a second party, so the agent holds the first payment, and whoever confirmed the
- * address is left out of approving it beside whoever gave it (`membersLeftOut`): two different members stand behind
- * it, unless the workspace has only one approver.
+ * Some addresses no member answers for alone (`unanswered`): one sent with `/payto` on GitHub, since every bounty acts
+ * as the member who connected GitHub whoever typed it, and a GitHub login is tied to no member; and one whose giver no
+ * entry names. For those the rule is exactly two different members: one confirms the address on Counterparties, and a
+ * different one approves its first payment. So no confirmation counts as a second party, and the agent holds it; the
+ * members who confirmed it are left out of approving it (`membersLeftOut`); and one approver alone is refused until
+ * another member's confirmation is recorded, since an approval's own confirmation never counts (`firstPaymentRefusal`).
+ * The workspace's only approver may still pay it. An address no entry records at all, written outside the ledger, can
+ * never show a confirmation: it is held for a person as before, and no one is left out for it.
  */
 
 /** The giver of an address the payee sent, through a payee link or GitHub, rather than a member. */
@@ -84,11 +87,19 @@ function askedBy(set: Entry, entries: ReadonlyArray<Entry>): AskedBy {
 
 const sameLogin = (a: unknown, b: unknown) => typeof a === "string" && typeof b === "string" && a.length > 0 && a.toLowerCase() === b.toLowerCase();
 
+type Provenance = { addressBy: string | null; confirmers: string[] } & AskedBy;
+
 /**
  * Who gave `address` and who confirmed it since, from the counterparty's entries newest first (N2); for an address the
  * payee sent, also the member who asked for it, when one can be named.
  */
-export function addressProvenance(address: string, entries: ReadonlyArray<Entry>): { addressBy: string | null; confirmers: string[] } & AskedBy {
+export function addressProvenance(address: string, entries: ReadonlyArray<Entry>): Provenance {
+  const { addressBy, confirmers, linkCreatedBy, bountyBy } = provenanceOf(address, entries);
+  return { addressBy, confirmers, ...(linkCreatedBy ? { linkCreatedBy } : {}), ...(bountyBy ? { bountyBy } : {}) };
+}
+
+/** `addressProvenance`, and whether an entry records who set the address at all (`recorded`). */
+function provenanceOf(address: string, entries: ReadonlyArray<Entry>): Provenance & { recorded: boolean } {
   const confirmers: string[] = [];
   for (const entry of entries) {
     if (entry.action === "counterparty_address_confirmed") {
@@ -99,13 +110,15 @@ export function addressProvenance(address: string, entries: ReadonlyArray<Entry>
     if (!SET_ADDRESS.has(entry.action)) continue;
     // The newest entry that set an address: if it is not this one, something outside the ledger wrote it.
     const set = entry.action === "create_counterparty" ? entry.detail.address : entry.detail.to;
-    if (!same(set, address)) return { addressBy: null, confirmers: [] };
+    if (!same(set, address)) return { addressBy: null, confirmers: [], recorded: false };
     // The payee's own, sent through a payee link or GitHub; otherwise the member who typed it, or no one known.
-    if (entry.detail.via === "mirror") return { addressBy: MIRROR, confirmers };
+    if (entry.detail.via === "mirror") return { addressBy: MIRROR, confirmers, recorded: true };
     const fromPayee = entry.detail.via === "github" || entry.detail.via === "payee_link";
-    return fromPayee ? { addressBy: PAYEE, confirmers, ...askedBy(entry, entries) } : { addressBy: member(entry.detail.by), confirmers };
+    return fromPayee
+      ? { addressBy: PAYEE, confirmers, ...askedBy(entry, entries), recorded: true }
+      : { addressBy: member(entry.detail.by), confirmers, recorded: true };
   }
-  return { addressBy: null, confirmers: [] };
+  return { addressBy: null, confirmers: [], recorded: false };
 }
 
 /** What the check answers for a payment to an address (N1–N3, N6). */
@@ -119,10 +132,15 @@ export interface NewPayeeCheck {
   bountyBy?: string;
   confirmedBy: string | null;
   /**
-   * For a first payment to an address no member answers for alone (sent on GitHub, or with no giver named): every member
-   * who confirmed it, left out of approving it. Absent otherwise.
+   * For a first payment to an address no member answers for alone: every member who confirmed it, left out of approving
+   * it. Absent otherwise, and when no one has confirmed it.
    */
   confirmersLeftOut?: string[];
+  /**
+   * A first payment to an address no member answers for alone: sent on GitHub, or with no giver named, though an entry
+   * records who set it. Two different members stand behind it: one who confirmed it, and another who approves it.
+   */
+  unanswered?: true;
   twoParties: boolean;
 }
 
@@ -140,10 +158,34 @@ export function addressGiver(check: Pick<NewPayeeCheck, "addressBy" | "linkCreat
  * address no member answers for alone, whoever confirmed it. Approve and pay, Pay now and the two approvals all leave
  * them out, unless one of them is the workspace's only approver.
  */
-export function membersLeftOut(check: Pick<NewPayeeCheck, "addressBy" | "linkCreatedBy" | "bountyBy" | "confirmersLeftOut"> | null | undefined): string[] {
+export function membersLeftOut(
+  check: Pick<NewPayeeCheck, "addressBy" | "linkCreatedBy" | "bountyBy" | "confirmersLeftOut" | "unanswered"> | null | undefined
+): string[] {
   if (!check) return [];
+  // No member answers for it: exactly whoever confirmed it, the member a bounty acts as included only if they did.
+  if (check.unanswered) return [...new Set(check.confirmersLeftOut ?? [])];
   const giver = addressGiver(check);
-  return [...new Set([...(giver ? [giver] : []), ...(check.confirmersLeftOut ?? [])])];
+  return giver ? [giver] : [];
+}
+
+/** The refusal of a confirmer of an address no member answers for, and of anyone while no other member confirmed it. */
+const CONFIRMED_IT = "You confirmed this address, so someone else must approve its first payment.";
+const CONFIRM_FIRST = "Someone else must confirm this address on Counterparties before its first payment.";
+
+/**
+ * Why this person may not approve this first payment on their own approval alone (N4), or null when they may: they gave
+ * the address or asked for it; or, for an address no member answers for, they confirmed it, or no other member has
+ * confirmed it yet. Read before the approval, whose own confirmation of the address never counts. The workspace's only
+ * approver may still approve it.
+ */
+export function firstPaymentRefusal(check: NewPayeeCheck | null | undefined, actorId: string): string | null {
+  if (!check) return null;
+  if (check.unanswered) {
+    const confirmers = check.confirmersLeftOut ?? [];
+    if (confirmers.includes(actorId)) return CONFIRMED_IT;
+    return confirmers.length === 0 ? CONFIRM_FIRST : null;
+  }
+  return addressGiver(check) === actorId ? newPayeeSelfMessage(check) : null;
 }
 
 /** How the payee sent an address a member asked for: through a payee link, or on GitHub; null for any other address. */
@@ -159,9 +201,8 @@ export function newPayeeSelfMessage(
   check: Pick<NewPayeeCheck, "addressBy" | "linkCreatedBy" | "bountyBy" | "confirmersLeftOut"> | null | undefined,
   actorId?: string
 ): string {
-  if (actorId !== undefined && check && addressGiver(check) !== actorId && check.confirmersLeftOut?.includes(actorId)) {
-    return "You confirmed this address, so someone else must approve its first payment.";
-  }
+  // Only an address no member answers for alone lists its confirmers, and only they are left out of it.
+  if (actorId !== undefined && check?.confirmersLeftOut?.includes(actorId)) return CONFIRMED_IT;
   switch (askedVia(check)) {
     case "payee_link":
       return "You asked for this address with a payee link, so someone else must approve its first payment.";
@@ -181,7 +222,7 @@ export function newPayeeCheck(input: {
   entries: ReadonlyArray<Entry>;
 }): NewPayeeCheck | null {
   if (!input.address) return null;
-  const { addressBy, confirmers, linkCreatedBy, bountyBy } = addressProvenance(input.address, input.entries);
+  const { addressBy, confirmers, linkCreatedBy, bountyBy, recorded } = provenanceOf(input.address, input.entries);
   const asked = { ...(linkCreatedBy ? { linkCreatedBy } : {}), ...(bountyBy ? { bountyBy } : {}) };
   // The confirmer must be someone other than whoever stands behind the address: for one the payee sent, who asked for it.
   const giver = addressGiver({ addressBy, ...asked });
@@ -189,14 +230,13 @@ export function newPayeeCheck(input: {
   if (input.paidTo.has(input.address.toLowerCase())) {
     return { firstPayment: false, addressBy, ...asked, confirmedBy: other ?? confirmers[0] ?? null, twoParties: true };
   }
-  // No member answers for it alone: sent on GitHub, or no giver named. No confirmation is a second party then, and
-  // whoever confirmed it is left out of approving it.
-  const unanswered = addressBy !== MIRROR && (giver === null || bountyBy !== undefined);
-  const confirmedByOthers = confirmers.filter((by) => by !== giver);
-  const leftOut = unanswered && confirmedByOthers.length > 0 ? { confirmersLeftOut: confirmedByOthers } : {};
+  // No member answers for it alone: sent on GitHub, or no giver named, though an entry records who set it. No
+  // confirmation is a second party then; whoever confirmed it is left out of approving it.
+  const unanswered = recorded && addressBy !== MIRROR && (giver === null || bountyBy !== undefined);
+  const leftOut = unanswered ? { ...(confirmers.length > 0 ? { confirmersLeftOut: confirmers } : {}), unanswered: true as const } : {};
   // A member's confirmation of the payee's own address, when another member asked for it through a payee link, or a
   // second member's of one a member gave: two parties.
-  const twoParties = addressBy === MIRROR || (!unanswered && other !== null);
+  const twoParties = addressBy === MIRROR || (!unanswered && giver !== null && other !== null);
   return { firstPayment: true, addressBy, ...asked, confirmedBy: other ?? confirmers[0] ?? null, ...leftOut, twoParties };
 }
 
@@ -209,6 +249,7 @@ export function newPayeeObserved(check: NewPayeeCheck): {
   linkCreatedBy?: string;
   bountyBy?: string;
   confirmedBy: string | null;
+  unanswered?: true;
   twoParties: boolean;
 } {
   return {
@@ -216,6 +257,7 @@ export function newPayeeObserved(check: NewPayeeCheck): {
     ...(check.linkCreatedBy ? { linkCreatedBy: check.linkCreatedBy } : {}),
     ...(check.bountyBy ? { bountyBy: check.bountyBy } : {}),
     confirmedBy: check.confirmedBy,
+    ...(check.unanswered ? { unanswered: true as const } : {}),
     twoParties: check.twoParties,
   };
 }

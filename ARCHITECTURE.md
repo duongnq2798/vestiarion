@@ -403,24 +403,30 @@ payment to an address.
   payment alone.
 - **Addresses no member answers for alone:** one sent with `/payto` (a GitHub login is tied to no member, and every
   `/bounty` acts as the member who connected GitHub, whoever typed it), and one whose giver no entry names
-  (`addressGiver` null). For these, no confirmation counts as a second party, so the agent holds the first payment, and
-  the members who confirmed the address are carried as `confirmersLeftOut`. A bounty whose `login` (who typed it) is
-  its pull request's `author` names no member. `membersLeftOut` (the giver, and those confirmers) is who Approve and
-  pay, Pay now and both two-approvals lists leave out, so the first payment rests on two different members unless one
-  is the workspace's only approver.
+  (`addressGiver` null), though an entry records who set it (`unanswered`). For these, no confirmation counts as a
+  second party, so the agent holds the first payment, and it rests on exactly two different members: one confirms the
+  address, and another approves it. The members who confirmed it are carried as `confirmersLeftOut`, and
+  `membersLeftOut` is exactly them (for any other address, the giver): who Approve and pay, Pay now and both
+  two-approvals lists leave out. `firstPaymentRefusal` also refuses one approver alone while no member's confirmation is
+  on record, read before the approval, whose own confirmation of the address never counts. The member a bounty acts as
+  is not left out. A bounty whose `login` (who typed it) is its pull request's `author` names no member. An address no
+  entry records at all is held for a person, and no one is left out for it.
 - **Where it applies:** wherever payments are real, meaning the chain provider is live. Real payments follow readable
   Circle credentials, not `orgs.mode`.
 - **The agent's side:** the cycle passes the AP and contractor stages the facts (`loadNewPayeeFacts`,
   `src/lib/new-payee-facts.ts`; `firstPaymentFrom` for a release). Code holds a first payment one party alone stands
   behind as `counterparty.new_payee`.
-- **A person's side:** Approve and pay, and Pay now on a milestone, refuse anyone in `membersLeftOut` unless they are
-  the sole approver, in words that say which (`newPayeeSelfMessage`): they gave it, asked for it with a link or a
-  bounty, or confirmed it. The Approvals card (`firstPaymentConfirmers`) and the milestone's two approvals
-  (`leftOutWhy`) say the same. The sole approver's payment records `addressGiverApproved: true` and says so in its
-  summary (`ADDRESS_GIVER_NOTE`). Confirmed payments are read a page at a time (`PAYMENT_PAGE`), and the invoices and
-  milestones they paid by id in chunks (`ID_CHUNK`), so PostgREST's row cap never drops one.
+- **A person's side:** Approve and pay, and Pay now on a milestone, refuse whoever `firstPaymentRefusal` names unless
+  they are the sole approver, in words that say why: they gave it or asked for it with a link (`newPayeeSelfMessage`),
+  they confirmed an address no member answers for alone, or no one has confirmed it yet. The Approvals card
+  (`firstPaymentConfirmers`, `firstPaymentUnanswered`) and the milestone's two approvals (`leftOutWhy`) say the same,
+  and "Who can act" (`whoCanAct`, on Approvals, Bills and the overdue email) leaves out `membersLeftOut`. The sole
+  approver's payment records `addressGiverApproved: true` and says so in its summary (`ADDRESS_GIVER_NOTE`). Recording
+  a transfer already sent asks no first-payment question. Confirmed payments and address entries are read a page at a
+  time (`PAYMENT_PAGE`), and the invoices and milestones paid by id in chunks (`ID_CHUNK`), so PostgREST's row cap
+  never drops one.
 - **Recorded:** a decision on a first payment records `observed.newPayee` through `newPayeeObserved`:
-  `{ addressBy, linkCreatedBy?, bountyBy?, confirmedBy, twoParties }`. The decision trail and the evidence page say
+  `{ addressBy, linkCreatedBy?, bountyBy?, confirmedBy, unanswered?, twoParties }`. The decision trail and the evidence page say
   when a payee link brought the address in, and the evidence page names who created the link.
 - **Afterwards:** the follow-up (`newPayeeFollowUp`) reopens a payable held this way once that payee has been paid at
   its address, or two parties stand behind it.

@@ -185,7 +185,7 @@ describe("what a held milestone waits for", () => {
     const reason = heldReason(facts({ lastEntry: { action: "milestone_release", detail: { guardrailBlocked: true, guardrailRule: "counterparty.new_payee" } } }));
     expect(reason).toMatchObject({ kind: "new_payee", hint: "First payment to a new address", canPay: true, canClose: true, override: true });
     expect(reason.text).toBe(
-      "This would be the first payment to Puka Hotel at this address, and only one person stands behind it. Someone other than whoever gave the address, or asked for it with a payee link or a GitHub bounty, pays it now; if you are the only person here who can approve payments, pay it yourself with Pay now. After that, the agent pays Puka Hotel at this address on its own."
+      "This would be the first payment to Puka Hotel at this address, and only one person stands behind it. Someone other than whoever gave the address, or asked for it with a payee link, pays it now; for an address sent on GitHub, one member confirms it on Counterparties and a different one pays it. If you are the only person here who can approve payments, pay it yourself with Pay now. After that, the agent pays Puka Hotel at this address on its own."
     );
   });
 
@@ -806,6 +806,26 @@ describe("Pay now and an address no member answers for alone", () => {
     expect(alone.fake.requests.some((request) => request.path === "/rest/v1/rpc/sole_approver")).toBe(true);
     expect(alone.ledger()[0].p_detail).toMatchObject({ firstPayment: true, addressGiverApproved: true });
     expect(alone.ledger()[0].p_summary).toContain(ADDRESS_GIVER_NOTE);
+  });
+
+  it("lets the member the bounty acts as pay it once someone else confirmed it: two different members", async () => {
+    live();
+    releaseHeldMilestoneMock.mockResolvedValue(PAID);
+    const { run } = world({ intent: null, last: heldAsNewPayee, addressEntries: selfBounty(ACTOR) });
+    expect((await run(() => payHeldMilestone({ actorId: CONNECTOR, milestoneId: MILESTONE }))).status).toBe("paid");
+  });
+
+  it("refuses anyone but the only approver when no entry says who confirmed it, though its row reads confirmed", async () => {
+    live();
+    releaseHeldMilestoneMock.mockResolvedValue(PAID);
+    // The confirmation's own entry never landed: no member can be named as the second one, so no one pays it alone.
+    const { run, claimed } = world({ intent: null, last: heldAsNewPayee, addressEntries: selfBounty(ACTOR).slice(1) });
+    const refused = run(() => payHeldMilestone({ actorId: MEMBER_Y, milestoneId: MILESTONE }));
+    await expect(refused).rejects.toThrow("Someone else must confirm this address on Counterparties before its first payment.");
+    expect(claimed()).toBe(false);
+    const alone = world({ intent: null, last: heldAsNewPayee, addressEntries: selfBounty(ACTOR).slice(1), soleApprover: { body: true } });
+    expect((await alone.run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))).status).toBe("paid");
+    expect(alone.ledger()[0].p_detail).toMatchObject({ firstPayment: true, addressGiverApproved: true });
   });
 
   it("leaves whoever confirmed it out of the two approvals, with the words Pay now would refuse them in", async () => {

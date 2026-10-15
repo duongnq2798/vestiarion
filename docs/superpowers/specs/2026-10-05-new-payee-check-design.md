@@ -47,6 +47,12 @@ Addresses that come from outside the console already wait for a person: one sent
     no entry names, no confirmation counts as a second party (N3), and the members who confirmed it are left out of
     approving its first payment beside its giver (N4), unless they are the sole approver. A bounty typed by its own pull
     request's author names no member.
+  - Amended 2026-10-15 (independent review, round 3): for such an address the rule is exactly two different members:
+    one confirms it on Counterparties, and a different one approves its first payment. Whoever confirmed it is left out,
+    and the member a bounty acts as is not, so two approvers are never both left out. An approval that would confirm the
+    address itself never counts: while no member's confirmation is on record, one approver alone is refused ("Someone
+    else must confirm this address on Counterparties before its first payment."), unless they are the sole approver.
+    N6's record adds `unanswered: true`.
 - **N3. Two parties before the agent pays a new address.**
   - The agent makes a first payment on its own only when two different parties stand behind the address: the payee
     gave it and a member confirmed it, or one member gave it and another member confirmed it.

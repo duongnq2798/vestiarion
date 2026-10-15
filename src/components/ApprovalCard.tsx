@@ -389,14 +389,23 @@ export function payBlockedReason(payable: WaitingPayable, viewerId: string, ownE
           : null;
 }
 
-/** Whether the viewer is left out of the first payment to this address: they gave it, asked for it, or confirmed it (N4). */
+/**
+ * Whether the viewer may not pay the first payment to this address alone (N4): they gave it or asked for it; or, for one
+ * no member answers for alone, they confirmed it, or no other member has confirmed it yet.
+ */
 function leftOutForAddress(payable: WaitingPayable, viewerId: string): boolean {
-  return payable.firstPaymentAddressBy === viewerId || (payable.firstPaymentConfirmers?.includes(viewerId) ?? false);
+  if (payable.firstPaymentUnanswered) {
+    const confirmers = payable.firstPaymentConfirmers ?? [];
+    return confirmers.length === 0 || confirmers.includes(viewerId);
+  }
+  return payable.firstPaymentAddressBy === viewerId;
 }
 
-/** Why the viewer may not pay the first payment to this address alone: they gave it, asked the payee for it, or confirmed it (N4). */
+/** Why the viewer may not pay the first payment to this address alone, as Approve and pay refuses them (N4). */
 function gaveAddressReason(payable: WaitingPayable, viewerId: string): string {
-  if (payable.firstPaymentAddressBy !== viewerId && payable.firstPaymentConfirmers?.includes(viewerId)) return "You confirmed this address";
+  if (payable.firstPaymentUnanswered) {
+    return payable.firstPaymentConfirmers?.includes(viewerId) ? "You confirmed this address" : "Another member must confirm this address first";
+  }
   return payable.firstPaymentVia === "payee_link"
     ? "You asked for this address with a payee link"
     : payable.firstPaymentVia === "github"

@@ -126,6 +126,21 @@ describe("loadNewPayeeFacts", () => {
     expect(chunks.reduce((sum, size) => sum + size, 0)).toBe(PAYMENT_PAGE + 1);
   });
 
+  it("reads every page of address entries, newest first, so the row cap never drops the entry that set the address", async () => {
+    // A thousand confirmations of an older address, then, on the second page, the entry that set it: none is dropped.
+    const confirmations = Array.from({ length: PAYMENT_PAGE }, () => ({ action: "counterparty_address_confirmed", detail: { by: "bao", counterpartyId: "cp-1", address: "0x2" } }));
+    const paged = fake((request) => {
+      if (request.path !== "/rest/v1/ledger_entries") return undefined;
+      return { body: request.params.get("offset") === "0" ? confirmations : [{ action: "create_counterparty", detail: { by: "anna", counterpartyId: "cp-1", address: "0x2" } }] };
+    });
+    const facts = await load(paged, ["cp-1"]);
+    expect(facts.entries.get("cp-1")).toHaveLength(PAYMENT_PAGE + 1);
+    expect(newPayeeCheckFor(facts, { id: "cp-1", address: "0x2" })).toMatchObject({ addressBy: "anna", confirmedBy: "bao", twoParties: true });
+    const pages = paged.requests.filter((request) => request.path === "/rest/v1/ledger_entries");
+    expect(pages.map((request) => request.params.get("offset"))).toEqual(["0", String(PAYMENT_PAGE)]);
+    expect(pages.every((request) => request.params.get("order") === "seq.desc" && request.params.get("limit") === String(PAYMENT_PAGE))).toBe(true);
+  });
+
   it("asks which payee a payment was for only when a payment was confirmed", async () => {
     const quiet = fake((request) => (request.path === "/rest/v1/payment_intents" ? { body: [] } : undefined));
     const facts = await load(quiet, ["cp-1"]);

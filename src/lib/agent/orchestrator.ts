@@ -1721,7 +1721,7 @@ async function decideApPayable(
     addressChangedAt: counterparty.address_changed_at,
     addressConfirmedAt: counterparty.address_confirmed_at,
     match: { poReference: invoice.po_reference, goodsReceived: invoice.goods_received, purchaseOrderRequired },
-    newPayee: firstPayment ? { twoParties: firstPayment.twoParties } : null,
+    newPayee: firstPayment ? { twoParties: firstPayment.twoParties, ...(firstPayment.unanswered ? { unanswered: true } : {}) } : null,
     currency,
     fxAvailable: !isEurc || fx !== null,
     bridge: crossChain ? { feePercent: isEurc ? 0 : feeRatioPercent, unsupportedToken: isEurc, route, gatewayShort } : null,
@@ -3844,7 +3844,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       } else if (newPayeeHeld) {
         guardrailBlocked = true;
         guardrailRule = "counterparty.new_payee";
-        reasoning += " [guardrail override: this is the first payment to this address, and only one person stands behind it — release refused; another person approves it]";
+        reasoning += firstRelease?.unanswered
+          ? " [guardrail override: this is the first payment to this address, and no member answers for this address alone — release refused; one member confirms it and a different one approves it]"
+          : " [guardrail override: this is the first payment to this address, and only one person stands behind it — release refused; another person approves it]";
       } else if (twoApprovalsHeld) {
         guardrailBlocked = true;
         guardrailRule = TWO_APPROVALS_RULE;

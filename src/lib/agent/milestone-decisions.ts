@@ -3,7 +3,7 @@ import { db } from "../dal";
 import { chainModes, getChainProvider } from "../circle";
 import { payeeNotReady } from "../counterparty-address";
 import { firstPaymentCheck, loadNewPayeeFacts, newPayeeCheckFor } from "../new-payee-facts";
-import { membersLeftOut, newPayeeSelfMessage, type NewPayeeCheck } from "../new-payee";
+import { firstPaymentRefusal, membersLeftOut, newPayeeSelfMessage, type NewPayeeCheck } from "../new-payee";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { listLedgerEntriesForTargets } from "../ledger";
 import type { Provenance } from "../provenance";
@@ -319,7 +319,7 @@ function reasonOf(facts: HeldFacts): Omit<HeldReason, "hint"> {
   if (detail.guardrailRule === "counterparty.new_payee") {
     return {
       kind: "new_payee",
-      text: `This would be the first payment to ${name} at this address, and only one person stands behind it. Someone other than whoever gave the address, or asked for it with a payee link or a GitHub bounty, pays it now; if you are the only person here who can approve payments, pay it yourself with Pay now. After that, the agent pays ${name} at this address on its own.`,
+      text: `This would be the first payment to ${name} at this address, and only one person stands behind it. Someone other than whoever gave the address, or asked for it with a payee link, pays it now; for an address sent on GitHub, one member confirms it on Counterparties and a different one pays it. If you are the only person here who can approve payments, pay it yourself with Pay now. After that, the agent pays ${name} at this address on its own.`,
       link: COUNTERPARTIES,
       canPay: true,
       canClose: true,
@@ -623,9 +623,12 @@ export async function payHeldMilestone(input: {
       soleApprover = true;
     }
   }
-  // A first payment to an address needs someone other than whoever gave it, unless they decide alone (new payee check N4).
-  if (!twoNeeded && membersLeftOut(firstPayment).includes(input.actorId)) {
-    if (!(await isSoleApprover(input.actorId))) raise("new_payee_self", newPayeeSelfMessage(firstPayment, input.actorId));
+  // A first payment to an address needs someone other than whoever it rests on, unless they decide alone (new payee check
+  // N4). One no member answers for alone needs another member's confirmation on record: an address confirmed with no
+  // entry saying who confirmed it names no one, and is paid as one no one confirmed.
+  const refusal = twoNeeded ? null : firstPaymentRefusal(firstPayment, input.actorId);
+  if (refusal) {
+    if (!(await isSoleApprover(input.actorId))) raise("new_payee_self", refusal);
     addressGiverApproved = true;
   }
 

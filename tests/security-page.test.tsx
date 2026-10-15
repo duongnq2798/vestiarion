@@ -496,8 +496,9 @@ describe("claims narrowed to what the code does", () => {
     expect([excludedSlots(2), excludedSlots(1), excludedSlots(0)]).toEqual([0, 1, 2]);
     expect(approvals).toContain("...(soleApprover ? { soleApprover: true } : {}),");
     expect(approvals).toContain("...(fewApprovers ? { fewApprovers: true } : {}),");
-    expect(approvals).toContain("if (membersLeftOut(firstPayment).includes(input.actorId)) {");
-    expect(approvals).toContain('if (!(await isSoleApprover(input.actorId))) throw new ApprovalError("new_payee_self", newPayeeSelfMessage(firstPayment, input.actorId));');
+    expect(approvals).toContain("const refusal = firstPaymentRefusal(firstPayment, input.actorId);");
+    expect(approvals).toContain('if (!(await isSoleApprover(input.actorId))) throw new ApprovalError("new_payee_self", refusal);');
+    expect(approvals).toContain('throw new ApprovalError("new_payee_self", newPayeeSelfMessage(firstPayment, input.actorId));');
     const access = section("access");
     for (const phrase of [
       "refuses the person who created an invoice unless they are the workspace's only owner, admin or approver, or another approver's unused approval of the same amount already stands",
@@ -524,10 +525,15 @@ describe("claims narrowed to what the code does", () => {
     expect(rule).toContain('entry.action === "payee_link_created" && entry.detail.linkId === linkId');
     expect(rule).toContain('entry.action === "github_bounty_attached"');
     expect(rule).toContain("const selfBounty = bounty !== undefined && sameLogin(bounty.detail.login, bounty.detail.author);");
-    // Sent on GitHub, or no one named: no confirmation is a second party, and whoever confirmed it is left out.
-    expect(rule).toContain("const unanswered = addressBy !== MIRROR && (giver === null || bountyBy !== undefined);");
-    expect(rule).toContain("const twoParties = addressBy === MIRROR || (!unanswered && other !== null);");
-    expect(rule).toContain("return [...new Set([...(giver ? [giver] : []), ...(check.confirmersLeftOut ?? [])])];");
+    // Sent on GitHub, or no one named: no confirmation is a second party, exactly whoever confirmed it is left out, and no
+    // one approves it alone before another member confirmed it.
+    expect(rule).toContain("const unanswered = recorded && addressBy !== MIRROR && (giver === null || bountyBy !== undefined);");
+    expect(rule).toContain("const twoParties = addressBy === MIRROR || (!unanswered && giver !== null && other !== null);");
+    expect(rule).toContain("if (check.unanswered) return [...new Set(check.confirmersLeftOut ?? [])];");
+    expect(rule).toContain("return confirmers.length === 0 ? CONFIRM_FIRST : null;");
+    for (const file of ["src/lib/agent/approvals.ts", "src/lib/agent/milestone-decisions.ts"]) {
+      expect(source(file)).toContain("firstPaymentRefusal(firstPayment, input.actorId)");
+    }
     // The ledger says so when the person who gave or asked for the address pays it alone.
     for (const file of ["src/lib/agent/approvals.ts", "src/lib/agent/milestone-decisions.ts"]) {
       expect(source(file)).toContain("...(addressGiverApproved ? { addressGiverApproved: true } : {}),");
@@ -538,7 +544,8 @@ describe("claims narrowed to what the code does", () => {
       "unless they are the workspace's only owner, admin or approver; the ledger entry says so",
       "For an address a payee sends through a payee link, the person who created the link counts as having given it, read from the link's signed entry in the workspace's ledger, or from the link's own record when that entry is missing: their own confirmation is not the second person",
       "A GitHub account is tied to no member, so for an address sent with /payto on a GitHub pull request, and for one no member can be named as having given, no confirmation counts as the second person",
-      "the agent holds the first payment, and whoever confirmed the address cannot approve it, nor can the member the bounty acts as, unless they are the workspace's only owner, admin or approver",
+      "the agent holds the first payment, and two different members stand behind it, one who confirms the address and another who approves the payment",
+      "Whoever confirmed it cannot approve it, and no one approves it before a member has confirmed it, since an approval's own confirmation does not count, unless they are the workspace's only owner, admin or approver.",
       "A bounty typed by its own pull request's author names no member.",
     ]) {
       expect(access, phrase).toContain(phrase);

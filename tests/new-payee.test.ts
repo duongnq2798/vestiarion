@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addressGiver, addressProvenance, membersLeftOut, MIRROR, newPayeeCheck, newPayeeObserved, newPayeeSelfMessage, PAYEE } from "@/lib/new-payee";
+import { addressGiver, addressProvenance, firstPaymentRefusal, membersLeftOut, MIRROR, newPayeeCheck, newPayeeObserved, newPayeeSelfMessage, PAYEE } from "@/lib/new-payee";
 
 /**
  * Two people before the first payment to an address (docs/superpowers/specs/2026-10-05-new-payee-check-design.md
@@ -189,7 +189,7 @@ describe("an address sent through a payee link, and the member who created the l
       [confirmed(BAO, ADDRESS), sent, linkCreated(ANNA, "link-2")],
     ]) {
       const check = newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries });
-      expect(check).toEqual({ firstPayment: true, addressBy: PAYEE, confirmedBy: BAO, confirmersLeftOut: [BAO], twoParties: false });
+      expect(check).toEqual({ firstPayment: true, addressBy: PAYEE, confirmedBy: BAO, confirmersLeftOut: [BAO], unanswered: true, twoParties: false });
       expect(addressGiver(check)).toBeNull();
       // Whoever confirmed it is left out of approving it: two different members stand behind its first payment.
       expect(membersLeftOut(check)).toEqual([BAO]);
@@ -204,8 +204,9 @@ describe("an address sent through a payee link, and the member who created the l
 /**
  * A GitHub login is tied to no member (independent review, 2026-10-15, round 2): every `/bounty` acts as the member who
  * connected GitHub, whoever typed it. So for an address sent with `/payto`, no confirmation counts as a second person:
- * the agent holds its first payment, and whoever confirmed it is left out of approving it with whoever the bounty acts
- * as. A bounty its own pull request's author typed names no one.
+ * the agent holds its first payment, and exactly whoever confirmed it is left out of approving it (round 3): the member
+ * the bounty acts as may approve it once someone else confirmed it. A bounty its own pull request's author typed names
+ * no one.
  */
 describe("an address sent with /payto on a GitHub pull request, and the member its bounty acts as", () => {
   const PULL = "https://github.com/acme/app/pull/42";
@@ -216,19 +217,25 @@ describe("an address sent with /payto on a GitHub pull request, and the member i
   });
 
   it("names the member the pull request's bounty acts as, from the bounty's signed entry", () => {
-    expect(newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries: [confirmed(ANNA, ADDRESS), payto, bounty(ANNA)] })).toEqual({
+    const check = newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries: [confirmed(ANNA, ADDRESS), payto, bounty(ANNA)] });
+    expect(check).toEqual({
       firstPayment: true,
       addressBy: PAYEE,
       bountyBy: ANNA,
       confirmedBy: ANNA,
+      confirmersLeftOut: [ANNA],
+      unanswered: true,
       twoParties: false,
     });
+    // Left out because she confirmed it, not because the bounty acts as her.
+    expect(membersLeftOut(check)).toEqual([ANNA]);
   });
 
   it("never counts a member's confirmation as the second person, and leaves whoever confirmed it out of approving it", () => {
     const check = newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries: [confirmed(BAO, ADDRESS), payto, bounty(ANNA)] });
-    expect(check).toEqual({ firstPayment: true, addressBy: PAYEE, bountyBy: ANNA, confirmedBy: BAO, confirmersLeftOut: [BAO], twoParties: false });
-    expect(membersLeftOut(check)).toEqual([ANNA, BAO]);
+    expect(check).toEqual({ firstPayment: true, addressBy: PAYEE, bountyBy: ANNA, confirmedBy: BAO, confirmersLeftOut: [BAO], unanswered: true, twoParties: false });
+    // Exactly whoever confirmed it: the member the bounty acts as, who did not, may approve it.
+    expect(membersLeftOut(check)).toEqual([BAO]);
   });
 
   it("reads the bounty on the pull request the address was posted on, not another one for the same payee", () => {
@@ -238,7 +245,7 @@ describe("an address sent with /payto on a GitHub pull request, and the member i
 
   it("names no one for a bounty its pull request's own author typed, a self-bounty", () => {
     const check = newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries: [confirmed(BAO, ADDRESS), payto, bounty(ANNA, PULL, "OctoCat")] });
-    expect(check).toEqual({ firstPayment: true, addressBy: PAYEE, confirmedBy: BAO, confirmersLeftOut: [BAO], twoParties: false });
+    expect(check).toEqual({ firstPayment: true, addressBy: PAYEE, confirmedBy: BAO, confirmersLeftOut: [BAO], unanswered: true, twoParties: false });
     expect(addressGiver(check)).toBeNull();
     expect(membersLeftOut(check)).toEqual([BAO]);
   });
@@ -246,7 +253,7 @@ describe("an address sent with /payto on a GitHub pull request, and the member i
   it("holds the first payment, and leaves whoever confirmed it out, when no bounty on that pull request names a member", () => {
     for (const entries of [[confirmed(BAO, ADDRESS), payto], [confirmed(BAO, ADDRESS), payto, bounty(ANNA, "https://github.com/acme/app/pull/7")]]) {
       const check = newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries });
-      expect(check).toEqual({ firstPayment: true, addressBy: PAYEE, confirmedBy: BAO, confirmersLeftOut: [BAO], twoParties: false });
+      expect(check).toEqual({ firstPayment: true, addressBy: PAYEE, confirmedBy: BAO, confirmersLeftOut: [BAO], unanswered: true, twoParties: false });
       expect(addressGiver(check)).toBeNull();
       expect(membersLeftOut(check)).toEqual([BAO]);
     }
@@ -257,6 +264,7 @@ describe("an address sent with /payto on a GitHub pull request, and the member i
       addressBy: PAYEE,
       bountyBy: ANNA,
       confirmersLeftOut: [BAO],
+      unanswered: true,
       twoParties: false,
     });
   });
@@ -270,9 +278,40 @@ describe("membersLeftOut and newPayeeSelfMessage: who may not approve a first pa
     expect(membersLeftOut(anchored)).toEqual([ANNA]);
     // An address a script wrote, with no giver known.
     const unknown = newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries: [confirmed(BAO, ADDRESS), changed(null, ADDRESS)] });
-    expect(unknown).toMatchObject({ addressBy: null, confirmersLeftOut: [BAO], twoParties: false });
+    expect(unknown).toMatchObject({ addressBy: null, confirmersLeftOut: [BAO], unanswered: true, twoParties: false });
     expect(membersLeftOut(unknown)).toEqual([BAO]);
     expect(membersLeftOut(null)).toEqual([]);
+  });
+
+  it("asks nothing it cannot be given of an address no entry records at all: it waits for a person, as before", () => {
+    // Written outside the ledger (a script), so no confirmation of it can ever be read: no one is left out for it.
+    for (const entries of [[confirmed(BAO, ADDRESS)], [confirmed(BAO, ADDRESS), created(ANNA, OTHER)]]) {
+      const check = newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries });
+      expect(check).toEqual({ firstPayment: true, addressBy: null, confirmedBy: null, twoParties: false });
+      expect(firstPaymentRefusal(check, BAO)).toBeNull();
+    }
+  });
+
+  it("refuses one approver alone: whoever gave it; for an address no member answers for, whoever confirmed it, or anyone while no one else has", () => {
+    const typed = newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries: [confirmed(BAO, ADDRESS), created(ANNA, ADDRESS)] });
+    expect(firstPaymentRefusal(typed, ANNA)).toBe("You gave this payee's address, so someone else must approve its first payment.");
+    expect(firstPaymentRefusal(typed, BAO)).toBeNull();
+    const PULL = "https://github.com/acme/app/pull/42";
+    const payto = (confirmers: string[]) => [
+      ...confirmers.map((by) => confirmed(by, ADDRESS)),
+      changed(null, ADDRESS, { via: "github", commentUrl: `${PULL}#issuecomment-9` }),
+      { action: "github_bounty_attached", detail: { by: ANNA, login: "maintainer", author: "octocat", pullRequest: PULL } },
+    ];
+    // The member the bounty acts as may approve once someone else confirmed it; whoever confirmed it may not.
+    const confirmedByBao = newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries: payto([BAO]) });
+    expect(firstPaymentRefusal(confirmedByBao, ANNA)).toBeNull();
+    expect(firstPaymentRefusal(confirmedByBao, BAO)).toBe("You confirmed this address, so someone else must approve its first payment.");
+    // No one confirmed it yet: an approval, which would confirm it itself, never counts as the confirmation.
+    const unconfirmed = newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries: payto([]) });
+    expect(unconfirmed).toMatchObject({ unanswered: true, twoParties: false });
+    expect(firstPaymentRefusal(unconfirmed, ANNA)).toBe("Someone else must confirm this address on Counterparties before its first payment.");
+    expect(firstPaymentRefusal(unconfirmed, BAO)).toBe("Someone else must confirm this address on Counterparties before its first payment.");
+    expect(firstPaymentRefusal(null, BAO)).toBeNull();
   });
 
   it("tells whoever confirmed an address no member answers for that someone else approves its first payment", () => {
@@ -316,6 +355,7 @@ describe("newPayeeObserved: what a decision on a first payment records (N6)", ()
       addressBy: PAYEE,
       bountyBy: ANNA,
       confirmedBy: BAO,
+      unanswered: true,
       twoParties: false,
     });
   });

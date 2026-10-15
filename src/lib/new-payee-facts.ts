@@ -76,15 +76,7 @@ export async function loadNewPayeeFacts(db: OrgDb, counterpartyIds: readonly str
     else paidTo.set(counterpartyId, new Set([address]));
   }
 
-  const rows = unwrap(
-    await db
-      .from("ledger_entries")
-      .select("action, detail")
-      .in("domain", ADDRESS_DOMAINS)
-      .in("action", ADDRESS_ACTIONS)
-      .in("detail->>counterpartyId", ids)
-      .order("seq", { ascending: false })
-  ) as Array<{ action: string; detail: Record<string, unknown> }>;
+  const rows = await addressEntries(db, ids);
   const creators = await linkRowCreators(db.orgId, rows);
   for (const row of rows) {
     const id = row.detail.counterpartyId;
@@ -102,6 +94,31 @@ export async function loadNewPayeeFacts(db: OrgDb, counterpartyIds: readonly str
 export const PAYMENT_PAGE = 1000;
 /** How many invoice or milestone ids one read names, to keep its address short. */
 export const ID_CHUNK = 100;
+
+type EntryRow = { action: string; detail: Record<string, unknown> };
+
+/**
+ * These counterparties' entries that set, confirmed or asked for an address, newest first, a page at a time, so the row
+ * cap never drops the oldest. An entry written meanwhile only shifts a later page: one entry read twice, none missed,
+ * and the newest entry that set the address is still read first.
+ */
+async function addressEntries(db: OrgDb, ids: string[]): Promise<EntryRow[]> {
+  const rows: EntryRow[] = [];
+  for (let from = 0; ; from += PAYMENT_PAGE) {
+    const page = unwrap(
+      await db
+        .from("ledger_entries")
+        .select("action, detail")
+        .in("domain", ADDRESS_DOMAINS)
+        .in("action", ADDRESS_ACTIONS)
+        .in("detail->>counterpartyId", ids)
+        .order("seq", { ascending: false })
+        .range(from, from + PAYMENT_PAGE - 1)
+    ) as EntryRow[];
+    rows.push(...page);
+    if (page.length < PAYMENT_PAGE) return rows;
+  }
+}
 
 type PaymentRow = { source_type: string; source_id: string; destination: string | null };
 

@@ -1186,7 +1186,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     // Who may not approve a first payment alone (new payee check N4; independent review, 2026-10-15).
     ["You gave this payee's address", APPROVAL_CARD],
     ["You asked for this address with a payee link", APPROVAL_CARD],
-    ["Your GitHub bounty asked for this address", APPROVAL_CARD],
+    ["Another member must confirm this address first", APPROVAL_CARD],
     ["You confirmed this address", APPROVAL_CARD],
     ["Create the workspace", GETTING_STARTED],
     ["Add or import a first bill", GETTING_STARTED],

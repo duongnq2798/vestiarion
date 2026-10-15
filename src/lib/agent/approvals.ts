@@ -21,7 +21,7 @@ import { choosePayoutRoute, payoutFundsShort, type GatewayFigures } from "../pay
 import type { CrossChainRoute } from "../circle/types";
 import { commissionPartnersOf } from "../commissions/beneficiary";
 import { isSoleApprover } from "./sole-approver";
-import { addressGiver, askedVia, membersLeftOut, newPayeeSelfMessage, type NewPayeeCheck } from "../new-payee";
+import { addressGiver, askedVia, firstPaymentRefusal, membersLeftOut, newPayeeSelfMessage, type NewPayeeCheck } from "../new-payee";
 import { firstPaymentCheck, loadNewPayeeFacts, newPayeeCheckFor } from "../new-payee-facts";
 import { addedSince, latestDecision, recordedFacts, type AddedDetails } from "../added-details";
 import { awaitsVerdict, heldForCash } from "../next-step";
@@ -489,6 +489,13 @@ export interface WaitingPayable {
    */
   firstPaymentConfirmers?: string[];
   /**
+   * An address no member answers for alone: one member confirms it on Counterparties and a different one approves its
+   * first payment, so while no one has confirmed it, no one approves it alone. Absent otherwise.
+   */
+  firstPaymentUnanswered?: true;
+  /** Every member left out of approving its first payment (`membersLeftOut`), for who can act. Absent otherwise. */
+  firstPaymentLeftOut?: string[];
+  /**
    * Above the workspace's figure for two approvals (two approvals T8): the figure, the approvals given that still count,
    * and whether whoever entered it, or gave its address, may give one. Absent when one approval pays it, or its transfer
    * was already sent.
@@ -661,6 +668,8 @@ export async function listWaitingPayables(
             firstPaymentAddressBy: addressGiver(newPayee),
             ...(askedFor ? { firstPaymentVia: askedFor } : {}),
             ...(newPayee.confirmersLeftOut ? { firstPaymentConfirmers: newPayee.confirmersLeftOut } : {}),
+            ...(newPayee.unanswered ? { firstPaymentUnanswered: true as const } : {}),
+            firstPaymentLeftOut: membersLeftOut(newPayee),
           }
         : {}),
       ...(twoApprovals.has(row.id) ? { twoApprovals: twoApprovals.get(row.id) } : {}),
@@ -798,10 +807,11 @@ function approvalPaidSummary(
 export const SOLE_APPROVER_NOTE = "(entered and approved by the workspace's only approver)";
 
 /**
- * How a ledger summary marks a first payment approved by the person who gave its address, or asked the payee for it, as
- * the workspace's only approver (new payee check N4; independent review, 2026-10-15).
+ * How a ledger summary marks a first payment the workspace's only approver paid though no other member stands behind its
+ * address: they gave it or asked the payee for it, or, for one no member answers for alone, they confirmed it or no one
+ * else has (new payee check N4; independent review, 2026-10-15).
  */
-export const ADDRESS_GIVER_NOTE = "(first payment to an address the approver gave or asked for, as the workspace's only approver)";
+export const ADDRESS_GIVER_NOTE = "(first payment to an address no other member stands behind, paid by the workspace's only approver)";
 
 /** How a ledger summary marks the approval that paid a payment two people approved (two approvals T7). */
 export const SECOND_OF_TWO_NOTE = "(the second of two approvals)";
@@ -870,7 +880,8 @@ export async function approveAndPay(
   if (partners.includes(input.actorId)) raise("beneficiary_approval");
   // A transfer that already exists is reconciled, never sent again.
   const alreadySent = transferExists(intent);
-  const firstPayment = await firstPaymentTo(invoice);
+  // Recording a transfer already sent pays no address for the first time: it went wherever it went, as Pay now reads it.
+  const firstPayment = alreadySent ? null : await firstPaymentTo(invoice);
   // Above the workspace's figure a payment needs two people's approval (two approvals T4); a transfer already sent is
   // only recorded, on one approval (T6).
   const above = alreadySent ? null : await readTwoApprovalsAbove(db());
@@ -912,9 +923,12 @@ export async function approveAndPay(
     // approver; the claim asks the database the same question again.
     soleApprover = invoice.createdBy === input.actorId;
     if (soleApprover && !(await isSoleApprover(input.actorId))) raise("self_approval");
-    // A first payment to an address needs someone other than whoever it rests on, unless they decide alone (new payee check N4).
-    if (membersLeftOut(firstPayment).includes(input.actorId)) {
-      if (!(await isSoleApprover(input.actorId))) throw new ApprovalError("new_payee_self", newPayeeSelfMessage(firstPayment, input.actorId));
+    // A first payment to an address needs someone other than whoever it rests on, unless they decide alone (new payee
+    // check N4). One no member answers for alone needs another member's confirmation on record first: this approval
+    // would confirm it itself, and that never counts.
+    const refusal = firstPaymentRefusal(firstPayment, input.actorId);
+    if (refusal) {
+      if (!(await isSoleApprover(input.actorId))) throw new ApprovalError("new_payee_self", refusal);
       addressGiverApproved = true;
     }
   }

@@ -90,10 +90,14 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   bounty acts as the person who connected GitHub, whoever typed it, so any member who could write to the repository
   could have bountied their own pull request, sent their own wallet and confirmed it. For an address sent with
   `/payto`, and for any address no member can be named as having given, a confirmation no longer counts as the second
-  person: the agent holds the first payment, and whoever confirmed the address cannot approve it either. A bounty
-  typed by the pull request's own author names no member.
+  person: the agent holds the first payment, and two different members stand behind it, one who confirms the address on
+  Counterparties and another who approves it. Whoever confirmed it cannot approve it, and no one approves it before a
+  member has confirmed it, since Approve and pay would confirm it itself. The member the bounty acts as may approve it
+  once someone else confirmed it, so two approvers are never both left out. "Who can act" and the overdue email leave
+  out whoever cannot approve it. A bounty typed by the pull request's own author names no member.
 - **The only approver's own first payment is on the record.** The workspace's only approver still pays a first payment
-  to an address they gave, asked for or confirmed, and its ledger entry now says they did it alone.
+  to an address they gave, asked for or confirmed, or that no one else confirmed, and its ledger entry now says they
+  did it alone.
 - **A first payment is the first to that payee at that address.** An address the workspace had paid for someone
   else, such as a member paid once as a contractor, let the agent pay any other counterparty pointed at it with no
   second person. The check now counts only payments to the same counterparty.
