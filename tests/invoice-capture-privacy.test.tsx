@@ -3,6 +3,7 @@ import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import PrivacyPage from "@/app/privacy/page";
+import { HOSTED_MODEL_PROVIDER } from "@/lib/connectors/consent";
 import { ACCESS_TTL_SECONDS, CONNECTION_LIFETIME_MS, REFRESH_TTL_MS } from "@/lib/extension/tokens";
 import { MAX_CAPTURED_CHARS, RAW_TEXT_DAYS, UNSENT_DRAFT_DAYS } from "@/lib/invoice-drafts/model";
 import { MAX_DOCUMENT_BYTES } from "@/lib/invoice-document/read";
@@ -35,7 +36,7 @@ describe("the privacy page's Chrome extension section", () => {
       `of at most ${MAX_DOCUMENT_BYTES / 1_000_000} MB`,
       "never reads your browsing history",
       "goes only to Vestiarion, at www.vestiarion.xyz",
-      "a picture is not read",
+      "A picture is not read",
     ]) {
       expect(section, phrase).toContain(phrase);
     }
@@ -84,8 +85,23 @@ describe("the privacy page's Chrome extension section", () => {
     expect(source("extensions/chrome-invoice-capture/extension/popup.js")).toContain("const PENDING_MS = 5 * 60_000;");
   });
 
-  it("names the model provider that reads what is captured, as for an upload", () => {
-    expect(section).toContain("It is read the way an invoice uploaded to the invoice form is read, so a model provider");
+  it("names the model provider that reads what is captured, as for an upload, with its terms and no training promise", () => {
+    expect(section).toContain(
+      `its text goes to the model provider (${HOSTED_MODEL_PROVIDER.name}, on the hosted service), under that provider's own API terms and privacy policy`
+    );
+    const raw = markup.split('id="chrome-extension"')[1]?.split('id="retention"')[0] ?? "";
+    expect(raw).toContain(`href="${HOSTED_MODEL_PROVIDER.terms}"`);
+    expect(raw).toContain(`href="${HOSTED_MODEL_PROVIDER.privacy}"`);
+    expect(section).not.toMatch(/train/i);
+    // The guide says the same, with the same links.
+    const guide = source("content/docs/guides/invoice-capture.mdx");
+    expect(guide).toContain(`the model provider (${HOSTED_MODEL_PROVIDER.name}, on the hosted service) sees its text, under that provider's own API terms.`);
+    expect(guide).toContain(`[API terms](${HOSTED_MODEL_PROVIDER.terms}) and [privacy policy](${HOSTED_MODEL_PROVIDER.privacy})`);
+    expect(guide).not.toMatch(/train/i);
+    const listing = source("extensions/chrome-invoice-capture/STORE_LISTING.md");
+    expect(listing).toContain(HOSTED_MODEL_PROVIDER.terms);
+    expect(listing).toContain(HOSTED_MODEL_PROVIDER.privacy);
+    expect(listing).not.toMatch(/train/i);
   });
 
   it("says there are no analytics on what is captured", () => {

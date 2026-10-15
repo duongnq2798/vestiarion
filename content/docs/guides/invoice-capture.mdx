@@ -31,7 +31,7 @@ If the window says **Sign in to connect the extension**, sign in to Vestiarion i
 - **Capture invoice with Vestiarion**: the menu you get by right-clicking a selection, which works in Chrome's PDF viewer too. The popup shows the text it took and sends it only when you press **Send to Vestiarion**, within 5 minutes; after that it is dropped.
 - **Choose a file**: a PDF with text, a `.txt` or an `.eml` file of at most 4 MB is read as **From a document** reads one. A picture is sent, not read: "A picture is not read. Type the invoice's fields from it, then send the draft."
 
-Vestiarion reads the supplier, the invoice number, the amount, the currency, the invoice date, the due date, the purchase order and a memo, with the AI model provider it uses, as it reads an invoice you upload, and checks each figure against the document. The popup shows them to edit, and says what is still missing, for instance "No due date was read. Add the day it is due." Notes about the document come with them, such as a date that can be read two ways.
+Vestiarion reads the supplier, the invoice number, the amount, the currency, the invoice date, the due date, the purchase order and a memo, with its model provider (DeepSeek, on the hosted service), as it reads an invoice you upload, and checks each figure against the document. The popup shows them to edit, and says what is still missing, for instance "No due date was read. Add the day it is due." Notes about the document come with them, such as a date that can be read two ways.
 
 Choose **Send draft**. **Sent for review** says where it waits, and **Open in Vestiarion** opens it there. A draft not sent stays in the popup until you send it or start over, and is deleted 7 days after you captured it. One connection keeps at most 50 drafts not sent.
 
@@ -64,7 +64,7 @@ A person's role is read again at every request: an owner or admin who becomes an
 - The text it was read from is kept for the reviewer until the draft is added or discarded, and at most 30 days.
 - A draft never sent is deleted after 7 days.
 - A file is never kept, only its SHA-256.
-- What you capture goes to Vestiarion, which has it read by the AI model provider it uses (on www.vestiarion.xyz, DeepSeek), under that provider's own API terms, as it does for an invoice you upload. The [privacy page](/privacy#chrome-extension) says more. The extension has no analytics, and nothing about an invoice goes to an analytics service.
+- What you capture goes to Vestiarion, which reads it as it reads an invoice you upload: the model provider (DeepSeek, on the hosted service) sees its text, under that provider's own API terms. Read DeepSeek's [API terms](https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html) and [privacy policy](https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html). The [privacy page](/privacy#chrome-extension) says more. The extension has no analytics, and nothing about an invoice goes to an analytics service.
 - In the extension, the access token is kept in memory only and the refresh token on this computer, until you disconnect.
 
 ## Disconnect it

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { LegalLink, LegalPage, LegalSection } from "@/components/vx/LegalPage";
+import { HOSTED_MODEL_PROVIDER } from "@/lib/connectors/consent";
 import { ISSUES_URL } from "@/lib/site-links";
 import { ARC_RPC_HOSTS, listed, MODEL_PROVIDER_TERMS, PAYEE_CHAIN_RPC_HOSTS } from "@/lib/subprocessors";
 
@@ -493,8 +494,10 @@ export default function PrivacyPage() {
             invoice with Vestiarion waits in the extension&apos;s memory until you send it or drop it, and is dropped after 5 minutes.
           </li>
           <li>
-            What you capture goes only to Vestiarion, at www.vestiarion.xyz. It is read the way an invoice uploaded to the invoice form is read, so a
-            model provider, when this deployment has one, receives its text as described above; a picture is not read.
+            What you capture goes only to Vestiarion, at www.vestiarion.xyz, which reads it the way it reads an invoice uploaded to the invoice form:
+            its text goes to the model provider ({HOSTED_MODEL_PROVIDER.name}, on the hosted service), under that provider&apos;s own{" "}
+            <LegalLink href={HOSTED_MODEL_PROVIDER.terms}>API terms</LegalLink> and <LegalLink href={HOSTED_MODEL_PROVIDER.privacy}>privacy policy</LegalLink>.
+            A picture is not read.
           </li>
           <li>
             Vestiarion keeps the draft in the workspace&apos;s records: the fields read and as you edited them (supplier, invoice number, amount,

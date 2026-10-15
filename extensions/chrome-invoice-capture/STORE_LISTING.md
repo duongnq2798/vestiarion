@@ -33,7 +33,8 @@ How it works:
    right-click the selection and choose Capture invoice with Vestiarion. Or choose the invoice's file (a PDF with text,
    a .txt or an .eml file, up to 4 MB).
 3. Vestiarion reads the supplier, invoice number, amount, currency, invoice date, due date, purchase order and memo,
-   with the AI model provider it uses, as it does for any invoice uploaded to it. Check each field; the extension says
+   with its model provider (DeepSeek, on the hosted service), as it does for any invoice uploaded to it. Check each
+   field; the extension says
    which ones are missing.
 4. Press Send draft. The draft waits under Captured drafts on Bills & receivables in Vestiarion, where an owner or admin
    adds it as a bill, with every check a bill goes through, or discards it.
@@ -45,9 +46,10 @@ How it works:
 - It does not read a page by itself. It reads the text you selected, once, when you press Capture selected text or
   choose Capture invoice with Vestiarion, and nothing else of the page.
 - It does not see your bills, counterparties, members, wallets or API keys. It can read only the drafts it created.
-- It does not send anything anywhere but Vestiarion, at www.vestiarion.xyz. Vestiarion has what you capture read by the
-  AI model provider it uses (on www.vestiarion.xyz, DeepSeek), under that provider's own API terms, as it does for any
-  invoice uploaded to it; nothing else receives it.
+- It does not send anything anywhere but Vestiarion, at www.vestiarion.xyz. Vestiarion reads what you capture as it
+  reads any invoice uploaded to it: the model provider (DeepSeek, on the hosted service) sees its text, under that
+  provider's own API terms (https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html) and
+  privacy policy (https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html).
 - It does not track you: no analytics, no advertising, and nothing about your invoices is counted.
 
 ## Single purpose
@@ -99,8 +101,8 @@ What the extension collects, only when the person captures an invoice:
 ### Retention, as the privacy policy says it
 
 The captured text is kept with the draft until a person adds it as a bill or discards it, and at most 30 days. A draft
-never sent is deleted after 7 days. A file is never kept, only its SHA-256. Vestiarion has the text read by its AI
-model provider, as described in the privacy policy. Disconnecting revokes the tokens at once, and a connection lasts
+never sent is deleted after 7 days. A file is never kept, only its SHA-256. The model provider (DeepSeek, on the hosted
+service) sees the text under its own API terms and privacy policy, as the privacy policy says. Disconnecting revokes the tokens at once, and a connection lasts
 at most 90 days.
 
 ## Test instructions for the reviewer

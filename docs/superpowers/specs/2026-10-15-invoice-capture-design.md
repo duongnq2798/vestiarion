@@ -170,7 +170,8 @@ discards it. The extension can never create a live invoice, approve, pay, or tou
   **Disconnect**, which revokes the token. The access token is kept in `chrome.storage.session` (memory),
   only the refresh token in `chrome.storage.local`, closed to content scripts (`setAccessLevel`) where Chrome supports
   it for local storage. What is captured goes to Vestiarion only, which has it read by the AI model provider it uses
-  (DeepSeek on the hosted service, under its own API terms), as for any invoice uploaded to it. No analytics.
+  (DeepSeek on the hosted service, `HOSTED_MODEL_PROVIDER`, under its own API terms and privacy policy, which the guide,
+  the privacy page and the store listing link), as for any invoice uploaded to it. No analytics.
 - **C26. Store listing** as text in `STORE_LISTING.md`: the name, short and long descriptions with a "What it does not
   do" section, the single-purpose statement, each permission's justification and the privacy answers. Icons are made
   from the brand mark by `scripts/extension-icons.mjs`.
