@@ -2178,11 +2178,17 @@ the provider.
   minutes and picked on the connect page (`POST /api/integrations/xero/choose`). A workspace connected to another
   organisation is refused; the same one reconnects its row. `accounting_connected` records the consent.
 - **Consent versions** (`consent.ts`). A change to what a statement says is a new version in `CONSENT_VERSIONS`, added
-  last to `CONSENT_HISTORY`; a connection keeps the version it agreed to until it connects again. The only gate on
-  versions is `ACCOUNTANT_BOOKING_CONSENTS`; `tests/connector-consent.test.tsx` holds every gate to taking a provider's
-  new version where it took the one before, and every version literal in `src/` to `consent.ts`. Versions `2026-10-15`
-  say the agent's model provider (DeepSeek, on the hosted service) sees the facts under its own API terms; the versions
-  before promised it would not train on them.
+  last to `CONSENT_HISTORY`; a connection keeps the version it agreed to until it connects again. The connect page
+  (`ConnectorConsent`) posts the version it showed, and `startConnect` records it only while it is still the current
+  one; an older page is sent back to be read again (`?consent=changed`). The only gate on versions is
+  `ACCOUNTANT_BOOKING_CONSENTS`. `tests/connector-consent.test.tsx` holds every gate to taking a provider's new version
+  where it took the one before, every version literal in `src/` to `consent.ts`, `CONSENT_VERSIONS` to the connect
+  route and page, and the migrations to checking a version's length only.
+- **The model provider a statement names.** Versions `2026-10-15` say the agent's model provider sees a bill's facts,
+  or may see a deal's, under its own API terms, and the connect page links its API terms and privacy policy; the
+  versions before promised it would not train on them. The provider is `HOSTED_MODEL_PROVIDER` (DeepSeek), and the
+  hosted deployment pins `AGENT_LLM_PROVIDER=deepseek` to match it rather than relying on auto-selection. Changing the
+  hosted provider changes what people agreed to, so it takes a new version of every statement that names it.
 - **Syncing** (`sync.ts`, `sync-store.ts`): suppliers, then bills, a page at a time in Xero's update order, each page read,
   then written, then the cursor moved, so a run stopped anywhere resumes at its page; no call to Xero happens inside a
   write. The backfill reads approved bills; later runs send `If-Modified-Since` and read every status. A run of several
@@ -2395,12 +2401,13 @@ reads in `api.ts`, `hubspotProvider`), wired in `src/lib/crm-providers.ts`. It i
     in shadow mode can never reach sending, sent or written.
   - *Connecting.* The core's flow on `/integrations/pipedrive`, `/integrations/pipedrive/connect`,
     `POST /api/integrations/pipedrive/connect` and `GET /api/integrations/pipedrive/callback`, consent
-    `pipedrive-2026-10-15` (`pipedrive-2026-10-14` before it). The authorize URL names no scope: Pipedrive's are the app's. The token answer's `scope` must
-    read deals and their organizations (`deals:read` or `deals:full`, and `contacts:read` or `contacts:full`); a grant
-    without them is revoked and refused before anything is kept (`?pipedrive=scopes`). The company is `users/me`'s
-    `company_id`, named by its `company_name`; one per grant. A company another workspace holds is refused
-    (`other_workspace`), and so is a workspace connected to another company (`other_organisation`); the same company
-    again reconnects its row. Writing is not asked for here: the card's switch is the only place it is turned on.
+    `pipedrive-2026-10-15` (`pipedrive-2026-10-14` before it). The authorize URL names no scope: Pipedrive's are the
+    app's. The token answer's `scope` must read deals and their organizations (`deals:read` or `deals:full`, and
+    `contacts:read` or `contacts:full`); a grant without them is revoked and refused before anything is kept
+    (`?pipedrive=scopes`). The company is `users/me`'s `company_id`, named by its `company_name`; one per grant. A
+    company another workspace holds is refused (`other_workspace`), and so is a workspace connected to another company
+    (`other_organisation`); the same company again reconnects its row. Writing is not asked for here: the card's switch
+    is the only place it is turned on.
   - *Tokens and the company's domain* (`credential.ts`, pure). The token answer's `api_domain` must be
     an https host under `pipedrive.com` (`https://<name>.pipedrive.com`), and is sealed with its token as one credential (`pd1|<host>|<token>`) in both token
     columns: every call goes to the domain of the token it carries, a refresh's new domain replaces the old one in the
@@ -2866,8 +2873,9 @@ the approver (`role_rank` 2, `RANK` 1): an owner or an admin may grant it, an ac
 makes `can_assign_role` answer false, never null, for a role `role_rank` does not know. Customer messages
 (`notifyCustomerWrote`) now reach an accountant whose email switch is on, and Settings' Notifications offers an accountant
 that switch as "Email me when a customer writes on its statement link". A Xero connection's consent says who approves
-what is booked: versions `xero-2026-10-13` and `xero-2026-10-15` name the accountant (`ACCOUNTANT_BOOKING_CONSENTS`), and an accountant's
-booking on a connection agreed under an earlier version is refused (`consent`) with whom to ask, until Xero is reconnected.
+what is booked: versions `xero-2026-10-13` and `xero-2026-10-15` name the accountant (`ACCOUNTANT_BOOKING_CONSENTS`),
+and an accountant's booking on a connection agreed under an earlier version is refused (`consent`) with whom to ask,
+until Xero is reconnected.
 "Unless the owner grants more" is a role change: one person holds one role in a workspace.
 
 **The read model** (A2, A3; `src/lib/accountant/read.ts`, `triage.ts`). Never a service-role read across tenants. The

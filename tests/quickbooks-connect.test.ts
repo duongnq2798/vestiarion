@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { finishConnect, startConnect, type ConnectDeps } from "@/lib/connectors/connect";
+import { CONSENT_VERSIONS } from "@/lib/connectors/consent";
 import type { AccountingProvider, ExternalOrganisation } from "@/lib/connectors/provider";
 import { connectState, readConnectState } from "@/lib/connectors/state";
 import { quickBooksProvider } from "@/lib/quickbooks/provider";
@@ -99,7 +100,7 @@ function form(fields: Record<string, string>, origin: string | null = ORIGIN): R
   return new Request(`${ORIGIN}/api/integrations/quickbooks/connect`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded", ...(origin ? { origin } : {}) },
-    body: new URLSearchParams(fields).toString(),
+    body: new URLSearchParams({ consent_version: CONSENT_VERSIONS.quickbooks, ...fields }).toString(),
   });
 }
 

@@ -28,13 +28,17 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 ### Fixed
 
 - **Connector consent says what the model provider does under its own terms.** The statements a person agrees to
-  before connecting Xero, QuickBooks, HubSpot or Pipedrive now say the agent's model provider (DeepSeek, on the hosted
-  service) sees the facts under that provider's own API terms, instead of promising it may not train on them, which
-  its terms do not say. Vestiarion's own promise stays: it never uses that data to train or improve any AI model.
-  Pipedrive's also says that disconnecting revokes Vestiarion's access, which, as Pipedrive documents it, uninstalls
-  Vestiarion from the company. New consent versions `2026-10-15` (Asana's statement did not change); existing
-  connections keep the version they agreed to, and an accountant still approves bookings on a Xero connection agreed
-  to the new version. The terms of use link DeepSeek's terms.
+  before connecting Xero, QuickBooks, HubSpot or Pipedrive no longer promise that the agent's model provider may not
+  train on the facts it sees, which its terms do not say. They now say the provider (DeepSeek, on the hosted service)
+  sees each bill's facts, or may see a deal's, under its own API terms, and the connect page links DeepSeek's API terms
+  and privacy policy, as the terms of use do. Vestiarion's own promise stays: it never uses that data to train or
+  improve any AI model. Pipedrive's also says that disconnecting stops the reading at once and revokes Vestiarion's
+  access, which, as Pipedrive documents it, uninstalls Vestiarion from the company. New consent versions `2026-10-15`
+  (Asana's did not change): any new connection or reconnection agrees to them, including Allow Vestiarion to book
+  payments and Allow writing to HubSpot, which reconnect. An existing connection keeps the version it agreed to until
+  it reconnects, and an accountant approves bookings on a Xero connection agreed under `2026-10-13` or `2026-10-15`.
+  A connect page left open while the words changed now says so and shows them again, instead of recording words the
+  person did not read.
 
 ## [0.1.0-beta.5] - 2026-10-15
 

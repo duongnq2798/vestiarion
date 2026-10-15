@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { chooseConnect, finishConnect, startConnect, type ConnectDeps } from "@/lib/connectors/connect";
+import { CONSENT_VERSIONS } from "@/lib/connectors/consent";
 import type { AccountingProvider, ExternalOrganisation } from "@/lib/connectors/provider";
 import { connectState, readConnectState } from "@/lib/connectors/state";
 import { parseMasterKeys } from "@/lib/secrets";
@@ -89,7 +90,7 @@ function form(fields: Record<string, string>, origin: string | null = ORIGIN): R
   return new Request(`${ORIGIN}/api/integrations/xero/connect`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded", ...(origin ? { origin } : {}) },
-    body: new URLSearchParams(fields).toString(),
+    body: new URLSearchParams({ consent_version: CONSENT_VERSIONS.xero, ...fields }).toString(),
   });
 }
 
@@ -131,6 +132,18 @@ describe("startConnect", () => {
     const response = await run(() => startConnect(form({ org: "acme" }), deps()));
     expect(location(response).toString()).toBe(`${ORIGIN}/integrations/xero/connect?org=acme&consent=missing`);
     expect(response.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("records the version the page showed, and sends a page older than the current words back to be read again", async () => {
+    const { run, deps } = world();
+    const shown = await run(() => startConnect(form({ org: "acme", consent: "yes", consent_version: CONSENT_VERSIONS.xero }), deps()));
+    expect(readConnectState(location(shown).searchParams.get("state") ?? "", keys(), NOW)?.consent?.version).toBe(CONSENT_VERSIONS.xero);
+    // A page loaded before the words changed, a page that posted no version, and a version that never was.
+    for (const consent_version of ["xero-2026-10-13", "", "xero-2099-01-01"]) {
+      const response = await run(() => startConnect(form({ org: "acme", consent: "yes", consent_version }), deps()));
+      expect(location(response).toString(), consent_version).toBe(`${ORIGIN}/integrations/xero/connect?org=acme&consent=changed`);
+      expect(response.headers.get("set-cookie")).toBeNull();
+    }
   });
 
   it("sends a member who may not manage integrations back, and a signed-out person to sign in", async () => {

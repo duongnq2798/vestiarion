@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { finishConnect, startConnect, type ConnectDeps } from "@/lib/connectors/connect";
+import { CONSENT_VERSIONS } from "@/lib/connectors/consent";
 import { NotSetUpError } from "@/lib/connectors/connections";
 import type { ConnectingProvider, ExternalOrganisation } from "@/lib/connectors/provider";
 import { connectState, readConnectState } from "@/lib/connectors/state";
@@ -96,7 +97,7 @@ function form(fields: Record<string, string>, origin: string | null = ORIGIN): R
   return new Request(`${ORIGIN}/api/integrations/hubspot/connect`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded", ...(origin ? { origin } : {}) },
-    body: new URLSearchParams(fields).toString(),
+    body: new URLSearchParams({ consent_version: CONSENT_VERSIONS.hubspot, ...fields }).toString(),
   });
 }
 
@@ -290,6 +291,18 @@ describe("allowing receipts to be written to HubSpot (docs/superpowers/specs/202
     const plain = location(await run(() => startConnect(form({ org: "acme", consent: "yes", write: "yes" }), deps())));
     expect(plain.searchParams.get("write")).toBe("0");
     expect(allowWrites).not.toHaveBeenCalled();
+  });
+
+  it("keeps the choice to write when it sends a page older than the current words back to be read again", async () => {
+    const { run, deps } = world();
+    const allowWrites = vi.fn();
+    const stale = { org: "acme", consent: "yes", consent_version: "hubspot-2026-10-13" };
+    expect(location(await run(() => startConnect(form({ ...stale, write: "yes" }), { ...deps(), allowWrites }))).toString()).toBe(
+      `${ORIGIN}/integrations/hubspot/connect?org=acme&consent=changed&write=1`
+    );
+    expect(location(await run(() => startConnect(form(stale), { ...deps(), allowWrites }))).toString()).toBe(
+      `${ORIGIN}/integrations/hubspot/connect?org=acme&consent=changed`
+    );
   });
 
   it("turns writing on once HubSpot granted the write scopes, before the first sync", async () => {

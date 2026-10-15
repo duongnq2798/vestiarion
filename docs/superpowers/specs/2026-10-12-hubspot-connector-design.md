@@ -212,8 +212,9 @@ workspace's members, and its agent, whose model provider may see a deal's facts 
 not train on them); that Vestiarion never uses HubSpot data to train or improve any model, nor passes it on without
 the workspace's say; that disconnecting stops the reading at once. Recorded in the state, the connection and the
 signed `accounting_connected` entry; `/terms` and `/privacy` say the same.
-*Since `hubspot-2026-10-15`*: the model provider sentence says the provider sees the facts under its own API terms (DeepSeek's, on
-the hosted service). The earlier promise that it may not train on them had no basis in those terms.
+*Since `hubspot-2026-10-15`*: the model provider sentence says the provider may see a deal's facts under its own API terms
+(DeepSeek's, on the hosted service), and the connect page links its API terms and privacy policy. The earlier promise
+that it may not train on them had no basis in those terms.
 
 **H15. Disconnecting.** As X13: the refresh token is revoked at HubSpot (best effort), the tokens deleted, the
 connection marked revoked with a signed `accounting_disconnected`. Deals planned, their links and the HubSpot rows

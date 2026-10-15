@@ -1,3 +1,4 @@
+import type { LlmProvider } from "../config";
 import { PROVIDER_LABELS, type AccountingProviderId, type ProviderId } from "./provider";
 
 /**
@@ -6,8 +7,11 @@ import { PROVIDER_LABELS, type AccountingProviderId, type ProviderId } from "./p
  * on the connection and in its signed entry. A change to what these words say is a new version (a grammar fix that
  * says the same is not); a connection keeps the version it agreed to. Browser-safe.
  *
- * Versions 2026-10-15 say the agent's model provider sees the facts under that provider's own API terms; the versions
- * before them promised the provider would not train on them, which DeepSeek's terms do not say.
+ * Versions 2026-10-15 say the agent's model provider sees (a CRM's: may see) the facts under that provider's own API
+ * terms; the versions before them promised the provider would not train on them, which DeepSeek's terms do not say.
+ *
+ * The connect page posts the version it showed, and the connect route records it only when it is still the current one
+ * (`startConnect`), so a connection's version is always the words the person read.
  */
 
 export const CONSENT_VERSIONS: Record<ProviderId, string> = {
@@ -31,11 +35,26 @@ export const CONSENT_HISTORY: Record<ProviderId, readonly string[]> = {
   asana: ["asana-2026-10-14"],
 };
 
-/** The hosted service's model provider, which the statements name, and the terms it handles API requests under. */
+/**
+ * The hosted service's model provider, which the statements name: the hosted deployment pins `AGENT_LLM_PROVIDER` to
+ * its `id`. Its API terms, and its privacy policy, which says what it does with what it is sent. Changing the hosted
+ * provider changes what people agreed to, so it takes a new version of every statement that names it.
+ */
 export const HOSTED_MODEL_PROVIDER = {
+  id: "deepseek",
   name: "DeepSeek",
   terms: "https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html",
-} as const;
+  privacy: "https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html",
+} as const satisfies { id: LlmProvider; name: string; terms: string; privacy: string };
+
+/** How a statement names the model provider; a line that does is shown with links to its terms and privacy policy. */
+const MODEL_PROVIDER = `The agent's model provider (${HOSTED_MODEL_PROVIDER.name}, on the hosted service)`;
+
+/** Whether a line of a statement names the model provider. */
+export const namesModelProvider = (line: string) => line.includes(MODEL_PROVIDER);
+
+/** What the connect page says when the statement changed between showing it and the person agreeing. */
+export const CONSENT_CHANGED = "The statement changed since this page loaded. Read it again.";
 
 /**
  * The versions under which an accountant may approve bookings (accountant console A1): those whose words name the
@@ -48,13 +67,13 @@ export const ACCOUNTANT_BOOKING_CONSENTS: ReadonlySet<string> = new Set(["xero-2
  * A CRM's statement (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H14): its companies, contacts and
  * deals; and, from version 2026-10-13, what is written back once an owner or admin allows it
  * (docs/superpowers/specs/2026-10-13-crm-receipts-design.md R3); and, from version 2026-10-15, that the model provider
- * sees a deal's facts under its own API terms. The first version said it writes nothing; a connection keeps the version
+ * may see a deal's facts, when a reminder is weighed, under its own API terms. The first version said it writes nothing; a connection keeps the version
  * it agreed to until it connects again.
  */
 const CRM_STATEMENT = (label: string) => [
   `Vestiarion reads the companies, contacts and deals of the ${label} account you connect: names, amounts, close dates, pipeline stages and each company's main contact email.`,
   `It writes to ${label} only once an owner or admin allows it: then, on each ${label} deal planned in Vestiarion, what was collected from payments confirmed on Arc, what is still owed, the last receipt, the reconciliation status and a link to the deal in Vestiarion, in a Vestiarion property group it creates. It never changes ${label}'s own deal fields, and writes payments on Arc testnet or in shadow mode only to a ${label} developer test account or sandbox.`,
-  `They are shown to this workspace's members and to its agent. The agent's model provider (DeepSeek, on the hosted service) sees a deal's facts to decide on its collections, under that provider's own API terms.`,
+  `They are shown to this workspace's members and to its agent. ${MODEL_PROVIDER} may see a deal's facts to decide on its collections, under that provider's own API terms.`,
   `Vestiarion never uses ${label} data to train or improve any AI model, and never passes it to anyone else without your workspace's say.`,
   `Disconnecting stops the reading at once. Deals already planned stay in Vestiarion.`,
 ];
@@ -63,16 +82,16 @@ const CRM_STATEMENT = (label: string) => [
  * Pipedrive's statement (docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md P14): its deals with their
  * organizations and persons, the change notices it sends, and what is written once allowed. Pipedrive names no test
  * company, so payments on Arc testnet or in shadow mode are never written to it (P12). Version 2026-10-15 says the model
- * provider sees a deal's facts under its own API terms, and that disconnecting revokes the access, which Pipedrive
- * documents as uninstalling the app.
+ * provider may see a deal's facts under its own API terms, and that disconnecting revokes the access, which Pipedrive
+ * documents as uninstalling the app: Vestiarion only calls Pipedrive's revoke endpoint.
  */
-const PIPEDRIVE_STATEMENT = [
+const PIPEDRIVE_STATEMENT: readonly string[] = [
   "Vestiarion reads the deals of the Pipedrive company you connect, with their organizations and persons: titles, values, close dates, pipeline stages, organization names and each person's email. It sees the deals the Pipedrive user who connects can see.",
   "Pipedrive tells Vestiarion when a deal changes, and Vestiarion then reads it again from Pipedrive. What a notice says is never used as it is.",
   "It writes to Pipedrive only once an owner or admin allows it: then, on each Pipedrive deal planned in Vestiarion, what was collected from payments confirmed on Arc, what is still owed, the last receipt, the reconciliation status and a link to the deal in Vestiarion, in Vestiarion deal fields it creates. It never changes Pipedrive's own deal fields, and never writes payments on Arc testnet or in shadow mode to Pipedrive.",
-  "They are shown to this workspace's members and to its agent. The agent's model provider (DeepSeek, on the hosted service) sees a deal's facts to decide on its collections, under that provider's own API terms.",
+  `They are shown to this workspace's members and to its agent. ${MODEL_PROVIDER} may see a deal's facts to decide on its collections, under that provider's own API terms.`,
   "Vestiarion never uses Pipedrive data to train or improve any AI model, and never passes it to anyone else without your workspace's say.",
-  "Disconnecting revokes Vestiarion's access, which, as Pipedrive documents it, uninstalls Vestiarion from your Pipedrive company, and stops the reading at once. Deals already planned stay in Vestiarion.",
+  "Disconnecting stops the reading at once and revokes Vestiarion's access, which, as Pipedrive documents it, uninstalls Vestiarion from your Pipedrive company. Deals already planned stay in Vestiarion.",
 ];
 
 /**
@@ -101,11 +120,11 @@ const WORK_STATEMENT = (label: string) => [
 export function consentStatement(provider: ProviderId): string[] {
   const label = PROVIDER_LABELS[provider];
   if (provider === "hubspot") return CRM_STATEMENT(label);
-  if (provider === "pipedrive") return PIPEDRIVE_STATEMENT;
+  if (provider === "pipedrive") return [...PIPEDRIVE_STATEMENT];
   if (provider === "asana") return WORK_STATEMENT(label);
   return [
     WHAT_IS_READ[provider],
-    `The bills you add are shown to this workspace's members and to its agent. The agent's model provider (DeepSeek, on the hosted service) sees each bill's facts to decide on it, under that provider's own API terms.`,
+    `The bills you add are shown to this workspace's members and to its agent. ${MODEL_PROVIDER} sees each bill's facts to decide on it, under that provider's own API terms.`,
     `Vestiarion never uses ${label} data to train or improve any AI model, and never passes it to anyone else without your workspace's say.`,
     `Disconnecting stops the reading at once. Bills already added stay in Vestiarion.`,
   ];

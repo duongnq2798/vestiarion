@@ -79,7 +79,7 @@ const form = (fields: Record<string, string>, origin: string | null = ORIGIN) =>
   new Request(`${ORIGIN}/api/integrations/pipedrive/connect`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded", ...(origin ? { origin } : {}) },
-    body: new URLSearchParams(fields).toString(),
+    body: new URLSearchParams({ consent_version: CONSENT_VERSIONS.pipedrive, ...fields }).toString(),
   });
 const callback = (query: Record<string, string>, nonce: string | null) =>
   new Request(`${ORIGIN}/api/integrations/pipedrive/callback?${new URLSearchParams(query).toString()}`, { headers: nonce ? { cookie: `vx_pipedrive_oauth=${nonce}` } : {} });
@@ -209,10 +209,12 @@ describe("Pipedrive's consent", () => {
     expect(words).toContain("Pipedrive tells Vestiarion when a deal changes, and Vestiarion then reads it again from Pipedrive");
     expect(words).toContain("never writes payments on Arc testnet or in shadow mode to Pipedrive");
     expect(words).toContain("Vestiarion never uses Pipedrive data to train or improve any AI model");
-    expect(words).toContain("The agent's model provider (DeepSeek, on the hosted service) sees a deal's facts to decide on its collections, under that provider's own API terms.");
+    expect(words).toContain("The agent's model provider (DeepSeek, on the hosted service) may see a deal's facts to decide on its collections, under that provider's own API terms.");
     expect(words).not.toMatch(/may not train/);
     // Disconnecting calls Pipedrive's revoke endpoint; the uninstall is what Pipedrive documents that doing.
-    expect(words).toContain("Disconnecting revokes Vestiarion's access, which, as Pipedrive documents it, uninstalls Vestiarion from your Pipedrive company");
+    expect(words).toContain(
+      "Disconnecting stops the reading at once and revokes Vestiarion's access, which, as Pipedrive documents it, uninstalls Vestiarion from your Pipedrive company."
+    );
     expect(words).not.toMatch(/VND/);
   });
 });

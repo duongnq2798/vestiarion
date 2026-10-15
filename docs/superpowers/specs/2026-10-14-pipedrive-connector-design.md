@@ -198,9 +198,10 @@ connected can see.
 values, close dates, stages, each person's email), that Pipedrive tells Vestiarion when a deal changes, what is written
 once allowed, that payments on Arc testnet or in shadow mode are never written, who sees it, no training, disconnecting.
 Recorded on the connection and in `accounting_connected`; `/terms` and `/privacy` say the same.
-*Since `pipedrive-2026-10-15`*: "no training" is Vestiarion's own promise only; the model provider sees a deal's facts
-under its own API terms (DeepSeek's, on the hosted service). Disconnecting revokes the access, which, as Pipedrive
-documents it, uninstalls the app.
+*Since `pipedrive-2026-10-15`*: "no training" is Vestiarion's own promise only; the model provider may see a deal's
+facts under its own API terms (DeepSeek's, on the hosted service), and the connect page links its API terms and
+privacy policy. Disconnecting stops the reading and revokes the access, which, as Pipedrive documents it, uninstalls
+the app.
 
 **P15. Disconnecting.** As H15: the refresh token is revoked at Pipedrive (which uninstalls the app and its webhook), the
 tokens deleted, the connection revoked with a signed `accounting_disconnected`. Planned deals, links and rows stay.
