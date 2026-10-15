@@ -54,7 +54,7 @@ describe("the landing page, while every read is pending", () => {
       "Every bill checked before it's paid. Every decision on record.",
       "Try it on your bills",
       "Evaluate first. Turn on payments later.",
-      "For small teams that pay people for their work.",
+      "For small businesses that pay people for their work.",
       "The AI suggests. Your rules decide.",
       "Don't take our word for it.",
       "Loading the agent's latest decision",

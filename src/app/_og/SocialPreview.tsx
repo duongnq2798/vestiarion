@@ -38,7 +38,7 @@ const LEDGER_BAR_MAX_WIDTH = Math.min(
 );
 const ledgerBarWidths = [0.78, 1, 0.64].map((ratio) => Math.round(LEDGER_BAR_MAX_WIDTH * ratio));
 
-const SUPPORTING_COPY = "For small teams that pay contractors and suppliers: the agent says pay, wait or stop, and why. Rules in code decide what it may pay, in USDC on Arc.";
+const SUPPORTING_COPY = "For small businesses that pay contractors and suppliers: the agent says pay, wait or stop, and why. Rules in code decide what it may pay, in USDC on Arc.";
 
 const statusChips = [
   { label: "Screened", color: COLOR.proof, background: COLOR.proofSoft, border: COLOR.proofLine },
@@ -143,7 +143,7 @@ export function renderSocialImage({
 /** One static, brand-matched image shared by the Open Graph and X routes. */
 export function socialPreviewImage(): ImageResponse {
   return renderSocialImage({
-    badge: "Accounts payable agent",
+    badge: "AI agent for bills and payments",
     footer: "vestiarion.xyz",
     children: (
       <div style={{ display: "flex", flex: 1, alignItems: "center", marginTop: 26 }}>
