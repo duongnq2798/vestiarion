@@ -1,0 +1,75 @@
+Postman calls the API without a line of code. Two collections and an environment are generated from the [OpenAPI document](/api/v1/openapi.json), so they describe the API exactly as it is served:
+
+| File | What it holds |
+| --- | --- |
+| [Vestiarion: Getting Started](https://www.vestiarion.xyz/postman/vestiarion-getting-started.postman_collection.json) | Five requests: from a key to a first `200`, then a first write. |
+| [Vestiarion API reference](https://www.vestiarion.xyz/postman/vestiarion-api-reference.postman_collection.json) | Every operation, in a folder per section of the [API reference](/docs/api). |
+| [Vestiarion environment](https://www.vestiarion.xyz/postman/vestiarion.postman_environment.json) | `baseUrl`, and an empty `apiKey` for your key. |
+
+Every request has saved examples: the answer its reference page shows, and each error it can answer, with the API's own message. None of the files holds a key, and no request can approve, reject or pay: no API call can.
+
+## 1. Import the collections
+
+1. In Postman, choose **Import**.
+2. Paste each of these URLs, one at a time, and import it:
+
+```text
+https://www.vestiarion.xyz/postman/vestiarion-getting-started.postman_collection.json
+https://www.vestiarion.xyz/postman/vestiarion-api-reference.postman_collection.json
+https://www.vestiarion.xyz/postman/vestiarion.postman_environment.json
+```
+
+You can also open or save the files from the table above and drop them on **Import**.
+
+## 2. Set a read-only key
+
+Start with a read-only key. It reads everything, so it is enough for the first three Getting Started requests and every `GET` in the reference, and it cannot add anything.
+
+1. [Create a key](/docs/get-started/quickstart#1-create-an-api-key) with **Can also add records** left clear, and copy it.
+2. In Postman, choose the **Vestiarion** environment at the top right.
+3. Open the environment, and paste the key as the value of `apiKey`. That value stays on your machine. Never share it: leave the variable's shared value empty, so sharing the environment never shares the key. `apiKey` is a secret variable, so Postman masks it on screen. To keep the key out of the environment altogether, store it in Postman Vault, Postman's local store for secrets, and refer to it from `apiKey`.
+
+Every request sends `{{apiKey}}` as `Authorization: Bearer`, from the collection's **Authorization** tab. A request sent while `apiKey` is empty stops before it leaves Postman, and says where the key goes.
+
+## 3. Make your first call
+
+Open **Vestiarion: Getting Started**, then **1. Read, with a read-only key**, and send **1. Get the workspace status**. A `200` means the key works. `provenance.payments` says whether payments on this workspace are `live`, `simulate` or `unavailable`.
+
+Then send the next two:
+
+- **2. List invoices** returns the ten newest, each with the agent's verdict and why, in `agentReasoning`. To read the next ten, tick `cursor` under **Params** and paste the answer's `page.nextCursor` into it.
+- **3. List the agent's decisions, with its reasoning** returns the entries the agent signed into the ledger, with `actor=agent`, 200 at a time. The ledger answers oldest first, and has no newest-first order: it is a stream to resume from. To reach the latest decisions, tick `cursor` and send each answer's `page.nextCursor` back in it until `hasMore` is `false`; keep the last cursor, and your next read starts there. Tick `domain` for the payables' decisions only. For the latest decisions on bills at once, **2. List invoices** is newest first, with the agent's reasoning on each.
+
+Each request checks its status in its post-response script, under **Scripts**, so running the folder in the Collection Runner shows at once whether every read answers. A `401 unauthorized` means the key is missing, mistyped or revoked: check the value of `apiKey`. [Errors](/docs/get-started/errors) lists every code.
+
+## 4. Add records with a read-and-write key
+
+The second folder, **2. Add records, with a read-and-write key**, adds a counterparty and an invoice for it. A read-only key gets `403 forbidden` there.
+
+1. Create a key with **Can also add records** ticked. Name it for Postman, so you can revoke it on its own later.
+2. Paste it as the value of `apiKey`, in place of the read-only key.
+3. Open the collection's **Variables**, and set `vendorAddress` to a wallet you control and `vendorName` to its owner's name. Neither write sends until both are set.
+4. Send **4. Add a counterparty**. It adds a vendor at `vendorAddress`, and its post-response script keeps the new counterparty's `id` as the collection variable `counterpartyId`.
+5. Send **5. Add an invoice for it**: a 0.10 USDC payable from that counterparty, due 14 days from the day you send it.
+
+Both requests send an `Idempotency-Key`, so sending one twice adds one record: the repeat, within 24 hours, gets the first answer back with `Idempotent-Replayed: true`. Step 4's key is made from `vendorAddress`, and step 5's from the counterparty and the due date, so another address, or another day, adds another record. Changing the body and sending it with the same key answers `409 conflict`.
+
+<Callout kind="real-money" title="Use a wallet you control">
+The address step 4 adds waits for a person in the workspace to confirm it on **Counterparties**, and until then the agent pays nothing to it: it holds the invoice from step 5. Once it is confirmed, the agent may pay it: in real USDC, on a workspace on Arc mainnet. Set `vendorAddress` to a wallet you control, and never confirm an address you do not own, such as one copied from an example.
+</Callout>
+
+The agent decides the invoice as it decides one typed into the console, with every guardrail, usually within a minute. Send **2. List invoices** again to read its decision, or open it in the console. [Add invoices from your own system](/docs/guides/api-invoices) walks through the same path with `curl`.
+
+## The reference collection
+
+**Vestiarion API reference** has one request per operation, in a folder per tag: Workspace, Ledger, Payables and receivables, Counterparties, Milestones, Treasury and Insights. Each request's description is its reference page's, with a link to it, and says which key it needs.
+
+- **Parameters.** Every query parameter is listed with its description and allowed values, and switched off. Tick one under **Params** to send it.
+- **Writes.** A `POST` has the reference page's example body. Every `POST` but **Create a payee link**, which keeps no outcome for a key, also has an example `Idempotency-Key`. Replace the example's values with your own before you send one: an address in an example is not yours.
+- **Examples.** Under each request, the saved examples show its success and each documented error, with the status and the body the API answers with.
+
+## Keeping them current
+
+The collections are rebuilt from the OpenAPI document whenever an operation, a parameter, an example or an error changes, and served from the same URLs. To update yours, import the same URL again: Postman recognizes the collection and offers to replace it. The [changelog](/docs/changelog) says what changed in the API.
+
+Prefer code? The [TypeScript SDK](/docs/get-started/sdk) and the [command-line interface](/docs/get-started/cli) make the same requests.
