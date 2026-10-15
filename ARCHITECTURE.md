@@ -2695,6 +2695,24 @@ An owner of the `@vestiarion` npm organization publishes the CLI from that file,
 npm publish public/cli/vestiarion-cli-<version>.tgz --access public
 ```
 
+The Postman collections are rendered from the OpenAPI document by `npm run postman:build` (`scripts/lib/postman.ts`)
+into `public/postman/`: "Vestiarion: Getting Started", five requests from a key to a first write; "Vestiarion API
+reference", every operation in a folder per tag, with a saved example of its success and of each documented error; and
+an environment with `baseUrl` and an empty, secret `apiKey`. They live under `public/` so the site serves them at
+`/postman/<file>`, the URL Postman imports from, from the same deploy as the API they describe, with
+`Access-Control-Allow-Origin: *` for Postman's browser app. The saved errors quote the API's own messages.
+`tests/postman.test.ts` fails when a committed file differs from what the generator renders, when one does not
+validate against the Postman Collection v2.1.0 schema (kept in `tests/fixtures/postman/`), when a saved message is not
+in `src/lib/api` or the v1 routes, and when any file holds something shaped like a key or authenticates other than with
+`{{apiKey}}`. A generator that meets an error code without a message, or a parameter it does not place, throws rather
+than guess.
+
+`server.json`, at the root, describes the remote MCP server for the official MCP Registry: Streamable HTTP at
+`/api/mcp`, and the API key as a required, secret `Authorization` header, `Bearer {api_key}`. `tests/mcp-registry.test.ts`
+validates it against the registry's schema (kept in `tests/fixtures/mcp-registry/`), and holds its name to the
+repository's GitHub namespace and its version to the route's `serverInfo`. Publishing it, and the Postman collections'
+public workspace, are a maintainer's steps, in `docs/distribution/`.
+
 The SDK's and the CLI's versions are their own. The product's version is a git tag, `vX.Y.Z` or `vX.Y.Z-beta.N`, published as a GitHub
 Release by `.github/workflows/release.yml`, which a maintainer starts by hand once the tag is pushed; `CHANGELOG.md`
 says what each release changed for the people using it. A tag deploys nothing: Vercel deploys `main`. How to release,

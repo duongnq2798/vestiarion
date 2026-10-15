@@ -29,6 +29,12 @@ The key is checked before any MCP message is read:
 
 Every tool call reads the key's own workspace and no other. Asking `get_counterparty` for another workspace's counterparty answers `not_found`, as the API does.
 
+### Which key to use
+
+Start with a read-only key. It answers every read question on this page, and an agent holding it can read and explain, and nothing more: if a prompt talks the agent into calling a write tool, the call gets the API's `403 forbidden`. To make one, leave **Can also add records** clear when you [create the key](/docs/get-started/authentication#creating-a-key).
+
+The write tools need a read-and-write key: `create_counterparty`, `create_invoice`, `create_milestone` and `create_payee_link`. Give an agent one only when you want it to add records, and give it a key of its own, named for that agent, so you can [revoke it](/docs/get-started/authentication#revoking-a-key) without stopping anything else. Even then, no tool approves or pays.
+
 ## Tools
 
 One tool per [API operation](/docs/api). Its name is the operation's id in snake case, its arguments are the operation's parameters, or for a write the fields of its request body and an optional `idempotencyKey`, with their types, allowed values and bounds, and its description, which is what the agent reads, is the operation's summary and description from its reference page. A read's tool is marked read-only and idempotent. The four write tools are marked as adding records: not read-only, and not idempotent.
