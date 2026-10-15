@@ -22,6 +22,16 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   adds a bill, approves or pays. Settings lists connected extensions under **Chrome extension**, with Disconnect. The
   captured text is kept until the draft is decided, 30 days at most. Loaded unpacked for now; it needs migration
   `0121` and `CHROME_EXTENSION_IDS`. [Guide](https://www.vestiarion.xyz/docs/guides/invoice-capture).
+- **Try the API from Postman.** Two Postman collections and an environment, served by the site and generated from the
+  API's own description, so they always match it. "Vestiarion: Getting Started" goes from a key to a first answer in
+  three reads (the workspace's status, its invoices, the agent's decisions with its reasoning), then adds a
+  counterparty, at a wallet you control that you set first, and an invoice for it with a read-and-write key.
+  "Vestiarion API reference" has every operation, with the answers and errors each one documents. No file holds a
+  key, and no request can approve or pay. [Guide](https://www.vestiarion.xyz/docs/get-started/postman).
+- **The MCP server, described for the MCP Registry.** `server.json` describes the remote MCP server for the official
+  MCP Registry, with the API key as a required, secret header; publishing it is a manual step. The MCP page now
+  says which key to use: a read-only key by default, and a read-and-write key only for an agent that should add
+  records. [Guide](https://www.vestiarion.xyz/docs/ai-integration/mcp#which-key-to-use).
 
 ## [0.1.0-beta.5] - 2026-10-15
 

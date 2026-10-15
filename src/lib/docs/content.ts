@@ -96,6 +96,7 @@ export const PAGE_LOADERS: Record<string, () => Promise<MdxModule>> = {
   "get-started/sdk": () => import("../../../content/docs/get-started/sdk.mdx"),
   "get-started/cli": () => import("../../../content/docs/get-started/cli.mdx"),
   "get-started/authentication": () => import("../../../content/docs/get-started/authentication.mdx"),
+  "get-started/postman": () => import("../../../content/docs/get-started/postman.mdx"),
   "get-started/errors": () => import("../../../content/docs/get-started/errors.mdx"),
   "get-started/pagination": () => import("../../../content/docs/get-started/pagination.mdx"),
   "get-started/limits": () => import("../../../content/docs/get-started/limits.mdx"),

@@ -4,6 +4,7 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { authenticateApiKey, generateApiKey, type AuthenticatedKey } from "@/lib/platform/api-keys";
 import { MCP_TOOLS } from "@/lib/mcp/tools";
+import { MCP_SERVER_VERSION } from "@/lib/mcp/version";
 import { GET as verifyLedgerRoute } from "@/app/api/v1/ledger/verify/route";
 import { DELETE, GET, POST } from "@/app/api/mcp/route";
 import { carriesOrg, fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
@@ -314,7 +315,7 @@ describe("the MCP protocol, with a valid key", () => {
     expect(response.status).toBe(200);
     const message = await reply(response);
     expect(message.id).toBe(1);
-    expect(message.result).toMatchObject({ protocolVersion: version, serverInfo: { name: "vestiarion", version: "1.0.0" } });
+    expect(message.result).toMatchObject({ protocolVersion: version, serverInfo: { name: "vestiarion", version: MCP_SERVER_VERSION } });
     // Tools only, and a static list (spec M5): no resources, no prompts, nothing to listen for.
     expect((message.result as { capabilities: unknown }).capabilities).toEqual({ tools: { listChanged: false } });
     expect(reached.count).toBe(1);
@@ -328,7 +329,7 @@ describe("the MCP protocol, with a valid key", () => {
     expect(result.supportedVersions).toContain(MODERN);
     // The tool list is fixed, so there is never a change to announce.
     expect(result.capabilities.tools).toEqual({ listChanged: false });
-    expect(result._meta["io.modelcontextprotocol/serverInfo"]).toEqual({ name: "vestiarion", version: "1.0.0" });
+    expect(result._meta["io.modelcontextprotocol/serverInfo"]).toEqual({ name: "vestiarion", version: MCP_SERVER_VERSION });
   });
 
   it(`closes a ${MODERN} subscriptions/listen stream at once, rather than holding the function open`, async () => {
