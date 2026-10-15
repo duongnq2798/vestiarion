@@ -417,7 +417,19 @@ payment to an address.
   Circle credentials, not `orgs.mode`.
 - **The agent's side:** the cycle passes the AP and contractor stages the facts (`loadNewPayeeFacts`,
   `src/lib/new-payee-facts.ts`; `firstPaymentFrom` for a release). Code holds a first payment one party alone stands
-  behind as `counterparty.new_payee`.
+  behind as `counterparty.new_payee`. The stages hand the same check to `reconcileApInvoice` and `reconcileMilestone`
+  (`newPayee`). The reconcile's send-again path only ever sees a `submitting` intent with no Circle id: a send whose
+  outcome was never recorded (a stale claim, or a lost batch). `executePayment` would look it up at Circle and, if
+  Circle had none, send it again to the address as it stands now, so a member who changed it to their own wallet and
+  confirmed it alone while the payment was stuck would not have put a second person behind it. When that would be a
+  first payment with `twoParties` false, the reconcile holds it (`newPayeeResendBlocker`), after the high risk and
+  unconfirmed address checks and before two approvals, as the stages order them, and before any lookup. So a transfer
+  Circle did take is recorded `held`, not paid: a person's Approve and pay or Pay now looks the send up first
+  (`settleUnknownSend`) and records it. Its `ap_reconcile` or `milestone_reconcile` entry records
+  `notResubmittedBecause: "counterparty.new_payee"` with `guardrailBlocked`, `guardrailRule` and `newPayee`, and the
+  reasoning gains "[not resubmitted: this is the first payment to this address, …]". The entry carries no `observed`,
+  so the follow-up keeps comparing against the decision before it, and the payment waits for a person. A transfer
+  recorded with its Circle id is only read, and asks nothing.
 - **A person's side:** Approve and pay, and Pay now on a milestone, refuse whoever `firstPaymentRefusal` names unless
   they are the sole approver, in words that say why: they gave it or asked for it with a link (`newPayeeSelfMessage`),
   they confirmed an address no member answers for alone, or no one has confirmed it yet. The Approvals card
@@ -1568,6 +1580,10 @@ could not be read, or an error before any result — leaves the invoice
 `matched` for the next cycle rather than demoting it. When no transfer
 exists yet and one could be resubmitted, the counterparty's risk level is
 read again first, and a counterparty now screened high risk is not paid.
+Nor is a resubmission that would be the first payment to the counterparty's
+current address with two different people not behind it: it is held as
+`counterparty.new_payee` for a person, as the stage holds a decision, before
+the earlier send is looked up (the new payee check above).
 The contractor stage does the same for a `verified` milestone whose release is
 already in flight. It records `milestone_reconcile` rather than asking the
 model again, so a change of mind cannot record a released payment as held.

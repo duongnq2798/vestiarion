@@ -1188,6 +1188,9 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["You asked for this address with a payee link", APPROVAL_CARD],
     ["Another member must confirm this address first", APPROVAL_CARD],
     ["You confirmed this address", APPROVAL_CARD],
+    // A resubmission held as a new payee: its note, as the reasoning reads it (`noteSentence`).
+    ["Not sent again: this is the first payment to this address", "src/lib/reasoning-copy.ts", "Not sent again: "],
+    ["this is the first payment to this address, and only one person stands behind it — another person approves it", "src/lib/agent/orchestrator.ts"],
     ["Create the workspace", GETTING_STARTED],
     ["Add or import a first bill", GETTING_STARTED],
     ["Set or confirm the limits", GETTING_STARTED],

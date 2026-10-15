@@ -9,6 +9,7 @@ import type { ChainProvider } from "@/lib/circle";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 import { ARC_TESTNET } from "@/lib/network";
+import { newPayeeCheckFor } from "@/lib/new-payee-facts";
 
 /**
  * Two cycle seams the control work leans on, each tested directly rather
@@ -860,5 +861,140 @@ describe("reconcileApInvoice — a payment the agent never sent, above the figur
       expect(fake.requests.some((r) => r.path === "/rest/v1/payment_approvals")).toBe(false);
     }
     expect(payInvoiceMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * A resubmission pays the counterparty's address as it stands now (new payee check N3, N5): a member who changed it to
+ * their own wallet and confirmed it alone, while a payment was stuck, has not put a second person behind it. The stage
+ * hands the reconcile its check, as it hands it to the decision; held, it is recorded as the stage records the hold.
+ */
+describe("reconcileApInvoice — a payment never sent, now the first payment to its address (new payee check)", () => {
+  const provider = { mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003 } as unknown as ChainProvider;
+  const XAVIER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000a1";
+  const YARA = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000b2";
+  const invoice = {
+    id: INVOICE_ID,
+    amount: 150,
+    counterpartyId: COUNTERPARTY_ID,
+    counterpartyName: "Acme Supplies",
+    address: "0xdead",
+    reasoning: "Paid 150 USDC to Acme Supplies.",
+    txRef: null,
+  };
+  const neverSent = { providerTxId: null, status: "submitting" };
+  // Xavier changed the address to his own wallet and confirmed it himself, newest first.
+  const changedByXavier = { action: "counterparty_address_changed", detail: { by: XAVIER, counterpartyId: COUNTERPARTY_ID, from: "0xold", to: "0xdead" } };
+  const confirmedBy = (by: string) => ({ action: "counterparty_address_confirmed", detail: { by, counterpartyId: COUNTERPARTY_ID, address: "0xdead", via: "confirm" } });
+  const checkFrom = (paidTo: string[], entries: Array<{ action: string; detail: Record<string, unknown> }>) => {
+    const facts = { paidTo: new Map([[COUNTERPARTY_ID, new Set(paidTo)]]), entries: new Map([[COUNTERPARTY_ID, entries]]) };
+    return vi.fn((counterparty: { id: string; address: string | null }) => newPayeeCheckFor(facts, counterparty));
+  };
+  const world = () =>
+    cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") {
+        return { body: { risk_level: "low", address_changed_at: "2026-10-15T08:00:00+00:00", address_confirmed_at: "2026-10-15T08:01:00+00:00" } };
+      }
+      if (r.path === "/rest/v1/rpc/agent_paused") return { body: false };
+      if (r.path === "/rest/v1/payment_approvals" && r.method === "GET") return { body: [] };
+      return undefined;
+    });
+  const paid = () => payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 200 });
+
+  it("holds it as a new payee rather than sending it to an address one person alone stands behind", async () => {
+    const newPayee = checkFrom(["0xold"], [confirmedBy(XAVIER), changedByXavier]);
+    const { fake, run } = world();
+
+    const outcome = await run(() => reconcileApInvoice(invoice, neverSent, { db: db(), provider, operating: { id: ACCOUNT_ID }, newPayee }));
+
+    expect(newPayee).toHaveBeenCalledWith({ id: COUNTERPARTY_ID, address: "0xdead" });
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    expect(decideMock).not.toHaveBeenCalled();
+    expect(outcome.status).toBe("held");
+    expect(outcome.line.message).toBe("Acme Supplies: not resubmitted, the first payment to this address and two different people do not stand behind it (150 USDC)");
+    const body = invoicePatches(fake.requests)[0].body as Record<string, unknown>;
+    expect(body.status).toBe("held");
+    expect(body.tx_ref).toBeNull();
+    expect(body.paid_amount).toBeNull();
+    expect(body.agent_reasoning).toBe(
+      `${invoice.reasoning} [not resubmitted: this is the first payment to this address, and only one person stands behind it — another person approves it]`
+    );
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_action).toBe("ap_reconcile");
+    expect(append.p_detail).toMatchObject({
+      notResubmittedBecause: "counterparty.new_payee",
+      guardrailBlocked: true,
+      guardrailRule: "counterparty.new_payee",
+      newPayee: { addressBy: XAVIER, confirmedBy: XAVIER, twoParties: false },
+      execution: { resultingStatus: "held" },
+    });
+    // Still no `observed` facts: the follow-up stage keeps comparing against the decision itself.
+    expect(append.p_detail).not.toHaveProperty("observed");
+  });
+
+  it("says what an address no member answers for alone needs: one member confirms it and a different one approves it", async () => {
+    const pull = "https://github.com/acme/app/pull/42";
+    const newPayee = checkFrom([], [
+      confirmedBy(YARA),
+      { action: "counterparty_address_changed", detail: { by: null, via: "github", login: "x-on-github", commentUrl: `${pull}#issuecomment-9`, counterpartyId: COUNTERPARTY_ID, from: "0xold", to: "0xdead" } },
+      { action: "github_bounty_attached", detail: { by: XAVIER, login: "maintainer", author: "x-on-github", pullRequest: pull, counterpartyId: COUNTERPARTY_ID } },
+    ]);
+    const { fake, run } = world();
+
+    const outcome = await run(() => reconcileApInvoice(invoice, neverSent, { db: db(), provider, operating: { id: ACCOUNT_ID }, newPayee }));
+
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    expect(outcome.status).toBe("held");
+    const body = invoicePatches(fake.requests)[0].body as Record<string, unknown>;
+    expect(body.agent_reasoning).toBe(
+      `${invoice.reasoning} [not resubmitted: this is the first payment to this address, and no member answers for this address alone — one member confirms it and a different one approves it]`
+    );
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toMatchObject({
+      notResubmittedBecause: "counterparty.new_payee",
+      newPayee: { addressBy: "payee", bountyBy: XAVIER, confirmedBy: YARA, unanswered: true, twoParties: false },
+    });
+  });
+
+  it("is held as a new payee before two approvals are asked about", async () => {
+    const newPayee = checkFrom([], [confirmedBy(XAVIER), changedByXavier]);
+    const { fake, run } = world();
+
+    await run(() => reconcileApInvoice(invoice, neverSent, { db: db(), provider, operating: { id: ACCOUNT_ID }, newPayee, twoApprovalsAbove: 100 }));
+
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toMatchObject({ notResubmittedBecause: "counterparty.new_payee" });
+    expect(fake.requests.some((r) => r.path === "/rest/v1/payment_approvals")).toBe(false);
+  });
+
+  it("sends it again once another member confirmed the address, or the payee was paid at it before", async () => {
+    paid();
+    for (const newPayee of [checkFrom([], [confirmedBy(YARA), confirmedBy(XAVIER), changedByXavier]), checkFrom(["0xdead"], [confirmedBy(XAVIER), changedByXavier])]) {
+      const { fake, run } = world();
+      const outcome = await run(() => reconcileApInvoice(invoice, neverSent, { db: db(), provider, operating: { id: ACCOUNT_ID }, newPayee }));
+      expect(outcome.status).toBe("paid");
+      const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+      expect(append.p_detail).not.toHaveProperty("notResubmittedBecause");
+      expect(append.p_detail).not.toHaveProperty("guardrailRule");
+    }
+    expect(payInvoiceMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("only reads a transfer that already exists, without asking who stands behind the address", async () => {
+    payInvoiceMock.mockResolvedValue({
+      status: "paid", txRef: "0xhash", note: "", operatingBalance: 350,
+      execution: { providerMode: "live", feeUsd: 0.003, feeSource: "chain_reported", settledInMs: 4000, executedAt: "2026-09-29T00:00:00Z", reconciled: true },
+    });
+    const newPayee = checkFrom([], [confirmedBy(XAVIER), changedByXavier]);
+    const { run } = world();
+
+    const outcome = await run(() =>
+      reconcileApInvoice({ ...invoice, txRef: "circle-tx-1" }, { providerTxId: "circle-tx-1", status: "pending" }, { db: db(), provider, operating: { id: ACCOUNT_ID }, newPayee })
+    );
+
+    expect(newPayee).not.toHaveBeenCalled();
+    expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+    expect(outcome.status).toBe("paid");
   });
 });

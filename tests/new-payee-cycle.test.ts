@@ -35,6 +35,21 @@ describe("the cycle and the first payment to a new payee", () => {
     // Recorded as the AP stage records it, the member who asked for the address included (tests/new-payee.test.ts).
     expect(contractors).toContain("...(firstRelease ? { newPayee: newPayeeObserved(firstRelease) } : {}),");
   });
+
+  // A resubmission of a payment never sent pays the address as it stands now (tests/control-cycle.test.ts and
+  // tests/milestone-reconcile.test.ts run the reconcile with the check): each stage hands its reconcile the same check.
+  it("asks the AP stage's check before sending again a payment never sent", () => {
+    const start = source.indexOf("export async function runApStage(");
+    const ap = source.slice(start, source.indexOf("\n/**\n", start));
+    expect(ap).toContain("const newPayeeOf: NewPayeeCheckOf = (counterparty) => (newPayeeFacts ? newPayeeCheckFor(newPayeeFacts, counterparty) : null);");
+    expect(ap).toContain("{ db, provider, operating, onChainLimit, twoApprovalsAbove, newPayee: newPayeeOf }");
+    expect(ap).toContain("newPayee: newPayeeOf,");
+  });
+
+  it("asks the contractor stage's check before releasing again a release never sent", () => {
+    const contractors = source.slice(source.indexOf('await stage("contractors"'), source.indexOf('await stage("treasury"'));
+    expect(contractors).toContain("{ db, provider, operating: operating ? { id: operating.id } : null, onChainLimit, twoApprovalsAbove, newPayee: firstReleaseTo }");
+  });
 });
 
 describe("the follow-up and a payable held as a new payee (new payee check N7)", () => {

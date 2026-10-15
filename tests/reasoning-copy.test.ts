@@ -108,6 +108,10 @@ describe("the notes code adds", () => {
     expect(noteSentence("not paid: it is being locked in escrow; verify it again once the lock has finished")).toBe(
       "Not paid: it is being locked in escrow; verify it again once the lock has finished."
     );
+    // A resubmission held as a new payee, as the first-payment guide quotes it.
+    expect(noteSentence("not resubmitted: this is the first payment to this address, and only one person stands behind it — another person approves it")).toBe(
+      "Not sent again: this is the first payment to this address, and only one person stands behind it — another person approves it."
+    );
   });
 });
 
