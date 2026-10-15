@@ -6,7 +6,7 @@ import { appendLedgerEntry } from "../ledger";
 import { ledgerKeyId } from "../ledger-keys";
 import { encryptSecret, masterKeysFromEnv } from "../secrets";
 import { currentConfig } from "../context";
-import { MAINNET_OFF, MAINNET_STARTING_TWO_APPROVALS } from "../mainnet";
+import { MAINNET_OFF, MAINNET_STARTING_BUDGET, MAINNET_STARTING_TWO_APPROVALS } from "../mainnet";
 import { networkProfile, type Network } from "../network";
 import { homeChain } from "../payee-chains";
 import { workspaceNetwork } from "../workspace-network";
@@ -37,8 +37,8 @@ function startingAccounts(network: Network) {
   ];
 }
 
-/** The agent's spending limit a mainnet workspace starts with (mainnet go-live M9): tight, and a figure always stays. */
-export const MAINNET_STARTING_BUDGET = { dailyUsdc: 50, weeklyUsdc: 150 } as const;
+/** The agent's spending limit a mainnet workspace starts with, kept beside the two-approvals figure in `../mainnet`. */
+export { MAINNET_STARTING_BUDGET };
 
 /**
  * The figure above which a payment on a mainnet workspace needs two people, from the start (mainnet limits L1): the

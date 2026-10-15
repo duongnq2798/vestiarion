@@ -19,6 +19,13 @@ export const MAINNET_NOT_CONNECTED = "This workspace on Arc mainnet has no Circl
 export const MAINNET_STARTING_TWO_APPROVALS = 100;
 
 /**
+ * The agent's spending limit a mainnet workspace starts with (mainnet go-live M9): tight, and a figure always stays.
+ * Written when a mainnet workspace is created, and read in place of a missing or empty limit there
+ * (`readOutflowBudget`), so the agent never pays without one on Arc mainnet.
+ */
+export const MAINNET_STARTING_BUDGET = { dailyUsdc: 50, weeklyUsdc: 150 } as const;
+
+/**
  * Arc mainnet is on, and open to this address (M1): it is on the allowlist, or the allowlist holds `*`, which opens Arc
  * mainnet to everyone once a pilot is done. `*` is never implied: an empty allowlist opens it to no one. No address is
  * never allowed.

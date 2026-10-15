@@ -1,5 +1,7 @@
 import { unwrap, type OrgDb } from "../dal";
+import { MAINNET_STARTING_BUDGET } from "../mainnet";
 import { parseFigure } from "../usdc-figure";
+import { workspaceNetwork } from "../workspace-network";
 
 /**
  * The agent's spending limit (docs/superpowers/specs/2026-10-02-outflow-budget-design.md): what it
@@ -97,14 +99,24 @@ export function budgetRoom(budget: OutflowBudget | null, spent: BudgetSpent): Bu
   };
 }
 
-/** The workspace's limit, or null when it has never set one. */
+/**
+ * The workspace's limit, or null when it has never set one. On Arc mainnet a figure always stands (mainnet limits L1,
+ * L2): a workspace whose row is missing, or holds neither figure, reads the starting limit, never none, as
+ * `readTwoApprovalsAbove` reads the starting two-approvals figure. The row is the tenant's to write, so its absence
+ * must not lift the limit.
+ */
 export async function readOutflowBudget(orgDb: OrgDb): Promise<OutflowBudget | null> {
   const rows = unwrap(await orgDb.from("agent_budgets").select("daily_usdc, weekly_usdc").limit(1)) as Array<{
     daily_usdc: string | number | null;
     weekly_usdc: string | number | null;
   }>;
   const row = rows[0];
-  return row ? { dailyUsdc: numeric(row.daily_usdc), weeklyUsdc: numeric(row.weekly_usdc) } : null;
+  const budget = row ? { dailyUsdc: numeric(row.daily_usdc), weeklyUsdc: numeric(row.weekly_usdc) } : null;
+  const none = !budget || (budget.dailyUsdc === null && budget.weeklyUsdc === null);
+  if (none && workspaceNetwork().id === "arc-mainnet") {
+    return { dailyUsdc: MAINNET_STARTING_BUDGET.dailyUsdc, weeklyUsdc: MAINNET_STARTING_BUDGET.weeklyUsdc };
+  }
+  return budget;
 }
 
 /** What the agent paid on its own today and in the 7-day window, from its signed decisions (R1, R3). */

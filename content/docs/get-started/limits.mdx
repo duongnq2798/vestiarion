@@ -6,7 +6,7 @@ A collection returns 1 to 200 items per page. `limit` defaults to 50, and a larg
 
 ## Rate limits
 
-Reads have no rate limit. Writes are limited to 30 a minute for each key, counted on each server instance, so a burst can now and then get a little past it. Over the limit, a write answers `429 rate_limited` with `Retry-After: 60`. No endpoint returns `503` today, but `unavailable` is a defined [error code](/docs/get-started/errors): write your client to back off on both, and it keeps working if a limit is added to reads.
+Reads have no rate limit. Writes from one key come in bursts of up to 30, then one every 2 seconds, counted on each server instance, so a key can make up to about 60 writes in its first minute and a little more now and then. Over the limit, a write answers `429 rate_limited` with `Retry-After: 60`. No endpoint returns `503` today, but `unavailable` is a defined [error code](/docs/get-started/errors): write your client to back off on both, and it keeps working if a limit is added to reads.
 
 - On a `429`, wait at least as long as the `Retry-After` header says, in seconds, before you try again.
 - On a `503`, retry with exponential backoff.

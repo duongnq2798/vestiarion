@@ -29,7 +29,10 @@ const ALLOWED: Record<string, number> = {
   // Terms and privacy, which name both networks and say what runs on Arc testnet only: hosted wallets, Circle's faucet,
   // shadow mode, the USYC reserve, escrow, the EURC swap, payouts to other chains and the agent's payee history.
   "src/app/terms/page.tsx": 11,
-  "src/app/privacy/page.tsx": 6,
+  // The privacy page's seventh, and the security page's list of services: the payee chains a receipt is read on for a
+  // payout to another chain, which only Arc testnet has.
+  "src/app/privacy/page.tsx": 7,
+  "src/lib/subprocessors.ts": 1,
   // The rule that books a payment only into books of the same reality, which names Arc testnet on either network: a
   // payment on Arc testnet or in shadow mode is booked only into a demo company (accounting write-back W1).
   "src/lib/connectors/posting.ts": 1,

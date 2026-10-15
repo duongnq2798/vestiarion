@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
+import { IDEMPOTENCY_TTL_MS } from "@/lib/api/idempotency";
 import {
-  deleteAbandonedSandboxes, deleteExpiredWebhookDeliveries, SANDBOX_IDLE_DAYS, WEBHOOK_DELIVERY_RETENTION_DAYS,
+  deleteAbandonedSandboxes, deleteExpiredIdempotencyOutcomes, deleteExpiredWebhookDeliveries, SANDBOX_IDLE_DAYS, WEBHOOK_DELIVERY_RETENTION_DAYS,
 } from "@/lib/platform/cleanup";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
@@ -343,5 +344,42 @@ describe("deleteExpiredWebhookDeliveries", () => {
     const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => deleteExpiredWebhookDeliveries(NOW));
 
     expect(result).toEqual({ deleted: 4, failed: 1 });
+  });
+});
+
+describe("deleteExpiredIdempotencyOutcomes", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  /** An outcome is given back for a day (write API R5); after that it is deleted, response body and all. */
+  const EXPIRY_ISO = new Date(NOW.getTime() - IDEMPOTENCY_TTL_MS).toISOString();
+
+  it("deletes every outcome claimed more than 24 hours ago, across workspaces, and counts them", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const fake = fakeSupabase((request) =>
+      request.path === "/rest/v1/api_idempotency" && request.method === "DELETE"
+        ? { status: 200, body: [], headers: { "content-range": "*/9" } }
+        : { status: 404, body: { message: "unexpected" } });
+
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => deleteExpiredIdempotencyOutcomes(NOW));
+
+    expect(IDEMPOTENCY_TTL_MS).toBe(24 * 3_600_000);
+    expect(result).toEqual({ deleted: 9, failed: 0 });
+    expect(fake.requests).toHaveLength(1);
+    const [request] = fake.requests;
+    expect(request.method).toBe("DELETE");
+    expect(request.headers.get("prefer")).toMatch(/count=exact/);
+    expect(request.params.get("created_at")).toBe(`lt.${EXPIRY_ISO}`);
+    // Every workspace's: the cleanup is the platform's, and names none.
+    expect(request.params.has("org_id")).toBe(false);
+  });
+
+  it("never throws: a failed delete is logged and counted as failed", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fake = fakeSupabase(() => ({ status: 500, body: { message: "boom" } }));
+
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => deleteExpiredIdempotencyOutcomes(NOW));
+
+    expect(result).toEqual({ deleted: 0, failed: 1 });
+    expect(error).toHaveBeenCalledWith("could not delete expired idempotency outcomes", "boom");
   });
 });

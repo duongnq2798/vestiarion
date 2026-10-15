@@ -10,7 +10,7 @@ import { SiteMenu } from "./SiteMenu";
 
 /**
  * The header and footer of the pages outside a workspace: the landing page,
- * sign-in, the workspace chooser, the docs, the terms and privacy pages and
+ * sign-in, the workspace chooser, the docs, the terms, privacy and security pages and
  * the not-found pages. Inside a workspace the navigation is `AppFrame`'s.
  */
 
@@ -168,6 +168,7 @@ export const FOOTER_COLUMNS: ReadonlyArray<{ title: string; links: readonly Foot
     links: [
       { href: "/terms", label: "Terms" },
       { href: "/privacy", label: "Privacy" },
+      { href: "/security", label: "Security" },
       { href: ISSUES_URL, label: "Contact" },
     ],
   },
@@ -178,6 +179,7 @@ export const COMPACT_FOOTER_LINKS: readonly FooterLink[] = [
   { href: "/docs", label: "Docs" },
   { href: "/terms", label: "Terms" },
   { href: "/privacy", label: "Privacy" },
+  { href: "/security", label: "Security" },
   { href: GITHUB_URL, label: "GitHub" },
   { href: X_URL, label: "X" },
 ];
@@ -236,7 +238,7 @@ const COPYRIGHT = "© 2026 Vestiarion contributors";
 /**
  * The full footer is the landing page's: the wordmark, then four columns of
  * links, two across on a phone, four from `sm` and beside the wordmark from
- * `lg`. `compact` is one line and four links, for every other public page.
+ * `lg`. `compact` is one line and its links, for every other public page.
  */
 export function SiteFooter({ compact = false, networkLabel = "Arc" }: { compact?: boolean; networkLabel?: string }) {
   if (compact) {

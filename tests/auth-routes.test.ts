@@ -42,6 +42,7 @@ describe("requiresSession", () => {
     ["/login", false],
     ["/terms", false],
     ["/privacy", false],
+    ["/security", false],
     ["/docs/guides/go-live", false],
     ["/auth/callback", false],
     ["/api/ledger/verify", false],
@@ -73,5 +74,6 @@ describe("loginRedirectFor", () => {
     expect(loginRedirectFor("/login", "?next=%2Fo", false)).toBeNull();
     expect(loginRedirectFor("/terms", "", false)).toBeNull();
     expect(loginRedirectFor("/privacy", "", false)).toBeNull();
+    expect(loginRedirectFor("/security", "", false)).toBeNull();
   });
 });

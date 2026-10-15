@@ -48,6 +48,7 @@ GitHub, treasury, Arc mainnet and the public numbers.
 
 ## Contents
 
+- [How to evaluate Vestiarion in 5 minutes](#how-to-evaluate-vestiarion-in-5-minutes)
 - [What Vestiarion does](#what-vestiarion-does)
 - [Why it is different](#why-it-is-different)
 - [How payments work](#how-payments-work)
@@ -61,6 +62,60 @@ GitHub, treasury, Arc mainnet and the public numbers.
 - [Documentation](#documentation)
 - [Development](#development)
 - [License](#license)
+
+## How to evaluate Vestiarion in 5 minutes
+
+Everything below runs on the live app, **[www.vestiarion.xyz](https://www.vestiarion.xyz)**, with an email address and
+nothing else: no wallet, no USDC, no API key, nothing to install.
+
+1. **Open a workspace on Arc testnet.** Sign in at [www.vestiarion.xyz/login](https://www.vestiarion.xyz/login) with
+   **Continue with Google** or **Email me a sign-in link**, give the workspace a name and choose **Create workspace**
+   (a **Test workspace**, on Arc testnet, if you are asked). It starts as a sandbox: payments are simulated and nothing
+   reaches a chain.
+2. **Load sample data and run the agent.** On **Treasury**, the console, choose **Load sample data**: six
+   counterparties, seven invoices (six to pay and one to collect) and two contractor milestones, chosen so that one cycle
+   shows every outcome. Then choose **Run cycle now**. To try one of your own bills instead, follow
+   [See your first decision](https://www.vestiarion.xyz/docs/guides/try-it).
+3. **Read the decisions and the refusals.** On **Bills & receivables**, each bill shows what the agent decided: pay it,
+   pay it on its discount's last day, ask for a missing purchase order, hold it above its supplier's limit, or flag it as
+   a duplicate. Its card shows **Agent’s reasoning** and **How the agent decided**. Where the model wanted to pay and a
+   rule in code stopped it, the card says "Blocked by code, not by the model" and names the rule.
+   [How payments are controlled](https://www.vestiarion.xyz/docs/guides/controls) lists every rule, and
+   [When the model and the policy disagree](https://www.vestiarion.xyz/docs/research/model-vs-policy#code-refused-seven-payments)
+   shows the payments code refused in production.
+4. **Verify the signed ledger.** Open **Audit log** and choose **Verify hash chain**: it checks every Ed25519 signature
+   and hash link and answers "Chain intact". Under **Download**, **Signed JSON** exports the chain, and
+   [`verify-ledger-export.mjs`](https://www.vestiarion.xyz/tools/verify-ledger-export.mjs) checks it on your own machine
+   with Node.js alone ([Verify an audit export](https://www.vestiarion.xyz/docs/guides/audit-export)).
+5. **Check production.** [Open numbers](https://www.vestiarion.xyz/open) reads production on every load: workspaces,
+   payments, decisions and what code refused, per network, with our own payments linked to the explorer under "Verify it
+   yourself". [Mainnet proof](#mainnet-proof) walks through the first payment on Arc mainnet: held by code as a first
+   payment to a new address, approved by a second person, and paid through the owner's spending-limit contract.
+
+**Watch instead:** [the demo](https://www.youtube.com/watch?v=UqfvCkkYGlk) (2:59),
+[the full product tour](https://www.youtube.com/watch?v=omER_wFsH3M) (4:58), and the
+[Xero](https://www.vestiarion.xyz/docs/guides/xero#watch-it) and
+[HubSpot](https://www.vestiarion.xyz/docs/guides/hubspot#watch-it) flows, under two minutes each.
+
+**Reviewing security:** [www.vestiarion.xyz/security](https://www.vestiarion.xyz/security) covers the architecture,
+tenant isolation, encryption, access control, connector tokens, webhooks, the subprocessors and what we do not claim.
+[SECURITY.md](SECURITY.md) says how to report a vulnerability.
+
+**Where things are in this repository:**
+
+| Path | What it holds |
+| --- | --- |
+| [`src/app`](src/app) | The Next.js routes: public pages, the workspace (`o/[slug]`), the shared links (`receipt`, `pay`, `report`, `statement`) and the API (`api/v1`, `api/mcp`) |
+| [`src/lib`](src/lib) | The logic: the agent and the rules in code (`agent/`, `agent/guardrails.ts`), the signed ledger (`ledger.ts`), Circle and Arc (`circle/`), the connectors, the tenant data access layer (`dal/`) and secrets (`secrets.ts`) |
+| [`src/components`](src/components) | The interface |
+| [`supabase/migrations`](supabase/migrations) | The Postgres schema, row-level security and database functions, as numbered migrations |
+| [`contracts`](contracts) | `VestiarionSpendingLimit` and `VestiarionEscrow`, in Solidity |
+| [`sdk`](sdk) and [`cli`](cli) | `@vestiarion/sdk` and `@vestiarion/cli`: the TypeScript client and the `vestiarion` command |
+| [`integrations`](integrations) | The Slack app manifest and the HubSpot app project |
+| [`content/docs`](content/docs) | The docs site's pages, in MDX |
+| [`scripts`](scripts) | Operator commands: migrations, a cycle, the payments switch, contract builds, research replays |
+| [`tests`](tests) | The Vitest suite `npm run verify` runs, every migration included, on an in-process Postgres |
+| [`docs`](docs) | Running it yourself, releasing, and each feature's design with its rollout record |
 
 ## What Vestiarion does
 
@@ -301,6 +356,8 @@ run in production, with its ledger entries and transactions.
 | **[Pipedrive](https://www.vestiarion.xyz/docs/guides/pipedrive)** | Won deals come in with their organizations and persons as soon as Pipedrive says a deal changed, and every 15 minutes; Plan collections fills in the New deal form, and a deal changed in Pipedrive afterwards is flagged on its deal for a person to change or keep; once allowed, each planned deal's receipts are written back to it in Vestiarion's own deal fields, read back, never over a person's change. Pipedrive names no developer sandbox, so only payments on Arc mainnet outside shadow mode are written; one company per workspace |
 | **[Xero](https://www.vestiarion.xyz/docs/guides/xero)** | Bills approved in Xero come in for review every 15 minutes, through the same check as a bill list, and become payables when a person adds them; once paid on Arc, each payment is drafted as a booking against its bill, which an owner or admin reviews field by field and approves before anything is written to Xero. A payment on Arc testnet or in shadow mode is booked only into a Xero demo company. [Watch it](https://www.vestiarion.xyz/docs/guides/xero#watch-it) (1:52) |
 | **[QuickBooks Online](https://www.vestiarion.xyz/docs/guides/quickbooks)** | Open bills in QuickBooks come in for review every 15 minutes, and sooner when QuickBooks says one changed, through the same check; a bill partly paid there comes in at what is left; read-only, with the bank account payments will be booked to chosen ahead |
+
+The Postman collections are also in a public workspace, [Vestiarion API](https://www.postman.com/vestiarion/vestiarion-api), and the MCP server is in the [MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.duongnq2798/vestiarion) as `io.github.duongnq2798/vestiarion`.
 
 ```bash
 npm install @vestiarion/sdk            # the typed client

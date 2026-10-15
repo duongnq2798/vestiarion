@@ -11,11 +11,23 @@ under `public/postman/`, and served by the site:
 [Use Vestiarion from Postman](https://www.vestiarion.xyz/docs/get-started/postman). Putting them in a public Postman
 workspace is a person's task, done once, then repeated when the API changes.
 
-## Checklist
+**Status:** first published on 2026-10-15. The public workspace is
+[Vestiarion API](https://www.postman.com/vestiarion/vestiarion-api), under the team's public handle `vestiarion`, and
+holds both collections, imported from the site's links. The guide and the README link it.
+
+## First publication (done 2026-10-15)
+
+These are the steps the first publication followed. Run them again only to make the workspace again from scratch; for
+an API change, see [When the API changes](#when-the-api-changes).
 
 - [ ] The PR adding the files is merged and deployed: each URL above answers `200` with JSON.
 - [ ] Sign in to Postman with the team's account, not a personal one, and give the team a public profile (team
       settings) if it has none. A public workspace needs one.
+
+  > **Note:** the public profile needs the team's public handle set, `vestiarion`. The workspace's public URL,
+  > `https://www.postman.com/vestiarion/vestiarion-api`, is made from it. While no handle is set, a public
+  > workspace's URL does not work: Postman shows an error with a `:publicHandle` placeholder where the handle belongs.
+
 - [ ] Create a workspace named **Vestiarion API**, visibility **Public**, with the summary: "The Vestiarion REST API:
       read a workspace's ledger, books and the agent's decisions; add counterparties, invoices and milestones."
 - [ ] **Import** each of the three URLs (paste the link). Import the Getting Started collection first, so it is listed
@@ -34,8 +46,11 @@ workspace is a person's task, done once, then repeated when the API changes.
 ## When the API changes
 
 A PR that changes an operation, a parameter, an example or an error runs `npm run postman:build` and commits the
-result, as the test requires. Once it is deployed, update the public workspace:
+result, as the test requires. The site serves the new files from that deploy, but the public workspace's copy does not
+change on its own: once the PR is deployed, re-import the workspace's collections from the site's links.
 
+- [ ] Check the changed collection's URL above answers `200` with the new version.
 - [ ] In the public workspace, **Import** the changed collection's URL again and choose **Replace**. Postman recognizes
-      it by its fixed `_postman_id`, so forks and the Run in Postman button keep pointing at it.
+      it by its fixed `_postman_id`, so forks and the Run in Postman button keep pointing at it. Forks then offer
+      **Pull changes**, which the guide tells readers to use.
 - [ ] Open one changed request and check it matches its reference page.

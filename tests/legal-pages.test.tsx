@@ -35,7 +35,7 @@ const text = (markup: string) =>
 const source = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8");
 
 const PAGES = [
-  { path: "/terms", file: "src/app/terms/page.tsx", Page: TermsPage, metadata: termsMetadata, heading: "Terms of use", updated: "2026-10-14" },
+  { path: "/terms", file: "src/app/terms/page.tsx", Page: TermsPage, metadata: termsMetadata, heading: "Terms of use", updated: "2026-10-15" },
   { path: "/privacy", file: "src/app/privacy/page.tsx", Page: PrivacyPage, metadata: privacyMetadata, heading: "Privacy", updated: "2026-10-15" },
 ] as const;
 
@@ -106,8 +106,9 @@ describe("the terms", () => {
   });
 
   it("states the starting figures of a workspace on Arc mainnet as the code writes them", () => {
-    const workspace = source("src/lib/platform/workspace.ts");
-    const budget = workspace.match(/MAINNET_STARTING_BUDGET = \{ dailyUsdc: (\d+), weeklyUsdc: (\d+) \}/);
+    const mainnet = source("src/lib/mainnet.ts");
+    const budget = mainnet.match(/MAINNET_STARTING_BUDGET = \{ dailyUsdc: (\d+), weeklyUsdc: (\d+) \}/);
+    expect(source("src/lib/platform/workspace.ts")).toContain("daily_usdc: MAINNET_STARTING_BUDGET.dailyUsdc");
     expect(budget).not.toBeNull();
     expect(body).toContain(`two approvals above ${MAINNET_STARTING_TWO_APPROVALS} USDC`);
     expect(body).toContain(`${budget?.[1]} USDC a day and ${budget?.[2]} USDC in 7 days`);

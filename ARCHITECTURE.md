@@ -9,8 +9,11 @@ available for screening and reserve operations.
 
 ## Isolation: two lines
 
-One organization's data never reaches another's request, by two independent
-mechanisms (spec §5.6):
+No request for one organization reads or changes another's records, by two
+independent mechanisms (spec §5.6). The answers that do cross organizations are
+aggregates or the team's own: /open's counts and USDC totals and the team's own
+payments, the landing's latest team decisions, and payee history over x402,
+which carries no amount.
 
 **Line 1 — the Data Access Layer.** `db()` adds `.eq('org_id', ...)` to every
 query and sets `org_id` on every insert; `no-restricted-imports` forbids
@@ -49,6 +52,14 @@ foreign-key checks, so migration `0019` makes every tenant-to-tenant foreign
 key composite (`org_id, ...`) and widens `cycle_snapshots`'s unique key to
 `(org_id, cycle_run_id)`, so the database itself refuses a link into another
 organization's row.
+
+The public `/security` page (`src/app/security/page.tsx`) sets these lines out
+for security reviewers, with encryption, approvals, connector tokens, webhook
+signing, the ledger, retention and the subprocessors, and says what is not
+claimed. `tests/security-page.test.tsx` reads the figures it quotes from the
+code, and holds its subprocessors (`src/lib/subprocessors.ts`) to the privacy
+page's services, name for name. `SECURITY.md` is the policy for reporting a
+vulnerability.
 
 ## Workspaces, roles and the cron
 
@@ -148,7 +159,8 @@ not a sandbox, and re-checks `last_active_at` against the cutoff before deleting
 that became active between the listing and the delete survives. A `live` organization is never
 deleted automatically. `POST /api/platform/cleanup`, bearer-guarded the same way as the cron, lists
 and deletes candidates; `.github/workflows/sandbox-cleanup.yml` calls it once a day and on manual
-dispatch.
+dispatch. The same run deletes webhook deliveries past their 30 days and the write API's idempotency
+outcomes past their 24 hours, across workspaces, and reports how many.
 
 **Deleting a workspace** is an owner's call from the danger zone at the bottom of Settings
 (`deleteWorkspaceAction`, `org.administer`, after typing the slug): `delete_org(p_org_id, p_by)`
@@ -617,7 +629,10 @@ phase 1b).
   action checks again. `createWorkspace({ network })` has `create_org` write the row's network on insert (0081),
   before the first account; 0078's lock then refuses any change once an account exists.
   - A mainnet workspace starts with one empty "Operating" account on `ARC`, no reserve, and an agent spending limit
-    of 50 USDC a day and 150 USDC in 7 days. `changeAgentBudget` keeps a figure there.
+    of 50 USDC a day and 150 USDC in 7 days (`MAINNET_STARTING_BUDGET`, `src/lib/mainnet.ts`). `changeAgentBudget`
+    keeps a figure there, and `readOutflowBudget` reads the starting limit for a mainnet workspace whose
+    `agent_budgets` row is missing or holds neither figure, since the tenant role can delete that row: the agent
+    never pays on Arc mainnet without a limit, as `readTwoApprovalsAbove` never reads no figure there.
   - It also starts with two approvals above 100 USDC (`approval_policies`, phase 2b), which `changeTwoApprovals` keeps
     on there. `org_created` records the starting limits.
 - **Held until live.** `orgConfig` sets `chain.networkHold`: `MAINNET_OFF` while the deployment has it off (and the
@@ -2583,11 +2598,13 @@ the link, which only this answer ever does, so that route keeps no outcome for
 an `Idempotency-Key` and answers with `Cache-Control: no-store`. An address added this way is
 stored as an unconfirmed change, so the agent holds payments to it until a
 person confirms it. A payable starts a cycle with `runCycleSoon`. Writes are
-counted per key (`takeApiWriteToken`, 30 a minute) after the scope check.
+counted per key (`takeApiWriteToken`, a burst of 30, then one every 2 seconds) after the scope check.
 `withIdempotency` (`src/lib/api/idempotency.ts`) claims an
 `Idempotency-Key` in `api_idempotency`, a platform table only the service role
-reaches, after the body validates: the first outcome is kept for 24 hours
-and replayed with `Idempotent-Replayed: true`, a different body or a request
+reaches, after the body validates: the first outcome is given back for 24 hours
+and replayed with `Idempotent-Replayed: true` (the daily cleanup,
+`deleteExpiredIdempotencyOutcomes` in `src/lib/platform/cleanup.ts`, deletes it
+after that, response body and all), a different body or a request
 still in flight answers `409 conflict`, and a `5xx` releases the claim so a
 retry runs again. A claim left without an outcome for 10 minutes
 (`IN_FLIGHT_TIMEOUT_MS`, longer than any function runs) is taken over by the
