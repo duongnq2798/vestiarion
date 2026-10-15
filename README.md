@@ -302,6 +302,8 @@ run in production, with its ledger entries and transactions.
 | **[Xero](https://www.vestiarion.xyz/docs/guides/xero)** | Bills approved in Xero come in for review every 15 minutes, through the same check as a bill list, and become payables when a person adds them; once paid on Arc, each payment is drafted as a booking against its bill, which an owner or admin reviews field by field and approves before anything is written to Xero. A payment on Arc testnet or in shadow mode is booked only into a Xero demo company. [Watch it](https://www.vestiarion.xyz/docs/guides/xero#watch-it) (1:52) |
 | **[QuickBooks Online](https://www.vestiarion.xyz/docs/guides/quickbooks)** | Open bills in QuickBooks come in for review every 15 minutes, and sooner when QuickBooks says one changed, through the same check; a bill partly paid there comes in at what is left; read-only, with the bank account payments will be booked to chosen ahead |
 
+The Postman collections are also in a public workspace, [Vestiarion API](https://www.postman.com/vestiarion/vestiarion-api), and the MCP server is in the [MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.duongnq2798/vestiarion) as `io.github.duongnq2798/vestiarion`.
+
 ```bash
 npm install @vestiarion/sdk            # the typed client
 npm install --global @vestiarion/cli   # the vestiarion command
