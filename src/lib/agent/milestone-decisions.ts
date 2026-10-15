@@ -3,7 +3,7 @@ import { db } from "../dal";
 import { chainModes, getChainProvider } from "../circle";
 import { payeeNotReady } from "../counterparty-address";
 import { firstPaymentCheck, loadNewPayeeFacts } from "../new-payee-facts";
-import { newPayeeCheck } from "../new-payee";
+import { addressGiver, newPayeeCheck } from "../new-payee";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { listLedgerEntriesForTargets } from "../ledger";
 import type { Provenance } from "../provenance";
@@ -506,7 +506,7 @@ export async function heldMilestonesTwoApprovals(
         id: milestone.id,
         payment: { amount: milestone.amount, currency: "USDC", address },
         weighed: milestone.amount,
-        excluded: [milestone.created_by, check?.firstPayment ? check.addressBy : null],
+        excluded: [milestone.created_by, check?.firstPayment ? addressGiver(check) : null],
         sent: transferExists(intents.get(milestone.id) ?? null),
       };
     }),
@@ -575,8 +575,8 @@ export async function payHeldMilestone(input: {
   const twoNeeded = above !== null && milestone.amount > above;
   // A first payment to an address, and who gave it (new payee check N4).
   const firstPayment = !alreadySent && provider.mode === "live" ? await firstPaymentCheck(db(), { id: milestone.contractorId, address: contractorAddress }) : null;
-  // Whoever added it, and whoever gave a first payment's address.
-  const excluded = [milestone.createdBy, firstPayment?.addressBy ?? null];
+  // Whoever added it, and whoever gave a first payment's address: for one sent through a payee link, its creator.
+  const excluded = [milestone.createdBy, addressGiver(firstPayment)];
   const source: PaymentSource = { type: "milestone", id: milestone.id };
   const payment = { amount: milestone.amount, currency: "USDC", address: contractorAddress };
   let soleApprover = false;
@@ -610,7 +610,7 @@ export async function payHeldMilestone(input: {
     }
   }
   // A first payment to an address needs someone other than whoever gave it, unless they decide alone (new payee check N4).
-  if (!twoNeeded && firstPayment?.addressBy === input.actorId && !(await isSoleApprover(input.actorId))) raise("new_payee_self");
+  if (!twoNeeded && addressGiver(firstPayment) === input.actorId && !(await isSoleApprover(input.actorId))) raise("new_payee_self");
 
   // Two approvals (T4): the first is recorded and sends nothing; the second, by another person, pays.
   let approvals: Array<{ by: string; at: string }> = [];

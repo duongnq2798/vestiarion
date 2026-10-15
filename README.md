@@ -164,7 +164,7 @@ flowchart LR
 | Layer | What it guarantees |
 | --- | --- |
 | **Guardrails in code** | Never pay a counterparty screened high risk, above its limit, a duplicate of a settled invoice, or with an incomplete match. A refusal records the model's argument and the rule that overruled it |
-| **New-payee check** | The first payment to an address needs two people behind it: the agent never makes one that only the person who gave the address stands behind, and that person cannot approve it either |
+| **New-payee check** | The first payment to an address needs two people behind it: the agent never makes one that only the person who gave the address stands behind, and that person cannot approve it either. Whoever creates a payee link counts as having given the address that comes through it |
 | **Two approvals** | Above a figure the owner sets, a payment needs two different people. Arc mainnet workspaces start at 100 USDC, and the owner can raise it but not turn it off there |
 | **Maker and checker** | Roles are owner, admin, approver and viewer. No one approves an invoice they created; only Compliance clears a high-risk counterparty |
 | **Agent spending limit** | A daily and a 7-day figure, checked in code and, where enforced, by the contract. Arc mainnet workspaces start at 50 USDC a day and 150 USDC in 7 days |

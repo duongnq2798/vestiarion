@@ -1495,6 +1495,57 @@ describe("the AP stage and the first payment to a new payee (new payee check)", 
 });
 
 
+/**
+ * An address sent through a payee link counts as given by the member who created the link (independent review,
+ * 2026-10-15): one admin who creates a link, sends their own wallet through it and confirms it has not put a second
+ * person behind it. `linkCreatedBy` is what `loadNewPayeeFacts` reads from the link (tests/new-payee-facts.test.ts).
+ */
+describe("the AP stage and the first payment to an address sent through a payee link", () => {
+  const dueToday = { due_date: "2026-10-01T12:00:00+00:00", early_pay_discount_pct: null, discount_due_date: null };
+  const sentThroughLink = {
+    action: "counterparty_address_changed",
+    detail: { by: null, via: "payee_link", linkId: "link-1", counterpartyId: NORTHWIND, from: null, to: "0xnorth" },
+    linkCreatedBy: "member-anna",
+  };
+  const confirmedBy = (by: string) => ({ action: "counterparty_address_confirmed", detail: { by, counterpartyId: NORTHWIND, address: "0xnorth", via: "confirm" } });
+  const facts = (entries: Array<{ action: string; detail: Record<string, unknown>; linkCreatedBy?: string | null }>) => ({
+    paidTo: new Set<string>(),
+    entries: new Map([[NORTHWIND, entries]]),
+  });
+
+  it("holds it for another person when the member who created the link is the one who confirmed the address", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "pay", payOn: null, reasoning: "Due today and within the limit; paying it.", confidence: 0.9 }));
+    const { fake, chain, stage } = apFake({ book: [payable(dueToday)], newPayee: facts([confirmedBy("member-anna"), sentThroughLink]) });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    expect(invoicePatches(fake.requests)[0].body).toMatchObject({ status: "held", paid_amount: null });
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({
+      guardrailBlocked: true,
+      guardrailRule: "counterparty.new_payee",
+      observed: { newPayee: { addressBy: "payee", linkCreatedBy: "member-anna", confirmedBy: "member-anna", twoParties: false } },
+      execution: { resultingStatus: "held" },
+    });
+  });
+
+  it("pays it, as before, when another member confirmed the address, and records who created the link", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "pay", payOn: null, reasoning: "Due today and within the limit; paying it.", confidence: 0.9 }));
+    const { fake, chain, stage } = apFake({ book: [payable(dueToday)], newPayee: facts([confirmedBy("member-bao"), sentThroughLink]) });
+
+    await stage();
+
+    expect(chain.transfers.map((transfer) => transfer.amount)).toEqual([400]);
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({
+      guardrailBlocked: false,
+      observed: { newPayee: { addressBy: "payee", linkCreatedBy: "member-anna", confirmedBy: "member-bao", twoParties: true } },
+    });
+  });
+});
+
+
 describe("the AP stage and a counterparty with no payment address", () => {
   const plain = { early_pay_discount_pct: null, discount_due_date: null };
   const noAddress = () => payable({ amount: "300", ...plain, counterparties: counterparty({ address: null }) });

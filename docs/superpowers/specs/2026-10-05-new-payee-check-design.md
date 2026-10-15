@@ -32,6 +32,11 @@ Addresses that come from outside the console already wait for a person: one sent
     - `create_counterparty` (`address` is the address): its `by`.
   - A later `counterparty_address_confirmed` for that address names who confirmed it.
   - An address with no such entry (set by a script) has no known giver, and counts as one person.
+  - Amended 2026-10-15 (independent review): an address sent through a payee link also names the member who created
+    the link, read from its `payee_links` row (`created_by`). That member counts as having given the address for N3
+    and N4, so a confirmation by them alone is not a second party, and they may not approve its first payment unless
+    they are the sole approver. `addressBy` stays `"payee"`; N6's record adds `linkCreatedBy`. A link whose creator is
+    no longer known reads as the payee's alone.
 - **N3. Two parties before the agent pays a new address.**
   - The agent makes a first payment on its own only when two different parties stand behind the address: the payee
     gave it and a member confirmed it, or one member gave it and another member confirmed it.
@@ -54,6 +59,7 @@ Addresses that come from outside the console already wait for a person: one sent
 - **N6. The ledger.**
   - A decision on a first payment records `observed.newPayee: { addressBy, confirmedBy, twoParties }`.
   - `addressBy` is a member id, `"payee"`, or null when not known.
+  - For an address sent through a payee link, `linkCreatedBy` names the member who created the link, when known.
   - The model is not told: this is code's rule, like the spending limit, and the decision's own record shows it.
 - **N7. After the first payment.**
   - Once the address has received a confirmed payment, the agent pays it on its own; every other check stays.

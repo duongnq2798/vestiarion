@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addressProvenance, MIRROR, newPayeeCheck, PAYEE } from "@/lib/new-payee";
+import { addressGiver, addressProvenance, MIRROR, newPayeeCheck, newPayeeObserved, PAYEE } from "@/lib/new-payee";
 
 /**
  * Two people before the first payment to an address (docs/superpowers/specs/2026-10-05-new-payee-check-design.md
@@ -120,5 +120,80 @@ describe("a mirror address Vestiarion made for a payee in shadow mode (shadow mo
 
   it("stands behind no other address set over it since", () => {
     expect(newPayeeCheck({ address: OTHER, paidTo: new Set(), entries: [changed(BAO, OTHER), mirrored] })?.twoParties).toBe(false);
+  });
+});
+
+/**
+ * An address sent through a payee link (independent review, 2026-10-15): the payee typed it, but a member chose to ask
+ * for it, so that member counts as having given it. Without this, one admin could create a link, send their own wallet
+ * through it, confirm it, and the agent would make the first payment with no second person. `linkCreatedBy` is read
+ * from the link itself when the facts are loaded (tests/new-payee-facts.test.ts), never from the ledger entry.
+ */
+describe("an address sent through a payee link, and the member who created the link", () => {
+  const linked = (creator: string | null) => ({ ...changed(null, ADDRESS, { via: "payee_link", linkId: "link-1" }), linkCreatedBy: creator });
+
+  it("keeps the payee as who sent it, and names the member who created the link beside it", () => {
+    expect(addressProvenance(ADDRESS, [confirmed(ANNA, ADDRESS), linked(ANNA)])).toEqual({ addressBy: PAYEE, linkCreatedBy: ANNA, confirmers: [ANNA] });
+  });
+
+  it("holds the first payment when the member who created the link is the only one who confirmed the address", () => {
+    expect(newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries: [confirmed(ANNA, ADDRESS), linked(ANNA)] })).toEqual({
+      firstPayment: true,
+      addressBy: PAYEE,
+      linkCreatedBy: ANNA,
+      confirmedBy: ANNA,
+      twoParties: false,
+    });
+  });
+
+  it("passes it when another member confirmed the address", () => {
+    expect(newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries: [confirmed(BAO, ADDRESS), linked(ANNA)] })).toEqual({
+      firstPayment: true,
+      addressBy: PAYEE,
+      linkCreatedBy: ANNA,
+      confirmedBy: BAO,
+      twoParties: true,
+    });
+    // The creator confirming beside another member changes nothing: two people stand behind it.
+    expect(newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries: [confirmed(ANNA, ADDRESS), confirmed(BAO, ADDRESS), linked(ANNA)] })).toMatchObject({
+      confirmedBy: BAO,
+      twoParties: true,
+    });
+  });
+
+  it("reads a link whose creator is not known, an account deleted since, as the payee's alone, as before", () => {
+    expect(newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries: [confirmed(BAO, ADDRESS), linked(null)] })).toEqual({
+      firstPayment: true,
+      addressBy: PAYEE,
+      confirmedBy: BAO,
+      twoParties: true,
+    });
+  });
+
+  it("names nothing about a link for an address given any other way", () => {
+    expect(newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries: [confirmed(BAO, ADDRESS), changed(ANNA, ADDRESS)] })).not.toHaveProperty("linkCreatedBy");
+  });
+});
+
+describe("addressGiver: the member a first payment's approval must not rest on alone", () => {
+  it("is the member who created the link for an address sent through one, and whoever gave it otherwise", () => {
+    const linked = { ...changed(null, ADDRESS, { via: "payee_link", linkId: "link-1" }), linkCreatedBy: ANNA };
+    expect(addressGiver(newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries: [linked] }))).toBe(ANNA);
+    expect(addressGiver(newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries: [created(BAO, ADDRESS)] }))).toBe(BAO);
+    expect(addressGiver(newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries: [changed(null, ADDRESS, { via: "github" })] }))).toBe(PAYEE);
+    expect(addressGiver(null)).toBeNull();
+  });
+});
+
+describe("newPayeeObserved: what a decision on a first payment records (N6)", () => {
+  it("records who gave the address, who confirmed it and whether two parties stand behind it, as before", () => {
+    const check = newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries: [confirmed(BAO, ADDRESS), changed(ANNA, ADDRESS)] });
+    expect(newPayeeObserved(check!)).toEqual({ addressBy: ANNA, confirmedBy: BAO, twoParties: true });
+  });
+
+  it("records the member who created the payee link beside the payee who sent the address through it", () => {
+    const linked = { ...changed(null, ADDRESS, { via: "payee_link", linkId: "link-1" }), linkCreatedBy: ANNA };
+    const check = newPayeeCheck({ address: ADDRESS, paidTo: new Set(), entries: [confirmed(ANNA, ADDRESS), linked] });
+    expect(newPayeeObserved(check!)).toEqual({ addressBy: PAYEE, linkCreatedBy: ANNA, confirmedBy: ANNA, twoParties: false });
   });
 });

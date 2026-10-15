@@ -183,6 +183,8 @@ function approvalsFake(options: {
   commissionPartners?: FakeReply;
   /** The counterparty's entries that set or confirmed its address, newest first (new payee check N2); none by default. */
   addressEntries?: Array<Record<string, unknown>>;
+  /** The workspace's payee links, `{ id, created_by }`, as the new payee check reads who created one; none by default. */
+  payeeLinks?: Array<{ id: string; created_by: string | null }>;
   /** The workspace's figure above which a payment needs two approvals (two approvals T1); none by default. */
   twoApprovals?: number;
   /** The invoice's open approvals (two approvals T4); none by default. */
@@ -297,6 +299,7 @@ function approvalsFake(options: {
     if (request.path === "/rest/v1/ledger_entries" && request.method === "GET" && request.params.has("detail->>invoiceId")) {
       return { body: options.decision ? [options.decision] : [] };
     }
+    if (request.path === "/rest/v1/payee_links" && request.method === "GET") return { body: options.payeeLinks ?? [] };
     if (request.path === "/rest/v1/decision_verdicts" && request.method === "GET") return { body: options.verdict ? [options.verdict] : [] };
     if (request.path === "/rest/v1/shadow_modes" && request.method === "GET") return { body: options.shadow ? [options.shadow] : [] };
     if (request.path === "/rest/v1/rpc/sole_approver" && options.soleApprover) return options.soleApprover;
@@ -2543,6 +2546,77 @@ describe("approveAndPay and the first payment to an address (new payee check N4)
     const addressRead = (request: RecordedRequest) => request.path === "/rest/v1/ledger_entries" && request.params.has("detail->>counterpartyId");
     expect(fake.requests.some(addressRead)).toBe(false);
     expect(rpcBodies(fake.requests, "append_ledger_entry")[0].p_detail).not.toHaveProperty("firstPayment");
+  });
+});
+
+/**
+ * An address sent through a payee link counts as given by the member who created the link (independent review,
+ * 2026-10-15): that member is refused its first payment as whoever typed an address in is, unless they decide alone.
+ */
+describe("approveAndPay and the first payment to an address sent through a payee link", () => {
+  const LINK = "7c1e2d3f-0000-4000-8000-00000000c1c1";
+  const ADMIN_A = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000d4";
+  // A created the link, the payee sent the address through it, and A confirmed it.
+  const sentThroughLink = (confirmer: string) => [
+    { action: "counterparty_address_confirmed", detail: { by: confirmer, counterpartyId: COUNTERPARTY_ID, address: "0xdead", via: "confirm" } },
+    { action: "counterparty_address_changed", detail: { by: null, via: "payee_link", linkId: LINK, counterpartyId: COUNTERPARTY_ID, from: null, to: "0xdead" } },
+  ];
+  const live = () => {
+    getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003 });
+    syncOperatingBalanceMock.mockResolvedValue(500);
+  };
+
+  it("refuses the member who created the link, before any claim, though the payee typed the address", async () => {
+    live();
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 0 });
+    const { fake, run } = approvalsFake({ addressEntries: sentThroughLink(ACTOR), payeeLinks: [{ id: LINK, created_by: ACTOR }] });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toThrow(
+      "You gave this payee's address, so someone else must approve its first payment."
+    );
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("lets another approver pay it, and records that it was the address's first payment", async () => {
+    live();
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 0 });
+    const { fake, run } = approvalsFake({ addressEntries: sentThroughLink(ADMIN_A), payeeLinks: [{ id: LINK, created_by: ADMIN_A }] });
+
+    expect((await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).status).toBe("paid");
+    expect(rpcBodies(fake.requests, "sole_approver")).toHaveLength(0);
+    expect(rpcBodies(fake.requests, "append_ledger_entry")[0].p_detail).toMatchObject({ by: ACTOR, firstPayment: true });
+  });
+
+  it("lets the workspace's only approver pay it, as for an address they typed in, and records the first payment", async () => {
+    live();
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 0 });
+    const { fake, run } = approvalsFake({ addressEntries: sentThroughLink(ACTOR), payeeLinks: [{ id: LINK, created_by: ACTOR }], soleApprover: { body: true } });
+
+    expect((await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).status).toBe("paid");
+    expect(rpcBodies(fake.requests, "sole_approver")).not.toHaveLength(0);
+    expect(rpcBodies(fake.requests, "append_ledger_entry")[0].p_detail).toMatchObject({ by: ACTOR, firstPayment: true });
+  });
+
+  it("leaves out the member who created the link from the two approvals above the figure", async () => {
+    live();
+    const { run } = approvalsFake({
+      addressEntries: sentThroughLink(ADMIN_A),
+      payeeLinks: [{ id: LINK, created_by: ADMIN_A }],
+      twoApprovals: 100,
+      approversBesides: (excluded) => (excluded.length === 0 ? 3 : 2),
+    });
+
+    const [row] = await run(() => listWaitingPayables());
+    expect(row.twoApprovals?.excluded).toEqual([CREATOR, ADMIN_A]);
+  });
+
+  it("names the member who created the link as who gave the address, on the listing", async () => {
+    live();
+    const { run } = approvalsFake({ addressEntries: sentThroughLink(ADMIN_A), payeeLinks: [{ id: LINK, created_by: ADMIN_A }] });
+
+    const [row] = await run(() => listWaitingPayables());
+    expect(row.firstPaymentAddressBy).toBe(ADMIN_A);
   });
 });
 

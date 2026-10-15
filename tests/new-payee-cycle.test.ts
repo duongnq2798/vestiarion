@@ -21,7 +21,8 @@ describe("the cycle and the first payment to a new payee", () => {
     const contractors = source.slice(source.indexOf('await stage("contractors"'), source.indexOf('await stage("treasury"'));
     expect(contractors).toContain('provider.mode === "live" && milestones.length > 0 ? await loadNewPayeeFacts(db, [...new Set(milestones.map((m) => m.contractor_id))]) : null');
     expect(contractors).toContain('guardrailRule = "counterparty.new_payee"');
-    expect(contractors).toMatch(/newPayee: \{ addressBy: firstRelease\.addressBy, confirmedBy: firstRelease\.confirmedBy, twoParties: firstRelease\.twoParties \}/);
+    // Recorded as the AP stage records it, the member who created a payee link included (tests/new-payee.test.ts).
+    expect(contractors).toContain("...(firstRelease ? { newPayee: newPayeeObserved(firstRelease) } : {}),");
   });
 });
 

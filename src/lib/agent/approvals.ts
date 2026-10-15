@@ -21,7 +21,7 @@ import { choosePayoutRoute, payoutFundsShort, type GatewayFigures } from "../pay
 import type { CrossChainRoute } from "../circle/types";
 import { commissionPartnersOf } from "../commissions/beneficiary";
 import { isSoleApprover } from "./sole-approver";
-import { newPayeeCheck } from "../new-payee";
+import { addressGiver, newPayeeCheck } from "../new-payee";
 import { firstPaymentCheck, loadNewPayeeFacts } from "../new-payee-facts";
 import { addedSince, latestDecision, recordedFacts, type AddedDetails } from "../added-details";
 import { awaitsVerdict, heldForCash } from "../next-step";
@@ -477,8 +477,8 @@ export interface WaitingPayable {
   fromReserve?: { operatingUsdc: number; amountUsdc: number };
   /**
    * Present when paying it would be the first payment to its address, where payments are real: who gave the address, a
-   * member's id, "payee", or null when not known (new payee check N4). That member may not approve it unless they
-   * decide alone.
+   * member's id, "payee", or null when not known (new payee check N4); for an address the payee sent through a payee
+   * link, the member who created the link. That member may not approve it unless they decide alone.
    */
   firstPaymentAddressBy?: string | null;
   /**
@@ -577,7 +577,7 @@ export async function listWaitingPayables(
         id: row.id,
         payment: { amount: num(row.amount), currency, address: row.counterparties?.address ?? null },
         weighed: currency === "USDC" ? num(row.amount) : typeof usdcValue === "number" ? usdcValue : null,
-        excluded: [row.created_by, newPayee?.firstPayment ? newPayee.addressBy : null],
+        excluded: [row.created_by, newPayee?.firstPayment ? addressGiver(newPayee) : null],
         sent: transferExists(intents.get(row.id) ?? null),
       };
     })
@@ -650,7 +650,7 @@ export async function listWaitingPayables(
         ? { heldForVerdict: true, verdictEntry: { seq: Number(decision.seq), ts: decision.ts } }
         : {}),
       ...(balances && fromReserveUsdc !== null ? { fromReserve: { operatingUsdc: balances.operating, amountUsdc: fromReserveUsdc } } : {}),
-      ...(newPayee?.firstPayment ? { firstPaymentAddressBy: newPayee.addressBy } : {}),
+      ...(newPayee?.firstPayment ? { firstPaymentAddressBy: addressGiver(newPayee) } : {}),
       ...(twoApprovals.has(row.id) ? { twoApprovals: twoApprovals.get(row.id) } : {}),
     };
   });
@@ -855,8 +855,9 @@ export async function approveAndPay(
   const above = alreadySent ? null : await readTwoApprovalsAbove(db());
   const usdcValue = above !== null && invoice.currency === "EURC" ? await usdcValueOfLatestDecision(invoice.id) : null;
   const twoNeeded = above !== null && needsTwoApprovals({ amount: invoice.amount, currency: invoice.currency, usdcValue }, above);
-  // Whoever entered it, and whoever gave a first payment's address (new payee check N4).
-  const excluded = [invoice.createdBy, firstPayment?.addressBy ?? null];
+  // Whoever entered it, and whoever gave a first payment's address: for one sent through a payee link, the member who
+  // created the link (new payee check N4).
+  const excluded = [invoice.createdBy, addressGiver(firstPayment)];
   const source: PaymentSource = { type: "invoice", id: invoice.id };
   const payment = { amount: invoice.amount, currency: invoice.currency, address: invoice.address };
 
@@ -886,7 +887,7 @@ export async function approveAndPay(
     soleApprover = invoice.createdBy === input.actorId;
     if (soleApprover && !(await isSoleApprover(input.actorId))) raise("self_approval");
     // A first payment to an address needs someone other than whoever gave it, unless they decide alone (new payee check N4).
-    if (firstPayment?.addressBy === input.actorId && !(await isSoleApprover(input.actorId))) raise("new_payee_self");
+    if (addressGiver(firstPayment) === input.actorId && !(await isSoleApprover(input.actorId))) raise("new_payee_self");
   }
   if (invoice.riskLevel === "high") raise("high_risk");
   // Nothing to pay where payments are real: refused before any claim, as the agent holds it (counterparty.no_address).

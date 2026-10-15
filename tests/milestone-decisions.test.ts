@@ -272,6 +272,8 @@ function world(options: {
   soleApprover?: FakeReply;
   /** The contractor's entries that set or confirmed its address, newest first (new payee check N2); none by default. */
   addressEntries?: Array<Record<string, unknown>>;
+  /** The workspace's payee links, `{ id, created_by }`, as the new payee check reads who created one; none by default. */
+  payeeLinks?: Array<{ id: string; created_by: string | null }>;
   /** The workspace's figure above which a payment needs two approvals (two approvals T1); none by default. */
   twoApprovals?: number;
   /** The milestone's open approvals (two approvals T4); none by default. */
@@ -296,6 +298,7 @@ function world(options: {
     // What the new payee check reads (N1, N2): the confirmed payments' addresses, and the address's entries.
     if (request.path === "/rest/v1/payment_intents" && request.params.get("status") === "eq.confirmed") return { body: [] };
     if (request.path === "/rest/v1/ledger_entries" && request.params.has("detail->>counterpartyId")) return { body: options.addressEntries ?? [] };
+    if (request.path === "/rest/v1/payee_links") return { body: options.payeeLinks ?? [] };
     if (request.path === "/rest/v1/orgs") return { body: orgRow(options.org) };
     if (request.path === "/rest/v1/spending_limit_contracts") return { body: options.spendingLimit ?? null };
     if (request.path === "/rest/v1/milestones" && request.method === "GET") return { body: milestoneRow(options.milestone) };
@@ -657,6 +660,58 @@ describe("Pay now and the first payment to an address (new payee check N4)", () 
 
     const other = world({ intent: null, last: heldAsNewPayee, addressEntries: gaveAddress(CREATOR) });
     expect((await other.run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))).status).toBe("paid");
+  });
+});
+
+
+/**
+ * An address sent through a payee link counts as given by the member who created the link (independent review,
+ * 2026-10-15), on a milestone as on a payable.
+ */
+describe("Pay now and the first payment to an address sent through a payee link", () => {
+  const LINK = "7c1e2d3f-0000-4000-8000-00000000c1c1";
+  const heldAsNewPayee = entryRow("milestone_release", { guardrailBlocked: true, guardrailRule: "counterparty.new_payee" });
+  const sentThroughLink = (confirmer: string) => [
+    { action: "counterparty_address_confirmed", detail: { by: confirmer, counterpartyId: CONTRACTOR, address: ADDRESS, via: "confirm" } },
+    { action: "counterparty_address_changed", detail: { by: null, via: "payee_link", linkId: LINK, counterpartyId: CONTRACTOR, from: null, to: ADDRESS } },
+  ];
+  const live = () => getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003 });
+
+  it("refuses the member who created the link, before any claim", async () => {
+    live();
+    releaseHeldMilestoneMock.mockResolvedValue(PAID);
+    const { run, claimed } = world({ intent: null, last: heldAsNewPayee, addressEntries: sentThroughLink(ACTOR), payeeLinks: [{ id: LINK, created_by: ACTOR }] });
+    expect(await refusal(run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE })))).toBe("new_payee_self");
+    expect(claimed()).toBe(false);
+    expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
+  });
+
+  it("lets the workspace's only approver, or another member, pay it, and records that it was the address's first payment", async () => {
+    live();
+    releaseHeldMilestoneMock.mockResolvedValue(PAID);
+    const alone = world({ intent: null, last: heldAsNewPayee, addressEntries: sentThroughLink(ACTOR), payeeLinks: [{ id: LINK, created_by: ACTOR }], soleApprover: { body: true } });
+    expect((await alone.run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))).status).toBe("paid");
+    expect(alone.ledger()[0].p_detail).toMatchObject({ firstPayment: true, heldFor: "new_payee" });
+
+    const other = world({ intent: null, last: heldAsNewPayee, addressEntries: sentThroughLink(CREATOR), payeeLinks: [{ id: LINK, created_by: CREATOR }] });
+    expect((await other.run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))).status).toBe("paid");
+  });
+
+  it("leaves out the member who created the link from the two approvals above the figure", async () => {
+    live();
+    const GAVE = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000d4";
+    const { run } = world({
+      twoApprovals: 0.2,
+      addressEntries: sentThroughLink(GAVE),
+      payeeLinks: [{ id: LINK, created_by: GAVE }],
+      approversBesides: (excluded) => (excluded.length === 0 ? 3 : 1),
+    });
+
+    const facts = await run(() =>
+      heldMilestonesTwoApprovals([{ id: MILESTONE, amount: 0.3, created_by: CREATOR, contractor_id: CONTRACTOR }], new Map([[CONTRACTOR, { address: ADDRESS }]]), new Map())
+    );
+
+    expect(facts.get(MILESTONE)).toEqual({ above: 0.2, approvals: [], excluded: [CREATOR, GAVE], excludedSlots: 1, approvers: 3 });
   });
 });
 

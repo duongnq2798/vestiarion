@@ -4,6 +4,7 @@ import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
 import { withOrg } from "@/lib/dal/scope";
 import { loadNewPayeeFacts } from "@/lib/new-payee-facts";
+import { newPayeeCheck, PAYEE } from "@/lib/new-payee";
 import { fakeSupabase } from "./support/fake-supabase";
 
 /**
@@ -61,5 +62,86 @@ describe("loadNewPayeeFacts", () => {
     const facts = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => withOrg(ORG, () => loadNewPayeeFacts(db(), [])));
     expect(facts.entries.size).toBe(0);
     expect(fake.requests.some((request) => request.path === "/rest/v1/ledger_entries")).toBe(false);
+  });
+});
+
+/**
+ * Who created the payee link an address came through (independent review, 2026-10-15), read from the link itself: the
+ * ledger entry the payee's submission wrote names the link, not who made it. The check counts that member as having
+ * given the address (tests/new-payee.test.ts).
+ */
+describe("loadNewPayeeFacts and an address sent through a payee link", () => {
+  const ANNA = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000a1";
+  const BAO = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000b2";
+  const LINK = "7c1e2d3f-0000-4000-8000-00000000c1c1";
+  const ADDRESS = "0x2222222222222222222222222222222222222222";
+
+  function linkWorkspace(links: Array<{ id: string; created_by: string | null }>, confirmedBy = ANNA) {
+    return fakeSupabase((request) => {
+      if (request.path === "/rest/v1/orgs") {
+        return { body: { id: ORG, slug: "demo", name: "Demo", mode: "live", ledger_signing_key_enc: null, circle_api_key_enc: null, circle_entity_secret_enc: null } };
+      }
+      if (request.path === "/rest/v1/ledger_entries") {
+        return {
+          body: [
+            { action: "counterparty_address_confirmed", detail: { by: confirmedBy, counterpartyId: "cp-1", address: ADDRESS, via: "confirm" } },
+            { action: "counterparty_address_changed", detail: { by: null, via: "payee_link", linkId: LINK, counterpartyId: "cp-1", from: null, to: ADDRESS } },
+            { action: "create_counterparty", detail: { by: ANNA, counterpartyId: "cp-1", address: null } },
+          ],
+        };
+      }
+      if (request.path === "/rest/v1/payee_links") return { body: links };
+      return { body: [] };
+    });
+  }
+  const load = (fake: ReturnType<typeof linkWorkspace>) =>
+    runWith({ config, db: fake.client, fetch: fake.fetch }, () => withOrg(ORG, () => loadNewPayeeFacts(db(), ["cp-1"])));
+
+  it("names the member who created the link beside the entry the payee's submission wrote, read from the link in this workspace", async () => {
+    const fake = linkWorkspace([{ id: LINK, created_by: ANNA }]);
+    const facts = await load(fake);
+
+    const entries = facts.entries.get("cp-1") ?? [];
+    expect(entries.find((entry) => entry.detail.via === "payee_link")).toMatchObject({ linkCreatedBy: ANNA });
+    // Only the entry that came through a link carries it, and the ledger's own detail is left as written.
+    expect(entries.filter((entry) => "linkCreatedBy" in entry)).toHaveLength(1);
+    expect(entries.find((entry) => entry.detail.via === "payee_link")?.detail).not.toHaveProperty("linkCreatedBy");
+
+    const read = fake.requests.find((request) => request.path === "/rest/v1/payee_links");
+    expect(read?.params.get("select")).toBe("id,created_by");
+    expect(read?.params.get("org_id")).toBe(`eq.${ORG}`);
+    expect(read?.params.get("id")).toBe(`in.(${LINK})`);
+  });
+
+  it("holds the first payment when the member who created the link is the one who confirmed the address", async () => {
+    const facts = await load(linkWorkspace([{ id: LINK, created_by: ANNA }], ANNA));
+    expect(newPayeeCheck({ address: ADDRESS, paidTo: facts.paidTo, entries: facts.entries.get("cp-1") ?? [] })).toMatchObject({
+      firstPayment: true,
+      addressBy: PAYEE,
+      linkCreatedBy: ANNA,
+      twoParties: false,
+    });
+  });
+
+  it("lets the agent pay it when another member confirmed the address, as before", async () => {
+    const facts = await load(linkWorkspace([{ id: LINK, created_by: ANNA }], BAO));
+    expect(newPayeeCheck({ address: ADDRESS, paidTo: facts.paidTo, entries: facts.entries.get("cp-1") ?? [] })).toMatchObject({
+      linkCreatedBy: ANNA,
+      confirmedBy: BAO,
+      twoParties: true,
+    });
+  });
+
+  it("knows no creator for a link it cannot find, or whose creator's account is gone", async () => {
+    for (const links of [[], [{ id: LINK, created_by: null }]]) {
+      const facts = await load(linkWorkspace(links));
+      expect(facts.entries.get("cp-1")?.find((entry) => entry.detail.via === "payee_link")).toMatchObject({ linkCreatedBy: null });
+    }
+  });
+
+  it("reads no link when no address came through one", async () => {
+    const fake = workspace();
+    await runWith({ config, db: fake.client, fetch: fake.fetch }, () => withOrg(ORG, () => loadNewPayeeFacts(db(), ["cp-1", "cp-2"])));
+    expect(fake.requests.some((request) => request.path === "/rest/v1/payee_links")).toBe(false);
   });
 });

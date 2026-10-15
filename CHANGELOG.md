@@ -24,6 +24,18 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   says which key to use: a read-only key by default, and a read-and-write key only for an agent that should add
   records. [Guide](https://www.vestiarion.xyz/docs/ai-integration/mcp#which-key-to-use).
 
+### Fixed
+
+- **An address asked for with a payee link needs a second person, as a typed one does.** Whoever creates a payee link
+  now counts as having given the address the payee sends through it. When that person is also the only one who
+  confirms the address, the agent no longer makes the first payment to it on its own: it holds it as
+  `counterparty.new_payee`, and another owner, admin or approver pays it with Approve and pay, or Pay now on a
+  milestone. Before, one admin could create a link, send their own wallet through it, confirm it, and the agent would
+  pay it with no second person. When someone else confirms the address, the agent pays as before. The workspace's
+  only approver still pays that first payment themselves, as for an address they typed in. The ledger still records
+  the address as the payee's, and a decision on its first payment now also names who created the link. No migration.
+  [Guide](https://www.vestiarion.xyz/docs/guides/first-payment#ask-a-payee-for-their-address).
+
 ## [0.1.0-beta.5] - 2026-10-15
 
 ### Added

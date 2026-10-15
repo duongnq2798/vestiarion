@@ -71,7 +71,7 @@ import { quoteEurcInUsdc, type EurcQuote } from "../fx/quote";
 import { quoteUsdcForEurc, sizeSwap, SWAP_COST_CAP_PERCENT, SWAP_NOT_QUOTED, type SwapOffer, type SwapQuote } from "../fx/swap-service";
 import { resumeOpenSwaps, swapForPayment, type SwapOutcome, type SwapSweep } from "../fx/swap";
 import { onceQuotes, probeFx } from "../fx/probe";
-import { newPayeeCheck } from "../new-payee";
+import { newPayeeCheck, newPayeeObserved } from "../new-payee";
 import { loadNewPayeeFacts, type NewPayeeFacts } from "../new-payee-facts";
 import { fxHoldOf, fxRecheckCandidates, type FxNow } from "../fx/recheck";
 import { currentOrgConfig } from "../context";
@@ -1953,9 +1953,7 @@ async function decideApPayable(
         // it held once the figure no longer covers it (two approvals T3).
         ...(ctx.twoApprovalsAbove != null ? { twoApprovalsAbove: ctx.twoApprovalsAbove } : {}),
         // Who stood behind the address for its first payment (new payee check N6).
-        ...(firstPayment
-          ? { newPayee: { addressBy: firstPayment.addressBy, confirmedBy: firstPayment.confirmedBy, twoParties: firstPayment.twoParties } }
-          : {}),
+        ...(firstPayment ? { newPayee: newPayeeObserved(firstPayment) } : {}),
         ...(ctx.addressHistory?.(counterparty.id) ? { addressHistory: ctx.addressHistory(counterparty.id) } : {}),
         operatingBalance: operatingBalanceAfter ?? operatingBalance,
         addressUnconfirmed: addressUnconfirmed(counterparty.address_changed_at, counterparty.address_confirmed_at),
@@ -3652,7 +3650,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           verification: milestoneVerification(milestone),
           ...(addressHistory.get(contractor.id) ? { addressHistory: addressHistory.get(contractor.id) } : {}),
           // Who stood behind the address for its first payment (new payee check N6).
-          ...(firstRelease ? { newPayee: { addressBy: firstRelease.addressBy, confirmedBy: firstRelease.confirmedBy, twoParties: firstRelease.twoParties } } : {}),
+          ...(firstRelease ? { newPayee: newPayeeObserved(firstRelease) } : {}),
           // The figure above which two people approve a release, when the workspace set one (two approvals T3).
           ...(twoApprovalsAbove != null ? { twoApprovalsAbove } : {}),
           // The project it belongs to, and what its reservation found (project budgets P5); absent in none.

@@ -376,13 +376,23 @@ payment to an address.
 - **Who stands behind the address:** read from the counterparty's `compliance` ledger entries, newest first. The
   entry that set the address (`create_counterparty`, `counterparty_address_changed`) names who gave it: a member, or
   the payee for a payee link or GitHub. `counterparty_address_confirmed` entries after it name who confirmed it.
+- **A payee link counts as its creator's:** the entry a payee link's submission writes names the link (`linkId`), with
+  `by: null`. `loadNewPayeeFacts` reads who created each such link from its own `payee_links` row in the workspace
+  (`created_by`, migration 0039, through `platformDb`) and sets it beside the entry as `linkCreatedBy`; the ledger's
+  detail is left as written. `newPayeeCheck` keeps `addressBy: "payee"` and adds `linkCreatedBy`, and a confirmation
+  counts as a second party only when it is by someone other than the link's creator. `addressGiver` (the creator,
+  else `addressBy`) is who Approve and pay, Pay now and the two approvals leave out. Without it, one admin could
+  create a link, send their own wallet through it, confirm it, and the agent would make the first payment alone. A
+  link whose creator is no longer known (their account deleted) reads as the payee's alone, as before.
 - **Where it applies:** wherever payments are real, meaning the chain provider is live. Real payments follow readable
   Circle credentials, not `orgs.mode`.
 - **The agent's side:** the cycle passes the AP and contractor stages the facts (`loadNewPayeeFacts`,
   `src/lib/new-payee-facts.ts`). Code holds a first payment one party alone stands behind as
   `counterparty.new_payee`.
-- **A person's side:** Approve and pay, and Pay now on a milestone, refuse the member who gave the address unless they
-  are the sole approver.
+- **A person's side:** Approve and pay, and Pay now on a milestone, refuse the member who gave the address (for a
+  payee link's address, the member who created the link) unless they are the sole approver.
+- **Recorded:** a decision on a first payment records `observed.newPayee` through `newPayeeObserved`:
+  `{ addressBy, linkCreatedBy?, confirmedBy, twoParties }`.
 - **Afterwards:** the follow-up reopens a payable held this way once its address is paid, or two parties stand behind
   it.
 
