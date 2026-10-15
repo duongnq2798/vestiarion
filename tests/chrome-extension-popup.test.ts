@@ -103,9 +103,11 @@ async function open() {
   await import("../extensions/chrome-invoice-capture/extension/popup.js");
 }
 
+/** Connected: the refresh token kept on disk, the access token in memory only (M6). */
 function connected() {
   local.set("firstRunDone", true);
-  local.set("auth", { accessToken: `vxa_${"a".repeat(43)}`, refreshToken: `vxr_${"b".repeat(43)}`, expiresAt: Date.now() + 3_600_000, workspace: { name: "Northstar", slug: "northstar" } });
+  local.set("auth", { refreshToken: `vxr_${"b".repeat(43)}`, workspace: { name: "Northstar", slug: "northstar" } });
+  session.set("access", { accessToken: `vxa_${"a".repeat(43)}`, expiresAt: Date.now() + 3_600_000 });
 }
 
 describe("the popup", () => {
@@ -187,15 +189,38 @@ describe("the popup", () => {
     expect(requests.some((request) => request.method === "PATCH")).toBe(false);
   });
 
-  it("sends a selection the context menu kept, with the key kept for it", async () => {
+  it("shows a selection the context menu kept, and sends it only on a click, with the key kept for it", async () => {
     connected();
     session.set("pendingSelection", { text: SELECTED, idempotencyKey: "menu-key-1", at: Date.now() });
     await open();
+    await vi.waitFor(() => expect($("pending").hidden).toBe(false));
+    expect(visible()).toEqual(["home"]);
+    expect($("pending-text").textContent).toBe(SELECTED);
+    expect(requests.some((request) => request.url.endsWith("/invoice-drafts"))).toBe(false);
+
+    $("pending-send").click();
     await vi.waitFor(() => expect(visible()).toEqual(["review"]));
     const capture = requests.find((request) => request.method === "POST" && request.url.endsWith("/invoice-drafts"))!;
     expect(capture.headers.get("idempotency-key")).toBe("menu-key-1");
     expect(chromeApi.scripting.executeScript).not.toHaveBeenCalled();
     expect(session.has("pendingSelection")).toBe(false);
+  });
+
+  it("lets a person drop a selection the context menu kept, and drops one older than 5 minutes by itself", async () => {
+    connected();
+    session.set("pendingSelection", { text: SELECTED, idempotencyKey: "menu-key-2", at: Date.now() });
+    await open();
+    await vi.waitFor(() => expect($("pending").hidden).toBe(false));
+    $("pending-drop").click();
+    await vi.waitFor(() => expect($("pending").hidden).toBe(true));
+    expect(session.has("pendingSelection")).toBe(false);
+
+    session.set("pendingSelection", { text: SELECTED, idempotencyKey: "menu-key-3", at: Date.now() - 5 * 60_000 - 1 });
+    await open();
+    await vi.waitFor(() => expect(visible()).toEqual(["home"]));
+    expect($("pending").hidden).toBe(true);
+    expect(session.has("pendingSelection")).toBe(false);
+    expect(requests.some((request) => request.url.endsWith("/invoice-drafts"))).toBe(false);
   });
 
   it("says when nothing is selected, and sends nothing", async () => {
@@ -218,6 +243,7 @@ describe("the popup", () => {
     expect(String(revoke.body)).toContain(`token=vxr_${"b".repeat(43)}`);
     expect(String(revoke.body)).toContain(`client_id=${CLIENT}`);
     expect(local.has("auth")).toBe(false);
+    expect(session.has("access")).toBe(false);
   });
 
   it("asks the service worker to refresh on a 401, and asks to connect again once the connection has ended", async () => {
@@ -240,7 +266,7 @@ describe("the popup", () => {
 });
 
 describe("the service worker's refresh", () => {
-  const STORED = { accessToken: `vxa_${"a".repeat(43)}`, refreshToken: `vxr_${"b".repeat(43)}`, expiresAt: 0, workspace: { name: "Northstar", slug: "northstar" } };
+  const STORED = { refreshToken: `vxr_${"b".repeat(43)}`, workspace: { name: "Northstar", slug: "northstar" } };
   const tokenCalls = () => requests.filter((request) => request.url === `${BASE}/api/extension/v1/token`);
 
   async function worker() {
@@ -260,6 +286,9 @@ describe("the service worker's refresh", () => {
     expect(tokenCalls()).toHaveLength(1);
     expect(String(tokenCalls()[0].body)).toContain(`refresh_token=${STORED.refreshToken}`);
     expect((local.get("auth") as typeof STORED).refreshToken).toBe(`vxr_${"d".repeat(43)}`);
+    // Only the refresh token goes to disk; the access token stays in memory.
+    expect(local.get("auth")).not.toHaveProperty("accessToken");
+    expect(session.get("access")).toMatchObject({ accessToken: `vxa_${"c".repeat(43)}` });
   });
 
   it("forgets the pair Vestiarion refused, and only that pair", async () => {
@@ -287,5 +316,20 @@ describe("the service worker's refresh", () => {
     const { refreshInWorker } = await worker();
     expect(await refreshInWorker()).toBe(false);
     expect(local.get("auth")).toEqual(STORED);
+  });
+});
+
+describe("the service worker", () => {
+  it("keeps the extension's storage from content scripts, where Chrome allows it", async () => {
+    const setAccessLevel = vi.fn(async () => {});
+    vi.stubGlobal("chrome", {
+      ...chromeApi,
+      storage: { ...chromeApi.storage, local: { ...chromeApi.storage.local, setAccessLevel } },
+      runtime: { ...chromeApi.runtime, onInstalled: { addListener: vi.fn() }, onMessage: { addListener: vi.fn() } },
+      contextMenus: { create: vi.fn(), onClicked: { addListener: vi.fn() } },
+    });
+    vi.resetModules();
+    await import("../extensions/chrome-invoice-capture/extension/background.js");
+    expect(setAccessLevel).toHaveBeenCalledWith({ accessLevel: "TRUSTED_CONTEXTS" });
   });
 });

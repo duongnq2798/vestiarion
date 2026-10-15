@@ -201,3 +201,20 @@ input[aria-invalid="true"] {
 .notes {
   color: var(--ink-2);
 }
+
+.pending {
+  margin: 0 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--surface);
+}
+
+.pending pre {
+  max-height: 120px;
+  margin: 0;
+  overflow: auto;
+  color: var(--ink-2);
+  font: 12px/1.4 ui-monospace, Consolas, monospace;
+  white-space: pre-wrap;
+}

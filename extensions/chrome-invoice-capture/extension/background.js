@@ -3,6 +3,17 @@ import { newIdempotencyKey } from "./lib/pkce.js";
 import { captureClickedSelection } from "./lib/selection.js";
 
 /**
+ * The refresh token on disk is for this extension's own pages and this worker only. Session storage is so already; local
+ * storage is exposed to content scripts unless told otherwise, and the extension has none, but where this Chrome lets
+ * local storage be closed to them, it is. An older Chrome that cannot answers nothing, and nothing else changes.
+ */
+try {
+  chrome.storage.local.setAccessLevel?.({ accessLevel: "TRUSTED_CONTEXTS" })?.catch?.(() => {});
+} catch {
+  // Only session storage takes an access level in this Chrome.
+}
+
+/**
  * Connect Vestiarion, and a token refresh, asked by the popup: both run here, since Chrome may close the popup while the
  * sign-in window is open or a refresh is on its way, and here one refresh runs at a time. Only this extension's own
  * pages can send these messages: it declares no externally_connectable.
@@ -25,8 +36,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 /**
  * The context menu item Capture invoice with Vestiarion, shown only on a selection. A click reads that selection once,
- * keeps it for the popup in chrome.storage.session (memory only, gone when Chrome closes), and opens the popup, where
- * the person checks the fields before anything becomes a draft they send. Nothing is sent from here.
+ * keeps it for the popup in chrome.storage.session (memory only, gone when Chrome closes), and opens the popup, which
+ * shows it and sends it to Vestiarion only when the person presses Send to Vestiarion, within 5 minutes. Nothing is
+ * sent from here.
  */
 
 const MENU_ID = "capture-invoice";

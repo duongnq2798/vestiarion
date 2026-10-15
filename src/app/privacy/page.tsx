@@ -464,7 +464,8 @@ export default function PrivacyPage() {
           <li>
             It reads a page only when you press <strong>Capture selected text</strong>, or choose <strong>Capture invoice with Vestiarion</strong> on a
             selection, and then only the text you selected, at most 20,000 characters. A file is sent only when you choose it in the extension: a PDF, a
-            text or email file, or a picture, of at most 4 MB. It never reads your browsing history or any other page.
+            text or email file, or a picture, of at most 4 MB. It never reads your browsing history or any other page. Text taken with Capture
+            invoice with Vestiarion waits in the extension&apos;s memory until you send it or drop it, and is dropped after 5 minutes.
           </li>
           <li>
             What you capture goes only to Vestiarion, at www.vestiarion.xyz. It is read the way an invoice uploaded to the invoice form is read, so a
@@ -481,9 +482,11 @@ export default function PrivacyPage() {
             created, and never the workspace&apos;s bills, counterparties, members, wallets or keys.
           </li>
           <li>
-            The extension keeps its access token (an hour) and refresh token (30 days) in Chrome&apos;s storage for extensions on your computer.
-            Vestiarion keeps only their SHA-256, with the workspace, your account&apos;s id and the extension&apos;s id. <strong>Disconnect</strong>, in
-            the extension or in Settings, ends them at once; leaving the workspace deletes them.
+            The extension keeps its access token (an hour) in memory only, and its refresh token (30 days) in Chrome&apos;s storage for extensions
+            on your computer. Vestiarion keeps only their SHA-256, with the workspace, your account&apos;s id and the extension&apos;s id. A connection
+            lasts at most 90 days from connecting. <strong>Disconnect</strong>, in the extension or in Settings, ends it at once, as does a role that can
+            no longer add bills; leaving the workspace deletes it. Vestiarion keeps a connection&apos;s row, without any usable token, for 30 days after
+            it ended or expired, and each one-time sign-in code for a day after it expired.
           </li>
           <li>
             The extension has no analytics. Nothing about an invoice you capture is sent to an analytics service, by the extension or by Vestiarion.
@@ -501,7 +504,8 @@ export default function PrivacyPage() {
           <li>A webhook delivery is deleted 30 days after it is delivered; one that failed, 30 days after it was created.</li>
           <li>
             Text captured with the Chrome extension is removed when its draft is added or discarded, and 30 days after capture at the latest; a
-            draft never sent for review is deleted after 7 days.
+            draft never sent for review is deleted after 7 days. A Chrome extension connection is deleted 30 days after it ended or expired, and a
+            one-time sign-in code a day after it expired.
           </li>
           <li>Everything else in a workspace is kept until the workspace is deleted.</li>
         </ul>

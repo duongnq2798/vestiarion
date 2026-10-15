@@ -25,6 +25,11 @@
     "service_worker": "background.js",
     "type": "module"
   },
-  "permissions": ["activeTab", "scripting", "storage", "identity", "contextMenus"],
-  "host_permissions": ["https://www.vestiarion.xyz/*"]
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "identity",
+    "contextMenus"
+  ]
 }

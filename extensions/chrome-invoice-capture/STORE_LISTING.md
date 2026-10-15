@@ -32,8 +32,9 @@ How it works:
 2. On a supplier's portal, in a web mail or in a PDF, select the invoice's text and press Capture selected text, or
    right-click the selection and choose Capture invoice with Vestiarion. Or choose the invoice's file (a PDF with text,
    a .txt or an .eml file, up to 4 MB).
-3. Vestiarion reads the supplier, invoice number, amount, currency, invoice date, due date, purchase order and memo.
-   Check each field; the extension says which ones are missing.
+3. Vestiarion reads the supplier, invoice number, amount, currency, invoice date, due date, purchase order and memo,
+   with the AI model provider it uses, as it does for any invoice uploaded to it. Check each field; the extension says
+   which ones are missing.
 4. Press Send draft. The draft waits under Captured drafts on Bills & receivables in Vestiarion, where an owner or admin
    adds it as a bill, with every check a bill goes through, or discards it.
 
@@ -44,7 +45,9 @@ How it works:
 - It does not read a page by itself. It reads the text you selected, once, when you press Capture selected text or
   choose Capture invoice with Vestiarion, and nothing else of the page.
 - It does not see your bills, counterparties, members, wallets or API keys. It can read only the drafts it created.
-- It does not send anything anywhere but your Vestiarion workspace at www.vestiarion.xyz.
+- It does not send anything anywhere but Vestiarion, at www.vestiarion.xyz. Vestiarion has what you capture read by the
+  AI model provider it uses (on www.vestiarion.xyz, DeepSeek), under that provider's own API terms, as it does for any
+  invoice uploaded to it; nothing else receives it.
 - It does not track you: no analytics, no advertising, and nothing about your invoices is counted.
 
 ## Single purpose
@@ -58,14 +61,15 @@ draft to the user's Vestiarion workspace.
   the extension reads the selected text in that one tab, for that one action. It has no access to any page otherwise.
 - `scripting`: runs the one function that returns the current selection's text in the active tab, after that press. No
   other script is ever run in a page.
-- `storage`: keeps the connection's tokens, the workspace's name, whether the first-run screen was read, and the draft
-  being checked, on this computer; a selection captured from the context menu waits in session storage until the popup
-  sends it.
+- `storage`: keeps the connection's refresh token, the workspace's name, whether the first-run screen was read, and the
+  draft being checked, on this computer; the access token, and a selection captured from the context menu until the
+  person sends or drops it (5 minutes at most), only in session storage, in memory.
 - `identity`: `chrome.identity.launchWebAuthFlow` opens Vestiarion's sign-in and consent page so the person connects
   their workspace with OAuth (authorization code with PKCE), without an API key in the extension.
 - `contextMenus`: adds Capture invoice with Vestiarion to the menu shown on a text selection.
-- Host permission `https://www.vestiarion.xyz/*`: the only server the extension talks to, to exchange the sign-in code
-  for tokens, send captures and the person's edits, and read back its own drafts.
+
+Host permissions: none. The extension's calls go to www.vestiarion.xyz alone, as cross-origin requests that
+Vestiarion answers with CORS for this extension's id, never with cookies.
 
 Remote code: No. Every script is in the package; there is no `eval`, no remote script and no CDN.
 
@@ -81,8 +85,8 @@ What the extension collects, only when the person captures an invoice:
 - Financial and payment information: yes. An invoice's amount, currency, dates and any payment details written on it,
   in the text or file the person captures.
 - Personal communications: yes, only when the person captures text from an email or chooses an .eml file.
-- Authentication information: yes. The connection's access and refresh tokens, kept in the extension's local storage
-  and sent only to www.vestiarion.xyz.
+- Authentication information: yes. The connection's refresh token, kept in the extension's local storage, and its
+  access token, kept in memory; both are sent only to www.vestiarion.xyz.
 - Personally identifiable information: only what an invoice the person captures contains, such as a supplier's name.
 - Health information, location, web history, user activity: no.
 
@@ -95,7 +99,9 @@ What the extension collects, only when the person captures an invoice:
 ### Retention, as the privacy policy says it
 
 The captured text is kept with the draft until a person adds it as a bill or discards it, and at most 30 days. A draft
-never sent is deleted after 7 days. A file is never kept, only its SHA-256. Disconnecting revokes the tokens at once.
+never sent is deleted after 7 days. A file is never kept, only its SHA-256. Vestiarion has the text read by its AI
+model provider, as described in the privacy policy. Disconnecting revokes the tokens at once, and a connection lasts
+at most 90 days.
 
 ## Test instructions for the reviewer
 

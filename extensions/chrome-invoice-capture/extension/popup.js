@@ -116,26 +116,52 @@ async function review(draft) {
   show("review");
 }
 
-/** Captures text, with the key kept for it so a retry of the same text makes no second draft. */
-async function captureText(text, button) {
+/** How long a selection the context menu kept waits for Send to Vestiarion. */
+const PENDING_MS = 5 * 60_000;
+
+/** The selection the context menu kept, while it is fresh; an older one is dropped. Shown, never sent by itself. */
+async function freshPending() {
+  const { pendingSelection } = await chrome.storage.session.get("pendingSelection");
+  if (!pendingSelection) return null;
+  if (!pendingSelection.text || !(Date.now() - Number(pendingSelection.at) <= PENDING_MS)) {
+    await chrome.storage.session.remove("pendingSelection");
+    return null;
+  }
+  return pendingSelection;
+}
+
+async function showPending() {
+  const pending = inTab ? null : await freshPending();
+  $("pending").hidden = !pending;
+  $("pending-text").textContent = pending ? pending.text : "";
+}
+
+/**
+ * Captures text with a key kept for it, so a retry of the same text makes no second draft: the context menu's own key
+ * for its selection, or one kept for the last text captured here.
+ */
+async function captureText(text, button, idempotencyKey) {
   if (!text.trim()) {
     say("Select the invoice's text on the page first, then press Capture selected text.", "error");
     return;
   }
-  const { pendingSelection } = await chrome.storage.session.get("pendingSelection");
-  const idempotencyKey = pendingSelection?.text === text && pendingSelection.idempotencyKey ? pendingSelection.idempotencyKey : newIdempotencyKey();
-  await chrome.storage.session.set({ pendingSelection: { text, idempotencyKey, at: Date.now() } });
+  let key = idempotencyKey;
+  if (!key) {
+    const { lastCapture } = await chrome.storage.session.get("lastCapture");
+    key = lastCapture?.text === text && lastCapture.idempotencyKey ? lastCapture.idempotencyKey : newIdempotencyKey();
+    await chrome.storage.session.set({ lastCapture: { text, idempotencyKey: key } });
+  }
   button.disabled = true;
   say("Reading the invoice…");
   try {
-    const draft = await captureSelection(text, idempotencyKey);
-    await chrome.storage.session.remove("pendingSelection");
+    const draft = await captureSelection(text, key);
+    await chrome.storage.session.remove(["pendingSelection", "lastCapture"]);
     say("");
     await review(draft);
   } catch (error) {
     // A capture Vestiarion refused for what it is (unreadable, too large, a key used for another) is not tried again;
-    // one that did not arrive, or met a limit, waits for the next try with the same key.
-    if (error instanceof ApiError && [400, 409, 413, 415, 422].includes(error.status)) await chrome.storage.session.remove("pendingSelection");
+    // one that did not arrive, or met a limit, may be tried again with the same key.
+    if (error instanceof ApiError && [400, 409, 413, 415, 422].includes(error.status)) await chrome.storage.session.remove(["pendingSelection", "lastCapture"]);
     if (!(await needsConnecting(error))) say(errorText(error), "error");
   } finally {
     button.disabled = false;
@@ -152,11 +178,10 @@ async function showConnected() {
   setWorkspace(auth.workspace);
   $("capture-selection").hidden = inTab;
   $("in-tab").hidden = inTab;
-
-  const { pendingSelection } = await chrome.storage.session.get("pendingSelection");
-  if (pendingSelection?.text && !inTab) {
+  await showPending();
+  if (!$("pending").hidden) {
+    // A selection waits for Send to Vestiarion: that comes before a draft in progress.
     show("home");
-    await captureText(pendingSelection.text, $("capture-selection"));
     return;
   }
   const { currentDraftId } = await chrome.storage.local.get("currentDraftId");
@@ -182,6 +207,25 @@ async function showConnected() {
     await needsConnecting(error);
   }
 }
+
+$("pending-send").addEventListener("click", async (event) => {
+  // Kept before the await: the event's currentTarget is gone once it has been dispatched.
+  const button = event.currentTarget;
+  const pending = await freshPending();
+  if (!pending) {
+    await showPending();
+    say("That selection was dropped after 5 minutes. Select the text again.", "error");
+    return;
+  }
+  await captureText(pending.text, button, pending.idempotencyKey);
+  await showPending();
+});
+
+$("pending-drop").addEventListener("click", async () => {
+  await chrome.storage.session.remove("pendingSelection");
+  await showPending();
+  say("");
+});
 
 $("first-run-ok").addEventListener("click", async () => {
   await chrome.storage.local.set({ firstRunDone: true });

@@ -23,9 +23,9 @@
         <ul class="points">
           <li>Nothing on a page is read until you press <strong>Capture selected text</strong>, or choose <strong>Capture invoice with Vestiarion</strong> on a selection. Then only the text you selected is sent.</li>
           <li>A file is sent only when you choose it here.</li>
-          <li>What you capture goes to www.vestiarion.xyz and nowhere else. It is read there into the invoice's fields and kept with the draft until it is added or discarded, at most 30 days.</li>
+          <li>What you capture goes to Vestiarion, at www.vestiarion.xyz. Vestiarion has it read into the invoice's fields by the AI model provider it uses, as it does for an invoice you upload there, and keeps it with the draft until it is added or discarded, at most 30 days.</li>
           <li>The extension cannot add a bill, approve or pay. A draft becomes a bill only when an owner or admin adds it in Vestiarion.</li>
-          <li>No analytics: nothing about your invoices is sent anywhere else.</li>
+          <li>No analytics: nothing about your invoices goes to an analytics service.</li>
         </ul>
         <button id="first-run-ok" class="primary" type="button">Continue</button>
       </section>
@@ -38,6 +38,14 @@
 
       <section id="home" hidden>
         <h1>Capture an invoice</h1>
+        <div id="pending" class="pending" hidden>
+          <p>You chose <strong>Capture invoice with Vestiarion</strong> on this text. Nothing is sent until you press Send to Vestiarion.</p>
+          <pre id="pending-text"></pre>
+          <div class="actions">
+            <button id="pending-send" class="primary" type="button">Send to Vestiarion</button>
+            <button id="pending-drop" class="secondary" type="button">Drop it</button>
+          </div>
+        </div>
         <p>Select the invoice's text on the page, or choose its file.</p>
         <div class="actions">
           <button id="capture-selection" class="primary" type="button">Capture selected text</button>

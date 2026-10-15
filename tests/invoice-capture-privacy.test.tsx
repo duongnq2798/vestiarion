@@ -3,7 +3,7 @@ import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import PrivacyPage from "@/app/privacy/page";
-import { ACCESS_TTL_SECONDS, REFRESH_TTL_MS } from "@/lib/extension/tokens";
+import { ACCESS_TTL_SECONDS, CONNECTION_LIFETIME_MS, REFRESH_TTL_MS } from "@/lib/extension/tokens";
 import { MAX_CAPTURED_CHARS, RAW_TEXT_DAYS, UNSENT_DRAFT_DAYS } from "@/lib/invoice-drafts/model";
 import { MAX_DOCUMENT_BYTES } from "@/lib/invoice-document/read";
 
@@ -46,8 +46,8 @@ describe("the privacy page's Chrome extension section", () => {
     expect(section).toContain(`${RAW_TEXT_DAYS} days after capture at the latest`);
     expect(section).toContain(`deleted after ${UNSENT_DRAFT_DAYS} days`);
     const migration = source("supabase/migrations/0121_invoice_capture.sql");
-    expect(migration).toContain(`captured_at < p_now - interval '${RAW_TEXT_DAYS} days'`);
-    expect(migration).toContain(`state = 'draft' and captured_at < p_now - interval '${UNSENT_DRAFT_DAYS} days'`);
+    expect(migration).toContain(`captured_at < p_now - interval '${RAW_TEXT_DAYS - 1} days'`);
+    expect(migration).toContain(`state = 'draft' and captured_at < p_now - interval '${UNSENT_DRAFT_DAYS - 1} days'`);
     // The text goes with the decision too.
     const commands = source("src/lib/commands/invoice-drafts.ts");
     expect(commands.split("export async function confirmInvoiceDraft")[1]).toContain("raw_text: null");
@@ -62,7 +62,30 @@ describe("the privacy page's Chrome extension section", () => {
     expect(REFRESH_TTL_MS).toBe(30 * 86_400_000);
     expect(section).toContain("refresh token (30 days)");
     expect(section).toContain("Vestiarion keeps only their SHA-256");
-    expect(section).toContain("leaving the workspace deletes them");
+    expect(section).toContain("leaving the workspace deletes it");
+    expect(section).toContain("access token (an hour) in memory only");
+    expect(CONNECTION_LIFETIME_MS).toBe(90 * 86_400_000);
+    expect(section).toContain("A connection lasts at most 90 days from connecting");
+    expect(section).toContain("as does a role that can no longer add bills");
+  });
+
+  it("says how long connections and codes are kept, as the sweep keeps them", () => {
+    expect(section).toContain("for 30 days after it ended or expired, and each one-time sign-in code for a day after it expired");
+    const migration = source("supabase/migrations/0121_invoice_capture.sql");
+    expect(migration).toContain("delete from public.extension_auth_codes where expires_at < p_now - interval '1 day'");
+    expect(migration).toContain("(revoked_at is not null and revoked_at < p_now - interval '30 days')");
+    expect(migration).toContain("or refresh_expires_at < p_now - interval '30 days'");
+    const retention = text(markup.split('id="retention"')[1]?.split('id="delete-workspace"')[0] ?? "");
+    expect(retention).toContain("A Chrome extension connection is deleted 30 days after it ended or expired, and a one-time sign-in code a day after it expired");
+  });
+
+  it("says a selection from the context menu waits at most 5 minutes", () => {
+    expect(section).toContain("is dropped after 5 minutes");
+    expect(source("extensions/chrome-invoice-capture/extension/popup.js")).toContain("const PENDING_MS = 5 * 60_000;");
+  });
+
+  it("names the model provider that reads what is captured, as for an upload", () => {
+    expect(section).toContain("It is read the way an invoice uploaded to the invoice form is read, so a model provider");
   });
 
   it("says there are no analytics on what is captured", () => {

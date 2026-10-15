@@ -2633,17 +2633,29 @@ tenant role reads, adds and changes and never deletes. A draft holds the fields 
 currency, invoice date, due date, purchase order, memo), its source (`selection` or `file`) and the document's kind and
 SHA-256, what the reader made of it (`read`: every warning for the console, the document's own notes for the extension,
 the counterparty matched, the fields as read), who captured it through which connection, and its state: `draft`,
-`sent`, `confirmed` with the invoice it became, or `discarded`. Reading reuses `readInvoiceDocument`
+`sent`, `confirmed` with the invoice it became, or `discarded`. A trigger, `invoice_drafts_guard`, holds the
+moves (draft to sent, draft or sent to discarded, sent to confirmed, confirmed back to sent only while no bill is
+linked), keeps where a capture came from fixed and its fields fixed once sent, lets the text only be removed, and links
+a bill once; a check keeps a bill on confirmed drafts only and a unique key one draft per bill. `read` is at most 64
+KB. Reading reuses `readInvoiceDocument`
 (`src/lib/invoice-document/draft.ts`), the reader of From a document, the chats and email, which now also returns the
 text read, the invoice date and the document's own warnings; `readInvoiceDraft` is its draft alone, as before. A
 picture is captured blank, not read. The commands are in `src/lib/commands/invoice-drafts.ts`:
 `invoice_draft.capture`, `.edit` and `.send` run on the new `chrome` surface, and `invoice_draft.confirm` and
-`.discard` in the console. Confirm claims a `sent` draft in one guarded update and calls `addInvoice`, so every check of
-a bill applies; the `create_invoice` entry names `via: "chrome"`, the draft and its invoice number; a draft that may
+`.discard` in the console. Confirm claims a `sent` draft in one guarded update with the id the bill will have
+(`claimed_invoice_id`) and calls `addInvoice` with it, so every check of a bill applies. Only a refusal that wrote
+nothing (`counterparty_not_found`, `forbidden`, `surface`) puts the draft back without a look; any other failure looks
+the bill up by that id, and a bill written before its ledger entry failed keeps the draft confirmed and linked, never
+added twice. The `create_invoice` entry names `via: "chrome"`, the draft and its invoice number; a draft that may
 repeat a bill or another draft (`src/lib/invoice-drafts/duplicates.ts`, the agent's `findDuplicates` and the invoice
 number) needs the person's **This is not a duplicate**. Bills & receivables lists the sent drafts as the review panel
-`captured`. The captured text (`raw_text`) goes when the draft is decided; `invoice_capture_sweep()`, run by the daily
-cleanup (`src/lib/invoice-drafts/retention.ts`), clears it 30 days after capture and deletes drafts never sent after 7.
+`captured` (50 at most, "50+" past that), without their text: **What was captured** reads it when it is opened
+(`readCapturedTextAction`). The link to add a supplier carries the draft's id, never its name. One connection keeps at
+most 50 drafts never sent. The captured text (`raw_text`) goes when the draft is decided; `invoice_capture_sweep()`, run
+by the daily cleanup (`src/lib/invoice-drafts/retention.ts`), clears it from 29 days after capture (and from any decided
+draft), deletes drafts never sent after 6, a day early so a daily run keeps the 30 and 7 days promised, links or puts
+back a draft left confirmed without its bill for an hour, and deletes codes a day after they expired and connections 30
+days after they ended.
 
 **Authorization without an API key.** `/extension/authorize` is an OAuth authorization endpoint with PKCE (S256 only)
 for the extension ids in `CHROME_EXTENSION_IDS` (`src/lib/extension/settings.ts`), whose one redirect address is
@@ -2651,13 +2663,20 @@ for the extension ids in `CHROME_EXTENSION_IDS` (`src/lib/extension/settings.ts`
 person picks a workspace where they hold `records.write` and allows it; `allowExtensionAction` issues a one-time code
 (`extension_auth_codes`, SHA-256, five minutes). `POST /api/extension/v1/token` uses the code up in one guarded update,
 then compares the client, the redirect address and the verifier and reads the role again; the connection is inserted
-with the code's hash, so a code presented twice always finds and revokes it. It answers an access token (`vxa_…`, an
+with the code's hash, so a code presented twice always finds and revokes it, and the exchange checks the code's
+`replayed_at` again after its insert, for a replay that landed in between. It answers an access token (`vxa_…`, an
 hour) and a refresh token (`vxr_…`, thirty days, replaced on every refresh, the one replaced kept as
-`retired_refresh_hash`: presented again, it revokes the connection) for the audience `vestiarion-chrome` and the scopes
-`invoice_draft:create` and `invoice_draft:read` only, kept as SHA-256 on the connection (`extension_grants`). The
-extension refreshes from its service worker, one refresh at a time. Both tables are platform tables,
-like API keys, read only by `src/lib/extension/tokens.ts`; a connection cascades with its membership.
-`POST /api/extension/v1/revoke` (RFC 7009) and Settings' **Chrome extension** section end one.
+`retired_refresh_hash`: used again, it revokes the connection, `reused_refresh`, as does a second refresh racing the
+first, whose guarded update matches nothing) for the audience `vestiarion-chrome` and the scopes
+`invoice_draft:create` and `invoice_draft:read` only, kept as SHA-256 on the connection (`extension_grants`). A
+connection lasts at most 90 days from `created_at` (`CONNECTION_LIFETIME_MS`, and a check on the row), and a role
+without `records.write` revokes it at a refresh or a request (`role_changed`). The extension refreshes from its service
+worker, one refresh at a time. Both tables are platform tables, like API keys, read only by
+`src/lib/extension/tokens.ts`; a connection cascades with its membership, and `removeMember`, leaving and account
+deletion read the connections first and record `extension_disconnected` (`member_removed`, `member_left`,
+`account_deleted`) for each. `POST /api/extension/v1/revoke` (RFC 7009) and Settings' **Chrome extension** section end
+one. The races are tested over the in-memory PostgREST with a hook that runs a request between two others: PGlite is
+one connection in one process and cannot hold two transactions open at once.
 
 **The extension's endpoints are under `/api/extension/v1`, not `/api/v1`.** They are not in the OpenAPI document, the
 SDK, the CLI or the MCP server, and they take no API key, as `/api/v1` takes no extension token (an extension token is
@@ -2665,14 +2684,17 @@ not `vxk_…`, so `authenticateApiKey` refuses it before any lookup). `guardExte
 (`src/lib/extension/http.ts`) checks the origin (CORS answers only `chrome-extension://<id>` of the allowed ids), the
 token, its audience and scope, sixty requests a minute per connection, and the member's role read now through
 `memberActor` on the `chrome` surface. `POST invoice-drafts` takes `{ source: "selection", text }` (at most 20,000
-characters in 100 KB) or a file of at most 4 MB, with a required `Idempotency-Key` kept on the draft (unique per
+characters in 100 KB, read with a byte cap whether or not the length is sent) or a file of at most 4 MB, with a required `Idempotency-Key` kept on the draft (unique per
 connection); `GET`, `PATCH` and `POST …/send` reach only the connection's own drafts. Before migration `0121`, or without
 `CHROME_EXTENSION_IDS`, they answer 503 and the console shows nothing new.
 
 **The extension** is plain JavaScript modules shipped as they are (`extension/`): Manifest V3 with exactly `activeTab`,
-`scripting`, `storage`, `identity` and `contextMenus` and the one host `https://www.vestiarion.xyz/*`, no content
-scripts, no remote code. It reads a selection only when a person presses Capture or uses the context menu, connects
-through `chrome.identity.launchWebAuthFlow` from its service worker, and keeps its tokens in `chrome.storage.local`.
+`scripting`, `storage`, `identity` and `contextMenus` and no host permission (its calls are CORS requests, without
+cookies), no content scripts, no remote code. It reads a selection only when a person presses Capture or uses the
+context menu, whose selection waits in session storage for **Send to Vestiarion** for five minutes and is never sent by
+itself. It connects through `chrome.identity.launchWebAuthFlow` from its service worker, keeps the access token in
+`chrome.storage.session` and only the refresh token in `chrome.storage.local` (closed to content scripts with
+`setAccessLevel` where Chrome supports it).
 `tests/chrome-extension-manifest.test.ts` holds the manifest and the code to that; `tests/invoice-capture-flow.test.ts`
 runs every call it makes against the routes in-process, over an in-memory PostgREST (`tests/support/memory-postgrest.ts`).
 

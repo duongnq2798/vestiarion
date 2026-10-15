@@ -7,8 +7,8 @@ as a draft to their Vestiarion workspace. The design is
 
 ```text
 extension/            the package Chrome loads, exactly as it ships: no build step
-  manifest.json       activeTab, scripting, storage, identity, contextMenus; https://www.vestiarion.xyz/* only
-  background.js       the context menu item, and Connect's sign-in window
+  manifest.json       activeTab, scripting, storage, identity, contextMenus; no host permission
+  background.js       the context menu item, Connect's sign-in window and every token refresh
   popup.html/.css/.js the popup: first run, connect, capture, check, send
   lib/                config (the one server), PKCE, connection, draft calls, the selection, the fields
   icons/              made from the brand mark by scripts/extension-icons.mjs
@@ -25,17 +25,29 @@ STORE_LISTING.md      the Chrome Web Store's fields, permission justifications a
    folder has another ID.
 4. Migration `0121_invoice_capture.sql` must have run on the deployment's database.
 
-The extension talks to `https://www.vestiarion.xyz` (`extension/lib/config.js`). To try it against a local server,
-change `API_BASE` there in your own copy; the server answers CORS only for the ids in its own `CHROME_EXTENSION_IDS`.
+The extension asks for no host permission. Its calls go to `https://www.vestiarion.xyz` (`extension/lib/config.js`)
+as cross-origin requests, which work because Vestiarion answers CORS for the extension ids in its
+`CHROME_EXTENSION_IDS`, and never with cookies: the token is the only credential. `chrome.identity.launchWebAuthFlow`,
+and `activeTab` with `scripting` for the selection, need no host permission either. To try it against a local server,
+change `API_BASE` in your own copy; that server answers CORS only for the ids in its own `CHROME_EXTENSION_IDS`.
+
+The access token is kept in `chrome.storage.session` (memory only); the refresh token and the workspace's name in
+`chrome.storage.local`. The service worker asks Chrome to keep local storage from content scripts
+(`setAccessLevel`, `TRUSTED_CONTEXTS`) where the browser supports it for local storage, and goes on without it where it
+does not; the extension has no content scripts either way.
 
 ## Pack it for the Chrome Web Store
 
-Bump `version` in `extension/manifest.json`, then zip the folder's contents, with `manifest.json` at the root of the
-zip. From the repository's root in PowerShell:
+Bump `version` in `extension/manifest.json`, then zip the package's files with `manifest.json` at the root of the zip.
+From the repository's root in PowerShell, where `tar.exe` is the one Windows 10 and later ship:
 
-```powershell
-Compress-Archive -Path extensions/chrome-invoice-capture/extension/* -DestinationPath vestiarion-invoice-capture.zip -Force
+```text
+tar.exe -a -c -f vestiarion-invoice-capture.zip -C extensions/chrome-invoice-capture/extension manifest.json background.js popup.html popup.css popup.js lib icons
 ```
+
+`tar.exe` writes entries with forward slashes, as the Chrome Web Store needs; Windows PowerShell 5.1's
+`Compress-Archive` writes backslashes, and its zip does not load. `tests/chrome-extension-manifest.test.ts` holds the
+command's list to every file and folder of the package, so a new one cannot be left out.
 
 Upload the zip in the developer dashboard and fill in the listing from `STORE_LISTING.md`. Once the store gives the
 item its ID, add that ID to `CHROME_EXTENSION_IDS` beside the unpacked one.
@@ -46,6 +58,7 @@ item its ID, add that ID to `CHROME_EXTENSION_IDS` beside the unpacked one.
 
 ## Tests
 
-`tests/chrome-extension-manifest.test.ts` holds the manifest to its exact permissions and host, and the code to having
-no remote code, no `eval`, no analytics and no markup written from captured text. `tests/invoice-capture-flow.test.ts`
-runs the server's side of every call the extension makes.
+`tests/chrome-extension-manifest.test.ts` holds the manifest to its exact permissions and no host, and the code to
+having no remote code, no `eval`, no cookies sent, no analytics and no markup written from captured text.
+`tests/chrome-extension-popup.test.ts` drives the popup and the service worker's refresh in a DOM.
+`tests/invoice-capture-flow.test.ts` runs the server's side of every call the extension makes.

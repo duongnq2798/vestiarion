@@ -4,8 +4,10 @@ import { challengeOf, newState, newVerifier } from "./pkce.js";
 /**
  * Connecting to Vestiarion without an API key: authorization code with PKCE through chrome.identity.launchWebAuthFlow.
  * Vestiarion's consent page issues a one-time code to this extension's own address, and the code with the verifier
- * gets an access token (an hour) and a refresh token (30 days, replaced on each refresh), for invoice drafts only. They
- * are kept in chrome.storage.local, which only this extension's own pages read. Disconnect revokes them.
+ * gets an access token (an hour) and a refresh token (30 days, replaced on each refresh; never past 90 days from
+ * connecting), for invoice drafts only. The access token is kept in memory only (chrome.storage.session, gone when
+ * Chrome closes); the refresh token and the workspace's name in chrome.storage.local, which the service worker keeps
+ * from content scripts where Chrome allows it (the extension has none). Disconnect revokes them.
  */
 
 const TOKEN_URL = `${API_BASE}/api/extension/v1/token`;
@@ -44,20 +46,19 @@ async function tokenRequest(params) {
 /** True in the service worker, where every refresh runs, one at a time. */
 const inWorker = typeof ServiceWorkerGlobalScope !== "undefined" && globalThis instanceof ServiceWorkerGlobalScope;
 
+/** The refresh token and the workspace to disk; the access token to memory only. */
 async function saveTokens(tokens) {
-  const auth = {
-    accessToken: tokens.access_token,
-    refreshToken: tokens.refresh_token,
-    expiresAt: Date.now() + Number(tokens.expires_in) * 1000 - EARLY_MS,
-    workspace: tokens.workspace ?? null,
-  };
-  await chrome.storage.local.set({ auth });
-  return auth;
+  await chrome.storage.local.set({ auth: { refreshToken: tokens.refresh_token, workspace: tokens.workspace ?? null } });
+  await chrome.storage.session.set({ access: { accessToken: tokens.access_token, expiresAt: Date.now() + Number(tokens.expires_in) * 1000 - EARLY_MS } });
+  return getAuth();
 }
 
+/** The connection as kept: the refresh token and the workspace, with the access token while memory holds one. */
 export async function getAuth() {
   const { auth } = await chrome.storage.local.get("auth");
-  return auth ?? null;
+  if (!auth) return null;
+  const { access } = await chrome.storage.session.get("access");
+  return { ...auth, accessToken: access?.accessToken ?? null, expiresAt: access?.expiresAt ?? 0 };
 }
 
 /** Connect Vestiarion: the consent page in Chrome's sign-in window, then the code exchanged for tokens. */
@@ -96,8 +97,8 @@ let refreshing = null;
 
 /**
  * The refresh itself, in the service worker, one at a time: a popup that closes mid-refresh loses nothing, and two
- * views never present the same refresh token twice, which Vestiarion would take for a stolen copy and end the
- * connection. Only the pair it tried is forgotten when Vestiarion refuses it, never one stored since.
+ * views never present the same refresh token twice, which Vestiarion takes as the token used again and answers by ending
+ * the connection. Only the pair it tried is forgotten when Vestiarion refuses it, never one stored since.
  */
 export function refreshInWorker() {
   refreshing ??= (async () => {
@@ -125,17 +126,18 @@ export async function refresh() {
   return answer?.ok === true;
 }
 
-/** The tokens, refreshed first when the access token is about to end; null when not connected. */
+/** The tokens, refreshed first when the access token is missing or about to end; null when not connected. */
 export async function validAuth() {
   const auth = await getAuth();
   if (!auth) return null;
-  if (Date.now() < auth.expiresAt) return auth;
+  if (auth.accessToken && Date.now() < auth.expiresAt) return auth;
   return (await refresh()) ? getAuth() : null;
 }
 
 /** Forgets the tokens and the draft in progress, without asking Vestiarion. */
 export async function forget() {
   await chrome.storage.local.remove(["auth", "currentDraftId"]);
+  await chrome.storage.session.remove("access");
 }
 
 /** Disconnect: Vestiarion revokes the connection, then the extension forgets it. */

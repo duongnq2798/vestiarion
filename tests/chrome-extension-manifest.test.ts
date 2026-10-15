@@ -5,9 +5,10 @@ import { MISSING_WORDS } from "@/lib/invoice-drafts/model";
 
 /**
  * Vestiarion Invoice Capture as it ships (docs/superpowers/specs/2026-10-15-invoice-capture-design.md C23-C26): a
- * Manifest V3 extension asking for exactly the five permissions and the one host its listing justifies, with every
- * line of code in the package (no remote code, no eval, no CDN), nothing sent anywhere but Vestiarion, no analytics,
- * and nothing from a page or a document written as markup.
+ * Manifest V3 extension asking for exactly the five permissions its listing justifies and no host at all (its calls to
+ * Vestiarion rely on the CORS Vestiarion answers it), with every line of code in the package (no remote code, no eval,
+ * no CDN), nothing sent anywhere but Vestiarion and never with cookies, no analytics, nothing from a page or a
+ * document written as markup, and a packing command that leaves no file behind.
  */
 
 const ROOT = path.join(process.cwd(), "extensions", "chrome-invoice-capture");
@@ -26,10 +27,10 @@ const CODE = FILES.filter((file) => /\.(js|mjs|html|css|json)$/.test(file)).map(
 const SCRIPTS = CODE.filter(({ file }) => file.endsWith(".js"));
 
 describe("the manifest (C23)", () => {
-  it("is Manifest V3, with exactly the five permissions and the one host", () => {
+  it("is Manifest V3, with exactly the five permissions and no host", () => {
     expect(manifest.manifest_version).toBe(3);
     expect(manifest.permissions).toEqual(["activeTab", "scripting", "storage", "identity", "contextMenus"]);
-    expect(manifest.host_permissions).toEqual(["https://www.vestiarion.xyz/*"]);
+    expect(manifest).not.toHaveProperty("host_permissions");
     expect(manifest).not.toHaveProperty("optional_permissions");
     expect(manifest).not.toHaveProperty("optional_host_permissions");
   });
@@ -79,7 +80,17 @@ describe("the code (C23-C25)", () => {
     expect(addresses).toEqual(["lib/config.js: https://www.vestiarion.xyz"]);
     for (const { file, text } of SCRIPTS) {
       for (const call of text.matchAll(/fetch\(\s*([^,)]+)/g)) expect(`${file}: ${call[1]}`).toMatch(/: (?:url|TOKEN_URL|REVOKE_URL)$/);
+      // No cookie goes with a call: the token is the only credential.
+      expect(text, file).not.toMatch(/credentials\s*:/);
     }
+  });
+
+  it("keeps the access token in memory and only the refresh token on disk, and keeps both from content scripts", () => {
+    const auth = CODE.find(({ file }) => file === "lib/auth.js")!.text;
+    expect(auth).toContain("chrome.storage.session.set({ access:");
+    expect(auth).not.toMatch(/storage\.local\.set\(\{[^}]*accessToken/);
+    const background = CODE.find(({ file }) => file === "background.js")!.text;
+    expect(background).toContain('setAccessLevel?.({ accessLevel: "TRUSTED_CONTEXTS" })');
   });
 
   it("counts nothing: no analytics, no error reporting service", () => {
@@ -112,10 +123,9 @@ describe("the code (C23-C25)", () => {
 describe("the store listing (C26)", () => {
   const listing = readFileSync(path.join(ROOT, "STORE_LISTING.md"), "utf8");
 
-  it("justifies each permission the manifest asks for, and the host", () => {
-    for (const permission of [...(manifest.permissions as string[]), ...(manifest.host_permissions as string[])]) {
-      expect(listing, permission).toContain(`\`${permission}\``);
-    }
+  it("justifies each permission the manifest asks for, and says it asks for no host", () => {
+    for (const permission of manifest.permissions as string[]) expect(listing, permission).toContain(`\`${permission}\``);
+    expect(listing).toContain("Host permissions: none.");
   });
 
   it("says what the extension does not do, its single purpose and its privacy answers", () => {
@@ -123,5 +133,20 @@ describe("the store listing (C26)", () => {
     expect(listing).toContain("## Single purpose");
     expect(listing).toContain("## Privacy");
     expect(listing).toContain(String(manifest.name));
+  });
+});
+
+describe("packing it (README)", () => {
+  const readme = readFileSync(path.join(ROOT, "README.md"), "utf8");
+  const command = /^tar\.exe -a -c -f (\S+\.zip) -C extensions\/chrome-invoice-capture\/extension (.+)$/m.exec(readme);
+
+  it("zips with tar, whose entries keep forward slashes, as the Chrome Web Store needs", () => {
+    expect(command, "the README's tar command").not.toBeNull();
+    expect(readme).not.toMatch(/^Compress-Archive /m);
+  });
+
+  it("names every file and folder of the package, and nothing else", () => {
+    const named = command![2].trim().split(/\s+/).sort();
+    expect(named).toEqual(readdirSync(PACKAGE).sort());
   });
 });
