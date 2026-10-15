@@ -123,6 +123,12 @@ export interface PaymentIntentStore {
   beginRetry(intent: PaymentIntent): Promise<PaymentIntent | null>;
   /** Records the wallet a send under the current key goes from, before it is sent (payment safety R5). */
   markSending?(idempotencyKey: string, sentWalletId: string | null): Promise<void>;
+  /**
+   * Records the address a send under the current key pays, before it is sent, when it is not the one recorded: the
+   * intent is written once per source, so it would keep its first attempt's address. A confirmed payment counts as paid
+   * at its recorded address (the new payee check), and its receipt shows it.
+   */
+  markDestination?(idempotencyKey: string, destination: string): Promise<void>;
   /** The source's intent, or null: a read that never creates one (payment safety R6). */
   findBySource?(sourceType: PaymentSourceType, sourceId: string): Promise<PaymentIntent | null>;
 }
@@ -399,6 +405,12 @@ export class SupabasePaymentIntentStore implements PaymentIntentStore, PaymentBa
 
   async markSending(idempotencyKey: string, sentWalletId: string | null): Promise<void> {
     const update = await db().from("payment_intents").update({ sent_wallet_id: sentWalletId }).eq("idempotency_key", idempotencyKey);
+    if (update.error) throw new Error(update.error.message);
+  }
+
+  async markDestination(idempotencyKey: string, destination: string): Promise<void> {
+    // Only the address: `updated_at` dates the send, and a send whose answer is lost is looked for around it.
+    const update = await db().from("payment_intents").update({ destination }).eq("idempotency_key", idempotencyKey);
     if (update.error) throw new Error(update.error.message);
   }
 
@@ -844,6 +856,9 @@ async function sendClaimed(
     // The wallet the send goes from, recorded first, so a send whose answer is lost is looked for there (R5).
     const sentWalletId = request.spendingLimit?.agentWalletId ?? null;
     if (store.markSending && sentWalletId !== (intent.sentWalletId ?? null)) await store.markSending(idempotencyKey, sentWalletId);
+    // And the address it pays, recorded first too: a payment sent again to the payee's new address is confirmed there,
+    // not at the address its first attempt asked for, and a send whose answer is lost is recorded where it went.
+    if (store.markDestination && request.destination !== intent.destination) await store.markDestination(idempotencyKey, request.destination);
     result = await provider.transfer({
       fromAccountId: request.fromAccountId,
       toAddress: request.destination,

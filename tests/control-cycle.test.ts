@@ -28,14 +28,20 @@ import { newPayeeCheckFor } from "@/lib/new-payee-facts";
  * ledger key over the recorded fake, as in `tests/approvals.test.ts`.
  */
 
-const { payInvoiceMock, decideMock, guardrailsMock } = vi.hoisted(() => ({
+const { payInvoiceMock, decideMock, guardrailsMock, settleMock } = vi.hoisted(() => ({
   payInvoiceMock: vi.fn(),
   decideMock: vi.fn(),
   guardrailsMock: vi.fn(),
+  settleMock: vi.fn(),
 }));
 vi.mock("@/lib/agent/pay", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/agent/pay")>()),
   payInvoice: payInvoiceMock,
+}));
+// What Circle says of a send never recorded: never taken, unless a test says otherwise (payment safety R4).
+vi.mock("@/lib/payments", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/payments")>()),
+  settleUnknownSend: settleMock,
 }));
 vi.mock("@/lib/agent/decide", () => ({ decide: decideMock }));
 vi.mock("@/lib/agent/guardrails", () => ({ enforceApGuardrails: guardrailsMock }));
@@ -61,6 +67,8 @@ beforeEach(() => {
   payInvoiceMock.mockReset();
   decideMock.mockReset();
   guardrailsMock.mockReset();
+  settleMock.mockReset();
+  settleMock.mockResolvedValue({ answer: "not_sent" });
 });
 afterEach(() => {
   if (savedMasterKeys === undefined) delete process.env.VESTIARION_MASTER_KEYS;
@@ -996,5 +1004,162 @@ describe("reconcileApInvoice — a payment never sent, now the first payment to 
     expect(newPayee).not.toHaveBeenCalled();
     expect(payInvoiceMock).toHaveBeenCalledTimes(1);
     expect(outcome.status).toBe("paid");
+  });
+});
+
+/**
+ * The reconcile only ever sends again a `submitting` intent with no Circle id: a send whose outcome was never recorded
+ * (a claim that went stale, a batch whose answer was lost), which may have reached Circle. It is looked for first,
+ * sending nothing, before any check that would hold it (payment safety R4, R6): found, it is recorded as a transfer
+ * that exists; not listed yet, or not asked, the invoice is left as it is for the next cycle; only a send Circle never
+ * took is weighed as a new one.
+ */
+describe("reconcileApInvoice — a send never recorded is looked for on Circle before anything holds it (payment safety R4)", () => {
+  const provider = { mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003 } as unknown as ChainProvider;
+  const invoice = {
+    id: INVOICE_ID,
+    amount: 150,
+    counterpartyId: COUNTERPARTY_ID,
+    counterpartyName: "Acme Supplies",
+    address: "0xdead",
+    reasoning: "Paid 150 USDC to Acme Supplies.",
+    txRef: null,
+  };
+  const neverRecorded = { providerTxId: null, status: "submitting" };
+  // A counterparty every resend check would hold: screened high risk since the payment was decided.
+  const highRisk = () =>
+    cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") return { body: { risk_level: "high" } };
+      if (r.path === "/rest/v1/rpc/agent_paused") return { body: false };
+      return undefined;
+    });
+  const counterpartyReads = (requests: RecordedRequest[]) => requests.filter((r) => r.path === "/rest/v1/counterparties");
+
+  it("records a transfer Circle already took as paid, rather than holding it for a check a resend would fail", async () => {
+    settleMock.mockResolvedValue({ answer: "found" });
+    payInvoiceMock.mockResolvedValue({
+      status: "paid", txRef: "0xhash", note: "", operatingBalance: 350,
+      execution: { providerMode: "live", feeUsd: 0.003, feeSource: "chain_reported", settledInMs: 4000, executedAt: "2026-10-15T00:00:00Z", reconciled: true },
+    });
+    const newPayee = vi.fn(() => ({ firstPayment: true, twoParties: false }) as never);
+    const { fake, run } = highRisk();
+
+    const outcome = await run(() =>
+      reconcileApInvoice(invoice, neverRecorded, { db: db(), provider, operating: { id: ACCOUNT_ID }, newPayee, twoApprovalsAbove: 100 })
+    );
+
+    expect(settleMock).toHaveBeenCalledWith({ type: "invoice", id: INVOICE_ID }, { provider, fromAccountId: ACCOUNT_ID });
+    // Reconciled as any transfer that exists: none of the resend checks, and not the pause.
+    expect(counterpartyReads(fake.requests)).toHaveLength(0);
+    expect(newPayee).not.toHaveBeenCalled();
+    expect(fake.requests.some((r) => r.path === "/rest/v1/payment_approvals")).toBe(false);
+    expect(rpcBodies(fake.requests, "agent_paused")).toHaveLength(0);
+    expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+    expect(payInvoiceMock).toHaveBeenCalledWith(
+      { invoiceId: INVOICE_ID, counterpartyId: COUNTERPARTY_ID, address: "0xdead", amount: 150, discount: null, currency: "USDC" },
+      { provider, operating: { id: ACCOUNT_ID } }
+    );
+    expect(outcome).toEqual({
+      status: "paid",
+      operatingBalance: 350,
+      line: { domain: "ap", message: "Acme Supplies: reconciled an in-flight payment, now paid (150 USDC)" },
+    });
+    const body = invoicePatches(fake.requests)[0].body as Record<string, unknown>;
+    expect(body.status).toBe("paid");
+    expect(body.tx_ref).toBe("0xhash");
+    expect(body).not.toHaveProperty("paid_amount");
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toMatchObject({ reconciled: true, execution: { txRef: "0xhash", resultingStatus: "paid" } });
+    expect(append.p_detail).not.toHaveProperty("notResubmittedBecause");
+  });
+
+  it.each([
+    [
+      "Circle has not listed the earlier send yet",
+      { answer: "undecided", retryAt: "2026-10-15T10:15:00.000Z" },
+      "Circle has not listed this payment's earlier send yet; it is looked for again from 10:15 UTC, and sent again only if Circle has none",
+    ],
+    [
+      "Circle could not be asked",
+      { answer: "undecided", retryAt: null },
+      "Circle could not be asked about this payment's earlier send; it is looked for again next cycle, and sent again only if Circle has none",
+    ],
+    [
+      "another request is settling the send",
+      { answer: "known" },
+      "another request is settling this payment's send right now; it is reconciled next cycle",
+    ],
+  ])("leaves the invoice matched, holding and sending nothing, while %s", async (_, answer, reason) => {
+    settleMock.mockResolvedValue(answer);
+    const { fake, run } = highRisk();
+
+    const outcome = await run(() => reconcileApInvoice(invoice, neverRecorded, { db: db(), provider, operating: { id: ACCOUNT_ID } }));
+
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    expect(counterpartyReads(fake.requests)).toHaveLength(0);
+    expect(invoicePatches(fake.requests)).toHaveLength(0);
+    expect(outcome).toEqual({
+      status: "matched",
+      operatingBalance: null,
+      line: { domain: "ap", message: "Acme Supplies: its earlier send is not settled on Circle yet, left pending for the next cycle (150 USDC)" },
+    });
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_action).toBe("ap_reconcile");
+    expect(append.p_summary).toBe("RECONCILE invoice from Acme Supplies for 150 USDC: not completed, left pending");
+    expect(append.p_detail).toMatchObject({
+      invoiceId: INVOICE_ID,
+      reconciled: false,
+      reconcileError: reason,
+      previousStatus: "matched",
+      execution: { txRef: null, resultingStatus: "matched" },
+    });
+  });
+
+  it("weighs a send Circle never took as a new one, only once the lookup said so", async () => {
+    let checkedBefore = -1;
+    const world = highRisk();
+    settleMock.mockImplementation(async () => {
+      checkedBefore = counterpartyReads(world.fake.requests).length;
+      return { answer: "not_sent" };
+    });
+
+    const outcome = await world.run(() => reconcileApInvoice(invoice, neverRecorded, { db: db(), provider, operating: { id: ACCOUNT_ID } }));
+
+    expect(checkedBefore).toBe(0);
+    expect(outcome.status).toBe("held");
+    const [append] = rpcBodies(world.fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toMatchObject({ notResubmittedBecause: "counterparty.high_risk" });
+  });
+
+  it("weighs a payout to another chain, which cannot be looked up this way, as before: checked, then asked for again under its key", async () => {
+    settleMock.mockResolvedValue({ answer: "undecided", retryAt: null, unlookable: true });
+    const held = highRisk();
+    expect((await held.run(() => reconcileApInvoice(invoice, neverRecorded, { db: db(), provider, operating: { id: ACCOUNT_ID } }))).status).toBe("held");
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+
+    payInvoiceMock.mockResolvedValue({ status: "matched", txRef: "0xburn", execution: null, note: "", operatingBalance: null, amountPaid: 150, discountTaken: 0 });
+    const { run } = cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") return { body: { risk_level: "low" } };
+      if (r.path === "/rest/v1/rpc/agent_paused") return { body: false };
+      return undefined;
+    });
+    await run(() => reconcileApInvoice({ ...invoice, destinationChain: "BASE-SEPOLIA" }, neverRecorded, { db: db(), provider, operating: { id: ACCOUNT_ID } }));
+    expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves it matched, without looking or holding, when there is no operating account to look from", async () => {
+    const { fake, run } = highRisk();
+
+    const outcome = await run(() => reconcileApInvoice(invoice, neverRecorded, { db: db(), provider, operating: null }));
+
+    expect(settleMock).not.toHaveBeenCalled();
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    expect(counterpartyReads(fake.requests)).toHaveLength(0);
+    expect(invoicePatches(fake.requests)).toHaveLength(0);
+    expect(outcome).toEqual({
+      status: "matched",
+      operatingBalance: null,
+      line: { domain: "ap", message: "Acme Supplies: earlier send left pending, no operating account to look for it from (150 USDC)" },
+    });
   });
 });

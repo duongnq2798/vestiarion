@@ -7,7 +7,7 @@ import { runComplianceSweep, screeningMode as complianceScreeningMode } from "..
 import { recheckAcceptedWork, refreshAcceptedWork, refreshGitHubMilestones } from "../milestone-verification";
 import { sendPullRequestComments } from "../github/payment-comments";
 import { seedScale } from "../seed";
-import { executePayment, executePaymentBatch, type PaymentExecution, type PaymentSourceType } from "../payments";
+import { executePayment, executePaymentBatch, settleUnknownSend, type PaymentExecution, type PaymentSourceType } from "../payments";
 import { payInvoice, syncOperatingBalance, payoutAddress } from "./pay";
 import { CycleMetricsCollector } from "./cycle-metrics";
 import {
@@ -686,6 +686,33 @@ async function twoApprovalsResendBlocker(
   return (await approvedByTwo(source, payment)) ? null : "workspace.two_approvals";
 }
 
+/**
+ * Whether a payment the reconcile would send again was sent after all (payment safety R4, R6). The reconcile only ever
+ * sends again a `submitting` intent with no Circle id: a send whose outcome was never recorded (a claim that went stale,
+ * a batch whose answer was lost), which may have reached Circle. It is looked for first, sending nothing, and before
+ * any check that would hold it, so a transfer Circle took is recorded rather than held:
+ * - `sent`: Circle has it, now recorded; it is reconciled as any transfer that exists.
+ * - `not_sent`: Circle never took it, now recorded; only then is it weighed as a new send. So is a payout to another
+ *   chain, which cannot be looked up this way and is asked for again under its own key, which Circle takes only once.
+ * - `waiting`: Circle has not listed it yet, could not be asked, or another request is settling it right now. Nothing is
+ *   written, and it is looked for again next cycle.
+ */
+async function earlierSend(
+  source: { type: PaymentSourceType; id: string },
+  deps: { provider: ChainProvider; operating: { id: string } }
+): Promise<{ answer: "sent" | "not_sent" } | { answer: "waiting"; reason: string }> {
+  const looked = await settleUnknownSend(source, { provider: deps.provider, fromAccountId: deps.operating.id });
+  if (looked.answer === "found") return { answer: "sent" };
+  if (looked.answer === "not_sent" || (looked.answer === "undecided" && looked.unlookable)) return { answer: "not_sent" };
+  if (looked.answer === "known") return { answer: "waiting", reason: "another request is settling this payment's send right now; it is reconciled next cycle" };
+  return {
+    answer: "waiting",
+    reason: looked.retryAt
+      ? `Circle has not listed this payment's earlier send yet; it is looked for again from ${looked.retryAt.slice(11, 16)} UTC, and sent again only if Circle has none`
+      : "Circle could not be asked about this payment's earlier send; it is looked for again next cycle, and sent again only if Circle has none",
+  };
+}
+
 /** The payment intent a payable already has: enough to tell whether a transfer exists. */
 export interface ExistingPaymentIntent {
   providerTxId: string | null;
@@ -796,23 +823,30 @@ function withNote(reasoning: string | null, note: string): string {
  * with a provider id is reconciled with the provider) rather than pay again.
  *
  * When a transfer already exists — a provider id, or a confirmed intent —
- * nothing new can move, so the pause is not consulted. When none does yet
- * (a submission that never recorded its provider id), `executePayment` may
- * submit it, so that path goes through `payApInvoiceIfNotPaused` and holds
- * while the agent is paused, as any agent payment does (D6).
+ * nothing new can move, so the pause is not consulted. When none is recorded
+ * (a submission that never recorded its provider id), it may still have
+ * reached Circle: it is looked for first, sending nothing (`earlierSend`,
+ * payment safety R4), before anything below could hold it. Found, it is a
+ * transfer that exists, reconciled as one. Not listed yet, not asked, or
+ * being settled by another request, the invoice stays `matched` and nothing
+ * is written to it. Only a send Circle never took goes on, and
+ * `executePayment` may submit it, so that path goes through
+ * `payApInvoiceIfNotPaused` and holds while the agent is paused, as any agent
+ * payment does (D6).
  *
- * Before a possible resubmission, the counterparty's current risk level is
- * read again: a counterparty screened high risk since the payment was
- * decided is not paid, and the invoice is held with a note instead. So is a
- * resubmission that would be the first payment to the counterparty's current
- * address with two different people not behind it (new payee check N3): it
- * is recorded as the stage records that hold, `counterparty.new_payee`.
+ * Before that resubmission, the counterparty's current risk level is read
+ * again: a counterparty screened high risk since the payment was decided is
+ * not paid, and the invoice is held with a note instead. So is a resubmission
+ * that would be the first payment to the counterparty's current address with
+ * two different people not behind it (new payee check N3): it is recorded as
+ * the stage records that hold, `counterparty.new_payee`.
  *
  * A reconcile that did not complete is not an outcome: when there is no
- * operating account to reconcile against, when the reconcile could not read
- * the provider (an error recorded with the provider id), or when it threw
- * before any result, the invoice stays `matched` for the next cycle rather
- * than being demoted to `held` over a transfer that may well have settled.
+ * operating account to reconcile against or look from, when the reconcile
+ * could not read the provider (an error recorded with the provider id), when
+ * it threw before any result, or when an earlier send is not settled on
+ * Circle yet, the invoice stays `matched` for the next cycle rather than
+ * being demoted to `held` over a transfer that may well have settled.
  *
  * The invoice keeps its decision time and, when the reconciliation reports
  * none, its recorded txRef; the reasoning gains a note only when the status
@@ -869,30 +903,67 @@ export async function reconcileApInvoice(
   const transferExists = intent.providerTxId !== null || intent.status === "confirmed";
   const name = invoice.counterpartyName;
 
-  if (transferExists && !deps.operating) {
+  // With no operating account there is nothing to reconcile against, nor to look for an earlier send from.
+  if (!deps.operating) {
     return {
       status: "matched",
       operatingBalance: null,
-      line: { domain: "ap", message: `${name}: in-flight payment left pending, no operating account to reconcile it against (${invoice.amount} ${currency})` },
+      line: {
+        domain: "ap",
+        message: transferExists
+          ? `${name}: in-flight payment left pending, no operating account to reconcile it against (${invoice.amount} ${currency})`
+          : `${name}: earlier send left pending, no operating account to look for it from (${invoice.amount} ${currency})`,
+      },
     };
   }
+  const operating = deps.operating;
+
+  /** A reconcile that did not complete, or an earlier send not settled on Circle yet: the invoice stays `matched`. */
+  const leftPending = async (reason: string, execution: PaymentExecution | null, message: string) => {
+    await appendLedgerEntry({
+      actor: "agent",
+      domain: "ap",
+      action: "ap_reconcile",
+      summary: `RECONCILE invoice from ${name} for ${invoice.amount} ${currency}: not completed, left pending`,
+      detail: {
+        invoiceId: invoice.id,
+        counterpartyId: invoice.counterpartyId,
+        reconciled: false,
+        reconcileError: reason,
+        previousStatus: "matched",
+        execution: {
+          txRef: invoice.txRef ?? execution?.txRef ?? null,
+          chainMode: execution?.providerMode ?? deps.provider.mode,
+          resultingStatus: "matched",
+          settlementRequired: true,
+        },
+      },
+    });
+    return { status: "matched", operatingBalance: null, line: { domain: "ap" as const, message: `${name}: ${message} (${invoice.amount} ${currency})` } };
+  };
+
+  // A send never recorded is looked for on Circle before anything would hold it (payment safety R4): found, it is a
+  // transfer that exists; not settled yet, the invoice waits for the next cycle.
+  const earlier = transferExists ? null : await earlierSend({ type: "invoice", id: invoice.id }, { provider: deps.provider, operating });
+  if (earlier?.answer === "waiting") return leftPending(earlier.reason, null, "its earlier send is not settled on Circle yet, left pending for the next cycle");
+  const sent = transferExists || earlier?.answer === "sent";
 
   let outcome: PayStepOutcome;
   let notResubmitted: "counterparty.high_risk" | "counterparty.address_unconfirmed" | "counterparty.new_payee" | "workspace.two_approvals" | null = null;
   // `undefined` leaves the invoice's recorded paid amount as it is.
   let paidAmount: number | null | undefined;
-  // A payment never sent is sent again only to a counterparty still fit to pay, at an address two different parties
-  // stand behind if it was never paid there (new payee check N3), and only on its own when one approval may pay it
-  // (payment integrity I4).
-  const riskOrAddress = transferExists ? null : await resubmissionBlocker(deps.db, invoice.counterpartyId);
-  const newPayeeHeld = transferExists || riskOrAddress ? null : newPayeeResendBlocker(deps.newPayee, { id: invoice.counterpartyId, address: invoice.address });
-  const blocker = transferExists
+  // A payment Circle never took is sent again only to a counterparty still fit to pay, at an address two different
+  // parties stand behind if it was never paid there (new payee check N3), and only on its own when one approval may pay
+  // it (payment integrity I4).
+  const riskOrAddress = sent ? null : await resubmissionBlocker(deps.db, invoice.counterpartyId);
+  const newPayeeHeld = sent || riskOrAddress ? null : newPayeeResendBlocker(deps.newPayee, { id: invoice.counterpartyId, address: invoice.address });
+  const blocker = sent
     ? null
     : (riskOrAddress ??
       (newPayeeHeld ? ("counterparty.new_payee" as const) : null) ??
       (await twoApprovalsResendBlocker({ type: "invoice", id: invoice.id }, { amount: invoice.amount, currency, address: invoice.address }, deps.twoApprovalsAbove)));
-  if (transferExists) {
-    const result = await payInvoice(input, { provider: deps.provider, operating: deps.operating });
+  if (sent) {
+    const result = await payInvoice(input, { provider: deps.provider, operating });
     const execution = result.execution;
     const incomplete =
       execution === null
@@ -900,32 +971,7 @@ export async function reconcileApInvoice(
         : execution.status === "failed" && execution.error != null && execution.providerTxId != null
           ? execution.error
           : null;
-    if (incomplete !== null) {
-      await appendLedgerEntry({
-        actor: "agent",
-        domain: "ap",
-        action: "ap_reconcile",
-        summary: `RECONCILE invoice from ${name} for ${invoice.amount} ${currency}: not completed, left pending`,
-        detail: {
-          invoiceId: invoice.id,
-          counterpartyId: invoice.counterpartyId,
-          reconciled: false,
-          reconcileError: incomplete,
-          previousStatus: "matched",
-          execution: {
-            txRef: invoice.txRef ?? execution?.txRef ?? null,
-            chainMode: execution?.providerMode ?? deps.provider.mode,
-            resultingStatus: "matched",
-            settlementRequired: true,
-          },
-        },
-      });
-      return {
-        status: "matched",
-        operatingBalance: null,
-        line: { domain: "ap", message: `${name}: could not reconcile the in-flight payment, left pending for the next cycle (${invoice.amount} ${currency})` },
-      };
-    }
+    if (incomplete !== null) return leftPending(incomplete, execution, "could not reconcile the in-flight payment, left pending for the next cycle");
     outcome = {
       status: result.status,
       txRef: result.txRef,
@@ -985,7 +1031,7 @@ export async function reconcileApInvoice(
             heldBecausePaused: false,
             operatingBalance: null,
           }
-        : await payApInvoiceIfNotPaused({ ...input, ...(onChain?.payment ? { spendingLimit: onChain.payment } : {}) }, { provider: deps.provider, operating: deps.operating });
+        : await payApInvoiceIfNotPaused({ ...input, ...(onChain?.payment ? { spendingLimit: onChain.payment } : {}) }, { provider: deps.provider, operating });
     outcome = resubmitted;
     paidAmount =
       resubmitted.payment && (resubmitted.status === "paid" || resubmitted.status === "matched")
@@ -2716,19 +2762,24 @@ async function releaseMilestone(
  * `executePayment` reconcile the existing intent rather than pay again.
  *
  * When a transfer already exists — a provider id, or a confirmed intent —
- * nothing new can move, so the pause is not consulted. When none does yet,
+ * nothing new can move, so the pause is not consulted. When none is recorded,
+ * the release may still have reached Circle: it is looked for first, sending
+ * nothing (`earlierSend`, payment safety R4), before anything below could
+ * hold it or make it wait. Found, it is a transfer that exists, reconciled as
+ * one; not settled on Circle yet, the milestone stays `verified` and nothing
+ * is written to it. Only a release Circle never took goes on, and
  * `executePayment` may submit it: the contractor's current risk level is read
  * again first (a contractor now screened high risk is held, not paid), and a
  * first release to its current address that two different people do not
  * stand behind is held as the stage holds it (new payee check N3); then
  * the release goes through `releaseMilestoneIfNotPaused`, which holds while
- * the agent is paused (D6). With no operating account there, the milestone
- * is held and noted, as `payInvoice` does for an invoice.
+ * the agent is paused (D6).
  *
  * A reconcile that did not complete is not an outcome: no operating account
- * to reconcile against, a reconcile that could not read the provider, or one
- * that threw before any result leaves the milestone `verified` for the next
- * cycle rather than demoting it to `held`.
+ * to reconcile against or look from, a reconcile that could not read the
+ * provider, one that threw before any result, or an earlier release not
+ * settled on Circle yet leaves the milestone `verified` for the next cycle
+ * rather than demoting it to `held`.
  *
  * The milestone keeps its decision time and, when the reconciliation reports
  * none, its recorded txRef; the reasoning gains a note only when the status
@@ -2765,19 +2816,56 @@ export async function reconcileMilestone(
   const release = { milestoneId: milestone.id, destination: payoutAddress(milestone.address, milestone.contractorId), amount };
   const subject = `milestone "${milestone.title}" for ${name} (${amount} USDC)`;
 
-  if (transferExists && !deps.operating) {
+  // With no operating account there is nothing to reconcile against, nor to look for an earlier release from.
+  if (!deps.operating) {
     return {
       status: "verified",
       operatingBalance: null,
-      line: { domain: "contractor", message: `${name}: in-flight release left pending, no operating account to reconcile it against (${amount} USDC)` },
+      line: {
+        domain: "contractor",
+        message: transferExists
+          ? `${name}: in-flight release left pending, no operating account to reconcile it against (${amount} USDC)`
+          : `${name}: earlier release left pending, no operating account to look for it from (${amount} USDC)`,
+      },
     };
   }
+  const operating = deps.operating;
 
-  // A release that never reached the provider would be resubmitted to the
-  // contractor's current address. While a changed address is unconfirmed the
-  // milestone waits exactly as the contractor stage's own check makes it wait:
-  // still verified, nothing written, decided again once someone confirms it.
-  const blocker = transferExists ? null : await resubmissionBlocker(deps.db, milestone.contractorId);
+  /** A reconcile that did not complete, or an earlier release not settled on Circle yet: the milestone stays `verified`. */
+  const leftPending = async (reason: string, execution: PaymentExecution | null, message: string) => {
+    await appendLedgerEntry({
+      actor: "agent",
+      domain: "contractor",
+      action: "milestone_reconcile",
+      summary: `RECONCILE ${subject}: not completed, left pending`,
+      detail: {
+        milestoneId: milestone.id,
+        counterpartyId: milestone.contractorId,
+        reconciled: false,
+        reconcileError: reason,
+        previousStatus: "verified",
+        execution: {
+          txRef: milestone.txRef ?? execution?.txRef ?? null,
+          chainMode: execution?.providerMode ?? deps.provider.mode,
+          resultingStatus: "verified",
+          settlementRequired: true,
+        },
+      },
+    });
+    return { status: "verified", operatingBalance: null, line: { domain: "contractor" as const, message: `${name}: ${message} (${amount} USDC)` } };
+  };
+
+  // A release never recorded is looked for on Circle before anything would hold it or make it wait (payment safety
+  // R4): found, it is a transfer that exists; not settled yet, the milestone waits for the next cycle.
+  const earlier = transferExists ? null : await earlierSend({ type: "milestone", id: milestone.id }, { provider: deps.provider, operating });
+  if (earlier?.answer === "waiting") return leftPending(earlier.reason, null, "its earlier release is not settled on Circle yet, left pending for the next cycle");
+  const sent = transferExists || earlier?.answer === "sent";
+
+  // A release Circle never took would be sent again to the contractor's
+  // current address. While a changed address is unconfirmed the milestone
+  // waits exactly as the contractor stage's own check makes it wait: still
+  // verified, nothing written, decided again once someone confirms it.
+  const blocker = sent ? null : await resubmissionBlocker(deps.db, milestone.contractorId);
   if (blocker === "counterparty.address_unconfirmed") {
     return {
       status: "verified",
@@ -2788,16 +2876,16 @@ export async function reconcileMilestone(
 
   // A first release to the address as it stands now needs two different people behind it, as the stage's own does (new
   // payee check N3); and it is sent again on its own only when one approval may pay it (payment integrity I4).
-  const newPayeeHeld = transferExists || blocker ? null : newPayeeResendBlocker(deps.newPayee, { id: milestone.contractorId, address: milestone.address });
+  const newPayeeHeld = sent || blocker ? null : newPayeeResendBlocker(deps.newPayee, { id: milestone.contractorId, address: milestone.address });
   const twoApprovals =
-    transferExists || blocker || newPayeeHeld
+    sent || blocker || newPayeeHeld
       ? null
       : await twoApprovalsResendBlocker({ type: "milestone", id: milestone.id }, { amount, currency: "USDC", address: milestone.address }, deps.twoApprovalsAbove);
 
   let outcome: PayStepOutcome;
   let notResubmitted: "counterparty.high_risk" | "counterparty.new_payee" | "workspace.two_approvals" | null = null;
-  if (transferExists && deps.operating) {
-    const result = await releaseMilestone(release, { provider: deps.provider, operatingAccountId: deps.operating.id });
+  if (sent) {
+    const result = await releaseMilestone(release, { provider: deps.provider, operatingAccountId: operating.id });
     const execution = result.paymentExecution;
     const incomplete =
       execution === null
@@ -2805,32 +2893,7 @@ export async function reconcileMilestone(
         : execution.status === "failed" && execution.error != null && execution.providerTxId != null
           ? execution.error
           : null;
-    if (incomplete !== null) {
-      await appendLedgerEntry({
-        actor: "agent",
-        domain: "contractor",
-        action: "milestone_reconcile",
-        summary: `RECONCILE ${subject}: not completed, left pending`,
-        detail: {
-          milestoneId: milestone.id,
-          counterpartyId: milestone.contractorId,
-          reconciled: false,
-          reconcileError: incomplete,
-          previousStatus: "verified",
-          execution: {
-            txRef: milestone.txRef ?? execution?.txRef ?? null,
-            chainMode: execution?.providerMode ?? deps.provider.mode,
-            resultingStatus: "verified",
-            settlementRequired: true,
-          },
-        },
-      });
-      return {
-        status: "verified",
-        operatingBalance: null,
-        line: { domain: "contractor", message: `${name}: could not reconcile the in-flight release, left pending for the next cycle (${amount} USDC)` },
-      };
-    }
+    if (incomplete !== null) return leftPending(incomplete, execution, "could not reconcile the in-flight release, left pending for the next cycle");
     outcome = result;
   } else if (blocker === "counterparty.high_risk") {
     notResubmitted = blocker;
@@ -2862,22 +2925,13 @@ export async function reconcileMilestone(
       heldBecausePaused: false,
       operatingBalance: null,
     };
-  } else if (deps.operating) {
+  } else {
     // Sent again by the agent: through the spending limit contract when the workspace enforces it (onchain spending limit R3).
     const onChain = await (deps.onChainLimit ?? onChainLimitGate()).check({ sourceType: "milestone", sourceId: milestone.id, to: milestone.address, amount });
     outcome = await releaseMilestoneIfNotPaused(
       { ...release, ...(onChain?.payment ? { spendingLimit: onChain.payment } : {}) },
-      { provider: deps.provider, operatingAccountId: deps.operating.id }
+      { provider: deps.provider, operatingAccountId: operating.id }
     );
-  } else {
-    outcome = {
-      status: "held",
-      txRef: null,
-      paymentExecution: null,
-      reasoningSuffix: " [no operating account configured]",
-      heldBecausePaused: false,
-      operatingBalance: null,
-    };
   }
 
   const status = outcome.status;

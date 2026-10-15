@@ -387,6 +387,10 @@ payment to an address.
   `payment_intents` row has paid for that payee. `loadNewPayeeFacts` reads each confirmed payment's payee through its
   invoice (`counterparty_id`) or milestone (`contractor_id`), so `paidTo` is per counterparty, lowercase: an address
   the workspace paid for someone else is still a first payment here. `newPayeeCheckFor` asks it for one counterparty.
+  A payment counts at the address its transfer went to: the intent is inserted once per source, so `executePayment`
+  writes the address a send pays (`markDestination`) before sending it whenever it is not the one recorded. A bill
+  sent again to the payee's new address, by the agent or by a person after a hold, is paid there, and its first
+  address stays a first payment.
 - **Who stands behind the address:** read from the counterparty's ledger entries, newest first. The entry that set the
   address (`create_counterparty`, `counterparty_address_changed`) names who gave it: a member, or the payee for a payee
   link or GitHub. `counterparty_address_confirmed` entries after it name who confirmed it.
@@ -419,13 +423,12 @@ payment to an address.
   `src/lib/new-payee-facts.ts`; `firstPaymentFrom` for a release). Code holds a first payment one party alone stands
   behind as `counterparty.new_payee`. The stages hand the same check to `reconcileApInvoice` and `reconcileMilestone`
   (`newPayee`). The reconcile's send-again path only ever sees a `submitting` intent with no Circle id: a send whose
-  outcome was never recorded (a stale claim, or a lost batch). `executePayment` would look it up at Circle and, if
-  Circle had none, send it again to the address as it stands now, so a member who changed it to their own wallet and
-  confirmed it alone while the payment was stuck would not have put a second person behind it. When that would be a
-  first payment with `twoParties` false, the reconcile holds it (`newPayeeResendBlocker`), after the high risk and
-  unconfirmed address checks and before two approvals, as the stages order them, and before any lookup. So a transfer
-  Circle did take is recorded `held`, not paid: a person's Approve and pay or Pay now looks the send up first
-  (`settleUnknownSend`) and records it. Its `ap_reconcile` or `milestone_reconcile` entry records
+  outcome was never recorded (a stale claim, or a lost batch). It looks that send up at Circle first, sending nothing
+  (`earlierSend`, below), and asks only once Circle is known never to have taken it. Sent again, it goes to the address
+  as it stands now, so a member who changed it to their own wallet and confirmed it alone while the payment was stuck
+  would not have put a second person behind it. When that would be a first payment with `twoParties` false, the
+  reconcile holds it (`newPayeeResendBlocker`), after the high risk and unconfirmed address checks and before two
+  approvals, as the stages order them. Its `ap_reconcile` or `milestone_reconcile` entry records
   `notResubmittedBecause: "counterparty.new_payee"` with `guardrailBlocked`, `guardrailRule` and `newPayee`, and the
   reasoning gains "[not resubmitted: this is the first payment to this address, …]". The entry carries no `observed`,
   so the follow-up keeps comparing against the decision before it, and the payment waits for a person. A transfer
@@ -753,6 +756,14 @@ would find.
   - Gateway and CCTP are not looked up. They keep their own safety, and their marker survives a later failure.
   - Reject, Return, Add details and a milestone's Close run the same lookup first (`settleUnknownSend`). A held
     milestone shows an `unknown` state.
+  - So do the cycle's reconciles of a `submitting` intent with no Circle id (`earlierSend` in `reconcileApInvoice` and
+    `reconcileMilestone`), before any check that would hold the payment it would send again:
+    - Found: reconciled as a transfer that exists, so it is recorded paid, never held over a check a resend would fail.
+    - Never taken: only then are the resend checks read (high risk, unconfirmed address, new payee, two approvals).
+      So is a payout to another chain, which is then asked for again under its key, as before.
+    - Not listed yet, not asked, or settled by another request right now: the invoice stays `matched` (the milestone
+      `verified`), nothing is written to it, and `ap_reconcile` (`milestone_reconcile`) records `reconciled: false`
+      with the reason. With no operating account nothing is looked for, and it stays as it is.
   - A bridge's approve, and a Gateway connection never made, are not marked.
 - **Screening that fails closed:** `orgConfig` marks a live workspace on a deployment with no screening service
   (`compliance.serviceRequired`). `screenName` then gives no verdict rather than the bundled list's, so its
@@ -1576,14 +1587,17 @@ reconciles the existing intent through its idempotency key and records
 `ap_reconcile` with `detail.reconciled: true`; otherwise a guardrail the
 person deliberately overrode could hold the invoice over a real transfer.
 A reconcile that did not complete — no operating account, a provider that
-could not be read, or an error before any result — leaves the invoice
-`matched` for the next cycle rather than demoting it. When no transfer
-exists yet and one could be resubmitted, the counterparty's risk level is
-read again first, and a counterparty now screened high risk is not paid.
+could not be read, an error before any result, or an earlier send Circle
+has not listed yet — leaves the invoice `matched` for the next cycle rather
+than demoting it. When no transfer is recorded, the send may still have
+reached Circle, so it is looked for there first, sending nothing: found, it
+is reconciled as a transfer that exists. Only when Circle never took it can
+it be resubmitted, and then the counterparty's risk level is read again
+first, and a counterparty now screened high risk is not paid.
 Nor is a resubmission that would be the first payment to the counterparty's
 current address with two different people not behind it: it is held as
-`counterparty.new_payee` for a person, as the stage holds a decision, before
-the earlier send is looked up (the new payee check above).
+`counterparty.new_payee` for a person, as the stage holds a decision (the
+new payee check above).
 The contractor stage does the same for a `verified` milestone whose release is
 already in flight. It records `milestone_reconcile` rather than asking the
 model again, so a change of mind cannot record a released payment as held.
