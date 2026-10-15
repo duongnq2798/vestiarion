@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { checkAuthorizeRequest, redirectWith } from "@/lib/extension/authorize-request";
 import { challengeOf, isVerifier, verifierMatches } from "@/lib/extension/pkce";
-import { allowedClient, allowedOrigin, DOWNLOAD_EXTENSION_ID, extensionSettingsFromEnv, parseExtensionIds, parseScopes, redirectUriFor } from "@/lib/extension/settings";
+import {
+  allowedClient,
+  allowedOrigin,
+  DOWNLOAD_EXTENSION_ID,
+  extensionSettingsFromEnv,
+  isExtensionId,
+  parseExtensionIds,
+  parseScopes,
+  redirectUriFor,
+  STORE_EXTENSION_ID,
+  STORE_URL,
+} from "@/lib/extension/settings";
 import { newToken, tokenKind } from "@/lib/extension/tokens";
 import { COMMAND_PERMISSIONS, SURFACE_COMMANDS } from "@/lib/commands/policy";
 import nextConfig from "../next.config";
@@ -23,9 +34,18 @@ describe("CHROME_EXTENSION_IDS (C12)", () => {
     ]);
     expect(extensionSettingsFromEnv(undefined)).toBeNull();
     expect(extensionSettingsFromEnv("nothing useful")).toBeNull();
-    // Once any id is listed, the copy offered for download is allowed too, by the one id its manifest's key gives it.
-    expect(extensionSettingsFromEnv(CLIENT)).toEqual({ ids: [CLIENT, DOWNLOAD_EXTENSION_ID] });
-    expect(extensionSettingsFromEnv(`${CLIENT} ${DOWNLOAD_EXTENSION_ID}`)).toEqual({ ids: [CLIENT, DOWNLOAD_EXTENSION_ID] });
+    // Once any id is listed, the Web Store's copy and the copy offered for download are allowed too, each by its one id.
+    expect(extensionSettingsFromEnv(CLIENT)).toEqual({ ids: [CLIENT, STORE_EXTENSION_ID, DOWNLOAD_EXTENSION_ID] });
+    expect(extensionSettingsFromEnv(`${CLIENT} ${DOWNLOAD_EXTENSION_ID} ${STORE_EXTENSION_ID}`)).toEqual({ ids: [CLIENT, DOWNLOAD_EXTENSION_ID, STORE_EXTENSION_ID] });
+  });
+
+  it("names the Web Store's copy by the id the store gave it, and its page by that id", () => {
+    expect(isExtensionId(STORE_EXTENSION_ID)).toBe(true);
+    expect(STORE_EXTENSION_ID).toBe("jfhjgbdbolhnneomgifdnjamoldlioan");
+    expect(STORE_URL).toBe("https://chromewebstore.google.com/detail/vestiarion-invoice-captur/jfhjgbdbolhnneomgifdnjamoldlioan");
+    const store = extensionSettingsFromEnv(CLIENT)!;
+    expect(allowedClient(store, STORE_EXTENSION_ID, `https://${STORE_EXTENSION_ID}.chromiumapp.org/`)).toBe(true);
+    expect(allowedOrigin(store, `chrome-extension://${STORE_EXTENSION_ID}`)).toBe(true);
   });
 
   it("allows an extension's own redirect address, exactly, and its own origin", () => {

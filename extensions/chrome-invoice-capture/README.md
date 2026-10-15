@@ -17,8 +17,9 @@ STORE_LISTING.md      the Chrome Web Store's fields, permission justifications a
 
 ## The download
 
-Until the Chrome Web Store lists it, people install the copy Vestiarion offers at
-`/downloads/vestiarion-invoice-capture.zip`. `npm run extension:download` (`scripts/build-extension-download.mjs`) builds
+People install it from the [Chrome Web Store](https://chromewebstore.google.com/detail/vestiarion-invoice-captur/jfhjgbdbolhnneomgifdnjamoldlioan), whose copy has the ID
+`jfhjgbdbolhnneomgifdnjamoldlioan` (`STORE_EXTENSION_ID`, allowed once `CHROME_EXTENSION_IDS` lists any ID). Where the
+store is not available, they install the copy Vestiarion offers at `/downloads/vestiarion-invoice-capture.zip`. `npm run extension:download` (`scripts/build-extension-download.mjs`) builds
 it into `public/downloads/` from this folder's `extension` files, with the public key of
 `src/lib/extension/download-key.json` added to its manifest as `key`. That key gives every copy the one ID `pemkppoklecedoebjfgjlgfibbepikki`
 wherever it is extracted, and the deployment allows it once `CHROME_EXTENSION_IDS` lists any ID
@@ -61,8 +62,8 @@ tar.exe -a -c -f vestiarion-invoice-capture.zip -C extensions/chrome-invoice-cap
 `Compress-Archive` writes backslashes, and its zip does not load. `tests/chrome-extension-manifest.test.ts` holds the
 command's list to every file and folder of the package, so a new one cannot be left out.
 
-Upload the zip in the developer dashboard and fill in the listing from `STORE_LISTING.md`. Once the store gives the
-item its ID, add that ID to `CHROME_EXTENSION_IDS` beside the unpacked one.
+Upload the zip in the developer dashboard and fill in the listing from `STORE_LISTING.md`. The store's copy has the ID
+`jfhjgbdbolhnneomgifdnjamoldlioan`, which the deployment allows as `STORE_EXTENSION_ID`; a new version keeps it.
 
 ## Change the icons
 

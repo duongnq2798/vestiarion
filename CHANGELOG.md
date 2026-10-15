@@ -14,6 +14,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Vestiarion Invoice Capture is on the Chrome Web Store.** Install it with Add to Chrome from
+  [its store page](https://chromewebstore.google.com/detail/vestiarion-invoice-captur/jfhjgbdbolhnneomgifdnjamoldlioan); Chrome keeps it up to date. The store's copy connects as soon as
+  invoice capture is on, with no change on the deployment, as the downloaded copy does, which stays for where the store
+  is not available. The landing page, the README and the [guide](https://www.vestiarion.xyz/docs/guides/invoice-capture#1-install-it)
+  link it.
 - **Download the Chrome extension.** The invoice capture guide links a zip of Vestiarion Invoice Capture to download,
   extract and load into Chrome, until the Chrome Web Store lists it. Every downloaded copy has the same extension ID,
   set by a public key in its manifest, and Vestiarion allows it as soon as invoice capture is on, so it connects with no
