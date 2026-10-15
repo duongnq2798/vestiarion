@@ -10,7 +10,7 @@ import { PRODUCT_HUNT_BADGE } from "@/lib/site-links";
 
 /**
  * The landing page's promise, as the server renders it (docs/superpowers/specs/2026-10-11-landing-clarity-design.md):
- * what Vestiarion is and who it is for in the first line, what it does with a bill in plain words, one call to action
+ * what Vestiarion is in the first line, what it does with a bill in plain words, one call to action
  * that leads into shadow mode everywhere it appears, and what trying it asks of you. Nothing apologises for the product.
  */
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/&amp;/g, "&").replace(/\s+/g, " ");
@@ -25,9 +25,9 @@ const DISCLAIMERS = [/no real money/i, /no real funds/i, /not real money/i, /fic
 const JARGON = [/ledger/i, /hash/i, /chain/i, /Ed25519/, /testnet/i, /mainnet/i, /guardrail/i, /counterparty/i, /\bap · /];
 
 describe("the landing hero", () => {
-  it("says what it is, for whom, and what it does with a bill (H1)", () => {
+  it("says what it is in plain words, and what it does with a bill (H1)", () => {
     const words = text(hero());
-    expect(words).toContain("An accounts payable agent for small teams");
+    expect(words).toContain("Your AI agent for bills and payments");
     expect(words).toContain("Every bill checked before it's paid. Every decision on record.");
     expect(words).toContain(
       "Vestiarion's agent reviews each invoice from your contractors and suppliers and tells you whether it's ready to pay, should wait, or needs you, and why. Within limits you set, it pays the ready ones in USDC."
