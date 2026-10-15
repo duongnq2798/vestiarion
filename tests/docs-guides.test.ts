@@ -1746,6 +1746,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Chrome extension", CAPTURE_SETTINGS],
     ["`activeTab`", CAPTURE_MANIFEST, '"activeTab"'],
     ["`contextMenus`", CAPTURE_MANIFEST, '"contextMenus"'],
+    ["`alarms`", CAPTURE_MANIFEST, '"alarms"'],
     ["Send to Vestiarion", CAPTURE_POPUP],
     ["Put in this project", "src/components/projects/ProjectForms.tsx"],
     ["extension_connected", CAPTURE_TOKENS],

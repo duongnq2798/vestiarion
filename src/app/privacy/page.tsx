@@ -503,7 +503,7 @@ export default function PrivacyPage() {
             Vestiarion keeps the draft in the workspace&apos;s records: the fields read and as you edited them (supplier, invoice number, amount,
             currency, invoice date, due date, purchase order and memo), who captured it and when, and the file&apos;s kind and SHA-256. A file itself is
             never kept. The text it was read from is kept for the person who reviews the draft, and removed when the draft is added as a bill or
-            discarded, and 30 days after capture at the latest. A draft never sent for review is deleted after 7 days.
+            discarded, and 30 days after capture at the latest. A draft never sent for review is deleted within 7 days.
           </li>
           <li>
             The workspace&apos;s members see a draft once it is sent for review, with the text it was read from. The extension sees only the drafts it
@@ -512,8 +512,8 @@ export default function PrivacyPage() {
           <li>
             The extension keeps its access token (an hour) in memory only, and its refresh token (30 days) in Chrome&apos;s storage for extensions
             on your computer. Vestiarion keeps only their SHA-256, with the workspace, your account&apos;s id and the extension&apos;s id. A connection
-            lasts at most 90 days from connecting. <strong>Disconnect</strong>, in the extension or in Settings, ends it at once, as does a role that can
-            no longer add bills; leaving the workspace deletes it. Vestiarion keeps a connection&apos;s row, without any usable token, for 30 days after
+            lasts at most 90 days from connecting. <strong>Disconnect</strong>, in the extension or in Settings, ends it at once. If your role can no
+            longer add bills, the connection&apos;s next request is refused and the connection ends then. Leaving the workspace deletes it. Vestiarion keeps a connection&apos;s row, without any usable token, for 30 days after
             it ended or expired, and each one-time sign-in code for a day after it expired.
           </li>
           <li>
@@ -532,7 +532,7 @@ export default function PrivacyPage() {
           <li>A webhook delivery is deleted 30 days after it is delivered; one that failed, 30 days after it was created.</li>
           <li>
             Text captured with the Chrome extension is removed when its draft is added or discarded, and 30 days after capture at the latest; a
-            draft never sent for review is deleted after 7 days. A Chrome extension connection is deleted 30 days after it ended or expired, and a
+            draft never sent for review is deleted within 7 days. A Chrome extension connection is deleted 30 days after it ended or expired, and a
             one-time sign-in code a day after it expired.
           </li>
           <li>

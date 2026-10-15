@@ -60,6 +60,7 @@ function stubChrome() {
     action: { setBadgeText: vi.fn(async () => {}), openPopup: vi.fn(async () => {}) },
     tabs: { query: vi.fn(async () => [{ id: 7 }]), create: vi.fn(async () => ({})) },
     scripting: { executeScript: vi.fn<(injection: { target: { tabId: number } }) => Promise<Array<{ result: string }>>>(async () => [{ result: SELECTED }]) },
+    alarms: { create: vi.fn(async () => {}), clear: vi.fn(async () => true), onAlarm: { addListener: vi.fn() } },
   };
 }
 
@@ -331,5 +332,45 @@ describe("the service worker", () => {
     vi.resetModules();
     await import("../extensions/chrome-invoice-capture/extension/background.js");
     expect(setAccessLevel).toHaveBeenCalledWith({ accessLevel: "TRUSTED_CONTEXTS" });
+  });
+
+  it("drops a selection from the context menu after 5 minutes with an alarm, whether or not the popup opens again", async () => {
+    let onClicked: ((info: unknown, tab: unknown) => Promise<void>) | undefined;
+    let onAlarm: ((alarm: { name: string }) => Promise<void>) | undefined;
+    const alarms = {
+      create: vi.fn(async () => {}),
+      clear: vi.fn(async () => true),
+      onAlarm: { addListener: vi.fn((listener: typeof onAlarm) => (onAlarm = listener)) },
+    };
+    vi.stubGlobal("chrome", {
+      ...chromeApi,
+      action: { ...chromeApi.action, setBadgeBackgroundColor: vi.fn(async () => {}) },
+      runtime: { ...chromeApi.runtime, onInstalled: { addListener: vi.fn() }, onMessage: { addListener: vi.fn() } },
+      contextMenus: { create: vi.fn(), onClicked: { addListener: vi.fn((listener: typeof onClicked) => (onClicked = listener)) } },
+      alarms,
+    });
+    vi.resetModules();
+    await import("../extensions/chrome-invoice-capture/extension/background.js");
+
+    await onClicked!({ menuItemId: "capture-invoice", selectionText: SELECTED, frameId: 0 }, { id: 7 });
+    expect(session.get("pendingSelection")).toMatchObject({ text: SELECTED });
+    expect(alarms.create).toHaveBeenCalledWith("pending-selection", { delayInMinutes: 5 });
+
+    // The alarm finds the selection still fresh (a newer one replaced it): it is kept, and the alarm set for the rest.
+    alarms.create.mockClear();
+    await onAlarm!({ name: "pending-selection" });
+    expect(session.has("pendingSelection")).toBe(true);
+    expect(alarms.create).toHaveBeenCalledTimes(1);
+
+    // Five minutes on, it is removed, though the popup never opened.
+    session.set("pendingSelection", { text: SELECTED, idempotencyKey: "menu-key", at: Date.now() - 5 * 60_000 });
+    await onAlarm!({ name: "pending-selection" });
+    expect(session.has("pendingSelection")).toBe(false);
+    expect(chromeApi.action.setBadgeText).toHaveBeenCalledWith({ text: "" });
+
+    // Another alarm's name is not this one's.
+    session.set("pendingSelection", { text: SELECTED, idempotencyKey: "menu-key", at: Date.now() - 10 * 60_000 });
+    await onAlarm!({ name: "something-else" });
+    expect(session.has("pendingSelection")).toBe(true);
   });
 });

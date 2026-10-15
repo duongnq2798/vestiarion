@@ -319,6 +319,35 @@ describe("the code exchange (C14, C15)", () => {
     expect((await refresh(renewed.refresh_token)).status).toBe(400);
   });
 
+  it("keeps the old refresh token working when the workspace cannot be read, so a failed refresh never ends the connection", async () => {
+    let failOrgs = false;
+    let failedReads = 0;
+    let saved: Row[] = [];
+    const w: ReturnType<typeof world> = world({
+      before: (request) => {
+        // The workspace's name and slug, which the token answer carries: the read finds nothing, so it fails.
+        if (failOrgs && request.method === "GET" && request.path === "/rest/v1/orgs" && request.params.get("select") === "name,slug") {
+          failedReads += 1;
+          saved = w.db.rows("orgs");
+          w.db.tables.orgs = [];
+        }
+      },
+    });
+    const tokens = await connect(w);
+    const refresh = () => w.run(() => tokenPOST(form(`${BASE}/api/extension/v1/token`, { grant_type: "refresh_token", refresh_token: tokens.refresh_token, client_id: CLIENT })));
+    failOrgs = true;
+    const failed = await refresh();
+    failOrgs = false;
+    w.db.tables.orgs = saved;
+    expect(failed.status).toBeGreaterThanOrEqual(500);
+    expect(failedReads).toBe(1);
+    // Nothing was rotated: the extension still holds a working refresh token, and the retry gets a new pair.
+    expect(w.db.rows("extension_grants")[0]).toMatchObject({ revoked_at: null, retired_refresh_hash: null });
+    const retried = await refresh();
+    expect(retried.status).toBe(200);
+    expect(w.db.rows("extension_grants")[0]).toMatchObject({ revoked_at: null });
+  });
+
   it("ends the connection when two refreshes with one token race: the extension never races itself", async () => {
     const w = world();
     const tokens = await connect(w);

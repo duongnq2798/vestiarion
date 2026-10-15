@@ -155,7 +155,8 @@ discards it. The extension can never create a live invoice, approve, pay, or tou
 ### The extension
 
 - **C23. Manifest V3**, in `extensions/chrome-invoice-capture/extension/`: permissions exactly `activeTab`,
-  `scripting`, `storage`, `identity` and `contextMenus`; no host permission: its calls to www.vestiarion.xyz are
+  `scripting`, `storage`, `identity`, `contextMenus` and `alarms` (which removes a context-menu selection after its 5
+  minutes); no host permission: its calls to www.vestiarion.xyz are
   cross-origin requests the server answers with CORS (C21), never with cookies. No content scripts that run by
   themselves, no remote code, no `eval`, no CDN: plain JavaScript modules shipped in the folder, no build step. The
   extension's pages keep MV3's default content security policy. It is packed with Windows' `tar.exe`, whose zip keeps
@@ -163,7 +164,8 @@ discards it. The extension can never create a live invoice, approve, pay, or tou
 - **C24. Reading the page only on a click.** **Capture selected text** reads the selection of the active tab once,
   through `activeTab` and `scripting`, when pressed; the context menu item **Capture invoice with Vestiarion** does
   the same for a selection, and keeps it in session memory: the popup shows it and sends it only when the person
-  presses **Send to Vestiarion**, within 5 minutes, after which it is dropped. Nothing runs on a page otherwise.
+  presses **Send to Vestiarion**, within 5 minutes, after which an alarm removes it, whether or not the popup opens
+  again. Nothing runs on a page otherwise.
 - **C25. The popup.** A first-run screen saying what is sent and when; **Connect Vestiarion**
   (`chrome.identity.launchWebAuthFlow`); the workspace connected; capture by selection or **Choose a file** (PDF, text,
   email or picture); the fields, editable, with a warning for each one missing; **Send draft**; **Open in Vestiarion**;

@@ -7,7 +7,7 @@ as a draft to their Vestiarion workspace. The design is
 
 ```text
 extension/            the package Chrome loads, exactly as it ships: no build step
-  manifest.json       activeTab, scripting, storage, identity, contextMenus; no host permission
+  manifest.json       activeTab, scripting, storage, identity, contextMenus, alarms; no host permission
   background.js       the context menu item, Connect's sign-in window and every token refresh
   popup.html/.css/.js the popup: first run, connect, capture, check, send
   lib/                config (the one server), PKCE, connection, draft calls, the selection, the fields

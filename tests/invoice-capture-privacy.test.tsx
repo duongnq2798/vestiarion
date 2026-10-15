@@ -45,7 +45,7 @@ describe("the privacy page's Chrome extension section", () => {
   it("says what is kept, and for how long, as the sweep keeps it", () => {
     expect(section).toContain("A file itself is never kept");
     expect(section).toContain(`${RAW_TEXT_DAYS} days after capture at the latest`);
-    expect(section).toContain(`deleted after ${UNSENT_DRAFT_DAYS} days`);
+    expect(section).toContain(`deleted within ${UNSENT_DRAFT_DAYS} days`);
     const migration = source("supabase/migrations/0121_invoice_capture.sql");
     expect(migration).toContain(`captured_at < p_now - interval '${RAW_TEXT_DAYS - 1} days'`);
     expect(migration).toContain(`state = 'draft' and captured_at < p_now - interval '${UNSENT_DRAFT_DAYS - 1} days'`);
@@ -63,11 +63,14 @@ describe("the privacy page's Chrome extension section", () => {
     expect(REFRESH_TTL_MS).toBe(30 * 86_400_000);
     expect(section).toContain("refresh token (30 days)");
     expect(section).toContain("Vestiarion keeps only their SHA-256");
-    expect(section).toContain("leaving the workspace deletes it");
+    expect(section).toContain("Leaving the workspace deletes it");
     expect(section).toContain("access token (an hour) in memory only");
     expect(CONNECTION_LIFETIME_MS).toBe(90 * 86_400_000);
     expect(section).toContain("A connection lasts at most 90 days from connecting");
-    expect(section).toContain("as does a role that can no longer add bills");
+    // A demoted role is found at the connection's next request or refresh, which is refused and ends it then.
+    expect(section).toContain("If your role can no longer add bills, the connection's next request is refused and the connection ends then");
+    expect(section).not.toContain("as does a role that can no longer add bills");
+    expect(source("src/lib/extension/http.ts")).toContain('reason: "role_changed"');
   });
 
   it("says how long connections and codes are kept, as the sweep keeps them", () => {

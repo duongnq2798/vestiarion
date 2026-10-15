@@ -313,6 +313,23 @@ describe("invoice_capture_sweep (0121, C9, C10)", () => {
     expect(await text(sent)).not.toBeNull();
   });
 
+  it("keeps the text of a draft confirmed without its bill yet, which may still go back for review, and clears it once linked", async () => {
+    const orgId = await createOrg(db, "capture-sweep-claimed");
+    const counterparty = (await db.query<{ id: string }>("insert into public.counterparties (org_id, name, role) values ($1, 'Claimed', 'vendor') returning id", [orgId])).rows[0].id;
+    const bill = crypto.randomUUID();
+    await db.query("insert into public.invoices (id, org_id, direction, counterparty_id, amount, due_date) values ($1, $2, 'payable', $3, 1, now())", [bill, orgId, counterparty]);
+    const claimed = await draft(orgId, { state: "sent" });
+    const linked = await draft(orgId, { state: "sent" });
+    const halfHourAgo = new Date(Date.now() - 30 * 60_000).toISOString();
+    await db.query("update public.invoice_drafts set state = 'confirmed', decided_at = $2, claimed_invoice_id = gen_random_uuid() where id = $1", [claimed, halfHourAgo]);
+    await db.query("update public.invoice_drafts set state = 'confirmed', decided_at = $2, claimed_invoice_id = $3 where id = $1", [linked, halfHourAgo, bill]);
+    await db.query("update public.invoice_drafts set invoice_id = $2 where id = $1", [linked, bill]);
+    await sweep(new Date().toISOString());
+    const text = async (id: string) => (await db.query<{ raw_text: string | null }>("select raw_text from public.invoice_drafts where id = $1", [id])).rows[0].raw_text;
+    expect(await text(claimed)).not.toBeNull();
+    expect(await text(linked)).toBeNull();
+  });
+
   it("links a draft left confirmed for an hour to the bill it became, and puts one whose bill was never added back for review", async () => {
     const orgId = await createOrg(db, "capture-sweep-stuck");
     const counterparty = (await db.query<{ id: string }>("insert into public.counterparties (org_id, name, role) values ($1, 'Stuck', 'vendor') returning id", [orgId])).rows[0].id;

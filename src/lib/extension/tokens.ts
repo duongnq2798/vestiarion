@@ -366,6 +366,9 @@ export async function refreshExtensionTokens(input: { refreshToken: unknown; cli
     await revokeConnection({ orgId: grant.org_id, connectionId: grant.id, by: null, reason: "role_changed" });
     return refusal("invalid_grant", NO_LONGER_ALLOWED);
   }
+  // Read before the pair is replaced, as an exchange does: a failure here leaves the extension's refresh token working,
+  // where one after the update would leave it holding a retired token whose next use ends the connection.
+  const workspace = await workspaceOf(grant.org_id);
   const tokens = pair(now, endsAt);
   // Guarded on the old hash: two refreshes with one token give one new pair, and the other ends the connection.
   const rotated = await platformDb()
@@ -380,7 +383,7 @@ export async function refreshExtensionTokens(input: { refreshToken: unknown; cli
     await revokeConnection({ orgId: grant.org_id, connectionId: grant.id, by: null, reason: "reused_refresh" });
     return refusal("invalid_grant", INVALID_REFRESH);
   }
-  return { ok: true, tokens: issued(tokens, grant.scopes.filter(isScope), await workspaceOf(grant.org_id)) };
+  return { ok: true, tokens: issued(tokens, grant.scopes.filter(isScope), workspace) };
 }
 
 /** Who a request acts for, through which connection, with what it was granted (C16). */

@@ -1,6 +1,6 @@
 /**
- * Where the extension sends what a person captures: Vestiarion itself, and nowhere else. It is the only host the
- * manifest asks for. A developer running Vestiarion locally may point this at their own server while testing an
+ * Where the extension sends what a person captures: Vestiarion itself, and nowhere else. The manifest asks for no host:
+ * these are cross-origin requests the server answers with CORS. A developer running Vestiarion locally may point this at their own server while testing an
  * unpacked build; the server answers only the extensions its CHROME_EXTENSION_IDS allows.
  */
 export const API_BASE = "https://www.vestiarion.xyz";

@@ -69,6 +69,8 @@ draft to the user's Vestiarion workspace.
 - `identity`: `chrome.identity.launchWebAuthFlow` opens Vestiarion's sign-in and consent page so the person connects
   their workspace with OAuth (authorization code with PKCE), without an API key in the extension.
 - `contextMenus`: adds Capture invoice with Vestiarion to the menu shown on a text selection.
+- `alarms`: removes a selection captured from the context menu 5 minutes after it was taken, if the person has not
+  sent or dropped it, whether or not the popup opens again.
 
 Host permissions: none. The extension's calls go to www.vestiarion.xyz alone, as cross-origin requests that
 Vestiarion answers with CORS for this extension's id, never with cookies.
@@ -101,7 +103,7 @@ What the extension collects, only when the person captures an invoice:
 ### Retention, as the privacy policy says it
 
 The captured text is kept with the draft until a person adds it as a bill or discards it, and at most 30 days. A draft
-never sent is deleted after 7 days. A file is never kept, only its SHA-256. The model provider (DeepSeek, on the hosted
+never sent is deleted within 7 days. A file is never kept, only its SHA-256. The model provider (DeepSeek, on the hosted
 service) sees the text under its own API terms and privacy policy, as the privacy policy says. Disconnecting revokes the tokens at once, and a connection lasts
 at most 90 days.
 

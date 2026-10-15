@@ -292,7 +292,7 @@ describe("the figures and settings it quotes, as the code has them", () => {
     );
     expect(section("encryption")).toContain("the Chrome extension's access and refresh tokens and its one-time sign-in codes");
     expect(section("retention")).toContain(
-      `Text captured with the Chrome extension is removed when its draft is added or discarded, and ${RAW_TEXT_DAYS} days after capture at the latest; a draft never sent for review is deleted after ${UNSENT_DRAFT_DAYS} days`
+      `Text captured with the Chrome extension is removed when its draft is added or discarded, and ${RAW_TEXT_DAYS} days after capture at the latest; a draft never sent for review is deleted within ${UNSENT_DRAFT_DAYS} days`
     );
     expect(section("retention")).toContain("A Chrome extension connection is deleted 30 days after it ended or expired, and a one-time sign-in code a day after it expired");
   });
@@ -344,6 +344,11 @@ describe("the figures and settings it quotes, as the code has them", () => {
     expect(source("src/lib/extension/http.ts")).toContain('"Cache-Control": "no-store"');
     expect(MAX_JSON_BYTES).toBe(100_000);
     expect(MAX_DOCUMENT_BYTES).toBe(4_000_000);
+    // Only a capture takes a key; a file is judged by its declared length, and one without it is refused with 411.
+    const captureRoute = source("src/app/api/extension/v1/invoice-drafts/route.ts");
+    expect(captureRoute).toContain('if (length === null || !Number.isFinite(declared)) return { denied: extensionError(request, "length_required"');
+    expect(source("src/lib/extension/http.ts")).toContain("length_required: 411,");
+    expect(source("src/app/api/extension/v1/invoice-drafts/[id]/route.ts")).not.toContain("Idempotency-Key");
     const limits = source("src/lib/rate-limit.ts");
     expect(limits).toContain("return take(extensionApiBuckets, connectionId, 60, 1_000, now);");
     expect(limits).toContain("return take(extensionTokenBuckets, key, 10, 6_000, now);");
@@ -352,8 +357,9 @@ describe("the figures and settings it quotes, as the code has them", () => {
       "chrome-extension://<id>",
       "refuses any other origin with 403",
       "never a cookie",
-      "Idempotency-Key",
-      `${MAX_JSON_BYTES / 1000} KB of JSON or a ${MAX_DOCUMENT_BYTES / 1_000_000} MB file`,
+      "A capture (POST) carries an Idempotency-Key",
+      `A JSON body is at most ${MAX_JSON_BYTES / 1000} KB, counted as it is read`,
+      `a file is at most ${MAX_DOCUMENT_BYTES / 1_000_000} MB by the Content-Length it declares, and one sent without it is refused with 411`,
       "bursts of up to 60, then one a second",
       "bursts of up to 10, then one every 6 seconds",
       "never cached",

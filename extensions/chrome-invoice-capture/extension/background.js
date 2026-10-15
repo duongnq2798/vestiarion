@@ -37,11 +37,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 /**
  * The context menu item Capture invoice with Vestiarion, shown only on a selection. A click reads that selection once,
  * keeps it for the popup in chrome.storage.session (memory only, gone when Chrome closes), and opens the popup, which
- * shows it and sends it to Vestiarion only when the person presses Send to Vestiarion, within 5 minutes. Nothing is
- * sent from here.
+ * shows it and sends it to Vestiarion only when the person presses Send to Vestiarion, within 5 minutes. An alarm
+ * removes it after those 5 minutes, whether or not the popup opens again. Nothing is sent from here.
  */
 
 const MENU_ID = "capture-invoice";
+const PENDING_ALARM = "pending-selection";
+/** The popup's PENDING_MS, in the minutes an alarm takes. */
+const PENDING_MINUTES = 5;
+
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name !== PENDING_ALARM) return;
+  const { pendingSelection } = await chrome.storage.session.get("pendingSelection");
+  if (!pendingSelection) return;
+  const left = Number(pendingSelection.at) + PENDING_MINUTES * 60_000 - Date.now();
+  if (left > 0) {
+    // A newer selection replaced the one this alarm was set for: it waits its own 5 minutes.
+    await chrome.alarms.create(PENDING_ALARM, { delayInMinutes: left / 60_000 });
+    return;
+  }
+  await chrome.storage.session.remove("pendingSelection");
+  await chrome.action.setBadgeText({ text: "" }).catch(() => {});
+});
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({ id: MENU_ID, title: "Capture invoice with Vestiarion", contexts: ["selection"] });
@@ -52,6 +69,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const text = await captureClickedSelection(info, tab);
   if (!text.trim()) return;
   await chrome.storage.session.set({ pendingSelection: { text, idempotencyKey: newIdempotencyKey(), at: Date.now() } });
+  await chrome.alarms.create(PENDING_ALARM, { delayInMinutes: PENDING_MINUTES });
   try {
     await chrome.action.openPopup();
   } catch {

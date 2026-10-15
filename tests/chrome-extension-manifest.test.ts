@@ -5,7 +5,7 @@ import { MISSING_WORDS } from "@/lib/invoice-drafts/model";
 
 /**
  * Vestiarion Invoice Capture as it ships (docs/superpowers/specs/2026-10-15-invoice-capture-design.md C23-C26): a
- * Manifest V3 extension asking for exactly the five permissions its listing justifies and no host at all (its calls to
+ * Manifest V3 extension asking for exactly the six permissions its listing justifies and no host at all (its calls to
  * Vestiarion rely on the CORS Vestiarion answers it), with every line of code in the package (no remote code, no eval,
  * no CDN), nothing sent anywhere but Vestiarion and never with cookies, no analytics, nothing from a page or a
  * document written as markup, and a packing command that leaves no file behind.
@@ -27,9 +27,10 @@ const CODE = FILES.filter((file) => /\.(js|mjs|html|css|json)$/.test(file)).map(
 const SCRIPTS = CODE.filter(({ file }) => file.endsWith(".js"));
 
 describe("the manifest (C23)", () => {
-  it("is Manifest V3, with exactly the five permissions and no host", () => {
+  it("is Manifest V3, with exactly the six permissions and no host", () => {
     expect(manifest.manifest_version).toBe(3);
-    expect(manifest.permissions).toEqual(["activeTab", "scripting", "storage", "identity", "contextMenus"]);
+    // `alarms` drops a selection from the context menu after 5 minutes; it shows no warning at install.
+    expect(manifest.permissions).toEqual(["activeTab", "scripting", "storage", "identity", "contextMenus", "alarms"]);
     expect(manifest).not.toHaveProperty("host_permissions");
     expect(manifest).not.toHaveProperty("optional_permissions");
     expect(manifest).not.toHaveProperty("optional_host_permissions");

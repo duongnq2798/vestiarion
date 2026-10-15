@@ -57,7 +57,7 @@ export async function captureInvoiceDraft(
   if ((await unsentDraftCount(input.connectionId, MAX_UNSENT_DRAFTS)) >= MAX_UNSENT_DRAFTS) {
     return refused(
       "too_many_drafts",
-      `This connection already has ${MAX_UNSENT_DRAFTS} drafts that were never sent. Send the ones you need first: a draft not sent is deleted 7 days after it was captured.`
+      `This connection already has ${MAX_UNSENT_DRAFTS} drafts that were never sent. Send the ones you need first: a draft not sent is deleted within 7 days of its capture.`
     );
   }
 

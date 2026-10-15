@@ -2720,10 +2720,10 @@ connection); `GET`, `PATCH` and `POST …/send` reach only the connection's own 
 `CHROME_EXTENSION_IDS`, they answer 503 and the console shows nothing new.
 
 **The extension** is plain JavaScript modules shipped as they are (`extension/`): Manifest V3 with exactly `activeTab`,
-`scripting`, `storage`, `identity` and `contextMenus` and no host permission (its calls are CORS requests, without
+`scripting`, `storage`, `identity`, `contextMenus` and `alarms` and no host permission (its calls are CORS requests, without
 cookies), no content scripts, no remote code. It reads a selection only when a person presses Capture or uses the
-context menu, whose selection waits in session storage for **Send to Vestiarion** for five minutes and is never sent by
-itself. It connects through `chrome.identity.launchWebAuthFlow` from its service worker, keeps the access token in
+context menu, whose selection waits in session storage for **Send to Vestiarion** for five minutes, then an alarm removes
+it; it is never sent by itself. It connects through `chrome.identity.launchWebAuthFlow` from its service worker, keeps the access token in
 `chrome.storage.session` and only the refresh token in `chrome.storage.local` (closed to content scripts with
 `setAccessLevel` where Chrome supports it).
 `tests/chrome-extension-manifest.test.ts` holds the manifest and the code to that; `tests/invoice-capture-flow.test.ts`

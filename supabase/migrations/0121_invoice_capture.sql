@@ -229,8 +229,10 @@ begin
    where state = 'confirmed' and invoice_id is null and decided_at < p_now - interval '1 hour';
   get diagnostics v_returned = row_count;
 
+  -- A draft confirmed without its bill linked yet keeps its text: it may still go back for review.
   update public.invoice_drafts set raw_text = null
-   where raw_text is not null and (captured_at < p_now - interval '29 days' or state in ('confirmed', 'discarded'));
+   where raw_text is not null
+     and (captured_at < p_now - interval '29 days' or state = 'discarded' or (state = 'confirmed' and invoice_id is not null));
   get diagnostics v_text = row_count;
 
   delete from public.invoice_drafts where state = 'draft' and captured_at < p_now - interval '6 days';

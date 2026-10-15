@@ -30,6 +30,7 @@
     "scripting",
     "storage",
     "identity",
-    "contextMenus"
+    "contextMenus",
+    "alarms"
   ]
 }

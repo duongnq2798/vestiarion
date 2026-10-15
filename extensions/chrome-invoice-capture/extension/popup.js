@@ -328,7 +328,7 @@ $("start-over").addEventListener("click", async () => {
   current = null;
   await chrome.storage.local.remove("currentDraftId");
   show("home");
-  say("That draft was not sent. Vestiarion deletes it after 7 days.");
+  say("That draft was not sent. Vestiarion deletes it within 7 days.");
 });
 
 $("open").addEventListener("click", async () => {

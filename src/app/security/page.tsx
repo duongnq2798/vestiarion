@@ -244,8 +244,8 @@ export default function SecurityPage() {
             <strong>Its routes.</strong> The extension reaches only <code>/api/extension/v1</code>: the token and revoke endpoints and its draft
             endpoints. Each answers CORS only for <code>chrome-extension://&lt;id&gt;</code> of an allowed id and refuses any other origin with 403,
             authenticates by the token alone, never a cookie, checks its audience and scope, and reads the member&apos;s role again on every
-            request. A draft request carries an <code>Idempotency-Key</code>; a body is at most 100 KB of JSON or a 4 MB file, counted as it is
-            read. Draft requests from one connection come in bursts of up to 60, then one a second, and token or revoke requests from one address
+            request. A capture (<code>POST</code>) carries an <code>Idempotency-Key</code>. A JSON body is at most 100 KB, counted as it is read;
+            a file is at most 4 MB by the <code>Content-Length</code> it declares, and one sent without it is refused with 411. Draft requests from one connection come in bursts of up to 60, then one a second, and token or revoke requests from one address
             in bursts of up to 10, then one every 6 seconds. Answers are never cached.
           </li>
         </ul>
@@ -392,7 +392,7 @@ export default function SecurityPage() {
           </li>
           <li>
             Text captured with the Chrome extension is removed when its draft is added or discarded, and 30 days after capture at the latest; a
-            draft never sent for review is deleted after 7 days, and a file it sent is never kept, only its SHA-256. A Chrome extension connection is
+            draft never sent for review is deleted within 7 days, and a file it sent is never kept, only its SHA-256. A Chrome extension connection is
             deleted 30 days after it ended or expired, and a one-time sign-in code a day after it expired.
           </li>
           <li>
