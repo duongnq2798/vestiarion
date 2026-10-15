@@ -2,9 +2,10 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 
 ## 2026-10-15: A payment sent again is held when it would be a new payee's first
 
-- An `ap_reconcile` or `milestone_reconcile` entry can now carry `notResubmittedBecause: "counterparty.new_payee"`, with `execution.resultingStatus: "held"`. The payment's first send never reached Circle, and sending it again to the payee's address as it stands now would have been the first payment to that payee at that address, with two different people not behind it. The agent held it rather than sending it; before, it sent it. A webhook endpoint receives that entry as `ledger.appended`, in place of one whose `execution.resultingStatus` said the payment went out.
+- An `ap_reconcile` or `milestone_reconcile` entry can now carry `notResubmittedBecause: "counterparty.new_payee"`, with `execution.resultingStatus: "held"`. This is a payment whose earlier send's outcome was never recorded: no Circle transaction id was kept for it. Before, the agent looked that send up at Circle and, if Circle had none, sent the payment again to the payee's address as it stands now. Now, when sending it again would be the first payment to that payee at that address with two different people not behind it, the agent holds it for a person instead, before looking anything up. A webhook endpoint receives that entry as `ledger.appended`, in place of one recording what the lookup or the new send found.
+- A person's Approve and pay, or Pay now on a milestone, looks the earlier send up at Circle first: a transfer Circle took is recorded as it stands, and nothing new is sent until Circle has answered.
 - Such an entry also carries the hold as a decision records it: `guardrailBlocked: true`, `guardrailRule: "counterparty.new_payee"`, and `newPayee`, the same `{ addressBy, linkCreatedBy?, bountyBy?, confirmedBy, unanswered?, twoParties }` a decision records as `observed.newPayee`. It still carries no `observed`.
-- A transfer Circle already has is only read, and its reconcile entry is unchanged. Nothing else in `/api/v1` or the webhooks changes.
+- A transfer recorded with its Circle transaction id is only read, and its reconcile entry is unchanged. Nothing else in `/api/v1` or the webhooks changes.
 
 ## 2026-10-15: Who asked for a payee's address counts as having given it
 

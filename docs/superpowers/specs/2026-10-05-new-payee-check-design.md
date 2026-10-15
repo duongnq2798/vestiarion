@@ -69,12 +69,14 @@ Addresses that come from outside the console already wait for a person: one sent
   - For a payable it speaks after the address check and the three-way match, so the bill's own gaps are asked first.
   - Cost if wrong: the first bill of every vendor a member typed in waits for a second person, as first-payment
     verification intends.
-  - Amended 2026-10-15 (independent review of the payee link change): a payment whose first send never reached Circle,
-    sent again by the cycle's reconcile, goes to the address as it stands now, so it is asked the same. One that would
-    be the first payment to that payee at that address, with no two parties behind it, is held as
-    `counterparty.new_payee`, after the high risk and unconfirmed address checks and before two approvals. Its
-    `ap_reconcile` or `milestone_reconcile` entry records `notResubmittedBecause`, `guardrailRule` and `newPayee`. A
-    transfer that already exists is only read.
+  - Amended 2026-10-15 (independent review of the payee link change): a payment whose earlier send's outcome was never
+    recorded (no Circle id) is looked up by the cycle's reconcile and, if Circle has none, sent again to the address as
+    it stands now, so it is asked the same. One that would be the first payment to that payee at that address, with no
+    two parties behind it, is held as `counterparty.new_payee` for a person, after the high risk and unconfirmed
+    address checks and before two approvals, and before the lookup. A person's Approve and pay or Pay now looks the
+    send up first and records a transfer Circle took. Its `ap_reconcile` or `milestone_reconcile` entry records
+    `notResubmittedBecause`, `guardrailBlocked`, `guardrailRule` and `newPayee`. A transfer recorded with its Circle id
+    is only read.
 - **N4. A person's payment.**
   - Approve and pay in Approvals refuses a first payment to an address the person gave themselves, as does Pay now on a
     milestone, unless they are the workspace's sole approver (as for an invoice they entered).
@@ -118,9 +120,9 @@ Addresses that come from outside the console already wait for a person: one sent
   - unchecked in a sandbox;
   - order: the address check and the match come first.
 - **Contractor stage:** a first release held the same way.
-- **Reconcile:** a payable's or milestone's payment never sent, held when sending it again would be a first payment one
-  party alone stands behind; sent again once two parties stand behind it, or the address was paid; a transfer that
-  exists asks nothing.
+- **Reconcile:** a payable's or milestone's send with no Circle id, held when sending it again would be a first payment
+  one party alone stands behind; sent again once two parties stand behind it, or the address was paid; a transfer
+  recorded with its Circle id asks nothing.
 - **Approvals:**
   - the giver is refused, unless sole approver;
   - another person may pay;

@@ -14,13 +14,16 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Fixed
 
-- **A payment sent again needs two people behind a new address too.** When a payment's first send never reached
-  Circle, the agent sends it again to the payee's address as it stands now, and it used to do so without asking who
-  stood behind that address. A member could change a payee's address to their own wallet and confirm it while a
-  payment waited, and the next cycle sent it there. Now a resend that would be the first payment to that payee at that
-  address, with two different people not behind it, is held as `counterparty.new_payee`, as the agent's own decision
-  would be, for bills and milestones alike. Its reasoning says "Not sent again: this is the first payment to this
-  address, …", and another owner, admin or approver pays it. A transfer Circle already has is only checked, as before.
+- **A payment sent again needs two people behind a new address too.** When the outcome of a payment's earlier send
+  was never recorded, the agent looks the send up at Circle and, if Circle has none, sends the payment again to the
+  payee's address as it stands now. It used to do so without asking who stood behind that address: a member could
+  change a payee's address to their own wallet and confirm it while a payment waited, and the next cycle sent it there.
+  Now, when sending it again would be the first payment to that payee at that address, with two different people not
+  behind it, the agent holds it as `counterparty.new_payee` for a person, as its own decision would, for bills and
+  milestones alike. Its reasoning says "Not sent again: this is the first payment to this address, …". Another owner,
+  admin or approver pays it, and their Approve and pay, or Pay now, looks the earlier send up at Circle before sending
+  anything, so a transfer Circle took is recorded rather than sent twice. A transfer recorded with its Circle
+  transaction id is only checked, as before.
   [Guide](https://www.vestiarion.xyz/docs/guides/first-payment#6-approve-a-held-payment).
 
 ## [0.1.0-beta.6] - 2026-10-15
