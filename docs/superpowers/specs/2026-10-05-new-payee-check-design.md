@@ -28,6 +28,10 @@ Addresses that come from outside the console already wait for a person: one sent
     'confirmed'`, destination compared case-insensitively).
   - A payment in flight does not make an address paid.
   - Payables and milestones both count.
+  - Amended 2026-10-15 (independent review of the reconcile change): a confirmed payment counts at the address its
+    transfer went to. An intent is written once per source, so each send records the address it pays before it is
+    sent (`markDestination`): a payment sent again to the payee's new address, after a hold, makes the new address
+    paid, and leaves the old one a first payment.
 - **N2. Who stands behind an address.** This is read from the ledger, newest first:
   - The entry that set the counterparty's current address names who gave it:
     - `counterparty_address_changed` (`to` is the address): a member (`by`), or the payee when `by` is null (a payee
@@ -73,10 +77,16 @@ Addresses that come from outside the console already wait for a person: one sent
     recorded (no Circle id) is looked up by the cycle's reconcile and, if Circle has none, sent again to the address as
     it stands now, so it is asked the same. One that would be the first payment to that payee at that address, with no
     two parties behind it, is held as `counterparty.new_payee` for a person, after the high risk and unconfirmed
-    address checks and before two approvals, and before the lookup. A person's Approve and pay or Pay now looks the
-    send up first and records a transfer Circle took. Its `ap_reconcile` or `milestone_reconcile` entry records
-    `notResubmittedBecause`, `guardrailBlocked`, `guardrailRule` and `newPayee`. A transfer recorded with its Circle id
-    is only read.
+    address checks and before two approvals. A person's Approve and pay or Pay now looks the send up first and records
+    a transfer Circle took. Its `ap_reconcile` or `milestone_reconcile` entry records `notResubmittedBecause`,
+    `guardrailBlocked`, `guardrailRule` and `newPayee`. A transfer recorded with its Circle id is only read.
+  - Amended 2026-10-15 (independent review of the reconcile change): this check, and the reconcile's others, used to
+    run before the lookup, so a transfer Circle had taken could be recorded held. The send is now looked for first,
+    sending nothing: found, it is reconciled as a transfer that exists; not listed yet, or Circle could not be asked,
+    the payment waits for the next cycle; only one Circle never took is asked. A send recorded failed with Circle's
+    answer lost is looked up the same way before the stage decides it again. A payout to another chain cannot be
+    looked up by its reference, so it is asked before it is asked for again under its key, and can be held while
+    Circle may hold the transfer.
 - **N4. A person's payment.**
   - Approve and pay in Approvals refuses a first payment to an address the person gave themselves, as does Pay now on a
     milestone, unless they are the workspace's sole approver (as for an invoice they entered).

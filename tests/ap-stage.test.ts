@@ -17,6 +17,8 @@ import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
 import { paymentIntentsBackend } from "./support/payment-intents";
 import { ARC_TESTNET } from "@/lib/network";
 import type { NewPayeeFacts } from "@/lib/new-payee-facts";
+import { MAY_HAVE_BEEN_ACCEPTED } from "@/lib/circle/settlement";
+import { paymentIdempotencyKey } from "@/lib/payments";
 
 /**
  * The AP stage (`runApStage`, src/lib/agent/orchestrator.ts) deciding *when*
@@ -191,9 +193,17 @@ function apFake(options: {
   twoApprovals?: number;
   /** The business's currency when the workspace is in shadow mode (shadow mode S1); off when absent. */
   shadow?: string;
+  /** The chain provider; a `Chain` that records transfers when absent. */
+  chain?: Chain;
 }) {
   const intents = paymentIntentsBackend(ORG);
   const fake = fakeSupabase((request) => {
+    // The in-flight read names its sources with `in.(…)`: every row of theirs, as PostgREST answers it.
+    const inSources = request.path === "/rest/v1/payment_intents" && request.method === "GET" ? request.params.get("source_id")?.match(/^in\.\((.*)\)$/)?.[1].split(",") : undefined;
+    if (inSources) {
+      const type = request.params.get("source_type")?.replace(/^eq\./, "");
+      return { body: intents.rows.filter((row) => row.source_type === type && inSources.includes(row.source_id as string)) };
+    }
     if (request.path === "/rest/v1/orgs") return { body: orgRow() };
     if (request.path === "/rest/v1/agent_budgets") return { body: options.budget ? [options.budget] : [] };
     if (request.path === "/rest/v1/approval_policies") return { body: options.twoApprovals ? [{ two_approvals_above: String(options.twoApprovals) }] : [] };
@@ -215,7 +225,7 @@ function apFake(options: {
     if (request.path === "/rest/v1/accounts" && request.method === "PATCH") return { body: [] };
     return intents.respond(request);
   });
-  const chain = new Chain();
+  const chain = options.chain ?? new Chain();
   const metrics = new CycleMetricsCollector();
   const lines: CycleLogLine[] = [];
   const stage = (operatingBalance = 1000, reserveBalance = 0) =>
@@ -236,7 +246,7 @@ function apFake(options: {
         })
       )
     );
-  return { fake, chain, metrics, lines, stage };
+  return { fake, chain, metrics, lines, stage, intents };
 }
 
 /** A model that answers `answer(params)` — parsed by the real schema, as `decide` parses a reply. */
@@ -1795,5 +1805,95 @@ describe("the AP stage in shadow mode, short of cash (shadow mode review M1)", (
     const execution = (entry.p_detail as { execution: Record<string, unknown> }).execution;
     expect(execution.heldBecause).toBe("shadow_verdict");
     expect(execution).not.toHaveProperty("cashNeededUsdc");
+  });
+});
+
+/**
+ * The most common unanswered send (payment safety R4): the transfer call ran out of time, Circle answered 5xx or with no
+ * id, so the intent is `failed` with no Circle id and "may or may not have been accepted". Circle may hold the transfer.
+ * The stage looks it up before anything could decide it again, so a payment that moved is recorded paid rather than held
+ * or flagged by a guardrail; only one Circle never took is decided again, through the model and every guardrail.
+ */
+describe("the AP stage and a payment whose send Circle never answered", () => {
+  const SENT_AT = "2026-10-15T09:30:00.000Z";
+  /** Circle as the lookup finds it: `listed` under the payment's reference, or nothing. */
+  class Circle extends Chain {
+    lookups: string[] = [];
+    constructor(private readonly listed: TransferResult | null) {
+      super();
+    }
+    async findTransferByRef(_from: string, refId: string): Promise<TransferResult | null> {
+      this.lookups.push(refId);
+      return this.listed;
+    }
+    async reconcileTransfer(): Promise<TransferResult> {
+      return this.listed as TransferResult;
+    }
+  }
+  const taken: TransferResult = {
+    providerTxId: "circle-tx-taken", txHash: "0xtaken", txRef: "0xtaken", chain: "ARC-TESTNET", status: "confirmed",
+    feeUsd: 0.003, feeSource: "chain_reported", providerMode: "live", settledInMs: 4000, providerState: "COMPLETE", failureReason: null,
+  };
+  /** A matched bill whose send timed out half an hour ago, to a payee screened high risk since. */
+  function unanswered(chain: Circle) {
+    const world = apFake({
+      book: [payable({ status: "matched", decided_at: "2026-10-15T09:29:00+00:00", counterparties: counterparty({ risk_level: "high" }) })],
+      chain,
+    });
+    const row = world.intents.insert({
+      source_type: "invoice", source_id: INVOICE_ID, idempotency_key: paymentIdempotencyKey("invoice", INVOICE_ID),
+      provider: "circle", provider_mode: "live", amount: 400, destination: "0xnorth",
+    });
+    Object.assign(row, { status: "failed", attempt_count: 1, last_error: `Circle did not answer within 20000 ms; the transfer ${MAY_HAVE_BEEN_ACCEPTED}`, updated_at: SENT_AT });
+    return { ...world, row };
+  }
+
+  it("records the transfer Circle took as paid, without deciding it again or flagging it", async () => {
+    today("2026-10-15T10:00:00.000Z");
+    const chain = new Circle(taken);
+    const { fake, row, stage } = unanswered(chain);
+
+    await stage();
+
+    expect(chain.lookups).toEqual([`Invoice ${INVOICE_ID}`]);
+    expect(chain.transfers).toEqual([]);
+    expect(decideMock).not.toHaveBeenCalled();
+    expect(row).toMatchObject({ status: "confirmed", provider_tx_id: "circle-tx-taken" });
+    const [patch] = invoicePatches(fake.requests);
+    expect(patch.body).toMatchObject({ status: "paid", tx_ref: "0xtaken" });
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_action).toBe("ap_reconcile");
+    expect(entry.p_detail).toMatchObject({ reconciled: true, execution: { resultingStatus: "paid" } });
+  });
+
+  it("decides it again, through every guardrail, once Circle shows it never took the send", async () => {
+    today("2026-10-15T10:00:00.000Z");
+    const chain = new Circle(null);
+    const { fake, row, stage } = unanswered(chain);
+
+    await stage();
+
+    expect(chain.lookups).toHaveLength(1);
+    expect(chain.transfers).toEqual([]);
+    expect(row.last_error).toBe("Circle has no transfer for this payment's earlier send; nothing was sent.");
+    // Decided again as a payment never sent: the high-risk payee is flagged by the guardrail, as before.
+    expect(decideMock).toHaveBeenCalledTimes(1);
+    const [patch] = invoicePatches(fake.requests);
+    expect((patch.body as Record<string, unknown>).status).not.toBe("paid");
+    expect(ledger(fake.requests)[0].p_action).not.toBe("ap_reconcile");
+  });
+
+  it("leaves it matched, deciding nothing, while Circle has not listed the send yet", async () => {
+    today("2026-10-15T09:40:00.000Z");
+    const chain = new Circle(null);
+    const { fake, row, stage } = unanswered(chain);
+
+    await stage();
+
+    expect(chain.lookups).toHaveLength(1);
+    expect(decideMock).not.toHaveBeenCalled();
+    expect(invoicePatches(fake.requests)).toHaveLength(0);
+    expect(row.status).toBe("failed");
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({ reconciled: false, execution: { resultingStatus: "matched" } });
   });
 });

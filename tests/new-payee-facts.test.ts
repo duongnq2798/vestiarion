@@ -3,9 +3,13 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
 import { withOrg } from "@/lib/dal/scope";
+import type { BalanceSnapshot, ChainProvider, EarnResult, TransferResult } from "@/lib/circle";
+import { ARC_TESTNET } from "@/lib/network";
 import { ID_CHUNK, loadNewPayeeFacts, newPayeeCheckFor, PAYMENT_PAGE } from "@/lib/new-payee-facts";
 import { PAYEE } from "@/lib/new-payee";
+import { executePayment, paymentIdempotencyKey, paymentMemo } from "@/lib/payments";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
+import { paymentIntentsBackend } from "./support/payment-intents";
 
 /**
  * What the new payee check reads (docs/superpowers/specs/2026-10-05-new-payee-check-design.md N1, N2): the addresses
@@ -259,5 +263,77 @@ describe("loadNewPayeeFacts and an address the payee sent", () => {
     const workspaceFake = workspace();
     await load(workspaceFake, ["cp-1", "cp-2"]);
     expect(workspaceFake.requests.some((request) => request.path === "/rest/v1/payee_links")).toBe(false);
+  });
+});
+
+/**
+ * A confirmed payment counts at the address its transfer went to (N2). A payable first sent to the payee's old address
+ * and held, then paid by a person once the payee gave a new one, went to the new address: that address has been paid,
+ * and the old one never was. The intent is written once per source, so the address is recorded again when it is sent.
+ */
+describe("loadNewPayeeFacts after a payment sent again to the payee's new address", () => {
+  const INVOICE = "018f8ce0-1557-7b54-a931-4d777f6bcf01";
+  const OLD = "0x1111111111111111111111111111111111111111";
+  const NEW = "0x2222222222222222222222222222222222222222";
+
+  function confirmed(providerTxId: string): TransferResult {
+    return {
+      providerTxId, txHash: "0xhash", txRef: "0xhash", chain: "ARC-TESTNET", status: "confirmed", feeUsd: 0.003,
+      feeSource: "chain_reported", providerMode: "live", settledInMs: 4000, providerState: "COMPLETE", failureReason: null,
+    };
+  }
+  const provider = (reconciled: TransferResult | null) =>
+    ({
+      network: ARC_TESTNET, mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003,
+      transfer: async () => confirmed("circle-tx-2"),
+      reconcileTransfer: async () => reconciled as TransferResult,
+      findTransferByRef: async () => null,
+      getBalance: async (): Promise<BalanceSnapshot> => { throw new Error("not used"); },
+      depositToEarn: async (): Promise<EarnResult> => { throw new Error("not used"); },
+      withdrawFromEarn: async (): Promise<EarnResult> => { throw new Error("not used"); },
+    }) as unknown as ChainProvider;
+
+  /** The workspace's `payment_intents` (tests/support/payment-intents.ts), with the invoice's held first attempt to OLD. */
+  function paidWorkspace(firstAttempt: Record<string, unknown>) {
+    const intents = paymentIntentsBackend(ORG);
+    const row = intents.insert({
+      source_type: "invoice", source_id: INVOICE, idempotency_key: paymentIdempotencyKey("invoice", INVOICE),
+      provider: "circle", provider_mode: "live", amount: 150, destination: OLD,
+    });
+    Object.assign(row, { attempt_count: 1, ...firstAttempt });
+    return fake((request) => {
+      if (request.path === "/rest/v1/payment_intents" && request.method === "GET" && request.params.get("status") === "eq.confirmed") {
+        const paid = intents.rows.filter((intent) => intent.status === "confirmed");
+        return { body: request.params.get("offset") === "0" ? paid.map(({ source_type, source_id, destination }) => ({ source_type, source_id, destination })) : [] };
+      }
+      if (request.path === "/rest/v1/payment_intents" || request.path.startsWith("/rest/v1/rpc/")) return intents.respond(request);
+      if (request.path === "/rest/v1/invoices") return { body: [{ id: INVOICE, counterparty_id: "cp-1" }] };
+      return undefined;
+    });
+  }
+
+  it.each([
+    ["a send Circle refused", { status: "failed", last_error: "insufficient funds" }, null],
+    [
+      "a transfer Circle ended in a terminal failure",
+      { status: "failed", provider_tx_id: "circle-tx-1", provider_state: "FAILED" },
+      { ...confirmed("circle-tx-1"), status: "failed", txHash: null, providerState: "FAILED", failureReason: "INSUFFICIENT_FUNDS" },
+    ],
+  ] as const)("counts the new address as paid and the old one as never paid, after %s", async (_, firstAttempt, reconciled) => {
+    const workspaceFake = paidWorkspace(firstAttempt);
+    await runWith({ config, db: workspaceFake.client, fetch: workspaceFake.fetch }, () =>
+      withOrg(ORG, () =>
+        executePayment(
+          { sourceType: "invoice", sourceId: INVOICE, fromAccountId: "account-1", destination: NEW, amount: 150, memo: paymentMemo("invoice", INVOICE) },
+          { provider: provider(reconciled as TransferResult | null), retryTerminalFailure: true }
+        )
+      )
+    );
+
+    const facts = await load(workspaceFake, ["cp-1"]);
+
+    expect([...(facts.paidTo.get("cp-1") ?? [])]).toEqual([NEW]);
+    expect(newPayeeCheckFor(facts, { id: "cp-1", address: NEW })).toMatchObject({ firstPayment: false });
+    expect(newPayeeCheckFor(facts, { id: "cp-1", address: OLD })).toMatchObject({ firstPayment: true });
   });
 });
