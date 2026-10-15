@@ -691,7 +691,8 @@ async function twoApprovalsResendBlocker(
  * sends again a `submitting` intent with no Circle id: a send whose outcome was never recorded (a claim that went stale,
  * a batch whose answer was lost), which may have reached Circle. It is looked for first, sending nothing, and before
  * any check that would hold it, so a transfer Circle took is recorded rather than held:
- * - `sent`: Circle has it, now recorded; it is reconciled as any transfer that exists.
+ * - `sent`: Circle has it, now recorded; it is reconciled as any transfer that exists. So is one another lookup recorded
+ *   since the stage read it, such as a lost batch's other member, found while looking for the first.
  * - `not_sent`: Circle never took it, now recorded; only then is it weighed as a new send. So is a payout to another
  *   chain, which cannot be looked up this way and is asked for again under its own key, which Circle takes only once.
  * - `waiting`: Circle has not listed it yet, could not be asked, or another request is settling it right now. Nothing is
@@ -702,7 +703,7 @@ async function earlierSend(
   deps: { provider: ChainProvider; operating: { id: string } }
 ): Promise<{ answer: "sent" | "not_sent" } | { answer: "waiting"; reason: string }> {
   const looked = await settleUnknownSend(source, { provider: deps.provider, fromAccountId: deps.operating.id });
-  if (looked.answer === "found") return { answer: "sent" };
+  if (looked.answer === "found" || (looked.answer === "known" && looked.recorded)) return { answer: "sent" };
   if (looked.answer === "not_sent" || (looked.answer === "undecided" && looked.unlookable)) return { answer: "not_sent" };
   if (looked.answer === "known" || (looked.answer === "undecided" && looked.settling)) {
     return { answer: "waiting", reason: "another request is settling this payment's send right now; it is reconciled next cycle" };

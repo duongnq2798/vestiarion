@@ -77,6 +77,8 @@ export function paymentIntentsBackend(orgId: string) {
         return { body: [] };
       }
       if (sent.method === "GET") {
+        // A batch's members (`batchMembers`): every row carrying its key.
+        if (sent.params.has("batch_key")) return { body: rows.filter((row) => row.batch_key === eq(sent.params.get("batch_key"))) };
         const key = eq(sent.params.get("idempotency_key"));
         const row = key ? byKey(key) : bySource(eq(sent.params.get("source_type")), eq(sent.params.get("source_id")));
         return { body: row ?? null };

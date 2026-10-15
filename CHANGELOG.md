@@ -34,10 +34,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   transaction id is only checked, as before.
   [Guide](https://www.vestiarion.xyz/docs/guides/first-payment#6-approve-a-held-payment).
 - **The agent looks for an unanswered send before holding it.** When Circle never answered a payment's send (the call
-  ran out of time, Circle answered with an error or no id, or the send stopped before its answer was recorded), the
-  transfer may have gone through anyway. The agent checked the payee's screening, address, first payment and two
-  approvals before looking, or decided the bill again with every guardrail, so a payment that had moved could be
-  recorded as held or flagged. Now the agent looks on Circle first, sending nothing: a transfer Circle has is recorded
+  ran out of time, Circle answered with a server (5xx) error or no id, or the send stopped before its answer was
+  recorded), the transfer may have gone through anyway. The agent checked the payee's screening, address, first
+  payment and two approvals before looking, or decided the bill again with every guardrail, so a payment that had
+  moved could be recorded as held or flagged. Now the agent looks on Circle first, sending nothing: a transfer Circle has is recorded
   as paid, one not listed yet waits for the next cycle, and only a send Circle never took goes on to the checks or a
   new decision, for bills and milestones alike. A payout to another chain cannot be looked up this way, so it still
   gets those checks first, and can be held while Circle may hold it; Approve and pay then asks Circle for it under the
@@ -49,6 +49,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   address kept counting as never paid, so later bills to it were held as first payments, while the old address counted
   as paid. Each send now records the address it pays. Payments already made keep the address they were recorded with.
   [Guide](https://www.vestiarion.xyz/docs/guides/first-payment#6-approve-a-held-payment).
+- **A lost batch's milestones are all recorded paid in the cycle that finds it.** When milestones released together
+  in one transaction lost Circle's answer, the agent finding that transaction for one of them records it on all of
+  them, but the others were left pending, as if another request were still settling them, and recorded paid only on
+  the next cycle. They are now reconciled in the same cycle.
+  [Runbook](https://www.vestiarion.xyz/docs/guides/payment-exceptions#outcome-unknown).
 
 ## [0.1.0-beta.6] - 2026-10-15
 

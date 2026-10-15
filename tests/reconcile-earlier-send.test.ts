@@ -116,7 +116,7 @@ function workspace(source: { type: "invoice" | "milestone"; id: string; failed?:
   const run = <T>(fn: () => Promise<T>) => runWith({ config, db: fake.client, fetch: fake.fetch }, () => withOrg(ORG, fn));
   const invoicePatch = () => fake.requests.find((r) => r.path === "/rest/v1/invoices" && r.method === "PATCH")?.body as Record<string, unknown> | undefined;
   const milestonePatch = () => fake.requests.find((r) => r.path === "/rest/v1/milestones" && r.method === "PATCH")?.body as Record<string, unknown> | undefined;
-  return { row, fake, run, invoicePatch, milestonePatch };
+  return { row, intents, fake, run, invoicePatch, milestonePatch };
 }
 
 const invoice = {
@@ -198,5 +198,51 @@ describe("reconcileMilestone over the real payment step — a release that timed
     expect(milestonePatch()).toBeUndefined();
     expect(fake.requests.some((r) => r.path === "/rest/v1/counterparties")).toBe(false);
     expect(fake.requests.some((r) => r.path === "/rest/v1/rpc/append_ledger_entry")).toBe(false);
+  });
+});
+
+/**
+ * A first attempt sent in a batch whose answer was lost (batch payouts R5) is looked for by the batch's refId. Found, the
+ * lookup records every member still without its Circle id. The batch's other milestones, reconciled later in the same
+ * cycle with the intents the stage read before it, find their send already recorded: reconciled now, as found, rather
+ * than left pending as if another request were still settling them.
+ */
+describe("reconcileMilestone over the real payment step — a lost batch's other releases (batch payouts R5)", () => {
+  const FIRST = "018f8ce0-1557-7b54-a931-4d777f6be00a";
+  const SECOND = "018f8ce0-1557-7b54-a931-4d777f6be00b";
+  const release = (id: string) => ({
+    id, title: `Milestone ${id.slice(-1)}`, amount: 150, contractorId: COUNTERPARTY_ID, contractorName: "Lena Ortiz",
+    address: "0xdead", reasoning: "Verified via github.", txRef: null,
+  });
+  // As the stage read both before the loop: claimed, no Circle id.
+  const asReadBefore = { providerTxId: null, status: "submitting" };
+
+  it("records every release of a batch Circle took in the cycle that found it, with one lookup and nothing sent", async () => {
+    const provider = new FakeProvider(confirmed("circle-tx-batch"));
+    const { row, intents, fake, run } = workspace({ type: "milestone", id: FIRST });
+    const second = intents.insert({
+      source_type: "milestone", source_id: SECOND, idempotency_key: paymentIdempotencyKey("milestone", SECOND),
+      provider: "circle", provider_mode: "live", amount: 150, destination: "0xdead",
+    });
+    const sentAt = row.updated_at as string;
+    for (const member of [row, second]) {
+      Object.assign(member, { status: "submitting", attempt_count: 1, updated_at: sentAt, batch_key: "batch-1", batch_size: 2, batch_sent_at: sentAt });
+    }
+
+    const first = await run(() => reconcileMilestone(release(FIRST), asReadBefore, { db: db(), provider, operating: { id: ACCOUNT_ID } }));
+    const next = await run(() => reconcileMilestone(release(SECOND), asReadBefore, { db: db(), provider, operating: { id: ACCOUNT_ID } }));
+
+    expect(provider.lookups.map((lookup) => lookup.refId)).toEqual(["batch-1"]);
+    expect(provider.transfers).toHaveLength(0);
+    expect(second).toMatchObject({ status: "confirmed", provider_tx_id: "circle-tx-batch" });
+    expect(first.status).toBe("paid");
+    expect(next.status).toBe("paid");
+    const patches = fake.requests.filter((r) => r.path === "/rest/v1/milestones" && r.method === "PATCH");
+    expect(patches.map((patch) => [patch.params.get("id"), (patch.body as Record<string, unknown>).status])).toEqual([
+      [`eq.${FIRST}`, "paid"],
+      [`eq.${SECOND}`, "paid"],
+    ]);
+    const entries = fake.requests.filter((r) => r.path === "/rest/v1/rpc/append_ledger_entry").map((r) => r.body as Record<string, unknown>);
+    expect(entries.map((entry) => (entry.p_detail as Record<string, unknown>).reconciled)).toEqual([true, true]);
   });
 });

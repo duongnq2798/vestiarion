@@ -762,7 +762,10 @@ would find.
     and a `failed` one Circle never answered (`transferUnknown`), which `paymentIntentsFor` hands them as `unanswered`
     rather than leaving its source to be decided again unlooked:
     - Found: reconciled as a transfer that exists, so it is recorded paid, never held or flagged over a check a resend
-      or a new decision would fail.
+      or a new decision would fail. So is one another lookup recorded since the stage read it (`known` with
+      `recorded`): a lost batch's other members, which the batch's lookup recorded while looking for the first, are
+      reconciled in the same cycle. A milestone whose escrow hold pays an address no longer its contractor's is still
+      held for a person, as any release from that hold is.
     - Never taken: a `submitting` one goes on to the resend checks (high risk, unconfirmed address, new payee, two
       approvals) and is sent again; an `unanswered` one is handed back (`decideAgain`), writing nothing, and the stage
       decides it again through the model and every guardrail, cash check included.
