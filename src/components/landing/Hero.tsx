@@ -6,9 +6,9 @@ import { TRY_HREF, TRY_LABEL } from "./cta";
 import { BillPreview } from "./hero/BillPreview";
 
 /**
- * The hero (docs/superpowers/specs/2026-10-11-landing-clarity-design.md H1, H2): what Vestiarion is and who it is for in
- * a line, what it does with a bill in a sentence, the one call to action, and what trying it asks of you. Beside it, two
- * sample bills as the product shows them, in words a business owner reads without knowing what a chain is.
+ * The hero (docs/superpowers/specs/2026-10-11-landing-clarity-design.md H1, H2): what Vestiarion is in a line, what it
+ * does with a bill in a sentence, the one call to action, and what trying it asks of you. Beside it, two sample bills
+ * as the product shows them, in words a business owner reads without knowing what a chain is.
  */
 export function Hero() {
   return (
@@ -18,7 +18,7 @@ export function Hero() {
       {/* One column that may shrink below its content on a phone, so nothing in it pushes past the right edge. */}
       <div className="relative mx-auto grid max-w-6xl grid-cols-1 gap-10 px-4 pb-14 pt-10 sm:px-6 sm:pb-20 sm:pt-14 lg:grid-cols-[minmax(0,1fr)_26rem] lg:items-center lg:gap-12 lg:py-20 xl:grid-cols-[minmax(0,1fr)_29rem] xl:gap-16">
         <div className="min-w-0">
-          <Eyebrow className="text-agent">An accounts payable agent for small teams</Eyebrow>
+          <Eyebrow className="text-agent">Your AI agent for bills and payments</Eyebrow>
           <h1
             id="hero-title"
             className="mt-4 text-balance text-[2.75rem] font-semibold leading-[0.98] tracking-[-0.05em] text-ink sm:text-6xl lg:text-[3.5rem] xl:text-[4.25rem]"
