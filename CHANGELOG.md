@@ -12,6 +12,8 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+## [0.1.0-beta.5] - 2026-10-15
+
 ### Added
 
 - **Asking why, in the moment.** When you go against the agent, Vestiarion asks why right there, in one optional line
@@ -406,7 +408,8 @@ public beta, on Arc testnet and Arc mainnet. Release notes:
   company.
 - HubSpot is read-only, polled every 15 minutes, and its app is not yet verified by HubSpot.
 
-[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.4...HEAD
+[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.5...HEAD
+[0.1.0-beta.5]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.5
 [0.1.0-beta.4]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.4
 [0.1.0-beta.3]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.3
 [0.1.0-beta.2]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.2
