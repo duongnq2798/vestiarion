@@ -4,7 +4,8 @@ import downloadKey from "./download-key.json";
  * Which Chrome extensions may connect to this deployment, and what they may be granted (invoice capture design C12,
  * C15, C21). Pure: read from `CHROME_EXTENSION_IDS`, the extension ids separated by commas or spaces, such as the Web
  * Store's and an unpacked build's. Without one valid id, invoice capture is off: the authorize page says so and every
- * extension route answers 503. Once it is on, the copy offered for download is allowed too (`DOWNLOAD_EXTENSION_ID`).
+ * extension route answers 503. Once it is on, the Web Store's copy (`STORE_EXTENSION_ID`) and the copy offered for
+ * download (`DOWNLOAD_EXTENSION_ID`) are allowed too.
  */
 
 /** The one audience an extension's token is for: the extension endpoints, never `/api/v1` (C15, C16). */
@@ -41,10 +42,19 @@ export function parseExtensionIds(raw: string | undefined): string[] {
  */
 export const DOWNLOAD_EXTENSION_ID: string = downloadKey.id;
 
-/** The settings, or null when no extension may connect: the ids listed, and the download's once any is. */
+/**
+ * The ID the Chrome Web Store gave Vestiarion Invoice Capture when it listed it. The store signs its copy and gives it
+ * this one ID, so it is allowed as the download's is, without a deployment having to list it.
+ */
+export const STORE_EXTENSION_ID = "jfhjgbdbolhnneomgifdnjamoldlioan";
+
+/** The extension's page on the Chrome Web Store, where it is installed with Add to Chrome. */
+export const STORE_URL = `https://chromewebstore.google.com/detail/vestiarion-invoice-captur/${STORE_EXTENSION_ID}`;
+
+/** The settings, or null when no extension may connect: the ids listed, and the store's and the download's once any is. */
 export function extensionSettingsFromEnv(raw: string | undefined = process.env.CHROME_EXTENSION_IDS): ExtensionSettings | null {
   const ids = parseExtensionIds(raw);
-  return ids.length > 0 ? { ids: [...new Set([...ids, DOWNLOAD_EXTENSION_ID])] } : null;
+  return ids.length > 0 ? { ids: [...new Set([...ids, STORE_EXTENSION_ID, DOWNLOAD_EXTENSION_ID])] } : null;
 }
 
 /** The one redirect an extension's code may go to: what `chrome.identity.getRedirectURL()` returns for it. */

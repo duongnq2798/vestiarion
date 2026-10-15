@@ -6,6 +6,7 @@ import { GUIDED_SETUP_HREF, TRY_HREF, TRY_LABEL } from "@/components/landing/cta
 import { FinalCta } from "@/components/landing/FinalCta";
 import { Hero } from "@/components/landing/Hero";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
+import { STORE_URL } from "@/lib/extension/settings";
 import { PRODUCT_HUNT_BADGE } from "@/lib/site-links";
 
 /**
@@ -44,6 +45,17 @@ describe("the landing hero", () => {
     const words = text(markup);
     expect(words).toContain("Start in shadow mode. Keep paying the way you do today while the agent decides on your real bills. No wallet or funds needed to start.");
     expect(words).toContain("Email sign-in, no password");
+  });
+
+  it("offers the Chrome extension from its store page, quietly, in a new tab", () => {
+    const markup = hero();
+    const link = markup.match(/<a [^>]*data-cta="hero-chrome"[^>]*>/)?.[0] ?? "";
+    expect(link).toContain(`href="${STORE_URL}"`);
+    expect(link).toContain('target="_blank"');
+    expect(link).toContain('rel="noopener noreferrer"');
+    const words = text(markup);
+    expect(words).toContain("Add to Chrome");
+    expect(words).toContain("Send an invoice from any page to your workspace as a draft.");
   });
 
   it("shows two sample bills in the product's own words, labelled as samples (H2)", () => {

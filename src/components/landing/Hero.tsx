@@ -1,13 +1,15 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Puzzle } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow } from "@/components/ui/Eyebrow";
+import { STORE_URL } from "@/lib/extension/settings";
 import { TRY_HREF, TRY_LABEL } from "./cta";
 import { BillPreview } from "./hero/BillPreview";
 
 /**
  * The hero (docs/superpowers/specs/2026-10-11-landing-clarity-design.md H1, H2): what Vestiarion is in a line, what it
- * does with a bill in a sentence, the one call to action, and what trying it asks of you. Beside it, two sample bills
+ * does with a bill in a sentence, the one call to action, and what trying it asks of you; below them, the Chrome
+ * extension's store page, as a quiet second way in. Beside it, two sample bills
  * as the product shows them, in words a business owner reads without knowing what a chain is.
  */
 export function Hero() {
@@ -52,6 +54,17 @@ export function Hero() {
               How shadow mode works
               <ArrowRight aria-hidden className="size-3.5" />
             </Link>
+          </p>
+          {/* A second, quiet way in beside the one call to action: the Chrome extension, from its store page. */}
+          <p className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2 text-[0.8125rem] text-ink-3">
+            <Button asChild size="sm" variant="secondary" className="bg-surface/80">
+              <a href={STORE_URL} target="_blank" rel="noopener noreferrer" data-cta="hero-chrome">
+                <Puzzle aria-hidden />
+                Add to Chrome
+                <span className="sr-only"> (Vestiarion Invoice Capture on the Chrome Web Store, opens in a new tab)</span>
+              </a>
+            </Button>
+            <span>Send an invoice from any page to your workspace as a draft.</span>
           </p>
         </div>
         <BillPreview />

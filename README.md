@@ -12,8 +12,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-6b7280?style=flat-square)](LICENSE)
 
 <a href="https://www.vestiarion.xyz"><img src="docs/assets/readme/open-the-app.svg" alt="Open the app: vestiarion.xyz" height="48"></a>
-<a href="https://www.youtube.com/watch?v=UqfvCkkYGlk"><img src="docs/assets/readme/watch-the-demo.svg" alt="Watch the demo: 2:59 on YouTube" height="48"></a>
-<a href="https://www.vestiarion.xyz/docs/guides/invoice-capture"><img src="docs/assets/readme/add-to-chrome.svg" alt="Add to Chrome: Invoice Capture" height="48"></a>
+<a href="https://youtu.be/-gMv3ipzDyA"><img src="docs/assets/readme/watch-the-demo.svg" alt="Watch the demo: 2:55 on YouTube" height="48"></a>
+<a href="https://chromewebstore.google.com/detail/vestiarion-invoice-captur/jfhjgbdbolhnneomgifdnjamoldlioan"><img src="docs/assets/readme/add-to-chrome.svg" alt="Add to Chrome: Invoice Capture, on the Chrome Web Store" height="48"></a>
 <a href="https://www.npmjs.com/package/@vestiarion/sdk"><img src="docs/assets/readme/npm-sdk.svg" alt="Install from npm: @vestiarion/sdk" height="48"></a>
 
 **[See your first decision](https://www.vestiarion.xyz/docs/guides/try-it)** · **[Open numbers](https://www.vestiarion.xyz/open)** · **[Mainnet proof](#mainnet-proof)** · **[Docs](https://www.vestiarion.xyz/docs)** · **[MCP server](https://www.vestiarion.xyz/docs/ai-integration/mcp)** · **[Security](https://www.vestiarion.xyz/security)**
@@ -34,10 +34,11 @@ hash-chained ledger anyone in the workspace can verify.
   <sub>A bill the agent paid on Arc: its reasoning, the checks behind it, the signed audit entry and the transaction.</sub>
 </p>
 
-**Watch it work:** [the demo](https://www.youtube.com/watch?v=UqfvCkkYGlk) (2:59) or [the full product tour](https://www.youtube.com/watch?v=omER_wFsH3M)
-(4:58), both recorded on the live product on October 12, 2026: a new workspace and its first payments, a freelancer paid
-by the agent on its own, a first payment code holds for a person, shadow mode, Xero, QuickBooks Online, HubSpot and
-GitHub, treasury, Arc mainnet and the public numbers.
+**Watch it work:** [the demo](https://youtu.be/-gMv3ipzDyA) (2:55) or [the full product tour](https://youtu.be/yfDxzibSYQc)
+(7:15), both recorded on the live product on October 15, 2026, with the Arc mainnet payment from October 12: a freelancer
+the agent pays on its own once a second member confirmed the address, a new supplier's first bill the model wanted to pay
+and code refused until a second member approved, the day the agent picks to pay, shadow mode and the customers' figures,
+Arc mainnet and the proof. The tour opens how the agent decided, line by line, on three of those decisions.
 
 > *Tameion* is ancient Greek for a treasury, the room the money was kept in. In Byzantium that room grew into the
 > *vestiarion*, the department that minted the coin, held the stores and paid the army.
@@ -88,8 +89,8 @@ nothing else: no wallet, no USDC, no API key, nothing to install.
    yourself". [Mainnet proof](#mainnet-proof) walks through the first payment on Arc mainnet: held by code as a first
    payment to a new address, approved by a second person, and paid through the owner's spending-limit contract.
 
-**Watch instead:** [the demo](https://www.youtube.com/watch?v=UqfvCkkYGlk) (2:59),
-[the full product tour](https://www.youtube.com/watch?v=omER_wFsH3M) (4:58), and the
+**Watch instead:** [the demo](https://youtu.be/-gMv3ipzDyA) (2:55),
+[the full product tour](https://youtu.be/yfDxzibSYQc) (7:15), and the
 [Xero](https://www.vestiarion.xyz/docs/guides/xero#watch-it) and
 [HubSpot](https://www.vestiarion.xyz/docs/guides/hubspot#watch-it) flows, under two minutes each.
 
@@ -357,7 +358,7 @@ run in production, with its ledger entries and transactions.
 | **[Webhooks](https://www.vestiarion.xyz/docs/webhooks)** | Up to 5 HTTPS endpoints per workspace receive every ledger entry, signed, with retries |
 | **[GitHub](https://www.vestiarion.xyz/docs/guides/github)** | Milestone verification from merged pull requests, bounties, and payment comments |
 | **[Email](https://www.vestiarion.xyz/docs/guides/email-invoices)** | A workspace address that reads forwarded invoices into drafts a person adds |
-| **[Chrome extension](https://www.vestiarion.xyz/docs/guides/invoice-capture)** | Vestiarion Invoice Capture sends the invoice text you select on a page, or a file you choose, to your workspace as a draft: you check the fields it read and send it, and an owner or admin adds it as a bill through the same checks as any bill. It connects by signing in and allowing it, never with an API key, and can only create and read its own drafts: it never adds a bill, approves or pays. Submitted to the Chrome Web Store; until it is listed, [download it](https://www.vestiarion.xyz/downloads/vestiarion-invoice-capture.zip) and load it unpacked, as the guide says. Its source is in [`extensions/chrome-invoice-capture`](extensions/chrome-invoice-capture) |
+| **[Chrome extension](https://www.vestiarion.xyz/docs/guides/invoice-capture)** | Vestiarion Invoice Capture sends the invoice text you select on a page, or a file you choose, to your workspace as a draft: you check the fields it read and send it, and an owner or admin adds it as a bill through the same checks as any bill. It connects by signing in and allowing it, never with an API key, and can only create and read its own drafts: it never adds a bill, approves or pays. [Add it to Chrome](https://chromewebstore.google.com/detail/vestiarion-invoice-captur/jfhjgbdbolhnneomgifdnjamoldlioan) from the Chrome Web Store, or [download it](https://www.vestiarion.xyz/downloads/vestiarion-invoice-capture.zip) and load it unpacked, as the guide says. Its source is in [`extensions/chrome-invoice-capture`](extensions/chrome-invoice-capture) |
 | **[Asana](https://www.vestiarion.xyz/docs/guides/asana)** | A milestone linked to the Asana task its work is delivered in is ready for acceptance when the task is completed; a person checks the deliverables against the criteria and accepts it, and the agent then decides its payment as for any verified milestone. A task completed in Asana is never by itself a reason to pay, and a task reopened or changed after acceptance is flagged |
 | **[HubSpot](https://www.vestiarion.xyz/docs/guides/hubspot)** | Won deals come in with their customers every 15 minutes; Plan collections fills in the New deal form, and a deal changed in HubSpot afterwards is flagged on its deal for a person to change or keep; once allowed, each planned deal's receipts are written back to it (collected, still owed, last receipt, reconciliation), read back, never over a person's change; one account per workspace. [Watch it](https://www.vestiarion.xyz/docs/guides/hubspot#watch-it) (1:55) |
 | **[Pipedrive](https://www.vestiarion.xyz/docs/guides/pipedrive)** | Won deals come in with their organizations and persons as soon as Pipedrive says a deal changed, and every 15 minutes; Plan collections fills in the New deal form, and a deal changed in Pipedrive afterwards is flagged on its deal for a person to change or keep; once allowed, each planned deal's receipts are written back to it in Vestiarion's own deal fields, read back, never over a person's change. Pipedrive names no developer sandbox, so only payments on Arc mainnet outside shadow mode are written; one company per workspace |

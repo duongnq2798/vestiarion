@@ -2778,7 +2778,8 @@ back a draft left confirmed without its bill for an hour, and deletes codes a da
 days after they ended.
 
 **Authorization without an API key.** `/extension/authorize` is an OAuth authorization endpoint with PKCE (S256 only)
-for the extension ids in `CHROME_EXTENSION_IDS` (`src/lib/extension/settings.ts`), and once any is listed the copy
+for the extension ids in `CHROME_EXTENSION_IDS` (`src/lib/extension/settings.ts`), and once any is listed the Chrome Web
+Store's copy (`STORE_EXTENSION_ID`, the id the store gave it, with its page at `STORE_URL`) and the copy
 offered for download (`DOWNLOAD_EXTENSION_ID`: `public/downloads/vestiarion-invoice-capture.zip`, built by
 `scripts/build-extension-download.mjs` with the public key in `src/lib/extension/download-key.json` as its manifest's
 `key`, so every copy has one id; `tests/extension-download.test.ts` keeps the zip equal to the package), whose one
