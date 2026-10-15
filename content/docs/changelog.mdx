@@ -9,6 +9,13 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 - `approval_paid` and `milestone_approval_paid` gain `addressGiverApproved: true`, and their summary a note, when the person who gave the address, or asked for it, made its first payment as the workspace's only approver.
 - Nothing else in `/api/v1` or the webhooks changes. `POST /api/v1/payee-links` takes and answers the same.
 
+## 2026-10-15: New connector consent versions
+
+- Any new connection or reconnection of Xero, QuickBooks, HubSpot or Pipedrive now carries `consent.version` `xero-2026-10-15`, `quickbooks-2026-10-15`, `hubspot-2026-10-15` or `pipedrive-2026-10-15` in its **`accounting_connected`** entry, with `reconnected: true` on a reconnect. That includes the reconnects behind **Allow Vestiarion to book payments** and **Allow writing to HubSpot**. The new words say the agent's model provider sees a bill's facts, or may see a deal's, under that provider's own API terms, where the earlier versions promised it would not train on them; Pipedrive's also says disconnecting revokes Vestiarion's access, which, as Pipedrive documents it, uninstalls the app. Asana's stays `asana-2026-10-14`.
+- An existing connection keeps the version it agreed to, on the connection and in its entries, until it reconnects. **`accounting_payment_approved`** may name an accountant in `by` on a Xero connection agreed under `xero-2026-10-13` or `xero-2026-10-15`.
+- The version recorded is the one the connect page showed. A page loaded before the words changed is sent back to be read again, and nothing is recorded until the person agrees to the current words.
+- Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-15: Postman collections, and the MCP server described for the MCP Registry
 
 - Two Postman collections and an environment, generated from the OpenAPI document and served under `https://www.vestiarion.xyz/postman/`. "Vestiarion: Getting Started" goes from a key to a first `200`, then adds a counterparty, at a wallet you set, and an invoice for it. "Vestiarion API reference" has every operation, with a saved example of its success and of each error it documents. Both authenticate with `{{apiKey}}` from the environment, and no file holds a key. [Use Vestiarion from Postman](/docs/get-started/postman) says how to import them. They call the endpoints as they are: no endpoint changes.

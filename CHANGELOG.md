@@ -26,7 +26,7 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   three reads (the workspace's status, its invoices, the agent's decisions with its reasoning), then adds a
   counterparty, at a wallet you control that you set first, and an invoice for it with a read-and-write key.
   "Vestiarion API reference" has every operation, with the answers and errors each one documents. No file holds a
-  key, and no request can approve or pay. [Guide](https://www.vestiarion.xyz/docs/get-started/postman)
+  key, and no request can approve or pay. [Guide](https://www.vestiarion.xyz/docs/get-started/postman).
 - **The MCP server, described for the MCP Registry.** `server.json` describes the remote MCP server for the official
   MCP Registry, with the API key as a required, secret header; publishing it is a manual step. The MCP page now
   says which key to use: a read-only key by default, and a read-and-write key only for an agent that should add
@@ -53,6 +53,18 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 - **An API write's idempotency outcome is deleted after its 24 hours.** It was given back for 24 hours, as documented,
   but the row, with its response, stayed. The daily cleanup now deletes outcomes older than that, in every workspace,
   and reports how many.
+- **Connector consent says what the model provider does under its own terms.** The statements a person agrees to
+  before connecting Xero, QuickBooks, HubSpot or Pipedrive no longer promise that the agent's model provider may not
+  train on the facts it sees, which its terms do not say. They now say the provider (DeepSeek, on the hosted service)
+  sees each bill's facts, or may see a deal's, under its own API terms, and the connect page links DeepSeek's API terms
+  and privacy policy, as the terms of use do. Vestiarion's own promise stays: it never uses that data to train or
+  improve any AI model. Pipedrive's also says that disconnecting stops the reading at once and revokes Vestiarion's
+  access, which, as Pipedrive documents it, uninstalls Vestiarion from the company. New consent versions `2026-10-15`
+  (Asana's did not change): any new connection or reconnection agrees to them, including Allow Vestiarion to book
+  payments and Allow writing to HubSpot, which reconnect. An existing connection keeps the version it agreed to until
+  it reconnects, and an accountant approves bookings on a Xero connection agreed under `2026-10-13` or `2026-10-15`.
+  A connect page left open while the words changed now says so and shows them again, instead of recording words the
+  person did not read.
 - **An address a member asked the payee for needs a second person, as a typed one does.** Whoever creates a payee
   link now counts as having given the address the payee sends through it, and the member a GitHub bounty acts as
   counts as having given an address sent with `/payto`. When that member is also the only one who confirms the
