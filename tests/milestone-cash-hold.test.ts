@@ -46,11 +46,17 @@ describe("the contractor stage and the cash in the operating wallet", () => {
     expect(reconciled).toContain('if (reconciled.status === "verified" && !escrowedRelease(milestone)) inFlightUsdc += amount;');
   });
 
-  it("leaves a release from escrow to the escrow, and one Circle never answered to its own lookup, and plans each as before", () => {
-    // A send Circle never answered may already have moved the money: sending it again under its key finds it (review finding 2).
-    expect(release).toContain("escrowed || unanswered.has(milestone.id) ? null : releaseCashShort(");
+  it("leaves a release from escrow to the escrow, and plans it as before", () => {
+    expect(release).toContain("heldForCash = escrowed ? null : releaseCashShort(");
     expect(release).toContain("fromEscrow: escrowed");
-    expect(stage).toContain("const unanswered = await unansweredMilestoneSends(db, milestones);");
+  });
+
+  it("looks a release Circle never answered up before deciding it, so the cash check only weighs one never sent (review finding 2)", () => {
+    // A send Circle never answered may already have moved the money: the reconcile looks it up first, records it when
+    // Circle took it, and hands back to be decided, cash check included, only a release Circle never took.
+    const reconciled = stage.slice(stage.indexOf("const reconciled = await reconcileMilestone("), stage.indexOf("// A contractor whose address a person changed"));
+    expect(reconciled).toContain("if (!reconciled.decideAgain) {");
+    expect(stage).not.toContain("unansweredMilestoneSends");
   });
 
   it("records why it held, what it needed and the cash it saw, for the follow-up stage", () => {

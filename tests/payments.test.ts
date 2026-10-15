@@ -138,6 +138,11 @@ class MemoryStore implements PaymentIntentStore {
     this.intent = { ...this.current(key), sentWalletId };
   }
 
+  async markDestination(key: string, destination: string): Promise<void> {
+    this.calls.push(`markDestination:${key}:${destination}`);
+    this.intent = { ...this.current(key), destination };
+  }
+
   async findBySource(sourceType: string, sourceId: string): Promise<PaymentIntent | null> {
     return this.intent && this.intent.sourceType === sourceType && this.intent.sourceId === sourceId ? { ...this.intent } : null;
   }
@@ -1021,8 +1026,30 @@ describe("executePayment after a send Circle never answered (payment safety R4)"
 
     const answer = await settleUnknownSend({ type: "invoice", id: request.sourceId }, { provider, fromAccountId: "account-1", store, now: Date.parse(SENT_AT) + 16 * MINUTE });
 
-    expect(answer).toMatchObject({ answer: "undecided" });
+    // Said as it is: another request is settling it, not that Circle could not be asked (review M3).
+    expect(answer).toEqual({ answer: "undecided", retryAt: null, settling: true });
     expect(store.intent?.status).toBe("submitting");
+  });
+
+  it("refuses a payout to another chain asked for again under its key to another address than the first send's, sending nothing (review M1)", async () => {
+    // Circle answers a key it holds with the transfer it took, which went where the first send asked: recording another
+    // address for it would name the wrong payee.
+    const store = await unknownSend({ route: "cctp", destinationChain: "BASE-SEPOLIA" });
+    const provider = new FakeProvider();
+
+    const result = await executePayment({ ...request, destination: "0x9999", destinationChain: "BASE-SEPOLIA" }, { provider, store, now: Date.parse(SENT_AT) + 30 * MINUTE });
+
+    expect(provider.transfers).toEqual([]);
+    expect(result.status).toBe("pending");
+    expect(store.intent?.destination).toBe(request.destination);
+    expect(store.intent?.lastError).toContain("was first sent to another address under this payment's key");
+    expect(store.intent?.lastError).toContain("may or may not have been accepted");
+    expect(store.calls.some((call) => call.startsWith("markDestination"))).toBe(false);
+
+    // To the address it was first sent to, it is asked for again under its key, as before.
+    provider.transferResults.push(transferResult("confirmed", "circle-tx-cctp"));
+    await executePayment({ ...request, destinationChain: "BASE-SEPOLIA" }, { provider, store, now: Date.parse(SENT_AT) + 31 * MINUTE });
+    expect(provider.transfers).toHaveLength(1);
   });
 
   it("sends nothing, and keeps it unknown, when Circle cannot be asked", async () => {
@@ -1158,5 +1185,86 @@ describe("metering a Circle transfer (accountant console U1)", () => {
     const second = inScope(() => executePayment(request, { provider: refused, store: new MemoryStore() }));
     await second.run;
     expect(second.usage()).toEqual([]);
+  });
+});
+
+/**
+ * An intent is one row per source, written once (`ensure` ignores a duplicate), so its address was the first attempt's.
+ * A payment sent again to the payee's address as it stands now records that address before it is sent: a confirmed
+ * payment names the address the transfer went to, which the new payee check counts as paid and a receipt shows.
+ */
+describe("the address a payment is sent to", () => {
+  const NEW = "0x9999";
+  const key = paymentIdempotencyKey("invoice", request.sourceId);
+  /** The intent as an earlier attempt to `request.destination` left it. */
+  async function earlier(over: Partial<PaymentIntent>): Promise<MemoryStore> {
+    const store = new MemoryStore();
+    await store.ensure({ ...request, idempotencyKey: key, provider: "circle" });
+    store.intent = { ...store.intent!, ...over };
+    store.calls = [];
+    return store;
+  }
+
+  it("records the new address before a send Circle refused is sent again to it", async () => {
+    const store = await earlier({ status: "failed", lastError: "insufficient funds" });
+    const provider = new FakeProvider();
+    provider.transferResults.push(transferResult("confirmed"));
+
+    const result = await executePayment({ ...request, destination: NEW }, { provider, store });
+
+    expect(result.status).toBe("confirmed");
+    expect(provider.transfers.map((transfer) => transfer.toAddress)).toEqual([NEW]);
+    expect(store.intent).toMatchObject({ status: "confirmed", destination: NEW });
+    // Written before the send, as the wallet is: a send whose answer is lost is still recorded where it went.
+    const marked = store.calls.indexOf(`markDestination:${key}:${NEW}`);
+    expect(marked).toBeGreaterThan(-1);
+    expect(marked).toBeLessThan(store.calls.findIndex((call) => call.startsWith("recordResult")));
+  });
+
+  it("records it on the attempt a person's retry opens after Circle ended the first in a terminal failure", async () => {
+    const store = await earlier({ status: "failed", providerTxId: "circle-tx-1", providerState: "FAILED" });
+    const provider = new FakeProvider();
+    provider.reconcileResults.push(transferResult("failed", "circle-tx-1", { state: "FAILED", reason: "INSUFFICIENT_FUNDS" }));
+    provider.transferResults.push(transferResult("confirmed", "circle-tx-2"));
+
+    await executePayment({ ...request, destination: NEW }, { provider, store, retryTerminalFailure: true });
+
+    expect(store.intent).toMatchObject({ transferAttempt: 2, status: "confirmed", providerTxId: "circle-tx-2", destination: NEW });
+    expect(store.calls).toContain(`markDestination:${paymentIdempotencyKey("invoice", request.sourceId, 2)}:${NEW}`);
+  });
+
+  it("keeps the address an earlier send went to when Circle is found to have taken it, whatever the request says now", async () => {
+    const store = await earlier({ status: "submitting", attemptCount: 1 });
+    const provider = new FakeProvider();
+    provider.found.push(transferResult("confirmed", "circle-tx-found"));
+
+    await executePayment({ ...request, destination: NEW }, { provider, store });
+
+    expect(provider.transfers).toHaveLength(0);
+    expect(store.intent).toMatchObject({ status: "confirmed", providerTxId: "circle-tx-found", destination: request.destination });
+    expect(store.calls.some((call) => call.startsWith("markDestination"))).toBe(false);
+  });
+
+  it("writes nothing more when the payment goes to the address already recorded", async () => {
+    const store = new MemoryStore();
+    const provider = new FakeProvider();
+    provider.transferResults.push(transferResult("confirmed"));
+
+    await executePayment(request, { provider, store });
+
+    expect(store.calls.some((call) => call.startsWith("markDestination"))).toBe(false);
+    expect(store.intent?.destination).toBe(request.destination);
+  });
+
+  it("records the address with the real store as one update naming the attempt's key", async () => {
+    const fake = fakeSupabase(() => ({ body: [] }));
+    await runWith(orgTestContext({ config: configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" }), client: fake.client, orgId: "0b6c1c9e-4a4f-4a7e-9b1e-000000000a0a" }), () =>
+      new SupabasePaymentIntentStore().markDestination(key, NEW)
+    );
+    const [update] = fake.requests.filter((sent) => sent.path === "/rest/v1/payment_intents");
+    expect(update.method).toBe("PATCH");
+    expect(update.params.get("idempotency_key")).toBe(`eq.${key}`);
+    // Only the address: `updated_at` dates the send, which an unknown send is looked for around.
+    expect(update.body).toEqual({ destination: NEW });
   });
 });

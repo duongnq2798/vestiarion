@@ -123,6 +123,12 @@ export interface PaymentIntentStore {
   beginRetry(intent: PaymentIntent): Promise<PaymentIntent | null>;
   /** Records the wallet a send under the current key goes from, before it is sent (payment safety R5). */
   markSending?(idempotencyKey: string, sentWalletId: string | null): Promise<void>;
+  /**
+   * Records the address a send under the current key pays, before it is sent, when it is not the one recorded: the
+   * intent is written once per source, so it would keep its first attempt's address. A confirmed payment counts as paid
+   * at its recorded address (the new payee check), and its receipt shows it.
+   */
+  markDestination?(idempotencyKey: string, destination: string): Promise<void>;
   /** The source's intent, or null: a read that never creates one (payment safety R6). */
   findBySource?(sourceType: PaymentSourceType, sourceId: string): Promise<PaymentIntent | null>;
 }
@@ -402,6 +408,12 @@ export class SupabasePaymentIntentStore implements PaymentIntentStore, PaymentBa
     if (update.error) throw new Error(update.error.message);
   }
 
+  async markDestination(idempotencyKey: string, destination: string): Promise<void> {
+    // Only the address: `updated_at` dates the send, and a send whose answer is lost is looked for around it.
+    const update = await db().from("payment_intents").update({ destination }).eq("idempotency_key", idempotencyKey);
+    if (update.error) throw new Error(update.error.message);
+  }
+
   async findBySource(sourceType: PaymentSourceType, sourceId: string): Promise<PaymentIntent | null> {
     // An intent is found by its source, as `ensure` finds it, and never created here.
     const result = await db().from("payment_intents").select("*").eq("source_type", sourceType).eq("source_id", sourceId).maybeSingle<PaymentIntentRow>();
@@ -483,6 +495,9 @@ export function paymentMemo(sourceType: PaymentSourceType, sourceId: string): st
 
 /** What an intent records once Circle has listed nothing for its unknown send after the grace period (R4). */
 export const NO_EARLIER_SEND = "Circle has no transfer for this payment's earlier send; nothing was sent.";
+
+/** What a lookup says when another request concluded first and claimed the payment while it asked Circle. */
+const SETTLING_ELSEWHERE = "Another request is settling this payment's earlier send right now";
 
 function execution(intent: PaymentIntent, reconciled: boolean, retriedAfter: RetriedAfter | null = null): PaymentExecution {
   // A send Circle never answered may have moved money: it is in flight until it is found or known never taken (R4).
@@ -724,7 +739,7 @@ async function lookForUnknownSend(
   // Written only while the row is still the one this lookup read (payment exceptions review): another request that
   // concluded first may have claimed it since and be sending it now, and that send is never written over.
   const marked = await store.recordNotSent(intent.idempotencyKey, { status: intent.status, updatedAt: intent.updatedAt });
-  if (!marked) return undecided("Another request is settling this payment's earlier send right now; it is looked for again, and sent only if Circle has none.");
+  if (!marked) return undecided(`${SETTLING_ELSEWHERE}; it is looked for again, and sent only if Circle has none.`);
   return NOT_SENT;
 }
 
@@ -738,9 +753,10 @@ export type UnknownSendAnswer =
   | { answer: "not_sent" }
   /**
    * Not listed yet (`retryAt`: when it can be told), or Circle could not be asked; `unlookable` when this route cannot be
-   * looked up at all (a payout to another chain), so only sending it again under its own key settles it.
+   * looked up at all (a payout to another chain), so only sending it again under its own key settles it; `settling` when
+   * another request concluded first and is settling it right now, so this one wrote nothing.
    */
-  | { answer: "undecided"; retryAt: string | null; unlookable?: true };
+  | { answer: "undecided"; retryAt: string | null; unlookable?: true; settling?: true };
 
 /**
  * Looks for a source's send Circle never answered, sending nothing (payment safety R6): what Reject, Return, Add
@@ -785,7 +801,11 @@ export async function settleUnknownSend(
   if (looked === NOT_SENT) return { answer: "not_sent" };
   if (looked?.providerTxId) return { answer: "found" };
   const listedBy = Date.parse(intent.updatedAt) + UNKNOWN_SEND_GRACE_MS;
-  return { answer: "undecided", retryAt: looked && looked.error?.startsWith("Circle has not listed") ? new Date(listedBy).toISOString() : null };
+  return {
+    answer: "undecided",
+    retryAt: looked && looked.error?.startsWith("Circle has not listed") ? new Date(listedBy).toISOString() : null,
+    ...(looked?.error?.startsWith(SETTLING_ELSEWHERE) ? { settling: true as const } : {}),
+  };
 }
 
 /** What a usage row calls a send: a payment, or one released from escrow or paid across chains. */
@@ -841,9 +861,19 @@ async function sendClaimed(
         "This payout was first sent through Gateway with another amount, payee or chain; nothing was sent. Check with Circle whether the first transfer was made before paying it again."
       );
     }
+    // Asked for again under a key Circle may already hold (an unknown send no lookup could settle): Circle answers with
+    // the transfer it took, which went where the first send asked, so another address is refused rather than recorded.
+    if (unknownBefore && request.destination.toLowerCase() !== intent.destination.toLowerCase()) {
+      throw new Error(
+        "This payment was first sent to another address under this payment's key, and Circle may hold that transfer; nothing was sent. Check with Circle whether the first transfer was made before paying it to the new address."
+      );
+    }
     // The wallet the send goes from, recorded first, so a send whose answer is lost is looked for there (R5).
     const sentWalletId = request.spendingLimit?.agentWalletId ?? null;
     if (store.markSending && sentWalletId !== (intent.sentWalletId ?? null)) await store.markSending(idempotencyKey, sentWalletId);
+    // And the address it pays, recorded first too: a payment sent again to the payee's new address is confirmed there,
+    // not at the address its first attempt asked for, and a send whose answer is lost is recorded where it went.
+    if (store.markDestination && request.destination !== intent.destination) await store.markDestination(idempotencyKey, request.destination);
     result = await provider.transfer({
       fromAccountId: request.fromAccountId,
       toAddress: request.destination,

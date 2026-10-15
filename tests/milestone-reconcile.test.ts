@@ -4,7 +4,7 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
 import { withOrg } from "@/lib/dal/scope";
-import { existingMilestoneIntents, reconcileMilestone, unansweredMilestoneSends } from "@/lib/agent/orchestrator";
+import { existingMilestoneIntents, reconcileMilestone } from "@/lib/agent/orchestrator";
 import { MAY_HAVE_BEEN_ACCEPTED } from "@/lib/circle/settlement";
 import type { ChainProvider } from "@/lib/circle";
 import type { PaymentExecution } from "@/lib/payments";
@@ -26,14 +26,17 @@ import { firstPaymentFrom } from "@/lib/new-payee-facts";
  * through the recorded PostgREST fake, as in the AP tests.
  */
 
-const { executePaymentMock, syncMock, decideMock } = vi.hoisted(() => ({
+const { executePaymentMock, syncMock, decideMock, settleMock } = vi.hoisted(() => ({
   executePaymentMock: vi.fn(),
   syncMock: vi.fn(),
   decideMock: vi.fn(),
+  settleMock: vi.fn(),
 }));
 vi.mock("@/lib/payments", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/payments")>()),
   executePayment: executePaymentMock,
+  // What Circle says of a release never recorded: never taken, unless a test says otherwise (payment safety R4).
+  settleUnknownSend: settleMock,
 }));
 vi.mock("@/lib/agent/pay", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/agent/pay")>()),
@@ -62,6 +65,8 @@ beforeEach(() => {
   executePaymentMock.mockReset();
   syncMock.mockReset();
   decideMock.mockReset();
+  settleMock.mockReset();
+  settleMock.mockResolvedValue({ answer: "not_sent" });
 });
 afterEach(() => {
   if (savedMasterKeys === undefined) delete process.env.VESTIARION_MASTER_KEYS;
@@ -166,10 +171,11 @@ describe("existingMilestoneIntents — which milestones the contractor stage rec
       r.path === "/rest/v1/payment_intents"
         ? {
             body: [
-              { source_id: "failed-no-id", provider_tx_id: null, status: "failed" },
+              { source_id: "failed-no-id", provider_tx_id: null, status: "failed", last_error: "Circle: the wallet's balance is insufficient" },
               { source_id: "failed-by-circle", provider_tx_id: "circle-tx-2", status: "failed" },
               { source_id: "submitting", provider_tx_id: null, status: "submitting" },
               { source_id: "created-no-id", provider_tx_id: null, status: "created" },
+              { source_id: "timed-out", provider_tx_id: null, status: "failed", last_error: `no answer within 30000 ms; the transfer ${MAY_HAVE_BEEN_ACCEPTED}` },
             ],
           }
         : undefined
@@ -181,8 +187,11 @@ describe("existingMilestoneIntents — which milestones the contractor stage rec
         { id: "failed-by-circle", status: "verified" },
         { id: "submitting", status: "verified" },
         { id: "created-no-id", status: "verified" },
+        { id: "timed-out", status: "verified" },
       ])
     );
+    // A release whose answer was lost may have moved the money: reconciled, so it is looked up before it is decided again.
+    expect(intents.get("timed-out")).toEqual({ providerTxId: null, status: "failed", unanswered: true });
     // Never claimed, so never submitted: decided again like the failed one.
     expect(intents.has("created-no-id")).toBe(false);
 
@@ -199,42 +208,6 @@ describe("existingMilestoneIntents — which milestones the contractor stage rec
     const intents = await run(() => existingMilestoneIntents(db(), [{ id: "pending-1", status: "pending" }]));
 
     expect(intents.size).toBe(0);
-    expect(fake.requests.some((r) => r.path === "/rest/v1/payment_intents")).toBe(false);
-  });
-});
-
-describe("unansweredMilestoneSends — releases Circle never answered, left to their own lookup rather than the cash check (mainnet pre-flight review)", () => {
-  it("names the verified milestones whose last send Circle never answered, and no other", async () => {
-    const { fake, run } = cycleFake((r) =>
-      r.path === "/rest/v1/payment_intents"
-        ? {
-            body: [
-              { source_id: "unanswered", provider_tx_id: null, status: "failed", last_error: `no answer within 30000 ms; the transfer ${MAY_HAVE_BEEN_ACCEPTED}` },
-              { source_id: "refused", provider_tx_id: null, status: "failed", last_error: "Circle: the wallet's balance is insufficient" },
-              { source_id: "in-flight", provider_tx_id: "circle-tx-1", status: "pending", last_error: null },
-            ],
-          }
-        : undefined
-    );
-
-    const unanswered = await run(() =>
-      unansweredMilestoneSends(db(), [
-        { id: "unanswered", status: "verified" },
-        { id: "refused", status: "verified" },
-        { id: "in-flight", status: "verified" },
-        { id: "held-1", status: "held" },
-      ])
-    );
-
-    expect([...unanswered]).toEqual(["unanswered"]);
-    const [lookup] = fake.requests.filter((r) => r.path === "/rest/v1/payment_intents");
-    expect(lookup.params.get("source_type")).toBe("eq.milestone");
-    expect(lookup.params.get("source_id")).toBe("in.(unanswered,refused,in-flight)");
-  });
-
-  it("asks nothing when no milestone is verified", async () => {
-    const { fake, run } = cycleFake();
-    expect((await run(() => unansweredMilestoneSends(db(), [{ id: "held-1", status: "held" }]))).size).toBe(0);
     expect(fake.requests.some((r) => r.path === "/rest/v1/payment_intents")).toBe(false);
   });
 });
@@ -515,19 +488,24 @@ describe("reconcileMilestone — a verified milestone with a release in flight",
     expect(outcome.operatingBalance).toBe(200);
   });
 
-  it("holds, noting it, when no transfer exists yet and there is no operating account", async () => {
+  it("leaves it verified, without looking for its earlier send or holding it, when there is no operating account", async () => {
     const { fake, run } = cycleFake((r) => {
-      if (r.path === "/rest/v1/counterparties" && r.method === "GET") return { body: { risk_level: "low" } };
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") return { body: { risk_level: "high" } };
       if (r.path === "/rest/v1/rpc/agent_paused") return { body: false };
       return undefined;
     });
 
     const outcome = await run(() => reconcileMilestone({ ...milestone, txRef: null }, neverSubmitted, { db: db(), provider, operating: null }));
 
+    expect(settleMock).not.toHaveBeenCalled();
     expect(executePaymentMock).not.toHaveBeenCalled();
-    expect(outcome.status).toBe("held");
-    const body = milestonePatches(fake.requests)[0].body as Record<string, unknown>;
-    expect(body.agent_reasoning).toBe(`${milestone.reasoning} [no operating account configured]`);
+    expect(fake.requests.some((r) => r.path === "/rest/v1/counterparties")).toBe(false);
+    expect(milestonePatches(fake.requests)).toHaveLength(0);
+    expect(outcome).toEqual({
+      status: "verified",
+      operatingBalance: null,
+      line: { domain: "contractor", message: "Lena Ortiz: earlier release left pending, no operating account to look for it from (250 USDC)" },
+    });
   });
 
   it("fails closed when the contractor's risk level cannot be read", async () => {
@@ -689,5 +667,106 @@ describe("reconcileMilestone — a release never sent, now the first payment to 
     expect(outcome.status).toBe("verified");
     expect(newPayee).not.toHaveBeenCalled();
     expect(milestonePatches(fake.requests)).toHaveLength(0);
+  });
+});
+
+/**
+ * The twin of the AP reconcile's lookup (tests/control-cycle.test.ts): a release whose send was never recorded may have
+ * reached Circle, so it is looked for first, sending nothing, before any check that would hold it or make it wait
+ * (payment safety R4, R6).
+ */
+describe("reconcileMilestone — a release never recorded is looked for on Circle before anything holds it (payment safety R4)", () => {
+  const counterpartyReads = (requests: RecordedRequest[]) => requests.filter((r) => r.path === "/rest/v1/counterparties");
+  const contractorIs = (row: Record<string, unknown>) =>
+    cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") return { body: row };
+      if (r.path === "/rest/v1/rpc/agent_paused") return { body: false };
+      return undefined;
+    });
+
+  it.each([
+    ["screened high risk", { risk_level: "high" }],
+    ["at a changed address no one has confirmed", { risk_level: "low", address_changed_at: "2026-10-15T08:00:00+00:00", address_confirmed_at: null }],
+  ])("records a release Circle already took as paid, for a contractor now %s", async (_, contractor) => {
+    settleMock.mockResolvedValue({ answer: "found" });
+    executePaymentMock.mockResolvedValue(execution({ status: "confirmed", txHash: "0xhash", txRef: "0xhash" }));
+    syncMock.mockResolvedValue(200);
+    const newPayee = vi.fn(() => ({ firstPayment: true, twoParties: false }) as never);
+    const { fake, run } = contractorIs(contractor);
+
+    const outcome = await run(() =>
+      reconcileMilestone({ ...milestone, txRef: null }, neverSubmitted, { db: db(), provider, operating: { id: ACCOUNT_ID }, newPayee, twoApprovalsAbove: 200 })
+    );
+
+    expect(settleMock).toHaveBeenCalledWith({ type: "milestone", id: MILESTONE_ID }, { provider, fromAccountId: ACCOUNT_ID });
+    expect(counterpartyReads(fake.requests)).toHaveLength(0);
+    expect(newPayee).not.toHaveBeenCalled();
+    expect(fake.requests.some((r) => r.path === "/rest/v1/payment_approvals")).toBe(false);
+    expect(rpcBodies(fake.requests, "agent_paused")).toHaveLength(0);
+    expect(executePaymentMock).toHaveBeenCalledTimes(1);
+    expect(outcome).toEqual({
+      status: "paid",
+      operatingBalance: 200,
+      line: { domain: "contractor", message: "Lena Ortiz: reconciled an in-flight release, now paid (250 USDC)" },
+    });
+    const body = milestonePatches(fake.requests)[0].body as Record<string, unknown>;
+    expect(body.status).toBe("paid");
+    expect(body.tx_ref).toBe("0xhash");
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).not.toHaveProperty("notResubmittedBecause");
+  });
+
+  it.each([
+    [
+      "Circle has not listed the earlier release yet",
+      { answer: "undecided", retryAt: "2026-10-15T10:15:00.000Z" },
+      "Circle has not listed this payment's earlier send yet; it is looked for again from 10:15 UTC, and sent again only if Circle has none",
+    ],
+    [
+      "Circle could not be asked",
+      { answer: "undecided", retryAt: null },
+      "Circle could not be asked about this payment's earlier send; it is looked for again next cycle, and sent again only if Circle has none",
+    ],
+    ["another request is settling the release", { answer: "known" }, "another request is settling this payment's send right now; it is reconciled next cycle"],
+  ])("leaves the milestone verified, holding and sending nothing, while %s", async (_, answer, reason) => {
+    settleMock.mockResolvedValue(answer);
+    const { fake, run } = contractorIs({ risk_level: "high" });
+
+    const outcome = await run(() => reconcileMilestone({ ...milestone, txRef: null }, neverSubmitted, { db: db(), provider, operating: { id: ACCOUNT_ID } }));
+
+    expect(executePaymentMock).not.toHaveBeenCalled();
+    expect(counterpartyReads(fake.requests)).toHaveLength(0);
+    expect(milestonePatches(fake.requests)).toHaveLength(0);
+    expect(outcome).toEqual({
+      status: "verified",
+      operatingBalance: null,
+      line: { domain: "contractor", message: "Lena Ortiz: its earlier release is not settled on Circle yet, left pending for the next cycle (250 USDC)" },
+    });
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_action).toBe("milestone_reconcile");
+    expect(append.p_summary).toBe(`RECONCILE milestone "${milestone.title}" for Lena Ortiz (250 USDC): not completed, left pending`);
+    expect(append.p_detail).toMatchObject({
+      milestoneId: MILESTONE_ID,
+      reconciled: false,
+      reconcileError: reason,
+      previousStatus: "verified",
+      execution: { txRef: null, resultingStatus: "verified" },
+    });
+  });
+
+  it("weighs a release Circle never took as a new one, only once the lookup said so", async () => {
+    let checkedBefore = -1;
+    const world = contractorIs({ risk_level: "high" });
+    settleMock.mockImplementation(async () => {
+      checkedBefore = counterpartyReads(world.fake.requests).length;
+      return { answer: "not_sent" };
+    });
+
+    const outcome = await world.run(() => reconcileMilestone({ ...milestone, txRef: null }, neverSubmitted, { db: db(), provider, operating: { id: ACCOUNT_ID } }));
+
+    expect(checkedBefore).toBe(0);
+    expect(outcome.status).toBe("held");
+    const [append] = rpcBodies(world.fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toMatchObject({ notResubmittedBecause: "counterparty.high_risk" });
   });
 });
