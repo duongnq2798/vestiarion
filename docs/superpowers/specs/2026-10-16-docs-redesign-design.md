@@ -110,3 +110,40 @@ Headless Edge:
   - "bank payouts" then Enter goes to `/docs/guides/bank-payouts#1-set-up-bank-payouts`;
   - Escape closes the dialog;
   - Enter on a closed section's summary opens it, with the focus ring.
+
+## Polish after the first review (H1–H6)
+
+A second review of the shipped redesign raised six points. Five are taken; one is not.
+
+- **H1 — One section open after a move.** Moving to a page in another section now opens that section alone and closes
+  the rest. Within a section, the ones opened by hand stay open. Before, the section left behind stayed open, so two
+  could show at once.
+- **H2 — The home has no "On this page".** It runs to 64rem for its grids, its prose still held to the 44rem reading
+  width.
+- **H3 — Workflows first.** The home leads with Popular workflows, Explore by topic and Developer resources, then "How
+  Vestiarion works": the overview paragraph and the testnet and mainnet note, moved down from the top.
+  - The two grids of cards and the topic index run three to a row from `xl` (`<Cards columns="3">`). A lone last topic
+    card spans its row, worked out from the count rather than by CSS that two rules could fight over.
+  - Beside the hero from `xl`, "How a bill moves" is a compact `<Flow>` of four steps the product takes, with the guide
+    on how payments are controlled:
+    1. a bill comes in;
+    2. the agent decides and says why;
+    3. rules in code check it, and can refuse what the model proposes;
+    4. it is paid in USDC on Arc within your limits, or a person decides.
+- **H4 — One search field.** On the home, the header's search steps aside for the hero's larger one. Ctrl K or ⌘K opens
+  search everywhere.
+- **H5 — Calmer group headings.** The sidebar's group headings are sentence case at 12 px, not spaced capitals.
+- **H6 — Not taken: folding the groups inside a section.** A group holds one to five pages; folding it would add a
+  click for each and save little height once only one section is open.
+
+`tests/docs-redesign.test.tsx` holds:
+- the home's order and its three-column grids;
+- no table of contents on the home, its widths;
+- one search field on the home and the header's elsewhere;
+- the hero's four steps, and a titled flow in Markdown;
+- the lone last topic card spanning its row.
+
+Headless Edge, at 1440, 1280, 1024, 768 and 375 px:
+- the hero's flow card from 1280 px;
+- the header's search gone on the home only;
+- moving from Pay bills, with Get paid opened by hand, to the Xero guide leaves Connect your tools alone open.

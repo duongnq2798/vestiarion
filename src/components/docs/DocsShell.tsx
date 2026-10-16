@@ -2,6 +2,7 @@ import { ArrowUpRight, ChevronRight, PencilLine } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
+import { cn } from "@/components/ui/cn";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { hasSource } from "@/lib/docs/content";
 import type { Heading } from "@/lib/docs/headings";
@@ -84,8 +85,9 @@ function Breadcrumb({ section }: { section: string }) {
 /**
  * One docs page inside the shell (docs redesign D4): where it sits, "Copy page", its title and lead, the content at a
  * reading width of 44rem (about 75 characters a line), then the edit link and the previous and next pages; "On this
- * page" beside it from `xl` up when the page has sections to list. `hero` replaces the title block on the docs' home.
- * The Markdown to copy is the page's `.md` view, written here when the page is built.
+ * page" beside it from `xl` up when the page has sections to list. `hero` replaces the title block on the docs' home,
+ * which has no "On this page" and runs wider, to 64rem, for its grids of cards; its prose keeps the 44rem reading width
+ * (docs home polish H2). The Markdown to copy is the page's `.md` view, written here when the page is built.
  */
 export function DocsPage({
   slug,
@@ -105,10 +107,16 @@ export function DocsPage({
   children: ReactNode;
 }) {
   const markdown = pageMarkdown(slug, publicOrigin());
-  const toc = headings.length >= 2;
+  const home = hero !== undefined;
+  const toc = !home && headings.length >= 2;
   return (
     <div className="flex gap-10 xl:gap-14">
-      <article className="min-w-0 max-w-[44rem] flex-1 pb-16 pt-6 sm:pt-8">
+      <article
+        className={cn(
+          "min-w-0 flex-1 pb-16 pt-6 sm:pt-8",
+          home ? "max-w-[64rem] [&>blockquote]:max-w-[44rem] [&>div[role=note]]:max-w-[44rem] [&>ol]:max-w-[44rem] [&>p]:max-w-[44rem] [&>ul]:max-w-[44rem]" : "max-w-[44rem]"
+        )}
+      >
         {hero ?? (
           <header className="mb-10">
             <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-3 gap-y-2">

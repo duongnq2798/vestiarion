@@ -92,7 +92,7 @@ describe("a workflow figure", () => {
         <FlowStep title="A person approves">In Approvals.</FlowStep>
       </Flow>
     );
-    expect(markup).toMatch(/<figure[^>]*><ol>/);
+    expect(markup).toMatch(/<figure[^>]*><ol[ >]/);
     expect(markup.match(/<li /g)).toHaveLength(2);
     expect(text(markup)).toBe("A bill In USDC. A person approves In Approvals. In the sandbox.");
   });
@@ -142,5 +142,77 @@ describe("the docs' home", () => {
     const home = readSource("");
     const popular = home.slice(home.indexOf("## Popular workflows"), home.indexOf("## Explore by topic"));
     expect(popular.match(/<Card icon="/g)).toHaveLength(6);
+  });
+});
+
+describe("the docs' home, polished (docs home polish H1-H4)", () => {
+  it("leads with the popular workflows and keeps the longer account of Vestiarion below the indexes", () => {
+    const home = readSource("");
+    const headings = [...home.matchAll(/^## (.+)$/gm)].map((match) => match[1]);
+    expect(headings.slice(0, 4)).toEqual(["Popular workflows", "Explore by topic", "Developer resources", "How Vestiarion works"]);
+    // Nothing comes before the first heading: the hero says what the docs are for.
+    expect(home.trimStart().startsWith("## Popular workflows")).toBe(true);
+    const about = home.slice(home.indexOf("## How Vestiarion works"), home.indexOf("## Watch it work"));
+    expect(about).toContain("Vestiarion is an AI agent for bills and payments, for small businesses.");
+    expect(about).toContain('<Callout kind="note" title="Testnet and mainnet">');
+    // The two grids of cards run three to a row on a wide screen.
+    expect(home.match(/<Cards columns="3">/g)).toHaveLength(2);
+    const Cards = useMDXComponents().Cards as (props: { columns?: string; children?: React.ReactNode }) => React.ReactElement;
+    expect(renderToStaticMarkup(<Cards columns="3" />)).toContain("xl:grid-cols-3");
+    expect(renderToStaticMarkup(<Cards />)).not.toContain("xl:grid-cols-3");
+  });
+
+  it("gives the home no table of contents and the cards its full width, its prose kept to the reading width", () => {
+    const markup = renderToStaticMarkup(
+      <DocsPage slug="" section="Get started" title="Overview" headings={[{ id: "a", text: "A", depth: 2 }, { id: "b", text: "B", depth: 2 }]} hero={<header>Hero</header>}>
+        <p>Body</p>
+      </DocsPage>
+    );
+    expect(markup).not.toContain('aria-label="On this page"');
+    expect(markup).toMatch(/<article class="[^"]*max-w-\[64rem\][^"]*\[&amp;&gt;p\]:max-w-\[44rem\]/);
+  });
+
+  it("shows one search field on the home: the hero's, not the header's", async () => {
+    const { DocsSearchButton, DocsSearchProvider } = await import("@/components/docs/DocsSearch");
+    route.pathname = "/docs";
+    const onHome = renderToStaticMarkup(
+      <DocsSearchProvider index={[]}>
+        <DocsSearchButton />
+      </DocsSearchProvider>
+    );
+    expect(onHome).not.toContain("Search the docs");
+    route.pathname = "/docs/guides/xero";
+    const onGuide = renderToStaticMarkup(
+      <DocsSearchProvider index={[]}>
+        <DocsSearchButton />
+      </DocsSearchProvider>
+    );
+    expect(onGuide).toContain("Search the docs");
+  });
+
+  it("draws how a bill moves beside the hero, in four steps the product takes, and names its flow in Markdown", async () => {
+    const { DocsHomeHero } = await import("@/components/docs/DocsHomeHero");
+    const { DocsSearchProvider } = await import("@/components/docs/DocsSearch");
+    const words = text(
+      renderToStaticMarkup(
+        <DocsSearchProvider index={[]}>
+          <DocsHomeHero />
+        </DocsSearchProvider>
+      )
+    );
+    expect(words).toContain(
+      "How a bill moves A bill comes in From a form, a PDF, your accounting tool, email, Chrome or the API. The agent decides Pay now, pay later, hold it or ask for what is missing, and says why. Rules in code check it Limits, duplicates and the payee. Code can refuse what the model proposes. Paid, or held for you In USDC on Arc, within your limits, or a person decides."
+    );
+    expect(mdxToMarkdown('<Flow title="How a bill moves">\n  <FlowStep title="A bill comes in">\n    From a form.\n  </FlowStep>\n</Flow>\n', ORIGIN)).toBe(
+      "**How a bill moves**\n\n1. **A bill comes in**: From a form.\n"
+    );
+  });
+
+  it("lays a lone last topic card across its row, at two and at three to a row", () => {
+    const markup = renderToStaticMarkup(<TopicIndex />);
+    const last = INDEXED_SECTIONS[INDEXED_SECTIONS.length - 1].title;
+    const card = markup.match(new RegExp(`<section aria-label="${last}" class="([^"]*)"`))?.[1] ?? "";
+    if (INDEXED_SECTIONS.length % 2 === 1) expect(card).toContain("sm:col-span-2");
+    if (INDEXED_SECTIONS.length % 3 === 1) expect(card).toContain("xl:col-span-3");
   });
 });

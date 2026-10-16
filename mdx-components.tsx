@@ -70,9 +70,9 @@ function Anchor({ href = "", className, children, ...props }: ComponentProps<"a"
   );
 }
 
-/** A grid of `Card`s: one column on a phone, two from `sm`. */
-function Cards({ children }: { children?: ReactNode }) {
-  return <div className="my-6 grid gap-3 sm:grid-cols-2">{children}</div>;
+/** A grid of `Card`s: one column on a phone, two from `sm`, and three from `xl` when `columns` is 3 (the docs' home). */
+function Cards({ columns, children }: { columns?: number | string; children?: ReactNode }) {
+  return <div className={cn("my-6 grid gap-3 sm:grid-cols-2", String(columns) === "3" && "xl:grid-cols-3")}>{children}</div>;
 }
 
 /**

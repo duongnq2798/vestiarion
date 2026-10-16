@@ -1,7 +1,7 @@
 "use client";
 
 import { FileText, Hash, Search } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
@@ -109,10 +109,15 @@ function useDocsSearch() {
   return context;
 }
 
-/** The header's search field: a button that opens search, with its shortcut from `sm` up and as an icon below. */
+/**
+ * The header's search field: a button that opens search, with its shortcut from `sm` up and as an icon below. The docs'
+ * home has its own, larger one in its hero, so the header's stands aside there: one search field on a screen (docs home
+ * polish H4). Ctrl K or ⌘K opens search on every page.
+ */
 export function DocsSearchButton({ className }: { className?: string }) {
   const search = useDocsSearch();
   const shortcut = useShortcutLabel();
+  if (usePathname() === "/docs") return null;
   return (
     <>
       <Button variant="secondary" size="icon" aria-label="Search the docs" onClick={search.open} className={cn("sm:hidden", className)}>

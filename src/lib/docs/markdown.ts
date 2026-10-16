@@ -70,7 +70,9 @@ export const MDX_TO_MARKDOWN: Record<string, (attributes: JsxAttributes, childre
       .filter((line) => line.trim())
       .map((line, index) => line.replace(/^- /, `${index + 1}. `));
     const caption = typeof attributes.caption === "string" ? attributes.caption.trim() : "";
-    return caption ? `${steps.join("\n")}\n\n*${caption}*` : steps.join("\n");
+    const title = typeof attributes.title === "string" ? attributes.title.trim() : "";
+    const list = title ? `**${title}**\n\n${steps.join("\n")}` : steps.join("\n");
+    return caption ? `${list}\n\n*${caption}*` : list;
   },
   FlowStep: (attributes, children, { convert }) => {
     const { title } = attributes;
