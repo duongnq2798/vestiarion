@@ -116,7 +116,7 @@ export default function SecurityPage() {
           <li>the Circle API key and entity secret a workspace connects;</li>
           <li>each workspace&apos;s Ed25519 ledger signing key;</li>
           <li>each webhook endpoint&apos;s signing secret, and the secret of each webhook Asana sends;</li>
-          <li>the OAuth access and refresh tokens of Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive and Asana;</li>
+          <li>the OAuth access and refresh tokens of Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive, Zoho CRM and Asana;</li>
           <li>a Slack connection&apos;s bot token and posting address, bound to the workspace and the field;</li>
           <li>
             a client pay link&apos;s token, so the link can be shown again on its card and the customer&apos;s statement page and sent in
@@ -268,19 +268,20 @@ export default function SecurityPage() {
         <ul>
           <li>
             <strong>Connecting.</strong> Only an owner or admin connects a workspace to Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive,
-            Asana, Slack or GitHub, and for the first six only after agreeing to what Vestiarion reads and writes there. The OAuth state is signed
-            under the master key and expires after 10 minutes, a nonce in an HttpOnly cookie must come back with it, and the callback is accepted only
-            for the same signed-in person, whose role is read again.
+            Zoho CRM, Asana, Slack or GitHub, and for the first seven only after agreeing to what Vestiarion reads and writes there. The OAuth state is
+            signed under the master key and expires after 10 minutes, a nonce in an HttpOnly cookie must come back with it, and the callback is
+            accepted only for the same signed-in person, whose role is read again.
           </li>
           <li>
-            <strong>Zoho&apos;s data centers.</strong> Zoho Books&apos; callback names the data center the person&apos;s Zoho account lives in. It is
-            read only after every other check, and only from a fixed list of Zoho&apos;s data centers: the code, the client secret and the tokens go
-            only to that data center&apos;s Zoho servers, never to an address the callback names, and each token is kept with its data center so it
-            is never sent to another.
+            <strong>Zoho&apos;s data centers.</strong> The callback of Zoho Books and of Zoho CRM names the data center the person&apos;s Zoho account
+            lives in. It is read only after every other check, and only from a fixed list of Zoho&apos;s data centers: the code, the client secret and
+            the tokens go only to that data center&apos;s Zoho servers, never to an address the callback names, and each token is kept with its data
+            center so it is never sent to another. Zoho CRM is called only at that data center&apos;s own API address, never at one an answer from
+            Zoho names.
           </li>
           <li>
-            <strong>Storing.</strong> The tokens of Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive and Asana are encrypted, in a table only the
-            platform reads, and are opened only in their own workspace&apos;s scope. They are never shown in the browser, a log, a model&apos;s prompt
+            <strong>Storing.</strong> The tokens of Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive, Zoho CRM and Asana are encrypted, in a table
+            only the platform reads, and are opened only in their own workspace&apos;s scope. They are never shown in the browser, a log, a model&apos;s prompt
             or a webhook.
           </li>
           <li>
@@ -314,7 +315,8 @@ export default function SecurityPage() {
         </ul>
         <p>
           What Vestiarion reads from and writes to each tool is on the <LegalLink href="/privacy#services">Privacy</LegalLink> page. QuickBooks
-          Online is never written to, though the access Intuit grants could. Zoho Books is never written to, and the access Zoho grants is read only.
+          Online is never written to, though the access Intuit grants could. Zoho Books and Zoho CRM are never written to, and the access Zoho grants
+          each is read only.
         </p>
       </LegalSection>
 
@@ -351,7 +353,7 @@ export default function SecurityPage() {
             <strong>Resend</strong>, for invoices by email: a Svix signature, refused when its timestamp is more than 5 minutes away.
           </li>
         </ul>
-        <p>Xero, Zoho Books and HubSpot send Vestiarion no webhooks: their records are read on a schedule.</p>
+        <p>Xero, Zoho Books, HubSpot and Zoho CRM send Vestiarion no webhooks: their records are read on a schedule.</p>
         <p>
           The scheduled routes, the agent&apos;s tick, the FX and transfer watches, webhook delivery, accounting sync, the daily cleanup and the FX
           rates, take the deployment&apos;s <code>AGENT_API_TOKEN</code> as a bearer token, compared as SHA-256 digests in constant time. So does the
@@ -459,8 +461,8 @@ export default function SecurityPage() {
             rule-based policy decides and the ledger says so. Either way, the answer is a proposal the rules in code check.
           </li>
           <li>
-            Vestiarion trains and fine-tunes no model, and never uses data from Xero, QuickBooks, Zoho Books, HubSpot, Pipedrive or Asana to train or improve
-            any AI model.
+            Vestiarion trains and fine-tunes no model, and never uses data from Xero, QuickBooks, Zoho Books, HubSpot, Pipedrive, Zoho CRM or Asana to
+            train or improve any AI model.
           </li>
         </ul>
       </LegalSection>

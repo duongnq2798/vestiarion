@@ -385,8 +385,8 @@ waiting. Supabase Cron runs them from the database instead:
   webhooks and by email. It sends nothing.
 - `POST /api/platform/webhooks`, every 10 minutes: webhook retries and anything still queued.
 - `POST /api/platform/accounting-sync`, every 15 minutes: bills from the Xero organisations, QuickBooks companies and
-  Zoho Books organizations workspaces connected, deals from the HubSpot accounts and Pipedrive companies they connected,
-  and the connections nobody finished choosing an organisation for, revoked and deleted.
+  Zoho Books organizations workspaces connected, deals from the HubSpot accounts, Pipedrive companies and Zoho CRM
+  organizations they connected, and the connections nobody finished choosing an organisation for, revoked and deleted.
 
 To set them up, run `supabase/cron/watches.sql` once in the Supabase SQL editor, with your
 deployment's origin in place of `https://www.vestiarion.xyz`. Its header lists what comes first:
@@ -513,6 +513,23 @@ until an owner or admin turns it on from the card; Vestiarion then adds nine "Ve
 Pipedrive's API says nothing that tells a developer sandbox from a real company, so payments on Arc testnet or in shadow
 mode are never written to Pipedrive. The connection needs migrations 0116 and 0117 (after 0105 and 0107); before they run,
 the Pipedrive card says Pipedrive is not set up yet. See [Bring deals in from Pipedrive](https://www.vestiarion.xyz/docs/guides/pipedrive).
+
+Zoho CRM uses the same Zoho client as Zoho Books (above): with `ZOHO_BOOKS_CLIENT_ID` and `ZOHO_BOOKS_CLIENT_SECRET`
+set, add `<origin>/api/integrations/zohocrm/callback` (and `http://localhost:3000/api/integrations/zohocrm/callback` to
+try it locally) to the client's Authorized Redirect URIs, and an owner or admin connects a workspace to one Zoho CRM
+organization from Settings, after agreeing to what Vestiarion does with its data. Its won deals come in with their
+accounts and contacts under Deals on Bills & receivables, and a person plans each one's collections from the New deal
+form filled in from it. To give Zoho CRM a client of its own, set both `ZOHO_CRM_CLIENT_ID` and `ZOHO_CRM_CLIENT_SECRET`
+(the same id form and data center settings as Zoho Books'); they take the place of the Zoho Books pair for Zoho CRM
+alone. The data centers work as for Zoho Books: Vestiarion takes the account's data center from Zoho's callback, checks
+it against its own list, and sends the code, the client secret, every token and every API call only to that data
+center's servers. The app asks for read scopes only (`ZohoCRM.modules.deals.READ ZohoCRM.modules.accounts.READ
+ZohoCRM.modules.contacts.READ ZohoCRM.org.READ ZohoCRM.settings.layouts.READ ZohoCRM.settings.pipeline.READ`) and
+writes nothing to Zoho CRM, so it has no receipts switch. A deal is won when the Deals pipelines give its stage the
+forecast type Closed Won, or, where they cannot be read, when the stage is named Closed Won. Several workspaces may connect the same organization. Zoho CRM's Developer Edition and sandboxes are not read in this
+version, and no webhook is registered: deals come in with the 15-minute sync and **Sync now**. The connection needs
+migration 0123 (after 0105); before it runs, the card says Zoho CRM is not set up on this deployment yet. See
+[Bring deals in from Zoho CRM](https://www.vestiarion.xyz/docs/guides/zohocrm).
 
 With `ASANA_CLIENT_ID` and `ASANA_CLIENT_SECRET` set, from an Asana OAuth app distributed to any workspace, an owner or
 admin connects a workspace to their Asana from Settings, after agreeing to what Vestiarion does with its data. A person

@@ -28,6 +28,7 @@ vi.mock("@/lib/accounting-providers", () => ({ accountingProviderOn: () => true 
 vi.mock("@/lib/hubspot/settings", () => ({ hubspotSettingsFromEnv: () => ({}) }));
 vi.mock("@/lib/pipedrive/settings", async (original) => ({ ...(await original<typeof import("@/lib/pipedrive/settings")>()), pipedriveSettingsFromEnv: () => ({}) }));
 vi.mock("@/lib/asana/settings", async (original) => ({ ...(await original<typeof import("@/lib/asana/settings")>()), asanaSettingsFromEnv: () => ({}) }));
+vi.mock("@/lib/zohocrm/settings", async (original) => ({ ...(await original<typeof import("@/lib/zohocrm/settings")>()), zohoCrmSettingsFromEnv: () => ({}) }));
 vi.mock("@/lib/connectors/token-store", () => ({ pendingChoice: vi.fn(async () => pending.value) }));
 vi.mock("@/lib/dal/scope", () => ({ withOrg: (_org: string, fn: () => Promise<unknown>) => fn() }));
 vi.mock("@/components/vx/SiteChrome", () => ({ SiteHeader: () => null, SiteFooter: () => null }));
@@ -45,6 +46,7 @@ import { AccountingConnect } from "@/app/integrations/_accounting/AccountingConn
 import HubSpotConnectPage from "@/app/integrations/hubspot/connect/page";
 import PipedriveConnectPage from "@/app/integrations/pipedrive/connect/page";
 import AsanaConnectPage from "@/app/integrations/asana/connect/page";
+import ZohoCrmConnectPage from "@/app/integrations/zohocrm/connect/page";
 import { CONSENT_CHANGED, CONSENT_VERSIONS, consentStatement, HOSTED_MODEL_PROVIDER, namesModelProvider } from "@/lib/connectors/consent";
 import type { ProviderId } from "@/lib/connectors/provider";
 import type { AccountingPanelView } from "@/lib/connectors/panel";
@@ -237,12 +239,13 @@ const anyConnectPage = async (provider: ProviderId, query: Record<string, string
   const searchParams = Promise.resolve(query);
   if (provider === "pipedrive") return renderToStaticMarkup(await PipedriveConnectPage({ searchParams }));
   if (provider === "asana") return renderToStaticMarkup(await AsanaConnectPage({ searchParams }));
+  if (provider === "zohocrm") return renderToStaticMarkup(await ZohoCrmConnectPage({ searchParams }));
   return connectPage(provider, query);
 };
 
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-describe.each(["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks"] as const)("the %s connect page's statement", (provider) => {
+describe.each(["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks", "zohocrm"] as const)("the %s connect page's statement", (provider) => {
   it("posts the version it shows, inside the form", async () => {
     memberships.value = [workspace("acme")];
     const form = (await anyConnectPage(provider)).match(/<form[^>]*>[^]*?<\/form>/)?.[0] ?? "";

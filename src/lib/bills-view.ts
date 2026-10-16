@@ -70,6 +70,8 @@ export interface BillsQuery {
   hubspot: string | null;
   /** `?pipedrive=<row>`: a Pipedrive deal to plan (Pipedrive connector P9). Absent means none. */
   pipedrive?: string | null;
+  /** `?zohocrm=<row>`: a Zoho CRM deal to plan (Zoho CRM connector C10). Absent means none. */
+  zohocrm?: string | null;
   /** `?history=all`, from before the tabs: every settled bill. */
   history: boolean;
   /** `?status=…`, from before the tabs: the invoices of one status. */
@@ -101,6 +103,8 @@ export interface BillsView {
   hubspot: string | null;
   /** A Pipedrive deal to plan; absent means none. */
   pipedrive?: string | null;
+  /** A Zoho CRM deal to plan; absent means none. */
+  zohocrm?: string | null;
 }
 
 type Raw = Record<string, string | string[] | undefined>;
@@ -117,6 +121,7 @@ export function readBillsQuery(raw: Raw): BillsQuery {
   const open = first(raw.open);
   const hubspot = first(raw.hubspot);
   const pipedrive = first(raw.pipedrive);
+  const zohocrm = first(raw.zohocrm);
   const add = first(raw.add);
   return {
     tab: oneOf(BILLS_TABS, first(raw.tab)),
@@ -130,6 +135,7 @@ export function readBillsQuery(raw: Raw): BillsQuery {
     new: oneOf(NEW_KINDS, first(raw.new)) ?? (add === undefined ? null : add === "deal" ? "deal" : "bill"),
     hubspot: hubspot !== undefined && hubspot !== "" ? hubspot : null,
     pipedrive: pipedrive !== undefined && pipedrive !== "" ? pipedrive : null,
+    zohocrm: zohocrm !== undefined && zohocrm !== "" ? zohocrm : null,
     history: first(raw.history) === "all",
     status: first(raw.status) ?? null,
   };
@@ -159,7 +165,7 @@ export function resolveBillsView(query: BillsQuery, facts: BillsFacts): BillsVie
   const tab: BillsTab =
     query.tab ??
     (openDirection === "receivable" ? "receivables" : openDirection === "payable" ? "bills" : null) ??
-    (query.hubspot || query.pipedrive || query.new === "deal" ? "receivables" : null) ??
+    (query.hubspot || query.pipedrive || query.zohocrm || query.new === "deal" ? "receivables" : null) ??
     (query.history ? "bills" : null) ??
     legacy?.tab ??
     searchTab ??
@@ -195,6 +201,7 @@ export function resolveBillsView(query: BillsQuery, facts: BillsFacts): BillsVie
     new: query.new,
     hubspot: query.hubspot,
     pipedrive: query.pipedrive ?? null,
+    zohocrm: query.zohocrm ?? null,
   };
 }
 
@@ -335,10 +342,18 @@ const REVIEW_ANCHORS: Readonly<Record<string, ReviewPanel>> = {
 };
 
 /**
- * The Receivables tab's sections that links name; `plan-from-hubspot` comes with `?hubspot=` and `plan-from-pipedrive`
- * with `?pipedrive=`, which open Receivables themselves.
+ * The Receivables tab's sections that links name; `plan-from-hubspot` comes with `?hubspot=`, `plan-from-pipedrive`
+ * with `?pipedrive=` and `plan-from-zohocrm` with `?zohocrm=`, which open Receivables themselves.
  */
-const RECEIVABLE_ANCHORS: ReadonlySet<string> = new Set(["deals", "from-hubspot", "plan-from-hubspot", "from-pipedrive", "plan-from-pipedrive"]);
+const RECEIVABLE_ANCHORS: ReadonlySet<string> = new Set([
+  "deals",
+  "from-hubspot",
+  "plan-from-hubspot",
+  "from-pipedrive",
+  "plan-from-pipedrive",
+  "from-zohocrm",
+  "plan-from-zohocrm",
+]);
 
 /**
  * Where a fragment from before the tabs lands (B4): `#trail-<id>` and `#settlement-<id>` open that bill's detail at that
@@ -366,7 +381,7 @@ export function legacyHashHref(hash: string, search: string): string | null {
     return write(false);
   }
   if (RECEIVABLE_ANCHORS.has(anchor)) {
-    if (params.get("tab") === "receivables" || params.has("hubspot") || params.has("pipedrive")) return null;
+    if (params.get("tab") === "receivables" || params.has("hubspot") || params.has("pipedrive") || params.has("zohocrm")) return null;
     params.set("tab", "receivables");
     return write(true);
   }

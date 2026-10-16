@@ -204,6 +204,7 @@ describe("the docs navigation", () => {
       ["guides/zohobooks", "Bring bills in from Zoho Books"],
       ["guides/hubspot", "Bring deals in from HubSpot"],
       ["guides/pipedrive", "Bring deals in from Pipedrive"],
+      ["guides/zohocrm", "Bring deals in from Zoho CRM"],
       ["guides/asana", "Accept contractor work from Asana"],
       ["guides/github", "Show payments on GitHub"],
     ]);

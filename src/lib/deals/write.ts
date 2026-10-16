@@ -96,18 +96,22 @@ export type DealSource =
   | { provider: "hubspot"; ids: { hubId: string; dealId: string; companyId: string | null } }
   // A Pipedrive company (the account), its deal, and the organization it was sold to
   // (docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md P19).
-  | { provider: "pipedrive"; ids: { companyId: string; dealId: string; organizationId: string | null } };
+  | { provider: "pipedrive"; ids: { companyId: string; dealId: string; organizationId: string | null } }
+  // A Zoho CRM organization (the account), its deal, and the account it was sold to
+  // (docs/superpowers/specs/2026-10-16-zoho-crm-connector-design.md C13).
+  | { provider: "zohocrm"; ids: { organizationId: string; dealId: string; accountId: string | null } };
 
 /** The CRM's ids a customer added with a deal carries: its account, and the business the deal was sold to. */
 export function customerSource(source: DealSource): CustomerSource {
-  return source.provider === "hubspot"
-    ? { provider: "hubspot", ids: { hubId: source.ids.hubId, companyId: source.ids.companyId } }
-    : { provider: "pipedrive", ids: { companyId: source.ids.companyId, organizationId: source.ids.organizationId } };
+  if (source.provider === "hubspot") return { provider: "hubspot", ids: { hubId: source.ids.hubId, companyId: source.ids.companyId } };
+  if (source.provider === "zohocrm") return { provider: "zohocrm", ids: { organizationId: source.ids.organizationId, accountId: source.ids.accountId } };
+  return { provider: "pipedrive", ids: { companyId: source.ids.companyId, organizationId: source.ids.organizationId } };
 }
 
 export type CustomerSource =
   | { provider: "hubspot"; ids: { hubId: string; companyId: string | null } }
-  | { provider: "pipedrive"; ids: { companyId: string; organizationId: string | null } };
+  | { provider: "pipedrive"; ids: { companyId: string; organizationId: string | null } }
+  | { provider: "zohocrm"; ids: { organizationId: string; accountId: string | null } };
 
 const sourceDetail = (source: DealSource | undefined) => (source ? { via: source.provider, [source.provider]: source.ids } : {});
 

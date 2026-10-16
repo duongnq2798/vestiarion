@@ -14,6 +14,17 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Won deals from Zoho CRM.** An owner or admin connects a Zoho CRM organization from Settings, and its won deals come
+  in with their accounts and contacts under Deals on Bills & receivables; Plan collections fills in the New deal form
+  from one, and nothing is planned until a person confirms it. A deal is won when its pipeline counts its stage as Closed
+  Won (or, where the pipelines cannot be read, by the stage's name); open deals are listed as not won yet, and lost ones
+  never come in. A planned deal changed in Zoho CRM afterwards (its amount, its closing date, a lost or open stage, or
+  deleted) says so on its page, for a person to change the deal or keep it as it is. It works in each of Zoho's data
+  centers but China's, reading only from the one the account lives in, and several workspaces may connect the same
+  organization. Read only: nothing is written to Zoho CRM, and the deals are read every 15 minutes and on Sync now. It
+  uses the Zoho client Zoho Books does (`ZOHO_BOOKS_CLIENT_ID` and `ZOHO_BOOKS_CLIENT_SECRET`, or `ZOHO_CRM_CLIENT_ID`
+  and `ZOHO_CRM_CLIENT_SECRET` when both are set), with its own redirect URI, and needs migration `0123`; until it runs,
+  the card says Zoho CRM is not set up on this deployment yet. [Guide](https://www.vestiarion.xyz/docs/guides/zohocrm).
 - **Bills from Zoho Books.** An owner or admin connects a Zoho Books organization from Settings, and its open bills
   (open, overdue, partially paid or approved, due or dated in the last 90 days or later) come in for review on Bills &
   receivables, through the same check as a bill list; each becomes a payable only when a person adds it, and the agent

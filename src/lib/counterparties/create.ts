@@ -45,7 +45,9 @@ export async function createCounterparty(input: {
     | { provider: "xero" | "quickbooks" | "zohobooks"; ids: { tenantId: string; contactId: string | null } }
     | { provider: "hubspot"; ids: { hubId: string; companyId: string | null } }
     // Pipedrive's company (the account) and the organization the deal was sold to (Pipedrive connector P19).
-    | { provider: "pipedrive"; ids: { companyId: string; organizationId: string | null } };
+    | { provider: "pipedrive"; ids: { companyId: string; organizationId: string | null } }
+    // Zoho CRM's organization and the account the deal was sold to (Zoho CRM connector C13).
+    | { provider: "zohocrm"; ids: { organizationId: string; accountId: string | null } };
   now?: () => string;
 }): Promise<CreatedCounterparty> {
   const { actorId, counterparty, via, apiKeyId, github, purchaseOrderRequired, external } = input;

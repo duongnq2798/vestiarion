@@ -52,7 +52,7 @@ const SERVICES: ReadonlyArray<{
     brand: "zohobooks-lockup",
     name: "Zoho Books",
     role: "Works with",
-    body: "Open bills from Zoho Books come in for review, read from the Zoho data center the account lives in.",
+    body: "Open bills from Zoho Books come in for review, and won deals from Zoho CRM to plan, read from the Zoho data center the account lives in.",
     href: "/docs/guides/zohobooks",
     check: "Read the guide",
   },
@@ -116,8 +116,8 @@ export function BuiltWith() {
           })}
         </ul>
         <p className="border-t border-line py-3 text-[0.6875rem] leading-relaxed text-ink-3">
-          npm is a registered trademark of npm, Inc. Intuit and QuickBooks are trademarks of Intuit Inc. Zoho and Zoho Books are trademarks of
-          Zoho Corporation Pvt. Ltd. Arc, Circle, Slack, Telegram, Xero, HubSpot, Pipedrive and Asana are trademarks of their respective owners.
+          npm is a registered trademark of npm, Inc. Intuit and QuickBooks are trademarks of Intuit Inc. Zoho, Zoho Books and Zoho CRM are trademarks
+          of Zoho Corporation Pvt. Ltd. Arc, Circle, Slack, Telegram, Xero, HubSpot, Pipedrive and Asana are trademarks of their respective owners.
           Their names and marks show what Vestiarion is built on and connects to, not an endorsement.
         </p>
       </div>

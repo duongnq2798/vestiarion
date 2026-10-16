@@ -153,11 +153,11 @@ export const SUBPROCESSORS: readonly Subprocessor[] = [
     when: ONLY_IF_CONNECTED,
   },
   {
-    name: "Zoho (Zoho Books)",
-    privacyEntry: "Zoho Books",
-    names: ["Zoho", "Zoho Books"],
-    purpose: "read for open bills and vendors, at the data center the account lives in, and never written to",
-    data: "only the requests that read the organizations a person can reach, and the bills and vendors of the one they pick",
+    name: "Zoho (Zoho Books and Zoho CRM)",
+    privacyEntry: "Zoho Books and Zoho CRM",
+    names: ["Zoho", "Zoho Books", "Zoho CRM"],
+    purpose: "read for open bills and vendors in Zoho Books and for deals with their accounts and contacts in Zoho CRM, at the data center the account lives in, and never written to",
+    data: "only the requests that read the Zoho Books organizations a person can reach and the bills and vendors of the one they pick, and the deals, accounts, contacts, deal pipelines and organization of the Zoho CRM organization connected",
     when: ONLY_IF_CONNECTED,
   },
   {

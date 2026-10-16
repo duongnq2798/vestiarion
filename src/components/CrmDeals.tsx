@@ -17,7 +17,7 @@ const INITIAL: HubSpotActionResult = { ok: false, message: "" };
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /** The CRMs whose won deals are listed, each with its own words (HubSpot connector H20, Pipedrive connector P20). */
-export type CrmListProvider = "hubspot" | "pipedrive";
+export type CrmListProvider = "hubspot" | "pipedrive" | "zohocrm";
 
 const WORDS: Record<CrmListProvider, { label: string; none: string; email: string }> = {
   hubspot: {
@@ -29,6 +29,11 @@ const WORDS: Record<CrmListProvider, { label: string; none: string; email: strin
     label: "Pipedrive",
     none: "No won deals from Pipedrive yet. A deal marked won there comes in within moments, or at the next sync.",
     email: "These customers have no billing email yet. Pipedrive has one for the person on their deal; use it only if it is where invoices go.",
+  },
+  zohocrm: {
+    label: "Zoho CRM",
+    none: "No won deals from Zoho CRM yet. A deal moved to a Closed Won stage there comes in at the next sync, within 15 minutes.",
+    email: "These customers have no billing email yet. Zoho CRM has one for the contact on their deal; use it only if it is where invoices go.",
   },
 };
 

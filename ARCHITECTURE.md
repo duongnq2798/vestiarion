@@ -1769,7 +1769,8 @@ and `importRow`; the invoice number starts the memo. The list itself is not kept
 `/o/[slug]/invoices` (docs/superpowers/specs/2026-10-12-bills-tabs-design.md) keeps four figures above three tabs:
 Needs you, Due in 7 days, Overdue and Receivables (what customers still owe, never called cash), each a link to the tab
 and filter behind it; **Waiting for review** only when something does (bills from Xero, QuickBooks or Zoho Books,
-payments to book, invoices by email, invoices captured with the Chrome extension, HubSpot or Pipedrive won deals); then **Bills**,
+payments to book, invoices by email, invoices captured with the Chrome extension, HubSpot, Pipedrive or Zoho CRM won
+deals); then **Bills**,
 **Payment plan** and **Receivables**.
 
 - **The address holds the view** (`src/lib/bills-view.ts`). `tab`, `filter`, `q`, `sort`, `page`, `open` (a bill's
@@ -1898,7 +1899,7 @@ Each open receivable gets one next step from what is known about its customer
 - **HubSpot's owner.** `crm_deals.owner_external_id`, from the deal's `hubspot_owner_id` (read with
   `crm.objects.deals.read`), written apart from the deal's facts so a sync before 0110 still writes them. A receivable
   whose deal was planned from a HubSpot deal with an owner asks before its first overdue reminder. A deal planned from
-  Pipedrive has no owner here: the ask is HubSpot's only for now.
+  Pipedrive or Zoho CRM has no owner here: the ask is HubSpot's only for now.
 - **Each email once (I11).** `src/lib/notifications/deliveries.ts`: a key per kind, event and recipient (hashed), the
   rules' version recorded beside it and never in it, so a retry after the rules changed keeps the key Resend knows;
   `notification_deliveries` claims it before the send (unique per workspace and key), a trigger keeps a sent row, and
@@ -2413,6 +2414,11 @@ the provider.
     refresh token it was given is kept. A refresh token lasts until revoked (`idleDays` 0, so the reconnect words name no
     idle days); `invalid_code`, `invalid_grant` or `invalid_client` at refresh marks needs reconnect. Zoho may answer a
     refusal with HTTP 200 and an `error` field, which is read as a refusal.
+  - *Shared with Zoho CRM.* One Zoho "Server-based Applications" client serves Zoho Books and Zoho CRM (below), each
+    with its own redirect URI registered on it. The OAuth calls in `oauth.ts` take the app (`ZohoApp`: the client, its
+    scopes, Zoho Books' when it names none, and the name its logs carry), and the data center table, the regional tokens
+    and the refusal rules above are the same for both. Each connection has its own grant: disconnecting one revokes only
+    its own refresh token.
   - *Organizations.* `organisations` reads `GET /books/v3/organizations` with the new token: one connects at once, and
     several are kept as a pending grant and picked on the connect page, as Xero's tenants are. Not `exclusive`: several
     workspaces may connect one organization, each with its own grant, and no one-workspace index exists for it.
@@ -2440,11 +2446,12 @@ the provider.
     the data layer always sends `p_org_id`) before anyone is sent to Zoho, so before 0122 runs, connecting says Zoho
     Books is not set up on this deployment yet.
 
-## Connectors: CRM (HubSpot and Pipedrive)
+## Connectors: CRM (HubSpot, Pipedrive and Zoho CRM)
 
 A workspace can bring its customers and won deals in from HubSpot
-(docs/superpowers/specs/2026-10-12-hubspot-connector-design.md) and from Pipedrive
-(docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md, below), either or both. It runs on the accounting
+(docs/superpowers/specs/2026-10-12-hubspot-connector-design.md), from Pipedrive
+(docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md, below) and from Zoho CRM
+(docs/superpowers/specs/2026-10-16-zoho-crm-connector-design.md, below), any or all of them. It runs on the accounting
 connectors' core, which
 gains a provider kind (`PROVIDER_KINDS`: `accounting` or `crm`) and no HubSpot names: `ConnectingProvider` is what the
 connect flow, the token refresh and disconnecting use of any provider, and `CrmProvider` (`src/lib/connectors/crm.ts`)
@@ -2610,6 +2617,69 @@ reads in `api.ts`, `hubspotProvider`), wired in `src/lib/crm-providers.ts`. It i
     `pipedrive: { companyId, organizationId }`, and the connection, change and receipt entries `provider: "pipedrive"`.
   - *Before 0116 and 0117, or without the app*, the card says Pipedrive is not set up yet or is not there, the routes answer 404
     without the app, and the sweeper never sees a Pipedrive connection.
+- **Zoho CRM** is the third CRM (docs/superpowers/specs/2026-10-16-zoho-crm-connector-design.md), on the same core,
+  wired in `src/lib/crm-providers.ts` beside HubSpot and Pipedrive, and read only. It is on with the Zoho client Zoho
+  Books uses (`ZOHO_BOOKS_CLIENT_ID` and `ZOHO_BOOKS_CLIENT_SECRET`), or with `ZOHO_CRM_CLIENT_ID` and
+  `ZOHO_CRM_CLIENT_SECRET` when both are set; its redirect URI, `<origin>/api/integrations/zohocrm/callback`, is
+  registered on the client beside Zoho Books'. Without a client there is no card, the pages are not found and the
+  routes answer 404. It differs where Zoho CRM does:
+  - *The core.* `ProviderId` gains `zohocrm` (kind `crm`, not `exclusive`: several workspaces may connect one
+    organization, since nothing is written there for them to contend over). `PROVIDER_WORDS` says organization, and
+    account for the customer; `idleDays` 0. The reference a planned deal carries is `zohocrm-<id>`
+    (`crmDealReference`). A deal's and a customer's source in their entries is `zohocrm: { organizationId, dealId,
+    accountId }` (`DealSource`, `CustomerSource`).
+  - *The folder*, `src/lib/zohocrm/`: `settings.ts` (the client, the callback URL and the six read scopes:
+    `ZohoCRM.modules.deals.READ`, `.accounts.READ`, `.contacts.READ`, `ZohoCRM.org.READ`,
+    `ZohoCRM.settings.layouts.READ`, `ZohoCRM.settings.pipeline.READ`), `http.ts`, `map.ts` (pure, from Zoho CRM's
+    JSON), `api.ts` (the reader), `store.ts` (`zohoCrmReady`), `provider.ts` (`zohoCrmProvider`) and `connect-deps.ts`
+    (the readiness probe, then a first sync of at most 10 pages after the answer).
+  - *Zoho's OAuth.* Zoho Books' calls (`src/lib/zohobooks/oauth.ts`) with Zoho CRM's scopes, and everything Zoho Books
+    does with data centers: the callback's `location` read after every other check and only from the fixed table, each
+    token kept as `<data center>|<token>`, a refresh at the token's own data center keeping the refresh token.
+  - *Connecting.* The core's flow on `/integrations/zohocrm`, `/integrations/zohocrm/connect` (**Continue to Zoho
+    CRM**), `POST /api/integrations/zohocrm/connect` and `GET /api/integrations/zohocrm/callback`, consent
+    `zohocrm-2026-10-16`. One organization per grant (`GET /crm/v8/org`: its id, `company_name` and `iso_code`), so
+    nothing to pick. A workspace connected to another organization is refused (`other_organisation`); the same
+    organization again reconnects its row.
+  - *The API domain is the data center's.* Every call goes to `ZOHO_REGIONS[<the token's data center>].api`
+    (`https://www.zohoapis.<tld>`, API v8, `Authorization: Zoho-oauthtoken`), never to a domain an answer names. A
+    Developer Edition or sandbox organization, whose API lives on `developer.` or `sandbox.zohoapis`, does not answer
+    there, so connecting one says Zoho CRM did not finish connecting.
+  - *Which deals are won.* Each stage's `forecast_type` in the Deals layouts' pipelines (`GET /settings/layouts?module=Deals`,
+    then `GET /settings/pipeline?layout_id=` for each), read once per run, by its actual and its display value:
+    `Closed Won` won, `Closed Lost` lost, `Open` open. A stage the pipelines do not name, or a token that may not read
+    them (a 403, an answer that does not read), falls back to Zoho CRM's own stage names: "Closed Won" won, "Closed
+    Lost" and "Closed-Lost to Competition" lost, anything else open.
+  - *Reads* (`api.ts`, `map.ts`). `GET /crm/v8/Deals` with its fields named, 200 a page, oldest change first
+    (`sort_by=Modified_Time`). A backfill reads every deal, and the core keeps the open ones and those won in its window;
+    later runs read the deals changed since five minutes before `since`, by `If-Modified-Since`; 204 and 304 read as no
+    records. Zoho CRM pages by number for its first 2,000 records and by `page_token` beyond: the reader remembers each
+    page's token, and a run resumed past page 10 walks the tokens from the last page it can reach. A deal's version is
+    its `Modified_Time` in UTC, its amount an exact decimal, its currency its own `Currency`, else the organization's
+    `iso_code` (read once per run), its close day `Closing_Date`, and its customer `Account_Name`, with the email of its
+    `Contact_Name`, read by id in one call a page. Linked deals and won ones still offered are read again by id
+    (`?ids=`) each run; one Zoho CRM no longer has is `deleted`.
+  - *No webhook.* Zoho CRM's notifications need a channel per module and a renewal; the sweeper reads every connection
+    every 15 minutes, and **Sync now** at once.
+  - *Errors* (`http.ts`). 401 `unauthorized` (a refresh, then a reconnect), 403 `forbidden`, 429 `rate_limited` a
+    minute later (Zoho CRM sends no Retry-After), 5xx and timeouts `unavailable`, an answer that does not read
+    `bad_response`.
+  - *Read only, held by the database (migration `0123`).* The provider checks of `accounting_connections`,
+    `accounting_tokens` and `external_links` take `zohocrm`, each replaced only while it does not yet (0116's rule).
+    `accounting_connections_writes_check` and `crm_receipt_writes_provider_check` are left taking HubSpot and Pipedrive
+    only, and the provider has no `receipts`, so a Zoho CRM connection can never turn writing on nor have a write
+    queued, and the card offers no switch. No one-workspace index. `zohocrm_connector_ready(p_org_id)`, in
+    `TENANT_RPCS`, is the probe `zohoCrmReady` asks after the core's `crmReady`: before 0123 runs, the card, the list
+    and the connect flow say Zoho CRM is not set up on this deployment yet, and no one is sent to Zoho.
+  - *Where it shows.* Settings, **Zoho CRM** (`ZohoCrmPanel`); Bills & receivables, Receivables, **From Zoho CRM: N won
+    deals** (`CrmDeals`, `#from-zohocrm`; `?zohocrm=<row>` opens the New deal form filled in), and "N won deals in Zoho
+    CRM" under Waiting for review; a deal's page, **Changed in Zoho CRM** (`?from=zohocrm`).
+  - *Disconnecting* revokes the refresh token at the token's own data center and deletes the tokens, with
+    `accounting_disconnected`; planned deals, links and rows stay.
+  - *Entries.* No new action: `deal_signed` and `deal_revised` carry `via: "zohocrm"` and
+    `zohocrm: { organizationId, dealId, accountId }`, `create_counterparty` and `counterparty_notice_email_changed`
+    `zohocrm: { organizationId, accountId }`, and the connection and change entries `provider: "zohocrm"`. Nothing is
+    written to Zoho CRM, so there are no receipt entries.
 
 ## Contractor work accepted from Asana
 
@@ -3157,7 +3227,7 @@ are built in, others come from `AGENT_LLM_PRICES`; `purpose` names what for: pay
 reminder, extraction, chat), `circle_transfer` (a live send or batch in `payments.ts`, with the chain-reported fee, and a
 live treasury move), `x402_purchase` (a payee history bought, at its price in USDC), `email` (each Resend attempt whose
 message names a `meter`; one sent outside a workspace's scope, after a payee's or a customer's request, is written into
-the workspace by `recordUsageFor`) and `connector_sync` (each Xero, QuickBooks, Zoho Books, HubSpot or Pipedrive sync that ran). `recordUsage`
+the workspace by `recordUsageFor`) and `connector_sync` (each Xero, QuickBooks, Zoho Books, HubSpot, Pipedrive or Zoho CRM sync that ran). `recordUsage`
 writes through the workspace's own tenant client, records nothing outside a scope, and never throws: metering never
 stands between a send and its record. A row holds counts, tokens and a cost with its currency; never an address, an
 amount paid to someone or what an email said. Attribution and display only: nothing reads it to charge or to stop.

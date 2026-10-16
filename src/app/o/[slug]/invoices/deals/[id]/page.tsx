@@ -44,7 +44,7 @@ export const metadata: Metadata = { title: "Deal" };
 
 type DealPageProps = {
   params: Promise<{ slug: string; id: string }>;
-  /** `from=hubspot` or `from=pipedrive`: Change deal opens filled in from the CRM's changes (HubSpot connector H12, Pipedrive connector P10). */
+  /** `from=hubspot`, `from=pipedrive` or `from=zohocrm`: Change deal opens filled in from the CRM's changes (HubSpot connector H12, Pipedrive connector P10). */
   searchParams: Promise<{ from?: string | string[] }>;
 };
 
@@ -157,7 +157,7 @@ export default async function DealPage({ params, searchParams }: DealPageProps) 
               seen={crm.seen}
               canWrite={canWrite}
               active={facts.status === "active"}
-              from={crm.provider === "pipedrive" ? "pipedrive" : "hubspot"}
+              from={crm.provider === "pipedrive" || crm.provider === "zohocrm" ? crm.provider : "hubspot"}
             />
           )}
           {receipt && <CrmReceiptCard orgSlug={slug} dealId={facts.id} view={receipt} canManage={canManage} />}

@@ -5,11 +5,11 @@
  * either. Pure types and one error class: no I/O.
  */
 
-export const PROVIDERS = ["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks"] as const;
+export const PROVIDERS = ["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks", "zohocrm"] as const;
 export type ProviderId = (typeof PROVIDERS)[number];
 
 /** A provider's name in copy. */
-export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quickbooks: "QuickBooks", hubspot: "HubSpot", pipedrive: "Pipedrive", asana: "Asana", zohobooks: "Zoho Books" };
+export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quickbooks: "QuickBooks", hubspot: "HubSpot", pipedrive: "Pipedrive", asana: "Asana", zohobooks: "Zoho Books", zohocrm: "Zoho CRM" };
 
 /**
  * What a provider brings in (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H1): an accounting tool its
@@ -17,7 +17,7 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quick
  * (docs/superpowers/specs/2026-10-14-asana-acceptance-design.md A1). The core's words follow it.
  */
 export type ProviderKind = "accounting" | "crm" | "work";
-export const PROVIDER_KINDS: Record<ProviderId, ProviderKind> = { xero: "accounting", quickbooks: "accounting", hubspot: "crm", pipedrive: "crm", asana: "work", zohobooks: "accounting" };
+export const PROVIDER_KINDS: Record<ProviderId, ProviderKind> = { xero: "accounting", quickbooks: "accounting", hubspot: "crm", pipedrive: "crm", asana: "work", zohobooks: "accounting", zohocrm: "crm" };
 
 /** The kind of a provider named by its id or its label; accounting for a name neither is. */
 export function providerKind(provider: string): ProviderKind {
@@ -113,6 +113,18 @@ export const PROVIDER_WORDS: Record<ProviderId, ProviderWords> = {
     idleDays: 0,
     bills: "open bills",
     approval: "A bill being open in Zoho Books does not approve its payment: the agent decides it.",
+  },
+  // Zoho CRM (docs/superpowers/specs/2026-10-16-zoho-crm-connector-design.md C1): an organization is the account, an
+  // account the business a deal is sold to. Its refresh token lasts until revoked, so no idle days.
+  zohocrm: {
+    possessive: "Zoho CRM's",
+    organisation: "organization",
+    contacts: "accounts",
+    accounts: "no accounts",
+    idleDays: 0,
+    bills: "won deals",
+    approval: "A deal won in Zoho CRM becomes a deal in Vestiarion only when you plan it.",
+    customer: "account",
   },
 };
 
@@ -377,7 +389,7 @@ export type ConnectingProvider = Pick<
 >;
 
 /** The CRMs among the providers: those that bring deals in (HubSpot connector H1, Pipedrive connector P1). */
-export type CrmProviderId = "hubspot" | "pipedrive";
+export type CrmProviderId = "hubspot" | "pipedrive" | "zohocrm";
 
 /** The accounting tools among the providers: those that bring bills in (HubSpot connector H1; Asana acceptance A1). */
 export type AccountingProviderId = Exclude<ProviderId, CrmProviderId | "asana">;

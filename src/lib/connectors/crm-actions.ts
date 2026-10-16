@@ -48,18 +48,26 @@ export function sourceOf({ row, connection }: CrmRowRead): DealSource {
   if (connection.provider === "pipedrive") {
     return { provider: "pipedrive", ids: { companyId: connection.externalOrgId, dealId: row.external_id, organizationId: row.company_external_id } };
   }
+  if (connection.provider === "zohocrm") {
+    return { provider: "zohocrm", ids: { organizationId: connection.externalOrgId, dealId: row.external_id, accountId: row.company_external_id } };
+  }
   return { provider: "hubspot", ids: { hubId: connection.externalOrgId, dealId: row.external_id, companyId: row.company_external_id } };
 }
 
 /** The CRMs whose companies a customer may be linked to, for the email it may be filled from. */
-const EMAIL_PROVIDERS = ["hubspot", "pipedrive"] as const;
+const EMAIL_PROVIDERS = ["hubspot", "pipedrive", "zohocrm"] as const;
 
-type EmailSource = { provider: "hubspot"; ids: { hubId: string; companyId: string } } | { provider: "pipedrive"; ids: { companyId: string; organizationId: string } };
+type EmailSource =
+  | { provider: "hubspot"; ids: { hubId: string; companyId: string } }
+  | { provider: "pipedrive"; ids: { companyId: string; organizationId: string } }
+  | { provider: "zohocrm"; ids: { organizationId: string; accountId: string } };
 
 const emailSource = (connection: Connection, companyId: string): EmailSource =>
   connection.provider === "pipedrive"
     ? { provider: "pipedrive", ids: { companyId: connection.externalOrgId, organizationId: companyId } }
-    : { provider: "hubspot", ids: { hubId: connection.externalOrgId, companyId } };
+    : connection.provider === "zohocrm"
+      ? { provider: "zohocrm", ids: { organizationId: connection.externalOrgId, accountId: companyId } }
+      : { provider: "hubspot", ids: { hubId: connection.externalOrgId, companyId } };
 
 /**
  * Links a row to the deal planned from it, with the CRM's facts now as its baseline, and the company to the customer

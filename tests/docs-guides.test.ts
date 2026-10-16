@@ -44,6 +44,7 @@ type GuideSlug =
   | "guides/zohobooks"
   | "guides/hubspot"
   | "guides/pipedrive"
+  | "guides/zohocrm"
   | "guides/asana"
   | "guides/audit-export"
   | "guides/evidence"
@@ -182,6 +183,12 @@ const PIPEDRIVE_CONNECT_PAGE = "src/app/integrations/pipedrive/connect/page.tsx"
 const PIPEDRIVE_ACTIONS = "src/app/actions/pipedrive.ts";
 const PIPEDRIVE_RECEIPTS = "src/lib/pipedrive/receipts.ts";
 const PIPEDRIVE_DEALS = "src/components/CrmDeals.tsx";
+// Zoho CRM's card, connect page and actions are its own; its list is the same CRM list, in Zoho CRM's words (Zoho CRM connector C16).
+const ZOHO_CRM_PANEL = "src/components/ZohoCrmPanel.tsx";
+const ZOHO_CRM_CONNECT_PAGE = "src/app/integrations/zohocrm/connect/page.tsx";
+const ZOHO_CRM_ACTIONS = "src/app/actions/zohocrm.ts";
+const ZOHO_CRM_SETTINGS = "src/lib/zohocrm/settings.ts";
+const ZOHO_CRM_DEALS = "src/components/CrmDeals.tsx";
 // Booking payments made on Arc in the tool (accounting write-back).
 const BOOKINGS = "src/components/AccountingBookings.tsx";
 const BOOKING_RUN = "src/lib/connectors/booking-run.ts";
@@ -2054,6 +2061,86 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Pipedrive is disconnected. Deals already planned stay in Vestiarion.", PIPEDRIVE_ACTIONS],
     ["accounting_disconnected", ACCOUNTING_CONNECTIONS],
   ],
+  // Zoho CRM, read only, on the CRM list HubSpot's and Pipedrive's use (Zoho CRM connector C4, C6, C10, C11, C12, C16, C18).
+  "guides/zohocrm": [
+    ["Connect Zoho CRM", ZOHO_CRM_PANEL],
+    ["An owner or admin connects Zoho CRM.", ZOHO_CRM_PANEL],
+    ["Connect as a Zoho CRM administrator to bring every deal in.", ZOHO_CRM_CONNECT_PAGE, "Connect as a Zoho CRM administrator to bring every deal"],
+    ["I agree", ACCOUNTING_CONSENT],
+    [
+      "Vestiarion reads the deals of the Zoho CRM organization you connect, with their accounts and contacts: deal names, amounts, currencies, closing dates, pipelines and stages, account names and each deal's contact email, and the organization's name and currency. It sees the deals the Zoho CRM user who connects can see. It writes nothing to Zoho CRM.",
+      ACCOUNTING_CONSENT,
+    ],
+    [
+      "The agent's model provider (DeepSeek, on the hosted service) may see a deal's facts to decide on its collections, under that provider's own API terms.",
+      ACCOUNTING_CONSENT,
+      "may see a deal's facts to decide on its collections, under that provider's own API terms.",
+    ],
+    ["Vestiarion never uses Zoho CRM data to train or improve any AI model, and never passes it to anyone else without your workspace's say.", ACCOUNTING_CONSENT],
+    ["Disconnecting stops the reading at once and revokes Vestiarion's access at Zoho. Deals already planned stay in Vestiarion.", ACCOUNTING_CONSENT],
+    ["Continue to Zoho CRM", ZOHO_CRM_CONNECT_PAGE],
+    ["Zoho asks you to sign in in your own data center and allow Vestiarion to read.", ZOHO_CRM_CONNECT_PAGE],
+    ["ZohoCRM.modules.deals.READ", ZOHO_CRM_SETTINGS],
+    ["ZohoCRM.modules.accounts.READ", ZOHO_CRM_SETTINGS],
+    ["ZohoCRM.modules.contacts.READ", ZOHO_CRM_SETTINGS],
+    ["ZohoCRM.org.READ", ZOHO_CRM_SETTINGS],
+    ["ZohoCRM.settings.layouts.READ", ZOHO_CRM_SETTINGS],
+    ["ZohoCRM.settings.pipeline.READ", ZOHO_CRM_SETTINGS],
+    ["Zoho CRM is connected. Its won deals are coming in on Bills & receivables, under Deals.", ZOHO_CRM_PANEL],
+    ["accounting_connected", ACCOUNTING_CONNECTIONS],
+    ["Connected to", ACCOUNTING_STATUS, "`Connected to ${name}`"],
+    ["Last synced 5 minutes ago.", ACCOUNTING_STATUS, "`Last synced ${"],
+    ["2 won deals to plan", ZOHO_CRM_PANEL, "`${view.toPlan} won deals to plan`"],
+    ["1 planned deal changed in Zoho CRM since.", ZOHO_CRM_PANEL],
+    ["Vestiarion sees the deals the Zoho CRM user who connected can see, and writes nothing to Zoho CRM.", ZOHO_CRM_PANEL],
+    ["Sync now", ZOHO_CRM_PANEL],
+    ["Connecting Zoho CRM was cancelled. Nothing changed.", ZOHO_CRM_PANEL],
+    ["This workspace is connected to another Zoho CRM organization. Disconnect it first, then connect the one you want.", ZOHO_CRM_PANEL],
+    ["Only an owner or admin connects Zoho CRM, from their own browser.", ZOHO_CRM_PANEL],
+    ["Zoho CRM did not finish connecting. Try again in a moment.", ZOHO_CRM_PANEL],
+    ["Zoho CRM is not set up on this deployment yet.", ZOHO_CRM_PANEL],
+    // Won deals to plan (C6, C10), on the CRM list.
+    ["2 won deals in Zoho CRM", INVOICES_PAGE_SOURCE, 'won ${plural(toPlan, "deal", "deals")} in ${from.label}'],
+    ["From Zoho CRM: 3 won deals", ZOHO_CRM_DEALS, "`From ${label}: ${won.length} won deals`"],
+    ["Plan collections", ZOHO_CRM_DEALS],
+    ["No amount in Zoho CRM", CRM_WORDS, "`No amount in ${label}`"],
+    ["No account in Zoho CRM", CRM_WORDS, "`No ${providerWords(label).customer ?? \"company\"} in ${label}`"],
+    ["No account in Zoho CRM", ACCOUNTING_WORDS, 'customer: "account"'],
+    ["Open the deal", ZOHO_CRM_DEALS],
+    ["No won deals from Zoho CRM yet. A deal moved to a Closed Won stage there comes in at the next sync, within 15 minutes.", ZOHO_CRM_DEALS],
+    ["Not won yet: 2 deals in Zoho CRM", ZOHO_CRM_DEALS, "`Not won yet: ${open.length} deals in ${label}`"],
+    ["Zoho CRM says 12,500 USD: planned as 12,500.00 USDC, one for one.", "src/lib/connectors/crm-prefill.ts", "says ${theirs}: planned as"],
+    ["zohocrm-4876876000000624001", CRM_WORDS, "`zohocrm-${externalId}`"],
+    ["Confirm deal", "src/components/deals/DealForm.tsx"],
+    ["Billing emails from Zoho CRM", ZOHO_CRM_DEALS, "`Billing emails from ${label}`"],
+    ["These customers have no billing email yet. Zoho CRM has one for the contact on their deal; use it only if it is where invoices go.", ZOHO_CRM_DEALS],
+    ["Use this email", ZOHO_CRM_DEALS],
+    ["counterparty_notice_email_changed", "src/lib/payment-notices.ts"],
+    // The planned deal's page.
+    ["Cash readiness", DEAL_CASH],
+    ["No cash gap", DEAL_CASH],
+    // Changes from Zoho CRM, the core's (C13).
+    ["Changed in Zoho CRM", CRM_CHANGES, "Changed in ${label}"],
+    ["Amount: 12,000 USD to 15,000 USD.", CRM_WORDS, "`Amount: ${from} to ${to}.`"],
+    ["Close date: Sep 20, 2026 to Sep 30, 2026.", CRM_WORDS, "`Close date: ${"],
+    ["Marked lost in Zoho CRM", CRM_WORDS, "`Marked lost in ${label}"],
+    ["Moved back to an open stage in Zoho CRM", CRM_WORDS, "`Moved back to an open stage in ${label}"],
+    ["Deleted in Zoho CRM. Nothing is cancelled: cancel the deal if it is off.", CRM_WORDS, "`Deleted in ${label}. ${NOTHING_CANCELLED}`"],
+    ["Nothing is cancelled: cancel the deal if it is off.", CRM_WORDS],
+    ["crm_deal_changed", "src/lib/connectors/crm-store.ts"],
+    ["Change deal", CRM_CHANGES],
+    ["Keep the deal as it is", CRM_CHANGES],
+    ["crm_deal_change_kept", "src/lib/connectors/crm-store.ts"],
+    // Status, errors and disconnecting (C15, C18).
+    ["Zoho CRM needs you to reconnect", ACCOUNTING_STATUS, "needs you to reconnect"],
+    ["Reconnect Zoho CRM", ZOHO_CRM_PANEL],
+    ["Zoho CRM asked Vestiarion to slow down. Syncing again at", ACCOUNTING_STATUS, "asked Vestiarion to slow down. Syncing again at"],
+    ["The last sync with Zoho CRM failed", ACCOUNTING_STATUS, "`The last sync with ${label} failed`"],
+    ["Synced. No new deals.", ZOHO_CRM_ACTIONS],
+    ["Disconnect Zoho CRM", ZOHO_CRM_PANEL],
+    ["Zoho CRM is disconnected. Deals already planned stay in Vestiarion.", ZOHO_CRM_ACTIONS],
+    ["accounting_disconnected", ACCOUNTING_CONNECTIONS],
+  ],
   "guides/asana": [
     ["Connect Asana", ASANA_PANEL],
     ["An owner or admin connects Asana.", ASANA_PANEL],
@@ -2840,6 +2927,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/zohobooks": 20,
   "guides/hubspot": 20,
   "guides/pipedrive": 20,
+  "guides/zohocrm": 20,
   "guides/asana": 20,
   "guides/audit-export": 5,
   "guides/evidence": 20,

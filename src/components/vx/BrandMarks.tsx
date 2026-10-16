@@ -36,7 +36,8 @@ export type Brand =
   | "pipedrive"
   | "pipedrive-lockup"
   | "asana-lockup"
-  | "zohobooks-lockup";
+  | "zohobooks-lockup"
+  | "zohocrm-lockup";
 
 /**
  * `aspect` is the file's width over its height. `inset` is clear space the file carries on every side, as a share of
@@ -71,6 +72,8 @@ const MARKS: Record<Brand, { name: string; file: string; aspect: number; inset?:
   // Zoho Books' logo, its blue book then "Zoho Books", as Zoho serves it on its own site; the words fill the lower two
   // thirds of the file, so it is drawn a little taller, to stand beside a name.
   "zohobooks-lockup": { name: "Zoho Books", file: "/brands/zohobooks-lockup.svg", aspect: 860 / 296, scale: 1.25, wordmark: true },
+  // Zoho CRM's logo, as Zoho serves it on its own site, drawn as Zoho Books' is.
+  "zohocrm-lockup": { name: "Zoho CRM", file: "/brands/zohocrm-lockup.svg", aspect: 860 / 296, scale: 1.25, wordmark: true },
 };
 
 /** The files every mark is served from, for the tests that hold them to their owners' originals. */
@@ -94,6 +97,7 @@ export const PROVIDER_MARKS: Readonly<Record<ProviderId, Brand>> = {
   pipedrive: "pipedrive",
   asana: "asana-lockup",
   zohobooks: "zohobooks-lockup",
+  zohocrm: "zohocrm-lockup",
 };
 
 /**

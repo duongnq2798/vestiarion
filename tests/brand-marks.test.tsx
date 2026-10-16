@@ -364,7 +364,7 @@ describe("the landing page's built on and works with", () => {
     // The trademark notice npm's policy asks for, Intuit's owner named, and that the marks are not an endorsement.
     expect(page).toContain("npm is a registered trademark of npm, inc.");
     expect(page).toContain("intuit and quickbooks are trademarks of intuit inc.");
-    expect(page).toContain("zoho and zoho books are trademarks of zoho corporation pvt. ltd.");
+    expect(page).toContain("zoho, zoho books and zoho crm are trademarks of zoho corporation pvt. ltd.");
     expect(page).toContain("arc, circle, slack, telegram, xero, hubspot, pipedrive and asana are trademarks of their respective owners.");
     expect(page).toContain("not an endorsement");
   });
@@ -378,7 +378,7 @@ describe("the landing page's answer to how bills come in", () => {
     for (const way of ["form", "PDF", "a bill list from your spreadsheet", "email", "Telegram", "the API", "Xero", "QuickBooks Online", "HubSpot", "Pipedrive"]) {
       expect(answer).toContain(way);
     }
-    expect(answer).toContain("Won deals come in from HubSpot or Pipedrive to plan their collections.");
+    expect(answer).toContain("Won deals come in from HubSpot, Pipedrive or Zoho CRM to plan their collections.");
     expect(answer).toContain("Contractor work delivered in Asana is paid once a person accepts it against its criteria.");
   });
 });
