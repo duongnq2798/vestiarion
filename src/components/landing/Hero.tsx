@@ -1,16 +1,17 @@
-import { ArrowRight, Puzzle } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow } from "@/components/ui/Eyebrow";
-import { STORE_URL } from "@/lib/extension/settings";
 import { TRY_HREF, TRY_LABEL } from "./cta";
 import { BillPreview } from "./hero/BillPreview";
+import { InvoiceCapture } from "./hero/InvoiceCapture";
 
 /**
- * The hero (docs/superpowers/specs/2026-10-11-landing-clarity-design.md H1, H2): what Vestiarion is in a line, what it
- * does with a bill in a sentence, the one call to action, and what trying it asks of you; below them, the Chrome
- * extension's store page, as a quiet second way in. Beside it, two sample bills
- * as the product shows them, in words a business owner reads without knowing what a chain is.
+ * The hero (docs/superpowers/specs/2026-10-11-landing-clarity-design.md H1, H2;
+ * docs/superpowers/specs/2026-10-16-landing-hero-capture-design.md): what Vestiarion is in a line, what it does with a
+ * bill in a sentence, the one call to action, and what trying it asks of you, kept together as one note; below them,
+ * Invoice Capture, the Chrome extension, as a quiet second way in. Beside it, two sample bills as the product shows
+ * them, in words a business owner reads without knowing what a chain is.
  */
 export function Hero() {
   return (
@@ -44,28 +45,21 @@ export function Hero() {
               </a>
             </Button>
           </div>
-          <p className="mt-4 max-w-xl text-pretty text-[0.9375rem] leading-relaxed text-ink-2">
-            <strong className="font-semibold text-ink">Start in shadow mode.</strong> Keep paying the way you do today while the agent decides on
-            your real bills. No wallet or funds needed to start.
-          </p>
-          <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.8125rem] text-ink-3">
-            <span>Email sign-in, no password.</span>
-            <Link href="/docs/guides/shadow-mode" className="inline-flex min-h-6 items-center gap-1 font-medium text-agent underline-offset-2 hover:underline">
-              How shadow mode works
-              <ArrowRight aria-hidden className="size-3.5" />
-            </Link>
-          </p>
-          {/* A second, quiet way in beside the one call to action: the Chrome extension, from its store page. */}
-          <p className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2 text-[0.8125rem] text-ink-3">
-            <Button asChild size="sm" variant="secondary" className="bg-surface/80">
-              <a href={STORE_URL} target="_blank" rel="noopener noreferrer" data-cta="hero-chrome">
-                <Puzzle aria-hidden />
-                Add to Chrome
-                <span className="sr-only"> (Vestiarion Invoice Capture on the Chrome Web Store, opens in a new tab)</span>
-              </a>
-            </Button>
-            <span>Send an invoice from any page to your workspace as a draft.</span>
-          </p>
+          {/* What trying it asks of you, as one note under the call to action: shadow mode, then how you sign in. */}
+          <div className="mt-5 max-w-xl border-l-2 border-proof-line pl-4">
+            <p className="text-pretty text-[0.9375rem] leading-relaxed text-ink-2">
+              <strong className="font-semibold text-ink">Start in shadow mode.</strong> Keep paying the way you do today while the agent decides on
+              your real bills. No wallet or funds needed to start.
+            </p>
+            <p className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.8125rem] text-ink-3">
+              <span>Email sign-in, no password.</span>
+              <Link href="/docs/guides/shadow-mode" className="inline-flex min-h-6 items-center gap-1 font-medium text-agent underline-offset-2 hover:underline">
+                How shadow mode works
+                <ArrowRight aria-hidden className="size-3.5" />
+              </Link>
+            </p>
+          </div>
+          <InvoiceCapture />
         </div>
         <BillPreview />
       </div>

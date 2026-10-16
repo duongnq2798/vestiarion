@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -5,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { GUIDED_SETUP_HREF, TRY_HREF, TRY_LABEL } from "@/components/landing/cta";
 import { FinalCta } from "@/components/landing/FinalCta";
 import { Hero } from "@/components/landing/Hero";
+import { CHROME_WEB_STORE_BADGE, INVOICE_CAPTURE_GUIDE } from "@/components/landing/hero/InvoiceCapture";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { STORE_URL } from "@/lib/extension/settings";
 import { PRODUCT_HUNT_BADGE } from "@/lib/site-links";
@@ -47,15 +49,50 @@ describe("the landing hero", () => {
     expect(words).toContain("Email sign-in, no password");
   });
 
-  it("offers the Chrome extension from its store page, quietly, in a new tab", () => {
+  it("keeps what trying it asks of you together, under the call to action", () => {
     const markup = hero();
-    const link = markup.match(/<a [^>]*data-cta="hero-chrome"[^>]*>/)?.[0] ?? "";
+    const note = markup.match(/<div class="[^"]*border-l-2[^"]*">([\s\S]*?)<\/div>/)?.[1] ?? "";
+    const words = text(note);
+    expect(words).toContain("Start in shadow mode.");
+    expect(words).toContain("Email sign-in, no password.");
+    expect(note).toContain('href="/docs/guides/shadow-mode"');
+  });
+
+  it("says what Invoice Capture does, a draft and nothing more, with its guide for everyone", () => {
+    const markup = hero();
+    const words = text(markup);
+    expect(words).toContain("Capture invoices from your browser");
+    expect(words).toContain("A Chrome extension saves an invoice from any page or file to your workspace as a draft, for you to check and add.");
+    expect(markup).toMatch(new RegExp(`<a [^>]*href="${INVOICE_CAPTURE_GUIDE}"[^>]*>Learn about Invoice Capture`));
+    // It never adds a bill, approves or pays: the words promise none of it.
+    for (const claim of [/extension (adds|approves|pays|sends money)/i, /install vestiarion/i]) expect(words).not.toMatch(claim);
+  });
+
+  it("offers the extension through Google's own store badge, where it can be installed, in a new tab", () => {
+    const markup = hero();
+    const link = markup.match(/<a [^>]*data-cta="hero-chrome"[^>]*>[\s\S]*?<\/a>/)?.[0] ?? "";
     expect(link).toContain(`href="${STORE_URL}"`);
+    expect(STORE_URL).toBe("https://chromewebstore.google.com/detail/vestiarion-invoice-captur/jfhjgbdbolhnneomgifdnjamoldlioan");
     expect(link).toContain('target="_blank"');
     expect(link).toContain('rel="noopener noreferrer"');
-    const words = text(markup);
-    expect(words).toContain("Add to Chrome");
-    expect(words).toContain("Send an invoice from any page to your workspace as a draft.");
+    expect(link).toMatch(/<img src="\/badges\/chrome-web-store\.png" alt="Available in the Chrome Web Store" width="170" height="48"/);
+    expect(link).toContain("opens in a new tab");
+    // Chrome installs extensions on a computer: the badge shows to a mouse or trackpad only, in CSS, the same on the
+    // server and in the browser.
+    const classes = link.match(/class="([^"]*)"/)?.[1].split(" ") ?? [];
+    expect(classes).toContain("hidden");
+    expect(classes).toContain("pointer-fine:inline-flex");
+    // The puzzle piece is gone, and no Chrome logo is drawn outside Google's badge.
+    expect(markup).not.toContain("lucide-puzzle");
+  });
+
+  it("serves Google's badge as Google ships it: resized in proportion, never changed", () => {
+    const file = readFileSync(path.join(process.cwd(), "public", CHROME_WEB_STORE_BADGE.src));
+    // developer.chrome.com/docs/webstore/branding, "Medium PNG (with border)".
+    expect(createHash("sha256").update(file).digest("hex")).toBe("fbf289fca885e58a1507cc8c69a9df68f35e83e683825b3ad6cd617b0a17d79c");
+    const [width, height] = [file.readUInt32BE(16), file.readUInt32BE(20)];
+    expect([width, height]).toEqual([340, 96]);
+    expect(CHROME_WEB_STORE_BADGE.width / CHROME_WEB_STORE_BADGE.height).toBeCloseTo(width / height, 2);
   });
 
   it("shows two sample bills in the product's own words, labelled as samples (H2)", () => {
@@ -63,6 +100,7 @@ describe("the landing hero", () => {
     for (const part of [
       "Bills & receivables",
       "Sample bills",
+      "Agent proposes: pay it",
       "Waiting for your verdict",
       "Agent's reasoning",
       "Do you agree with the agent?",
@@ -73,8 +111,12 @@ describe("the landing hero", () => {
     ]) {
       expect(words).toContain(part);
     }
-    // The sample's controls are drawn, not pressable.
+    // The sample's controls are drawn, not pressable, and a screen reader hears that they are a sample's.
     expect(hero()).not.toMatch(/<button\b/);
+    expect(hero()).toMatch(/<div aria-hidden="true" class="[^"]*cursor-default[^"]*"><span[^>]*>Agree and pay<\/span>/);
+    expect(text(hero())).toContain("In the product: Agree and pay, or Disagree. Shown here as a sample.");
+    // An agent's proposal is not a payment: the first bill waits for a person.
+    expect(text(hero())).not.toContain("Agent: pay it");
   });
 
   it("keeps the technical vocabulary out of the first screen", () => {

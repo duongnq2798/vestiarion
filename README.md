@@ -13,7 +13,7 @@
 
 <a href="https://www.vestiarion.xyz"><img src="docs/assets/readme/open-the-app.svg" alt="Open the app: vestiarion.xyz" height="48"></a>
 <a href="https://youtu.be/-gMv3ipzDyA"><img src="docs/assets/readme/watch-the-demo.svg" alt="Watch the demo: 2:55 on YouTube" height="48"></a>
-<a href="https://chromewebstore.google.com/detail/vestiarion-invoice-captur/jfhjgbdbolhnneomgifdnjamoldlioan"><img src="docs/assets/readme/add-to-chrome.svg" alt="Add to Chrome: Invoice Capture, on the Chrome Web Store" height="48"></a>
+<a href="https://chromewebstore.google.com/detail/vestiarion-invoice-captur/jfhjgbdbolhnneomgifdnjamoldlioan"><img src="public/badges/chrome-web-store.png" alt="Available in the Chrome Web Store: Vestiarion Invoice Capture" height="48"></a>
 <a href="https://www.npmjs.com/package/@vestiarion/sdk"><img src="docs/assets/readme/npm-sdk.svg" alt="Install from npm: @vestiarion/sdk" height="48"></a>
 
 **[See your first decision](https://www.vestiarion.xyz/docs/guides/try-it)** · **[Open numbers](https://www.vestiarion.xyz/open)** · **[Mainnet proof](#mainnet-proof)** · **[Docs](https://www.vestiarion.xyz/docs)** · **[MCP server](https://www.vestiarion.xyz/docs/ai-integration/mcp)** · **[Security](https://www.vestiarion.xyz/security)**
