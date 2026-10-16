@@ -84,8 +84,9 @@ describe("the landing's open numbers", () => {
       "From our own workspaces",
       "USDC paid 0.10",
       "Each one on Open numbers",
-      "Latest payment Oct 7",
-      "09:43 UTC",
+      // Every panel's foot: the side that does not lead it, then the team's latest payment there as evidence.
+      "Latest team payment · Oct 7, 2026, 09:43 UTC",
+      "Latest team payment · Oct 8, 2026, 06:10 UTC",
       "Customers · None on Arc mainnet yet",
       // Arc testnet: customers have paid, so their figures lead and the team's sit on a line of their own (P2).
       "Customers Workspaces 5",
@@ -97,6 +98,7 @@ describe("the landing's open numbers", () => {
       expect(words).toContain(part);
     }
     expect(markup).toContain('href="/open#our-payments-arc-mainnet"');
+    expect(words).not.toContain("Latest payment Oct 7");
     // The team's payments never stand under "Customers".
     expect(words).not.toContain("Customers Workspaces Not yet");
     expect(words).not.toContain("Customers Payments settled 1");
@@ -118,8 +120,8 @@ describe("the landing's open numbers", () => {
     const empty = text(renderToStaticMarkup(<NetworkPanels mainnet={nobody} testnet={null} />));
     expect(empty).toContain("Customers Workspaces Not yet");
     expect(empty).toContain("Payments settled None yet");
-    expect(empty).toContain("Agreed with the agent None yet");
-    expect(empty).toContain("No verdict from a customer yet");
+    expect(empty).toContain("Customers agreed None yet");
+    expect(empty).toContain("No customer has reviewed a decision yet");
     expect(empty).toContain("Vestiarion team · No payment by our own workspaces yet.");
   });
 
@@ -144,8 +146,8 @@ describe("the landing's open numbers", () => {
 
   it("say how often customers agreed with the agent in shadow mode, else customers' on-time share, never the team's", () => {
     const words = text(renderToStaticMarkup(<NetworkPanels mainnet={MAINNET} testnet={TESTNET} />));
-    expect(words).toContain("Agreed with the agent 3 of 4");
-    expect(words).toContain("in shadow mode, 75%");
+    expect(words).toContain("Customers agreed 3 of 4");
+    expect(words).toContain("with the agent's decisions, in shadow mode");
     // Arc mainnet: the team's one invoice paid on time is not a customer's, so it is not shown as one.
     expect(words).not.toContain("Invoices paid on time 100%");
     const onTime: OpenNumbers = {
@@ -180,6 +182,11 @@ describe("the hero's live legs", () => {
     const yieldLeg = landingProvenance(base).find((leg) => leg.label === "Yield");
     expect(yieldLeg).toMatchObject({ live: true, detail: "USYC reserve, Arc testnet", href: RESERVE_PROOF_HREF });
     expect(RESERVE_PROOF_HREF).toBe("/docs/research/model-vs-policy#the-treasury-with-real-usyc");
+  });
+
+  it("say payments go through Circle when they run live, and only then", () => {
+    expect(landingProvenance(base).find((leg) => leg.label === "Payments")?.detail).toBe("USDC through Circle, Arc mainnet and testnet");
+    expect(landingProvenance({ ...base, paymentsLive: false }).find((leg) => leg.label === "Payments")?.detail).toBe("Arc mainnet and testnet");
   });
 
   it("keep the reserve simulated, with no link, when no workspace runs a real one", () => {
@@ -221,7 +228,8 @@ describe("the hero's live legs", () => {
     // Every read still pending: the section's words and links are drawn, each read waits behind its own fallback.
     const markup = renderToStaticMarkup(<Proof numbers={new Promise(() => {})} facts={new Promise(() => {})} />);
     expect(markup).toMatch(/<a[^>]*href="\/open#mainnet"[^>]*>Live on Arc mainnet<\/a>/);
-    expect(text(markup)).toContain("What runs live right now · Live on Arc mainnet");
+    expect(text(markup)).toContain("Live capabilities · Live on Arc mainnet");
+    expect(text(markup)).toContain("Verify it yourself");
     expect(text(markup)).toContain("Don't take our word for it.");
     expect(text(markup)).toContain("Loading the agent's latest decision");
     expect(text(markup)).toContain("Loading the open numbers");

@@ -29,7 +29,8 @@ export function landingProvenance(facts: LandingProvenanceFacts): ProvenanceLeg[
   return [
     {
       label: "Payments",
-      detail: "Arc mainnet and testnet",
+      // Live payments are sent through Circle's wallets (the live provider); a simulated deployment sends nothing.
+      detail: facts.paymentsLive ? "USDC through Circle, Arc mainnet and testnet" : "Arc mainnet and testnet",
       live: facts.paymentsLive,
       href: facts.mainnetTxUrl ?? "/open#mainnet",
       hrefLabel: facts.mainnetTxUrl ? "See the latest payment on Arc mainnet" : "See the payments on Arc mainnet",

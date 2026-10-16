@@ -1,4 +1,4 @@
-import { ArrowRight, ArrowUpRight } from "lucide-react";
+import { ArrowRight, ArrowUpRight, ChartColumn, FileCheck, GitBranch, ShieldCheck, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { Eyebrow } from "@/components/ui/Eyebrow";
@@ -20,13 +20,16 @@ import { RecentDecisionList } from "./RecentDecisions";
  * the team and each network on its own, what runs live now, and where to check each of them without us.
  */
 
-/** The two checks that need no trust in us first: the signed ledger, then the agent's decisions against the rules. */
-const CHECK_IT = [
-  { href: "/docs/guides/audit-export", label: "Verify a ledger export yourself", external: false },
-  { href: "/docs/research/model-vs-policy", label: "Where the model and the rules disagreed", external: false },
-  { href: "/open", label: "Every figure on Open numbers", external: false },
-  { href: GITHUB_URL, label: "The source code, MIT licensed", external: true },
-] as const;
+/**
+ * The two checks that need no trust in us first: the signed ledger, then the agent's decisions against the rules. Each
+ * has a small icon of its own, so the four tell apart at a glance.
+ */
+const CHECK_IT: ReadonlyArray<{ href: string; label: string; icon: LucideIcon; external: boolean }> = [
+  { href: "/docs/guides/audit-export", label: "Verify a ledger export yourself", icon: FileCheck, external: false },
+  { href: "/docs/research/model-vs-policy", label: "Where the model and the rules disagreed", icon: ShieldCheck, external: false },
+  { href: "/open", label: "Every figure on Open numbers", icon: ChartColumn, external: false },
+  { href: GITHUB_URL, label: "The source code, MIT licensed", icon: GitBranch, external: true },
+];
 
 /** What the proof reads besides the open numbers: the team's latest decision, the ones before it, and which legs run live. */
 export interface ProofFacts {
@@ -69,7 +72,7 @@ export function Proof({ numbers, facts }: { numbers: Promise<LandingNumbers>; fa
         <div className="mt-8 grid grid-cols-1 gap-6 border-t border-line pt-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-12">
           <div className="min-w-0">
             <p className="mb-2.5 font-mono text-xs uppercase tracking-[0.14em] text-ink-3">
-              What runs live right now ·{" "}
+              Live capabilities ·{" "}
               <Link href="/open#mainnet" className="text-agent underline decoration-agent/40 underline-offset-4 hover:decoration-agent">
                 Live on Arc mainnet
               </Link>
@@ -79,7 +82,7 @@ export function Proof({ numbers, facts }: { numbers: Promise<LandingNumbers>; fa
             </Suspense>
           </div>
           <div className="min-w-0">
-            <p className="mb-2.5 font-mono text-xs uppercase tracking-[0.14em] text-ink-3">Check it without us</p>
+            <p className="mb-2.5 font-mono text-xs uppercase tracking-[0.14em] text-ink-3">Verify it yourself</p>
             <ul className="grid gap-1.5">
               {CHECK_IT.map((item) => (
                 <li key={item.href}>
@@ -88,14 +91,16 @@ export function Proof({ numbers, facts }: { numbers: Promise<LandingNumbers>; fa
                       href={item.href}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex min-h-6 items-center gap-1 text-[0.9375rem] font-medium text-agent underline-offset-4 hover:underline"
+                      className="inline-flex min-h-6 items-center gap-1.5 text-[0.9375rem] font-medium text-agent underline-offset-4 hover:underline"
                     >
+                      <item.icon aria-hidden className="size-4 text-ink-3" />
                       {item.label}
                       <ArrowUpRight aria-hidden className="size-4" />
                       <span className="sr-only"> (opens in a new tab)</span>
                     </a>
                   ) : (
-                    <Link href={item.href} className="inline-flex min-h-6 items-center gap-1 text-[0.9375rem] font-medium text-agent underline-offset-4 hover:underline">
+                    <Link href={item.href} className="inline-flex min-h-6 items-center gap-1.5 text-[0.9375rem] font-medium text-agent underline-offset-4 hover:underline">
+                      <item.icon aria-hidden className="size-4 text-ink-3" />
                       {item.label}
                       <ArrowRight aria-hidden className="size-4" />
                     </Link>
