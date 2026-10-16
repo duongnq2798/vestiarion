@@ -116,10 +116,12 @@ describe("Pay early for a discount on Bills (E8)", () => {
     expect(markup).toContain('href="/docs/guides/early-payment-offers"');
   });
 
-  it("lets only an owner or admin make the offer", () => {
+  it("lets only an owner or admin make the offer, or withdraw one", () => {
     const markup = render(false);
     expect(markup).not.toContain("Offer this discount for paying today");
     expect(markup).toContain("An owner or admin makes the offer.");
+    expect(markup).toContain("Offer out: 0.50% off");
+    expect(markup).not.toContain("Withdraw");
   });
 });
 
