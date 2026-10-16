@@ -8,8 +8,8 @@
 -- CLABE's bank code and last four digits and the beneficiary's name are kept: never the whole CLABE. A removed one keeps
 -- its row (removed_at), so the history of where a vendor was paid stays.
 --
--- payment_intents.payout_route takes 'bank'. 0047 drops and adds this check on every run, with cctp, gateway and escrow;
--- this file runs after it and widens it again, so the check always ends with bank.
+-- payment_intents.payout_route takes 'bank'. Each file widens this check only while it lacks that file's route, so a
+-- re-run of 0047 or of this file never narrows it, and rows paid to a bank never stop a re-run.
 --
 -- bank_payouts_ready(p_org_id): true once this migration has run; reads nothing.
 --
@@ -103,9 +103,18 @@ drop trigger if exists counterparty_bank_accounts_guard on public.counterparty_b
 create trigger counterparty_bank_accounts_guard before update on public.counterparty_bank_accounts
   for each row execute function public.counterparty_bank_accounts_guard();
 
-alter table public.payment_intents drop constraint if exists payment_intents_payout_route_check;
-alter table public.payment_intents
-  add constraint payment_intents_payout_route_check check (payout_route in ('cctp', 'gateway', 'escrow', 'bank'));
+-- Widened to take bank only while it does not yet, so a re-run never narrows a later widening (as 0047 now does too).
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'payment_intents_payout_route_check' and pg_get_constraintdef(oid) like '%''bank''%'
+  ) then
+    alter table public.payment_intents drop constraint if exists payment_intents_payout_route_check;
+    alter table public.payment_intents
+      add constraint payment_intents_payout_route_check check (payout_route in ('cctp', 'gateway', 'escrow', 'bank'));
+  end if;
+end $$;
 
 create or replace function public.bank_payouts_ready(p_org_id uuid)
 returns boolean

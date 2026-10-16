@@ -62,9 +62,20 @@ begin
   end if;
 end $$;
 
-alter table public.payment_intents drop constraint if exists payment_intents_payout_route_check;
-alter table public.payment_intents
-  add constraint payment_intents_payout_route_check check (payout_route in ('cctp', 'gateway', 'escrow'));
+-- Widened to take escrow only while it does not yet: a later migration widens it further (0124 adds bank), and a re-run
+-- of this file must never narrow it again, which rows on a later route would refuse (scripts/migrate.ts re-runs every
+-- file).
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'payment_intents_payout_route_check' and pg_get_constraintdef(oid) like '%''escrow''%'
+  ) then
+    alter table public.payment_intents drop constraint if exists payment_intents_payout_route_check;
+    alter table public.payment_intents
+      add constraint payment_intents_payout_route_check check (payout_route in ('cctp', 'gateway', 'escrow'));
+  end if;
+end $$;
 
 notify pgrst, 'reload schema';
 
