@@ -31,6 +31,7 @@ type GuideSlug =
   | "guides/projects"
   | "guides/commissions"
   | "guides/pay-a-contractor"
+  | "guides/bank-payouts"
   | "guides/get-paid"
   | "guides/telegram"
   | "guides/slack"
@@ -188,6 +189,12 @@ const ZOHO_CRM_PANEL = "src/components/ZohoCrmPanel.tsx";
 const ZOHO_CRM_CONNECT_PAGE = "src/app/integrations/zohocrm/connect/page.tsx";
 const ZOHO_CRM_ACTIONS = "src/app/actions/zohocrm.ts";
 const ZOHO_CRM_SETTINGS = "src/lib/zohocrm/settings.ts";
+const BANK_PANEL = "src/components/BankPayoutsPanel.tsx";
+const BANK_ACCOUNT = "src/components/intake/CounterpartyBankAccount.tsx";
+const BANK_ACTIONS = "src/app/actions/bank-payouts.ts";
+const BANK_COMMANDS = "src/lib/bank-payouts/commands.ts";
+const BANK_WORDS = "src/lib/bank-payouts/words.ts";
+const BANK_PAYOUT = "src/lib/circle/bank-payout.ts";
 const ZOHO_CRM_DEALS = "src/components/CrmDeals.tsx";
 // Booking payments made on Arc in the tool (accounting write-back).
 const BOOKINGS = "src/components/AccountingBookings.tsx";
@@ -2141,6 +2148,45 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Zoho CRM is disconnected. Deals already planned stay in Vestiarion.", ZOHO_CRM_ACTIONS],
     ["accounting_disconnected", ACCOUNTING_CONNECTIONS],
   ],
+  // Bank payouts through BlindPay (bank payouts B3, B4, B6, B7, B12).
+  "guides/bank-payouts": [
+    ["Bank payouts", BANK_PANEL, 'title="Bank payouts"'],
+    ["Accept BlindPay's terms and set up", BANK_PANEL, "Accept BlindPay&apos;s terms and set up"],
+    ["An owner sets up bank payouts.", BANK_PANEL],
+    ["Bank payouts are set up. Add a vendor's bank account on Counterparties to pay it in pesos.", BANK_PANEL],
+    ["bank_payouts_set_up", BANK_COMMANDS],
+    ["Approved by BlindPay", BANK_PANEL],
+    ["BlindPay is checking the business", BANK_PANEL],
+    ["BlindPay did not send back the accepted terms, so nothing changed. Start again.", BANK_PANEL],
+    ["BlindPay did not finish setting the workspace up. Try again in a moment.", BANK_PANEL],
+    ["Only an owner sets up bank payouts.", BANK_PANEL],
+    ["Bank payouts are not set up on this deployment yet.", BANK_PANEL],
+    ["Bank account in Mexico (SPEI)", BANK_ACCOUNT],
+    ["None: paid to its address.", BANK_ACCOUNT],
+    ["Name the account is held in", BANK_ACCOUNT],
+    ["18 digits, from the vendor's bank statement or app.", BANK_ACCOUNT],
+    ["Vestiarion keeps only the bank and the last four digits; the CLABE goes to BlindPay.", BANK_ACCOUNT],
+    ["Paid to BBVA ····9716, Ana López, through BlindPay.", BANK_ACCOUNT, "Paid to {bankAccountWords(account)}, through BlindPay."],
+    ["BlindPay is checking it.", BANK_ACCOUNT],
+    ["counterparty_bank_account_set", BANK_COMMANDS],
+    ["Paid to its address again.", BANK_ACTIONS],
+    ["That CLABE does not check: it is 18 digits, the last one a control digit. Check it with the vendor.", BANK_COMMANDS],
+    ["Only a vendor's bills are paid to a bank account.", BANK_COMMANDS],
+    ["BlindPay refused this bank account. Check the CLABE and the beneficiary's name with the vendor.", BANK_COMMANDS],
+    ["Set up bank payouts under Settings, Bank payouts, first.", BANK_COMMANDS],
+    ["This vendor is paid to a bank account through BlindPay, and a person approves every bank payout. Check what the vendor receives, then pay it in Approvals.", "src/lib/next-step.ts"],
+    [
+      "Paid to a bank account in Mexico: BBVA ····9716, Ana López, through BlindPay.",
+      BANK_WORDS,
+      "`Paid to a bank account in Mexico: ${clabeBank(bank.bankCode)} ····${bank.last4}, ${bank.beneficiaryName}, through BlindPay.",
+    ],
+    ["Ana López receives about 1,814.00 MXN (18.35 MXN per USDC, BlindPay's fees 2.10 MXN).", BANK_WORDS, "receives about ${pesos(bank.quote.receiverAmount)} MXN (${rate}BlindPay's fees"],
+    ["Approve and pay asks BlindPay for a fresh quote.", BANK_WORDS],
+    ["Pay 100.00 USDC to Taller Norte's bank account in Mexico now?", "src/components/ApprovalCard.tsx", "USDC to ${payable.counterpartyName}'s bank account in Mexico now?"],
+    ["Only USDC is paid to a bank account", BANK_WORDS],
+    ["approval_paid", "src/lib/agent/approvals.ts"],
+    ["BlindPay's quote expired before the payout: nothing was sent. Approve again for a new quote.", BANK_PAYOUT],
+  ],
   "guides/asana": [
     ["Connect Asana", ASANA_PANEL],
     ["An owner or admin connects Asana.", ASANA_PANEL],
@@ -2914,6 +2960,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/projects": 20,
   "guides/commissions": 20,
   "guides/pay-a-contractor": 20,
+  "guides/bank-payouts": 20,
   "guides/get-paid": 20,
   "guides/telegram": 20,
   "guides/slack": 20,

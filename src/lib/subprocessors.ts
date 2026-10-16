@@ -161,6 +161,14 @@ export const SUBPROCESSORS: readonly Subprocessor[] = [
     when: ONLY_IF_CONNECTED,
   },
   {
+    name: "BlindPay",
+    privacyEntry: "BlindPay",
+    names: ["BlindPay"],
+    purpose: "pays a vendor's bills to its bank account in Mexico, in pesos over SPEI, from the workspace's USDC",
+    data: "the workspace's name and the owner's email, each vendor's CLABE and the name its account is held in, each payout's amount, and the operating wallet's address",
+    when: "when an owner sets up bank payouts",
+  },
+  {
     name: "HubSpot",
     privacyEntry: "HubSpot",
     names: ["HubSpot"],

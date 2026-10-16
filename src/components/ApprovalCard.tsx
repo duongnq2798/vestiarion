@@ -23,6 +23,7 @@ import { paymentSendingToast, paymentToastId, withPaymentReceipt } from "@/compo
 import { withSuccessToast } from "@/components/withSuccessToast";
 import type { WaitingPayable } from "@/lib/agent/approvals";
 import { addedDetailsSentence } from "@/lib/added-details";
+import { bankAccountLine, bankQuoteLine } from "@/lib/bank-payouts/words";
 import { approvalAnchor, orgHref } from "@/lib/auth/org-paths";
 import { agentResumes, CASH_SHORTFALL, SHADOW_VERDICT, counterpartyPath, ruleNextStep } from "@/lib/next-step";
 import { amountToPay } from "@/lib/agent/payment-timing";
@@ -49,7 +50,7 @@ const giveBack = withSuccessToast(returnInvoiceAction);
  */
 export function payConfirmTitle(
   payable: Pick<WaitingPayable, "amount" | "counterpartyName" | "discount"> &
-    Partial<Pick<WaitingPayable, "currency" | "payeeChain" | "bridgeFeeUsdc" | "payoutRoute" | "fromReserve" | "paymentSent" | "lastAttempt">>,
+    Partial<Pick<WaitingPayable, "currency" | "payeeChain" | "bridgeFeeUsdc" | "payoutRoute" | "fromReserve" | "paymentSent" | "lastAttempt" | "bank">>,
   sandbox: boolean,
   now: Date = new Date()
 ): string {
@@ -73,6 +74,10 @@ export function payConfirmTitle(
   const reserve = payable.fromReserve
     ? ` The operating wallet holds ${payable.fromReserve.operatingUsdc} USDC, so about ${payable.fromReserve.amountUsdc} USDC comes back from the USYC reserve first.`
     : "";
+  // A vendor paid to its bank account in Mexico: the USDC leaves, and the vendor receives pesos (bank payouts B12).
+  if (payable.bank) {
+    return `Pay ${fmt(amountPaid)} USDC to ${payable.counterpartyName}'s bank account in Mexico now?${discount}${sandbox ? " (simulated)" : ""} ${bankQuoteLine(payable.bank)}${reserve}`;
+  }
   return `Pay ${fmt(amountPaid)} ${payable.currency ?? "USDC"} to ${payable.counterpartyName}${elsewhere} now?${discount}${sandbox ? " (simulated)" : ""}${fee}${reserve}`;
 }
 
@@ -260,11 +265,18 @@ export default function ApprovalCard({
         </CardHeader>
         <CardContent>
           <p className="text-reasoning text-ink-2">{payable.explanation || "The agent recorded no reasoning."}</p>
-          <p className="mt-2 min-w-0 truncate text-xs text-ink-3" title={payable.address ?? undefined}>
-            Pays to{" "}
-            {payable.address ? <span className="font-mono text-ink-2">{payable.address}</span> : "no address set"}
-            {paidAcrossChains(payable.payeeChain) && ` on ${chainById(payable.payeeChain as string).label}`}
-          </p>
+          {payable.bank ? (
+            <div className="mt-2 space-y-0.5 text-xs">
+              <p className="text-ink-2">{bankAccountLine(payable.bank)}</p>
+              <p className="text-ink-3">{bankQuoteLine(payable.bank)}</p>
+            </div>
+          ) : (
+            <p className="mt-2 min-w-0 truncate text-xs text-ink-3" title={payable.address ?? undefined}>
+              Pays to{" "}
+              {payable.address ? <span className="font-mono text-ink-2">{payable.address}</span> : "no address set"}
+              {paidAcrossChains(payable.payeeChain) && ` on ${chainById(payable.payeeChain as string).label}`}
+            </p>
+          )}
           {two && <p className="mt-2 text-sm text-ink-2">{twoApprovalsLine(two, viewerId, memberEmails)}</p>}
           {two && canDecide && two.approvers < 2 && (
             <Callout tone="held" className="mt-2">

@@ -1,6 +1,6 @@
 import { db } from "../dal";
 import { getChainProvider, type ChainProvider, type Stablecoin } from "../circle";
-import type { PayoutRoute, SpendingLimitPayment } from "../circle/types";
+import type { BankPayoutParams, PayoutRoute, SpendingLimitPayment } from "../circle/types";
 import { executePayment, type PaymentExecution, paymentMemo } from "../payments";
 import { amountToPay, type InvoiceDiscount } from "./payment-timing";
 
@@ -61,6 +61,8 @@ export interface PayInvoiceInput {
   route?: PayoutRoute;
   /** The agent's payment while its spending limit is enforced on Arc: sent through the contract (onchain spending limit R3). Never a person's. */
   spendingLimit?: SpendingLimitPayment;
+  /** A vendor's bill paid to its bank account through BlindPay (bank payouts B7): the address is not used. */
+  bank?: BankPayoutParams;
 }
 
 export interface PayInvoiceResult {
@@ -126,7 +128,8 @@ export async function payInvoice(
         sourceType: "invoice",
         sourceId: input.invoiceId,
         fromAccountId: operating.id,
-        destination: payoutAddress(input.address, input.counterpartyId),
+        // A bank payout's intent names the bank account it went to, not an address (bank payouts B7).
+        destination: input.bank ? `blindpay:${input.bank.bankAccountId}` : payoutAddress(input.address, input.counterpartyId),
         amount: amountPaid,
         memo: paymentMemo("invoice", input.invoiceId),
         token: input.currency ?? "USDC",
@@ -134,6 +137,7 @@ export async function payInvoice(
         ...(input.maxBridgeFeeUsdc != null ? { maxBridgeFeeUsdc: input.maxBridgeFeeUsdc } : {}),
         ...(input.route ? { route: input.route } : {}),
         ...(input.spendingLimit ? { spendingLimit: input.spendingLimit } : {}),
+        ...(input.bank ? { bank: input.bank } : {}),
       },
       { provider, retryTerminalFailure }
     );

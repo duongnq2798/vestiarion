@@ -1,0 +1,75 @@
+Some vendors want pesos in their bank account, not USDC in a wallet. Bank payouts pay such a vendor's bills to its bank account in Mexico over SPEI, through [BlindPay](https://www.blindpay.com), from the same USDC the workspace pays every bill with. The workspace pays the bill's USDC; the vendor receives pesos, and a person sees how many before approving each payout.
+
+The agent still reads every bill and decides on it as for any vendor. It never pays a bank payout by itself: a person approves every one.
+
+<Callout kind="note" title="BlindPay's development instance">
+In this version a workspace is set up on BlindPay's development instance, with BlindPay's test business values, on Arc testnet. BlindPay runs each payout through its sandbox: you see the quote, the payout and its outcome, and no pesos reach a bank. A production instance needs BlindPay's own review of your business, which this version does not collect.
+</Callout>
+
+## Before you start
+
+- **An owner** of the workspace sets up bank payouts. Anyone else sees "An owner sets up bank payouts."
+- **An owner or admin** adds a vendor's bank account, on **Counterparties**.
+- **The vendor's CLABE**: the 18-digit account number every Mexican bank account has, from the vendor's bank statement or app, and the name the account is held in.
+- **Bills in USDC.** Only USDC is paid to a bank account. A bill in EURC to a vendor paid to its bank is refused, and says why.
+- **At least 5.00 USDC** a payout: BlindPay quotes no less to a bank account.
+
+## 1. Set up bank payouts
+
+Open **Settings**. Under **Bank payouts**, choose **Accept BlindPay's terms and set up**. BlindPay's terms open on its own page. Accept them there, and BlindPay sends you back to Settings, where the card says "Bank payouts are set up. Add a vendor's bank account on Counterparties to pay it in pesos." The ledger records `bank_payouts_set_up`.
+
+From then on the card says how the workspace stands with BlindPay, such as "Approved by BlindPay" or "BlindPay is checking the business", and how many vendors are paid to a bank account.
+
+If setting up did not finish, the card says why, and nothing is kept:
+
+- "BlindPay did not send back the accepted terms, so nothing changed. Start again."
+- "BlindPay did not finish setting the workspace up. Try again in a moment."
+- "Only an owner sets up bank payouts."
+- "Bank payouts are not set up on this deployment yet." on a deployment where BlindPay is not configured.
+
+## 2. Add a vendor's bank account
+
+Open **Counterparties**. Each vendor shows **Bank account in Mexico (SPEI)**, with "None: paid to its address." until you add one. Choose **Add**, then enter:
+
+- **Name the account is held in**, as the bank has it;
+- **CLABE**: "18 digits, from the vendor's bank statement or app." Spaces and dashes are fine.
+
+Choose **Save**. Vestiarion checks the CLABE's control digit before anything is sent, then gives the account to BlindPay as a vendor's. Vestiarion keeps only the bank and the last four digits; the CLABE goes to BlindPay. The vendor then shows "Paid to BBVA ····9716, Ana López, through BlindPay.", with "BlindPay is checking it." until BlindPay approves the account. The ledger records `counterparty_bank_account_set`, with the bank's code and the last four digits, never the CLABE.
+
+From then on the vendor's bills are paid to that account, and its address is not used. **Replace** puts another account in use; **Remove** pays the vendor at its address again ("Paid to its address again."). A bill whose payment already started keeps the way it started: one first paid to a bank account is never sent to an address instead, nor the other way round.
+
+If the account is refused, the dialog says why:
+
+- "That CLABE does not check: it is 18 digits, the last one a control digit. Check it with the vendor."
+- "Only a vendor's bills are paid to a bank account."
+- "BlindPay refused this bank account. Check the CLABE and the beneficiary's name with the vendor."
+- "Set up bank payouts under Settings, Bank payouts, first."
+
+## 3. Approve the payout
+
+The agent decides on the vendor's bill as on any other, and a payment it would make is held for you: "This vendor is paid to a bank account through BlindPay, and a person approves every bank payout. Check what the vendor receives, then pay it in Approvals."
+
+In **Approvals**, the bill's card says where the money goes, in place of an address: "Paid to a bank account in Mexico: BBVA ····9716, Ana López, through BlindPay." Under it, what the vendor would receive now, by BlindPay's quote, such as "Ana López receives about 1,814.00 MXN (18.35 MXN per USDC, BlindPay's fees 2.10 MXN). Approve and pay asks BlindPay for a fresh quote."
+
+Choose **Approve and pay**. The dialog asks "Pay 100.00 USDC to Taller Norte's bank account in Mexico now?", with what the vendor receives. When you confirm:
+
+1. BlindPay quotes the bill's amount again. A quote that would take any other amount than the bill's sends nothing.
+2. The operating wallet approves BlindPay's contract on Arc for that amount.
+3. BlindPay takes the USDC and pays the pesos to the account over SPEI.
+
+The ledger's `approval_paid` entry records the payout with BlindPay's quote and payout ids, the pesos the vendor receives, the rate and BlindPay's fees, and the account's bank and last four digits.
+
+## 4. Follow the payout
+
+The payment is in flight while BlindPay pays the bank, and settles when BlindPay says the payout completed. BlindPay tells Vestiarion when a payout changes, and the agent's next cycle reads the payout from BlindPay itself; what the notice says is never used as it is.
+
+- **Completed**: the bill is paid, as any payment.
+- **Refunded**: BlindPay sent no pesos and gave the USDC back. The bill is held again with what BlindPay said, as for any [failed payment](/docs/guides/payment-exceptions#failed-or-cancelled), and only a person pays it again: **Approve and pay** starts a new payout, under a new key, with a fresh quote.
+- **Failed**: BlindPay sent no pesos, and holds the USDC until it refunds it. Nothing new is sent: **Approve and pay** only reads the payout again. Ask BlindPay to refund it; once BlindPay says it is refunded, the bill can be paid again.
+- **No answer from BlindPay**: the payout may have been made, so the payment stays in flight and is asked for again under the same key, which BlindPay makes once. It is never paid twice.
+
+If the quote expires before the payout, "BlindPay's quote expired before the payout: nothing was sent. Approve again for a new quote."
+
+## What BlindPay sees
+
+BlindPay receives the workspace's name and the owner's email, for the business it pays from; each vendor's CLABE and the name its account is held in; the amount of each payout; and the operating wallet's address on Arc. It never receives your bills, your other vendors, or anything the agent reasoned. BlindPay is among the service providers in Vestiarion's [privacy policy](/privacy).

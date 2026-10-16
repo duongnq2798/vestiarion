@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { ChainProvider, Stablecoin, TransferResult } from "./circle";
-import type { PayoutRoute, SpendingLimitPayment } from "./circle/types";
+import type { BankPayoutParams, BankPayoutRecord, PayoutRoute, SpendingLimitPayment } from "./circle/types";
 import { BatchNotSentError, MAX_BATCH_SIZE } from "./circle/batch";
 import { FAILED_STATES, MAY_HAVE_BEEN_ACCEPTED } from "./circle/settlement";
 import { db, unwrap } from "./dal";
@@ -171,6 +171,11 @@ export interface PaymentRequest {
    * contract from the agent's wallet, never in a batch. Only the agent's own sends carry it; a person's never do (R6).
    */
   spendingLimit?: SpendingLimitPayment;
+  /**
+   * A vendor's bill paid to its bank account through BlindPay (bank payouts B7): the intent keeps the `bank` route from
+   * its first attempt, and a later attempt is never a transfer to an address, nor the other way.
+   */
+  bank?: BankPayoutParams;
 }
 
 /** The terminally failed attempt a retry followed: ids and Circle's states only. */
@@ -206,6 +211,8 @@ export interface PaymentExecution {
   route?: PayoutRoute | null;
   /** The batch this payment was sent in, shared with its other members (batch payouts §2); null when sent alone. */
   batch?: { key: string; size: number } | null;
+  /** A bank payout's quote and payout, as BlindPay answered the send (bank payouts B10); absent when it was not one. */
+  bankPayout?: BankPayoutRecord | null;
 }
 
 /**
@@ -279,7 +286,7 @@ function fromRow(row: PaymentIntentRow): PaymentIntent {
     updatedAt: row.updated_at,
     destinationChain: row.destination_chain ?? null,
     mintTxHash: row.mint_tx_hash ?? null,
-    route: row.payout_route === "gateway" || row.payout_route === "cctp" || row.payout_route === "escrow" ? row.payout_route : null,
+    route: row.payout_route === "gateway" || row.payout_route === "cctp" || row.payout_route === "escrow" || row.payout_route === "bank" ? row.payout_route : null,
     batchKey: row.batch_key ?? null,
     batchSize: row.batch_size ?? null,
     batchSentAt: row.batch_sent_at ?? null,
@@ -315,6 +322,8 @@ export class SupabasePaymentIntentStore implements PaymentIntentStore, PaymentBa
       ...(paidAcrossChains(input.destinationChain) ? { destination_chain: input.destinationChain, payout_route: input.route ?? "cctp" } : {}),
       // A milestone locked in escrow keeps the escrow route from its first attempt: never a transfer after a release.
       ...(input.escrow ? { payout_route: "escrow" } : {}),
+      // A bank payout keeps the bank route from its first attempt (bank payouts B7).
+      ...(input.bank ? { payout_route: "bank" } : {}),
     }, { onConflict: "source_type,source_id", ignoreDuplicates: true });
     if (result.error) throw new Error(result.error.message);
     return this.getBySource(input.sourceType, input.sourceId);
@@ -711,7 +720,8 @@ async function lookForUnknownSend(
   store: PaymentIntentStore,
   now: number
 ): Promise<PaymentExecution | typeof NOT_SENT | null> {
-  if (intent.route === "gateway" || intent.route === "cctp" || paidAcrossChains(request.destinationChain)) return null;
+  // A bank payout is not a Circle transfer: it is asked for again under its own key, which BlindPay makes once (bank payouts B7).
+  if (intent.route === "gateway" || intent.route === "cctp" || intent.route === "bank" || paidAcrossChains(request.destinationChain)) return null;
   if (!provider.findTransferByRef) return null;
   const sentAt = Date.parse(intent.updatedAt);
   const undecided = (error: string): PaymentExecution => ({ ...execution(intent, true), status: "pending", error });
@@ -847,13 +857,21 @@ async function sendClaimed(
     // A Gateway transfer is refused again only when its whole spec repeats: the same
     // salt with another amount (a discount that lapsed), payee or chain would be a
     // second transfer. A later attempt is sent only as the first one asked (review C1).
-    const route = intent.route === "escrow" ? "escrow" : paidAcrossChains(request.destinationChain) ? (intent.route ?? "cctp") : null;
+    const route = intent.route === "escrow" || intent.route === "bank" ? intent.route : paidAcrossChains(request.destinationChain) ? (intent.route ?? "cctp") : null;
     // A release from escrow and a transfer are never both sent for one payment (milestone escrow E4).
     if (route === "escrow" && !request.escrow) {
       throw new Error("This milestone's payment is a release from escrow; nothing was sent. Check its hold on Arc testnet before paying it another way.");
     }
     if (request.escrow && route !== "escrow") {
       throw new Error("This milestone is locked in escrow, but its payment was started as a transfer; nothing was sent. Check it before paying it.");
+    }
+    // A bank payout keeps its route (bank payouts B7): one first paid to a bank is never sent to an address, nor one first
+    // sent to an address paid to a bank, whatever changed on the vendor since.
+    if (route === "bank" && !request.bank) {
+      throw new Error("This bill was first paid to a bank account through BlindPay; nothing was sent. Check the payout with BlindPay before paying it another way.");
+    }
+    if (request.bank && route !== "bank") {
+      throw new Error("This bill was first paid to an address; nothing was sent. Check that payment before paying it to the vendor's bank account.");
     }
     // The contract carries USDC paid on Arc only: not a release from escrow, not a payout to another chain (R3, R4).
     if (request.spendingLimit && route !== null) {
@@ -890,6 +908,7 @@ async function sendClaimed(
       ...(route ? { route } : {}),
       ...(route === "escrow" && request.escrow ? { escrow: request.escrow } : {}),
       ...(request.spendingLimit ? { spendingLimit: request.spendingLimit } : {}),
+      ...(route === "bank" && request.bank ? { bank: request.bank } : {}),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Transfer failed";
@@ -899,6 +918,7 @@ async function sendClaimed(
   }
   try {
     const recorded = execution(await store.recordResult(idempotencyKey, result), false, retriedAfter);
+    if (result.bankPayout) recorded.bankPayout = result.bankPayout;
     // Metered once the send is recorded, never before it (accountant console U1); it never throws.
     await meterTransfer(result, sendAction(intent, request), 1);
     return recorded;
@@ -915,7 +935,7 @@ async function sendClaimed(
 
 /** Whether a request may go in a batch at all (batch payouts R1): USDC on Arc, not a release from escrow. */
 function batchable(request: PaymentRequest): boolean {
-  return !request.escrow && !request.route && !request.spendingLimit && !paidAcrossChains(request.destinationChain) && (request.token ?? "USDC") === "USDC";
+  return !request.escrow && !request.route && !request.spendingLimit && !request.bank && !paidAcrossChains(request.destinationChain) && (request.token ?? "USDC") === "USDC";
 }
 
 interface Claimed {

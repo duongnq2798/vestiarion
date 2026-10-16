@@ -30,6 +30,7 @@ import { PAYMENTS_OFF, PaymentsDisabledError } from "../payments-switch";
 import { BridgeFeeError, bridgeFee, bridgeStepKey, burnCalls, cctpOf, forwardedMint, type ContractCall } from "./cctp";
 import { burnIntent, burnIntentTypedData, estimateGateway, gatewaySalt, gatewayTransferStatus, submitGatewayTransfer, type GatewayTransferStatus } from "./gateway";
 import { chainOn, paidAcrossChains } from "../payee-chains";
+import { bankPayoutResult, payToBank, reconcileBankPayout, BANK_ID } from "./bank-payout";
 import { toBaseUnits } from "../fx/quote";
 import { PAY_SIGNATURE, usdcUnits } from "../spending-limit/onchain";
 import type { ChainConfig } from "../config";
@@ -294,6 +295,16 @@ export class LiveProvider implements ChainProvider {
 
     if (params.spendingLimit) return this.spendingLimitPay(params, params.spendingLimit);
     const account = await this.account(params.fromAccountId);
+    // A vendor's bill paid to its bank account through BlindPay (bank payouts B7): the address is not used.
+    if (params.bank) {
+      return payToBank(params, params.bank, account, {
+        fetchImpl: this.fetch,
+        approve: async (call, key) => {
+          const id = await this.execute(account.walletId, call, key, params.memo, { what: "the approve for the bank payout", movesMoney: false });
+          return awaitSettlement(this.client, id);
+        },
+      });
+    }
     if (params.route === "escrow") return this.escrowRelease(params, account);
     if (paidAcrossChains(params.destinationChain)) {
       return params.route === "gateway" ? this.gatewayPayout(params, account) : this.bridge(params, account);
@@ -714,6 +725,8 @@ export class LiveProvider implements ChainProvider {
 
   async reconcileTransfer(providerTxId: string): Promise<TransferResult> {
     if (providerTxId.startsWith(BURN_ID) || providerTxId.startsWith(APPROVE_ID)) return this.reconcileBridge(providerTxId);
+    // A bank payout, read again from BlindPay: it sends nothing (bank payouts B8).
+    if (providerTxId.startsWith(BANK_ID)) return bankPayoutResult(providerTxId, await reconcileBankPayout(providerTxId, { fetchImpl: this.fetch }), this.network.circleBlockchain);
     // A Gateway payout, read again: it signs and sends nothing (G4).
     if (providerTxId.startsWith(GATEWAY_ID)) {
       const status = await gatewayTransferStatus(this.network, providerTxId.slice(GATEWAY_ID.length), { fetch: this.fetch });

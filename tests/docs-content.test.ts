@@ -173,6 +173,7 @@ describe("the docs navigation", () => {
       ["guides/payment-exceptions", "When a payment does not settle"],
       ["guides/import-bills", "Import your bill list"],
       ["guides/pay-a-contractor", "Pay a contractor for delivered work"],
+      ["guides/bank-payouts", "Pay a vendor's bank account in Mexico"],
       ["guides/email-invoices", "Add invoices by email"],
       ["guides/payment-plan", "Plan the next two weeks of payments"],
       ["guides/report", "Read your workspace report"],

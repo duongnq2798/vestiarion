@@ -355,6 +355,15 @@ export default function PrivacyPage() {
             workspace, and the signed ledger keeps only ids, names, amounts and masked emails.
           </li>
           <li>
+            <strong>BlindPay</strong>, for a workspace an owner sets up for bank payouts after accepting BlindPay&apos;s terms on BlindPay&apos;s own
+            page, pays a vendor&apos;s bills to its bank account in Mexico over SPEI. It receives the workspace&apos;s name and the owner&apos;s email,
+            for the business it pays from (in this version with BlindPay&apos;s test business values, on its development instance), each vendor&apos;s
+            CLABE and the name its account is held in, the amount of each payout, and the operating wallet&apos;s address on Arc. Vestiarion keeps
+            BlindPay&apos;s ids, the business&apos;s review status, and each account&apos;s bank and last four digits and the name it is held in; never
+            the whole CLABE. The signed ledger keeps only ids, the bank&apos;s code and the last four digits. BlindPay never receives the
+            workspace&apos;s bills, its other counterparties or the agent&apos;s reasoning.
+          </li>
+          <li>
             <strong>HubSpot</strong>, for a workspace an owner or admin connects to a HubSpot account after agreeing to it, is read from, and written
             to only once an owner or admin allows it: then each HubSpot deal planned in Vestiarion receives what was collected on it from payments
             confirmed on Arc, what is still owed, the last receipt&apos;s day, amount and transaction link, the reconciliation status and a link to the

@@ -64,6 +64,32 @@ export interface TransferParams {
    * workspace's contract, from the agent's own wallet, naming the payment by `ref`. USDC on Arc only.
    */
   spendingLimit?: SpendingLimitPayment;
+  /**
+   * A vendor's bill paid to its bank account through BlindPay (docs/superpowers/specs/2026-10-16-bank-payouts-design.md
+   * B7): a fresh quote, the approve of BlindPay's contract from the operating wallet, then the payout. `toAddress` is not
+   * used. USDC on Arc only; on a development instance BlindPay's test token USDB.
+   */
+  bank?: BankPayoutParams;
+}
+
+/** Where a bank payout goes: the vendor's account at BlindPay, and the network and token BlindPay is paid with. */
+export interface BankPayoutParams {
+  bankAccountId: string;
+  network: string;
+  token: "USDC" | "USDB";
+}
+
+/** What a bank payout's quote said, for the ledger and the card (bank payouts B10). */
+export interface BankPayoutRecord {
+  provider: "blindpay";
+  quoteId: string;
+  payoutId: string;
+  receiverAmount: number;
+  currency: "MXN";
+  rate: number | null;
+  feesReceiver: number;
+  network: string;
+  token: "USDC" | "USDB";
 }
 
 /** Where an agent's payment goes when its spending limit is enforced on Arc: the contract, the agent's wallet, and the payment's ref. */
@@ -89,9 +115,9 @@ export interface BatchTransferParams {
 
 /** The two ways a payee on another chain is paid from Arc testnet. */
 /** How a payment goes: across chains through CCTP or a Gateway balance, or, for a milestone locked in escrow, by releasing its hold. */
-export type PayoutRoute = "cctp" | "gateway" | "escrow";
+export type PayoutRoute = "cctp" | "gateway" | "escrow" | "bank";
 /** The routes a payment across chains can take. */
-export type CrossChainRoute = Exclude<PayoutRoute, "escrow">;
+export type CrossChainRoute = Exclude<PayoutRoute, "escrow" | "bank">;
 
 export interface TransferResult {
   providerTxId: string;
@@ -115,6 +141,8 @@ export interface TransferResult {
   bridgeFeeUsdc?: number | null;
   /** The route a payment across chains took; absent for a payment on Arc. */
   route?: PayoutRoute;
+  /** A bank payout's quote and payout (bank payouts B10). */
+  bankPayout?: BankPayoutRecord | null;
 }
 
 export interface EarnDepositParams {

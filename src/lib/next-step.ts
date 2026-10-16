@@ -163,6 +163,9 @@ export function ruleNextStep(rule: string | null | undefined, counterparty: { id
       return { sentence: "Circle gave no fee for this payout, so its cost is not known. Pay it in Approvals, or return it to the agent later.", fix: null };
     case "bridge.gateway_balance_short":
       return { sentence: "The Gateway balance does not cover this payout. Fund Gateway, or pay it in Approvals.", fix: { label: "Treasury", path: "/console" } };
+    case "payout.bank_needs_person":
+      // A bank payout (bank payouts B6): a person approves what leaves and what the bank receives.
+      return { sentence: "This vendor is paid to a bank account through BlindPay, and a person approves every bank payout. Check what the vendor receives, then pay it in Approvals.", fix: null };
     case "bridge.unsupported_token":
       return { sentence: "Only USDC crosses chains, and this invoice is in EURC. Reject it in Approvals, or ask for an invoice in USDC.", fix: null };
     case "fx.rate_unavailable":
@@ -246,6 +249,8 @@ export function ruleInBrief(rule: string | null | undefined): string | null {
       return "Circle gave no fee for the payout";
     case "bridge.gateway_balance_short":
       return "the Gateway balance does not cover it";
+    case "payout.bank_needs_person":
+      return "a person approves every bank payout";
     case "bridge.unsupported_token":
       return "only USDC crosses chains";
     case "fx.rate_unavailable":

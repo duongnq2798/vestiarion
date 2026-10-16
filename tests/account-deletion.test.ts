@@ -125,6 +125,8 @@ describe("0023 is idempotent", () => {
         { tbl: "commission_plans", col: "beneficiary_member", action: "n" },
         { tbl: "commission_plans", col: "created_by", action: "n" },
         { tbl: "commission_plans", col: "ended_by", action: "n" },
+        // Who added a vendor's bank account, and who set the workspace up with BlindPay (0124).
+        { tbl: "counterparty_bank_accounts", col: "added_by", action: "n" },
         { tbl: "crm_deals", col: "reviewed_by", action: "n" },
         { tbl: "crm_receipt_writes", col: "overwrite_by", action: "n" },
         { tbl: "customer_portal_links", col: "created_by", action: "n" },
@@ -188,6 +190,7 @@ describe("0023 is idempotent", () => {
         { tbl: "slack_installs", col: "installed_by", action: "n" },
         { tbl: "spending_limit_contracts", col: "created_by", action: "n" },
         { tbl: "webhook_endpoints", col: "created_by", action: "n" },
+        { tbl: "workspace_payout_partners", col: "set_up_by", action: "n" },
       ]);
     } finally {
       await fresh.close();

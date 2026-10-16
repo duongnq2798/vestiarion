@@ -85,6 +85,9 @@ const KEEP_UPDATE: Record<string, { column: string; expr: string }> = {
   project_reservations: { column: "release_reason", expr: "'changed'" },
   // A workspace's reporting currency is changed, never deleted (0113).
   reporting_currencies: { column: "currency", expr: "'MYR'" },
+  // The workspace's BlindPay customer, and a vendor's bank account, which is removed, never deleted (0124).
+  workspace_payout_partners: { column: "kyb_status", expr: "'approved'" },
+  counterparty_bank_accounts: { column: "status", expr: "'approved'" },
 };
 
 beforeAll(async () => {

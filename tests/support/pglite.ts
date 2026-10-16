@@ -115,6 +115,7 @@ export const TENANT_TABLES = [
   "commission_plans", "commission_plan_deals", "commission_payouts", "commission_lines",
   "decision_reasons",
   "invoice_drafts",
+  "workspace_payout_partners", "counterparty_bank_accounts",
 ] as const;
 
 export interface SeededRows {
@@ -397,6 +398,13 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     `insert into invoice_drafts (org_id, state, source, supplier_name, amount, connection_id, idempotency_key, request_sha256, invoice_id)
      values ($1, 'confirmed', 'selection', $2, '1', gen_random_uuid(), $3, encode(sha256(convert_to($3, 'utf8')), 'hex'), $4)`,
     [orgId, `cp-${tag}`, `capture-${tag}`, invoiceId]
+  );
+  // The workspace's BlindPay customer, and a vendor's bank account at BlindPay (0124).
+  await db.query("insert into workspace_payout_partners (org_id, tos_id, customer_id) values ($1, 'to_test1234', 're_test1234')", [orgId]);
+  await db.query(
+    `insert into counterparty_bank_accounts (org_id, counterparty_id, external_id, bank_code, last4, beneficiary_name)
+     values ($1, $2, 'ba_test1234', '012', '9716', 'Ana López')`,
+    [orgId, counterpartyId]
   );
   const key = crypto.generateKeyPairSync("ed25519");
   await appendSignedForOrg(db, orgId, { actor: "system", domain: "system", action: "note", summary: tag, detail: { tag } }, key.privateKey);

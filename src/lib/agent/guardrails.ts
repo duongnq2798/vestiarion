@@ -44,6 +44,11 @@ export interface ApGuardrailInput {
     /** A payout an earlier attempt sent through Gateway, which the Gateway balance no longer covers (review I3). */
     gatewayShort?: { balanceUsdc: number; neededUsdc: number } | null;
   } | null;
+  /**
+   * The payee is paid to a bank account through BlindPay (docs/superpowers/specs/2026-10-16-bank-payouts-design.md B6):
+   * a person approves every such payout in this version, whatever the model says.
+   */
+  paidToBank?: boolean;
   /** A live EURC payment the wallet's EURC cannot cover: what it holds (null when it could not be read) and what the payment sends. */
   eurcShort?: {
     balance: number | null;
@@ -112,6 +117,7 @@ export type ApGuardrailRule =
   | "bridge.fee_unavailable"
   | "bridge.fee_above_cap"
   | "bridge.gateway_balance_short"
+  | "payout.bank_needs_person"
   | typeof TWO_APPROVALS_RULE
   | "workspace.outflow_budget"
   | "workspace.onchain_limit_route"
@@ -327,6 +333,16 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       status: "held",
       rule: "bridge.fee_above_cap",
       reasoning: `${input.reasoning} [guardrail override: the ${routeName(input.bridge)} fee is ${input.bridge.feePercent.toFixed(2)}% of the amount, above the ${BRIDGE_FEE_CAP_PERCENT}% a payout may cost — ${verb} refused before execution]`,
+    };
+  }
+  // A bank payout leaves through a partner and a bank rail, and cannot be called back once BlindPay has it: a person
+  // approves the money and the rail (bank payouts B6). The agent's decision stands as the reason; code holds it.
+  if (input.paidToBank) {
+    return {
+      blocked: true,
+      status: "held",
+      rule: "payout.bank_needs_person",
+      reasoning: `${input.reasoning} [guardrail override: this payee is paid to a bank account through BlindPay, and a person approves every bank payout — ${verb} held for a person]`,
     };
   }
   // A payout keeps the route its first attempt took: one sent through Gateway

@@ -280,6 +280,13 @@ export default function SecurityPage() {
             Zoho names.
           </li>
           <li>
+            <strong>BlindPay.</strong> Bank payouts run under the deployment&apos;s own BlindPay key, a server secret never stored in the database
+            or shown in the browser. An owner sets a workspace up, and an owner or admin adds a vendor&apos;s bank account; its CLABE is checked, sent
+            to BlindPay and not kept, only its bank and last four digits. Every payout is held for a person, takes exactly the bill&apos;s amount or
+            sends nothing, and is asked for under a key derived from the payment&apos;s, so BlindPay makes it once. BlindPay&apos;s notices are
+            accepted only under its Svix signature, within five minutes, and only start a cycle that reads the payout from BlindPay itself.
+          </li>
+          <li>
             <strong>Storing.</strong> The tokens of Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive, Zoho CRM and Asana are encrypted, in a table
             only the platform reads, and are opened only in their own workspace&apos;s scope. They are never shown in the browser, a log, a model&apos;s prompt
             or a webhook.

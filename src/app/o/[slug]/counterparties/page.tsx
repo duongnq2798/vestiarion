@@ -3,6 +3,9 @@ import AgentControls from "@/components/AgentControls";
 import { CounterpartyRow, readiness } from "@/components/CounterpartyRow";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import CounterpartyAddress from "@/components/intake/CounterpartyAddressEdit";
+import CounterpartyBankAccount from "@/components/intake/CounterpartyBankAccount";
+import { bankAccountsOf, readPayoutPartner } from "@/lib/bank-payouts/store";
+import { blindpaySettingsFromEnv } from "@/lib/blindpay/settings";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
 import CounterpartyLimitEdit from "@/components/intake/CounterpartyLimitEdit";
 import CounterpartyNoticeEmailEdit from "@/components/intake/CounterpartyNoticeEmailEdit";
@@ -75,6 +78,19 @@ export default async function CounterpartiesPage({
     ]);
     // Only those who may send a payee link see which ones are out.
     const payeeLinks = canWrite ? await listActivePayeeLinks(access.membership.orgId) : new Map<string, { id: string; expiresAt: string }>();
+    // Vendors paid to a bank account through BlindPay (bank payouts B4), on a deployment with it; best effort, none
+    // before migration 0124.
+    const bankPayoutsOn = blindpaySettingsFromEnv() !== null;
+    const [bankAccounts, bankPartner, canManageBank] = bankPayoutsOn
+      ? await Promise.all([
+          bankAccountsOf(counterparties.filter((counterparty) => counterparty.role === "vendor").map((counterparty) => counterparty.id)).catch((error: unknown) => {
+            console.error("counterparties: bank accounts not read", error instanceof Error ? error.message : error);
+            return new Map();
+          }),
+          readPayoutPartner().catch(() => null),
+          viewerCan(slug, "integrations.manage"),
+        ])
+      : [new Map(), null, false];
     // What needs someone first, then by name (Counterparties layout).
     const ordered = [...counterparties].sort((a, b) => readiness(a).rank - readiness(b).rank || a.name.localeCompare(b.name));
     const refreshMs = counterpartiesRefreshMs({
@@ -191,6 +207,15 @@ export default async function CounterpartiesPage({
                         canWrite={canWrite}
                         canConfirm={canConfirm}
                       />
+                      {bankPayoutsOn && counterparty.role === "vendor" && (
+                        <CounterpartyBankAccount
+                          orgSlug={slug}
+                          counterparty={{ id: counterparty.id, name: counterparty.name }}
+                          account={bankAccounts.get(counterparty.id) ?? null}
+                          canManage={canManageBank}
+                          setUp={Boolean(bankPartner?.customerId)}
+                        />
+                      )}
                       {counterparty.mirror_wallet_id && (
                         <p className="mt-1 text-xs text-ink-3">Mirror address: a wallet Vestiarion made for this payee on Arc testnet, in shadow mode.</p>
                       )}

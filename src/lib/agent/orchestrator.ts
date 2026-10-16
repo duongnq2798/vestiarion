@@ -84,6 +84,7 @@ import { gatewayQuoter, type GatewayQuote } from "../circle/gateway-quote";
 export type { GatewayQuote };
 import type { CrossChainRoute, PayoutRoute, SpendingLimitPayment } from "../circle/types";
 import { BRIDGE_FEE_CAP_PERCENT, chainOn, paidAcrossChains } from "../payee-chains";
+import { bankAccountsOf } from "../bank-payouts/store";
 import {
   amountToPay,
   boundPayOn,
@@ -1157,6 +1158,8 @@ interface ApPayableRow {
     chain?: string | null;
     /** Whether a purchase order must be on file before the agent pays it (0073); read as true when absent. */
     purchase_order_required?: boolean;
+    /** Paid to a bank account through BlindPay (bank payouts B6), as read for the stage; a person approves every one. */
+    paid_to_bank?: boolean;
   };
 }
 
@@ -1477,7 +1480,8 @@ async function decideApPayable(
   // the fee, read now, is weighed by the model, bounded by code, and paid on
   // top of the invoice out of the operating USDC. Only USDC crosses.
   const destination = chainOn(ctx.provider.network.id, counterparty.chain);
-  const crossChain = paidAcrossChains(destination.id);
+  // A vendor paid to its bank account is paid through BlindPay, never across chains (bank payouts B7).
+  const crossChain = !counterparty.paid_to_bank && paidAcrossChains(destination.id);
   let fee: BridgeFee | null = null;
   let gateway: GatewayQuote | null = null;
   if (crossChain && !isEurc) {
@@ -1510,9 +1514,12 @@ async function decideApPayable(
   // The cap is weighed on the ratio itself (review M6); the model is shown it rounded.
   const feeRatioPercent = routeFeeUsdc !== null ? (routeFeeUsdc / amount) * 100 : null;
   const feePercent = feeRatioPercent === null ? null : Math.round(feeRatioPercent * 100) / 100;
-  const payout = crossChain
-    ? { chain: destination.label, route, feeUsdc: routeFeeUsdc, feePercent, expectedSeconds: viaGateway ? EXPECTED_GATEWAY_SECONDS : EXPECTED_BRIDGE_SECONDS }
-    : { chain: destination.label, route: "direct" };
+  const payout = counterparty.paid_to_bank
+    ? // A vendor paid to its bank (bank payouts B6): the model sees the rail; a person approves what the bank receives.
+      { route: "bank", provider: "BlindPay", rail: "SPEI", currency: "MXN", note: "a person approves every bank payout, with BlindPay's quote" }
+    : crossChain
+      ? { chain: destination.label, route, feeUsdc: routeFeeUsdc, feePercent, expectedSeconds: viaGateway ? EXPECTED_GATEWAY_SECONDS : EXPECTED_BRIDGE_SECONDS }
+      : { chain: destination.label, route: "direct" };
   const highRisk = counterparty.risk_level === "high";
 
   // The system prompt has always told the model to flag a duplicate invoice.
@@ -1704,6 +1711,9 @@ async function decideApPayable(
           confidence: 0.9,
         };
       }
+      if (counterparty.paid_to_bank) {
+        return { action: "hold", reasoning: `${counterparty.name} is paid to a bank account through BlindPay, and a person approves every bank payout.`, confidence: 0.9 };
+      }
       if (crossChain && isEurc) {
         return { action: "hold", reasoning: `Only USDC crosses chains, and this invoice is in EURC; ${counterparty.name} is paid on ${destination.label}.`, confidence: 0.9 };
       }
@@ -1791,7 +1801,8 @@ async function decideApPayable(
 
   // No address to pay where payments are real: the guardrail holds it before anything is sent (counterparty.no_address),
   // so neither limit is read for it. A sandbox simulates the payee's address.
-  const addressMissing = provider.mode === "live" && !counterparty.address;
+  // A vendor paid to its bank needs no address (bank payouts B4).
+  const addressMissing = provider.mode === "live" && !counterparty.address && !counterparty.paid_to_bank;
   // The agent's spending limit (outflow budget spec R4): read only for a
   // payment now, since a schedule is decided again on its day. A read that
   // fails throws, and the stage pays nothing (R8).
@@ -1799,7 +1810,7 @@ async function decideApPayable(
   // The same limit on Arc (onchain spending limit R4, R7, R8): for a payment now, whether its contract can carry
   // it and what the contract itself says, asked before anything is sent. Null when the workspace does not enforce it.
   const onChainLimit =
-    decision.action === "pay" && !addressMissing
+    decision.action === "pay" && !addressMissing && !counterparty.paid_to_bank
       ? await ctx.onChainLimit.check({
           sourceType: "invoice",
           sourceId: invoice.id,
@@ -1829,7 +1840,8 @@ async function decideApPayable(
     newPayee: firstPayment ? { twoParties: firstPayment.twoParties, ...(firstPayment.unanswered ? { unanswered: true } : {}) } : null,
     currency,
     fxAvailable: !isEurc || fx !== null,
-    bridge: crossChain ? { feePercent: isEurc ? 0 : feeRatioPercent, unsupportedToken: isEurc, route, gatewayShort } : null,
+    bridge: crossChain && !counterparty.paid_to_bank ? { feePercent: isEurc ? 0 : feeRatioPercent, unsupportedToken: isEurc, route, gatewayShort } : null,
+    paidToBank: counterparty.paid_to_bank === true,
     eurcShort: eurcUnreadable
       ? { balance: null, needed: eurcNeeded, faucet: Boolean(ctx.provider.network.faucet) }
       : isEurc && eurcBalance !== null && eurcBalance < eurcNeeded
@@ -1988,6 +2000,8 @@ async function decideApPayable(
       ...(outflowBudget ? { outflowBudget } : {}),
       // The same limit on Arc: the contract, the payment's ref and the contract's verdict (onchain spending limit R8, R12).
       ...(onChainLimit ? { onChainLimit: onChainLimitRecord(onChainLimit) } : {}),
+      // A vendor paid to its bank account through BlindPay, which a person approves every payout of (bank payouts B6).
+      ...(counterparty.paid_to_bank ? { paidToBank: true } : {}),
       // A payee on another chain: the route and the fee read for this decision (CCTP payouts X11).
       // A Gateway payout also records the Gateway balance it was weighed against.
       ...(crossChain
@@ -2310,6 +2324,10 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   // falls due first, and in the cycle's treasury buffer, but not decided
   // before then.
   const payables = loaded.filter((row) => dueForDecision(row, now));
+  // Which vendors are paid to a bank account through BlindPay (bank payouts B6): read once for the stage, none before
+  // migration 0124. A read that fails stops the stage, so a bank-paid vendor is never paid to an address by mistake.
+  const bankPaid = payables.length > 0 ? await bankAccountsOf(payables.map((row) => row.counterparty_id), db) : new Map<string, unknown>();
+  for (const row of payables) if (bankPaid.has(row.counterparty_id)) row.counterparties.paid_to_bank = true;
   // Read once for the stage, in a live workspace: which addresses were paid before, and who stands behind the others.
   const newPayeeFacts = input.newPayee && payables.length > 0 ? await input.newPayee.load([...new Set(payables.map((row) => row.counterparty_id))]) : null;
   // Asked by each decision, and by each resubmission of a payment never sent, which pays the address as it stands now.

@@ -26,6 +26,7 @@ export const RULE_WORDS: Record<string, string> = {
   "bridge.fee_above_cap": "the cross-chain fee was above its cap",
   "bridge.fee_unavailable": "the cross-chain fee could not be read",
   "bridge.gateway_balance_short": "the Gateway balance was short",
+  "payout.bank_needs_person": "a person approves every bank payout",
   "bridge.unsupported_token": "that token cannot cross chains",
   "obligation.duplicate_reference": "a bill and a milestone named the same purchase order or work",
   "project.budget_exceeded": "its project's budget had no room left for it",
