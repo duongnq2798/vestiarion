@@ -54,6 +54,12 @@ describe("BlindPay's settings (B2)", () => {
   });
 });
 
+describe("a live quote's rate (B5)", () => {
+  it("is BlindPay's quotation over a hundred, without a float's tail", () => {
+    expect(mapQuote({ ...QUOTE, blindpay_quotation: 1831.37 }).rate).toBe(18.3137);
+  });
+});
+
 describe("BlindPay's way back from its terms (B3)", () => {
   it("reads the workspace and the terms whether BlindPay adds ?tos_id= or &tos_id=", () => {
     const back = blindpayTermsReturnUri("https://www.vestiarion.xyz", "pinecrest-studio");
@@ -84,7 +90,7 @@ describe("BlindPay's answers (B5, B7, B8)", () => {
       senderAmount: 10,
       receiverAmount: 181.4,
       rate: 18.35,
-      feesReceiver: 2.1,
+      feesSender: 2.1,
       contract: { token: QUOTE.contract.address, spender: QUOTE.contract.blindpayContractAddress, amount: "10000000", network: "arc_testnet", chainId: 5042002 },
     });
     expect(() => mapQuote({ ...QUOTE, contract: { ...QUOTE.contract, blindpayContractAddress: "not an address" } })).toThrow();

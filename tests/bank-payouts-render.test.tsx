@@ -89,7 +89,7 @@ describe("the approval card of a bank payout (B12)", () => {
     last4: "9716",
     beneficiaryName: "Ana López",
     accountStatus: "approved",
-    quote: { receiverAmount: 1814, currency: "MXN", rate: 18.35, feesReceiver: 2.1 },
+    quote: { receiverAmount: 1814, currency: "MXN", rate: 18.35, feesSender: 2.1 },
     quoteProblem: null,
   };
   const payable: WaitingPayable = {
@@ -131,7 +131,7 @@ describe("the approval card of a bank payout (B12)", () => {
 
   it("asks to pay the USDC to the vendor's bank account, with what it receives", () => {
     expect(payConfirmTitle(payable, false)).toBe(
-      "Pay 100.00 USDC to Taller Norte's bank account in Mexico now? Ana López receives about 1,814.00 MXN (18.35 MXN per USDC, BlindPay's fees 2.10 MXN). Approve and pay asks BlindPay for a fresh quote."
+      "Pay 100.00 USDC to Taller Norte's bank account in Mexico now? Ana López receives about 1,814.00 MXN (18.35 MXN per USDC, BlindPay's fees 2.10 USDC). Approve and pay asks BlindPay for a fresh quote."
     );
   });
 });
