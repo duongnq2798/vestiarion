@@ -184,6 +184,13 @@ export default function TermsPage() {
           workspace.
         </p>
         <p>
+          When an owner sets a workspace up for bank payouts, they accept BlindPay&apos;s own terms, on BlindPay&apos;s page, for the workspace, and
+          BlindPay pays the bills of the vendors given a bank account in Mexico to that account in pesos over SPEI, from the workspace&apos;s USDC. In
+          this version a workspace is set up on BlindPay&apos;s development instance with BlindPay&apos;s test business values: payouts are tested, and
+          no pesos reach a bank. A person approves every bank payout, after seeing BlindPay&apos;s quote of what the vendor receives; the rate and
+          BlindPay&apos;s fees are BlindPay&apos;s. A payout BlindPay has made cannot be called back from Vestiarion.
+        </p>
+        <p>
           When an owner or admin connects Asana to a workspace, they agree, for the workspace, that Vestiarion reads Asana as them: the workspaces,
           projects and tasks a member opens to link a task to a milestone, and for each linked task whether and when it was completed and by whom,
           its assignee, and the links in its description, attachments and comments. Vestiarion makes a webhook on each linked task and deletes it when

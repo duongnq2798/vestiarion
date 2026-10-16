@@ -531,6 +531,19 @@ version, and no webhook is registered: deals come in with the 15-minute sync and
 migration 0123 (after 0105); before it runs, the card says Zoho CRM is not set up on this deployment yet. See
 [Bring deals in from Zoho CRM](https://www.vestiarion.xyz/docs/guides/zohocrm).
 
+With `BLINDPAY_API_KEY` and `BLINDPAY_INSTANCE_ID` set, from a BlindPay instance, an owner sets a workspace up for bank
+payouts from Settings, accepting BlindPay's terms on BlindPay's page, and an owner or admin gives a vendor its CLABE on
+Counterparties; that vendor's bills are then paid to its bank account in Mexico in pesos over SPEI, from the workspace's
+USDC, and a person approves every bank payout. Use a development instance in this version: a workspace is set up with
+BlindPay's test business values, and BlindPay approves it and runs each payout in its sandbox. On Arc testnet BlindPay is
+paid on `arc_testnet` with its USDB test token, and on Arc mainnet on `arc` with USDC; `BLINDPAY_NETWORK` and
+`BLINDPAY_TOKEN` pay it on another network BlindPay names. Add a webhook in BlindPay at
+`<origin>/api/integrations/blindpay/webhook` for the `payout.*` events and set its signing secret as
+`BLINDPAY_WEBHOOK_SECRET`: a notice is accepted only under that Svix signature, within five minutes, and only starts a
+cycle that reads the payout from BlindPay. The connection needs migration 0124; before it runs, the Bank payouts card
+says bank payouts are not set up on this deployment yet. See [Pay a vendor's bank account in
+Mexico](https://www.vestiarion.xyz/docs/guides/bank-payouts).
+
 With `ASANA_CLIENT_ID` and `ASANA_CLIENT_SECRET` set, from an Asana OAuth app distributed to any workspace, an owner or
 admin connects a workspace to their Asana from Settings, after agreeing to what Vestiarion does with its data. A person
 links a milestone to the Asana task its work is delivered in, writes the acceptance criteria from the agreement, and

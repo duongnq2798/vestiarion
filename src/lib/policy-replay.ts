@@ -140,6 +140,7 @@ export const BILL_STAGES: readonly string[] = [
   "bridge.fee_unavailable",
   "bridge.fee_above_cap",
   "bridge.gateway_balance_short",
+  "payout.bank_needs_person",
   TWO_APPROVALS_RULE,
   BUDGET,
   ROUTE,
@@ -219,6 +220,8 @@ interface Facts {
   /** A milestone's place in its contractor stage's entries; `first` for a bill. */
   order: StageOrder;
   crossChain: boolean;
+  /** Paid to a bank account through BlindPay, as the decision recorded it; none was before bank payouts (B6). */
+  paidToBank: boolean;
   live: boolean;
   /** The spending-limit contract's check, as recorded; undefined when none was recorded. */
   contract: Record<string, unknown> | undefined;
@@ -300,6 +303,7 @@ function factsOf(entry: ReplayEntry, history: ShadowHistory): Facts | null {
     payOnDay: action === "schedule" ? payOnDayOf(decision) : null,
     order: source === "milestone" ? stageOrderOf(action, recordedRule, detail) : "first",
     crossChain: record(detail.payout) !== null,
+    paidToBank: detail.paidToBank === true,
     live: execution?.chainMode === "live",
     contract: record(detail.onChainLimit) ?? undefined,
     recordedBudget: budget ? { dailyUsdc: numeric(budget.dailyUsdc), weeklyUsdc: numeric(budget.weeklyUsdc) } : null,
@@ -391,6 +395,8 @@ function contractAnswer(stage: string, facts: Facts, figures: RuleFigures): Stag
 /** A check no setting here changes, at a stage past the recorded rule: settled from the facts, where they settle it (P4). */
 function settleFromFacts(stage: string, facts: Facts, figures: RuleFigures): StageAnswer {
   if (CROSS_CHAIN.has(stage)) return facts.crossChain ? { cantTell: "stage_unsettled" } : "passes";
+  // No setting here pays a bank payout without a person (bank payouts B6).
+  if (stage === "payout.bank_needs_person") return facts.paidToBank ? "fires" : "passes";
   if (EURC_FUNDING.has(stage)) return facts.currency === "EURC" ? { cantTell: "stage_unsettled" } : "passes";
   if (stage === ROUTE || stage === CONTRACT) {
     // A sandbox has no contract. A bill's check is asked before its checks run, so none recorded means none enforced;

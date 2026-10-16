@@ -8,6 +8,9 @@ import AsanaPanel from "@/components/AsanaPanel";
 import HubSpotPanel from "@/components/HubSpotPanel";
 import PipedrivePanel from "@/components/PipedrivePanel";
 import ZohoCrmPanel from "@/components/ZohoCrmPanel";
+import BankPayoutsPanel, { type BankPayoutsView } from "@/components/BankPayoutsPanel";
+import { bankPayoutsReady, countBankAccountsInUse, readPayoutPartner } from "@/lib/bank-payouts/store";
+import { blindpaySettingsFromEnv } from "@/lib/blindpay/settings";
 import LedgerKeyPanel from "@/components/LedgerKeyPanel";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import { SettingsSections, type SettingsGroup } from "@/components/SettingsSections";
@@ -74,7 +77,7 @@ export default async function SettingsPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ slack?: string | string[]; github?: string | string[]; xero?: string | string[]; quickbooks?: string | string[]; zohobooks?: string | string[]; hubspot?: string | string[]; pipedrive?: string | string[]; zohocrm?: string | string[] }>;
+  searchParams: Promise<{ slack?: string | string[]; github?: string | string[]; xero?: string | string[]; quickbooks?: string | string[]; zohobooks?: string | string[]; hubspot?: string | string[]; pipedrive?: string | string[]; zohocrm?: string | string[]; bankpayouts?: string | string[] }>;
 }) {
   const { slug } = await params;
   const access = await requireMembership(slug);
@@ -227,6 +230,22 @@ export default async function SettingsPage({
         : null;
     // Zoho CRM's card (Zoho CRM connector C16, C17), on a deployment with the Zoho client; best effort. Before migration
     // 0123 it says Zoho CRM is not set up yet. It writes nothing, so it has no receipts.
+    // Bank payouts (bank payouts B3), on a deployment with a BlindPay instance; best effort. Before migration 0124 the card
+    // says they are not set up yet.
+    const bankPayouts: BankPayoutsView | null = blindpaySettingsFromEnv()
+      ? await bankPayoutsReady()
+          .then(async (): Promise<BankPayoutsView> => {
+            const partner = await readPayoutPartner();
+            if (!partner?.customerId) return { state: "not_started" };
+            return { state: "set_up", kybStatus: partner.kybStatus, setUpAt: partner.setUpAt, vendors: await countBankAccountsInUse() };
+          })
+          .catch((error: unknown): BankPayoutsView | null => {
+            if (error instanceof NotSetUpError) return { state: "not_set_up" };
+            console.error("settings: bank payouts not loaded", error instanceof Error ? error.message : error);
+            return null;
+          })
+      : null;
+    const bankPayoutsOutcome = ((await searchParams) as { bankpayouts?: string | string[] }).bankpayouts;
     const zohoCrm: CrmPanelView | null = zohoCrmSettingsFromEnv()
       ? await zohoCrmReady()
           .then(() => crmPanelView("zohocrm"))
@@ -439,6 +458,18 @@ export default async function SettingsPage({
             title: "Zoho CRM",
             content: zohoCrm ? (
               <ZohoCrmPanel orgSlug={slug} view={zohoCrm} canManage={canManageIntegrations} notice={typeof zohoCrmOutcome === "string" ? zohoCrmOutcome : null} />
+            ) : null,
+          },
+          {
+            id: "bank-payouts-title",
+            title: "Bank payouts",
+            content: bankPayouts ? (
+              <BankPayoutsPanel
+                orgSlug={slug}
+                view={bankPayouts}
+                canSetUp={can(membership.role, "org.administer")}
+                notice={typeof bankPayoutsOutcome === "string" ? bankPayoutsOutcome : null}
+              />
             ) : null,
           },
           {

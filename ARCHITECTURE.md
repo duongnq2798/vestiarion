@@ -2238,6 +2238,47 @@ for each connected workspace with a pending milestone on that pull request, as
 the GitHub check reads its link, so the payment follows the merge within a
 minute instead of waiting for the schedule.
 
+## Bank payouts (BlindPay)
+
+A vendor's bills paid to its bank account in Mexico, in pesos over SPEI, from the workspace's USDC
+(docs/superpowers/specs/2026-10-16-bank-payouts-design.md). BlindPay is the off-ramp: the operating wallet approves
+BlindPay's contract on Arc for the quote's amount, and BlindPay takes the tokens and pays the bank.
+
+- **Settings** (`src/lib/blindpay/settings.ts`). On when `BLINDPAY_API_KEY` and `BLINDPAY_INSTANCE_ID` are set; the
+  workspace's network picks BlindPay's (`arc_testnet` with its USDB test token on Arc testnet, `arc` with USDC on Arc
+  mainnet), and `BLINDPAY_NETWORK`/`BLINDPAY_TOKEN` override it. Off, the Settings card says so and the routes answer 404.
+- **Set-up** (`src/lib/bank-payouts/commands.ts`, `src/app/api/integrations/blindpay/terms`). An owner opens BlindPay's
+  terms link; BlindPay sends them back with `tos_id`, and the same signed-in owner's request makes the workspace's
+  business customer with BlindPay's test values (a development instance approves any). `workspace_payout_partners`
+  (0124) keeps BlindPay's ids and the review status; the ledger records `bank_payouts_set_up`.
+- **A vendor's account** (`src/lib/blindpay/clabe.ts`, `counterparty_bank_accounts`, 0124). An owner or admin enters the
+  CLABE, whose control digit is checked before BlindPay sees it; it goes to BlindPay as a third party's account and
+  only its bank code, last four and beneficiary name are kept, one in use per vendor, never edited (a guard trigger),
+  removed rather than deleted. The ledger records `counterparty_bank_account_set` without the CLABE.
+- **The agent** (`src/lib/agent/orchestrator.ts`). Bank-paid vendors are read once per stage (`bankAccountsOf`); such a
+  vendor needs no address, is never paid across chains, and its decision records `paidToBank: true`. The guardrail
+  `payout.bank_needs_person` holds every pay: a person approves every bank payout. Policy replay settles that stage from
+  `paidToBank`.
+- **Approvals** (`src/lib/agent/approvals.ts`, `src/lib/bank-payouts/words.ts`). The listing reads an indicative quote
+  per bank payout, with no idempotency key, and the card shows the account and what the vendor receives. Approve and
+  pay passes `bank: { bankAccountId, network, token }` to `payInvoice`; the intent's destination is
+  `blindpay:<account id>`.
+- **The payment** (`src/lib/payments.ts`, `src/lib/circle/bank-payout.ts`). The intent keeps `payout_route = 'bank'`
+  from its first attempt: a bill first paid to a bank is never sent to an address, nor the other way round, and bank
+  payouts never go in a batch. `payToBank` asks a fresh quote (keyless: a quote moves nothing, so a try after one
+  expired gets a new one), refuses one whose sender amount is not the bill's or that expired, runs the approve as a
+  Circle contract execution under `<attempt key>/bank-approve` and waits for it to confirm, then asks for the payout
+  under `<attempt key>/bank-payout`, again on `PAYOUTS_ALLOWANCE_NOT_CONFIRMED`. A payout request with no answer, or one
+  whose key BlindPay already holds, keeps the payment in flight (`MAY_HAVE_BEEN_ACCEPTED`), and it is asked for again
+  under the same key, never looked for on Circle. The provider id is `blindpay:<payout id>`; reconciliation reads the
+  payout from BlindPay, and `completed` confirms it. `refunded` reads as Circle's `FAILED`, so a person's Approve and
+  pay opens the next attempt through `begin_payment_retry`, as for any transfer. `failed` is failed but not terminal:
+  BlindPay holds the USDC until it refunds it, so nothing new is sent and the payout is read until it is refunded.
+- **Notices** (`src/lib/bank-payouts/webhook.ts`). BlindPay's webhooks come through Svix: the signature
+  (`svix-id.svix-timestamp.body`, HMAC-SHA256 under the `whsec_` key) and a five-minute window are checked before the
+  body is read; a `payout.*` notice finds the workspace whose payment waits on that payout and starts a
+  `payment_settled` cycle, which reads the payout itself.
+
 ## Accounting connectors: Xero, QuickBooks Online and Zoho Books
 
 A workspace can bring its bills in from Xero (docs/superpowers/specs/2026-10-12-xero-connector-design.md), from

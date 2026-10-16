@@ -11,13 +11,18 @@ import { PAYMENTS_OFF, PaymentsDisabledError, paymentsHold } from "../payments-s
 import { payInvoice, syncOperatingBalance } from "./pay";
 import { amountToPay, invoiceDiscount, type InvoiceDiscount } from "./payment-timing";
 import { ContractRefusal, personPaymentThroughContract } from "../treasury/person-payment";
-import type { SpendingLimitPayment } from "../circle/types";
+import type { BankPayoutParams, SpendingLimitPayment } from "../circle/types";
 import { chainById, homeChain, paidAcrossChains } from "../payee-chains";
 import { counterpartyChainProblem } from "../intake-validation";
 import { workspaceNetwork } from "../workspace-network";
 import { bridgeFee, type BridgeFee } from "../circle/cctp";
 import { gatewayQuoter, type GatewayQuote } from "../circle/gateway-quote";
 import { choosePayoutRoute, payoutFundsShort, type GatewayFigures } from "../payout-route";
+import { bankAccountsOf, readPayoutPartner, type CounterpartyBankAccount } from "../bank-payouts/store";
+import type { BankPayoutShown } from "../bank-payouts/words";
+import { createQuote, MIN_QUOTE } from "../blindpay/api";
+import type { BlindpayQuote } from "../blindpay/map";
+import { blindpaySettingsFromEnv } from "../blindpay/settings";
 import type { CrossChainRoute } from "../circle/types";
 import { commissionPartnersOf } from "../commissions/beneficiary";
 import { isSoleApprover } from "./sole-approver";
@@ -115,7 +120,9 @@ export type ApprovalErrorCode =
   | "needs_second_approver"
   | "chain_off_network"
   | "verdict_needed"
-  | "verdict_disagreed";
+  | "verdict_disagreed"
+  | "bank_not_set_up"
+  | "bank_unsupported_token";
 
 /**
  * Every message except `insufficient_funds` and `needs_second_approver`, whose texts name the balance and the figure,
@@ -141,6 +148,8 @@ const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds" | "needs_
   already_approved: "You approved this already. Another person who can approve payments must approve it to pay.",
   verdict_needed: "This decision waits for a verdict in shadow mode. Agree or disagree with it in Approvals first.",
   verdict_disagreed: "Someone disagreed with this decision in shadow mode, so it is not paid. Return it to the agent or reject it.",
+  bank_not_set_up: "This vendor is paid to a bank account, and bank payouts are not set up on this workspace yet. Set them up under Settings, Bank payouts.",
+  bank_unsupported_token: "Only USDC is paid to a bank account, and this invoice is in EURC.",
 };
 
 export class ApprovalError extends Error {
@@ -504,7 +513,16 @@ export interface WaitingPayable {
    * was already sent.
    */
   twoApprovals?: TwoApprovalsFacts;
+  /**
+   * A vendor paid to its bank account in Mexico through BlindPay (bank payouts B12): the account as the card names it,
+   * and an indicative quote read for this listing, what the vendor would receive now; Approve and pay asks a fresh one.
+   * The quote is null when it was not read: `quoteProblem` says why. Absent for a vendor paid to its address.
+   */
+  bank?: WaitingBankPayout;
 }
+
+/** A bank payout as the approval card shows it (bank payouts B12). */
+export type WaitingBankPayout = BankPayoutShown;
 
 
 /** Every payable currently waiting for a person's decision — held, flagged, awaiting more information, or claimed by someone else right now. */
@@ -512,6 +530,8 @@ export async function listWaitingPayables(
   options: {
     bridgeFee?: (chain: string, amount: number) => Promise<BridgeFee>;
     gatewayQuote?: (chain: string, amount: number) => Promise<GatewayQuote | null>;
+    /** BlindPay's indicative quote for a bank payout (bank payouts B12); BlindPay itself when not given. */
+    bankQuote?: (input: { bankAccountId: string; amount: number }) => Promise<BlindpayQuote>;
   } = {}
 ): Promise<WaitingPayable[]> {
   const rows = unwrap(
@@ -555,10 +575,12 @@ export async function listWaitingPayables(
     bridgeFee: options.bridgeFee ?? ((chain: string, amount: number) => bridgeFee(network, chain, amount)),
     gatewayQuote: options.gatewayQuote ?? ((chain: string, amount: number) => (quoter ??= gatewayQuoter(getChainProvider(), db()))(chain, amount)),
   };
+  // Vendors paid to their bank account in Mexico (bank payouts B4): no chain, no address, no CCTP or Gateway route.
+  const bankAccounts = rows.length > 0 ? await bankAccountsOf(rows.map((row) => row.counterparty_id)) : new Map<string, CounterpartyBankAccount>();
   const quotes = new Map<string, PayoutQuotes>();
   await Promise.all(
     rows
-      .filter((row) => paidAcrossChains(row.counterparties?.chain) && currencyOf(row.currency) === "USDC")
+      .filter((row) => !bankAccounts.has(row.counterparty_id) && paidAcrossChains(row.counterparties?.chain) && currencyOf(row.currency) === "USDC")
       .map(async (row) => quotes.set(row.id, await readPayoutQuotes(row.counterparties?.chain as string, num(row.amount), read)))
   );
 
@@ -574,13 +596,16 @@ export async function listWaitingPayables(
     for (const intent of found) intents.set(intent.source_id, intent);
   }
 
+  const bankPayouts = await waitingBankPayouts(rows, bankAccounts, intents, options.bankQuote);
+
   // Whose address a first payment would go to, where payments are real (new payee check N4): read once for the list.
   const newPayeeFacts =
     rows.length > 0 && chainModes().mode === "live" ? await loadNewPayeeFacts(db(), [...new Set(rows.map((row) => row.counterparty_id))]) : null;
 
   // A transfer already sent is only recorded, which asks no first-payment question (as Approve and pay reads it).
+  // A bank payout goes to no address, so it asks no first-payment question either (B6).
   const newPayeeOf = (row: (typeof rows)[number]) =>
-    newPayeeFacts && !transferExists(intents.get(row.id) ?? null)
+    newPayeeFacts && !bankAccounts.has(row.counterparty_id) && !transferExists(intents.get(row.id) ?? null)
       ? newPayeeCheckFor(newPayeeFacts, { id: row.counterparty_id, address: row.counterparties?.address ?? null })
       : null;
 
@@ -680,8 +705,66 @@ export async function listWaitingPayables(
           }
         : {}),
       ...(twoApprovals.has(row.id) ? { twoApprovals: twoApprovals.get(row.id) } : {}),
+      ...(bankPayouts.has(row.id) ? { bank: bankPayouts.get(row.id) } : {}),
     };
   });
+}
+
+/**
+ * The bank payouts in a listing (bank payouts B12): each vendor's account, and BlindPay's indicative quote for what it
+ * would receive now, read side by side. A quote BlindPay does not answer leaves the card without one, never the list.
+ */
+async function waitingBankPayouts(
+  rows: ReadonlyArray<{ id: string; amount: string; currency?: string | null; counterparty_id: string }>,
+  accounts: Map<string, CounterpartyBankAccount>,
+  intents: Map<string, IntentState>,
+  bankQuote: ((input: { bankAccountId: string; amount: number }) => Promise<BlindpayQuote>) | undefined
+): Promise<Map<string, WaitingBankPayout>> {
+  const out = new Map<string, WaitingBankPayout>();
+  const banked = rows.filter((row) => accounts.has(row.counterparty_id));
+  if (banked.length === 0) return out;
+  const settings = blindpaySettingsFromEnv();
+  const partner = settings ? await readPayoutPartner().catch(() => null) : null;
+  const quote =
+    bankQuote ??
+    (settings && partner?.customerId
+      ? (input: { bankAccountId: string; amount: number }) => createQuote(settings, { ...input, ...settings.route(workspaceNetwork().id) }, undefined)
+      : null);
+  await Promise.all(
+    banked.map(async (row) => {
+      const account = accounts.get(row.counterparty_id) as CounterpartyBankAccount;
+      const amount = num(row.amount);
+      const intent = intents.get(row.id) ?? null;
+      const problem: WaitingBankPayout["quoteProblem"] =
+        transferExists(intent) || transferUnknown(intent)
+          ? "sent"
+          : currencyOf(row.currency) !== "USDC"
+            ? "eurc"
+            : !quote
+              ? "not_set_up"
+              : amount < MIN_QUOTE
+                ? "below_minimum"
+                : null;
+      let read: WaitingBankPayout["quote"] = null;
+      if (problem === null && quote) {
+        try {
+          const answer = await quote({ bankAccountId: account.externalId, amount });
+          read = { receiverAmount: answer.receiverAmount, currency: "MXN", rate: answer.rate, feesReceiver: answer.feesReceiver };
+        } catch (error) {
+          console.error("approvals: BlindPay quote not read", error instanceof Error ? error.message : "unknown error");
+        }
+      }
+      out.set(row.id, {
+        bankCode: account.bankCode,
+        last4: account.last4,
+        beneficiaryName: account.beneficiaryName,
+        accountStatus: account.status,
+        quote: read,
+        quoteProblem: problem ?? (read ? null : "unread"),
+      });
+    })
+  );
+  return out;
 }
 
 /** An invoice's currency as read: EURC, or USDC for anything else, a row from before 0040 included. */
@@ -708,6 +791,21 @@ interface LoadedInvoice {
   destinationChain: string | null;
   poReference: string | null;
   goodsReceived: boolean;
+  /** The vendor's bank account in use, when it is paid to a bank through BlindPay (bank payouts B4, B7). */
+  bankAccount: CounterpartyBankAccount | null;
+}
+
+/**
+ * Where a bank payout goes (bank payouts B7): the vendor's account at BlindPay, on the network and token BlindPay is paid
+ * with for the workspace's network. Refused before any claim when it is not USDC, when the deployment has no BlindPay
+ * instance, or when the workspace has no BlindPay customer yet.
+ */
+async function bankRouteFor(invoice: Pick<LoadedInvoice, "currency" | "bankAccount">): Promise<BankPayoutParams> {
+  if (invoice.currency !== "USDC") raise("bank_unsupported_token");
+  const settings = blindpaySettingsFromEnv();
+  const partner = settings ? await readPayoutPartner() : null;
+  if (!settings || !partner?.customerId || !invoice.bankAccount) raise("bank_not_set_up");
+  return { bankAccountId: invoice.bankAccount.externalId, ...settings.route(getChainProvider().network.id) };
 }
 
 async function loadWaitingPayable(invoiceId: string): Promise<LoadedInvoice> {
@@ -740,6 +838,7 @@ async function loadWaitingPayable(invoiceId: string): Promise<LoadedInvoice> {
   if (!row || row.direction !== "payable" || !(WAITING_STATUSES as readonly string[]).includes(row.status)) {
     raise("invoice_not_found");
   }
+  const bankAccount = (await bankAccountsOf([row.counterparty_id])).get(row.counterparty_id) ?? null;
 
   return {
     id: row.id,
@@ -757,6 +856,7 @@ async function loadWaitingPayable(invoiceId: string): Promise<LoadedInvoice> {
     destinationChain: row.counterparties?.chain ?? null,
     poReference: row.po_reference ?? null,
     goodsReceived: row.goods_received === true,
+    bankAccount,
   };
 }
 
@@ -888,7 +988,8 @@ export async function approveAndPay(
   // A transfer that already exists is reconciled, never sent again.
   const alreadySent = transferExists(intent);
   // Recording a transfer already sent pays no address for the first time: it went wherever it went, as Pay now reads it.
-  const firstPayment = alreadySent ? null : await firstPaymentTo(invoice);
+  // A bank payout has no address to pay for the first time: a person approves every one (bank payouts B6).
+  const firstPayment = alreadySent || invoice.bankAccount ? null : await firstPaymentTo(invoice);
   // Above the workspace's figure a payment needs two people's approval (two approvals T4); a transfer already sent is
   // only recorded, on one approval (T6).
   const above = alreadySent ? null : await readTwoApprovalsAbove(db());
@@ -941,15 +1042,17 @@ export async function approveAndPay(
   }
   if (invoice.riskLevel === "high") raise("high_risk");
   // Nothing to pay where payments are real: refused before any claim, as the agent holds it (counterparty.no_address).
-  if (!invoice.address && chainModes().mode === "live") raise("no_address");
+  // A vendor paid to its bank needs no address (bank payouts B4): only USDC, through the workspace's BlindPay customer.
+  if (!invoice.address && !invoice.bankAccount && chainModes().mode === "live") raise("no_address");
   const shownAddress = input.shownAddress?.trim();
-  if (shownAddress !== undefined && !sameAddress(invoice.address, shownAddress === "" ? null : shownAddress)) {
+  if (!invoice.bankAccount && shownAddress !== undefined && !sameAddress(invoice.address, shownAddress === "" ? null : shownAddress)) {
     raise("address_changed");
   }
+  const bank = invoice.bankAccount && !alreadySent ? await bankRouteFor(invoice) : null;
 
   // A payee's chain must be one the workspace's network pays on (network threading P3): refused in plain words, before
   // any claim, and never paid on the workspace's own chain instead.
-  const chainProblem = counterpartyChainProblem(getChainProvider().network.id, invoice.destinationChain);
+  const chainProblem = invoice.bankAccount ? null : counterpartyChainProblem(getChainProvider().network.id, invoice.destinationChain);
   if (chainProblem) throw new ApprovalError("chain_off_network", chainProblem);
 
   // Only USDC crosses chains (CCTP payouts X6): refused before any claim.
@@ -1009,7 +1112,7 @@ export async function approveAndPay(
   // A new payment to another chain (approval payout route P1): both routes' fees and the Gateway balance, read now, and
   // the route by the agent's rule, keeping the one an earlier attempt took. A transfer already sent is only reconciled:
   // its decision recorded them.
-  const crossChain = !alreadySent && invoice.currency === "USDC" && paidAcrossChains(invoice.destinationChain);
+  const crossChain = !alreadySent && !invoice.bankAccount && invoice.currency === "USDC" && paidAcrossChains(invoice.destinationChain);
   const quotes = crossChain
     ? await readPayoutQuotes(invoice.destinationChain as string, invoice.amount, {
         bridgeFee: options.bridgeFee ?? ((chain, amount) => bridgeFee(provider.network, chain, amount)),
@@ -1139,9 +1242,11 @@ export async function approveAndPay(
         currency: invoice.currency,
         // A person approving a payout to another chain lets its fee be at most the invoice itself (review I2, I4):
         // a fee read higher at the burn sends nothing.
-        ...(paidAcrossChains(invoice.destinationChain)
+        ...(paidAcrossChains(invoice.destinationChain) && !invoice.bankAccount
           ? { destinationChain: invoice.destinationChain as string, maxBridgeFeeUsdc: invoice.amount, ...(route ? { route } : {}) }
           : {}),
+        // A vendor paid to its bank (bank payouts B7); a payout already sent is reconciled under its intent's route.
+        ...(invoice.bankAccount ? { bank: bank ?? (await bankRouteFor(invoice)) } : {}),
         // From the owner's own wallet, only through its contract, from the agent's wallet (wallet treasury W11).
         ...(throughContract ? { spendingLimit: throughContract } : {}),
       },
@@ -1210,8 +1315,13 @@ export async function approveAndPay(
       // attempt Circle failed before it: ids and states only.
       ...(result.execution ? { attempt: result.execution.attempt } : {}),
       ...(result.execution?.retriedAfter ? { retriedAfter: result.execution.retriedAfter } : {}),
-      // A new payment to another chain: the route it took and both routes' fees, as an ap_pay entry records them.
-      ...(payout ? { payout } : {}),
+      // A new payment to another chain: the route it took and both routes' fees, as an ap_pay entry records them. A bank
+      // payout: BlindPay's quote and payout, and the account's bank and last four (bank payouts B10).
+      ...(result.execution?.bankPayout && invoice.bankAccount
+        ? { payout: { route: "bank", ...result.execution.bankPayout, rail: "spei", bankAccount: { bankCode: invoice.bankAccount.bankCode, last4: invoice.bankAccount.last4 } } }
+        : payout
+          ? { payout }
+          : {}),
       // The person who entered it approved it, as the workspace's only approver.
       ...(soleApprover ? { soleApprover: true } : {}),
       // The person who gave the address, or asked for it, made its first payment as the workspace's only approver.

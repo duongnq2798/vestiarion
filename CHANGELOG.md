@@ -14,6 +14,16 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Bills paid to a vendor's bank account in Mexico.** An owner sets the workspace up for bank payouts from Settings,
+  accepting BlindPay's terms on BlindPay's page, and an owner or admin gives a vendor its CLABE on Counterparties. That
+  vendor's bills are then paid to its bank account in pesos over SPEI, through BlindPay, from the workspace's USDC on
+  Arc: the CLABE is checked before BlindPay sees it, and only its bank and last four digits are kept. The agent decides
+  on the bills as on any other, and a person approves every bank payout, after the approval card shows what the vendor
+  receives by BlindPay's quote. A payout takes exactly the bill's amount or sends nothing, is asked for under the
+  payment's own key, so BlindPay makes it once, and one BlindPay refunded is paid again only by a person. In
+  this version a workspace is set up on BlindPay's development instance, with BlindPay's test business values. It needs
+  `BLINDPAY_API_KEY`, `BLINDPAY_INSTANCE_ID` and `BLINDPAY_WEBHOOK_SECRET` and migration `0124`.
+  [Guide](https://www.vestiarion.xyz/docs/guides/bank-payouts).
 - **Won deals from Zoho CRM.** An owner or admin connects a Zoho CRM organization from Settings, and its won deals come
   in with their accounts and contacts under Deals on Bills & receivables; Plan collections fills in the New deal form
   from one, and nothing is planned until a person confirms it. A deal is won when its pipeline counts its stage as Closed

@@ -72,6 +72,8 @@ export const TENANT_TABLES = [
   "decision_reasons",
   // What the Chrome extension captured, until a person adds it as a bill or discards it (migration 0121).
   "invoice_drafts",
+  // Bank payouts through BlindPay: the workspace's customer and each vendor's bank account (migration 0124).
+  "workspace_payout_partners", "counterparty_bank_accounts",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
@@ -88,6 +90,8 @@ export const TENANT_RPCS = [
   "zohobooks_connector_ready",
   // Whether migration 0123 has run (Zoho CRM connector C17): it reads nothing.
   "zohocrm_connector_ready",
+  // Whether migration 0124 has run (bank payouts B11): it reads nothing.
+  "bank_payouts_ready",
   // Commissions on money received (commissions C2, C5, C10, C11).
   "set_commission_plan", "end_commission_plan", "record_commissions", "create_commission_payout", "commission_partner_members",
 ] as const;

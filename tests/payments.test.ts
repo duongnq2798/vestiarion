@@ -80,7 +80,7 @@ class MemoryStore implements PaymentIntentStore {
       previousAttempts: [],
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
-      route: input.escrow ? "escrow" : input.destinationChain && input.destinationChain !== "ARC-TESTNET" ? (input.route ?? "cctp") : null,
+      route: input.escrow ? "escrow" : input.bank ? "bank" : input.destinationChain && input.destinationChain !== "ARC-TESTNET" ? (input.route ?? "cctp") : null,
       destinationChain: input.destinationChain && input.destinationChain !== "ARC-TESTNET" ? input.destinationChain : null,
     };
     return { ...this.intent };
@@ -400,6 +400,64 @@ describe("payment idempotency", () => {
     const stopped = await executePayment(escrowed, { provider: both, store: transferred });
     expect(both.transfers).toEqual([]);
     expect(stopped.error).toBe("This milestone is locked in escrow, but its payment was started as a transfer; nothing was sent. Check it before paying it.");
+  });
+
+  it("keeps a bank payout a bank payout, and opens a new attempt once BlindPay failed it (bank payouts B7)", async () => {
+    const BANK = { bankAccountId: "ba_000000000001", network: "arc_testnet", token: "USDB" as const };
+    const banked = { ...request, destination: "blindpay:ba_000000000001", bank: BANK };
+
+    // The first attempt: the intent keeps the bank route, and the payout goes out to the account.
+    const first = new MemoryStore();
+    const provider = new FakeProvider();
+    provider.transferResults.push({ ...transferResult("pending", "blindpay:po_000000000001", { state: "processing" }), route: "bank" });
+    const sent = await executePayment(banked, { provider, store: first });
+    expect(first.intent?.route).toBe("bank");
+    expect(provider.transfers[0]).toMatchObject({ route: "bank", bank: BANK, idempotencyKey: paymentIdempotencyKey("invoice", request.sourceId) });
+    expect(sent.status).toBe("pending");
+
+    // A later attempt asked without the account: nothing goes to an address instead.
+    const pinned = new MemoryStore();
+    await pinned.ensure({ ...banked, idempotencyKey: paymentIdempotencyKey("invoice", request.sourceId), provider: "circle" });
+    pinned.intent = { ...pinned.intent!, status: "failed", attemptCount: 1 };
+    const plain = new FakeProvider();
+    const refused = await executePayment(request, { provider: plain, store: pinned });
+    expect(plain.transfers).toEqual([]);
+    expect(refused.error).toBe("This bill was first paid to a bank account through BlindPay; nothing was sent. Check the payout with BlindPay before paying it another way.");
+
+    // A bill first paid to an address is never paid to the bank on top of it.
+    const addressed = new MemoryStore();
+    await addressed.ensure({ ...request, idempotencyKey: paymentIdempotencyKey("invoice", request.sourceId), provider: "circle" });
+    addressed.intent = { ...addressed.intent!, status: "failed", attemptCount: 1 };
+    const both = new FakeProvider();
+    const stopped = await executePayment(banked, { provider: both, store: addressed });
+    expect(both.transfers).toEqual([]);
+    expect(stopped.error).toBe("This bill was first paid to an address; nothing was sent. Check that payment before paying it to the vendor's bank account.");
+
+    // BlindPay refunded the payout, which reads as Circle's own terminal failure: a person's Approve and pay opens the next
+    // attempt under a new key, still to the bank.
+    const failed = new MemoryStore();
+    await failed.ensure({ ...banked, idempotencyKey: paymentIdempotencyKey("invoice", request.sourceId), provider: "circle" });
+    failed.intent = { ...failed.intent!, status: "failed", attemptCount: 1, providerTxId: "blindpay:po_000000000001", providerState: "FAILED" };
+    const again = new FakeProvider();
+    again.reconcileResults.push({ ...transferResult("failed", "blindpay:po_000000000001", { state: "FAILED", reason: "BlindPay refunded the payout" }), route: "bank" });
+    again.transferResults.push({ ...transferResult("pending", "blindpay:po_000000000002", { state: "processing" }), route: "bank" });
+    await executePayment(banked, { provider: again, store: failed, retryTerminalFailure: true });
+    expect(again.reconciliations).toEqual(["blindpay:po_000000000001"]);
+    expect(again.transfers).toHaveLength(1);
+    expect(again.transfers[0]).toMatchObject({ route: "bank", bank: BANK, idempotencyKey: paymentIdempotencyKey("invoice", request.sourceId, 2) });
+  });
+
+  it("asks a bank payout BlindPay never answered for again under its own key, never looking for it on Circle (bank payouts B7)", async () => {
+    const BANK = { bankAccountId: "ba_000000000001", network: "arc_testnet", token: "USDB" as const };
+    const banked = { ...request, destination: "blindpay:ba_000000000001", bank: BANK };
+    const store = new MemoryStore();
+    await store.ensure({ ...banked, idempotencyKey: paymentIdempotencyKey("invoice", request.sourceId), provider: "circle" });
+    store.intent = { ...store.intent!, status: "failed", attemptCount: 1, lastError: "BlindPay did not answer the payout request, so it may or may not have been accepted; it is asked for again under the same key." };
+    const provider = new FakeProvider();
+    provider.transferResults.push({ ...transferResult("pending", "blindpay:po_000000000001", { state: "processing" }), route: "bank" });
+    await executePayment(banked, { provider, store });
+    expect(provider.lookups).toEqual([]);
+    expect(provider.transfers[0]).toMatchObject({ route: "bank", idempotencyKey: paymentIdempotencyKey("invoice", request.sourceId) });
   });
 
   it("sends a Gateway retry with the same amount, payee and chain as before, in whatever case the address is written", async () => {

@@ -127,6 +127,7 @@ const RULE_WORDS: Record<string, string> = {
   "bridge.fee_unavailable": "no cross-chain fee",
   "bridge.fee_above_cap": "the cross-chain fee is too high",
   "bridge.gateway_balance_short": "the Gateway balance is short",
+  "payout.bank_needs_person": "it is paid to a bank account",
   "workspace.onchain_limit_route": "the spending-limit contract on Arc cannot carry it",
   "workspace.onchain_limit": "the spending-limit contract on Arc refuses it",
   "obligation.duplicate_reference": "the same purchase order or work as an earlier bill or milestone",
