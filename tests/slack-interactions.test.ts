@@ -189,7 +189,11 @@ describe("handleInteraction", () => {
 
   it("refuses a card that was changed, has expired, or is another workspace's", async () => {
     const { handle, replies } = world();
-    await handle(signedClick("vx_approve", `${cardToken(CARD, keys()).slice(0, -2)}AA`));
+    // Change the signature's first character to one it is not: a signature already ending in "AA" (one in 1,024, and the
+    // token carries the time) was left as it was by writing "AA" over its end.
+    const token = cardToken(CARD, keys());
+    const at = token.lastIndexOf(".") + 1;
+    await handle(signedClick("vx_approve", `${token.slice(0, at)}${token[at] === "A" ? "B" : "A"}${token.slice(at + 1)}`));
     await handle(signedClick("vx_approve", cardToken(CARD, keys(), Date.now() - 8 * 24 * 60 * 60_000)));
     await handle(signedClick("vx_approve", cardToken({ ...CARD, org: OTHER_ORG }, keys())));
     expect(mocks.approve).not.toHaveBeenCalled();
