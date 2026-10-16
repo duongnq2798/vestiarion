@@ -53,6 +53,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- **Each kind of team on the landing page ends with the agent's decision, not a receipt.** Beside each story under
+  "Who it's for", the card shows what the agent checked, each check passed or failed, and its decision and why: paid
+  when every check passed, held for a person when a rule in code refused it, or scheduled for an early-payment
+  discount's last day. Each card links to How the agent decides, and screen readers now read it.
 - **The landing page's hero is quieter, and says what Invoice Capture does.**
   - The left column is three groups: the message, the call to action with shadow mode right under it, and Invoice
     Capture. The headline is a little smaller, so the column stands level with the sample bills.
