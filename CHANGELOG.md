@@ -59,6 +59,18 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- **The docs read and find their way like a product's.**
+  - The sidebar is grouped by what you are doing: Get started, Pay bills, Plan and report, Get paid, Trust and controls,
+    Connect your tools and Developers, then the reference. Each section opens and closes, the one you are reading opens
+    by itself, and the long ones split into short groups, such as Accounting and Sales and CRM.
+  - Pages sit on a white reading surface with a breadcrumb, a stronger title and a lead, at about 75 characters a line,
+    with an Edit this page on GitHub link.
+  - Callouts carry their own colour, icon and label.
+  - The docs' home leads with search and the two ways in, then popular workflows, every section's first guides and the
+    developer resources.
+  - The bank payout guide draws its flow, from the bill to the vendor's bank, and puts its sandbox notice up as
+    Important.
+  - Every page keeps its address.
 - **Arc and Circle stand out on the landing page as what Vestiarion is built on.** Under the integrations, "Built on
   Arc, with Circle" gives each a larger card. Arc's says payments are made there, each linked to its transaction,
   testnet for trials and mainnet for real USDC, and links the open numbers and the README's mainnet proof. Circle's

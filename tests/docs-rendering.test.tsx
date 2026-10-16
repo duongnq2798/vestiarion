@@ -200,9 +200,9 @@ describe("the overview's card grid", () => {
     expect(open).toBeGreaterThan(-1);
     expect(grid.startsWith("<a ")).toBe(true);
     expect(grid).not.toMatch(/<p[^>]*><a /);
-    // The first grid is the four ways in; a callout may follow it before the next heading.
+    // The first grid is the six popular workflows, each with its icon (docs redesign D5).
     const cards = (grid.match(/<a [^>]*>/g) ?? []).filter((tag) => tag.includes('href="/docs') && tag.includes("rounded-2xl"));
-    expect(cards).toHaveLength(4);
+    expect(cards).toHaveLength(6);
   });
 });
 

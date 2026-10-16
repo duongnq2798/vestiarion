@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { headingComponents } from "@/components/docs/DocsHeading";
+import { DocsHomeHero } from "@/components/docs/DocsHomeHero";
 import { DocsPage } from "@/components/docs/DocsShell";
 import { hasSource, loadPage, readSource } from "@/lib/docs/content";
 import { slugifyHeadings } from "@/lib/docs/headings";
@@ -49,7 +50,14 @@ export default async function DocsSlugPage({ params }: Props) {
   const { Content } = loaded;
 
   return (
-    <DocsPage slug={slug} section={found.section} title={found.page.title} description={found.page.description} headings={headings}>
+    <DocsPage
+      slug={slug}
+      section={found.section}
+      title={found.page.title}
+      description={found.page.description}
+      headings={headings}
+      hero={slug === "" ? <DocsHomeHero /> : undefined}
+    >
       <Content components={headingComponents(headings)} />
     </DocsPage>
   );

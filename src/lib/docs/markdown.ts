@@ -4,7 +4,7 @@ import { MCP_TOOLS } from "@/lib/mcp/tools";
 import { calloutLabel } from "./callouts";
 import { hasSource, notesSource, publishedPages, readSource } from "./content";
 import { fencedLines } from "./headings";
-import { findPage, operationsByTag } from "./nav";
+import { DOCS_NAV, findPage, operationsByTag } from "./nav";
 import { docsHref, docsMarkdownPath } from "./paths";
 import { ERROR_MEANINGS, REFERENCE_SECTIONS } from "./reference";
 import { sampleRequest } from "./samples";
@@ -63,6 +63,29 @@ export const MDX_TO_MARKDOWN: Record<string, (attributes: JsxAttributes, childre
     const description = convert(children).replace(/\s+/g, " ").trim();
     return `- [${title}](${href})${description ? `: ${description}` : ""}`;
   },
+  // A workflow (docs redesign D7): its steps as a numbered list, then its caption in italics.
+  Flow: (attributes, children, { convert }) => {
+    const steps = convert(children)
+      .split("\n")
+      .filter((line) => line.trim())
+      .map((line, index) => line.replace(/^- /, `${index + 1}. `));
+    const caption = typeof attributes.caption === "string" ? attributes.caption.trim() : "";
+    return caption ? `${steps.join("\n")}\n\n*${caption}*` : steps.join("\n");
+  },
+  FlowStep: (attributes, children, { convert }) => {
+    const { title } = attributes;
+    if (typeof title !== "string" || !title.trim()) throw new Error("<FlowStep> needs a title");
+    const detail = convert(children).replace(/\s+/g, " ").trim();
+    return `- **${title}**${detail ? `: ${detail}` : ""}`;
+  },
+  // The docs' home's topics: each section of the sidebar but the reference lists and the changelog, with its pages.
+  TopicIndex: () =>
+    DOCS_NAV.filter((section) => !section.folded && section.pages.length > 1)
+      .map((section) => {
+        const pages = section.pages.filter((page) => page.slug !== "");
+        return `- **${section.title}**: ${pages.map((page) => `[${page.title}](${docsHref(page.slug)})`).join(", ")}`;
+      })
+      .join("\n"),
   // A step's screenshot: a Markdown image, its root path made absolute with the links, then its caption in italics.
   Screenshot: (attributes) => {
     const { src, alt, caption } = attributes;
@@ -96,10 +119,10 @@ export const MDX_TO_MARKDOWN: Record<string, (attributes: JsxAttributes, childre
  *   table row it would be a cell; after a quote, a list item or text, and
  *   before text, it would continue a paragraph.
  */
-const BLOCK_COMPONENTS = new Set(["Callout", "Action", "Cards", "Card", "EndpointTable", "McpToolTable", "Screenshot", "Video"]);
+const BLOCK_COMPONENTS = new Set(["Callout", "Action", "Cards", "Card", "EndpointTable", "McpToolTable", "Screenshot", "Video", "Flow", "FlowStep", "TopicIndex"]);
 
 /** Components that belong only inside another: a `Card` is one cell of a `Cards` grid. */
-const PARENT_OF: Record<string, string> = { Card: "Cards" };
+const PARENT_OF: Record<string, string> = { Card: "Cards", FlowStep: "Flow" };
 
 /** Whether `text` holds only spaces and tabs from `from` to the end of its line. */
 function restOfLineBlank(text: string, from: number): boolean {

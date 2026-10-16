@@ -136,8 +136,10 @@ describe("the docs navigation", () => {
     const slugs = flatPages().map((page) => page.slug);
     expect(new Set(slugs).size).toBe(slugs.length);
     expect(DOCS_NAV.map((section) => section.title)).toEqual([
-      "Start here",
-      "Everyday work",
+      "Get started",
+      "Pay bills",
+      "Plan and report",
+      "Get paid",
       "Trust and controls",
       "Connect your tools",
       "Developers",
@@ -158,36 +160,52 @@ describe("the docs navigation", () => {
     );
   });
 
-  it("groups the pages by what a reader is doing, a business's path first and the developers' after (docs clarity N1)", () => {
+  it("groups the pages by what a reader is doing, a business's path first and the developers' after (docs clarity N1, docs redesign D2)", () => {
     const pagesOf = (title: string) => DOCS_NAV.find((section) => section.title === title)!.pages.map((page) => [page.slug, page.title]);
-    expect(pagesOf("Start here")).toEqual([
+    const groupsOf = (title: string) => DOCS_NAV.find((section) => section.title === title)!.pages.map((page) => page.group);
+    expect(pagesOf("Get started")).toEqual([
       ["", "Overview"],
       ["guides/try-it", "See your first decision"],
       ["guides/workspace", "Find your way around a workspace"],
-    ]);
-    expect(pagesOf("Everyday work")).toEqual([
       ["guides/shadow-mode", "Run alongside how you pay today"],
       ["guides/go-live", "Go live"],
+    ]);
+    expect(pagesOf("Pay bills")).toEqual([
       ["guides/first-payment", "Your first payment"],
-      ["guides/where-a-payment-is", "Know where a payment is"],
-      ["guides/payment-exceptions", "When a payment does not settle"],
-      ["guides/import-bills", "Import your bill list"],
       ["guides/pay-a-contractor", "Pay a contractor for delivered work"],
       ["guides/early-payment-offers", "Pay early for a discount"],
       ["guides/bank-payouts", "Pay a vendor's bank account in Mexico"],
+      ["guides/import-bills", "Import your bill list"],
       ["guides/email-invoices", "Add invoices by email"],
+      ["guides/where-a-payment-is", "Know where a payment is"],
+      ["guides/payment-exceptions", "When a payment does not settle"],
+      ["guides/get-paid", "Get paid as a freelancer"],
+    ]);
+    expect(groupsOf("Pay bills")).toEqual([
+      "Pay",
+      "Pay",
+      "Pay",
+      "Pay",
+      "Add bills",
+      "Add bills",
+      "Follow a payment",
+      "Follow a payment",
+      "For the people you pay",
+    ]);
+    expect(pagesOf("Plan and report")).toEqual([
       ["guides/payment-plan", "Plan the next two weeks of payments"],
-      ["guides/report", "Read your workspace report"],
       ["guides/cash-scenarios", "Plan for clients paying late"],
-      ["guides/currencies", "Work in your own currency"],
-      ["guides/apply-payments", "Apply money received to invoices"],
       ["guides/projects", "Give each project its own budget"],
+      ["guides/currencies", "Work in your own currency"],
+      ["guides/report", "Read your workspace report"],
+      ["guides/accountants", "Work across clients as an accountant"],
+    ]);
+    expect(pagesOf("Get paid")).toEqual([
       ["guides/deals", "Turn a signed deal into a collection schedule"],
-      ["guides/commissions", "Pay commissions on money received"],
       ["guides/customer-portal", "Share a statement with a customer"],
       ["guides/collections", "Chase what customers owe"],
-      ["guides/accountants", "Work across clients as an accountant"],
-      ["guides/get-paid", "Get paid as a freelancer"],
+      ["guides/apply-payments", "Apply money received to invoices"],
+      ["guides/commissions", "Pay commissions on money received"],
     ]);
     expect(pagesOf("Trust and controls")).toEqual([
       ["guides/controls", "How payments are controlled"],
@@ -198,9 +216,6 @@ describe("the docs navigation", () => {
       ["contracts", "Contracts on Arc"],
     ]);
     expect(pagesOf("Connect your tools")).toEqual([
-      ["guides/slack", "Get the agent's decisions in Slack"],
-      ["guides/invoice-capture", "Capture invoices from Chrome"],
-      ["guides/telegram", "Get the agent's decisions in Telegram"],
       ["guides/xero", "Bring bills in from Xero"],
       ["guides/quickbooks", "Bring bills in from QuickBooks Online"],
       ["guides/zohobooks", "Bring bills in from Zoho Books"],
@@ -209,13 +224,25 @@ describe("the docs navigation", () => {
       ["guides/zohocrm", "Bring deals in from Zoho CRM"],
       ["guides/asana", "Accept contractor work from Asana"],
       ["guides/github", "Show payments on GitHub"],
+      ["guides/slack", "Get the agent's decisions in Slack"],
+      ["guides/telegram", "Get the agent's decisions in Telegram"],
+      ["guides/invoice-capture", "Capture invoices from Chrome"],
     ]);
+    expect([...new Set(groupsOf("Connect your tools"))]).toEqual(["Accounting", "Sales and CRM", "Delivered work", "Team chat", "Your browser"]);
     expect(pagesOf("Developers").slice(0, 4)).toEqual([
       ["get-started/quickstart", "Developer quickstart"],
       ["get-started/sdk", "TypeScript SDK"],
       ["get-started/cli", "Command-line interface"],
       ["get-started/authentication", "Authentication"],
     ]);
+    expect([...new Set(groupsOf("Developers"))]).toEqual(["Start", "Guides", "Conventions", "AI agents"]);
+    // A group is a run: once a section moves on from a group, it never comes back to it.
+    for (const section of DOCS_NAV) {
+      const runs = section.pages.map((page) => page.group).filter((group, index, all) => group !== all[index - 1]);
+      expect(new Set(runs).size, section.title).toBe(runs.length);
+      // A section either groups all its pages or none.
+      expect(new Set(section.pages.map((page) => page.group === undefined)).size, section.title).toBe(1);
+    }
   });
 
   it("folds only the long reference lists in the sidebar", () => {
@@ -246,30 +273,22 @@ describe("the docs navigation", () => {
     expect(neighbours("guides/workspace").next?.slug).toBe("guides/shadow-mode");
     expect(neighbours("guides/shadow-mode").next?.slug).toBe("guides/go-live");
     expect(neighbours("guides/go-live").next?.slug).toBe("guides/first-payment");
-    expect(neighbours("guides/first-payment").next?.slug).toBe("guides/where-a-payment-is");
+    // Paying bills: the kinds of payment, the ways bills come in, following a payment, then the payee's side.
+    expect(neighbours("guides/first-payment").next?.slug).toBe("guides/pay-a-contractor");
+    expect(neighbours("guides/bank-payouts").next?.slug).toBe("guides/import-bills");
+    expect(neighbours("guides/email-invoices").next?.slug).toBe("guides/where-a-payment-is");
     expect(neighbours("guides/where-a-payment-is").next?.slug).toBe("guides/payment-exceptions");
-    expect(neighbours("guides/payment-exceptions").next?.slug).toBe("guides/import-bills");
-    expect(neighbours("guides/import-bills").next?.slug).toBe("guides/pay-a-contractor");
-    expect(neighbours("guides/email-invoices").next?.slug).toBe("guides/payment-plan");
-    expect(neighbours("guides/payment-plan").next?.slug).toBe("guides/report");
-    expect(neighbours("guides/get-paid").next?.slug).toBe("guides/controls");
+    expect(neighbours("guides/get-paid").next?.slug).toBe("guides/payment-plan");
+    expect(neighbours("guides/report").next?.slug).toBe("guides/accountants");
+    expect(neighbours("guides/accountants").next?.slug).toBe("guides/deals");
+    expect(neighbours("guides/commissions").next?.slug).toBe("guides/controls");
     // How payments are controlled, trying a limit first, why one payment was paid, then checking the whole ledger.
     expect(neighbours("guides/controls").next?.slug).toBe("guides/try-a-rule");
     expect(neighbours("guides/try-a-rule").next?.slug).toBe("guides/evidence");
     expect(neighbours("guides/evidence").next?.slug).toBe("guides/audit-export");
-    expect(neighbours("contracts").next?.slug).toBe("guides/slack");
-    expect(neighbours("guides/github").next?.slug).toBe("get-started/quickstart");
+    expect(neighbours("contracts").next?.slug).toBe("guides/xero");
+    expect(neighbours("guides/invoice-capture").next?.slug).toBe("get-started/quickstart");
     expect(neighbours("ai-integration/mcp").next?.slug).toBe("api");
-    expect(neighbours("guides/report").next?.slug).toBe("guides/cash-scenarios");
-    expect(neighbours("guides/cash-scenarios").next?.slug).toBe("guides/currencies");
-    expect(neighbours("guides/currencies").next?.slug).toBe("guides/apply-payments");
-    expect(neighbours("guides/apply-payments").next?.slug).toBe("guides/projects");
-    expect(neighbours("guides/projects").next?.slug).toBe("guides/deals");
-    expect(neighbours("guides/deals").next?.slug).toBe("guides/commissions");
-    expect(neighbours("guides/commissions").next?.slug).toBe("guides/customer-portal");
-    expect(neighbours("guides/customer-portal").next?.slug).toBe("guides/collections");
-    expect(neighbours("guides/collections").next?.slug).toBe("guides/accountants");
-    expect(neighbours("guides/accountants").next?.slug).toBe("guides/get-paid");
     expect(neighbours(pages[pages.length - 1].slug).next).toBeUndefined();
     expect(neighbours("no-such-page")).toEqual({});
   });

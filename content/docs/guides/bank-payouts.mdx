@@ -2,7 +2,25 @@ Some vendors want pesos in their bank account, not USDC in a wallet. Bank payout
 
 The agent still reads every bill and decides on it as for any vendor. It never pays a bank payout by itself: a person approves every one.
 
-<Callout kind="note" title="BlindPay's development instance">
+<Flow caption="In this version BlindPay's development instance runs every payout through its sandbox, on Arc testnet: no pesos reach a bank.">
+  <FlowStep title="A bill to the vendor">
+    In USDC, at least 10.00 USDC.
+  </FlowStep>
+  <FlowStep title="The agent decides">
+    Every check, as for any vendor. A payment it would make is held for you.
+  </FlowStep>
+  <FlowStep title="A person approves">
+    In Approvals, after seeing what the vendor receives by BlindPay's quote.
+  </FlowStep>
+  <FlowStep title="BlindPay pays out">
+    From the operating wallet: USDC, or test USDB on Arc testnet.
+  </FlowStep>
+  <FlowStep title="The vendor's bank">
+    Pesos over SPEI, to the CLABE on file.
+  </FlowStep>
+</Flow>
+
+<Callout kind="important" title="BlindPay's development instance">
 In this version a workspace is set up on BlindPay's development instance, with BlindPay's test business values, on Arc testnet. BlindPay runs each payout through its sandbox: you see the quote, the payout and its outcome, and no pesos reach a bank. A production instance needs BlindPay's own review of your business, which this version does not collect.
 </Callout>
 
