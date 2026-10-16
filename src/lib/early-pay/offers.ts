@@ -1,8 +1,10 @@
 import crypto from "node:crypto";
 import { runCycleSoon } from "../agent/cycle-soon";
+import { currentOrgId } from "../context";
 import { db, platformDb, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
+import { AGENT_MAX_CEILING_PCT, AGENT_MIN_CEILING_PCT } from "./agent-rules";
 import { MAX_OFFER_PCT, MIN_OFFER_PCT, suggestOffer, type OfferCandidate, type OffersView } from "./offers-words";
 
 export * from "./offers-words";
@@ -75,6 +77,10 @@ export async function offersView(now: Date = new Date()): Promise<OffersView | n
   const reserve = (unwrap(await db().from("accounts").select("apy").eq("kind", "reserve").maybeSingle()) as { apy: string | null } | null) ?? null;
   const reserveApy = reserve?.apy != null && Number.isFinite(Number(reserve.apy)) ? Number(reserve.apy) : 0;
   const openBy = new Map(offers.filter((row) => row.status === "open" && Date.parse(row.expires_at) > now.getTime()).map((row) => [row.invoice_id, row] as const));
+  const agent = await agentOffersSetting();
+  // The offers the agent made (0126): read best effort, so an offer out says who made it.
+  const reviews = agent ? await db().from("early_payment_offer_reviews").select("offer_id").not("offer_id", "is", null).limit(500) : null;
+  const byAgent = new Set(((reviews && !reviews.error ? reviews.data : []) as Array<{ offer_id: string | null }>).map((row) => row.offer_id));
   const candidates = invoices
     .filter((row) => !started.has(row.id) && Number(row.amount) > 0)
     .map((row): OfferCandidate => {
@@ -87,7 +93,7 @@ export async function offersView(now: Date = new Date()): Promise<OffersView | n
         currency: row.currency === "EURC" ? "EURC" : "USDC",
         dueDate: row.due_date,
         suggestion: suggestOffer({ dueDate: row.due_date, now, reserveApy }),
-        open: open ? { id: open.id, pct: Number(open.discount_pct), offered: Number(open.offered_amount), expiresAt: open.expires_at } : null,
+        open: open ? { id: open.id, pct: Number(open.discount_pct), offered: Number(open.offered_amount), expiresAt: open.expires_at, byAgent: byAgent.has(open.id) } : null,
       };
     })
     .slice(0, 12);
@@ -95,11 +101,46 @@ export async function offersView(now: Date = new Date()): Promise<OffersView | n
     .filter((row): row is OfferRow & { status: "accepted" | "declined" | "withdrawn"; decided_at: string } => row.status !== "open" && row.decided_at !== null)
     .slice(0, 5)
     .map((row) => ({ id: row.id, counterpartyName: row.counterparties?.name ?? "A supplier", pct: Number(row.discount_pct), status: row.status, decidedAt: row.decided_at }));
-  return { reserveApy, candidates, recent };
+  return { reserveApy, agent, candidates, recent };
 }
 
-/** An offer made for a bill (E3), recorded; the link is returned once and never kept. */
-export async function createOffer(input: { orgId: string; actorId: string; invoiceId: string; pct: number; origin: string; now?: number }): Promise<{ url: string; offered: number; expiresAt: string }> {
+/** Whether the agent makes offers in the workspace in scope, and its ceiling (AO1); null before migration 0126. */
+export async function agentOffersSetting(): Promise<{ on: boolean; maxPct: number | null } | null> {
+  const org = await platformDb().from("orgs").select("early_offers_on_at, early_offers_max_pct").eq("id", currentOrgId()).maybeSingle<{ early_offers_on_at: string | null; early_offers_max_pct: string | null }>();
+  if (org.error || !org.data) return null;
+  const max = org.data.early_offers_max_pct === null ? null : Number(org.data.early_offers_max_pct);
+  return { on: org.data.early_offers_on_at !== null, maxPct: max !== null && Number.isFinite(max) ? max : null };
+}
+
+/** The agent's offers turned on, with the most it asks, or off (AO1); recorded in the ledger. */
+export async function setAgentOffers(input: { orgId: string; actorId: string; on: boolean; maxPct: number | null }): Promise<void> {
+  if (input.on && (input.maxPct === null || !Number.isFinite(input.maxPct) || input.maxPct < AGENT_MIN_CEILING_PCT || input.maxPct > AGENT_MAX_CEILING_PCT)) {
+    throw new OfferError(`Set the most to ask from ${AGENT_MIN_CEILING_PCT}% to ${AGENT_MAX_CEILING_PCT}%.`);
+  }
+  const maxPct = input.on ? Math.round((input.maxPct as number) * 100) / 100 : null;
+  const done = await platformDb().rpc("set_agent_early_offers", { p_org_id: input.orgId, p_on: input.on, p_max_pct: maxPct, p_by: input.actorId });
+  if (done.error) throw new Error(done.error.message);
+  await appendLedgerEntryBestEffort(input.orgId, {
+    actor: "human",
+    domain: "ap",
+    action: input.on ? "early_offers_on" : "early_offers_off",
+    summary: input.on ? `The agent makes early-payment offers, asking at most ${(maxPct as number).toFixed(2)}%` : "The agent no longer makes early-payment offers",
+    detail: { by: input.actorId, ...(input.on ? { maxPct } : {}) },
+  });
+}
+
+export interface MadeOffer {
+  id: string;
+  invoice_id: string;
+  counterparty_id: string;
+  amount: string;
+  offered_amount: string;
+  currency: string;
+  expires_at: string;
+}
+
+/** The offer row made under a new token (E3), by a person or by the agent (null); the token is returned, never kept. */
+async function insertOffer(input: { orgId: string; actorId: string | null; invoiceId: string; pct: number; now?: number }): Promise<{ token: string; pct: number; row: MadeOffer }> {
   if (!Number.isFinite(input.pct) || input.pct < MIN_OFFER_PCT || input.pct > MAX_OFFER_PCT) {
     throw new OfferError(`Ask a discount from ${MIN_OFFER_PCT}% to ${MAX_OFFER_PCT}%.`);
   }
@@ -109,14 +150,35 @@ export async function createOffer(input: { orgId: string; actorId: string; invoi
   const made = await platformDb()
     .rpc("create_early_payment_offer", { p_org_id: input.orgId, p_invoice_id: input.invoiceId, p_pct: pct, p_token_hash: secretHash, p_by: input.actorId, p_expires_at: expires })
     .select("id, invoice_id, counterparty_id, amount, offered_amount, currency, expires_at")
-    .single<{ id: string; invoice_id: string; counterparty_id: string; amount: string; offered_amount: string; currency: string; expires_at: string }>();
+    .single<MadeOffer>();
   if (made.error) {
     if (/^offer_not_eligible/.test(made.error.message)) {
       throw new OfferError("This bill can no longer take an offer: it changed, a payment started, or it falls due within 3 days.");
     }
     throw new Error(made.error.message);
   }
-  const row = made.data;
+  return { token, pct, row: made.data };
+}
+
+/**
+ * An offer the agent makes (docs/superpowers/specs/2026-10-16-agent-early-payment-offers-design.md AO4): the row and its
+ * link, which the agent emails at once; the stage records it, with its decision.
+ */
+export async function createAgentOffer(input: { orgId: string; invoiceId: string; pct: number; origin: string; now?: number }): Promise<{ url: string; pct: number; row: MadeOffer }> {
+  const { token, pct, row } = await insertOffer({ ...input, actorId: null });
+  return { url: offerUrl(input.origin, token), pct, row };
+}
+
+/** An offer the agent made and could not email (AO4), withdrawn so its link never stands unseen; false when not open. */
+export async function withdrawAgentOffer(orgId: string, offerId: string): Promise<boolean> {
+  const done = await platformDb().rpc("withdraw_early_payment_offer", { p_org_id: orgId, p_offer_id: offerId, p_by: null });
+  if (done.error) throw new Error(done.error.message);
+  return done.data === true;
+}
+
+/** An offer made for a bill (E3), recorded; the link is returned once and never kept. */
+export async function createOffer(input: { orgId: string; actorId: string; invoiceId: string; pct: number; origin: string; now?: number }): Promise<{ url: string; offered: number; expiresAt: string }> {
+  const { token, pct, row } = await insertOffer(input);
   await appendLedgerEntryBestEffort(input.orgId, {
     actor: "human",
     domain: "ap",

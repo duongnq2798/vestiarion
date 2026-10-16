@@ -14,6 +14,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **The agent makes early-payment offers.** An owner or admin lets the agent make the offers itself, with the most it
+  asks. Each cycle, after it decides its bills, it weighs each bill it scheduled for a later day, in USDC, a week or more
+  from its due date, never offered before, whose supplier has an email on file and declined no offer in 30 days, where
+  the operating wallet can pay it today. The model decides whether to offer and what discount to ask, between the
+  suggestion and the ceiling, and the agent emails the supplier the link in a fixed template; an offer whose email does
+  not go is withdrawn. At most 3 a cycle, never in a sandbox or while the agent is paused. Needs migration `0126`.
+  [Guide](https://www.vestiarion.xyz/docs/guides/early-payment-offers#let-the-agent-make-the-offers).
 - **Early-payment offers.** Bills & receivables lists the bills the agent will pay later under Pay early for a discount,
   each with the discount worth asking for paying today, twice what the cash would earn in the reserve by the due date.
   An owner or admin offers it to the supplier through a one-time link, kept only as a hash. If the supplier accepts, the

@@ -12,7 +12,7 @@ vi.mock("@/lib/dal", async (importOriginal) => ({
 }));
 vi.mock("@/lib/dal/scope", () => ({ withOrg: async (_orgId: string, fn: () => Promise<unknown>) => fn() }));
 vi.mock("@/lib/ledger-best-effort", () => ({ appendLedgerEntryBestEffort: mocks.ledger }));
-vi.mock("@/app/actions/early-payment-offers", () => ({ makeOfferAction: vi.fn(), withdrawOfferAction: vi.fn() }));
+vi.mock("@/app/actions/early-payment-offers", () => ({ makeOfferAction: vi.fn(), withdrawOfferAction: vi.fn(), setAgentOffersAction: vi.fn() }));
 vi.mock("@/app/offer/[token]/actions", () => ({ decideOfferAction: vi.fn() }));
 
 import { EarlyPaymentOffers } from "@/components/bills/EarlyPaymentOffers";
@@ -97,9 +97,10 @@ describe("the supplier's answer (E5, E6)", () => {
 describe("Pay early for a discount on Bills (E8)", () => {
   const view: OffersView = {
     reserveApy: 0.042,
+    agent: { on: false, maxPct: null },
     candidates: [
       { invoiceId: "inv-1", counterpartyName: "Taller Norte", reference: "INV-108", amount: 1000, currency: "USDC", dueDate: "2026-11-05T12:00:00Z", suggestion: { days: 20, breakEvenPct: 0.23, pct: 1, annualPct: 18.3 }, open: null },
-      { invoiceId: "inv-2", counterpartyName: "Cobalt Cloud", reference: null, amount: 50, currency: "USDC", dueDate: "2026-11-01T12:00:00Z", suggestion: { days: 16, breakEvenPct: 0.18, pct: 0.5, annualPct: 11.4 }, open: { id: "offer-2", pct: 0.5, offered: 49.75, expiresAt: "2026-10-23T09:00:00Z" } },
+      { invoiceId: "inv-2", counterpartyName: "Cobalt Cloud", reference: null, amount: 50, currency: "USDC", dueDate: "2026-11-01T12:00:00Z", suggestion: { days: 16, breakEvenPct: 0.18, pct: 0.5, annualPct: 11.4 }, open: { id: "offer-2", pct: 0.5, offered: 49.75, expiresAt: "2026-10-23T09:00:00Z", byAgent: true } },
     ],
     recent: [{ id: "offer-0", counterpartyName: "Lumen Print Co.", pct: 1.5, status: "accepted", decidedAt: "2026-10-15T10:00:00Z" }],
   };
@@ -111,7 +112,9 @@ describe("Pay early for a discount on Bills (E8)", () => {
     expect(markup).toContain("Paying 20 days early for 1.00% is like earning 18.3% a year, above the reserve's 4.2%.");
     expect(markup).toContain("Offer this discount for paying today");
     expect(markup).toContain("Offer out: 0.50% off");
+    expect(markup).toContain("The agent emailed it to the supplier.");
     expect(markup).toContain("Withdraw");
+    expect(markup).toContain("Let the agent make offers");
     expect(markup).toContain("Lumen Print Co. accepted 1.50% off, Oct 15, 2026.");
     expect(markup).toContain('href="/docs/guides/early-payment-offers"');
   });
@@ -122,6 +125,14 @@ describe("Pay early for a discount on Bills (E8)", () => {
     expect(markup).toContain("An owner or admin makes the offer.");
     expect(markup).toContain("Offer out: 0.50% off");
     expect(markup).not.toContain("Withdraw");
+    expect(markup).not.toContain("Let the agent make offers");
+    expect(markup).toContain("The agent does not make these offers itself. An owner or admin turns it on.");
+  });
+
+  it("says when the agent makes the offers itself, and lets an owner or admin stop it (AO1)", () => {
+    const markup = decode(renderToStaticMarkup(<EarlyPaymentOffers orgSlug="pinecrest" view={{ ...view, agent: { on: true, maxPct: 2 } }} canOffer />));
+    expect(markup).toContain("The agent makes these offers itself: it picks the bills and the discount, asking at most 2.00%, only from cash it can pay today, and emails each supplier the link at the address payment notices go to.");
+    expect(markup).toContain("Stop the agent's offers");
   });
 });
 

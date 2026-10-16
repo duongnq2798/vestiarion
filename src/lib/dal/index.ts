@@ -75,6 +75,8 @@ export const TENANT_TABLES = [
   // Bank payouts through BlindPay: the workspace's customer and each vendor's bank account (migration 0124).
   "workspace_payout_partners", "counterparty_bank_accounts",
   "early_payment_offers",
+  // The agent's one review of each bill it may offer early payment on (migration 0126).
+  "early_payment_offer_reviews",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
@@ -95,6 +97,8 @@ export const TENANT_RPCS = [
   "bank_payouts_ready",
   // Whether migration 0125 has run (early-payment offers E7): it reads nothing.
   "early_payment_offers_ready",
+  // Whether migration 0126 has run (agent early-payment offers AO4): it reads nothing.
+  "early_payment_offer_reviews_ready",
   // Commissions on money received (commissions C2, C5, C10, C11).
   "set_commission_plan", "end_commission_plan", "record_commissions", "create_commission_payout", "commission_partner_members",
 ] as const;
@@ -131,7 +135,7 @@ export const PLATFORM_RPCS = [
   // The daily cleanup's retention for invoice capture (migration 0121).
   "invoice_capture_sweep",
   // Early-payment offers (0125, early-payment offers E3-E6): made and withdrawn by a workspace, previewed and decided by token.
-  "create_early_payment_offer", "withdraw_early_payment_offer", "early_payment_offer_preview", "decide_early_payment_offer",
+  "create_early_payment_offer", "withdraw_early_payment_offer", "early_payment_offer_preview", "decide_early_payment_offer", "set_agent_early_offers",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 

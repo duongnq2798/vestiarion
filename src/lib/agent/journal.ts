@@ -35,6 +35,7 @@ export const CYCLE_STAGES = [
   "forecast",
   "proposals",
   "collections",
+  "early_offers",
   "notices",
   "telegram",
   "slack",
@@ -70,6 +71,10 @@ export type CycleStage = (typeof CYCLE_STAGES)[number];
  *               changes until then. Last, so it never delays a payment.
  *   collections receipts. It emails clients the reminders a person turned on; if the cycle
  *               could not read what arrived, it reminds no one who may just have paid.
+ *   early_offers reconcile + ap. It offers suppliers payment today for a discount on bills the
+ *               agent scheduled for later, only from cash a current balance shows after this
+ *               cycle's payments; an offer moves nothing until the supplier accepts it, and the
+ *               payment then passes every check (agent early-payment offers AO2, AO6).
  *   forecast    Nothing. It reads and records; it authorises nothing. It is the
  *               stage most worth keeping alive after a failure, because it is
  *               what tells a human where the cycle left the book.
@@ -97,6 +102,8 @@ export const STAGE_REQUIRES: Record<CycleStage, readonly CycleStage[]> = {
   proposals: [],
   // Reminds clients of open receivables: never before reading what they may just have paid (collections R9).
   collections: ["receipts"],
+  // Offers suppliers early payment from the cash left after the payments AP decided (agent early-payment offers AO2).
+  early_offers: ["reconcile", "ap"],
   notices: [],
   telegram: [],
   slack: [],

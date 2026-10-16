@@ -2256,6 +2256,20 @@ A supplier paid today for a discount it accepts (docs/superpowers/specs/2026-10-
   UTC), returns the bill to `pending`, and marks the offer accepted. The ledger records the answer, and
   `runCycleSoon({ kind: "early_payment_accepted" })` lets the agent decide the bill at once with its usual timing: a
   discount ending today is paid today, after every check.
+- **The agent's own offers** (`src/lib/agent/early-offers.ts`, stage `early_offers`, migration 0126;
+  docs/superpowers/specs/2026-10-16-agent-early-payment-offers-design.md). An owner or admin turns them on with a
+  ceiling (`set_agent_early_offers`, `orgs.early_offers_*`). After collections, in a live workspace not paused and with
+  email configured, each scheduled USDC bill due 7 days or more out is weighed once code allows it
+  (`agentOfferAllowed`, `src/lib/early-pay/agent-rules.ts`): never offered before, its supplier with a notice email, no
+  other open offer and no decline in 30 days, the suggestion within the ceiling, and the operating USDC left after this
+  cycle's payments, less what falls due in 7 days and the offers out, covering it. The model answers `offer` or `skip`
+  with a discount, kept between the suggestion and the ceiling (`boundOfferPct`); without a model, the written policy
+  offers at the suggestion. `early_payment_offer_reviews` (one per bill) is claimed before the offer is made; the
+  link goes to the supplier in a fixed template (`src/lib/email/early-payment-offer.ts`) under the offer's Resend
+  idempotency key. A failed send withdraws the offer and releases the review; one left unsent for 15 minutes is a
+  stopped run's and is withdrawn the same way. A skip is weighed again after 7 days. At most 3 offers a cycle; the
+  ledger records `early_payment_offered` (`via: "agent"`, the decision, the written policy's answer) or
+  `early_payment_offer_skipped`.
 
 ## Bank payouts (BlindPay)
 

@@ -48,6 +48,8 @@ export type CycleEventKind =
   | "cash_returned"
   /** A supplier accepted an early-payment offer: the bill now carries a discount ending today (early-payment offers E5). */
   | "early_payment_accepted"
+  /** The agent may now offer early payment on the bills it scheduled for later (agent early-payment offers AO1). */
+  | "early_offers_on"
   /** Test USDC came in from Vestiarion's float: a payable held for cash may be paid now (test USDC T7). */
   | "test_usdc_added"
   | "reminders_on"

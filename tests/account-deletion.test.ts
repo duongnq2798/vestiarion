@@ -168,6 +168,8 @@ describe("0023 is idempotent", () => {
         { tbl: "onboarding_marks", col: "user_id", action: "c" },
         { tbl: "orgs", col: "agent_paused_by", action: "n" },
         { tbl: "orgs", col: "created_by", action: "n" },
+        // Who let the agent make early-payment offers (0126).
+        { tbl: "orgs", col: "early_offers_on_by", action: "n" },
         { tbl: "orgs", col: "usyc_live_by", action: "n" },
         { tbl: "payee_links", col: "created_by", action: "n" },
         { tbl: "payment_actuals", col: "recorded_by", action: "n" },
