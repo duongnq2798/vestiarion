@@ -2267,13 +2267,20 @@ BlindPay's contract on Arc for the quote's amount, and BlindPay takes the tokens
   from its first attempt: a bill first paid to a bank is never sent to an address, nor the other way round, and bank
   payouts never go in a batch. `payToBank` asks a fresh quote (keyless: a quote moves nothing, so a try after one
   expired gets a new one), refuses one whose sender amount is not the bill's or that expired, runs the approve as a
-  Circle contract execution under `<attempt key>/bank-approve` and waits for it to confirm, then asks for the payout
-  under `<attempt key>/bank-payout`, again on `PAYOUTS_ALLOWANCE_NOT_CONFIRMED`. A payout request with no answer, or one
+  Circle contract execution and waits for it to confirm, then asks for the payout, again on
+  `PAYOUTS_ALLOWANCE_NOT_CONFIRMED`; each step's key is a UUID derived from the attempt's key and the step
+  (`bankStepKey`), as Circle takes only UUIDs. A payout request with no answer, or one
   whose key BlindPay already holds, keeps the payment in flight (`MAY_HAVE_BEEN_ACCEPTED`), and it is asked for again
   under the same key, never looked for on Circle. The provider id is `blindpay:<payout id>`; reconciliation reads the
   payout from BlindPay, and `completed` confirms it. `refunded` reads as Circle's `FAILED`, so a person's Approve and
   pay opens the next attempt through `begin_payment_retry`, as for any transfer. `failed` is failed but not terminal:
   BlindPay holds the USDC until it refunds it, so nothing new is sent and the payout is read until it is refunded.
+- **Test USDB** (`src/lib/bank-payouts/test-token.ts`). On Arc testnet BlindPay takes USDB, its test token, not USDC.
+  BlindPay's dashboard mints it only to a browser wallet, so the card's **Mint 100 test USDB** has the operating wallet
+  call `mintUSDB(uint256)` on it (anyone may mint to themselves) through the provider's `mintTestToken`, Arc testnet
+  only; the ledger records `bank_payouts_test_token_minted`. Before the approve, `payToBank` reads the wallet's balance
+  of the quote's token on the provider's chain and refuses a payout it does not cover; Approve and pay counts USDC only
+  when that is the token BlindPay takes.
 - **Notices** (`src/lib/bank-payouts/webhook.ts`). BlindPay's webhooks come through Svix: the signature
   (`svix-id.svix-timestamp.body`, HMAC-SHA256 under the `whsec_` key) and a five-minute window are checked before the
   body is read; a `payout.*` notice finds the workspace whose payment waits on that payout and starts a

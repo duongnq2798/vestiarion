@@ -30,7 +30,7 @@ import { PAYMENTS_OFF, PaymentsDisabledError } from "../payments-switch";
 import { BridgeFeeError, bridgeFee, bridgeStepKey, burnCalls, cctpOf, forwardedMint, type ContractCall } from "./cctp";
 import { burnIntent, burnIntentTypedData, estimateGateway, gatewaySalt, gatewayTransferStatus, submitGatewayTransfer, type GatewayTransferStatus } from "./gateway";
 import { chainOn, paidAcrossChains } from "../payee-chains";
-import { bankPayoutResult, payToBank, reconcileBankPayout, BANK_ID } from "./bank-payout";
+import { BANK_ID, bankPayoutResult, payToBank, readTokenBalance, reconcileBankPayout } from "./bank-payout";
 import { toBaseUnits } from "../fx/quote";
 import { PAY_SIGNATURE, usdcUnits } from "../spending-limit/onchain";
 import type { ChainConfig } from "../config";
@@ -299,6 +299,8 @@ export class LiveProvider implements ChainProvider {
     if (params.bank) {
       return payToBank(params, params.bank, account, {
         fetchImpl: this.fetch,
+        // Read on this provider's chain only: the approve runs there too.
+        tokenBalance: (token, owner, chainId) => (chainId === this.network.chainId ? readTokenBalance(this.rpcUrl, token, owner, this.fetch) : Promise.resolve(null)),
         approve: async (call, key) => {
           const id = await this.execute(account.walletId, call, key, params.memo, { what: "the approve for the bank payout", movesMoney: false });
           return awaitSettlement(this.client, id);
@@ -941,6 +943,20 @@ export class LiveProvider implements ChainProvider {
         },
       ];
     });
+  }
+
+  async mintTestToken(
+    accountId: string,
+    call: ContractCall,
+    idempotencyKey: string
+  ): Promise<{ status: TransferResult["status"]; txHash: string | null }> {
+    // A test token is minted on Arc testnet only, never where tokens have value (bank payouts B13).
+    if (this.network.id !== "arc-testnet") throw new Error("A test token is minted on Arc testnet only.");
+    await this.refuseWhilePaymentsOff();
+    const account = await this.account(accountId);
+    const id = await this.execute(account.walletId, call, idempotencyKey, "Test USDB for bank payouts", { what: "the mint of test USDB", movesMoney: false });
+    const settled = await awaitSettlement(this.client, id);
+    return { status: settled.status, txHash: settled.transaction?.txHash ?? null };
   }
 
   async getTokenBalance(accountId: string, token: Stablecoin): Promise<BalanceSnapshot> {

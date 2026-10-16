@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@/app/actions/bank-payouts", () => ({ startBankPayoutsAction: vi.fn(), setBankAccountAction: vi.fn(), stopBankAccountAction: vi.fn() }));
+vi.mock("@/app/actions/bank-payouts", () => ({ startBankPayoutsAction: vi.fn(), setBankAccountAction: vi.fn(), stopBankAccountAction: vi.fn(), mintTestUsdbAction: vi.fn() }));
 vi.mock("@/app/actions/approvals", () => ({ approveInvoiceAction: vi.fn(), rejectInvoiceAction: vi.fn(), returnInvoiceAction: vi.fn(), addInvoiceDetailsAction: vi.fn() }));
 vi.mock("@/app/actions/verdicts", () => ({ giveVerdictAction: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
@@ -37,6 +37,23 @@ describe("BankPayoutsPanel (B3)", () => {
     expect(markup).toContain("1 vendor is paid to a bank account.");
     expect(markup).toContain(BANK_PAYOUTS_NOTICES.set_up.text);
     expect(markup).toContain("no pesos reach a bank");
+  });
+});
+
+describe("test USDB on the Bank payouts card (B13)", () => {
+  const setUp = (testToken: { balance: number | null } | null, canMint = true) =>
+    decode(
+      renderToStaticMarkup(
+        <BankPayoutsPanel orgSlug="pinecrest" view={{ state: "set_up", kybStatus: "approved", setUpAt: null, vendors: 0, testToken }} canSetUp canMint={canMint} notice={null} />
+      )
+    );
+
+  it("mints it for an owner or admin on Arc testnet, saying what the wallet holds", () => {
+    expect(setUp({ balance: 12.5 })).toContain("The operating wallet holds 12.5 test USDB.");
+    expect(setUp({ balance: 12.5 })).toContain("Mint 100 test USDB");
+    expect(setUp({ balance: null })).toContain("Its USDB could not be read just now.");
+    expect(setUp({ balance: 0 }, false)).not.toContain("Mint 100 test USDB");
+    expect(setUp(null)).not.toContain("test USDB");
   });
 });
 

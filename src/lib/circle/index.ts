@@ -94,6 +94,11 @@ class HybridProvider implements ChainProvider {
     return this.live.listInboundTransfers(accountId, since);
   }
 
+  /** A test token for bank payouts is minted to the real wallet (bank payouts B13). */
+  mintTestToken(...args: Parameters<NonNullable<ChainProvider["mintTestToken"]>>): ReturnType<NonNullable<ChainProvider["mintTestToken"]>> {
+    return this.live.mintTestToken(...args);
+  }
+
   depositToEarn(params: EarnDepositParams): Promise<EarnResult> {
     if (this.earnMode !== "live" && !this.network.usyc) return Promise.reject(this.noReserve());
     return this.earnMode === "live" ? this.live.depositToEarn(params) : this.simulated.depositToEarn(params);

@@ -2186,6 +2186,11 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Only USDC is paid to a bank account", BANK_WORDS],
     ["approval_paid", "src/lib/agent/approvals.ts"],
     ["BlindPay's quote expired before the payout: nothing was sent. Approve again for a new quote.", BANK_PAYOUT],
+    // Test USDB on Arc testnet (B13).
+    ["On Arc testnet BlindPay takes its test token, USDB, from the operating wallet, not USDC.", BANK_PANEL],
+    ["Mint 100 test USDB", BANK_PANEL],
+    ["bank_payouts_test_token_minted", "src/lib/bank-payouts/test-token.ts"],
+    ["The operating wallet holds less USDB than this payout takes: nothing was sent. Fund it with USDB first.", BANK_PAYOUT, "than this payout takes: nothing was sent. Fund it with"],
   ],
   "guides/asana": [
     ["Connect Asana", ASANA_PANEL],

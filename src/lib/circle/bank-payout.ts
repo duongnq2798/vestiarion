@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createEvmPayout, createQuote, getPayout } from "../blindpay/api";
 import { BlindpayError, type BlindpayHttp } from "../blindpay/http";
 import { payoutOutcome, type BlindpayPayout, type BlindpayQuote } from "../blindpay/map";
@@ -24,9 +25,16 @@ export class BankPayoutError extends Error {
   }
 }
 
-/** The key of one step of a bank payout attempt (B7): the attempt's own key, then the step. */
+/**
+ * The key of one step of a bank payout attempt (B7): a UUID derived from the attempt's own key and the step, as Circle
+ * takes idempotency keys only as UUIDs, the same for every try of the attempt and different for each step.
+ */
 export function bankStepKey(attemptKey: string, step: "approve" | "payout"): string {
-  return `${attemptKey}/bank-${step}`.slice(0, 255);
+  const hash = createHash("sha256").update(`vestiarion/bank/v1/${attemptKey}/${step}`, "utf8").digest();
+  hash[6] = (hash[6] & 0x0f) | 0x50;
+  hash[8] = (hash[8] & 0x3f) | 0x80;
+  const hex = hash.subarray(0, 16).toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
 const cents = (amount: number) => Math.round(amount * 100);
@@ -75,6 +83,30 @@ export function bankPayoutResult(providerTxId: string, payout: BlindpayPayout, c
   };
 }
 
+/** `keccak256("balanceOf(address)")`'s first four bytes. */
+const BALANCE_OF = "0x70a08231";
+
+/**
+ * What `owner` holds of `token`, in its base units, read from the chain's RPC; null when it cannot be read. The token a
+ * bank payout takes is the quote's (B7): USDB, BlindPay's test token, on Arc testnet; USDC on Arc mainnet.
+ */
+export async function readTokenBalance(rpcUrl: string, token: string, owner: string, fetchImpl: typeof fetch = fetch): Promise<bigint | null> {
+  try {
+    const response = await fetchImpl(rpcUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to: token, data: `${BALANCE_OF}${owner.slice(2).toLowerCase().padStart(64, "0")}` }, "latest"] }),
+      signal: AbortSignal.timeout(4_000),
+      cache: "no-store",
+    });
+    if (!response.ok) return null;
+    const result = ((await response.json()) as { result?: unknown }).result;
+    return typeof result === "string" && /^0x[0-9a-fA-F]{1,64}$/.test(result) ? BigInt(result) : null;
+  } catch {
+    return null;
+  }
+}
+
 function settingsOrThrow(): BlindpaySettings {
   const settings = blindpaySettingsFromEnv();
   if (!settings) throw new BankPayoutError("Bank payouts are not set up on this deployment: nothing was sent.");
@@ -90,7 +122,13 @@ export async function payToBank(
   params: TransferParams,
   route: BankPayoutParams,
   account: { address?: string | null; chain: string },
-  deps: BlindpayHttp & { approve: (call: ContractCall, key: string) => Promise<Settlement>; settings?: BlindpaySettings; waitMs?: number }
+  deps: BlindpayHttp & {
+    approve: (call: ContractCall, key: string) => Promise<Settlement>;
+    /** What the sender holds of the quote's token on the quote's chain, in base units; null when it cannot be read there. */
+    tokenBalance?: (token: string, owner: string, chainId: number | null) => Promise<bigint | null>;
+    settings?: BlindpaySettings;
+    waitMs?: number;
+  }
 ): Promise<TransferResult> {
   const settings = deps.settings ?? settingsOrThrow();
   const sender = account.address;
@@ -108,6 +146,12 @@ export async function payToBank(
     throw new BankPayoutError(`BlindPay quoted ${quote.senderAmount} to leave for a ${params.amount} payment: nothing was sent.`);
   }
   if (quote.expiresAtMs <= Date.now()) throw new BankPayoutError("BlindPay's quote expired before the payout: nothing was sent. Approve again for a new quote.");
+  // What BlindPay takes is the quote's token, which on Arc testnet is not USDC: the wallet must hold that much of it, or
+  // nothing is approved (B7). A balance that cannot be read leaves it to BlindPay, which refuses a payout it cannot take.
+  const held = deps.tokenBalance ? await deps.tokenBalance(quote.contract.token, sender, quote.contract.chainId) : null;
+  if (held !== null && held < BigInt(quote.contract.amount)) {
+    throw new BankPayoutError(`The operating wallet holds less ${route.token} than this payout takes: nothing was sent. Fund it with ${route.token} first.`);
+  }
 
   const approve: ContractCall = { contractAddress: quote.contract.token, abiFunctionSignature: "approve(address,uint256)", abiParameters: [quote.contract.spender, quote.contract.amount] };
   const approved = await deps.approve(approve, bankStepKey(params.idempotencyKey, "approve"));

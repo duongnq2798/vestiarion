@@ -70,9 +70,9 @@ rail, and cannot be called back once BlindPay has it. So code holds the agent's 
 1. a fresh quote for the invoice amount (`currency_type: sender`, `cover_fees: false`: the business pays the invoice
    amount exactly, and fees come out of the pesos), refused when its sender amount is not the invoice's;
 2. `approve(BlindPay contract, amount)` on the quote's token, from the operating wallet, through Circle's contract
-   execution, under a key derived from the payment attempt's (`…/bank-approve`);
+   execution, under a UUID derived from the payment attempt's key and the step (Circle takes only UUIDs);
 3. `POST /payouts/evm` with the quote and the operating wallet's address, under `Idempotency-Key` derived from the
-   attempt's (`…/bank-payout`), so a retried attempt never creates a second payout.
+   attempt's the same way, so a retried attempt never creates a second payout.
 
 The payment intent's provider id is `blindpay:<payout id>`; its route `bank`. The quote carries no key: it moves
 nothing, so a try after one expired gets a new one. The approve and the payout keep the attempt's keys, so a payout
@@ -120,3 +120,11 @@ through a payee link, EURC to a bank, milestones to a bank, the agent paying a b
 - The migration on PGlite: the tables, one active bank account per counterparty, the route check, tenancy.
 - The card, the counterparty form and the Approvals card with sample data.
 - Live: a development instance, a vendor with a test CLABE, a 5.00 payable paid, a 666.00 one failed.
+
+**B13. Test USDB on Arc testnet** (added after the first live check). A development instance takes USDB, BlindPay's
+test token, not USDC; on Arc testnet it is `0x83cD7E0a1e8ae37eC75842544d77E190F386B73A`, 18 decimals, and anyone may
+mint it to themselves with `mintUSDB(uint256)`. BlindPay's dashboard mints only to a browser wallet, so the Bank
+payouts card has **Mint 100 test USDB**: the operating wallet mints to itself through Circle's contract execution
+(Arc testnet only, ledger `bank_payouts_test_token_minted`). Approve and pay counts the operating wallet's USDC only
+when BlindPay takes USDC; `payToBank` reads the quote's token balance on chain before the approve and sends nothing
+when it falls short. Circle takes only UUID idempotency keys, so each step's key is a UUID derived from the attempt's.
