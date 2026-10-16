@@ -66,7 +66,8 @@ export function mapQuote(body: unknown): BlindpayQuote {
     expiresAtMs: expires,
     senderAmount: sender,
     receiverAmount: receiver,
-    rate: rate === null ? null : rate / 100,
+    // Pesos per token unit, to six places: BlindPay's quotation is a hundredth of it (1831.37 is 18.3137, as seen live).
+    rate: rate === null ? null : Number((rate / 100).toFixed(6)),
     feesSender: (minor(body.flat_fee) ?? 0) + (minor(body.billing_fee_amount) ?? 0),
     contract: {
       token,

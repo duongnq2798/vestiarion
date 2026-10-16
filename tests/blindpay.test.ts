@@ -54,6 +54,12 @@ describe("BlindPay's settings (B2)", () => {
   });
 });
 
+describe("a live quote's rate (B5)", () => {
+  it("is BlindPay's quotation over a hundred, without a float's tail", () => {
+    expect(mapQuote({ ...QUOTE, blindpay_quotation: 1831.37 }).rate).toBe(18.3137);
+  });
+});
+
 describe("BlindPay's way back from its terms (B3)", () => {
   it("reads the workspace and the terms whether BlindPay adds ?tos_id= or &tos_id=", () => {
     const back = blindpayTermsReturnUri("https://www.vestiarion.xyz", "pinecrest-studio");
