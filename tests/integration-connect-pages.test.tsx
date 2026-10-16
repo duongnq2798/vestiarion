@@ -201,6 +201,17 @@ describe("the organisation pick after Xero", () => {
   });
 });
 
+describe("each accounting tool's connect page", () => {
+  it("names the tool's data with its own possessive: Xero's, QuickBooks' and Zoho Books'", async () => {
+    memberships.value = [workspace("acme")];
+    const heading = async (provider: "xero" | "quickbooks" | "zohobooks") =>
+      (await connectPage(provider)).replace(/&#x27;/g, "'").match(/What Vestiarion does with [^<]*/)?.[0];
+    expect(await heading("xero")).toBe("What Vestiarion does with Xero's data");
+    expect(await heading("quickbooks")).toBe("What Vestiarion does with QuickBooks' data");
+    expect(await heading("zohobooks")).toBe("What Vestiarion does with Zoho Books' data");
+  });
+});
+
 describe("the organization pick after Zoho Books (Zoho Books connector Z5)", () => {
   it("names the organizations in Zoho's words, and never sends the person to Xero's Connected apps", async () => {
     memberships.value = [workspace("acme")];

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  actionLabel,
   CLAUDE_PRICES,
   costWords,
   fromMicros,
@@ -41,6 +42,17 @@ describe("summarizeUsage", () => {
     expect(summary.kinds.find((kind) => kind.kind === "circle_transfer")!.count).toBe(3);
     expect(summary.kinds.map((kind) => kind.kind)).toEqual(["model_call", "circle_transfer", "x402_purchase", "email", "connector_sync"]);
     expect(summary.kinds.find((kind) => kind.kind === "connector_sync")!.count).toBe(0);
+  });
+
+  it("names each connector's syncs by the tool's own name, Asana's too", () => {
+    expect(["xero", "quickbooks", "zohobooks", "hubspot", "pipedrive", "asana"].map(actionLabel)).toEqual([
+      "Xero",
+      "QuickBooks",
+      "Zoho Books",
+      "HubSpot",
+      "Pipedrive",
+      "Asana",
+    ]);
   });
 
   it("never adds one currency to another, within a kind either", () => {
