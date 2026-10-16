@@ -116,6 +116,7 @@ export const TENANT_TABLES = [
   "decision_reasons",
   "invoice_drafts",
   "workspace_payout_partners", "counterparty_bank_accounts",
+  "early_payment_offers",
 ] as const;
 
 export interface SeededRows {
@@ -405,6 +406,12 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     `insert into counterparty_bank_accounts (org_id, counterparty_id, external_id, bank_code, last4, beneficiary_name)
      values ($1, $2, 'ba_test1234', '012', '9716', 'Ana López')`,
     [orgId, counterpartyId]
+  );
+  // An early-payment offer for the bill (0125).
+  await db.query(
+    `insert into early_payment_offers (org_id, invoice_id, counterparty_id, discount_pct, amount, offered_amount, token_hash, expires_at)
+     values ($1, $2, $3, 1, 1, 0.99, encode(sha256(convert_to($4, 'utf8')), 'hex'), now() + interval '7 days')`,
+    [orgId, invoiceId, counterpartyId, `offer-${tag}`]
   );
   const key = crypto.generateKeyPairSync("ed25519");
   await appendSignedForOrg(db, orgId, { actor: "system", domain: "system", action: "note", summary: tag, detail: { tag } }, key.privateKey);

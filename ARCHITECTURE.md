@@ -2238,6 +2238,25 @@ for each connected workspace with a pending milestone on that pull request, as
 the GitHub check reads its link, so the payment follows the merge within a
 minute instead of waiting for the schedule.
 
+## Early-payment offers
+
+A supplier paid today for a discount it accepts (docs/superpowers/specs/2026-10-16-early-payment-offers-design.md).
+
+- **Which bills, what to ask** (`src/lib/early-pay/offers-words.ts`, `offersView`). A payable scheduled or pending,
+  with no discount, no payment intent and a due date at least 3 days out. The suggestion is twice the reserve's yield to
+  the due date (`apy × days / 365`), rounded up to 0.25%, from 0.5% to 5%. Shown on Bills & receivables above the
+  list (`EarlyPaymentOffers`).
+- **The offer** (`createOffer`, migration 0125). `create_early_payment_offer` checks eligibility
+  (`early_payment_offer_eligible`), withdraws the bill's open offer, and stores the bill's amount, the discounted amount
+  and the SHA-256 of a `vxo_` token (one open per invoice, partial unique index). It lapses after 7 days or the day
+  before the due date. The tenant role only reads `early_payment_offers`; every write is a service-role function.
+- **The supplier** (`/offer/[token]`, `decideOffer`). No session; the token is the credential, and `/offer/:token`
+  is redacted for analytics. `decide_early_payment_offer` locks the offer and the bill. An acceptance needs the bill
+  still eligible and its amount unchanged; it then sets `early_pay_discount_pct` and `discount_due_date` (today, 12:00
+  UTC), returns the bill to `pending`, and marks the offer accepted. The ledger records the answer, and
+  `runCycleSoon({ kind: "early_payment_accepted" })` lets the agent decide the bill at once with its usual timing: a
+  discount ending today is paid today, after every check.
+
 ## Bank payouts (BlindPay)
 
 A vendor's bills paid to its bank account in Mexico, in pesos over SPEI, from the workspace's USDC

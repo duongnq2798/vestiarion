@@ -312,6 +312,8 @@ run in production, with its ledger entries and transactions.
   sets aside the same money twice, and holds what a budget cannot cover for a person.
 - **Treasury** — safe-to-spend today, cash outlook, USYC reserve with **Bring cash back** (Arc testnet).
 - **Cross-currency and cross-chain** — EURC invoices and swaps, CCTP and Gateway payouts (Arc testnet).
+- **Early-payment offers** — the agent's later bills, each with the discount worth asking for paying today; an owner or
+  admin sends the supplier a one-time link, and an accepted offer is paid at the discounted amount the same day.
 - **Bank payouts** — a vendor's bills paid to its bank account in Mexico, in pesos over SPEI through BlindPay, from the
   workspace's USDC; a person sees what the vendor receives and approves every one (BlindPay's development instance).
 - **Shadow mode** — try the agent on real bills, paid in the business's own way, before it pays anything itself.

@@ -427,8 +427,8 @@ export default function PrivacyPage() {
         <ul>
           <li>
             an invitation address becomes <code>/invite/:token</code>, a payee link <code>/payee/:token</code>, a client&apos;s pay link{" "}
-            <code>/pay/:token</code>, a receipt link <code>/receipt/:token</code>, a shared report <code>/report/:token</code> and a customer&apos;s statement{" "}
-            <code>/statement/:token</code>, and a workspace address has the workspace&apos;s slug
+            <code>/pay/:token</code>, a receipt link <code>/receipt/:token</code>, a shared report <code>/report/:token</code>, a customer&apos;s statement{" "}
+            <code>/statement/:token</code> and an early-payment offer <code>/offer/:token</code>, and a workspace address has the workspace&apos;s slug
             replaced, as <code>/o/:org</code>;
           </li>
           <li>only the path is sent, never the query string or anything after a #;</li>

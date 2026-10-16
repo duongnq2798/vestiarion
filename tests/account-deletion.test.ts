@@ -142,6 +142,8 @@ describe("0023 is idempotent", () => {
         { tbl: "deals", col: "created_by", action: "n" },
         { tbl: "decision_reasons", col: "given_by", action: "n" },
         { tbl: "decision_verdicts", col: "decided_by", action: "n" },
+        // Who made an early-payment offer (0125).
+        { tbl: "early_payment_offers", col: "created_by", action: "n" },
         { tbl: "escrow_contracts", col: "created_by", action: "n" },
         // Who disconnected a Chrome extension (0121).
         { tbl: "extension_grants", col: "revoked_by", action: "n" },

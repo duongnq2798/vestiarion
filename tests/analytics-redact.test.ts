@@ -18,6 +18,7 @@ describe("redactPath", () => {
     ["/pay/vxl_secret/", "/pay/:token"],
     ["/statement/vxc_secret", "/statement/:token"],
     ["/statement/vxc_secret/", "/statement/:token"],
+    ["/offer/vxo_secret", "/offer/:token"],
     ["/o/acme", "/o/:org"],
     ["/o/acme/", "/o/:org/"],
     ["/o/acme/audit", "/o/:org/audit"],

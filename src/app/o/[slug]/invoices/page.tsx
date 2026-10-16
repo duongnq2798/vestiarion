@@ -121,6 +121,8 @@ import { NextAction } from "@/components/collections/NextAction";
 import { readCollections, type CollectionsView } from "@/lib/collection-context/page";
 import { publicOrigin } from "@/lib/public-origin";
 import { readProjectOptions } from "@/lib/projects/read";
+import { EarlyPaymentOffers } from "@/components/bills/EarlyPaymentOffers";
+import { offersView } from "@/lib/early-pay/offers";
 
 export const dynamic = "force-dynamic";
 
@@ -762,8 +764,17 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     // The tab shown, and only it, is read and built (B5).
     let tabContent: Pick<Parameters<typeof BillsScreen>[0], "bills" | "plan" | "receivables"> = {};
     if (view.tab === "bills") {
+      // The bills worth paying early for a discount (early-payment offers E1, E2); best effort, none before 0125.
+      const offers = await offersView().catch((error: unknown) => {
+        console.error("invoices: early-payment offers not read", error instanceof Error ? error.message : error);
+        return null;
+      });
       tabContent = {
-        bills: { list: listOf("bills"), below: schedules.length > 0 ? <RecurringSummary schedules={schedules} orgSlug={slug} canWrite={canWrite} /> : undefined },
+        bills: {
+          list: listOf("bills"),
+          above: offers ? <EarlyPaymentOffers orgSlug={slug} view={offers} canOffer={canWrite} /> : undefined,
+          below: schedules.length > 0 ? <RecurringSummary schedules={schedules} orgSlug={slug} canWrite={canWrite} /> : undefined,
+        },
       };
     } else if (view.tab === "plan") {
       // The next 14 days of payments, in the order the cash allows (payment plan design P1), from the invoices and

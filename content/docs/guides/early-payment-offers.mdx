@@ -1,0 +1,41 @@
+Most bills carry no early-payment discount, so the agent pays them on their due date and keeps the cash in the reserve until then. Many suppliers would rather be paid today and take a little less for it. An early-payment offer asks them: Vestiarion suggests the discount worth asking, you send the supplier a one-time link, and if they accept, the agent pays the discounted amount the same day.
+
+For your business, 1% off for paying 20 days early is worth about 18% a year, far more than the reserve earns. For the supplier, the money arrives today, on Arc testnet or Arc mainnet as your workspace pays, instead of in three weeks.
+
+## Before you start
+
+- **An owner or admin** makes an offer. Anyone else sees what each offer would be worth, and "An owner or admin makes the offer."
+- **A bill the agent will pay later.** An offer is for a bill to pay that the agent has scheduled for a later day, or not decided yet. The bill must have no discount on its invoice, no payment started, and a due date at least 3 days away. A bill held, flagged or waiting for information is yours to decide first, in Approvals.
+
+## 1. See which bills are worth it
+
+Open **Bills & receivables**. Above the list, **Pay early for a discount** shows the bills paid later, each with the discount Vestiarion suggests and what it is worth. For example: "Paying 20 days early for 1.00% is like earning 18.3% a year, above the reserve's 4.2%."
+
+The suggestion is twice what the cash would earn in the reserve by the due date, rounded up to the next 0.25%, from 0.5% to 5%. Asking at least that much makes the discount worth more than keeping the cash, which is also what the agent weighs when it decides the bill.
+
+## 2. Make the offer
+
+Change the discount if you want (from 0.1% to 10%), then choose **Offer this discount for paying today**. The card says "Offer made. Send the supplier this link: it works once." and shows the link with **Copy the offer link**. Send it to the supplier the way you usually write to them. Vestiarion keeps only a hash of the link, so it is shown this once.
+
+The ledger records `early_payment_offered`, with the discount, the bill's amount, what the supplier would receive and when the offer lapses.
+
+An offer stands for 7 days, or until the day before the bill falls due if that comes sooner. While it stands, the bill shows "Offer out:" with the discount, what the supplier would receive and until when, and **Withdraw**. Withdrawing says "Offer withdrawn. The link no longer works." and records `early_payment_offer_withdrawn`. Making a new offer for the same bill withdraws the one before.
+
+If the bill changed since the page loaded, the card says "This bill can no longer take an offer: it changed, a payment started, or it falls due within 3 days."
+
+## 3. What the supplier sees
+
+The link opens a page with no account to make. It says who offers what for which invoice, for example "Pinecrest Studio offers to pay invoice INV-108 today: 990.00 USDC instead of 1,000.00 USDC on Oct 30, 2026.". The money goes where you already pay that supplier. The page offers **Accept: get paid today** and **Decline**, and shows nothing else about your business.
+
+- **Accept** says "Accepted. The business pays you today, at the discounted amount, once its usual checks pass."
+- **Decline** says "Declined. Your invoice is paid as planned, on its due date." and records `early_payment_offer_declined`.
+- A link already answered, withdrawn or past its date says "This link is no longer valid. Ask the business that sent it for a new one."
+- If the bill changed since the offer (its amount, or a payment started), the page says "This invoice changed since the offer was made, so nothing changed. Ask the business for a new offer."
+
+## 4. The agent pays it
+
+When the supplier accepts, Vestiarion puts the discount on the bill's invoice, ending today, returns the bill to the agent, and starts a cycle at once. The ledger records `early_payment_offer_accepted`.
+
+The agent then decides the bill as any bill with a discount ending today, with every check it always runs: screening, the three-way match, the payment limit, the guardrails, two approvals above your figure, and a person for a bank payout. When they pass, it pays the discounted amount today. When a check stops it, the bill waits for a person in Approvals as usual, and the discount lapses at the end of the day.
+
+An accepted offer never changes who is paid, where, or the amount upward: it only takes the discount off.
