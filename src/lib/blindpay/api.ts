@@ -31,7 +31,7 @@ export async function termsUrl(settings: Settings, input: { idempotencyKey: stri
  * KYB, which this version does not collect.
  */
 export function testBusiness(input: { tosId: string; legalName: string; email: string; externalId: string }) {
-  const placeholder = "https://www.vestiarion.xyz/blindpay-development-test-document.pdf";
+  const placeholder = "https://www.vestiarion.xyz/downloads/blindpay-development-test-document.pdf";
   return {
     type: "business",
     kyc_type: "standard",
