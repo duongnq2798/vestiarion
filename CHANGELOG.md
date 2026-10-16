@@ -12,8 +12,6 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
-## [0.1.0-beta.7] - 2026-10-15
-
 ### Added
 
 - **Bills from Zoho Books.** An owner or admin connects a Zoho Books organization from Settings, and its open bills
@@ -27,6 +25,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   minutes and on Sync now. It needs migration `0122`, `ZOHO_BOOKS_CLIENT_ID` and `ZOHO_BOOKS_CLIENT_SECRET`; until
   0122 runs, connecting says Zoho Books is not set up on this deployment yet.
   [Guide](https://www.vestiarion.xyz/docs/guides/zohobooks).
+
+## [0.1.0-beta.7] - 2026-10-15
+
+### Added
+
 - **Vestiarion Invoice Capture is on the Chrome Web Store.** Install it with Add to Chrome from
   [its store page](https://chromewebstore.google.com/detail/vestiarion-invoice-captur/jfhjgbdbolhnneomgifdnjamoldlioan); Chrome keeps it up to date. The store's copy connects as soon as
   invoice capture is on, with no change on the deployment, as the downloaded copy does, which stays for where the store
