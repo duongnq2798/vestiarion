@@ -1,4 +1,4 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/Badge";
@@ -87,37 +87,54 @@ export const INTEGRATION_GROUPS: readonly Group[] = [
   },
 ];
 
-/** What Vestiarion is built on, and where a developer starts: links to the evidence, Arc and Circle to their own sites too. */
+/**
+ * What Vestiarion is built on (docs/superpowers/specs/2026-10-16-landing-arc-circle-design.md): Arc, where its payments
+ * are made, and Circle, whose wallets hold the treasury and send them, each drawn larger than a tool a business connects,
+ * with what the product does on it and links to the evidence: the open numbers, the README's mainnet proof and Circle
+ * table, the code, and each company's own site. Every fact is the README's ("Circle integrations", "Mainnet proof"),
+ * and the testnet-only ones say so. "Built on" and "built with", never "powered by" or "partner": neither vouches for
+ * Vestiarion.
+ */
 const FOUNDATIONS: ReadonlyArray<{
   brand: Brand;
   name: string;
   role: string;
   body: string;
-  link: { href: string; label: string };
-  site?: { href: string; label: string };
+  facts: readonly string[];
+  links: ReadonlyArray<{ href: string; label: string }>;
+  site: { href: string; label: string };
 }> = [
   {
     brand: "arc",
     name: "Arc",
-    role: "Settles on",
-    body: "Payments settle in USDC on Arc, and anyone can check each one.",
-    link: { href: "/open", label: "See the payments" },
+    role: "Where payments are made",
+    body: "The agent's payments are made on Arc, and each one links to its transaction on Arc's explorer, for anyone to check.",
+    facts: [
+      "Arc testnet for shadow mode and trials, Arc mainnet for real USDC",
+      "On Arc mainnet, an owner's wallet can cap the agent with a spending-limit contract it deploys",
+      "The open numbers count mainnet and testnet apart",
+    ],
+    links: [
+      { href: "/open", label: "See the payments" },
+      { href: `${REPOSITORY}#mainnet-proof`, label: "Mainnet proof" },
+    ],
     site: { href: ARC_URL, label: "arc.io" },
   },
   {
     brand: "circle",
     name: "Circle",
-    role: "Payments through",
-    body: "Circle's wallets carry the live USDC payments.",
-    link: { href: `${REPOSITORY}/blob/main/src/lib/circle/liveProvider.ts`, label: "Read the code" },
+    role: "Wallets and money movement",
+    body: "Circle's wallets hold each workspace's treasury and send every payment the agent is allowed to make.",
+    facts: [
+      "Developer-Controlled Wallets for treasury and agent wallets, transfers and balances",
+      "Modular Wallets for passkey wallets: an owner's treasury on Arc mainnet, and payees'",
+      "CCTP, Gateway, Gas Station, USYC and EURC swaps on Arc testnet",
+    ],
+    links: [
+      { href: `${REPOSITORY}#circle-integrations`, label: "Circle products we use" },
+      { href: `${REPOSITORY}/blob/main/src/lib/circle/liveProvider.ts`, label: "Read the code" },
+    ],
     site: { href: CIRCLE_URL, label: "circle.com" },
-  },
-  {
-    brand: "npm",
-    name: "npm",
-    role: "SDK on",
-    body: "@vestiarion/sdk, a typed client for every endpoint.",
-    link: { href: "/docs/get-started/sdk", label: "SDK docs" },
   },
 ];
 
@@ -211,44 +228,67 @@ export function Integrations() {
             </GroupRow>
           ))}
 
-          <GroupRow id="foundations" title="Under the hood" summary="Where payments settle, and where developers start.">
-            <ul
-              aria-labelledby="integrations-foundations"
-              className="grid divide-y divide-line rounded-xl border border-line md:grid-cols-3 md:divide-x md:divide-y-0"
-            >
-              {FOUNDATIONS.map((item) => {
-                const external = item.link.href.startsWith("https://");
-                return (
-                  <li key={item.name} className="min-w-0 px-4 py-4 sm:px-5">
-                    <Eyebrow>{item.role}</Eyebrow>
-                    <p className="mt-2 flex min-h-6 items-center gap-2 text-[0.9375rem] font-semibold text-ink">
-                      <Named brand={item.brand} name={item.name} size={item.brand === "npm" ? 16 : 20} />
-                    </p>
-                    <p className="mt-1.5 text-sm leading-relaxed text-ink-2">{item.body}</p>
-                    <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs">
-                      <Link
-                        href={item.link.href}
-                        className="inline-flex min-h-6 items-center font-semibold text-agent underline-offset-4 hover:underline"
-                        {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
+          <GroupRow id="foundations" title="Built on Arc, with Circle" summary="Where every payment is made, and the wallets that send it.">
+            <div className="min-w-0">
+              <ul aria-labelledby="integrations-foundations" className="grid gap-3 md:grid-cols-2">
+                {FOUNDATIONS.map((item) => (
+                  <li key={item.name} className="flex min-w-0 flex-col rounded-xl border border-line bg-surface p-5">
+                    <Eyebrow className="text-agent">{item.role}</Eyebrow>
+                    <div className="mt-2.5 flex min-h-8 items-center justify-between gap-3">
+                      <p className="flex items-center gap-2.5 text-lg font-semibold text-ink">
+                        <Named brand={item.brand} name={item.name} size={28} />
+                      </p>
+                      <a
+                        href={item.site.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex min-h-6 shrink-0 items-center font-mono text-xs text-ink-3 underline-offset-4 transition-colors duration-150 ease-standard hover:text-agent hover:underline"
                       >
-                        {item.link.label} {external ? "↗" : "→"}
-                        {external && <span className="sr-only"> (opens in a new tab)</span>}
-                      </Link>
-                      {item.site && (
-                        <a
-                          href={item.site.href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex min-h-6 items-center text-ink-3 underline-offset-4 transition-colors duration-150 ease-standard hover:text-agent hover:underline"
-                        >
-                          {item.site.label} ↗<span className="sr-only">{`, ${item.name}'s own site (opens in a new tab)`}</span>
-                        </a>
-                      )}
+                        {item.site.label} ↗<span className="sr-only">{`, ${item.name}'s own site (opens in a new tab)`}</span>
+                      </a>
+                    </div>
+                    <p className="mt-2 text-sm leading-relaxed text-ink-2">{item.body}</p>
+                    <ul className="mt-3 grid gap-1.5">
+                      {item.facts.map((fact) => (
+                        <li key={fact} className="flex items-start gap-2 text-[0.8125rem] leading-snug text-ink-2">
+                          <Check aria-hidden className="mt-0.5 size-3.5 shrink-0 text-agent" strokeWidth={2.5} />
+                          {fact}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-auto flex flex-wrap gap-x-4 gap-y-1 pt-4 font-mono text-xs">
+                      {item.links.map((link) => {
+                        const external = link.href.startsWith("https://");
+                        return (
+                          <Link
+                            key={link.href}
+                            href={link.href}
+                            className="inline-flex min-h-6 items-center font-semibold text-agent underline-offset-4 hover:underline"
+                            {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
+                          >
+                            {link.label} {external ? "↗" : "→"}
+                            {external && <span className="sr-only"> (opens in a new tab)</span>}
+                          </Link>
+                        );
+                      })}
                     </p>
                   </li>
-                );
-              })}
-            </ul>
+                ))}
+              </ul>
+              {/* Where a developer starts: a line under the two, not a third card beside them. */}
+              <p className="mt-4 text-pretty text-sm leading-6 text-ink-2">
+                <BrandMark brand="npm" size={14} className="mr-2 inline-block align-[-2px]" />
+                <span className="sr-only">npm</span>
+                Building on Vestiarion? @vestiarion/sdk is a typed client for every endpoint.{" "}
+                <Link
+                  href="/docs/get-started/sdk"
+                  className="inline-flex items-center gap-1 whitespace-nowrap font-medium text-agent underline-offset-4 hover:underline"
+                >
+                  SDK docs
+                  <ArrowRight aria-hidden className="size-3.5" />
+                </Link>
+              </p>
+            </div>
           </GroupRow>
         </div>
 

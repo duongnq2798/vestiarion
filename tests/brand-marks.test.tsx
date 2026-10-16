@@ -312,13 +312,39 @@ describe("the landing page's integrations", () => {
       ["integrations-accounting", "Accounting"],
       ["integrations-sales", "Sales and CRM"],
       ["integrations-work", "Work and team chat"],
-      ["integrations-foundations", "Under the hood"],
+      ["integrations-foundations", "Built on Arc, with Circle"],
     ]);
     for (const id of ["accounting", "sales", "work", "foundations"]) expect(markup).toContain(`<ul aria-labelledby="integrations-${id}"`);
-    // Three side by side from a tablet's width, one list below it: no row is ever left with one.
-    expect(markup.match(/md:grid-cols-3/g)).toHaveLength(4);
-    expect(markup).not.toMatch(/grid-cols-(2|4|5)/);
-    expect(markup.match(/<li /g)).toHaveLength(12);
+    // Three tools side by side from a tablet's width, one list below it: no row is ever left with one. Arc and Circle
+    // are a pair of their own, two side by side.
+    expect(markup.match(/md:grid-cols-3/g)).toHaveLength(3);
+    expect(markup.match(/md:grid-cols-2/g)).toHaveLength(1);
+    expect(markup).not.toMatch(/grid-cols-(4|5)/);
+    expect(markup.match(/<li class="min-w-0">/g)).toHaveLength(9);
+    expect(markup.match(/<li class="flex min-w-0 flex-col rounded-xl/g)).toHaveLength(2);
+  });
+
+  it("draws Arc and Circle larger than the tools, with what the product does on each and the evidence, and the SDK as a line under them", () => {
+    // Their marks are drawn at 28 px; no tool's is above 26.
+    expect(markup).toMatch(/<img src="\/brands\/arc\.jpeg"[^>]*width="28" height="28"/);
+    expect(markup).toMatch(/<img src="\/brands\/circle\.svg"[^>]*width="28" height="28"/);
+    for (const entry of tools) expect(entry.mark ?? 24).toBeLessThanOrEqual(26);
+    const page = text(markup);
+    expect(page).toContain("Where payments are made Arc arc.io");
+    expect(page).toContain("Wallets and money movement Circle circle.com");
+    // The Circle products named are the README's, and the ones that run on Arc testnet alone say so.
+    const readme = readFileSync(path.join(process.cwd(), "README.md"), "utf8");
+    for (const product of ["Developer-Controlled Wallets", "Modular Wallets", "CCTP", "Gateway", "Gas Station", "USYC"]) {
+      expect(page).toContain(product);
+      expect(readme).toContain(product);
+    }
+    expect(page).toContain("CCTP, Gateway, Gas Station, USYC and EURC swaps on Arc testnet");
+    // Each evidence link lands on a section the README has.
+    expect(readme).toContain("### Mainnet proof");
+    expect(readme).toContain("### Circle integrations");
+    // The SDK is a line under the pair, not a card beside them.
+    expect(page).toContain("Building on Vestiarion? @vestiarion/sdk is a typed client for every endpoint. SDK docs");
+    expect(markup).not.toMatch(/<li[^>]*>(?:(?!<\/li>)[\s\S])*@vestiarion\/sdk/);
   });
 
   it("names each service beside its mark, and links each tool to its guide, Arc and Circle to their own sites as well", () => {
@@ -337,10 +363,12 @@ describe("the landing page's integrations", () => {
       "/docs/guides/asana",
       "/docs/guides/slack",
       "/docs/guides/telegram",
-      "/open",
       "https://www.arc.io",
-      "https://github.com/duongnq2798/vestiarion/blob/main/src/lib/circle/liveProvider.ts",
+      "/open",
+      "https://github.com/duongnq2798/vestiarion#mainnet-proof",
       "https://www.circle.com",
+      "https://github.com/duongnq2798/vestiarion#circle-integrations",
+      "https://github.com/duongnq2798/vestiarion/blob/main/src/lib/circle/liveProvider.ts",
       "/docs/get-started/sdk",
     ]);
     expect([...markup.matchAll(/data-brand="([\w-]+)"/g)].map((match) => match[1])).toEqual([

@@ -48,7 +48,9 @@ row (E), and no word on what each connection is for (F).
 - **L7 — what it is built on, below and quieter.** "Under the hood": Arc (settles on; see the payments, arc.io), Circle
   (payments through; the code, circle.com) and the SDK on npm (SDK docs), in one ruled panel with small marks and the
   role labels in mono. The role labels stay here because they say each relationship. The SDK is a peer of Arc and
-  Circle instead of an orphan row.
+  Circle instead of an orphan row. Superseded the same day by `2026-10-16-landing-arc-circle-design.md`: Arc and Circle
+  are now a larger pair, "Built on Arc, with Circle", with what the product does on each and links to the evidence,
+  and the SDK is a line under them.
 - **L8 — sizes.** Marks are 24 px beside a written name; the wordmarks and lockups are tuned per mark (Zoho's 26,
   Pipedrive's 22, Asana's 20) so they look the same size, each its owner's file unaltered. Card sentences are 14 px
   (12 px before), the trademark notice 12 px (11 before).
