@@ -1,7 +1,7 @@
 name: Vestiarion accounting sync
 
-# Brings bills in from the accounting tools workspaces connected (Xero, QuickBooks) and deals from their CRMs (HubSpot),
-# and clears connections nobody finished (docs/superpowers/specs/2026-10-12-xero-connector-design.md X7;
+# Brings bills in from the accounting tools workspaces connected (Xero, QuickBooks, Zoho Books) and deals from their
+# CRMs (HubSpot), and clears connections nobody finished (docs/superpowers/specs/2026-10-12-xero-connector-design.md X7;
 # docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H7). Supabase Cron calls the route every 15 minutes
 # (supabase/cron/watches.sql); this workflow is its manual run.
 on:

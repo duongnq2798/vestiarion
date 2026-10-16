@@ -201,6 +201,7 @@ describe("the docs navigation", () => {
       ["guides/telegram", "Get the agent's decisions in Telegram"],
       ["guides/xero", "Bring bills in from Xero"],
       ["guides/quickbooks", "Bring bills in from QuickBooks Online"],
+      ["guides/zohobooks", "Bring bills in from Zoho Books"],
       ["guides/hubspot", "Bring deals in from HubSpot"],
       ["guides/pipedrive", "Bring deals in from Pipedrive"],
       ["guides/asana", "Accept contractor work from Asana"],

@@ -216,7 +216,12 @@ export async function finishConnect(request: Request, deps: ConnectDeps): Promis
   const named = namedParam ? params.get(namedParam) : null;
   if (namedParam && !named) return back("failed");
 
-  const exchanged = await deps.provider.exchangeCode({ code, redirectUri: redirectUri(deps) });
+  // A provider whose callback names the person's data center (Zoho's location, Z3): passed on, and checked by the
+  // provider against its own list before the code goes anywhere.
+  const regionParam = deps.provider.callbackRegionParam;
+  const exchanged = await deps.provider.exchangeCode(
+    regionParam ? { code, redirectUri: redirectUri(deps), region: params.get(regionParam) } : { code, redirectUri: redirectUri(deps) }
+  );
   if (!exchanged.ok) return back("failed");
   const consent = state.consent;
   try {

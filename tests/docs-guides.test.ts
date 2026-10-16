@@ -41,6 +41,7 @@ type GuideSlug =
   | "guides/github"
   | "guides/xero"
   | "guides/quickbooks"
+  | "guides/zohobooks"
   | "guides/hubspot"
   | "guides/pipedrive"
   | "guides/asana"
@@ -143,7 +144,7 @@ const HELD_ACTIONS = "src/components/HeldMilestoneActions.tsx";
 const MILESTONE_DECISIONS = "src/lib/agent/milestone-decisions.ts";
 const SLACK_PANEL = "src/components/SlackPanel.tsx";
 const SLACK_CONNECT_PAGE = "src/app/integrations/slack/connect/page.tsx";
-// Xero's and QuickBooks' cards, connect page and review list are one set of components, given the tool.
+// Xero's, QuickBooks' and Zoho Books' cards, connect page and review list are one set of components, given the tool.
 const ACCOUNTING_PANEL = "src/components/AccountingPanel.tsx";
 const ACCOUNTING_PICKER = "src/components/AccountingAccountPicker.tsx";
 const ACCOUNTING_REVIEW = "src/components/AccountingBillsReview.tsx";
@@ -2230,6 +2231,56 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["QuickBooks is still connected", "src/app/integrations/quickbooks/disconnected/page.tsx"],
     ["QuickBooks says it was disconnected there", ACCOUNTING_CONNECTIONS, "says it was disconnected there"],
   ],
+  // Zoho Books on the same card, connect page and review list, in its own words (Zoho Books connector Z1, Z5, Z7, Z11).
+  "guides/zohobooks": [
+    ["Connect Zoho Books", ACCOUNTING_PANEL, "`Connect ${label}`"],
+    ["An owner or admin connects Zoho Books.", ACCOUNTING_PANEL, "An owner or admin connects {label}."],
+    [
+      "Vestiarion reads the bills and vendors of the Zoho Books organization you pick, and the names of the organizations you can reach. It writes nothing to Zoho Books.",
+      ACCOUNTING_CONSENT,
+    ],
+    ["I agree", ACCOUNTING_CONSENT],
+    [
+      "The agent's model provider (DeepSeek, on the hosted service) sees each bill's facts to decide on it, under that provider's own API terms.",
+      ACCOUNTING_CONSENT,
+      "sees each bill's facts to decide on it, under that provider's own API terms.",
+    ],
+    ["Vestiarion never uses Zoho Books data to train or improve any AI model", ACCOUNTING_CONSENT, "data to train or improve any AI model"],
+    ["Continue to Zoho Books", ACCOUNTING_CONNECT_PAGE, "Continue to {label}"],
+    ["Zoho asks you to sign in in your own data center and allow Vestiarion to read. If you have several organizations, you pick one here next.", ACCOUNTING_CONNECT_PAGE],
+    ["ZohoBooks.bills.READ", "src/lib/zohobooks/settings.ts"],
+    ["ZohoBooks.contacts.READ", "src/lib/zohobooks/settings.ts"],
+    ["ZohoBooks.settings.READ", "src/lib/zohobooks/settings.ts"],
+    ["Pick the Zoho Books organization", ACCOUNTING_CONNECT_PAGE, "Pick the {label} {organisation}"],
+    ["Connect this organization", ACCOUNTING_CONNECT_PAGE, "Connect this {organisation}"],
+    ["Zoho Books is connected. Its open bills are coming in for review on Bills & receivables.", ACCOUNTING_PANEL, "is connected. Its open bills are coming in for review on Bills & receivables."],
+    ["accounting_connected", ACCOUNTING_CONNECTIONS],
+    ["Disconnect it first, then connect the one you want.", ACCOUNTING_PANEL],
+    ["Sync now", ACCOUNTING_PANEL],
+    ["Partly paid in Zoho Books", ACCOUNTING_REVIEW, "Partly paid in {label}"],
+    ["Closed in Zoho Books after they were added", ACCOUNTING_REVIEW, "Closed in {label} after they were added"],
+    ["Partly paid in Zoho Books after they were added", ACCOUNTING_REVIEW, "Partly paid in {label} after they were added"],
+    ["accounting_bill_closed", "src/lib/connectors/sync-store.ts"],
+    ["3 from Zoho Books", INVOICES_PAGE_SOURCE, "`${review.items.length} from ${label}`"],
+    ["From Zoho Books: 3 bills to add", ACCOUNTING_REVIEW, "`From ${label}: ${items.length} bills to add`"],
+    ["Ready to add", ACCOUNTING_REVIEW],
+    ["Already in Vestiarion: same counterparty, amount, due date and reference.", "src/lib/bill-import/rows.ts"],
+    ["Add, goods received", ACCOUNTING_REVIEW],
+    ["Add, not received yet", ACCOUNTING_REVIEW],
+    ["Dismiss", ACCOUNTING_REVIEW],
+    ["New counterparty", ACCOUNTING_REVIEW],
+    ["A bill being open in Zoho Books does not approve its payment: the agent decides it.", ACCOUNTING_WORDS],
+    ["A person added it, brought in from Zoho Books.", "src/lib/decision-trail.ts", ", brought in from Zoho Books"],
+    ["accounting_bills_dismissed", "src/lib/commands/accounting.ts"],
+    ["The last sync with Zoho Books failed", ACCOUNTING_STATUS, "`The last sync with ${label} failed`"],
+    ["Zoho Books asked Vestiarion to slow down. Syncing again at", ACCOUNTING_STATUS, "asked Vestiarion to slow down. Syncing again at"],
+    ["Zoho Books needs you to reconnect", ACCOUNTING_STATUS, "needs you to reconnect"],
+    ["Reconnect Zoho Books", ACCOUNTING_PANEL, "`Reconnect ${label}`"],
+    ["Zoho Books did not finish connecting. Try again in a moment.", ACCOUNTING_PANEL, "did not finish connecting. Try again in a moment."],
+    ["Zoho Books is not set up on this deployment yet.", ACCOUNTING_PANEL, "{label} is not set up on this deployment yet."],
+    ["Disconnect Zoho Books", ACCOUNTING_PANEL, "Disconnect {PROVIDER_LABELS[provider]}"],
+    ["accounting_disconnected", ACCOUNTING_CONNECTIONS],
+  ],
   "guides/github": [
     ["Settings", APP_NAV],
     ["GitHub", GITHUB_PANEL],
@@ -2786,6 +2837,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/github": 10,
   "guides/xero": 20,
   "guides/quickbooks": 20,
+  "guides/zohobooks": 20,
   "guides/hubspot": 20,
   "guides/pipedrive": 20,
   "guides/asana": 20,

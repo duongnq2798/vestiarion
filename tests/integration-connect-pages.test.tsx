@@ -113,13 +113,13 @@ describe("the Settings cards' links to a connect page", () => {
   });
 });
 
-const connectPage = async (provider: "xero" | "quickbooks" | "hubspot", query: Record<string, string> = {}) => {
+const connectPage = async (provider: "xero" | "quickbooks" | "hubspot" | "zohobooks", query: Record<string, string> = {}) => {
   const searchParams = Promise.resolve(query);
   const page = provider === "hubspot" ? await HubSpotConnectPage({ searchParams }) : await AccountingConnect({ provider, searchParams });
   return renderToStaticMarkup(page);
 };
 
-describe.each(["xero", "quickbooks", "hubspot"] as const)("the %s connect page", (provider) => {
+describe.each(["xero", "quickbooks", "hubspot", "zohobooks"] as const)("the %s connect page", (provider) => {
   it("picks the workspace the Settings card named, among several, with real radio buttons and their labels", async () => {
     memberships.value = [workspace("acme"), workspace("beta", "admin")];
     const markup = await connectPage(provider, { org: "beta" });
@@ -196,6 +196,29 @@ describe("the organisation pick after Xero", () => {
     expect(radios.map((radio) => radio.value)).toEqual(["tenant-1", "tenant-2"]);
     expect(radios.map((radio) => labelFor(markup, radio.id))).toEqual(["Demo Company (Global)", "Northstar Studio Pte Ltd"]);
     expect(radios.every((radio) => radio.name === "organisation" && "required" in radio)).toBe(true);
+    expect(markup).toMatch(/<legend[^>]*>Organisation<\/legend>/);
+    expect(markup).toContain("The others stay authorised in Xero until you remove them there, under Settings, Connected apps.");
+  });
+});
+
+describe("the organization pick after Zoho Books (Zoho Books connector Z5)", () => {
+  it("names the organizations in Zoho's words, and never sends the person to Xero's Connected apps", async () => {
+    memberships.value = [workspace("acme")];
+    pending.value = {
+      id: "0b6c1c9e-4a4f-4a7e-9b1e-000000000d05",
+      choices: [
+        { externalOrgId: "60012345678", name: "Lumen Holdings" },
+        { externalOrgId: "60087654321", name: "Lumen Retail" },
+      ],
+    };
+    const markup = (await connectPage("zohobooks", { org: "acme", choose: pending.value.id })).replace(/&#x27;/g, "'");
+    expect(markup).toContain("Pick the Zoho Books organization");
+    expect(markup).toContain("Zoho Books gave access to more than one organization.");
+    expect(markup).toContain("Vestiarion reads only the one you pick.");
+    expect(markup).toMatch(/<legend[^>]*>Organization<\/legend>/);
+    expect(markup).toContain("Connect this organization");
+    expect(markup).not.toMatch(/authorised|Connected apps|Organisation/);
+    expect(inputs(markup).filter((input) => input.type === "radio").map((radio) => radio.value)).toEqual(["60012345678", "60087654321"]);
   });
 });
 
@@ -208,7 +231,7 @@ const anyConnectPage = async (provider: ProviderId, query: Record<string, string
 
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-describe.each(["xero", "quickbooks", "hubspot", "pipedrive", "asana"] as const)("the %s connect page's statement", (provider) => {
+describe.each(["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks"] as const)("the %s connect page's statement", (provider) => {
   it("posts the version it shows, inside the form", async () => {
     memberships.value = [workspace("acme")];
     const form = (await anyConnectPage(provider)).match(/<form[^>]*>[^]*?<\/form>/)?.[0] ?? "";

@@ -174,7 +174,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     const raw = await searchParams;
     const query = readBillsQuery(raw);
     // Every tab: what the figures, the strip and the New forms need (B5).
-    const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, canReconcile, schedules, deciding, emailed, fromXero, fromQuickBooks, dealsRead, fromHubSpot, fromPipedrive] = await Promise.all([
+    const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, canReconcile, schedules, deciding, emailed, fromXero, fromQuickBooks, fromZohoBooks, dealsRead, fromHubSpot, fromPipedrive] = await Promise.all([
       listInvoices(),
       listCounterparties(),
       listLedgerEntries(1),
@@ -202,6 +202,8 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       // cannot be read.
       broughtIn("xero"),
       broughtIn("quickbooks"),
+      // And Zoho Books' (Zoho Books connector Z1), hidden before migration 0122 the same way.
+      broughtIn("zohobooks"),
       // The workspace's deals and their schedules (deal schedule). Best effort: before migration 0104 runs the section
       // says deals are not set up, and a read that fails hides only the section.
       readDeals().catch((error: unknown) => {
@@ -651,6 +653,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     for (const [provider, review] of [
       ["xero", fromXero],
       ["quickbooks", fromQuickBooks],
+      ["zohobooks", fromZohoBooks],
     ] as const) {
       if (review.state !== "list") continue;
       const changed = review.closed.length + review.partlyPaid.length;

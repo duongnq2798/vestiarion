@@ -5,11 +5,11 @@
  * either. Pure types and one error class: no I/O.
  */
 
-export const PROVIDERS = ["xero", "quickbooks", "hubspot", "pipedrive", "asana"] as const;
+export const PROVIDERS = ["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks"] as const;
 export type ProviderId = (typeof PROVIDERS)[number];
 
 /** A provider's name in copy. */
-export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quickbooks: "QuickBooks", hubspot: "HubSpot", pipedrive: "Pipedrive", asana: "Asana" };
+export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quickbooks: "QuickBooks", hubspot: "HubSpot", pipedrive: "Pipedrive", asana: "Asana", zohobooks: "Zoho Books" };
 
 /**
  * What a provider brings in (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H1): an accounting tool its
@@ -17,7 +17,7 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quick
  * (docs/superpowers/specs/2026-10-14-asana-acceptance-design.md A1). The core's words follow it.
  */
 export type ProviderKind = "accounting" | "crm" | "work";
-export const PROVIDER_KINDS: Record<ProviderId, ProviderKind> = { xero: "accounting", quickbooks: "accounting", hubspot: "crm", pipedrive: "crm", asana: "work" };
+export const PROVIDER_KINDS: Record<ProviderId, ProviderKind> = { xero: "accounting", quickbooks: "accounting", hubspot: "crm", pipedrive: "crm", asana: "work", zohobooks: "accounting" };
 
 /** The kind of a provider named by its id or its label; accounting for a name neither is. */
 export function providerKind(provider: string): ProviderKind {
@@ -102,6 +102,17 @@ export const PROVIDER_WORDS: Record<ProviderId, ProviderWords> = {
     idleDays: 0,
     bills: "linked tasks",
     approval: "A task completed in Asana is never by itself a reason to pay: a person accepts the work against its criteria.",
+  },
+  // Zoho Books (docs/superpowers/specs/2026-10-16-zoho-books-connector-design.md Z1): organizations and vendors, its open
+  // bills, no booking so no accounts, and a refresh token that lasts until revoked, so no idle days.
+  zohobooks: {
+    possessive: "Zoho Books'",
+    organisation: "organization",
+    contacts: "vendors",
+    accounts: "no accounts",
+    idleDays: 0,
+    bills: "open bills",
+    approval: "A bill being open in Zoho Books does not approve its payment: the agent decides it.",
   },
 };
 
@@ -249,6 +260,12 @@ export interface AccountingProvider {
    */
   callbackOrganisationParam?: string;
   /**
+   * The query parameter the provider's callback names the person's data center in (Zoho's `location`,
+   * docs/superpowers/specs/2026-10-16-zoho-books-connector-design.md Z3): read after every other check and passed to
+   * `exchangeCode` as `region`, which the provider checks against its own list before anything is sent.
+   */
+  callbackRegionParam?: string;
+  /**
    * One workspace per organisation at a time (QuickBooks, Q5): revoking or disconnecting the app there ends every grant
    * for the organisation, so two workspaces would cut each other off. Xero lets several share one (X4).
    */
@@ -259,7 +276,7 @@ export interface AccountingProvider {
    * too. A provider that asks for its write scopes on every connection (Xero) leaves it.
    */
   authorizeUrl(input: { state: string; redirectUri: string; write?: boolean }): string;
-  exchangeCode(input: { code: string; redirectUri: string }): Promise<ExchangeOutcome>;
+  exchangeCode(input: { code: string; redirectUri: string; region?: string | null }): Promise<ExchangeOutcome>;
   /**
    * The organisations a fresh token reaches, those of this authorization first where the provider says which; with
    * `named`, the one the callback named, once the token is shown to read it.
@@ -356,7 +373,7 @@ export interface BookingProvider {
  */
 export type ConnectingProvider = Pick<
   AccountingProvider,
-  "id" | "label" | "scopes" | "authorizeUrl" | "exchangeCode" | "organisations" | "refresh" | "revoke" | "exclusive" | "callbackOrganisationParam"
+  "id" | "label" | "scopes" | "authorizeUrl" | "exchangeCode" | "organisations" | "refresh" | "revoke" | "exclusive" | "callbackOrganisationParam" | "callbackRegionParam"
 >;
 
 /** The CRMs among the providers: those that bring deals in (HubSpot connector H1, Pipedrive connector P1). */

@@ -12,7 +12,7 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { BrandName, PROVIDER_MARKS } from "@/components/vx/BrandMarks";
-import { accountName } from "@/lib/connectors/booking";
+import { accountName, PICKS_PAYMENT_ACCOUNT } from "@/lib/connectors/booking";
 import { billsHref } from "@/lib/bills-view";
 import type { AccountingPanelView } from "@/lib/connectors/panel";
 import { PROVIDER_LABELS, PROVIDER_WORDS, type AccountingProviderId, type ProviderId } from "@/lib/connectors/provider";
@@ -93,8 +93,8 @@ function ConnectButton({ provider, orgSlug, label }: { provider: ProviderId; org
  * docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q15, Q19), one per tool, headed by its mark
  * (docs/superpowers/specs/2026-10-12-integration-marks-design.md): its status in business
  * words, never "connected" while the last sync failed; the bills waiting for review; a reconnect when the tool no
- * longer takes the connection; Sync now and Disconnect; and the account payments made on Arc will be booked to. Every
- * member sees the status; an owner or admin gets the controls. `view` carries no token.
+ * longer takes the connection; Sync now and Disconnect; and, for a tool with accounts, the account payments made on Arc
+ * will be booked to. Every member sees the status; an owner or admin gets the controls. `view` carries no token.
  */
 export default function AccountingPanel({
   provider,
@@ -157,7 +157,7 @@ export default function AccountingPanel({
                   {view.waiting === 0 ? (
                     "No bills waiting for review."
                   ) : (
-                    <Link className="font-medium text-agent underline-offset-4 hover:underline" href={`/o/${orgSlug}${billsHref({ tab: "bills", review: provider === "xero" || provider === "quickbooks" ? provider : null })}`}>
+                    <Link className="font-medium text-agent underline-offset-4 hover:underline" href={`/o/${orgSlug}${billsHref({ tab: "bills", review: provider === "xero" || provider === "quickbooks" || provider === "zohobooks" ? provider : null })}`}>
                       {view.waiting === 1 ? "1 bill waiting for review" : `${view.waiting} bills waiting for review`}
                     </Link>
                   )}
@@ -169,7 +169,8 @@ export default function AccountingPanel({
                 )}
               </ul>
             )}
-            {!view.revoked && (
+            {/* A tool with no accounts to choose from (Zoho Books, Z9) says nothing about booking. */}
+            {!view.revoked && PICKS_PAYMENT_ACCOUNT[provider] && (
               <div className="space-y-2 border-t border-line pt-4">
                 <p className="text-sm font-medium text-ink">Where payments made on Arc will be booked</p>
                 <p className="text-sm text-ink-2">

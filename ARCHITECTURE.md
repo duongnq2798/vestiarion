@@ -1768,8 +1768,8 @@ and `importRow`; the invoice number starts the memo. The list itself is not kept
 
 `/o/[slug]/invoices` (docs/superpowers/specs/2026-10-12-bills-tabs-design.md) keeps four figures above three tabs:
 Needs you, Due in 7 days, Overdue and Receivables (what customers still owe, never called cash), each a link to the tab
-and filter behind it; **Waiting for review** only when something does (bills from Xero or QuickBooks, payments to book,
-invoices by email, invoices captured with the Chrome extension, HubSpot or Pipedrive won deals); then **Bills**,
+and filter behind it; **Waiting for review** only when something does (bills from Xero, QuickBooks or Zoho Books,
+payments to book, invoices by email, invoices captured with the Chrome extension, HubSpot or Pipedrive won deals); then **Bills**,
 **Payment plan** and **Receivables**.
 
 - **The address holds the view** (`src/lib/bills-view.ts`). `tab`, `filter`, `q`, `sort`, `page`, `open` (a bill's
@@ -2237,19 +2237,22 @@ for each connected workspace with a pending milestone on that pull request, as
 the GitHub check reads its link, so the payment follows the merge within a
 minute instead of waiting for the schedule.
 
-## Accounting connectors: Xero and QuickBooks Online
+## Accounting connectors: Xero, QuickBooks Online and Zoho Books
 
-A workspace can bring its bills in from Xero (docs/superpowers/specs/2026-10-12-xero-connector-design.md) and from
-QuickBooks Online (docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md), either or both. The core,
+A workspace can bring its bills in from Xero (docs/superpowers/specs/2026-10-12-xero-connector-design.md), from
+QuickBooks Online (docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md) and from Zoho Books
+(docs/superpowers/specs/2026-10-16-zoho-books-connector-design.md), any or all of them. The core,
 `src/lib/connectors/`, names no provider: it talks to one through `AccountingProvider` (`provider.ts`: the authorize URL,
 the code exchange, the organisations a token reaches, refresh, revoke, and paged reads of bills, contacts and accounts
 mapped into `ExternalBill`, `ExternalContact` and `ExternalAccount`), and words each provider's own way through
-`PROVIDER_WORDS` (Xero's organisations and suppliers, QuickBooks' companies and vendors). Each provider has its folder
-(`src/lib/xero/`, `src/lib/quickbooks/`: settings, HTTP, OAuth calls, the pure mapping from its JSON in `map.ts`, and the
-provider object), wired in `src/lib/accounting-providers.ts`, the one place the core meets them. Xero is on only with
-`XERO_CLIENT_ID` and `XERO_CLIENT_SECRET` (a Xero "Web app"), QuickBooks only with `QUICKBOOKS_CLIENT_ID` and
-`QUICKBOOKS_CLIENT_SECRET` (an Intuit app; `QUICKBOOKS_ENVIRONMENT` picks sandbox or production companies); otherwise its
-card and routes are not there. The Settings card (`AccountingPanel`), the review list (`AccountingBillsReview`), the
+`PROVIDER_WORDS` (Xero's organisations and suppliers, QuickBooks' companies and vendors, Zoho Books' organizations and
+vendors). Each provider has its folder (`src/lib/xero/`, `src/lib/quickbooks/`, `src/lib/zohobooks/`: settings, HTTP,
+OAuth calls, the pure mapping from its JSON in `map.ts`, and the provider object), wired in
+`src/lib/accounting-providers.ts`, the one place the core meets them. Xero is on only with `XERO_CLIENT_ID` and
+`XERO_CLIENT_SECRET` (a Xero "Web app"), QuickBooks only with `QUICKBOOKS_CLIENT_ID` and `QUICKBOOKS_CLIENT_SECRET` (an
+Intuit app; `QUICKBOOKS_ENVIRONMENT` picks sandbox or production companies), Zoho Books only with `ZOHO_BOOKS_CLIENT_ID`
+(in Zoho's form, `1000.` and capital letters and digits) and `ZOHO_BOOKS_CLIENT_SECRET` (a Zoho server-based client);
+otherwise its card and routes are not there. The Settings card (`AccountingPanel`), the review list (`AccountingBillsReview`), the
 account picker, the launch and connect pages and the server actions (`src/app/actions/accounting.ts`) are one set, given
 the provider.
 
@@ -2359,8 +2362,8 @@ the provider.
     `invoiceId`), which webhooks carry. The network fee is shown apart and never booked.
   - **The seam.** `AccountingProvider.booking?: BookingProvider` (`provider.ts`): `writeScopes`, `organisation`,
     `bill`, `findPayment`, `bookPayment`, `payment`, each mapped to the core's shapes; Xero's in
-    `src/lib/xero/payments.ts` (pure) and `payments-api.ts`. A provider without it (QuickBooks, for now) never books;
-    one that adds it also sets `BOOKS_PAYMENTS` (`booking.ts`) for the account picker's preview.
+    `src/lib/xero/payments.ts` (pure) and `payments-api.ts`. A provider without it (QuickBooks and Zoho Books, for now)
+    never books; one that adds it also sets `BOOKS_PAYMENTS` (`booking.ts`) for the account picker's preview.
   - **Where it shows**: **Booked in Xero** on the paid bill's card, a last row in **Where the payment is**, and a step,
     The books, in **Why it was paid**, all from the signed entries (`bookingFromEntries`, `booked.ts`). The card's own
     entry (`matchingEntry`) skips `accounting_` entries.
@@ -2394,6 +2397,48 @@ the provider.
     workspaces where the signed-in person manages integrations, it asks QuickBooks whether each connection still works
     (a fresh token through the serialized refresh, then one read) and marks it revoked only when QuickBooks refuses it,
     signing `accounting_disconnected` with `atProvider: true`.
+- **Zoho Books** (`src/lib/zohobooks/`) differs where Zoho does, through one more optional part of the core:
+  - *Data centers.* A Zoho account lives in one data center, each with its own accounts server and API domain: the US,
+    the EU, India, Australia, Japan, the UK, Canada, Saudi Arabia and the UAE, in a fixed table in
+    `src/lib/zohobooks/regions.ts`; China's, whose accounts are separate, is not in it. The authorize URL is the US
+    accounts server's, which sends a person of another data center on to theirs. The core gained `callbackRegionParam`:
+    Zoho Books names `location`, which `finishConnect` reads only after every other check (state, nonce cookie, person,
+    role, consent) and hands to `exchangeCode` as `region`. A `location` not in the table is refused before anything is
+    sent, and none is the US, where a client without multi-DC lives. The callback's `accounts-server` is never read, so
+    an edited callback sends the client secret nowhere. A person outside the US connects only once their data center is
+    turned on under the client's Settings tab in Zoho's API console, with the same credentials for all.
+  - *Tokens.* Each token the provider hands the core is `<region>|<Zoho's token>` (`withRegion`, `regionalToken`),
+    encrypted and kept as any other, so a refresh, a revocation and every API call go to the data center the token came
+    from, a token is never sent to another, and no column was added. Zoho answers a refresh with an access token only: the
+    refresh token it was given is kept. A refresh token lasts until revoked (`idleDays` 0, so the reconnect words name no
+    idle days); `invalid_code`, `invalid_grant` or `invalid_client` at refresh marks needs reconnect. Zoho may answer a
+    refusal with HTTP 200 and an `error` field, which is read as a refusal.
+  - *Organizations.* `organisations` reads `GET /books/v3/organizations` with the new token: one connects at once, and
+    several are kept as a pending grant and picked on the connect page, as Xero's tenants are. Not `exclusive`: several
+    workspaces may connect one organization, each with its own grant, and no one-workspace index exists for it.
+  - *Reads* (`api.ts`, pure mapping in `map.ts`). `<api domain>/books/v3/<resource>?organization_id=<id>` with
+    `Authorization: Zoho-oauthtoken <token>`, 200 to a page, oldest first by `created_time`, `page_context.has_more_page`
+    for the next. The backfill reads every bill (`filter_by=Status.All`) and the core keeps the open ones in its window;
+    later runs read the bills changed since `since` (`last_modified_time`), whatever their status, so a bill paid or
+    voided later is seen. `open`, `overdue`, `partially_paid` and `approved` are open, `paid` paid, `void` voided,
+    `draft` and `pending_approval` drafts, never brought in. A bill's version is its `last_modified_time` in UTC, its
+    amounts exact decimal strings, and its `balance` the amount due, so `partlyPaidSince` covers it. Vendors are its
+    contacts (`contact_type=vendor`, every status), read in full on each run since Zoho filters contacts by no change
+    time; an inactive one is read as archived.
+  - *No deletions seen.* Zoho Books lists no deleted bill and has no change feed, so a bill deleted there after it was
+    added stays as it is here, and one deleted while in review stays on the review list; no `accounting_bill_closed`
+    ever has `sourceStatus` `deleted` for it. A bill voided there is seen and flagged. The guide says so.
+  - *No booking, no webhook.* `accounts` answers none and there is no `booking` (`BOOKS_PAYMENTS.zohobooks` is false).
+    Zoho's webhooks are workflow rules a person sets up in its own screens, with no API to register one, so the sweeper
+    reads each connection every 15 minutes, as Xero's, and **Sync now** at once.
+  - *Errors* (`http.ts`). A 429 is `rate_limited`, with Retry-After when Zoho sends one and a minute otherwise (100
+    requests a minute per organization, and a daily allowance by plan); a 401 refreshes once; a 403 marks needs reconnect,
+    as for every provider; 5xx and timeouts are `unavailable`.
+  - *Migration `0122`.* The provider checks of `accounting_connections`, `accounting_tokens` and `external_links` take
+    `zohobooks`, each replaced only while it does not yet, so a re-run never narrows a later widening (0116's rule), and
+    `zohobooks_connector_ready(p_org_id)` answers true. The connect flow asks it (`zohoBooksReady`, a tenant RPC, which
+    the data layer always sends `p_org_id`) before anyone is sent to Zoho, so before 0122 runs, connecting says Zoho
+    Books is not set up on this deployment yet.
 
 ## Connectors: CRM (HubSpot and Pipedrive)
 
@@ -3112,7 +3157,7 @@ are built in, others come from `AGENT_LLM_PRICES`; `purpose` names what for: pay
 reminder, extraction, chat), `circle_transfer` (a live send or batch in `payments.ts`, with the chain-reported fee, and a
 live treasury move), `x402_purchase` (a payee history bought, at its price in USDC), `email` (each Resend attempt whose
 message names a `meter`; one sent outside a workspace's scope, after a payee's or a customer's request, is written into
-the workspace by `recordUsageFor`) and `connector_sync` (each Xero, QuickBooks, HubSpot or Pipedrive sync that ran). `recordUsage`
+the workspace by `recordUsageFor`) and `connector_sync` (each Xero, QuickBooks, Zoho Books, HubSpot or Pipedrive sync that ran). `recordUsage`
 writes through the workspace's own tenant client, records nothing outside a scope, and never throws: metering never
 stands between a send and its record. A row holds counts, tokens and a cost with its currency; never an address, an
 amount paid to someone or what an email said. Attribution and display only: nothing reads it to charge or to stop.

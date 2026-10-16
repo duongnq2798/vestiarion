@@ -1,0 +1,83 @@
+Connect Zoho Books, and the open bills in your Zoho Books organization come into Vestiarion for you to review, without retyping them. Each bill goes through the same check as a bill list: duplicates, currency, the supplier. It becomes a payable only when you add it, and the agent then decides it as any other bill, with every guardrail.
+
+Vestiarion reads from Zoho Books and writes nothing to it. A bill being open in Zoho Books does not approve its payment in Vestiarion.
+
+## Before you start
+
+- **An owner or admin** of the workspace connects Zoho Books. Anyone else sees "An owner or admin connects Zoho Books."
+- **A Zoho Books organization** with bills: bills entered in Zoho Books with a balance left to pay. Zoho Books has no sandbox: a free plan or a trial organization works for a first try.
+- **Your Zoho data center.** Your Zoho account lives in one data center: the US, the EU, India, Australia, Japan, the UK, Canada, Saudi Arabia or the UAE. Vestiarion reads from the one your account is in, and from no other. An account in Zoho's data center in China cannot connect.
+- **Several workspaces, one organization.** A Zoho Books organization can connect to more than one Vestiarion workspace. Each reads its bills on its own, and disconnecting one leaves the others connected.
+- **The bills' currency.** Outside shadow mode, Vestiarion pays bills in USDC or EURC, and Zoho Books bills are in your own currency. In a workspace in [shadow mode](/docs/guides/shadow-mode) on Arc testnet, a bill in the business's own currency is added at its USDC amount at the day's rate, as a bill typed into the form is.
+
+## 1. Connect Zoho Books
+
+Open **Settings**. Under **Zoho Books**, choose **Connect Zoho Books**.
+
+The connect page has the workspace you came from already picked (if you manage several, you can pick another) and says what Vestiarion does with Zoho Books' data:
+
+- Vestiarion reads the bills and vendors of the Zoho Books organization you pick, and the names of the organizations you can reach. It writes nothing to Zoho Books.
+- The bills you add are shown to the workspace's members and to its agent. The agent's model provider (DeepSeek, on the hosted service) sees each bill's facts to decide on it, under that provider's own API terms. Read DeepSeek's [API terms](https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html) and [privacy policy](https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html).
+- Vestiarion never uses Zoho Books data to train or improve any AI model, and never passes it to anyone else without your workspace's say.
+
+Tick **I agree**, then choose **Continue to Zoho Books**. Zoho asks you to sign in in your own data center and allow Vestiarion to read. If you have several organizations, you pick one here next. Zoho lists what Vestiarion asks for, all of it read only: bills (`ZohoBooks.bills.READ`), contacts (`ZohoBooks.contacts.READ`) and settings, for the organizations' names (`ZohoBooks.settings.READ`). Your agreement, with its date, is kept on the connection and in the workspace's signed ledger.
+
+If you can reach more than one organization, Vestiarion then asks you to **Pick the Zoho Books organization**: choose one and **Connect this organization**. Vestiarion reads only the one you pick.
+
+Back in Settings, the card says "Zoho Books is connected. Its open bills are coming in for review on Bills & receivables." The ledger records `accounting_connected`. If this workspace is already connected to another Zoho Books organization, the card says "This workspace is connected to another Zoho Books organization. Disconnect it first, then connect the one you want." and nothing changes.
+
+## 2. Which bills come in
+
+The first sync starts as soon as you connect. It brings in the bills Zoho Books shows as open, overdue, partially paid or approved, due or dated in the last 90 days or later. Older open bills stay in Zoho Books; add one with the invoice form if you need it. After that, Vestiarion asks Zoho Books every 15 minutes for the bills changed since, and reads its vendors again. **Sync now** asks at once. Zoho Books sends Vestiarion no notice of a change, so a bill changed there comes in at the next sync.
+
+- **Drafts and bills pending approval** in Zoho Books never come in. A bill approved there comes in at the next sync.
+- **A bill partly paid in Zoho Books** comes in at what is left to pay, marked "Partly paid in Zoho Books".
+- **A bill paid or voided in Zoho Books** before you added it leaves the list.
+- **A bill paid or voided in Zoho Books after you added it** stays in Vestiarion, and is listed under "Closed in Zoho Books after they were added", so you can reject it before the agent pays it. The ledger records `accounting_bill_closed`.
+- **A bill partly paid in Zoho Books after you added it** is listed under "Partly paid in Zoho Books after they were added", with what is left to pay there.
+- **A bill deleted in Zoho Books is not seen.** Zoho Books lists no deleted bill, and keeps no record of a deletion that an app can read. A bill deleted there stays in Vestiarion as it was: on the review list, where you can **Dismiss** it, or, once added, as a payable the agent decides as any other. If you delete a bill in Zoho Books after adding it, reject it in Vestiarion too. To have Vestiarion see it, void the bill in Zoho Books instead of deleting it.
+- **A bill is never added twice.** Each one is kept once by its id in Zoho Books, and checked against the invoices already in Vestiarion.
+
+## 3. Add the bills
+
+Open **Bills & receivables**. **Waiting for review**, at the top, names the bills Zoho Books brought in, such as "3 from Zoho Books"; it opens "From Zoho Books: 3 bills to add" beside the page, with the vendor, the bill's number, its amount due, its due day and what will happen to it:
+
+- **Ready to add**, with its USDC amount for a bill in your own currency.
+- **Already in Vestiarion: same counterparty, amount, due date and reference.**
+- **Can't be added**, and why, in the same words as a bill list.
+
+None is ticked to start: tick each bill to add, or **Select all**, which ticks the bills that can be added. Then choose:
+
+- **Add, goods received**, when the goods or services on the ticked bills were received;
+- **Add, not received yet**, when they were not: the agent waits for them to be marked received before it pays;
+- **Dismiss**, for bills you pay another way. They stay in Zoho Books.
+
+Each bill is added as one typed into the invoice form: the same checks, and a signed `create_invoice` entry that says `via: "zohobooks"` with the Zoho Books ids of the organization, the bill and the vendor. Its decision trail says "A person added it, brought in from Zoho Books." Dismissing records `accounting_bills_dismissed`.
+
+**The vendor.** A bill goes to the counterparty its Zoho Books vendor was linked to the first time, else to the one counterparty with its name (without regard to case, punctuation or a legal suffix). A vendor no counterparty has yet is added with the bill, marked **New counterparty**: a vendor with no payment address yet, a payment limit of its largest bill being added, and purchase orders needed, which you change on **Counterparties**. Add its payment address there before the agent can pay it.
+
+**The approval.** A bill being open in Zoho Books does not approve its payment: the agent decides it. Nor does a bill approved in Zoho Books' approval flow. A person decides what the agent stops.
+
+## 4. When something goes wrong
+
+The card says what happened, in words, and never "connected" while the last sync failed:
+
+| The card says | What it means |
+| --- | --- |
+| The last sync with Zoho Books failed | Zoho Books did not answer, or its answer could not be read. The card says when Vestiarion tries again: a minute later, then longer after each failure, at most an hour. Nothing read so far is lost; the next sync goes on from where this one stopped. |
+| Zoho Books asked Vestiarion to slow down. Syncing again at 14:05 UTC. | Zoho Books limits how often an app may ask: per minute for each organization, and per day by the organization's plan. The next sync starts at the time Zoho Books gave, or a minute later, from where this one stopped. |
+| Zoho Books needs you to reconnect | Zoho Books no longer accepts the connection: Vestiarion's access was removed in Zoho. A connection does not lapse for not being used. Choose **Reconnect Zoho Books**: the bills, links and review list are kept. |
+| Zoho Books did not finish connecting. Try again in a moment. | Zoho did not give Vestiarion access, or your Zoho account is in a data center Vestiarion does not read from, such as China's. Nothing is kept. |
+| Zoho Books is not set up on this deployment yet. | The deployment has not finished setting up Zoho Books. Nothing is read. |
+
+## 5. Disconnect
+
+An owner or admin chooses **Disconnect Zoho Books**. Vestiarion asks Zoho to revoke its access, deletes its tokens, and reads nothing more. Bills already added stay in Vestiarion, with their history. The ledger records `accounting_disconnected`. To connect again, choose **Connect Zoho Books**.
+
+Removing Vestiarion's access in your Zoho account works too: the card then says "Zoho Books needs you to reconnect", and nothing more is read.
+
+## Your data
+
+- Zoho Books' tokens are kept encrypted, readable only by the server, and never shown in the browser, a log, a model's prompt or a webhook. Each one is sent only to the Zoho data center it came from.
+- A bill's facts (vendor, number, amount, days) are shown to the workspace's members and to the agent. Its model provider sees them under that provider's own terms: on the hosted service, DeepSeek's [API terms](https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html) and [privacy policy](https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html).
+- Vestiarion never uses Zoho Books data to train or improve any AI model. See the [privacy page](/privacy).

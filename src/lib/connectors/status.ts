@@ -54,7 +54,10 @@ const reconnectWords = (label: string) =>
     ? `${label} no longer accepts this connection: the app's access was removed in ${label}. Reconnect ${label} to go on reading the tasks linked to milestones.`
     : providerKind(label) === "crm"
       ? `${label} no longer accepts this connection: the app was uninstalled in ${label}, or its access was removed. Reconnect ${label} to go on bringing its deals in.`
-      : `${label} no longer accepts this connection: it was disconnected in ${label}, or not used for ${providerWords(label).idleDays} days. Reconnect ${label} to go on bringing its bills in.`;
+      : providerWords(label).idleDays > 0
+        ? `${label} no longer accepts this connection: it was disconnected in ${label}, or not used for ${providerWords(label).idleDays} days. Reconnect ${label} to go on bringing its bills in.`
+        : // A refresh token that lasts until revoked (Zoho Books, Z1): only a person ends it.
+          `${label} no longer accepts this connection: it was disconnected in ${label}, or its access was revoked. Reconnect ${label} to go on bringing its bills in.`;
 
 export type SyncErrorKind = "rate_limited" | "unavailable" | "bad_response" | "failed" | "reconnect";
 

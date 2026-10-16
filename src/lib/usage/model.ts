@@ -50,6 +50,7 @@ export const ACTION_LABELS: Record<string, string> = {
   quickbooks: "QuickBooks",
   hubspot: "HubSpot",
   pipedrive: "Pipedrive",
+  zohobooks: "Zoho Books",
 };
 
 export function actionLabel(action: string): string {
@@ -259,7 +260,7 @@ export interface LimitFacts {
   invitationsToday: number | null;
   invitationCap: number;
   /** A connector whose status needs a person (needs reconnecting, or its last sync failed). */
-  connectors: Array<{ provider: "xero" | "quickbooks" | "hubspot" | "pipedrive"; title: string }>;
+  connectors: Array<{ provider: "xero" | "quickbooks" | "hubspot" | "pipedrive" | "zohobooks"; title: string }>;
 }
 
 const NEAR = 0.8;
@@ -274,7 +275,7 @@ function usdc(value: number): string {
   return `${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USDC`;
 }
 
-const PROVIDER_NAMES = { xero: "Xero", quickbooks: "QuickBooks", hubspot: "HubSpot", pipedrive: "Pipedrive" } as const;
+const PROVIDER_NAMES = { xero: "Xero", quickbooks: "QuickBooks", hubspot: "HubSpot", pipedrive: "Pipedrive", zohobooks: "Zoho Books" } as const;
 
 /** Each limit the workspace can hit, reached ones first, then near, then the rest. */
 export function usageLimits(facts: LimitFacts): UsageLimit[] {

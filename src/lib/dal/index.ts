@@ -84,6 +84,8 @@ export const TENANT_RPCS = [
   "accept_asana_task", "hold_asana_acceptance",
   // Whether migration 0116 has run (Pipedrive connector P2): it reads nothing.
   "pipedrive_connector_ready",
+  // Whether migration 0122 has run (Zoho Books connector Z12): it reads nothing.
+  "zohobooks_connector_ready",
   // Commissions on money received (commissions C2, C5, C10, C11).
   "set_commission_plan", "end_commission_plan", "record_commissions", "create_commission_payout", "commission_partner_members",
 ] as const;

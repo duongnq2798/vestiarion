@@ -75,6 +75,7 @@ export const PAGE_LOADERS: Record<string, () => Promise<MdxModule>> = {
   "guides/github": () => import("../../../content/docs/guides/github.mdx"),
   "guides/xero": () => import("../../../content/docs/guides/xero.mdx"),
   "guides/quickbooks": () => import("../../../content/docs/guides/quickbooks.mdx"),
+  "guides/zohobooks": () => import("../../../content/docs/guides/zohobooks.mdx"),
   "guides/hubspot": () => import("../../../content/docs/guides/hubspot.mdx"),
   "guides/pipedrive": () => import("../../../content/docs/guides/pipedrive.mdx"),
   "guides/asana": () => import("../../../content/docs/guides/asana.mdx"),

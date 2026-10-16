@@ -12,6 +12,20 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+### Added
+
+- **Bills from Zoho Books.** An owner or admin connects a Zoho Books organization from Settings, and its open bills
+  (open, overdue, partially paid or approved, due or dated in the last 90 days or later) come in for review on Bills &
+  receivables, through the same check as a bill list; each becomes a payable only when a person adds it, and the agent
+  decides it as any other. Drafts and bills pending approval never come in. A bill paid or voided in Zoho Books after it
+  was added is flagged, and one partly paid comes in at what is left. A bill deleted in Zoho Books is not seen, since
+  Zoho Books does not say when one is, and the guide says so. It works in each of Zoho's data centers but China's,
+  reading only from the one the account lives in; a person with several organizations picks one, and several workspaces
+  may connect the same organization. Read only: nothing is written to Zoho Books, and the bills are read every 15
+  minutes and on Sync now. It needs migration `0122`, `ZOHO_BOOKS_CLIENT_ID` and `ZOHO_BOOKS_CLIENT_SECRET`; until
+  0122 runs, connecting says Zoho Books is not set up on this deployment yet.
+  [Guide](https://www.vestiarion.xyz/docs/guides/zohobooks).
+
 ## [0.1.0-beta.7] - 2026-10-15
 
 ### Added

@@ -72,6 +72,15 @@ describe("the QuickBooks card", () => {
     expect(Object.keys(accountingNotices("quickbooks"))).toEqual(Object.keys(accountingNotices("xero")));
   });
 
+  it("offers the account payments made on Arc will be booked to, where Zoho Books' card says nothing about booking (Zoho Books connector Z9)", () => {
+    expect(render(connected)).toContain("Where payments made on Arc will be booked");
+    const zoho = decode(renderToStaticMarkup(<AccountingPanel provider="zohobooks" orgSlug="acme" view={connected} canManage notice={null} />));
+    expect(zoho).toContain("Disconnect Zoho Books");
+    expect(zoho).toContain('href="/o/acme/invoices?review=zohobooks"');
+    expect(zoho).not.toMatch(/booked|account/i);
+    expect(zoho.match(/name="provider" value="zohobooks"/g)?.length).toBe(2);
+  });
+
   it("asks for a reconnect when QuickBooks no longer takes the connection", () => {
     const markup = render({ ...connected, connected: false, status: { tone: "error", title: "QuickBooks needs you to reconnect", detail: ["x"], reconnect: true } });
     expect(markup).toContain("Reconnect QuickBooks");

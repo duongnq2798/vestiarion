@@ -192,11 +192,11 @@ describe("the terms page on connected tools", () => {
   });
 
   it("links the hosted provider's API terms and privacy policy for each tool whose facts the agent decides on", () => {
-    // Xero, QuickBooks, HubSpot and Pipedrive.
-    expect(markup.match(new RegExp(`<a href="${escape(HOSTED_MODEL_PROVIDER.terms)}" target="_blank" rel="noopener noreferrer"[^>]*>API terms</a>`, "g"))).toHaveLength(4);
-    expect(markup.match(new RegExp(`<a href="${escape(HOSTED_MODEL_PROVIDER.privacy)}" target="_blank" rel="noopener noreferrer"[^>]*>privacy policy</a>`, "g"))).toHaveLength(4);
+    // Xero, QuickBooks, Zoho Books, HubSpot and Pipedrive.
+    expect(markup.match(new RegExp(`<a href="${escape(HOSTED_MODEL_PROVIDER.terms)}" target="_blank" rel="noopener noreferrer"[^>]*>API terms</a>`, "g"))).toHaveLength(5);
+    expect(markup.match(new RegExp(`<a href="${escape(HOSTED_MODEL_PROVIDER.privacy)}" target="_blank" rel="noopener noreferrer"[^>]*>privacy policy</a>`, "g"))).toHaveLength(5);
     const text = markup.replace(/<[^>]+>/g, "").replace(/&#x27;/g, "'").replace(/\s+/g, " ");
-    expect(text.split(`under ${HOSTED_MODEL_PROVIDER.name}'s API terms and privacy policy.`)).toHaveLength(5);
+    expect(text.split(`under ${HOSTED_MODEL_PROVIDER.name}'s API terms and privacy policy.`)).toHaveLength(6);
     expect(text.split(`(${HOSTED_MODEL_PROVIDER.name}, on the hosted service) may see a deal's facts`)).toHaveLength(3);
   });
 });

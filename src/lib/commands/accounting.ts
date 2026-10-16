@@ -1,5 +1,5 @@
 import { NotSetUpError, connectionById, type Connection } from "../connectors/connections";
-import { PROVIDER_LABELS, providerKind } from "../connectors/provider";
+import { PROVIDER_LABELS, providerKind, type AccountingProviderId } from "../connectors/provider";
 import { MAX_REVIEW, newSupplierLimit, readReview, type ReviewItem } from "../connectors/review";
 import { createCounterparty } from "../counterparties/create";
 import { db, unwrap } from "../dal";
@@ -53,7 +53,7 @@ async function openConnection(connectionId: string): Promise<{ connection: Conne
 }
 
 /** The accounting tool a bill came from: never a CRM, which `openConnection` refuses. */
-function accountingProviderOf(connection: Connection): "xero" | "quickbooks" {
+function accountingProviderOf(connection: Connection): AccountingProviderId {
   if (connection.provider === "hubspot" || connection.provider === "pipedrive" || connection.provider === "asana") throw new Error("Only an accounting tool brings bills in");
   return connection.provider;
 }

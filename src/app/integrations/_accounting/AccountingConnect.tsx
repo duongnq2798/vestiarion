@@ -25,11 +25,23 @@ const one = (value: string | string[] | undefined) => (typeof value === "string"
 const INTRO: Record<AccountingProviderId, string> = {
   xero: "Bring your approved bills in from Xero. Each one waits for you on Bills & receivables and becomes a payable only when you add it.",
   quickbooks: "Bring your open bills in from QuickBooks Online. Each one waits for you on Bills & receivables and becomes a payable only when you add it.",
+  zohobooks: "Bring your open bills in from Zoho Books. Each one waits for you on Bills & receivables and becomes a payable only when you add it.",
 };
 
 /** What happens at the tool, for a tool whose grant is for one organisation it asks the person to pick (QuickBooks, Q4, Q5). */
 const AT_THE_TOOL: Partial<Record<AccountingProviderId, string>> = {
   quickbooks: "QuickBooks asks you to sign in and pick the company to connect. A company connects to one Vestiarion workspace at a time.",
+  zohobooks: "Zoho asks you to sign in in your own data center and allow Vestiarion to read. If you have several organizations, you pick one here next.",
+};
+
+/**
+ * What becomes of the organisations not picked, after a tool that authorized several: Xero's grant stays on each until the
+ * person removes it there (X4); a Zoho token reaches every organization of the account, and Vestiarion reads only the
+ * one picked (Zoho Books connector Z5).
+ */
+const OTHERS: Partial<Record<AccountingProviderId, string>> = {
+  xero: "The others stay authorised in Xero until you remove them there, under Settings, Connected apps.",
+  zohobooks: "Vestiarion reads only the one you pick.",
 };
 
 /** "an organisation", "a company". */
@@ -113,8 +125,7 @@ export async function AccountingConnect({ provider, searchParams }: { provider: 
               </h1>
               <p className="mt-3 text-sm text-ink-2">
                 {label} gave access to more than one {organisation}. Pick the one whose bills come into{" "}
-                <strong className="font-semibold text-ink">{chosen.name}</strong>. The others stay authorised in {label} until you remove them there, under
-                Settings, Connected apps.
+                <strong className="font-semibold text-ink">{chosen.name}</strong>.{OTHERS[provider] ? ` ${OTHERS[provider]}` : ""}
               </p>
               {error && (
                 <p role="alert" className="mt-4 text-sm text-refused">
@@ -125,7 +136,7 @@ export async function AccountingConnect({ provider, searchParams }: { provider: 
                 <input type="hidden" name="org" value={chosen.slug} />
                 <input type="hidden" name="choice" value={pending.id} />
                 <NativeRadioGroup
-                  legend={organisation === "company" ? "Company" : "Organisation"}
+                  legend={`${organisation[0].toUpperCase()}${organisation.slice(1)}`}
                   name="organisation"
                   required
                   options={pending.choices.map((choice) => ({ value: choice.externalOrgId, label: choice.name }))}
