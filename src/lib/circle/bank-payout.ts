@@ -29,7 +29,7 @@ export class BankPayoutError extends Error {
  * The key of one step of a bank payout attempt (B7): a UUID derived from the attempt's own key and the step, as Circle
  * takes idempotency keys only as UUIDs, the same for every try of the attempt and different for each step.
  */
-export function bankStepKey(attemptKey: string, step: "approve" | "payout"): string {
+export function bankStepKey(attemptKey: string, step: "approve" | `payout/${string}`): string {
   const hash = createHash("sha256").update(`vestiarion/bank/v1/${attemptKey}/${step}`, "utf8").digest();
   hash[6] = (hash[6] & 0x0f) | 0x50;
   hash[8] = (hash[8] & 0x3f) | 0x80;
@@ -164,7 +164,9 @@ export async function payToBank(
   const waitMs = deps.waitMs ?? 3_000;
   for (let tries = 0; ; tries += 1) {
     try {
-      const payout = await createEvmPayout(settings, { quoteId: quote.id, senderWalletAddress: sender }, bankStepKey(params.idempotencyKey, "payout"), deps);
+      // Keyed by the quote too: BlindPay binds a key to its first body, so a later try with a fresh quote is its own request.
+      // The approve's key stays the attempt's, so a payout already made has used its allowance and a second one is refused.
+      const payout = await createEvmPayout(settings, { quoteId: quote.id, senderWalletAddress: sender }, bankStepKey(params.idempotencyKey, `payout/${quote.id}`), deps);
       return bankPayoutResult(`${BANK_ID}${payout.id}`, payout, account.chain, bankRecord(quote, payout.id, route), started);
     } catch (error) {
       const retry = error instanceof BlindpayError && (error.code === "PAYOUTS_ALLOWANCE_NOT_CONFIRMED" || error.code === "idempotency_key_in_flight") && tries < 4;

@@ -67,6 +67,15 @@ describe("a vendor's bank account (B4)", () => {
     expect(JSON.stringify(mocks.ledger.mock.calls)).not.toContain(CLABE);
   });
 
+  it("keys the account by everything BlindPay is sent, so a corrected name is a new request", async () => {
+    await setBankAccount({ actorId: "user-1", counterpartyId: "cp-1", beneficiaryName: "Ana Lopez", clabe: CLABE });
+    await setBankAccount({ actorId: "user-1", counterpartyId: "cp-1", beneficiaryName: "Ana López", clabe: CLABE });
+    await setBankAccount({ actorId: "user-1", counterpartyId: "cp-1", beneficiaryName: "Ana López", clabe: CLABE });
+    const keys = mocks.createSpeiAccount.mock.calls.map((call) => call[2] as string);
+    expect(keys[0]).not.toBe(keys[1]);
+    expect(keys[1]).toBe(keys[2]);
+  });
+
   it("refuses a CLABE that does not check, or a counterparty that is not a vendor, before BlindPay sees it", async () => {
     await expect(setBankAccount({ actorId: "user-1", counterpartyId: "cp-1", beneficiaryName: "Ana López", clabe: "032180000118359718" })).rejects.toThrow(/That CLABE does not check/);
     mocks.counterparty = { id: "cp-1", name: "Acme Buyer", role: "customer" };
@@ -95,7 +104,7 @@ describe("setting the workspace up (B3)", () => {
     mocks.readPayoutPartner.mockResolvedValue(null);
     mocks.createCustomer.mockResolvedValue({ id: "re_000000000009", kybStatus: "approved" });
     await finishBankPayoutsSetUp({ actorId: "user-1", tosId: "to_abcd1234", workspaceName: "Pinecrest Studio", contactEmail: "owner@example.com" });
-    expect(mocks.createCustomer).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ tos_id: "to_abcd1234", legal_name: "Pinecrest Studio", external_id: "org-1" }), "org:org-1:blindpay-customer:to_abcd1234");
+    expect(mocks.createCustomer).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ tos_id: "to_abcd1234", legal_name: "Pinecrest Studio", external_id: "org-1" }), expect.stringMatching(/^org:org-1:blindpay-customer:to_abcd1234:[0-9a-f]{16}$/));
     expect(mocks.savePayoutPartner).toHaveBeenLastCalledWith("org-1", { customerId: "re_000000000009", kybStatus: "approved", setUpBy: "user-1" });
     expect(mocks.ledger.mock.calls[0][1]).toMatchObject({ action: "bank_payouts_set_up", domain: "treasury" });
     await expect(finishBankPayoutsSetUp({ actorId: "user-1", tosId: "nope", workspaceName: "x", contactEmail: "x@example.com" })).rejects.toThrow(BankPayoutsError);
