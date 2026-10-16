@@ -50,4 +50,14 @@ export function blindpayTermsReturnUri(origin: string, orgSlug: string): string 
   return `${origin}/api/integrations/blindpay/terms?org=${encodeURIComponent(orgSlug)}`;
 }
 
+/**
+ * The workspace and the accepted terms from BlindPay's way back (B3). BlindPay adds `?tos_id=` to the return address
+ * as it is, so behind `?org=` it arrives as `?org=<slug>?tos_id=<id>`; a well-formed `&tos_id=` is read too.
+ */
+export function readTermsReturn(url: URL): { slug: string; tosId: string } {
+  const [slug, rest] = (url.searchParams.get("org") ?? "").split("?", 2);
+  const tosId = url.searchParams.get("tos_id") ?? (rest ? new URLSearchParams(rest).get("tos_id") : null) ?? "";
+  return { slug, tosId };
+}
+
 export const BLINDPAY_API = "https://api.blindpay.com";

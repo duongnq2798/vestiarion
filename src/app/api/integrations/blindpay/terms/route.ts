@@ -3,7 +3,7 @@ import { membershipFor } from "@/lib/auth/membership";
 import { can } from "@/lib/auth/roles";
 import { getSessionUser } from "@/lib/auth/session";
 import { BankPayoutsError, finishBankPayoutsSetUp } from "@/lib/bank-payouts/commands";
-import { blindpaySettingsFromEnv } from "@/lib/blindpay/settings";
+import { blindpaySettingsFromEnv, readTermsReturn } from "@/lib/blindpay/settings";
 import { withOrg } from "@/lib/dal/scope";
 
 /**
@@ -19,9 +19,7 @@ const back = (slug: string, outcome: string) => Response.redirect(`${siteOrigin(
 
 export async function GET(request: Request): Promise<Response> {
   if (!blindpaySettingsFromEnv()) return Response.json({ error: "not_found" }, { status: 404 });
-  const url = new URL(request.url);
-  const slug = url.searchParams.get("org") ?? "";
-  const tosId = url.searchParams.get("tos_id") ?? "";
+  const { slug, tosId } = readTermsReturn(new URL(request.url));
   if (!/^[a-z0-9-]{1,64}$/.test(slug)) return Response.json({ error: "bad_request" }, { status: 400 });
   const user = await getSessionUser();
   if (!user) return Response.redirect(`${siteOrigin()}/login?next=${encodeURIComponent(`/o/${slug}/settings#bank-payouts`)}`, 303);

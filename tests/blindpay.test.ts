@@ -4,7 +4,7 @@ import { createEvmPayout, createQuote, createSpeiAccount, getPayout, termsUrl, t
 import { clabeBank, clabeShown, readClabe } from "@/lib/blindpay/clabe";
 import { BlindpayError } from "@/lib/blindpay/http";
 import { expiresAtMs, mapPayout, mapQuote, payoutOutcome } from "@/lib/blindpay/map";
-import { blindpaySettingsFromEnv } from "@/lib/blindpay/settings";
+import { blindpaySettingsFromEnv, blindpayTermsReturnUri, readTermsReturn } from "@/lib/blindpay/settings";
 import { verifyBlindpaySignature } from "@/lib/blindpay/webhook";
 
 /**
@@ -49,6 +49,15 @@ describe("BlindPay's settings (B2)", () => {
     expect(overridden?.route("arc-testnet")).toEqual({ network: "base_sepolia", token: "USDB" });
     expect(blindpaySettingsFromEnv({ BLINDPAY_API_KEY: "k" })).toBeNull();
     expect(blindpaySettingsFromEnv({ BLINDPAY_API_KEY: "k", BLINDPAY_INSTANCE_ID: "in_TestInstance01", BLINDPAY_WEBHOOK_SECRET: "nope" })?.webhookSecret).toBeNull();
+  });
+});
+
+describe("BlindPay's way back from its terms (B3)", () => {
+  it("reads the workspace and the terms whether BlindPay adds ?tos_id= or &tos_id=", () => {
+    const back = blindpayTermsReturnUri("https://www.vestiarion.xyz", "pinecrest-studio");
+    expect(readTermsReturn(new URL(`${back}?tos_id=to_TestTerms01`))).toEqual({ slug: "pinecrest-studio", tosId: "to_TestTerms01" });
+    expect(readTermsReturn(new URL(`${back}&tos_id=to_TestTerms01`))).toEqual({ slug: "pinecrest-studio", tosId: "to_TestTerms01" });
+    expect(readTermsReturn(new URL(back))).toEqual({ slug: "pinecrest-studio", tosId: "" });
   });
 });
 
