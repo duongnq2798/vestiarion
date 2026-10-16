@@ -1,5 +1,4 @@
-import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -97,16 +96,24 @@ describe("the landing hero", () => {
     expect(served.equals(shipped)).toBe(true);
   });
 
-  it("links the README to the store with Google's badge as Google ships it, and draws no Chrome logo of its own", () => {
+  it("links the README to the store with a button like its others, the extension's own mark on it and no Chrome logo", () => {
     const readme = readFileSync(path.join(process.cwd(), "README.md"), "utf8");
-    expect(readme).toContain(`<a href="${STORE_URL}"><img src="public/badges/chrome-web-store.png" alt="Available in the Chrome Web Store`);
-    const badge = readFileSync(path.join(process.cwd(), "public/badges/chrome-web-store.png"));
-    // developer.chrome.com/docs/webstore/branding, "Medium PNG (with border)", unchanged.
-    expect(createHash("sha256").update(badge).digest("hex")).toBe("fbf289fca885e58a1507cc8c69a9df68f35e83e683825b3ad6cd617b0a17d79c");
-    expect([badge.readUInt32BE(16), badge.readUInt32BE(20)]).toEqual([340, 96]);
-    // The README's buttons no longer redraw Chrome's logo: no chrome icon, none of its four colours' blue centre.
-    const buttons = readFileSync(path.join(process.cwd(), "scripts/readme-buttons.mjs"), "utf8");
-    expect(buttons).not.toMatch(/\bchrome:\s*`|icon: "chrome"|#4285F4/i);
+    expect(readme).toContain(`<a href="${STORE_URL}"><img src="docs/assets/readme/add-to-chrome.svg" alt="Add to Chrome: Vestiarion Invoice Capture`);
+    // The four buttons on the README's first row are drawn alike: the same size, the same dark ground and rim.
+    const files = [...readme.matchAll(/<img src="(docs\/assets\/readme\/[\w-]+\.svg)"[^>]*height="48">/g)].map((match) => match[1]);
+    expect(files).toEqual(["docs/assets/readme/open-the-app.svg", "docs/assets/readme/watch-the-demo.svg", "docs/assets/readme/add-to-chrome.svg", "docs/assets/readme/npm-sdk.svg"]);
+    const frame = (svg: string) => svg.match(/^<svg [^>]*width="(\d+)" height="(\d+)"[\s\S]*?<rect [^>]*fill="(#\w+)" stroke="(#\w+)"/)?.slice(1);
+    const frames = files.map((file) => frame(readFileSync(path.join(process.cwd(), file), "utf8")));
+    for (const each of frames) expect(each).toEqual(frames[0]);
+    // Add to Chrome carries the brand mark the store lists the extension with, path for path, and none of Chrome's colours.
+    const chrome = readFileSync(path.join(process.cwd(), "docs/assets/readme/add-to-chrome.svg"), "utf8");
+    expect(chrome).toContain("ADD TO CHROME");
+    expect(chrome).toContain("Invoice Capture");
+    for (const drawing of readFileSync(path.join(process.cwd(), "src/app/icon.svg"), "utf8").match(/<(?:path|circle)\b[^>]*\/>/g) ?? []) {
+      expect(chrome).toContain(drawing);
+    }
+    expect(chrome).not.toMatch(/#4285F4|#EA4335|#FBBC05|#34A853/i);
+    expect(existsSync(path.join(process.cwd(), "public/badges/chrome-web-store.png"))).toBe(false);
   });
 
   it("shows two sample bills in the product's own words, labelled as samples (H2)", () => {
