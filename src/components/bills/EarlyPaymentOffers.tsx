@@ -1,6 +1,7 @@
 "use client";
 
 import { HandCoins } from "lucide-react";
+import { useState } from "react";
 import { makeOfferAction, withdrawOfferAction, type OfferActionResult } from "@/app/actions/early-payment-offers";
 import { DocsLink } from "@/components/DocsLink";
 import { Card } from "@/components/ui/Card";
@@ -17,35 +18,51 @@ const INITIAL: OfferActionResult = { ok: false, message: "" };
 
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
-function MakeOffer({ orgSlug, candidate, reserveApy }: { orgSlug: string; candidate: OfferCandidate; reserveApy: number }) {
+/**
+ * One bill's offer controls. The made offer's link lives in this component's state, which outlives the page's refresh
+ * after the action: the bill then has an open offer, and the link must stay on screen, since it is never kept (E3).
+ */
+function OfferControls({ orgSlug, candidate, reserveApy, canOffer }: { orgSlug: string; candidate: OfferCandidate; reserveApy: number; canOffer: boolean }) {
   const { state, formProps } = useActionForm(makeOfferAction, INITIAL);
-  const pct = candidate.suggestion.pct;
+  const [pct, setPct] = useState(candidate.suggestion.pct.toFixed(2));
+  const asked = Number(pct.replace(",", "."));
+  const worth = offerWorth({ pct: Number.isFinite(asked) && asked > 0 ? asked : candidate.suggestion.pct, days: candidate.suggestion.days, reserveApy });
+  if (state.ok && state.url) {
+    return (
+      <div className="space-y-1">
+        <p className="text-xs text-ink">{state.message}</p>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <code className="min-w-0 max-w-full truncate rounded-lg bg-ground px-2 py-1 font-mono text-xs text-ink-2">{state.url}</code>
+          <CopyButton value={state.url} label="Copy the offer link" variant="secondary" size="sm" />
+        </div>
+      </div>
+    );
+  }
+  if (candidate.open) return <OpenOffer orgSlug={orgSlug} candidate={candidate} />;
+  if (!canOffer) return <p className="text-xs text-ink-3">{worth} An owner or admin makes the offer.</p>;
   return (
     <div className="space-y-2">
-      <p className="text-xs text-ink-2">{offerWorth({ pct, days: candidate.suggestion.days, reserveApy })}</p>
-      {state.ok && state.url ? (
-        <div className="space-y-1">
-          <p className="text-xs text-ink">{state.message}</p>
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <code className="min-w-0 max-w-full truncate rounded-lg bg-ground px-2 py-1 font-mono text-xs text-ink-2">{state.url}</code>
-            <CopyButton value={state.url} label="Copy the offer link" variant="secondary" size="sm" />
-          </div>
-        </div>
-      ) : (
-        <form {...formProps} className="flex flex-wrap items-center gap-2">
-          <input type="hidden" name="orgSlug" value={orgSlug} />
-          <input type="hidden" name="invoiceId" value={candidate.invoiceId} />
-          <label className="flex items-center gap-1 text-xs text-ink-2">
-            <span className="sr-only">Discount asked, in percent</span>
-            <Input name="pct" defaultValue={pct.toFixed(2)} inputMode="decimal" className="h-8 w-20 text-right font-mono text-xs" aria-label={`Discount asked from ${candidate.counterpartyName}, in percent`} />
-            <span>%</span>
-          </label>
-          <SubmitButton size="sm" variant="secondary" pendingLabel="Making the offer…" icon={<HandCoins aria-hidden />}>
-            Offer this discount for paying today
-          </SubmitButton>
-          <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.ok ? null : state.message}</FormMessage>
-        </form>
-      )}
+      <p className="text-xs text-ink-2">{worth}</p>
+      <form {...formProps} className="flex flex-wrap items-center gap-2">
+        <input type="hidden" name="orgSlug" value={orgSlug} />
+        <input type="hidden" name="invoiceId" value={candidate.invoiceId} />
+        <label className="flex items-center gap-1 text-xs text-ink-2">
+          <span className="sr-only">Discount asked, in percent</span>
+          <Input
+            name="pct"
+            value={pct}
+            onChange={(event) => setPct(event.target.value)}
+            inputMode="decimal"
+            className="h-8 w-20 text-right font-mono text-xs"
+            aria-label={`Discount asked from ${candidate.counterpartyName}, in percent`}
+          />
+          <span>%</span>
+        </label>
+        <SubmitButton size="sm" variant="secondary" pendingLabel="Making the offer…" icon={<HandCoins aria-hidden />}>
+          Offer this discount for paying today
+        </SubmitButton>
+        <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.ok ? null : state.message}</FormMessage>
+      </form>
     </div>
   );
 }
@@ -94,13 +111,7 @@ export function EarlyPaymentOffers({ orgSlug, view, canOffer }: { orgSlug: strin
               <Money value={candidate.amount} token={candidate.currency} className="text-sm font-semibold text-ink" />
             </div>
             <div className="min-w-0">
-              {candidate.open ? (
-                <OpenOffer orgSlug={orgSlug} candidate={candidate} />
-              ) : canOffer ? (
-                <MakeOffer orgSlug={orgSlug} candidate={candidate} reserveApy={view.reserveApy} />
-              ) : (
-                <p className="text-xs text-ink-3">{offerWorth({ pct: candidate.suggestion.pct, days: candidate.suggestion.days, reserveApy: view.reserveApy })} An owner or admin makes the offer.</p>
-              )}
+              <OfferControls orgSlug={orgSlug} candidate={candidate} reserveApy={view.reserveApy} canOffer={canOffer} />
             </div>
           </div>
         ))}
