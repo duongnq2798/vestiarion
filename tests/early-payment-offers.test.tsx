@@ -53,6 +53,10 @@ describe("the discount worth asking (E2)", () => {
     expect(offerLine({ orgName: "Northwind Supply", reference: "INV-108", amount: 1000, offered: 990, currency: "USDC", dueDate: "2026-10-30T12:00:00Z" })).toBe(
       "Northwind Supply offers to pay invoice INV-108 today: 990.00 USDC instead of 1,000.00 USDC on Oct 30, 2026."
     );
+    // A discount under a cent still shows: 0.50% off 0.50 USDC is 0.4975, never 0.50.
+    expect(offerLine({ orgName: "Pinecrest Studio", reference: "LP-121", amount: 0.5, offered: 0.4975, currency: "USDC", dueDate: "2026-11-12T12:00:00Z" })).toBe(
+      "Pinecrest Studio offers to pay invoice LP-121 today: 0.4975 USDC instead of 0.50 USDC on Nov 12, 2026."
+    );
   });
 });
 

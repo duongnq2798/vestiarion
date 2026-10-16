@@ -96,7 +96,7 @@ describe("Settings on Arc mainnet says what stays (mainnet copy C11)", () => {
 describe("workspace text names the workspace's network (mainnet copy C1, C8)", () => {
   it("tells a payee's billing contact the network its payments are confirmed on", () => {
     expect(noticeEmailDescription("vendor", "arc-testnet")).toBe(
-      "Each time a payment to it is confirmed on Arc testnet, Vestiarion emails this address the amount, what it is for and the transaction. Leave it empty to send none."
+      "Each time a payment to it is confirmed on Arc testnet, Vestiarion emails this address the amount, what it is for and the transaction; when the agent makes early-payment offers, it sends them here too. Leave it empty to send none."
     );
     expect(noticeEmailDescription("vendor", "arc-mainnet")).toContain("confirmed on Arc mainnet");
     expect(noticeEmailDescription("client", "arc-mainnet")).not.toContain("Arc testnet");

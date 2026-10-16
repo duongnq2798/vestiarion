@@ -24,7 +24,7 @@ const update = withSuccessToast(updateCounterpartyNoticeEmailAction);
 export function noticeEmailDescription(role: string | undefined, network: Network): string {
   return role === "client"
     ? "When you turn on reminders for one of its invoices on Bills & receivables, the agent emails them here, with the pay link. Leave it empty to send none."
-    : `Each time a payment to it is confirmed on ${networkProfile(network).label}, Vestiarion emails this address the amount, what it is for and the transaction. Leave it empty to send none.`;
+    : `Each time a payment to it is confirmed on ${networkProfile(network).label}, Vestiarion emails this address the amount, what it is for and the transaction; when the agent makes early-payment offers, it sends them here too. Leave it empty to send none.`;
 }
 
 export default function CounterpartyNoticeEmailEdit({
