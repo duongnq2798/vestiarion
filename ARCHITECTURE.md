@@ -2258,7 +2258,10 @@ BlindPay's contract on Arc for the quote's amount, and BlindPay takes the tokens
 - **The agent** (`src/lib/agent/orchestrator.ts`). Bank-paid vendors are read once per stage (`bankAccountsOf`); such a
   vendor needs no address, is never paid across chains, and its decision records `paidToBank: true`. The guardrail
   `payout.bank_needs_person` holds every pay: a person approves every bank payout. Policy replay settles that stage from
-  `paidToBank`.
+  `paidToBank`. On Arc testnet, where BlindPay takes USDB (`bankPayoutTakesTestToken`), the stage reads the operating
+  wallet's USDB once (`readTestUsdb`, or `ApStageInput.testTokenBalance`) and times such a bill against it alone, with no
+  reserve and no USDC falling due, as a Gateway payout is timed against the Gateway balance; the model sees
+  `treasury.usdbBalance`, and a hold for want of USDB is not `heldBecause: cash_shortfall`, which USDC coming in reopens.
 - **Approvals** (`src/lib/agent/approvals.ts`, `src/lib/bank-payouts/words.ts`). The listing reads an indicative quote
   per bank payout, with no idempotency key, and the card shows the account and what the vendor receives. Approve and
   pay passes `bank: { bankAccountId, network, token }` to `payInvoice`; the intent's destination is

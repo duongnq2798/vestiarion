@@ -49,7 +49,7 @@ If the account is refused, the dialog says why:
 
 ## 3. Approve the payout
 
-The agent decides on the vendor's bill as on any other, and a payment it would make is held for you: "This vendor is paid to a bank account through BlindPay, and a person approves every bank payout. Check what the vendor receives, then pay it in Approvals."
+The agent decides on the vendor's bill as on any other, and a payment it would make is held for you: "This vendor is paid to a bank account through BlindPay, and a person approves every bank payout. Check what the vendor receives, then pay it in Approvals." On Arc testnet the agent weighs the bill against the operating wallet's test USDB, which is what BlindPay takes there, not its USDC: a bill the wallet's USDB cannot cover is held until a person mints more or approves it, and is not decided again when USDC comes in.
 
 In **Approvals**, the bill's card says where the money goes, in place of an address: "Paid to a bank account in Mexico: BBVA ····9716, Ana López, through BlindPay." Under it, what the vendor would receive now, by BlindPay's quote, such as "Ana López receives about 1,814.00 MXN (18.35 MXN per USDC, BlindPay's fees 2.10 USDC). Approve and pay asks BlindPay for a fresh quote."
 

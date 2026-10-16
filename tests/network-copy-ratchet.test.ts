@@ -90,7 +90,8 @@ const ALLOWED: Record<string, number> = {
   "src/components/BankPayoutsPanel.tsx": 2,
   "src/lib/bank-payouts/test-token.ts": 3,
   "src/lib/circle/simulateProvider.ts": 1,
-  "src/lib/agent/orchestrator.ts": 1,
+  // And the model's instruction that a bank payout on Arc testnet is weighed against the wallet's USDB (bank payouts B13).
+  "src/lib/agent/orchestrator.ts": 2,
   "src/lib/spending-limit/onchain.ts": 3,
   "src/lib/fx/errors.ts": 1,
   "src/lib/fx/swap-service.ts": 1,

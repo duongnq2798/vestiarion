@@ -85,6 +85,7 @@ export type { GatewayQuote };
 import type { CrossChainRoute, PayoutRoute, SpendingLimitPayment } from "../circle/types";
 import { BRIDGE_FEE_CAP_PERCENT, chainOn, paidAcrossChains } from "../payee-chains";
 import { bankAccountsOf } from "../bank-payouts/store";
+import { bankPayoutTakesTestToken, readTestUsdb } from "../bank-payouts/test-token";
 import {
   amountToPay,
   boundPayOn,
@@ -140,6 +141,7 @@ export const SYSTEM_PROMPT = `You are Vestiarion, an autonomous treasury agent o
 Rules you must follow:
 - Never pay a counterparty whose risk level is "high".
 - Never authorise an amount above the counterparty's current payment limit.
+- A bill paid to a bank account through BlindPay on Arc testnet (payout.route "bank" with treasury.usdbBalance) is paid in BlindPay's test token, USDB, one for one with its USDC: weigh treasury.usdbBalance for it, not the USDC balance. A person approves every bank payout.
 - An invoice is in USDC or EURC. Payment limits are in USDC: a EURC invoice is weighed at its USDC value (invoice.usdcValue, from Circle's quote), and it is paid in EURC from the wallet's EURC (treasury.eurcBalance), never sent as USDC. When usdcValue is null there is no rate, so hold it. When treasury.eurcBalance is null, payments are simulated here or the balance could not be read; code checks it before any EURC leaves.
 - When the wallet's EURC is short of a EURC payment and \`swap\` is given, you may pay now by swapping USDC for EURC first: answer pay with fundWithSwap true. Code swaps swap.usdcIn USDC for at least swap.eurcMinimum EURC through Circle's Stablecoin Service, then pays in EURC; EURC left over stays in the wallet. Weigh swap.costPercent, what each EURC costs through the swap above the rate usdcValue is at, and whether that USDC is needed for what falls due in USDC within 7 days (treasury.usdcDueWithin7Days, against treasury.usdcBalance). Code refuses a swap that costs more than ${SWAP_COST_CAP_PERCENT}% or leaves the USDC below what falls due. When the wallet is short and \`swapUnavailable\` says why there is no swap, hold it.
 - A payee on another chain is paid from Arc through Circle's CCTP: payout gives the route, the fee paid on top of the invoice and the expected time. Weigh whether the fee is worth paying for this invoice; code holds a payout whose fee is above 10% of the amount.
@@ -1422,6 +1424,11 @@ async function decideApPayable(
     obligationsBy: (targetOn: string, today: string, currency: Stablecoin) => ObligationsDue;
     metrics: CycleMetricsCollector;
     eurc: EurcFunds;
+    /**
+     * The operating wallet's USDB, when a bank payout on this network takes it instead of USDC (bank payouts B13): read
+     * once per stage; "unreadable" when the read failed. Null where a bank payout takes USDC.
+     */
+    testToken?: { balance: () => Promise<number | "unreadable"> } | null;
     bridgeFee: (chain: string, amount: number) => Promise<BridgeFee>;
     gatewayQuote: (chain: string, amount: number) => Promise<GatewayQuote | null>;
     /** A swap to fund a EURC payable the wallet is short of (EURC swap spec S1, S6); null when this workspace cannot make one. */
@@ -1472,6 +1479,11 @@ async function decideApPayable(
   }
   const usdcValue = isEurc ? (fx ? fx.usdcEstimated : null) : amount;
   const eurcRead = isEurc ? await ctx.eurc.balance() : null;
+  // A vendor paid to its bank account where BlindPay takes its test token (bank payouts B13): timed against the operating
+  // wallet's USDB alone, one for one with the bill's USDC, with no reserve and none of the USDC falling due counted.
+  const testTokenRead = counterparty.paid_to_bank && !isEurc && ctx.testToken ? await ctx.testToken.balance() : null;
+  const paidInTestToken = testTokenRead !== null;
+  const testTokenBalance = typeof testTokenRead === "number" ? testTokenRead : null;
   const eurcUnreadable = eurcRead === "unreadable";
   const eurcBalance = typeof eurcRead === "number" ? eurcRead : null;
   const overLimit = limit != null && usdcValue != null && usdcValue > limit;
@@ -1602,15 +1614,18 @@ async function decideApPayable(
       // With a swap on offer, the EURC it would bring counts (S3): a later day is scheduled, and swapped for on that day.
       operatingBalance: isEurc
         ? (eurcUnreadable ? 0 : (eurcBalance ?? Number.POSITIVE_INFINITY) + plannedSwapEurc)
-        : viaGateway
-          ? (gateway ? gateway.balanceUsdc - gateway.feeUsdc : 0)
-          : operatingBalance - (fee?.feeUsdc ?? 0),
-      reserveApy: isEurc || viaGateway ? 0 : ctx.reserveApy,
-      reserveBalance: isEurc || viaGateway ? 0 : ctx.reserveBalance,
+        : paidInTestToken
+          ? (testTokenBalance ?? 0)
+          : viaGateway
+            ? (gateway ? gateway.balanceUsdc - gateway.feeUsdc : 0)
+            : operatingBalance - (fee?.feeUsdc ?? 0),
+      reserveApy: isEurc || viaGateway || paidInTestToken ? 0 : ctx.reserveApy,
+      reserveBalance: isEurc || viaGateway || paidInTestToken ? 0 : ctx.reserveBalance,
       currency,
     },
-    // A Gateway payout's money is set aside in the Gateway balance: what falls due from the operating wallet does not count against it.
-    (targetOn, today) => (viaGateway ? { total: 0, count: 0 } : ctx.obligationsBy(targetOn, today, currency))
+    // A Gateway payout's money is set aside in the Gateway balance, and a bank payout in USDB is paid from the wallet's
+    // USDB: what falls due in USDC from the operating wallet counts against neither.
+    (targetOn, today) => (viaGateway || paidInTestToken ? { total: 0, count: 0 } : ctx.obligationsBy(targetOn, today, currency))
   );
   const previouslyScheduledFor = invoice.status === "scheduled" ? (invoice.scheduled_for ?? null) : null;
   const scheduledEarlier = previouslyScheduledFor
@@ -1661,7 +1676,10 @@ async function decideApPayable(
             usdcDueWithin7Days,
             reserveBalance: 0,
           }
-        : { operatingBalance, reserveBalance: ctx.reserveBalance },
+        : paidInTestToken
+          ? // What BlindPay takes for this bank payout on Arc testnet (bank payouts B13): USDB, one for one with the USDC.
+            { usdbBalance: testTokenBalance, usdcBalance: operatingBalance, reserveBalance: 0 }
+          : { operatingBalance, reserveBalance: ctx.reserveBalance },
       payout,
       timing: timingFacts(timing),
       scheduledEarlier,
@@ -1886,7 +1904,8 @@ async function decideApPayable(
   // so it is no guardrail block and counts as none; the follow-up never reopens it, a person ends it.
   const heldForVerdict = decision.action === "pay" && !guardrail.blocked && (ctx.shadow ?? null) !== null;
   // Held for a verdict, it is not held for want of cash too: a person's Agree and pay weighs the cash then (review M1).
-  const shortOfCash = !heldForBudget && !heldForVerdict && !guardrail.blocked && timing.shortfall === true && currency === "USDC" && !viaGateway;
+  // A bank payout in USDB is not decided again for USDC coming in: the wallet's USDB is what it needs (bank payouts B13).
+  const shortOfCash = !heldForBudget && !heldForVerdict && !guardrail.blocked && timing.shortfall === true && currency === "USDC" && !viaGateway && !paidInTestToken;
   metrics.recordDecisionMode(mode, agreedWithReference);
   let status = guardrail.status ?? STATUS_FOR_AP_ACTION[decision.action];
   let txRef: string | null = null;
@@ -2160,6 +2179,11 @@ export interface ApStageInput {
   lines: CycleLogLine[];
   /** The operating wallet's address, which a EURC quote is asked for; null when it has none. */
   operatingAddress?: string | null;
+  /**
+   * The operating wallet's USDB, BlindPay's test token, which a bank payout takes on Arc testnet instead of USDC (bank
+   * payouts B13); read on chain from the wallet's address when absent. Null when it cannot be read.
+   */
+  testTokenBalance?: () => Promise<number | null>;
   /** What a EURC amount is worth in USDC now (E2); Circle's Stablecoin Service unless a test passes its own. */
   quoteEurc?: (amountEurc: number) => Promise<EurcQuote>;
   /** The CCTP fee to a payee's chain now (CCTP payouts X3); Iris unless a test passes its own. */
@@ -2239,6 +2263,26 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   const now = new Date();
   const budget = input.budget ?? budgetGate(db);
   const onChainLimit = input.onChainLimit ?? onChainLimitGate();
+
+  // BlindPay's test token, which a bank payout takes on Arc testnet (bank payouts B13): read only when a bank-paid payable
+  // is decided, once per stage, and only live. Where a bank payout takes USDC there is none.
+  let testTokenHeld: number | "unreadable" | undefined;
+  const testToken =
+    provider.mode === "live" && bankPayoutTakesTestToken(provider.network)
+      ? {
+          balance: async (): Promise<number | "unreadable"> => {
+            if (testTokenHeld === undefined) {
+              const read = input.testTokenBalance
+                ? await input.testTokenBalance().catch(() => null)
+                : input.operatingAddress
+                  ? await readTestUsdb(provider.network, input.operatingAddress)
+                  : null;
+              testTokenHeld = read ?? "unreadable";
+            }
+            return testTokenHeld;
+          },
+        }
+      : null;
 
   // Read only when a EURC payable is decided, once per stage, and only live.
   let eurcHeld: number | null | undefined;
@@ -2464,6 +2508,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       metrics,
       obligationsBy: (targetOn, today, currency) => obligationsDueBy(book, { excludeId: invoice.id, by: targetOn, today, milestones, currency }),
       eurc,
+      testToken,
       bridgeFee: input.bridgeFee ?? ((chain, amount) => irisBridgeFee(provider.network, chain, amount)),
       gatewayQuote: gatewayQuote ??= input.gatewayQuote ?? gatewayQuoter(provider, db),
       swap: swaps ? { quote: quoteSwap, run: swaps.run } : null,

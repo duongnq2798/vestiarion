@@ -5,6 +5,7 @@ import { blindpaySettingsFromEnv } from "../blindpay/settings";
 import { currentOrgId } from "../context";
 import { db } from "../dal";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
+import type { NetworkProfile } from "../network";
 import { workspaceNetwork } from "../workspace-network";
 import { BankPayoutsError } from "./commands";
 import { readPayoutPartner } from "./store";
@@ -25,6 +26,21 @@ const UNITS = 10n ** 18n;
 
 /** Whole USDB, from its base units, to two decimals. */
 const whole = (units: bigint) => Number((units * 100n) / UNITS) / 100;
+
+/**
+ * The operating wallet's USDB on `network`, whole, read on chain (B13); null when it cannot be read, or the network has
+ * no USDB. What the agent weighs a bank payout against on Arc testnet, in place of USDC.
+ */
+export async function readTestUsdb(network: NetworkProfile, address: string, fetchImpl?: typeof fetch): Promise<number | null> {
+  if (network.id !== "arc-testnet" || !/^0x[0-9a-fA-F]{40}$/.test(address)) return null;
+  const units = await readTokenBalance(networkRpcUrl(network), USDB_ARC_TESTNET, address, fetchImpl);
+  return units === null ? null : whole(units);
+}
+
+/** Whether a bank payout on this network takes BlindPay's test token rather than USDC (B13): Arc testnet, USDB. */
+export function bankPayoutTakesTestToken(network: Pick<NetworkProfile, "id">): boolean {
+  return blindpaySettingsFromEnv()?.route(network.id).token === "USDB" && network.id === "arc-testnet";
+}
 
 /** Whether this workspace pays bank payouts in USDB: live, on Arc testnet, with BlindPay's development token. */
 function takesTestToken(): boolean {
