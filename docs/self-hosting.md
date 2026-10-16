@@ -619,7 +619,8 @@ The suite covers the paths where being wrong costs money, and nothing else:
   red.
 
 Nothing in the suite needs Supabase, Circle, or an LLM key — the Postgres above is in-process and
-needs no server. Everything that does need a live service is exercised by
+needs no server. It runs on UTC, as Supabase does, whatever the machine's time zone, so a check
+against `current_date` passes or fails the same on every machine and at every hour. Everything that does need a live service is exercised by
 `npm run cycle -- <org-slug>` against a real project, which is the honest place for it, not a
 mock that agrees with itself.
 
