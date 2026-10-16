@@ -46,7 +46,7 @@ export function offerUrl(origin: string, token: string): string {
 }
 
 type InvoiceRow = { id: string; amount: string; currency: string | null; due_date: string; memo: string | null; status: string; counterparties: { name: string } | null };
-type OfferRow = { id: string; invoice_id: string; discount_pct: string; offered_amount: string; status: string; expires_at: string; decided_at: string | null; counterparties: { name: string } | null };
+type OfferRow = { id: string; invoice_id: string; discount_pct: string; offered_amount: string; counter_pct?: string | null; status: string; expires_at: string; decided_at: string | null; counterparties: { name: string } | null };
 
 /**
  * The bills worth an offer (E1, E2), in the workspace in scope: each with its suggestion, or the offer already out for
@@ -71,12 +71,14 @@ export async function offersView(now: Date = new Date()): Promise<OffersView | n
   const started = ids.length
     ? new Set((unwrap(await db().from("payment_intents").select("source_id").eq("source_type", "invoice").in("source_id", ids)) as Array<{ source_id: string }>).map((row) => row.source_id))
     : new Set<string>();
-  const offers = unwrap(
-    await db().from("early_payment_offers").select("id, invoice_id, discount_pct, offered_amount, status, expires_at, decided_at, counterparties(name)").order("created_at", { ascending: false }).limit(60)
-  ) as unknown as OfferRow[];
+  const offersRead = (columns: string) => db().from("early_payment_offers").select(columns).order("created_at", { ascending: false }).limit(60);
+  // With each counter (0127); before that migration runs, as before.
+  const withCounters = await offersRead("id, invoice_id, discount_pct, offered_amount, counter_pct, status, expires_at, decided_at, counterparties(name)");
+  const offers = (withCounters.error ? unwrap(await offersRead("id, invoice_id, discount_pct, offered_amount, status, expires_at, decided_at, counterparties(name)")) : withCounters.data) as unknown as OfferRow[];
   const reserve = (unwrap(await db().from("accounts").select("apy").eq("kind", "reserve").maybeSingle()) as { apy: string | null } | null) ?? null;
   const reserveApy = reserve?.apy != null && Number.isFinite(Number(reserve.apy)) ? Number(reserve.apy) : 0;
-  const openBy = new Map(offers.filter((row) => row.status === "open" && Date.parse(row.expires_at) > now.getTime()).map((row) => [row.invoice_id, row] as const));
+  // An offer out, or one a supplier countered that the agent has not answered yet (offer counters N7).
+  const openBy = new Map(offers.filter((row) => (row.status === "open" && Date.parse(row.expires_at) > now.getTime()) || row.status === "countered").map((row) => [row.invoice_id, row] as const));
   const agent = await agentOffersSetting();
   // The offers the agent made (0126): read best effort, so an offer out says who made it.
   const reviews = agent ? await db().from("early_payment_offer_reviews").select("offer_id").not("offer_id", "is", null).limit(500) : null;
@@ -93,14 +95,14 @@ export async function offersView(now: Date = new Date()): Promise<OffersView | n
         currency: row.currency === "EURC" ? "EURC" : "USDC",
         dueDate: row.due_date,
         suggestion: suggestOffer({ dueDate: row.due_date, now, reserveApy }),
-        open: open ? { id: open.id, pct: Number(open.discount_pct), offered: Number(open.offered_amount), expiresAt: open.expires_at, byAgent: byAgent.has(open.id) } : null,
+        open: open ? { id: open.id, pct: Number(open.discount_pct), offered: Number(open.offered_amount), expiresAt: open.expires_at, byAgent: byAgent.has(open.id), counterPct: open.status === "countered" && open.counter_pct != null ? Number(open.counter_pct) : null } : null,
       };
     })
     .slice(0, 12);
   const recent = offers
-    .filter((row): row is OfferRow & { status: "accepted" | "declined" | "withdrawn"; decided_at: string } => row.status !== "open" && row.decided_at !== null)
+    .filter((row): row is OfferRow & { status: "accepted" | "declined" | "withdrawn"; decided_at: string } => (row.status === "accepted" || row.status === "declined" || row.status === "withdrawn") && row.decided_at !== null)
     .slice(0, 5)
-    .map((row) => ({ id: row.id, counterpartyName: row.counterparties?.name ?? "A supplier", pct: Number(row.discount_pct), status: row.status, decidedAt: row.decided_at }));
+    .map((row) => ({ id: row.id, counterpartyName: row.counterparties?.name ?? "A supplier", pct: Number(row.discount_pct), status: row.status, decidedAt: row.decided_at, counterPct: row.counter_pct != null ? Number(row.counter_pct) : null }));
   return { reserveApy, agent, candidates, recent };
 }
 
@@ -271,4 +273,42 @@ export async function decideOffer(token: string, accept: boolean, deps: { raise?
   });
   if (row.outcome === "accepted") (deps.raise ?? runCycleSoon)({ orgId, sandbox: org.mode === "sandbox", kind: "early_payment_accepted" });
   return row.outcome;
+}
+
+/** Whether an open offer is the agent's, so the supplier's page offers a counter (docs/superpowers/specs/2026-10-17-offer-counters-design.md N1). */
+export async function offerByAgent(token: string): Promise<boolean> {
+  const tokenHash = offerTokenHash(token);
+  if (!tokenHash) return false;
+  const read = await platformDb().rpc("early_payment_offer_by_agent", { p_token_hash: tokenHash });
+  // Before migration 0127, or on any error: no counter, the offer is answered as before.
+  if (read.error) return false;
+  return read.data === true;
+}
+
+export type CounterOutcome = "countered" | "not_agent" | "bad_pct" | "not_valid";
+
+/**
+ * The supplier's counter (N2), in one database step: a smaller discount on an offer the agent made. Recorded in the
+ * workspace, and a cycle starts at once for the agent to answer it.
+ */
+export async function counterOffer(token: string, pct: number, deps: { raise?: typeof runCycleSoon } = {}): Promise<CounterOutcome> {
+  const tokenHash = offerTokenHash(token);
+  if (!tokenHash || !Number.isFinite(pct)) return tokenHash ? "bad_pct" : "not_valid";
+  const done = await platformDb().rpc("counter_early_payment_offer", { p_token_hash: tokenHash, p_pct: Math.round(pct * 100) / 100 });
+  if (done.error) throw new Error(done.error.message);
+  const row = ((done.data ?? []) as Array<{ outcome: CounterOutcome; offer_id: string | null; org_id: string | null; invoice_id: string | null; counter_pct: string | null; discount_pct: string | null; currency: string | null }>)[0];
+  if (!row || row.outcome !== "countered" || !row.org_id) return row?.outcome ?? "not_valid";
+  const orgId = row.org_id;
+  const org = unwrap(await platformDb().from("orgs").select("mode").eq("id", orgId).single()) as { mode: "sandbox" | "live" };
+  await withOrg(orgId, async () => {
+    await appendLedgerEntryBestEffort(orgId, {
+      actor: "system",
+      domain: "ap",
+      action: "early_payment_offer_countered",
+      summary: `The supplier proposed ${Number(row.counter_pct).toFixed(2)}% off instead of ${Number(row.discount_pct).toFixed(2)}%`,
+      detail: { offerId: row.offer_id, invoiceId: row.invoice_id, counterPct: Number(row.counter_pct), discountPct: Number(row.discount_pct), currency: row.currency, via: "offer_link" },
+    });
+  });
+  (deps.raise ?? runCycleSoon)({ orgId, sandbox: org.mode === "sandbox", kind: "early_payment_countered" });
+  return "countered";
 }

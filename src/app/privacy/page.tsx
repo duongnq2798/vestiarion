@@ -185,7 +185,7 @@ export default function PrivacyPage() {
             <strong>Resend</strong> sends transactional email: invitations to a workspace, digests of the payments waiting for a decision, the link a payee
             adds their address through, payment notices to a payee once a live workspace&apos;s payment to them is confirmed, the reminders an owner
             or admin turns on for a client&apos;s invoice, with its pay link, the early-payment offers the agent makes to a supplier once an owner or admin turns them
-            on, with the offer&apos;s one-time link, and a note to a workspace&apos;s owners and admins when a customer writes
+            on, with the offer&apos;s one-time link, and its answer when the supplier proposes a smaller discount, and a note to a workspace&apos;s owners and admins when a customer writes
             on its statement link, with at most 140 characters of what it wrote and no link it wrote. It receives each recipient&apos;s email address and the message. When the
             team has turned it on, it also sends the team a short note about each new guided setup request, described below.
           </li>

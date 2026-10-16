@@ -74,7 +74,7 @@ export interface OfferCandidate {
   dueDate: string;
   suggestion: OfferSuggestion;
   /** The open offer, when one is out: its discount, what it pays, and when it lapses. */
-  open: { id: string; pct: number; offered: number; expiresAt: string; byAgent: boolean } | null;
+  open: { id: string; pct: number; offered: number; expiresAt: string; byAgent: boolean; counterPct: number | null } | null;
 }
 
 export interface OffersView {
@@ -86,5 +86,5 @@ export interface OffersView {
   agent: { on: boolean; maxPct: number | null } | null;
   candidates: OfferCandidate[];
   /** The last decided offers, newest first. */
-  recent: Array<{ id: string; counterpartyName: string; pct: number; status: "accepted" | "declined" | "withdrawn"; decidedAt: string }>;
+  recent: Array<{ id: string; counterpartyName: string; pct: number; status: "accepted" | "declined" | "withdrawn"; decidedAt: string; /** What the supplier proposed instead, when it countered (offer counters N7). */ counterPct?: number | null }>;
 }

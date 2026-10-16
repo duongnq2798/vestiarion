@@ -2270,6 +2270,16 @@ A supplier paid today for a discount it accepts (docs/superpowers/specs/2026-10-
   stopped run's and is withdrawn the same way. A skip is weighed again after 7 days. At most 3 offers a cycle; the
   ledger records `early_payment_offered` (`via: "agent"`, the decision, the written policy's answer) or
   `early_payment_offer_skipped`.
+- **Counters** (migration 0127; docs/superpowers/specs/2026-10-17-offer-counters-design.md). On an offer the agent made
+  (`early_payment_offer_by_agent`, a review linked to the offer), the supplier's page takes a smaller discount
+  (`counterOffer`, `counter_early_payment_offer`). The offer becomes `countered` with `counter_pct`, and
+  `runCycleSoon({ kind: "early_payment_countered" })` starts a cycle. The `early_offers` stage answers counters before
+  it makes offers (`answerCounter`). Code declines, with no model, when the agent's offers are off, the bill changed, the
+  counter is no more than the reserve's yield to the due date, or the cash for offers falls short. Otherwise the model
+  answers `accept | decline` beside the written policy (accept). `answer_early_payment_counter` answers a countered
+  offer once: accepted, the bill takes the counter as its discount, ending today, and returns to pending, and the offer
+  is accepted at the counter. The supplier is emailed the answer in a fixed template (`counterAnswerEmail`) under the
+  offer's idempotency key, and an accepted counter starts a cycle that pays it.
 
 ## Bank payouts (BlindPay)
 

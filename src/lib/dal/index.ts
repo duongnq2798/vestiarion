@@ -136,6 +136,8 @@ export const PLATFORM_RPCS = [
   "invoice_capture_sweep",
   // Early-payment offers (0125, early-payment offers E3-E6): made and withdrawn by a workspace, previewed and decided by token.
   "create_early_payment_offer", "withdraw_early_payment_offer", "early_payment_offer_preview", "decide_early_payment_offer", "set_agent_early_offers",
+  // Suppliers' counters to the agent's offers (0127, offer counters N1, N2, N5).
+  "early_payment_offer_by_agent", "counter_early_payment_offer", "answer_early_payment_counter",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 

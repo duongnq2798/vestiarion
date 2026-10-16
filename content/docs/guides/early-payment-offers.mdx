@@ -58,3 +58,23 @@ When it offers, the agent emails the supplier the link, with who offers what for
 When it decides not to offer, the ledger records `early_payment_offer_skipped` with its reasoning, and the bill is weighed again a week later.
 
 The agent makes no offers in a sandbox, while it is paused, or when email is not set up. Choose **Stop the agent's offers** to turn it off: "The agent no longer makes offers. Offers already out still stand." The ledger records `early_offers_off`. Members who are not an owner or admin read whether it is on.
+
+## When the supplier proposes a smaller discount
+
+On an offer the agent made, the supplier's page also asks "Would a smaller discount work for you?" The supplier enters a discount below the one offered and chooses **Propose a smaller discount**. The page says "Sent. The business answers you by email shortly. Until then, your invoice stays due as planned." and the link works no more. The ledger records `early_payment_offer_countered`, and a cycle starts at once. An offer you made yourself has no counter: the agent does not negotiate your terms.
+
+On Bills, the bill says "*Supplier* proposed *pct*% instead of *pct*%. The agent answers it at its next cycle."
+
+The agent answers each counter once. Code lets it accept only when all of this holds:
+
+- its offers are still on;
+- the bill has not changed since the offer;
+- the counter is more than what the cash would earn in the reserve by the due date;
+- the operating wallet can pay it today, as for a new offer.
+
+Where code allows it, the model decides whether to accept, from the bill, the two discounts, the reserve's yield, the cash left and what the supplier did with earlier offers. Without a model, the agent accepts. Where code does not allow it, the agent declines, and no model is asked.
+
+- **Accepted:** the counter goes on the bill as its discount, ending today. A cycle starts at once and pays the supplier the discounted amount, after every check. The ledger records `early_payment_counter_accepted`, and the supplier is emailed "*Business* accepted your *pct*%: it pays you *amount* today, ...". On Bills it reads "accepted *pct*% off, after a counter".
+- **Declined:** the bill keeps its due date. The ledger records `early_payment_counter_declined`, and the supplier is emailed "*Business* keeps the original terms: your invoice is paid as planned, ...".
+
+Both emails are fixed templates, sent to the address payment notices go to.

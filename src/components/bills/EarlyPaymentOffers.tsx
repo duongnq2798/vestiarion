@@ -83,6 +83,14 @@ function OfferControls({ orgSlug, candidate, reserveApy, canOffer }: { orgSlug: 
 
 function OpenOffer({ orgSlug, candidate, canOffer, withdraw }: { orgSlug: string; candidate: OfferCandidate; canOffer: boolean; withdraw: WithdrawForm }) {
   const open = candidate.open as NonNullable<OfferCandidate["open"]>;
+  // A counter the agent has not answered yet: no Withdraw, the agent answers it (offer counters N7).
+  if (open.counterPct !== null) {
+    return (
+      <p className="text-xs text-ink-2">
+        {candidate.counterpartyName} proposed {open.counterPct.toFixed(2)}% instead of {open.pct.toFixed(2)}%. The agent answers it at its next cycle.
+      </p>
+    );
+  }
   const line = (
     <p className="text-xs text-ink-2">
       Offer out: {open.pct.toFixed(2)}% off, <Money value={open.offered} token={candidate.currency} className="text-xs" /> today, until {day(open.expiresAt)}.
@@ -171,7 +179,11 @@ export function EarlyPaymentOffers({ orgSlug, view, canOffer }: { orgSlug: strin
           <ul aria-label="Offers decided" className="space-y-0.5 px-4 py-3 text-xs text-ink-2 sm:px-5">
             {view.recent.map((offer) => (
               <li key={offer.id}>
-                {offer.counterpartyName} {offer.status === "accepted" ? "accepted" : offer.status === "declined" ? "declined" : "was withdrawn"} {offer.pct.toFixed(2)}% off, {day(offer.decidedAt)}.
+                {offer.counterPct != null
+                  ? offer.status === "accepted"
+                    ? `${offer.counterpartyName} accepted ${offer.pct.toFixed(2)}% off, after a counter, ${day(offer.decidedAt)}.`
+                    : `The agent declined ${offer.counterpartyName}'s counter of ${offer.counterPct.toFixed(2)}%, ${day(offer.decidedAt)}.`
+                  : `${offer.counterpartyName} ${offer.status === "accepted" ? "accepted" : offer.status === "declined" ? "declined" : "was withdrawn"} ${offer.pct.toFixed(2)}% off, ${day(offer.decidedAt)}.`}
               </li>
             ))}
           </ul>
