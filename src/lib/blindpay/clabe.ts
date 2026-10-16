@@ -23,6 +23,7 @@ const BANKS: Record<string, string> = {
   "014": "Santander",
   "021": "HSBC",
   "030": "BanBajío",
+  "032": "IXE",
   "036": "Inbursa",
   "044": "Scotiabank",
   "058": "Banregio",

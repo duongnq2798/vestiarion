@@ -120,8 +120,8 @@ export async function getBankAccount(settings: Settings, input: { customerId: st
   );
 }
 
-/** BlindPay quotes at least 5.00 to a bank account. */
-export const MIN_QUOTE = 5;
+/** BlindPay quotes 10.00 to 30,000.00 to a bank account (LIMITS_AMOUNT_OUT_OF_RANGE outside it, as seen live). */
+export const MIN_QUOTE = 10;
 
 /**
  * A quote for paying `amount` of the token to the bank account (B5, B7): the business pays the amount exactly

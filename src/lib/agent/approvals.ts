@@ -756,7 +756,7 @@ async function waitingBankPayouts(
       if (problem === null && quote) {
         try {
           const answer = await quote({ bankAccountId: account.externalId, amount });
-          read = { receiverAmount: answer.receiverAmount, currency: "MXN", rate: answer.rate, feesReceiver: answer.feesReceiver };
+          read = { receiverAmount: answer.receiverAmount, currency: "MXN", rate: answer.rate, feesSender: answer.feesSender };
         } catch (error) {
           console.error("approvals: BlindPay quote not read", error instanceof Error ? error.message : "unknown error");
         }

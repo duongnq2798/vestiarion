@@ -87,7 +87,7 @@ export interface BankPayoutRecord {
   receiverAmount: number;
   currency: "MXN";
   rate: number | null;
-  feesReceiver: number;
+  feesSender: number;
   network: string;
   token: "USDC" | "USDB";
 }

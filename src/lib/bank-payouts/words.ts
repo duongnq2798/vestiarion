@@ -11,7 +11,7 @@ export interface BankPayoutShown {
   last4: string;
   beneficiaryName: string;
   accountStatus: "verifying" | "approved" | "rejected" | "deprecated";
-  quote: { receiverAmount: number; currency: "MXN"; rate: number | null; feesReceiver: number } | null;
+  quote: { receiverAmount: number; currency: "MXN"; rate: number | null; feesSender: number } | null;
   quoteProblem: "not_set_up" | "eurc" | "below_minimum" | "unread" | "sent" | null;
 }
 
@@ -27,7 +27,7 @@ export function bankAccountLine(bank: Pick<BankPayoutShown, "bankCode" | "last4"
 export function bankQuoteLine(bank: Pick<BankPayoutShown, "beneficiaryName" | "quote" | "quoteProblem">): string {
   if (bank.quote) {
     const rate = bank.quote.rate !== null ? `${pesos(bank.quote.rate)} MXN per USDC, ` : "";
-    return `${bank.beneficiaryName} receives about ${pesos(bank.quote.receiverAmount)} MXN (${rate}BlindPay's fees ${pesos(bank.quote.feesReceiver)} MXN). Approve and pay asks BlindPay for a fresh quote.`;
+    return `${bank.beneficiaryName} receives about ${pesos(bank.quote.receiverAmount)} MXN (${rate}BlindPay's fees ${pesos(bank.quote.feesSender)} USDC). Approve and pay asks BlindPay for a fresh quote.`;
   }
   switch (bank.quoteProblem) {
     case "sent":
@@ -35,7 +35,7 @@ export function bankQuoteLine(bank: Pick<BankPayoutShown, "beneficiaryName" | "q
     case "eurc":
       return "Only USDC is paid to a bank account, and this invoice is in EURC.";
     case "below_minimum":
-      return "BlindPay pays at least 5.00 USDC to a bank account.";
+      return "BlindPay pays at least 10.00 USDC to a bank account.";
     case "not_set_up":
       return "Bank payouts are not set up on this workspace: an owner sets them up under Settings.";
     default:
