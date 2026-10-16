@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { Reveal } from "@/components/ui/Reveal";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { ProvenanceBar, type ProvenanceLeg } from "@/components/vx/Provenance";
+import { ProvenanceList, type ProvenanceLeg } from "@/components/vx/Provenance";
 import { ARC_MAINNET, ARC_TESTNET } from "@/lib/network";
 import type { LatestDecisionShown } from "@/lib/platform/latest-decision";
 import { earlierThan, type RecentDecisions } from "@/lib/platform/recent-decisions";
@@ -20,10 +20,11 @@ import { RecentDecisionList } from "./RecentDecisions";
  * the team and each network on its own, what runs live now, and where to check each of them without us.
  */
 
+/** The two checks that need no trust in us first: the signed ledger, then the agent's decisions against the rules. */
 const CHECK_IT = [
-  { href: "/open", label: "Every figure on Open numbers", external: false },
   { href: "/docs/guides/audit-export", label: "Verify a ledger export yourself", external: false },
   { href: "/docs/research/model-vs-policy", label: "Where the model and the rules disagreed", external: false },
+  { href: "/open", label: "Every figure on Open numbers", external: false },
   { href: GITHUB_URL, label: "The source code, MIT licensed", external: true },
 ] as const;
 
@@ -73,7 +74,7 @@ export function Proof({ numbers, facts }: { numbers: Promise<LandingNumbers>; fa
                 Live on Arc mainnet
               </Link>
             </p>
-            <Suspense fallback={<Skeleton className="h-20 rounded-2xl sm:h-[4.75rem]" />}>
+            <Suspense fallback={<Skeleton className="h-[8.5rem] rounded-2xl" />}>
               <Live source={facts} />
             </Suspense>
           </div>
@@ -130,7 +131,7 @@ async function Latest({ source }: { source: Promise<ProofFacts> }) {
 
 async function Live({ source }: { source: Promise<ProofFacts> }) {
   const { provenance } = await source;
-  return <ProvenanceBar legs={provenance} />;
+  return <ProvenanceList legs={provenance} />;
 }
 
 async function Figures({ source }: { source: Promise<LandingNumbers> }) {

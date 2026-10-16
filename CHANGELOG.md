@@ -66,6 +66,16 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- **The landing page's proof leads each network with whoever has paid on it.**
+  - Arc mainnet, where no customer has paid yet, now leads with the team's own payments under "Paid by the Vestiarion
+    team": how many, how much USDC, and the latest on its explorer. "None on Arc mainnet yet" is on the customers' line
+    under them.
+  - Arc testnet still leads with customers. On either network, customers' figures lead once any customer has paid
+    there, and the two are never added together.
+  - The figures are set in the sans, with shorter descriptions.
+  - The badges read Real USDC and Test USDC, on the landing page and on Open numbers.
+  - What runs live is a list, one capability to a row, with where it runs.
+  - "Check it without us" starts with verifying a ledger export, then where the model and the rules disagreed.
 - **The docs read and find their way like a product's.**
   - The sidebar is grouped by what you are doing: Get started, Pay bills, Plan and report, Get paid, Trust and controls,
     Connect your tools and Developers, then the reference. Each section opens and closes, the one you are reading opens
