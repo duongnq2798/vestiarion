@@ -44,10 +44,11 @@ small pieces, and the two bills reading as overlapping mockups. This record desc
   - The partner chose, 2026-10-16, a small Add to Chrome button with Vestiarion Invoice Capture's own icon: the V the
     store lists it with, `public/extension/invoice-capture-48.png`, a copy of the extension's 48 px icon, drawn at 18
     px. Chrome is named in words, a use the guidelines allow.
-  - The README links the store with Google's badge (`public/badges/chrome-web-store.png`, the bordered medium PNG, 340
-    x 96, unchanged).
-  - The README's own drawn button, whose Chrome logo was redrawn from circles, is gone, and
-    `scripts/readme-buttons.mjs` no longer draws it.
+  - The README's own drawn button had a Chrome logo redrawn from circles. For a few hours it gave way to Google's badge,
+    but that white badge broke the README's row of dark buttons. So the README's Add to Chrome is now drawn like its
+    other three buttons: same size, dark ground and rim, "ADD TO CHROME" over "Invoice Capture". It carries the brand
+    mark the extension is listed with, which `scripts/readme-buttons.mjs` reads from `src/app/icon.svg`, so the two
+    never part. Google's badge file is gone.
   - Cost if wrong: if Google approves a request to use Chrome's logo, the icon can change in one line.
 - **HC2 — Three groups in the left column, set apart by space alone.**
   1. The message: eyebrow, headline, description.
@@ -114,7 +115,8 @@ Rejected:
   - carries the extension's icon, byte for byte the extension's own;
   - is the small secondary button, shown to a fine pointer only;
 - no Chrome logo, Google badge or puzzle piece in the hero;
-- the README's badge is Google's file by its SHA-256, and `scripts/readme-buttons.mjs` draws no Chrome icon;
+- the README's four buttons share one size, ground and rim, and Add to Chrome carries the brand mark's own drawing and
+  none of Chrome's colours;
 - the two bills:
   - are rows of one card, the reasoning and its checks together on a tint, the held bill a status row;
   - the drawn Agree and pay is agent-soft;

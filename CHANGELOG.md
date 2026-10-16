@@ -63,8 +63,8 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   - "Capture invoices from Chrome" says the extension sends an invoice to your workspace as a draft. Beside it, a small
     Add to Chrome button carries the extension's own icon in place of a puzzle piece. The button shows on a computer
     only, where Chrome can install it; a phone sees a link to the guide instead.
-  - The README links the store with Google's "Available in the Chrome Web Store" badge, in place of a button that
-    redrew Chrome's logo.
+  - The README's Add to Chrome is drawn like its other three buttons and carries the extension's own icon, in place of
+    a button that redrew Chrome's logo.
   - The two sample bills are one list: the open one with its reasoning in focus, the held one a status row under it.
     Their checks no longer wrap into narrow columns, and their invoice numbers are no longer cut off on a phone.
   - The first bill says "Agent proposes: pay it". Its drawn Agree and pay is no longer a second blue button, and it
