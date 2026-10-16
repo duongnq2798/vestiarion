@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { BuiltWith } from "@/components/landing/BuiltWith";
+import { INTEGRATION_GROUPS, Integrations } from "@/components/landing/Integrations";
 import { BRAND_FILES, BrandMark, BrandName, isWordmark, PROVIDER_MARKS, type Brand } from "@/components/vx/BrandMarks";
 import { PROVIDERS } from "@/lib/connectors/provider";
 
@@ -292,83 +292,131 @@ describe("a brand mark", () => {
   });
 });
 
-describe("the landing page's built on and works with", () => {
-  const markup = renderToStaticMarkup(<BuiltWith />);
+describe("the landing page's integrations", () => {
+  const markup = renderToStaticMarkup(<Integrations />);
+  const tools = INTEGRATION_GROUPS.flatMap((group) => group.tools);
+  const tool = (name: string) => {
+    const found = tools.find((candidate) => candidate.name === name);
+    if (!found) throw new Error(`no ${name}`);
+    return found;
+  };
 
-  it("names each service beside its mark, and links to the evidence, Arc and Circle to their own sites as well", () => {
+  it("groups the tools by the job they do for the business, three to a group, each a list named by its heading", () => {
+    expect(INTEGRATION_GROUPS.map((group) => [group.title, group.tools.map((entry) => entry.name)])).toEqual([
+      ["Accounting", ["Xero", "QuickBooks Online", "Zoho Books"]],
+      ["Sales and CRM", ["HubSpot", "Pipedrive", "Zoho CRM"]],
+      ["Work and team chat", ["Asana", "Slack", "Telegram"]],
+    ]);
+    // What the product is built on comes last, apart from the tools a business connects.
+    expect([...markup.matchAll(/<h3 id="([\w-]+)"[^>]*>([^<]+)<\/h3>/g)].map((match) => [match[1], match[2]])).toEqual([
+      ["integrations-accounting", "Accounting"],
+      ["integrations-sales", "Sales and CRM"],
+      ["integrations-work", "Work and team chat"],
+      ["integrations-foundations", "Under the hood"],
+    ]);
+    for (const id of ["accounting", "sales", "work", "foundations"]) expect(markup).toContain(`<ul aria-labelledby="integrations-${id}"`);
+    // Three side by side from a tablet's width, one list below it: no row is ever left with one.
+    expect(markup.match(/md:grid-cols-3/g)).toHaveLength(4);
+    expect(markup).not.toMatch(/grid-cols-(2|4|5)/);
+    expect(markup.match(/<li /g)).toHaveLength(12);
+  });
+
+  it("names each service beside its mark, and links each tool to its guide, Arc and Circle to their own sites as well", () => {
     const page = text(markup);
-    for (const name of ["Arc", "Circle", "Xero", "QuickBooks Online", "Zoho Books", "HubSpot", "Pipedrive", "Asana", "Slack", "Telegram", "npm"]) expect(page).toContain(name);
+    for (const name of ["Xero", "QuickBooks Online", "Zoho Books", "HubSpot", "Pipedrive", "Zoho CRM", "Asana", "Slack", "Telegram", "Arc", "Circle", "npm"]) {
+      expect(page).toContain(name);
+    }
     const hrefs = [...markup.matchAll(/<a [^>]*href="([^"]+)"/g)].map((match) => match[1]);
     expect(hrefs).toEqual([
-      "/open",
-      "https://www.arc.io",
-      "https://github.com/duongnq2798/vestiarion/blob/main/src/lib/circle/liveProvider.ts",
-      "https://www.circle.com",
       "/docs/guides/xero",
       "/docs/guides/quickbooks",
       "/docs/guides/zohobooks",
       "/docs/guides/hubspot",
       "/docs/guides/pipedrive",
+      "/docs/guides/zohocrm",
       "/docs/guides/asana",
       "/docs/guides/slack",
       "/docs/guides/telegram",
+      "/open",
+      "https://www.arc.io",
+      "https://github.com/duongnq2798/vestiarion/blob/main/src/lib/circle/liveProvider.ts",
+      "https://www.circle.com",
       "/docs/get-started/sdk",
     ]);
     expect([...markup.matchAll(/data-brand="([\w-]+)"/g)].map((match) => match[1])).toEqual([
-      "arc",
-      "circle",
       "xero",
       "quickbooks-lockup",
       "zohobooks-lockup",
       "hubspot",
       "pipedrive-lockup",
+      "zohocrm-lockup",
       "asana-lockup",
       "slack",
       "telegram",
+      "arc",
+      "circle",
       "npm",
     ]);
-    // npm's and Xero's marks and the QuickBooks, Zoho Books, Pipedrive and Asana lockups are their names, so the written
-    // names are for screen readers.
-    expect(markup).toContain('<span class="sr-only">npm</span>');
-    expect(markup).toContain('<span class="sr-only">Xero</span>');
-    expect(markup).toMatch(/data-brand="quickbooks-lockup"[^>]*\/><span class="sr-only">QuickBooks Online<\/span>/);
-    expect(markup).toMatch(/data-brand="zohobooks-lockup"[^>]*\/><span class="sr-only">Zoho Books<\/span>/);
-    expect(markup).toMatch(/data-brand="pipedrive-lockup"[^>]*\/><span class="sr-only">Pipedrive<\/span>/);
-    expect(markup).toMatch(/data-brand="asana-lockup"[^>]*\/><span class="sr-only">Asana<\/span>/);
-    // Every service shows its mark: none is named in words alone.
-    expect(markup).not.toMatch(/font-semibold text-ink"><span>/);
+    // A mark that spells its name stands in its place, the name kept for screen readers; any other is beside the name.
+    for (const [brand, name] of [
+      ["xero", "Xero"],
+      ["quickbooks-lockup", "QuickBooks Online"],
+      ["zohobooks-lockup", "Zoho Books"],
+      ["pipedrive-lockup", "Pipedrive"],
+      ["zohocrm-lockup", "Zoho CRM"],
+      ["asana-lockup", "Asana"],
+      ["npm", "npm"],
+    ]) {
+      expect(markup).toMatch(new RegExp(`data-brand="${brand}"[^>]*/><span class="sr-only">${name}</span>`));
+    }
+    for (const [brand, name] of [
+      ["hubspot", "HubSpot"],
+      ["slack", "Slack"],
+      ["telegram", "Telegram"],
+      ["arc", "Arc"],
+      ["circle", "Circle"],
+    ]) {
+      expect(markup).toMatch(new RegExp(`data-brand="${brand}"[^>]*/><span>${name}</span>`));
+    }
   });
 
-  it("lists eleven services, two to a row below a laptop's width and five from it, the last spanning its row, so every row is full", () => {
-    const items = [...markup.matchAll(/<li class="([^"]*)"/g)].map((match) => match[1]);
-    expect(items).toHaveLength(11);
-    expect(markup).toContain('<ul class="grid grid-cols-2 lg:grid-cols-5">');
-    expect(markup).not.toMatch(/grid-cols-(3|4)/);
-    // Five to a row: the first of each row starts without a rule, and the rows after the first have one above them.
-    for (const item of items) expect(item).toContain("lg:nth-[5n+1]:border-l-0");
-    for (const item of items) expect(item).toContain("lg:nth-[n+6]:border-t");
-    // Eleven leave the last alone on its row of two and of five: the last spans the whole row, and no other spans.
-    expect(items.length % 2).toBe(1);
-    expect(items.length % 5).toBe(1);
-    for (const item of items) expect(item.match(/\S*col-span\S*/g)).toEqual(["last:col-span-full"]);
-    // A name too long for a phone's half width moves under its mark instead of running into the line below.
-    expect(markup).toContain("min-h-5 flex-wrap");
-    expect(markup).not.toMatch(/flex h-5 /);
+  it("leads every tool to its setup guide in the same words, beside the mark on a phone and at the card's foot from a tablet", () => {
+    // Each card's link label is in the HTML twice, one of them hidden at each width.
+    expect(markup.match(/>Setup guide</g)).toHaveLength(tools.length * 2);
+    expect(markup.match(/shrink-0 md:hidden/g)).toHaveLength(tools.length);
+    expect(markup.match(/hidden pt-3 md:inline-flex/g)).toHaveLength(tools.length);
+    // Connecting a tool needs a workspace, so nothing on the landing page offers to connect one.
+    expect(text(markup)).not.toMatch(/Connect now|Read the guide/);
+    for (const entry of tools) expect(entry.href).toMatch(/^\/docs\/guides\/[a-z]+$/);
   });
 
-  it("says what each new integration does, each with its guide", () => {
+  it("says what each tool does as the product does it: read-only where it is, a write-back with who allows it, and no tool that pays", () => {
     const page = text(markup);
-    expect(page).toContain("Bills come in for review; payments on Arc are booked back once approved. Read the guide");
-    // The lockup says QuickBooks; the words say which one.
-    expect(page).toContain("Open bills from QuickBooks Online come in for review, sooner via webhooks. Read the guide");
-    expect(page).toContain("Won deals come in with their customers, to plan as collection schedules; what each collected goes back to the deal. Read the guide");
+    expect(page).toContain("Nothing is paid until it passes your checks.");
+    expect(page).toContain("Open bills come in for review. None is paid until you add it and it passes every check.");
+    expect(page).toContain("Won deals come in, ready to plan as the payments each customer owes you. You confirm every plan.");
+    // Xero is the one accounting tool written back to, and only an entry a person approves.
+    expect(tool("Xero").body).toBe("Payments made on Arc are booked back to Xero once you approve each entry.");
+    for (const name of ["QuickBooks Online", "Zoho Books", "Zoho CRM"]) expect(tool(name).body).toMatch(/Read-only\.$/);
+    // QuickBooks Online connects only to sandbox companies until Intuit's app assessment is complete.
+    expect(tool("QuickBooks Online").status).toBe("Sandbox companies for now");
+    expect(page).toContain("Sandbox companies for now");
+    expect(tools.filter((entry) => entry.status)).toHaveLength(1);
+    // HubSpot's receipts wait for an owner's or admin's say-so; Pipedrive's are only for payments on Arc mainnet.
+    expect(tool("HubSpot").body).toMatch(/^Once you allow it,/);
+    expect(tool("Pipedrive").body).toContain("Receipts for payments on Arc mainnet can go back on the deal.");
+    // A completed Asana task is never by itself a reason to pay.
+    expect(tool("Asana").body).toBe("A completed task is paid only after a person accepts it against its criteria.");
+    // Slack shows decisions; the Telegram bot never pays.
+    expect(tool("Slack").body).not.toMatch(/pay/i);
+    expect(tool("Telegram").body).toMatch(/The bot never pays\.$/);
   });
 
   it("says built on and works with, never that a service vouches for Vestiarion", () => {
     const page = text(markup).toLowerCase();
-    expect(page).toContain("built on, and works with");
-    for (const claim of ["partner", "trusted by", "powered by", "endorsed by", "certified", "gmail"]) expect(page).not.toContain(claim);
-    // The trademark notice npm's policy asks for, Intuit's owner named, and that the marks are not an endorsement.
+    expect(page).toContain("keep your tools. vestiarion connects to them.");
+    for (const claim of ["partner", "trusted by", "powered by", "endorsed by", "certified", "official", "gmail"]) expect(page).not.toContain(claim);
+    // The trademark notice npm's policy asks for, Intuit's and Zoho's owners named, and that the marks are not an endorsement.
     expect(page).toContain("npm is a registered trademark of npm, inc.");
     expect(page).toContain("intuit and quickbooks are trademarks of intuit inc.");
     expect(page).toContain("zoho, zoho books and zoho crm are trademarks of zoho corporation pvt. ltd.");

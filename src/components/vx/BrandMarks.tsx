@@ -6,9 +6,10 @@ import type { ProviderId } from "@/lib/connectors/provider";
  * (docs/superpowers/specs/2026-10-07-brand-marks-design.md,
  * docs/superpowers/specs/2026-10-12-integration-marks-design.md): Arc, where
  * payments settle; Circle, whose wallets carry them; Slack and Telegram, where
- * the agent asks and reports; npm, where the SDK is published; Xero and
- * QuickBooks Online, whose bills come in; HubSpot and Pipedrive, whose won deals
- * come in; Asana, where contractors deliver the work they are paid for.
+ * the agent asks and reports; npm, where the SDK is published; Xero,
+ * QuickBooks Online and Zoho Books, whose bills come in; HubSpot, Pipedrive and
+ * Zoho CRM, whose won deals come in; Asana, where contractors deliver the work
+ * they are paid for.
  *
  * Each is its owner's file, served unaltered from public/brands/ in its own
  * colours: no recolouring, cropping or redrawing, as the owners' guidelines
@@ -81,8 +82,8 @@ const MARKS: Record<Brand, { name: string; file: string; aspect: number; inset?:
 export const BRAND_FILES: Readonly<Record<Brand, string>> = Object.fromEntries(Object.entries(MARKS).map(([brand, mark]) => [brand, mark.file])) as Record<Brand, string>;
 
 /**
- * True when the mark spells the name itself (npm's, Xero's, the QuickBooks, Pipedrive and Asana lockups), so the name
- * beside it is for screen readers only.
+ * True when the mark spells the name itself (npm's, Xero's, the QuickBooks, Pipedrive, Asana, Zoho Books and Zoho CRM
+ * lockups), so the name beside it is for screen readers only.
  */
 export const isWordmark = (brand: Brand) => MARKS[brand].wordmark === true;
 

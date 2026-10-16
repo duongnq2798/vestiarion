@@ -29,7 +29,8 @@ public pages is checkable, so a mark may only stand for an integration the code 
 
 ## 3. Where
 
-- The landing page: "Built on, and works with", right under "Verifiable, not vouched for".
+- The landing page: "Built on, and works with", right under "Verifiable, not vouched for" (since 2026-10-16 the
+  Integrations section, `2026-10-16-landing-integrations-design.md`).
 - Settings: the Slack section's heading and the Telegram card.
 - `/open`: Arc's mark beside each network's name.
 - The Slack and Telegram guides' screenshots, re-photographed (`npm run docs:screenshots -- slack-settings telegram-connect`).

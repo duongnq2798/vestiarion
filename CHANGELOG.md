@@ -50,6 +50,15 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   0122 runs, connecting says Zoho Books is not set up on this deployment yet.
   [Guide](https://www.vestiarion.xyz/docs/guides/zohobooks).
 
+### Changed
+
+- **The landing page's integrations, grouped by what each tool does.** "Built on, and works with" is now Integrations,
+  a section of its own before the developers': accounting (Xero, QuickBooks Online, Zoho Books), sales and CRM (HubSpot,
+  Pipedrive and, newly shown, Zoho CRM), and work and team chat (Asana, Slack, Telegram), each group saying what its
+  tools share and each card what is particular to its tool, with a link to its setup guide. Arc, Circle and the SDK sit
+  together under the hood. QuickBooks Online's card, and its guide, say that the hosted service connects to QuickBooks
+  sandbox companies only until Intuit completes its assessment of the app.
+
 ### Fixed
 
 - **The connect pages of QuickBooks and Zoho Books name their data right.** They said "QuickBooks's data" and "Zoho

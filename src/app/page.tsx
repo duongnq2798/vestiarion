@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { BuildOnIt } from "@/components/landing/BuildOnIt";
-import { BuiltWith } from "@/components/landing/BuiltWith";
 import { Faq } from "@/components/landing/Faq";
 import { FinalCta } from "@/components/landing/FinalCta";
 import { Hero } from "@/components/landing/Hero";
+import { Integrations } from "@/components/landing/Integrations";
 import { Proof, type ProofFacts } from "@/components/landing/Proof";
 import { landingProvenance, latestOwnPaymentUrl } from "@/components/landing/provenance";
 import { Safety } from "@/components/landing/Safety";
@@ -111,8 +111,9 @@ async function proofFacts(mainnet: Promise<OpenNumbers | null>): Promise<ProofFa
 
 /**
  * The landing page (docs/superpowers/specs/2026-10-11-landing-clarity-design.md): what Vestiarion is and how to try it
- * first, who it is for, how it is kept safe, then the proof, the developer's way in, the questions and the close. The
- * technical showcase, the decision loop step by step and the receipts behind each claim, is /how-it-decides.
+ * first, who it is for, how it is kept safe, then the proof, the tools it connects to, the developer's way in, the
+ * questions and the close. The technical showcase, the decision loop step by step and the receipts behind each claim, is
+ * /how-it-decides.
  *
  * Nothing above the proof waits for a read (landing stream S1): the reads start here and the proof streams each of them
  * in behind its own fallback, so the hero arrives with the first bytes. The measurements are the open numbers, every
@@ -134,8 +135,8 @@ export default function LandingPage() {
         <UseCases />
         <Safety />
         <Proof numbers={numbers} facts={proofFacts(mainnet)} />
+        <Integrations />
         <BuildOnIt />
-        <BuiltWith />
         <Faq mainnetForEveryone={mainnetOpenToEveryone(currentConfig())} />
         <FinalCta />
       </main>
