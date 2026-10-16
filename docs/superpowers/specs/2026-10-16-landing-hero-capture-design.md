@@ -55,12 +55,15 @@ small pieces, and the two bills reading as overlapping mockups. This record desc
   3. Invoice Capture.
 
   No rule beside the shadow-mode note and none above Invoice Capture.
-  - The note: "**Start in shadow mode.** Keep paying the way you do today while the agent decides on your real bills."
-  - Then a smaller line: "No wallet or funds needed to start.", "Email sign-in, no password.", How shadow mode works.
-- **HC3 — Invoice Capture in one line.**
+  - The note sits 24 px under the calls to action: "**Start in shadow mode.** Keep paying the way you do today while
+    the agent decides on your real bills."
+  - Then one smaller line of three facts, 20 px apart, with no separators: "No wallet or funds needed.", "Email
+    sign-in, no password.", How shadow mode works. It fits one line from 1280 px.
+- **HC3 — Invoice Capture as one row.**
   - "Capture invoices from Chrome", then "Send an invoice from any page to your workspace as a draft."
-  - Beside it, the small secondary Add to Chrome button (32 px high, the extension's icon, an arrow out). It stays
-    below "Try it on your bills" and "See how it works" in weight.
+  - The row is as wide as the column's text above. The words take the room that is left, on one line from 1280 px,
+    and the small secondary Add to Chrome button (32 px high, the extension's icon, an arrow out) keeps to the right
+    edge. It stays below "Try it on your bills" and "See how it works" in weight.
   - The words say draft: the extension never adds a bill, approves or pays (guides/invoice-capture).
 - **HC4 — The button only where Chrome can install it, in CSS.**
   - A fine primary pointer (a mouse or trackpad, `pointer-fine:inline-flex`) gets Add to Chrome.
@@ -72,19 +75,27 @@ small pieces, and the two bills reading as overlapping mockups. This record desc
     can install the extension.
 - **HC5 — A slightly smaller headline.**
   - 3.25 rem from 1024 px (was 3.5) and 4 rem from 1280 px (was 4.25), and the description at 18 px beside the bills.
-  - The hero's left column now stands about as tall as the sample bills: the hero is 806 px tall at 1280-1920 px,
-    against 842 px before this pass.
-- **HC6 — The sample bills as two rows of one list.**
-  - One card holds both bills, as Bills & receivables lists them. The held bill is the next row, under a line, not a
-    second card tucked under the first.
-  - Both rows open alike: a payee's initial, name, invoice reference (13 px, wrapping as whole phrases) and amount (16
-    px, aligned on its baseline, with a 12 px USDC). On a 320 px phone the amount takes a line of its own.
-  - The first row: "Agent proposes: pay it", the Safety section's wording, beside "Waiting for your verdict". Then the
-    reasoning, and the checks in one column until the card is 32 rem wide (a container query), so none wraps.
-  - "Do you agree with the agent?" sits under a line. Agree and pay is drawn in agent-soft, not solid blue, and the two
-    drawn controls are hidden from screen readers, which hear "In the product: Agree and pay, or Disagree. Shown here as
-    a sample." Nothing in the figure can be pressed.
-  - The held row: "Held for you", then "Blocked by code, not by the model." in ink before the rule's words.
+  - The hero's left column now stands about as tall as the sample bills: the hero is 816 px tall at 1280-1920 px,
+    against 842 px before this pass, and the card's top lines up with the headline's.
+- **HC6 — The sample bills as one list: the open bill in focus, the held one as a status row.**
+  - One card holds both bills, as Bills & receivables lists them. Its title is a plain line, "Bills & receivables" in
+    13 px beside the Sample bills tag, not a ruled mono strip, and only one rule is left inside: the one above the
+    held row.
+  - The open bill opens with its payee's initial, name, invoice reference (13 px, wrapping as whole phrases) and amount
+    (18 px, aligned on its baseline, with a 12 px USDC). On a 320 px phone the amount takes a line of its own. Then
+    "Agent proposes: pay it", the Safety section's wording, beside "Waiting for your verdict".
+  - The agent's reasoning, the product's difference, is the figure's focus: its label, its words in ink, and the checks
+    sit together on a light agent-soft tint (30 %, 12 px in from its edges, an 8 px radius), enough to set it apart
+    without reading as a box inside the card. The checks stay in one column until the card is 32 rem wide (a container
+    query), so none wraps.
+  - "Do you agree with the agent?" follows. Agree and pay is drawn in agent-soft, not solid blue, and the two drawn
+    controls are hidden from screen readers, which hear "In the product: Agree and pay, or Disagree. Shown here as a
+    sample." Nothing in the figure can be pressed.
+  - The held bill is a closed row on the ground's tone: a smaller initial, its name, "Invoice 0931 · 6,500.00 USDC",
+    "Held for you" at the right, then "Blocked by code, not by the model." in ink before the rule's words.
+- **Not added: a proof line in the hero.** A third review suggested a small link to the open numbers. The nav's Proof
+  link and the Proof section further down already lead there, and one more line under the call to action would undo
+  HC2.
 
 Rejected:
 - Chrome's logo on the button: it needs Google's approval.
@@ -105,7 +116,7 @@ Rejected:
 - no Chrome logo, Google badge or puzzle piece in the hero;
 - the README's badge is Google's file by its SHA-256, and `scripts/readme-buttons.mjs` draws no Chrome icon;
 - the two bills:
-  - are rows of one card with the same amount style;
+  - are rows of one card, the reasoning and its checks together on a tint, the held bill a status row;
   - the drawn Agree and pay is agent-soft;
   - the drawn controls are hidden from screen readers;
   - "Agent: pay it" is gone.

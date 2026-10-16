@@ -45,13 +45,13 @@ describe("the landing hero", () => {
     expect(markup).toMatch(/<a [^>]*href="#how-it-works"[^>]*>See how it works<\/a>/);
     expect(markup).toMatch(/<a [^>]*href="\/docs\/guides\/shadow-mode"[^>]*>How shadow mode works/);
     const words = text(markup);
-    expect(words).toContain("Start in shadow mode. Keep paying the way you do today while the agent decides on your real bills. No wallet or funds needed to start.");
+    expect(words).toContain("Start in shadow mode. Keep paying the way you do today while the agent decides on your real bills. No wallet or funds needed.");
     expect(words).toContain("Email sign-in, no password");
   });
 
   it("keeps to three groups: the message, the call to action with what it asks of you, then Invoice Capture", () => {
     const words = text(hero());
-    const order = ["Every bill checked", TRY_LABEL, "Start in shadow mode.", "No wallet or funds needed to start.", "Capture invoices from Chrome"].map((part) =>
+    const order = ["Every bill checked", TRY_LABEL, "Start in shadow mode.", "No wallet or funds needed.", "Capture invoices from Chrome"].map((part) =>
       words.indexOf(part)
     );
     expect(order.every((at) => at >= 0)).toBe(true);
@@ -137,18 +137,22 @@ describe("the landing hero", () => {
     expect(drawn).not.toContain("bg-agent");
   });
 
-  it("draws the two sample bills as rows of one list, each headed alike", () => {
+  it("draws the two sample bills as one list: the open bill with its reasoning in focus, the held one as a status row", () => {
     const markup = hero();
-    // One card: the held bill is the list's next row, not a second card tucked under the first.
+    // One card: the held bill is the list's next row, not a second card tucked under the first, and the card's title
+    // is a plain line, not a ruled strip.
     expect(markup).not.toContain("-mt-px");
     expect(markup).not.toContain("rounded-b-2xl");
-    // Both rows: a payee's initial, name, invoice and amount in the same sizes.
-    const amounts = [...markup.matchAll(/<p class="([^"]*)">(2,400\.00|6,500\.00)<span/g)].map((match) => match[1]);
-    expect(amounts).toHaveLength(2);
-    expect(amounts[0]).toBe(amounts[1]);
+    expect(markup).not.toContain("border-b border-line bg-ground/70");
+    // The agent's reasoning and its checks sit together on a tint, the figure's focus.
+    const reasoning = markup.match(/<div class="[^"]*bg-agent-soft\/30[^"]*">([\s\S]*?)<\/ul><\/div>/)?.[1] ?? "";
+    expect(text(reasoning)).toContain("Agent's reasoning The checkout flow was delivered");
+    expect(reasoning).toContain('aria-label="Checked before deciding"');
     const words = text(markup);
     expect(words).toContain("Northwind Dev Invoice 0412 · milestone 2 of 3 2,400.00 USDC");
-    expect(words).toContain("Kestrel Design Invoice 0931 · campaign assets 6,500.00 USDC");
+    // The held bill, smaller and on the ground's tone: who, which invoice, how much, then why it waits.
+    expect(words).toContain("Kestrel Design Invoice 0931 · 6,500.00 USDC Held for you Blocked by code, not by the model.");
+    expect(markup).toContain("border-t border-line bg-ground/50");
   });
 
   it("keeps the technical vocabulary out of the first screen", () => {

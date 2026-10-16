@@ -45,13 +45,13 @@ export function Hero() {
               </a>
             </Button>
           </div>
-          {/* What trying it asks of you, right under the call to action: shadow mode, then what it does not need. */}
-          <p className="mt-4 max-w-xl text-pretty text-[0.9375rem] leading-relaxed text-ink-2">
+          {/* What trying it asks of you, under the call to action: shadow mode, then what it does not need, each fact apart. */}
+          <p className="mt-6 max-w-xl text-pretty text-[0.9375rem] leading-relaxed text-ink-2">
             <strong className="font-semibold text-ink">Start in shadow mode.</strong> Keep paying the way you do today while the agent decides on your
             real bills.
           </p>
-          <p className="mt-1 flex max-w-xl flex-wrap items-center gap-x-3 gap-y-1 text-[0.8125rem] text-ink-3">
-            <span>No wallet or funds needed to start.</span>
+          <p className="mt-1.5 flex max-w-xl flex-wrap items-center gap-x-5 gap-y-1 text-[0.8125rem] text-ink-3">
+            <span>No wallet or funds needed.</span>
             <span>Email sign-in, no password.</span>
             <Link href="/docs/guides/shadow-mode" className="inline-flex min-h-6 items-center gap-1 font-medium text-agent underline-offset-2 hover:underline">
               How shadow mode works
