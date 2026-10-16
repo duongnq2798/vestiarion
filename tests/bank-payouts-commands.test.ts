@@ -105,7 +105,7 @@ describe("setting the workspace up (B3)", () => {
     mocks.createCustomer.mockResolvedValue({ id: "re_000000000009", kybStatus: "approved" });
     await finishBankPayoutsSetUp({ actorId: "user-1", tosId: "to_abcd1234", workspaceName: "Pinecrest Studio", contactEmail: "owner@example.com" });
     expect(mocks.createCustomer).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ tos_id: "to_abcd1234", legal_name: "Pinecrest Studio", external_id: "org-1" }), expect.stringMatching(/^org:org-1:blindpay-customer:to_abcd1234:[0-9a-f]{16}$/));
-    expect(mocks.savePayoutPartner).toHaveBeenLastCalledWith("org-1", { customerId: "re_000000000009", kybStatus: "approved", setUpBy: "user-1" });
+    expect(mocks.savePayoutPartner).toHaveBeenLastCalledWith("org-1", { tosId: "to_abcd1234", customerId: "re_000000000009", kybStatus: "approved", setUpBy: "user-1" });
     expect(mocks.ledger.mock.calls[0][1]).toMatchObject({ action: "bank_payouts_set_up", domain: "treasury" });
     await expect(finishBankPayoutsSetUp({ actorId: "user-1", tosId: "nope", workspaceName: "x", contactEmail: "x@example.com" })).rejects.toThrow(BankPayoutsError);
   });

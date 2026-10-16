@@ -77,7 +77,8 @@ export function testBusiness(input: { tosId: string; legalName: string; email: s
 }
 
 export async function createCustomer(settings: Settings, body: unknown, idempotencyKey: string, deps: BlindpayHttp = {}): Promise<{ id: string; kybStatus: KybStatus }> {
-  return mapCustomer(await blindpayCall(settings, "POST", "/customers", { body, idempotencyKey, label: "customer" }, deps));
+  // BlindPay downloads the business's documents before it answers, which takes longer than any other call.
+  return mapCustomer(await blindpayCall(settings, "POST", "/customers", { body, idempotencyKey, label: "customer", timeoutMs: 60_000 }, deps));
 }
 
 export async function getCustomer(settings: Settings, customerId: string, deps: BlindpayHttp = {}): Promise<{ id: string; kybStatus: KybStatus }> {
