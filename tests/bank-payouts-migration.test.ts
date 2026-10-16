@@ -27,10 +27,10 @@ const definition = async (name: string) =>
   (await db.query<{ def: string }>("select pg_get_constraintdef(oid) as def from pg_constraint where conname = $1", [name])).rows[0]?.def ?? "";
 
 /** A vendor of the workspace, with the bank account seeding gave it removed, so each test adds its own. */
-async function vendor(orgId: string, tag: string): Promise<{ counterpartyId: string }> {
-  const { counterpartyId } = await seedOrgRows(db, orgId, tag);
+async function vendor(orgId: string, tag: string): Promise<{ counterpartyId: string; invoiceId: string }> {
+  const { counterpartyId, invoiceId } = await seedOrgRows(db, orgId, tag);
   await db.query("update public.counterparty_bank_accounts set removed_at = now() where org_id = $1 and removed_at is null", [orgId]);
-  return { counterpartyId };
+  return { counterpartyId, invoiceId };
 }
 
 async function account(orgId: string, counterpartyId: string, externalId = "ba_000000000001"): Promise<string> {
@@ -143,6 +143,27 @@ describe("counterparty_bank_accounts (0124)", () => {
 
 describe("payment_intents.payout_route (0124)", () => {
   it("takes bank beside cctp, gateway and escrow, after 0047 ran again", async () => {
+    const def = await definition("payment_intents_payout_route_check");
+    for (const route of ["cctp", "gateway", "escrow", "bank"]) expect(def).toContain(`'${route}'`);
+  });
+});
+
+describe("re-running every migration with a bank payout on file (0047, 0124)", () => {
+  it("never narrows the route check again, so a row paid to a bank does not stop the run", async () => {
+    // As on production after the first bank payout: scripts/migrate.ts re-runs every file, and 0047 used to set the check
+    // back to cctp, gateway and escrow, which this row refused.
+    const orgId = await createOrg(db, "bank-rerun");
+    const { invoiceId } = await vendor(orgId, "bank-rerun");
+    await db.query(
+      `insert into public.payment_intents (org_id, source_type, source_id, idempotency_key, provider, amount, destination, payout_route)
+       values ($1, 'invoice', $2, $3, 'circle', 10, 'blindpay:ba_000000000501', 'bank')
+       on conflict (idempotency_key) do nothing`,
+      [orgId, invoiceId, `bank-rerun-${invoiceId}`]
+    ).catch(async () => {
+      // The seeded intent already holds this invoice: put it on the bank route instead.
+      await db.query("update public.payment_intents set payout_route = 'bank' where org_id = $1 and source_id = $2", [orgId, invoiceId]);
+    });
+    await applyMigrations(db, (file) => file.startsWith("0045_") || file.startsWith("0047_") || file.startsWith("0124_"));
     const def = await definition("payment_intents_payout_route_check");
     for (const route of ["cctp", "gateway", "escrow", "bank"]) expect(def).toContain(`'${route}'`);
   });
