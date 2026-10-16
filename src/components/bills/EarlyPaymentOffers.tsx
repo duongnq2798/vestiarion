@@ -18,30 +18,44 @@ const INITIAL: OfferActionResult = { ok: false, message: "" };
 
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
+type WithdrawForm = ReturnType<typeof useActionForm<OfferActionResult>>;
+
 /**
- * One bill's offer controls. The made offer's link lives in this component's state, which outlives the page's refresh
- * after the action: the bill then has an open offer, and the link must stay on screen, since it is never kept (E3).
+ * One bill's offer controls. Both actions' results live in this component, which outlives the page's refresh after
+ * either: the made offer's link stays on screen above the offer out, since it is never kept (E3), until the offer is
+ * withdrawn, and the withdrawal says so above the form that comes back.
  */
 function OfferControls({ orgSlug, candidate, reserveApy, canOffer }: { orgSlug: string; candidate: OfferCandidate; reserveApy: number; canOffer: boolean }) {
-  const { state, formProps } = useActionForm(makeOfferAction, INITIAL);
+  const [link, setLink] = useState<{ url: string; message: string } | null>(null);
+  const { state, formProps } = useActionForm(makeOfferAction, INITIAL, { onSuccess: (made) => setLink(made.url ? { url: made.url, message: made.message } : null) });
+  const withdraw = useActionForm(withdrawOfferAction, INITIAL, { onSuccess: () => setLink(null) });
   const [pct, setPct] = useState(candidate.suggestion.pct.toFixed(2));
   const asked = Number(pct.replace(",", "."));
   const worth = offerWorth({ pct: Number.isFinite(asked) && asked > 0 ? asked : candidate.suggestion.pct, days: candidate.suggestion.days, reserveApy });
-  if (state.ok && state.url) {
+  if (link || candidate.open) {
     return (
-      <div className="space-y-1">
-        <p className="text-xs text-ink">{state.message}</p>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <code className="min-w-0 max-w-full truncate rounded-lg bg-ground px-2 py-1 font-mono text-xs text-ink-2">{state.url}</code>
-          <CopyButton value={state.url} label="Copy the offer link" variant="secondary" size="sm" />
-        </div>
+      <div className="space-y-2">
+        {link && (
+          <div className="space-y-1">
+            <p className="text-xs text-ink">{link.message}</p>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <code className="min-w-0 max-w-full truncate rounded-lg bg-ground px-2 py-1 font-mono text-xs text-ink-2">{link.url}</code>
+              <CopyButton value={link.url} label="Copy the offer link" variant="secondary" size="sm" />
+            </div>
+          </div>
+        )}
+        {candidate.open && <OpenOffer orgSlug={orgSlug} candidate={candidate} canOffer={canOffer} withdraw={withdraw} />}
       </div>
     );
   }
-  if (candidate.open) return <OpenOffer orgSlug={orgSlug} candidate={candidate} />;
   if (!canOffer) return <p className="text-xs text-ink-3">{worth} An owner or admin makes the offer.</p>;
   return (
     <div className="space-y-2">
+      {withdraw.state.ok && (
+        <p role="status" className="text-xs text-ink">
+          {withdraw.state.message}
+        </p>
+      )}
       <p className="text-xs text-ink-2">{worth}</p>
       <form {...formProps} className="flex flex-wrap items-center gap-2">
         <input type="hidden" name="orgSlug" value={orgSlug} />
@@ -67,20 +81,23 @@ function OfferControls({ orgSlug, candidate, reserveApy, canOffer }: { orgSlug: 
   );
 }
 
-function OpenOffer({ orgSlug, candidate }: { orgSlug: string; candidate: OfferCandidate }) {
-  const { state, formProps } = useActionForm(withdrawOfferAction, INITIAL);
+function OpenOffer({ orgSlug, candidate, canOffer, withdraw }: { orgSlug: string; candidate: OfferCandidate; canOffer: boolean; withdraw: WithdrawForm }) {
   const open = candidate.open as NonNullable<OfferCandidate["open"]>;
+  const line = (
+    <p className="text-xs text-ink-2">
+      Offer out: {open.pct.toFixed(2)}% off, <Money value={open.offered} token={candidate.currency} className="text-xs" /> today, until {day(open.expiresAt)}.
+    </p>
+  );
+  if (!canOffer) return line;
   return (
-    <form {...formProps} className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+    <form {...withdraw.formProps} className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
       <input type="hidden" name="orgSlug" value={orgSlug} />
       <input type="hidden" name="offerId" value={open.id} />
-      <p className="text-xs text-ink-2">
-        Offer out: {open.pct.toFixed(2)}% off, <Money value={open.offered} token={candidate.currency} className="text-xs" /> today, until {day(open.expiresAt)}.
-      </p>
+      {line}
       <SubmitButton size="sm" variant="link" className="text-xs" pendingLabel="Withdrawing…">
         Withdraw
       </SubmitButton>
-      <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.message}</FormMessage>
+      <FormMessage tone="error">{withdraw.state.ok ? null : withdraw.state.message}</FormMessage>
     </form>
   );
 }

@@ -15,11 +15,11 @@ The suggestion is twice what the cash would earn in the reserve by the due date,
 
 ## 2. Make the offer
 
-Change the discount if you want (from 0.1% to 10%), then choose **Offer this discount for paying today**. The card says "Offer made. Send the supplier this link: it works once." and shows the link with **Copy the offer link**. Send it to the supplier the way you usually write to them. Vestiarion keeps only a hash of the link, so it is shown this once.
+Change the discount if you want (from 0.1% to 10%), then choose **Offer this discount for paying today**. The card says "Offer made. Send the supplier this link: it works once." and shows the link with **Copy the offer link**, above the offer out. Send it to the supplier the way you usually write to them. Vestiarion keeps only a hash of the link, so it is shown this once, until you leave the page.
 
 The ledger records `early_payment_offered`, with the discount, the bill's amount, what the supplier would receive and when the offer lapses.
 
-An offer stands for 7 days, or until the day before the bill falls due if that comes sooner. While it stands, the bill shows "Offer out:" with the discount, what the supplier would receive and until when, and **Withdraw**. Withdrawing says "Offer withdrawn. The link no longer works." and records `early_payment_offer_withdrawn`. Making a new offer for the same bill withdraws the one before.
+An offer stands for 7 days, or until the day before the bill falls due if that comes sooner. While it stands, the bill shows "Offer out:" with the discount, what the supplier would receive and until when, and, for an owner or admin, **Withdraw**. Withdrawing says "Offer withdrawn. The link no longer works." and records `early_payment_offer_withdrawn`. Making a new offer for the same bill withdraws the one before.
 
 If the bill changed since the page loaded, the card says "This bill can no longer take an offer: it changed, a payment started, or it falls due within 3 days."
 
