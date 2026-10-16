@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { LiveProof, NetworkPanels } from "@/components/landing/LiveProof";
 import { LatestPanel, Proof } from "@/components/landing/Proof";
 import { landingProvenance, RESERVE_PROOF_HREF } from "@/components/landing/provenance";
-import { ProvenanceBar } from "@/components/vx/Provenance";
+import { ProvenanceBar, ProvenanceList } from "@/components/vx/Provenance";
 import type { OpenNumbers, SideNumbers } from "@/lib/platform/open-numbers";
 
 /**
@@ -72,26 +72,55 @@ const TESTNET: OpenNumbers = {
 };
 
 describe("the landing's open numbers", () => {
-  it("show Arc mainnet first, then Arc testnet, customers' figures large and the team's on a line of their own (landing clarity P2)", () => {
+  it("show Arc mainnet first, then Arc testnet, each led by whoever has paid on it (landing proof cards)", () => {
     const markup = renderToStaticMarkup(<NetworkPanels mainnet={MAINNET} testnet={TESTNET} />);
     const words = text(markup);
     expect(words.indexOf("Arc mainnet")).toBeLessThan(words.indexOf("Arc testnet"));
     for (const part of [
-      "Real money",
-      "Test money",
-      "Customers Workspaces Not yet",
-      "None opened by anyone outside the team yet",
-      "Payments settled None yet",
-      "No customer has paid through it here yet",
-      "Vestiarion team · 1 payment, 0.10 USDC, from our own workspaces",
+      "Real USDC",
+      "Test USDC",
+      // Arc mainnet: no customer has paid there, so the team's own payments lead, under a heading that names the team.
+      "Paid by the Vestiarion team Payments settled 1",
+      "From our own workspaces",
+      "USDC paid 0.10",
+      "Each one on Open numbers",
+      "Latest payment Oct 7",
+      "09:43 UTC",
+      "Customers · None on Arc mainnet yet",
+      // Arc testnet: customers have paid, so their figures lead and the team's sit on a line of their own (P2).
       "Customers Workspaces 5",
-      "3 live now, 2 made a first payment",
+      "3 live, 2 have paid",
       "Payments settled 2",
-      "22.00 USDC paid by customers",
+      "22.00 USDC paid",
       "Vestiarion team · 89 payments, 122.26 USDC, from our own workspaces",
     ]) {
       expect(words).toContain(part);
     }
+    expect(markup).toContain('href="/open#our-payments-arc-mainnet"');
+    // The team's payments never stand under "Customers".
+    expect(words).not.toContain("Customers Workspaces Not yet");
+    expect(words).not.toContain("Customers Payments settled 1");
+  });
+
+  it("lead with customers once any has paid on a network, and say how far customers got where none has", () => {
+    const paidByCustomers: OpenNumbers = { ...MAINNET, sides: { ...MAINNET.sides, customers: side({ workspacesOpened: 2, liveWorkspaces: 1, firstPayments: 1, payments: 3, usdcPaid: 4.5 }) } };
+    const led = text(renderToStaticMarkup(<NetworkPanels mainnet={paidByCustomers} testnet={null} />));
+    expect(led).toContain("Customers Workspaces 2");
+    expect(led).toContain("1 live, 1 has paid");
+    expect(led).toContain("Vestiarion team · 1 payment, 0.10 USDC, from our own workspaces");
+    expect(led).not.toContain("Paid by the Vestiarion team");
+
+    const openedOnly: OpenNumbers = { ...MAINNET, sides: { ...MAINNET.sides, customers: side({ workspacesOpened: 2, liveWorkspaces: 2 }) } };
+    expect(text(renderToStaticMarkup(<NetworkPanels mainnet={openedOnly} testnet={null} />))).toContain("Customers · 2 workspaces opened, no payment yet");
+
+    // Nobody has paid at all: the customers' figures, each saying so.
+    const nobody: OpenNumbers = { ...MAINNET, sides: { ...MAINNET.sides, ours: side() }, ourPayments: [] };
+    const empty = text(renderToStaticMarkup(<NetworkPanels mainnet={nobody} testnet={null} />));
+    expect(empty).toContain("Customers Workspaces Not yet");
+    expect(empty).toContain("Payments settled None yet");
+    expect(empty).toContain("Agreed with the agent None yet");
+    expect(empty).toContain("No verdict from a customer yet");
+    expect(empty).toContain("Vestiarion team · No payment by our own workspaces yet.");
   });
 
   it("never show a total that counts the team as a customer figure", () => {
@@ -116,10 +145,8 @@ describe("the landing's open numbers", () => {
   it("say how often customers agreed with the agent in shadow mode, else customers' on-time share, never the team's", () => {
     const words = text(renderToStaticMarkup(<NetworkPanels mainnet={MAINNET} testnet={TESTNET} />));
     expect(words).toContain("Agreed with the agent 3 of 4");
-    expect(words).toContain("decisions, in shadow mode (75%)");
-    // Arc mainnet: the team's one invoice paid on time is not a customer's, so it is not shown under Customers.
-    expect(words).toContain("Agreed with the agent None yet");
-    expect(words).toContain("No customer has given a verdict in shadow mode yet");
+    expect(words).toContain("in shadow mode, 75%");
+    // Arc mainnet: the team's one invoice paid on time is not a customer's, so it is not shown as one.
     expect(words).not.toContain("Invoices paid on time 100%");
     const onTime: OpenNumbers = {
       ...MAINNET,
@@ -177,6 +204,17 @@ describe("the hero's live legs", () => {
     expect(text(markup)).toContain("See the latest payment on Arc mainnet");
     const plain = renderToStaticMarkup(<ProvenanceBar legs={[{ label: "Screening", detail: "bundled list", live: false }]} />);
     expect(plain).not.toContain("<a");
+  });
+
+  it("list one leg to a row in the proof, each saying whether it is live, and link the rows that show it", () => {
+    const markup = renderToStaticMarkup(<ProvenanceList legs={landingProvenance(base)} />);
+    expect(markup.match(/<li>/g)).toHaveLength(3);
+    expect(markup).toMatch(new RegExp(`<a[^>]*href="https://explorer.arc.io/tx/${MAINNET_TX}"[^>]*target="_blank"[^>]*rel="noopener noreferrer"`));
+    expect(text(markup)).toContain("Yield · USYC reserve, Arc testnet Live");
+    expect(text(markup)).toContain("See the latest payment on Arc mainnet (opens in a new tab)");
+    // Screening shows nothing live to link to, so its row is not a link.
+    expect(markup.match(/<a /g)).toHaveLength(2);
+    expect(text(markup)).toContain("Screening · OpenSanctions Live");
   });
 
   it("sit in the landing's proof, with the Arc mainnet claim linked to the mainnet numbers (landing clarity P3)", () => {

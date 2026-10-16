@@ -64,3 +64,58 @@ function LegBadge({ leg, compact, linked = false }: { leg: ProvenanceLeg; compac
     </Badge>
   );
 }
+
+/**
+ * The same legs as a list, one row each (landing proof cards, docs/superpowers/specs/2026-10-17-landing-proof-cards-
+ * design.md): the leg, where it runs, then whether it is live, at the same place on every row. For a section with room
+ * to read them, where badges of three widths wrapped unevenly. A row with an `href` is a link to what shows it live.
+ */
+export function ProvenanceList({ legs }: { legs: ProvenanceLeg[] }) {
+  return (
+    <ul aria-label="Live and simulated product capabilities" className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
+      {legs.map((leg) => {
+        const external = leg.href !== undefined && /^https?:\/\//.test(leg.href);
+        return (
+          <li key={leg.label}>
+            {leg.href ? (
+              <a
+                href={leg.href}
+                {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                className="flex min-h-11 items-center gap-3 px-4 py-2.5 transition-colors duration-150 ease-standard hover:bg-ground/60"
+              >
+                <LegRow leg={leg} linked />
+                {leg.hrefLabel && <span className="sr-only">{`, ${leg.hrefLabel}${external ? " (opens in a new tab)" : ""}`}</span>}
+              </a>
+            ) : (
+              <div className="flex min-h-11 items-center gap-3 px-4 py-2.5">
+                <LegRow leg={leg} linked={false} />
+              </div>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function LegRow({ leg, linked }: { leg: ProvenanceLeg; linked: boolean }) {
+  const tone = leg.held ? "held" : leg.live ? "proof" : "simulated";
+  return (
+    <>
+      <span
+        aria-hidden
+        className={cn("size-1.5 shrink-0 rounded-full", tone === "held" ? "bg-held" : tone === "proof" ? "bg-proof" : "border border-dashed border-ink-3")}
+      />
+      <span className="min-w-0 flex-1 text-[0.9375rem]">
+        <span className="font-medium text-ink">{leg.label}</span> <span className="text-ink-2">· {leg.detail}</span>
+      </span>
+      <span className={cn("font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.1em]", tone === "held" ? "text-held" : tone === "proof" ? "text-proof" : "text-ink-2")}>
+        {leg.held ? "Held" : leg.live ? "Live" : "Simulated"}
+      </span>
+      {/* The arrow's place is kept on every row, so each row's status lines up with the next. */}
+      <span aria-hidden className="flex size-4 shrink-0 items-center justify-center">
+        {linked && <ArrowUpRight className="size-4 text-proof" />}
+      </span>
+    </>
+  );
+}

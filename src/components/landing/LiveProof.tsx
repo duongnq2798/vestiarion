@@ -2,12 +2,13 @@ import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
 import { formatFigure, formatPercent, formatRatio } from "@/components/open/OpenNumbersTable";
 import { Badge } from "@/components/ui/Badge";
+import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { Reveal } from "@/components/ui/Reveal";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { BrandMark } from "@/components/vx/BrandMarks";
 import { Hash } from "@/components/vx/Primitives";
-import { utcMinute } from "@/lib/copy";
+import { utcDay, utcMinute } from "@/lib/copy";
 import { ARC_MAINNET, ARC_TESTNET, type NetworkProfile } from "@/lib/network";
 import type { OpenNumbers } from "@/lib/platform/open-numbers";
 import { CountUp } from "./CountUp";
@@ -76,16 +77,19 @@ function NumbersFallback() {
 export function NetworkPanels({ mainnet, testnet }: LandingNumbers) {
   return (
     <div className="grid gap-5 lg:grid-cols-2">
-      <NetworkPanel id="mainnet" profile={ARC_MAINNET} money="Real money" numbers={mainnet} />
-      <NetworkPanel id="testnet" profile={ARC_TESTNET} money="Test money" numbers={testnet} />
+      <NetworkPanel id="mainnet" profile={ARC_MAINNET} money="Real USDC" numbers={mainnet} />
+      <NetworkPanel id="testnet" profile={ARC_TESTNET} money="Test USDC" numbers={testnet} />
     </div>
   );
 }
 
 function NetworkPanel({ id, profile, money, numbers }: { id: string; profile: NetworkProfile; money: string; numbers: OpenNumbers | null }) {
   const titleId = `measurements-${id}`;
+  const real = id === "mainnet";
   return (
     <section aria-labelledby={titleId} className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface">
+      {/* Real money's network carries a thin rule in the proof colour; the test network stays neutral. */}
+      {real && <span aria-hidden className="h-0.5 bg-proof" />}
       <header className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-6">
         <div className="flex items-center gap-2.5">
           {/* Both networks are Arc's; the mark sits beside the name, which says which one. */}
@@ -94,7 +98,7 @@ function NetworkPanel({ id, profile, money, numbers }: { id: string; profile: Ne
             {profile.label}
           </h3>
         </div>
-        <Badge tone={id === "mainnet" ? "proof" : "neutral"} size="sm" className="font-mono uppercase tracking-[0.08em]">
+        <Badge tone={real ? "proof" : "neutral"} size="sm" className="font-mono uppercase tracking-[0.08em]">
           {money}
         </Badge>
       </header>
@@ -114,32 +118,37 @@ function NetworkPanel({ id, profile, money, numbers }: { id: string; profile: Ne
 }
 
 /**
- * One network's figures, customers' first and large, the team's own on a line of its own under them (landing clarity
- * P2): a figure that counts the team never stands where a reader takes it for customers'.
+ * One network's figures, led by whoever has paid on it (landing proof cards,
+ * docs/superpowers/specs/2026-10-17-landing-proof-cards-design.md): customers' figures once any customer has paid there,
+ * with the team's own on a line under them; until then the team's own payments, under a heading that says they are the
+ * team's, with where customers stand on the line under them. A figure that counts the team never stands where a reader
+ * takes it for customers' (landing clarity P2), and the two are never added together.
  */
 function PanelFigures({ numbers, profile }: { numbers: OpenNumbers; profile: NetworkProfile }) {
+  const { customers, ours } = numbers.sides;
+  return customers.payments === 0 && ours.payments > 0 ? <TeamFigures numbers={numbers} profile={profile} /> : <CustomerFigures numbers={numbers} profile={profile} />;
+}
+
+/** The figures customers brought to a network, then the team's own on a line of its own. */
+function CustomerFigures({ numbers, profile }: { numbers: OpenNumbers; profile: NetworkProfile }) {
   const { customers, ours } = numbers.sides;
   const latest = numbers.ourPayments[0];
   const latestUrl = latestOwnPaymentUrl(numbers, profile);
   return (
     <>
-      <p className="border-t border-line px-5 pb-1 pt-4 font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.11em] text-ink-3 sm:px-6">Customers</p>
-      <dl className="grid flex-1 grid-cols-1 gap-px bg-line sm:grid-cols-3">
+      <FiguresHeading>Customers</FiguresHeading>
+      <FigureGrid count={3}>
         <Figure label="Workspaces" value={customers.workspacesOpened === 0 ? "Not yet" : formatFigure(customers.workspacesOpened, "count")}>
           {customers.workspacesOpened === 0
-            ? "None opened by anyone outside the team yet"
-            : `${formatFigure(customers.liveWorkspaces, "count")} live now, ${formatFigure(customers.firstPayments, "count")} made a first payment`}
+            ? "None opened outside the team yet"
+            : `${formatFigure(customers.liveWorkspaces, "count")} live, ${formatFigure(customers.firstPayments, "count")} ${customers.firstPayments === 1 ? "has" : "have"} paid`}
         </Figure>
         <Figure label="Payments settled" value={customers.payments === 0 ? "None yet" : formatFigure(customers.payments, "count")}>
-          {customers.payments === 0 ? "No customer has paid through it here yet" : `${formatFigure(customers.usdcPaid, "usdc")} USDC paid by customers`}
+          {customers.payments === 0 ? "No customer has paid here yet" : `${formatFigure(customers.usdcPaid, "usdc")} USDC paid`}
         </Figure>
         <Judgement numbers={numbers} />
-      </dl>
-      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-line bg-ground/50 px-5 py-3.5 text-sm text-ink-2 sm:px-6">
-        <span className="basis-full font-medium text-ink sm:basis-auto">Vestiarion team</span>
-        <span aria-hidden className="hidden sm:inline">
-          ·
-        </span>
+      </FigureGrid>
+      <SideLine who="Vestiarion team">
         <span>
           {ours.payments === 0
             ? "No payment by our own workspaces yet."
@@ -157,8 +166,74 @@ function PanelFigures({ numbers, profile }: { numbers: OpenNumbers; profile: Net
             <Hash value={latest.txHash} href={latestUrl} className="text-sm" />
           </>
         )}
-      </p>
+      </SideLine>
     </>
+  );
+}
+
+/**
+ * A network no customer has paid on yet, led by the team's own payments there: how many, how much, and the latest on
+ * its explorer, under a heading that names the team; then where customers stand, on a line of their own.
+ */
+function TeamFigures({ numbers, profile }: { numbers: OpenNumbers; profile: NetworkProfile }) {
+  const { customers, ours } = numbers.sides;
+  const latest = numbers.ourPayments[0];
+  const latestUrl = latestOwnPaymentUrl(numbers, profile);
+  const shown = latest && latestUrl;
+  return (
+    <>
+      <FiguresHeading>Paid by the Vestiarion team</FiguresHeading>
+      <FigureGrid count={shown ? 3 : 2}>
+        <Figure label="Payments settled" value={formatFigure(ours.payments, "count")}>
+          From our own workspaces
+        </Figure>
+        <Figure label="USDC paid" value={formatFigure(ours.usdcPaid, "usdc")}>
+          <Link href={`/open#our-payments-${profile.id}`} className="font-medium text-agent underline-offset-4 hover:underline">
+            Each one on Open numbers
+          </Link>
+        </Figure>
+        {shown && (
+          <Figure label="Latest payment" value={utcDay(latest.at).replace(/, \d{4}$/, "")} counted={false}>
+            <span className="flex flex-wrap items-center gap-x-2">
+              <time dateTime={latest.at} className="font-mono text-xs text-ink-3">
+                {`${new Date(latest.at).toISOString().slice(11, 16)} UTC`}
+              </time>
+              <Hash value={latest.txHash} href={latestUrl} className="whitespace-nowrap text-sm" />
+            </span>
+          </Figure>
+        )}
+      </FigureGrid>
+      <SideLine who="Customers">
+        <span>
+          {customers.workspacesOpened === 0
+            ? `None on ${profile.label} yet`
+            : `${formatFigure(customers.workspacesOpened, "count")} ${customers.workspacesOpened === 1 ? "workspace" : "workspaces"} opened, no payment yet`}
+        </span>
+      </SideLine>
+    </>
+  );
+}
+
+/** Whose figures follow: customers', or the team's own. */
+function FiguresHeading({ children }: { children: ReactNode }) {
+  return <p className="border-t border-line px-5 pb-1 pt-4 font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.11em] text-ink-3 sm:px-6">{children}</p>;
+}
+
+/** Two or three figures, side by side from `sm`, one under the other on a phone. */
+function FigureGrid({ count, children }: { count: 2 | 3; children: ReactNode }) {
+  return <dl className={cn("grid flex-1 grid-cols-1 gap-px bg-line", count === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2")}>{children}</dl>;
+}
+
+/** The side that does not lead a panel, on a line of its own under its figures: the team's, or the customers'. */
+function SideLine({ who, children }: { who: string; children: ReactNode }) {
+  return (
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-line bg-ground/50 px-5 py-3.5 text-sm text-ink-2 sm:px-6">
+      <span className="basis-full font-medium text-ink sm:basis-auto">{who}</span>
+      <span aria-hidden className="hidden sm:inline">
+        ·
+      </span>
+      {children}
+    </p>
   );
 }
 
@@ -174,7 +249,7 @@ function Judgement({ numbers }: { numbers: OpenNumbers }) {
   if (given !== null && agreed !== null && given > 0) {
     return (
       <Figure label="Agreed with the agent" value={formatRatio(agreed, given)}>
-        {`decisions, in shadow mode (${formatPercent(agreed, given)})`}
+        {`in shadow mode, ${formatPercent(agreed, given)}`}
       </Figure>
     );
   }
@@ -189,22 +264,24 @@ function Judgement({ numbers }: { numbers: OpenNumbers }) {
   }
   return (
     <Figure label="Agreed with the agent" value="None yet">
-      No customer has given a verdict in shadow mode yet
+      No verdict from a customer yet
     </Figure>
   );
 }
 
 /**
  * One figure: its value large above its label, then what it means. The label comes first for a screen reader. On a
- * phone the value sits at the right of its label, as a row, so three figures do not stand three screens tall.
+ * phone the value sits at the right of its label, as a row, so three figures do not stand three screens tall. The value
+ * is set in the sans with even-width digits; times and hashes keep the mono. `counted` is false for a value that is not
+ * an amount, such as a date, which is shown as it is rather than counted up.
  */
-function Figure({ label, value, children }: { label: string; value: string; children: ReactNode }) {
+function Figure({ label, value, counted = true, children }: { label: string; value: string; counted?: boolean; children: ReactNode }) {
   return (
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 bg-surface px-5 py-4 sm:flex sm:flex-col sm:items-stretch sm:px-6 sm:py-5">
       <dt className="text-sm font-semibold text-ink sm:order-2 sm:mt-2.5">{label}</dt>
       {/* Kept to one line: three figures share half the page's width beside the other network from lg up. */}
-      <dd className="row-span-2 whitespace-nowrap text-right font-mono text-2xl font-semibold leading-none tracking-[-0.04em] text-ink tabular-nums sm:order-1 sm:text-left sm:text-3xl lg:text-[1.75rem]">
-        <CountUp value={value} />
+      <dd className="row-span-2 whitespace-nowrap text-right text-2xl font-semibold leading-none tracking-[-0.035em] text-ink tabular-nums sm:order-1 sm:text-left sm:text-3xl lg:text-[2rem]">
+        {counted ? <CountUp value={value} /> : value}
       </dd>
       <dd className="mt-0.5 text-sm leading-6 text-ink-2 sm:order-3 sm:mt-1">{children}</dd>
     </div>
