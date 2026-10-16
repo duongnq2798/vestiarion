@@ -73,11 +73,16 @@ export interface OfferCandidate {
   dueDate: string;
   suggestion: OfferSuggestion;
   /** The open offer, when one is out: its discount, what it pays, and when it lapses. */
-  open: { id: string; pct: number; offered: number; expiresAt: string } | null;
+  open: { id: string; pct: number; offered: number; expiresAt: string; byAgent: boolean } | null;
 }
 
 export interface OffersView {
   reserveApy: number;
+  /**
+   * Whether the agent makes these offers itself, and the most it asks (agent early-payment offers AO1); null before
+   * migration 0126.
+   */
+  agent: { on: boolean; maxPct: number | null } | null;
   candidates: OfferCandidate[];
   /** The last decided offers, newest first. */
   recent: Array<{ id: string; counterpartyName: string; pct: number; status: "accepted" | "declined" | "withdrawn"; decidedAt: string }>;

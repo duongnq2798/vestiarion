@@ -39,3 +39,22 @@ When the supplier accepts, Vestiarion puts the discount on the bill's invoice, e
 The agent then decides the bill as any bill with a discount ending today, with every check it always runs: screening, the three-way match, the payment limit, the guardrails, two approvals above your figure, and a person for a bank payout. When they pass, it pays the discounted amount today. When a check stops it, the bill waits for a person in Approvals as usual, and the discount lapses at the end of the day.
 
 An accepted offer never changes who is paid, where, or the amount upward: it only takes the discount off.
+
+## Let the agent make the offers
+
+Instead of making each offer yourself, an owner or admin can let the agent make them. In **Pay early for a discount**, set the most the agent may ask (from 0.5% to 10%) next to "At most", then choose **Let the agent make offers**. The card says "The agent now offers these bills to their suppliers by email." and starts a cycle, so the bills already scheduled are weighed at once. The ledger records `early_offers_on`, with the most it asks.
+
+From then on, each cycle, after it has decided its bills, the agent looks at each bill it scheduled for a later day. It weighs an offer only where all of this holds:
+
+- the bill is in USDC, falls due at least 7 days from today, and never had an offer, yours or its own;
+- the supplier has an email on file, the one payment notices go to, has no other offer out, and declined no offer in the last 30 days;
+- the suggested discount is no more than the most you set;
+- the operating wallet can pay it today: the USDC left after the cycle's payments, less what falls due in the next 7 days and the offers already out, covers what the supplier would receive.
+
+The model then decides whether to offer, and what discount to ask, between the suggestion and the most you set, from the bill, the days early, the reserve's yield, the cash left and what the supplier did with earlier offers. Without a model, the agent offers at the suggestion. At most 3 offers go out a cycle.
+
+When it offers, the agent emails the supplier the link, with who offers what for which invoice and until when, at the address payment notices go to. The email is a fixed template: the model writes none of it. The ledger records `early_payment_offered` with `via: "agent"`, the masked address, the agent's reasoning and the written policy's answer. On the card, the offer out says "The agent emailed it to the supplier." If the email does not go, the offer is withdrawn, so no link stands that the supplier never got, and the bill is weighed again at the next cycle.
+
+When it decides not to offer, the ledger records `early_payment_offer_skipped` with its reasoning, and the bill is weighed again a week later.
+
+The agent makes no offers in a sandbox, while it is paused, or when email is not set up. Choose **Stop the agent's offers** to turn it off: "The agent no longer makes offers. Offers already out still stand." The ledger records `early_offers_off`. Members who are not an owner or admin read whether it is on.

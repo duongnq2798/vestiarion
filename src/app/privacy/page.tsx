@@ -45,7 +45,7 @@ export default function PrivacyPage() {
           <li>invoices, with their amounts, memos, purchase order references and due dates;</li>
           <li>
             counterparties: their names, wallet addresses, screening results and payment limits, and their billing email when a member gives one, where
-            payment notices and reminders go;
+            payment notices, reminders and the agent&apos;s early-payment offers go;
           </li>
           <li>contractor milestones, with any GitHub pull request link used to verify one;</li>
           <li>the agent&apos;s settings and its treasury records;</li>
@@ -184,7 +184,8 @@ export default function PrivacyPage() {
           <li>
             <strong>Resend</strong> sends transactional email: invitations to a workspace, digests of the payments waiting for a decision, the link a payee
             adds their address through, payment notices to a payee once a live workspace&apos;s payment to them is confirmed, the reminders an owner
-            or admin turns on for a client&apos;s invoice, with its pay link, and a note to a workspace&apos;s owners and admins when a customer writes
+            or admin turns on for a client&apos;s invoice, with its pay link, the early-payment offers the agent makes to a supplier once an owner or admin turns them
+            on, with the offer&apos;s one-time link, and a note to a workspace&apos;s owners and admins when a customer writes
             on its statement link, with at most 140 characters of what it wrote and no link it wrote. It receives each recipient&apos;s email address and the message. When the
             team has turned it on, it also sends the team a short note about each new guided setup request, described below.
           </li>

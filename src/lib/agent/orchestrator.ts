@@ -53,6 +53,7 @@ import { createRecurringInvoices } from "./recurring";
 import { releaseDueDealLines } from "../deals/write";
 import { proposeLimitChanges } from "./proposals";
 import { sendReceivableReminders } from "./collections";
+import { makeEarlyPaymentOffers } from "./early-offers";
 import { buyPayeeHistories, type AddressHistoryFact } from "./services";
 import { cadenceLabel, type RecurringUnit } from "../recurring";
 import {
@@ -4431,6 +4432,14 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   // whether to email the client now, and how firmly, within code's bounds
   // (collections R3–R7). Live workspaces only.
   lines.push(...(await sendReceivableReminders(db)));
+  });
+
+  await stage("early_offers", async () => {
+  // -------------------------------------------------- 6c. early-payment offers
+  // Once a person turned it on, each bill the agent scheduled for later where code allows it: the model decides whether
+  // to offer the supplier payment today for a discount, and how much, and the link is emailed to the supplier
+  // (agent early-payment offers AO1-AO5). Live workspaces only; an offer moves nothing until the supplier accepts.
+  lines.push(...(await makeEarlyPaymentOffers(db, { operatingBalance, reserveApy: num(accounts.find((a) => a.kind === "reserve")?.apy) })));
   });
 
   await stage("notices", async () => {
