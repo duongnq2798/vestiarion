@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { DocsCallout } from "@/components/docs/DocsCallout";
-import { DocsPage, editHref } from "@/components/docs/DocsShell";
+import { DocsPage, DocsShell, editHref } from "@/components/docs/DocsShell";
 import { DocsSidebar } from "@/components/docs/DocsSidebar";
 import { Flow, FlowStep } from "@/components/docs/Flow";
 import { INDEXED_SECTIONS, TopicIndex } from "@/components/docs/TopicIndex";
@@ -69,6 +69,18 @@ describe("a docs page's frame", () => {
       </DocsPage>
     );
     expect(markup).not.toContain("Edit this page on GitHub");
+  });
+
+  it("puts the footer in the page's column, beside the sidebar, so the sidebar is never pushed under the header", () => {
+    // The sidebar sticks below the header at the viewport's height. Its row has to run to the end of the document:
+    // were the footer below that row, the end of a page would push the sidebar up by the footer's height, its first
+    // sections under the header, with nothing left to scroll that brings them back.
+    const markup = renderToStaticMarkup(
+      <DocsShell searchIndex={[]}>
+        <p>Body</p>
+      </DocsShell>
+    );
+    expect(markup).toMatch(/<\/aside><div class="[^"]*"><main [^>]*><p>Body<\/p><\/main><footer /);
   });
 });
 

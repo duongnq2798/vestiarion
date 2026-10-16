@@ -103,6 +103,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Fixed
 
+- **The docs' sidebar keeps its first sections in view at the end of a page.** Scrolled to the bottom, the footer
+  pushed the sidebar up under the header, so its first sections were hidden, and scrolling over the sidebar could not
+  bring them back until the page itself was scrolled up. The footer now sits under the page, beside the sidebar, which
+  stays below the header to the last line.
 - **Bank payouts on Arc testnet are timed against USDB.** BlindPay takes its test token, USDB, there, but the agent
   weighed a bank-paid bill against the operating wallet's USDC and held it as short on cash, to be decided again once
   USDC came in. It now weighs the wallet's USDB alone, tells the model so, and holds a payment it would make for a
