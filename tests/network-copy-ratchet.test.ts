@@ -19,8 +19,10 @@ const ALLOWED: Record<string, number> = {
   // testnet's (Arc mainnet open to everyone, 2026-10-08): the landing's hero, call to action and grid (shadow mode, a
   // wallet in one click, Circle's faucet, what Arc mainnet does not have yet), the docs site's navigation (shadow
   // mode, Arc testnet beside Arc mainnet), the network picker that names both networks, and /open, which counts each
-  // network apart.
+  // network apart. The landing's integrations name Arc testnet beside Arc mainnet for what each is for, and say which
+  // Circle products run on Arc testnet alone (landing Arc and Circle AC2).
   "src/components/landing/Faq.tsx": 3,
+  "src/components/landing/Integrations.tsx": 2,
   "src/lib/docs/nav.ts": 2,
   "src/components/CreateWorkspaceForm.tsx": 1,
   "src/app/open/page.tsx": 4,

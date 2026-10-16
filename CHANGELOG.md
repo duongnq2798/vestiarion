@@ -53,6 +53,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- **Arc and Circle stand out on the landing page as what Vestiarion is built on.** Under the integrations, "Built on
+  Arc, with Circle" gives each a larger card. Arc's says payments are made there, each linked to its transaction,
+  testnet for trials and mainnet for real USDC, and links the open numbers and the README's mainnet proof. Circle's
+  names the wallets that hold the treasury and send each payment, with the Circle products that run on Arc testnet
+  alone saying so, and links the README's Circle table and the code. The SDK is a line under the two.
 - **Each kind of team on the landing page ends with the agent's decision, not a receipt.** Beside each story under
   "Who it's for", the card shows what the agent checked, each check passed or failed, and its decision and why: paid
   when every check passed, held for a person when a rule in code refused it, or scheduled for an early-payment
