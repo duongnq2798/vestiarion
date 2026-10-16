@@ -30,8 +30,14 @@ export function migrationFiles(): string[] {
   return readdirSync(MIGRATIONS_DIR).filter((file) => file.endsWith(".sql")).sort();
 }
 
+/**
+ * A fresh database with Supabase's baseline, on UTC as Supabase's own databases are. PGlite otherwise takes the
+ * machine's time zone, so ahead of UTC, early in the local day, its `current_date` was a day past the UTC dates the
+ * tests write, and a check such as "a promise within 90 days" let a date it refuses in production through.
+ */
 export async function createDatabase(): Promise<PGlite> {
   const db = new PGlite({ extensions: { pgcrypto } });
+  await db.exec("set timezone = 'UTC'");
   await db.exec(SUPABASE_BASELINE);
   return db;
 }
