@@ -52,14 +52,18 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
-- **The landing page's hero says what Invoice Capture does, and shows Google's own store badge.** Under the call to
-  action, starting in shadow mode and the email sign-in now read as one note. Below it, "Capture invoices from your
-  browser" says the Chrome extension saves an invoice as a draft for you to check and add, links its guide, and offers
-  it through the "Available in the Chrome Web Store" badge in place of a button with a puzzle piece. The badge shows on
-  a computer only, where Chrome can install it; a phone still sees the guide. The README's Chrome button is the same
-  badge. In the sample bills, the checks no longer wrap into narrow columns, invoice numbers are no longer cut off on a
-  phone, the first bill says "Agent proposes: pay it", and the held one stands apart. Its drawn buttons tell a screen
-  reader they are a sample's.
+- **The landing page's hero is quieter, and says what Invoice Capture does.**
+  - The left column is three groups: the message, the call to action with shadow mode right under it, and Invoice
+    Capture. The headline is a little smaller, so the column stands level with the sample bills.
+  - "Capture invoices from Chrome" says the extension sends an invoice to your workspace as a draft. Beside it, a small
+    Add to Chrome button carries the extension's own icon in place of a puzzle piece. The button shows on a computer
+    only, where Chrome can install it; a phone sees a link to the guide instead.
+  - The README links the store with Google's "Available in the Chrome Web Store" badge, in place of a button that
+    redrew Chrome's logo.
+  - The two sample bills are rows of one list, headed alike. Their checks no longer wrap into narrow columns, and their
+    invoice numbers are no longer cut off on a phone.
+  - The first bill says "Agent proposes: pay it". Its drawn Agree and pay is no longer a second blue button, and it
+    tells a screen reader it is a sample's.
 
 ### Fixed
 

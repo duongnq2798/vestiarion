@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { GUIDED_SETUP_HREF, TRY_HREF, TRY_LABEL } from "@/components/landing/cta";
 import { FinalCta } from "@/components/landing/FinalCta";
 import { Hero } from "@/components/landing/Hero";
-import { CHROME_WEB_STORE_BADGE, INVOICE_CAPTURE_GUIDE } from "@/components/landing/hero/InvoiceCapture";
+import { EXTENSION_ICON, INVOICE_CAPTURE_GUIDE } from "@/components/landing/hero/InvoiceCapture";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { STORE_URL } from "@/lib/extension/settings";
 import { PRODUCT_HUNT_BADGE } from "@/lib/site-links";
@@ -49,50 +49,64 @@ describe("the landing hero", () => {
     expect(words).toContain("Email sign-in, no password");
   });
 
-  it("keeps what trying it asks of you together, under the call to action", () => {
-    const markup = hero();
-    const note = markup.match(/<div class="[^"]*border-l-2[^"]*">([\s\S]*?)<\/div>/)?.[1] ?? "";
-    const words = text(note);
-    expect(words).toContain("Start in shadow mode.");
-    expect(words).toContain("Email sign-in, no password.");
-    expect(note).toContain('href="/docs/guides/shadow-mode"');
+  it("keeps to three groups: the message, the call to action with what it asks of you, then Invoice Capture", () => {
+    const words = text(hero());
+    const order = ["Every bill checked", TRY_LABEL, "Start in shadow mode.", "No wallet or funds needed to start.", "Capture invoices from Chrome"].map((part) =>
+      words.indexOf(part)
+    );
+    expect(order.every((at) => at >= 0)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    // Space sets the groups apart: no rule beside the shadow-mode note, none above Invoice Capture.
+    expect(hero()).not.toContain("border-l-2");
   });
 
-  it("says what Invoice Capture does, a draft and nothing more, with its guide for everyone", () => {
+  it("says what Invoice Capture does, a draft and nothing more, and its guide where it cannot be installed", () => {
     const markup = hero();
     const words = text(markup);
-    expect(words).toContain("Capture invoices from your browser");
-    expect(words).toContain("A Chrome extension saves an invoice from any page or file to your workspace as a draft, for you to check and add.");
-    expect(markup).toMatch(new RegExp(`<a [^>]*href="${INVOICE_CAPTURE_GUIDE}"[^>]*>Learn about Invoice Capture`));
+    expect(words).toContain("Capture invoices from Chrome Send an invoice from any page to your workspace as a draft.");
+    const guide = markup.match(new RegExp(`<a [^>]*href="${INVOICE_CAPTURE_GUIDE}"[^>]*>`))?.[0] ?? "";
+    expect(guide).toContain("pointer-fine:hidden");
+    expect(words).toContain("Learn about Invoice Capture");
     // It never adds a bill, approves or pays: the words promise none of it.
     for (const claim of [/extension (adds|approves|pays|sends money)/i, /install vestiarion/i]) expect(words).not.toMatch(claim);
   });
 
-  it("offers the extension through Google's own store badge, where it can be installed, in a new tab", () => {
+  it("offers Add to Chrome as a small button with the extension's own icon, where it can be installed, in a new tab", () => {
     const markup = hero();
     const link = markup.match(/<a [^>]*data-cta="hero-chrome"[^>]*>[\s\S]*?<\/a>/)?.[0] ?? "";
     expect(link).toContain(`href="${STORE_URL}"`);
     expect(STORE_URL).toBe("https://chromewebstore.google.com/detail/vestiarion-invoice-captur/jfhjgbdbolhnneomgifdnjamoldlioan");
     expect(link).toContain('target="_blank"');
     expect(link).toContain('rel="noopener noreferrer"');
-    expect(link).toMatch(/<img src="\/badges\/chrome-web-store\.png" alt="Available in the Chrome Web Store" width="170" height="48"/);
+    expect(link).toMatch(/<img src="\/extension\/invoice-capture-48\.png" alt="" aria-hidden="true" width="18" height="18"/);
+    expect(text(link)).toContain("Add to Chrome");
     expect(link).toContain("opens in a new tab");
-    // Chrome installs extensions on a computer: the badge shows to a mouse or trackpad only, in CSS, the same on the
-    // server and in the browser.
+    // Chrome installs extensions on a computer: the button shows to a mouse or trackpad only, in CSS, the same on the
+    // server and in the browser; it is the small secondary button, below the call to action in weight.
     const classes = link.match(/class="([^"]*)"/)?.[1].split(" ") ?? [];
-    expect(classes).toContain("hidden");
-    expect(classes).toContain("pointer-fine:inline-flex");
-    // The puzzle piece is gone, and no Chrome logo is drawn outside Google's badge.
+    for (const name of ["hidden", "pointer-fine:inline-flex", "h-8", "bg-surface/80"]) expect(classes).toContain(name);
+    expect(classes).not.toContain("bg-agent");
+    // The puzzle piece is gone, and Chrome's logo, Google's mark, is drawn nowhere.
     expect(markup).not.toContain("lucide-puzzle");
+    expect(markup).not.toContain("chrome-web-store");
   });
 
-  it("serves Google's badge as Google ships it: resized in proportion, never changed", () => {
-    const file = readFileSync(path.join(process.cwd(), "public", CHROME_WEB_STORE_BADGE.src));
-    // developer.chrome.com/docs/webstore/branding, "Medium PNG (with border)".
-    expect(createHash("sha256").update(file).digest("hex")).toBe("fbf289fca885e58a1507cc8c69a9df68f35e83e683825b3ad6cd617b0a17d79c");
-    const [width, height] = [file.readUInt32BE(16), file.readUInt32BE(20)];
-    expect([width, height]).toEqual([340, 96]);
-    expect(CHROME_WEB_STORE_BADGE.width / CHROME_WEB_STORE_BADGE.height).toBeCloseTo(width / height, 2);
+  it("draws the extension's own icon, the one its store page shows", () => {
+    const served = readFileSync(path.join(process.cwd(), "public", EXTENSION_ICON.src));
+    const shipped = readFileSync(path.join(process.cwd(), "extensions/chrome-invoice-capture/extension/icons/icon-48.png"));
+    expect(served.equals(shipped)).toBe(true);
+  });
+
+  it("links the README to the store with Google's badge as Google ships it, and draws no Chrome logo of its own", () => {
+    const readme = readFileSync(path.join(process.cwd(), "README.md"), "utf8");
+    expect(readme).toContain(`<a href="${STORE_URL}"><img src="public/badges/chrome-web-store.png" alt="Available in the Chrome Web Store`);
+    const badge = readFileSync(path.join(process.cwd(), "public/badges/chrome-web-store.png"));
+    // developer.chrome.com/docs/webstore/branding, "Medium PNG (with border)", unchanged.
+    expect(createHash("sha256").update(badge).digest("hex")).toBe("fbf289fca885e58a1507cc8c69a9df68f35e83e683825b3ad6cd617b0a17d79c");
+    expect([badge.readUInt32BE(16), badge.readUInt32BE(20)]).toEqual([340, 96]);
+    // The README's buttons no longer redraw Chrome's logo: no chrome icon, none of its four colours' blue centre.
+    const buttons = readFileSync(path.join(process.cwd(), "scripts/readme-buttons.mjs"), "utf8");
+    expect(buttons).not.toMatch(/\bchrome:\s*`|icon: "chrome"|#4285F4/i);
   });
 
   it("shows two sample bills in the product's own words, labelled as samples (H2)", () => {
@@ -117,6 +131,24 @@ describe("the landing hero", () => {
     expect(text(hero())).toContain("In the product: Agree and pay, or Disagree. Shown here as a sample.");
     // An agent's proposal is not a payment: the first bill waits for a person.
     expect(text(hero())).not.toContain("Agent: pay it");
+    // The drawn Agree and pay is quieter than the page's own call to action: never solid agent blue.
+    const drawn = hero().match(/<span class="([^"]*)">Agree and pay<\/span>/)?.[1].split(" ") ?? [];
+    expect(drawn).toContain("bg-agent-soft");
+    expect(drawn).not.toContain("bg-agent");
+  });
+
+  it("draws the two sample bills as rows of one list, each headed alike", () => {
+    const markup = hero();
+    // One card: the held bill is the list's next row, not a second card tucked under the first.
+    expect(markup).not.toContain("-mt-px");
+    expect(markup).not.toContain("rounded-b-2xl");
+    // Both rows: a payee's initial, name, invoice and amount in the same sizes.
+    const amounts = [...markup.matchAll(/<p class="([^"]*)">(2,400\.00|6,500\.00)<span/g)].map((match) => match[1]);
+    expect(amounts).toHaveLength(2);
+    expect(amounts[0]).toBe(amounts[1]);
+    const words = text(markup);
+    expect(words).toContain("Northwind Dev Invoice 0412 · milestone 2 of 3 2,400.00 USDC");
+    expect(words).toContain("Kestrel Design Invoice 0931 · campaign assets 6,500.00 USDC");
   });
 
   it("keeps the technical vocabulary out of the first screen", () => {
