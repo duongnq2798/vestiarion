@@ -48,7 +48,8 @@ export function offeredAmount(amount: number, pct: number): number {
   return Number(((amount * (100 - pct)) / 100).toFixed(6));
 }
 
-const money = (value: number) => new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+// Up to 6 decimals, as USDC has: a discount on a small bill is under a cent, and 0.4975 must not read as 0.50.
+const money = (value: number) => new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(value);
 
 /** "Paying 20 days early for 1.00% is like earning 18.3% a year, above the reserve's 4.2%." (E8) */
 export function offerWorth(input: { pct: number; days: number; reserveApy: number }): string {
