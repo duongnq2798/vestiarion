@@ -153,6 +153,7 @@ describe("BlindPay's calls", () => {
   it("sends BlindPay only its own test values for a development business, never a real person's", () => {
     const business = testBusiness({ tosId: "to_000000000001", legalName: "Pinecrest Studio", email: "ops@example.com", externalId: "org-1" });
     expect(business).toMatchObject({ type: "business", kyc_type: "standard", tos_id: "to_000000000001", legal_name: "Pinecrest Studio", tax_id: "000000000" });
+    expect(business.owners[0]).toMatchObject({ tax_id: "123456789", tax_type: "SSN" });
     expect(business.owners[0]).toMatchObject({ first_name: "Test", last_name: "Owner" });
     expect(business.legal_name).not.toBe("Fail");
   });

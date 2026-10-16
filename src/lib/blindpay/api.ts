@@ -57,7 +57,8 @@ export function testBusiness(input: { tosId: string; legalName: string; email: s
         first_name: "Test",
         last_name: "Owner",
         date_of_birth: "1990-01-01T00:00:00.000Z",
-        tax_id: "000000000",
+        // A well-formed test SSN: BlindPay refuses one that cannot be issued, such as 000000000.
+        tax_id: "123456789",
         tax_type: "SSN",
         address_line_1: "1 Test Street",
         city: "San Francisco",
