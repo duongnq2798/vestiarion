@@ -91,7 +91,10 @@ export default function TermsPage() {
             the accounting tool you connect, such as a Xero organisation, a QuickBooks company or a Zoho Books organization: connect only one you may give
             a workspace access to;
           </li>
-          <li>the CRM you connect, such as a HubSpot account or a Pipedrive company: connect only one you may give a workspace access to;</li>
+          <li>
+            the CRM you connect, such as a HubSpot account, a Pipedrive company or a Zoho CRM organization: connect only one you may give a workspace
+            access to;
+          </li>
           <li>
             the work tool you connect, such as your Asana, and the acceptance criteria you write: a person in your workspace, never Asana, accepts a
             contractor&apos;s work against them;
@@ -166,6 +169,19 @@ export default function TermsPage() {
           Pipedrive becomes a deal in Vestiarion only when a person plans it, and a change made in Pipedrive afterwards changes nothing in Vestiarion
           until a person does. One Pipedrive company connects to one workspace at a time. Disconnecting revokes Vestiarion&apos;s access, which, as
           Pipedrive documents it, uninstalls Vestiarion from the company, and stops the reading at once; the deals already planned stay with the workspace.
+        </p>
+        <p>
+          When an owner or admin connects Zoho CRM to a workspace, they agree, for the workspace, that Vestiarion reads the deals of the Zoho CRM
+          organization they connect, with their accounts and contacts: deal names, amounts, currencies, closing dates, pipelines and stages, account
+          names and each deal&apos;s contact email, and the organization&apos;s name and currency, as far as the Zoho CRM user who connects can see
+          them. It writes nothing to Zoho CRM, and the access Zoho grants is read only. They are shown to the workspace&apos;s members and to its
+          agent; the agent&apos;s model provider ({HOSTED_MODEL_PROVIDER.name}, on the hosted service) may see a deal&apos;s facts to decide on its
+          collections, under {HOSTED_MODEL_PROVIDER.name}&apos;s <LegalLink href={HOSTED_MODEL_PROVIDER.terms}>API terms</LegalLink> and{" "}
+          <LegalLink href={HOSTED_MODEL_PROVIDER.privacy}>privacy policy</LegalLink>. Vestiarion never uses Zoho CRM data to train or improve any AI
+          model, and never passes it to anyone else without the workspace&apos;s say. A deal won in Zoho CRM becomes a deal in Vestiarion only when
+          a person plans it, and a change made in Zoho CRM afterwards changes nothing in Vestiarion until a person does. Several workspaces may
+          connect the same organization. Disconnecting, here or in Zoho, stops the reading at once; the deals already planned stay with the
+          workspace.
         </p>
         <p>
           When an owner or admin connects Asana to a workspace, they agree, for the workspace, that Vestiarion reads Asana as them: the workspaces,

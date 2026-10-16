@@ -29,6 +29,7 @@ const BRANDS: Brand[] = [
   "pipedrive-lockup",
   "asana-lockup",
   "zohobooks-lockup",
+  "zohocrm-lockup",
 ];
 
 const text = (markup: string) =>
@@ -62,6 +63,8 @@ const OFFICIAL_SHA256: Record<Brand, string> = {
   "asana-lockup": "8a951a5126a6b1de833f5354102ba995eec1003cc76e79dd8401c890d987c1b5",
   // Zoho Books' logo as Zoho serves it on its own site (zohowebstatic.com/sites/zweb/images/productlogos/books.svg).
   "zohobooks-lockup": "9189936047e3b48257ceafb2b3c96ec46d3463569d765b464738e5628bc8abdf",
+  // Zoho CRM's logo, from the same place (zohowebstatic.com/sites/zweb/images/productlogos/crm.svg).
+  "zohocrm-lockup": "69e2a4eeb48af0920824615bb11725d60f5690ec7dae0fc39ce6ec47d130e4c4",
 };
 
 const brandFile = (brand: Brand) => readFileSync(path.join(process.cwd(), "public", BRAND_FILES[brand]), "utf8");
@@ -227,15 +230,18 @@ describe("a brand mark", () => {
       "telegram.svg",
       "xero.svg",
       "zohobooks-lockup.svg",
+      "zohocrm-lockup.svg",
     ]);
   });
 
   it("gives each connector its own mark, and Intuit's name alone no mark: no place stands for Intuit itself", () => {
     expect(Object.keys(PROVIDER_MARKS).sort()).toEqual([...PROVIDERS].sort());
-    expect(PROVIDER_MARKS).toEqual({ xero: "xero", quickbooks: "quickbooks", hubspot: "hubspot", pipedrive: "pipedrive", asana: "asana-lockup", zohobooks: "zohobooks-lockup" });
-    // A connector's mark is a symbol before its written name, but Xero's wordmark and Asana's and Zoho Books' logos,
-    // which spell theirs.
-    for (const provider of PROVIDERS) expect(isWordmark(PROVIDER_MARKS[provider]), provider).toBe(provider === "xero" || provider === "asana" || provider === "zohobooks");
+    expect(PROVIDER_MARKS).toEqual({ xero: "xero", quickbooks: "quickbooks", hubspot: "hubspot", pipedrive: "pipedrive", asana: "asana-lockup", zohobooks: "zohobooks-lockup", zohocrm: "zohocrm-lockup" });
+    // A connector's mark is a symbol before its written name, but Xero's wordmark and the Asana, Zoho Books and Zoho CRM
+    // logos, which spell theirs.
+    for (const provider of PROVIDERS) {
+      expect(isWordmark(PROVIDER_MARKS[provider]), provider).toBe(provider === "xero" || provider === "asana" || provider === "zohobooks" || provider === "zohocrm");
+    }
     expect(readdirSync(path.join(process.cwd(), "public/brands")).some((file) => /^intuit/i.test(file))).toBe(false);
   });
 
@@ -255,6 +261,7 @@ describe("a brand mark", () => {
       "pipedrive-lockup": "Pipedrive",
       "asana-lockup": "Asana",
       "zohobooks-lockup": "Zoho Books",
+      "zohocrm-lockup": "Zoho CRM",
     };
     const walk = (dir: string): string[] =>
       readdirSync(dir, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? walk(path.join(dir, entry.name)) : [path.join(dir, entry.name)]));
@@ -267,8 +274,8 @@ describe("a brand mark", () => {
     }
   });
 
-  it("knows npm's and Xero's marks and the QuickBooks, Pipedrive, Asana and Zoho Books lockups spell their names, and the symbols do not", () => {
-    expect(BRANDS.filter(isWordmark)).toEqual(["npm", "xero", "quickbooks-lockup", "pipedrive-lockup", "asana-lockup", "zohobooks-lockup"]);
+  it("knows npm's and Xero's marks and the QuickBooks, Pipedrive, Asana, Zoho Books and Zoho CRM lockups spell their names, and the symbols do not", () => {
+    expect(BRANDS.filter(isWordmark)).toEqual(["npm", "xero", "quickbooks-lockup", "pipedrive-lockup", "asana-lockup", "zohobooks-lockup", "zohocrm-lockup"]);
   });
 
   it("names a mark beside its name: a wordmark stands in its place with the name for screen readers, any other before it", () => {
@@ -364,7 +371,7 @@ describe("the landing page's built on and works with", () => {
     // The trademark notice npm's policy asks for, Intuit's owner named, and that the marks are not an endorsement.
     expect(page).toContain("npm is a registered trademark of npm, inc.");
     expect(page).toContain("intuit and quickbooks are trademarks of intuit inc.");
-    expect(page).toContain("zoho and zoho books are trademarks of zoho corporation pvt. ltd.");
+    expect(page).toContain("zoho, zoho books and zoho crm are trademarks of zoho corporation pvt. ltd.");
     expect(page).toContain("arc, circle, slack, telegram, xero, hubspot, pipedrive and asana are trademarks of their respective owners.");
     expect(page).toContain("not an endorsement");
   });
@@ -378,7 +385,7 @@ describe("the landing page's answer to how bills come in", () => {
     for (const way of ["form", "PDF", "a bill list from your spreadsheet", "email", "Telegram", "the API", "Xero", "QuickBooks Online", "HubSpot", "Pipedrive"]) {
       expect(answer).toContain(way);
     }
-    expect(answer).toContain("Won deals come in from HubSpot or Pipedrive to plan their collections.");
+    expect(answer).toContain("Won deals come in from HubSpot, Pipedrive or Zoho CRM to plan their collections.");
     expect(answer).toContain("Contractor work delivered in Asana is paid once a person accepts it against its criteria.");
   });
 });

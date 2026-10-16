@@ -21,6 +21,7 @@ export const CONSENT_VERSIONS: Record<ProviderId, string> = {
   pipedrive: "pipedrive-2026-10-15",
   asana: "asana-2026-10-14",
   zohobooks: "zohobooks-2026-10-16",
+  zohocrm: "zohocrm-2026-10-16",
 };
 
 /**
@@ -35,6 +36,7 @@ export const CONSENT_HISTORY: Record<ProviderId, readonly string[]> = {
   pipedrive: ["pipedrive-2026-10-14", "pipedrive-2026-10-15"],
   asana: ["asana-2026-10-14"],
   zohobooks: ["zohobooks-2026-10-16"],
+  zohocrm: ["zohocrm-2026-10-16"],
 };
 
 /**
@@ -97,6 +99,17 @@ const PIPEDRIVE_STATEMENT: readonly string[] = [
 ];
 
 /**
+ * Zoho CRM's statement (docs/superpowers/specs/2026-10-16-zoho-crm-connector-design.md C11): its deals with their
+ * accounts and contacts, read only. Nothing is written to Zoho CRM in this version.
+ */
+const ZOHO_CRM_STATEMENT: readonly string[] = [
+  "Vestiarion reads the deals of the Zoho CRM organization you connect, with their accounts and contacts: deal names, amounts, currencies, closing dates, pipelines and stages, account names and each deal's contact email, and the organization's name and currency. It sees the deals the Zoho CRM user who connects can see. It writes nothing to Zoho CRM.",
+  `They are shown to this workspace's members and to its agent. ${MODEL_PROVIDER} may see a deal's facts to decide on its collections, under that provider's own API terms.`,
+  "Vestiarion never uses Zoho CRM data to train or improve any AI model, and never passes it to anyone else without your workspace's say.",
+  "Disconnecting stops the reading at once and revokes Vestiarion's access at Zoho. Deals already planned stay in Vestiarion.",
+];
+
+/**
  * What is read, in each tool's own words: Xero's chart of accounts, QuickBooks' bank accounts only; and what is written.
  * Xero's version 2 says it books the payments a person approves (docs/superpowers/specs/2026-10-12-accounting-writeback-design.md
  * W8, W12), and versions 2026-10-13 and 2026-10-15 name the accountant among those who approve (accountant console A1);
@@ -124,6 +137,7 @@ export function consentStatement(provider: ProviderId): string[] {
   const label = PROVIDER_LABELS[provider];
   if (provider === "hubspot") return CRM_STATEMENT(label);
   if (provider === "pipedrive") return [...PIPEDRIVE_STATEMENT];
+  if (provider === "zohocrm") return [...ZOHO_CRM_STATEMENT];
   if (provider === "asana") return WORK_STATEMENT(label);
   return [
     WHAT_IS_READ[provider],

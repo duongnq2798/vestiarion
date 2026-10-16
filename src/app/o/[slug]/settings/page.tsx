@@ -7,6 +7,7 @@ import GitHubPanel from "@/components/GitHubPanel";
 import AsanaPanel from "@/components/AsanaPanel";
 import HubSpotPanel from "@/components/HubSpotPanel";
 import PipedrivePanel from "@/components/PipedrivePanel";
+import ZohoCrmPanel from "@/components/ZohoCrmPanel";
 import LedgerKeyPanel from "@/components/LedgerKeyPanel";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import { SettingsSections, type SettingsGroup } from "@/components/SettingsSections";
@@ -52,6 +53,8 @@ import { asanaPanelFor } from "@/lib/asana/panel";
 import { hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
 import { pipedriveSettingsFromEnv } from "@/lib/pipedrive/settings";
 import { pipedriveReady } from "@/lib/pipedrive/store";
+import { zohoCrmSettingsFromEnv } from "@/lib/zohocrm/settings";
+import { zohoCrmReady } from "@/lib/zohocrm/store";
 import { crmReceiptsPanelFor } from "@/lib/connectors/crm-receipts-view";
 import { crmProvider } from "@/lib/crm-providers";
 import { linkFor as telegramLinkFor } from "@/lib/telegram/links";
@@ -71,7 +74,7 @@ export default async function SettingsPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ slack?: string | string[]; github?: string | string[]; xero?: string | string[]; quickbooks?: string | string[]; zohobooks?: string | string[]; hubspot?: string | string[]; pipedrive?: string | string[] }>;
+  searchParams: Promise<{ slack?: string | string[]; github?: string | string[]; xero?: string | string[]; quickbooks?: string | string[]; zohobooks?: string | string[]; hubspot?: string | string[]; pipedrive?: string | string[]; zohocrm?: string | string[] }>;
 }) {
   const { slug } = await params;
   const access = await requireMembership(slug);
@@ -88,7 +91,7 @@ export default async function SettingsPage({
     // How connecting Slack went, from its way back (Slack design S3); only the codes the panel knows are shown.
     // And how connecting GitHub went (GitHub App design G2).
     // And how connecting Xero or QuickBooks went (Xero connector X4; QuickBooks connector Q4), and HubSpot (HubSpot H4).
-    const { slack: slackOutcome, github: githubOutcome, xero: xeroOutcome, quickbooks: quickBooksOutcome, zohobooks: zohoBooksOutcome, hubspot: hubspotOutcome, pipedrive: pipedriveOutcome } = await searchParams;
+    const { slack: slackOutcome, github: githubOutcome, xero: xeroOutcome, quickbooks: quickBooksOutcome, zohobooks: zohoBooksOutcome, hubspot: hubspotOutcome, pipedrive: pipedriveOutcome, zohocrm: zohoCrmOutcome } = await searchParams;
     const inboxSettings = inboxSettingsFromEnv();
     const [goLive, apiKeys, webhookEndpoints, ledgerKey, dashboardStats, deletion, usyc, slack, notifySwitch, telegramLink, inbox, github, twoApprovals, shadow, xero, quickBooks, zohoBooks, hubspot, usage, limits, reportingCurrency] = await Promise.all([
       goLiveStatus(membership.orgId),
@@ -222,6 +225,17 @@ export default async function SettingsPage({
             return null;
           })
         : null;
+    // Zoho CRM's card (Zoho CRM connector C16, C17), on a deployment with the Zoho client; best effort. Before migration
+    // 0123 it says Zoho CRM is not set up yet. It writes nothing, so it has no receipts.
+    const zohoCrm: CrmPanelView | null = zohoCrmSettingsFromEnv()
+      ? await zohoCrmReady()
+          .then(() => crmPanelView("zohocrm"))
+          .catch((error: unknown): CrmPanelView | null => {
+            if (error instanceof NotSetUpError) return { state: "not_set_up" };
+            console.error("settings: Zoho CRM status not loaded", error instanceof Error ? error.message : error);
+            return null;
+          })
+      : null;
     // Asana (Asana acceptance A16): only on a deployment where it is configured; best effort, like HubSpot's. Before
     // migration 0115 the card says Asana is not set up yet. How connecting it went comes back in `?asana=`.
     const asana = await asanaPanelFor().catch((error: unknown) => {
@@ -418,6 +432,13 @@ export default async function SettingsPage({
                 notice={typeof pipedriveOutcome === "string" ? pipedriveOutcome : null}
                 receipts={pipedriveReceipts}
               />
+            ) : null,
+          },
+          {
+            id: "zohocrm-title",
+            title: "Zoho CRM",
+            content: zohoCrm ? (
+              <ZohoCrmPanel orgSlug={slug} view={zohoCrm} canManage={canManageIntegrations} notice={typeof zohoCrmOutcome === "string" ? zohoCrmOutcome : null} />
             ) : null,
           },
           {

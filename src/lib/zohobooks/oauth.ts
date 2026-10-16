@@ -9,14 +9,21 @@ import { ZOHO_BOOKS_SCOPES, type ZohoBooksSettings } from "./settings";
  * Zoho's OAuth 2.0 authorization code flow (docs/superpowers/specs/2026-10-16-zoho-books-connector-design.md Z3, Z4,
  * Z10): the authorize URL at the US accounts server, which sends a person of another data center on to theirs; the code
  * exchanged at the accounts server of the data center the callback named; refresh and revocation at the one the token
- * carries. Client id and secret go in the form body, never in a URL.
+ * carries. Client id and secret go in the form body, never in a URL. Zoho CRM uses the same flow with its own scopes
+ * (docs/superpowers/specs/2026-10-16-zoho-crm-connector-design.md C3).
  */
 
-export function authorizeUrl(settings: ZohoBooksSettings, input: { state: string; redirectUri: string }): string {
+/** A Zoho client and what it asks for: Zoho Books' read scopes unless it names its own, and the name its logs carry. */
+export type ZohoApp = ZohoBooksSettings & { scopes?: readonly string[]; name?: string };
+
+const scopesOf = (app: ZohoApp): readonly string[] => app.scopes ?? ZOHO_BOOKS_SCOPES;
+const nameOf = (app: ZohoApp): string => app.name ?? "zohobooks";
+
+export function authorizeUrl(settings: ZohoApp, input: { state: string; redirectUri: string }): string {
   const url = new URL(`${ZOHO_REGIONS.us.accounts}/oauth/v2/auth`);
   url.searchParams.set("client_id", settings.clientId);
   url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", ZOHO_BOOKS_SCOPES.join(","));
+  url.searchParams.set("scope", scopesOf(settings).join(","));
   url.searchParams.set("redirect_uri", input.redirectUri);
   // A refresh token, and the consent screen each time, so a reconnect always gets a new one.
   url.searchParams.set("access_type", "offline");
@@ -47,14 +54,14 @@ async function bodyOf(response: Response): Promise<unknown> {
  * table is refused before anything is sent.
  */
 export async function exchangeCode(
-  settings: ZohoBooksSettings,
+  settings: ZohoApp,
   input: { code: string; redirectUri: string; region?: string | null },
   deps: ZohoBooksHttp = {}
 ): Promise<ExchangeOutcome> {
   const now = deps.now ?? Date.now;
   const region = regionOf(input.region);
   if (!region) {
-    console.error("zohobooks: the callback named a data center Vestiarion does not know");
+    console.error(`${nameOf(settings)}: the callback named a data center Vestiarion does not know`);
     return { ok: false, reason: "refused" };
   }
   let response: Response;
@@ -72,11 +79,11 @@ export async function exchangeCode(
   const body = await bodyOf(response);
   const error = tokenError(body);
   if (!response.ok || error) {
-    console.error("zohobooks: the code exchange was refused", response.status, error);
+    console.error(`${nameOf(settings)}: the code exchange was refused`, response.status, error);
     return { ok: false, reason: "refused" };
   }
   try {
-    return { ok: true, tokens: mapTokens(body, region, now(), ZOHO_BOOKS_SCOPES), authEventId: null };
+    return { ok: true, tokens: mapTokens(body, region, now(), scopesOf(settings)), authEventId: null };
   } catch {
     return { ok: false, reason: "unavailable" };
   }
@@ -86,7 +93,7 @@ export async function exchangeCode(
 const SPENT = new Set(["invalid_code", "invalid_grant", "invalid_client"]);
 
 /** A refresh at the token's own data center. Zoho answers an access token only; the refresh token is kept (Z4). */
-export async function refreshTokens(settings: ZohoBooksSettings, refreshToken: string, deps: ZohoBooksHttp = {}): Promise<RefreshOutcome> {
+export async function refreshTokens(settings: ZohoApp, refreshToken: string, deps: ZohoBooksHttp = {}): Promise<RefreshOutcome> {
   const now = deps.now ?? Date.now;
   let kept: { region: ZohoRegion; token: string };
   try {
@@ -109,13 +116,13 @@ export async function refreshTokens(settings: ZohoBooksSettings, refreshToken: s
   const error = tokenError(body);
   if (response.ok && !error) {
     try {
-      return { ok: true, tokens: mapTokens(body, kept.region, now(), ZOHO_BOOKS_SCOPES, refreshToken) };
+      return { ok: true, tokens: mapTokens(body, kept.region, now(), scopesOf(settings), refreshToken) };
     } catch {
       return { ok: false, reason: "unavailable", retryAfterMs: null };
     }
   }
   if (error && SPENT.has(error)) return { ok: false, reason: "reconnect" };
-  console.error("zohobooks: a refresh failed", response.status, error);
+  console.error(`${nameOf(settings)}: a refresh failed`, response.status, error);
   return { ok: false, reason: "unavailable", retryAfterMs: parseRetryAfter(response.headers.get("retry-after"), now()) };
 }
 

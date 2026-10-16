@@ -14,7 +14,7 @@ import {
   HOSTED_MODEL_PROVIDER,
   namesModelProvider,
 } from "@/lib/connectors/consent";
-import { PROVIDERS, type ProviderId } from "@/lib/connectors/provider";
+import { PROVIDER_KINDS, PROVIDERS, type ProviderId } from "@/lib/connectors/provider";
 
 /**
  * What a person agrees to before connecting a tool (src/lib/connectors/consent.ts). A connection keeps the version it
@@ -170,7 +170,7 @@ describe("the model provider a statement names", () => {
     }
     expect(naming).toHaveLength(1);
     // A bill is decided on by the model; a deal's facts reach it only when a reminder is weighed.
-    const sees = provider === "hubspot" || provider === "pipedrive" ? "may see a deal's facts to decide on its collections" : "sees each bill's facts to decide on it";
+    const sees = PROVIDER_KINDS[provider] === "crm" ? "may see a deal's facts to decide on its collections" : "sees each bill's facts to decide on it";
     expect(naming[0]).toContain(`${named} ${sees}, under that provider's own API terms.`);
   });
 });
@@ -192,11 +192,11 @@ describe("the terms page on connected tools", () => {
   });
 
   it("links the hosted provider's API terms and privacy policy for each tool whose facts the agent decides on", () => {
-    // Xero, QuickBooks, Zoho Books, HubSpot and Pipedrive.
-    expect(markup.match(new RegExp(`<a href="${escape(HOSTED_MODEL_PROVIDER.terms)}" target="_blank" rel="noopener noreferrer"[^>]*>API terms</a>`, "g"))).toHaveLength(5);
-    expect(markup.match(new RegExp(`<a href="${escape(HOSTED_MODEL_PROVIDER.privacy)}" target="_blank" rel="noopener noreferrer"[^>]*>privacy policy</a>`, "g"))).toHaveLength(5);
+    // Xero, QuickBooks, Zoho Books, HubSpot, Pipedrive and Zoho CRM.
+    expect(markup.match(new RegExp(`<a href="${escape(HOSTED_MODEL_PROVIDER.terms)}" target="_blank" rel="noopener noreferrer"[^>]*>API terms</a>`, "g"))).toHaveLength(6);
+    expect(markup.match(new RegExp(`<a href="${escape(HOSTED_MODEL_PROVIDER.privacy)}" target="_blank" rel="noopener noreferrer"[^>]*>privacy policy</a>`, "g"))).toHaveLength(6);
     const text = markup.replace(/<[^>]+>/g, "").replace(/&#x27;/g, "'").replace(/\s+/g, " ");
-    expect(text.split(`under ${HOSTED_MODEL_PROVIDER.name}'s API terms and privacy policy.`)).toHaveLength(6);
-    expect(text.split(`(${HOSTED_MODEL_PROVIDER.name}, on the hosted service) may see a deal's facts`)).toHaveLength(3);
+    expect(text.split(`under ${HOSTED_MODEL_PROVIDER.name}'s API terms and privacy policy.`)).toHaveLength(7);
+    expect(text.split(`(${HOSTED_MODEL_PROVIDER.name}, on the hosted service) may see a deal's facts`)).toHaveLength(4);
   });
 });

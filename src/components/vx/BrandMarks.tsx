@@ -36,7 +36,8 @@ export type Brand =
   | "pipedrive"
   | "pipedrive-lockup"
   | "asana-lockup"
-  | "zohobooks-lockup";
+  | "zohobooks-lockup"
+  | "zohocrm-lockup";
 
 /**
  * `aspect` is the file's width over its height. `inset` is clear space the file carries on every side, as a share of
@@ -71,6 +72,9 @@ const MARKS: Record<Brand, { name: string; file: string; aspect: number; inset?:
   // Zoho Books' logo, its blue book then "Zoho Books", as Zoho serves it on its own site; the words fill the lower two
   // thirds of the file, so it is drawn a little taller, to stand beside a name.
   "zohobooks-lockup": { name: "Zoho Books", file: "/brands/zohobooks-lockup.svg", aspect: 860 / 296, scale: 1.25, wordmark: true },
+  // Zoho CRM's logo, its blue loop then "Zoho CRM", as Zoho serves it on its own site; drawn as Zoho Books' is, its
+  // words in black, as the QuickBooks lockup's are.
+  "zohocrm-lockup": { name: "Zoho CRM", file: "/brands/zohocrm-lockup.svg", aspect: 713.81 / 296, scale: 1.25, wordmark: true },
 };
 
 /** The files every mark is served from, for the tests that hold them to their owners' originals. */
@@ -84,8 +88,8 @@ export const isWordmark = (brand: Brand) => MARKS[brand].wordmark === true;
 
 /**
  * The mark each connector shows beside its name in Settings and on its connect and launch pages: a symbol, except
- * Xero's wordmark (its kit has no other), Asana's logo (its dots alone come on a white square) and Zoho Books' logo (Zoho
- * serves no symbol of its own for it).
+ * Xero's wordmark (its kit has no other), Asana's logo (its dots alone come on a white square) and the Zoho Books and
+ * Zoho CRM logos (Zoho serves no symbol of its own for either).
  */
 export const PROVIDER_MARKS: Readonly<Record<ProviderId, Brand>> = {
   xero: "xero",
@@ -94,6 +98,7 @@ export const PROVIDER_MARKS: Readonly<Record<ProviderId, Brand>> = {
   pipedrive: "pipedrive",
   asana: "asana-lockup",
   zohobooks: "zohobooks-lockup",
+  zohocrm: "zohocrm-lockup",
 };
 
 /**

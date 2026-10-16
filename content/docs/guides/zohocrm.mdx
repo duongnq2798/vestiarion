@@ -1,0 +1,133 @@
+Connect Zoho CRM, and your won deals come into Vestiarion with their accounts and contacts, so you plan their collections without typing them again. A won deal becomes a [deal](/docs/guides/deals) with its collection schedule only when you plan it, from the New deal form filled in for you. A deal changed in Zoho CRM afterwards says so, and nothing in Vestiarion changes until you do.
+
+Vestiarion reads from Zoho CRM and writes nothing to it. Keeping your bills in Zoho Books as well? [Bring them in from Zoho Books](/docs/guides/zohobooks): a workspace can connect both, and disconnecting one leaves the other connected.
+
+## Before you start
+
+- **An owner or admin** of the workspace connects Zoho CRM. Anyone else sees "An owner or admin connects Zoho CRM."
+- **A Zoho CRM organization** with deals. A free or trial edition works for a first try. Zoho CRM's Developer Edition and sandboxes are not read in this version: connect the organization your business sells from.
+- **Who you connect as.** Vestiarion sees the deals the Zoho CRM user who connected can see. Connect as a Zoho CRM administrator to bring every deal in.
+- **Your Zoho data center.** Your Zoho account lives in one data center: the US, the EU, India, Australia, Japan, the UK, Canada, Saudi Arabia or the UAE. Vestiarion reads from the one your account is in, and from no other. An account in Zoho's data center in China cannot connect.
+- **Several workspaces, one organization.** A Zoho CRM organization can connect to more than one Vestiarion workspace. Each reads its deals on its own, and disconnecting one leaves the others connected. A workspace connects one Zoho CRM organization.
+- **The deals' currency.** Vestiarion plans deals in USDC or EURC. A deal in US dollars is planned in USDC, and one in euros in EURC, one for one. A deal in another currency is planned in that currency only in a workspace in [shadow mode](/docs/guides/shadow-mode), on Arc testnet; otherwise you type its total in USDC. A deal with no currency of its own is in the organization's home currency.
+
+## 1. Connect Zoho CRM
+
+Open **Settings**. Under **Zoho CRM**, choose **Connect Zoho CRM**.
+
+The connect page has the workspace you came from already picked (if you manage several, you can pick another) and says what Vestiarion does with Zoho CRM's data:
+
+- Vestiarion reads the deals of the Zoho CRM organization you connect, with their accounts and contacts: deal names, amounts, currencies, closing dates, pipelines and stages, account names and each deal's contact email, and the organization's name and currency. It sees the deals the Zoho CRM user who connects can see. It writes nothing to Zoho CRM.
+- They are shown to the workspace's members and to its agent. The agent's model provider (DeepSeek, on the hosted service) may see a deal's facts to decide on its collections, under that provider's own API terms. Read DeepSeek's [API terms](https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html) and [privacy policy](https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html).
+- Vestiarion never uses Zoho CRM data to train or improve any AI model, and never passes it to anyone else without your workspace's say.
+- Disconnecting stops the reading at once and revokes Vestiarion's access at Zoho. Deals already planned stay in Vestiarion.
+
+Tick **I agree**, then choose **Continue to Zoho CRM**. Zoho asks you to sign in in your own data center and allow Vestiarion to read. It lists what Vestiarion asks for, all of it read only: deals (`ZohoCRM.modules.deals.READ`), accounts (`ZohoCRM.modules.accounts.READ`), contacts, for each deal's contact email (`ZohoCRM.modules.contacts.READ`), the organization, for its name and home currency (`ZohoCRM.org.READ`), and the Deals layouts and their pipelines, which say which stages are won and lost (`ZohoCRM.settings.layouts.READ` and `ZohoCRM.settings.pipeline.READ`). Vestiarion connects the Zoho CRM organization your sign-in opens, so there is nothing to pick. Your agreement, with its date, is kept on the connection and in the workspace's signed ledger.
+
+Back in Settings, the card says "Zoho CRM is connected. Its won deals are coming in on Bills & receivables, under Deals." The ledger records `accounting_connected`, with `provider: "zohocrm"`.
+
+From then on the card shows how the connection is doing: "Connected to" and your organization's name in Zoho CRM, when it last synced, such as "Last synced 5 minutes ago.", a link saying how many won deals wait, such as "2 won deals to plan", and, once a planned deal changes in Zoho CRM, "1 planned deal changed in Zoho CRM since." Under them it says what the connection sees: "Vestiarion sees the deals the Zoho CRM user who connected can see, and writes nothing to Zoho CRM." An owner or admin also gets **Sync now** and **Disconnect Zoho CRM**.
+
+If connecting did not finish, the card says why, and nothing is kept:
+
+- "Connecting Zoho CRM was cancelled. Nothing changed." when you cancel on Zoho's screen.
+- "This workspace is connected to another Zoho CRM organization. Disconnect it first, then connect the one you want."
+- "Only an owner or admin connects Zoho CRM, from their own browser."
+- "Zoho CRM did not finish connecting. Try again in a moment." when Zoho did not give Vestiarion access, your Zoho account is in a data center Vestiarion does not read from, such as China's, or the organization is a Developer Edition or a sandbox.
+- "Zoho CRM is not set up on this deployment yet." on a deployment where Zoho CRM is not configured.
+
+## 2. Which deals come in
+
+The first sync starts as soon as you connect. It reads every deal in Zoho CRM and brings in your open deals, and the deals won from 90 days before you connected, with each deal's account and the email of the contact on it. After that, Vestiarion asks Zoho CRM every 15 minutes for the deals changed since, and **Sync now** asks at once. Zoho CRM sends Vestiarion no notice of a change, so a deal changed there comes in at the next sync.
+
+- **A won deal** is one in a stage its pipeline counts as Closed Won: the stage's forecast type in Zoho CRM. Where the pipelines cannot be read, a stage named Closed Won is won, Closed Lost and Closed-Lost to Competition are lost, and any other stage is open.
+- **A deal won before that window** stays out.
+- **A lost deal** never comes in. One listed as not won yet leaves the list once it is lost, and one you planned says so on its page ([step 5](#5-when-a-deal-changes-in-zoho-crm)).
+- **Each deal comes in once**, by its id in Zoho CRM, whatever changes in it.
+- **A deal deleted in Zoho CRM** leaves the list of won deals, and one you planned is marked deleted on its page. Nothing in Vestiarion is removed for it.
+- **Only the deals the user who connected can see** come in. If deals you expect are missing, check that user's access in Zoho CRM, or reconnect as a Zoho CRM administrator.
+
+## 3. Plan a won deal's collections
+
+Open **Bills & receivables**. When a won deal waits to be planned, **Waiting for review** at the top names it, such as "2 won deals in Zoho CRM", and opens the **Receivables** tab at it. Under **Deals**, "From Zoho CRM: 3 won deals" lists each won deal with its account, amount, close day and stage:
+
+- **Plan collections**, for a won deal with an amount and an account;
+- why it cannot be planned, for one without: "No amount in Zoho CRM" or "No account in Zoho CRM". A deal with a contact and no account cannot be planned in this version: add its account in Zoho CRM, and it can be at the next sync;
+- **Planned**, with **Open the deal**, for a deal you planned already. A deal is never planned twice.
+
+With none yet, it says "No won deals from Zoho CRM yet. A deal moved to a Closed Won stage there comes in at the next sync, within 15 minutes."
+
+Below, "Not won yet: 2 deals in Zoho CRM" lists the deals still open in Zoho CRM, for what is coming. They cannot be planned until they are won.
+
+**Plan collections** opens the New deal form, filled in from the deal:
+
+- **Customer**: the customer this Zoho CRM account was planned for before; else the customer with the account's name; else the account as a new customer, added when you confirm. When two customers have the name, or the one that has it was planned for another Zoho CRM account, you choose.
+- **Deal**: the deal's name.
+- **Total** and **Currency**: the deal's amount, in USDC for a deal in US dollars and EURC for one in euros. The form says "Zoho CRM says 12,500 USD: planned as 12,500.00 USDC, one for one."
+- **Start date**: the deal's closing date in Zoho CRM.
+- **External reference**: `zohocrm-` and the deal's id in Zoho CRM, such as `zohocrm-4876876000000624001`, which links the two. It cannot be changed here.
+
+Pick how it is billed (a deposit and balance, milestones, a monthly retainer or your own lines), check the schedule, and choose **Confirm deal**. The deal is signed in the ledger as any deal, as `deal_signed` with `via: "zohocrm"` and the deal's ids in Zoho CRM. The account is linked to the customer, so the next deal from it finds the customer.
+
+### Billing emails
+
+A customer linked to a Zoho CRM account that has no billing email yet is listed under "Billing emails from Zoho CRM", with the email of the contact on its deal: "These customers have no billing email yet. Zoho CRM has one for the contact on their deal; use it only if it is where invoices go." Choose **Use this email** if it is: it becomes the customer's billing email, used for reminders once you turn them on for an invoice. The ledger records `counterparty_notice_email_changed` with `via: "zohocrm"`. A billing email the customer already has is never replaced, and only the email you were shown is used.
+
+## 4. The planned deal's page
+
+A deal planned from Zoho CRM is a deal like any other: its schedule, its releases and its versions are those of [Turn a signed deal into a collection schedule](/docs/guides/deals). Its page also shows:
+
+- **Cash readiness**: enter what the deal will cost, and the page says the first day it would be short and by how much, or **No cash gap**. See [Plan its costs and see when it needs cash](/docs/guides/deals#5-plan-its-costs-and-see-when-it-needs-cash).
+- **Its project**, when you put it in one: the project then counts what the deal collected. See [Give each project its own budget](/docs/guides/projects).
+- **Changed in Zoho CRM**, when Zoho CRM changed the deal since you planned it ([step 5](#5-when-a-deal-changes-in-zoho-crm)).
+
+## 5. When a deal changes in Zoho CRM
+
+A planned deal can change in Zoho CRM afterwards: its amount or currency, its closing date, it moves to a lost stage or back to an open one, or it is deleted. Vestiarion never changes the deal for it. The deal's page, and its row under **Deals**, say **Changed in Zoho CRM**, with each change, such as:
+
+- "Amount: 12,000 USD to 15,000 USD."
+- "Close date: Sep 20, 2026 to Sep 30, 2026."
+- "Marked lost in Zoho CRM (Closed Lost). Nothing is cancelled: cancel the deal if it is off." The words in brackets are the stage's name in Zoho CRM.
+- "Moved back to an open stage in Zoho CRM (Negotiation/Review)."
+- "Deleted in Zoho CRM. Nothing is cancelled: cancel the deal if it is off."
+
+The ledger records each new set of changes once, as `crm_deal_changed`. Then choose:
+
+- **Change deal**, which opens the deal's Change deal form filled in: Zoho CRM's new amount as the new total, a correction proposed for the lines not invoiced yet, and the changes as the reason. Check it and save it as a new version. Lines already released, and their receivables, stay as they are. The version is signed as `deal_revised` with `via: "zohocrm"`.
+- **Keep the deal as it is**, when the deal is right as it stands. The changes are marked as seen, and the ledger records `crm_deal_change_kept`.
+
+Both act on the changes the page showed you. If Zoho CRM changed the deal again since you opened the page, nothing is saved: reload the page to see what changed now.
+
+A deal marked lost or deleted in Zoho CRM is only flagged: its invoices, payments and receipts all stay. To stop its lines, use **Cancel deal** on its page.
+
+## What Vestiarion reads and keeps
+
+- **It reads**, with the access of the Zoho CRM user who connected: deals (name, amount, currency, closing date, pipeline and stage, account, contact and when each last changed), the email of each deal's contact, the stages of the Deals layouts' pipelines, and the organization (its id, name and home currency).
+- **It writes nothing** to Zoho CRM: no deal, account, contact or field.
+- **It keeps** the deals read, the accounts' names, the contacts' emails, the organization's id and name, the Zoho data center your account lives in, the access granted and your agreement, and Zoho's tokens encrypted, readable only by the server and sent only to that data center's Zoho servers.
+
+## Status and errors
+
+The Zoho CRM card in Settings says how the connection is doing, in words, and never "connected" while the last sync failed:
+
+- **"Zoho CRM needs you to reconnect"**, when Zoho no longer accepts the connection: Vestiarion's access was removed in your Zoho account. A connection does not lapse for not being used. Choose **Reconnect Zoho CRM**: the same organization reconnects the same connection, with its deals and links.
+- **"Zoho CRM asked Vestiarion to slow down. Syncing again at 14:05 UTC."** when Zoho CRM's limits were reached: a daily allowance of API calls by your edition, and how many calls may run at once. The next sync starts a minute later, from where this one stopped. Nothing is lost.
+- **"The last sync with Zoho CRM failed"**, when Zoho CRM did not answer, or its answer could not be read. The card says when Vestiarion tries again, and the next sync goes on from where this one stopped.
+- **"Zoho CRM is not set up on this deployment yet."** on a deployment where Zoho CRM is not configured.
+
+**Sync now** says what it found, such as "Synced. No new deals."
+
+## Disconnect
+
+Choose **Disconnect Zoho CRM** on the card. Vestiarion stops reading at once, asks Zoho to revoke its access, and deletes its tokens. The card says "Zoho CRM is disconnected. Deals already planned stay in Vestiarion." Deals already planned stay in Vestiarion, with their receivables. The ledger records `accounting_disconnected`. To connect again, choose **Connect Zoho CRM**.
+
+Removing Vestiarion's access in your Zoho account works too: the card then says "Zoho CRM needs you to reconnect", and nothing more is read.
+
+## Not in this version
+
+- Writing what was collected back to Zoho CRM deals, as Vestiarion does for [HubSpot](/docs/guides/hubspot) and [Pipedrive](/docs/guides/pipedrive).
+- Zoho CRM's notifications: changes come in with the 15-minute sync and **Sync now**.
+- Zoho CRM's Developer Edition and sandbox organizations.
+- Picking among several Zoho CRM organizations one Zoho user belongs to.
+- Zoho CRM's quotes, sales orders and invoices, and linking a Zoho CRM deal to a Zoho Books invoice.
+- Asking a deal's owner before the first overdue reminder, which [Chase what customers owe](/docs/guides/collections) does for deals planned from HubSpot.

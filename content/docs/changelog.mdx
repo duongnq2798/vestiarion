@@ -1,5 +1,14 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-16: Deals brought in from Zoho CRM
+
+- An owner or admin can connect a workspace to a Zoho CRM organization, and a person plans the collections of the won deals it brings in. There is no new kind of entry: the entries HubSpot's and Pipedrive's deals use (below) now also name Zoho CRM. Each is listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:
+  - **`accounting_connected`** and **`accounting_disconnected`** with `provider: "zohocrm"`; `externalOrgId` is the Zoho CRM organization id and `externalOrgName` its name. **`accounting_connected`** carries `consent.version` `zohocrm-2026-10-16`, and `scopes` `ZohoCRM.modules.deals.READ`, `ZohoCRM.modules.accounts.READ`, `ZohoCRM.modules.contacts.READ`, `ZohoCRM.org.READ`, `ZohoCRM.settings.layouts.READ` and `ZohoCRM.settings.pipeline.READ`, all read only. Several workspaces may connect the same organization, each with its own connection.
+  - **`deal_signed`**, for a deal planned from Zoho CRM, and **`deal_revised`**, for a change saved from what Zoho CRM changed, with `via: "zohocrm"` and `zohocrm: { organizationId, dealId, accountId }`: the organization id, the deal's id and the id of the account it was sold to, in Zoho CRM. The deal's `externalRef` is `zohocrm-` followed by Zoho CRM's deal id.
+  - **`create_counterparty`**, for a customer added with such a deal, and **`counterparty_notice_email_changed`**, for a billing email filled from Zoho CRM, with `via: "zohocrm"` and `zohocrm: { organizationId, accountId }`; the addresses are masked, as before.
+  - **`crm_deal_changed`** and **`crm_deal_change_kept`** with `provider: "zohocrm"`; `crmDealId` is Zoho CRM's deal id, without the `zohocrm-` prefix. A `stage` change's `label` is the stage's name in Zoho CRM.
+- Nothing is written to Zoho CRM, so a Zoho CRM connection writes no `crm_receipt_` entries. Nothing else in `/api/v1` or the webhooks changes: the Zoho CRM deals not planned are not in the API.
+
 ## 2026-10-16: Bills brought in from Zoho Books
 
 - An owner or admin can connect a workspace to a Zoho Books organization, and a person adds the bills it brings in from Bills & receivables. Its connection writes the entries Xero's and QuickBooks' write (below), each sent to webhook endpoints as `ledger.appended` and listed by `GET /api/v1/ledger`, with `provider: "zohobooks"`: **`accounting_connected`**, **`accounting_disconnected`**, **`accounting_bill_closed`** and **`accounting_bills_dismissed`**. `externalOrgId` is the Zoho Books organization id, `externalOrgName` its name, and `billId` and `billIds` are Zoho Books bill ids.

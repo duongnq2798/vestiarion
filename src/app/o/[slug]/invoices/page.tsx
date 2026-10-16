@@ -107,6 +107,8 @@ import { dealLinksOf, plannedLinesOf, readDeals, type DealLink } from "@/lib/dea
 import { hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
 import { pipedriveSettingsFromEnv } from "@/lib/pipedrive/settings";
 import { pipedriveReady } from "@/lib/pipedrive/store";
+import { zohoCrmSettingsFromEnv } from "@/lib/zohocrm/settings";
+import { zohoCrmReady } from "@/lib/zohocrm/store";
 import { FromCustomers } from "@/components/portal/FromCustomers";
 import { StatementLinks } from "@/components/portal/StatementLinks";
 import { listPortalLinks, type PortalLink } from "@/lib/customer-portal/links";
@@ -133,7 +135,8 @@ type InvoicePageProps = {
    * The view (docs/superpowers/specs/2026-10-12-bills-tabs-design.md B3, B4): `tab`, `filter`, `q` (a search by id, invoice
    * number, purchase order, counterparty, amount or a payment's reference, I09), `sort`, `page`, `open` (a bill's
    * detail), `review` (a review list over the page), `new` and the palette's `add` (a New form), `hubspot` (a HubSpot
-   * deal to plan, H11) and `pipedrive` (a Pipedrive deal to plan, Pipedrive connector P9); and, from before the tabs, `history=all` and `status`, read by `readBillsQuery`.
+   * deal to plan, H11), `pipedrive` (a Pipedrive deal to plan, Pipedrive connector P9) and `zohocrm` (a Zoho CRM deal to
+   * plan, Zoho CRM connector C10); and, from before the tabs, `history=all` and `status`, read by `readBillsQuery`.
    */
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
@@ -174,7 +177,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     const raw = await searchParams;
     const query = readBillsQuery(raw);
     // Every tab: what the figures, the strip and the New forms need (B5).
-    const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, canReconcile, schedules, deciding, emailed, fromXero, fromQuickBooks, fromZohoBooks, dealsRead, fromHubSpot, fromPipedrive] = await Promise.all([
+    const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, canReconcile, schedules, deciding, emailed, fromXero, fromQuickBooks, fromZohoBooks, dealsRead, fromHubSpot, fromPipedrive, fromZohoCrm] = await Promise.all([
       listInvoices(),
       listCounterparties(),
       listLedgerEntries(1),
@@ -232,6 +235,18 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
             })
             .catch((error: unknown): CrmReviewView => {
               if (!(error instanceof NotSetUpError)) console.error("invoices: deals from Pipedrive not loaded", error instanceof Error ? error.message : error);
+              return { state: "hidden" };
+            })
+        : ({ state: "hidden" } as CrmReviewView),
+      // And Zoho CRM's (Zoho CRM connector C16): hidden before migration 0123 and without a connection.
+      zohoCrmSettingsFromEnv()
+        ? connectionFor("zohocrm")
+            .then(async (connection) => {
+              await zohoCrmReady();
+              return crmReview(connection);
+            })
+            .catch((error: unknown): CrmReviewView => {
+              if (!(error instanceof NotSetUpError)) console.error("invoices: deals from Zoho CRM not loaded", error instanceof Error ? error.message : error);
               return { state: "hidden" };
             })
         : ({ state: "hidden" } as CrmReviewView),
@@ -720,7 +735,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         ),
       };
     }
-    for (const [key, from] of [["hubspot", fromHubSpot], ["pipedrive", fromPipedrive]] as const) {
+    for (const [key, from] of [["hubspot", fromHubSpot], ["pipedrive", fromPipedrive], ["zohocrm", fromZohoCrm]] as const) {
       if (from.state !== "list") continue;
       const toPlan = from.won.filter((row) => row.linkedDeal === null && row.plan.ok).length;
       const changed = from.won.filter((row) => row.changes.length > 0).length;
@@ -776,7 +791,13 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       // Read again on confirm. One planned already, right after its Plan collections or from an old link, shows the deal
       // it became instead.
       const crmPlans = await Promise.all(
-        ([["hubspot", fromHubSpot, view.hubspot], ["pipedrive", fromPipedrive, view.pipedrive ?? null]] as const).map(async ([provider, from, asked]) => {
+        (
+          [
+            ["hubspot", fromHubSpot, view.hubspot],
+            ["pipedrive", fromPipedrive, view.pipedrive ?? null],
+            ["zohocrm", fromZohoCrm, view.zohocrm ?? null],
+          ] as const
+        ).map(async ([provider, from, asked]) => {
           const plan = from.state === "list" ? crmPlanState(asked, from.won) : null;
           const prefill: CrmPrefillRead | null =
             plan?.kind === "form" && canWrite && Array.isArray(deals)

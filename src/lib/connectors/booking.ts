@@ -12,14 +12,14 @@ import type { ProviderId } from "./provider";
  * a provider with `booking` on its `AccountingProvider`. Browser-safe, for the preview; a provider that adds booking sets
  * it here too. A CRM books nothing (HubSpot connector H1).
  */
-export const BOOKS_PAYMENTS: Record<ProviderId, boolean> = { xero: true, quickbooks: false, hubspot: false, pipedrive: false, asana: false, zohobooks: false };
+export const BOOKS_PAYMENTS: Record<ProviderId, boolean> = { xero: true, quickbooks: false, hubspot: false, pipedrive: false, asana: false, zohobooks: false, zohocrm: false };
 
 /**
  * Which tools offer an account for payments made on Arc in their Settings card: those with accounts to choose from
  * (`accounts` on the provider). Zoho Books has none, so its card says nothing about booking
  * (docs/superpowers/specs/2026-10-16-zoho-books-connector-design.md Z9). Browser-safe, for the card.
  */
-export const PICKS_PAYMENT_ACCOUNT: Record<ProviderId, boolean> = { xero: true, quickbooks: true, hubspot: false, pipedrive: false, asana: false, zohobooks: false };
+export const PICKS_PAYMENT_ACCOUNT: Record<ProviderId, boolean> = { xero: true, quickbooks: true, hubspot: false, pipedrive: false, asana: false, zohobooks: false, zohocrm: false };
 
 export interface BookingAccount {
   name: string;

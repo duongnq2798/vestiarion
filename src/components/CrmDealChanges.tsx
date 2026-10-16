@@ -31,7 +31,7 @@ export function CrmDealChanges({
   dealId: string;
   label: string;
   /** The CRM, for the address Change deal opens with (`?from=<provider>`, Pipedrive connector P10). */
-  from?: "hubspot" | "pipedrive";
+  from?: "hubspot" | "pipedrive" | "zohocrm";
   words: string[];
   /** The key of the changes shown: Keep the deal as it is keeps these alone. */
   seen: string;

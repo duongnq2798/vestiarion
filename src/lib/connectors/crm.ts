@@ -162,11 +162,14 @@ export function plannable(facts: {
 /**
  * The reference a deal planned from a CRM carries (H10, H11), unique among the workspace's deals: HubSpot's deal id as
  * it is, Pipedrive's as `pipedrive-<id>`, since its small numbers would meet references people type
- * (docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md P1). A reference typed by hand the same way links its
- * deal at the next sync, as HubSpot's does.
+ * (docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md P1), and Zoho CRM's as `zohocrm-<id>`, which says
+ * where it came from (docs/superpowers/specs/2026-10-16-zoho-crm-connector-design.md C9). A reference typed by hand the
+ * same way links its deal at the next sync, as HubSpot's does.
  */
 export function crmDealReference(provider: ProviderId, externalId: string): string {
-  return provider === "pipedrive" ? `pipedrive-${externalId}` : externalId;
+  if (provider === "pipedrive") return `pipedrive-${externalId}`;
+  if (provider === "zohocrm") return `zohocrm-${externalId}`;
+  return externalId;
 }
 
 /** The facts of a deal a change is told by (H12): kept as the baseline when a deal is planned, and compared later. */
