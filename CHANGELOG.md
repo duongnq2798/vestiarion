@@ -50,6 +50,7 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   0122 runs, connecting says Zoho Books is not set up on this deployment yet.
   [Guide](https://www.vestiarion.xyz/docs/guides/zohobooks).
 
+
 ### Changed
 
 - **The landing page's hero is quieter, and says what Invoice Capture does.**
@@ -73,6 +74,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Fixed
 
+- **Bank payouts on Arc testnet are timed against USDB.** BlindPay takes its test token, USDB, there, but the agent
+  weighed a bank-paid bill against the operating wallet's USDC and held it as short on cash, to be decided again once
+  USDC came in. It now weighs the wallet's USDB alone, tells the model so, and holds a payment it would make for a
+  person under the bank payout rule. Arc mainnet, where BlindPay takes USDC, is unchanged.
 - **The connect pages of QuickBooks and Zoho Books name their data right.** They said "QuickBooks's data" and "Zoho
   Books's data"; they now say QuickBooks' and Zoho Books'. Usage this month names Asana's syncs "Asana", not "asana".
 
