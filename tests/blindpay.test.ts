@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { createEvmPayout, createQuote, createSpeiAccount, getPayout, termsUrl, testBusiness } from "@/lib/blindpay/api";
 import { clabeBank, clabeShown, readClabe } from "@/lib/blindpay/clabe";
@@ -153,6 +155,13 @@ describe("BlindPay's calls", () => {
   it("sends BlindPay only its own test values for a development business, never a real person's", () => {
     const business = testBusiness({ tosId: "to_000000000001", legalName: "Pinecrest Studio", email: "ops@example.com", externalId: "org-1" });
     expect(business).toMatchObject({ type: "business", kyc_type: "standard", tos_id: "to_000000000001", legal_name: "Pinecrest Studio", tax_id: "000000000" });
+    expect(business.owners[0]).toMatchObject({ tax_id: "123456789", tax_type: "SSN" });
+    // BlindPay downloads each document: every one names a PDF this app serves (a 404 fails set-up with FILES_UNREADABLE).
+    const documents = new Set([business.incorporation_doc_file, business.proof_of_ownership_doc_file, business.proof_of_address_doc_file, business.owners[0].id_doc_front_file, business.owners[0].proof_of_address_doc_file]);
+    expect(documents.size).toBe(1);
+    const served = new URL([...documents][0]).pathname;
+    expect(served).toMatch(/^\/downloads\//);
+    expect(readFileSync(path.join(process.cwd(), "public", served)).subarray(0, 5).toString()).toBe("%PDF-");
     expect(business.owners[0]).toMatchObject({ first_name: "Test", last_name: "Owner" });
     expect(business.legal_name).not.toBe("Fail");
   });

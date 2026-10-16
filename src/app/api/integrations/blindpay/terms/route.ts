@@ -14,6 +14,8 @@ import { withOrg } from "@/lib/dal/scope";
  */
 
 export const dynamic = "force-dynamic";
+// BlindPay reads the business's documents before it makes the customer.
+export const maxDuration = 90;
 
 const back = (slug: string, outcome: string) => Response.redirect(`${siteOrigin()}/o/${encodeURIComponent(slug)}/settings?bankpayouts=${outcome}#bank-payouts`, 303);
 

@@ -31,7 +31,7 @@ export async function termsUrl(settings: Settings, input: { idempotencyKey: stri
  * KYB, which this version does not collect.
  */
 export function testBusiness(input: { tosId: string; legalName: string; email: string; externalId: string }) {
-  const placeholder = "https://www.vestiarion.xyz/blindpay-development-test-document.pdf";
+  const placeholder = "https://www.vestiarion.xyz/downloads/blindpay-development-test-document.pdf";
   return {
     type: "business",
     kyc_type: "standard",
@@ -57,7 +57,8 @@ export function testBusiness(input: { tosId: string; legalName: string; email: s
         first_name: "Test",
         last_name: "Owner",
         date_of_birth: "1990-01-01T00:00:00.000Z",
-        tax_id: "000000000",
+        // A well-formed test SSN: BlindPay refuses one that cannot be issued, such as 000000000.
+        tax_id: "123456789",
         tax_type: "SSN",
         address_line_1: "1 Test Street",
         city: "San Francisco",
@@ -76,7 +77,8 @@ export function testBusiness(input: { tosId: string; legalName: string; email: s
 }
 
 export async function createCustomer(settings: Settings, body: unknown, idempotencyKey: string, deps: BlindpayHttp = {}): Promise<{ id: string; kybStatus: KybStatus }> {
-  return mapCustomer(await blindpayCall(settings, "POST", "/customers", { body, idempotencyKey, label: "customer" }, deps));
+  // BlindPay downloads the business's documents before it answers, which takes longer than any other call.
+  return mapCustomer(await blindpayCall(settings, "POST", "/customers", { body, idempotencyKey, label: "customer", timeoutMs: 60_000 }, deps));
 }
 
 export async function getCustomer(settings: Settings, customerId: string, deps: BlindpayHttp = {}): Promise<{ id: string; kybStatus: KybStatus }> {

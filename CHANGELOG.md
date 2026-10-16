@@ -52,6 +52,18 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- **The landing page's hero is quieter, and says what Invoice Capture does.**
+  - The left column is three groups: the message, the call to action with shadow mode right under it, and Invoice
+    Capture. The headline is a little smaller, so the column stands level with the sample bills.
+  - "Capture invoices from Chrome" says the extension sends an invoice to your workspace as a draft. Beside it, a small
+    Add to Chrome button carries the extension's own icon in place of a puzzle piece. The button shows on a computer
+    only, where Chrome can install it; a phone sees a link to the guide instead.
+  - The README links the store with Google's "Available in the Chrome Web Store" badge, in place of a button that
+    redrew Chrome's logo.
+  - The two sample bills are one list: the open one with its reasoning in focus, the held one a status row under it.
+    Their checks no longer wrap into narrow columns, and their invoice numbers are no longer cut off on a phone.
+  - The first bill says "Agent proposes: pay it". Its drawn Agree and pay is no longer a second blue button, and it
+    tells a screen reader it is a sample's.
 - **The landing page's integrations, grouped by what each tool does.** "Built on, and works with" is now Integrations,
   a section of its own before the developers': accounting (Xero, QuickBooks Online, Zoho Books), sales and CRM (HubSpot,
   Pipedrive and, newly shown, Zoho CRM), and work and team chat (Asana, Slack, Telegram), each group saying what its

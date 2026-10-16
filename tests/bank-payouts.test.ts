@@ -78,7 +78,7 @@ describe("paying a bill to a bank account (B7)", () => {
     const approve = bankStepKey("attempt-key-1", "approve");
     expect(approve).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     expect(bankStepKey("attempt-key-1", "approve")).toBe(approve);
-    expect(bankStepKey("attempt-key-1", "payout")).not.toBe(approve);
+    expect(bankStepKey("attempt-key-1", "payout/qu_000000000001")).not.toBe(approve);
     expect(bankStepKey("attempt-key-2", "approve")).not.toBe(approve);
   });
 
@@ -91,7 +91,7 @@ describe("paying a bill to a bank account (B7)", () => {
     expect(api.sent[0].url).toBe("https://api.blindpay.com/v1/instances/in_TestInstanceAB/quotes");
     expect(api.sent[0].body).toMatchObject({ bank_account_id: "ba_000000000001", currency_type: "sender", cover_fees: false, request_amount: 1000, network: "arc_testnet", token: "USDB" });
     expect(wallet.calls).toEqual([{ call: { contractAddress: TOKEN, abiFunctionSignature: "approve(address,uint256)", abiParameters: [SPENDER, "10000000"] }, key: bankStepKey("attempt-key-1", "approve") }]);
-    expect(api.sent[1]).toMatchObject({ key: bankStepKey("attempt-key-1", "payout"), body: { quote_id: "qu_000000000001", sender_wallet_address: WALLET.address } });
+    expect(api.sent[1]).toMatchObject({ key: bankStepKey("attempt-key-1", "payout/qu_000000000001"), body: { quote_id: "qu_000000000001", sender_wallet_address: WALLET.address } });
     expect(result).toMatchObject({
       providerTxId: `${BANK_ID}po_000000000001`,
       status: "pending",
@@ -160,7 +160,7 @@ describe("paying a bill to a bank account (B7)", () => {
     const api = blindpay({ quote: [{ body: quote() }], payout: [{ status: 400, body: { code: "PAYOUTS_ALLOWANCE_NOT_CONFIRMED" } }, { body: payout() }] });
     const result = await payToBank(PARAMS, ROUTE, WALLET, { fetchImpl: api.fetchImpl, approve: approver().approve, settings: SETTINGS, waitMs: 0 });
     const payouts = api.sent.filter((request) => request.url.endsWith("/payouts/evm"));
-    expect(payouts.map((request) => request.key)).toEqual([bankStepKey("attempt-key-1", "payout"), bankStepKey("attempt-key-1", "payout")]);
+    expect(payouts.map((request) => request.key)).toEqual([bankStepKey("attempt-key-1", "payout/qu_000000000001"), bankStepKey("attempt-key-1", "payout/qu_000000000001")]);
     expect(result.providerTxId).toBe(`${BANK_ID}po_000000000001`);
   });
 
