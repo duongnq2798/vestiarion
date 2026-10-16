@@ -54,7 +54,7 @@ export async function blindpayCall(
   settings: Pick<BlindpaySettings, "apiKey" | "instanceId">,
   method: "GET" | "POST" | "DELETE",
   path: string,
-  options: { body?: unknown; idempotencyKey?: string; label: string },
+  options: { body?: unknown; idempotencyKey?: string; label: string; timeoutMs?: number },
   deps: BlindpayHttp = {}
 ): Promise<unknown> {
   const instancePath = path.startsWith("/v1/") ? path.replace("{instance}", settings.instanceId) : `/v1/instances/${settings.instanceId}${path}`;
@@ -69,7 +69,7 @@ export async function blindpayCall(
         ...(options.idempotencyKey ? { "idempotency-key": options.idempotencyKey.slice(0, 255) } : {}),
       },
       ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(options.timeoutMs ?? TIMEOUT_MS),
       cache: "no-store",
     });
   } catch {

@@ -55,6 +55,22 @@ describe("workspace_payout_partners (0124)", () => {
     await expect(db.query("insert into public.workspace_payout_partners (org_id, provider) values ($1, 'stripe')", [other])).rejects.toThrow(/provider_check/);
   });
 
+  it("takes its customer by an upsert only when the upsert names the terms too", async () => {
+    // An INSERT ... ON CONFLICT checks the row it proposes before it finds the conflict: a customer without its terms is
+    // refused even for a row that has them, so the set-up writes both (bank payouts B3, as seen live).
+    const orgId = await createOrg(db, "bank-partner-upsert");
+    await db.query("insert into public.workspace_payout_partners (org_id, tos_id) values ($1, 'to_upsert12345')", [orgId]);
+    const upsert = (withTerms: boolean) =>
+      db.query(
+        `insert into public.workspace_payout_partners (org_id, provider, customer_id${withTerms ? ", tos_id" : ""}) values ($1, 'blindpay', 're_upsert12345'${withTerms ? ", 'to_upsert12345'" : ""})
+         on conflict (org_id, provider) do update set customer_id = excluded.customer_id`,
+        [orgId]
+      );
+    await expect(upsert(false)).rejects.toThrow(/workspace_payout_partners_customer_check/);
+    await upsert(true);
+    expect((await db.query<{ customer_id: string }>("select customer_id from public.workspace_payout_partners where org_id = $1", [orgId])).rows[0].customer_id).toBe("re_upsert12345");
+  });
+
   it("is seen and written only by its own workspace's tenant requests", async () => {
     const mine = await createOrg(db, "bank-partner-mine");
     const theirs = await createOrg(db, "bank-partner-theirs");

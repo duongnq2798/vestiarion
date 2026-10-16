@@ -74,7 +74,8 @@ export async function finishBankPayoutsSetUp(input: { actorId: string; tosId: st
     console.error("bank payouts: BlindPay did not make the customer", error instanceof BlindpayError ? `${error.status} ${error.code ?? ""}` : "unknown error");
     throw new BankPayoutsError("BlindPay did not finish setting the workspace up. Try again in a moment.");
   }
-  await savePayoutPartner(orgId, { customerId: customer.id, kybStatus: customer.kybStatus as never, setUpBy: input.actorId });
+  // With its terms again: an upsert checks the row it proposes, and a customer is never kept without its terms (0124).
+  await savePayoutPartner(orgId, { tosId: input.tosId, customerId: customer.id, kybStatus: customer.kybStatus as never, setUpBy: input.actorId });
   await appendLedgerEntryBestEffort(orgId, {
     actor: "human",
     domain: "treasury",
