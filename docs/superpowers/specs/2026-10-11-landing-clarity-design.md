@@ -40,6 +40,9 @@ own.
 | C1 | Close | "See what the agent decides on your next bill." The same call to action, the four steps after it, and a guided setup (`/studios#guided-setup`) for a team that wants a call. |
 | D1 | /how-it-decides | The previous hero's decision receipt in its arch beside the live ledger head, the decision loop step by step, and the claims with receipts, their links now pointing at the evidence. |
 
+Since 2026-10-16 the hero's left column is three groups, Invoice Capture has a line of its own with a small Add to
+Chrome button, and the two sample bills are rows of one list (`2026-10-16-landing-hero-capture-design.md`).
+
 Removed from the landing: "What the agent pays" (six feature cards; cross-chain and EURC are Arc testnet only and
 belong in the guides, which the use cases link), the Product Hunt badge in the hero (now in the full footer: launch week
 is over), and the hero's provenance strip (now in the proof).

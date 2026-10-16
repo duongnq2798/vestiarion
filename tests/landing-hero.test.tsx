@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -5,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { GUIDED_SETUP_HREF, TRY_HREF, TRY_LABEL } from "@/components/landing/cta";
 import { FinalCta } from "@/components/landing/FinalCta";
 import { Hero } from "@/components/landing/Hero";
+import { EXTENSION_ICON, INVOICE_CAPTURE_GUIDE } from "@/components/landing/hero/InvoiceCapture";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { STORE_URL } from "@/lib/extension/settings";
 import { PRODUCT_HUNT_BADGE } from "@/lib/site-links";
@@ -43,19 +45,68 @@ describe("the landing hero", () => {
     expect(markup).toMatch(/<a [^>]*href="#how-it-works"[^>]*>See how it works<\/a>/);
     expect(markup).toMatch(/<a [^>]*href="\/docs\/guides\/shadow-mode"[^>]*>How shadow mode works/);
     const words = text(markup);
-    expect(words).toContain("Start in shadow mode. Keep paying the way you do today while the agent decides on your real bills. No wallet or funds needed to start.");
+    expect(words).toContain("Start in shadow mode. Keep paying the way you do today while the agent decides on your real bills. No wallet or funds needed.");
     expect(words).toContain("Email sign-in, no password");
   });
 
-  it("offers the Chrome extension from its store page, quietly, in a new tab", () => {
+  it("keeps to three groups: the message, the call to action with what it asks of you, then Invoice Capture", () => {
+    const words = text(hero());
+    const order = ["Every bill checked", TRY_LABEL, "Start in shadow mode.", "No wallet or funds needed.", "Capture invoices from Chrome"].map((part) =>
+      words.indexOf(part)
+    );
+    expect(order.every((at) => at >= 0)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    // Space sets the groups apart: no rule beside the shadow-mode note, none above Invoice Capture.
+    expect(hero()).not.toContain("border-l-2");
+  });
+
+  it("says what Invoice Capture does, a draft and nothing more, and its guide where it cannot be installed", () => {
     const markup = hero();
-    const link = markup.match(/<a [^>]*data-cta="hero-chrome"[^>]*>/)?.[0] ?? "";
+    const words = text(markup);
+    expect(words).toContain("Capture invoices from Chrome Send an invoice from any page to your workspace as a draft.");
+    const guide = markup.match(new RegExp(`<a [^>]*href="${INVOICE_CAPTURE_GUIDE}"[^>]*>`))?.[0] ?? "";
+    expect(guide).toContain("pointer-fine:hidden");
+    expect(words).toContain("Learn about Invoice Capture");
+    // It never adds a bill, approves or pays: the words promise none of it.
+    for (const claim of [/extension (adds|approves|pays|sends money)/i, /install vestiarion/i]) expect(words).not.toMatch(claim);
+  });
+
+  it("offers Add to Chrome as a small button with the extension's own icon, where it can be installed, in a new tab", () => {
+    const markup = hero();
+    const link = markup.match(/<a [^>]*data-cta="hero-chrome"[^>]*>[\s\S]*?<\/a>/)?.[0] ?? "";
     expect(link).toContain(`href="${STORE_URL}"`);
+    expect(STORE_URL).toBe("https://chromewebstore.google.com/detail/vestiarion-invoice-captur/jfhjgbdbolhnneomgifdnjamoldlioan");
     expect(link).toContain('target="_blank"');
     expect(link).toContain('rel="noopener noreferrer"');
-    const words = text(markup);
-    expect(words).toContain("Add to Chrome");
-    expect(words).toContain("Send an invoice from any page to your workspace as a draft.");
+    expect(link).toMatch(/<img src="\/extension\/invoice-capture-48\.png" alt="" aria-hidden="true" width="18" height="18"/);
+    expect(text(link)).toContain("Add to Chrome");
+    expect(link).toContain("opens in a new tab");
+    // Chrome installs extensions on a computer: the button shows to a mouse or trackpad only, in CSS, the same on the
+    // server and in the browser; it is the small secondary button, below the call to action in weight.
+    const classes = link.match(/class="([^"]*)"/)?.[1].split(" ") ?? [];
+    for (const name of ["hidden", "pointer-fine:inline-flex", "h-8", "bg-surface/80"]) expect(classes).toContain(name);
+    expect(classes).not.toContain("bg-agent");
+    // The puzzle piece is gone, and Chrome's logo, Google's mark, is drawn nowhere.
+    expect(markup).not.toContain("lucide-puzzle");
+    expect(markup).not.toContain("chrome-web-store");
+  });
+
+  it("draws the extension's own icon, the one its store page shows", () => {
+    const served = readFileSync(path.join(process.cwd(), "public", EXTENSION_ICON.src));
+    const shipped = readFileSync(path.join(process.cwd(), "extensions/chrome-invoice-capture/extension/icons/icon-48.png"));
+    expect(served.equals(shipped)).toBe(true);
+  });
+
+  it("links the README to the store with Google's badge as Google ships it, and draws no Chrome logo of its own", () => {
+    const readme = readFileSync(path.join(process.cwd(), "README.md"), "utf8");
+    expect(readme).toContain(`<a href="${STORE_URL}"><img src="public/badges/chrome-web-store.png" alt="Available in the Chrome Web Store`);
+    const badge = readFileSync(path.join(process.cwd(), "public/badges/chrome-web-store.png"));
+    // developer.chrome.com/docs/webstore/branding, "Medium PNG (with border)", unchanged.
+    expect(createHash("sha256").update(badge).digest("hex")).toBe("fbf289fca885e58a1507cc8c69a9df68f35e83e683825b3ad6cd617b0a17d79c");
+    expect([badge.readUInt32BE(16), badge.readUInt32BE(20)]).toEqual([340, 96]);
+    // The README's buttons no longer redraw Chrome's logo: no chrome icon, none of its four colours' blue centre.
+    const buttons = readFileSync(path.join(process.cwd(), "scripts/readme-buttons.mjs"), "utf8");
+    expect(buttons).not.toMatch(/\bchrome:\s*`|icon: "chrome"|#4285F4/i);
   });
 
   it("shows two sample bills in the product's own words, labelled as samples (H2)", () => {
@@ -63,6 +114,7 @@ describe("the landing hero", () => {
     for (const part of [
       "Bills & receivables",
       "Sample bills",
+      "Agent proposes: pay it",
       "Waiting for your verdict",
       "Agent's reasoning",
       "Do you agree with the agent?",
@@ -73,8 +125,34 @@ describe("the landing hero", () => {
     ]) {
       expect(words).toContain(part);
     }
-    // The sample's controls are drawn, not pressable.
+    // The sample's controls are drawn, not pressable, and a screen reader hears that they are a sample's.
     expect(hero()).not.toMatch(/<button\b/);
+    expect(hero()).toMatch(/<div aria-hidden="true" class="[^"]*cursor-default[^"]*"><span[^>]*>Agree and pay<\/span>/);
+    expect(text(hero())).toContain("In the product: Agree and pay, or Disagree. Shown here as a sample.");
+    // An agent's proposal is not a payment: the first bill waits for a person.
+    expect(text(hero())).not.toContain("Agent: pay it");
+    // The drawn Agree and pay is quieter than the page's own call to action: never solid agent blue.
+    const drawn = hero().match(/<span class="([^"]*)">Agree and pay<\/span>/)?.[1].split(" ") ?? [];
+    expect(drawn).toContain("bg-agent-soft");
+    expect(drawn).not.toContain("bg-agent");
+  });
+
+  it("draws the two sample bills as one list: the open bill with its reasoning in focus, the held one as a status row", () => {
+    const markup = hero();
+    // One card: the held bill is the list's next row, not a second card tucked under the first, and the card's title
+    // is a plain line, not a ruled strip.
+    expect(markup).not.toContain("-mt-px");
+    expect(markup).not.toContain("rounded-b-2xl");
+    expect(markup).not.toContain("border-b border-line bg-ground/70");
+    // The agent's reasoning and its checks sit together on a tint, the figure's focus.
+    const reasoning = markup.match(/<div class="[^"]*bg-agent-soft\/30[^"]*">([\s\S]*?)<\/ul><\/div>/)?.[1] ?? "";
+    expect(text(reasoning)).toContain("Agent's reasoning The checkout flow was delivered");
+    expect(reasoning).toContain('aria-label="Checked before deciding"');
+    const words = text(markup);
+    expect(words).toContain("Northwind Dev Invoice 0412 · milestone 2 of 3 2,400.00 USDC");
+    // The held bill, smaller and on the ground's tone: who, which invoice, how much, then why it waits.
+    expect(words).toContain("Kestrel Design Invoice 0931 · 6,500.00 USDC Held for you Blocked by code, not by the model.");
+    expect(markup).toContain("border-t border-line bg-ground/50");
   });
 
   it("keeps the technical vocabulary out of the first screen", () => {

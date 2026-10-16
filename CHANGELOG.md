@@ -50,6 +50,21 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   0122 runs, connecting says Zoho Books is not set up on this deployment yet.
   [Guide](https://www.vestiarion.xyz/docs/guides/zohobooks).
 
+### Changed
+
+- **The landing page's hero is quieter, and says what Invoice Capture does.**
+  - The left column is three groups: the message, the call to action with shadow mode right under it, and Invoice
+    Capture. The headline is a little smaller, so the column stands level with the sample bills.
+  - "Capture invoices from Chrome" says the extension sends an invoice to your workspace as a draft. Beside it, a small
+    Add to Chrome button carries the extension's own icon in place of a puzzle piece. The button shows on a computer
+    only, where Chrome can install it; a phone sees a link to the guide instead.
+  - The README links the store with Google's "Available in the Chrome Web Store" badge, in place of a button that
+    redrew Chrome's logo.
+  - The two sample bills are one list: the open one with its reasoning in focus, the held one a status row under it.
+    Their checks no longer wrap into narrow columns, and their invoice numbers are no longer cut off on a phone.
+  - The first bill says "Agent proposes: pay it". Its drawn Agree and pay is no longer a second blue button, and it
+    tells a screen reader it is a sample's.
+
 ### Fixed
 
 - **The connect pages of QuickBooks and Zoho Books name their data right.** They said "QuickBooks's data" and "Zoho
