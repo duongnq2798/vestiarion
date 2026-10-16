@@ -84,7 +84,7 @@ describe("BlindPay's answers (B5, B7, B8)", () => {
       senderAmount: 10,
       receiverAmount: 181.4,
       rate: 18.35,
-      feesReceiver: 2.1,
+      feesSender: 2.1,
       contract: { token: QUOTE.contract.address, spender: QUOTE.contract.blindpayContractAddress, amount: "10000000", network: "arc_testnet", chainId: 5042002 },
     });
     expect(() => mapQuote({ ...QUOTE, contract: { ...QUOTE.contract, blindpayContractAddress: "not an address" } })).toThrow();

@@ -97,7 +97,7 @@ describe("paying a bill to a bank account (B7)", () => {
       status: "pending",
       route: "bank",
       providerState: "processing",
-      bankPayout: { provider: "blindpay", quoteId: "qu_000000000001", payoutId: "po_000000000001", receiverAmount: 181.4, currency: "MXN", rate: 18.35, feesReceiver: 2.1, network: "arc_testnet", token: "USDB" },
+      bankPayout: { provider: "blindpay", quoteId: "qu_000000000001", payoutId: "po_000000000001", receiverAmount: 181.4, currency: "MXN", rate: 18.35, feesSender: 2.1, network: "arc_testnet", token: "USDB" },
     });
   });
 
@@ -235,8 +235,8 @@ describe("the approval card's words (B12)", () => {
   it("names the account by its bank and last four, and what the vendor receives", () => {
     expect(bankAccountLine(BANK)).toBe("Paid to a bank account in Mexico: BBVA ····9716, Ana López, through BlindPay.");
     expect(bankAccountLine({ ...BANK, accountStatus: "verifying" })).toContain("BlindPay is still checking the account.");
-    expect(bankQuoteLine({ ...BANK, quote: { receiverAmount: 1814, currency: "MXN", rate: 18.35, feesReceiver: 2.1 }, quoteProblem: null })).toBe(
-      "Ana López receives about 1,814.00 MXN (18.35 MXN per USDC, BlindPay's fees 2.10 MXN). Approve and pay asks BlindPay for a fresh quote."
+    expect(bankQuoteLine({ ...BANK, quote: { receiverAmount: 1814, currency: "MXN", rate: 18.35, feesSender: 2.1 }, quoteProblem: null })).toBe(
+      "Ana López receives about 1,814.00 MXN (18.35 MXN per USDC, BlindPay's fees 2.10 USDC). Approve and pay asks BlindPay for a fresh quote."
     );
     expect(bankQuoteLine({ ...BANK, quote: null, quoteProblem: "eurc" })).toBe("Only USDC is paid to a bank account, and this invoice is in EURC.");
     expect(bankQuoteLine({ ...BANK, quote: null, quoteProblem: "unread" })).toMatch(/^BlindPay did not quote it just now/);

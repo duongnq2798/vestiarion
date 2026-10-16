@@ -11,6 +11,7 @@ import ZohoCrmPanel from "@/components/ZohoCrmPanel";
 import BankPayoutsPanel, { type BankPayoutsView } from "@/components/BankPayoutsPanel";
 import { bankPayoutsReady, countBankAccountsInUse, readPayoutPartner } from "@/lib/bank-payouts/store";
 import { testTokenView } from "@/lib/bank-payouts/test-token";
+import { refreshPartnerStatus } from "@/lib/bank-payouts/commands";
 import { blindpaySettingsFromEnv } from "@/lib/blindpay/settings";
 import LedgerKeyPanel from "@/components/LedgerKeyPanel";
 import NotificationsPanel from "@/components/NotificationsPanel";
@@ -236,8 +237,10 @@ export default async function SettingsPage({
     const bankPayouts: BankPayoutsView | null = blindpaySettingsFromEnv()
       ? await bankPayoutsReady()
           .then(async (): Promise<BankPayoutsView> => {
-            const partner = await readPayoutPartner();
+            let partner = await readPayoutPartner();
             if (!partner?.customerId) return { state: "not_started" };
+            // BlindPay reviews the business after set-up: its status is read from BlindPay again until it is approved (B3).
+            if (partner.kybStatus !== "approved") partner = (await refreshPartnerStatus().then(readPayoutPartner).catch(() => partner)) ?? partner;
             return {
               state: "set_up",
               kybStatus: partner.kybStatus,

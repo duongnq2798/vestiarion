@@ -48,7 +48,7 @@ export function bankRecord(quote: BlindpayQuote, payoutId: string, route: BankPa
     receiverAmount: quote.receiverAmount,
     currency: "MXN",
     rate: quote.rate,
-    feesReceiver: quote.feesReceiver,
+    feesSender: quote.feesSender,
     network: route.network,
     token: route.token,
   };

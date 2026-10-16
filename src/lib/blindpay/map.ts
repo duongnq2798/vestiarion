@@ -43,8 +43,8 @@ export interface BlindpayQuote {
   receiverAmount: number;
   /** Pesos per token unit, BlindPay's own quotation. */
   rate: number | null;
-  /** BlindPay's fees, in the receiver's currency: its flat fee and billing fee. */
-  feesReceiver: number;
+  /** BlindPay's fees, in the sender's token (USDC or USDB), taken out before the conversion: its flat fee and billing fee. */
+  feesSender: number;
   contract: { token: string; spender: string; amount: string; network: string; chainId: number | null };
 }
 
@@ -67,7 +67,7 @@ export function mapQuote(body: unknown): BlindpayQuote {
     senderAmount: sender,
     receiverAmount: receiver,
     rate: rate === null ? null : rate / 100,
-    feesReceiver: (minor(body.flat_fee) ?? 0) + (minor(body.billing_fee_amount) ?? 0),
+    feesSender: (minor(body.flat_fee) ?? 0) + (minor(body.billing_fee_amount) ?? 0),
     contract: {
       token,
       spender,

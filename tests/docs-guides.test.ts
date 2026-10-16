@@ -2180,7 +2180,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
       BANK_WORDS,
       "`Paid to a bank account in Mexico: ${clabeBank(bank.bankCode)} ····${bank.last4}, ${bank.beneficiaryName}, through BlindPay.",
     ],
-    ["Ana López receives about 1,814.00 MXN (18.35 MXN per USDC, BlindPay's fees 2.10 MXN).", BANK_WORDS, "receives about ${pesos(bank.quote.receiverAmount)} MXN (${rate}BlindPay's fees"],
+    ["Ana López receives about 1,814.00 MXN (18.35 MXN per USDC, BlindPay's fees 2.10 USDC).", BANK_WORDS, "receives about ${pesos(bank.quote.receiverAmount)} MXN (${rate}BlindPay's fees"],
     ["Approve and pay asks BlindPay for a fresh quote.", BANK_WORDS],
     ["Pay 100.00 USDC to Taller Norte's bank account in Mexico now?", "src/components/ApprovalCard.tsx", "USDC to ${payable.counterpartyName}'s bank account in Mexico now?"],
     ["Only USDC is paid to a bank account", BANK_WORDS],
