@@ -42,7 +42,7 @@ function SectionPages({ pages, active, onNavigate }: { pages: NavPage[]; active:
         return (
           <li key={page.slug}>
             {opensGroup && (
-              <p aria-hidden className={cn("pb-1 pl-4 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-3", index === 0 ? "pt-1.5" : "pt-3.5")}>
+              <p aria-hidden className={cn("pb-1 pl-4 text-xs font-medium text-ink-3", index === 0 ? "pt-1.5" : "pt-3")}>
                 {page.group}
               </p>
             )}
@@ -61,24 +61,25 @@ function opening(sections: NavSection[], active: string | null): Set<string> {
 }
 
 /**
- * Every section of the docs, each a disclosure (docs redesign D3): the one holding the page being read is open, so the
- * sidebar shows one section's pages at a time and the others as headings with their page count. A section opened by
- * hand stays open while pages change, since the sidebar lives in the docs layout; moving to a page in a closed section
- * opens it. The sections come from the server (`DOCS_NAV`), which keeps the API operations they are partly built from
- * out of the browser bundle. A one-page section (the changelog) is a link of its own. Each section is a `<details>`, so
- * it opens and closes before any script runs.
+ * Every section of the docs, each a disclosure (docs redesign D3, docs home polish H1): the one holding the page being
+ * read is open, so the sidebar shows one section's pages at a time and the others as headings with their page count.
+ * Moving to a page in another section opens that section and closes the rest; within a section, the ones opened by hand
+ * stay open, since the sidebar lives in the docs layout. The sections come from the server (`DOCS_NAV`), which keeps the
+ * API operations they are partly built from out of the browser bundle. A one-page section (the changelog) is a link of
+ * its own. Each section is a `<details>`, so it opens and closes before any script runs.
  */
 export function DocsSidebar({ sections, onNavigate, className }: { sections: NavSection[]; onNavigate?: () => void; className?: string }) {
   const active = slugOfPathname(usePathname());
   const [open, setOpen] = useState(() => opening(sections, active));
   const nav = useRef<HTMLElement>(null);
 
-  // A page in a closed section opens it; the sections opened by hand stay as they are.
+  // A page in another section opens it alone; a page in the same section leaves what was opened by hand as it is.
   const [shownFor, setShownFor] = useState(active);
   if (shownFor !== active) {
     setShownFor(active);
     const holding = sections.find((section) => section.pages.some((page) => page.slug === active));
-    if (holding && !open.has(holding.title)) setOpen(new Set([...open, holding.title]));
+    const before = sections.find((section) => section.pages.some((page) => page.slug === shownFor));
+    if (holding && holding !== before) setOpen(new Set([holding.title]));
   }
 
   // The current page in view inside the sidebar's own scroll (the aside, or the drawer's body): a deep page is not left

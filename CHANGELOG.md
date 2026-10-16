@@ -62,12 +62,14 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 - **The docs read and find their way like a product's.**
   - The sidebar is grouped by what you are doing: Get started, Pay bills, Plan and report, Get paid, Trust and controls,
     Connect your tools and Developers, then the reference. Each section opens and closes, the one you are reading opens
-    by itself, and the long ones split into short groups, such as Accounting and Sales and CRM.
+    by itself, moving to another section closes the last, and the long ones split into short groups, such as Accounting
+    and Sales and CRM.
   - Pages sit on a white reading surface with a breadcrumb, a stronger title and a lead, at about 75 characters a line,
     with an Edit this page on GitHub link.
   - Callouts carry their own colour, icon and label.
-  - The docs' home leads with search and the two ways in, then popular workflows, every section's first guides and the
-    developer resources.
+  - The docs' home leads with search and the two ways in, beside how a bill moves in four steps, then popular
+    workflows, every section's first guides and the developer resources, three to a row on a wide screen, with no table
+    of contents and one search field.
   - The bank payout guide draws its flow, from the bill to the vendor's bank, and puts its sandbox notice up as
     Important.
   - Every page keeps its address.
