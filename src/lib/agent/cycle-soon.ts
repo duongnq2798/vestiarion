@@ -46,6 +46,8 @@ export type CycleEventKind =
   /** A person moved a scheduled bill to today from the payment plan: decided now, not at the next schedule (payment plan P9). */
   | "plan_approved"
   | "cash_returned"
+  /** A supplier accepted an early-payment offer: the bill now carries a discount ending today (early-payment offers E5). */
+  | "early_payment_accepted"
   /** Test USDC came in from Vestiarion's float: a payable held for cash may be paid now (test USDC T7). */
   | "test_usdc_added"
   | "reminders_on"

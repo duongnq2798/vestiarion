@@ -1,5 +1,13 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-16: Early-payment offers
+
+- An owner or admin can offer a supplier payment today for a discount, through a one-time link the supplier answers with no account. Each step is a new entry, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:
+  - **`early_payment_offered`** (domain `ap`, actor `human`), with `offerId`, `invoiceId`, `counterpartyId`, `discountPct`, `amount`, `offeredAmount`, `currency`, `expiresAt` and `by`.
+  - **`early_payment_offer_accepted`** and **`early_payment_offer_declined`** (actor `system`, `via: "offer_link"`), with `offerId` and `invoiceId`; an acceptance also carries `discountPct`, `offeredAmount` and `currency`.
+  - **`early_payment_offer_withdrawn`**, with `offerId` and `by`.
+- An accepted offer sets the invoice's `earlyPayDiscount` to `{ percent, deadline }`, the deadline being today (UTC), and returns a scheduled payable to `pending`, as `GET /api/v1/invoices` shows it. The agent's next decision on it, an `ap_…` entry as before, weighs that discount like any other. Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-16: Bills paid to a vendor's bank account in Mexico
 
 - An owner can set a workspace up for bank payouts through BlindPay, and an owner or admin can give a vendor a bank account in Mexico, whose bills are then paid in pesos over SPEI from the workspace's USDC. Each change is a new entry, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:

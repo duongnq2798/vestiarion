@@ -129,7 +129,7 @@ export default function SecurityPage() {
         </p>
         <p>
           Some secrets are kept only as a SHA-256 hash: an API key&apos;s 256-bit secret, beside its prefix, compared in constant time; the tokens of
-          invitations, payee links, customer statement links, and shared receipts and reports; the codes that link a Telegram chat or a Slack
+          invitations, payee links, customer statement links, early-payment offers, and shared receipts and reports; the codes that link a Telegram chat or a Slack
           account; and the Chrome extension&apos;s access and refresh tokens and its one-time sign-in codes. Some are never stored: the GitHub token of the person connecting GitHub is used once and dropped, a GitHub App installation&apos;s
           tokens are made for each run and kept in memory, and the password Pipedrive sends with its webhooks is derived from the master key for each
           company.

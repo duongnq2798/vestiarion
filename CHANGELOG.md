@@ -14,6 +14,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Early-payment offers.** Bills & receivables lists the bills the agent will pay later under Pay early for a discount,
+  each with the discount worth asking for paying today, twice what the cash would earn in the reserve by the due date.
+  An owner or admin offers it to the supplier through a one-time link, kept only as a hash. If the supplier accepts, the
+  discount goes on the bill, ending today, and the agent pays the discounted amount at once, after every check any bill
+  gets; the supplier can also decline, and the offer can be withdrawn. Needs migration `0125`.
+  [Guide](https://www.vestiarion.xyz/docs/guides/early-payment-offers).
 - **Bills paid to a vendor's bank account in Mexico.** An owner sets the workspace up for bank payouts from Settings,
   accepting BlindPay's terms on BlindPay's page, and an owner or admin gives a vendor its CLABE on Counterparties. That
   vendor's bills are then paid to its bank account in pesos over SPEI, through BlindPay, from the workspace's USDC on

@@ -32,6 +32,7 @@ type GuideSlug =
   | "guides/commissions"
   | "guides/pay-a-contractor"
   | "guides/bank-payouts"
+  | "guides/early-payment-offers"
   | "guides/get-paid"
   | "guides/telegram"
   | "guides/slack"
@@ -190,6 +191,13 @@ const ZOHO_CRM_CONNECT_PAGE = "src/app/integrations/zohocrm/connect/page.tsx";
 const ZOHO_CRM_ACTIONS = "src/app/actions/zohocrm.ts";
 const ZOHO_CRM_SETTINGS = "src/lib/zohocrm/settings.ts";
 const BANK_PANEL = "src/components/BankPayoutsPanel.tsx";
+const OFFERS_CARD = "src/components/bills/EarlyPaymentOffers.tsx";
+const OFFERS_ACTIONS = "src/app/actions/early-payment-offers.ts";
+const OFFERS_LIB = "src/lib/early-pay/offers.ts";
+const OFFERS_WORDS = "src/lib/early-pay/offers-words.ts";
+const OFFER_PAGE = "src/app/offer/[token]/page.tsx";
+const OFFER_ACTIONS = "src/app/offer/[token]/actions.ts";
+const OFFER_DECISION = "src/components/early-pay/OfferDecision.tsx";
 const BANK_ACCOUNT = "src/components/intake/CounterpartyBankAccount.tsx";
 const BANK_ACTIONS = "src/app/actions/bank-payouts.ts";
 const BANK_COMMANDS = "src/lib/bank-payouts/commands.ts";
@@ -2148,6 +2156,30 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Zoho CRM is disconnected. Deals already planned stay in Vestiarion.", ZOHO_CRM_ACTIONS],
     ["accounting_disconnected", ACCOUNTING_CONNECTIONS],
   ],
+  // Early-payment offers (early-payment offers E1-E8).
+  "guides/early-payment-offers": [
+    ["An owner or admin makes the offer.", OFFERS_CARD],
+    ["Pay early for a discount", OFFERS_CARD, 'title="Pay early for a discount"'],
+    ["Paying 20 days early for 1.00% is like earning 18.3% a year, above the reserve's 4.2%.", OFFERS_WORDS, "is like earning ${yearly}% a year${reserve}."],
+    ["Offer this discount for paying today", OFFERS_CARD],
+    ["Offer made. Send the supplier this link: it works once.", OFFERS_ACTIONS],
+    ["Copy the offer link", OFFERS_CARD],
+    ["early_payment_offered", OFFERS_LIB],
+    ["Offer out:", OFFERS_CARD],
+    ["Withdraw", OFFERS_CARD],
+    ["Offer withdrawn. The link no longer works.", OFFERS_ACTIONS],
+    ["early_payment_offer_withdrawn", OFFERS_LIB],
+    ["This bill can no longer take an offer: it changed, a payment started, or it falls due within 3 days.", OFFERS_LIB],
+    ["Pinecrest Studio offers to pay invoice INV-108 today: 990.00 USDC instead of 1,000.00 USDC on Oct 30, 2026.", OFFERS_WORDS, "offers to pay ${bill} today: "],
+    ["Accept: get paid today", OFFER_DECISION],
+    ["Decline", OFFER_DECISION],
+    ["Accepted. The business pays you today, at the discounted amount, once its usual checks pass.", OFFER_ACTIONS],
+    ["Declined. Your invoice is paid as planned, on its due date.", OFFER_ACTIONS],
+    ["early_payment_offer_declined", OFFERS_LIB],
+    ["This link is no longer valid. Ask the business that sent it for a new one.", OFFER_PAGE],
+    ["This invoice changed since the offer was made, so nothing changed. Ask the business for a new offer.", OFFER_ACTIONS],
+    ["early_payment_offer_accepted", OFFERS_LIB],
+  ],
   // Bank payouts through BlindPay (bank payouts B3, B4, B6, B7, B12).
   "guides/bank-payouts": [
     ["Bank payouts", BANK_PANEL, 'title="Bank payouts"'],
@@ -2966,6 +2998,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/commissions": 20,
   "guides/pay-a-contractor": 20,
   "guides/bank-payouts": 20,
+  "guides/early-payment-offers": 20,
   "guides/get-paid": 20,
   "guides/telegram": 20,
   "guides/slack": 20,
