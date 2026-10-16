@@ -121,13 +121,34 @@ export function DocsSearchButton({ className }: { className?: string }) {
       <Button
         variant="secondary"
         onClick={search.open}
-        className={cn("hidden w-56 justify-start gap-2.5 px-3 font-normal text-ink-3 shadow-none hover:text-ink sm:inline-flex", className)}
+        className={cn("hidden w-56 justify-start gap-2.5 bg-ground/50 px-3 font-normal text-ink-3 shadow-none hover:text-ink sm:inline-flex lg:w-72", className)}
       >
         <Search aria-hidden />
         <span className="flex-1 text-left">Search the docs…</span>
         <Kbd>{shortcut}</Kbd>
       </Button>
     </>
+  );
+}
+
+/**
+ * The docs home's search (docs redesign D5): a wide field-shaped button that opens the same search dialog as the
+ * header's, with its shortcut. It is a button, not a text field: typing happens in the dialog, where the results are.
+ */
+export function DocsSearchHero() {
+  const search = useDocsSearch();
+  const shortcut = useShortcutLabel();
+  return (
+    <Button
+      variant="secondary"
+      size="lg"
+      onClick={search.open}
+      className="w-full max-w-xl justify-start gap-3 px-4 text-[0.9375rem] font-normal text-ink-3 hover:text-ink"
+    >
+      <Search aria-hidden />
+      <span className="min-w-0 flex-1 truncate text-left">Search guides, API endpoints and webhooks…</span>
+      <Kbd>{shortcut}</Kbd>
+    </Button>
   );
 }
 

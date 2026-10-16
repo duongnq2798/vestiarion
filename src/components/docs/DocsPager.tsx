@@ -29,7 +29,7 @@ export function DocsPager({ slug }: { slug: string }) {
   const { prev, next } = neighbours(slug);
   if (!prev && !next) return null;
   return (
-    <nav aria-label="Previous and next pages" className="mt-14 grid gap-3 border-t border-line pt-8 sm:grid-cols-2">
+    <nav aria-label="Previous and next pages" className="mt-8 grid gap-3 border-t border-line pt-8 sm:grid-cols-2">
       {prev && <PagerLink page={prev} direction="prev" />}
       {next && <PagerLink page={next} direction="next" />}
     </nav>

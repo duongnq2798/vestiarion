@@ -3021,12 +3021,17 @@ the webhook verification snippets run against the signing code. The Guides
 pages (`content/docs/guides/`) are for people using the app rather than the
 API; they quote its buttons, fields and messages exactly, and
 `tests/docs-guides.test.ts` checks each quoted string against the source file
-it comes from, so renaming one in the app means updating the guide. Their step screenshots are the app’s own components rendered with sample data by `/docs-shots/<name>` (`src/app/docs-shots/`), which answers only where `DOCS_SCREENSHOTS=1` is set; `npm run docs:screenshots` photographs them into `public/docs/guides/`, and `tests/docs-screenshots.test.tsx` holds every `<Screenshot>` to an existing PNG with alt text, and every PNG to a guide. The nav groups pages by what a reader is doing (`docs/superpowers/specs/2026-10-11-docs-clarity-design.md`): Start here,
-Everyday work, Trust and controls, Connect your tools, Developers, then the API reference and webhooks, which the sidebar
-folds (`NavSection.folded`) until opened or holding the page being read; pages keep their addresses whatever their group.
-MDX pages have `<Callout kind="note|tip|important|warning|real-money">`, whose kind is written beside its title on the
-page and in the `.md` view, `<Action href>` for a guide's one next step in the app, and numbered `## 1. …` steps, which
-`DocsHeading` draws with a number badge while keeping their ids. A `<Screenshot>` opens larger in a dialog
+it comes from, so renaming one in the app means updating the guide. Their step screenshots are the app’s own components rendered with sample data by `/docs-shots/<name>` (`src/app/docs-shots/`), which answers only where `DOCS_SCREENSHOTS=1` is set; `npm run docs:screenshots` photographs them into `public/docs/guides/`, and `tests/docs-screenshots.test.tsx` holds every `<Screenshot>` to an existing PNG with alt text, and every PNG to a guide. The nav groups pages by what a reader is doing (`docs/superpowers/specs/2026-10-11-docs-clarity-design.md`,
+`docs/superpowers/specs/2026-10-16-docs-redesign-design.md`): Get started, Pay bills, Plan and report, Get paid, Trust and
+controls, Connect your tools, Developers, then the API reference, webhooks and the changelog. The long sections split
+their pages into short runs under a `NavPage.group` ("Accounting" in Connect your tools), which only the sidebar draws.
+Every section is a disclosure in the sidebar, open when it holds the page being read; pages keep their addresses
+whatever their group. The docs' home (`DocsHomeHero`, then `content/docs/index.mdx`) leads with search and the two ways
+in, then popular workflows, `<TopicIndex />` (every section and its first pages, built from the nav) and the developer
+resources. MDX pages have `<Callout kind="note|tip|important|warning|real-money">`, whose kind is written beside its
+title on the page and in the `.md` view, `<Action href>` for a guide's one next step in the app, `<Flow>` and
+`<FlowStep title>` for a workflow the guide describes (a numbered list in the `.md` view), `<Card icon>` from one set of
+line icons, and numbered `## 1. …` steps, which `DocsHeading` draws with a number badge while keeping their ids. A `<Screenshot>` opens larger in a dialog
 (`ZoomableImage`). A `<Video>` (`src/components/docs/Video.tsx`) shows a guide's walkthrough film, an MP4 and its poster
 under `public/docs/videos/`, in the browser's own player with `preload="none"` (no embed, no autoplay), its title,
 length and caption below, and its transcript, written between its tags in the MDX, under "Read the transcript"; the

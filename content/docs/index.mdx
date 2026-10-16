@@ -1,61 +1,71 @@
 Vestiarion is an AI agent for bills and payments, for small businesses. It reads each bill your team adds, decides whether to pay it now, pay it on a later day, hold it for a person or ask for what is missing, and writes down why. Rules in code check every payment before money moves, within limits you set, and every decision is signed into a ledger you can verify. Payments are in USDC on Arc: Arc testnet to try everything, Arc mainnet for real money.
 
-These docs take a business from its first decision to live payments, and show developers how to build on the API and webhooks.
-
-## Start here
-
-<Cards>
-  <Card title="See your first decision" href="/docs/guides/try-it">
-    Add a supplier and one of your bills, and read what the agent decided and why. No wallet, no USDC, about five minutes.
-  </Card>
-  <Card title="Run alongside how you pay today" href="/docs/guides/shadow-mode">
-    Shadow mode: keep paying as you do, and agree or disagree with each of the agent's decisions on your real bills.
-  </Card>
-  <Card title="How payments are controlled" href="/docs/guides/controls">
-    The checks in code, the limits, who approves, how to stop the agent, and where money can move.
-  </Card>
-  <Card title="Developer quickstart" href="/docs/get-started/quickstart">
-    Create a workspace API key and make your first two requests.
-  </Card>
-</Cards>
-
 <Callout kind="note" title="Testnet and mainnet">
 A workspace is on Arc testnet or on Arc mainnet, chosen when it is created. On Arc testnet nothing has market value and a new workspace simulates its payments until you take it live. On Arc mainnet, a live workspace pays real USDC. See [Where money can move](/docs/guides/controls#where-money-can-move).
 </Callout>
+
+## Popular workflows
+
+<Cards>
+  <Card icon="decision" title="See your first decision" href="/docs/guides/try-it">
+    Add a supplier and one of your bills, and read what the agent decided and why. No wallet, no USDC, about five minutes.
+  </Card>
+  <Card icon="shadow" title="Run alongside how you pay today" href="/docs/guides/shadow-mode">
+    Shadow mode: keep paying as you do, and agree or disagree with each of the agent's decisions on your real bills.
+  </Card>
+  <Card icon="payment" title="Go live" href="/docs/guides/go-live">
+    Create the workspace's wallets, fund them with USDC and take the agent live, on Arc testnet or on Arc mainnet.
+  </Card>
+  <Card icon="controls" title="How payments are controlled" href="/docs/guides/controls">
+    The checks in code, the limits, who approves, how to stop the agent, and where money can move.
+  </Card>
+  <Card icon="accounting" title="Bring bills in from your accounting" href="/docs/guides/xero">
+    Connect Xero, QuickBooks Online or Zoho Books: open bills come in for review and become payables only when you add them.
+  </Card>
+  <Card icon="capture" title="Capture invoices from Chrome" href="/docs/guides/invoice-capture">
+    Send an invoice from a page or a file to your workspace as a draft, for an owner or admin to add. It never pays.
+  </Card>
+</Cards>
+
+## Explore by topic
+
+Every guide, by what you are doing. The sidebar holds each section's full list.
+
+<TopicIndex />
+
+## Developer resources
+
+<Cards>
+  <Card icon="key" title="Developer quickstart" href="/docs/get-started/quickstart">
+    Create a workspace API key and make your first two requests.
+  </Card>
+  <Card icon="api" title="API reference" href="/docs/api">
+    Every v1 endpoint with its parameters, response and errors.
+  </Card>
+  <Card icon="sdk" title="TypeScript SDK" href="/docs/get-started/sdk">
+    A typed client for the API and its webhooks: every page, safe retries and signature checks.
+  </Card>
+  <Card icon="webhooks" title="Webhooks" href="/docs/webhooks">
+    Each ledger entry pushed to your HTTPS endpoint, signed.
+  </Card>
+  <Card icon="ai" title="AI integration" href="/docs/ai-integration">
+    Markdown views, llms.txt, the OpenAPI document and an MCP server for coding agents.
+  </Card>
+  <Card icon="github" title="Source on GitHub" href="https://github.com/duongnq2798/vestiarion">
+    The code, the contracts on Arc and these docs, open to read.
+  </Card>
+</Cards>
 
 ## Watch it work
 
 Two short walkthroughs, recorded in the live product on Arc testnet with demo data. Each card opens the video at the top of its guide.
 
 <Cards>
-  <Card title="Bills from Xero, decided by the agent" href="/docs/guides/xero#watch-it">
+  <Card icon="video" title="Bills from Xero, decided by the agent" href="/docs/guides/xero#watch-it">
     Under two minutes: bills come in from the Xero Demo Company, one paid in Xero is caught before it is paid twice, and one is paid on Arc testnet.
   </Card>
-  <Card title="A deal from HubSpot, collected on Arc" href="/docs/guides/hubspot#watch-it">
+  <Card icon="video" title="A deal from HubSpot, collected on Arc" href="/docs/guides/hubspot#watch-it">
     Under two minutes: a deal won in a HubSpot test account is planned, its deposit is paid and matched, and the receipt is written back to HubSpot.
-  </Card>
-</Cards>
-
-## Go further
-
-<Cards>
-  <Card title="Go live" href="/docs/guides/go-live">
-    Using the app: create the wallets, fund them and take the agent live.
-  </Card>
-  <Card title="Pay a contractor for delivered work" href="/docs/guides/pay-a-contractor">
-    Add a milestone, verify the work by hand or by a merged pull request, and let the agent release the pay.
-  </Card>
-  <Card title="When the model and the policy disagree" href="/docs/research/model-vs-policy">
-    Production decisions beside the written policy's answer to the same facts, and where code refused the model.
-  </Card>
-  <Card title="API reference" href="/docs/api">
-    Every v1 endpoint with its parameters, response and errors.
-  </Card>
-  <Card title="Webhooks" href="/docs/webhooks">
-    Each ledger entry pushed to your HTTPS endpoint, signed.
-  </Card>
-  <Card title="AI integration" href="/docs/ai-integration">
-    Markdown views, llms.txt, the OpenAPI document and an MCP server for coding agents.
   </Card>
 </Cards>
 

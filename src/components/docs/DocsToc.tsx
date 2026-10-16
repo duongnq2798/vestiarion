@@ -22,8 +22,8 @@ export function DocsToc({ headings }: { headings: Heading[] }) {
 
   return (
     <nav aria-label="On this page">
-      <p className="font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-2">On this page</p>
-      <ul className="mt-3 space-y-1 border-l border-line">
+      <p className="text-[0.8125rem] font-semibold text-ink">On this page</p>
+      <ul className="mt-3 border-l border-line">
         {headings.map((heading) => {
           const current = heading.id === active;
           return (
@@ -32,9 +32,9 @@ export function DocsToc({ headings }: { headings: Heading[] }) {
                 href={`#${heading.id}`}
                 aria-current={current ? "location" : undefined}
                 className={cn(
-                  "-ml-px block border-l py-1.5 text-[0.84375rem] leading-snug transition-colors duration-150 ease-standard",
+                  "-ml-px block border-l-2 py-1.5 text-[0.8125rem] leading-snug transition-colors duration-150 ease-standard",
                   heading.depth === 3 ? "pl-6" : "pl-3",
-                  current ? "border-agent font-medium text-agent" : "border-transparent text-ink-2 hover:border-line-strong hover:text-ink"
+                  current ? "border-agent font-medium text-agent" : "border-transparent text-ink-3 hover:border-line-strong hover:text-ink"
                 )}
               >
                 {heading.text}
