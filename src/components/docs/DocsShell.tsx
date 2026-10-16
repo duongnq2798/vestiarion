@@ -29,7 +29,8 @@ export function editHref(slug: string): string {
  * "Docs", with search, the repository and the console; the sidebar from `lg` up (a drawer from the header below it) on
  * its own quiet panel; and the page on the reading surface. The page brings its own table of contents, through
  * `DocsPage`, so the frame stays put while pages change beneath it. The search index is built by the layout and handed
- * to the browser here.
+ * to the browser here. The footer closes the page's column, beside the sidebar: the sidebar's row then runs to the end
+ * of the document, so the sticky sidebar is never pushed up under the header when a page is read to its end.
  */
 export function DocsShell({ searchIndex, children }: { searchIndex: SearchEntry[]; children: ReactNode }) {
   return (
@@ -53,11 +54,13 @@ export function DocsShell({ searchIndex, children }: { searchIndex: SearchEntry[
           <aside className="sticky top-16 hidden h-[calc(100dvh-4rem)] w-[17.5rem] shrink-0 overflow-y-auto overscroll-contain border-r border-line bg-ground/40 lg:block">
             <DocsSidebar sections={DOCS_NAV} />
           </aside>
-          <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-4 outline-none sm:px-6 lg:px-10 xl:px-12">
-            {children}
-          </main>
+          <div className="flex min-w-0 flex-1 flex-col">
+            <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-4 outline-none sm:px-6 lg:px-10 xl:px-12">
+              {children}
+            </main>
+            <SiteFooter compact />
+          </div>
         </div>
-        <SiteFooter compact />
       </div>
     </DocsSearchProvider>
   );

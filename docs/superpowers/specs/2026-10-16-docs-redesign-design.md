@@ -147,3 +147,20 @@ Headless Edge, at 1440, 1280, 1024, 768 and 375 px:
 - the hero's flow card from 1280 px;
 - the header's search gone on the home only;
 - moving from Pay bills, with Get paid opened by hand, to the Xero guide leaves Connect your tools alone open.
+
+## Fix: the sidebar at the end of a page
+
+The sidebar sticks 4rem from the top, the viewport's height less the header's, inside the row it shares with the page.
+The compact footer sat under that row, so at the end of a page the row ended above the footer and, as sticky elements
+do, the sidebar went up with it: by the footer's height (73 px), its first sections under the header. The sidebar was
+already scrolled to its top, and `overscroll-contain` kept the wheel from reaching the page, so scrolling over it could
+not bring them back; only scrolling the page up did.
+
+The footer now closes the page's column, beside the sidebar, so the row runs to the end of the document and the sidebar
+stays under the header to the last line. Its panel runs down beside the footer.
+
+- `tests/docs-redesign.test.tsx` holds the footer inside the page's column, after `<main>`.
+- Headless Edge, every section open, scrolled to the end of the payment plan guide at 1440 × 900 and 1024 × 768, and
+  of the docs' home at 1440 × 900: the sidebar's top stays at the header's bottom, its first section in view, before
+  and after a wheel up over it. Before the fix, at 1440 × 900, its top was 9 px above the viewport. At 375 px, with no
+  sidebar, the footer runs the full width as before.
