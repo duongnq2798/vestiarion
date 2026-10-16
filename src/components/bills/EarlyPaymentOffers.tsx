@@ -27,7 +27,7 @@ function MakeOffer({ orgSlug, candidate, reserveApy }: { orgSlug: string; candid
         <div className="space-y-1">
           <p className="text-xs text-ink">{state.message}</p>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <code className="min-w-0 max-w-full truncate rounded bg-ground px-2 py-1 font-mono text-xs text-ink-2">{state.url}</code>
+            <code className="min-w-0 max-w-full truncate rounded-lg bg-ground px-2 py-1 font-mono text-xs text-ink-2">{state.url}</code>
             <CopyButton value={state.url} label="Copy the offer link" variant="secondary" size="sm" />
           </div>
         </div>
