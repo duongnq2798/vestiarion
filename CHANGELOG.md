@@ -26,6 +26,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   0122 runs, connecting says Zoho Books is not set up on this deployment yet.
   [Guide](https://www.vestiarion.xyz/docs/guides/zohobooks).
 
+### Fixed
+
+- **The connect pages of QuickBooks and Zoho Books name their data right.** They said "QuickBooks's data" and "Zoho
+  Books's data"; they now say QuickBooks' and Zoho Books'. Usage this month names Asana's syncs "Asana", not "asana".
+
 ## [0.1.0-beta.7] - 2026-10-15
 
 ### Added

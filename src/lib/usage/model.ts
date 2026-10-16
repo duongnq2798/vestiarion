@@ -51,6 +51,7 @@ export const ACTION_LABELS: Record<string, string> = {
   hubspot: "HubSpot",
   pipedrive: "Pipedrive",
   zohobooks: "Zoho Books",
+  asana: "Asana",
 };
 
 export function actionLabel(action: string): string {

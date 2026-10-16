@@ -181,7 +181,7 @@ export async function AccountingConnect({ provider, searchParams }: { provider: 
                     }))}
                   />
                 )}
-                <ConnectorConsent provider={provider} title={`What Vestiarion does with ${label}'s data`} changed={one(params.consent) === "changed"} />
+                <ConnectorConsent provider={provider} title={`What Vestiarion does with ${PROVIDER_WORDS[provider].possessive} data`} changed={one(params.consent) === "changed"} />
                 <NativeCheckbox
                   name="consent"
                   value="yes"
