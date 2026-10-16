@@ -20,7 +20,7 @@ export default function SecurityPage() {
     <LegalPage
       eyebrow="Trust"
       title="Security"
-      updated="2026-10-15"
+      updated="2026-10-16"
       intro="How Vestiarion protects the data and the money it handles, for anyone reviewing the app, its API or its integrations. Every statement describes what the code does today, and the code is public, so each one can be checked against it. What we do not claim is at the end."
     >
       <LegalSection id="architecture" title="Architecture and data flow">
@@ -116,7 +116,7 @@ export default function SecurityPage() {
           <li>the Circle API key and entity secret a workspace connects;</li>
           <li>each workspace&apos;s Ed25519 ledger signing key;</li>
           <li>each webhook endpoint&apos;s signing secret, and the secret of each webhook Asana sends;</li>
-          <li>the OAuth access and refresh tokens of Xero, QuickBooks Online, HubSpot, Pipedrive and Asana;</li>
+          <li>the OAuth access and refresh tokens of Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive and Asana;</li>
           <li>a Slack connection&apos;s bot token and posting address, bound to the workspace and the field;</li>
           <li>
             a client pay link&apos;s token, so the link can be shown again on its card and the customer&apos;s statement page and sent in
@@ -267,15 +267,21 @@ export default function SecurityPage() {
       <LegalSection id="connectors" title="Connected tools and their tokens">
         <ul>
           <li>
-            <strong>Connecting.</strong> Only an owner or admin connects a workspace to Xero, QuickBooks Online, HubSpot, Pipedrive, Asana, Slack or
-            GitHub, and for the first five only after agreeing to what Vestiarion reads and writes there. The OAuth state is signed under the master
-            key and expires after 10 minutes, a nonce in an HttpOnly cookie must come back with it, and the callback is accepted only for the same
-            signed-in person, whose role is read again.
+            <strong>Connecting.</strong> Only an owner or admin connects a workspace to Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive,
+            Asana, Slack or GitHub, and for the first six only after agreeing to what Vestiarion reads and writes there. The OAuth state is signed
+            under the master key and expires after 10 minutes, a nonce in an HttpOnly cookie must come back with it, and the callback is accepted only
+            for the same signed-in person, whose role is read again.
           </li>
           <li>
-            <strong>Storing.</strong> The tokens of Xero, QuickBooks Online, HubSpot, Pipedrive and Asana are encrypted, in a table only the platform
-            reads, and are opened only in their own workspace&apos;s scope. They are never shown in the browser, a log, a model&apos;s prompt or a
-            webhook.
+            <strong>Zoho&apos;s data centers.</strong> Zoho Books&apos; callback names the data center the person&apos;s Zoho account lives in. It is
+            read only after every other check, and only from a fixed list of Zoho&apos;s data centers: the code, the client secret and the tokens go
+            only to that data center&apos;s Zoho servers, never to an address the callback names, and each token is kept with its data center so it
+            is never sent to another.
+          </li>
+          <li>
+            <strong>Storing.</strong> The tokens of Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive and Asana are encrypted, in a table only the
+            platform reads, and are opened only in their own workspace&apos;s scope. They are never shown in the browser, a log, a model&apos;s prompt
+            or a webhook.
           </li>
           <li>
             <strong>Refreshing.</strong> A token is refreshed a minute before it expires, under a lease in the database, so one refresh runs at a time
@@ -290,7 +296,8 @@ export default function SecurityPage() {
           <li>
             <strong>Disconnected on the provider&apos;s side.</strong> When someone disconnects QuickBooks Online at Intuit, its Disconnect page asks
             Intuit whether the connection still works, and deletes the tokens once Intuit refuses them. Pipedrive&apos;s notice that the app was
-            uninstalled marks the connection to be connected again and keeps its tokens, which no longer work.
+            uninstalled marks the connection to be connected again and keeps its tokens, which no longer work. Zoho sends no notice: access removed
+            in Zoho is found when the next sync&apos;s refresh is refused, which marks the connection the same way.
           </li>
           <li>
             <strong>Slack</strong> keeps its bot token and posting address encrypted. Disconnecting uninstalls the app from the Slack workspace, which
@@ -307,7 +314,7 @@ export default function SecurityPage() {
         </ul>
         <p>
           What Vestiarion reads from and writes to each tool is on the <LegalLink href="/privacy#services">Privacy</LegalLink> page. QuickBooks
-          Online is never written to, though the access Intuit grants could.
+          Online is never written to, though the access Intuit grants could. Zoho Books is never written to, and the access Zoho grants is read only.
         </p>
       </LegalSection>
 
@@ -344,7 +351,7 @@ export default function SecurityPage() {
             <strong>Resend</strong>, for invoices by email: a Svix signature, refused when its timestamp is more than 5 minutes away.
           </li>
         </ul>
-        <p>Xero and HubSpot send Vestiarion no webhooks: their records are read on a schedule.</p>
+        <p>Xero, Zoho Books and HubSpot send Vestiarion no webhooks: their records are read on a schedule.</p>
         <p>
           The scheduled routes, the agent&apos;s tick, the FX and transfer watches, webhook delivery, accounting sync, the daily cleanup and the FX
           rates, take the deployment&apos;s <code>AGENT_API_TOKEN</code> as a bearer token, compared as SHA-256 digests in constant time. So does the
@@ -452,8 +459,8 @@ export default function SecurityPage() {
             rule-based policy decides and the ledger says so. Either way, the answer is a proposal the rules in code check.
           </li>
           <li>
-            Vestiarion trains and fine-tunes no model, and never uses data from Xero, QuickBooks, HubSpot, Pipedrive or Asana to train or improve any AI
-            model.
+            Vestiarion trains and fine-tunes no model, and never uses data from Xero, QuickBooks, Zoho Books, HubSpot, Pipedrive or Asana to train or improve
+            any AI model.
           </li>
         </ul>
       </LegalSection>

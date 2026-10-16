@@ -28,6 +28,7 @@ const BRANDS: Brand[] = [
   "pipedrive",
   "pipedrive-lockup",
   "asana-lockup",
+  "zohobooks-lockup",
 ];
 
 const text = (markup: string) =>
@@ -59,6 +60,8 @@ const OFFICIAL_SHA256: Record<Brand, string> = {
   pipedrive: "45f867120bc5459c83f3148b5f0f9678e8228f6820940e1d8262756a6979b3e5",
   "pipedrive-lockup": "9f3315ca31f3698bd1e73ebd6430e8d0bbb23b84bfcada5261bbab0dcfdd594a",
   "asana-lockup": "8a951a5126a6b1de833f5354102ba995eec1003cc76e79dd8401c890d987c1b5",
+  // Zoho Books' logo as Zoho serves it on its own site (zohowebstatic.com/sites/zweb/images/productlogos/books.svg).
+  "zohobooks-lockup": "9189936047e3b48257ceafb2b3c96ec46d3463569d765b464738e5628bc8abdf",
 };
 
 const brandFile = (brand: Brand) => readFileSync(path.join(process.cwd(), "public", BRAND_FILES[brand]), "utf8");
@@ -223,14 +226,16 @@ describe("a brand mark", () => {
       "slack.svg",
       "telegram.svg",
       "xero.svg",
+      "zohobooks-lockup.svg",
     ]);
   });
 
   it("gives each connector its own mark, and Intuit's name alone no mark: no place stands for Intuit itself", () => {
     expect(Object.keys(PROVIDER_MARKS).sort()).toEqual([...PROVIDERS].sort());
-    expect(PROVIDER_MARKS).toEqual({ xero: "xero", quickbooks: "quickbooks", hubspot: "hubspot", pipedrive: "pipedrive", asana: "asana-lockup" });
-    // A connector's mark is a symbol before its written name, but Xero's wordmark and Asana's logo, which spell theirs.
-    for (const provider of PROVIDERS) expect(isWordmark(PROVIDER_MARKS[provider]), provider).toBe(provider === "xero" || provider === "asana");
+    expect(PROVIDER_MARKS).toEqual({ xero: "xero", quickbooks: "quickbooks", hubspot: "hubspot", pipedrive: "pipedrive", asana: "asana-lockup", zohobooks: "zohobooks-lockup" });
+    // A connector's mark is a symbol before its written name, but Xero's wordmark and Asana's and Zoho Books' logos,
+    // which spell theirs.
+    for (const provider of PROVIDERS) expect(isWordmark(PROVIDER_MARKS[provider]), provider).toBe(provider === "xero" || provider === "asana" || provider === "zohobooks");
     expect(readdirSync(path.join(process.cwd(), "public/brands")).some((file) => /^intuit/i.test(file))).toBe(false);
   });
 
@@ -249,6 +254,7 @@ describe("a brand mark", () => {
       pipedrive: "Pipedrive",
       "pipedrive-lockup": "Pipedrive",
       "asana-lockup": "Asana",
+      "zohobooks-lockup": "Zoho Books",
     };
     const walk = (dir: string): string[] =>
       readdirSync(dir, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? walk(path.join(dir, entry.name)) : [path.join(dir, entry.name)]));
@@ -261,8 +267,8 @@ describe("a brand mark", () => {
     }
   });
 
-  it("knows npm's and Xero's marks and the QuickBooks, Pipedrive and Asana lockups spell their names, and the symbols do not", () => {
-    expect(BRANDS.filter(isWordmark)).toEqual(["npm", "xero", "quickbooks-lockup", "pipedrive-lockup", "asana-lockup"]);
+  it("knows npm's and Xero's marks and the QuickBooks, Pipedrive, Asana and Zoho Books lockups spell their names, and the symbols do not", () => {
+    expect(BRANDS.filter(isWordmark)).toEqual(["npm", "xero", "quickbooks-lockup", "pipedrive-lockup", "asana-lockup", "zohobooks-lockup"]);
   });
 
   it("names a mark beside its name: a wordmark stands in its place with the name for screen readers, any other before it", () => {
@@ -284,7 +290,7 @@ describe("the landing page's built on and works with", () => {
 
   it("names each service beside its mark, and links to the evidence, Arc and Circle to their own sites as well", () => {
     const page = text(markup);
-    for (const name of ["Arc", "Circle", "Xero", "QuickBooks Online", "HubSpot", "Pipedrive", "Asana", "Slack", "Telegram", "npm"]) expect(page).toContain(name);
+    for (const name of ["Arc", "Circle", "Xero", "QuickBooks Online", "Zoho Books", "HubSpot", "Pipedrive", "Asana", "Slack", "Telegram", "npm"]) expect(page).toContain(name);
     const hrefs = [...markup.matchAll(/<a [^>]*href="([^"]+)"/g)].map((match) => match[1]);
     expect(hrefs).toEqual([
       "/open",
@@ -293,6 +299,7 @@ describe("the landing page's built on and works with", () => {
       "https://www.circle.com",
       "/docs/guides/xero",
       "/docs/guides/quickbooks",
+      "/docs/guides/zohobooks",
       "/docs/guides/hubspot",
       "/docs/guides/pipedrive",
       "/docs/guides/asana",
@@ -305,6 +312,7 @@ describe("the landing page's built on and works with", () => {
       "circle",
       "xero",
       "quickbooks-lockup",
+      "zohobooks-lockup",
       "hubspot",
       "pipedrive-lockup",
       "asana-lockup",
@@ -312,27 +320,30 @@ describe("the landing page's built on and works with", () => {
       "telegram",
       "npm",
     ]);
-    // npm's and Xero's marks and the QuickBooks, Pipedrive and Asana lockups are their names, so the written names are
-    // for screen readers.
+    // npm's and Xero's marks and the QuickBooks, Zoho Books, Pipedrive and Asana lockups are their names, so the written
+    // names are for screen readers.
     expect(markup).toContain('<span class="sr-only">npm</span>');
     expect(markup).toContain('<span class="sr-only">Xero</span>');
     expect(markup).toMatch(/data-brand="quickbooks-lockup"[^>]*\/><span class="sr-only">QuickBooks Online<\/span>/);
+    expect(markup).toMatch(/data-brand="zohobooks-lockup"[^>]*\/><span class="sr-only">Zoho Books<\/span>/);
     expect(markup).toMatch(/data-brand="pipedrive-lockup"[^>]*\/><span class="sr-only">Pipedrive<\/span>/);
     expect(markup).toMatch(/data-brand="asana-lockup"[^>]*\/><span class="sr-only">Asana<\/span>/);
     // Every service shows its mark: none is named in words alone.
     expect(markup).not.toMatch(/font-semibold text-ink"><span>/);
   });
 
-  it("lists ten services, two to a row below a laptop's width and five from it, so every row is full", () => {
+  it("lists eleven services, two to a row below a laptop's width and five from it, the last spanning its row, so every row is full", () => {
     const items = [...markup.matchAll(/<li class="([^"]*)"/g)].map((match) => match[1]);
-    expect(items).toHaveLength(10);
+    expect(items).toHaveLength(11);
     expect(markup).toContain('<ul class="grid grid-cols-2 lg:grid-cols-5">');
     expect(markup).not.toMatch(/grid-cols-(3|4)/);
     // Five to a row: the first of each row starts without a rule, and the rows after the first have one above them.
     for (const item of items) expect(item).toContain("lg:nth-[5n+1]:border-l-0");
     for (const item of items) expect(item).toContain("lg:nth-[n+6]:border-t");
-    // Ten fill every row of two and of five: none spans.
-    for (const item of items) expect(item).not.toMatch(/col-span/);
+    // Eleven leave the last alone on its row of two and of five: the last spans the whole row, and no other spans.
+    expect(items.length % 2).toBe(1);
+    expect(items.length % 5).toBe(1);
+    for (const item of items) expect(item.match(/\S*col-span\S*/g)).toEqual(["last:col-span-full"]);
     // A name too long for a phone's half width moves under its mark instead of running into the line below.
     expect(markup).toContain("min-h-5 flex-wrap");
     expect(markup).not.toMatch(/flex h-5 /);
@@ -353,6 +364,7 @@ describe("the landing page's built on and works with", () => {
     // The trademark notice npm's policy asks for, Intuit's owner named, and that the marks are not an endorsement.
     expect(page).toContain("npm is a registered trademark of npm, inc.");
     expect(page).toContain("intuit and quickbooks are trademarks of intuit inc.");
+    expect(page).toContain("zoho and zoho books are trademarks of zoho corporation pvt. ltd.");
     expect(page).toContain("arc, circle, slack, telegram, xero, hubspot, pipedrive and asana are trademarks of their respective owners.");
     expect(page).toContain("not an endorsement");
   });

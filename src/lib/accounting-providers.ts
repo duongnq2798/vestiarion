@@ -3,12 +3,15 @@ import { quickBooksProvider } from "./quickbooks/provider";
 import { quickBooksSettingsFromEnv } from "./quickbooks/settings";
 import { xeroProvider } from "./xero/provider";
 import { xeroSettingsFromEnv } from "./xero/settings";
+import { zohoBooksProvider } from "./zohobooks/provider";
+import { zohoBooksSettingsFromEnv } from "./zohobooks/settings";
 
 /**
  * The accounting providers this deployment has set up (docs/superpowers/specs/2026-10-12-xero-connector-design.md X1,
  * X16; docs/superpowers/specs/2026-10-12-quickbooks-connector-design.md Q1, Q2): the one place the core is wired to a
  * provider's folder. Xero is on with `XERO_CLIENT_ID` and `XERO_CLIENT_SECRET`; QuickBooks Online with
- * `QUICKBOOKS_CLIENT_ID` and `QUICKBOOKS_CLIENT_SECRET`.
+ * `QUICKBOOKS_CLIENT_ID` and `QUICKBOOKS_CLIENT_SECRET`; Zoho Books with `ZOHO_BOOKS_CLIENT_ID` and `ZOHO_BOOKS_CLIENT_SECRET`
+ * (docs/superpowers/specs/2026-10-16-zoho-books-connector-design.md Z2).
  */
 export function accountingProvider(id: ProviderId): AccountingProvider | null {
   if (id === "xero") {
@@ -19,6 +22,10 @@ export function accountingProvider(id: ProviderId): AccountingProvider | null {
     const settings = quickBooksSettingsFromEnv();
     return settings ? quickBooksProvider(settings) : null;
   }
+  if (id === "zohobooks") {
+    const settings = zohoBooksSettingsFromEnv();
+    return settings ? zohoBooksProvider(settings) : null;
+  }
   return null;
 }
 
@@ -26,6 +33,7 @@ export function accountingProvider(id: ProviderId): AccountingProvider | null {
 export function accountingProviderOn(id: ProviderId): boolean {
   if (id === "xero") return xeroSettingsFromEnv() !== null;
   if (id === "quickbooks") return quickBooksSettingsFromEnv() !== null;
+  if (id === "zohobooks") return zohoBooksSettingsFromEnv() !== null;
   // A CRM is not an accounting tool (HubSpot connector H1): `crm-providers.ts` wires it.
   return false;
 }

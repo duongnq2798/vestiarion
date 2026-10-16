@@ -20,6 +20,7 @@ export const CONSENT_VERSIONS: Record<ProviderId, string> = {
   hubspot: "hubspot-2026-10-15",
   pipedrive: "pipedrive-2026-10-15",
   asana: "asana-2026-10-14",
+  zohobooks: "zohobooks-2026-10-16",
 };
 
 /**
@@ -33,6 +34,7 @@ export const CONSENT_HISTORY: Record<ProviderId, readonly string[]> = {
   hubspot: ["hubspot-2026-10-12", "hubspot-2026-10-13", "hubspot-2026-10-15"],
   pipedrive: ["pipedrive-2026-10-14", "pipedrive-2026-10-15"],
   asana: ["asana-2026-10-14"],
+  zohobooks: ["zohobooks-2026-10-16"],
 };
 
 /**
@@ -103,6 +105,7 @@ const PIPEDRIVE_STATEMENT: readonly string[] = [
 const WHAT_IS_READ: Record<AccountingProviderId, string> = {
   xero: "Vestiarion reads the bills, suppliers and chart of accounts of the Xero organisation you pick. It writes to Xero only the payments an owner, admin or accountant approves: each payment made on Arc for a bill brought in from Xero, booked against that bill.",
   quickbooks: "Vestiarion reads the bills, vendors and bank accounts of the QuickBooks company you connect. It writes nothing to QuickBooks.",
+  zohobooks: "Vestiarion reads the bills and vendors of the Zoho Books organization you pick, and the names of the organizations you can reach. It writes nothing to Zoho Books.",
 };
 
 /**

@@ -19,7 +19,7 @@ export default function TermsPage() {
   return (
     <LegalPage
       title="Terms of use"
-      updated="2026-10-15"
+      updated="2026-10-16"
       intro="These terms cover your use of Vestiarion, an autonomous treasury agent that pays invoices and contractors in USDC on Arc mainnet and Arc testnet. By using it, you accept them."
     >
       <LegalSection id="networks" title="Arc mainnet and Arc testnet">
@@ -87,7 +87,10 @@ export default function TermsPage() {
             pay on its own, and what it holds for a person;
           </li>
           <li>who you invite to your workspace, and the role you give them;</li>
-          <li>the accounting tool you connect, such as a Xero organisation or a QuickBooks company: connect only one you may give a workspace access to;</li>
+          <li>
+            the accounting tool you connect, such as a Xero organisation, a QuickBooks company or a Zoho Books organization: connect only one you may give
+            a workspace access to;
+          </li>
           <li>the CRM you connect, such as a HubSpot account or a Pipedrive company: connect only one you may give a workspace access to;</li>
           <li>
             the work tool you connect, such as your Asana, and the acceptance criteria you write: a person in your workspace, never Asana, accepts a
@@ -121,6 +124,18 @@ export default function TermsPage() {
           data from Intuit, to train or improve any AI model, and never passes it to anyone else without the workspace&apos;s say. A bill open in
           QuickBooks is not a payment approved in Vestiarion. Disconnecting, here or in QuickBooks, stops the reading at once; the bills already added
           stay with the workspace.
+        </p>
+        <p>
+          When an owner or admin connects Zoho Books to a workspace, they agree, for the workspace, that Vestiarion reads the bills and vendors of the
+          Zoho Books organization they pick, and the names of the organizations they can reach. It writes nothing to Zoho Books, and the access Zoho
+          grants is read only. The bills a person adds are shown to the workspace&apos;s members and to its agent; the
+          agent&apos;s model provider ({HOSTED_MODEL_PROVIDER.name}, on the hosted service) sees each bill&apos;s facts to decide on it, under{" "}
+          {HOSTED_MODEL_PROVIDER.name}&apos;s <LegalLink href={HOSTED_MODEL_PROVIDER.terms}>API terms</LegalLink> and{" "}
+          <LegalLink href={HOSTED_MODEL_PROVIDER.privacy}>privacy policy</LegalLink>. Vestiarion never uses Zoho Books data to train or improve any
+          AI model, and never passes it to anyone else without the workspace&apos;s say. A bill open or approved in Zoho Books is not a payment
+          approved in Vestiarion. Zoho Books does not tell Vestiarion when a bill is deleted there, so a bill you added and then deleted in Zoho Books
+          is yours to reject in Vestiarion. Disconnecting, here or in Zoho, stops the reading at once; the bills already added stay with the
+          workspace.
         </p>
         <p>
           When an owner or admin connects HubSpot to a workspace, they agree, for the workspace, that Vestiarion reads the companies, contacts and deals

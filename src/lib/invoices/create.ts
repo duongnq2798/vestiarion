@@ -34,7 +34,7 @@ export interface ImportedRow {
  * organisation, the bill and the contact, with the bill's number. Its entry names them under the provider's name.
  */
 export interface ExternalSource {
-  provider: "xero" | "quickbooks";
+  provider: "xero" | "quickbooks" | "zohobooks";
   ids: { tenantId: string; billId: string; contactId: string | null; invoiceNumber: string | null };
 }
 

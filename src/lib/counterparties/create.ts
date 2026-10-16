@@ -42,7 +42,7 @@ export async function createCounterparty(input: {
    * added with a deal a CRM brought in, by the CRM's (HubSpot connector H11).
    */
   external?:
-    | { provider: "xero" | "quickbooks"; ids: { tenantId: string; contactId: string | null } }
+    | { provider: "xero" | "quickbooks" | "zohobooks"; ids: { tenantId: string; contactId: string | null } }
     | { provider: "hubspot"; ids: { hubId: string; companyId: string | null } }
     // Pipedrive's company (the account) and the organization the deal was sold to (Pipedrive connector P19).
     | { provider: "pipedrive"; ids: { companyId: string; organizationId: string | null } };

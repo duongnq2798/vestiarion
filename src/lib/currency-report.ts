@@ -39,6 +39,7 @@ export const SOURCE_WORDS: Record<string, string> = {
   deal: "a deal",
   xero: "Xero",
   quickbooks: "QuickBooks",
+  zohobooks: "Zoho Books",
   github: "GitHub",
   schedule: "a recurring payment",
 };

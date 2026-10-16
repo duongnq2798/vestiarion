@@ -1,5 +1,13 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-16: Bills brought in from Zoho Books
+
+- An owner or admin can connect a workspace to a Zoho Books organization, and a person adds the bills it brings in from Bills & receivables. Its connection writes the entries Xero's and QuickBooks' write (below), each sent to webhook endpoints as `ledger.appended` and listed by `GET /api/v1/ledger`, with `provider: "zohobooks"`: **`accounting_connected`**, **`accounting_disconnected`**, **`accounting_bill_closed`** and **`accounting_bills_dismissed`**. `externalOrgId` is the Zoho Books organization id, `externalOrgName` its name, and `billId` and `billIds` are Zoho Books bill ids.
+- **`accounting_connected`** carries `consent.version` `zohobooks-2026-10-16`, and `scopes` `ZohoBooks.bills.READ`, `ZohoBooks.contacts.READ` and `ZohoBooks.settings.READ`, all read only. Several workspaces may connect the same organization, each with its own connection.
+- **`accounting_bill_closed`** comes when a bill already added is paid or voided in Zoho Books, with `sourceStatus` `paid` or `voided`, never `deleted`: Zoho Books does not say when a bill is deleted.
+- A bill added from Zoho Books is a **`create_invoice`** entry with `via: "zohobooks"` and `zohobooks: { tenantId, billId, contactId, invoiceNumber }`: the organization id, the bill's id, its vendor's id and its number in Zoho Books. A vendor added with it is a **`create_counterparty`** entry with `via: "zohobooks"` and `zohobooks: { tenantId, contactId }`. A bill partly paid in Zoho Books is added at what is left to pay.
+- Nothing is booked in Zoho Books, so a Zoho Books connection writes no `accounting_payment_account_chosen` and no `accounting_payment_` entries. Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-15: A release Circle took is recorded in the cycle that finds it
 
 - When the agent finds on Circle a batch whose answer was lost, while reconciling one of its milestones, Circle's transaction is recorded on every member at once. The batch's other milestones, reconciled later in the same cycle, now get a `milestone_reconcile` entry with `reconciled: true` and their `execution.resultingStatus` (`"paid"` once confirmed). They used to get one with `reconciled: false` and `reconcileError: "another request is settling this payment's send right now; it is reconciled next cycle"`, and were recorded paid only on the next cycle. The same holds for any payment whose send another lookup recorded after the cycle read it.

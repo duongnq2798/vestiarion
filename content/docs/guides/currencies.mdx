@@ -3,7 +3,7 @@ Your bills come in the currency they were written in: US dollars, Singapore doll
 ## Four things every amount keeps
 
 - **The amount as written**: the figure and currency on the bill, the deal or the payment you recorded. A yen or won amount has no decimals; the others have two.
-- **Where it came from**: the form in the console, a bill list, an emailed invoice, Xero, QuickBooks, HubSpot, a deal, or the API.
+- **Where it came from**: the form in the console, a bill list, an emailed invoice, Xero, QuickBooks, Zoho Books, HubSpot, a deal, or the API.
 - **The rate it was converted at**, when it was: how many of its currency made one US dollar, who published that rate, and when.
 - **The executable amount**: what moves on Arc, in USDC or EURC. For a bill written in another currency, that is the bill's amount at the rate of the day it was added, to the cent, and it does not change afterwards.
 
@@ -15,7 +15,7 @@ Vestiarion never uses one kind of rate in place of another, and every figure say
 
 - A **reference rate** is a market rate a feed published. Vestiarion reads ExchangeRate-API's daily rates. Reports, plans and bills taken in another currency use it.
 - A **provider's quote** is what the provider will actually exchange at. A EURC payable is weighed at Circle's quote, shown on its card as its **USDC value**.
-- An **accounting rate** is the rate your books used, in Xero or QuickBooks. Vestiarion does not read it yet.
+- An **accounting rate** is the rate your books used, in Xero, QuickBooks or Zoho Books. Vestiarion does not read it yet.
 
 Two more are named where they appear: the **redemption peg**, 1:1 and never a market rate, that takes USDC to US dollars and EURC to euros, and a rate **typed by a person** into a cash scenario. A total that counts USDC in US dollars says so: for example "USDC counted at its 1:1 redemption peg". It is a value, never US dollars held in a bank.
 

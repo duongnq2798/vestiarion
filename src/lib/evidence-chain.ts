@@ -278,6 +278,8 @@ function via(detail: Record<string, unknown>): string {
       return " in the review of bills from Xero";
     case "quickbooks":
       return " in the review of bills from QuickBooks";
+    case "zohobooks":
+      return " in the review of bills from Zoho Books";
     case "chrome":
       return " from a draft captured with the Chrome extension";
     default:
@@ -285,8 +287,8 @@ function via(detail: Record<string, unknown>): string {
   }
 }
 
-/** " as bill PD-4471", the number the accounting tool gave the bill (Xero's, QuickBooks'), when the entry kept one. */
-function toolNumber(detail: Record<string, unknown>, tool: "xero" | "quickbooks"): string {
+/** " as bill PD-4471", the number the accounting tool gave the bill (Xero's, QuickBooks', Zoho Books'), when the entry kept one. */
+function toolNumber(detail: Record<string, unknown>, tool: "xero" | "quickbooks" | "zohobooks"): string {
   const ids = record(detail[tool]);
   const number = ids ? text(ids.invoiceNumber) : null;
   return number ? ` as bill ${number}` : "";
@@ -669,6 +671,8 @@ function billStep(ctx: Context, invoice: EvidenceInvoice): EvidenceStep {
             ? `brought in from Xero${toolNumber(created.detail, "xero")}, and added on Bills & receivables by the person who reviewed it`
           : created.detail.via === "quickbooks"
             ? `brought in from QuickBooks${toolNumber(created.detail, "quickbooks")}, and added on Bills & receivables by the person who reviewed it`
+          : created.detail.via === "zohobooks"
+            ? `brought in from Zoho Books${toolNumber(created.detail, "zohobooks")}, and added on Bills & receivables by the person who reviewed it`
           : created.detail.via
             ? `added${via(created.detail)}`
             : "added in the invoice form on Bills & receivables";

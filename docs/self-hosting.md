@@ -384,9 +384,9 @@ waiting. Supabase Cron runs them from the database instead:
   was sent is told to the workspace's people, once per attempt, in the console, Slack, Telegram,
   webhooks and by email. It sends nothing.
 - `POST /api/platform/webhooks`, every 10 minutes: webhook retries and anything still queued.
-- `POST /api/platform/accounting-sync`, every 15 minutes: bills from the Xero organisations and QuickBooks companies
-  workspaces connected, deals from the HubSpot accounts and Pipedrive companies they connected, and the connections nobody
-  finished choosing an organisation for, revoked and deleted.
+- `POST /api/platform/accounting-sync`, every 15 minutes: bills from the Xero organisations, QuickBooks companies and
+  Zoho Books organizations workspaces connected, deals from the HubSpot accounts and Pipedrive companies they connected,
+  and the connections nobody finished choosing an organisation for, revoked and deleted.
 
 To set them up, run `supabase/cron/watches.sql` once in the Supabase SQL editor, with your
 deployment's origin in place of `https://www.vestiarion.xyz`. Its header lists what comes first:
@@ -449,6 +449,23 @@ keys and sandbox companies, or `production` for Production keys, which need Intu
 payload format, subscribed to Bill, BillPayment and Vendor at least) starts a sync of the company's connection within
 a minute of a change; without it, changes come in with the 15-minute sync alone. The connection needs migrations 0101
 and 0102. See [Bring bills in from QuickBooks Online](https://www.vestiarion.xyz/docs/guides/quickbooks).
+
+With `ZOHO_BOOKS_CLIENT_ID` and `ZOHO_BOOKS_CLIENT_SECRET` set, from a Zoho "Server-based Applications" client made at
+`api-console.zoho.com` whose Authorized Redirect URIs are `<origin>/api/integrations/zohobooks/callback` (and
+`http://localhost:3000/api/integrations/zohobooks/callback` to try it locally), an owner or admin connects a workspace
+to one Zoho Books organization the same way, and its open bills come in for review beside Xero's and QuickBooks'. The
+client id is in Zoho's form, `1000.` and capital letters and digits; any other value leaves Zoho Books off. A Zoho
+account lives in one data center, so on the client's Settings tab turn on each one you serve (US, EU, India, Australia,
+Japan, UK, Canada, Saudi Arabia, UAE) and tick "Use the same OAuth credentials for all data centers"; a person in a data
+center not turned on cannot sign in to connect, and China's is not offered. Vestiarion takes the data center from
+Zoho's callback, checks it against its own list, and sends the code, the client secret and every token only to that data
+center's servers. The app asks for read scopes only (`ZohoBooks.bills.READ ZohoBooks.contacts.READ
+ZohoBooks.settings.READ`) and writes nothing to Zoho Books. A person who can reach several organizations picks one on
+the connect page, and several workspaces may connect the same organization. Zoho Books has no API to register a
+webhook, so its bills come in with the 15-minute sync and **Sync now**, and a bill deleted in Zoho Books is not seen.
+Zoho Books has no sandbox: try it with a free or trial organization. The connection needs migration 0122; before it
+runs, connecting says Zoho Books is not set up on this deployment yet. See
+[Bring bills in from Zoho Books](https://www.vestiarion.xyz/docs/guides/zohobooks).
 
 With `HUBSPOT_CLIENT_ID` and `HUBSPOT_CLIENT_SECRET` set, from a HubSpot app on the developer platform with OAuth and
 marketplace distribution, an owner or admin connects a workspace to one HubSpot account from Settings, after agreeing to

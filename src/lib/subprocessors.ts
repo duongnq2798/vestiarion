@@ -7,7 +7,7 @@
 import { NETWORKS } from "./network";
 
 /** The day this list was last checked against the code. */
-export const SUBPROCESSORS_AS_OF = "2026-10-15";
+export const SUBPROCESSORS_AS_OF = "2026-10-16";
 
 const hostOf = (url: string) => new URL(url).host;
 
@@ -150,6 +150,14 @@ export const SUBPROCESSORS: readonly Subprocessor[] = [
     names: ["Intuit", "QuickBooks"],
     purpose: "read for open bills, vendors and bank accounts, and never written to",
     data: "only the requests that read the company's bills, vendors and bank accounts",
+    when: ONLY_IF_CONNECTED,
+  },
+  {
+    name: "Zoho (Zoho Books)",
+    privacyEntry: "Zoho Books",
+    names: ["Zoho", "Zoho Books"],
+    purpose: "read for open bills and vendors, at the data center the account lives in, and never written to",
+    data: "only the requests that read the organizations a person can reach, and the bills and vendors of the one they pick",
     when: ONLY_IF_CONNECTED,
   },
   {

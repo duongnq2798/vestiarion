@@ -71,7 +71,7 @@ export default async function SettingsPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ slack?: string | string[]; github?: string | string[]; xero?: string | string[]; quickbooks?: string | string[]; hubspot?: string | string[]; pipedrive?: string | string[] }>;
+  searchParams: Promise<{ slack?: string | string[]; github?: string | string[]; xero?: string | string[]; quickbooks?: string | string[]; zohobooks?: string | string[]; hubspot?: string | string[]; pipedrive?: string | string[] }>;
 }) {
   const { slug } = await params;
   const access = await requireMembership(slug);
@@ -88,9 +88,9 @@ export default async function SettingsPage({
     // How connecting Slack went, from its way back (Slack design S3); only the codes the panel knows are shown.
     // And how connecting GitHub went (GitHub App design G2).
     // And how connecting Xero or QuickBooks went (Xero connector X4; QuickBooks connector Q4), and HubSpot (HubSpot H4).
-    const { slack: slackOutcome, github: githubOutcome, xero: xeroOutcome, quickbooks: quickBooksOutcome, hubspot: hubspotOutcome, pipedrive: pipedriveOutcome } = await searchParams;
+    const { slack: slackOutcome, github: githubOutcome, xero: xeroOutcome, quickbooks: quickBooksOutcome, zohobooks: zohoBooksOutcome, hubspot: hubspotOutcome, pipedrive: pipedriveOutcome } = await searchParams;
     const inboxSettings = inboxSettingsFromEnv();
-    const [goLive, apiKeys, webhookEndpoints, ledgerKey, dashboardStats, deletion, usyc, slack, notifySwitch, telegramLink, inbox, github, twoApprovals, shadow, xero, quickBooks, hubspot, usage, limits, reportingCurrency] = await Promise.all([
+    const [goLive, apiKeys, webhookEndpoints, ledgerKey, dashboardStats, deletion, usyc, slack, notifySwitch, telegramLink, inbox, github, twoApprovals, shadow, xero, quickBooks, zohoBooks, hubspot, usage, limits, reportingCurrency] = await Promise.all([
       goLiveStatus(membership.orgId),
       listApiKeys(membership.orgId),
       listWebhookEndpoints(membership.orgId),
@@ -156,6 +156,13 @@ export default async function SettingsPage({
       accountingProviderOn("quickbooks")
         ? accountingPanelView("quickbooks", Date.now(), { writeScopes: accountingProvider("quickbooks")?.booking?.writeScopes }).catch((error: unknown) => {
             console.error("settings: QuickBooks status not loaded", error instanceof Error ? error.message : error);
+            return null;
+          })
+        : null,
+      // And Zoho Books, its own card beside them (Zoho Books connector Z1); before migration 0122 it says it is not set up.
+      accountingProviderOn("zohobooks")
+        ? accountingPanelView("zohobooks", Date.now(), { writeScopes: accountingProvider("zohobooks")?.booking?.writeScopes }).catch((error: unknown) => {
+            console.error("settings: Zoho Books status not loaded", error instanceof Error ? error.message : error);
             return null;
           })
         : null,
@@ -371,6 +378,19 @@ export default async function SettingsPage({
                 view={quickBooks}
                 canManage={canManageIntegrations}
                 notice={typeof quickBooksOutcome === "string" ? quickBooksOutcome : null}
+              />
+            ) : null,
+          },
+          {
+            id: "zohobooks-title",
+            title: "Zoho Books",
+            content: zohoBooks ? (
+              <AccountingPanel
+                provider="zohobooks"
+                orgSlug={slug}
+                view={zohoBooks}
+                canManage={canManageIntegrations}
+                notice={typeof zohoBooksOutcome === "string" ? zohoBooksOutcome : null}
               />
             ) : null,
           },

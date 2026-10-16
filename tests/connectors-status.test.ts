@@ -121,6 +121,12 @@ describe("QuickBooks's words (docs/superpowers/specs/2026-10-12-quickbooks-conne
       "QuickBooks no longer accepts this connection: it was disconnected in QuickBooks, or not used for 100 days. Reconnect QuickBooks to go on bringing its bills in."
     );
   });
+
+  it("names no idle days for Zoho Books, whose refresh token lasts until revoked (Zoho Books connector Z1)", () => {
+    expect(syncErrorWords("reconnect", "Zoho Books", null)).toBe(
+      "Zoho Books no longer accepts this connection: it was disconnected in Zoho Books, or its access was revoked. Reconnect Zoho Books to go on bringing its bills in."
+    );
+  });
 });
 
 describe("a CRM's status words (HubSpot connector H16)", () => {

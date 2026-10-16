@@ -13,7 +13,8 @@ const REPOSITORY = "https://github.com/duongnq2798/vestiarion";
  * Vestiarion. Arc and Circle also link to their own sites, beside the evidence,
  * in a new tab. QuickBooks Online shows Intuit's QuickBooks lockup, which spells
  * QuickBooks, so its body names QuickBooks Online in full. Pipedrive shows its
- * wordmark and Asana its logo, the dots and "asana", each in the name's place.
+ * wordmark, Asana its logo, the dots and "asana", and Zoho Books its logo, the
+ * book and "Zoho Books", each in the name's place.
  */
 const SERVICES: ReadonlyArray<{
   /** The service's mark, beside its name, or in its place when the mark spells it. */
@@ -47,6 +48,14 @@ const SERVICES: ReadonlyArray<{
     href: "/docs/guides/quickbooks",
     check: "Read the guide",
   },
+  {
+    brand: "zohobooks-lockup",
+    name: "Zoho Books",
+    role: "Works with",
+    body: "Open bills from Zoho Books come in for review, read from the Zoho data center the account lives in.",
+    href: "/docs/guides/zohobooks",
+    check: "Read the guide",
+  },
   { brand: "hubspot", name: "HubSpot", role: "Works with", body: "Won deals come in with their customers, to plan as collection schedules; what each collected goes back to the deal.", href: "/docs/guides/hubspot", check: "Read the guide" },
   {
     brand: "pipedrive-lockup",
@@ -70,7 +79,8 @@ export function BuiltWith() {
           Built on, and works with
         </h2>
         {/*
-          Ten services: five to a row from a laptop's width, and two to a row below it, so every row is full.
+          Eleven services: five to a row from a laptop's width, and two to a row below it. The eleventh, npm, is alone on
+          its row at both widths, so it spans the whole row (last:col-span-full) and every row is full.
         */}
         <ul className="grid grid-cols-2 lg:grid-cols-5">
           {SERVICES.map((service) => {
@@ -78,7 +88,7 @@ export function BuiltWith() {
             return (
               <li
                 key={service.name}
-                className="min-w-0 border-line py-4 pr-4 lg:border-l lg:pl-5 lg:nth-[5n+1]:border-l-0 lg:nth-[5n+1]:pl-0 lg:nth-[n+6]:border-t"
+                className="min-w-0 border-line py-4 pr-4 last:col-span-full lg:border-l lg:pl-5 lg:nth-[5n+1]:border-l-0 lg:nth-[5n+1]:pl-0 lg:nth-[n+6]:border-t"
               >
                 <Link href={service.href} className="group block" {...(external ? { target: "_blank", rel: "noreferrer" } : {})}>
                   <p className="font-mono text-[0.6875rem] uppercase tracking-[0.1em] text-ink-3">{service.role}</p>
@@ -106,9 +116,9 @@ export function BuiltWith() {
           })}
         </ul>
         <p className="border-t border-line py-3 text-[0.6875rem] leading-relaxed text-ink-3">
-          npm is a registered trademark of npm, Inc. Intuit and QuickBooks are trademarks of Intuit Inc. Arc, Circle, Slack, Telegram, Xero,
-          HubSpot, Pipedrive and Asana are trademarks of their respective owners. Their names and marks show what Vestiarion is built on and connects
-          to, not an endorsement.
+          npm is a registered trademark of npm, Inc. Intuit and QuickBooks are trademarks of Intuit Inc. Zoho and Zoho Books are trademarks of
+          Zoho Corporation Pvt. Ltd. Arc, Circle, Slack, Telegram, Xero, HubSpot, Pipedrive and Asana are trademarks of their respective owners.
+          Their names and marks show what Vestiarion is built on and connects to, not an endorsement.
         </p>
       </div>
     </section>
