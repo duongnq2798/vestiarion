@@ -24,6 +24,11 @@ export class BankPayoutsError extends Error {
 
 const NOT_ON = "Bank payouts are not set up on this deployment.";
 
+/** A request body's SHA-256, its first 16 hex digits: what an idempotency key is bound to at BlindPay. */
+export function bodyHash(body: unknown): string {
+  return crypto.createHash("sha256").update(JSON.stringify(body)).digest("hex").slice(0, 16);
+}
+
 function settingsOrThrow(): BlindpaySettings {
   const settings = blindpaySettingsFromEnv();
   if (!settings) throw new BankPayoutsError(NOT_ON);
@@ -61,11 +66,10 @@ export async function finishBankPayoutsSetUp(input: { actorId: string; tosId: st
   await savePayoutPartner(orgId, { tosId: input.tosId });
   let customer: { id: string; kybStatus: string };
   try {
-    customer = await createCustomer(
-      settings,
-      testBusiness({ tosId: input.tosId, legalName: input.workspaceName, email: input.contactEmail, externalId: orgId }),
-      `org:${orgId}:blindpay-customer:${input.tosId}`
-    );
+    const business = testBusiness({ tosId: input.tosId, legalName: input.workspaceName, email: input.contactEmail, externalId: orgId });
+    // BlindPay binds a key to the body it first came with, and refuses it with another (`idempotency_key_payload_mismatch`):
+    // the key carries the body's hash, so the same request is made once, and a changed one is a new request.
+    customer = await createCustomer(settings, business, `org:${orgId}:blindpay-customer:${input.tosId}:${bodyHash(business)}`);
   } catch (error) {
     console.error("bank payouts: BlindPay did not make the customer", error instanceof BlindpayError ? `${error.status} ${error.code ?? ""}` : "unknown error");
     throw new BankPayoutsError("BlindPay did not finish setting the workspace up. Try again in a moment.");
@@ -110,7 +114,8 @@ export async function setBankAccount(input: { actorId: string; counterpartyId: s
   if (counterparty.role !== "vendor") throw new BankPayoutsError("Only a vendor's bills are paid to a bank account.");
 
   const shown = clabeShown(digits);
-  const fingerprint = crypto.createHash("sha256").update(digits).digest("hex").slice(0, 16);
+  // Every field BlindPay is sent, so a name corrected for the same CLABE is a new request, not a refused key.
+  const fingerprint = bodyHash({ clabe: digits, beneficiaryName, label: counterparty.name });
   let made: { id: string; status: CounterpartyBankAccount["status"] };
   try {
     made = await createSpeiAccount(settings, { customerId: partner.customerId, beneficiaryName, clabe: digits, label: counterparty.name }, `cp:${counterparty.id}:bank:${fingerprint}`);
