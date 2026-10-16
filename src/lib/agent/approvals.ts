@@ -597,6 +597,8 @@ export async function listWaitingPayables(
   }
 
   const bankPayouts = await waitingBankPayouts(rows, bankAccounts, intents, options.bankQuote);
+  // On Arc testnet a bank payout takes BlindPay's test token, which the operating wallet's USDC does not cover (B7).
+  const bankTakesUsdc = (blindpaySettingsFromEnv()?.route(network.id).token ?? "USDC") === "USDC";
 
   // Whose address a first payment would go to, where payments are real (new payee check N4): read once for the list.
   const newPayeeFacts =
@@ -643,7 +645,12 @@ export async function listWaitingPayables(
     // counts it (R5, review finding 2); a CCTP payout whose fee was not read has no figure, as it would not be covered.
     const cctpFee = payoutRoute === "cctp" ? (quote?.cctpFeeUsdc ?? null) : null;
     const fromOperating =
-      currencyOf(row.currency) === "USDC" && payoutRoute !== "gateway" && !(payoutRoute === "cctp" && cctpFee === null) && !transferExists(intent) && !transferUnknown(intent);
+      currencyOf(row.currency) === "USDC" &&
+      payoutRoute !== "gateway" &&
+      !(payoutRoute === "cctp" && cctpFee === null) &&
+      !(bankAccounts.has(row.counterparty_id) && !bankTakesUsdc) &&
+      !transferExists(intent) &&
+      !transferUnknown(intent);
     const needs = num(row.amount) + (cctpFee !== null ? cctpFee + cctpFeeCushion(cctpFee) : 0);
     const fromReserveUsdc = balances && fromOperating ? amountFromReserve(needs, balances.operating, balances.reserve) : null;
     const onFile = { poReference: row.po_reference ?? null, goodsReceived: row.goods_received === true };
@@ -1126,7 +1133,9 @@ export async function approveAndPay(
   // does not touch; anything else from the operating wallet, a CCTP payout with its fee on top. What the operating wallet
   // lacks comes back from the reserve once the decision is claimed, when the reserve holds it (approval cash R1, R2).
   let fromReserve: ReserveCover | null = null;
-  if (!mayExist && invoice.currency === "USDC") {
+  // A bank payout on Arc testnet takes BlindPay's test token, not USDC: its balance is read once BlindPay quotes (B7).
+  const takesUsdc = !bank || bank.token === "USDC";
+  if (!mayExist && invoice.currency === "USDC" && takesUsdc) {
     if (route === "gateway") {
       const short = payoutFundsShort({ route, amount: invoice.amount, operatingUsdc: 0, cctpFeeUsdc: null, gateway: quotes?.gateway ?? null });
       if (short) throw new ApprovalError("insufficient_funds", gatewayShortMessage(short.holds, quotes?.gateway?.feeUsdc ?? null));

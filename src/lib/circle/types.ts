@@ -280,6 +280,15 @@ export interface ChainProvider {
   getEarnPosition?(reserveAccountId: string): Promise<EarnPosition>;
   getBalance(accountId: string): Promise<BalanceSnapshot>;
   /**
+   * A test token minted to an account's own wallet, from the wallet itself (bank payouts B13): BlindPay's USDB on Arc
+   * testnet. Only a live provider on Arc testnet has it; it moves no money. `idempotencyKey` is a UUID.
+   */
+  mintTestToken?(
+    accountId: string,
+    call: { contractAddress: string; abiFunctionSignature: string; abiParameters: string[] },
+    idempotencyKey: string
+  ): Promise<{ status: TransferResult["status"]; txHash: string | null }>;
+  /**
    * One token's balance in an account's wallet (EURC invoices spec E5).
    * Optional: providers that only ever hold USDC may leave it out, and a caller
    * then has no EURC balance to rely on.

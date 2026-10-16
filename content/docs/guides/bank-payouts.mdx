@@ -20,6 +20,8 @@ Open **Settings**. Under **Bank payouts**, choose **Accept BlindPay's terms and 
 
 From then on the card says how the workspace stands with BlindPay, such as "Approved by BlindPay" or "BlindPay is checking the business", and how many vendors are paid to a bank account.
 
+**On Arc testnet, fund the operating wallet with test USDB.** "On Arc testnet BlindPay takes its test token, USDB, from the operating wallet, not USDC." The card says how much the operating wallet holds. An owner or admin chooses **Mint 100 test USDB**: the operating wallet mints it to itself on Arc testnet, and the ledger records `bank_payouts_test_token_minted`. USDB has no value. On Arc mainnet BlindPay takes USDC, and there is nothing to mint.
+
 If setting up did not finish, the card says why, and nothing is kept:
 
 - "BlindPay did not send back the accepted terms, so nothing changed. Start again."
@@ -53,7 +55,7 @@ In **Approvals**, the bill's card says where the money goes, in place of an addr
 
 Choose **Approve and pay**. The dialog asks "Pay 100.00 USDC to Taller Norte's bank account in Mexico now?", with what the vendor receives. When you confirm:
 
-1. BlindPay quotes the bill's amount again. A quote that would take any other amount than the bill's sends nothing.
+1. BlindPay quotes the bill's amount again. A quote that would take any other amount than the bill's sends nothing, and so does a wallet that holds less of the token BlindPay takes: "The operating wallet holds less USDB than this payout takes: nothing was sent. Fund it with USDB first."
 2. The operating wallet approves BlindPay's contract on Arc for that amount.
 3. BlindPay takes the USDC and pays the pesos to the account over SPEI.
 

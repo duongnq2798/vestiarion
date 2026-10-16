@@ -21,7 +21,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   on the bills as on any other, and a person approves every bank payout, after the approval card shows what the vendor
   receives by BlindPay's quote. A payout takes exactly the bill's amount or sends nothing, is asked for under the
   payment's own key, so BlindPay makes it once, and one BlindPay refunded is paid again only by a person. In
-  this version a workspace is set up on BlindPay's development instance, with BlindPay's test business values. It needs
+  this version a workspace is set up on BlindPay's development instance, with BlindPay's test business values; on Arc
+  testnet BlindPay takes its test token, USDB, which an owner or admin mints to the operating wallet from the Bank
+  payouts card (Mint 100 test USDB), and a payout is refused before the approve when the wallet holds too little of the
+  token BlindPay takes. It needs
   `BLINDPAY_API_KEY`, `BLINDPAY_INSTANCE_ID` and `BLINDPAY_WEBHOOK_SECRET` and migration `0124`.
   [Guide](https://www.vestiarion.xyz/docs/guides/bank-payouts).
 - **Won deals from Zoho CRM.** An owner or admin connects a Zoho CRM organization from Settings, and its won deals come

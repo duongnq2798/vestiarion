@@ -7,6 +7,7 @@ import { siteOrigin } from "@/lib/auth/env";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { BankPayoutsError, bankPayoutsTermsLink, setBankAccount, stopBankAccount } from "@/lib/bank-payouts/commands";
+import { mintTestUsdb } from "@/lib/bank-payouts/test-token";
 import { inOrg } from "@/lib/dal/scope";
 
 /**
@@ -78,6 +79,21 @@ export async function stopBankAccountAction(_previous: BankPayoutsActionResult, 
       return removed ? { ok: true, message: "Paid to its address again." } : { ok: false, message: "It was not paid to a bank account." };
     } catch (error) {
       return answer(error, "stopBankAccountAction failed");
+    }
+  });
+}
+
+/** BlindPay's test token minted to the operating wallet, on Arc testnet (B13). */
+export async function mintTestUsdbAction(_previous: BankPayoutsActionResult, formData: FormData): Promise<BankPayoutsActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "integrations.manage");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    try {
+      const minted = await mintTestUsdb({ actorId: auth.user.id, requestId: crypto.randomUUID() });
+      revalidateOrgPages();
+      return { ok: true, message: `${minted.amount} test USDB minted to the operating wallet.` };
+    } catch (error) {
+      return answer(error, "mintTestUsdbAction failed");
     }
   });
 }

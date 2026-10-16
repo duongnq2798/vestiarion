@@ -2,7 +2,7 @@
 
 import { Landmark } from "lucide-react";
 import { useEffect } from "react";
-import { startBankPayoutsAction, type BankPayoutsActionResult } from "@/app/actions/bank-payouts";
+import { mintTestUsdbAction, startBankPayoutsAction, type BankPayoutsActionResult } from "@/app/actions/bank-payouts";
 import { DocsLink } from "@/components/DocsLink";
 import { Card } from "@/components/ui/Card";
 import { FormMessage } from "@/components/ui/FormMessage";
@@ -16,7 +16,14 @@ const INITIAL: BankPayoutsActionResult = { ok: false, message: "" };
 export type BankPayoutsView =
   | { state: "not_set_up" }
   | { state: "not_started" }
-  | { state: "set_up"; kybStatus: string | null; setUpAt: string | null; vendors: number };
+  | {
+      state: "set_up";
+      kybStatus: string | null;
+      setUpAt: string | null;
+      vendors: number;
+      /** On Arc testnet, the operating wallet's USDB, BlindPay's test token, which bank payouts take there (B13). */
+      testToken?: { balance: number | null } | null;
+    };
 
 /** What BlindPay's way back says, by the code it carries in `?bankpayouts=`. */
 export const BANK_PAYOUTS_NOTICES: Record<string, { tone: "success" | "error"; text: string }> = {
@@ -32,6 +39,25 @@ const KYB_WORDS: Record<string, string> = {
   pending_review: "BlindPay is reviewing the business",
   rejected: "BlindPay did not approve the business",
 };
+
+function MintTestToken({ orgSlug, balance }: { orgSlug: string; balance: number | null }) {
+  const { state, formProps } = useActionForm(mintTestUsdbAction, INITIAL);
+  return (
+    <div className="space-y-2 border-t border-line pt-4">
+      <p className="max-w-prose text-sm text-ink-2">
+        On Arc testnet BlindPay takes its test token, USDB, from the operating wallet, not USDC.{" "}
+        {balance === null ? "Its USDB could not be read just now." : `The operating wallet holds ${balance} test USDB.`}
+      </p>
+      <form {...formProps} className="flex flex-wrap items-center gap-3">
+        <input type="hidden" name="orgSlug" value={orgSlug} />
+        <SubmitButton size="sm" variant="secondary" pendingLabel="Minting on Arc testnet…">
+          Mint 100 test USDB
+        </SubmitButton>
+        <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.message}</FormMessage>
+      </form>
+    </div>
+  );
+}
 
 function Start({ orgSlug }: { orgSlug: string }) {
   const { state, formProps } = useActionForm(startBankPayoutsAction, INITIAL);
@@ -55,7 +81,20 @@ function Start({ orgSlug }: { orgSlug: string }) {
  * accepts BlindPay's terms on BlindPay's page and comes back set up. In this version the workspace is set up on BlindPay's
  * development instance, with BlindPay's test business values; real KYB is BlindPay's production review.
  */
-export default function BankPayoutsPanel({ orgSlug, view, canSetUp, notice }: { orgSlug: string; view: BankPayoutsView; canSetUp: boolean; notice: string | null }) {
+export default function BankPayoutsPanel({
+  orgSlug,
+  view,
+  canSetUp,
+  canMint = false,
+  notice,
+}: {
+  orgSlug: string;
+  view: BankPayoutsView;
+  canSetUp: boolean;
+  /** An owner or admin mints test USDB (B13). */
+  canMint?: boolean;
+  notice: string | null;
+}) {
   const told = notice ? BANK_PAYOUTS_NOTICES[notice] : undefined;
   return (
     <section aria-labelledby="bank-payouts-title" id="bank-payouts">
@@ -86,6 +125,7 @@ export default function BankPayoutsPanel({ orgSlug, view, canSetUp, notice }: { 
             <li className="text-ink-3">BlindPay&apos;s development instance: payouts are tested, and no pesos reach a bank.</li>
           </ul>
         )}
+        {view.state === "set_up" && view.testToken && canMint && <MintTestToken orgSlug={orgSlug} balance={view.testToken.balance} />}
       </Card>
     </section>
   );

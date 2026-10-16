@@ -10,6 +10,7 @@ import PipedrivePanel from "@/components/PipedrivePanel";
 import ZohoCrmPanel from "@/components/ZohoCrmPanel";
 import BankPayoutsPanel, { type BankPayoutsView } from "@/components/BankPayoutsPanel";
 import { bankPayoutsReady, countBankAccountsInUse, readPayoutPartner } from "@/lib/bank-payouts/store";
+import { testTokenView } from "@/lib/bank-payouts/test-token";
 import { blindpaySettingsFromEnv } from "@/lib/blindpay/settings";
 import LedgerKeyPanel from "@/components/LedgerKeyPanel";
 import NotificationsPanel from "@/components/NotificationsPanel";
@@ -237,7 +238,13 @@ export default async function SettingsPage({
           .then(async (): Promise<BankPayoutsView> => {
             const partner = await readPayoutPartner();
             if (!partner?.customerId) return { state: "not_started" };
-            return { state: "set_up", kybStatus: partner.kybStatus, setUpAt: partner.setUpAt, vendors: await countBankAccountsInUse() };
+            return {
+              state: "set_up",
+              kybStatus: partner.kybStatus,
+              setUpAt: partner.setUpAt,
+              vendors: await countBankAccountsInUse(),
+              testToken: await testTokenView().catch(() => null),
+            };
           })
           .catch((error: unknown): BankPayoutsView | null => {
             if (error instanceof NotSetUpError) return { state: "not_set_up" };
@@ -468,6 +475,7 @@ export default async function SettingsPage({
                 orgSlug={slug}
                 view={bankPayouts}
                 canSetUp={can(membership.role, "org.administer")}
+                canMint={canManageIntegrations}
                 notice={typeof bankPayoutsOutcome === "string" ? bankPayoutsOutcome : null}
               />
             ) : null,
