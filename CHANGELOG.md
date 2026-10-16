@@ -64,6 +64,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
     Their checks no longer wrap into narrow columns, and their invoice numbers are no longer cut off on a phone.
   - The first bill says "Agent proposes: pay it". Its drawn Agree and pay is no longer a second blue button, and it
     tells a screen reader it is a sample's.
+- **The landing page's integrations, grouped by what each tool does.** "Built on, and works with" is now Integrations,
+  a section of its own before the developers': accounting (Xero, QuickBooks Online, Zoho Books), sales and CRM (HubSpot,
+  Pipedrive and, newly shown, Zoho CRM), and work and team chat (Asana, Slack, Telegram), each group saying what its
+  tools share and each card what is particular to its tool, with a link to its setup guide. Arc, Circle and the SDK sit
+  together under the hood. QuickBooks Online's card, and its guide, say that the hosted service connects to QuickBooks
+  sandbox companies only until Intuit completes its assessment of the app.
 
 ### Fixed
 

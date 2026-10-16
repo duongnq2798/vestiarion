@@ -52,7 +52,9 @@ endorsement.
   drawn so its circle is as tall as the other symbols (274 / 227.5 of the size). On the landing page its words would be
   5 px tall at that size, too small to read on a 1x screen, so the strip draws it with a 23 px circle (97 x 28) and
   lets it into the row's margins (`-mt-1.5 -mb-0.5`): the row keeps its 20 px and every card's text stays level.
-- **I8 — the landing strip: eight services, never a row of one.** "Built on, and works with" lists Arc, Circle, Xero,
+- **I8 — the landing strip: eight services, never a row of one.** (The strip's layout, here and in I16, gave way on
+  2026-10-16 to grouped cards: `2026-10-16-landing-integrations-design.md`. The marks, their sizes' reasoning and the
+  notice stand.) "Built on, and works with" lists Arc, Circle, Xero,
   QuickBooks Online, HubSpot, Slack, Telegram and npm: two to a row up to 1024 px, four from there (rows of 4 + 4,
   never 3 + 3 + 2 or 5 + 3), with a rule above the second row and none before each row's first card. A name too long
   for half a phone's width moves under its mark instead of running into the line below. Checked at 1440, 1024, 768 and
