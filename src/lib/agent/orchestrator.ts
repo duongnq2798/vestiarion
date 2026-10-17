@@ -91,6 +91,7 @@ import {
   amountToPay,
   boundPayOn,
   invoiceDiscount,
+  noGainInPayingNow,
   planPaymentTiming,
   utcDate,
   type InvoiceDiscount,
@@ -1339,20 +1340,33 @@ function sameApDecision(decision: ApDecision, reference: ApDecision): boolean {
   return decision.action !== "schedule" || decision.payOn === reference.payOn;
 }
 
-type TimingRule = ReturnType<typeof boundPayOn>["timingRule"];
+type TimingRule = ReturnType<typeof boundPayOn>["timingRule"] | "pay.no_gain";
 
 /**
  * The model's decision as code lets it stand: a `schedule` is bounded by
  * `boundPayOn` — a date after the due date moves back to it, one today or
  * earlier (or unreadable) becomes pay now — and every correction is named,
  * for the ledger (`timingRule`) and for a person reading the reasoning.
+ * A `pay` that gains nothing by going today (`noGainInPayingNow`: no
+ * discount available, no shortfall, the policy's day later, the bill not
+ * already set for today) is scheduled for the policy's day instead.
  * Every other action stands as it is, without any date sent along with it:
  * only a schedule has a day.
  */
 function boundApDecision(
   decision: ApDecision,
-  input: { now: Date; dueDate: string }
+  input: { now: Date; dueDate: string; timing?: PaymentTiming; scheduledFor?: string | null }
 ): { decision: ApDecision; payOn: string | null; timingRule: TimingRule; requestedPayOn: string | null; note: string } {
+  const keptTo = input.timing ? noGainInPayingNow({ action: decision.action, timing: input.timing, scheduledFor: input.scheduledFor ?? null }) : null;
+  if (keptTo !== null && decision.action === "pay" && decision.fundWithSwap !== true) {
+    return {
+      decision: { action: "schedule", payOn: keptTo, reasoning: decision.reasoning, confidence: decision.confidence },
+      payOn: keptTo,
+      timingRule: "pay.no_gain",
+      requestedPayOn: null,
+      note: ` [The model chose to pay today; with no early-payment discount and no shortfall, nothing is gained by it, so code schedules it for ${utcDay(keptTo)}.]`,
+    };
+  }
   if (decision.action !== "schedule") {
     return {
       decision: {
@@ -1811,6 +1825,9 @@ async function decideApPayable(
   const { decision: boundDecision, payOn, timingRule, requestedPayOn, note: timingNote } = boundApDecision(modelDecision, {
     now,
     dueDate: invoice.due_date,
+    // A payment now that gains nothing waits for the policy's day, unless the bill was already set for today (payment timing §1).
+    timing,
+    scheduledFor: scheduledEarlier?.payOn ?? null,
   });
   // A swap is a choice only when the wallet is short: on any other payable the flag means nothing, and is not recorded (review #9).
   const decision: ApDecision = boundDecision.fundWithSwap === true && !(eurcShortNow > 0) ? withoutSwapChoice(boundDecision) : boundDecision;

@@ -1921,6 +1921,13 @@ Each open receivable gets one next step from what is known about its customer
 
 ## The payment plan
 
+**A payment now that gains nothing waits for its day** (`noGainInPayingNow`, `src/lib/agent/payment-timing.ts`). The AP
+stage's `boundApDecision` turns the model's `pay` into a `schedule` for the policy's day (its due date) when no
+early-payment discount is available today, there is no shortfall, the due date is ahead, and the bill is not already set
+for today or an earlier day (a person's move from this plan, or a day chosen before). The ledger records
+`timingRule: "pay.no_gain"`, and the reasoning ends with a note. Without it, the model once paid a 0.20 USDC bill 28 days
+early while its own reasoning argued for the due date, which also left the bill outside the agent's early-payment offers.
+
 Bills & receivables' Payment plan tab shows the next 14 UTC days of payments
 (docs/superpowers/specs/2026-10-11-payment-plan-design.md), read only when that tab is shown. `planPayments`
 (`src/lib/payment-plan.ts`) is pure: from the operating wallet, the USYC

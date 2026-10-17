@@ -128,6 +128,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Fixed
 
+- **The agent no longer pays a bill early for nothing.** When the model chose to pay today a bill with no early-payment
+  discount available, no shortfall and a due date ahead, the payment went, though nothing was gained by it; once, the
+  model's own reasoning argued for the due date. Code now schedules such a bill for its due date, and the reasoning
+  says so. A bill set for today, by a person from the payment plan or on a day chosen before, is still paid today.
 - **The docs' sidebar keeps its first sections in view at the end of a page.** Scrolled to the bottom, the footer
   pushed the sidebar up under the header, so its first sections were hidden, and scrolling over the sidebar could not
   bring them back until the page itself was scrolled up. The footer now sits under the page, beside the sidebar, which

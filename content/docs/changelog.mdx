@@ -1,5 +1,25 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-17: A payment now that gains nothing waits for its day
+
+- An `ap_schedule` entry may carry a new value of `timingRule`, **`pay.no_gain`**. The model answered pay for a payable that gains nothing by being paid today: no early-payment discount available, no shortfall, a due date ahead, and not already set for today. Code scheduled it for the policy's day, its due date, instead. The entry's `decision` is `{ action: "schedule", payOn }`, and its reasoning ends with a note that says so. Nothing else in `/api/v1` or the webhooks changes.
+
+## 2026-10-17: Suppliers counter the agent's early-payment offers
+
+- On an offer the agent made, a supplier may propose a smaller discount, and the agent answers it. Each step is a new entry, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:
+  - **`early_payment_offer_countered`** (domain `ap`, actor `system`, `via: "offer_link"`), with `offerId`, `invoiceId`, `counterPct`, `discountPct` and `currency`.
+  - **`early_payment_counter_accepted`** and **`early_payment_counter_declined`** (actor `agent`), with `offerId`, `invoiceId`, `counterpartyId`, `discountPct`, `counterPct`, `decision: { action: "accept" | "decline", reasoning }`, `referenceDecision`, `decisionMode` and `agreedWithReference`. An acceptance also carries `offeredAmount`; a counter the bill changed under carries `billChanged: true`. `decisionMode` is `code` when code declined it without asking a model.
+- An accepted counter sets the invoice's `earlyPayDiscount` to the counter, the deadline being today (UTC), and returns the payable to `pending`; the agent's next `ap_…` entry weighs it as before.
+
+## 2026-10-16: The agent makes early-payment offers
+
+- An owner or admin can let the agent make early-payment offers itself. New entries, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:
+  - **`early_offers_on`** (domain `ap`, actor `human`), with `maxPct` and `by`, and **`early_offers_off`**, with `by`.
+  - **`early_payment_offered`** with actor `agent` and `via: "agent"`. Beside the fields a person's offer carries (but `by`), it has `to` (the supplier's address, masked), `daysEarly`, `decision: { action: "offer", pct, reasoning }`, `referenceDecision`, `decisionMode` and `agreedWithReference`, and `pctLimited: { chosen, sent }` when code kept the discount within its bounds.
+  - **`early_payment_offer_skipped`** (actor `agent`), with `invoiceId`, `counterpartyId`, `daysEarly`, `decision: { action: "skip", reasoning }`, `referenceDecision`, `decisionMode` and `agreedWithReference`.
+  - **`early_payment_offer_withdrawn`** with `via: "agent"` and `reason: "not_emailed"`, when an offer the agent made could not be emailed.
+- Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-16: Early-payment offers
 
 - An owner or admin can offer a supplier payment today for a discount, through a one-time link the supplier answers with no account. Each step is a new entry, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:
