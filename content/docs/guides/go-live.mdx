@@ -2,6 +2,52 @@ A workspace starts in sandbox. Going live gives it treasury wallets on its netwo
 
 Only an **owner** of the workspace can take it live. Everyone else sees the workspace's status in the same place, with the line "An owner can connect Circle and take this workspace live from here."
 
+## Watch it
+
+Under a minute and a half: wallets created, funded with testnet USDC and taken live, then a workspace on Arc mainnet. The guide below goes through each part in full.
+
+<Video
+  src="/docs/videos/go-live-flow.mp4"
+  poster="/docs/videos/go-live-flow-poster.jpg"
+  title="Take a workspace live on Arc"
+  duration="1:22"
+  caption="The live product on Arc testnet, with demo data in the team's own workspaces. The wallet setup and going live were recorded Oct 12; the last scenes show the team's Arc mainnet workspace, which moves real USDC. Recorded Oct 17, 2026."
+>
+
+Go live.
+
+Wallets on Arc, funded with USDC, and an agent that pays on its own.
+
+A new test workspace starts as a sandbox: its payments are simulated until an owner takes it live.
+
+On Arc testnet, the simplest choice is a Vestiarion testnet wallet: no Circle account is needed.
+
+Vestiarion creates the workspace's treasury wallets in its own Circle account.
+
+Fund the operating wallet with testnet USDC from Circle's faucet.
+
+Here it holds forty USDC.
+
+Then go live. It cannot be undone from here; pausing the agent stops it paying.
+
+Live, the agent pays on its own, within its limits, whenever something changes and every six hours.
+
+USDC can also come in from another chain.
+
+And idle cash can earn in USYC, Circle's tokenized money market fund, until bills fall due.
+
+On Arc mainnet the money is real, and the treasury can be a wallet you hold yourself.
+
+Its contract caps what the agent may move: here, fifty USDC a day and a hundred and fifty in seven days.
+
+Only your wallet can change those figures, or stop it.
+
+Live means the agent pays on its own, inside limits only you can change.
+
+vestiarion.xyz/docs/guides/go-live
+
+</Video>
+
 ## Before you start
 
 Until the workspace has made its first payment on its network, Arc testnet or Arc mainnet, the console shows owners and admins a **Get started** checklist: **Create the workspace**, already ticked, then add a wallet, fund it with USDC, go live, add a payee with an Arc address, **Add or import a first bill**, **Set or confirm the limits**, and the first payment. A sandbox on Arc testnet with no wallet simulates its payments, so its checklist starts with your first bill instead: **Add a supplier**, **Add or import a first bill**, **See the agent's decision** and **Set or confirm the limits**, then, under **To pay on Arc**, the wallet, its USDC, going live and the first payment. Each step ticks itself off from the workspace's own records, and the next one links to the page where it is done. Approvers and accountants see checklists of their own: see [Your first steps, by role](/docs/guides/first-payment#your-first-steps-by-role). **Read the guide** opens [Your first payment](/docs/guides/first-payment) while a sandbox with no wallet waits for its first decision, this page until the workspace is live and funded, and [Your first payment](/docs/guides/first-payment) after that. The checklist disappears once the workspace is live and its first payment has settled.

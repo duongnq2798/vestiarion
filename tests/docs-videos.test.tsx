@@ -6,7 +6,7 @@ import { Video, type VideoProps } from "@/components/docs/Video";
 import { CONTENT_DIR, readSource } from "@/lib/docs/content";
 import { mdxToMarkdown, pageMarkdown } from "@/lib/docs/markdown";
 import { publicFile } from "@/lib/docs/screenshots";
-import { isoDuration, VIDEO_ATTRIBUTES, VIDEO_DIR, videoProblem } from "@/lib/docs/videos";
+import { GUIDE_VIDEOS, isoDuration, VIDEO_ATTRIBUTES, VIDEO_DIR, videoFor, videoProblem } from "@/lib/docs/videos";
 import { useMDXComponents } from "../mdx-components";
 
 /**
@@ -90,11 +90,11 @@ function mp4(bytes: Buffer): { boxes: string[]; seconds: number | null } {
 const minutesAndSeconds = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 
 describe("the guides' videos", () => {
-  it("are in the Xero and HubSpot guides, one each, and nowhere else", () => {
-    expect(USES.map((use) => [use.file, use.src])).toEqual([
-      ["guides/hubspot.mdx", "/docs/videos/hubspot-flow.mp4"],
-      ["guides/xero.mdx", "/docs/videos/xero-flow.mp4"],
-    ]);
+  it("are in the guides GUIDE_VIDEOS names, one each with its title and length, and nowhere else", () => {
+    const byFile = (a: string[], b: string[]) => a[0].localeCompare(b[0]);
+    expect(USES.map((use) => [use.file, use.src!, use.title!, use.duration!]).sort(byFile)).toEqual(
+      GUIDE_VIDEOS.map((video) => [`${video.guide}.mdx`, `${VIDEO_DIR}${video.guide.replace(/^guides\//, "")}-flow.mp4`, video.title, video.duration]).sort(byFile)
+    );
     // Every `<Video` is one the list above read: none is self-closing, without its transcript.
     const opened = MDX.flatMap((file) => [...readFileSync(file, "utf8").matchAll(/<Video\b/g)]);
     expect(opened).toHaveLength(USES.length);
@@ -148,21 +148,34 @@ describe("the guides' videos", () => {
 });
 
 describe("each guide's Watch it section", () => {
-  it.each(["guides/xero", "guides/hubspot"] as const)("%s has it after the introduction, before Before you start and step 1, holding the video", (slug) => {
+  it.each(GUIDE_VIDEOS.map((video) => video.guide))("%s has it after the introduction, as its first section, holding the video", (slug) => {
     const guide = readSource(slug);
     const headings = [...guide.matchAll(/^## (.+)$/gm)].map((match) => match[1]);
-    expect(headings.slice(0, 3)).toEqual(["Watch it", "Before you start", headings.find((heading) => /^1\. /.test(heading))]);
-    const section = guide.slice(guide.indexOf("## Watch it"), guide.indexOf("## Before you start"));
+    expect(headings[0]).toBe("Watch it");
+    const section = guide.slice(guide.indexOf("## Watch it"), guide.indexOf(`## ${headings[1]}`));
     expect(section).toContain("<Video");
     expect(section).toContain("</Video>");
     // The introduction comes first.
     expect(guide.indexOf("## Watch it")).toBeGreaterThan(200);
   });
 
-  it("is linked from the docs Overview", () => {
+  it.each(GUIDE_VIDEOS.flatMap((video) => (video.also ?? []).map((also) => [also, video.guide] as const)))("%s, which %s's video also walks through, links to it", (also, guide) => {
+    expect(readSource(also)).toContain(`](/docs/${guide}#watch-it)`);
+  });
+
+  it("is linked from the docs Overview, each one", () => {
     const overview = readSource("");
-    expect(overview).toContain('href="/docs/guides/xero#watch-it"');
-    expect(overview).toContain('href="/docs/guides/hubspot#watch-it"');
+    for (const video of GUIDE_VIDEOS) expect(overview, video.guide).toContain(`href="/docs/${video.guide}#watch-it"`);
+  });
+});
+
+describe("the app's links to a walkthrough", () => {
+  it("open its guide at the video, from a link to that guide or one it also covers, never from a link to one heading", () => {
+    expect(videoFor("/docs/guides/shadow-mode")).toMatchObject({ watch: "/docs/guides/shadow-mode#watch-it" });
+    expect(videoFor("/docs/guides/zohobooks")).toMatchObject({ watch: "/docs/guides/quickbooks#watch-it" });
+    expect(videoFor("/docs/guides/audit-export")).toMatchObject({ watch: "/docs/guides/evidence#watch-it" });
+    expect(videoFor("/docs/guides/go-live#earn-on-idle-cash-with-usyc")).toBeNull();
+    expect(videoFor("/docs/guides/slack")).toBeNull();
   });
 });
 

@@ -1,10 +1,12 @@
 import { ArrowRight, BookOpen, Check, Download, EyeOff } from "lucide-react";
 import Link from "next/link";
+import { WatchLink } from "@/components/DocsLink";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { cn } from "@/components/ui/cn";
 import { orgHref } from "@/lib/auth/org-paths";
+import { videoFor } from "@/lib/docs/videos";
 import type { GettingStarted as Checklist, GettingStartedStep } from "@/lib/getting-started";
 
 type FormAction = (formData: FormData) => void | Promise<void>;
@@ -44,6 +46,8 @@ export function GettingStarted({
   const role = checklist.role ?? "owner";
   const titleId = `getting-started-title${role === "owner" ? "" : `-${role}`}`;
   const doneCount = checklist.steps.filter((step) => step.done).length;
+  // The guide's walkthrough, when it has one, beside "Read the guide".
+  const video = videoFor(`/docs/guides/${checklist.guide}`);
   // Consecutive steps under the same heading, each with its number in the whole list.
   const groups: Array<{ section?: string; start: number; steps: GettingStartedStep[] }> = [];
   checklist.steps.forEach((step, index) => {
@@ -128,6 +132,7 @@ export function GettingStarted({
                 Read the guide
               </Link>
             </Button>
+            {video && <WatchLink video={video} size="sm" />}
             {dismiss && (
               <form action={dismiss}>
                 <input type="hidden" name="orgSlug" value={slug} />

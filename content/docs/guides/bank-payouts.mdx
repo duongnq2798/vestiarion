@@ -24,6 +24,42 @@ The agent still reads every bill and decides on it as for any vendor. It never p
 In this version a workspace is set up on BlindPay's development instance, with BlindPay's test business values, on Arc testnet. BlindPay runs each payout through its sandbox: you see the quote, the payout and its outcome, and no pesos reach a bank. A production instance needs BlindPay's own review of your business, which this version does not collect.
 </Callout>
 
+## Watch it
+
+Under a minute: bank payouts set up with BlindPay, the vendor's bank account, and a payout followed to the end. The guide below goes through each part in full.
+
+<Video
+  src="/docs/videos/bank-payouts-flow.mp4"
+  poster="/docs/videos/bank-payouts-flow-poster.jpg"
+  title="Pay a vendor's bank account in pesos"
+  duration="0:58"
+  caption="The live product on Arc testnet, with demo data in the team's own workspace, on BlindPay's development instance, where no pesos reach a bank. The payout shown was approved on Oct 16. Recorded Oct 17, 2026."
+>
+
+Pay a vendor's bank account.
+
+The workspace pays USDC; the vendor receives pesos, through BlindPay.
+
+Some vendors want pesos, not USDC. Bank payouts pay their bills to a bank account in Mexico over SPEI, through BlindPay.
+
+The workspace pays the bill's USDC, and a person sees how many pesos before approving each payout.
+
+This workspace uses BlindPay's development instance: payouts are tested, and no pesos reach a bank.
+
+On Arc testnet, BlindPay takes its test token, USDB, from the operating wallet.
+
+The vendor's bank account is added on Counterparties, and it is paid there instead of to an Arc address.
+
+A person approved this payout on October sixteenth.
+
+Where the payment is follows it: approved, sent to Circle, confirmed on Arc testnet, and in the payee's wallet.
+
+The vendor gets pesos. The workspace pays USDC, after a person sees how many.
+
+vestiarion.xyz/docs/guides/bank-payouts
+
+</Video>
+
 ## Before you start
 
 - **An owner** of the workspace sets up bank payouts. Anyone else sees "An owner sets up bank payouts."

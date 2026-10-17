@@ -1,5 +1,51 @@
 Vestiarion's agent decides what to do with each bill, but a decision is not a payment. Before any money moves, rules in Vestiarion's code check the decision, limits cap what the agent may pay on its own, and people decide whatever it may not. This page says what each of those does, what stops the agent, and where money can move at all. Each part links to the guide that goes into it. How the data behind these decisions is protected, from tenant isolation and encryption to connector tokens, webhooks and the services that receive data, is on the [Security](/security) page.
 
+## Watch it
+
+Under a minute and a half: a payment code refused, the limits, the people who approve, and the pause. The guide below goes through each part in full.
+
+<Video
+  src="/docs/videos/controls-flow.mp4"
+  poster="/docs/videos/controls-flow-poster.jpg"
+  title="How payments are controlled"
+  duration="1:24"
+  caption="The live product on Arc testnet, with demo data in the team's own workspaces. A payment the code refused at the spending limit, the limit enforced by a contract on Arc, the approvals a person decides, and the pause. Recorded Oct 17, 2026."
+>
+
+How payments are controlled.
+
+Checks in code, limits, people, and a way to stop the agent.
+
+The agent decides on every bill. Before any money moves, rules in code check the payment.
+
+Here the agent wanted to pay Swanston Security fifty USDC.
+
+Code refused it: it would pass the workspace's spending limit.
+
+The model cannot argue past it. What it argued stays on the record, beside the rule that stopped it.
+
+The agent's spending limit caps what it pays on its own each day.
+
+On Arc, a contract enforces it: the agent's own payments go through it, and it refuses anything past the limit.
+
+Each payee has a limit of its own too. A bill above it waits for a person.
+
+Whatever the agent will not pay waits in Approvals, with its reasons.
+
+The person who entered a bill never also approves it, so a payment made by hand has two people behind it.
+
+Above a figure you choose, a payment needs two approvals, from two different people.
+
+Owners and admins choose who joins the workspace, and in which role.
+
+And the agent can be paused from the console at any time: no cycle runs while it is paused.
+
+The model proposes. Code, limits and people decide what moves.
+
+vestiarion.xyz/docs/guides/controls
+
+</Video>
+
 ## A decision is not a payment
 
 For each bill, the agent decides to pay it now, to pay it on a later day, to hold it for a person, to flag it, or to ask for what is missing, and it writes down why. A model proposes that decision; when no model is configured, a written policy does. Either way:

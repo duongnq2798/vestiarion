@@ -2,6 +2,58 @@ Shadow mode lets a business try the agent on its real bills without moving its m
 
 <Action href="/onboarding?shadow=1">Try shadow mode on your bills</Action>
 
+## Watch it
+
+Under two minutes: shadow mode on, test USDC for your real amounts, a mirror address, and a verdict on each decision. The guide below goes through each part in full.
+
+<Video
+  src="/docs/videos/shadow-mode-flow.mp4"
+  poster="/docs/videos/shadow-mode-flow-poster.jpg"
+  title="Shadow mode on your own bills"
+  duration="1:31"
+  caption="The live product on Arc testnet, with demo data in the team's own workspace, in shadow mode. Test USDC comes from Vestiarion's float, a supplier with no Arc address gets a mirror address, and the agent's decision gets a verdict; one agree-and-pay is from Oct 15. Recorded Oct 17, 2026."
+>
+
+Run alongside how you pay today.
+
+Shadow mode: the agent decides on your real bills, and pays only what you agree to.
+
+In shadow mode you keep paying your bills the way you do today.
+
+It is turned on in Settings, for bills in your own currency: here, US dollars.
+
+Add your bills as they arrive, and the agent decides on each one.
+
+A payment you agree to is sent in USDC on Arc testnet, at the bill's amount.
+
+When the open bills need more than the wallet holds, add test USDC from Vestiarion's float.
+
+Here, sixty test USDC came in.
+
+A supplier you pay by bank has no Arc address.
+
+Give it a mirror address: a wallet Vestiarion makes for it on Arc testnet.
+
+It is used in shadow mode only.
+
+The agent decided again: pay on the due date, and keep the cash working until then.
+
+We agree.
+
+Agree with a payment that is due now, and it is sent at once.
+
+Disagree, and it is not paid: say why in a line, and the agent decides it again later.
+
+The console counts every verdict, and how often you agreed.
+
+When you are ready, turn shadow mode off, and the agent pays on its own, within its limits.
+
+Measure the agent on your own bills before it pays anything on its own.
+
+vestiarion.xyz/docs/guides/shadow-mode
+
+</Video>
+
 ## Before you start
 
 - **A workspace on Arc testnet.** A sandbox is enough to start: with no wallet, it decides on your real bills, and a payment you agree to there is simulated. To pay what you agree to in USDC on Arc testnet, take it live with USDC in its operating wallet: see [Go live](/docs/guides/go-live). Each payment you agree to is then paid from that wallet, so keep it funded: with test USDC from Vestiarion's float, for what your open bills need (see [Fund it for your real amounts](#fund-it-for-your-real-amounts)), or from Circle's faucet, 20 USDC every two hours.

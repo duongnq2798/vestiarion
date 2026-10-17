@@ -5,6 +5,7 @@ import ApprovalCard from "@/components/ApprovalCard";
 import { ProposalCard } from "@/components/ProposalCard";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { DocsLink } from "@/components/DocsLink";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ChecklistVisit } from "@/components/vx/ChecklistVisit";
 import { GettingStarted } from "@/components/vx/GettingStarted";
@@ -102,6 +103,7 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
               ? "Payables the agent would not pay on its own, oldest due date first. Pay one now, reject it, or return it to the agent's next cycle."
               : "Payables the agent would not pay on its own, oldest due date first. An owner, admin or approver decides them."
           }
+          right={<DocsLink href="/docs/guides/controls" topic="how payments are controlled" />}
         />
         {/* A payable the agent just held, or one another approver just decided, shows up without a reload:
             every 15 s while something waits (someone else may be deciding it), every 30 s otherwise, and at once

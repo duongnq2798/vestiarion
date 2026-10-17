@@ -14,6 +14,14 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **A short video for each main flow.** Twelve more guides open with a narrated walkthrough recorded in the live
+  product, two minutes or less each, with its transcript: your first decision, your first payment, shadow mode, how
+  payments are controlled, going live, getting paid by a customer, early-payment offers, paying a contractor, bills from
+  QuickBooks and Zoho Books, bills that arrive on their own, bank payouts, and evidence with the audit export. The docs
+  Overview and the README list them all. In the app, a section's "Docs" link to one of these guides is followed by
+  "Watch" and the video's length, and so is the getting-started checklist's "Read the guide"; Collections and
+  Approvals gain their "Docs" link. [Watch them](https://www.vestiarion.xyz/docs#watch-it-work).
+
 - **The agent tells you before the cash runs short.** Each cycle it works out the same 30 days the console's cash
   outlook shows, and when the wallet will run short it says once, in the console, Telegram and Slack, how much is
   needed and by when, what customers owe by then, and what it is already doing: bills held for want of cash, requests
