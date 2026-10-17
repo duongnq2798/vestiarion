@@ -14,6 +14,47 @@ export const VIDEO_ATTRIBUTES = ["src", "poster", "title", "caption", "duration"
 
 export type VideoAttribute = (typeof VIDEO_ATTRIBUTES)[number];
 
+/**
+ * A guide's walkthrough: the guide whose "Watch it" section shows it, its title and length as that `<Video>` gives
+ * them, and the guides it also walks through, which point to it. The app links each from beside the "Docs" link to
+ * any of those guides (`DocsLink`, the getting-started checklist); `tests/docs-videos.test.tsx` holds this list to the
+ * `<Video>`s in the MDX.
+ */
+export interface GuideVideo {
+  guide: string;
+  title: string;
+  duration: string;
+  also?: readonly string[];
+}
+
+export const GUIDE_VIDEOS: readonly GuideVideo[] = [
+  { guide: "guides/try-it", title: "See your first decision", duration: "1:45" },
+  { guide: "guides/first-payment", title: "Your first payment, paid by the agent", duration: "1:32" },
+  { guide: "guides/shadow-mode", title: "Shadow mode on your own bills", duration: "1:31" },
+  { guide: "guides/controls", title: "How payments are controlled", duration: "1:24" },
+  { guide: "guides/go-live", title: "Take a workspace live on Arc", duration: "1:22" },
+  { guide: "guides/collections", title: "Get paid by a customer on Arc", duration: "1:03" },
+  { guide: "guides/early-payment-offers", title: "Early-payment offers made by the agent", duration: "1:10" },
+  { guide: "guides/pay-a-contractor", title: "Pay a contractor for verified work", duration: "1:01" },
+  { guide: "guides/quickbooks", title: "Bills from QuickBooks and Zoho Books", duration: "1:00", also: ["guides/zohobooks"] },
+  { guide: "guides/import-bills", title: "Bills that arrive on their own", duration: "1:17", also: ["guides/email-invoices", "guides/invoice-capture"] },
+  { guide: "guides/bank-payouts", title: "Pay a vendor's bank account in pesos", duration: "0:58" },
+  { guide: "guides/evidence", title: "Evidence and the audit export", duration: "0:56", also: ["guides/audit-export"] },
+  { guide: "guides/xero", title: "Bills from Xero, decided by the agent", duration: "1:52" },
+  { guide: "guides/hubspot", title: "A deal from HubSpot, collected on Arc", duration: "1:55" },
+];
+
+/**
+ * The walkthrough a link to a docs page can offer beside it, with where it plays (its guide's "Watch it" section), or
+ * null: a link to one heading of a page, or to a page no walkthrough covers, offers none.
+ */
+export function videoFor(href: string): (GuideVideo & { watch: string }) | null {
+  if (href.includes("#")) return null;
+  const slug = href.replace(/^\/docs\//, "").replace(/\/$/, "");
+  const video = GUIDE_VIDEOS.find((entry) => entry.guide === slug || entry.also?.includes(slug));
+  return video ? { ...video, watch: `/docs/${video.guide}#watch-it` } : null;
+}
+
 /** A length written as minutes and seconds, `1:52`, as an ISO 8601 duration, `PT1M52S`; null for anything else. */
 export function isoDuration(duration: string): string | null {
   const match = /^(\d{1,2}):([0-5]\d)$/.exec(duration.trim());

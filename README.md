@@ -18,7 +18,7 @@
 
 **[See your first decision](https://www.vestiarion.xyz/docs/guides/try-it)** · **[Open numbers](https://www.vestiarion.xyz/open)** · **[Mainnet proof](#mainnet-proof)** · **[Docs](https://www.vestiarion.xyz/docs)** · **[MCP server](https://www.vestiarion.xyz/docs/ai-integration/mcp)** · **[Security](https://www.vestiarion.xyz/security)**
 
-<sub>Built on [Arc](https://www.arc.network) and [Circle](#circle-integrations) · Works with [Xero](https://www.vestiarion.xyz/docs/guides/xero) · [QuickBooks Online](https://www.vestiarion.xyz/docs/guides/quickbooks) · [Zoho Books](https://www.vestiarion.xyz/docs/guides/zohobooks) · [HubSpot](https://www.vestiarion.xyz/docs/guides/hubspot) · [Pipedrive](https://www.vestiarion.xyz/docs/guides/pipedrive) · [Zoho CRM](https://www.vestiarion.xyz/docs/guides/zohocrm) · [BlindPay](https://www.vestiarion.xyz/docs/guides/bank-payouts) · [Asana](https://www.vestiarion.xyz/docs/guides/asana) · [GitHub](https://www.vestiarion.xyz/docs/guides/github) · [Slack](https://www.vestiarion.xyz/docs/guides/slack) · [Telegram](https://www.vestiarion.xyz/docs/guides/telegram) · [Chrome](https://www.vestiarion.xyz/docs/guides/invoice-capture) · [@vestiarionhq](https://x.com/vestiarionhq)</sub>
+<sub>Built on [Arc](https://www.arc.io) and [Circle](#circle-integrations) · Works with [Xero](https://www.vestiarion.xyz/docs/guides/xero) · [QuickBooks Online](https://www.vestiarion.xyz/docs/guides/quickbooks) · [Zoho Books](https://www.vestiarion.xyz/docs/guides/zohobooks) · [HubSpot](https://www.vestiarion.xyz/docs/guides/hubspot) · [Pipedrive](https://www.vestiarion.xyz/docs/guides/pipedrive) · [Zoho CRM](https://www.vestiarion.xyz/docs/guides/zohocrm) · [BlindPay](https://www.vestiarion.xyz/docs/guides/bank-payouts) · [Asana](https://www.vestiarion.xyz/docs/guides/asana) · [GitHub](https://www.vestiarion.xyz/docs/guides/github) · [Slack](https://www.vestiarion.xyz/docs/guides/slack) · [Telegram](https://www.vestiarion.xyz/docs/guides/telegram) · [Chrome](https://www.vestiarion.xyz/docs/guides/invoice-capture) · [@vestiarionhq](https://x.com/vestiarionhq)</sub>
 
 </div>
 
@@ -46,6 +46,7 @@ Arc mainnet and the proof. The tour opens how the agent decided, line by line, o
 ## Contents
 
 - [How to evaluate Vestiarion in 5 minutes](#how-to-evaluate-vestiarion-in-5-minutes)
+- [Watch each flow](#watch-each-flow)
 - [What Vestiarion does](#what-vestiarion-does)
 - [Why it is different](#why-it-is-different)
 - [How payments work](#how-payments-work)
@@ -90,9 +91,8 @@ nothing else: no wallet, no USDC, no API key, nothing to install.
    payment to a new address, approved by a second person, and paid through the owner's spending-limit contract.
 
 **Watch instead:** [the demo](https://youtu.be/-gMv3ipzDyA) (2:55),
-[the full product tour](https://youtu.be/yfDxzibSYQc) (7:15), and the
-[Xero](https://www.vestiarion.xyz/docs/guides/xero#watch-it) and
-[HubSpot](https://www.vestiarion.xyz/docs/guides/hubspot#watch-it) flows, under two minutes each.
+[the full product tour](https://youtu.be/yfDxzibSYQc) (7:15), and [a short video for each main flow](#watch-each-flow),
+two minutes or less each.
 
 **Reviewing security:** [www.vestiarion.xyz/security](https://www.vestiarion.xyz/security) covers the architecture,
 tenant isolation, encryption, access control, connector tokens, webhooks, the subprocessors and what we do not claim.
@@ -114,6 +114,27 @@ tenant isolation, encryption, access control, connector tokens, webhooks, the su
 | [`scripts`](scripts) | Operator commands: migrations, a cycle, the payments switch, contract builds, research replays |
 | [`tests`](tests) | The Vitest suite `npm run verify` runs, every migration included, on an in-process Postgres |
 | [`docs`](docs) | Running it yourself, releasing, and each feature's design with its rollout record |
+
+## Watch each flow
+
+One short video for each main flow, recorded in the live product on Arc testnet with demo data in the team's own workspaces. Each plays at the top of its guide, with its transcript.
+
+| Flow | Length | What it shows |
+| --- | --- | --- |
+| [See your first decision](https://www.vestiarion.xyz/docs/guides/try-it#watch-it) | 1:45 | A supplier and one of its bills added in shadow mode, the agent's decision and why, and a verdict. |
+| [Your first payment, paid by the agent](https://www.vestiarion.xyz/docs/guides/first-payment#watch-it) | 1:32 | A bill the agent pays on its own, one that waits for a second person, and the record of both. |
+| [Shadow mode on your own bills](https://www.vestiarion.xyz/docs/guides/shadow-mode#watch-it) | 1:31 | Shadow mode on, test USDC for your real amounts, a mirror address, and a verdict on each decision. |
+| [How payments are controlled](https://www.vestiarion.xyz/docs/guides/controls#watch-it) | 1:24 | A payment code refused, the limits, the people who approve, and the pause. |
+| [Take a workspace live on Arc](https://www.vestiarion.xyz/docs/guides/go-live#watch-it) | 1:22 | Wallets created, funded with testnet USDC and taken live, then a workspace on Arc mainnet. |
+| [Get paid by a customer on Arc](https://www.vestiarion.xyz/docs/guides/collections#watch-it) | 1:03 | An invoice to a customer, its pay link and pay page, and the agent's next step on Collections. |
+| [Early-payment offers made by the agent](https://www.vestiarion.xyz/docs/guides/early-payment-offers#watch-it) | 1:10 | The bills worth paying early, an offer the agent made and the supplier accepted, and a counter. |
+| [Pay a contractor for verified work](https://www.vestiarion.xyz/docs/guides/pay-a-contractor#watch-it) | 1:01 | A freelancer paid through a one-time link, released by the agent, and milestone escrow. |
+| [Bills from QuickBooks and Zoho Books](https://www.vestiarion.xyz/docs/guides/quickbooks#watch-it) | 1:00 | Open bills from QuickBooks and Zoho Books, reviewed and added, then decided by the agent. |
+| [Bills that arrive on their own](https://www.vestiarion.xyz/docs/guides/import-bills#watch-it) | 1:17 | An invoice PDF read into the form, a pasted list of bills, and the email and Chrome intake. |
+| [Pay a vendor's bank account in pesos](https://www.vestiarion.xyz/docs/guides/bank-payouts#watch-it) | 0:58 | Bank payouts set up with BlindPay, the vendor's bank account, and a payout followed to the end. |
+| [Evidence and the audit export](https://www.vestiarion.xyz/docs/guides/evidence#watch-it) | 0:56 | Why a payment was made, how each fact is known, and the audit log's chain check. |
+| [Bills from Xero, decided by the agent](https://www.vestiarion.xyz/docs/guides/xero#watch-it) | 1:52 | Bills from the Xero Demo Company come in, one paid in Xero is caught before it is paid twice, and one is paid on Arc testnet. |
+| [A deal from HubSpot, collected on Arc](https://www.vestiarion.xyz/docs/guides/hubspot#watch-it) | 1:55 | A deal won in HubSpot is planned, its deposit is paid and matched, and the receipt is written back to HubSpot. |
 
 ## What Vestiarion does
 

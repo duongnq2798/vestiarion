@@ -3183,7 +3183,10 @@ under `public/docs/videos/`, in the browser's own player with `preload="none"` (
 length and caption below, and its transcript, written between its tags in the MDX, under "Read the transcript"; the
 `.md` view links the file and gives the transcript. A `<Video>` missing an attribute or its transcript fails the render,
 and `tests/docs-videos.test.tsx` holds each one to an existing fast-start MP4 of the length it states, and every file
-there to a guide. The proxy skips `docs/videos/`, and `outputFileTracingExcludes` keeps the files out of the server
+there to a guide. `GUIDE_VIDEOS` (`src/lib/docs/videos.ts`) lists them, one per main flow, with the guides each also
+walks through; the test holds it to the MDX, and the app offers each one beside its guide's links: `DocsLink` adds
+"Watch" and the length after "Docs" for a link to a whole guide that has one, and the getting-started checklist after
+"Read the guide". The proxy skips `docs/videos/`, and `outputFileTracingExcludes` keeps the files out of the server
 functions. **A PR that
 changes `/api/v1` or webhooks adds a changelog entry** to
 `content/docs/changelog.mdx`: dated, newest first, saying what changed for an
