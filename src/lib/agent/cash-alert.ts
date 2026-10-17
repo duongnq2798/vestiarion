@@ -131,18 +131,18 @@ export function cashShortSummary(short: CashShort): string {
     : `Cash runs short on ${utcDay(short.shortOn)} by ${usdc(short.shortBy)}, and by ${usdc(short.need)} on ${utcDay(short.lowestOn)}`;
 }
 
-/** The stage: work out the outlook, decide whether to tell, and sign it. */
-export async function alertCashShort(orgDb: OrgDb, options: { now?: number } = {}): Promise<CycleLogLine[]> {
-  const nowMs = options.now ?? Date.now();
-  // Shadow mode (S5): the business pays in its own money, and the wallet only mirrors agreed payments.
-  if (await readShadowMode(orgDb)) return [];
-  const [accountsRead, invoicesRead, milestonesRead, lastRead] = await Promise.all([
+/**
+ * The console's cash outlook from the workspace's open rows (S1): the balances, the open invoices (payables still to pay
+ * and receivables still owed, so a long paid history never crowds the read past the row cap), what customers still owe
+ * on each, as the console counts it, and the open milestones. Shared with the weekly brief.
+ */
+export async function readOpenCashOutlook(orgDb: OrgDb, nowMs: number): Promise<{ outlook: CashOutlook; accounts: Array<{ kind: string; balance: number }>; invoices: OutlookInvoice[] }> {
+  const [accountsRead, invoicesRead, milestonesRead] = await Promise.all([
     orgDb.from("accounts").select("kind, balance").in("kind", ["operating", "reserve"]),
     // Only what is open: the whole invoice table is more than a read returns once a workspace has paid enough bills
     // (review of #420), and a paid one moves no money ahead.
     orgDb.from("invoices").select(OPEN_INVOICE_COLUMNS).in("status", [...OPEN_STATUSES]).order("due_date", { ascending: true }),
     orgDb.from("milestones").select("id, title, amount, status, escrow_state, counterparties(name)").in("status", ["pending", "verified"]),
-    orgDb.from("ledger_entries").select("action, ts, detail").in("action", [CASH_SHORT_AHEAD, CASH_SHORT_CLEARED]).order("seq", { ascending: false }).limit(1),
   ]);
   const accounts = (unwrap(accountsRead) as Array<{ kind: string; balance: string | number }>).map((row) => ({ kind: row.kind, balance: Number(row.balance) }));
   const openRows = unwrap(invoicesRead) as unknown as OpenInvoiceRow[];
@@ -167,7 +167,19 @@ export async function alertCashShort(orgDb: OrgDb, options: { now?: number } = {
     status: row.status,
     escrow_state: row.escrow_state as OutlookMilestone["escrow_state"],
   }));
-  const short = cashShortOf(cashOutlook(outlookInputOf({ now: nowMs, accounts, invoices, milestones })));
+  return { outlook: cashOutlook(outlookInputOf({ now: nowMs, accounts, invoices, milestones })), accounts, invoices };
+}
+
+/** The stage: work out the outlook, decide whether to tell, and sign it. */
+export async function alertCashShort(orgDb: OrgDb, options: { now?: number } = {}): Promise<CycleLogLine[]> {
+  const nowMs = options.now ?? Date.now();
+  // Shadow mode (S5): the business pays in its own money, and the wallet only mirrors agreed payments.
+  if (await readShadowMode(orgDb)) return [];
+  const [{ outlook, accounts, invoices }, lastRead] = await Promise.all([
+    readOpenCashOutlook(orgDb, nowMs),
+    orgDb.from("ledger_entries").select("action, ts, detail").in("action", [CASH_SHORT_AHEAD, CASH_SHORT_CLEARED]).order("seq", { ascending: false }).limit(1),
+  ]);
+  const short = cashShortOf(outlook);
   const last = ((unwrap(lastRead) as LastAlert[])[0] ?? null) as LastAlert | null;
   const due = alertDue(short, last, nowMs);
   if (due === null) return [];

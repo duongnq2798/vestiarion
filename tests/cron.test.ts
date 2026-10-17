@@ -9,10 +9,11 @@ import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fa
 
 // What a cycle does is the orchestrator's tests' job, and what a digest does
 // is tests/notifications.test.ts's: here only the order and isolation of the two.
-const { runAgentCycleMock, notifyMock, escalateMock } = vi.hoisted(() => ({ runAgentCycleMock: vi.fn(), notifyMock: vi.fn(), escalateMock: vi.fn() }));
+const { runAgentCycleMock, notifyMock, escalateMock, briefMock } = vi.hoisted(() => ({ runAgentCycleMock: vi.fn(), notifyMock: vi.fn(), escalateMock: vi.fn(), briefMock: vi.fn() }));
 vi.mock("@/lib/agent/orchestrator", () => ({ runAgentCycle: runAgentCycleMock }));
 vi.mock("@/lib/notifications/waiting", () => ({ notifyWaitingDecisions: notifyMock }));
 vi.mock("@/lib/notifications/escalations", () => ({ escalateOverdueDecisions: escalateMock }));
+vi.mock("@/lib/notifications/weekly-brief", () => ({ sendWeeklyBrief: briefMock }));
 
 const A = "5d0f3a2e-8c1b-4f7a-9e6d-00000000a000";
 const B = "5d0f3a2e-8c1b-4f7a-9e6d-00000000b000";
@@ -163,6 +164,7 @@ describe("runScheduledCycle", () => {
     runAgentCycleMock.mockReset();
     notifyMock.mockReset();
     escalateMock.mockReset();
+    briefMock.mockReset();
     vi.restoreAllMocks();
   });
 
@@ -181,6 +183,11 @@ describe("runScheduledCycle", () => {
       order.push(`escalate ${currentOrgId()}`);
       return { sent: 0, failed: 0, invoices: 0 };
     });
+    // The weekly brief follows, in the same scope (weekly brief W1).
+    briefMock.mockImplementation(async () => {
+      order.push(`brief ${currentOrgId()}`);
+      return { sent: 0, failed: 0, skipped: "not_monday" };
+    });
 
     const results = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => runLiveOrganizations(runScheduledCycle));
 
@@ -188,7 +195,7 @@ describe("runScheduledCycle", () => {
       { slug: "a-corp", ok: true, result: { lines: [] } },
       { slug: "b-corp", ok: true, result: { lines: [] } },
     ]);
-    expect(order).toEqual([`cycle ${A}`, `notify ${A}`, `escalate ${A}`, `cycle ${B}`, `notify ${B}`, `escalate ${B}`]);
+    expect(order).toEqual([`cycle ${A}`, `notify ${A}`, `escalate ${A}`, `brief ${A}`, `cycle ${B}`, `notify ${B}`, `escalate ${B}`, `brief ${B}`]);
     // Only the scheduled path starts a cycle this way: no person, no cap (N1), and the schedule as its trigger.
     expect(runAgentCycleMock).toHaveBeenCalledWith({ trigger: { kind: "schedule" } });
   });

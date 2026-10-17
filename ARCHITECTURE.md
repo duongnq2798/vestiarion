@@ -2403,6 +2403,26 @@ or unpaid accepted `customer_discount_offers`), each best effort (`null` when un
 warning that is not counted among what waits for a person, ⚠️ in Telegram), so the console, Telegram and Slack tell
 them. Skipped in shadow mode (`readShadowMode`). Code only, no model.
 
+## The agent's weekly brief
+
+docs/superpowers/specs/2026-10-18-weekly-brief-design.md, `src/lib/notifications/weekly-brief.ts`, email in
+`src/lib/email/weekly-brief.ts`. `runScheduledCycle` (`src/lib/agent/cron.ts`) calls `sendWeeklyBrief()` after the digest
+and the escalations, on the same never-throw terms. It goes only on a Monday (UTC), once per ISO week (`isoWeek`; the
+week's `weekly_brief_sent` entry without `preview` stops a second), not in shadow mode, and not when `briefWorthSending`
+finds nothing to say. `weeklyBriefFacts` reads, for the last 7 days, confirmed USDC `payment_intents`, `ar_received`
+entries and the agent's `ap_*`/`milestone_*` entries; the payables waiting for a person; and, through
+`readOpenCashOutlook` (shared with the cash alert, `src/lib/agent/cash-alert.ts`), the next 7 days' outflows and
+expected receipts and `cashShortOf`, over the 7 whole UTC days before today (`ar_received` and `ar_payment_applied`
+count as money received). Recipients are the digest's (`decidingRecipients`: owners, admins, approvers with
+`memberships.notify_email`), read before the figures. The week is claimed before the sends with the throwing
+`appendLedgerEntry` (`weekly_brief_sent`): a cycle that starts while they go, or a tick cut short after them, finds it
+claimed; a claim that cannot be signed sends nothing. When no send succeeds, `weekly_brief_failed` lets the claim go,
+and the once-a-week check reads the week's last non-preview entry of the two, so a later Monday cycle retries.
+`sendWeeklyBriefNowAction` (`src/app/actions/notifications.ts`, `approval.decide`) sends it to the session's own
+address via `sendWeeklyBrief({ only })`, signed with `preview: true` and `by`, at most once per member in
+`PREVIEW_EVERY_MS` (5 minutes), never in shadow mode; the button is `SendBriefNow` in `NotificationsPanel`. Its emails
+are metered as `weekly_brief`.
+
 ## Bank payouts (BlindPay)
 
 A vendor's bills paid to its bank account in Mexico, in pesos over SPEI, from the workspace's USDC
