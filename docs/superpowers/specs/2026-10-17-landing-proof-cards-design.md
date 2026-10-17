@@ -54,3 +54,33 @@ A review of the landing's proof section, the Arc mainnet and Arc testnet cards u
   - the list of live legs, its links and its unlinked row.
 - Headless Edge, against production's figures, at 1440, 1024, 768 and 375 px: three figures a card from `sm`, the
   latest payment's hash on one line, and the list's statuses lined up.
+
+## Second review
+
+The second review scored the section 8.7 of 10 and asked for one round of refinement, not a redesign.
+
+- **The latest payment's date stood level with the figures.** "Oct 12" sat beside 4 and 1.42 as though it were an
+  achievement. Arc mainnet now leads with two figures, payments settled and USDC paid. The latest payment moves to the
+  card's foot as evidence.
+- **The two cards ended differently.** Both feet now hold the same two lines:
+  - the side that does not lead the card (the team's, or the customers');
+  - "Latest team payment", its time and its hash on the explorer.
+
+  Customers' payments are still counted, never listed.
+- **"7 of 7" did not say whose verdicts it counted.** It now reads "Customers agreed", "with the agent's decisions, in
+  shadow mode". A longer label, "Decisions customers agreed with", ran to three lines beside the other figures and left
+  Arc mainnet's card with a gap. The count out of the verdicts given already says the share.
+- **The figures lacked a focus.** They are a step larger (36 px from `lg`). Their descriptions are a step smaller and
+  quieter. The link under USDC paid is an underlined secondary link, not the brand blue.
+- **The two lists' labels were technical.**
+  - "What runs live right now" is "Live capabilities".
+  - "Check it without us" is "Verify it yourself", as the payments list on Open numbers is headed.
+  - Each check has a small icon: a file check, a shield check, a chart and a branch.
+  - "Live" on each row is set lighter.
+- **Circle was less present than Arc.** When payments run live, their row reads "USDC through Circle, Arc mainnet and
+  testnet". It says so only then: live payments are sent through Circle's wallets, and a simulated deployment sends
+  nothing.
+
+Checked:
+- `tests/landing-proof.test.tsx` holds the two feet, the new label and the Circle wording, live and simulated.
+- Headless Edge at 1440, 1024, 768 and 375 px.

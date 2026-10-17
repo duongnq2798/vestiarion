@@ -109,7 +109,7 @@ function LegRow({ leg, linked }: { leg: ProvenanceLeg; linked: boolean }) {
       <span className="min-w-0 flex-1 text-[0.9375rem]">
         <span className="font-medium text-ink">{leg.label}</span> <span className="text-ink-2">· {leg.detail}</span>
       </span>
-      <span className={cn("font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.1em]", tone === "held" ? "text-held" : tone === "proof" ? "text-proof" : "text-ink-2")}>
+      <span className={cn("font-mono text-[0.6875rem] font-medium uppercase tracking-[0.1em]", tone === "held" ? "text-held" : tone === "proof" ? "text-proof" : "text-ink-2")}>
         {leg.held ? "Held" : leg.live ? "Live" : "Simulated"}
       </span>
       {/* The arrow's place is kept on every row, so each row's status lines up with the next. */}

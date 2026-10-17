@@ -8,7 +8,7 @@ import { Reveal } from "@/components/ui/Reveal";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { BrandMark } from "@/components/vx/BrandMarks";
 import { Hash } from "@/components/vx/Primitives";
-import { utcDay, utcMinute } from "@/lib/copy";
+import { utcMinute } from "@/lib/copy";
 import { ARC_MAINNET, ARC_TESTNET, type NetworkProfile } from "@/lib/network";
 import type { OpenNumbers } from "@/lib/platform/open-numbers";
 import { CountUp } from "./CountUp";
@@ -129,11 +129,9 @@ function PanelFigures({ numbers, profile }: { numbers: OpenNumbers; profile: Net
   return customers.payments === 0 && ours.payments > 0 ? <TeamFigures numbers={numbers} profile={profile} /> : <CustomerFigures numbers={numbers} profile={profile} />;
 }
 
-/** The figures customers brought to a network, then the team's own on a line of its own. */
+/** The figures customers brought to a network, then the team's own on the panel's foot. */
 function CustomerFigures({ numbers, profile }: { numbers: OpenNumbers; profile: NetworkProfile }) {
   const { customers, ours } = numbers.sides;
-  const latest = numbers.ourPayments[0];
-  const latestUrl = latestOwnPaymentUrl(numbers, profile);
   return (
     <>
       <FiguresHeading>Customers</FiguresHeading>
@@ -148,68 +146,42 @@ function CustomerFigures({ numbers, profile }: { numbers: OpenNumbers; profile: 
         </Figure>
         <Judgement numbers={numbers} />
       </FigureGrid>
-      <SideLine who="Vestiarion team">
-        <span>
-          {ours.payments === 0
-            ? "No payment by our own workspaces yet."
-            : `${formatFigure(ours.payments, "count")} ${ours.payments === 1 ? "payment" : "payments"}, ${formatFigure(ours.usdcPaid, "usdc")} USDC, from our own workspaces`}
-        </span>
-        {latest && latestUrl && (
-          <>
-            <span aria-hidden className="hidden sm:inline">
-              ·
-            </span>
-            <span>latest</span>
-            <time dateTime={latest.at} className="font-mono text-xs text-ink-3">
-              {utcMinute(latest.at)}
-            </time>
-            <Hash value={latest.txHash} href={latestUrl} className="text-sm" />
-          </>
-        )}
-      </SideLine>
+      <PanelFoot numbers={numbers} profile={profile} who="Vestiarion team">
+        {ours.payments === 0
+          ? "No payment by our own workspaces yet."
+          : `${formatFigure(ours.payments, "count")} ${ours.payments === 1 ? "payment" : "payments"}, ${formatFigure(ours.usdcPaid, "usdc")} USDC, from our own workspaces`}
+      </PanelFoot>
     </>
   );
 }
 
 /**
- * A network no customer has paid on yet, led by the team's own payments there: how many, how much, and the latest on
- * its explorer, under a heading that names the team; then where customers stand, on a line of their own.
+ * A network no customer has paid on yet, led by the team's own payments there, how many and how much, under a heading
+ * that names the team; then, on the panel's foot, where customers stand and the latest payment on its explorer.
  */
 function TeamFigures({ numbers, profile }: { numbers: OpenNumbers; profile: NetworkProfile }) {
   const { customers, ours } = numbers.sides;
-  const latest = numbers.ourPayments[0];
-  const latestUrl = latestOwnPaymentUrl(numbers, profile);
-  const shown = latest && latestUrl;
   return (
     <>
       <FiguresHeading>Paid by the Vestiarion team</FiguresHeading>
-      <FigureGrid count={shown ? 3 : 2}>
+      <FigureGrid count={2}>
         <Figure label="Payments settled" value={formatFigure(ours.payments, "count")}>
           From our own workspaces
         </Figure>
         <Figure label="USDC paid" value={formatFigure(ours.usdcPaid, "usdc")}>
-          <Link href={`/open#our-payments-${profile.id}`} className="font-medium text-agent underline-offset-4 hover:underline">
+          <Link
+            href={`/open#our-payments-${profile.id}`}
+            className="underline decoration-line-strong underline-offset-4 transition-colors duration-150 ease-standard hover:text-agent hover:decoration-agent"
+          >
             Each one on Open numbers
           </Link>
         </Figure>
-        {shown && (
-          <Figure label="Latest payment" value={utcDay(latest.at).replace(/, \d{4}$/, "")} counted={false}>
-            <span className="flex flex-wrap items-center gap-x-2">
-              <time dateTime={latest.at} className="font-mono text-xs text-ink-3">
-                {`${new Date(latest.at).toISOString().slice(11, 16)} UTC`}
-              </time>
-              <Hash value={latest.txHash} href={latestUrl} className="whitespace-nowrap text-sm" />
-            </span>
-          </Figure>
-        )}
       </FigureGrid>
-      <SideLine who="Customers">
-        <span>
-          {customers.workspacesOpened === 0
-            ? `None on ${profile.label} yet`
-            : `${formatFigure(customers.workspacesOpened, "count")} ${customers.workspacesOpened === 1 ? "workspace" : "workspaces"} opened, no payment yet`}
-        </span>
-      </SideLine>
+      <PanelFoot numbers={numbers} profile={profile} who="Customers">
+        {customers.workspacesOpened === 0
+          ? `None on ${profile.label} yet`
+          : `${formatFigure(customers.workspacesOpened, "count")} ${customers.workspacesOpened === 1 ? "workspace" : "workspaces"} opened, no payment yet`}
+      </PanelFoot>
     </>
   );
 }
@@ -224,10 +196,34 @@ function FigureGrid({ count, children }: { count: 2 | 3; children: ReactNode }) 
   return <dl className={cn("grid flex-1 grid-cols-1 gap-px bg-line", count === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2")}>{children}</dl>;
 }
 
-/** The side that does not lead a panel, on a line of its own under its figures: the team's, or the customers'. */
-function SideLine({ who, children }: { who: string; children: ReactNode }) {
+/**
+ * Every panel's foot, the same on both networks: the side that does not lead it (the team's, or the customers'), then
+ * the team's latest payment there, on its explorer, as the evidence a reader can check. Customers' payments are counted,
+ * never listed.
+ */
+function PanelFoot({ numbers, profile, who, children }: { numbers: OpenNumbers; profile: NetworkProfile; who: string; children: ReactNode }) {
+  const latest = numbers.ourPayments[0];
+  const latestUrl = latestOwnPaymentUrl(numbers, profile);
   return (
-    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-line bg-ground/50 px-5 py-3.5 text-sm text-ink-2 sm:px-6">
+    <div className="grid gap-1.5 border-t border-line bg-ground/50 px-5 py-3.5 text-sm text-ink-2 sm:px-6">
+      <FootLine who={who}>
+        <span>{children}</span>
+      </FootLine>
+      {latest && latestUrl && (
+        <FootLine who="Latest team payment">
+          <time dateTime={latest.at} className="font-mono text-xs text-ink-3">
+            {utcMinute(latest.at)}
+          </time>
+          <Hash value={latest.txHash} href={latestUrl} className="whitespace-nowrap text-sm" />
+        </FootLine>
+      )}
+    </div>
+  );
+}
+
+function FootLine({ who, children }: { who: string; children: ReactNode }) {
+  return (
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
       <span className="basis-full font-medium text-ink sm:basis-auto">{who}</span>
       <span aria-hidden className="hidden sm:inline">
         ·
@@ -248,8 +244,8 @@ function Judgement({ numbers }: { numbers: OpenNumbers }) {
   const agreed = customers.verdictsAgreed;
   if (given !== null && agreed !== null && given > 0) {
     return (
-      <Figure label="Agreed with the agent" value={formatRatio(agreed, given)}>
-        {`in shadow mode, ${formatPercent(agreed, given)}`}
+      <Figure label="Customers agreed" value={formatRatio(agreed, given)}>
+        with the agent&apos;s decisions, in shadow mode
       </Figure>
     );
   }
@@ -263,8 +259,8 @@ function Judgement({ numbers }: { numbers: OpenNumbers }) {
     );
   }
   return (
-    <Figure label="Agreed with the agent" value="None yet">
-      No verdict from a customer yet
+    <Figure label="Customers agreed" value="None yet">
+      No customer has reviewed a decision yet
     </Figure>
   );
 }
@@ -272,18 +268,17 @@ function Judgement({ numbers }: { numbers: OpenNumbers }) {
 /**
  * One figure: its value large above its label, then what it means. The label comes first for a screen reader. On a
  * phone the value sits at the right of its label, as a row, so three figures do not stand three screens tall. The value
- * is set in the sans with even-width digits; times and hashes keep the mono. `counted` is false for a value that is not
- * an amount, such as a date, which is shown as it is rather than counted up.
+ * is set in the sans with even-width digits; times and hashes keep the mono.
  */
-function Figure({ label, value, counted = true, children }: { label: string; value: string; counted?: boolean; children: ReactNode }) {
+function Figure({ label, value, children }: { label: string; value: string; children: ReactNode }) {
   return (
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 bg-surface px-5 py-4 sm:flex sm:flex-col sm:items-stretch sm:px-6 sm:py-5">
       <dt className="text-sm font-semibold text-ink sm:order-2 sm:mt-2.5">{label}</dt>
       {/* Kept to one line: three figures share half the page's width beside the other network from lg up. */}
-      <dd className="row-span-2 whitespace-nowrap text-right text-2xl font-semibold leading-none tracking-[-0.035em] text-ink tabular-nums sm:order-1 sm:text-left sm:text-3xl lg:text-[2rem]">
-        {counted ? <CountUp value={value} /> : value}
+      <dd className="row-span-2 whitespace-nowrap text-right text-2xl font-semibold leading-none tracking-[-0.035em] text-ink tabular-nums sm:order-1 sm:text-left sm:text-[2rem] lg:text-[2.25rem]">
+        <CountUp value={value} />
       </dd>
-      <dd className="mt-0.5 text-sm leading-6 text-ink-2 sm:order-3 sm:mt-1">{children}</dd>
+      <dd className="mt-0.5 text-[0.8125rem] leading-5 text-ink-3 sm:order-3 sm:mt-1.5">{children}</dd>
     </div>
   );
 }
