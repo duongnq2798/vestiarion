@@ -36,7 +36,7 @@ const ICONS = {
 
 const BUTTONS = [
   { file: "open-the-app.svg", icon: "web", caption: "OPEN THE APP", label: "vestiarion.xyz" },
-  { file: "watch-the-demo.svg", icon: "play", caption: "WATCH THE DEMO", label: "2:55 on YouTube" },
+  { file: "watch-the-demo.svg", icon: "play", caption: "WATCH THE DEMO", label: "2:59 on YouTube" },
   { file: "add-to-chrome.svg", icon: "capture", caption: "ADD TO CHROME", label: "Invoice Capture" },
   { file: "npm-sdk.svg", icon: "npm", caption: "INSTALL FROM NPM", label: "@vestiarion/sdk" },
 ];

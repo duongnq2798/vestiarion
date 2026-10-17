@@ -20,7 +20,8 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   QuickBooks and Zoho Books, bills that arrive on their own, bank payouts, and evidence with the audit export. The docs
   Overview and the README list them all. In the app, a section's "Docs" link to one of these guides is followed by
   "Watch" and the video's length, and so is the getting-started checklist's "Read the guide"; Collections and
-  Approvals gain their "Docs" link. [Watch them](https://www.vestiarion.xyz/docs#watch-it-work).
+  Approvals gain their "Docs" link. [Watch them](https://www.vestiarion.xyz/docs#watch-it-work). The demo and the product
+  tour are voiced again, with USDC said letter by letter, and the README links the new uploads.
 
 - **The agent tells you before the cash runs short.** Each cycle it works out the same 30 days the console's cash
   outlook shows, and when the wallet will run short it says once, in the console, Telegram and Slack, how much is
