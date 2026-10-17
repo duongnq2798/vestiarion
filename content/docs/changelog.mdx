@@ -1,5 +1,12 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-17: Suppliers counter the agent's requests for more time
+
+- On a request for more time, a supplier may propose fewer days, and the agent answers it. New entries, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`, all in domain `ap`:
+  - **`term_request_countered`** (actor `system`, `via: "terms_link"`), with `requestId`, `invoiceId`, `counterDays` and `days`.
+  - **`term_counter_accepted`** and **`term_counter_declined`** (actor `agent`), with `requestId`, `invoiceId`, `counterpartyId`, `days`, `counterDays`, `decision: { action: "accept" | "decline", reasoning }`, `referenceDecision`, `decisionMode`, `agreedWithReference` and `supplierTold`. An acceptance also carries `newDueDate`; a counter the bill changed under carries `billChanged: true`. `decisionMode` is `code` when the bill was being paid and no model was asked.
+- An accepted counter moves the invoice's `dueDate` by `counterDays` and returns the payable to `pending`. Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-17: Requests for more time withdrawn when no longer needed
 
 - **`term_request_withdrawn`** may now carry `reason: "paid"`, when the bill is being paid, or `reason: "not_needed"`, when it is no longer held for want of cash, beside `"not_emailed"`. These carry `counterpartyId`, `days`, `supplierTold` (whether the supplier was emailed that the request is withdrawn) and `to` (the address, masked). Nothing else in `/api/v1` or the webhooks changes.

@@ -16,7 +16,7 @@ const INITIAL: TermRequestsActionResult = { ok: false, message: "" };
 
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
-const STATUS: Record<string, string> = { open: "asked for", accepted: "agreed to", declined: "declined", withdrawn: "was withdrawn from" };
+const STATUS: Record<string, string> = { open: "asked for", accepted: "agreed to", declined: "declined", withdrawn: "was withdrawn from", countered: "proposed fewer days than" };
 
 /**
  * Bills & receivables, **More time when cash is short** (docs/superpowers/specs/2026-10-17-term-requests-design.md X1):

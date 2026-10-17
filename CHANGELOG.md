@@ -14,6 +14,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Suppliers can propose fewer days on the agent's request for more time.** On the request's page, beside Agree and
+  Decline, a supplier may propose fewer days. The agent answers at its next cycle: it accepts when the new date is one
+  the business can keep, with what it holds and what customers owe by then, and declines otherwise rather than promise a
+  payment it would miss; the model decides, the written policy is its reference. Accepted, the due date moves by those
+  days. The supplier gets the answer by email, and each step shows in the activity toasts, Telegram and Slack. It needs
+  migration `0130`. [Guide](https://www.vestiarion.xyz/docs/guides/more-time#if-the-supplier-proposes-fewer-days).
+
 - **Requests for more time, followed up.** When money comes in before a supplier answers, or the bill is no longer
   held for want of cash, the agent withdraws its request for more time and emails the supplier that it no longer needs
   it, so no one agrees to a later date the business does not need. It keeps doing so after the requests are turned off.

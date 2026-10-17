@@ -54,6 +54,8 @@ export type CycleEventKind =
   | "early_payment_countered"
   /** A customer accepted a discount for paying early: what they owe is lower until its pay-by day (customer discounts C5). */
   | "customer_discount_accepted"
+  /** A supplier proposed fewer days on the agent's request for more time: the agent answers it now (term counters F5). */
+  | "term_request_countered"
   /** The agent may now offer customers discounts while bills are held for cash (customer discounts C1). */
   | "customer_offers_on"
   /** A supplier agreed to more time: the bill falls due later and is decided again (term requests X5). */

@@ -52,6 +52,14 @@ When the supplier declines, nothing changes: the bill keeps its due date and wai
 
 A request only ever moves a due date later. It never changes the amount, who is paid, or where.
 
+## If the supplier proposes fewer days
+
+On the request's page, the supplier may also propose fewer days than asked: "Would fewer days work for you? Propose how many, and *Business* answers you by email." The ledger records `term_request_countered`, and a cycle starts at once.
+
+The agent answers it at that cycle, even if you turned the requests off. It accepts when the new date the fewer days give is one the business can keep: what the operating wallet holds, less what else falls due, and the money customers owe by then cover the bill. Otherwise it declines, rather than promise a payment it would miss, and the bill keeps its date and waits for a person. The model decides, with the written policy's answer as a reference. A bill already being paid needs no more time, and the supplier is told so.
+
+Accepted, the bill's due date moves by those days and the agent decides the bill again. The supplier gets an email either way, and the ledger records `term_counter_accepted` or `term_counter_declined` with the reasoning.
+
 ## When the request is no longer needed
 
 If money comes in before the supplier answers and the agent pays the bill, or the bill is no longer held for want of
