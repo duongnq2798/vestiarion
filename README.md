@@ -131,8 +131,8 @@ reads the whole book each time it runs:
 | **Audit** | Appends every decision, human action and system event to an Ed25519-signed, hash-chained ledger, exportable and verifiable in one click |
 
 The agent cycle: reconcile -> receipts -> compliance -> follow-up -> recurring -> services -> liquidity -> AP ->
-contractors -> treasury -> forecast -> proposals -> collections -> early offers -> customer offers -> notices -> telegram ->
-slack, each stage's outcome appended to the ledger.
+contractors -> treasury -> forecast -> proposals -> collections -> early offers -> customer offers -> term requests ->
+notices -> telegram -> slack, each stage's outcome appended to the ledger.
 
 ## Why it is different
 

@@ -1,0 +1,65 @@
+Some days the operating wallet cannot pay a bill on time: a customer pays late, or several bills fall due together. The agent then holds the bill for a person, and the supplier waits without knowing why. A request for more time asks the supplier first: the same amount, on a later day, by email, with a one-time link. If they agree, the due date moves, and the agent decides the bill again against the new date.
+
+For your business, a week or two often covers the gap until what customers owe comes in. For the supplier, the money still arrives in full, on Arc testnet or Arc mainnet as your workspace pays, on a day they agreed to.
+
+## Before you start
+
+- **An owner or admin** turns the requests on. Anyone else reads whether they are on: "The agent does not ask suppliers for more time. An owner or admin turns it on."
+- **Email.** The agent sends each request by email, to the address payment notices go to. A supplier with no notice email on its counterparty is not asked.
+
+## 1. Turn the requests on
+
+Open **Bills & receivables**. Under **More time when cash is short**, set the most days the agent may ask for next to "Up to", from 3 to 30 (14 by default), then choose **Let the agent ask for more time**. The card says "The agent now asks suppliers for more time on bills held for cash." and starts a cycle, so the bills already held are weighed at once. The ledger records `term_requests_on`, with the most days.
+
+A number outside 3 to 30 says "Set the most days to ask for, from 3 to 30."
+
+Choose **Stop the agent's requests** to turn it off: "The agent no longer asks for more time. Requests already out still stand." The ledger records `term_requests_off`.
+
+## 2. Which bills the agent asks about
+
+Each cycle, after it has decided its bills, the agent looks at each bill held because the operating wallet could not pay it. Bills held for any other reason, such as a guardrail or shadow mode, wait for a person as usual. It weighs a request only where all of this holds:
+
+- the bill falls due within 14 days, or is past due by no more than 7;
+- the bill never had a request;
+- the supplier has an email on file, the one payment notices go to, has no other request open, and declined no request in the last 30 days.
+
+The model then decides whether to ask, and for how many days, from the bill, its due date, the operating USDC, what else falls due in the next 30 days, what customers owe by day, and what the supplier did with earlier requests. The written policy, given to the model as a reference, asks for the days until what customers owe covers the bill after what falls due before it, from 7 up to the most you set, or for the most when it never does. Without a model, the agent asks for that. Code keeps the days from 3 to the most you set, whatever the model chose. At most 3 requests go out a cycle.
+
+When it asks, the agent emails the supplier the link. The ledger records `term_request_sent` with `via: "agent"`, the masked address, the days, the old and new due dates, the agent's reasoning and the written policy's answer. Where code changed the model's days, the reasoning says so, and the entry carries `daysLimited`.
+
+When it decides not to ask, the ledger records `term_request_skipped` with its reasoning, and the bill is weighed again a week later. It still waits for a person in Approvals.
+
+The email is a fixed template: the model writes none of it. Its subject is "*Business* asks for *days* more days on invoice *reference*". If it does not go, the request is withdrawn, so no link stands that the supplier never got, and the bill is weighed again at the next cycle. A request made by a cycle that stopped before its email went is withdrawn at the first cycle 15 minutes on, recorded as `term_request_withdrawn`, and its bill weighed again.
+
+The agent makes no requests while it is paused, or when email is not set up.
+
+## 3. What the supplier sees
+
+The email says who asks what for which invoice, until when, and "If you decline, or do nothing, the invoice stays due on" its date. **See the request** opens a page with no account to make. Under "Payment terms", it says, for example, "Pinecrest Studio asks to pay invoice INV-108 on Nov 13, 2026 instead of Oct 30, 2026: 14 more days, for the full 1,000.00 USDC." It offers **Agree to the new date** and **Decline**, and shows nothing else about your business.
+
+A request stands for 5 days, or until the new due date if that comes first.
+
+- **Agree** says "Agreed. The invoice now falls due on the new date, for the same amount." The ledger records `term_request_accepted`, with `via: "terms_link"`.
+- **Decline** says "Declined. The invoice stays due on its original date." The ledger records `term_request_declined`.
+- A link already answered, withdrawn or past its date says "This link is no longer valid. Ask the business that sent it for a new one."
+- If the bill changed since the request (its amount or due date, a payment started, or a person released it), the page says "This invoice changed since the request was made, so nothing changed. Ask the business for a new request."
+
+## 4. The agent decides the bill again
+
+When the supplier agrees, the bill's due date moves to the new date, the bill returns to the agent, and a cycle starts at once. The agent then decides it as any bill due on that day, with every check it always runs. If the cash is still short when it would pay, it holds the bill again, for a person. A bill has one request: the agent does not ask about it again.
+
+When the supplier declines, nothing changes: the bill keeps its due date and waits for a person in Approvals.
+
+A request only ever moves a due date later. It never changes the amount, who is paid, or where.
+
+## Following along
+
+On **Bills & receivables**, **More time when cash is short** lists the last five requests: the supplier, the days and the new due date, and whether the supplier agreed, declined, or has yet to answer, or the request was withdrawn. Every step is in the ledger, with the actions above.
+
+## Try it in a sandbox
+
+A sandbox's suppliers are sample data, with no address of their own. So in a sandbox, the agent sends its requests to the email of the member who turned them on, who answers as the supplier would. The card says so: "In this sandbox, the requests go to the email of whoever turned them on, who answers as the supplier."
+
+- The emails start "[Sandbox]" and say so.
+- Payments are simulated, as every sandbox's are.
+- The ledger entry carries `sandbox: true`.

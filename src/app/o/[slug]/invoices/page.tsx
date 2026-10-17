@@ -125,6 +125,8 @@ import { EarlyPaymentOffers } from "@/components/bills/EarlyPaymentOffers";
 import { offersView } from "@/lib/early-pay/offers";
 import { CustomerDiscounts } from "@/components/customer-offers/CustomerDiscounts";
 import { customerOffersView } from "@/lib/customer-offers/store";
+import { TermRequests } from "@/components/bills/TermRequests";
+import { termRequestsView } from "@/lib/terms/requests";
 
 export const dynamic = "force-dynamic";
 
@@ -771,10 +773,21 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         console.error("invoices: early-payment offers not read", error instanceof Error ? error.message : error);
         return null;
       });
+      // Requests for more time on bills held for cash (term requests X1); best effort, none before 0128.
+      const terms = await termRequestsView().catch((error: unknown) => {
+        console.error("invoices: term requests not read", error instanceof Error ? error.message : error);
+        return null;
+      });
       tabContent = {
         bills: {
           list: listOf("bills"),
-          above: offers ? <EarlyPaymentOffers orgSlug={slug} view={offers} canOffer={canWrite} /> : undefined,
+          above:
+            offers || terms ? (
+              <>
+                {offers && <EarlyPaymentOffers orgSlug={slug} view={offers} canOffer={canWrite} />}
+                {terms && <TermRequests orgSlug={slug} view={terms} canWrite={canWrite} />}
+              </>
+            ) : undefined,
           below: schedules.length > 0 ? <RecurringSummary schedules={schedules} orgSlug={slug} canWrite={canWrite} /> : undefined,
         },
       };

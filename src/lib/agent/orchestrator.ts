@@ -55,6 +55,7 @@ import { proposeLimitChanges } from "./proposals";
 import { sendReceivableReminders } from "./collections";
 import { makeCustomerOffers } from "./customer-offers";
 import { makeEarlyPaymentOffers } from "./early-offers";
+import { makeTermRequests } from "./term-requests";
 import { buyPayeeHistories, type AddressHistoryFact } from "./services";
 import { cadenceLabel, type RecurringUnit } from "../recurring";
 import {
@@ -4466,6 +4467,13 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   // discount for paying an open receivable early, and how much, and the link is emailed to the customer (customer
   // discounts C1-C7). Live workspaces only; an offer lowers nothing until the customer accepts it.
   lines.push(...(await makeCustomerOffers(db, { operatingBalance })));
+  });
+
+  await stage("term_requests", async () => {
+  // -------------------------------------------------- 6e. term requests
+  // Once a person turned it on, each bill held for want of cash where code allows it: the model decides whether to ask
+  // the supplier for more time, and how many days, and the link is emailed to the supplier (term requests X1-X6).
+  lines.push(...(await makeTermRequests(db, { operatingBalance })));
   });
 
   await stage("notices", async () => {

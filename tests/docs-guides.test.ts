@@ -34,6 +34,7 @@ type GuideSlug =
   | "guides/bank-payouts"
   | "guides/early-payment-offers"
   | "guides/customer-discounts"
+  | "guides/more-time"
   | "guides/get-paid"
   | "guides/telegram"
   | "guides/slack"
@@ -207,6 +208,15 @@ const DISCOUNTS_STAGE = "src/lib/agent/customer-offers.ts";
 const DISCOUNT_PAGE = "src/app/discount/[token]/page.tsx";
 const DISCOUNT_ACTIONS = "src/app/discount/[token]/actions.ts";
 const DISCOUNT_DECISION = "src/components/customer-offers/DiscountDecision.tsx";
+const TERMS_CARD = "src/components/bills/TermRequests.tsx";
+const TERMS_ACTIONS = "src/app/actions/term-requests.ts";
+const TERMS_LIB = "src/lib/terms/requests.ts";
+const TERMS_AGENT = "src/lib/agent/term-requests.ts";
+const TERMS_WORDS = "src/lib/terms/words.ts";
+const TERMS_EMAIL = "src/lib/email/term-request.ts";
+const TERMS_PAGE = "src/app/more-time/[token]/page.tsx";
+const TERMS_DECIDE = "src/app/more-time/[token]/actions.ts";
+const TERMS_DECISION = "src/components/terms/TermDecision.tsx";
 const BANK_ACCOUNT = "src/components/intake/CounterpartyBankAccount.tsx";
 const BANK_ACTIONS = "src/app/actions/bank-payouts.ts";
 const BANK_COMMANDS = "src/lib/bank-payouts/commands.ts";
@@ -2165,6 +2175,38 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Zoho CRM is disconnected. Deals already planned stay in Vestiarion.", ZOHO_CRM_ACTIONS],
     ["accounting_disconnected", ACCOUNTING_CONNECTIONS],
   ],
+  // Requests for more time (term requests X1-X7).
+  "guides/more-time": [
+    ["The agent does not ask suppliers for more time. An owner or admin turns it on.", TERMS_CARD],
+    ["More time when cash is short", TERMS_CARD, 'title="More time when cash is short"'],
+    ["Up to", TERMS_CARD, '<span>Up to</span>'],
+    ["Let the agent ask for more time", TERMS_CARD],
+    ["The agent now asks suppliers for more time on bills held for cash.", TERMS_ACTIONS],
+    ["term_requests_on", TERMS_LIB],
+    ["Set the most days to ask for, from 3 to 30.", TERMS_LIB, 'Set the most days to ask for, from ${MIN_TERM_DAYS} to ${MAX_TERM_DAYS}.'],
+    ["Stop the agent's requests", TERMS_CARD],
+    ["The agent no longer asks for more time. Requests already out still stand.", TERMS_ACTIONS],
+    ["term_requests_off", TERMS_LIB],
+    ["term_request_sent", TERMS_AGENT],
+    ["daysLimited", TERMS_AGENT],
+    ["term_request_skipped", TERMS_AGENT],
+    ["term_request_withdrawn", TERMS_AGENT],
+    ["If you decline, or do nothing, the invoice stays due on", TERMS_EMAIL],
+    ["See the request", TERMS_EMAIL],
+    ["Payment terms", TERMS_DECISION],
+    ["Pinecrest Studio asks to pay invoice INV-108 on Nov 13, 2026 instead of Oct 30, 2026: 14 more days, for the full 1,000.00 USDC.", TERMS_WORDS],
+    ["Agree to the new date", TERMS_DECISION],
+    ["Decline", TERMS_DECISION],
+    ["Agreed. The invoice now falls due on the new date, for the same amount.", TERMS_DECIDE],
+    ["term_request_accepted", TERMS_LIB],
+    ["terms_link", TERMS_LIB],
+    ["Declined. The invoice stays due on its original date.", TERMS_DECIDE],
+    ["term_request_declined", TERMS_LIB],
+    ["This link is no longer valid. Ask the business that sent it for a new one.", TERMS_PAGE],
+    ["This invoice changed since the request was made, so nothing changed. Ask the business for a new request.", TERMS_DECIDE],
+    ["In this sandbox, the requests go to the email of whoever turned them on, who answers as the supplier.", TERMS_CARD],
+    ["[Sandbox]", TERMS_EMAIL, '"[Sandbox] "'],
+  ],
   // Early-payment offers (early-payment offers E1-E8).
   "guides/early-payment-offers": [
     ["An owner or admin makes the offer.", OFFERS_CARD],
@@ -3035,6 +3077,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/bank-payouts": 20,
   "guides/early-payment-offers": 20,
   "guides/customer-discounts": 20,
+  "guides/more-time": 20,
   "guides/get-paid": 20,
   "guides/telegram": 20,
   "guides/slack": 20,

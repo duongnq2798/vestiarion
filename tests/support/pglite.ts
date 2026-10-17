@@ -124,6 +124,7 @@ export const TENANT_TABLES = [
   "workspace_payout_partners", "counterparty_bank_accounts",
   "early_payment_offers", "early_payment_offer_reviews",
   "customer_discount_offers", "customer_discount_reviews",
+  "payment_term_requests", "payment_term_request_reviews",
 ] as const;
 
 export interface SeededRows {
@@ -429,6 +430,14 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     [orgId, invoiceId, counterpartyId, `discount-${tag}`]
   );
   await db.query("insert into customer_discount_reviews (org_id, invoice_id, action) values ($1, $2, 'skip')", [orgId, invoiceId]);
+  // A request for more time on the bill, and the agent's review of it (0128).
+  await db.query(
+    `insert into payment_term_requests (org_id, invoice_id, counterparty_id, days, amount, due_date, new_due_date, token_hash, expires_at)
+     select $1, i.id, $3, 7, i.amount, i.due_date, i.due_date + interval '7 days', encode(sha256(convert_to($4, 'utf8')), 'hex'), now() + interval '5 days'
+       from invoices i where i.id = $2`,
+    [orgId, invoiceId, counterpartyId, `term-${tag}`]
+  );
+  await db.query("insert into payment_term_request_reviews (org_id, invoice_id, action) values ($1, $2, 'skip')", [orgId, invoiceId]);
   const key = crypto.generateKeyPairSync("ed25519");
   await appendSignedForOrg(db, orgId, { actor: "system", domain: "system", action: "note", summary: tag, detail: { tag } }, key.privateKey);
   return { counterpartyId, accountId, invoiceId, cycleRunId, idempotencyKey };

@@ -1,5 +1,15 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-17: The agent asks suppliers for more time
+
+- An owner or admin can let the agent ask a supplier for more time on a bill held for want of cash. Each step is a new entry, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:
+  - **`term_requests_on`** (domain `ap`, actor `human`), with `maxDays` and `by`, and **`term_requests_off`**, with `by`.
+  - **`term_request_sent`** (actor `agent`, `via: "agent"`), with `requestId`, `invoiceId`, `counterpartyId`, `to` (the supplier's address, masked), `days`, `amount`, `currency`, `dueDate`, `newDueDate`, `expiresAt`, `decision: { action: "ask", days, reasoning }`, `referenceDecision`, `decisionMode` and `agreedWithReference`; `daysLimited: { chosen, sent }` when code kept the days within their bounds, and `sandbox: true` in a sandbox.
+  - **`term_request_skipped`** (actor `agent`), with `invoiceId`, `counterpartyId`, `decision: { action: "skip", reasoning }`, `referenceDecision`, `decisionMode` and `agreedWithReference`.
+  - **`term_request_withdrawn`** (actor `agent`, `via: "agent"`, `reason: "not_emailed"`), with `requestId` and `invoiceId`, when a request could not be emailed.
+  - **`term_request_accepted`** and **`term_request_declined`** (actor `system`, `via: "terms_link"`), with `requestId` and `invoiceId`; an acceptance also carries `days` and `newDueDate`.
+- An accepted request moves the invoice's `dueDate` to the new date and returns the payable from `held` to `pending`, as `GET /api/v1/invoices` shows it. The agent's next decision on it, an `ap_…` entry as before, weighs the new date. Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-17: The agent offers customers a discount to pay early
 
 - An owner or admin can let the agent offer customers a discount for paying an open receivable early while bills are held for want of cash. New entries, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`, all in domain `ar`:

@@ -20,6 +20,7 @@ describe("redactPath", () => {
     ["/statement/vxc_secret/", "/statement/:token"],
     ["/offer/vxo_secret", "/offer/:token"],
     ["/discount/vxd_secret", "/discount/:token"],
+    ["/more-time/vxt_secret", "/more-time/:token"],
     ["/o/acme", "/o/:org"],
     ["/o/acme/", "/o/:org/"],
     ["/o/acme/audit", "/o/:org/audit"],

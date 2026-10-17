@@ -80,8 +80,8 @@ describe("every server action", () => {
     );
     const outside = withDirective.map(rel).filter((file) => !file.startsWith("src/app/actions/"));
     expect(outside.sort()).toEqual([
-      "src/app/account/actions.ts", "src/app/admin/growth/actions.ts", "src/app/discount/[token]/actions.ts", "src/app/invite/actions.ts", "src/app/login/actions.ts", "src/app/offer/[token]/actions.ts",
-      "src/app/onboarding/actions.ts", "src/app/pay/[token]/actions.ts", "src/app/payee/[token]/actions.ts", "src/app/statement/[token]/actions.ts", "src/app/studios/actions.ts",
+      "src/app/account/actions.ts", "src/app/admin/growth/actions.ts", "src/app/discount/[token]/actions.ts", "src/app/invite/actions.ts", "src/app/login/actions.ts", "src/app/more-time/[token]/actions.ts",
+      "src/app/offer/[token]/actions.ts", "src/app/onboarding/actions.ts", "src/app/pay/[token]/actions.ts", "src/app/payee/[token]/actions.ts", "src/app/statement/[token]/actions.ts", "src/app/studios/actions.ts",
     ]);
   });
 

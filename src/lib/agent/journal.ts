@@ -37,6 +37,7 @@ export const CYCLE_STAGES = [
   "collections",
   "early_offers",
   "customer_offers",
+  "term_requests",
   "notices",
   "telegram",
   "slack",
@@ -80,6 +81,8 @@ export type CycleStage = (typeof CYCLE_STAGES)[number];
  *               customers a discount to pay open receivables early; it reads which bills AP held
  *               and what arrived, and an offer only ever lowers what a customer owes until a set
  *               day (customer discounts C2, C8).
+ *   term_requests reconcile + ap. It asks suppliers for more time on bills the AP stage held for
+ *               want of cash; a request only moves a due date later, and moves no money.
  *   forecast    Nothing. It reads and records; it authorises nothing. It is the
  *               stage most worth keeping alive after a failure, because it is
  *               what tells a human where the cycle left the book.
@@ -111,6 +114,8 @@ export const STAGE_REQUIRES: Record<CycleStage, readonly CycleStage[]> = {
   early_offers: ["reconcile", "ap"],
   // Offers customers a discount while bills are held for cash: never before knowing what AP held and what arrived (customer discounts C2).
   customer_offers: ["reconcile", "receipts", "ap"],
+  // Asks suppliers for more time on bills AP held for want of cash, from the balance reconcile read (term requests X2).
+  term_requests: ["reconcile", "ap"],
   notices: [],
   telegram: [],
   slack: [],

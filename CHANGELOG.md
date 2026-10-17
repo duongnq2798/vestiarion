@@ -14,6 +14,14 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **The agent asks suppliers for more time when cash is short.** An owner or admin turns it on in More time when cash
+  is short on Bills & receivables, with the most days the agent may ask for (3 to 30). When the operating wallet cannot
+  pay a bill falling due within two weeks, the agent emails the supplier a one-time link asking for the same amount on
+  a later day; the model picks the days and code keeps them within your most. A supplier who agrees moves the due date,
+  and the agent decides the bill again; one who declines leaves it as it was, for a person. In a sandbox, the requests
+  go to the member who turned them on. It needs migration `0128`.
+  [Guide](https://www.vestiarion.xyz/docs/guides/more-time).
+
 - **The agent offers customers a discount to pay early while cash is short.** When bills are held because the operating
   wallet cannot pay them, an owner or admin can let the agent offer customers a small discount, up to the most they set
   (0.5% to 5%), to pay an open invoice within 5 days. The model picks which invoices and how much within bounds code

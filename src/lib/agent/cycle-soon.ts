@@ -56,6 +56,10 @@ export type CycleEventKind =
   | "customer_discount_accepted"
   /** The agent may now offer customers discounts while bills are held for cash (customer discounts C1). */
   | "customer_offers_on"
+  /** A supplier agreed to more time: the bill falls due later and is decided again (term requests X5). */
+  | "term_request_accepted"
+  /** The agent may now ask suppliers for more time on bills held for cash (term requests X1). */
+  | "term_requests_on"
   /** Test USDC came in from Vestiarion's float: a payable held for cash may be paid now (test USDC T7). */
   | "test_usdc_added"
   | "reminders_on"
