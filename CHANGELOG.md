@@ -14,6 +14,16 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Scheduled payments are checked against the cash ahead.** A scheduled bill used to wait, undecided, until its day,
+  even when a bill due earlier had since taken the cash it was counting on; it was then held on its day, too late to
+  act. Each cycle the agent now measures every USDC bill scheduled for a later day as the written policy does, and
+  decides again now one the cash will not cover then. Held days ahead, it is decided again once cash comes in, and the
+  agent can ask the supplier for more time and offer customers a discount before the day comes. A bill a person moved
+  from the payment plan keeps its day. The activity toasts, Telegram and Slack say "set for Oct 23: the cash will not
+  cover it then". Such a bill is never paid now ahead of what falls due first, and a bill held behind one that is paid
+  later reopens once the money for it is there. The customer discount shortfall now counts what is set for bills
+  scheduled before the held ones fall due, and the reserve. No migration. [Guide](https://www.vestiarion.xyz/docs/guides/payment-plan).
+
 - **Suppliers can propose fewer days on the agent's request for more time.** On the request's page, beside Agree and
   Decline, a supplier may propose fewer days. The agent answers at its next cycle: it accepts when the new date is one
   the business can keep, with what it holds and what customers owe by then, and declines otherwise rather than promise a

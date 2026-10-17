@@ -6,7 +6,7 @@ For each bill, the agent decides to pay it now, to pay it on a later day, to hol
 
 - **A decision to pay is checked by code before anything is sent.** If a check fails, nothing is sent: the bill is held, flagged or sent back for what is missing, and its card says "Blocked by code, not by the model" and names the rule in words. Nothing the model writes changes these checks.
 - **In shadow mode, nothing is paid until a person agrees.** Each decision asks **Do you agree with the agent?**, and **Agree and pay** pays it through the same checks a person's approval goes through. See [Run alongside how you pay today](/docs/guides/shadow-mode).
-- **A scheduled payment is decided again on its day.** Scheduling sends nothing; on the day, the checks run again.
+- **A scheduled payment is decided again on its day, or sooner when the cash will not cover it then.** Scheduling sends nothing; on the day, the checks run again. Each cycle the agent also checks every scheduled payment against the cash ahead, and decides again now one that something due earlier has left without cash, so it is held days before its day rather than on it.
 
 Every decision, refusal, approval and payment is a signed entry in the workspace's ledger. See [The record](#the-record).
 

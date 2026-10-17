@@ -1928,6 +1928,24 @@ for today or an earlier day (a person's move from this plan, or a day chosen bef
 `timingRule: "pay.no_gain"`, and the reasoning ends with a note. Without it, the model once paid a 0.20 USDC bill 28 days
 early while its own reasoning argued for the due date, which also left the bill outside the agent's early-payment offers.
 
+**A scheduled payment the cash will no longer cover is decided before its day**
+(docs/superpowers/specs/2026-10-17-cash-ahead-design.md, `src/lib/agent/cash-ahead.ts`). `dueForDecision` leaves a
+scheduled payable to its day; `runApStage` first passes those still waiting to `cashAheadOf`, which reads the open book,
+the verified milestones, the bank-paid vendors and each bill's latest `ap_schedule` or `payment_rescheduled` entry, and
+`shortAhead` measures each USDC bill as `planPaymentTiming` does for a later day: operating plus reserve, less
+`obligationsDueBy` its day, against `amountToPay` on its day. A short one joins the stage's payables and is decided with
+every check; the model sees `scheduledEarlier.decidedBeforeItsDay`, the ledger entry records `cashAhead` (`scheduledFor`,
+`cashCounted`, `dueBefore`, `needed`), and a hold is `heldBecause: cash_shortfall`, so the follow-up reopens it and the
+customer discount and more-time stages act on it. A model `pay` on such a bill is held by code (`timingRule:
+"pay.cash_ahead"`): paid now, it would take the cash the bills before it count on. No treadmill: a person's move keeps
+its day, a decision that scheduled knowing `timing.shortfall` stands, and a bill already decided early is measured again
+only when what is left for it (cash counted less what falls due before it) fell by more than a cent; at most 5 a cycle,
+earliest first. A read that fails leaves every bill to its day. The follow-up's cash rule (`cashChangeSince`) now takes
+a bill's `amountDueAtTarget` and `targetOn` from its hold and `dueBeforeHeldBills` from the book now, so a bill held
+behind one that was paid since reopens once what is left for it grew and covers it, rather than waiting for the whole
+figure it saw when held. The customer discount stage's `cashShortfall` adds USDC payables scheduled on or before the
+last held bill's due day, and takes off the reserve with the operating USDC.
+
 Bills & receivables' Payment plan tab shows the next 14 UTC days of payments
 (docs/superpowers/specs/2026-10-11-payment-plan-design.md), read only when that tab is shown. `planPayments`
 (`src/lib/payment-plan.ts`) is pure: from the operating wallet, the USYC

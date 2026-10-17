@@ -42,6 +42,8 @@ import { agentPaused } from "./pause";
  */
 
 const DAY_MS = 86_400_000;
+/** The start of the UTC day after `day` (`YYYY-MM-DD`), for a filter on or before that day. */
+const nextDayStart = (day: string) => new Date(Date.parse(`${day}T00:00:00Z`) + DAY_MS).toISOString();
 const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 
 const SYSTEM_PROMPT = `You are the receivables step of a treasury agent for a small business. Bills are held because the operating wallet cannot pay them, and the business turned on early-payment discounts for its customers: the agent may offer a customer a small discount, by email, to pay an open invoice within ${CUSTOMER_PAY_WITHIN_DAYS} days instead of on its due date. Code allows an offer on this invoice now. Decide whether to offer, and what discount to give.
@@ -177,10 +179,11 @@ export async function makeCustomerOffers(
   if (!on) return lines;
 
   // The shortfall (C2): the bills whose latest decision held them for want of cash, beyond the operating USDC and the
-  // discounts already accepted and not yet paid.
+  // discounts already accepted and not yet paid. The cash set for a bill scheduled before the last of them falls due is
+  // not there for a held one, and the reserve, which the policy counts for a later day, is (cash ahead A5).
   const held = unwrap(
-    await orgDb.from("invoices").select("id, amount, currency").eq("direction", "payable").eq("status", "held").limit(500)
-  ) as Array<{ id: string; amount: string; currency: string | null }>;
+    await orgDb.from("invoices").select("id, amount, currency, due_date").eq("direction", "payable").eq("status", "held").limit(500)
+  ) as Array<{ id: string; amount: string; currency: string | null; due_date: string }>;
   const heldUsdc = held.filter((row) => (row.currency ?? "USDC") === "USDC");
   if (heldUsdc.length === 0) return lines;
   const decisions = unwrap(
@@ -200,6 +203,20 @@ export async function makeCustomerOffers(
   const heldForCashRows = heldUsdc.filter((row) => heldForCash(latest.get(row.id)));
   const heldForCashTotal = heldForCashRows.reduce((sum, row) => sum + Number(row.amount), 0);
 
+  // What is already set for bills scheduled on or before the last held bill falls due, and the reserve (cash ahead A5).
+  // A read that fails counts neither, as before.
+  const lastHeldDay = heldForCashRows.map((row) => String(row.due_date).slice(0, 10)).sort().at(-1) ?? null;
+  const [scheduledRead, reserveRead] = lastHeldDay
+    ? await Promise.all([
+        orgDb.from("invoices").select("amount, currency, scheduled_for").eq("direction", "payable").eq("status", "scheduled").lt("scheduled_for", nextDayStart(lastHeldDay)).limit(1000),
+        orgDb.from("accounts").select("balance").eq("kind", "reserve").limit(1),
+      ])
+    : [null, null];
+  const scheduledUsdc = ((scheduledRead?.error ? [] : (scheduledRead?.data ?? [])) as Array<{ amount: string; currency: string | null }>)
+    .filter((row) => (row.currency ?? "USDC") === "USDC")
+    .reduce((sum, row) => sum + Number(row.amount), 0);
+  const reserveUsdc = reserveRead?.error ? 0 : Number((reserveRead?.data as Array<{ balance: string }> | null)?.[0]?.balance ?? 0) || 0;
+
   // Discounts accepted and still to come in (C2): their receivable still open, and their pay-by day not passed. One paid
   // in full instead, or by a person's allocation, is in the operating USDC already, or owed in full again.
   const acceptedRows = offers.filter((row) => row.status === "accepted" && String(row.pay_by).slice(0, 10) >= today);
@@ -211,7 +228,7 @@ export async function makeCustomerOffers(
       )
     : new Set<string>();
   const acceptedUnpaid = acceptedRows.filter((row) => stillOpen.has(row.invoice_id)).reduce((sum, row) => sum + Number(row.offered_amount), 0);
-  const shortfall = cashShortfall({ heldForCash: heldForCashTotal, operating: input.operatingBalance, acceptedUnpaid });
+  const shortfall = cashShortfall({ heldForCash: heldForCashTotal, scheduled: scheduledUsdc, operating: input.operatingBalance, reserve: reserveUsdc, acceptedUnpaid });
   if (shortfall <= 0) return lines;
 
   // A withdrawn offer is one whose email never went (C7): the customer never saw it, so it counts for nothing, and its
@@ -304,7 +321,9 @@ export async function makeCustomerOffers(
         cash: {
           billsHeldForCash: heldForCashRows.length,
           heldForCashUsdc: Number(heldForCashTotal.toFixed(6)),
+          scheduledBeforeHeldBillsFallDueUsdc: Number(scheduledUsdc.toFixed(6)),
           operatingAfterTodaysPayments: input.operatingBalance,
+          reserveUsdc,
           discountsAcceptedNotYetPaid: Number(acceptedUnpaid.toFixed(6)),
           shortfall: Number(stillShort.toFixed(6)),
         },

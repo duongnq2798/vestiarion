@@ -338,6 +338,25 @@ describe("follow-up — held for want of cash (reserve cash back R4)", () => {
     expect(planFollowUp(cashHeld({ cash: { operating: 1000, reserve: 0 } }), facts, NOW, config).action).toBe("wait");
   });
 
+  describe("measured against what falls due before it now (cash ahead, review of #418)", () => {
+    // Held days ahead: 45 USDC set for Oct 23, with 140 USDC falling due before it and 150.03 USDC in the wallet.
+    const heldAhead: DecisionFacts = { ...facts, heldForCash: { needed: 185, operating: 150.03, reserve: 0, amountDue: 45, targetOn: "2026-10-23" } };
+    const bill = (cash: FrozenInvoice["cash"]) => frozen({ status: "held", amount: 45, cash });
+
+    it("reopens once the bill before it was paid and money came in, though the cash is below what it saw", () => {
+      expect(planFollowUp(bill({ operating: 60.03, reserve: 0, dueBefore: 0 }), heldAhead, NOW, config).action).toBe("reopen");
+    });
+
+    it("waits when only the bill before it was paid: what is left for it has not moved", () => {
+      expect(planFollowUp(bill({ operating: 10.03, reserve: 0, dueBefore: 0 }), heldAhead, NOW, config).action).toBe("wait");
+    });
+
+    it("keeps the hold's own figures when what falls due before it was not read", () => {
+      expect(planFollowUp(bill({ operating: 60.03, reserve: 0 }), heldAhead, NOW, config).action).toBe("wait");
+      expect(planFollowUp(bill({ operating: 190, reserve: 0 }), heldAhead, NOW, config).action).toBe("reopen");
+    });
+  });
+
   // A milestone release the operating wallet could not cover, after the releases before it in its cycle (mainnet pre-flight).
   const milestoneAtDecision: MilestoneDecisionFacts = {
     riskLevel: "clear",

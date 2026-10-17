@@ -88,6 +88,8 @@ export type { GatewayQuote };
 import type { CrossChainRoute, PayoutRoute, SpendingLimitPayment } from "../circle/types";
 import { BRIDGE_FEE_CAP_PERCENT, chainOn, paidAcrossChains } from "../payee-chains";
 import { bankAccountsOf } from "../bank-payouts/store";
+import { latestSchedulingOf, shortAhead, type CashAhead } from "./cash-ahead";
+import { PAYMENT_RESCHEDULED } from "../payment-plan-apply";
 import { bankPayoutTakesTestToken, readTestUsdb } from "../bank-payouts/test-token";
 import {
   amountToPay,
@@ -163,6 +165,7 @@ When to pay an accounts-payable invoice:
 - Never schedule a payment past the due date.
 - For a payment scheduled for a later day, cash held in the reserve counts toward what is available: the treasury stage redeems it back into operating before that date comes due. For a payment made now, only the operating balance counts — the treasury stage that would redeem the reserve runs after this one, in the same cycle, so that cash is not available for a transfer this minute.
 - When \`timing.shortfall\` is true, the cash available by its date (the operating balance, plus the reserve for a later day) cannot cover this payment after the payables that fall due on or before that date. Hold it and cite the figures, rather than scheduling or paying into a failure.
+- When \`scheduledEarlier.decidedBeforeItsDay\` is true, an earlier cycle scheduled this payment, and it is decided again before that day because the cash will no longer cover it then: something that falls due first came in since. Holding it now gives the business days to bring the money in or move the date, rather than finding out on the day.
 - Cite the figures you were given: what the discount is worth, the yield from keeping the cash to the due date, the dates, and what falls due on or before its date (\`timing.earlierObligations\`: their total and how many there are).
 
 Respond with ONLY a single JSON object in the requested shape. No prose outside the JSON.`;
@@ -193,7 +196,7 @@ export interface ApPromptFacts {
   treasury: Record<string, number | null>;
   payout: unknown;
   timing: unknown;
-  scheduledEarlier: { payOn: string; reasoning: string | null } | null;
+  scheduledEarlier: { payOn: string; reasoning: string | null; decidedBeforeItsDay?: true } | null;
   duplicateMatches: Array<{
     otherInvoiceStatus: string;
     otherInvoiceDueDate: string | null;
@@ -1342,7 +1345,26 @@ function sameApDecision(decision: ApDecision, reference: ApDecision): boolean {
   return decision.action !== "schedule" || decision.payOn === reference.payOn;
 }
 
-type TimingRule = ReturnType<typeof boundPayOn>["timingRule"] | "pay.no_gain";
+type TimingRule = ReturnType<typeof boundPayOn>["timingRule"] | "pay.no_gain" | "pay.cash_ahead";
+
+/**
+ * A payment now on a bill decided before its day because the cash will not cover it then (cash ahead A2): paid now, it
+ * would take the cash the bills due before it count on, which is the shortfall that brought it here. Code holds it
+ * instead; null when the decision stands.
+ */
+function heldForCashAhead(
+  bounded: ReturnType<typeof boundApDecision>,
+  input: { decidedBeforeItsDay: boolean; shortfall: boolean }
+): ReturnType<typeof boundApDecision> | null {
+  if (!input.decidedBeforeItsDay || !input.shortfall || bounded.decision.action !== "pay") return null;
+  return {
+    decision: { action: "hold", reasoning: bounded.decision.reasoning, confidence: bounded.decision.confidence },
+    payOn: null,
+    timingRule: "pay.cash_ahead",
+    requestedPayOn: null,
+    note: " [The model chose to pay today, but this bill was set for a later day and the cash will not cover it then after what falls due first; paid now, it would take that cash, so code holds it.]",
+  };
+}
 
 /**
  * The model's decision as code lets it stand: a `schedule` is bounded by
@@ -1458,6 +1480,8 @@ async function decideApPayable(
     addressHistory?: (counterpartyId: string) => AddressHistoryFact | null;
     /** Why the follow-up reopened this payable this cycle, when a fresh quote cleared what held it (FX re-evaluation F6). */
     reevaluation?: (invoiceId: string) => ApReevaluation | null;
+    /** What the cash ahead check measured, when this scheduled payable is decided before its day because of it (cash ahead A2). */
+    cashAhead?: (invoiceId: string) => CashAhead | null;
     /** In a live workspace, whether this is the first payment to the address and who stands behind it (new payee check N1–N3). */
     newPayee?: NewPayeeCheckOf;
     /** The figure above which a payment needs two people's approval, null when none is set (two approvals T3). */
@@ -1645,8 +1669,10 @@ async function decideApPayable(
     (targetOn, today) => (viaGateway || paidInTestToken ? { total: 0, count: 0 } : ctx.obligationsBy(targetOn, today, currency))
   );
   const previouslyScheduledFor = invoice.status === "scheduled" ? (invoice.scheduled_for ?? null) : null;
+  // Decided before its day because the cash will not cover it then (cash ahead A2): the model is told so.
+  const cashAhead = previouslyScheduledFor ? (ctx.cashAhead?.(invoice.id) ?? null) : null;
   const scheduledEarlier = previouslyScheduledFor
-    ? { payOn: utcDate(previouslyScheduledFor), reasoning: invoice.agent_reasoning }
+    ? { payOn: utcDate(previouslyScheduledFor), reasoning: invoice.agent_reasoning, ...(cashAhead ? { decidedBeforeItsDay: true as const } : {}) }
     : null;
 
   const { value: modelDecision, mode, reference, agreedWithReference: sameActionAsReference } = await decide<ApDecision>({
@@ -1824,13 +1850,16 @@ async function decideApPayable(
 
   // Code bounds the date before anything else sees the decision: no invoice
   // is scheduled past its due date, or for a day already here (P2).
-  const { decision: boundDecision, payOn, timingRule, requestedPayOn, note: timingNote } = boundApDecision(modelDecision, {
+  const bounded = boundApDecision(modelDecision, {
     now,
     dueDate: invoice.due_date,
     // A payment now that gains nothing waits for the policy's day, unless the bill was already set for today (payment timing §1).
     timing,
     scheduledFor: scheduledEarlier?.payOn ?? null,
   });
+  // Decided early because the cash ahead is short, it is never paid now ahead of what falls due first (cash ahead A2).
+  const { decision: boundDecision, payOn, timingRule, requestedPayOn, note: timingNote } =
+    heldForCashAhead(bounded, { decidedBeforeItsDay: cashAhead !== null, shortfall: timing.shortfall }) ?? bounded;
   // A swap is a choice only when the wallet is short: on any other payable the flag means nothing, and is not recorded (review #9).
   const decision: ApDecision = boundDecision.fundWithSwap === true && !(eurcShortNow > 0) ? withoutSwapChoice(boundDecision) : boundDecision;
   // Scored on what code let stand, and on the day as well as the action; null
@@ -2088,6 +2117,8 @@ async function decideApPayable(
       ...(ctx.shadow ? { shadow: true } : {}),
       // The day an earlier cycle scheduled this invoice for, now decided again.
       ...(previouslyScheduledFor ? { scheduledFor: previouslyScheduledFor } : {}),
+      // Decided before that day because the cash will not cover it then: what the check measured (cash ahead A4).
+      ...(cashAhead ? { cashAhead } : {}),
       // Decided again because a fresh quote cleared what held it: the reopen, its trigger and the decision it follows (F6).
       ...(ctx.reevaluation?.(invoice.id) ? { reevaluation: ctx.reevaluation(invoice.id) } : {}),
       // What the transfer carried and what the discount took off it; null
@@ -2181,7 +2212,9 @@ async function decideApPayable(
       ? `${counterparty.name}: scheduled for ${payOn} (${amount} ${currency})`
       : sent && discount && sent.discountTaken > 0
         ? `${counterparty.name}: pay (${sent.amountPaid} ${currency} after a ${discount.pct}% early-payment discount on ${amount} ${currency})`
-        : `${counterparty.name}: ${decision.action} (${amount} ${currency})`;
+        : cashAhead && shortOfCash && status === "held"
+          ? `${counterparty.name}: held, decided before ${cashAhead.scheduledFor}: the cash will not cover it then (${amount} ${currency})`
+          : `${counterparty.name}: ${decision.action} (${amount} ${currency})`;
   return { status, scheduledFor, operatingBalance: operatingBalanceAfter, line: { domain: "ap", message } };
 }
 
@@ -2386,8 +2419,12 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   ) as ApPayableRow[];
   // A scheduled payable waits for its day: it is counted below among what
   // falls due first, and in the cycle's treasury buffer, but not decided
-  // before then.
-  const payables = loaded.filter((row) => dueForDecision(row, now));
+  // before then, unless the cash will no longer cover it then (cash ahead A1).
+  const ahead = await cashAheadOf(
+    loaded.filter((row) => !dueForDecision(row, now)),
+    { db, now, operatingBalance, reserveBalance }
+  );
+  const payables = loaded.filter((row) => dueForDecision(row, now) || ahead.has(row.id));
   // Which vendors are paid to a bank account through BlindPay (bank payouts B6): read once for the stage, none before
   // migration 0124. A read that fails stops the stage, so a bank-paid vendor is never paid to an address by mistake.
   const bankPaid = payables.length > 0 ? await bankAccountsOf(payables.map((row) => row.counterparty_id), db) : new Map<string, unknown>();
@@ -2536,6 +2573,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       onChainLimit,
       addressHistory: (counterpartyId) => input.addressHistory?.get(counterpartyId) ?? null,
       reevaluation: (invoiceId) => input.reevaluations?.get(invoiceId) ?? null,
+      cashAhead: (invoiceId) => ahead.get(invoiceId) ?? null,
       newPayee: newPayeeOf,
       twoApprovalsAbove,
       shadow,
@@ -2719,6 +2757,89 @@ export async function openMilestoneAmounts(orgDb: OrgDb, filter: { statuses: str
   if (withEscrow.error?.code === "42703") return (unwrap(await ask("amount")) as unknown as Array<{ amount: string }>).map((row) => num(row.amount));
   const rows = unwrap(withEscrow) as unknown as Array<{ amount: string; escrow_state?: string | null }>;
   return rows.filter((row) => row.escrow_state !== "funded").map((row) => num(row.amount));
+}
+
+/**
+ * The scheduled payables, among those still before their day, that the cash will no longer cover then (cash ahead A1,
+ * src/lib/agent/cash-ahead.ts), with what was measured. Read only when there are any: the open book, the verified
+ * milestones, the bank-paid vendors and each bill's latest scheduling. A read that fails leaves every bill to its day,
+ * as before: none is decided early on half the facts.
+ */
+async function cashAheadOf(
+  waiting: ApPayableRow[],
+  input: { db: OrgDb; now: Date; operatingBalance: number; reserveBalance: number }
+): Promise<Map<string, CashAhead>> {
+  const scheduled = waiting.filter((row) => row.status === "scheduled" && invoiceCurrency(row.currency) === "USDC");
+  if (scheduled.length === 0) return new Map();
+  try {
+    const { db: orgDb, now } = input;
+    const ids = scheduled.map((row) => row.id);
+    const [openRows, verified, bankPaid, entries] = await Promise.all([
+      orgDb.from("invoices").select("id, amount, currency, due_date, status, scheduled_for").eq("direction", "payable").in("status", [...OPEN_PAYABLE_STATUSES]),
+      openMilestoneAmounts(orgDb, { statuses: ["verified"], verifiedOnly: true }),
+      bankAccountsOf([...new Set(scheduled.map((row) => row.counterparty_id))], orgDb),
+      orgDb.from("ledger_entries").select("action, detail").in("action", ["ap_schedule", PAYMENT_RESCHEDULED]).in("detail->>invoiceId", ids).order("seq", { ascending: false }).limit(1000),
+    ]);
+    const book: PayableBookRow[] = (unwrap(openRows) as Array<{ id: string; amount: string; currency: string | null; due_date: string; status: string; scheduled_for: string | null }>).map((row) => ({
+      id: row.id,
+      amount: num(row.amount),
+      currency: invoiceCurrency(row.currency),
+      due_date: row.due_date,
+      status: row.status,
+      scheduled_for: row.scheduled_for,
+    }));
+    const milestones: ObligationsDue = { total: verified.reduce((sum, amount) => sum + amount, 0), count: verified.length };
+    const today = utcDate(now);
+    return shortAhead({
+      candidates: scheduled.map((row) => ({
+        id: row.id,
+        amount: num(row.amount),
+        currency: invoiceCurrency(row.currency),
+        scheduledFor: row.scheduled_for ?? null,
+        discount: invoiceDiscount(row),
+        paidToBank: bankPaid.has(row.counterparty_id),
+      })),
+      today,
+      operatingBalance: input.operatingBalance,
+      reserveBalance: input.reserveBalance,
+      dueBy: (excludeId, by) => obligationsDueBy(book, { excludeId, by, today, milestones }),
+      latest: latestSchedulingOf(unwrap(entries) as Array<{ action: string; detail: Record<string, unknown> }>),
+    });
+  } catch (error) {
+    console.error("ap: cash ahead not checked; scheduled payments wait for their day", error instanceof Error ? error.message : error);
+    return new Map();
+  }
+}
+
+/**
+ * What falls due on or before each held bill's day now, the bill aside (cash ahead, review of #418): the follow-up
+ * measures a hold for want of cash against it, rather than against what came before the bill when it was held, which
+ * may have been paid since. A day already past counts as today. Keyed by id, for the bills with a day; empty when the
+ * read fails, and each hold's own figure then stands.
+ */
+async function dueBeforeHeldBills(orgDb: OrgDb, bills: Array<{ id: string; targetOn: string | null }>): Promise<Map<string, number>> {
+  const dated = bills.filter((bill): bill is { id: string; targetOn: string } => bill.targetOn !== null);
+  if (dated.length === 0) return new Map();
+  try {
+    const [openRows, verified] = await Promise.all([
+      orgDb.from("invoices").select("id, amount, currency, due_date, status, scheduled_for").eq("direction", "payable").in("status", [...OPEN_PAYABLE_STATUSES]),
+      openMilestoneAmounts(orgDb, { statuses: ["verified"], verifiedOnly: true }),
+    ]);
+    const book: PayableBookRow[] = (unwrap(openRows) as Array<{ id: string; amount: string; currency: string | null; due_date: string; status: string; scheduled_for: string | null }>).map((row) => ({
+      id: row.id,
+      amount: num(row.amount),
+      currency: invoiceCurrency(row.currency),
+      due_date: row.due_date,
+      status: row.status,
+      scheduled_for: row.scheduled_for,
+    }));
+    const milestones: ObligationsDue = { total: verified.reduce((sum, amount) => sum + amount, 0), count: verified.length };
+    const today = utcDate(new Date());
+    return new Map(dated.map((bill) => [bill.id, obligationsDueBy(book, { excludeId: bill.id, by: bill.targetOn > today ? bill.targetOn : today, today, milestones }).total] as const));
+  } catch (error) {
+    console.error("follow-up: what falls due before held bills not read; their holds keep their own figures", error instanceof Error ? error.message : error);
+    return new Map();
+  }
 }
 
 /**
@@ -3126,10 +3247,21 @@ function heldForProjectFacts(detail: Record<string, unknown>): HeldForProject | 
   return Number.isFinite(needed) ? { projectId: project.id, neededMinor: needed } : null;
 }
 
-/** A hold for want of cash, from its ledger entry's `execution` (reserve cash back R4). */
-function heldForCashFacts(execution: Record<string, unknown>): { needed: number; operating: number; reserve: number } {
+/**
+ * A hold for want of cash, from its ledger entry's `execution` (reserve cash back R4), and, for a bill, the amount it
+ * needs on its day and that day from the entry's `timing`: what fell due before it then may be paid by now, so the
+ * follow-up measures that part again (cash ahead, review of #418).
+ */
+function heldForCashFacts(
+  execution: Record<string, unknown>,
+  timing?: unknown
+): { needed: number; operating: number; reserve: number; amountDue?: number; targetOn?: string } {
   const seen = (execution.cashSeen ?? {}) as Record<string, unknown>;
-  return { needed: num(execution.cashNeededUsdc), operating: num(seen.operating), reserve: num(seen.reserve) };
+  const facts = { needed: num(execution.cashNeededUsdc), operating: num(seen.operating), reserve: num(seen.reserve) };
+  const record = typeof timing === "object" && timing !== null ? (timing as Record<string, unknown>) : null;
+  const amountDue = Number(record?.amountDueAtTarget);
+  const targetOn = typeof record?.targetOn === "string" && /^\d{4}-\d{2}-\d{2}$/.test(record.targetOn) ? record.targetOn : null;
+  return Number.isFinite(amountDue) && amountDue > 0 && targetOn ? { ...facts, amountDue, targetOn } : facts;
 }
 
 /** What the operating wallet and the reserve hold now, as the cycle's reconcile left them. */
@@ -3528,8 +3660,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         // Held only for the spending limit: the USDC it was weighed at (R6).
         heldForBudgetUsdc:
           execution?.heldBecause === HELD_FOR_BUDGET ? num(entry.detail.usdcValue ?? observed.amount) : null,
-        // Held for want of cash: what it needed, and the balances it saw (reserve cash back R4).
-        heldForCash: execution?.heldBecause === HELD_FOR_CASH ? heldForCashFacts(execution) : null,
+        // Held for want of cash: what it needed, and the balances it saw (reserve cash back R4), and its own amount and
+        // day, so what falls due before it is measured again now (cash ahead, review of #418).
+        heldForCash: execution?.heldBecause === HELD_FOR_CASH ? heldForCashFacts(execution, entry.detail.timing) : null,
         // Held in shadow mode for a person to agree: only a person ends it (shadow mode S2).
         heldForVerdict: execution?.heldBecause === HELD_FOR_VERDICT,
         // Decided while the counterparty's new address waited for a person: once confirmed, it is decided again.
@@ -3569,6 +3702,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     // The cash the operating wallet and the reserve hold now, read only when something waits on it (R4).
     const cashHeld = [...factsByInvoice.values()].some((facts) => facts.heldForCash != null);
     const cash = cashHeld ? await cashNow(db) : undefined;
+    // What falls due before each such bill's day now, this bill aside: what came before it when it was held may be
+    // paid since (cash ahead, review of #418). Not read, the hold's own figure stands, as before.
+    const dueBeforeNow = cashHeld ? await dueBeforeHeldBills(db, frozenRows.map((row) => ({ id: row.id, targetOn: factsByInvoice.get(row.id)?.heldForCash?.targetOn ?? null }))) : new Map<string, number>();
     // What the limit leaves now, read only when something waits on it.
     const budgetHeld = [...factsByInvoice.values()].some((facts) => facts.heldForBudgetUsdc != null);
     const room = budgetHeld ? await budget.room() : undefined;
@@ -3610,7 +3746,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           paymentLimit:
             row.counterparties.payment_limit == null ? null : num(row.counterparties.payment_limit),
           ...(room !== undefined ? { budgetRoom: room === null ? null : room.remaining } : {}),
-          ...(cash !== undefined ? { cash } : {}),
+          ...(cash !== undefined ? { cash: dueBeforeNow.has(row.id) ? { ...cash, dueBefore: dueBeforeNow.get(row.id) } : cash } : {}),
           addressUnconfirmed: addressUnconfirmed(row.counterparties.address_changed_at, row.counterparties.address_confirmed_at),
           addressMissing: !row.counterparties.address,
           purchaseOrderRequired: row.counterparties.purchase_order_required,

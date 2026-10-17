@@ -553,6 +553,15 @@ function invoiceItem(
       };
     case "ap_flag_fraud":
       return { seq: entry.seq, text: `Flagged ${invoice.name} ${amount} for you to review${after}.`, detail: firstSentence(entry.detail), tone: "stopped", ...decide, txHash: null };
+    case "ap_hold": {
+      // Held days before the day it was set for, because the cash will not cover it then (cash ahead A4); held then for
+      // anything else, it says so as any hold does.
+      const setFor = text(record(entry.detail.cashAhead)?.scheduledFor);
+      if (setFor && text(record(entry.detail.execution)?.heldBecause) === "cash_shortfall") {
+        return { seq: entry.seq, text: `Held ${invoice.name} ${amount}, set for ${shortDay(setFor)}: the cash will not cover it then.`, detail: firstSentence(entry.detail), tone: "stopped", ...decide, txHash: null };
+      }
+      return { seq: entry.seq, text: `Held ${invoice.name} ${amount} for you${after}.`, detail: firstSentence(entry.detail), tone: "stopped", ...decide, txHash: null };
+    }
     default:
       return { seq: entry.seq, text: `Held ${invoice.name} ${amount} for you${after}.`, detail: firstSentence(entry.detail), tone: "stopped", ...decide, txHash: null };
   }
