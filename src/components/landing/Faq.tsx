@@ -5,7 +5,8 @@ import { Eyebrow } from "@/components/ui/Eyebrow";
 
 /**
  * The questions a team asks before it tries Vestiarion (docs/superpowers/specs/2026-10-11-landing-clarity-design.md F1),
- * answered as the product behaves today. Cost is left out on purpose: there is no published price to answer it with.
+ * answered as the product behaves today. Cost is answered as it stands: trying it is free and there is no published price
+ * yet; a live payment carries only its network fee.
  * `mainnetForEveryone` is whether this deployment opens Arc mainnet to every account, so the answer about real money
  * does not promise a workspace there to someone it is not open to.
  */
@@ -16,6 +17,16 @@ export function landingFaq(mainnetForEveryone: boolean): ReadonlyArray<{ questio
       question: "Do I need crypto to try it?",
       answer:
         "No. In shadow mode you keep paying the way you do today. You add your real bills, see what the agent decides, and agree or disagree. No wallet or funds are needed to start; USDC matters only once you want the agent to pay bills itself.",
+    },
+    {
+      question: "How long does it take to start?",
+      answer:
+        "About five minutes. Add a supplier and one of your bills, as a PDF or through the form, and the agent usually decides on it within a minute, with its reasons and the checks it ran. Connecting Xero or HubSpot takes a few clicks more.",
+    },
+    {
+      question: "What does it cost?",
+      answer:
+        "Trying it is free, and there is no published price yet. Shadow mode needs no wallet and no funds. Once the agent pays bills itself, each payment carries only its network fee, in USDC: on Arc, less than a cent. A payout to another chain carries that chain's transfer fee too.",
     },
     {
       question: "Do the people I pay need a crypto wallet?",

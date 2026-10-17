@@ -157,12 +157,14 @@ function why(facts: DecisionFacts): string | null {
 function factsOf(facts: DecisionFacts): LatestDecisionFact[] {
   const shown: LatestDecisionFact[] = [];
   if (facts.decisionMode) shown.push({ label: "Proposed by", value: MODELS[facts.decisionMode] ?? "A model", tone: "neutral" });
-  // The written policy decides beside every model; when it decided itself, there is nothing to compare.
-  if (facts.agreedWithReference !== null && facts.decisionMode !== "heuristic") {
-    shown.push({ label: "Written policy", value: facts.agreedWithReference ? "Agreed" : "Disagreed", tone: facts.agreedWithReference ? "proof" : "held" });
-  }
+  // The rules in code decide, and can refuse what any model proposes; they come before the written policy, which only
+  // compares.
   if (facts.guardrailBlocked !== null) {
-    shown.push({ label: "Code checks", value: facts.guardrailBlocked ? "Refused it" : "Passed", tone: facts.guardrailBlocked ? "refused" : "proof" });
+    shown.push({ label: "Rules in code", value: facts.guardrailBlocked ? "Refused it" : "Passed", tone: facts.guardrailBlocked ? "refused" : "proof" });
+  }
+  // The written policy answers beside every model, to compare; when it decided itself, there is nothing to compare.
+  if (facts.agreedWithReference !== null && facts.decisionMode !== "heuristic") {
+    shown.push({ label: "Written policy, to compare", value: facts.agreedWithReference ? "Agreed" : "Differed", tone: facts.agreedWithReference ? "proof" : "neutral" });
   }
   if (facts.verdict) shown.push({ label: "Person", value: facts.verdict === "agree" ? "Agreed" : "Disagreed", tone: facts.verdict === "agree" ? "proof" : "held" });
   else if (facts.heldBecause === HELD_FOR_VERDICT) shown.push({ label: "Person", value: "Deciding", tone: "held" });
@@ -248,22 +250,22 @@ export function decisionOutcome(facts: DecisionFacts): DecisionOutcome {
 }
 
 /**
- * What was checked before a decision went ahead, for one that did (paid, sent, scheduled): the written policy's answer
- * beside the model's, and code's checks. Only what the entry recorded; null when it recorded neither.
+ * What was checked before a decision went ahead, for one that did (paid, sent, scheduled): the rules in code first,
+ * which decide and can refuse what any model proposes, then the written policy's answer to the same facts, which is kept
+ * beside the model's only to compare and never pays or blocks. Only what the entry recorded; null when it recorded
+ * neither.
  */
 function checksSentence(facts: DecisionFacts): string | null {
   const policy =
     facts.decisionMode === "heuristic"
-      ? "The written policy decided"
+      ? "No model answered, so the written policy decided."
       : facts.agreedWithReference === true
-        ? "The written policy agreed"
+        ? "The written policy agreed."
         : facts.agreedWithReference === false
-          ? "The written policy disagreed"
+          ? "The written policy, kept only to compare, would have decided otherwise."
           : null;
-  const code = facts.guardrailBlocked === false ? "code checks passed" : null;
-  if (policy && code) return `${policy}; ${code}.`;
-  if (policy) return `${policy}.`;
-  return code ? "Code checks passed." : null;
+  const code = facts.guardrailBlocked === false ? "Rules in code passed it." : null;
+  return [code, policy].filter(Boolean).join(" ") || null;
 }
 
 /**

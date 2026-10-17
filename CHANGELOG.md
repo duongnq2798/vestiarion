@@ -12,6 +12,15 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+### Changed
+
+- **The landing page's proof says which rule decides.** A paid bill now reads "Rules in code passed it" first, then
+  whether the written policy agreed, "kept only to compare" when it would have decided otherwise. The latest decision's
+  badges read "Rules in code" and "Written policy, to compare", and one sentence says the rules in code decide while the
+  written policy never pays or blocks. Earlier decisions list three, with the latest refusal by code among them when
+  there is one. The FAQ says how long it takes to start (about five minutes) and what it costs: trying it is free, there
+  is no published price yet, and a live payment carries only its network fee, less than a cent on Arc.
+
 ## [0.1.0-beta.8] - 2026-10-17
 
 ### Added

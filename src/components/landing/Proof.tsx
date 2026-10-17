@@ -26,7 +26,7 @@ import { RecentDecisionList } from "./RecentDecisions";
  */
 const CHECK_IT: ReadonlyArray<{ href: string; label: string; icon: LucideIcon; external: boolean }> = [
   { href: "/docs/guides/audit-export", label: "Verify a ledger export yourself", icon: FileCheck, external: false },
-  { href: "/docs/research/model-vs-policy", label: "Where the model and the rules disagreed", icon: ShieldCheck, external: false },
+  { href: "/docs/research/model-vs-policy", label: "When the model and the written policy disagree", icon: ShieldCheck, external: false },
   { href: "/open", label: "Every figure on Open numbers", icon: ChartColumn, external: false },
   { href: GITHUB_URL, label: "The source code, MIT licensed", icon: GitBranch, external: true },
 ];
@@ -148,8 +148,8 @@ function DecisionFallback() {
   return (
     <div aria-busy="true" className="mt-10">
       <p className="sr-only">Loading the agent&apos;s latest decisions</p>
-      {/* As tall as the latest decision with the five before it, as measured, so nothing below jumps when it streams in. */}
-      <Skeleton className="h-[92rem] rounded-2xl sm:h-[70rem] lg:h-[49rem]" />
+      {/* As tall as the latest decision with the three before it, as measured, so nothing below jumps when it streams in. */}
+      <Skeleton className="h-[88rem] rounded-2xl sm:h-[61rem] lg:h-[45rem]" />
     </div>
   );
 }

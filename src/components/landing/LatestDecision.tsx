@@ -54,7 +54,12 @@ export function LatestDecisionCard({ decision, headingLevel = 2 }: { decision: L
             ))}
           </ul>
         )}
-        <p className="mt-4 text-xs text-ink-3">From one of the Vestiarion team&apos;s own workspaces. Its words, names and reasoning stay in the workspace.</p>
+        {/* Said once, where both first show: which of the two decides, so a policy that differed never reads as a rule broken. */}
+        <p className="mt-4 max-w-2xl text-pretty text-sm leading-relaxed text-ink-2">
+          Rules in code decide, and can refuse what any model proposes. The written policy is a second answer to the same facts, kept beside the
+          model&apos;s to compare: it never pays or blocks.
+        </p>
+        <p className="mt-2 text-xs text-ink-3">From one of the Vestiarion team&apos;s own workspaces. Its words, names and reasoning stay in the workspace.</p>
       </div>
       <div className="grid gap-4 rounded-2xl border border-line bg-ground/60 p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">

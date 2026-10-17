@@ -79,11 +79,19 @@ describe("the earlier decisions", () => {
     expect(words.split("Paid a 0.12 USDC bill.")).toHaveLength(2);
   });
 
+  it("say once which decides: the rules in code, while the written policy only compares", () => {
+    const words = text(renderToStaticMarkup(<LatestPanel latest={LATEST} recent={RECENT} />));
+    expect(words).toContain(
+      "Rules in code decide, and can refuse what any model proposes. The written policy is a second answer to the same facts, kept beside the model's to compare: it never pays or blocks."
+    );
+    expect(words).toContain("A few of the newest, one row per bill, with the latest refusal by code among them when there is one.");
+  });
+
   it("say what came of each in words, why, and on which network with real or test money", () => {
     const words = text(renderToStaticMarkup(<LatestPanel latest={LATEST} recent={RECENT} />));
     for (const part of [
       "Refused by code Decided to pay a 0.50 USDC bill. Code refused it: the cross-chain fee was above its cap.",
-      "Paid Paid a 0.20 USDC bill. The written policy agreed; code checks passed.",
+      "Paid Paid a 0.20 USDC bill. Rules in code passed it. The written policy agreed.",
       "Refused by code Decided to pay a 0.10 USDC bill. Code refused it: a first payment to a new address needs two people.",
       "Arc testnet · test money",
       "Arc mainnet · real money",
