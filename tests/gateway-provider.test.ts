@@ -79,7 +79,8 @@ describe("LiveProvider: a release from the workspace's escrow (milestone escrow 
   it("calls release(bytes32) on the escrow from the operating wallet, under the attempt's key, and transfers nothing", async () => {
     const c = circle();
     const execute = vi.fn(async () => ({ data: { id: "circle-release-1" } }));
-    const getTransaction = vi.fn(async () => ({ data: { transaction: { id: "circle-release-1", state: "COMPLETE", txHash: `0x${"3".repeat(64)}` } } }));
+    // Circle reports the fee, so the provider never reads it from Arc's RPC: a test that reached the chain could outlast its timeout.
+    const getTransaction = vi.fn(async () => ({ data: { transaction: { id: "circle-release-1", state: "COMPLETE", txHash: `0x${"3".repeat(64)}`, networkFeeInUSD: "0.01" } } }));
     Object.assign(c.raw, { createContractExecutionTransaction: execute, getTransaction });
     const escrow = { contract: `0x${"e5".repeat(20)}`, holdId: `0x${"1".repeat(64)}` };
     const result = await new LiveProvider(CHAIN, { network: ARC_TESTNET, client: c.client, fetch: gateway().fetch }).transfer({

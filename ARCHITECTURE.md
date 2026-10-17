@@ -3514,6 +3514,8 @@ the footer, whether the title takes one line or two.
 Pure contract and payload behavior is covered by `tests/api-contract.test.ts`;
 authentication and per-workspace scoping are covered by
 `tests/api-key-scope.test.ts`. `npm run verify` runs lockfile consistency,
-TypeScript, lint, and the complete Vitest suite. `npm run build` validates the
-production route graph. Live API checks use the local app plus a real
+TypeScript, lint, and the complete Vitest suite. The suite never reaches the
+network: `tests/setup.ts` refuses any request to a host other than loopback, so a
+stub that leaves a chain read open fails at once rather than waiting on a real
+RPC. `npm run build` validates the production route graph. Live API checks use the local app plus a real
 workspace API key (created on `/o/<slug>/settings`) and Supabase data.

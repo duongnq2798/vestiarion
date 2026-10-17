@@ -40,7 +40,8 @@ function circle(state = "COMPLETE") {
     createTransaction: vi.fn(() => Promise.reject(new Error("a payment through the contract makes no transfer from the wallet"))),
     getWalletTokenBalance: vi.fn(() => Promise.reject(new Error("unexpected"))),
     createContractExecutionTransaction: vi.fn(async () => ({ data: { id: "circle-pay-1" } })),
-    getTransaction: vi.fn(async () => ({ data: { transaction: { id: "circle-pay-1", state, txHash: `0x${"4".repeat(64)}` } } })),
+    // Circle reports the fee, so the provider never reads it from Arc's RPC: a test that reached the chain could outlast its timeout.
+    getTransaction: vi.fn(async () => ({ data: { transaction: { id: "circle-pay-1", state, txHash: `0x${"4".repeat(64)}`, networkFeeInUSD: "0.01" } } })),
   };
   return { client: client as unknown as LiveProviderClient, raw: client };
 }
