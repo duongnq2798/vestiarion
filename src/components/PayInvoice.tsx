@@ -7,6 +7,8 @@ import type { PayLinkPreview } from "@/lib/platform/pay-links";
 const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 /** The amount as a wallet's field takes it: no thousands separator. */
 const PLAIN = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6, useGrouping: false });
+/** A "YYYY-MM-DD" day as "Oct 22, 2026". */
+const DAY = (day: string) => new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
 /**
  * An open invoice on its pay link's page (docs/superpowers/specs/2026-10-01-receivables-on-arc-design.md §2): who asks,
@@ -14,11 +16,26 @@ const PLAIN = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximum
  * invoice, it asks for what is still owed and says what arrived (docs/superpowers/specs/2026-10-12-allocations-design.md
  * L11).
  *
+ * While a discount the client accepted applies (docs/superpowers/specs/2026-10-17-customer-early-pay-discounts-design.md
+ * C5), it asks for the discounted amount and says until when, and what is owed after.
+ *
  * On a phone (docs/superpowers/specs/2026-10-13-customer-portal-design.md I16) the amount, with its currency, has its own
  * Copy beside the address's, so a client switching to a wallet app takes both; every button is at least 44 px tall.
  */
-export function PayInvoice({ preview, balance, token }: { preview: PayLinkPreview; balance: { owed: number; received: number } | null; token: string }) {
-  const owed = balance ? balance.owed : preview.amount;
+export function PayInvoice({
+  preview,
+  balance,
+  token,
+  discount = null,
+}: {
+  preview: PayLinkPreview;
+  balance: { owed: number; received: number } | null;
+  token: string;
+  /** The discount the client accepted, while it applies: what pays the invoice now, and until when (C5). */
+  discount?: { owed: number; pct: number; payBy: string; full: number } | null;
+}) {
+  // A discount is only ever on an invoice nothing was applied to (C2), so it never meets a balance.
+  const owed = balance ? balance.owed : discount ? discount.owed : preview.amount;
   return (
     <section className="rounded-2xl border border-line bg-surface p-6 shadow-surface">
       <p>
@@ -33,6 +50,15 @@ export function PayInvoice({ preview, balance, token }: { preview: PayLinkPrevie
             <dt className="text-ink-3">Received</dt>
             <dd className="text-ink">
               {AMOUNT.format(balance.received)} of {AMOUNT.format(preview.amount)} {preview.currency}. This is what is still owed.
+            </dd>
+          </>
+        )}
+        {discount && !balance && (
+          <>
+            <dt className="text-ink-3">Discount</dt>
+            <dd className="text-ink">
+              {discount.pct.toFixed(2)}% off {AMOUNT.format(discount.full)} {preview.currency}, for paying by the end of {DAY(discount.payBy)} (UTC). After that, the
+              invoice is {AMOUNT.format(discount.full)} {preview.currency} again.
             </dd>
           </>
         )}

@@ -77,6 +77,8 @@ export const TENANT_TABLES = [
   "early_payment_offers",
   // The agent's one review of each bill it may offer early payment on (migration 0126).
   "early_payment_offer_reviews",
+  // Discounts the agent offers customers for paying early, and its one review of each receivable (migration 0129).
+  "customer_discount_offers", "customer_discount_reviews",
   // Requests for more time on bills held for cash, and the agent's one review of each bill (migration 0128).
   "payment_term_requests", "payment_term_request_reviews",
 ] as const;
@@ -101,6 +103,8 @@ export const TENANT_RPCS = [
   "early_payment_offers_ready",
   // Whether migration 0126 has run (agent early-payment offers AO4): it reads nothing.
   "early_payment_offer_reviews_ready",
+  // Whether migration 0129 has run (customer discounts C1): it reads nothing.
+  "customer_discounts_ready",
   // Whether migration 0128 has run (term requests X6): it reads nothing.
   "term_requests_ready",
   // Commissions on money received (commissions C2, C5, C10, C11).
@@ -142,6 +146,10 @@ export const PLATFORM_RPCS = [
   "create_early_payment_offer", "withdraw_early_payment_offer", "early_payment_offer_preview", "decide_early_payment_offer", "set_agent_early_offers",
   // Suppliers' counters to the agent's offers (0127, offer counters N1, N2, N5).
   "early_payment_offer_by_agent", "counter_early_payment_offer", "answer_early_payment_counter",
+  // Discounts offered to customers for paying early (0129, customer discounts C1, C4-C6): set, made, withdrawn and settled
+  // for a workspace, previewed and decided by token.
+  "set_customer_offers", "create_customer_discount_offer", "withdraw_customer_discount_offer", "customer_discount_preview",
+  "decide_customer_discount", "settle_customer_discount",
   // Requests for more time (0128, term requests X1, X4-X6): made and withdrawn by the agent, previewed and decided by token.
   "create_term_request", "term_request_preview", "decide_term_request", "withdraw_term_request", "set_term_requests",
 ] as const;

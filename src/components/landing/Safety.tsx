@@ -173,7 +173,7 @@ export function Safety() {
             <ArrowRight aria-hidden className="size-4" />
           </Link>
           <Link href="/docs/research/model-vs-policy" className="inline-flex min-h-6 items-center gap-1 font-semibold text-agent-line underline-offset-4 hover:underline">
-            When the model and the rules disagreed
+            When the model and the written policy disagree
             <ArrowRight aria-hidden className="size-4" />
           </Link>
         </div>

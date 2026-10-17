@@ -19,7 +19,28 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   pay a bill falling due within two weeks, the agent emails the supplier a one-time link asking for the same amount on
   a later day; the model picks the days and code keeps them within your most. A supplier who agrees moves the due date,
   and the agent decides the bill again; one who declines leaves it as it was, for a person. In a sandbox, the requests
-  go to the member who turned them on. [Guide](https://www.vestiarion.xyz/docs/guides/more-time).
+  go to the member who turned them on. It needs migration `0128`.
+  [Guide](https://www.vestiarion.xyz/docs/guides/more-time).
+
+- **The agent offers customers a discount to pay early while cash is short.** When bills are held because the operating
+  wallet cannot pay them, an owner or admin can let the agent offer customers a small discount, up to the most they set
+  (0.5% to 5%), to pay an open invoice within 5 days. The model picks which invoices and how much within bounds code
+  sets; the customer accepts from a one-time link, pays the lower amount through the invoice's pay link, and the agent
+  matches it as any payment. The invoice's amount never changes, and after its pay-by day the discount lapses. It needs
+  migration `0129`. [Guide](https://www.vestiarion.xyz/docs/guides/customer-discounts).
+
+### Changed
+
+- **The landing page's proof says which rule decides.** A paid bill now reads "Rules in code passed it" first, then
+  whether the written policy agreed, "kept only to compare" when it would have decided otherwise. The latest decision's
+  badges read "Rules in code" and "Written policy, to compare", and one sentence says the rules in code decide while the
+  written policy never pays or blocks. Earlier decisions list three, with the latest refusal by code among them when
+  there is one. The FAQ says how long it takes to start (about five minutes) and what it costs: trying it is free, there
+  is no published price yet, and a live payment carries only its network fee, less than a cent on Arc.
+
+## [0.1.0-beta.8] - 2026-10-17
+
+### Added
 
 - **Early-payment offers in a sandbox.** A sandbox's suppliers are sample data, so the agent used to make no offers
   there. Now it sends them, and its answers to counters, to the member who turned the offers on, who answers as the
@@ -97,6 +118,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- **The security page says when a release's changes were not each reviewed.** It said every change is reviewed by an
+  independent AI code reviewer before merge. Not every change in this release was, so it now says changes are reviewed,
+  and that a release whose changes were not each reviewed so says it in its notes, as this one does.
 - **The landing page's proof leads each network with whoever has paid on it.**
   - Arc mainnet, where no customer has paid yet, now leads with the team's own payments under "Paid by the Vestiarion
     team": how many and how much USDC. "None on Arc mainnet yet" is on the customers' line under them.
@@ -725,7 +749,8 @@ public beta, on Arc testnet and Arc mainnet. Release notes:
   company.
 - HubSpot is read-only, polled every 15 minutes, and its app is not yet verified by HubSpot.
 
-[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.7...HEAD
+[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.8...HEAD
+[0.1.0-beta.8]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.8
 [0.1.0-beta.7]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.7
 [0.1.0-beta.6]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.6
 [0.1.0-beta.5]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.5

@@ -582,3 +582,30 @@ describe("early payment the agent negotiates, in words (offer activity A1-A3)", 
     expect(ACTIVITY_ACTIONS).not.toContain("early_payment_offer_skipped");
   });
 });
+
+describe("the agent's discounts to customers (customer discounts)", () => {
+  const discount = (action: string, detail: Record<string, unknown>) => entry(action, { offerId: "discount-1", currency: "USDC", ...detail });
+  const open = { path: `/invoices?open=${INVOICE}`, pathLabel: "Open the receivable" };
+
+  it("says the offer it emailed and who decided it, and a receivable paid at the discount with what it cost", () => {
+    expect(activityItem(discount("customer_discount_offered", { discountPct: 1, offeredAmount: 0.297, payBy: "2026-10-22", decisionMode: "deepseek", agreedWithReference: true }), refs({ currency: "USDC" }))).toMatchObject({
+      text: "Offered Jiren 1.00% off for paying early, by email, while bills are held for cash: 0.297 USDC by 2026-10-22 instead of 0.30 USDC.",
+      detail: "DeepSeek decided, as the written policy would.",
+      tone: "done",
+      ...open,
+    });
+    const tx = "0x" + "ab".repeat(32);
+    expect(activityItem(discount("customer_discount_taken", { discountPct: 1, received: 0.297, discount: 0.003, txHash: tx }), refs({ currency: "USDC" }))).toMatchObject({
+      text: "Jiren paid 0.297 USDC early, at 1.00% off: the discount cost 0.003 USDC.",
+      tone: "done",
+      txHash: tx,
+    });
+  });
+
+  it("tells nothing of a receivable the agent chose not to offer, and neither is a card for a chat", () => {
+    expect(ACTIVITY_ACTIONS).toContain("customer_discount_offered");
+    expect(ACTIVITY_ACTIONS).toContain("customer_discount_taken");
+    expect(ACTIVITY_ACTIONS).not.toContain("customer_discount_skipped");
+    expect(activityItem(discount("customer_discount_offered", { discountPct: 1, offeredAmount: 0.297 }), refs())).not.toHaveProperty("invoiceId");
+  });
+});

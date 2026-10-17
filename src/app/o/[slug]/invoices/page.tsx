@@ -123,6 +123,8 @@ import { publicOrigin } from "@/lib/public-origin";
 import { readProjectOptions } from "@/lib/projects/read";
 import { EarlyPaymentOffers } from "@/components/bills/EarlyPaymentOffers";
 import { offersView } from "@/lib/early-pay/offers";
+import { CustomerDiscounts } from "@/components/customer-offers/CustomerDiscounts";
+import { customerOffersView } from "@/lib/customer-offers/store";
 import { TermRequests } from "@/components/bills/TermRequests";
 import { termRequestsView } from "@/lib/terms/requests";
 
@@ -916,12 +918,18 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         invoiceHref: (invoiceId) => here({ open: invoiceId }),
       });
       const statementLinks = statementLinkRows(linkList, new Map(counterparties.map((counterparty) => [counterparty.id, counterparty.name])), members);
+      // The agent's discounts for customers who pay early (customer discounts C1); best effort, none before 0129.
+      const discounts = await customerOffersView().catch((error: unknown) => {
+        console.error("invoices: customer discounts not read", error instanceof Error ? error.message : error);
+        return null;
+      });
       tabContent = {
         receivables: {
           list: listOf("receivables"),
           above: (
             <>
               {collections && <CollectionsPanel panel={collections.panel} available={collections.available} />}
+              {discounts && <CustomerDiscounts orgSlug={slug} view={discounts} canWrite={canWrite} />}
               <FromCustomers orgSlug={slug} items={customerItems} canWrite={canReconcile} />
               {/* Before migration 0103 runs, receivables show as before, and say applying payments waits for it (allocations L11). */}
               {book && !book.available && receivableRows.length > 0 && <p className="text-xs text-ink-3">Applying payments is not set up on this deployment yet.</p>}

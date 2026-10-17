@@ -10,6 +10,17 @@ Changes to the API and webhooks that affect an integration, newest first. Change
   - **`term_request_accepted`** and **`term_request_declined`** (actor `system`, `via: "terms_link"`), with `requestId` and `invoiceId`; an acceptance also carries `days` and `newDueDate`.
 - An accepted request moves the invoice's `dueDate` to the new date and returns the payable from `held` to `pending`, as `GET /api/v1/invoices` shows it. The agent's next decision on it, an `ap_…` entry as before, weighs the new date. Nothing else in `/api/v1` or the webhooks changes.
 
+## 2026-10-17: The agent offers customers a discount to pay early
+
+- An owner or admin can let the agent offer customers a discount for paying an open receivable early while bills are held for want of cash. New entries, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`, all in domain `ar`:
+  - **`customer_offers_on`** (actor `human`), with `maxPct` and `by`, and **`customer_offers_off`**, with `by`.
+  - **`customer_discount_offered`** (actor `agent`), with `offerId`, `invoiceId`, `counterpartyId`, `to` (the customer's address, masked), `discountPct`, `amount`, `offeredAmount`, `currency`, `payBy`, `daysEarly`, `shortfall`, `decision: { action: "offer", pct, reasoning }`, `referenceDecision`, `decisionMode`, `agreedWithReference`, and `pctLimited: { chosen, sent }` when code kept the discount within its bounds.
+  - **`customer_discount_skipped`** (actor `agent`), with `invoiceId`, `counterpartyId`, `daysEarly`, `shortfall`, `decision: { action: "skip", reasoning }`, `referenceDecision`, `decisionMode` and `agreedWithReference`.
+  - **`customer_discount_withdrawn`** (actor `agent`), with `offerId`, `invoiceId` and `reason: "not_emailed"`.
+  - **`customer_discount_accepted`** and **`customer_discount_declined`** (actor `system`, `via: "discount_link"`), with `offerId` and `invoiceId`; an acceptance also carries `discountPct`, `offeredAmount`, `payBy` and `currency`.
+  - **`customer_discount_taken`** (actor `agent`), with `invoiceId`, `counterpartyId`, `offerId`, `amount`, `received`, `discountPct`, `discount` (what it cost), `payBy`, `currency` and `txHash`, after the receivable was paid at the discount.
+- An accepted offer sets the receivable's `earlyPayDiscount` to the offer's, the deadline being its pay-by day; its `amount` does not change. Its **`ar_received`** entry, when paid at the discount, carries `atDiscount: true` and the amount received. A discount set on a receivable any other way still changes nothing about what pays it. Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-17: The agent's early-payment offers in a sandbox
 
 - In a sandbox, the agent now makes early-payment offers, sent to the member who turned them on in place of the sample supplier. Its **`early_payment_offered`** entry there carries `sandbox: true`, and `to` is that member's address, masked. Nothing else in `/api/v1` or the webhooks changes.

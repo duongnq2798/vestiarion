@@ -33,6 +33,7 @@ type GuideSlug =
   | "guides/pay-a-contractor"
   | "guides/bank-payouts"
   | "guides/early-payment-offers"
+  | "guides/customer-discounts"
   | "guides/more-time"
   | "guides/get-paid"
   | "guides/telegram"
@@ -199,6 +200,14 @@ const OFFERS_WORDS = "src/lib/early-pay/offers-words.ts";
 const OFFER_PAGE = "src/app/offer/[token]/page.tsx";
 const OFFER_ACTIONS = "src/app/offer/[token]/actions.ts";
 const OFFER_DECISION = "src/components/early-pay/OfferDecision.tsx";
+const DISCOUNTS_CARD = "src/components/customer-offers/CustomerDiscounts.tsx";
+const DISCOUNTS_ACTIONS = "src/app/actions/customer-offers.ts";
+const DISCOUNTS_LIB = "src/lib/customer-offers/store.ts";
+const DISCOUNTS_WORDS = "src/lib/customer-offers/words.ts";
+const DISCOUNTS_STAGE = "src/lib/agent/customer-offers.ts";
+const DISCOUNT_PAGE = "src/app/discount/[token]/page.tsx";
+const DISCOUNT_ACTIONS = "src/app/discount/[token]/actions.ts";
+const DISCOUNT_DECISION = "src/components/customer-offers/DiscountDecision.tsx";
 const TERMS_CARD = "src/components/bills/TermRequests.tsx";
 const TERMS_ACTIONS = "src/app/actions/term-requests.ts";
 const TERMS_LIB = "src/lib/terms/requests.ts";
@@ -2222,6 +2231,32 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["This invoice changed since the offer was made, so nothing changed. Ask the business for a new offer.", OFFER_ACTIONS],
     ["early_payment_offer_accepted", OFFERS_LIB],
   ],
+  // Discounts the agent offers customers for paying early (customer discounts C1-C6).
+  "guides/customer-discounts": [
+    ["A sandbox has no wallet to receive a payment in, so the agent offers its sample customers nothing.", DISCOUNTS_CARD],
+    ["The agent offers customers no discounts. An owner or admin turns it on.", DISCOUNTS_CARD],
+    ["Paid sooner when cash is short", DISCOUNTS_CARD, 'title="Paid sooner when cash is short"'],
+    ["Let the agent offer discounts", DISCOUNTS_CARD],
+    ["While bills are held for cash, the agent now offers customers a discount to pay early.", DISCOUNTS_ACTIONS],
+    ["customer_offers_on", DISCOUNTS_LIB],
+    ["Stop the agent's discounts", DISCOUNTS_CARD],
+    ["The agent no longer offers customers discounts. Offers already out still stand.", DISCOUNTS_ACTIONS],
+    ["customer_offers_off", DISCOUNTS_LIB],
+    ["customer_discount_offered", DISCOUNTS_STAGE],
+    ["customer_discount_skipped", DISCOUNTS_STAGE],
+    ["Pinecrest Studio offers 1.00% off invoice INV-2041: pay 297.00 USDC by Oct 22, 2026 instead of 300.00 USDC on Nov 16, 2026.", DISCOUNTS_WORDS, "% off ${invoice}: pay "],
+    ["Accept: pay less by paying early", DISCOUNT_DECISION],
+    ["No thanks", DISCOUNT_DECISION],
+    ["Accepted. Pay the discounted amount through the invoice's pay link by the day shown.", DISCOUNT_ACTIONS],
+    ["Open the pay link", DISCOUNT_DECISION],
+    ["customer_discount_accepted", DISCOUNTS_LIB],
+    ["No discount, then. The invoice stays as it was, due on its due date.", DISCOUNT_ACTIONS],
+    ["customer_discount_declined", DISCOUNTS_LIB],
+    ["This invoice changed since the offer was made, so nothing changed. Ask the business for a new offer.", DISCOUNT_ACTIONS],
+    ["This link is no longer valid. Ask the business that sent it for a new one.", DISCOUNT_PAGE],
+    ["customer_discount_taken", "src/lib/agent/receipts.ts"],
+    ["Northwind Goods paid 297.00 USDC at 1.00% off 300.00, by Oct 22, 2026.", DISCOUNTS_WORDS, " USDC at ${row.pct.toFixed(2)}% off "],
+  ],
   // Bank payouts through BlindPay (bank payouts B3, B4, B6, B7, B12).
   "guides/bank-payouts": [
     ["Bank payouts", BANK_PANEL, 'title="Bank payouts"'],
@@ -3041,6 +3076,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/pay-a-contractor": 20,
   "guides/bank-payouts": 20,
   "guides/early-payment-offers": 20,
+  "guides/customer-discounts": 20,
   "guides/more-time": 20,
   "guides/get-paid": 20,
   "guides/telegram": 20,

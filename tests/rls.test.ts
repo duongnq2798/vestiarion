@@ -49,6 +49,7 @@ const CRUD_UPDATE: Record<string, { column: string; expr: string }> = {
   recurring_payables: { column: "memo", expr: "'changed'" },
   policy_proposals: { column: "reasoning", expr: "'changed'" },
   early_payment_offer_reviews: { column: "action", expr: "'offer'" },
+  customer_discount_reviews: { column: "action", expr: "'offer'" },
   payment_term_request_reviews: { column: "action", expr: "'ask'" },
   spending_limit_contracts: { column: "circle_contract_id", expr: "coalesce(circle_contract_id, '') || '-changed'" },
   ar_reminders: { column: "tone", expr: "'firm'" },
@@ -191,7 +192,7 @@ describe.each(TENANT_TABLES)("%s", (table) => {
   });
 
   it("cannot change or remove another organization's rows", async () => {
-    if (table === "ledger_entries" || table === "cycle_snapshots" || table === "service_purchases" || table === "decision_verdicts" || table === "payment_actuals" || table === "report_baselines" || table === "bank_statement_lines" || table === "receivable_allocations" || table === "deal_versions" || table === "customer_request_messages" || table === "approval_escalation_starts" || table === "collection_policies" || table === "collection_task_starts" || table === "usage_events" || table === "cash_scenario_versions" || table === "fx_rates" || table === "fx_variances" || table === "onboarding_marks" || table === "decision_reasons" || table === "commission_plans" || table === "commission_plan_deals" || table === "commission_payouts" || table === "commission_lines" || table === "early_payment_offers" || table === "payment_term_requests") {
+    if (table === "ledger_entries" || table === "cycle_snapshots" || table === "service_purchases" || table === "decision_verdicts" || table === "payment_actuals" || table === "report_baselines" || table === "bank_statement_lines" || table === "receivable_allocations" || table === "deal_versions" || table === "customer_request_messages" || table === "approval_escalation_starts" || table === "collection_policies" || table === "collection_task_starts" || table === "usage_events" || table === "cash_scenario_versions" || table === "fx_rates" || table === "fx_variances" || table === "onboarding_marks" || table === "decision_reasons" || table === "commission_plans" || table === "commission_plan_deals" || table === "commission_payouts" || table === "commission_lines" || table === "early_payment_offers" || table === "customer_discount_offers" || table === "payment_term_requests") {
       // Append-only tables, and a workspace's escalation start (0108): the tenant role holds no UPDATE/DELETE privilege
       // at all, cross-org or not, so each statement is refused on its own —
       // the first failure would abort the transaction before the second ran.
@@ -234,7 +235,7 @@ describe.each(TENANT_TABLES)("%s", (table) => {
 });
 
 describe("history is append-only for the tenant role", () => {
-  it.each(["ledger_entries", "cycle_snapshots", "service_purchases", "decision_verdicts", "payment_actuals", "report_baselines", "bank_statement_lines", "receivable_allocations", "deal_versions", "customer_request_messages", "usage_events", "cash_scenario_versions", "fx_rates", "fx_variances", "onboarding_marks", "decision_reasons", "commission_plans", "commission_plan_deals", "commission_payouts", "commission_lines", "early_payment_offers", "payment_term_requests"])("%s refuses UPDATE and DELETE even on the tenant's own rows", async (table) => {
+  it.each(["ledger_entries", "cycle_snapshots", "service_purchases", "decision_verdicts", "payment_actuals", "report_baselines", "bank_statement_lines", "receivable_allocations", "deal_versions", "customer_request_messages", "usage_events", "cash_scenario_versions", "fx_rates", "fx_variances", "onboarding_marks", "decision_reasons", "commission_plans", "commission_plan_deals", "commission_payouts", "commission_lines", "early_payment_offers", "customer_discount_offers", "payment_term_requests"])("%s refuses UPDATE and DELETE even on the tenant's own rows", async (table) => {
     await expect(asTenant(db, A, (tx) => tx.query(`update public.${table} set org_id = org_id`))).rejects.toThrow(/permission denied/);
     await expect(asTenant(db, A, (tx) => tx.query(`delete from public.${table}`))).rejects.toThrow(/permission denied/);
   });

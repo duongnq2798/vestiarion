@@ -74,13 +74,13 @@ describe("every /o/[slug] page", () => {
 });
 
 describe("every server action", () => {
-  it("lives in src/app/actions, except sign-in, accepting an invitation, creating a first workspace, your own account, a payee's own address, a client's payment check, a customer's statement, a supplier's answer to an early-payment offer, the founder dashboard, and a studio's guided setup request", () => {
+  it("lives in src/app/actions, except sign-in, accepting an invitation, creating a first workspace, your own account, a payee's own address, a client's payment check, a customer's statement, a supplier's answer to an early-payment offer, a customer's answer to an early-payment discount, the founder dashboard, and a studio's guided setup request", () => {
     const withDirective = walk(path.join(ROOT, "src")).filter(
       (file) => /\.(ts|tsx)$/.test(file) && /^\s*["']use server["']/.test(read(file))
     );
     const outside = withDirective.map(rel).filter((file) => !file.startsWith("src/app/actions/"));
     expect(outside.sort()).toEqual([
-      "src/app/account/actions.ts", "src/app/admin/growth/actions.ts", "src/app/invite/actions.ts", "src/app/login/actions.ts", "src/app/more-time/[token]/actions.ts",
+      "src/app/account/actions.ts", "src/app/admin/growth/actions.ts", "src/app/discount/[token]/actions.ts", "src/app/invite/actions.ts", "src/app/login/actions.ts", "src/app/more-time/[token]/actions.ts",
       "src/app/offer/[token]/actions.ts", "src/app/onboarding/actions.ts", "src/app/pay/[token]/actions.ts", "src/app/payee/[token]/actions.ts", "src/app/statement/[token]/actions.ts", "src/app/studios/actions.ts",
     ]);
   });

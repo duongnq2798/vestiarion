@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
-import { matchTransfer, recordIncomingTransfers, type OpenReceivable } from "@/lib/agent/receipts";
+import { matchTransfer, owedAt, recordIncomingTransfers, type OpenReceivable } from "@/lib/agent/receipts";
 import type { ChainProvider, InboundTransfer } from "@/lib/circle/types";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 import { ARC_MAINNET, ARC_TESTNET } from "@/lib/network";
@@ -66,6 +66,39 @@ describe("matchTransfer", () => {
   });
 });
 
+describe("matchTransfer at a customer's accepted discount (customer discounts C6)", () => {
+  // An offer of 1% off 12.50, made Oct 2, accepted, payable by Oct 5 (UTC): 12.375.
+  const offer = { offerId: "discount-1", pct: 1, amount: 12.375, since: "2026-10-02T10:00:00Z", payBy: "2026-10-05" };
+  const discounted = (over: Partial<OpenReceivable> = {}) => receivable({ discount: offer, ...over });
+
+  it("matches the offer's discounted amount for money that arrived after the offer and by the end of its pay-by day", () => {
+    expect(owedAt(discounted(), new Date("2026-10-05T23:59:00Z"))).toEqual({ amount: 12.375, atDiscount: true });
+    expect(matchTransfer(transfer({ amount: 12.375, receivedAt: "2026-10-05T23:59:00Z" }), [discounted()])).toEqual({ invoiceId: "inv-1", matchedBy: "sender", atDiscount: true });
+    expect(matchTransfer(transfer({ amount: 12.375, from: OTHER, receivedAt: "2026-10-03T10:00:00Z" }), [discounted({ clientAddress: null })])).toEqual({ invoiceId: "inv-1", matchedBy: "amount", atDiscount: true });
+  });
+
+  it("never settles at the discount with money that arrived before the offer was made", () => {
+    expect(owedAt(discounted(), new Date("2026-10-02T09:59:00Z"))).toEqual({ amount: 12.5, atDiscount: false });
+    expect(matchTransfer(transfer({ amount: 12.375, receivedAt: "2026-10-02T09:59:00Z" }), [discounted()])).toBeNull();
+  });
+
+  it("leaves the discounted amount unmatched once the pay-by day has passed, and takes the full amount as before", () => {
+    expect(owedAt(discounted(), new Date("2026-10-06T00:00:01Z"))).toEqual({ amount: 12.5, atDiscount: false });
+    expect(matchTransfer(transfer({ amount: 12.375, receivedAt: "2026-10-06T00:00:01Z" }), [discounted()])).toBeNull();
+    expect(matchTransfer(transfer({ amount: 12.5, receivedAt: "2026-10-07T10:00:00Z" }), [discounted()])).toEqual({ invoiceId: "inv-1", matchedBy: "sender" });
+  });
+
+  it("still takes the full amount while the discount applies, with no discount taken, and nothing in between", () => {
+    expect(matchTransfer(transfer({ amount: 12.5, receivedAt: "2026-10-03T10:00:00Z" }), [discounted()])).toEqual({ invoiceId: "inv-1", matchedBy: "sender" });
+    expect(matchTransfer(transfer({ amount: 12.37, receivedAt: "2026-10-03T10:00:00Z" }), [discounted()])).toBeNull();
+  });
+
+  it("keeps a receivable with no accepted offer exactly as it was", () => {
+    expect(owedAt(receivable(), new Date("2026-10-03T10:00:00Z"))).toEqual({ amount: 12.5, atDiscount: false });
+    expect(owedAt(receivable({ discount: null }), new Date("2026-10-03T10:00:00Z"))).toEqual({ amount: 12.5, atDiscount: false });
+  });
+});
+
 describe("recordIncomingTransfers", () => {
   let fake: ReturnType<typeof fakeSupabase>;
   const run = <T,>(fn: () => Promise<T>) => runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), fn);
@@ -79,9 +112,10 @@ describe("recordIncomingTransfers", () => {
   }];
 
   function workspace(
-    over: { latest?: unknown[]; unmatched?: unknown[]; open?: unknown[]; invoicePatch?: unknown[]; grants?: unknown[]; allocations?: FakeReply; applied?: FakeReply; claim?: FakeReply } = {}
+    over: { latest?: unknown[]; unmatched?: unknown[]; open?: unknown[]; invoicePatch?: unknown[]; grants?: unknown[]; allocations?: FakeReply; applied?: FakeReply; claim?: FakeReply; offers?: unknown[] } = {}
   ) {
     return (r: RecordedRequest): FakeReply => {
+      if (r.path === "/rest/v1/customer_discount_offers" && r.method === "GET") return { body: over.offers ?? [] };
       if (r.path === "/rest/v1/receivable_allocations" && r.method === "GET") return over.allocations ?? { body: [] };
       if (r.path === "/rest/v1/receivable_allocations" && r.method === "POST") {
         return over.applied ?? { status: 201, body: { id: "alloc-1", created_at: "2026-10-01T15:01:00Z", reverses: null, reason: null, payment_seq: 1, ...(r.body as object) } };
@@ -109,6 +143,26 @@ describe("recordIncomingTransfers", () => {
     ledgerMock.mockReset().mockResolvedValue(undefined);
     floatMock.mockReset().mockResolvedValue(null);
     fake = fakeSupabase(workspace());
+  });
+
+  it("settles a receivable at its accepted discount, marks the offer paid and signs what the discount cost (customer discounts C6)", async () => {
+    const offers = [{ id: "discount-1", invoice_id: "inv-1", discount_pct: "1.00", offered_amount: "12.375000", pay_by: "2026-10-05", created_at: "2026-10-01T10:00:00Z" }];
+    const paid = [{ ...UNMATCHED[0], amount: "12.375000", received_at: "2026-10-03T10:00:00Z" }];
+    fake = fakeSupabase(workspace({ offers, unmatched: paid }));
+    const result = await run(() => recordIncomingTransfers(db(), provider([]), "operating"));
+    expect(result.matched).toBe(1);
+    expect(fake.requests.some((r) => r.path === "/rest/v1/rpc/settle_customer_discount")).toBe(true);
+    const taken = ledgerMock.mock.calls.map((call) => call[0] as { action: string; detail: Record<string, unknown> }).find((entry) => entry.action === "customer_discount_taken");
+    expect(taken?.detail).toMatchObject({ invoiceId: "inv-1", offerId: "discount-1", amount: 12.5, received: 12.375, discount: 0.125, payBy: "2026-10-05" });
+  });
+
+  it("never settles at a discount typed on a receivable with no accepted offer (customer discounts C6)", async () => {
+    const open = [{ ...OPEN[0], early_pay_discount_pct: "1.00", discount_due_date: "2026-10-05T12:00:00Z" }];
+    const paid = [{ ...UNMATCHED[0], amount: "12.375000", received_at: "2026-10-03T10:00:00Z" }];
+    fake = fakeSupabase(workspace({ open, unmatched: paid }));
+    const result = await run(() => recordIncomingTransfers(db(), provider([]), "operating"));
+    expect(result.matched).toBe(0);
+    expect(ledgerMock).not.toHaveBeenCalled();
   });
 
   it("does nothing for a provider with no real wallet (R4)", async () => {

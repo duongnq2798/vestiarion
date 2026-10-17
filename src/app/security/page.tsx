@@ -129,7 +129,7 @@ export default function SecurityPage() {
         </p>
         <p>
           Some secrets are kept only as a SHA-256 hash: an API key&apos;s 256-bit secret, beside its prefix, compared in constant time; the tokens of
-          invitations, payee links, customer statement links, early-payment offers, and shared receipts and reports; the codes that link a Telegram chat or a Slack
+          invitations, payee links, customer statement links, early-payment offers, customers&apos; discount offers, and shared receipts and reports; the codes that link a Telegram chat or a Slack
           account; and the Chrome extension&apos;s access and refresh tokens and its one-time sign-in codes. Some are never stored: the GitHub token of the person connecting GitHub is used once and dropped, a GitHub App installation&apos;s
           tokens are made for each run and kept in memory, and the password Pipedrive sends with its webhooks is derived from the master key for each
           company.
@@ -497,8 +497,8 @@ export default function SecurityPage() {
             requests, and Vercel deploys <code>main</code>.
           </li>
           <li>
-            Each change is reviewed by an independent AI code reviewer before merge, and every defect it finds is fixed with a test that fails first.
-            Each change must pass CI before it is merged.
+            Changes are reviewed by an independent AI code reviewer before merge, and every defect it finds is fixed with a test that fails first; when a
+            release&apos;s changes were not each reviewed so, its release notes say so. Each change must pass CI before it is merged.
           </li>
           <li>
             <LegalLink href={CI_URL}>CI</LegalLink> runs on every pull request and every push to <code>main</code>: it checks that the lockfile

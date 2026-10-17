@@ -126,13 +126,13 @@ reads the whole book each time it runs:
 | **Payables** | Three-way match (purchase order, goods received, invoice), duplicate and risk checks, then **pay**, **schedule**, **hold**, **request info** or **flag as fraud**, with its reasoning attached |
 | **Contractors** | Releases a milestone once its evidence is verified, such as a merged GitHub pull request; on Arc testnet the milestone's USDC can sit in an escrow contract until then |
 | **Compliance** | Re-screens every counterparty each cycle (OpenSanctions where configured) and tiers its payment limit down on a hit, reversibly |
-| **Receivables** | A signed deal becomes a schedule of receivables released on their days; a client pays through a link; the agent matches the transfer to what was owed, suggests how to apply a payment that covers several invoices, part of one or falls a fee short, and, when turned on, sends reminders for what is still owed within bounds code sets, after weighing what the customer said, paid and was promised, its own rules and the HubSpot deal it was sold through, asking a person first when the step is theirs |
+| **Receivables** | A signed deal becomes a schedule of receivables released on their days; a client pays through a link; the agent matches the transfer to what was owed, suggests how to apply a payment that covers several invoices, part of one or falls a fee short, and, when turned on, sends reminders for what is still owed within bounds code sets, after weighing what the customer said, paid and was promised, its own rules and the HubSpot deal it was sold through, asking a person first when the step is theirs; and, when turned on, while bills are held for want of cash, offers customers a small discount to pay an open invoice within 5 days |
 | **Treasury** | On Arc testnet, sweeps idle cash above a 7-day buffer into Circle's USYC only when the yield beats the round-trip fee, and redeems ahead of what falls due |
 | **Audit** | Appends every decision, human action and system event to an Ed25519-signed, hash-chained ledger, exportable and verifiable in one click |
 
 The agent cycle: reconcile -> receipts -> compliance -> follow-up -> recurring -> services -> liquidity -> AP ->
-contractors -> treasury -> forecast -> proposals -> collections -> early offers -> term requests -> notices -> telegram ->
-slack, each stage's outcome appended to the ledger.
+contractors -> treasury -> forecast -> proposals -> collections -> early offers -> customer offers -> term requests ->
+notices -> telegram -> slack, each stage's outcome appended to the ledger.
 
 ## Why it is different
 

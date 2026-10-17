@@ -52,7 +52,7 @@ describe("recentDecisionView", () => {
       realMoney: false,
       outcome: { kind: "paid", label: "Paid", tone: "proof" },
       headline: "Paid a 0.20 USDC bill.",
-      detail: "The written policy agreed; code checks passed.",
+      detail: "Rules in code passed it. The written policy agreed.",
       txUrl: `https://explorer.testnet.arc.io/tx/${TX}`,
     });
   });
@@ -106,7 +106,7 @@ describe("recentDecisionView", () => {
     expect(view({ action: "ap_schedule", resultingStatus: "scheduled", txRef: null, payOn: "2026-10-14" })).toMatchObject({
       outcome: { kind: "scheduled", label: "Scheduled" },
       headline: "Scheduled a 0.20 USDC bill for Oct 14.",
-      detail: "The written policy agreed; code checks passed.",
+      detail: "Rules in code passed it. The written policy agreed.",
       txUrl: null,
     });
   });
@@ -143,8 +143,9 @@ describe("recentDecisionView", () => {
   });
 
   it("says only what the entry recorded about the checks", () => {
-    expect(view({ decisionMode: "heuristic", agreedWithReference: null }).detail).toBe("The written policy decided; code checks passed.");
-    expect(view({ agreedWithReference: false }).detail).toBe("The written policy disagreed; code checks passed.");
+    expect(view({ decisionMode: "heuristic", agreedWithReference: null }).detail).toBe("Rules in code passed it. No model answered, so the written policy decided.");
+    // The rules in code come first: they decide. A written policy that differed is said to be kept only to compare.
+    expect(view({ agreedWithReference: false }).detail).toBe("Rules in code passed it. The written policy, kept only to compare, would have decided otherwise.");
     expect(view({ agreedWithReference: null, guardrailBlocked: null }).detail).toBeNull();
     expect(view({ action: "ap_pay", resultingStatus: "held", txRef: null }).detail).toBeNull();
   });
@@ -155,11 +156,22 @@ describe("recentDecisionView", () => {
 });
 
 describe("earlierThan", () => {
-  it("lists only decisions older than the latest one shown above, at most five", () => {
+  it("lists only decisions older than the latest one shown above, at most three", () => {
     const rows = [9, 8, 7, 6, 5, 4, 3, 2].map((seq) => view({ seq }));
-    expect(earlierThan(rows, 8).map((row) => row.seq)).toEqual([7, 6, 5, 4, 3]);
+    expect(earlierThan(rows, 8).map((row) => row.seq)).toEqual([7, 6, 5]);
     expect(earlierThan(rows, 3).map((row) => row.seq)).toEqual([2]);
     expect(earlierThan(rows, 2)).toEqual([]);
+  });
+
+  it("gives the last place to the newest refusal by code when none of the newest was refused", () => {
+    const refused = { action: "ap_hold", resultingStatus: "held", txRef: null, guardrailBlocked: true, guardrailRule: "counterparty.payment_limit" };
+    const rows = [9, 8, 7, 6, 5, 4].map((seq) => view(seq === 5 || seq === 4 ? { seq, ...refused } : { seq }));
+    expect(earlierThan(rows, 9).map((row) => row.seq)).toEqual([8, 7, 5]);
+    // A refusal already among the newest keeps them as they are.
+    const early = [9, 8, 7, 6, 5].map((seq) => view(seq === 7 ? { seq, ...refused } : { seq }));
+    expect(earlierThan(early, 9).map((row) => row.seq)).toEqual([8, 7, 6]);
+    // With no refusal read, the newest stand.
+    expect(earlierThan([9, 8, 7, 6, 5].map((seq) => view({ seq })), 9).map((row) => row.seq)).toEqual([8, 7, 6]);
   });
 });
 
@@ -177,7 +189,7 @@ describe("readRecentDecisions", () => {
   it("reads the team's earlier decisions and the week's counts, each network apart", async () => {
     rpc.mockResolvedValue({ data: FOUND, error: null });
     const found = await readRecentDecisions(at());
-    expect(rpc).toHaveBeenCalledWith("recent_team_decisions", { p_limit: 6 });
+    expect(rpc).toHaveBeenCalledWith("recent_team_decisions", { p_limit: 12 });
     expect(found?.pastWeek).toEqual({ mainnet: 4, testnet: 57 });
     expect(found?.decisions).toHaveLength(1);
     expect(found?.decisions[0]).toMatchObject({ seq: 2588, headline: "Paid a 0.20 USDC bill.", outcome: { kind: "paid" } });
