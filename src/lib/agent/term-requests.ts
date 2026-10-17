@@ -14,6 +14,7 @@ import { REASONING_RULE, REASONING_SHAPE } from "../reasoning-copy";
 import { answerTermCounter, createTermRequest, TermRequestError, withdrawTermRequest } from "../terms/requests";
 import {
   boundTermDays,
+  coveredAfterDays,
   coveredWithin,
   referenceCounterDecision,
   type TermCounterDecision,
@@ -51,6 +52,7 @@ const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximu
 const SYSTEM_PROMPT = `You are the payment-terms step of a treasury agent for a small business. A bill is held because the operating wallet cannot pay it on time, and the business turned on requests for more time: the agent may ask the supplier, by email, to accept the same amount on a later day. Code allows a request on this bill now. Decide whether to ask, and for how many days.
 
 - Ask for enough days that the money customers owe, or what comes in, covers the bill after what else falls due; asking for more than that strains the supplier for nothing.
+- coverage gives what code worked out from those figures: whether the bill is covered on its due date, and, if not, how many days after it the cash and what customers owe first cover it, within the most you may ask (null: not within it). Rely on it rather than adding the figures yourself.
 - Ask for at least the fewest days and no more than the most you are given.
 - Skip when asking would not help, for example when no money is expected in time even with the most days, or when what you know of the supplier says the request would not be welcome; the bill then waits for a person.
 - The written policy's answer is given as a reference. Follow it unless the facts say otherwise, and say why when you depart from it.
@@ -60,7 +62,7 @@ Respond with ONLY a single JSON object in the requested shape. No prose outside 
 
 const COUNTER_PROMPT = `You are the payment-terms step of a treasury agent for a small business. The agent asked a supplier for more time on a bill it cannot pay on time, and the supplier proposed fewer days instead. Decide whether to accept them.
 
-- Accept when the new date they give is one the business can keep: what it holds now, less what else falls due, and the money customers owe by then cover the bill.
+- Accept when the new date they give is one the business can keep: what it holds now, less what else falls due, and the money customers owe by then cover the bill. coverage gives what code worked out from those figures; rely on it rather than adding them yourself.
 - Decline when it cannot keep that date: agreeing would promise a payment the business would miss. Declined, the bill keeps its original due date and waits for a person.
 - The written policy's answer is given as a reference. Follow it unless the facts say otherwise, and say why when you depart from it.
 - ${REASONING_RULE}
@@ -241,6 +243,7 @@ export async function makeTermRequests(
               dueOnOrBeforeThisBill: Number(dueBefore.toFixed(6)),
               customersOweByDaysAfterDue: incoming.filter((item) => item.daysAfterDue <= request.days).sort((a, b) => a.daysAfterDue - b.daysAfterDue),
             },
+            coverage: { coveredByProposedDate: coveredWithin(counterDays, { amount, cashNow, incoming }), coveredAfterDays: coveredAfterDays({ amount, cashNow, incoming, withinDays: request.days }) },
             writtenPolicy: reference,
             responseShape: { action: "accept | decline", reasoning: REASONING_SHAPE },
           }),
@@ -436,6 +439,10 @@ export async function makeTermRequests(
           dueOnOrBeforeThisBill: Number(dueBefore.toFixed(6)),
           customersOweByDaysAfterDue: incoming.filter((item) => item.daysAfterDue <= maxDays).sort((a, b) => a.daysAfterDue - b.daysAfterDue),
         },
+        coverage: (() => {
+          const after = coveredAfterDays({ amount, cashNow, incoming, withinDays: maxDays });
+          return { coveredOnDueDate: after === 0, coveredAfterDays: after, withinMostDays: maxDays };
+        })(),
         days: { fewest: 3, most: maxDays },
         writtenPolicy: reference,
         responseShape: { action: "ask | skip", days: `3 to ${maxDays}, when asking`, reasoning: REASONING_SHAPE },
