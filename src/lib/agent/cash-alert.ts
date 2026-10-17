@@ -121,8 +121,8 @@ export function alertDue(now: CashShort | null, last: LastAlert | null, nowMs: n
   return null;
 }
 
-/** "229.97 USDC", as the alert writes amounts. */
-const usdc = (value: number) => `${AMOUNT.format(value)} USDC`;
+/** "229.97 USDC", as the alert writes amounts: up to the cent, since what is short is what to bring in. */
+const usdc = (value: number) => `${AMOUNT.format(Math.ceil(Math.round(value * 1e6) / 1e4) / 100)} USDC`;
 
 /** The alert's one-line summary, for the ledger. */
 export function cashShortSummary(short: CashShort): string {

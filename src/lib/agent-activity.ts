@@ -323,6 +323,9 @@ function stuckItem(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem,
   };
 }
 
+/** An amount rounded up to the cent. */
+const upToCent = (value: number) => Math.ceil(Math.round(value * 1e6) / 1e4) / 100;
+
 /** The payment plan, where a person sees each day's balance (cash short alert S4). */
 const PAYMENT_PLAN_PATH = billsHref({ tab: "plan" });
 
@@ -338,12 +341,14 @@ function cashAlertItem(entry: ActivityEntry): Omit<ActivityItem, "txUrl" | "netw
   const lowestOn = text(entry.detail.lowestOn) ?? shortOn;
   const need = number(entry.detail.need);
   if (!shortOn || !lowestOn || need === null) return null;
+  // What is short, up to the cent: it is what to bring in, and a cent less would leave it short (live test, Oct 17).
+  const short = (value: number) => activityAmount(upToCent(value), "USDC");
   const usdc = (value: number) => activityAmount(value, "USDC");
   const shortBy = number(entry.detail.shortBy) ?? need;
   const said =
     lowestOn === shortOn
-      ? `Cash runs short on ${shortDay(shortOn)}: ${usdc(need)} more is needed by then to pay what is due.`
-      : `Cash runs short on ${shortDay(shortOn)}: ${usdc(shortBy)} short that day, and ${usdc(need)} by ${shortDay(lowestOn)} to pay everything due.`;
+      ? `Cash runs short on ${shortDay(shortOn)}: ${short(need)} more is needed by then to pay what is due.`
+      : `Cash runs short on ${shortDay(shortOn)}: ${short(shortBy)} short that day, and ${short(need)} by ${shortDay(lowestOn)} to pay everything due.`;
   const expected = number(entry.detail.expectedBy) ?? 0;
   // Enough on time, enough in all but some of it after the first short day, or not enough (review of #420).
   const enough =

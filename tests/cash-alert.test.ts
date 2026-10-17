@@ -146,6 +146,11 @@ describe("the cash alert stage (S1-S5)", () => {
     expect(lines).toEqual([{ domain: "treasury", message: "cash runs short on Oct 23, 2026 by 139.97 USDC, and by 229.97 USDC on Oct 25, 2026" }]);
   });
 
+  it("writes what is short up to the cent in the summary (live test, Oct 17)", async () => {
+    await run(world({ operating: "147.02755" }));
+    expect(signed()[0].summary).toBe("Cash runs short on Oct 23, 2026 by 142.98 USDC, and by 232.98 USDC on Oct 25, 2026");
+  });
+
   it("reads only open invoices and milestones, so a long history cannot crowd out what is due (review of #420)", async () => {
     const client = world();
     await run(client);
