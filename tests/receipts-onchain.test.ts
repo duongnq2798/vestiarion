@@ -121,7 +121,7 @@ describe("readOnChain", () => {
   });
 
   it("reads Arc testnet through its public RPC, never the deployment's own (receipts review #5)", () => {
-    expect(receiptRpcUrl("ARC-TESTNET")).toBe("https://rpc.testnet.arc.network");
+    expect(receiptRpcUrl("ARC-TESTNET")).toBe("https://rpc.testnet.arc.io");
     expect(receiptRpcUrl("BASE-SEPOLIA")).toBe("https://sepolia.base.org");
   });
 

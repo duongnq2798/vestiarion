@@ -16,7 +16,7 @@ describe("the Arc testnet profile", () => {
       circleBlockchain: "ARC-TESTNET",
       chainId: 5042002,
       caip2: "eip155:5042002",
-      rpcUrl: "https://rpc.testnet.arc.network",
+      rpcUrl: "https://rpc.testnet.arc.io",
       explorer: "https://explorer.testnet.arc.io",
       tokens: { USDC: "0x3600000000000000000000000000000000000000", EURC: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a" },
       payeeChains: ARC_TESTNET.payeeChains,
