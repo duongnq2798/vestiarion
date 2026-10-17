@@ -64,6 +64,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Fixed
 
+- **The agent no longer reads a request it took back as the supplier's no.** Weighing a request for more time, the
+  model was told how many earlier requests a supplier got, agreed to and declined, but not how many the agent itself
+  withdrew; in a live test it read one withdrawn request as a second decline. It is now told those too, and a request
+  withdrawn before its email went no longer counts as one the supplier got.
+
 - **A supplier whose counter the agent declined can be asked for more time again.** The agent's no to a counter was
   counted as the supplier declining, which kept the agent from asking that supplier about any other bill for 30 days.
   Only a request the supplier itself declines now waits.
