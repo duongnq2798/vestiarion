@@ -196,7 +196,12 @@ describe("what the agent did, in words", () => {
     expect(activityItem(entry("ap_hold", {}), refs({ status: "held" }))).toMatchObject({ text: "Held Jiren 0.30 USDC for you.", tone: "stopped" });
     // Held days ahead of the day it was set for (cash ahead A4).
     const ahead = { cashAhead: { scheduledFor: "2026-10-23", cashCounted: 150.03, dueBefore: { total: 140, count: 1 }, needed: 0.3 } };
-    expect(activityItem(entry("ap_hold", ahead), refs({ status: "held" }))).toMatchObject({ text: "Held Jiren 0.30 USDC, set for Oct 23: the cash will not cover it then.", tone: "stopped" });
+    expect(activityItem(entry("ap_hold", { ...ahead, execution: { heldBecause: "cash_shortfall" } }), refs({ status: "held" }))).toMatchObject({
+      text: "Held Jiren 0.30 USDC, set for Oct 23: the cash will not cover it then.",
+      tone: "stopped",
+    });
+    // Decided early but held for something else: said as any hold.
+    expect(activityItem(entry("ap_hold", ahead), refs({ status: "held" }))?.text).toBe("Held Jiren 0.30 USDC for you.");
     expect(activityItem(entry("ap_request_info", {}), refs({ status: "awaiting_info" }))).toMatchObject({
       text: "Asked for details before paying Jiren 0.30 USDC.",
       tone: "stopped",

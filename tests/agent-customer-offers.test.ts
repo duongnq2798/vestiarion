@@ -47,6 +47,10 @@ interface World {
   maxPct?: string;
   paused?: boolean;
   held?: Array<Record<string, unknown>>;
+  /** Payables scheduled on or before the last held bill falls due (cash ahead A5). */
+  scheduled?: Array<Record<string, unknown>>;
+  /** The reserve's USDC (cash ahead A5); 0 when absent. */
+  reserve?: string;
   decisions?: Array<Record<string, unknown>>;
   receivables?: Array<Record<string, unknown>>;
   offers?: Array<Record<string, unknown>>;
@@ -71,9 +75,11 @@ function world(w: World = {}) {
     if (request.path === "/rest/v1/customer_discount_reviews" && request.method === "GET") return { body: w.reviews ?? [] };
     if (request.path === "/rest/v1/customer_discount_reviews" && request.method === "POST") return w.claim ?? { body: { id: "review-1" } };
     if (request.path === "/rest/v1/invoices" && request.params.get("direction") === "eq.payable") {
-      // Held and scheduled payables in one read (cash ahead A5); a row without a status is a held one.
-      return { body: (w.held ?? [{ id: BILL, amount: "500", currency: "USDC" }]).map((row) => ({ status: "held", ...row })) };
+      // Scheduled payables before the last held bill falls due, read apart (cash ahead A5).
+      if (request.params.get("status") === "eq.scheduled") return { body: w.scheduled ?? [] };
+      return { body: w.held ?? [{ id: BILL, amount: "500", currency: "USDC", due_date: "2026-10-25T12:00:00+00:00" }] };
     }
+    if (request.path === "/rest/v1/accounts") return { body: [{ balance: w.reserve ?? "0" }] };
     if (request.path === "/rest/v1/invoices" && request.params.get("direction") === "eq.receivable") return { body: w.receivables ?? [receivable()] };
     if (request.path === "/rest/v1/invoices") return { body: w.stillOpen ?? [] };
     if (request.path === "/rest/v1/ledger_entries" && request.params.get("action") === "eq.customer_discount_offered") {
@@ -195,10 +201,23 @@ describe("when it asks nothing (C1, C2)", () => {
     expect(created).toEqual([]);
   });
 
-  it("does not count operating USDC already set for a scheduled bill (cash ahead A5)", async () => {
-    await run(world({ held: [{ id: BILL, amount: "500", currency: "USDC" }, { id: "scheduled-bill", amount: "300", currency: "USDC", status: "scheduled" }] }), 600);
+  it("counts the cash set for bills scheduled before the held bill falls due, and the reserve (cash ahead A5)", async () => {
+    const client = world({ scheduled: [{ amount: "300", currency: "USDC", scheduled_for: "2026-10-22T00:00:00+00:00" }], reserve: "50" });
+    await run(client, 600);
     expect(created).toHaveLength(1);
-    expect(JSON.parse((decideMock.mock.calls[0][0] as { userPrompt: string }).userPrompt).cash).toMatchObject({ scheduledForLaterUsdc: 300, shortfall: 200 });
+    expect(JSON.parse((decideMock.mock.calls[0][0] as { userPrompt: string }).userPrompt).cash).toMatchObject({
+      scheduledBeforeHeldBillsFallDueUsdc: 300,
+      reserveUsdc: 50,
+      shortfall: 150,
+    });
+    // Only those scheduled on or before the day the last held bill falls due are asked for.
+    const read = client.requests.find((r) => r.path === "/rest/v1/invoices" && r.params.get("status") === "eq.scheduled");
+    expect(read?.params.get("scheduled_for")).toBe("lt.2026-10-26T00:00:00.000Z");
+  });
+
+  it("offers nothing when the reserve covers what the operating USDC does not", async () => {
+    await run(world({ reserve: "3000", scheduled: [{ amount: "2000", currency: "USDC", scheduled_for: "2026-10-20T00:00:00+00:00" }] }), 200);
+    expect(created).toEqual([]);
   });
 
   it("offers nothing when turned off, paused, or in a sandbox", async () => {

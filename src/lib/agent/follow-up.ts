@@ -60,9 +60,9 @@ export interface FrozenInvoice {
   budgetRoom?: number | null;
   /**
    * The USDC the operating wallet and the reserve hold now. Absent when it was not read, because nothing waited on it
-   * (reserve cash back R4).
+   * (reserve cash back R4). `dueBefore`: what falls due on or before its day now, this bill aside; absent when not read.
    */
-  cash?: { operating: number; reserve: number };
+  cash?: { operating: number; reserve: number; dueBefore?: number };
   /** Whether the counterparty's address changed and no one has confirmed it, now. Absent when it was not read. */
   addressUnconfirmed?: boolean;
   /** Whether the counterparty has no payment address, now. Absent when it was not read. */
@@ -123,9 +123,9 @@ export interface DecisionFacts {
   heldForBudgetUsdc?: number | null;
   /**
    * Held for want of cash (`execution.heldBecause`): the USDC it needed, and the operating and reserve balances it saw.
-   * Null otherwise (reserve cash back R4).
+   * Null otherwise (reserve cash back R4). For a bill, `amountDue` and `targetOn`: what it needs on its day, and that day.
    */
-  heldForCash?: { needed: number; operating: number; reserve: number } | null;
+  heldForCash?: { needed: number; operating: number; reserve: number; amountDue?: number; targetOn?: string } | null;
   /**
    * Whether the counterparty's address waited for a person's confirmation (`observed.addressUnconfirmed`). False for a
    * decision recorded before the address was observed.
@@ -230,11 +230,21 @@ function twoApprovalsChange(now: number | null | undefined, held: { value: numbe
  * pause, would only fail again: it waits, and the treasury stage's own redemption for what is due is what moves it.
  * Null while nothing changed, or while not read.
  */
-function cashChangeSince(now: { operating: number; reserve: number } | undefined, held: { needed: number; operating: number; reserve: number }): string | null {
+function cashChangeSince(
+  now: { operating: number; reserve: number; dueBefore?: number } | undefined,
+  held: { needed: number; operating: number; reserve: number; amountDue?: number }
+): string | null {
   if (now === undefined) return null;
   const total = now.operating + now.reserve;
-  if (total + CASH_EPSILON < held.needed) return null;
-  const moved = now.operating > held.operating + CASH_EPSILON || total > held.operating + held.reserve + CASH_EPSILON;
+  // What it needs is its own amount on its day and what falls due before it now: a bill that came before it when it
+  // was held, and was paid since, no longer counts (cash ahead, review of #418). And what moved is what is left for
+  // it, the cash less what falls due before it: paying that bill takes as much off both. Not read, the hold's figures.
+  const remeasured = held.amountDue !== undefined && now.dueBefore !== undefined;
+  const needed = remeasured ? (held.amountDue as number) + (now.dueBefore as number) : held.needed;
+  if (total + CASH_EPSILON < needed) return null;
+  const leftThen = held.operating + held.reserve - (remeasured ? held.needed - (held.amountDue as number) : 0);
+  const leftNow = total - (remeasured ? (now.dueBefore as number) : 0);
+  const moved = now.operating > held.operating + CASH_EPSILON || leftNow > leftThen + CASH_EPSILON;
   return moved ? `the cash it needs is there now (${Number(total.toFixed(6))} USDC in the operating wallet and the reserve)` : null;
 }
 

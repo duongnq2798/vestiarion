@@ -18,7 +18,7 @@ Choose **Stop the agent's discounts** to turn it off: "The agent no longer offer
 
 ## 2. When the agent offers
 
-The agent offers nothing while cash is not short. Each cycle, after it has decided its bills, it adds up the bills it held for want of cash. If they come to more than the operating USDC left after the cycle's payments, less what is already set for scheduled bills, and the discounts customers already accepted and have not paid yet, the difference is the shortfall, and the agent looks at your open invoices. It weighs an offer on one only where all of this holds:
+The agent offers nothing while cash is not short. Each cycle, after it has decided its bills, it adds up the bills it held for want of cash. If they come, with what is already set for bills scheduled before the last of them falls due, to more than the operating USDC left after the cycle's payments, the reserve, and the discounts customers already accepted and have not paid yet, the difference is the shortfall, and the agent looks at your open invoices. It weighs an offer on one only where all of this holds:
 
 - it is in USDC, nothing has been applied to it, and it falls due at least 7 days from today;
 - it never had an offer, and the agent did not decide against one in the last 7 days;

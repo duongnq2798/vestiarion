@@ -103,12 +103,12 @@ export function discountedAmount(amount: number, pct: number): number {
 }
 
 /**
- * The shortfall (C2): what the payables held for want of cash add up to, less the operating USDC left after this cycle's
- * payments and what is already set for scheduled payables (cash ahead A5), and less the receivables already accepted at a
- * discount and not yet paid. Never below zero.
+ * The shortfall (C2): what the payables held for want of cash add up to, with what is already set for payables scheduled
+ * before the last of them falls due, less the operating USDC left after this cycle's payments and the reserve (cash ahead
+ * A5), and less the receivables already accepted at a discount and not yet paid. Never below zero.
  */
-export function cashShortfall(input: { heldForCash: number; scheduled?: number; operating: number; acceptedUnpaid: number }): number {
-  return Number(Math.max(0, input.heldForCash + (input.scheduled ?? 0) - input.operating - input.acceptedUnpaid).toFixed(6));
+export function cashShortfall(input: { heldForCash: number; scheduled?: number; operating: number; reserve?: number; acceptedUnpaid: number }): number {
+  return Number(Math.max(0, input.heldForCash + (input.scheduled ?? 0) - input.operating - (input.reserve ?? 0) - input.acceptedUnpaid).toFixed(6));
 }
 
 /**

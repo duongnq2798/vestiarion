@@ -101,6 +101,8 @@ describe("how much to ask for (C2)", () => {
     // The live test's book: 150 held, 140 scheduled, 150.03 in the wallet.
     expect(cashShortfall({ heldForCash: 150, scheduled: 140, operating: 150.03, acceptedUnpaid: 0 })).toBe(139.97);
     expect(cashShortfall({ heldForCash: 20, scheduled: 20, operating: 50, acceptedUnpaid: 0 })).toBe(0);
+    // The reserve, which the policy counts for a later day, is cash too (review of #418).
+    expect(cashShortfall({ heldForCash: 400, scheduled: 2900, operating: 200, reserve: 3000, acceptedUnpaid: 0 })).toBe(100);
   });
 
   it("takes the largest first until they cover the shortfall, three at most", () => {

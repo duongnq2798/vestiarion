@@ -98,6 +98,19 @@ describe("a bill left to its day (A3)", () => {
     const moreDue = [...BOOK, { id: "new", amount: 5, day: "2026-10-21" }];
     expect(check({ latest: latest({ by: "agent", shortfall: false, cashAhead: seen }), dueBy: dueByIn(moreDue) }).has("b-45-a")).toBe(true);
   });
+
+  it("when a bill before it is paid: less cash, and that much less falling due first (review of #418)", () => {
+    const seen = { cashCounted: 150.03, dueBefore: { total: 140, count: 1 } };
+    const paid = BOOK.filter((row) => row.id !== "b-140");
+    expect(check({ latest: latest({ by: "agent", shortfall: false, cashAhead: seen }), operatingBalance: 10.03, dueBy: dueByIn(paid) }).has("b-45-a")).toBe(false);
+    // A rounding difference is not worse either.
+    expect(check({ latest: latest({ by: "agent", shortfall: false, cashAhead: seen }), operatingBalance: 150.029 }).has("b-45-a")).toBe(false);
+  });
+
+  it("when a check decided it early and the model scheduled it knowing the cash fell short", () => {
+    const seen = { cashCounted: 200, dueBefore: { total: 140, count: 1 } };
+    expect(check({ latest: latest({ by: "agent", shortfall: true, cashAhead: seen }) }).has("b-45-a")).toBe(false);
+  });
 });
 
 describe("a bill's latest scheduling, from the ledger", () => {

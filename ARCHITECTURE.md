@@ -1936,11 +1936,15 @@ the verified milestones, the bank-paid vendors and each bill's latest `ap_schedu
 `obligationsDueBy` its day, against `amountToPay` on its day. A short one joins the stage's payables and is decided with
 every check; the model sees `scheduledEarlier.decidedBeforeItsDay`, the ledger entry records `cashAhead` (`scheduledFor`,
 `cashCounted`, `dueBefore`, `needed`), and a hold is `heldBecause: cash_shortfall`, so the follow-up reopens it and the
-customer discount and more-time stages act on it. No treadmill: a person's move keeps its day, a decision that scheduled
-knowing `timing.shortfall` stands, and a bill already decided early is measured again only when the cash counted fell or
-what falls due before it grew since; at most 5 a cycle, earliest first. A read that fails leaves every bill to its day.
-The customer discount stage's `cashShortfall` now adds scheduled USDC payables to the held ones before taking off the
-operating USDC.
+customer discount and more-time stages act on it. A model `pay` on such a bill is held by code (`timingRule:
+"pay.cash_ahead"`): paid now, it would take the cash the bills before it count on. No treadmill: a person's move keeps
+its day, a decision that scheduled knowing `timing.shortfall` stands, and a bill already decided early is measured again
+only when what is left for it (cash counted less what falls due before it) fell by more than a cent; at most 5 a cycle,
+earliest first. A read that fails leaves every bill to its day. The follow-up's cash rule (`cashChangeSince`) now takes
+a bill's `amountDueAtTarget` and `targetOn` from its hold and `dueBeforeHeldBills` from the book now, so a bill held
+behind one that was paid since reopens once what is left for it grew and covers it, rather than waiting for the whole
+figure it saw when held. The customer discount stage's `cashShortfall` adds USDC payables scheduled on or before the
+last held bill's due day, and takes off the reserve with the operating USDC.
 
 Bills & receivables' Payment plan tab shows the next 14 UTC days of payments
 (docs/superpowers/specs/2026-10-11-payment-plan-design.md), read only when that tab is shown. `planPayments`

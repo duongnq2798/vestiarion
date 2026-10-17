@@ -32,11 +32,18 @@ and the customer discount and more-time stages act on it the same cycle.
 **A3. No treadmill.** A bill is not checked again when:
 - its latest scheduling was a person's move from the payment plan (`payment_rescheduled`): that day is theirs;
 - its latest decision scheduled it knowing the cash fell short (`timing.shortfall: true`): the model chose that;
-- its latest decision was itself one of these checks (`cashAhead` in its detail), and the cash counted is not lower
-  and what falls due before it is not higher than then. A Gateway payout or a bank payout, whose decision counts
-  other cash, is therefore decided early at most once per change.
+- its latest decision was itself one of these checks (`cashAhead` in its detail), and what is left for it, the cash
+  counted less what falls due before it, has not fallen by more than a cent since. Paying a bill before it takes as
+  much off both. A Gateway payout, whose decision counts other cash, is decided early at most once per change.
 
 At most 5 bills a cycle, the earliest scheduled first.
+
+**A2b. Never paid now.** A model `pay` on a bill decided early with `timing.shortfall` is held by code
+(`pay.cash_ahead`): paid now, it would take the cash the bills before it count on.
+
+**A2c. Reopened on what is left for it (review of #418).** A hold records what the bill needed with what fell due
+before it then. The follow-up now measures what falls due before it now, so a bill held behind one paid since reopens
+once money comes in and covers it, not only once the cash reaches the whole old figure.
 
 **A4. Recorded.** The AP decision's ledger entry carries `cashAhead: { scheduledFor, cashCounted, dueBefore: { total,
 count }, needed }`. The activity feed (console, Telegram, Slack) says "Held Cobalt Cloud 45.00 USDC, set for Oct 23:
@@ -44,8 +51,8 @@ the cash will not cover it then." The cycle log says it was decided before its d
 
 **A5. Customer discounts count scheduled payments.** The shortfall the discount stage works from was the bills held
 for want of cash less the operating USDC, as if none of that USDC were already set for a scheduled bill. It is now
-held-for-cash bills plus scheduled USDC payables, less the operating USDC and the receivables accepted at a discount
-and not yet paid.
+held-for-cash bills plus USDC payables scheduled on or before the last of them falls due, less the operating USDC, the
+reserve and the receivables accepted at a discount and not yet paid.
 
 ## Out of scope
 

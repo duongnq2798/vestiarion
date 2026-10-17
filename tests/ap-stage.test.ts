@@ -1980,7 +1980,23 @@ describe("a scheduled payment the cash will no longer cover on its day (cash ahe
       cashAhead: { scheduledFor: "2026-10-23", cashCounted: 150.03, dueBefore: { total: 140, count: 1 }, needed: 45 },
       execution: { heldBecause: "cash_shortfall" },
     });
-    expect(lines).toEqual([{ domain: "ap", message: "Northwind: hold, decided before 2026-10-23: the cash will not cover it then (45 USDC)" }]);
+    expect(lines).toEqual([{ domain: "ap", message: "Northwind: held, decided before 2026-10-23: the cash will not cover it then (45 USDC)" }]);
+  });
+
+  it("is never paid now ahead of what falls due first, whatever the model chose (review of #418)", async () => {
+    today("2026-10-17T09:00:00.000Z");
+    model(() => ({ action: "pay", reasoning: "The wallet covers 45 USDC today, so paying now.", confidence: 0.8 }));
+    const { fake, chain, stage } = apFake({ book: [setFor23(), setFor22()] });
+
+    await stage(150.03);
+
+    expect(chain.transfers).toEqual([]);
+    const [patch] = invoicePatches(fake.requests);
+    expect(patch.body).toMatchObject({ status: "held" });
+    expect((patch.body as Record<string, string>).agent_reasoning).toContain("so code holds it.]");
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_action).toBe("ap_hold");
+    expect(entry.p_detail).toMatchObject({ timingRule: "pay.cash_ahead", decision: { action: "hold" }, execution: { heldBecause: "cash_shortfall" } });
   });
 
   it("waits for its day when the cash still covers it, or a person moved it there", async () => {

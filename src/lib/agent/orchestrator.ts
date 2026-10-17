@@ -1345,7 +1345,26 @@ function sameApDecision(decision: ApDecision, reference: ApDecision): boolean {
   return decision.action !== "schedule" || decision.payOn === reference.payOn;
 }
 
-type TimingRule = ReturnType<typeof boundPayOn>["timingRule"] | "pay.no_gain";
+type TimingRule = ReturnType<typeof boundPayOn>["timingRule"] | "pay.no_gain" | "pay.cash_ahead";
+
+/**
+ * A payment now on a bill decided before its day because the cash will not cover it then (cash ahead A2): paid now, it
+ * would take the cash the bills due before it count on, which is the shortfall that brought it here. Code holds it
+ * instead; null when the decision stands.
+ */
+function heldForCashAhead(
+  bounded: ReturnType<typeof boundApDecision>,
+  input: { decidedBeforeItsDay: boolean; shortfall: boolean }
+): ReturnType<typeof boundApDecision> | null {
+  if (!input.decidedBeforeItsDay || !input.shortfall || bounded.decision.action !== "pay") return null;
+  return {
+    decision: { action: "hold", reasoning: bounded.decision.reasoning, confidence: bounded.decision.confidence },
+    payOn: null,
+    timingRule: "pay.cash_ahead",
+    requestedPayOn: null,
+    note: " [The model chose to pay today, but this bill was set for a later day and the cash will not cover it then after what falls due first; paid now, it would take that cash, so code holds it.]",
+  };
+}
 
 /**
  * The model's decision as code lets it stand: a `schedule` is bounded by
@@ -1831,13 +1850,16 @@ async function decideApPayable(
 
   // Code bounds the date before anything else sees the decision: no invoice
   // is scheduled past its due date, or for a day already here (P2).
-  const { decision: boundDecision, payOn, timingRule, requestedPayOn, note: timingNote } = boundApDecision(modelDecision, {
+  const bounded = boundApDecision(modelDecision, {
     now,
     dueDate: invoice.due_date,
     // A payment now that gains nothing waits for the policy's day, unless the bill was already set for today (payment timing §1).
     timing,
     scheduledFor: scheduledEarlier?.payOn ?? null,
   });
+  // Decided early because the cash ahead is short, it is never paid now ahead of what falls due first (cash ahead A2).
+  const { decision: boundDecision, payOn, timingRule, requestedPayOn, note: timingNote } =
+    heldForCashAhead(bounded, { decidedBeforeItsDay: cashAhead !== null, shortfall: timing.shortfall }) ?? bounded;
   // A swap is a choice only when the wallet is short: on any other payable the flag means nothing, and is not recorded (review #9).
   const decision: ApDecision = boundDecision.fundWithSwap === true && !(eurcShortNow > 0) ? withoutSwapChoice(boundDecision) : boundDecision;
   // Scored on what code let stand, and on the day as well as the action; null
@@ -2190,8 +2212,8 @@ async function decideApPayable(
       ? `${counterparty.name}: scheduled for ${payOn} (${amount} ${currency})`
       : sent && discount && sent.discountTaken > 0
         ? `${counterparty.name}: pay (${sent.amountPaid} ${currency} after a ${discount.pct}% early-payment discount on ${amount} ${currency})`
-        : cashAhead
-          ? `${counterparty.name}: ${decision.action}, decided before ${cashAhead.scheduledFor}: the cash will not cover it then (${amount} ${currency})`
+        : cashAhead && shortOfCash && status === "held"
+          ? `${counterparty.name}: held, decided before ${cashAhead.scheduledFor}: the cash will not cover it then (${amount} ${currency})`
           : `${counterparty.name}: ${decision.action} (${amount} ${currency})`;
   return { status, scheduledFor, operatingBalance: operatingBalanceAfter, line: { domain: "ap", message } };
 }
@@ -2790,6 +2812,37 @@ async function cashAheadOf(
 }
 
 /**
+ * What falls due on or before each held bill's day now, the bill aside (cash ahead, review of #418): the follow-up
+ * measures a hold for want of cash against it, rather than against what came before the bill when it was held, which
+ * may have been paid since. A day already past counts as today. Keyed by id, for the bills with a day; empty when the
+ * read fails, and each hold's own figure then stands.
+ */
+async function dueBeforeHeldBills(orgDb: OrgDb, bills: Array<{ id: string; targetOn: string | null }>): Promise<Map<string, number>> {
+  const dated = bills.filter((bill): bill is { id: string; targetOn: string } => bill.targetOn !== null);
+  if (dated.length === 0) return new Map();
+  try {
+    const [openRows, verified] = await Promise.all([
+      orgDb.from("invoices").select("id, amount, currency, due_date, status, scheduled_for").eq("direction", "payable").in("status", [...OPEN_PAYABLE_STATUSES]),
+      openMilestoneAmounts(orgDb, { statuses: ["verified"], verifiedOnly: true }),
+    ]);
+    const book: PayableBookRow[] = (unwrap(openRows) as Array<{ id: string; amount: string; currency: string | null; due_date: string; status: string; scheduled_for: string | null }>).map((row) => ({
+      id: row.id,
+      amount: num(row.amount),
+      currency: invoiceCurrency(row.currency),
+      due_date: row.due_date,
+      status: row.status,
+      scheduled_for: row.scheduled_for,
+    }));
+    const milestones: ObligationsDue = { total: verified.reduce((sum, amount) => sum + amount, 0), count: verified.length };
+    const today = utcDate(new Date());
+    return new Map(dated.map((bill) => [bill.id, obligationsDueBy(book, { excludeId: bill.id, by: bill.targetOn > today ? bill.targetOn : today, today, milestones }).total] as const));
+  } catch (error) {
+    console.error("follow-up: what falls due before held bills not read; their holds keep their own figures", error instanceof Error ? error.message : error);
+    return new Map();
+  }
+}
+
+/**
  * A milestone locked in escrow is paid by releasing its hold (milestone escrow E4): the workspace's contract
  * and the hold's id. A hold whose amount no longer matches the milestone's is not released: a person decides.
  * Null for a milestone with no funded hold. A read that fails throws: paying without knowing could send a
@@ -3194,10 +3247,21 @@ function heldForProjectFacts(detail: Record<string, unknown>): HeldForProject | 
   return Number.isFinite(needed) ? { projectId: project.id, neededMinor: needed } : null;
 }
 
-/** A hold for want of cash, from its ledger entry's `execution` (reserve cash back R4). */
-function heldForCashFacts(execution: Record<string, unknown>): { needed: number; operating: number; reserve: number } {
+/**
+ * A hold for want of cash, from its ledger entry's `execution` (reserve cash back R4), and, for a bill, the amount it
+ * needs on its day and that day from the entry's `timing`: what fell due before it then may be paid by now, so the
+ * follow-up measures that part again (cash ahead, review of #418).
+ */
+function heldForCashFacts(
+  execution: Record<string, unknown>,
+  timing?: unknown
+): { needed: number; operating: number; reserve: number; amountDue?: number; targetOn?: string } {
   const seen = (execution.cashSeen ?? {}) as Record<string, unknown>;
-  return { needed: num(execution.cashNeededUsdc), operating: num(seen.operating), reserve: num(seen.reserve) };
+  const facts = { needed: num(execution.cashNeededUsdc), operating: num(seen.operating), reserve: num(seen.reserve) };
+  const record = typeof timing === "object" && timing !== null ? (timing as Record<string, unknown>) : null;
+  const amountDue = Number(record?.amountDueAtTarget);
+  const targetOn = typeof record?.targetOn === "string" && /^\d{4}-\d{2}-\d{2}$/.test(record.targetOn) ? record.targetOn : null;
+  return Number.isFinite(amountDue) && amountDue > 0 && targetOn ? { ...facts, amountDue, targetOn } : facts;
 }
 
 /** What the operating wallet and the reserve hold now, as the cycle's reconcile left them. */
@@ -3596,8 +3660,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         // Held only for the spending limit: the USDC it was weighed at (R6).
         heldForBudgetUsdc:
           execution?.heldBecause === HELD_FOR_BUDGET ? num(entry.detail.usdcValue ?? observed.amount) : null,
-        // Held for want of cash: what it needed, and the balances it saw (reserve cash back R4).
-        heldForCash: execution?.heldBecause === HELD_FOR_CASH ? heldForCashFacts(execution) : null,
+        // Held for want of cash: what it needed, and the balances it saw (reserve cash back R4), and its own amount and
+        // day, so what falls due before it is measured again now (cash ahead, review of #418).
+        heldForCash: execution?.heldBecause === HELD_FOR_CASH ? heldForCashFacts(execution, entry.detail.timing) : null,
         // Held in shadow mode for a person to agree: only a person ends it (shadow mode S2).
         heldForVerdict: execution?.heldBecause === HELD_FOR_VERDICT,
         // Decided while the counterparty's new address waited for a person: once confirmed, it is decided again.
@@ -3637,6 +3702,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     // The cash the operating wallet and the reserve hold now, read only when something waits on it (R4).
     const cashHeld = [...factsByInvoice.values()].some((facts) => facts.heldForCash != null);
     const cash = cashHeld ? await cashNow(db) : undefined;
+    // What falls due before each such bill's day now, this bill aside: what came before it when it was held may be
+    // paid since (cash ahead, review of #418). Not read, the hold's own figure stands, as before.
+    const dueBeforeNow = cashHeld ? await dueBeforeHeldBills(db, frozenRows.map((row) => ({ id: row.id, targetOn: factsByInvoice.get(row.id)?.heldForCash?.targetOn ?? null }))) : new Map<string, number>();
     // What the limit leaves now, read only when something waits on it.
     const budgetHeld = [...factsByInvoice.values()].some((facts) => facts.heldForBudgetUsdc != null);
     const room = budgetHeld ? await budget.room() : undefined;
@@ -3678,7 +3746,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           paymentLimit:
             row.counterparties.payment_limit == null ? null : num(row.counterparties.payment_limit),
           ...(room !== undefined ? { budgetRoom: room === null ? null : room.remaining } : {}),
-          ...(cash !== undefined ? { cash } : {}),
+          ...(cash !== undefined ? { cash: dueBeforeNow.has(row.id) ? { ...cash, dueBefore: dueBeforeNow.get(row.id) } : cash } : {}),
           addressUnconfirmed: addressUnconfirmed(row.counterparties.address_changed_at, row.counterparties.address_confirmed_at),
           addressMissing: !row.counterparties.address,
           purchaseOrderRequired: row.counterparties.purchase_order_required,

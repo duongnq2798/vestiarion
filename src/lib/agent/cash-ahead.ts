@@ -47,6 +47,8 @@ export type LatestScheduling =
   | { by: "agent"; shortfall: boolean | null; cashAhead: Pick<CashAhead, "cashCounted" | "dueBefore"> | null };
 
 const CENT_MILLIONTH = 0.0000005;
+/** How much the margin must fall before a bill decided early is measured again: a cent, so rounding never counts. */
+const MARGIN_TOLERANCE = 0.01;
 
 const dayOf = (value: string | null): string | null => {
   if (!value) return null;
@@ -55,18 +57,19 @@ const dayOf = (value: string | null): string | null => {
 };
 
 /**
- * Whether the cash ahead got worse for a bill since a check last decided it before its day (A3): less cash counted,
- * or more falling due before it. Unchanged, the decision then stands until its day.
+ * Whether the cash ahead got worse for a bill since a check last decided it before its day (A3): what is left for it,
+ * the cash counted less what falls due before it, fell by more than a cent. Paying a bill that came before it takes
+ * the same amount off both, and leaves it where it was. Otherwise the decision stands until its day.
  */
 function worseSince(seen: Pick<CashAhead, "cashCounted" | "dueBefore">, now: Pick<CashAhead, "cashCounted" | "dueBefore">): boolean {
-  return now.cashCounted < seen.cashCounted - CENT_MILLIONTH || now.dueBefore.total > seen.dueBefore.total + CENT_MILLIONTH;
+  return now.cashCounted - now.dueBefore.total < seen.cashCounted - seen.dueBefore.total - MARGIN_TOLERANCE;
 }
 
 /**
  * The scheduled bills the cash will not cover on their day, to be decided again now (A1, A3), keyed by id, with what
  * was measured. Only USDC bills scheduled for a day after today and not paid to a bank account are measured. A bill
  * is left to its day when a person moved it there, when its decision scheduled it knowing the cash fell short, or
- * when a check already decided it early and the cash ahead is no worse now.
+ * when a check already decided it early and what is left for it has not fallen since.
  */
 export function shortAhead(input: {
   candidates: readonly AheadCandidate[];
@@ -90,7 +93,8 @@ export function shortAhead(input: {
     const latest = input.latest.get(row.id);
     if (latest?.by === "person") continue;
     if (latest?.by === "agent") {
-      if (latest.cashAhead ? !worseSince(latest.cashAhead, ahead) : latest.shortfall === true) continue;
+      if (latest.shortfall === true) continue;
+      if (latest.cashAhead && !worseSince(latest.cashAhead, ahead)) continue;
     }
     measured.push({ id: row.id, ahead });
   }
