@@ -700,3 +700,14 @@ describe("the wallet will run short (cash short alert S4)", () => {
     });
   });
 });
+
+describe("what is short, up to the cent (live test, Oct 17)", () => {
+  it("rounds what is short up to the cent, so the figure is what to bring in", () => {
+    const item = activityItem(
+      { seq: 1003, action: "cash_short_ahead", detail: { shortOn: "2026-10-23", shortBy: 147.97245, lowestOn: "2026-10-29", need: 238.07245, expectedBy: 40, coveredWithExpected: false, doing: { heldForCash: { count: 3, total: 240 } } } } as ActivityEntry,
+      refs()
+    );
+    expect(item?.text).toBe("Cash runs short on Oct 23: 147.98 USDC short that day, and 238.08 USDC by Oct 29 to pay everything due.");
+    expect(item?.detail).toContain("Customers owe 40.00 USDC by Oct 29");
+  });
+});
