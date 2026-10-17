@@ -123,6 +123,7 @@ export const TENANT_TABLES = [
   "invoice_drafts",
   "workspace_payout_partners", "counterparty_bank_accounts",
   "early_payment_offers", "early_payment_offer_reviews",
+  "customer_discount_offers", "customer_discount_reviews",
 ] as const;
 
 export interface SeededRows {
@@ -421,6 +422,13 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
   );
   // The agent's review of the bill (0126).
   await db.query("insert into early_payment_offer_reviews (org_id, invoice_id, action) values ($1, $2, 'skip')", [orgId, invoiceId]);
+  // A discount offered to the customer on it, and the agent's review (0129).
+  await db.query(
+    `insert into customer_discount_offers (org_id, invoice_id, counterparty_id, discount_pct, amount, offered_amount, token_hash, pay_by, expires_at)
+     values ($1, $2, $3, 1, 1, 0.99, encode(sha256(convert_to($4, 'utf8')), 'hex'), current_date + 1, now() + interval '1 day')`,
+    [orgId, invoiceId, counterpartyId, `discount-${tag}`]
+  );
+  await db.query("insert into customer_discount_reviews (org_id, invoice_id, action) values ($1, $2, 'skip')", [orgId, invoiceId]);
   const key = crypto.generateKeyPairSync("ed25519");
   await appendSignedForOrg(db, orgId, { actor: "system", domain: "system", action: "note", summary: tag, detail: { tag } }, key.privateKey);
   return { counterpartyId, accountId, invoiceId, cycleRunId, idempotencyKey };

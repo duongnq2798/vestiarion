@@ -77,6 +77,8 @@ export const TENANT_TABLES = [
   "early_payment_offers",
   // The agent's one review of each bill it may offer early payment on (migration 0126).
   "early_payment_offer_reviews",
+  // Discounts the agent offers customers for paying early, and its one review of each receivable (migration 0129).
+  "customer_discount_offers", "customer_discount_reviews",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
@@ -99,6 +101,8 @@ export const TENANT_RPCS = [
   "early_payment_offers_ready",
   // Whether migration 0126 has run (agent early-payment offers AO4): it reads nothing.
   "early_payment_offer_reviews_ready",
+  // Whether migration 0129 has run (customer discounts C1): it reads nothing.
+  "customer_discounts_ready",
   // Commissions on money received (commissions C2, C5, C10, C11).
   "set_commission_plan", "end_commission_plan", "record_commissions", "create_commission_payout", "commission_partner_members",
 ] as const;
@@ -138,6 +142,10 @@ export const PLATFORM_RPCS = [
   "create_early_payment_offer", "withdraw_early_payment_offer", "early_payment_offer_preview", "decide_early_payment_offer", "set_agent_early_offers",
   // Suppliers' counters to the agent's offers (0127, offer counters N1, N2, N5).
   "early_payment_offer_by_agent", "counter_early_payment_offer", "answer_early_payment_counter",
+  // Discounts offered to customers for paying early (0129, customer discounts C1, C4-C6): set, made, withdrawn and settled
+  // for a workspace, previewed and decided by token.
+  "set_customer_offers", "create_customer_discount_offer", "withdraw_customer_discount_offer", "customer_discount_preview",
+  "decide_customer_discount", "settle_customer_discount",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 

@@ -204,6 +204,7 @@ describe("the docs navigation", () => {
       ["guides/deals", "Turn a signed deal into a collection schedule"],
       ["guides/customer-portal", "Share a statement with a customer"],
       ["guides/collections", "Chase what customers owe"],
+      ["guides/customer-discounts", "Get paid sooner when cash is short"],
       ["guides/apply-payments", "Apply money received to invoices"],
       ["guides/commissions", "Pay commissions on money received"],
     ]);

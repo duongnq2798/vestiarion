@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { homeChain, networkOfChain } from "@/lib/payee-chains";
+import { paidAtDiscount, payLinkDiscount } from "@/lib/customer-offers/store";
 import { payLinkBalance, previewPayLink, type PayLinkPreview } from "@/lib/platform/pay-links";
 import { linkSocialMetadata } from "@/lib/link-previews";
 
@@ -56,7 +57,11 @@ export default async function PayPage({ params }: PayPageProps) {
         return null;
       })
     : null;
-  const arrived: number | null = balance ? balance.received : balanceRead ? (preview?.amount ?? 0) : null;
+  // A discount the client accepted (customer discounts C5, C6): asked for while it applies; once paid at it, what arrived
+  // was the discounted amount, never the whole invoice. Best effort, as the balance: unread, the invoice is as before.
+  const discount = preview && preview.status === "open" && !balance ? await payLinkDiscount(preview.orgId, preview.invoiceId).catch(() => null) : null;
+  const discounted = preview && preview.status === "received" && !balance ? await paidAtDiscount(preview.orgId, preview.invoiceId).catch(() => null) : null;
+  const arrived: number | null = balance ? balance.received : discounted !== null ? discounted : balanceRead ? (preview?.amount ?? 0) : null;
   const network = preview ? homeChain(networkOfChain(preview.chain)).label : undefined;
 
   return (
@@ -106,7 +111,7 @@ export default async function PayPage({ params }: PayPageProps) {
               )}
             </section>
           ) : (
-            <PayInvoice preview={preview} balance={balance} token={token} />
+            <PayInvoice preview={preview} balance={balance} token={token} discount={discount} />
           )}
         </div>
       </main>

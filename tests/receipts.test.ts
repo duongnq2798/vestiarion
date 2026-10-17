@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
-import { matchTransfer, recordIncomingTransfers, type OpenReceivable } from "@/lib/agent/receipts";
+import { matchTransfer, owedAt, recordIncomingTransfers, type OpenReceivable } from "@/lib/agent/receipts";
 import type { ChainProvider, InboundTransfer } from "@/lib/circle/types";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 import { ARC_MAINNET, ARC_TESTNET } from "@/lib/network";
@@ -63,6 +63,36 @@ describe("matchTransfer", () => {
     expect(matchTransfer(transfer({ amount: 12.49 }), [receivable()])).toBeNull();
     expect(matchTransfer(transfer({ token: "EURC" }), [receivable()])).toBeNull();
     expect(matchTransfer(transfer({ amount: 12.5000001 }), [receivable()])).toEqual({ invoiceId: "inv-1", matchedBy: "sender" });
+  });
+});
+
+describe("matchTransfer at a customer's discount (customer discounts C6)", () => {
+  // 1% off 12.50 until Oct 5 (the deadline's UTC day, stored at noon): 12.375.
+  const discounted = (over: Partial<OpenReceivable> = {}) => receivable({ discount: { pct: 1, deadline: "2026-10-05T12:00:00Z" }, ...over });
+
+  it("matches the discounted amount for money that arrived by the end of the discount's last day", () => {
+    expect(owedAt(discounted(), new Date("2026-10-05T23:59:00Z"))).toEqual({ amount: 12.375, atDiscount: true });
+    expect(matchTransfer(transfer({ amount: 12.375, receivedAt: "2026-10-05T23:59:00Z" }), [discounted()])).toEqual({ invoiceId: "inv-1", matchedBy: "sender", atDiscount: true });
+    expect(matchTransfer(transfer({ amount: 12.375, from: OTHER }), [discounted({ clientAddress: null })])).toEqual({ invoiceId: "inv-1", matchedBy: "amount", atDiscount: true });
+  });
+
+  it("leaves the discounted amount unmatched once the discount's last day has passed", () => {
+    expect(owedAt(discounted(), new Date("2026-10-06T00:00:01Z"))).toEqual({ amount: 12.5, atDiscount: false });
+    expect(matchTransfer(transfer({ amount: 12.375, receivedAt: "2026-10-06T00:00:01Z" }), [discounted()])).toBeNull();
+  });
+
+  it("matches the full amount after the discount ends, as before", () => {
+    expect(matchTransfer(transfer({ amount: 12.5, receivedAt: "2026-10-07T10:00:00Z" }), [discounted()])).toEqual({ invoiceId: "inv-1", matchedBy: "sender" });
+  });
+
+  it("still takes the full amount while the discount applies, with no discount taken, and nothing in between", () => {
+    expect(matchTransfer(transfer({ amount: 12.5, receivedAt: "2026-10-03T10:00:00Z" }), [discounted()])).toEqual({ invoiceId: "inv-1", matchedBy: "sender" });
+    expect(matchTransfer(transfer({ amount: 12.37, receivedAt: "2026-10-03T10:00:00Z" }), [discounted()])).toBeNull();
+  });
+
+  it("keeps a receivable with no discount exactly as it was", () => {
+    expect(owedAt(receivable(), new Date("2026-10-03T10:00:00Z"))).toEqual({ amount: 12.5, atDiscount: false });
+    expect(owedAt(receivable({ discount: null }), new Date("2026-10-03T10:00:00Z"))).toEqual({ amount: 12.5, atDiscount: false });
   });
 });
 

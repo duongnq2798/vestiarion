@@ -2,9 +2,11 @@ import { ALLOCATION_COLUMNS, readAllocationRows, toAllocationRow, type Allocatio
 import { allocationErrorFromDb, fromMicros, receivableBalance, toMicros } from "../allocations/model";
 import type { ChainProvider, InboundTransfer, Stablecoin } from "../circle/types";
 import { sameAddress } from "../counterparty-address";
-import { unwrap, type OrgDb } from "../dal";
+import { currentOrgId } from "../context";
+import { platformDb, unwrap, type OrgDb } from "../dal";
 import { appendLedgerEntry } from "../ledger";
 import { floatAddress } from "../test-usdc";
+import { amountToPay, discountApplies, invoiceDiscount, type InvoiceDiscount } from "./payment-timing";
 
 /**
  * Money in, matched to what was owed (docs/superpowers/specs/2026-10-01-receivables-on-arc-design.md §2).
@@ -22,6 +24,11 @@ import { floatAddress } from "../test-usdc";
  * transfer that is exactly what is still owed on a part-paid receivable is applied to it by the same two rules a whole
  * match trusts, as an allocation row the agent writes and signs (ar_payment_applied). Before 0103 runs there are no
  * such rows, and the match is as it was.
+ *
+ * A receivable a customer accepted a discount on (docs/superpowers/specs/2026-10-17-customer-early-pay-discounts-design.md
+ * C6) is also matched by its discounted amount, for money that arrived by the end of the discount's last day (UTC); it
+ * settles the receivable as any whole match does, and the discount is signed (customer_discount_taken). Money of the
+ * discounted amount that arrives later matches nothing and is left for a person.
  */
 
 export interface OpenReceivable {
@@ -36,6 +43,16 @@ export interface OpenReceivable {
   createdAt: string;
   /** Whether its client was sent a live pay link, the only case a match by amount alone is trusted. */
   hasPayLink: boolean;
+  /** The discount its customer accepted (C5), which lowers what pays it through the discount's last day; null or absent when none. */
+  discount?: InvoiceDiscount | null;
+}
+
+/** What pays a receivable for money that arrived at a time: its discounted amount while its discount applies, else its amount. */
+export function owedAt(receivable: OpenReceivable, arrived: Date): { amount: number; atDiscount: boolean } {
+  if (receivable.discount && discountApplies(receivable.discount, arrived)) {
+    return { amount: amountToPay(receivable.amount, receivable.discount, arrived).amountPaid, atDiscount: true };
+  }
+  return { amount: receivable.amount, atDiscount: false };
 }
 
 export interface ReceiptsResult {
@@ -58,22 +75,36 @@ const LOOKBACK_DAYS = 30;
  * trusted outright; an amount alone only for a receivable whose client was sent its pay link, and only
  * when it is the one such receivable.
  */
-export function matchTransfer(transfer: InboundTransfer, open: OpenReceivable[]): { invoiceId: string; matchedBy: "sender" | "amount" } | null {
+export function matchTransfer(
+  transfer: InboundTransfer,
+  open: OpenReceivable[]
+): { invoiceId: string; matchedBy: "sender" | "amount"; atDiscount?: true } | null {
   const arrived = Date.parse(transfer.receivedAt);
+  const same = (a: number) => Math.abs(a - transfer.amount) < SAME_AMOUNT;
+  // Paid at the discount the customer accepted (C6), while it applies; the full amount always pays it too.
+  const atDiscount = new Set(
+    open.filter((receivable) => {
+      const owed = owedAt(receivable, new Date(arrived));
+      return owed.atDiscount && same(owed.amount);
+    }).map((receivable) => receivable.id)
+  );
   const candidates = open.filter(
     (receivable) =>
-      receivable.currency === transfer.token && Math.abs(receivable.amount - transfer.amount) < SAME_AMOUNT && arrived >= Date.parse(receivable.createdAt)
+      receivable.currency === transfer.token && (same(receivable.amount) || atDiscount.has(receivable.id)) && arrived >= Date.parse(receivable.createdAt)
   );
   if (candidates.length === 0) return null;
+  // At a discount: said only when it is, so a match at the full amount reads exactly as before.
+  const found = (receivable: OpenReceivable, matchedBy: "sender" | "amount") =>
+    atDiscount.has(receivable.id) ? { invoiceId: receivable.id, matchedBy, atDiscount: true as const } : { invoiceId: receivable.id, matchedBy };
   const bySender = transfer.from
     ? candidates.filter((receivable) => receivable.clientAddress && sameAddress(receivable.clientAddress, transfer.from as string))
     : [];
   if (bySender.length > 0) {
     const oldest = [...bySender].sort((a, b) => Date.parse(a.dueDate) - Date.parse(b.dueDate))[0];
-    return { invoiceId: oldest.id, matchedBy: "sender" };
+    return found(oldest, "sender");
   }
   const linked = candidates.filter((receivable) => receivable.hasPayLink);
-  return candidates.length === 1 && linked.length === 1 ? { invoiceId: linked[0].id, matchedBy: "amount" } : null;
+  return candidates.length === 1 && linked.length === 1 ? found(linked[0], "amount") : null;
 }
 
 export async function recordIncomingTransfers(
@@ -136,7 +167,7 @@ export async function recordIncomingTransfers(
   const openRows = unwrap(
     await orgDb
       .from("invoices")
-      .select("id, counterparty_id, amount, currency, due_date, created_at, counterparties(name, address)")
+      .select("id, counterparty_id, amount, currency, due_date, created_at, early_pay_discount_pct, discount_due_date, counterparties(name, address)")
       .eq("direction", "receivable")
       .in("status", ["pending", "matched"])
   ) as unknown as Array<{
@@ -146,6 +177,8 @@ export async function recordIncomingTransfers(
     currency: string | null;
     due_date: string;
     created_at: string;
+    early_pay_discount_pct: string | null;
+    discount_due_date: string | null;
     counterparties: { name: string; address: string | null };
   }>;
   const linked = new Set(
@@ -169,6 +202,7 @@ export async function recordIncomingTransfers(
     clientAddress: row.counterparties.address,
     createdAt: row.created_at,
     hasPayLink: linked.has(row.id),
+    discount: invoiceDiscount(row),
   });
   let open: OpenReceivable[] = openRows.filter((row) => !appliedInvoices.has(row.id)).map(asOpen);
   // A part-paid receivable is matched by what is still owed on it, never by its full amount.
@@ -192,7 +226,8 @@ export async function recordIncomingTransfers(
         allocations,
         false
       );
-      return { ...receivable, amount: fromMicros(outstanding) };
+      // What is still owed, never at a discount: a discount is only offered on a receivable nothing was applied to (C2).
+      return { ...receivable, amount: fromMicros(outstanding), discount: null };
     })
     .filter((receivable) => receivable.amount > 0);
 
@@ -262,13 +297,49 @@ export async function recordIncomingTransfers(
         circleTxId: transfer.circleTxId,
         matchedBy: match.matchedBy,
         receivedAt: transfer.receivedAt,
+        ...(match.atDiscount ? { atDiscount: true } : {}),
       },
     });
+    if (match.atDiscount && receivable.discount) await discountTaken(receivable, transfer);
     open = open.filter((candidate) => candidate.id !== receivable.id);
     matched += 1;
     lines.push({ domain: "ar", message: `Received ${transfer.amount} ${transfer.token} from ${receivable.clientName} on ${provider.network.label} (matched by ${match.matchedBy})` });
   }
   return { recorded: transfers.length, matched, lines };
+}
+
+/**
+ * A receivable paid at the discount its customer accepted (C6): the offer marked paid, and what the discount cost signed
+ * as customer_discount_taken. Best effort after the settlement it follows: a failure is logged, never undoes it.
+ */
+async function discountTaken(receivable: OpenReceivable, transfer: InboundTransfer): Promise<void> {
+  const discount = receivable.discount as InvoiceDiscount;
+  const cost = Number((receivable.amount - transfer.amount).toFixed(6));
+  try {
+    const orgId = currentOrgId();
+    const settled = await platformDb().rpc("settle_customer_discount", { p_org_id: orgId, p_invoice_id: receivable.id });
+    if (settled.error) console.error("customer discount not marked paid", settled.error.message);
+    await appendLedgerEntry({
+      actor: "agent",
+      domain: "ar",
+      action: "customer_discount_taken",
+      summary: `${receivable.clientName} paid ${transfer.amount} ${transfer.token} by ${discount.deadline.slice(0, 10)}, ${discount.pct.toFixed(2)}% off ${receivable.amount}: the discount cost ${cost} ${transfer.token}`,
+      detail: {
+        invoiceId: receivable.id,
+        counterpartyId: receivable.counterpartyId,
+        offerId: settled.error ? null : (settled.data ?? null),
+        amount: receivable.amount,
+        received: transfer.amount,
+        discountPct: discount.pct,
+        discount: cost,
+        payBy: discount.deadline.slice(0, 10),
+        currency: transfer.token,
+        txHash: transfer.txHash,
+      },
+    });
+  } catch (error) {
+    console.error("customer discount not recorded", error instanceof Error ? error.message : "unknown error");
+  }
 }
 
 /**

@@ -12,6 +12,15 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+### Added
+
+- **The agent offers customers a discount to pay early while cash is short.** When bills are held because the operating
+  wallet cannot pay them, an owner or admin can let the agent offer customers a small discount, up to the most they set
+  (0.5% to 5%), to pay an open invoice within 5 days. The model picks which invoices and how much within bounds code
+  sets; the customer accepts from a one-time link, pays the lower amount through the invoice's pay link, and the agent
+  matches it as any payment. The invoice's amount never changes, and after its pay-by day the discount lapses. It needs
+  migration `0129`. [Guide](https://www.vestiarion.xyz/docs/guides/customer-discounts).
+
 ### Changed
 
 - **The landing page's proof says which rule decides.** A paid bill now reads "Rules in code passed it" first, then

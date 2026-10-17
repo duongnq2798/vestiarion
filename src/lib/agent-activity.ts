@@ -20,6 +20,13 @@ export const EARLY_PAYMENT_ACTIONS = [
   "early_payment_offer_withdrawn",
 ] as const;
 
+/**
+ * The agent's discounts to customers for paying early, told as they happen
+ * (docs/superpowers/specs/2026-10-17-customer-early-pay-discounts-design.md): an offer it emailed, and a receivable paid
+ * at the discount. A receivable the agent chose not to offer is not news.
+ */
+export const CUSTOMER_DISCOUNT_ACTIONS = ["customer_discount_offered", "customer_discount_taken"] as const;
+
 /** A supplier's answers to an early-payment offer: recorded by the system, told beside the agent's own entries (A2). */
 export const SUPPLIER_ANSWERS = ["early_payment_offer_accepted", "early_payment_offer_countered"] as const;
 
@@ -39,6 +46,7 @@ export const ACTIVITY_ACTIONS = [
   // Early payment the agent negotiates (offer activity A1): its offers, a supplier's answer or counter, its answer to that,
   // and an offer it withdrew. A person's own offer, and a bill the agent chose not to offer, are not news.
   ...EARLY_PAYMENT_ACTIONS,
+  ...CUSTOMER_DISCOUNT_ACTIONS,
 ] as const;
 
 /** The people's actions on an invoice that give the agent something to decide: how long after one it decided is told. */
@@ -256,6 +264,7 @@ function itemOf(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem, "t
   const invoice = id ? refs.invoices.get(id) : undefined;
   if (!id || !invoice) return null;
   if ((EARLY_PAYMENT_ACTIONS as readonly string[]).includes(entry.action)) return earlyPaymentItem(entry, id, invoice);
+  if ((CUSTOMER_DISCOUNT_ACTIONS as readonly string[]).includes(entry.action)) return customerDiscountItem(entry, id, invoice);
   const item = invoiceItem(entry, refs, id, invoice);
   // A stopped payable is what a person decides: a chat's card names it (Slack design S8). One held for a person's
   // verdict is settled by giving one, in Vestiarion, so a chat draws no card for it (shadow mode S4).
@@ -330,6 +339,41 @@ function earlyPaymentItem(
       if (!byAgent) return null;
       const why = text(detail.reason) === "cash" ? "the cash no longer covers it" : "its email never went";
       return { seq: entry.seq, text: `Withdrew the early-payment offer to ${invoice.name}: ${why}.`, detail: null, tone: "done", ...how, txHash: null };
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * A discount the agent offered a customer for paying early, and a receivable paid at it, in words (customer discounts).
+ * Neither is a decision for a person, so neither is stopped, and no chat draws a card for it.
+ */
+function customerDiscountItem(
+  entry: ActivityEntry,
+  id: string,
+  invoice: ActivityRefs["invoices"] extends ReadonlyMap<string, infer V> ? V : never
+): Omit<ActivityItem, "txUrl" | "network"> | null {
+  const detail = entry.detail;
+  const how = { path: invoiceHref(id), pathLabel: "Open the receivable" };
+  switch (entry.action) {
+    case "customer_discount_offered": {
+      const offered = number(detail.offeredAmount);
+      const payBy = text(detail.payBy);
+      const what = offered !== null ? `${activityAmount(offered, "USDC")}${payBy ? ` by ${payBy}` : ""} instead of ${activityAmount(invoice.amount, invoice.currency)}` : activityAmount(invoice.amount, invoice.currency);
+      return { seq: entry.seq, text: `Offered ${invoice.name} ${pct(detail.discountPct)} off for paying early, by email, while bills are held for cash: ${what}.`, detail: deciderLine(detail), tone: "done", ...how, txHash: null };
+    }
+    case "customer_discount_taken": {
+      const received = number(detail.received);
+      const cost = number(detail.discount);
+      return {
+        seq: entry.seq,
+        text: `${invoice.name} paid ${received !== null ? activityAmount(received, "USDC") : activityAmount(invoice.amount, invoice.currency)} early, at ${pct(detail.discountPct)} off${cost !== null ? `: the discount cost ${activityAmount(cost, "USDC")}` : ""}.`,
+        detail: null,
+        tone: "done",
+        ...how,
+        txHash: text(detail.txHash),
+      };
     }
     default:
       return null;
