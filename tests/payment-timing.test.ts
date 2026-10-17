@@ -4,6 +4,7 @@ import {
   boundPayOn,
   discountApplies,
   invoiceDiscount,
+  noGainInPayingNow,
   planPaymentTiming,
   utcDate,
   type PaymentTimingInput,
@@ -370,5 +371,38 @@ describe("planPaymentTiming", () => {
     expect(result.recommendation).toEqual({ action: "pay" });
     expect(result.targetOn).toBe(result.today);
     expect(result.reason).toContain("due date could not be read");
+  });
+});
+
+describe("a payment now that gains nothing (noGainInPayingNow)", () => {
+  const input: PaymentTimingInput = {
+    now: new Date("2026-10-17T00:30:00.000Z"),
+    amount: 0.2,
+    dueDate: "2026-11-14T12:00:00.000Z",
+    discount: null,
+    operatingBalance: 0.32,
+    reserveApy: 0,
+    reserveBalance: 0,
+    earlierObligations: 0.1,
+  };
+  const timing = (over: Partial<PaymentTimingInput> = {}) => planPaymentTiming({ ...input, ...over });
+
+  it("names the policy's day for a pay with no discount, no shortfall and a due date ahead", () => {
+    expect(noGainInPayingNow({ action: "pay", timing: timing(), scheduledFor: null })).toBe("2026-11-14");
+  });
+
+  it("lets a payment now stand when it gains something, is due, is short, or was set for today", () => {
+    // A discount available today: paying now takes it.
+    expect(noGainInPayingNow({ action: "pay", timing: timing({ discount: { pct: 1, deadline: "2026-10-20T12:00:00.000Z" } }), scheduledFor: null })).toBeNull();
+    // Due today, or overdue: the policy pays now too.
+    expect(noGainInPayingNow({ action: "pay", timing: timing({ dueDate: "2026-10-17T12:00:00.000Z" }), scheduledFor: null })).toBeNull();
+    expect(noGainInPayingNow({ action: "pay", timing: timing({ dueDate: "2026-10-01T12:00:00.000Z" }), scheduledFor: null })).toBeNull();
+    // A shortfall: what happens to it is not a timing question.
+    expect(noGainInPayingNow({ action: "pay", timing: timing({ operatingBalance: 0.05 }), scheduledFor: null })).toBeNull();
+    // Set for today already: by a person from the payment plan, or a day chosen before.
+    expect(noGainInPayingNow({ action: "pay", timing: timing(), scheduledFor: "2026-10-17" })).toBeNull();
+    expect(noGainInPayingNow({ action: "pay", timing: timing(), scheduledFor: "2026-10-15" })).toBeNull();
+    // Any other answer is not this rule's.
+    for (const action of ["schedule", "hold", "request_info", "flag_fraud"]) expect(noGainInPayingNow({ action, timing: timing(), scheduledFor: null })).toBeNull();
   });
 });

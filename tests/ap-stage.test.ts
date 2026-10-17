@@ -1145,7 +1145,8 @@ describe("the cycle's obligation measurement", () => {
 });
 
 describe("the AP stage and the agent's spending limit (outflow budget spec)", () => {
-  const plain = { early_pay_discount_pct: null, discount_due_date: null };
+  // Due already, with no discount: paying now is the policy's answer too, so what is tested here is the payment itself.
+  const plain = { early_pay_discount_pct: null, discount_due_date: null, due_date: "2026-10-01T12:00:00+00:00" };
   const northwind = () => payable({ amount: "300", ...plain });
   const contoso = () =>
     payable({
@@ -1196,7 +1197,7 @@ describe("the AP stage and the agent's spending limit (outflow budget spec)", ()
   it("schedules past the limit, since a scheduled payable is decided again on its day", async () => {
     today("2026-10-02T09:00:00.000Z");
     model(() => ({ action: "schedule", payOn: "2026-10-20", reasoning: "Pay on the due date.", confidence: 0.9 }));
-    const { fake, chain, stage } = apFake({ book: [northwind()], budget: { daily_usdc: "10", weekly_usdc: null } });
+    const { fake, chain, stage } = apFake({ book: [{ ...northwind(), due_date: "2026-10-31T12:00:00+00:00" }], budget: { daily_usdc: "10", weekly_usdc: null } });
 
     await stage();
 
@@ -1218,7 +1219,8 @@ describe("the AP stage and the agent's spending limit (outflow budget spec)", ()
 });
 
 describe("the AP stage and the spending limit enforced on Arc (onchain spending limit spec)", () => {
-  const plain = { early_pay_discount_pct: null, discount_due_date: null };
+  // Due already, with no discount: paying now is the policy's answer too, so what is tested here is the payment itself.
+  const plain = { early_pay_discount_pct: null, discount_due_date: null, due_date: "2026-10-01T12:00:00+00:00" };
   const northwind = () => payable({ amount: "300", ...plain });
   const payNow = () => model(() => ({ action: "pay", reasoning: "Matched and within the limit; paying now.", confidence: 0.9 }));
   const LIMIT = { contract: "0x11a1700000000000000000000000000000001111", agentWalletId: "wallet-agent", agentAddress: "0xA9e7000000000000000000000000000000000A9e" };
@@ -1295,7 +1297,7 @@ describe("the AP stage and the spending limit enforced on Arc (onchain spending 
     today("2026-10-03T09:00:00.000Z");
     model(() => ({ action: "schedule", payOn: "2026-10-20", reasoning: "Pay on the due date.", confidence: 0.9 }));
     const verdict = vi.fn(async () => ({ state: "allowed" as const }));
-    const { fake, chain, stage } = apFake({ book: [northwind()], onChainLimit: onChainLimitGate({ read: async () => LIMIT, verdict }) });
+    const { fake, chain, stage } = apFake({ book: [{ ...northwind(), due_date: "2026-10-31T12:00:00+00:00" }], onChainLimit: onChainLimitGate({ read: async () => LIMIT, verdict }) });
 
     await stage();
 
@@ -1609,7 +1611,8 @@ describe("the AP stage and the first payment to an address sent on GitHub", () =
 
 
 describe("the AP stage and a counterparty with no payment address", () => {
-  const plain = { early_pay_discount_pct: null, discount_due_date: null };
+  // Due already, with no discount: paying now is the policy's answer too, so what is tested here is the payment itself.
+  const plain = { early_pay_discount_pct: null, discount_due_date: null, due_date: "2026-10-01T12:00:00+00:00" };
   const noAddress = () => payable({ amount: "300", ...plain, counterparties: counterparty({ address: null }) });
   const payNow = () => model(() => ({ action: "pay", reasoning: "Matched and within the limit; paying now.", confidence: 0.9 }));
 
@@ -1648,7 +1651,8 @@ describe("the AP stage and a counterparty with no payment address", () => {
 
 
 describe("the AP stage and two approvals above the workspace's figure (two approvals T3)", () => {
-  const plain = { early_pay_discount_pct: null, discount_due_date: null };
+  // Due already, with no discount: paying now is the policy's answer too, so what is tested here is the payment itself.
+  const plain = { early_pay_discount_pct: null, discount_due_date: null, due_date: "2026-10-01T12:00:00+00:00" };
   const northwind = () => payable({ amount: "300", ...plain });
   const contoso = () =>
     payable({
@@ -1708,7 +1712,8 @@ describe("the AP stage and two approvals above the workspace's figure (two appro
 
 
 describe("the AP stage in shadow mode (shadow mode S2)", () => {
-  const plain = { early_pay_discount_pct: null, discount_due_date: null };
+  // Due already, with no discount: paying now is the policy's answer too, so what is tested here is the payment itself.
+  const plain = { early_pay_discount_pct: null, discount_due_date: null, due_date: "2026-10-01T12:00:00+00:00" };
   const northwind = () => payable({ amount: "300", ...plain });
   const contoso = () =>
     payable({
@@ -1766,7 +1771,7 @@ describe("the AP stage in shadow mode (shadow mode S2)", () => {
   it("leaves a schedule standing: on its day the payment is held instead", async () => {
     today("2026-10-02T09:00:00.000Z");
     model(() => ({ action: "schedule", payOn: "2026-10-05", reasoning: "Pay on its due date, not before.", confidence: 0.8 }));
-    const { fake, chain, stage } = apFake({ book: [northwind()], shadow: "VND" });
+    const { fake, chain, stage } = apFake({ book: [{ ...northwind(), due_date: "2026-10-31T12:00:00+00:00" }], shadow: "VND" });
 
     await stage();
 
@@ -1792,7 +1797,8 @@ describe("the AP stage in shadow mode (shadow mode S2)", () => {
 });
 
 describe("the AP stage in shadow mode, short of cash (shadow mode review M1)", () => {
-  const plain = { early_pay_discount_pct: null, discount_due_date: null };
+  // Due already, with no discount: paying now is the policy's answer too, so what is tested here is the payment itself.
+  const plain = { early_pay_discount_pct: null, discount_due_date: null, due_date: "2026-10-01T12:00:00+00:00" };
   it("keeps the hold for a person's verdict, not for want of cash, when the model pays what the wallet cannot cover", async () => {
     today("2026-10-02T09:00:00.000Z");
     model(() => ({ action: "pay", reasoning: "Matched and within the limit; paying now.", confidence: 0.9 }));
@@ -1895,5 +1901,44 @@ describe("the AP stage and a payment whose send Circle never answered", () => {
     expect(invoicePatches(fake.requests)).toHaveLength(0);
     expect(row.status).toBe("failed");
     expect(ledger(fake.requests)[0].p_detail).toMatchObject({ reconciled: false, execution: { resultingStatus: "matched" } });
+  });
+});
+
+describe("a payment now that gains nothing (payment timing §1)", () => {
+  const plain = { early_pay_discount_pct: null, discount_due_date: null };
+  const payNow = () => model(() => ({ action: "pay", reasoning: "No early-payment discount, so paying on the Oct 31 due date keeps the cash available longer.", confidence: 0.95 }));
+
+  it("is scheduled for the policy's day when there is no discount and no shortfall, and the entry says why", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    payNow();
+    const { fake, chain, lines, stage } = apFake({ book: [payable(plain)] });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    const [patch] = invoicePatches(fake.requests);
+    expect(patch.body).toMatchObject({ status: "scheduled", scheduled_for: "2026-10-31T00:00:00.000Z" });
+    expect((patch.body as Record<string, string>).agent_reasoning).toContain(
+      "[The model chose to pay today; with no early-payment discount and no shortfall, nothing is gained by it, so code schedules it for Oct 31, 2026.]"
+    );
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_action).toBe("ap_schedule");
+    expect(entry.p_detail).toMatchObject({ decision: { action: "schedule", payOn: "2026-10-31" }, timingRule: "pay.no_gain" });
+    expect(lines[0].message).toBe("Northwind: scheduled for 2026-10-31 (400 USDC)");
+  });
+
+  it("is paid as the model chose when a discount is available today, or the bill was set for today", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    payNow();
+    const discounted = apFake({ book: [payable()] });
+    await discounted.stage();
+    expect(discounted.chain.transfers.map((t) => t.amount)).toEqual([392]);
+
+    // Moved to today by a person from the payment plan: paid on the day it was set for.
+    today("2026-10-11T09:00:00.000Z");
+    payNow();
+    const setForToday = apFake({ book: [scheduledPayable({ ...plain, scheduled_for: "2026-10-11T00:00:00+00:00" })] });
+    await setForToday.stage();
+    expect(setForToday.chain.transfers.map((t) => t.amount)).toEqual([400]);
   });
 });

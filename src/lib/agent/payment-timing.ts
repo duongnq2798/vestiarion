@@ -181,6 +181,20 @@ export function boundPayOn(
   return { action: "schedule", payOn: effective, timingRule: clamped ? "payon.after_due" : null };
 }
 
+/**
+ * A payment now the model chose where nothing is gained by it (docs/superpowers/specs/2026-09-30-payment-timing-design.md
+ * §1): no early-payment discount available today, no shortfall, and the policy's day later than today. Code then
+ * schedules it for that day, which it returns; null when the payment now stands. A bill already set for today or an
+ * earlier day (a person moved it there from the payment plan, or a day chosen before has come) is paid as set.
+ */
+export function noGainInPayingNow(input: { action: string; timing: PaymentTiming; scheduledFor: string | null }): string | null {
+  const { action, timing, scheduledFor } = input;
+  if (action !== "pay" || timing.recommendation.action !== "schedule") return null;
+  if (timing.discountValue !== null || timing.shortfall) return null;
+  if (scheduledFor !== null && scheduledFor <= timing.today) return null;
+  return timing.recommendation.payOn > timing.today ? timing.recommendation.payOn : null;
+}
+
 function buildReason(args: {
   input: PaymentTimingInput;
   today: string;

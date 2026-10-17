@@ -72,10 +72,11 @@ function vendor(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** Due today, with no discount: paying now is the policy's answer too, so what is tested here is the payment itself. */
 function payable(overrides: Record<string, unknown> = {}) {
   return {
     id: INVOICE_ID, direction: "payable", status: "pending", amount: "100", currency: "EURC", memo: "Linen samples", po_reference: "PO-7701",
-    goods_received: true, due_date: "2026-10-03T12:00:00+00:00", counterparty_id: VENDOR,
+    goods_received: true, due_date: "2026-10-01T12:00:00+00:00", counterparty_id: VENDOR,
     agent_reasoning: null, tx_ref: null, decided_at: null, scheduled_for: null, paid_amount: null,
     early_pay_discount_pct: null, discount_due_date: null, created_at: "2026-10-01T08:00:00Z",
     counterparties: vendor(),
@@ -197,7 +198,7 @@ describe("a EURC payable inside its limit at the quoted rate", () => {
 
   it("is weighed with EURC money only: the reserve, and USDC payables due first, do not count (P1)", async () => {
     model("pay");
-    const usdcFirst = { ...payable({ id: USDC_ID, currency: "USDC", amount: "900", po_reference: "PO-1", due_date: "2026-10-02T12:00:00+00:00" }) };
+    const usdcFirst = { ...payable({ id: USDC_ID, currency: "USDC", amount: "900", po_reference: "PO-1", due_date: "2026-09-30T12:00:00+00:00" }) };
     const { stage } = apFake({ book: [usdcFirst, payable()] });
 
     await stage();
