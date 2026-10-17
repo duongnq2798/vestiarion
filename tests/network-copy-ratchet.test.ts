@@ -80,6 +80,8 @@ const ALLOWED: Record<string, number> = {
   "src/components/MirrorAddressControl.tsx": 1,
   "src/app/o/[slug]/counterparties/page.tsx": 1,
   "src/lib/mirror-address.ts": 2,
+  // The weekly brief in shadow mode (weekly brief W6): what agreeing paid, and that nothing did, both only on Arc testnet.
+  "src/lib/email/weekly-brief.ts": 2,
   // Passkey wallets, offered only to a payee on Arc testnet (`modularWallets`).
   "src/components/payee/PasskeyWalletOption.tsx": 1,
   "src/components/wallet/PasskeyWallet.tsx": 1,
