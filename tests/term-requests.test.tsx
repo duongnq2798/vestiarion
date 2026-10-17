@@ -267,6 +267,19 @@ describe("coverage worked out by code (live test fix, Oct 17)", () => {
   });
 });
 
+describe("a supplier who countered (live test fix, Oct 17)", () => {
+  const earlier = (over: Record<string, unknown>) => ({ id: "request-old", invoice_id: "other-bill", counterparty_id: SUPPLIER, status: "declined", days: 5, due_date: "2026-10-23T12:00:00+00:00", decided_at: "2026-10-17T08:39:29Z", expires_at: "2026-10-22T09:00:00+00:00", ...over });
+
+  it("is asked again about another bill when the agent declined its counter, but not within 30 days of declining itself", async () => {
+    const countered = world({ requests: [earlier({ counter_days: 3 })], sent: ["request-old"] });
+    await run(countered);
+    expect(countered.requests.some((r) => r.path === "/rest/v1/rpc/create_term_request")).toBe(true);
+    const declined = world({ requests: [earlier({ counter_days: null })], sent: ["request-old"] });
+    await run(declined);
+    expect(declined.requests.some((r) => r.path === "/rest/v1/rpc/create_term_request")).toBe(false);
+  });
+});
+
 describe("a request no longer needed (follow-up F1, F2)", () => {
   const out = { id: "request-0", invoice_id: INVOICE, counterparty_id: SUPPLIER, status: "open", days: 14, due_date: "2026-10-20T12:00:00+00:00", decided_at: null, expires_at: "2026-10-22T09:00:00+00:00" };
   const bill = (over: Record<string, unknown> = {}) => ({ id: INVOICE, status: "held", amount: "300", currency: "USDC", due_date: "2026-10-20T12:00:00+00:00", memo: "LP-130 brochures", counterparties: { name: "Lumen Print Co.", notice_email: "ap@lumen.example" }, ...over });

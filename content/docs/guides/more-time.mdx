@@ -21,7 +21,7 @@ Each cycle, after it has decided its bills, the agent looks at each bill held be
 
 - the bill falls due within 14 days, or is past due by no more than 7;
 - the bill never had a request;
-- the supplier has an email on file, the one payment notices go to, has no other request open, and declined no request in the last 30 days.
+- the supplier has an email on file, the one payment notices go to, has no other request open, and declined no request in the last 30 days. A request the supplier answered with fewer days, which the agent then turned down, is not the supplier's decline and does not count.
 
 The model then decides whether to ask, and for how many days, from the bill, its due date, the operating USDC, what else falls due in the next 30 days, what customers owe by day, and what the supplier did with earlier requests. The written policy, given to the model as a reference, asks for the days until what customers owe covers the bill after what falls due before it, from 7 up to the most you set, or for the most when it never does. Without a model, the agent asks for that. Code keeps the days from 3 to the most you set, whatever the model chose. At most 3 requests go out a cycle.
 

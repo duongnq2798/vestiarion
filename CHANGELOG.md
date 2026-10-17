@@ -54,6 +54,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Fixed
 
+- **A supplier whose counter the agent declined can be asked for more time again.** The agent's no to a counter was
+  counted as the supplier declining, which kept the agent from asking that supplier about any other bill for 30 days.
+  Only a request the supplier itself declines now waits.
 - **Leaving Bills & receivables no longer asks about a bill already added.** After New ▾ added a bill or an invoice,
   the form cleared itself, a select going back to its default counted as an edit, and the browser asked "Leave site?".
   The form now stays clean after a save until something is typed into it again.
