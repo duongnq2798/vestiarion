@@ -27,6 +27,15 @@ export const EARLY_PAYMENT_ACTIONS = [
  */
 export const CUSTOMER_DISCOUNT_ACTIONS = ["customer_discount_offered", "customer_discount_taken"] as const;
 
+/**
+ * The agent's requests for more time, told as they happen (docs/superpowers/specs/2026-10-17-term-requests-follow-up-design.md
+ * F3): a request it sent, a supplier's answer, and a request it withdrew. A bill it chose not to ask about is not news.
+ */
+export const TERM_REQUEST_ACTIONS = ["term_request_sent", "term_request_accepted", "term_request_declined", "term_request_withdrawn"] as const;
+
+/** A supplier's answers to a request for more time: recorded by the system, told beside the agent's own entries (F3). */
+export const TERM_ANSWERS = ["term_request_accepted", "term_request_declined"] as const;
+
 /** A supplier's answers to an early-payment offer: recorded by the system, told beside the agent's own entries (A2). */
 export const SUPPLIER_ANSWERS = ["early_payment_offer_accepted", "early_payment_offer_countered"] as const;
 
@@ -47,6 +56,8 @@ export const ACTIVITY_ACTIONS = [
   // and an offer it withdrew. A person's own offer, and a bill the agent chose not to offer, are not news.
   ...EARLY_PAYMENT_ACTIONS,
   ...CUSTOMER_DISCOUNT_ACTIONS,
+  // Requests for more time (term requests follow-up F3).
+  ...TERM_REQUEST_ACTIONS,
 ] as const;
 
 /** The people's actions on an invoice that give the agent something to decide: how long after one it decided is told. */
@@ -264,6 +275,7 @@ function itemOf(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem, "t
   const invoice = id ? refs.invoices.get(id) : undefined;
   if (!id || !invoice) return null;
   if ((EARLY_PAYMENT_ACTIONS as readonly string[]).includes(entry.action)) return earlyPaymentItem(entry, id, invoice);
+  if ((TERM_REQUEST_ACTIONS as readonly string[]).includes(entry.action)) return termRequestItem(entry, id, invoice);
   if ((CUSTOMER_DISCOUNT_ACTIONS as readonly string[]).includes(entry.action)) return customerDiscountItem(entry, id, invoice);
   const item = invoiceItem(entry, refs, id, invoice);
   // A stopped payable is what a person decides: a chat's card names it (Slack design S8). One held for a person's
@@ -374,6 +386,40 @@ function customerDiscountItem(
         ...how,
         txHash: text(detail.txHash),
       };
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * A request for more time, in words (F3): the agent's request and who decided it, a supplier's answer, and a request the
+ * agent withdrew, with why. None is a decision for a person, so none is stopped, and no chat draws a card for it; a
+ * declined request leaves the bill held, which its own card already says.
+ */
+function termRequestItem(
+  entry: ActivityEntry,
+  id: string,
+  invoice: ActivityRefs["invoices"] extends ReadonlyMap<string, infer V> ? V : never
+): Omit<ActivityItem, "txUrl" | "network"> | null {
+  const detail = entry.detail;
+  const amount = activityAmount(invoice.amount, invoice.currency);
+  const days = number(detail.days);
+  const dayWord = (n: number | null) => (n === null ? "more time" : n === 1 ? "1 more day" : `${n} more days`);
+  const newDue = text(detail.newDueDate)?.slice(0, 10) ?? null;
+  const how = { path: invoiceHref(id, "trail"), pathLabel: "How it decided" };
+  switch (entry.action) {
+    case "term_request_sent":
+      return { seq: entry.seq, text: `Asked ${invoice.name} for ${dayWord(days)} on ${amount}, by email${newDue ? `: due ${newDue}` : ""}.`, detail: deciderLine(detail), tone: "done", ...how, txHash: null };
+    case "term_request_accepted":
+      return { seq: entry.seq, text: `${invoice.name} agreed to ${dayWord(days)}${newDue ? `: the bill now falls due ${newDue}` : ""}.`, detail: null, tone: "done", ...how, txHash: null };
+    case "term_request_declined":
+      return { seq: entry.seq, text: `${invoice.name} declined the request for more time: the bill keeps its due date and waits for a person.`, detail: null, tone: "done", ...how, txHash: null };
+    case "term_request_withdrawn": {
+      const reason = text(detail.reason);
+      const why = reason === "paid" ? "the bill is being paid on time" : reason === "not_needed" ? "it is no longer needed" : "its email never went";
+      const told = detail.supplierTold === true ? ", and told them" : "";
+      return { seq: entry.seq, text: `Withdrew the request for more time to ${invoice.name}: ${why}${told}.`, detail: null, tone: "done", ...how, txHash: null };
     }
     default:
       return null;

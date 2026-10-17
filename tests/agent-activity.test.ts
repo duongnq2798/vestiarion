@@ -457,7 +457,7 @@ describe("reading the agent's activity", () => {
     expect(triggers.params.get("action")).toBe("in.(create_invoice,invoice_details_added,approval_returned)");
     const asked = client.requests.find((r) => r.path === "/rest/v1/ledger_entries" && r.params.get("select") === "seq,ts,action,detail")!;
     // The agent's entries, and a supplier's answer to its early-payment offer, which the system records (offer activity A2).
-    expect(asked.params.get("or")).toBe("(actor.eq.agent,and(actor.eq.system,action.in.(early_payment_offer_accepted,early_payment_offer_countered)))");
+    expect(asked.params.get("or")).toBe("(actor.eq.agent,and(actor.eq.system,action.in.(early_payment_offer_accepted,early_payment_offer_countered,term_request_accepted,term_request_declined)))");
     expect(asked.params.get("seq")).toBe("gt.967");
     expect(asked.params.get("action")).toContain("ap_pay");
     expect(asked.params.get("action")).not.toContain("cycle_complete");
@@ -607,5 +607,33 @@ describe("the agent's discounts to customers (customer discounts)", () => {
     expect(ACTIVITY_ACTIONS).toContain("customer_discount_taken");
     expect(ACTIVITY_ACTIONS).not.toContain("customer_discount_skipped");
     expect(activityItem(discount("customer_discount_offered", { discountPct: 1, offeredAmount: 0.297 }), refs())).not.toHaveProperty("invoiceId");
+  });
+});
+
+describe("the agent's requests for more time (term requests follow-up F3)", () => {
+  const term = (action: string, detail: Record<string, unknown>) => entry(action, { requestId: "request-1", ...detail });
+  const how = { path: `/invoices?open=${INVOICE}#trail-${INVOICE}`, pathLabel: "How it decided" };
+
+  it("says the request it sent and who decided it, and the supplier's answer", () => {
+    expect(activityItem(term("term_request_sent", { via: "agent", days: 14, newDueDate: "2026-11-03T12:00:00+00:00", decisionMode: "deepseek", agreedWithReference: true }), refs({ currency: "USDC" }))).toMatchObject({
+      text: "Asked Jiren for 14 more days on 0.30 USDC, by email: due 2026-11-03.",
+      detail: "DeepSeek decided, as the written policy would.",
+      tone: "done",
+      ...how,
+    });
+    expect(activityItem(term("term_request_accepted", { days: 7, newDueDate: "2026-10-27T12:00:00+00:00" }), refs())).toMatchObject({ text: "Jiren agreed to 7 more days: the bill now falls due 2026-10-27.", tone: "done" });
+    expect(activityItem(term("term_request_declined", {}), refs())).toMatchObject({ text: "Jiren declined the request for more time: the bill keeps its due date and waits for a person." });
+  });
+
+  it("says why it withdrew a request, and whether the supplier was told", () => {
+    expect(activityItem(term("term_request_withdrawn", { via: "agent", reason: "paid", supplierTold: true }), refs())).toMatchObject({ text: "Withdrew the request for more time to Jiren: the bill is being paid on time, and told them." });
+    expect(activityItem(term("term_request_withdrawn", { via: "agent", reason: "not_needed", supplierTold: false }), refs())).toMatchObject({ text: "Withdrew the request for more time to Jiren: it is no longer needed." });
+    expect(activityItem(term("term_request_withdrawn", { via: "agent", reason: "not_emailed" }), refs())).toMatchObject({ text: "Withdrew the request for more time to Jiren: its email never went." });
+  });
+
+  it("tells every step but a skip, and none is a card for a chat", () => {
+    for (const action of ["term_request_sent", "term_request_accepted", "term_request_declined", "term_request_withdrawn"]) expect(ACTIVITY_ACTIONS).toContain(action);
+    expect(ACTIVITY_ACTIONS).not.toContain("term_request_skipped");
+    expect(activityItem(term("term_request_declined", {}), refs())).not.toHaveProperty("invoiceId");
   });
 });

@@ -1,5 +1,9 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-17: Requests for more time withdrawn when no longer needed
+
+- **`term_request_withdrawn`** may now carry `reason: "paid"`, when the bill is being paid, or `reason: "not_needed"`, when it is no longer held for want of cash, beside `"not_emailed"`. These carry `counterpartyId`, `days`, `supplierTold` (whether the supplier was emailed that the request is withdrawn) and `to` (the address, masked). Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-17: The agent asks suppliers for more time
 
 - An owner or admin can let the agent ask a supplier for more time on a bill held for want of cash. Each step is a new entry, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:
