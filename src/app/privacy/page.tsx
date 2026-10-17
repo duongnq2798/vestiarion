@@ -226,7 +226,8 @@ export default function PrivacyPage() {
               <li>
                 when the cash cannot cover every bill due within 14 days, to choose which are paid first: each such bill&apos;s payee name, amount, due date
                 and days left, whether it is a recurring payment and how often, its memo and purchase order, an early-payment discount it would lose, its
-                status, and how many requests for more time its supplier was sent, agreed to and declined; the cash the agent can pay with, what is
+                status, and how many requests for more time its supplier was sent and how each ended (agreed, declined by the supplier, fewer days the
+                agent declined, withdrawn by the agent, still open); the cash the agent can pay with, what is
                 already committed, and the written policy&apos;s order. Code pays the bills in the order chosen only while the cash lasts;
               </li>
               <li>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { boundOrder, competingBills, needsPlan, planFingerprint, planFrom, planOf, referenceOrder, sameSplit, type PriorityRow } from "@/lib/agent/cash-priority";
+import { supplierRequestsOf } from "@/lib/agent/cash-priority-plan";
 
 /**
  * Which bill first when the cash cannot cover them all (docs/superpowers/specs/2026-10-18-cash-priority-design.md P1-P3,
@@ -96,5 +97,25 @@ describe("the plan, signed and read back (P5)", () => {
     });
     expect(planOf({ fingerprint: "f1" })).toBeNull();
     expect(planOf(null)).toBeNull();
+  });
+});
+
+
+describe("what a supplier did with earlier requests for more time (live test, Oct 17)", () => {
+  it("names every outcome, so a request the agent withdrew or whose counter it declined is not read as the supplier's", () => {
+    // Cobalt Cloud on Oct 17: it proposed 3 days and the agent declined them; the agent withdrew the next request when cash came in.
+    expect(supplierRequestsOf([{ status: "declined", counter_days: 3 }, { status: "withdrawn", counter_days: null }])).toEqual({
+      made: 2,
+      agreed: 0,
+      declinedBySupplier: 0,
+      supplierProposedFewerDaysWhichTheAgentDeclined: 1,
+      withdrawnByTheAgentBeforeAnAnswer: 1,
+      stillOpen: 0,
+    });
+    expect(supplierRequestsOf([{ status: "accepted", counter_days: null }, { status: "declined", counter_days: null }, { status: "open", counter_days: null }])).toMatchObject({
+      agreed: 1,
+      declinedBySupplier: 1,
+      stillOpen: 1,
+    });
   });
 });

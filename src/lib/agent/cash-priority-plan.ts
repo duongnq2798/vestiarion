@@ -25,7 +25,7 @@ const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximu
 
 export const PRIORITY_SYSTEM_PROMPT = `You are the cash step of a treasury agent for a small business. The cash it can pay with cannot cover every bill below, all due within ${PRIORITY_HORIZON_DAYS} days or overdue. Decide the order they are paid in: code pays them in your order while the cash lasts, and the rest wait. A bill that waits is held for a person, the agent asks its supplier for more time and customers to pay sooner, and it is decided again once cash comes in.
 
-- Put first what costs the business most to pay late: a recurring service it runs on (hosting, storage, software, rent) can be stopped; an early-payment discount is lost after its day; a supplier who already declined more time will not wait again; a bill already overdue hurts more each day.
+- Put first what costs the business most to pay late: a recurring service it runs on (hosting, storage, software, rent) can be stopped; an early-payment discount is lost after its day; a supplier who itself declined more time before (supplierRequestsForMoreTime.declinedBySupplier) will not wait again; a bill already overdue hurts more each day. A request the agent withdrew, or whose fewer days the agent declined, says nothing about the supplier's patience: say only what the counts show.
 - Put later what can wait: a one-off purchase, a supplier who agreed to more time before, a bill due later.
 - Paying two small bills can keep two suppliers whole where one large bill keeps one.
 - The written policy's order, given as a reference, pays the bill due first, the smaller first on the same day. Follow it unless the facts say otherwise, and say why when you depart from it.
@@ -164,7 +164,7 @@ export async function cashPriority(input: { db: OrgDb; now: Date; operatingBalan
       purchaseOrder: row.po_reference,
       earlyPayDiscount: pct && row.discount_due_date ? { percent: pct, until: row.discount_due_date.slice(0, 10) } : null,
       status: bill.status === "held" ? "held for want of cash" : bill.status,
-      supplierRequestsForMoreTime: history.get(row.counterparty_id) ?? { made: 0, accepted: 0, declined: 0 },
+      supplierRequestsForMoreTime: history.get(row.counterparty_id) ?? NO_REQUESTS,
     };
   });
   const policy: OrderDecision = {
@@ -257,18 +257,44 @@ async function reopenKept(db: OrgDb, plan: PriorityPlan, byId: ReadonlyMap<strin
   return lines;
 }
 
-/** What each supplier did with earlier requests for more time (P2): best effort, none before migration 0128. */
-async function supplierHistory(db: OrgDb, counterpartyIds: string[]): Promise<Map<string, { made: number; accepted: number; declined: number }>> {
-  const history = new Map<string, { made: number; accepted: number; declined: number }>();
+/**
+ * What happened to each earlier request for more time a supplier was sent (P2), every outcome named: told only how
+ * many were made and how many agreed or declined, the model read the others as a supplier's yes, then as its no, in
+ * the live test (Oct 17). Best effort, none before migration 0128.
+ */
+export interface SupplierRequests {
+  made: number;
+  agreed: number;
+  declinedBySupplier: number;
+  supplierProposedFewerDaysWhichTheAgentDeclined: number;
+  withdrawnByTheAgentBeforeAnAnswer: number;
+  stillOpen: number;
+}
+
+const NO_REQUESTS: SupplierRequests = { made: 0, agreed: 0, declinedBySupplier: 0, supplierProposedFewerDaysWhichTheAgentDeclined: 0, withdrawnByTheAgentBeforeAnAnswer: 0, stillOpen: 0 };
+
+export function supplierRequestsOf(rows: ReadonlyArray<{ status: string; counter_days: number | null }>): SupplierRequests {
+  const counted = { ...NO_REQUESTS };
+  for (const row of rows) {
+    counted.made += 1;
+    if (row.status === "accepted") counted.agreed += 1;
+    else if (row.status === "declined" && row.counter_days == null) counted.declinedBySupplier += 1;
+    else if (row.status === "declined") counted.supplierProposedFewerDaysWhichTheAgentDeclined += 1;
+    else if (row.status === "withdrawn") counted.withdrawnByTheAgentBeforeAnAnswer += 1;
+    else counted.stillOpen += 1;
+  }
+  return counted;
+}
+
+async function supplierHistory(db: OrgDb, counterpartyIds: string[]): Promise<Map<string, SupplierRequests>> {
+  const history = new Map<string, SupplierRequests>();
   if (counterpartyIds.length === 0) return history;
   const read = await db.from("payment_term_requests").select("counterparty_id, status, counter_days").in("counterparty_id", counterpartyIds).limit(1000);
   if (read.error) return history;
+  const byCounterparty = new Map<string, Array<{ status: string; counter_days: number | null }>>();
   for (const row of (read.data ?? []) as Array<{ counterparty_id: string; status: string; counter_days: number | null }>) {
-    const entry = history.get(row.counterparty_id) ?? { made: 0, accepted: 0, declined: 0 };
-    entry.made += 1;
-    if (row.status === "accepted") entry.accepted += 1;
-    if (row.status === "declined" && row.counter_days == null) entry.declined += 1;
-    history.set(row.counterparty_id, entry);
+    byCounterparty.set(row.counterparty_id, [...(byCounterparty.get(row.counterparty_id) ?? []), row]);
   }
+  for (const [id, rows] of byCounterparty) history.set(id, supplierRequestsOf(rows));
   return history;
 }

@@ -103,6 +103,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Fixed
 
+- **The agent no longer guesses how a supplier answered earlier requests for more time.** Choosing which bills to pay
+  first, the model was told how many requests a supplier was sent, agreed to and declined; in the live test it read a
+  request the agent withdrew, and a counter the agent declined, first as the supplier's yes, then as its no. It is now
+  told each outcome, and to say only what the counts show.
+
 - **Public receipts and evidence pages check Arc testnet again.** Arc's public testnet RPC is now
   `https://rpc.testnet.arc.io`; the old `rpc.testnet.arc.network` name stopped resolving, so receipts said one check
   could not be made and "Why it was paid" could not open the payment. Every Arc testnet read made without
