@@ -48,6 +48,12 @@ export const TERM_REQUEST_ACTIONS = [
  */
 export const CASH_ALERT_ACTIONS = ["cash_short_ahead", "cash_short_cleared"] as const;
 
+/**
+ * The agent's choice of which bills the cash goes to first when it cannot cover them all
+ * (docs/superpowers/specs/2026-10-18-cash-priority-design.md P6): told when it is made, not each cycle it is reused.
+ */
+export const CASH_PRIORITY_ACTIONS = ["cash_priority_set"] as const;
+
 /** A supplier's answers to a request for more time: recorded by the system, told beside the agent's own entries (F3). */
 export const TERM_ANSWERS = ["term_request_accepted", "term_request_declined", "term_request_countered"] as const;
 
@@ -75,6 +81,8 @@ export const ACTIVITY_ACTIONS = [
   ...TERM_REQUEST_ACTIONS,
   // The wallet will run short, or no longer will (cash short alert S4).
   ...CASH_ALERT_ACTIONS,
+  // Which bills the cash goes to first (cash priority P6).
+  ...CASH_PRIORITY_ACTIONS,
 ] as const;
 
 /** The people's actions on an invoice that give the agent something to decide: how long after one it decided is told. */
@@ -249,6 +257,7 @@ function itemOf(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem, "t
   if (!(ACTIVITY_ACTIONS as readonly string[]).includes(entry.action)) return null;
   if (entry.action === "payment_stuck") return stuckItem(entry, refs);
   if ((CASH_ALERT_ACTIONS as readonly string[]).includes(entry.action)) return cashAlertItem(entry);
+  if ((CASH_PRIORITY_ACTIONS as readonly string[]).includes(entry.action)) return cashPriorityItem(entry);
   const blocked = entry.detail.guardrailBlocked === true;
 
   if (entry.action.startsWith("milestone_")) {
@@ -373,6 +382,31 @@ function cashAlertItem(entry: ActivityEntry): Omit<ActivityItem, "txUrl" | "netw
   const agent = parts.length > 0 ? ` The agent ${parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`}.` : "";
   // A warning, not a decision for a person: it neither counts among what waits for them nor takes the stopped mark.
   return { seq: entry.seq, text: said, detail: `${customers}${agent}`, tone: "notice", path: PAYMENT_PLAN_PATH, pathLabel: "See the payment plan", txHash: null };
+}
+
+/**
+ * Which bills the cash goes to first, in words (cash priority P6): those the agent pays first and those that wait, with
+ * the first sentence of why. Not a decision for a person: each waiting bill's own hold is the one to decide.
+ */
+function cashPriorityItem(entry: ActivityEntry): Omit<ActivityItem, "txUrl" | "network"> | null {
+  if (!Array.isArray(entry.detail.order)) return null;
+  const order = (entry.detail.order as unknown[]).map(record).filter((item): item is Record<string, unknown> => item !== null);
+  const named = (items: Record<string, unknown>[]) => items.map((item) => `${text(item.payee) ?? "a supplier"} ${activityAmount(number(item.amount) ?? 0, "USDC")}`).join(", ");
+  const kept = order.filter((item) => item.keep === true);
+  const waiting = order.filter((item) => item.keep !== true);
+  if (waiting.length === 0) return null;
+  const pays = kept.length > 0 ? `the agent pays ${named(kept)} first; ` : "";
+  const waits = `${named(waiting)} ${waiting.length === 1 ? "waits" : "wait"}`;
+  const why = text(entry.detail.reasoning);
+  return {
+    seq: entry.seq,
+    text: `The cash cannot cover every bill due soon: ${pays}${waits}.`,
+    detail: why ? (why.match(/^.*?[.!?](?=\s|$)/s)?.[0] ?? why) : null,
+    tone: "notice",
+    path: PAYMENT_PLAN_PATH,
+    pathLabel: "See the payment plan",
+    txHash: null,
+  };
 }
 
 /** What Circle said of a payment that has not confirmed, or that it was not asked, or never answered the send. */
@@ -615,6 +649,10 @@ function invoiceItem(
     case "ap_flag_fraud":
       return { seq: entry.seq, text: `Flagged ${invoice.name} ${amount} for you to review${after}.`, detail: firstSentence(entry.detail), tone: "stopped", ...decide, txHash: null };
     case "ap_hold": {
+      // Made to wait by the agent's choice of which bills the cash goes to first (cash priority P6).
+      if (record(entry.detail.cashPriority)?.waits === true) {
+        return { seq: entry.seq, text: `Held ${invoice.name} ${amount}: the cash goes first to the bills the agent chose.`, detail: firstSentence(entry.detail), tone: "stopped", ...decide, txHash: null };
+      }
       // Held days before the day it was set for, because the cash will not cover it then (cash ahead A4); held then for
       // anything else, it says so as any hold does.
       const setFor = text(record(entry.detail.cashAhead)?.scheduledFor);

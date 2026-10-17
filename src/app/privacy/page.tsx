@@ -224,6 +224,12 @@ export default function PrivacyPage() {
                 asks. The answer is read from the workspace and written by the app, not by the model;
               </li>
               <li>
+                when the cash cannot cover every bill due within 14 days, to choose which are paid first: each such bill&apos;s payee name, amount, due date
+                and days left, whether it is a recurring payment and how often, its memo and purchase order, an early-payment discount it would lose, its
+                status, and how many requests for more time its supplier was sent, agreed to and declined; the cash the agent can pay with, what is
+                already committed, and the written policy&apos;s order. Code pays the bills in the order chosen only while the cash lasts;
+              </li>
+              <li>
                 for a reminder to a client: the receivable&apos;s amount and currency, its due date and how far today is from it, what it is for (its memo
                 and purchase order), the client&apos;s name and how it paid its earlier receivables (on time, late, and how late on average), the
                 reminders already sent (when, and how firmly), the tones allowed, and the written policy&apos;s answer. The email itself is a fixed

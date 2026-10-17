@@ -197,6 +197,10 @@ function apFake(options: {
   chain?: Chain;
   /** The ledger's `ap_schedule` and `payment_rescheduled` entries, newest first (cash ahead A3); none when absent. */
   schedulings?: Array<{ action: string; detail: Record<string, unknown> }>;
+  /** The latest AP decisions and payment plan moves on held and scheduled payables, newest first (cash priority P1). */
+  decisions?: Array<{ action?: string; detail: Record<string, unknown> }>;
+  /** The ledger's last `cash_priority_set` entries, newest first (cash priority P5). */
+  priorityPlans?: Array<{ detail: Record<string, unknown> }>;
 }) {
   const intents = paymentIntentsBackend(ORG);
   const fake = fakeSupabase((request) => {
@@ -214,12 +218,28 @@ function apFake(options: {
     if (request.path === "/rest/v1/ledger_entries" && request.method === "GET" && request.params.has("actor")) return { body: options.agentPayments ?? [] };
     // Each scheduled bill's latest scheduling, read by the cash ahead check (A3).
     if (request.path === "/rest/v1/ledger_entries" && request.method === "GET" && request.params.get("action")?.startsWith("in.(ap_schedule")) return { body: options.schedulings ?? [] };
+    // The latest decisions on held payables, and the last cash priority plan (cash priority P1, P5).
+    if (request.path === "/rest/v1/ledger_entries" && request.method === "GET" && request.params.get("action") === "in.(ap_pay,ap_hold,ap_schedule,ap_request_info,ap_flag_fraud,payment_rescheduled)") {
+      return { body: (options.decisions ?? []).map((entry) => ({ action: entry.action ?? "ap_hold", detail: entry.detail })) };
+    }
+    if (request.path === "/rest/v1/ledger_entries" && request.method === "GET" && request.params.get("action") === "eq.cash_priority_set") return { body: options.priorityPlans ?? [] };
+    if (request.path === "/rest/v1/payment_term_requests") return { body: [] };
     if (request.path === "/rest/v1/rpc/append_ledger_entry") return { body: LEDGER_ROW };
     if (request.path === "/rest/v1/rpc/agent_paused") return { body: options.paused ?? false };
     if (request.path === "/rest/v1/invoices" && request.method === "GET") {
-      const statuses = request.params.get("status")?.match(/^in\.\((.*)\)$/)?.[1].split(",");
-      const rows = statuses ? options.book.filter((row) => statuses.includes(row.status as string)) : options.book;
+      const status = request.params.get("status");
+      const statuses = status?.match(/^in\.\((.*)\)$/)?.[1].split(",") ?? (status?.startsWith("eq.") ? [status.slice(3)] : undefined);
+      const ids = request.params.get("id")?.match(/^in\.\((.*)\)$/)?.[1].split(",");
+      const rows = options.book.filter((row) => (!statuses || statuses.includes(row.status as string)) && (!ids || ids.includes(row.id as string)));
       return { body: orderedAs(rows, request.params.get("order")) };
+    }
+    // A reopen (cash priority P4) is a compare-and-set on `held`: it answers with the row it moved, and the book moves too.
+    if (request.path === "/rest/v1/invoices" && request.method === "PATCH" && request.params.get("status") === "eq.held") {
+      const id = request.params.get("id")?.replace(/^eq\./, "");
+      const row = options.book.find((entry) => entry.id === id && entry.status === "held");
+      if (!row) return { body: [] };
+      row.status = (request.body as Record<string, unknown>).status;
+      return { body: [{ id }] };
     }
     if (request.path === "/rest/v1/invoices" && request.method === "PATCH") return { body: [] };
     if (request.path === "/rest/v1/milestones") return { body: options.milestones ?? [] };
@@ -1949,12 +1969,13 @@ describe("a payment now that gains nothing (payment timing §1)", () => {
 
 describe("a scheduled payment the cash will no longer cover on its day (cash ahead)", () => {
   const plain = { early_pay_discount_pct: null, discount_due_date: null };
-  // The live test's book on Oct 17: 45 USDC set for Oct 23, then 140 USDC set for Oct 22 once cash came in.
+  // The live test's book on Oct 17, moved past the cash priority plan's 14 days so the check is seen on its own: 45 USDC
+  // set for Nov 13, then 140 USDC set for Nov 12 once cash came in.
   const setFor23 = () =>
-    scheduledPayable({ ...plain, amount: "45", memo: "GPU hours", due_date: "2026-10-23T12:00:00+00:00", scheduled_for: "2026-10-23T00:00:00+00:00", agent_reasoning: "Paying on the due date, Oct 23." });
+    scheduledPayable({ ...plain, amount: "45", memo: "GPU hours", due_date: "2026-11-13T12:00:00+00:00", scheduled_for: "2026-11-13T00:00:00+00:00", agent_reasoning: "Paying on the due date, Nov 13." });
   const setFor22 = () => ({
     ...scheduledPayable({
-      ...plain, id: OTHER_INVOICE_ID, amount: "140", memo: "Render farm", due_date: "2026-10-22T12:00:00+00:00", scheduled_for: "2026-10-22T00:00:00+00:00",
+      ...plain, id: OTHER_INVOICE_ID, amount: "140", memo: "Render farm", due_date: "2026-11-12T12:00:00+00:00", scheduled_for: "2026-11-12T00:00:00+00:00",
       counterparty_id: CONTOSO,
     }),
     counterparties: counterparty({ id: CONTOSO, name: "Contoso" }),
@@ -1968,19 +1989,19 @@ describe("a scheduled payment the cash will no longer cover on its day (cash ahe
 
     expect(chain.transfers).toEqual([]);
     expect(decideMock).toHaveBeenCalledTimes(1);
-    expect(promptOf().scheduledEarlier).toEqual({ payOn: "2026-10-23", reasoning: "Paying on the due date, Oct 23.", decidedBeforeItsDay: true });
-    expect(promptOf().timing).toMatchObject({ targetOn: "2026-10-23", earlierObligations: { total: 140, count: 1 }, shortfall: true });
+    expect(promptOf().scheduledEarlier).toEqual({ payOn: "2026-11-13", reasoning: "Paying on the due date, Nov 13.", decidedBeforeItsDay: true });
+    expect(promptOf().timing).toMatchObject({ targetOn: "2026-11-13", earlierObligations: { total: 140, count: 1 }, shortfall: true });
     const [patch] = invoicePatches(fake.requests);
     expect(patch.params.get("id")).toBe(`eq.${INVOICE_ID}`);
     expect(patch.body).toMatchObject({ status: "held", scheduled_for: null });
     const [entry] = ledger(fake.requests);
     expect(entry.p_action).toBe("ap_hold");
     expect(entry.p_detail).toMatchObject({
-      scheduledFor: "2026-10-23T00:00:00+00:00",
-      cashAhead: { scheduledFor: "2026-10-23", cashCounted: 150.03, dueBefore: { total: 140, count: 1 }, needed: 45 },
+      scheduledFor: "2026-11-13T00:00:00+00:00",
+      cashAhead: { scheduledFor: "2026-11-13", cashCounted: 150.03, dueBefore: { total: 140, count: 1 }, needed: 45 },
       execution: { heldBecause: "cash_shortfall" },
     });
-    expect(lines).toEqual([{ domain: "ap", message: "Northwind: held, decided before 2026-10-23: the cash will not cover it then (45 USDC)" }]);
+    expect(lines).toEqual([{ domain: "ap", message: "Northwind: held, decided before 2026-11-13: the cash will not cover it then (45 USDC)" }]);
   });
 
   it("is never paid now ahead of what falls due first, whatever the model chose (review of #418)", async () => {
@@ -2014,7 +2035,7 @@ describe("a scheduled payment the cash will no longer cover on its day (cash ahe
 
   it("is not decided early again while the cash ahead is no worse than when it last was", async () => {
     today("2026-10-17T09:00:00.000Z");
-    const seen = { action: "ap_schedule", detail: { invoiceId: INVOICE_ID, timing: { shortfall: false }, cashAhead: { scheduledFor: "2026-10-23", cashCounted: 150.03, dueBefore: { total: 140, count: 1 }, needed: 45 } } };
+    const seen = { action: "ap_schedule", detail: { invoiceId: INVOICE_ID, timing: { shortfall: false }, cashAhead: { scheduledFor: "2026-11-13", cashCounted: 150.03, dueBefore: { total: 140, count: 1 }, needed: 45 } } };
     const same = apFake({ book: [setFor23(), setFor22()], schedulings: [seen] });
     await same.stage(150.03);
     expect(decideMock).not.toHaveBeenCalled();
@@ -2022,5 +2043,191 @@ describe("a scheduled payment the cash will no longer cover on its day (cash ahe
     const worse = apFake({ book: [setFor23(), setFor22()], schedulings: [seen] });
     await worse.stage(149);
     expect(decideMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe("which bill first when the cash cannot cover them all (cash priority)", () => {
+  const plain = { early_pay_discount_pct: null, discount_due_date: null };
+  const HOSTING = "018f8ce0-1557-7b54-a931-4d777f6ba0a1";
+  const STORAGE = "018f8ce0-1557-7b54-a931-4d777f6ba0a2";
+  // The live test's book on Oct 17: 150.03 USDC, a 140 USDC render farm bill set for Oct 22, and two 45 USDC bills,
+  // GPU hosting and storage, due Oct 24 and Oct 25, held for want of cash.
+  const render = () => ({
+    ...scheduledPayable({ ...plain, id: OTHER_INVOICE_ID, amount: "140", memo: "Render farm", due_date: "2026-10-22T12:00:00+00:00", scheduled_for: "2026-10-22T00:00:00+00:00", counterparty_id: CONTOSO }),
+    counterparties: counterparty({ id: CONTOSO, name: "Contoso" }),
+  });
+  const heldBill = (id: string, memo: string, due: string) =>
+    payable({ ...plain, id, status: "held", amount: "45", memo, po_reference: `PO-${memo.replace(/\W+/g, "-").toUpperCase()}`, due_date: `${due}T12:00:00+00:00`, decided_at: "2026-10-17T08:00:00+00:00" });
+  const book = () => [render(), heldBill(HOSTING, "GPU hosting", "2026-10-24"), heldBill(STORAGE, "Storage", "2026-10-25")];
+  const heldForCash = (id: string) => ({ detail: { invoiceId: id, execution: { heldBecause: "cash_shortfall" } } });
+  const decisions = [heldForCash(HOSTING), heldForCash(STORAGE)];
+
+  /** The model: an order for the cash priority call, and for each bill's own decision `apAnswer`, or the written policy. */
+  async function modelOrders(order: string[], reasons: Record<string, string>, apAnswer?: Record<string, unknown>) {
+    const actual = await vi.importActual<typeof import("@/lib/agent/decide")>("@/lib/agent/decide");
+    decideMock.mockImplementation(async (params: DecideParams<unknown>) => {
+      if (params.purpose !== "cash_priority") {
+        if (!apAnswer) return actual.decide(params as DecideParams<unknown>);
+        const reference = params.fallback() as { action: string };
+        const value = params.schema.parse(apAnswer) as { action: string };
+        return { value, mode: "deepseek", reference, agreedWithReference: value.action === reference.action };
+      }
+      const reference = params.fallback();
+      const value = params.schema.parse({ order, reasons, reasoning: "Hosting and storage keep the business running; the render farm can wait." });
+      return { value, mode: "deepseek", reference, agreedWithReference: true };
+    });
+  }
+  const priorityCalls = () => decideMock.mock.calls.filter((call) => (call[0] as DecideParams<unknown>).purpose === "cash_priority");
+  const entries = (requests: RecordedRequest[], action: string) => ledger(requests).filter((entry) => entry.p_action === action);
+
+  it("pays the bills the agent chose first, holds the one due first, and signs why", async () => {
+    today("2026-10-17T09:00:00.000Z");
+    // In the written policy's order the refs are B1 render farm, B2 hosting, B3 storage.
+    await modelOrders(["B2", "B3", "B1"], { B1: "A one-off render can wait.", B2: "Hosting stops the business if unpaid.", B3: "Storage holds the client files." });
+    const { fake, chain, lines, stage } = apFake({ book: book(), decisions });
+
+    await stage(150.03);
+
+    expect(chain.transfers).toEqual([]);
+    // The plan: signed once, with each bill's place and reason, and that the model departed from the policy.
+    const [plan] = entries(fake.requests, "cash_priority_set");
+    expect(plan.p_detail).toMatchObject({
+      cash: { operating: 150.03, reserve: 0, committed: 0, available: 150.03 },
+      order: [
+        { invoiceId: HOSTING, keep: true, reason: "Hosting stops the business if unpaid.", amount: 45 },
+        { invoiceId: STORAGE, keep: true, reason: "Storage holds the client files.", amount: 45 },
+        { invoiceId: OTHER_INVOICE_ID, keep: false, reason: "A one-off render can wait.", amount: 140 },
+      ],
+      referenceOrder: [OTHER_INVOICE_ID, HOSTING, STORAGE],
+      decisionMode: "deepseek",
+      agreedWithReference: false,
+    });
+    // The two kept bills held for cash are reopened, and decided: scheduled for their due dates, the cash being theirs.
+    expect(entries(fake.requests, "invoice_reopened").map((entry) => (entry.p_detail as Record<string, unknown>).invoiceId)).toEqual([HOSTING, STORAGE]);
+    const patches = invoicePatches(fake.requests).filter((patch) => patch.params.get("status") !== "eq.held");
+    const byId = new Map(patches.map((patch) => [patch.params.get("id")?.replace(/^eq\./, ""), patch.body as Record<string, unknown>]));
+    expect(byId.get(HOSTING)).toMatchObject({ status: "scheduled", scheduled_for: "2026-10-24T00:00:00.000Z" });
+    expect(byId.get(STORAGE)).toMatchObject({ status: "scheduled", scheduled_for: "2026-10-25T00:00:00.000Z" });
+    // The render farm waits: decided now, held by code for want of cash, with the agent's reason.
+    expect(byId.get(OTHER_INVOICE_ID)).toMatchObject({ status: "held", scheduled_for: null });
+    expect(String(byId.get(OTHER_INVOICE_ID)?.agent_reasoning)).toContain("the agent chose to pay others first: A one-off render can wait.");
+    const renderEntry = ledger(fake.requests).find((entry) => (entry.p_detail as Record<string, unknown>).invoiceId === OTHER_INVOICE_ID && entry.p_action === "ap_hold");
+    expect(renderEntry?.p_detail).toMatchObject({
+      timingRule: "cash.priority",
+      cashPriority: { waits: true, reason: "A one-off render can wait." },
+      // Reopened by cash coming in only once it covers this bill and the kept ones, 140 + 45 + 45.
+      execution: { heldBecause: "cash_shortfall", cashNeededUsdc: 230 },
+    });
+    expect(lines.some((line) => line.message === "Contoso: held, the cash goes to the bills chosen first (140 USDC)")).toBe(true);
+  });
+
+  it("follows the written policy's order without a model, and reopens nothing it keeps waiting", async () => {
+    today("2026-10-17T09:00:00.000Z");
+    const { fake, stage } = apFake({ book: book(), decisions });
+
+    await stage(150.03);
+
+    const [plan] = entries(fake.requests, "cash_priority_set");
+    expect(plan.p_detail).toMatchObject({
+      decisionMode: "heuristic",
+      agreedWithReference: null,
+      order: [{ invoiceId: OTHER_INVOICE_ID, keep: true }, { invoiceId: HOSTING, keep: false }, { invoiceId: STORAGE, keep: false }],
+    });
+    expect(entries(fake.requests, "invoice_reopened")).toEqual([]);
+    // The render farm stays set for its day: kept, and not decided before it.
+    expect(invoicePatches(fake.requests).some((patch) => patch.params.get("id") === `eq.${OTHER_INVOICE_ID}`)).toBe(false);
+  });
+
+  it("reuses the last plan while nothing changed: no model call, nothing signed again, the plan still applied", async () => {
+    today("2026-10-17T09:00:00.000Z");
+    await modelOrders(["B2", "B3", "B1"], {});
+    const first = apFake({ book: book(), decisions });
+    await first.stage(150.03);
+    const [signed] = entries(first.fake.requests, "cash_priority_set");
+    expect(priorityCalls()).toHaveLength(1);
+
+    decideMock.mockClear();
+    const again = apFake({ book: book(), decisions, priorityPlans: [{ detail: signed.p_detail as Record<string, unknown> }] });
+    await again.stage(150.03);
+    expect(priorityCalls()).toHaveLength(0);
+    expect(entries(again.fake.requests, "cash_priority_set")).toEqual([]);
+    expect(entries(again.fake.requests, "invoice_reopened")).toHaveLength(2);
+  });
+
+  it("does not reopen a kept bill held again under the same plan, so a reused plan is no loop of decisions", async () => {
+    today("2026-10-17T09:00:00.000Z");
+    await modelOrders(["B2", "B3", "B1"], {});
+    const first = apFake({ book: book(), decisions });
+    await first.stage(150.03);
+    const [signed] = entries(first.fake.requests, "cash_priority_set");
+    const fingerprint = (signed.p_detail as Record<string, unknown>).fingerprint;
+
+    // Hosting was held for cash again under that plan (the operating wallet was short of it today); storage was not.
+    const heldAgain = { action: "ap_hold", detail: { invoiceId: HOSTING, execution: { heldBecause: "cash_shortfall" }, cashPriority: { waits: false, reason: null, fingerprint } } };
+    const again = apFake({ book: book(), decisions: [heldAgain, heldForCash(STORAGE)], priorityPlans: [{ detail: signed.p_detail as Record<string, unknown> }] });
+    await again.stage(150.03);
+    expect(entries(again.fake.requests, "invoice_reopened").map((entry) => (entry.p_detail as Record<string, unknown>).invoiceId)).toEqual([STORAGE]);
+  });
+
+  it("leaves out a kept bill a guardrail held since, whose latest word is an ap_schedule (review of the plan)", async () => {
+    today("2026-10-17T09:00:00.000Z");
+    await modelOrders(["B2", "B1"], {});
+    // The reopened hosting bill was scheduled, and a guardrail held that schedule: it no longer waits for cash.
+    const guardrailHeld = { action: "ap_schedule", detail: { invoiceId: HOSTING, guardrailBlocked: true, execution: { heldBecause: "cash_shortfall" } } };
+    const { fake, stage } = apFake({ book: book(), decisions: [guardrailHeld, heldForCash(STORAGE)] });
+    await stage(150.03);
+    const [plan] = entries(fake.requests, "cash_priority_set");
+    expect(((plan.p_detail as Record<string, unknown>).order as Array<Record<string, unknown>>).map((item) => item.invoiceId)).toEqual([STORAGE, OTHER_INVOICE_ID]);
+    expect(entries(fake.requests, "invoice_reopened").map((entry) => (entry.p_detail as Record<string, unknown>).invoiceId)).toEqual([STORAGE]);
+  });
+
+  it("keeps the last plan while a cent of yield moves the cash, and sets aside committed cash and a person's move", async () => {
+    today("2026-10-17T09:00:00.000Z");
+    await modelOrders(["B2", "B3", "B1"], {});
+    const first = apFake({ book: book(), decisions });
+    await first.stage(150.03);
+    const [signed] = entries(first.fake.requests, "cash_priority_set");
+    decideMock.mockClear();
+    const moved = apFake({ book: book(), decisions, priorityPlans: [{ detail: signed.p_detail as Record<string, unknown> }] });
+    await moved.stage(150.07);
+    expect(priorityCalls()).toHaveLength(0);
+
+    // 240 USDC would cover all three, but a 100 USDC milestone verified today is released first.
+    decideMock.mockClear();
+    const committed = apFake({ book: book(), decisions, milestones: [{ amount: "100" }] });
+    await committed.stage(240);
+    expect(entries(committed.fake.requests, "cash_priority_set")[0]?.p_detail).toMatchObject({ cash: { committed: 100, available: 140 } });
+
+    // A person moved the render farm from the payment plan: its day stands, its cash is set aside, and it is not weighed.
+    decideMock.mockClear();
+    const personMove = { action: "payment_rescheduled", detail: { invoiceId: OTHER_INVOICE_ID } };
+    const kept = apFake({ book: book(), decisions: [personMove, ...decisions] });
+    await kept.stage(240);
+    const order = ((entries(kept.fake.requests, "cash_priority_set")[0]?.p_detail as Record<string, unknown>)?.order ?? []) as Array<Record<string, unknown>>;
+    expect(order.map((item) => item.invoiceId)).not.toContain(OTHER_INVOICE_ID);
+    expect(invoicePatches(kept.fake.requests).some((patch) => patch.params.get("id") === `eq.${OTHER_INVOICE_ID}`)).toBe(false);
+  });
+
+  it("holds a waiting bill the model would pay, and makes no plan when the cash covers every bill, or in shadow mode", async () => {
+    today("2026-10-24T09:00:00.000Z");
+    // Overdue, the render farm is one the model would pay now; the plan keeps hosting and storage, so code holds it.
+    await modelOrders(["B2", "B3", "B1"], { B1: "A one-off render can wait." }, { action: "pay", reasoning: "Correct invoice, within the limit; paying.", confidence: 0.9 });
+    const due = [render(), heldBill(HOSTING, "GPU hosting", "2026-10-24"), heldBill(STORAGE, "Storage", "2026-10-25")];
+    const { fake, chain, stage } = apFake({ book: due, decisions });
+    await stage(150.03);
+    expect(chain.transfers.map((t) => t.amount)).toEqual([45]);
+    const renderEntry = ledger(fake.requests).find((entry) => (entry.p_detail as Record<string, unknown>).invoiceId === OTHER_INVOICE_ID && entry.p_action === "ap_hold");
+    expect(renderEntry?.p_detail).toMatchObject({ decision: { action: "hold" }, timingRule: "cash.priority", cashPriority: { waits: true }, execution: { heldBecause: "cash_shortfall" } });
+
+    decideMock.mockClear();
+    const plenty = apFake({ book: book(), decisions });
+    await plenty.stage(1000);
+    expect(priorityCalls()).toHaveLength(0);
+    expect(entries(plenty.fake.requests, "cash_priority_set")).toEqual([]);
+
+    const shadowed = apFake({ book: book(), decisions, shadow: "USD" });
+    await shadowed.stage(150.03);
+    expect(priorityCalls()).toHaveLength(0);
   });
 });

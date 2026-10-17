@@ -2385,6 +2385,30 @@ amount on a later day (docs/superpowers/specs/2026-10-17-term-requests-design.md
   `term_request_declined` (`via: "terms_link"`), and `runCycleSoon({ kind: "term_request_accepted" })` lets the agent
   decide the bill again against the new date. A request never changes the amount, the payee or where it is paid.
 
+## Which bill first when the cash cannot cover them all
+
+docs/superpowers/specs/2026-10-18-cash-priority-design.md; pure rules in `src/lib/agent/cash-priority.ts`, the plan in
+`src/lib/agent/cash-priority-plan.ts`. `runApStage` calls `cashPriorityOf` right after its load: a cheap look (the loaded
+pending and scheduled USDC plus the held USDC against operating plus reserve, less what is committed) decides whether to
+plan at all, and shadow mode is read once for the stage (`shadowOnce`). `cashPriority` reads the open payables and the
+latest word on each held or scheduled one (every AP decision action and `payment_rescheduled`), sets aside what is
+committed (matched payables, verified milestones not in escrow, scheduled bills a person moved), and takes the competing
+bills (`competingBills`: USDC, not
+bank-paid, pending, scheduled or held with `heldBecause: cash_shortfall` on its latest decision, due within 14 days or
+overdue). When they exceed what is left (`needsPlan`), it reuses the last `cash_priority_set` whose `fingerprint` (bill
+ids, amounts, due days; not statuses, not cash) matches and whose order still splits the same way (`sameSplit`), or asks
+the model (`decide`, purpose `cash_priority`,
+refs B1..Bn in the written policy's order, which is the fallback), bounds the order (`boundOrder`), fits it to the cash
+(`planFrom`: keep while the kept total fits, skip what does not), and signs the plan. Kept bills that are held are
+reopened with a compare-and-set on `held` and an `invoice_reopened` (`followUp.reason: "cash_priority"`), then loaded,
+unless their latest decision records this plan's fingerprint (`cashPriority.fingerprint`): held again under the same
+plan, they are not retried. Waiting bills join the stage's payables even before their day and are left out of the kept
+bills' `obligationsDueBy` and cash ahead measure, and only theirs; `heldForPriority` turns a model `pay` or `schedule` on
+one into a hold (`timingRule: "cash.priority"`) whose `shortOfCash` holds for want of cash, with `cashNeededUsdc` its own
+amount plus the kept total, which the follow-up measures without re-measuring what falls due before it, so the
+more-time and customer discount stages act on it and only enough cash for everything reopens it. A read that fails leaves the stage in date order. The activity feed tells
+`cash_priority_set` (`cashPriorityItem`, tone `notice`) and a waiting bill's hold.
+
 ## Telling the owner before the cash runs short
 
 docs/superpowers/specs/2026-10-17-cash-short-alert-design.md, `src/lib/agent/cash-alert.ts`, stage `cash_alert` after

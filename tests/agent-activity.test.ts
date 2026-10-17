@@ -711,3 +711,33 @@ describe("what is short, up to the cent (live test, Oct 17)", () => {
     expect(item?.detail).toContain("Customers owe 40.00 USDC by Oct 29");
   });
 });
+
+
+describe("which bills the cash goes to first (cash priority P6)", () => {
+  const plan = {
+    seq: 1100,
+    action: "cash_priority_set",
+    detail: {
+      order: [
+        { invoiceId: "a", payee: "Cobalt Cloud", amount: 45, keep: true },
+        { invoiceId: "b", payee: "Cobalt Cloud", amount: 45, keep: true },
+        { invoiceId: "c", payee: "Cobalt Cloud", amount: 140, keep: false },
+      ],
+      reasoning: "Hosting and storage keep the business running. The render farm can wait.",
+    },
+  } as ActivityEntry;
+
+  it("says which bills it pays first and which wait, with the first sentence of why, as a warning", () => {
+    expect(activityItem(plan, refs())).toMatchObject({
+      text: "The cash cannot cover every bill due soon: the agent pays Cobalt Cloud 45.00 USDC, Cobalt Cloud 45.00 USDC first; Cobalt Cloud 140.00 USDC waits.",
+      detail: "Hosting and storage keep the business running.",
+      tone: "notice",
+      path: "/invoices?tab=plan",
+    });
+  });
+
+  it("says a bill held for it waits for the bills the agent chose", () => {
+    const held = { seq: 1101, action: "ap_hold", detail: { invoiceId: INVOICE, cashPriority: { waits: true, reason: "A one-off render can wait." } } } as ActivityEntry;
+    expect(activityItem(held, refs({ status: "held" }))?.text).toBe("Held Jiren 0.30 USDC: the cash goes first to the bills the agent chose.");
+  });
+});
