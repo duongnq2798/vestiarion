@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { flushSync } from "react-dom";
-import { setNotifyEmailAction, type NotifyEmailActionResult } from "@/app/actions/notifications";
+import { sendWeeklyBriefNowAction, setNotifyEmailAction, type NotifyEmailActionResult } from "@/app/actions/notifications";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { SectionHeader } from "@/components/ui/SectionHeader";
@@ -17,7 +18,7 @@ const INITIAL: NotifyEmailActionResult = { ok: false, message: "" };
  * the requested state while the change is on its way, and the server's answer afterwards, reverted to `initial` on a
  * refusal.
  */
-function NotifyEmailSwitch({ orgSlug, initial, label }: { orgSlug: string; initial: boolean; label: string }) {
+function NotifyEmailSwitch({ orgSlug, initial, label, brief = false }: { orgSlug: string; initial: boolean; label: string; brief?: boolean }) {
   const [requested, setRequested] = useState(initial);
   const { state, pending, formProps } = useActionForm(setNotifyEmailAction, INITIAL, { toastOnSuccess: true });
 
@@ -42,7 +43,29 @@ function NotifyEmailSwitch({ orgSlug, initial, label }: { orgSlug: string; initi
           </p>
         )}
       </form>
+      {brief && <SendBriefNow orgSlug={orgSlug} />}
     </Card>
+  );
+}
+
+/**
+ * This week's brief, sent at once to the viewer only (weekly brief W4): to see what Monday's email says.
+ */
+function SendBriefNow({ orgSlug }: { orgSlug: string }) {
+  const { state, pending, formProps } = useActionForm(sendWeeklyBriefNowAction, INITIAL, { toastOnSuccess: true });
+  return (
+    <form {...formProps} className="mt-3 flex flex-wrap items-center gap-3 border-t border-line pt-3">
+      <input type="hidden" name="orgSlug" value={orgSlug} />
+      <p className="min-w-0 flex-1 text-xs text-ink-2">In a live workspace it also sends a summary each Monday: what the agent did, what waits for you, what is due and whether the cash covers it.</p>
+      <Button type="submit" size="sm" variant="secondary" loading={pending}>
+        Send me this week&apos;s summary
+      </Button>
+      {!state.ok && state.message && (
+        <p role="alert" className="w-full text-xs text-refused">
+          {state.message}
+        </p>
+      )}
+    </form>
   );
 }
 
@@ -78,7 +101,7 @@ export default function NotificationsPanel({
         action={telegram ? <DocsLink href="/docs/guides/telegram" topic="Telegram notifications" /> : undefined}
       />
       <div className="space-y-4">
-        {emailLabel && <NotifyEmailSwitch orgSlug={orgSlug} initial={notifyEmail} label={emailLabel} />}
+        {emailLabel && <NotifyEmailSwitch orgSlug={orgSlug} initial={notifyEmail} label={emailLabel} brief={canDecide} />}
         {telegram && <TelegramCard orgSlug={orgSlug} link={telegram.link} />}
       </div>
     </section>

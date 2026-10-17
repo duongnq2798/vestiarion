@@ -6,6 +6,7 @@ import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { platformDb } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
+import { sendWeeklyBrief } from "@/lib/notifications/weekly-brief";
 
 export interface NotifyEmailActionResult {
   ok: boolean;
@@ -41,5 +42,24 @@ export async function setNotifyEmailAction(_previous: NotifyEmailActionResult, f
     }
     revalidateOrgPages();
     return { ok: true, message: on === "true" ? "Emails on." : "Emails off." };
+  });
+}
+
+/**
+ * Sends this week's brief at once to the viewer, and only to them (weekly brief W4). Gated on `approval.decide`: the brief
+ * goes to those who decide payments. The address is the session's, never the form's, so nobody can have it sent to
+ * someone else.
+ */
+export async function sendWeeklyBriefNowAction(_previous: NotifyEmailActionResult, formData: FormData): Promise<NotifyEmailActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "approval.decide");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  const email = auth.user.email;
+  if (!email) return { ok: false, message: "Your account has no email address to send it to." };
+  return inOrg(auth, async () => {
+    const outcome = await sendWeeklyBrief({ only: { userId: auth.user.id, email } });
+    if (outcome.sent > 0) return { ok: true, message: `Sent to ${email}.` };
+    if (outcome.skipped === "too_soon") return { ok: false, message: "It went a few minutes ago. Try again shortly." };
+    if (outcome.skipped === "no_email") return { ok: false, message: "Email is not set up on this deployment." };
+    return { ok: false, message: "That did not work. Try again in a moment." };
   });
 }

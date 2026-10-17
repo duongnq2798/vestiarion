@@ -14,6 +14,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **The agent's weekly brief.** On Mondays, after the first scheduled cycle, each owner, admin and approver who keeps
+  payment emails on gets a summary of the week: what the agent paid, what customers paid and how many decisions it
+  made in the last 7 days, what waits for them, what leaves in the next 7 days, and whether the cash covers the next 30
+  days or when it runs short and by how much. A quiet workspace gets none, nor does one in shadow mode. **Send me this
+  week's summary**, under Notifications in Settings, sends it at once to your own address. The ledger records
+  `weekly_brief_sent`. No migration. [Guide](https://www.vestiarion.xyz/docs/guides/payment-plan#the-week-by-email).
+
 - **A short video for each main flow.** Twelve more guides open with a narrated walkthrough recorded in the live
   product, two minutes or less each, with its transcript: your first decision, your first payment, shadow mode, how
   payments are controlled, going live, getting paid by a customer, early-payment offers, paying a contractor, bills from

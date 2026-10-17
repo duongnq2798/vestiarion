@@ -12,7 +12,7 @@ export interface EmailMessage {
   html: string;
   text: string;
   /**
-   * What the email is for, when it is metered in the workspace in scope (accountant console U1): `invitation`, `digest`,
+   * What the email is for, when it is metered in the workspace in scope (accountant console U1): `invitation`, `digest`, `weekly_brief`,
    * `reminder`, ... A send outside a workspace's scope records nothing.
    */
   meter?: string;

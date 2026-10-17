@@ -1,5 +1,12 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-18: The agent's weekly brief
+
+- Two new entries, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`, both in domain `system`, actor `system`:
+  - **`weekly_brief_sent`**, signed just before the emails go, with `week` (`2026-W43`), `recipients` (how many it goes to), `paid: { count, usdc }`, `received: { count, usdc }`, `decisions`, `waiting`, `next7: { count, usdc, expectedUsdc }` and `short` (the cash shortfall, or `null`). One a member sent to themselves from Settings also carries `preview: true` and `by`, their user id.
+  - **`weekly_brief_failed`**, when no email went after all, with `week` and `failed`; the week's brief is then tried again.
+- Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-17: The agent tells you before the cash runs short
 
 - Two new entries, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`, both in domain `treasury`, actor `agent`:

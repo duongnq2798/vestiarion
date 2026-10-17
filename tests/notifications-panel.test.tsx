@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/app/actions/telegram", () => ({ connectTelegramAction: vi.fn(), disconnectTelegramAction: vi.fn() }));
-vi.mock("@/app/actions/notifications", () => ({ setNotifyEmailAction: vi.fn() }));
+vi.mock("@/app/actions/notifications", () => ({ setNotifyEmailAction: vi.fn(), sendWeeklyBriefNowAction: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
 import NotificationsPanel from "@/components/NotificationsPanel";
@@ -19,11 +19,14 @@ describe("NotificationsPanel", () => {
     expect(markup).toContain(">Notifications<");
     expect(markup).toContain("Email me when payments need a decision");
     expect(markup).toContain("Connect Telegram");
+    // This week's brief, sent at once to them (weekly brief W4).
+    expect(markup).toContain("Send me this week&#x27;s summary");
   });
 
   it("gives a viewer only their Telegram chat", () => {
     const markup = renderToStaticMarkup(<NotificationsPanel orgSlug="acme" canDecide={false} notifyEmail={false} telegram={{ link: null }} />);
     expect(markup).not.toContain("Email me when payments need a decision");
+    expect(markup).not.toContain("this week&#x27;s summary");
     expect(markup).toContain("Connect Telegram");
   });
 

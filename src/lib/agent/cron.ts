@@ -3,6 +3,7 @@ import { platformDb, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
 import { escalateOverdueDecisions } from "../notifications/escalations";
 import { notifyWaitingDecisions } from "../notifications/waiting";
+import { sendWeeklyBrief } from "../notifications/weekly-brief";
 import { CycleRunningError } from "./cycle-running";
 import { runAgentCycle, type CycleResult } from "./orchestrator";
 import { AgentPausedError } from "./pause";
@@ -90,7 +91,7 @@ export async function runLiveOrganizations<T>(run: () => Promise<T>): Promise<Cr
  * cycle's result: `notifyWaitingDecisions` does not throw, and if it ever
  * did, the error is logged here by organization id and the result still
  * returned. The escalation of payables past their decide-by day follows the
- * digest, on the same terms.
+ * digest, on the same terms, and then, on a Monday, the weekly brief.
  */
 export async function runScheduledCycle(): Promise<CycleResult> {
   const result = await runAgentCycle({ trigger: { kind: "schedule" } });
@@ -104,6 +105,12 @@ export async function runScheduledCycle(): Promise<CycleResult> {
     await escalateOverdueDecisions();
   } catch (error) {
     console.error("escalations failed after the cycle", currentOrgId(), error instanceof Error ? error.message : String(error));
+  }
+  // On a Monday, once a week: what the agent did and what is coming (weekly brief W1, W5).
+  try {
+    await sendWeeklyBrief();
+  } catch (error) {
+    console.error("weekly brief failed after the cycle", currentOrgId(), error instanceof Error ? error.message : String(error));
   }
   return result;
 }

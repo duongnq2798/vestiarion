@@ -103,6 +103,12 @@ See the payment plan
 
 What is short is rounded up to the cent, since it is what to bring in. It tells you again only when the first short day comes earlier, the amount needed grows by at least 1 USDC and a tenth, or a week passes and the cash is still short. When the cash covers everything again, it says "The cash covers everything due in the next 30 days again." Nothing is said in shadow mode, where you pay your bills as before. The ledger records `cash_short_ahead` and `cash_short_cleared` with the figures.
 
+## The week by email
+
+On Mondays, after the first scheduled cycle of the day (UTC), the agent emails a summary of the week to each owner, admin and approver who keeps **Email me when payments need a decision** on in Settings, under Notifications. It says what the agent did in the last 7 days (the payments confirmed, what customers paid and how many decisions it made), how many payments wait for a decision from you, the payments that leave in the next 7 days and what customers owe by then, and whether the cash covers the next 30 days or when it runs short and by how much. It links to the console, to Approvals when something waits, and to this plan. A workspace with nothing to say gets no email, and none goes in shadow mode.
+
+To see it before Monday, press **Send me this week's summary** under Notifications: it goes at once to your own address only, at most once in five minutes, and not in shadow mode. The ledger records each as `weekly_brief_sent`, with the week and the figures, just before it goes; the one you send yourself says `preview: true`. If no email went after all, `weekly_brief_failed` says so, and the week's brief is tried again at the next scheduled cycle that Monday.
+
 ## The last 30 days
 
 Under the plan, **Last 30 days** is "Counted from what was paid and recorded, not from a plan.":
