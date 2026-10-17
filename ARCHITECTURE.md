@@ -2385,6 +2385,20 @@ amount on a later day (docs/superpowers/specs/2026-10-17-term-requests-design.md
   `term_request_declined` (`via: "terms_link"`), and `runCycleSoon({ kind: "term_request_accepted" })` lets the agent
   decide the bill again against the new date. A request never changes the amount, the payee or where it is paid.
 
+## Telling the owner before the cash runs short
+
+docs/superpowers/specs/2026-10-17-cash-short-alert-design.md, `src/lib/agent/cash-alert.ts`, stage `cash_alert` after
+`term_requests` (needs `reconcile`). The stage reads the rows `/today` reads (`listAccounts`, `listInvoices`,
+`listMilestones`), maps them with `outlookInputOf` (`src/lib/cash-outlook-input.ts`, shared with `todayFacts`) and runs
+`cashOutlook`, so its figures are the console's. `cashShortOf` reads `shortOn`/`shortBy` (first negative day),
+`lowestOn`/`need` (most negative day within 30) and the receivables expected by then. `alertDue` compares with the last
+`cash_short_ahead` or `cash_short_cleared` entry: alert when none or cleared, the short day earlier, the need up by
+max(1 USDC, 10%), or 7 days since; clear when no longer short after an alert; otherwise nothing. The alert's detail adds
+the balances and `doing` (bills held for want of cash from the latest AP decisions, open `payment_term_requests`, open
+or unpaid accepted `customer_discount_offers`), each best effort (`null` when unreadable). Both actions are in
+`CASH_ALERT_ACTIONS` in the activity feed (`cashAlertItem`, link to the payment plan, no `invoiceId`), so the console,
+Telegram and Slack tell them. Skipped in shadow mode (`readShadowMode`). Code only, no model.
+
 ## Bank payouts (BlindPay)
 
 A vendor's bills paid to its bank account in Mexico, in pesos over SPEI, from the workspace's USDC

@@ -54,6 +54,7 @@ import { releaseDueDealLines } from "../deals/write";
 import { proposeLimitChanges } from "./proposals";
 import { sendReceivableReminders } from "./collections";
 import { makeCustomerOffers } from "./customer-offers";
+import { alertCashShort } from "./cash-alert";
 import { makeEarlyPaymentOffers } from "./early-offers";
 import { makeTermRequests } from "./term-requests";
 import { buyPayeeHistories, type AddressHistoryFact } from "./services";
@@ -4610,6 +4611,14 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   // Once a person turned it on, each bill held for want of cash where code allows it: the model decides whether to ask
   // the supplier for more time, and how many days, and the link is emailed to the supplier (term requests X1-X6).
   lines.push(...(await makeTermRequests(db, { operatingBalance })));
+  });
+
+  await stage("cash_alert", async () => {
+  // ------------------------------------------------------ 6f. cash alert
+  // When the wallet will run short within 30 days, as the console's cash outlook shows it, the owner is told how much,
+  // by when, and what the agent is doing about it; again only when that changes, and once it no longer runs short
+  // (cash short alert S1-S5). Code only; the telegram and slack stages below tell it.
+  lines.push(...(await alertCashShort(db)));
   });
 
   await stage("notices", async () => {

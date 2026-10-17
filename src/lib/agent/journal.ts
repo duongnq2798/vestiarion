@@ -38,6 +38,7 @@ export const CYCLE_STAGES = [
   "early_offers",
   "customer_offers",
   "term_requests",
+  "cash_alert",
   "notices",
   "telegram",
   "slack",
@@ -83,6 +84,8 @@ export type CycleStage = (typeof CYCLE_STAGES)[number];
  *               day (customer discounts C2, C8).
  *   term_requests reconcile + ap. It asks suppliers for more time on bills the AP stage held for
  *               want of cash; a request only moves a due date later, and moves no money.
+ *   cash_alert  reconcile. It tells the owner when the wallet will run short, from the balances
+ *               reconcile read; it authorises nothing (cash short alert S1).
  *   forecast    Nothing. It reads and records; it authorises nothing. It is the
  *               stage most worth keeping alive after a failure, because it is
  *               what tells a human where the cycle left the book.
@@ -116,6 +119,8 @@ export const STAGE_REQUIRES: Record<CycleStage, readonly CycleStage[]> = {
   customer_offers: ["reconcile", "receipts", "ap"],
   // Asks suppliers for more time on bills AP held for want of cash, from the balance reconcile read (term requests X2).
   term_requests: ["reconcile", "ap"],
+  // Tells the owner when the wallet will run short: never from balances reconcile did not read (cash short alert S1).
+  cash_alert: ["reconcile"],
   notices: [],
   telegram: [],
   slack: [],
