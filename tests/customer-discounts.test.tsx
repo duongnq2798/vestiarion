@@ -47,13 +47,18 @@ describe("the one-time link (C4)", () => {
   });
 });
 
-describe("what is owed while the discount applies (C5, C6)", () => {
-  const row = { amount: 300, early_pay_discount_pct: "1.00", discount_due_date: "2026-10-22T12:00:00Z" };
+describe("what is owed while an accepted discount applies (C5, C6)", () => {
+  const offer = { pct: 1, amount: 300, offered: 297, since: "2026-10-17T09:00:00Z", payBy: "2026-10-22" };
 
-  it("is the discounted amount through the pay-by day, and the full amount after", () => {
-    expect(owedNow(row, new Date("2026-10-22T23:00:00Z"))).toEqual({ owed: 297, discount: { pct: 1, payBy: "2026-10-22", full: 300 } });
-    expect(owedNow(row, new Date("2026-10-23T00:00:01Z"))).toEqual({ owed: 300, discount: null });
-    expect(owedNow({ amount: 300 }, new Date("2026-10-20T00:00:00Z"))).toEqual({ owed: 300, discount: null });
+  it("is the offer's discounted amount from the offer through the pay-by day, and the full amount outside it", () => {
+    expect(owedNow(300, offer, new Date("2026-10-22T23:00:00Z"))).toEqual({ owed: 297, discount: { pct: 1, payBy: "2026-10-22", full: 300 } });
+    expect(owedNow(300, offer, new Date("2026-10-23T00:00:01Z"))).toEqual({ owed: 300, discount: null });
+    expect(owedNow(300, offer, new Date("2026-10-17T08:59:00Z"))).toEqual({ owed: 300, discount: null });
+    expect(owedNow(300, null, new Date("2026-10-20T00:00:00Z"))).toEqual({ owed: 300, discount: null });
+  });
+
+  it("takes no discount on a receivable whose amount changed since the offer", () => {
+    expect(owedNow(350, offer, new Date("2026-10-20T00:00:00Z"))).toEqual({ owed: 350, discount: null });
   });
 });
 
@@ -134,6 +139,8 @@ describe("Paid sooner when cash is short, on Bills & receivables (C1)", () => {
     expect(html).toContain("Northwind Goods paid 297.00 USDC at 1.00% off 300.00, by Oct 22, 2026.");
     expect(html).toContain("Acme declined 0.75% off 120.00 USDC, to pay by Oct 22, 2026.");
     expect(recentDiscountLine(recent[1])).toBe("Acme declined 0.75% off 120.00 USDC, to pay by Oct 22, 2026.");
+    expect(recentDiscountLine({ ...recent[1], status: "paid_full" })).toBe("Acme accepted 0.75% off, then paid the full 120.00 USDC.");
+    expect(recentDiscountLine({ ...recent[1], status: "lapsed" })).toBe("Acme accepted 0.75% off 120.00 USDC but did not pay by Oct 22, 2026: the full amount is owed again.");
   });
 });
 
@@ -156,7 +163,7 @@ describe("the pay link while a discount applies (C5)", () => {
   it("asks for the discounted amount and says until when, and what it is after", () => {
     const html = decode(renderToStaticMarkup(<PayInvoice preview={preview} balance={null} token="vxr_x" discount={{ owed: 297, pct: 1, payBy: "2026-10-22", full: 300 }} />));
     expect(html).toContain("Send exactly 297.00 USDC to");
-    expect(html).toContain("1.00% off 300.00 USDC, for paying by the end of 2026-10-22 (UTC). After that, the invoice is 300.00 USDC again.");
+    expect(html).toContain("1.00% off 300.00 USDC, for paying by the end of Oct 22, 2026 (UTC). After that, the invoice is 300.00 USDC again.");
   });
 
   it("asks for the whole invoice with no discount, as before", () => {

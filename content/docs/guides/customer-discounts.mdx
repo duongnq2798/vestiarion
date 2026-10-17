@@ -46,7 +46,7 @@ If the email does not go, the offer is withdrawn, so no link stands that the cus
 
 An accepted offer puts the discount on the invoice, ending on its pay-by day. The invoice's amount does not change. Its pay link then asks for the discounted amount, says until when, and says what the invoice is after that day.
 
-A payment of exactly the discounted amount that arrives by the end of the pay-by day (UTC) settles the invoice, as any payment matched to it does. The ledger records `customer_discount_taken` with what the discount cost, and the bills held for cash are decided again at the next cycle with the money in. A payment of the full amount still settles it, with no discount taken.
+A payment of exactly the discounted amount that arrives after the offer was made and by the end of the pay-by day (UTC) settles the invoice, as any payment matched to it does. Only an accepted offer lowers what pays an invoice: a discount typed on a receivable when it was added, imported or sent through the API does not. The ledger records `customer_discount_taken` with what the discount cost, and the bills held for cash are decided again at the next cycle with the money in. A payment of the full amount still settles it, with no discount taken.
 
 After the pay-by day the discount no longer applies: the invoice is owed in full again, and a payment of the discounted amount then matches nothing and waits for a person to [apply it](/docs/guides/apply-payments).
 
@@ -56,7 +56,7 @@ An offer only ever lowers what a customer owes, until a set day. It never change
 
 The agent's activity, its toasts and your Telegram chat and Slack channel when connected, tells each offer it emailed and each invoice paid at a discount, with what the discount cost.
 
-The card lists the latest offers, one line each, for example "Northwind Goods paid 297.00 USDC at 1.00% off 300.00, by Oct 22, 2026." or "Acme declined 0.75% off 120.00 USDC, to pay by Oct 22, 2026."
+The card lists the latest offers, one line each, for example "Northwind Goods paid 297.00 USDC at 1.00% off 300.00, by Oct 22, 2026." or "Acme declined 0.75% off 120.00 USDC, to pay by Oct 22, 2026." An accepted offer the customer then paid in full says so, and one not paid by its day says "the full amount is owed again".
 
 ## Related
 

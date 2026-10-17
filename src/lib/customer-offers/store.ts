@@ -1,6 +1,5 @@
 import crypto from "node:crypto";
 import { runCycleSoon } from "../agent/cycle-soon";
-import { amountToPay, discountApplies, invoiceDiscount } from "../agent/payment-timing";
 import { currentOrgId } from "../context";
 import { db, platformDb, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
@@ -197,47 +196,64 @@ export async function decideDiscount(token: string, accept: boolean, deps: { rai
   return { outcome: "declined" };
 }
 
-/** What a receivable is owed at now, with the discount it carries while it applies (C6). Pure. */
-export function owedNow(row: { amount: number; early_pay_discount_pct?: string | number | null; discount_due_date?: string | null }, now: Date): { owed: number; discount: { pct: number; payBy: string; full: number } | null } {
-  const discount = invoiceDiscount(row);
-  if (!discount || !discountApplies(discount, now)) return { owed: row.amount, discount: null };
-  return { owed: amountToPay(row.amount, discount, now).amountPaid, discount: { pct: discount.pct, payBy: discount.deadline.slice(0, 10), full: row.amount } };
+/** An accepted offer as the pay page reads it: what pays the receivable, from when, through which UTC day. */
+export interface AcceptedOffer {
+  pct: number;
+  /** The receivable's amount when the offer was made, and the offer's discounted amount, as the database worked it out. */
+  amount: number;
+  offered: number;
+  /** When the offer was made, and its pay-by day ("YYYY-MM-DD"). */
+  since: string;
+  payBy: string;
 }
 
-/** The discount a pay link's receivable carries now, for the pay page (C5); null when none applies. */
-export async function payLinkDiscount(orgId: string, invoiceId: string, now: Date = new Date()): Promise<{ owed: number; pct: number; payBy: string; full: number } | null> {
+/**
+ * What a receivable is owed now (C6), as the matcher takes it: an accepted offer's discounted amount from when the offer
+ * was made through its pay-by day (UTC), for a receivable whose amount has not changed since; else its amount. Pure.
+ */
+export function owedNow(amount: number, offer: AcceptedOffer | null, now: Date): { owed: number; discount: { pct: number; payBy: string; full: number } | null } {
+  if (!offer || Math.round(offer.amount * 1_000_000) !== Math.round(amount * 1_000_000)) return { owed: amount, discount: null };
+  const at = now.getTime();
+  const end = Date.parse(`${offer.payBy}T00:00:00Z`) + 86_400_000;
+  if (at < Date.parse(offer.since) || at >= end) return { owed: amount, discount: null };
+  return { owed: offer.offered, discount: { pct: offer.pct, payBy: offer.payBy, full: amount } };
+}
+
+type OfferRead = { discount_pct: string; amount: string; offered_amount: string; pay_by: string; created_at: string };
+const asAccepted = (row: OfferRead): AcceptedOffer => ({
+  pct: Number(row.discount_pct),
+  amount: Number(row.amount),
+  offered: Number(row.offered_amount),
+  since: row.created_at,
+  payBy: String(row.pay_by).slice(0, 10),
+});
+
+/** The discount a pay link's receivable carries now, for the pay page (C5): from its accepted offer only; null when none applies. */
+export async function payLinkDiscount(orgId: string, invoiceId: string, amount: number, now: Date = new Date()): Promise<{ owed: number; pct: number; payBy: string; full: number } | null> {
   const read = await withOrg(orgId, async () =>
     db()
-      .from("invoices")
-      .select("amount, early_pay_discount_pct, discount_due_date")
-      .eq("id", invoiceId)
-      .eq("direction", "receivable")
-      .maybeSingle<{ amount: string; early_pay_discount_pct: string | null; discount_due_date: string | null }>()
+      .from("customer_discount_offers")
+      .select("discount_pct, amount, offered_amount, pay_by, created_at")
+      .eq("invoice_id", invoiceId)
+      .eq("status", "accepted")
+      .maybeSingle<OfferRead>()
   );
   if (read.error || !read.data) return null;
-  const { owed, discount } = owedNow({ ...read.data, amount: Number(read.data.amount) }, now);
+  const { owed, discount } = owedNow(amount, asAccepted(read.data), now);
   return discount ? { owed, ...discount } : null;
 }
 
 /**
  * What arrived for a receivable paid at the discount its customer accepted (C6), for the pay page's paid view: the
- * transfer matched to it, when the receivable carries a discount and that transfer was less than its amount. Null
- * otherwise, and the page says what it always said.
+ * offer's discounted amount, once the receipts stage marked it paid. Null otherwise, and the page says what it always said.
  */
 export async function paidAtDiscount(orgId: string, invoiceId: string): Promise<number | null> {
-  return withOrg(orgId, async () => {
-    const invoice = await db()
-      .from("invoices")
-      .select("amount, early_pay_discount_pct")
-      .eq("id", invoiceId)
-      .eq("direction", "receivable")
-      .maybeSingle<{ amount: string; early_pay_discount_pct: string | null }>();
-    if (invoice.error || !invoice.data || invoice.data.early_pay_discount_pct === null) return null;
-    const matched = await db().from("incoming_transfers").select("amount").eq("invoice_id", invoiceId);
-    if (matched.error || !matched.data || matched.data.length !== 1) return null;
-    const arrived = Number((matched.data[0] as { amount: string }).amount);
-    return Number.isFinite(arrived) && arrived < Number(invoice.data.amount) ? arrived : null;
-  });
+  const read = await withOrg(orgId, async () =>
+    db().from("customer_discount_offers").select("offered_amount").eq("invoice_id", invoiceId).eq("status", "paid").maybeSingle<{ offered_amount: string }>()
+  );
+  if (read.error || !read.data) return null;
+  const arrived = Number(read.data.offered_amount);
+  return Number.isFinite(arrived) ? arrived : null;
 }
 
 export interface CustomerOffersView {
@@ -246,7 +262,7 @@ export interface CustomerOffersView {
 }
 
 /** The setting and the latest offers, for Bills & receivables (C1); null before migration 0129. */
-export async function customerOffersView(): Promise<CustomerOffersView | null> {
+export async function customerOffersView(now?: Date): Promise<CustomerOffersView | null> {
   const ready = await db().rpc("customer_discounts_ready");
   if (ready.error) return null;
   const setting = await customerOffersSetting();
@@ -254,21 +270,34 @@ export async function customerOffersView(): Promise<CustomerOffersView | null> {
   const rows = unwrap(
     await db()
       .from("customer_discount_offers")
-      .select("id, discount_pct, amount, offered_amount, status, pay_by, created_at, decided_at, paid_at, counterparties(name)")
+      .select("id, invoice_id, discount_pct, amount, offered_amount, status, pay_by, created_at, decided_at, paid_at, counterparties(name)")
+      .neq("status", "withdrawn")
       .order("created_at", { ascending: false })
       .limit(6)
-  ) as unknown as Array<{ id: string; discount_pct: string; amount: string; offered_amount: string; status: string; pay_by: string; created_at: string; decided_at: string | null; paid_at: string | null; counterparties: { name: string } | null }>;
+  ) as unknown as Array<{ id: string; invoice_id: string; discount_pct: string; amount: string; offered_amount: string; status: string; pay_by: string; created_at: string; decided_at: string | null; paid_at: string | null; counterparties: { name: string } | null }>;
+  // An accepted offer's receivable, read for whether it was paid in full instead, or its pay-by day passed (C6).
+  const acceptedIds = rows.filter((row) => row.status === "accepted").map((row) => row.invoice_id);
+  const received = new Set(
+    acceptedIds.length
+      ? (unwrap(await db().from("invoices").select("id, status").in("id", acceptedIds)) as Array<{ id: string; status: string }>).filter((row) => row.status === "received").map((row) => row.id)
+      : []
+  );
+  const today = (now ?? new Date()).toISOString().slice(0, 10);
   return {
     setting,
-    recent: rows.map((row) => ({
-      id: row.id,
-      customerName: row.counterparties?.name ?? "A customer",
-      pct: Number(row.discount_pct),
-      amount: Number(row.amount),
-      discounted: Number(row.offered_amount),
-      status: row.status,
-      payBy: row.pay_by,
-      at: row.paid_at ?? row.decided_at ?? row.created_at,
-    })),
+    recent: rows.map((row) => {
+      const payBy = String(row.pay_by).slice(0, 10);
+      const status = row.status !== "accepted" ? row.status : received.has(row.invoice_id) ? "paid_full" : payBy < today ? "lapsed" : "accepted";
+      return {
+        id: row.id,
+        customerName: row.counterparties?.name ?? "A customer",
+        pct: Number(row.discount_pct),
+        amount: Number(row.amount),
+        discounted: Number(row.offered_amount),
+        status,
+        payBy,
+        at: row.paid_at ?? row.decided_at ?? row.created_at,
+      };
+    }),
   };
 }

@@ -92,6 +92,15 @@ interface ReviewRow {
   emailed_at: string | null;
 }
 
+/** When a review is claimed: the clock's time, so a slow model call before it never shortens its lease; never before `now`. */
+const claimedAt = (now: number) => new Date(Math.max(now, Date.now())).toISOString();
+
+/** Whether the agent signed this offer as emailed (customer_discount_offered): the email went, whatever its review says. */
+async function signedAsEmailed(orgDb: OrgDb, offerId: string): Promise<boolean> {
+  const read = await orgDb.from("ledger_entries").select("seq").eq("action", "customer_discount_offered").eq("detail->>offerId", offerId).limit(1);
+  return !read.error && Array.isArray(read.data) && read.data.length > 0;
+}
+
 const startOfDay = (now: number) => {
   const d = new Date(now);
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
@@ -127,19 +136,33 @@ export async function makeCustomerOffers(
   const today = new Date(startOfDay(now)).toISOString().slice(0, 10);
   const lines: CycleLogLine[] = [];
 
+  const offers = unwrap(
+    await orgDb.from("customer_discount_offers").select("id, invoice_id, counterparty_id, status, discount_pct, offered_amount, pay_by, decided_at, expires_at").order("created_at", { ascending: false }).limit(1000)
+  ) as OfferRow[];
+
   // Reviews: an offer left unsent by a stopped run is withdrawn and its receivable weighed again; a skip, after 7 days (C7).
   const reviews = unwrap(await orgDb.from("customer_discount_reviews").select("id, invoice_id, action, offer_id, decided_at, emailed_at").limit(2000)) as ReviewRow[];
   const reviewed = new Set<string>();
   for (const review of reviews) {
     const age = now - Date.parse(review.decided_at);
     if (review.action === "offer" && !review.emailed_at && age > CUSTOMER_UNSENT_LEASE_MS) {
-      if (review.offer_id && (await withdrawDiscountOffer(orgId, review.offer_id))) {
+      // The offer it made: the one it names, or, when the run stopped before naming it, the receivable's open one.
+      const offerId = review.offer_id ?? offers.find((row) => row.invoice_id === review.invoice_id && row.status === "open")?.id ?? null;
+      // An offer signed as emailed went out, though its review was not marked so: marked now, never withdrawn.
+      if (offerId && (await signedAsEmailed(orgDb, offerId))) {
+        await orgDb.from("customer_discount_reviews").update({ offer_id: offerId, emailed_at: new Date(now).toISOString() }).eq("id", review.id);
+        reviewed.add(review.invoice_id);
+        continue;
+      }
+      if (offerId && (await withdrawDiscountOffer(orgId, offerId))) {
+        const row = offers.find((offer) => offer.id === offerId);
+        if (row) row.status = "withdrawn";
         await appendLedgerEntry({
           actor: "agent",
           domain: "ar",
           action: "customer_discount_withdrawn",
           summary: "Early-payment discount offer withdrawn: its email never went",
-          detail: { offerId: review.offer_id, invoiceId: review.invoice_id, reason: "not_emailed" },
+          detail: { offerId, invoiceId: review.invoice_id, reason: "not_emailed" },
         });
       }
       await orgDb.from("customer_discount_reviews").delete().eq("id", review.id);
@@ -177,16 +200,26 @@ export async function makeCustomerOffers(
   const heldForCashRows = heldUsdc.filter((row) => heldForCash(latest.get(row.id)));
   const heldForCashTotal = heldForCashRows.reduce((sum, row) => sum + Number(row.amount), 0);
 
-  const offers = unwrap(
-    await orgDb.from("customer_discount_offers").select("id, invoice_id, counterparty_id, status, discount_pct, offered_amount, pay_by, decided_at, expires_at").order("created_at", { ascending: false }).limit(1000)
-  ) as OfferRow[];
-  const acceptedUnpaid = offers.filter((row) => row.status === "accepted" && row.pay_by >= today).reduce((sum, row) => sum + Number(row.offered_amount), 0);
+  // Discounts accepted and still to come in (C2): their receivable still open, and their pay-by day not passed. One paid
+  // in full instead, or by a person's allocation, is in the operating USDC already, or owed in full again.
+  const acceptedRows = offers.filter((row) => row.status === "accepted" && String(row.pay_by).slice(0, 10) >= today);
+  const stillOpen = acceptedRows.length
+    ? new Set(
+        (
+          unwrap(await orgDb.from("invoices").select("id").in("id", acceptedRows.map((row) => row.invoice_id)).in("status", ["pending", "matched"])) as Array<{ id: string }>
+        ).map((row) => row.id)
+      )
+    : new Set<string>();
+  const acceptedUnpaid = acceptedRows.filter((row) => stillOpen.has(row.invoice_id)).reduce((sum, row) => sum + Number(row.offered_amount), 0);
   const shortfall = cashShortfall({ heldForCash: heldForCashTotal, operating: input.operatingBalance, acceptedUnpaid });
   if (shortfall <= 0) return lines;
 
-  const offeredInvoices = new Set(offers.map((row) => row.invoice_id));
+  // A withdrawn offer is one whose email never went (C7): the customer never saw it, so it counts for nothing, and its
+  // receivable is weighed again.
+  const seenOffers = offers.filter((row) => row.status !== "withdrawn");
+  const offeredInvoices = new Set(seenOffers.map((row) => row.invoice_id));
   const customer = (id: string) => {
-    const mine = offers.filter((row) => row.counterparty_id === id);
+    const mine = seenOffers.filter((row) => row.counterparty_id === id);
     const declined = mine.filter((row) => row.status === "declined" && row.decided_at).map((row) => row.decided_at as string).sort();
     return {
       made: mine.length,
@@ -259,7 +292,7 @@ export async function makeCustomerOffers(
     const history = customer(row.counterparty_id);
     const days = daysEarly(row);
     const suggested = suggestedCustomerPct(days, ceiling);
-    const payBy = payByDay(today, utcDay(row.due_date) === "" ? today : new Date(row.due_date).toISOString().slice(0, 10));
+    const payBy = payByDay(today, new Date(row.due_date).toISOString().slice(0, 10));
     const reference = referenceCustomerDecision({ suggestedPct: suggested, daysEarly: days, shortfall: Number(stillShort.toFixed(6)) });
     const decided = await decide<CustomerOfferDecision>({
       purpose: "customer_discount",
@@ -286,7 +319,7 @@ export async function makeCustomerOffers(
     const referenceDecision = { action: reference.action, pct: reference.pct ?? null };
 
     if (value.action === "skip") {
-      const claim = await orgDb.from("customer_discount_reviews").insert({ invoice_id: row.id, action: "skip", decided_at: new Date(now).toISOString() }).select("id").single<{ id: string }>();
+      const claim = await orgDb.from("customer_discount_reviews").insert({ invoice_id: row.id, action: "skip", decided_at: claimedAt(now) }).select("id").single<{ id: string }>();
       if (claim.error?.code === "23505") continue;
       if (claim.error) throw new Error(claim.error.message);
       await appendLedgerEntry({
@@ -302,7 +335,7 @@ export async function makeCustomerOffers(
 
     const bounded = boundCustomerPct(value.pct, suggested, ceiling);
     // Claimed before the offer is made: two runs at once never offer the same receivable twice (C7).
-    const claim = await orgDb.from("customer_discount_reviews").insert({ invoice_id: row.id, action: "offer", discount_pct: bounded.pct, decided_at: new Date(now).toISOString() }).select("id").single<{ id: string }>();
+    const claim = await orgDb.from("customer_discount_reviews").insert({ invoice_id: row.id, action: "offer", discount_pct: bounded.pct, decided_at: claimedAt(now) }).select("id").single<{ id: string }>();
     if (claim.error?.code === "23505") continue;
     if (claim.error) throw new Error(claim.error.message);
     const release = () => orgDb.from("customer_discount_reviews").delete().eq("id", claim.data.id);
@@ -341,8 +374,10 @@ export async function makeCustomerOffers(
       lines.push({ domain: "ar", message: `Early-payment discount offer to ${customerName} not sent (${result.reason}); tried again at the next cycle` });
       continue;
     }
-    const emailed = await orgDb.from("customer_discount_reviews").update({ emailed_at: new Date().toISOString() }).eq("id", claim.data.id);
-    if (emailed.error) console.error("customer discount review not marked emailed", row.id, emailed.error.message);
+    // Marked emailed, tried twice: an emailed offer left unmarked is recognised by its signed entry, never withdrawn.
+    const markEmailed = () => orgDb.from("customer_discount_reviews").update({ emailed_at: new Date().toISOString() }).eq("id", claim.data.id);
+    const emailed = (await markEmailed()).error ? await markEmailed() : null;
+    if (emailed?.error) console.error("customer discount review not marked emailed", row.id, emailed.error.message);
     stillShort = Math.max(0, stillShort - Number(offer.row.offered_amount));
     const reasoning = bounded.limited
       ? `${value.reasoning} [The model chose ${value.pct}%; code allows 0.25% to ${ceiling}%, so the offer gives ${bounded.pct}%.]`

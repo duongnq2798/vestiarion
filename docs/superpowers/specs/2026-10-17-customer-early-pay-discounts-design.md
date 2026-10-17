@@ -47,8 +47,12 @@ business pays early for a discount when cash is plenty; here it is paid early fo
   - **Declined:** nothing changes.
   - Signed: `customer_discount_accepted` or `customer_discount_declined`.
 - **C6 Paid, or back to the full amount.**
-  - A payment of exactly the discounted amount, received by the end of the pay-by day (UTC), settles the receivable as
-    any matched payment does, and is signed `customer_discount_taken` with what the discount cost.
+  - A payment of exactly the discounted amount, received after the offer was made and by the end of the pay-by day
+    (UTC), settles the receivable as any matched payment does, and is signed `customer_discount_taken` with what the
+    discount cost. Money that came in before the offer was never paid at its discount.
+  - Only an accepted offer lowers what pays a receivable. A discount typed on a receivable from a form, an import or the
+    API changes nothing about what pays it, as before.
+  - A discount accepted and then paid in full, or by a person's allocation, no longer counts as money to come in.
   - After the pay-by day the discount no longer applies: the receivable is owed in full again, and a payment of the
     discounted amount then is left for a person, as any payment that matches nothing.
 - **C7 One email, once.** The same pattern as the supplier offers (AO4): each receivable's review is claimed before the
@@ -64,7 +68,8 @@ collection, cash readiness and the HubSpot and Pipedrive write-back read the inv
 and would show the discount as money never invoiced. The discount columns payables already use (`early_pay_discount_pct`,
 `discount_due_date`, migration 0038) say instead what pays the receivable until a day, and the amount stays what was
 invoiced. The matcher (`src/lib/agent/receipts.ts`) takes the discounted amount for money that arrived by the end of
-that day, as well as the full amount; nothing else that reads a receivable changes.
+that day, as well as the full amount, reading the accepted offer itself (its discounted amount as the database worked
+it out, when it was made, its pay-by day), never the columns alone; nothing else that reads a receivable changes.
 
 ## Storage (migration 0129)
 

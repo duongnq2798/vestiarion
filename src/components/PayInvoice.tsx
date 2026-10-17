@@ -7,6 +7,8 @@ import type { PayLinkPreview } from "@/lib/platform/pay-links";
 const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 /** The amount as a wallet's field takes it: no thousands separator. */
 const PLAIN = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6, useGrouping: false });
+/** A "YYYY-MM-DD" day as "Oct 22, 2026". */
+const DAY = (day: string) => new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
 /**
  * An open invoice on its pay link's page (docs/superpowers/specs/2026-10-01-receivables-on-arc-design.md §2): who asks,
@@ -55,7 +57,7 @@ export function PayInvoice({
           <>
             <dt className="text-ink-3">Discount</dt>
             <dd className="text-ink">
-              {discount.pct.toFixed(2)}% off {AMOUNT.format(discount.full)} {preview.currency}, for paying by the end of {discount.payBy} (UTC). After that, the
+              {discount.pct.toFixed(2)}% off {AMOUNT.format(discount.full)} {preview.currency}, for paying by the end of {DAY(discount.payBy)} (UTC). After that, the
               invoice is {AMOUNT.format(discount.full)} {preview.currency} again.
             </dd>
           </>

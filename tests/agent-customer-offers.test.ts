@@ -53,6 +53,10 @@ interface World {
   reviews?: Array<Record<string, unknown>>;
   links?: Array<Record<string, unknown>>;
   claim?: FakeReply;
+  /** The receivables of accepted offers still open. */
+  stillOpen?: Array<Record<string, unknown>>;
+  /** The agent's signed customer_discount_offered entries, by offer. */
+  signed?: string[];
 }
 
 const created: Array<{ p_pct: number; p_pay_by: string }> = [];
@@ -70,6 +74,11 @@ function world(w: World = {}) {
       return { body: w.held ?? [{ id: BILL, amount: "500", currency: "USDC" }] };
     }
     if (request.path === "/rest/v1/invoices" && request.params.get("direction") === "eq.receivable") return { body: w.receivables ?? [receivable()] };
+    if (request.path === "/rest/v1/invoices") return { body: w.stillOpen ?? [] };
+    if (request.path === "/rest/v1/ledger_entries" && request.params.get("action") === "eq.customer_discount_offered") {
+      const offerId = request.params.get("detail->>offerId")?.replace(/^eq\./, "") ?? "";
+      return { body: (w.signed ?? []).includes(offerId) ? [{ seq: 99 }] : [] };
+    }
     if (request.path === "/rest/v1/ledger_entries") return { body: w.decisions ?? [{ seq: 10, detail: HELD_FOR_CASH }] };
     if (request.path === "/rest/v1/customer_discount_offers") return { body: w.offers ?? [] };
     if (request.path === "/rest/v1/receivable_links") return { body: w.links ?? [{ invoice_id: RECEIVABLE, token_enc: { v: 1 }, revoked_at: null }] };
@@ -151,6 +160,28 @@ describe("making an offer (C2-C4, C7)", () => {
   });
 });
 
+describe("an offer left unsent by a stopped run (C7)", () => {
+  const stale = { id: "review-0", invoice_id: RECEIVABLE, action: "offer", decided_at: "2026-10-17T08:00:00Z", emailed_at: null };
+  const open = { id: "open-1", invoice_id: RECEIVABLE, counterparty_id: CUSTOMER, status: "open", discount_pct: "1", offered_amount: "297", pay_by: "2026-10-22", decided_at: null, expires_at: "2026-10-22T23:59:59Z" };
+
+  it("withdraws the receivable's open offer even when the review never named it", async () => {
+    const client = world({ reviews: [{ ...stale, offer_id: null }], offers: [open] });
+    await run(client);
+    const withdraw = client.requests.find((request) => request.path === "/rest/v1/rpc/withdraw_customer_discount_offer");
+    expect(withdraw?.body).toMatchObject({ p_offer_id: "open-1" });
+    expect(actions()).toContain("customer_discount_withdrawn");
+  });
+
+  it("keeps an offer signed as emailed, marking its review instead of withdrawing it", async () => {
+    const client = world({ reviews: [{ ...stale, offer_id: "open-1" }], offers: [open], signed: ["open-1"] });
+    await run(client);
+    expect(client.requests.some((request) => request.path === "/rest/v1/rpc/withdraw_customer_discount_offer")).toBe(false);
+    const marked = client.requests.find((request) => request.path === "/rest/v1/customer_discount_reviews" && request.method === "PATCH");
+    expect(marked?.body).toMatchObject({ offer_id: "open-1", emailed_at: expect.any(String) });
+    expect(actions()).not.toContain("customer_discount_withdrawn");
+  });
+});
+
 describe("when it asks nothing (C1, C2)", () => {
   it("offers nothing while no bill is held for want of cash", async () => {
     await run(world({ decisions: [{ seq: 10, detail: { invoiceId: BILL, execution: {} } }] }));
@@ -178,10 +209,19 @@ describe("when it asks nothing (C1, C2)", () => {
     expect(decideMock).not.toHaveBeenCalled();
   });
 
-  it("counts discounts already accepted and not yet paid against the shortfall", async () => {
+  it("counts discounts accepted and still to come in against the shortfall, and not one already paid in full", async () => {
     const accepted = { id: "a", invoice_id: "other", counterparty_id: "other-customer", status: "accepted", discount_pct: "1", offered_amount: "400", pay_by: "2026-10-20", decided_at: "2026-10-16T00:00:00Z", expires_at: "2026-10-20T23:59:59Z" };
-    await run(world({ offers: [accepted] }));
+    await run(world({ offers: [accepted], stillOpen: [{ id: "other" }] }));
     expect(created).toEqual([]);
+    // Paid in full instead: its money is in the operating USDC, so the shortfall stands and the agent offers.
+    await run(world({ offers: [accepted], stillOpen: [] }));
+    expect(created).toHaveLength(1);
+  });
+
+  it("weighs a receivable again after an offer whose email never went (C7)", async () => {
+    const withdrawn = { id: "old", invoice_id: RECEIVABLE, counterparty_id: CUSTOMER, status: "withdrawn", discount_pct: "1", offered_amount: "297", pay_by: "2026-10-21", decided_at: "2026-10-16T00:00:00Z", expires_at: "2026-10-21T23:59:59Z" };
+    await run(world({ offers: [withdrawn] }));
+    expect(created).toHaveLength(1);
   });
 });
 

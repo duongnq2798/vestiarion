@@ -23,5 +23,7 @@ const STATUS: Record<string, string> = {
 /** One line of the recent offers on Bills & receivables: "Acme accepted 1.00% off 500.00 USDC, to pay by Oct 22, 2026." */
 export function recentDiscountLine(row: { customerName: string; status: string; pct: number; amount: number; discounted: number; payBy: string }): string {
   if (row.status === "paid") return `${row.customerName} paid ${money(row.discounted)} USDC at ${row.pct.toFixed(2)}% off ${money(row.amount)}, by ${day(row.payBy)}.`;
+  if (row.status === "paid_full") return `${row.customerName} accepted ${row.pct.toFixed(2)}% off, then paid the full ${money(row.amount)} USDC.`;
+  if (row.status === "lapsed") return `${row.customerName} accepted ${row.pct.toFixed(2)}% off ${money(row.amount)} USDC but did not pay by ${day(row.payBy)}: the full amount is owed again.`;
   return `${row.customerName} ${STATUS[row.status] ?? row.status} ${row.pct.toFixed(2)}% off ${money(row.amount)} USDC, to pay by ${day(row.payBy)}.`;
 }

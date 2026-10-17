@@ -2325,9 +2325,10 @@ early-payment offers above.
   `early_pay_discount_pct` and `discount_due_date` to the offer's, ending on the pay-by day; the amount never changes,
   so deal collection, CRM write-back and commissions read the receivable as before. Signed `customer_discount_accepted`
   or `customer_discount_declined`; an acceptance starts a cycle (`customer_discount_accepted`).
-- **Paid at the discount** (`src/lib/agent/receipts.ts`). `matchTransfer` also takes the discounted amount
-  (`owedAt`) for money that arrived by the end of the discount's last UTC day, and says `atDiscount`; the full amount
-  always matches too. Settled at the discount, `settle_customer_discount` marks the offer `paid` and
+- **Paid at the discount** (`src/lib/agent/receipts.ts`). The stage reads each open receivable's `accepted` offer;
+  `matchTransfer` also takes that offer's `offered_amount` (`owedAt`) for money that arrived after the offer was made
+  and by the end of its pay-by UTC day, and says `atDiscount`; the full amount always matches too. A discount typed on a
+  receivable without an offer is never taken. Settled at the discount, `settle_customer_discount` marks the offer `paid` and
   `customer_discount_taken` signs what it cost. The pay link page asks for the discounted amount while it applies
   (`payLinkDiscount`) and, paid, says what arrived (`paidAtDiscount`).
 

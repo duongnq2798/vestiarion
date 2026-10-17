@@ -59,7 +59,7 @@ export default async function PayPage({ params }: PayPageProps) {
     : null;
   // A discount the client accepted (customer discounts C5, C6): asked for while it applies; once paid at it, what arrived
   // was the discounted amount, never the whole invoice. Best effort, as the balance: unread, the invoice is as before.
-  const discount = preview && preview.status === "open" && !balance ? await payLinkDiscount(preview.orgId, preview.invoiceId).catch(() => null) : null;
+  const discount = preview && preview.status === "open" && !balance ? await payLinkDiscount(preview.orgId, preview.invoiceId, preview.amount).catch(() => null) : null;
   const discounted = preview && preview.status === "received" && !balance ? await paidAtDiscount(preview.orgId, preview.invoiceId).catch(() => null) : null;
   const arrived: number | null = balance ? balance.received : discounted !== null ? discounted : balanceRead ? (preview?.amount ?? 0) : null;
   const network = preview ? homeChain(networkOfChain(preview.chain)).label : undefined;
