@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { DocsLink } from "@/components/DocsLink";
 import { slugifyHeadings } from "@/lib/docs/headings";
 import { findPage } from "@/lib/docs/nav";
+import { videoFor } from "@/lib/docs/videos";
 
 /**
  * Each section of the app that a docs page explains links it beside its heading, as API keys and Webhooks always did:
@@ -42,6 +43,8 @@ const SECTIONS: Array<[string, string]> = [
   ["src/app/accountant/page.tsx", "/docs/guides/accountants"],
   ["src/components/UsagePanel.tsx", "/docs/guides/accountants#6-usage-and-limits"],
   ["src/components/vx/PaymentsInFlight.tsx", "/docs/guides/payment-exceptions"],
+  ["src/components/collections/CollectionsPanel.tsx", "/docs/guides/collections"],
+  ["src/app/o/[slug]/approvals/page.tsx", "/docs/guides/controls"],
 ];
 
 describe("DocsLink", () => {
@@ -51,6 +54,18 @@ describe("DocsLink", () => {
     expect(markup).toContain('aria-label="Docs: shadow mode"');
     expect(markup).toContain(">Docs</a>");
     expect(markup).toContain("<svg");
+  });
+
+  it("is followed by Watch and the length when the page has a walkthrough, opening the guide at it", () => {
+    const markup = renderToStaticMarkup(<DocsLink href="/docs/guides/shadow-mode" topic="shadow mode" />);
+    const video = videoFor("/docs/guides/shadow-mode")!;
+    expect(markup).toContain('href="/docs/guides/shadow-mode#watch-it"');
+    expect(markup).toContain(`aria-label="Watch: ${video.title}, ${video.duration}"`);
+    expect(markup).toContain(`>${video.duration}</span>`);
+    // A page with no walkthrough, or one heading of a page, has Docs alone.
+    for (const href of ["/docs/guides/slack", "/docs/guides/go-live#earn-on-idle-cash-with-usyc"]) {
+      expect(renderToStaticMarkup(<DocsLink href={href} topic="x" />)).not.toContain("Watch");
+    }
   });
 });
 

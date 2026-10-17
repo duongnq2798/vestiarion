@@ -1,5 +1,6 @@
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
+import { DocsLink } from "@/components/DocsLink";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { SectionHeader } from "@/components/ui/SectionHeader";
@@ -14,7 +15,12 @@ export function CollectionsPanel({ panel, available }: { panel: CollectionsPanel
   const { kept, broken } = panel.promises;
   return (
     <section id="collections" aria-labelledby="collections-title" className="scroll-mt-6 space-y-3">
-      <SectionHeader id="collections-title" title="Collections" meta="The next step for each receivable, and why" />
+      <SectionHeader
+        id="collections-title"
+        title="Collections"
+        meta="The next step for each receivable, and why"
+        action={<DocsLink href="/docs/guides/collections" topic="chasing what customers owe" />}
+      />
       <Card className="overflow-hidden">
         <dl className="grid grid-cols-3 divide-x divide-line border-b border-line">
           <Figure label="Waiting on you" value={panel.waiting} tone={panel.waiting > 0 ? "held" : "default"} sub={panel.waiting === 1 ? "receivable" : "receivables"} />
