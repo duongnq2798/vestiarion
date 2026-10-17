@@ -50,8 +50,13 @@ const foundSchema = z.object({
 
 type Found = { decisions: DecisionFacts[]; pastWeek: RecentDecisions["pastWeek"] };
 
-/** One more than the landing lists: the newest is the latest decision, shown above them. */
-const READ = 6;
+/**
+ * Enough to find a refusal by code among the newest: the newest is the latest decision, shown above them, and the
+ * landing lists `SHOWN` of the rest.
+ */
+const READ = 12;
+/** How many earlier decisions the landing lists: a few, with the full count on Open numbers. */
+export const SHOWN = 3;
 const MEMO_MS = 60_000;
 let memo: { at: number; value: Promise<Found> } | null = null;
 
@@ -83,8 +88,14 @@ export async function readRecentDecisions(now: number = Date.now()): Promise<Rec
 
 /**
  * The decisions to list under the latest one: strictly older than it, so the latest never shows twice and a list read
- * a moment later never shows a newer one beneath it, at most `limit`.
+ * a moment later never shows a newer one beneath it, at most `limit`, newest first. When none of those was refused by
+ * code but an older one read was, the newest refusal takes the last place: the list then shows the rules in code
+ * stopping a payment, not only payments going out.
  */
-export function earlierThan(decisions: RecentDecisionView[], latestSeq: number, limit = READ - 1): RecentDecisionView[] {
-  return decisions.filter((decision) => decision.seq < latestSeq).slice(0, limit);
+export function earlierThan(decisions: RecentDecisionView[], latestSeq: number, limit = SHOWN): RecentDecisionView[] {
+  const older = decisions.filter((decision) => decision.seq < latestSeq);
+  const newest = older.slice(0, limit);
+  if (newest.length < limit || newest.some((decision) => decision.outcome.kind === "refused")) return newest;
+  const refusal = older.slice(limit).find((decision) => decision.outcome.kind === "refused");
+  return refusal ? [...newest.slice(0, limit - 1), refusal] : newest;
 }

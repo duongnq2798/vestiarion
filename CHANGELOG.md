@@ -90,6 +90,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- **The landing page's proof says which rule decides.** A paid bill now reads "Rules in code passed it" first, then
+  whether the written policy agreed, "kept only to compare" when it would have decided otherwise. The latest decision's
+  badges read "Rules in code" and "Written policy, to compare", and one sentence says the rules in code decide while the
+  written policy never pays or blocks. Earlier decisions list three, with the latest refusal by code among them when
+  there is one. The FAQ says how long it takes to start: about five minutes.
 - **The landing page's proof leads each network with whoever has paid on it.**
   - Arc mainnet, where no customer has paid yet, now leads with the team's own payments under "Paid by the Vestiarion
     team": how many and how much USDC. "None on Arc mainnet yet" is on the customers' line under them.

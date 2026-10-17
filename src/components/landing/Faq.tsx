@@ -18,6 +18,11 @@ export function landingFaq(mainnetForEveryone: boolean): ReadonlyArray<{ questio
         "No. In shadow mode you keep paying the way you do today. You add your real bills, see what the agent decides, and agree or disagree. No wallet or funds are needed to start; USDC matters only once you want the agent to pay bills itself.",
     },
     {
+      question: "How long does it take to start?",
+      answer:
+        "About five minutes. Add a supplier and one of your bills, as a PDF or through the form, and the agent usually decides on it within a minute, with its reasons and the checks it ran. Connecting Xero or HubSpot takes a few clicks more.",
+    },
+    {
       question: "Do the people I pay need a crypto wallet?",
       answer:
         "Only once the agent pays them itself: a payee then needs an address on Arc. Someone new gets a link to enter theirs, with no account to make. In shadow mode on Arc testnet, a payee with no address can be given one that Vestiarion makes for them.",
