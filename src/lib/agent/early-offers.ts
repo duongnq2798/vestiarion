@@ -195,11 +195,33 @@ export async function makeEarlyPaymentOffers(
   // The cash code leaves for offers (AO2): what falls due within the horizon comes first, then the offers already out.
   const horizon = startOfDay(now) + CASH_HORIZON_DAYS * DAY_MS;
   const dueSoon = payables.filter((row) => (row.currency ?? "USDC") === "USDC" && Date.parse(row.due_date) < horizon).reduce((sum, row) => sum + Number(row.amount), 0);
-  const openOffered = offers.filter(isOpen).reduce((sum, row) => sum + Number(row.offered_amount), 0);
+  const agentOffers = new Set(reviews.map((review) => review.offer_id).filter((id): id is string => id !== null));
+
+  // The offers out must stay covered (offer results R2): when the operating USDC left after this cycle's payments, less
+  // what falls due within the horizon, no longer covers every open offer, the agent withdraws its own, the largest first,
+  // until it does. A person's offer is a person's to withdraw.
+  const covering = Math.max(0, input.operatingBalance - dueSoon);
+  const open = offers.filter(isOpen);
+  let openOffered = open.reduce((sum, row) => sum + Number(row.offered_amount), 0);
+  const withdrawable = open.filter((row) => agentOffers.has(row.id)).sort((a, b) => Number(b.offered_amount) - Number(a.offered_amount));
+  for (const row of withdrawable) {
+    if (openOffered <= covering + 1e-9) break;
+    if (!(await withdrawAgentOffer(orgId, row.id))) continue;
+    openOffered -= Number(row.offered_amount);
+    row.status = "withdrawn";
+    const supplierName = payables.find((bill) => bill.id === row.invoice_id)?.counterparties?.name ?? "the supplier";
+    await appendLedgerEntry({
+      actor: "agent",
+      domain: "ap",
+      action: "early_payment_offer_withdrawn",
+      summary: `Early-payment offer to ${supplierName} withdrawn: the cash no longer covers it`,
+      detail: { offerId: row.id, invoiceId: row.invoice_id, via: "agent", reason: "cash", offeredAmount: Number(row.offered_amount), covering: Number(covering.toFixed(6)) },
+    });
+    lines.push({ domain: "ap", message: `Withdrew the early-payment offer to ${supplierName}: the cash no longer covers it` });
+  }
   let available = cashForOffers({ operating: input.operatingBalance, dueSoon, openOffers: openOffered });
 
   // Counters first (offer counters N3-N6): each one a supplier proposed on the agent's own offer, answered once.
-  const agentOffers = new Set(reviews.map((review) => review.offer_id).filter((id): id is string => id !== null));
   const countered = offers.filter((row) => row.status === "countered" && row.counter_pct !== null && agentOffers.has(row.id)).slice(0, COUNTERS_PER_RUN);
   if (countered.length > 0) {
     const suppliers = new Map(

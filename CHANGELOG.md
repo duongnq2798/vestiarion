@@ -14,6 +14,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **What the early-payment offers came to, and offers kept covered.** Pay early for a discount says how many offers
+  were made (by the agent among them), accepted (after a counter among them) and declined, and what the bills paid early
+  saved, as an amount and as a yearly rate on the cash paid early. And the agent withdraws its own open offers, the
+  largest first, when the cash left after what falls due this week no longer covers every offer out, so it never
+  promises a supplier a payment today it could not make. A person's offer is never withdrawn by the agent.
+  [Guide](https://www.vestiarion.xyz/docs/guides/early-payment-offers#what-the-offers-came-to).
+
 - **Suppliers can counter the agent's early-payment offers.** On an offer the agent made, the supplier may propose a
   smaller discount instead of accepting or declining. The agent answers it at once: code lets it accept only while its
   offers are on, the bill is unchanged, the counter beats what the cash would earn in the reserve by the due date, and

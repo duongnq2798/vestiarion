@@ -78,3 +78,20 @@ Where code allows it, the model decides whether to accept, from the bill, the tw
 - **Declined:** the bill keeps its due date. The ledger records `early_payment_counter_declined`, and the supplier is emailed "*Business* keeps the original terms: your invoice is paid as planned, ...".
 
 Both emails are fixed templates, sent to the address payment notices go to.
+
+## What the offers came to
+
+Once you have made an offer, **Pay early for a discount** says what they came to. For example: "So far: 4 offers made, 2 by the agent; 3 accepted, 1 of them after a counter; none declined. Paying early saved 0.02255 USDC, like earning 15.3% a year."
+
+- **Saved** is the bills' amounts less what was paid, for the bills paid early.
+- **The yearly rate** is that saving on the cash paid early, weighted by how many days before the due date each payment went. It reads the workspace's last 60 offers.
+
+## Offers stay covered
+
+An offer promises payment today, so the cash for it must stay there. At each cycle, the agent first checks the cash: the operating USDC left after the cycle's payments, less what falls due in the next 7 days. If that no longer covers every offer out, the agent withdraws its own offers, the largest first, until it does.
+
+- Each withdrawal is recorded in the ledger as `early_payment_offer_withdrawn`, with `reason: "cash"`.
+- The supplier's link then says it is no longer valid.
+- The agent does not offer that bill again.
+
+The agent never withdraws an offer you made.

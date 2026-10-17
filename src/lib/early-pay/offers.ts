@@ -5,7 +5,7 @@ import { db, platformDb, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { AGENT_MAX_CEILING_PCT, AGENT_MIN_CEILING_PCT } from "./agent-rules";
-import { MAX_OFFER_PCT, MIN_OFFER_PCT, suggestOffer, type OfferCandidate, type OffersView } from "./offers-words";
+import { MAX_OFFER_PCT, MIN_OFFER_PCT, offerResults, suggestOffer, type OfferCandidate, type OffersView } from "./offers-words";
 
 export * from "./offers-words";
 
@@ -46,7 +46,7 @@ export function offerUrl(origin: string, token: string): string {
 }
 
 type InvoiceRow = { id: string; amount: string; currency: string | null; due_date: string; memo: string | null; status: string; counterparties: { name: string } | null };
-type OfferRow = { id: string; invoice_id: string; discount_pct: string; offered_amount: string; counter_pct?: string | null; status: string; expires_at: string; decided_at: string | null; counterparties: { name: string } | null };
+type OfferRow = { id: string; invoice_id: string; discount_pct: string; amount?: string; offered_amount: string; counter_pct?: string | null; status: string; expires_at: string; decided_at: string | null; counterparties: { name: string } | null };
 
 /**
  * The bills worth an offer (E1, E2), in the workspace in scope: each with its suggestion, or the offer already out for
@@ -73,8 +73,8 @@ export async function offersView(now: Date = new Date()): Promise<OffersView | n
     : new Set<string>();
   const offersRead = (columns: string) => db().from("early_payment_offers").select(columns).order("created_at", { ascending: false }).limit(60);
   // With each counter (0127); before that migration runs, as before.
-  const withCounters = await offersRead("id, invoice_id, discount_pct, offered_amount, counter_pct, status, expires_at, decided_at, counterparties(name)");
-  const offers = (withCounters.error ? unwrap(await offersRead("id, invoice_id, discount_pct, offered_amount, status, expires_at, decided_at, counterparties(name)")) : withCounters.data) as unknown as OfferRow[];
+  const withCounters = await offersRead("id, invoice_id, discount_pct, amount, offered_amount, counter_pct, status, expires_at, decided_at, counterparties(name)");
+  const offers = (withCounters.error ? unwrap(await offersRead("id, invoice_id, discount_pct, amount, offered_amount, status, expires_at, decided_at, counterparties(name)")) : withCounters.data) as unknown as OfferRow[];
   const reserve = (unwrap(await db().from("accounts").select("apy").eq("kind", "reserve").maybeSingle()) as { apy: string | null } | null) ?? null;
   const reserveApy = reserve?.apy != null && Number.isFinite(Number(reserve.apy)) ? Number(reserve.apy) : 0;
   // An offer out, or one a supplier countered that the agent has not answered yet (offer counters N7).
@@ -103,7 +103,27 @@ export async function offersView(now: Date = new Date()): Promise<OffersView | n
     .filter((row): row is OfferRow & { status: "accepted" | "declined" | "withdrawn"; decided_at: string } => (row.status === "accepted" || row.status === "declined" || row.status === "withdrawn") && row.decided_at !== null)
     .slice(0, 5)
     .map((row) => ({ id: row.id, counterpartyName: row.counterparties?.name ?? "A supplier", pct: Number(row.discount_pct), status: row.status, decidedAt: row.decided_at, counterPct: row.counter_pct != null ? Number(row.counter_pct) : null }));
-  return { reserveApy, agent, candidates, recent };
+  // What the offers came to (offer results R1): the bills accepted ones were for, read for how early and whether paid.
+  const acceptedBills = [...new Set(offers.filter((row) => row.status === "accepted").map((row) => row.invoice_id))];
+  const bills = new Map(
+    (acceptedBills.length ? (unwrap(await db().from("invoices").select("id, due_date, status").in("id", acceptedBills)) as Array<{ id: string; due_date: string; status: string }>) : []).map((row) => [row.id, row] as const)
+  );
+  const results =
+    offers.length > 0
+      ? offerResults(
+          offers.map((row) => ({
+            status: row.status,
+            amount: Number(row.amount ?? 0),
+            offered: Number(row.offered_amount),
+            byAgent: byAgent.has(row.id),
+            countered: row.counter_pct != null,
+            decidedAt: row.decided_at,
+            dueDate: bills.get(row.invoice_id)?.due_date ?? null,
+            paid: bills.get(row.invoice_id)?.status === "paid",
+          }))
+        )
+      : null;
+  return { reserveApy, agent, candidates, recent, results };
 }
 
 /** Whether the agent makes offers in the workspace in scope, and its ceiling (AO1); null before migration 0126. */
