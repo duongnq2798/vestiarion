@@ -12,7 +12,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-6b7280?style=flat-square)](LICENSE)
 
 <a href="https://www.vestiarion.xyz"><img src="docs/assets/readme/open-the-app.svg" alt="Open the app: vestiarion.xyz" height="48"></a>
-<a href="https://youtu.be/-gMv3ipzDyA"><img src="docs/assets/readme/watch-the-demo.svg" alt="Watch the demo: 2:55 on YouTube" height="48"></a>
+<a href="https://youtu.be/LIrG03dfWVM"><img src="docs/assets/readme/watch-the-demo.svg" alt="Watch the demo: 2:59 on YouTube" height="48"></a>
 <a href="https://chromewebstore.google.com/detail/vestiarion-invoice-captur/jfhjgbdbolhnneomgifdnjamoldlioan"><img src="docs/assets/readme/add-to-chrome.svg" alt="Add to Chrome: Vestiarion Invoice Capture, on the Chrome Web Store" height="48"></a>
 <a href="https://www.npmjs.com/package/@vestiarion/sdk"><img src="docs/assets/readme/npm-sdk.svg" alt="Install from npm: @vestiarion/sdk" height="48"></a>
 
@@ -34,8 +34,8 @@ hash-chained ledger anyone in the workspace can verify.
   <sub>A bill the agent paid on Arc: its reasoning, the checks behind it, the signed audit entry and the transaction.</sub>
 </p>
 
-**Watch it work:** [the demo](https://youtu.be/-gMv3ipzDyA) (2:55) or [the full product tour](https://youtu.be/yfDxzibSYQc)
-(7:15), both recorded on the live product on October 15, 2026, with the Arc mainnet payment from October 12: a freelancer
+**Watch it work:** [the demo](https://youtu.be/LIrG03dfWVM) (2:59) or [the full product tour](https://youtu.be/2y1ntW6WAdM)
+(7:22), both recorded on the live product on October 15, 2026, with the Arc mainnet payment from October 12: a freelancer
 the agent pays on its own once a second member confirmed the address, a new supplier's first bill the model wanted to pay
 and code refused until a second member approved, the day the agent picks to pay, shadow mode and the customers' figures,
 Arc mainnet and the proof. The tour opens how the agent decided, line by line, on three of those decisions.
@@ -90,8 +90,8 @@ nothing else: no wallet, no USDC, no API key, nothing to install.
    yourself". [Mainnet proof](#mainnet-proof) walks through the first payment on Arc mainnet: held by code as a first
    payment to a new address, approved by a second person, and paid through the owner's spending-limit contract.
 
-**Watch instead:** [the demo](https://youtu.be/-gMv3ipzDyA) (2:55),
-[the full product tour](https://youtu.be/yfDxzibSYQc) (7:15), and [a short video for each main flow](#watch-each-flow),
+**Watch instead:** [the demo](https://youtu.be/LIrG03dfWVM) (2:59),
+[the full product tour](https://youtu.be/2y1ntW6WAdM) (7:22), and [a short video for each main flow](#watch-each-flow),
 two minutes or less each.
 
 **Reviewing security:** [www.vestiarion.xyz/security](https://www.vestiarion.xyz/security) covers the architecture,
@@ -117,24 +117,24 @@ tenant isolation, encryption, access control, connector tokens, webhooks, the su
 
 ## Watch each flow
 
-One short video for each main flow, recorded in the live product on Arc testnet with demo data in the team's own workspaces. Each plays at the top of its guide, with its transcript, and the newer ones are on YouTube too.
+One short video for each main flow, recorded in the live product on Arc testnet with demo data in the team's own workspaces. Each plays at the top of its guide, with its transcript, and on YouTube.
 
 | Flow | Length | What it shows | YouTube |
 | --- | --- | --- | --- |
-| [See your first decision](https://www.vestiarion.xyz/docs/guides/try-it#watch-it) | 1:46 | A supplier and one of its bills added in shadow mode, the agent's decision and why, and a verdict. | |
-| [Your first payment, paid by the agent](https://www.vestiarion.xyz/docs/guides/first-payment#watch-it) | 1:32 | A bill the agent pays on its own, one that waits for a second person, and the record of both. | |
-| [Shadow mode on your own bills](https://www.vestiarion.xyz/docs/guides/shadow-mode#watch-it) | 1:33 | Shadow mode on, test USDC for your real amounts, a mirror address, and a verdict on each decision. | |
-| [How payments are controlled](https://www.vestiarion.xyz/docs/guides/controls#watch-it) | 1:25 | A payment code refused, the limits, the people who approve, and the pause. | |
-| [Take a workspace live on Arc](https://www.vestiarion.xyz/docs/guides/go-live#watch-it) | 1:26 | Wallets created, funded with testnet USDC and taken live, then a workspace on Arc mainnet. | |
-| [Get paid by a customer on Arc](https://www.vestiarion.xyz/docs/guides/collections#watch-it) | 1:05 | An invoice to a customer, its pay link and pay page, and the agent's next step on Collections. | |
-| [Early-payment offers made by the agent](https://www.vestiarion.xyz/docs/guides/early-payment-offers#watch-it) | 1:13 | The bills worth paying early, an offer the agent made and the supplier accepted, and a counter. | |
-| [Pay a contractor for verified work](https://www.vestiarion.xyz/docs/guides/pay-a-contractor#watch-it) | 1:01 | A freelancer paid through a one-time link, released by the agent, and milestone escrow. | |
-| [Bills from QuickBooks and Zoho Books](https://www.vestiarion.xyz/docs/guides/quickbooks#watch-it) | 1:00 | Open bills from QuickBooks and Zoho Books, reviewed and added, then decided by the agent. | [Watch](https://youtu.be/pHKPZqiM0ew) |
-| [Bills that arrive on their own](https://www.vestiarion.xyz/docs/guides/import-bills#watch-it) | 1:17 | An invoice PDF read into the form, a pasted list of bills, and the email and Chrome intake. | [Watch](https://youtu.be/xQPel2tZ3UQ) |
-| [Pay a vendor's bank account in pesos](https://www.vestiarion.xyz/docs/guides/bank-payouts#watch-it) | 1:01 | Bank payouts set up with BlindPay, the vendor's bank account, and a payout followed to the end. | |
-| [Evidence and the audit export](https://www.vestiarion.xyz/docs/guides/evidence#watch-it) | 0:56 | Why a payment was made, how each fact is known, and the audit log's chain check. | [Watch](https://youtu.be/Zc1aAbKAv0I) |
-| [Bills from Xero, decided by the agent](https://www.vestiarion.xyz/docs/guides/xero#watch-it) | 1:52 | Bills from the Xero Demo Company come in, one paid in Xero is caught before it is paid twice, and one is paid on Arc testnet. | |
-| [A deal from HubSpot, collected on Arc](https://www.vestiarion.xyz/docs/guides/hubspot#watch-it) | 1:55 | A deal won in HubSpot is planned, its deposit is paid and matched, and the receipt is written back to HubSpot. | |
+| [See your first decision](https://www.vestiarion.xyz/docs/guides/try-it#watch-it) | 1:46 | A supplier and one of its bills added in shadow mode, the agent's decision and why, and a verdict. | [Watch](https://youtu.be/NLbkL9UTZno) |
+| [Your first payment, paid by the agent](https://www.vestiarion.xyz/docs/guides/first-payment#watch-it) | 1:32 | A bill the agent pays on its own, one that waits for a second person, and the record of both. | [Watch](https://youtu.be/36goTq5mDVg) |
+| [Shadow mode on your own bills](https://www.vestiarion.xyz/docs/guides/shadow-mode#watch-it) | 1:33 | Shadow mode on, test USDC for your real amounts, a mirror address, and a verdict on each decision. | [Watch](https://youtu.be/juD26mVxNCo) |
+| [How payments are controlled](https://www.vestiarion.xyz/docs/guides/controls#watch-it) | 1:25 | A payment code refused, the limits, the people who approve, and the pause. | [Watch](https://youtu.be/Gftnox42XPA) |
+| [Take a workspace live on Arc](https://www.vestiarion.xyz/docs/guides/go-live#watch-it) | 1:26 | Wallets created, funded with testnet USDC and taken live, then a workspace on Arc mainnet. | [Watch](https://youtu.be/AOPJduY0ohs) |
+| [Get paid by a customer on Arc](https://www.vestiarion.xyz/docs/guides/collections#watch-it) | 1:05 | An invoice to a customer, its pay link and pay page, and the agent's next step on Collections. | [Watch](https://youtu.be/NHRKTiQvCEg) |
+| [Early-payment offers made by the agent](https://www.vestiarion.xyz/docs/guides/early-payment-offers#watch-it) | 1:13 | The bills worth paying early, an offer the agent made and the supplier accepted, and a counter. | [Watch](https://youtu.be/GSrdfUdPoxU) |
+| [Pay a contractor for verified work](https://www.vestiarion.xyz/docs/guides/pay-a-contractor#watch-it) | 1:01 | A freelancer paid through a one-time link, released by the agent, and milestone escrow. | [Watch](https://youtu.be/MQWOlUDi_h0) |
+| [Bills from QuickBooks and Zoho Books](https://www.vestiarion.xyz/docs/guides/quickbooks#watch-it) | 1:00 | Open bills from QuickBooks and Zoho Books, reviewed and added, then decided by the agent. | [Watch](https://youtu.be/EhlpGMueECc) |
+| [Bills that arrive on their own](https://www.vestiarion.xyz/docs/guides/import-bills#watch-it) | 1:17 | An invoice PDF read into the form, a pasted list of bills, and the email and Chrome intake. | [Watch](https://youtu.be/7ZxrTg0ZHGg) |
+| [Pay a vendor's bank account in pesos](https://www.vestiarion.xyz/docs/guides/bank-payouts#watch-it) | 1:01 | Bank payouts set up with BlindPay, the vendor's bank account, and a payout followed to the end. | [Watch](https://youtu.be/ukbASJof93w) |
+| [Evidence and the audit export](https://www.vestiarion.xyz/docs/guides/evidence#watch-it) | 0:56 | Why a payment was made, how each fact is known, and the audit log's chain check. | [Watch](https://youtu.be/CWGIqRzS_jg) |
+| [Bills from Xero, decided by the agent](https://www.vestiarion.xyz/docs/guides/xero#watch-it) | 1:52 | Bills from the Xero Demo Company come in, one paid in Xero is caught before it is paid twice, and one is paid on Arc testnet. |  |
+| [A deal from HubSpot, collected on Arc](https://www.vestiarion.xyz/docs/guides/hubspot#watch-it) | 1:55 | A deal won in HubSpot is planned, its deposit is paid and matched, and the receipt is written back to HubSpot. |  |
 
 ## What Vestiarion does
 
