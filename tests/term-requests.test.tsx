@@ -278,6 +278,21 @@ describe("a supplier who countered (live test fix, Oct 17)", () => {
     await run(declined);
     expect(declined.requests.some((r) => r.path === "/rest/v1/rpc/create_term_request")).toBe(false);
   });
+
+  it("tells the model which earlier requests the agent took back, and leaves out one the supplier never got", async () => {
+    // Live test, Oct 17: told only made 2, declined 0, the model read the request it withdrew as a second no.
+    const client = world({
+      requests: [
+        earlier({ counter_days: 3 }),
+        earlier({ id: "request-withdrawn", invoice_id: "third-bill", status: "withdrawn", counter_days: null }),
+        earlier({ id: "request-unsent", invoice_id: "fourth-bill", status: "withdrawn", counter_days: null }),
+      ],
+      sent: ["request-old", "request-withdrawn"],
+    });
+    await run(client);
+    const prompt = JSON.parse((decideMock.mock.calls[0][0] as { userPrompt: string }).userPrompt) as { supplier: { requestsBefore: Record<string, number> } };
+    expect(prompt.supplier.requestsBefore).toEqual({ made: 2, accepted: 0, declined: 0, counteredAndDeclinedByUs: 1, withdrawnByUsBeforeAnAnswer: 1 });
+  });
 });
 
 describe("a request no longer needed (follow-up F1, F2)", () => {

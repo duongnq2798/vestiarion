@@ -377,7 +377,8 @@ export async function makeTermRequests(
   );
   const askedBills = new Set(requests.filter((row) => row.status !== "withdrawn" || sent.has(row.id)).map((row) => row.invoice_id));
   const supplier = (id: string) => {
-    const mine = requests.filter((row) => row.counterparty_id === id);
+    // The requests the supplier got: one withdrawn before its email went was never seen (X6).
+    const mine = requests.filter((row) => row.counterparty_id === id && (row.status !== "withdrawn" || sent.has(row.id)));
     // A request the supplier countered and the agent then declined (F6) is the agent's no, not the supplier's: only a
     // request the supplier itself declined waits 30 days before the next (X2).
     const declined = mine.filter((row) => row.status === "declined" && row.counter_days == null && row.decided_at).map((row) => row.decided_at as string).sort();
@@ -386,6 +387,9 @@ export async function makeTermRequests(
       accepted: mine.filter((row) => row.status === "accepted").length,
       declined: declined.length,
       countersDeclined: mine.filter((row) => row.status === "declined" && row.counter_days != null).length,
+      // Taken back by the agent once the bill was paid or no longer short (F1): the supplier said nothing about it, and
+      // the model is told so, rather than left to read an unanswered request as a no (live test, Oct 17).
+      withdrawn: mine.filter((row) => row.status === "withdrawn").length,
       lastDeclinedAt: declined.at(-1) ?? null,
       hasOpen: mine.some((row) => row.status === "open" && Date.parse(row.expires_at) > now),
     };
@@ -436,7 +440,7 @@ export async function makeTermRequests(
       userPrompt: JSON.stringify({
         task: "Decide whether to ask this supplier for more time on the held bill, and for how many days.",
         bill: { amount, currency: row.currency ?? "USDC", dueDate: utcDay(row.due_date), daysToDue, reference: row.memo },
-        supplier: { name: supplierName, requestsBefore: { made: history.made, accepted: history.accepted, declined: history.declined, counteredAndDeclinedByUs: history.countersDeclined } },
+        supplier: { name: supplierName, requestsBefore: { made: history.made, accepted: history.accepted, declined: history.declined, counteredAndDeclinedByUs: history.countersDeclined, withdrawnByUsBeforeAnAnswer: history.withdrawn } },
         cash: {
           operatingAfterTodaysPayments: input.operatingBalance,
           dueOnOrBeforeThisBill: Number(dueBefore.toFixed(6)),
