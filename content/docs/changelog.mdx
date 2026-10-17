@@ -1,5 +1,9 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-18: The weekly brief in shadow mode
+
+- In a workspace in shadow mode, **`weekly_brief_sent`** now carries `shadow: { verdicts: { given, agreed }, sinceStart: { given, agreed, since } }`, the verdicts given in the week and since shadow mode began, and `short` is always `null`: the wallet only mirrors agreed payments. Such a workspace now gets the brief, where before it got none. Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-18: The agent's weekly brief
 
 - Two new entries, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`, both in domain `system`, actor `system`:

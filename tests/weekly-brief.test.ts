@@ -43,11 +43,13 @@ interface World {
   briefs?: Array<{ action: string; ts?: string; detail: Record<string, unknown> }>;
   shadow?: boolean;
   book?: Array<Record<string, unknown>>;
+  /** The person's signed verdicts, in shadow mode. */
+  verdicts?: Array<{ ts: string; verdict: string }>;
 }
 function world(w: World = {}) {
   return fakeSupabase((request) => {
     if (request.path === "/rest/v1/orgs") return { body: { name: "Pinecrest Studio", slug: "pinecrest-studio" } };
-    if (request.path === "/rest/v1/shadow_modes") return { body: w.shadow ? [{ currency: "VND", started_at: "2026-10-01T00:00:00Z", started_by: null }] : [] };
+    if (request.path === "/rest/v1/shadow_modes") return { body: w.shadow ? [{ currency: "USD", started_at: "2026-10-08T09:00:00Z", started_by: null }] : [] };
     if (request.path === "/rest/v1/accounts") return { body: [{ kind: "operating", balance: w.operating ?? "150.03" }, { kind: "reserve", balance: "0" }] };
     if (request.path === "/rest/v1/invoices") {
       const book = w.book ?? BOOK;
@@ -60,6 +62,11 @@ function world(w: World = {}) {
     if (request.path === "/rest/v1/payment_intents") return { body: [{ amount: "140", token: "USDC" }, { amount: "1", token: "USDC" }, { amount: "5", token: "EURC" }] };
     if (request.path === "/rest/v1/ledger_entries") {
       const action = request.params.get("action");
+      if (action === "eq.decision_verdict") {
+        const from = request.params.get("ts")?.replace(/^gte\./, "") ?? "";
+        expect(from).toBe("2026-10-08T09:00:00Z");
+        return { body: (w.verdicts ?? []).map((row) => ({ ts: row.ts, detail: { verdict: row.verdict } })) };
+      }
       if (action === "in.(ar_received,ar_payment_applied)") return { body: [{ detail: { amount: 29.925, currency: "USDC" } }, { detail: { amount: 5, currency: "EURC" } }] };
       const briefs = w.briefs ?? [];
       // The week's last word, previews aside, newest first.
@@ -176,10 +183,9 @@ describe("sending it (W1, W2, W4, W5)", () => {
     expect(ledgerMock).not.toHaveBeenCalled();
   });
 
-  it("sends nothing on another day, once the week is claimed, or in shadow mode", async () => {
+  it("sends nothing on another day, or once the week is claimed", async () => {
     expect(await run(world(), () => sendWeeklyBrief({ now: SATURDAY }))).toMatchObject({ sent: 0, skipped: "not_monday" });
     expect(await run(world({ briefs: [{ action: WEEKLY_BRIEF_SENT, detail: { week: "2026-W43" } }] }), () => sendWeeklyBrief({ now: MONDAY }))).toMatchObject({ sent: 0, skipped: "sent_this_week" });
-    expect(await run(world({ shadow: true }), () => sendWeeklyBrief({ now: MONDAY }))).toMatchObject({ sent: 0, skipped: "shadow_mode" });
     expect(sendMock).not.toHaveBeenCalled();
   });
 
@@ -214,11 +220,53 @@ describe("sending it (W1, W2, W4, W5)", () => {
     expect(claimMock.mock.calls[0][0]).toMatchObject({ detail: { week: "2026-W42", preview: true, by: "u1", recipients: 1 } });
   });
 
-  it("refuses a second one to the same member within a few minutes, and any in shadow mode", async () => {
+  it("refuses a second one to the same member within a few minutes", async () => {
     const recent = { action: WEEKLY_BRIEF_SENT, ts: "2026-10-17T17:58:00Z", detail: { week: "2026-W42", preview: true, by: "u1" } };
     expect(await run(world({ briefs: [recent] }), () => sendWeeklyBrief({ now: SATURDAY, only: { userId: "u1", email: "owner@pinecrest.example" } }))).toMatchObject({ sent: 0, skipped: "too_soon" });
     const older = { ...recent, ts: "2026-10-17T17:50:00Z" };
     expect((await run(world({ briefs: [older] }), () => sendWeeklyBrief({ now: SATURDAY, only: { userId: "u1", email: "owner@pinecrest.example" } }))).sent).toBe(1);
-    expect(await run(world({ shadow: true }), () => sendWeeklyBrief({ now: SATURDAY, only: { userId: "u1", email: "owner@pinecrest.example" } }))).toMatchObject({ skipped: "shadow_mode" });
+  });
+});
+
+describe("the brief in shadow mode (W6)", () => {
+  const VERDICTS = [
+    { ts: "2026-10-09T10:00:00Z", verdict: "agree" },
+    { ts: "2026-10-10T10:00:00Z", verdict: "agree" },
+    { ts: "2026-10-14T10:00:00Z", verdict: "agree" },
+    { ts: "2026-10-15T10:00:00Z", verdict: "disagree" },
+  ];
+
+  it("counts the verdicts in the week and since shadow mode began, and leaves the mirror wallet's cash out", async () => {
+    const facts = await run(world({ shadow: true, verdicts: VERDICTS }), () => weeklyBriefFacts(db(), MONDAY, { currency: "USD", startedAt: "2026-10-08T09:00:00Z", startedBy: null }));
+    expect(facts.shadow).toEqual({ verdicts: { given: 2, agreed: 1 }, sinceStart: { given: 4, agreed: 3, since: "2026-10-08" } });
+    expect(facts.cash.short).toBeNull();
+  });
+
+  it("speaks of verdicts and says the business's own money did not move", () => {
+    const facts: WeeklyBriefFacts = {
+      week: "2026-W43", from: "2026-10-12", to: "2026-10-18", paid: { count: 1, usdc: 45 }, received: { count: 0, usdc: 0 }, decisions: 3, waiting: 1,
+      next7: { count: 2, usdc: 90, expectedUsdc: 0, lines: [] }, cash: { operating: 150, reserve: 0, short: null },
+      shadow: { verdicts: { given: 2, agreed: 1 }, sinceStart: { given: 8, agreed: 8, since: "2026-10-08" } },
+    };
+    const said = briefSentences(facts);
+    expect(said.lastWeek).toEqual([
+      "Made 3 decisions on your bills; in shadow mode each waits for your verdict.",
+      "You gave 2 verdicts and agreed with 1.",
+      "Paid 1 bill you agreed with on Arc testnet, 45.00 USDC in all.",
+    ]);
+    expect(said.waiting).toBe("1 payment waits for your verdict or a decision from you.");
+    expect(said.cash).toBe("Since shadow mode began on Oct 8, you agreed with the agent on 8 of 8 decisions. Your own money did not move: you keep paying your bills as before.");
+    const email = weeklyBriefEmail({ orgName: "Northwind Ops", facts, links: { console: "https://x/console", approvals: "https://x/approvals", plan: "https://x/plan" }, origin: "https://x" });
+    expect(email.subject).toBe("Northwind Ops: you agreed with the agent on 8 of 8 · your week in shadow mode");
+    expect(email.html).toContain("Your week with the agent · shadow mode");
+  });
+
+  it("goes to a shadow-mode workspace on a Monday, and from Settings, with the verdicts signed", async () => {
+    const outcome = await run(world({ shadow: true, verdicts: VERDICTS }), () => sendWeeklyBrief({ now: MONDAY }));
+    expect(outcome.sent).toBe(2);
+    expect((sendMock.mock.calls[0][0] as { subject: string }).subject).toBe("Pinecrest Studio: you agreed with the agent on 3 of 4 · your week in shadow mode");
+    expect(claimMock.mock.calls[0][0]).toMatchObject({ detail: { short: null, shadow: { verdicts: { given: 2, agreed: 1 }, sinceStart: { given: 4, agreed: 3 } } } });
+    sendMock.mockClear();
+    expect((await run(world({ shadow: true }), () => sendWeeklyBrief({ now: SATURDAY, only: { userId: "u1", email: "owner@pinecrest.example" } }))).sent).toBe(1);
   });
 });

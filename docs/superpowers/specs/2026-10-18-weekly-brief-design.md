@@ -12,8 +12,8 @@ both, with the numbers, gives them a reason to look, and tells them when they ne
 ## Design
 
 **W1. When.** The first scheduled cycle on a Monday (UTC) sends the week's brief, once per workspace per ISO week: the
-ledger's `weekly_brief_sent` with `week` (`2026-W43`) says it went. Scheduled cycles run for live workspaces only. Not in
-shadow mode, where the business pays its bills in its own money (out of scope for now).
+ledger's `weekly_brief_sent` with `week` (`2026-W43`) says it went. Scheduled cycles run for live workspaces only. In
+shadow mode, see W6.
 
 **W2. To whom.** The digest's recipients: owners, admins and approvers with "Email me when payments need a decision" on
 (`decidingRecipients`), at most 25. A line under the switch says it now covers the weekly summary too.
@@ -36,9 +36,15 @@ claimed (`weekly_brief_sent`) just before the emails go, so a cycle that starts 
 no email went, `weekly_brief_failed` lets the claim go, and the next scheduled cycle that Monday tries again (review of
 the brief).
 
+**W6. Shadow mode (added the same night).** A business in shadow mode keeps paying its bills itself, and the wallet
+only mirrors the payments it agreed to, so the brief speaks of verdicts instead of cash: the agent's decisions on its
+bills, the verdicts given in the week and how many agreed, the agreed bills paid on Arc testnet, and the agreement since
+shadow mode began, from the signed `decision_verdict` entries. It says the business's own money did not move, and has no
+cash line. The subject leads with the agreement ("you agreed with the agent on 8 of 8"). The ledger entry carries
+`shadow`.
+
 ## Out of scope
 
-- Shadow mode's own summary (verdicts given, agreement).
 - Telegram and Slack: they already hear each decision as it happens.
 
 ## Tests

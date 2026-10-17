@@ -7,14 +7,15 @@ import { BRIEF_LINES, weeklyBriefEmail, type WeeklyBriefFacts } from "../email/w
 import { appendLedgerEntry } from "../ledger";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { cashShortOf, readOpenCashOutlook } from "../agent/cash-alert";
-import { readShadowMode } from "../shadow-mode";
+import { readShadowMode, type ShadowMode } from "../shadow-mode";
 import { decidingRecipients, DIGEST_MAX_RECIPIENTS, DIGEST_SEND_DEADLINE_MS } from "./waiting";
 
 /**
  * The agent's weekly brief (docs/superpowers/specs/2026-10-18-weekly-brief-design.md): on the first scheduled cycle of a
  * Monday (UTC), once per ISO week, the members who decide payments and keep its emails on are told what the agent did in
  * the last 7 days, what waits for them, what leaves in the next 7 and whether the cash covers it (W1-W3). A member can
- * also send it to themselves at once from Settings (W4). Runs in an organization's scope; never throws (W5).
+ * also send it to themselves at once from Settings (W4). In shadow mode it speaks of the person's verdicts instead of
+ * the mirror wallet's cash (W6). Runs in an organization's scope; never throws (W5).
  */
 
 export const WEEKLY_BRIEF_SENT = "weekly_brief_sent";
@@ -47,11 +48,19 @@ export function briefDue(now: Date, sentThisWeek: boolean): boolean {
 
 /** Whether there is anything to say: a quiet workspace is not emailed that nothing happened (W3). */
 export function briefWorthSending(facts: WeeklyBriefFacts): boolean {
-  return facts.paid.count > 0 || facts.received.count > 0 || facts.decisions > 0 || facts.waiting > 0 || facts.next7.count > 0 || facts.cash.short !== null;
+  return (
+    facts.paid.count > 0 ||
+    facts.received.count > 0 ||
+    facts.decisions > 0 ||
+    facts.waiting > 0 ||
+    facts.next7.count > 0 ||
+    facts.cash.short !== null ||
+    (facts.shadow?.verdicts.given ?? 0) > 0
+  );
 }
 
 /** The brief's figures, read in the workspace's scope (W3). */
-export async function weeklyBriefFacts(orgDb: OrgDb, nowMs: number): Promise<WeeklyBriefFacts> {
+export async function weeklyBriefFacts(orgDb: OrgDb, nowMs: number, shadow: ShadowMode | null = null): Promise<WeeklyBriefFacts> {
   // The 7 whole UTC days before today, as the heading says them (review of the brief).
   const today = Date.UTC(new Date(nowMs).getUTCFullYear(), new Date(nowMs).getUTCMonth(), new Date(nowMs).getUTCDate());
   const since = new Date(today - 7 * DAY_MS).toISOString();
@@ -71,6 +80,11 @@ export async function weeklyBriefFacts(orgDb: OrgDb, nowMs: number): Promise<Wee
   const out = ahead.flatMap((entry) => entry.items.filter((item) => item.kind !== "in").map((item) => ({ day: entry.day, label: item.label, amount: item.amount, note: item.note })));
   const expected = ahead.reduce((sum, entry) => sum + entry.items.filter((item) => item.kind === "in").reduce((total, item) => total + item.amount, 0), 0);
   const short = cashShortOf(outlook);
+  // In shadow mode (W6): the person's verdicts, in the week and since shadow mode began, from their signed entries.
+  const verdictsOf = (rows: Array<{ ts: string; detail: Record<string, unknown> }>) => ({ given: rows.length, agreed: rows.filter((row) => row.detail.verdict === "agree").length });
+  const verdictRows = shadow
+    ? (unwrap(await orgDb.from("ledger_entries").select("ts, detail").eq("action", "decision_verdict").gte("ts", shadow.startedAt).lt("ts", until).limit(5000)) as Array<{ ts: string; detail: Record<string, unknown> }>)
+    : [];
   return {
     week: isoWeek(new Date(nowMs)),
     from: utcDay(today - 7 * DAY_MS),
@@ -83,8 +97,15 @@ export async function weeklyBriefFacts(orgDb: OrgDb, nowMs: number): Promise<Wee
     cash: {
       operating: Number(accounts.find((account) => account.kind === "operating")?.balance ?? 0),
       reserve: Number(accounts.find((account) => account.kind === "reserve")?.balance ?? 0),
-      short: short && short.need >= 0.01 ? { shortOn: short.shortOn, shortBy: short.shortBy, lowestOn: short.lowestOn, need: short.need } : null,
+      // The wallet only mirrors agreed payments in shadow mode: its shortfall is not the business's.
+      short: !shadow && short && short.need >= 0.01 ? { shortOn: short.shortOn, shortBy: short.shortBy, lowestOn: short.lowestOn, need: short.need } : null,
     },
+    shadow: shadow
+      ? {
+          verdicts: verdictsOf(verdictRows.filter((row) => row.ts >= since)),
+          sinceStart: { ...verdictsOf(verdictRows), since: shadow.startedAt.slice(0, 10) },
+        }
+      : null,
   };
 }
 
@@ -92,7 +113,7 @@ export interface BriefOutcome {
   sent: number;
   failed: number;
   /** Why nothing went, when nothing did. */
-  skipped?: "not_monday" | "sent_this_week" | "shadow_mode" | "no_email" | "nobody" | "quiet" | "too_soon" | "failed";
+  skipped?: "not_monday" | "sent_this_week" | "no_email" | "nobody" | "quiet" | "too_soon" | "failed";
 }
 
 /**
@@ -130,15 +151,15 @@ export async function sendWeeklyBrief(options: { now?: number; only?: { userId: 
       ) as Array<{ action: string }>;
       if (!briefDue(new Date(nowMs), last[0]?.action === WEEKLY_BRIEF_SENT)) return { ...outcome, skipped: "sent_this_week" };
     }
-    // Shadow mode (out of scope): the wallet only mirrors agreed payments, so its figures would mislead, a preview's too.
-    if (await readShadowMode(orgDb)) return { ...outcome, skipped: "shadow_mode" };
+    // In shadow mode the brief speaks of verdicts, not of the mirror wallet's cash (W6).
+    const shadow = await readShadowMode(orgDb);
 
     const settings = emailSettingsFromEnv();
     if (!settings) return { ...outcome, skipped: "no_email" };
     // Who is told, before the figures are read: a workspace nobody is told about reads nothing more.
     const recipients = options.only ? [options.only] : (await decidingRecipients(scopedOrgId)).slice(0, DIGEST_MAX_RECIPIENTS);
     if (recipients.length === 0) return { ...outcome, skipped: "nobody" };
-    const facts = await weeklyBriefFacts(orgDb, nowMs);
+    const facts = await weeklyBriefFacts(orgDb, nowMs, shadow);
     if (!options.only && !briefWorthSending(facts)) return { ...outcome, skipped: "quiet" };
 
     const org = unwrap(await platformDb().from("orgs").select("name, slug").eq("id", scopedOrgId).single()) as { name: string; slug: string };
@@ -165,6 +186,7 @@ export async function sendWeeklyBrief(options: { now?: number; only?: { userId: 
         waiting: facts.waiting,
         next7: { count: facts.next7.count, usdc: facts.next7.usdc, expectedUsdc: facts.next7.expectedUsdc },
         short: facts.cash.short,
+        ...(facts.shadow ? { shadow: facts.shadow } : {}),
       },
     });
 

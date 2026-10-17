@@ -2408,8 +2408,10 @@ them. Skipped in shadow mode (`readShadowMode`). Code only, no model.
 docs/superpowers/specs/2026-10-18-weekly-brief-design.md, `src/lib/notifications/weekly-brief.ts`, email in
 `src/lib/email/weekly-brief.ts`. `runScheduledCycle` (`src/lib/agent/cron.ts`) calls `sendWeeklyBrief()` after the digest
 and the escalations, on the same never-throw terms. It goes only on a Monday (UTC), once per ISO week (`isoWeek`; the
-week's `weekly_brief_sent` entry without `preview` stops a second), not in shadow mode, and not when `briefWorthSending`
-finds nothing to say. `weeklyBriefFacts` reads, for the last 7 days, confirmed USDC `payment_intents`, `ar_received`
+week's `weekly_brief_sent` entry without `preview` stops a second), and not when `briefWorthSending` finds nothing to
+say. In shadow mode (`readShadowMode`) `weeklyBriefFacts` also reads the `decision_verdict` entries since
+`shadow.startedAt` (the week's, and all of them), sets `cash.short` to null since the wallet only mirrors agreed
+payments, and the email speaks of verdicts: its subject leads with the agreement since shadow mode began. `weeklyBriefFacts` reads, for the last 7 days, confirmed USDC `payment_intents`, `ar_received`
 entries and the agent's `ap_*`/`milestone_*` entries; the payables waiting for a person; and, through
 `readOpenCashOutlook` (shared with the cash alert, `src/lib/agent/cash-alert.ts`), the next 7 days' outflows and
 expected receipts and `cashShortOf`, over the 7 whole UTC days before today (`ar_received` and `ar_payment_applied`
@@ -2420,7 +2422,7 @@ claimed; a claim that cannot be signed sends nothing. When no send succeeds, `we
 and the once-a-week check reads the week's last non-preview entry of the two, so a later Monday cycle retries.
 `sendWeeklyBriefNowAction` (`src/app/actions/notifications.ts`, `approval.decide`) sends it to the session's own
 address via `sendWeeklyBrief({ only })`, signed with `preview: true` and `by`, at most once per member in
-`PREVIEW_EVERY_MS` (5 minutes), never in shadow mode; the button is `SendBriefNow` in `NotificationsPanel`. Its emails
+`PREVIEW_EVERY_MS` (5 minutes); the button is `SendBriefNow` in `NotificationsPanel`. Its emails
 are metered as `weekly_brief`.
 
 ## Bank payouts (BlindPay)
