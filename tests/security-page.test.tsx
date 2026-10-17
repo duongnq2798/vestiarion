@@ -812,11 +812,13 @@ describe("what it does not claim, still true of the code", () => {
 
   it("review and CI before each merge, and no branch protection or required human second approval", () => {
     const development = section("development");
-    expect(development).toContain("Each change is reviewed by an independent AI code reviewer before merge");
+    expect(development).toContain("Changes are reviewed by an independent AI code reviewer before merge");
+    expect(development).toContain("when a release's changes were not each reviewed so, its release notes say so");
     expect(development).toContain("Each change must pass CI before it is merged");
     expect(notClaimed).toContain("main has no branch protection and no required human second approval");
     expect(notClaimed).not.toMatch(/no independent review|not reviewed|no second reviewer/i);
-    // The release notes say the same of every feature since the second beta, and CI runs on every pull request.
+    // Every release's notes since the second beta say whether its changes were reviewed by an independent reviewer before
+    // merge (v0.1.0-beta.8 says not every one was), and CI runs on every pull request.
     const releases = readdirSync(path.join(process.cwd(), "docs/releases")).filter((name) => /^v0\.1\.0-beta\.([2-9]|\d{2,})\.md$/.test(name));
     expect(releases.length).toBeGreaterThan(0);
     for (const notes of releases) {

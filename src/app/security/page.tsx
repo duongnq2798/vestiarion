@@ -497,8 +497,8 @@ export default function SecurityPage() {
             requests, and Vercel deploys <code>main</code>.
           </li>
           <li>
-            Each change is reviewed by an independent AI code reviewer before merge, and every defect it finds is fixed with a test that fails first.
-            Each change must pass CI before it is merged.
+            Changes are reviewed by an independent AI code reviewer before merge, and every defect it finds is fixed with a test that fails first; when a
+            release&apos;s changes were not each reviewed so, its release notes say so. Each change must pass CI before it is merged.
           </li>
           <li>
             <LegalLink href={CI_URL}>CI</LegalLink> runs on every pull request and every push to <code>main</code>: it checks that the lockfile

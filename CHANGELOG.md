@@ -12,6 +12,17 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+### Changed
+
+- **The landing page's proof says which rule decides.** A paid bill now reads "Rules in code passed it" first, then
+  whether the written policy agreed, "kept only to compare" when it would have decided otherwise. The latest decision's
+  badges read "Rules in code" and "Written policy, to compare", and one sentence says the rules in code decide while the
+  written policy never pays or blocks. Earlier decisions list three, with the latest refusal by code among them when
+  there is one. The FAQ says how long it takes to start (about five minutes) and what it costs: trying it is free, there
+  is no published price yet, and a live payment carries only its network fee, less than a cent on Arc.
+
+## [0.1.0-beta.8] - 2026-10-17
+
 ### Added
 
 - **Early-payment offers in a sandbox.** A sandbox's suppliers are sample data, so the agent used to make no offers
@@ -90,12 +101,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
-- **The landing page's proof says which rule decides.** A paid bill now reads "Rules in code passed it" first, then
-  whether the written policy agreed, "kept only to compare" when it would have decided otherwise. The latest decision's
-  badges read "Rules in code" and "Written policy, to compare", and one sentence says the rules in code decide while the
-  written policy never pays or blocks. Earlier decisions list three, with the latest refusal by code among them when
-  there is one. The FAQ says how long it takes to start (about five minutes) and what it costs: trying it is free, there
-  is no published price yet, and a live payment carries only its network fee, less than a cent on Arc.
+- **The security page says when a release's changes were not each reviewed.** It said every change is reviewed by an
+  independent AI code reviewer before merge. Not every change in this release was, so it now says changes are reviewed,
+  and that a release whose changes were not each reviewed so says it in its notes, as this one does.
 - **The landing page's proof leads each network with whoever has paid on it.**
   - Arc mainnet, where no customer has paid yet, now leads with the team's own payments under "Paid by the Vestiarion
     team": how many and how much USDC. "None on Arc mainnet yet" is on the customers' line under them.
@@ -724,7 +732,8 @@ public beta, on Arc testnet and Arc mainnet. Release notes:
   company.
 - HubSpot is read-only, polled every 15 minutes, and its app is not yet verified by HubSpot.
 
-[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.7...HEAD
+[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.8...HEAD
+[0.1.0-beta.8]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.8
 [0.1.0-beta.7]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.7
 [0.1.0-beta.6]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.6
 [0.1.0-beta.5]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.5
