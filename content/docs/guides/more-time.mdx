@@ -17,7 +17,7 @@ Choose **Stop the agent's requests** to turn it off: "The agent no longer asks f
 
 ## 2. Which bills the agent asks about
 
-Each cycle, after it has decided its bills, the agent looks at each bill held because the operating wallet could not pay it. That includes a bill scheduled for a later day that the cash will no longer cover then: the agent holds it days before its day, so the request can go out while there is time. Bills held for any other reason, such as a guardrail or shadow mode, wait for a person as usual. It weighs a request only where all of this holds:
+Each cycle, after it has decided its bills, the agent looks at each bill held because the operating wallet could not pay it. That includes a bill scheduled for a later day that the cash will no longer cover then: the agent holds it days before its day, so the request can go out while there is time. It also includes a bill the agent chose to make wait, when the cash cannot cover every bill due soon and it pays others first (see [Which bill first](/docs/guides/payment-plan#which-bill-first-when-the-cash-cannot-cover-them-all)). Bills held for any other reason, such as a guardrail or shadow mode, wait for a person as usual. It weighs a request only where all of this holds:
 
 - the bill falls due within 14 days, or is past due by no more than 7;
 - the bill never had a request;

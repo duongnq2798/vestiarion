@@ -14,6 +14,15 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **The agent chooses which bills to pay first when the cash cannot cover them all.** Bills used to be paid in date
+  order: the one due first took the cash, and the rest were held. Now, when the bills due within 14 days add up to more
+  than the cash, the model orders them by what costs the business most to pay late (a service it runs on, a discount
+  about to end, a supplier who will not wait), saying why for each, with the written policy's date order as its
+  reference. Code pays them in that order only while the cash lasts, holds the rest for a person, even one the model
+  would pay, and reopens a held bill the agent chose to pay. The choice is signed once as `cash_priority_set` and told in
+  the console, Telegram and Slack, and kept until a bill or the cash changes. No migration.
+  [Guide](https://www.vestiarion.xyz/docs/guides/payment-plan#which-bill-first-when-the-cash-cannot-cover-them-all).
+
 - **The weekly brief in shadow mode.** A business in shadow mode now gets the Monday brief too, about its verdicts
   instead of cash: the decisions the agent made on its bills, the verdicts given and how many agreed, the agreed bills
   paid on Arc testnet, and the agreement since shadow mode began ("you agreed with the agent on 8 of 8"). It says the

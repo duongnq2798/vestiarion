@@ -1,5 +1,12 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-18: Which bill first when the cash cannot cover them all
+
+- A new entry, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`: **`cash_priority_set`** (domain `ap`, actor `agent`), when the bills due within 14 days add up to more than the cash and the agent chooses the order they are paid in. It carries `fingerprint`, `cash: { operating, reserve, committed, available }`, `order` (each bill, most important first: `{ invoiceId, payee, amount, dueOn, keep, reason }`), `reasoning`, `decisionMode`, `referenceOrder` (the written policy's, as invoice ids), `agreedWithReference`, and `orderCorrected: true` when code fixed the model's order. It is signed again only when the bills change, or the cash changes enough to split them differently.
+- **`invoice_reopened`** may carry `followUp.reason: "cash_priority"`, for a bill held for want of cash that the agent chose to pay first.
+- An AP decision on a bill in the plan carries **`cashPriority: { waits, reason, fingerprint }`**, and **`timingRule`** may be **`"cash.priority"`** when code turned the model's pay or schedule on a waiting bill into a hold; such a hold has `execution.heldBecause: "cash_shortfall"`, and its `cashNeededUsdc` is its own amount plus the kept bills'.
+- Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-18: The weekly brief in shadow mode
 
 - In a workspace in shadow mode, **`weekly_brief_sent`** now carries `shadow: { verdicts: { given, agreed }, sinceStart: { given, agreed, since } }`, the verdicts given in the week and since shadow mode began, and `short` is always `null`: the wallet only mirrors agreed payments. Such a workspace now gets the brief, where before it got none. Nothing else in `/api/v1` or the webhooks changes.
