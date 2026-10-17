@@ -4,7 +4,7 @@
  * with who decided and what was checked, how long after the person's action, and where to look. Pure: the route reads
  * the rows, this says them, and the page decides how to show them.
  */
-import { invoiceHref } from "./bills-view";
+import { billsHref, invoiceHref } from "./bills-view";
 import { deciderName } from "./decision-trail";
 import { awaitsVerdict, heldForVerdict, ruleInBrief } from "./next-step";
 import { networkProfile, type Network } from "./network";
@@ -42,6 +42,12 @@ export const TERM_REQUEST_ACTIONS = [
   "term_counter_declined",
 ] as const;
 
+/**
+ * The agent's word that the wallet will run short, and that it no longer will (docs/superpowers/specs/2026-10-17-cash-short-alert-design.md
+ * S4): told once each, and again only when the shortfall changes.
+ */
+export const CASH_ALERT_ACTIONS = ["cash_short_ahead", "cash_short_cleared"] as const;
+
 /** A supplier's answers to a request for more time: recorded by the system, told beside the agent's own entries (F3). */
 export const TERM_ANSWERS = ["term_request_accepted", "term_request_declined", "term_request_countered"] as const;
 
@@ -67,12 +73,14 @@ export const ACTIVITY_ACTIONS = [
   ...CUSTOMER_DISCOUNT_ACTIONS,
   // Requests for more time (term requests follow-up F3).
   ...TERM_REQUEST_ACTIONS,
+  // The wallet will run short, or no longer will (cash short alert S4).
+  ...CASH_ALERT_ACTIONS,
 ] as const;
 
 /** The people's actions on an invoice that give the agent something to decide: how long after one it decided is told. */
 export const TRIGGER_ACTIONS = ["create_invoice", "invoice_details_added", "approval_returned"] as const;
 
-export type ActivityTone = "done" | "pending" | "stopped";
+export type ActivityTone = "done" | "pending" | "stopped" | "notice";
 
 export interface ActivityItem {
   seq: number;
@@ -82,8 +90,8 @@ export interface ActivityItem {
   detail: string | null;
   /**
    * Done (paid or released as Circle confirmed it, simulated, scheduled, received), pending (submitted and not confirmed
-   * by Circle yet, its outcome unknown, or a decision whose transfer the entry does not record), or stopped (held,
-   * asked, flagged, refused by code).
+   * by Circle yet, its outcome unknown, or a decision whose transfer the entry does not record), stopped (held,
+   * asked, flagged, refused by code), or notice (a warning that is no decision for a person: the cash will run short).
    */
   tone: ActivityTone;
   /** Where in the workspace a person sees it, or handles it: an org path such as `/approvals#payable-<id>`. */
@@ -240,6 +248,7 @@ export function activityItem(entry: ActivityEntry, refs: ActivityRefs): Activity
 function itemOf(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem, "txUrl" | "network"> | null {
   if (!(ACTIVITY_ACTIONS as readonly string[]).includes(entry.action)) return null;
   if (entry.action === "payment_stuck") return stuckItem(entry, refs);
+  if ((CASH_ALERT_ACTIONS as readonly string[]).includes(entry.action)) return cashAlertItem(entry);
   const blocked = entry.detail.guardrailBlocked === true;
 
   if (entry.action.startsWith("milestone_")) {
@@ -312,6 +321,53 @@ function stuckItem(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem,
     pathLabel: invoiceId ? "How it decided" : "Contractors",
     txHash: arcTx(text(entry.detail.txHash)),
   };
+}
+
+/** The payment plan, where a person sees each day's balance (cash short alert S4). */
+const PAYMENT_PLAN_PATH = billsHref({ tab: "plan" });
+
+/**
+ * The wallet will run short, or no longer will, in words (cash short alert S4): how much, by when, the customers' money
+ * expected by then, and what the agent is doing about it. Not a decision for a person, so no chat draws a card for it.
+ */
+function cashAlertItem(entry: ActivityEntry): Omit<ActivityItem, "txUrl" | "network"> | null {
+  if (entry.action === "cash_short_cleared") {
+    return { seq: entry.seq, text: "The cash covers everything due in the next 30 days again.", detail: null, tone: "done", path: PAYMENT_PLAN_PATH, pathLabel: "See the payment plan", txHash: null };
+  }
+  const shortOn = text(entry.detail.shortOn);
+  const lowestOn = text(entry.detail.lowestOn) ?? shortOn;
+  const need = number(entry.detail.need);
+  if (!shortOn || !lowestOn || need === null) return null;
+  const usdc = (value: number) => activityAmount(value, "USDC");
+  const shortBy = number(entry.detail.shortBy) ?? need;
+  const said =
+    lowestOn === shortOn
+      ? `Cash runs short on ${shortDay(shortOn)}: ${usdc(need)} more is needed by then to pay what is due.`
+      : `Cash runs short on ${shortDay(shortOn)}: ${usdc(shortBy)} short that day, and ${usdc(need)} by ${shortDay(lowestOn)} to pay everything due.`;
+  const expected = number(entry.detail.expectedBy) ?? 0;
+  // Enough on time, enough in all but some of it after the first short day, or not enough (review of #420).
+  const enough =
+    entry.detail.coveredWithExpected === true
+      ? "enough if each pays on time"
+      : expected >= need
+        ? `enough in all, but not all of it by ${shortDay(shortOn)}`
+        : "not enough even if each pays on time";
+  const customers =
+    expected > 0
+      ? `Customers owe ${usdc(expected)} by ${shortDay(lowestOn)}, ${enough}; it is not counted until it arrives.`
+      : `No customer payment is expected by ${shortDay(lowestOn)}.`;
+  const doing = record(entry.detail.doing);
+  const held = record(doing?.heldForCash);
+  const parts: string[] = [];
+  const heldCount = number(held?.count);
+  if (heldCount !== null && heldCount > 0) parts.push(`holds ${heldCount === 1 ? "1 bill" : `${heldCount} bills`} for want of cash (${usdc(number(held?.total) ?? 0)})`);
+  const requests = number(doing?.termRequestsOpen);
+  if (requests !== null && requests > 0) parts.push(`has ${requests === 1 ? "1 request" : `${requests} requests`} for more time open`);
+  const discounts = number(doing?.customerDiscountsOpen);
+  if (discounts !== null && discounts > 0) parts.push(`has ${discounts === 1 ? "1 customer discount" : `${discounts} customer discounts`} open`);
+  const agent = parts.length > 0 ? ` The agent ${parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`}.` : "";
+  // A warning, not a decision for a person: it neither counts among what waits for them nor takes the stopped mark.
+  return { seq: entry.seq, text: said, detail: `${customers}${agent}`, tone: "notice", path: PAYMENT_PLAN_PATH, pathLabel: "See the payment plan", txHash: null };
 }
 
 /** What Circle said of a payment that has not confirmed, or that it was not asked, or never answered the send. */

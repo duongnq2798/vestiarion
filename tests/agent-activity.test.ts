@@ -654,3 +654,49 @@ describe("the agent's requests for more time (term requests follow-up F3)", () =
     expect(activityItem(term("term_request_declined", {}), refs())).not.toHaveProperty("invoiceId");
   });
 });
+
+describe("the wallet will run short (cash short alert S4)", () => {
+  const ahead = (detail: Record<string, unknown> = {}) =>
+    ({
+      seq: 1001,
+      action: "cash_short_ahead",
+      detail: {
+        shortOn: "2026-10-23", shortBy: 139.97, lowestOn: "2026-10-25", need: 229.97, expectedBy: 40, coveredWithExpected: false,
+        doing: { heldForCash: { count: 3, total: 240 }, termRequestsOpen: 1, customerDiscountsOpen: 0 },
+        ...detail,
+      },
+    }) as ActivityEntry;
+
+  it("says how short, by when, the customers' money and what the agent is doing, with the payment plan", () => {
+    expect(activityItem(ahead(), refs())).toMatchObject({
+      text: "Cash runs short on Oct 23: 139.97 USDC short that day, and 229.97 USDC by Oct 25 to pay everything due.",
+      detail: "Customers owe 40.00 USDC by Oct 25, not enough even if each pays on time; it is not counted until it arrives. The agent holds 3 bills for want of cash (240.00 USDC) and has 1 request for more time open.",
+      tone: "notice",
+      path: "/invoices?tab=plan",
+      pathLabel: "See the payment plan",
+      txHash: null,
+    });
+    expect(activityItem(ahead(), refs())?.invoiceId).toBeUndefined();
+  });
+
+  it("says when customers owe enough in all, but some of it comes after the first short day (review of #420)", () => {
+    expect(activityItem(ahead({ expectedBy: 300, coveredWithExpected: false }), refs())?.detail).toContain(
+      "Customers owe 300.00 USDC by Oct 25, enough in all, but not all of it by Oct 23;"
+    );
+    expect(activityItem(ahead({ expectedBy: 300, coveredWithExpected: true }), refs())?.detail).toContain("enough if each pays on time;");
+  });
+
+  it("says it in one figure when the first short day is the shortest, and says when no customer money is due", () => {
+    const item = activityItem(ahead({ lowestOn: "2026-10-23", need: 139.97, expectedBy: 0, doing: { heldForCash: null, termRequestsOpen: null, customerDiscountsOpen: null } }), refs());
+    expect(item?.text).toBe("Cash runs short on Oct 23: 139.97 USDC more is needed by then to pay what is due.");
+    expect(item?.detail).toBe("No customer payment is expected by Oct 23.");
+  });
+
+  it("says when the cash covers everything again", () => {
+    expect(activityItem({ seq: 1002, action: "cash_short_cleared", detail: {} } as ActivityEntry, refs())).toMatchObject({
+      text: "The cash covers everything due in the next 30 days again.",
+      tone: "done",
+      path: "/invoices?tab=plan",
+    });
+  });
+});

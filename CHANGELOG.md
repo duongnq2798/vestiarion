@@ -14,6 +14,14 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **The agent tells you before the cash runs short.** Each cycle it works out the same 30 days the console's cash
+  outlook shows, and when the wallet will run short it says once, in the console, Telegram and Slack, how much is
+  needed and by when, what customers owe by then, and what it is already doing: bills held for want of cash, requests
+  for more time and customer discounts open. It says it again only when the first short day comes earlier, the amount
+  grows by at least 1 USDC and a tenth, or a week passes, and says when the cash covers everything again. A new cycle
+  stage, `cash_alert`, after `term_requests`; the ledger records `cash_short_ahead` and `cash_short_cleared`. Not in
+  shadow mode. No migration. [Guide](https://www.vestiarion.xyz/docs/guides/payment-plan#when-the-cash-will-run-short).
+
 - **Scheduled payments are checked against the cash ahead.** A scheduled bill used to wait, undecided, until its day,
   even when a bill due earlier had since taken the cash it was counting on; it was then held on its day, too late to
   act. Each cycle the agent now measures every USDC bill scheduled for a later day as the written policy does, and

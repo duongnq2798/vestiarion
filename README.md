@@ -132,7 +132,7 @@ reads the whole book each time it runs:
 
 The agent cycle: reconcile -> receipts -> compliance -> follow-up -> recurring -> services -> liquidity -> AP ->
 contractors -> treasury -> forecast -> proposals -> collections -> early offers -> customer offers -> term requests ->
-notices -> telegram -> slack, each stage's outcome appended to the ledger.
+cash alert -> notices -> telegram -> slack, each stage's outcome appended to the ledger.
 
 ## Why it is different
 

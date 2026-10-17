@@ -91,6 +91,18 @@ In a live workspace, the plan's cash is the balance read from the chain. When th
 
 When the agent's spending limit, the figure for two approvals or the open milestones cannot be read, the plan says "Part of the plan could not be read", names what, and approving waits in the same way. A sandbox's balance is its own simulated figure, so it is always current.
 
+## When the cash will run short
+
+You do not have to open the plan to find out. Each cycle, the agent works out the same 30 days the console's cash outlook shows: the operating USDC and the reserve, less every open bill on its day (a scheduled one on the day it is set for, a held one on its due day) and every open milestone today, with no customer payment counted until it arrives. When the wallet will run short, it tells you once, in the console and in your connected Telegram chat and Slack channel, for instance:
+
+```
+Cash runs short on Oct 23: 139.97 USDC short that day, and 229.97 USDC by Oct 25 to pay everything due.
+Customers owe 40.00 USDC by Oct 25, not enough even if each pays on time; it is not counted until it arrives. The agent holds 3 bills for want of cash (240.00 USDC) and has 1 request for more time open.
+See the payment plan
+```
+
+It tells you again only when the first short day comes earlier, the amount needed grows by at least 1 USDC and a tenth, or a week passes and the cash is still short. When the cash covers everything again, it says "The cash covers everything due in the next 30 days again." Nothing is said in shadow mode, where you pay your bills as before. The ledger records `cash_short_ahead` and `cash_short_cleared` with the figures.
+
 ## The last 30 days
 
 Under the plan, **Last 30 days** is "Counted from what was paid and recorded, not from a plan.":

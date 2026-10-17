@@ -1,4 +1,5 @@
 import { cashOutlook } from "../cash-outlook";
+import { outlookInputOf } from "../cash-outlook-input";
 import { db, unwrap } from "../dal";
 import { firstSentence } from "../email/waiting-digest";
 import { listAccounts, listInvoices, listMilestones } from "../queries";
@@ -52,38 +53,7 @@ export async function todayFacts(now: number = Date.now()): Promise<TodayFacts> 
     db().from("ledger_entries").select("ts").eq("action", "cycle_complete").order("seq", { ascending: false }).limit(1),
   ]);
   const payables = invoices.filter((invoice) => invoice.direction === "payable");
-  const outlook = cashOutlook({
-    now,
-    operatingUsdc: Number(accounts.find((account) => account.kind === "operating")?.balance ?? 0),
-    reserveUsdc: Number(accounts.find((account) => account.kind === "reserve")?.balance ?? 0),
-    payables: payables.map((invoice) => ({
-      id: invoice.id,
-      counterparty: invoice.counterparty_name,
-      amount: invoice.amount,
-      currency: invoice.currency ?? null,
-      due_date: invoice.due_date,
-      status: invoice.status,
-      scheduled_for: invoice.scheduled_for ?? null,
-    })),
-    milestones: milestones.map((milestone) => ({
-      id: milestone.id,
-      title: milestone.title,
-      contractor: milestone.contractor_name,
-      amount: milestone.amount,
-      status: milestone.status,
-      escrow_state: milestone.escrow_state ?? null,
-    })),
-    receivables: invoices
-      .filter((invoice) => invoice.direction === "receivable")
-      .map((invoice) => ({
-        id: invoice.id,
-        counterparty: invoice.counterparty_name,
-        amount: invoice.amount,
-        currency: invoice.currency ?? null,
-        due_date: invoice.due_date,
-        status: invoice.status,
-      })),
-  });
+  const outlook = cashOutlook(outlookInputOf({ now, accounts, invoices, milestones }));
   const waiting =
     payables.filter((invoice) => (WAITING_PAYABLE as readonly string[]).includes(invoice.status)).length +
     milestones.filter((milestone) => milestone.status === "held").length;
