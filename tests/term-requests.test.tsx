@@ -25,7 +25,7 @@ vi.mock("@/app/actions/term-requests", () => ({ setTermRequestsAction: vi.fn() }
 import { makeTermRequests } from "@/lib/agent/term-requests";
 import { termRequestEmail } from "@/lib/email/term-request";
 import { counterTermRequest, decideTermRequest, generateTermToken, termTokenHash } from "@/lib/terms/requests";
-import { boundTermDays, referenceTermDays, termRequestAllowed, type TermFacts } from "@/lib/terms/rules";
+import { boundTermDays, coveredAfterDays, referenceTermDays, termRequestAllowed, type TermFacts } from "@/lib/terms/rules";
 import { termRequestLine } from "@/lib/terms/words";
 import { TermDecision } from "@/components/terms/TermDecision";
 import { TermRequests } from "@/components/bills/TermRequests";
@@ -247,6 +247,23 @@ describe("a request the agent makes", () => {
     expect(email.subject).toMatch(/^\[Sandbox\] /);
     expect(email.text).toContain("This is a sandbox. You get this in place of Kestrel Print Co, a sample supplier");
     expect(ledgerMock.mock.calls[0][0].detail).toMatchObject({ sandbox: true, to: "ow***@pinecrest.example" });
+  });
+});
+
+describe("coverage worked out by code (live test fix, Oct 17)", () => {
+  it("says the first day after the due date the cash and what customers owe cover the bill", () => {
+    // The live case: 40.10 now, 30 owed 2 days after the 45.00 bill falls due: covered from day 3.
+    expect(coveredAfterDays({ amount: 45, cashNow: 40.1, incoming: [{ daysAfterDue: 2, amount: 30 }], withinDays: 14 })).toBe(3);
+    expect(coveredAfterDays({ amount: 45, cashNow: 50, incoming: [], withinDays: 14 })).toBe(0);
+    expect(coveredAfterDays({ amount: 45, cashNow: 10, incoming: [{ daysAfterDue: 2, amount: 30 }], withinDays: 14 })).toBeNull();
+    expect(coveredAfterDays({ amount: 45, cashNow: 40.1, incoming: [{ daysAfterDue: 20, amount: 30 }], withinDays: 14 })).toBeNull();
+  });
+
+  it("gives the model the coverage, so it never adds the figures itself", async () => {
+    await run(world());
+    const prompt = JSON.parse((decideMock.mock.calls[0][0] as { userPrompt: string }).userPrompt) as { coverage: Record<string, unknown> };
+    // 100 USDC now, 250 owed 10 days after the 300 bill falls due: covered from day 11, within the 14 days.
+    expect(prompt.coverage).toEqual({ coveredOnDueDate: false, coveredAfterDays: 11, withinMostDays: 14 });
   });
 });
 

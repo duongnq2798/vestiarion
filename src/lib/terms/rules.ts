@@ -78,6 +78,22 @@ export function referenceTermDays(input: {
 }
 
 /**
+ * The first day after the bill's due date by which it is covered (X3, F6): 0 when the cash now covers it, else the day
+ * after the customer payment that tips it over; null when nothing within `withinDays` does. Code works it out so the model
+ * never has to add the figures itself.
+ */
+export function coveredAfterDays(input: { amount: number; cashNow: number; incoming: Array<{ daysAfterDue: number; amount: number }>; withinDays: number }): number | null {
+  let cash = input.cashNow;
+  if (cash >= input.amount) return 0;
+  for (const item of [...input.incoming].sort((a, b) => a.daysAfterDue - b.daysAfterDue)) {
+    if (item.daysAfterDue + 1 > input.withinDays) break;
+    cash += item.amount;
+    if (cash >= input.amount) return Math.max(0, item.daysAfterDue + 1);
+  }
+  return null;
+}
+
+/**
  * Whether the bill is covered within these days of its due date (F6): the operating USDC now, less what falls due before,
  * and then what customers owe, each counted the day after it is expected, as the written policy counts it.
  */

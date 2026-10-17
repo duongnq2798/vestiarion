@@ -52,6 +52,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   there is one. The FAQ says how long it takes to start (about five minutes) and what it costs: trying it is free, there
   is no published price yet, and a live payment carries only its network fee, less than a cent on Arc.
 
+### Fixed
+
+- **The agent no longer adds up the cash for a request for more time itself.** In a live test, the model skipped asking
+  a supplier for more time because it compared what customers owe with the bill alone, though that and the cash on
+  hand covered it two days after the due date. Code now works out when the bill is covered and gives the model that,
+  for a new request and for a supplier's counter.
+
 ## [0.1.0-beta.8] - 2026-10-17
 
 ### Added
