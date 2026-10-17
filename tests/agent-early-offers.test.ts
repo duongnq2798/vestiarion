@@ -51,6 +51,7 @@ interface World {
   offers?: Array<Record<string, unknown>>;
   reviews?: Array<Record<string, unknown>>;
   claim?: FakeReply;
+  answer?: string;
 }
 
 function world(w: World = {}) {
@@ -70,6 +71,12 @@ function world(w: World = {}) {
       return { body: { id: "offer-1", invoice_id: INVOICE, counterparty_id: SUPPLIER, amount: "100.000000", offered_amount: (100 - pct).toFixed(6), currency: "USDC", expires_at: "2026-10-23T09:00:00Z" } };
     }
     if (request.path === "/rest/v1/rpc/withdraw_early_payment_offer") return { body: true };
+    if (request.path === "/rest/v1/counterparties") return { body: [{ id: SUPPLIER, name: "Lumen Print Co.", notice_email: "ap@lumen.example" }] };
+    if (request.path === "/rest/v1/rpc/answer_early_payment_counter") {
+      const accept = (request.body as { p_accept: boolean }).p_accept;
+      const outcome = w.answer ?? (accept ? "accepted" : "declined");
+      return { body: [{ outcome, invoice_id: INVOICE, counter_pct: "0.25", offered_amount: outcome === "accepted" ? "99.750000" : null, currency: "USDC" }] };
+    }
     return { body: [] };
   });
 }
@@ -258,5 +265,56 @@ describe("the supplier's email (AO4)", () => {
     expect(email.text).toContain("That is 1.00% less, paid today instead of waiting for the due date. It goes where Pinecrest Studio already pays you. The offer stands until Oct 23, 2026, and the link works once.");
     expect(email.text).toContain("If you would rather wait, decline it or do nothing: your invoice is paid as planned, on its due date.");
     expect(email.html).toContain("https://www.vestiarion.xyz/offer/vxo_x");
+  });
+});
+
+describe("a counter the agent answers (offer counters N3-N6)", () => {
+  const countered = (over: Record<string, unknown> = {}) => ({ id: "offer-c", invoice_id: INVOICE, counter_pct: "0.25", counterparty_id: SUPPLIER, status: "countered", discount_pct: "0.50", offered_amount: "99.5", decided_at: "2026-10-16T08:59:00Z", expires_at: "2026-10-23T09:00:00Z", ...over });
+  const agentReview = { id: "review-c", invoice_id: INVOICE, action: "offer", offer_id: "offer-c", decided_at: "2026-10-16T08:00:00Z", emailed_at: "2026-10-16T08:00:05Z" };
+
+  it("is accepted where code allows it and the model agrees, answered in one step, emailed and signed, and makes no new offer on its bill", async () => {
+    model({ action: "accept", reasoning: "0.25% still beats the reserve, and Lumen takes early payment." });
+    const client = world({ offers: [countered()], reviews: [agentReview] });
+    const lines = await run(client);
+
+    const asked = JSON.parse((decideMock.mock.calls[0][0] as DecideParams<unknown>).userPrompt) as Record<string, unknown>;
+    expect(asked).toMatchObject({ offer: { discountPct: 0.5, supplierProposedPct: 0.25, supplierWouldReceiveToday: 99.75 }, writtenPolicy: { action: "accept" } });
+    expect(client.requests.find((r) => r.path === "/rest/v1/rpc/answer_early_payment_counter")?.body).toMatchObject({ p_org_id: ORG, p_offer_id: "offer-c", p_accept: true });
+    expect(ledgerMock.mock.calls[0][0]).toMatchObject({ actor: "agent", action: "early_payment_counter_accepted", detail: { offerId: "offer-c", counterPct: 0.25, offeredAmount: 99.75, decisionMode: "deepseek", agreedWithReference: true } });
+    const email = sendMock.mock.calls[0][0];
+    expect(email.to).toBe("ap@lumen.example");
+    expect(email.subject).toBe("Pinecrest Studio accepted your 0.25% for invoice LP-117 print run");
+    expect(email.text).toContain("Pinecrest Studio accepted your 0.25%: it pays you 99.75 USDC today, instead of 100.00 USDC on Nov 5, 2026, once its usual checks pass.");
+    expect(email.idempotencyKey).toMatch(/^[0-9a-f]{64}$/);
+    // Its bill had an offer: none is made again.
+    expect(client.requests.some((r) => r.path === "/rest/v1/rpc/create_early_payment_offer")).toBe(false);
+    expect(lines).toEqual([{ domain: "ap", message: "Accepted Lumen Print Co.'s counter: 0.25% off, paid today" }]);
+  });
+
+  it("is declined by code, with no model, when it is no more than the reserve would earn, the cash is short, or the offers are off", async () => {
+    for (const [w, cash, why] of [
+      [{ offers: [countered({ counter_pct: "0.20" })], reviews: [agentReview] }, 500, "no more than the 0.23% the cash would earn"],
+      [{ offers: [countered()], reviews: [agentReview] }, 50, "cannot pay it today"],
+      [{ offers: [countered()], reviews: [agentReview], on: false }, 500, "no longer makes early-payment offers"],
+    ] as Array<[World, number, string]>) {
+      ledgerMock.mockClear();
+      sendMock.mockClear();
+      const client = world(w);
+      await run(client, cash);
+      expect(client.requests.find((r) => r.path === "/rest/v1/rpc/answer_early_payment_counter")?.body, why).toMatchObject({ p_accept: false });
+      expect(ledgerMock.mock.calls[0][0]).toMatchObject({ action: "early_payment_counter_declined", detail: { decisionMode: "code" } });
+      expect(ledgerMock.mock.calls[0][0].detail.decision.reasoning).toContain(why);
+      expect(sendMock.mock.calls[0][0].text).toContain("Pinecrest Studio keeps the original terms: your invoice is paid as planned, 100.00 USDC on Nov 5, 2026.");
+    }
+    expect(decideMock).not.toHaveBeenCalled();
+  });
+
+  it("is left alone when another run answered it, and a person's offer countered is not the agent's to answer", async () => {
+    const client = world({ offers: [countered()], reviews: [agentReview], answer: "not_countered" });
+    expect(await run(client)).toEqual([]);
+    expect(ledgerMock).not.toHaveBeenCalled();
+    const person = world({ offers: [countered()], reviews: [] });
+    await run(person);
+    expect(person.requests.some((r) => r.path === "/rest/v1/rpc/answer_early_payment_counter")).toBe(false);
   });
 });

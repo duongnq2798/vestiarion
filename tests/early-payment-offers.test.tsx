@@ -13,11 +13,11 @@ vi.mock("@/lib/dal", async (importOriginal) => ({
 vi.mock("@/lib/dal/scope", () => ({ withOrg: async (_orgId: string, fn: () => Promise<unknown>) => fn() }));
 vi.mock("@/lib/ledger-best-effort", () => ({ appendLedgerEntryBestEffort: mocks.ledger }));
 vi.mock("@/app/actions/early-payment-offers", () => ({ makeOfferAction: vi.fn(), withdrawOfferAction: vi.fn(), setAgentOffersAction: vi.fn() }));
-vi.mock("@/app/offer/[token]/actions", () => ({ decideOfferAction: vi.fn() }));
+vi.mock("@/app/offer/[token]/actions", () => ({ decideOfferAction: vi.fn(), counterOfferAction: vi.fn() }));
 
 import { EarlyPaymentOffers } from "@/components/bills/EarlyPaymentOffers";
 import { OfferDecision } from "@/components/early-pay/OfferDecision";
-import { decideOffer, generateOfferToken, offerTokenHash } from "@/lib/early-pay/offers";
+import { counterOffer, decideOffer, generateOfferToken, offerTokenHash } from "@/lib/early-pay/offers";
 import { annualPct, daysEarly, offeredAmount, offerLine, offerWorth, suggestOffer, type OffersView } from "@/lib/early-pay/offers-words";
 
 /**
@@ -70,6 +70,30 @@ describe("the one-time link (E3)", () => {
   });
 });
 
+describe("the supplier's counter (offer counters N2)", () => {
+  const { token } = generateOfferToken();
+
+  it("records a smaller discount on the agent's offer and starts a cycle for the agent to answer it", async () => {
+    mocks.rpc.mockResolvedValueOnce({ data: [{ outcome: "countered", offer_id: "offer-1", org_id: "org-1", invoice_id: "inv-1", counter_pct: "0.25", discount_pct: "0.50", currency: "USDC" }], error: null });
+    const raise = vi.fn();
+    expect(await counterOffer(token, 0.25, { raise })).toBe("countered");
+    expect(mocks.rpc).toHaveBeenCalledWith("counter_early_payment_offer", { p_token_hash: offerTokenHash(token), p_pct: 0.25 });
+    expect(mocks.ledger.mock.calls[0][1]).toMatchObject({ action: "early_payment_offer_countered", detail: { offerId: "offer-1", counterPct: 0.25, discountPct: 0.5, via: "offer_link" } });
+    expect(raise).toHaveBeenCalledWith({ orgId: "org-1", sandbox: false, kind: "early_payment_countered" });
+  });
+
+  it("records nothing for a person's offer, a discount not below the offer's, or a stale link", async () => {
+    const raise = vi.fn();
+    for (const outcome of ["not_agent", "bad_pct", "not_valid"]) {
+      mocks.rpc.mockResolvedValueOnce({ data: [{ outcome, offer_id: null, org_id: null, invoice_id: null, counter_pct: null, discount_pct: null, currency: null }], error: null });
+      expect(await counterOffer(token, 0.25, { raise })).toBe(outcome);
+    }
+    expect(await counterOffer("not-a-token", 0.25, { raise })).toBe("not_valid");
+    expect(mocks.ledger).not.toHaveBeenCalled();
+    expect(raise).not.toHaveBeenCalled();
+  });
+});
+
 describe("the supplier's answer (E5, E6)", () => {
   const { token } = generateOfferToken();
   const row = (outcome: string) => ({ data: [{ outcome, offer_id: "offer-1", org_id: "org-1", invoice_id: "inv-1", discount_pct: "1.00", offered_amount: "990", currency: "USDC" }], error: null });
@@ -104,9 +128,14 @@ describe("Pay early for a discount on Bills (E8)", () => {
     agent: { on: false, maxPct: null },
     candidates: [
       { invoiceId: "inv-1", counterpartyName: "Taller Norte", reference: "INV-108", amount: 1000, currency: "USDC", dueDate: "2026-11-05T12:00:00Z", suggestion: { days: 20, breakEvenPct: 0.23, pct: 1, annualPct: 18.3 }, open: null },
-      { invoiceId: "inv-2", counterpartyName: "Cobalt Cloud", reference: null, amount: 50, currency: "USDC", dueDate: "2026-11-01T12:00:00Z", suggestion: { days: 16, breakEvenPct: 0.18, pct: 0.5, annualPct: 11.4 }, open: { id: "offer-2", pct: 0.5, offered: 49.75, expiresAt: "2026-10-23T09:00:00Z", byAgent: true } },
+      { invoiceId: "inv-2", counterpartyName: "Cobalt Cloud", reference: null, amount: 50, currency: "USDC", dueDate: "2026-11-01T12:00:00Z", suggestion: { days: 16, breakEvenPct: 0.18, pct: 0.5, annualPct: 11.4 }, open: { id: "offer-2", pct: 0.5, offered: 49.75, expiresAt: "2026-10-23T09:00:00Z", byAgent: true, counterPct: null } },
+      { invoiceId: "inv-3", counterpartyName: "Birch Paper", reference: null, amount: 80, currency: "USDC", dueDate: "2026-11-08T12:00:00Z", suggestion: { days: 23, breakEvenPct: 0.26, pct: 0.75, annualPct: 11.9 }, open: { id: "offer-3", pct: 0.75, offered: 79.4, expiresAt: "2026-10-23T09:00:00Z", byAgent: true, counterPct: 0.5 } },
     ],
-    recent: [{ id: "offer-0", counterpartyName: "Lumen Print Co.", pct: 1.5, status: "accepted", decidedAt: "2026-10-15T10:00:00Z" }],
+    recent: [
+      { id: "offer-0", counterpartyName: "Lumen Print Co.", pct: 1.5, status: "accepted", decidedAt: "2026-10-15T10:00:00Z" },
+      { id: "offer-4", counterpartyName: "Alder Copy", pct: 0.25, status: "accepted", decidedAt: "2026-10-15T11:00:00Z", counterPct: 0.25 },
+      { id: "offer-5", counterpartyName: "Cedar & Co", pct: 1, status: "declined", decidedAt: "2026-10-15T12:00:00Z", counterPct: 0.2 },
+    ],
   };
   const render = (canOffer: boolean) => decode(renderToStaticMarkup(<EarlyPaymentOffers orgSlug="pinecrest" view={view} canOffer={canOffer} />));
 
@@ -120,6 +149,11 @@ describe("Pay early for a discount on Bills (E8)", () => {
     expect(markup).toContain("Withdraw");
     expect(markup).toContain("Let the agent make offers");
     expect(markup).toContain("Lumen Print Co. accepted 1.50% off, Oct 15, 2026.");
+    // A counter the agent has not answered, and counters it answered (offer counters N7).
+    expect(markup).toContain("Birch Paper proposed 0.50% instead of 0.75%. The agent answers it at its next cycle.");
+    expect(markup.match(/>Withdraw</g)).toHaveLength(1);
+    expect(markup).toContain("Alder Copy accepted 0.25% off, after a counter, Oct 15, 2026.");
+    expect(markup).toContain("The agent declined Cedar & Co's counter of 0.20%, Oct 15, 2026.");
     expect(markup).toContain('href="/docs/guides/early-payment-offers"');
   });
 
@@ -154,5 +188,21 @@ describe("the supplier's page (E4)", () => {
     expect(markup).toContain("That is 1.00% less, paid today instead of waiting for the due date.");
     expect(markup).toContain("Accept: get paid today");
     expect(markup).toContain("Decline");
+    expect(markup).not.toContain("Propose a smaller discount");
+  });
+
+  it("lets the supplier propose a smaller discount on the agent's offer, starting at half of it (offer counters N1)", () => {
+    const markup = decode(
+      renderToStaticMarkup(
+        <OfferDecision
+          token="vxo_x"
+          canCounter
+          offer={{ orgName: "Pinecrest Studio", counterpartyName: "Lumen Print Co.", reference: "LP-121", amount: 0.5, offered: 0.4975, currency: "USDC", pct: 0.5, dueDate: "2026-11-12T12:00:00Z", expiresAt: "2026-10-23T09:00:00Z" }}
+        />
+      )
+    );
+    expect(markup).toContain("Would a smaller discount work for you? Propose one, and Pinecrest Studio answers you by email.");
+    expect(markup).toContain("Propose a smaller discount");
+    expect(markup).toContain('value="0.25"');
   });
 });

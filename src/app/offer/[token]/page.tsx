@@ -3,7 +3,7 @@ import { CloudOff, Unlink } from "lucide-react";
 import { OfferDecision } from "@/components/early-pay/OfferDecision";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
-import { previewOffer, type OfferPreview } from "@/lib/early-pay/offers";
+import { offerByAgent, previewOffer, type OfferPreview } from "@/lib/early-pay/offers";
 
 export const dynamic = "force-dynamic";
 
@@ -26,8 +26,11 @@ export default async function OfferPage({ params }: OfferPageProps) {
   const { token } = await params;
   let offer: OfferPreview | null = null;
   let failed = false;
+  let canCounter = false;
   try {
     offer = await previewOffer(token);
+    // The agent's own offers may be countered (offer counters N1).
+    canCounter = offer ? await offerByAgent(token) : false;
   } catch {
     console.error("early-payment offer preview failed");
     failed = true;
@@ -43,7 +46,7 @@ export default async function OfferPage({ params }: OfferPageProps) {
           ) : !offer ? (
             <EmptyState icon={<Unlink />} titleAs="h1" title="This link is no longer valid. Ask the business that sent it for a new one." />
           ) : (
-            <OfferDecision token={token} offer={offer} />
+            <OfferDecision token={token} offer={offer} canCounter={canCounter} />
           )}
         </div>
       </main>

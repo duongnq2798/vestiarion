@@ -14,6 +14,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Suppliers can counter the agent's early-payment offers.** On an offer the agent made, the supplier may propose a
+  smaller discount instead of accepting or declining. The agent answers it at once: code lets it accept only while its
+  offers are on, the bill is unchanged, the counter beats what the cash would earn in the reserve by the due date, and
+  the operating wallet can pay it today; the model decides within that. An accepted counter goes on the bill and is
+  paid the same day, after every check; either way the supplier gets the answer by email. Needs migration `0127`.
+  [Guide](https://www.vestiarion.xyz/docs/guides/early-payment-offers#when-the-supplier-proposes-a-smaller-discount).
 - **The agent makes early-payment offers.** An owner or admin lets the agent make the offers itself, with the most it
   asks. Each cycle, after it decides its bills, it weighs each bill it scheduled for a later day, in USDC, a week or more
   from its due date, never offered before, whose supplier has an email on file and declined no offer in 30 days, where

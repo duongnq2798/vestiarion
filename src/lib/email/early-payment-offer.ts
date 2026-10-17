@@ -43,3 +43,43 @@ export function earlyPaymentOfferEmail(input: {
   const text = [`Hi ${supplierName},`, "", lead, terms, nothing, "", `See the offer: ${url}`, "", note].join("\n");
   return { subject, html, text };
 }
+
+/**
+ * The email a supplier gets when the agent answers its counter (docs/superpowers/specs/2026-10-17-offer-counters-design.md
+ * N6): accepted, what it is paid today; declined, that the invoice keeps its due date. A template; nothing a model wrote.
+ */
+export function counterAnswerEmail(input: {
+  orgName: string;
+  supplierName: string;
+  reference: string | null;
+  accepted: boolean;
+  /** The discount the supplier proposed, and, accepted, what it receives today, as "0.4988". */
+  counterPct: number;
+  offered: string | null;
+  amount: string;
+  token: string;
+  dueOn: string;
+  origin: string;
+}): { subject: string; html: string; text: string } {
+  const { orgName, supplierName, reference, accepted, counterPct, offered, amount, token, dueOn, origin } = input;
+  const invoice = reference ? `invoice ${reference}` : "your invoice";
+  const subject = accepted ? `${orgName} accepted your ${counterPct.toFixed(2)}% for ${invoice}` : `${orgName} keeps the original terms for ${invoice}`;
+  const lead = accepted
+    ? `${orgName} accepted your ${counterPct.toFixed(2)}%: it pays you ${offered} ${token} today, instead of ${amount} ${token} on ${dueOn}, once its usual checks pass.`
+    : `${orgName} keeps the original terms: your invoice is paid as planned, ${amount} ${token} on ${dueOn}.`;
+  const after = accepted ? "It goes where it already pays you. You get a payment notice when it is confirmed." : "Nothing else changes, and there is nothing for you to do.";
+  const guide = `${origin}/docs/guides/early-payment-offers`;
+  const note = `You get this because you answered ${orgName}'s early-payment offer through Vestiarion. For anything about this invoice, contact ${orgName}.`;
+  const html = actionEmailHtml({
+    title: subject,
+    preheader: lead,
+    eyebrow: "Early payment",
+    heading: accepted ? `Hi ${supplierName}, you are paid today` : `Hi ${supplierName}, the due date stands`,
+    paragraphsHtml: [escapeHtml(lead), escapeHtml(after)],
+    button: { label: "How early payment works", link: guide },
+    note,
+    origin,
+  });
+  const text = [`Hi ${supplierName},`, "", lead, after, "", `How early payment works: ${guide}`, "", note].join("\n");
+  return { subject, html, text };
+}
