@@ -195,6 +195,8 @@ function apFake(options: {
   shadow?: string;
   /** The chain provider; a `Chain` that records transfers when absent. */
   chain?: Chain;
+  /** The ledger's `ap_schedule` and `payment_rescheduled` entries, newest first (cash ahead A3); none when absent. */
+  schedulings?: Array<{ action: string; detail: Record<string, unknown> }>;
 }) {
   const intents = paymentIntentsBackend(ORG);
   const fake = fakeSupabase((request) => {
@@ -210,6 +212,8 @@ function apFake(options: {
     if (request.path === "/rest/v1/shadow_modes") return { body: options.shadow ? [{ currency: options.shadow, started_at: "2026-10-01T00:00:00Z", started_by: null }] : [] };
     // The spending limit's read of the agent's payments (filtered by actor), not the ledger's own head read.
     if (request.path === "/rest/v1/ledger_entries" && request.method === "GET" && request.params.has("actor")) return { body: options.agentPayments ?? [] };
+    // Each scheduled bill's latest scheduling, read by the cash ahead check (A3).
+    if (request.path === "/rest/v1/ledger_entries" && request.method === "GET" && request.params.get("action")?.startsWith("in.(ap_schedule")) return { body: options.schedulings ?? [] };
     if (request.path === "/rest/v1/rpc/append_ledger_entry") return { body: LEDGER_ROW };
     if (request.path === "/rest/v1/rpc/agent_paused") return { body: options.paused ?? false };
     if (request.path === "/rest/v1/invoices" && request.method === "GET") {
@@ -1940,5 +1944,67 @@ describe("a payment now that gains nothing (payment timing §1)", () => {
     const setForToday = apFake({ book: [scheduledPayable({ ...plain, scheduled_for: "2026-10-11T00:00:00+00:00" })] });
     await setForToday.stage();
     expect(setForToday.chain.transfers.map((t) => t.amount)).toEqual([400]);
+  });
+});
+
+describe("a scheduled payment the cash will no longer cover on its day (cash ahead)", () => {
+  const plain = { early_pay_discount_pct: null, discount_due_date: null };
+  // The live test's book on Oct 17: 45 USDC set for Oct 23, then 140 USDC set for Oct 22 once cash came in.
+  const setFor23 = () =>
+    scheduledPayable({ ...plain, amount: "45", memo: "GPU hours", due_date: "2026-10-23T12:00:00+00:00", scheduled_for: "2026-10-23T00:00:00+00:00", agent_reasoning: "Paying on the due date, Oct 23." });
+  const setFor22 = () => ({
+    ...scheduledPayable({
+      ...plain, id: OTHER_INVOICE_ID, amount: "140", memo: "Render farm", due_date: "2026-10-22T12:00:00+00:00", scheduled_for: "2026-10-22T00:00:00+00:00",
+      counterparty_id: CONTOSO,
+    }),
+    counterparties: counterparty({ id: CONTOSO, name: "Contoso" }),
+  });
+
+  it("is decided again now and held, and the entry, the prompt and the log say why", async () => {
+    today("2026-10-17T09:00:00.000Z");
+    const { fake, chain, lines, stage } = apFake({ book: [setFor23(), setFor22()] });
+
+    await stage(150.03);
+
+    expect(chain.transfers).toEqual([]);
+    expect(decideMock).toHaveBeenCalledTimes(1);
+    expect(promptOf().scheduledEarlier).toEqual({ payOn: "2026-10-23", reasoning: "Paying on the due date, Oct 23.", decidedBeforeItsDay: true });
+    expect(promptOf().timing).toMatchObject({ targetOn: "2026-10-23", earlierObligations: { total: 140, count: 1 }, shortfall: true });
+    const [patch] = invoicePatches(fake.requests);
+    expect(patch.params.get("id")).toBe(`eq.${INVOICE_ID}`);
+    expect(patch.body).toMatchObject({ status: "held", scheduled_for: null });
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_action).toBe("ap_hold");
+    expect(entry.p_detail).toMatchObject({
+      scheduledFor: "2026-10-23T00:00:00+00:00",
+      cashAhead: { scheduledFor: "2026-10-23", cashCounted: 150.03, dueBefore: { total: 140, count: 1 }, needed: 45 },
+      execution: { heldBecause: "cash_shortfall" },
+    });
+    expect(lines).toEqual([{ domain: "ap", message: "Northwind: hold, decided before 2026-10-23: the cash will not cover it then (45 USDC)" }]);
+  });
+
+  it("waits for its day when the cash still covers it, or a person moved it there", async () => {
+    today("2026-10-17T09:00:00.000Z");
+    const covered = apFake({ book: [setFor23(), setFor22()] });
+    await covered.stage(185);
+    expect(decideMock).not.toHaveBeenCalled();
+    expect(invoicePatches(covered.fake.requests)).toEqual([]);
+
+    const moved = apFake({ book: [setFor23(), setFor22()], schedulings: [{ action: "payment_rescheduled", detail: { invoiceId: INVOICE_ID } }] });
+    await moved.stage(150.03);
+    expect(decideMock).not.toHaveBeenCalled();
+    expect(invoicePatches(moved.fake.requests)).toEqual([]);
+  });
+
+  it("is not decided early again while the cash ahead is no worse than when it last was", async () => {
+    today("2026-10-17T09:00:00.000Z");
+    const seen = { action: "ap_schedule", detail: { invoiceId: INVOICE_ID, timing: { shortfall: false }, cashAhead: { scheduledFor: "2026-10-23", cashCounted: 150.03, dueBefore: { total: 140, count: 1 }, needed: 45 } } };
+    const same = apFake({ book: [setFor23(), setFor22()], schedulings: [seen] });
+    await same.stage(150.03);
+    expect(decideMock).not.toHaveBeenCalled();
+
+    const worse = apFake({ book: [setFor23(), setFor22()], schedulings: [seen] });
+    await worse.stage(149);
+    expect(decideMock).toHaveBeenCalledTimes(1);
   });
 });

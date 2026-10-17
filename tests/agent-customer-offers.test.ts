@@ -71,7 +71,8 @@ function world(w: World = {}) {
     if (request.path === "/rest/v1/customer_discount_reviews" && request.method === "GET") return { body: w.reviews ?? [] };
     if (request.path === "/rest/v1/customer_discount_reviews" && request.method === "POST") return w.claim ?? { body: { id: "review-1" } };
     if (request.path === "/rest/v1/invoices" && request.params.get("direction") === "eq.payable") {
-      return { body: w.held ?? [{ id: BILL, amount: "500", currency: "USDC" }] };
+      // Held and scheduled payables in one read (cash ahead A5); a row without a status is a held one.
+      return { body: (w.held ?? [{ id: BILL, amount: "500", currency: "USDC" }]).map((row) => ({ status: "held", ...row })) };
     }
     if (request.path === "/rest/v1/invoices" && request.params.get("direction") === "eq.receivable") return { body: w.receivables ?? [receivable()] };
     if (request.path === "/rest/v1/invoices") return { body: w.stillOpen ?? [] };
@@ -192,6 +193,12 @@ describe("when it asks nothing (C1, C2)", () => {
   it("offers nothing when the operating USDC already covers the bills held", async () => {
     await run(world(), 600);
     expect(created).toEqual([]);
+  });
+
+  it("does not count operating USDC already set for a scheduled bill (cash ahead A5)", async () => {
+    await run(world({ held: [{ id: BILL, amount: "500", currency: "USDC" }, { id: "scheduled-bill", amount: "300", currency: "USDC", status: "scheduled" }] }), 600);
+    expect(created).toHaveLength(1);
+    expect(JSON.parse((decideMock.mock.calls[0][0] as { userPrompt: string }).userPrompt).cash).toMatchObject({ scheduledForLaterUsdc: 300, shortfall: 200 });
   });
 
   it("offers nothing when turned off, paused, or in a sandbox", async () => {

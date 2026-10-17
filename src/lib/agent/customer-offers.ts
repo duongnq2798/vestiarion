@@ -177,12 +177,15 @@ export async function makeCustomerOffers(
   if (!on) return lines;
 
   // The shortfall (C2): the bills whose latest decision held them for want of cash, beyond the operating USDC and the
-  // discounts already accepted and not yet paid.
-  const held = unwrap(
-    await orgDb.from("invoices").select("id, amount, currency").eq("direction", "payable").eq("status", "held").limit(500)
-  ) as Array<{ id: string; amount: string; currency: string | null }>;
-  const heldUsdc = held.filter((row) => (row.currency ?? "USDC") === "USDC");
+  // discounts already accepted and not yet paid. The operating USDC already set for a scheduled bill is not there for a
+  // held one (cash ahead A5).
+  const open = unwrap(
+    await orgDb.from("invoices").select("id, amount, currency, status").eq("direction", "payable").in("status", ["held", "scheduled"]).limit(1000)
+  ) as Array<{ id: string; amount: string; currency: string | null; status: string }>;
+  const openUsdc = open.filter((row) => (row.currency ?? "USDC") === "USDC");
+  const heldUsdc = openUsdc.filter((row) => row.status === "held");
   if (heldUsdc.length === 0) return lines;
+  const scheduledUsdc = openUsdc.filter((row) => row.status === "scheduled").reduce((sum, row) => sum + Number(row.amount), 0);
   const decisions = unwrap(
     await orgDb
       .from("ledger_entries")
@@ -211,7 +214,7 @@ export async function makeCustomerOffers(
       )
     : new Set<string>();
   const acceptedUnpaid = acceptedRows.filter((row) => stillOpen.has(row.invoice_id)).reduce((sum, row) => sum + Number(row.offered_amount), 0);
-  const shortfall = cashShortfall({ heldForCash: heldForCashTotal, operating: input.operatingBalance, acceptedUnpaid });
+  const shortfall = cashShortfall({ heldForCash: heldForCashTotal, scheduled: scheduledUsdc, operating: input.operatingBalance, acceptedUnpaid });
   if (shortfall <= 0) return lines;
 
   // A withdrawn offer is one whose email never went (C7): the customer never saw it, so it counts for nothing, and its
@@ -304,6 +307,7 @@ export async function makeCustomerOffers(
         cash: {
           billsHeldForCash: heldForCashRows.length,
           heldForCashUsdc: Number(heldForCashTotal.toFixed(6)),
+          scheduledForLaterUsdc: Number(scheduledUsdc.toFixed(6)),
           operatingAfterTodaysPayments: input.operatingBalance,
           discountsAcceptedNotYetPaid: Number(acceptedUnpaid.toFixed(6)),
           shortfall: Number(stillShort.toFixed(6)),

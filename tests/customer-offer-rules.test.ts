@@ -97,6 +97,12 @@ describe("how much to ask for (C2)", () => {
     expect(cashShortfall({ heldForCash: 20, operating: 50, acceptedUnpaid: 0 })).toBe(0);
   });
 
+  it("does not count operating USDC already set for scheduled payables (cash ahead A5)", () => {
+    // The live test's book: 150 held, 140 scheduled, 150.03 in the wallet.
+    expect(cashShortfall({ heldForCash: 150, scheduled: 140, operating: 150.03, acceptedUnpaid: 0 })).toBe(139.97);
+    expect(cashShortfall({ heldForCash: 20, scheduled: 20, operating: 50, acceptedUnpaid: 0 })).toBe(0);
+  });
+
   it("takes the largest first until they cover the shortfall, three at most", () => {
     const rows = [{ amount: 10 }, { amount: 50 }, { amount: 30 }, { amount: 5 }, { amount: 40 }];
     expect(pickCustomerOffers(rows, 45, 1).map((row) => row.amount)).toEqual([50]);

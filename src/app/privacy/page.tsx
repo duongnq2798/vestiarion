@@ -205,7 +205,7 @@ export default function PrivacyPage() {
                 today&apos;s date and the due date, what the discount is worth and the last day it applies, the yield from keeping the cash to the due date,
                 the day the written policy would pay on and the amount due that day, the total and number of payments that fall due on or before that day,
                 and whether the cash available by that day falls short of covering this invoice after them; when the agent scheduled the invoice earlier, the date it
-                chose and its reasoning; and any earlier invoices from the same
+                chose and its reasoning, and whether it is decided again before that date because the cash will not cover it then; and any earlier invoices from the same
                 counterparty that look like duplicates of it, each with its amount, due date and status, the signals that matched, how strong the match is
                 and what the match found;
               </li>
