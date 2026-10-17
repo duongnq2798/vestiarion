@@ -10,7 +10,14 @@ describe("the landing's FAQ", () => {
     );
   });
 
-  it("asks it second, right after whether crypto is needed to try it", () => {
-    expect(landingFaq(true).slice(0, 2).map((item) => item.question)).toEqual(["Do I need crypto to try it?", "How long does it take to start?"]);
+  it("says what it costs: free to try, no published price, only a payment's network fee once the agent pays", () => {
+    const entry = landingFaq(true).find((item) => item.question === "What does it cost?");
+    expect(entry?.answer).toBe(
+      "Trying it is free, and there is no published price yet. Shadow mode needs no wallet and no funds. Once the agent pays bills itself, each payment carries only its network fee, in USDC: on Arc, less than a cent. A payout to another chain carries that chain's transfer fee too."
+    );
+  });
+
+  it("asks how long and what it costs right after whether crypto is needed to try it", () => {
+    expect(landingFaq(true).slice(0, 3).map((item) => item.question)).toEqual(["Do I need crypto to try it?", "How long does it take to start?", "What does it cost?"]);
   });
 });

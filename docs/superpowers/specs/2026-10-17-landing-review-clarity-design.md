@@ -37,10 +37,15 @@ the second and part of the third. The other sections are noted under "Left for t
   line shown on a computer only.
 - **Shrinking Arc and Circle to a strip.** An earlier review asked for them to stand out as what Vestiarion is built on.
 
-## Waiting on a decision
+## What it costs
 
-- **What it costs.** The FAQ still leaves cost out: there is no published price. A free trial or a price is the
-  partner's to state.
+- **The FAQ now says what it costs, as the partner stated it.** "What does it cost?" is asked third:
+  - trying it is free, and there is no published price yet;
+  - shadow mode needs no wallet and no funds;
+  - once the agent pays, each payment carries only its network fee, in USDC, less than a cent on Arc;
+  - a payout to another chain carries that chain's transfer fee too.
+
+  These are the figures the guide to getting paid gives.
 
 ## Left for their own change
 
@@ -57,6 +62,6 @@ the second and part of the third. The other sections are noted under "Left for t
   - `tests/latest-decision.test.ts` and `tests/recent-decisions.test.ts`: the rules in code first, "Differed" neutral,
     the sentences, and the newest refusal taking the last place.
   - `tests/landing-recent-decisions.test.tsx`: the one sentence on which decides.
-  - `tests/landing-faq.test.tsx`: the new question and its place.
+  - `tests/landing-faq.test.tsx`: the two new questions and their places.
 - Headless Edge, against production's decisions, at 1440, 768 and 375 px. The latest decision with three earlier ones,
   a refusal by code among them, measures 44.5, 60.8 and 87.8 rem.
