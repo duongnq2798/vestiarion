@@ -12,6 +12,8 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+## [0.1.0-beta.8] - 2026-10-17
+
 ### Added
 
 - **Early-payment offers in a sandbox.** A sandbox's suppliers are sample data, so the agent used to make no offers
@@ -90,6 +92,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- **The security page says when a release's changes were not each reviewed.** It said every change is reviewed by an
+  independent AI code reviewer before merge. Not every change in this release was, so it now says changes are reviewed,
+  and that a release whose changes were not each reviewed so says it in its notes, as this one does.
 - **The landing page's proof leads each network with whoever has paid on it.**
   - Arc mainnet, where no customer has paid yet, now leads with the team's own payments under "Paid by the Vestiarion
     team": how many and how much USDC. "None on Arc mainnet yet" is on the customers' line under them.
@@ -718,7 +723,8 @@ public beta, on Arc testnet and Arc mainnet. Release notes:
   company.
 - HubSpot is read-only, polled every 15 minutes, and its app is not yet verified by HubSpot.
 
-[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.7...HEAD
+[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.8...HEAD
+[0.1.0-beta.8]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.8
 [0.1.0-beta.7]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.7
 [0.1.0-beta.6]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.6
 [0.1.0-beta.5]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.5
