@@ -211,7 +211,7 @@ describe("loadSampleData", () => {
 
     const counts = await run(() => loadSampleData({ actorId: ACTOR, now: NOW }));
 
-    expect(counts).toEqual({ counterparties: 6, invoices: 7, milestones: 2 });
+    expect(counts).toEqual({ counterparties: 6, invoices: 8, milestones: 2 });
     const [counterparties] = requestsTo(fake.requests, "/rest/v1/counterparties", "POST");
     const rows = counterparties.body as Array<Record<string, unknown>>;
     expect(rows).toHaveLength(6);
@@ -223,7 +223,7 @@ describe("loadSampleData", () => {
     }
     const [invoices] = requestsTo(fake.requests, "/rest/v1/invoices", "POST");
     const invoiceRows = invoices.body as Array<Record<string, unknown>>;
-    expect(invoiceRows).toHaveLength(7);
+    expect(invoiceRows).toHaveLength(8);
     // Harbor is the second counterparty inserted, so its invoice points at the id the insert returned for it.
     expect(invoiceRows.find((row) => row.memo === "Standing desks")?.counterparty_id).toBe("cp-1");
     expect(invoiceRows.every((row) => !("counterparty" in row))).toBe(true);
@@ -242,7 +242,7 @@ describe("loadSampleData", () => {
     expect(entry.p_action).toBe("sample_data_loaded");
     expect(entry.p_domain).toBe("system");
     expect(entry.p_actor).toBe("human");
-    expect(entry.p_detail).toEqual({ by: ACTOR, counterparties: 6, invoices: 7, milestones: 2 });
+    expect(entry.p_detail).toEqual({ by: ACTOR, counterparties: 6, invoices: 8, milestones: 2 });
   });
 
   it.each([
