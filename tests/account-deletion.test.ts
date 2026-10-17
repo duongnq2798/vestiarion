@@ -170,6 +170,8 @@ describe("0023 is idempotent", () => {
         { tbl: "orgs", col: "created_by", action: "n" },
         // Who let the agent make early-payment offers (0126).
         { tbl: "orgs", col: "early_offers_on_by", action: "n" },
+        // Who let the agent ask suppliers for more time (0128).
+        { tbl: "orgs", col: "term_requests_on_by", action: "n" },
         { tbl: "orgs", col: "usyc_live_by", action: "n" },
         { tbl: "payee_links", col: "created_by", action: "n" },
         { tbl: "payment_actuals", col: "recorded_by", action: "n" },

@@ -2300,6 +2300,41 @@ A supplier paid today for a discount it accepts (docs/superpowers/specs/2026-10-
   left after the cycle's payments, less what falls due within 7 days, is below every open offer, it withdraws the
   agent's own, the largest first, and records `early_payment_offer_withdrawn` with `reason: "cash"`.
 
+## Requests for more time
+
+The mirror of the early-payment offers: a bill held for want of cash, and the agent asks the supplier for the same
+amount on a later day (docs/superpowers/specs/2026-10-17-term-requests-design.md, migration 0128).
+
+- **The setting** (`setTermRequests`, `src/lib/terms/requests.ts`). An owner or admin turns it on with the most days,
+  from 3 to 30 (`set_term_requests`, `orgs.term_requests_*`), on Bills & receivables (`TermRequests`). The ledger
+  records `term_requests_on` or `term_requests_off`, and turning it on starts a cycle (`term_requests_on`).
+- **The stage** (`src/lib/agent/term-requests.ts`, stage `term_requests`, after `early_offers`). In a workspace not
+  paused and with email configured, each held payable whose latest `ap_pay` or `ap_hold` held it for want of cash
+  (`heldForCash`, `execution.heldBecause: "cash_shortfall"`) is weighed once code allows it (`termRequestAllowed`,
+  `src/lib/terms/rules.ts`): due within 14 days or past due by no more than 7, never asked about, its supplier with a
+  notice email, no other open request and no decline in 30 days. The model answers `ask | skip` with days, from the
+  bill, the operating USDC after this cycle's payments, what falls due and what customers owe in the next 30 days, and
+  the supplier's earlier requests. The written policy (`referenceTermDays`) asks for the days until what customers owe
+  covers the bill after what falls due before it, from 7 to the most, or the most; code keeps the days from 3 to the
+  most (`boundTermDays`). The review (`payment_term_request_reviews`, one per bill) is claimed before the request is
+  made, and the link goes out in a fixed template (`src/lib/email/term-request.ts`) under the request's Resend
+  idempotency key; a failed send withdraws the request, and one left unsent for 15 minutes is withdrawn
+  (`term_request_withdrawn`, `reason: "not_emailed"`). A skip is weighed again after 7 days. At most 3 requests a
+  cycle; the ledger records `term_request_sent` (`via: "agent"`, the decision, the written policy's answer, and
+  `daysLimited` when code changed the days) or `term_request_skipped`. In a sandbox, the requests go to the member who
+  turned them on (`orgs.term_requests_on_by`), with a "[Sandbox]" subject and `sandbox: true`.
+- **The request** (`createTermRequest`). `create_term_request` checks eligibility (`term_request_eligible`: held, a
+  positive amount, no payment intent), withdraws the bill's open request, and stores the amount, the due date, the new
+  due date (the due date plus the days) and the SHA-256 of a `vxt_` token, one open per bill. It stands 5 days, or
+  until the new due date if sooner. The tenant role only reads `payment_term_requests`; every write is a service-role
+  function.
+- **The supplier** (`/more-time/[token]`, `decideTermRequest`). No session; the token is the credential, and
+  `/more-time/:token` is redacted for analytics. `decide_term_request` locks the request and the bill. An agreement
+  needs the bill still eligible with its amount and due date unchanged; it then moves `due_date` to the new date,
+  returns the bill to `pending`, and marks the request accepted. The ledger records `term_request_accepted` or
+  `term_request_declined` (`via: "terms_link"`), and `runCycleSoon({ kind: "term_request_accepted" })` lets the agent
+  decide the bill again against the new date. A request never changes the amount, the payee or where it is paid.
+
 ## Bank payouts (BlindPay)
 
 A vendor's bills paid to its bank account in Mexico, in pesos over SPEI, from the workspace's USDC

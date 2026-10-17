@@ -14,6 +14,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **The agent asks suppliers for more time when cash is short.** An owner or admin turns it on in More time when cash
+  is short on Bills & receivables, with the most days the agent may ask for (3 to 30). When the operating wallet cannot
+  pay a bill falling due within two weeks, the agent emails the supplier a one-time link asking for the same amount on
+  a later day; the model picks the days and code keeps them within your most. A supplier who agrees moves the due date,
+  and the agent decides the bill again; one who declines leaves it as it was, for a person. In a sandbox, the requests
+  go to the member who turned them on. [Guide](https://www.vestiarion.xyz/docs/guides/more-time).
+
 - **Early-payment offers in a sandbox.** A sandbox's suppliers are sample data, so the agent used to make no offers
   there. Now it sends them, and its answers to counters, to the member who turned the offers on, who answers as the
   supplier. The emails say "[Sandbox]", payments are simulated, and the sample data adds a bill due in three weeks for

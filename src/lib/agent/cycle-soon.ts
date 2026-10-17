@@ -52,6 +52,10 @@ export type CycleEventKind =
   | "early_offers_on"
   /** A supplier proposed a smaller discount on the agent's offer: the agent answers it now (offer counters N2). */
   | "early_payment_countered"
+  /** A supplier agreed to more time: the bill falls due later and is decided again (term requests X5). */
+  | "term_request_accepted"
+  /** The agent may now ask suppliers for more time on bills held for cash (term requests X1). */
+  | "term_requests_on"
   /** Test USDC came in from Vestiarion's float: a payable held for cash may be paid now (test USDC T7). */
   | "test_usdc_added"
   | "reminders_on"

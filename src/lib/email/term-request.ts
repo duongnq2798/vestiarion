@@ -1,0 +1,50 @@
+import { escapeHtml } from "./html";
+import { actionEmailHtml } from "./layout";
+
+/**
+ * The email a supplier gets when the agent asks for more time (docs/superpowers/specs/2026-10-17-term-requests-design.md
+ * X4, X6): who asks, for which invoice, the new date and the full amount, until when, and the request's one-time link,
+ * where they agree or decline. A template; nothing a model wrote.
+ */
+export function termRequestEmail(input: {
+  orgName: string;
+  supplierName: string;
+  /** The invoice's reference (its memo); null when nothing says. */
+  reference: string | null;
+  /** The amount, as "1,000.00", and its token. */
+  amount: string;
+  token: string;
+  days: number;
+  /** The due date, the new one, and the request's last day, as "Oct 30, 2026". */
+  dueOn: string;
+  newDueOn: string;
+  until: string;
+  url: string;
+  origin: string;
+  /** A sandbox's request, sent to the member who turned the requests on in place of the sample supplier. */
+  sandbox?: boolean;
+}): { subject: string; html: string; text: string } {
+  const { orgName, supplierName, reference, amount, token, days, dueOn, newDueOn, until, url, origin } = input;
+  const invoice = reference ? `invoice ${reference}` : "your invoice";
+  const subject = `${input.sandbox ? "[Sandbox] " : ""}${orgName} asks for ${days} more days on ${invoice}`;
+  const lead = `${orgName} asks to pay ${invoice} on ${newDueOn} instead of ${dueOn}: ${days} more days, for the full ${amount} ${token}.`;
+  const terms = `Nothing else changes: the same amount, to where ${orgName} already pays you. The request stands until ${until}, and the link works once.`;
+  const nothing = `If you decline, or do nothing, the invoice stays due on ${dueOn}.`;
+  const play = input.sandbox
+    ? `This is a sandbox. You get this in place of ${supplierName}, a sample supplier, so you can answer as the supplier would. Its payments are simulated.`
+    : null;
+  const note = `You get this because ${orgName} pays its bills through Vestiarion and asked its agent to ask for more time when cash is short. For anything about this invoice, contact ${orgName}.`;
+
+  const html = actionEmailHtml({
+    title: subject,
+    preheader: lead,
+    eyebrow: "Payment terms",
+    heading: `Hi ${supplierName}, a request for more time`,
+    paragraphsHtml: [...(play ? [escapeHtml(play)] : []), escapeHtml(lead), escapeHtml(terms), escapeHtml(nothing)],
+    button: { label: "See the request", link: url },
+    note,
+    origin,
+  });
+  const text = [`Hi ${supplierName},`, "", ...(play ? [play, ""] : []), lead, terms, nothing, "", `See the request: ${url}`, "", note].join("\n");
+  return { subject, html, text };
+}

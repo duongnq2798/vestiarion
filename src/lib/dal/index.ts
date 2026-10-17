@@ -77,6 +77,8 @@ export const TENANT_TABLES = [
   "early_payment_offers",
   // The agent's one review of each bill it may offer early payment on (migration 0126).
   "early_payment_offer_reviews",
+  // Requests for more time on bills held for cash, and the agent's one review of each bill (migration 0128).
+  "payment_term_requests", "payment_term_request_reviews",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
@@ -99,6 +101,8 @@ export const TENANT_RPCS = [
   "early_payment_offers_ready",
   // Whether migration 0126 has run (agent early-payment offers AO4): it reads nothing.
   "early_payment_offer_reviews_ready",
+  // Whether migration 0128 has run (term requests X6): it reads nothing.
+  "term_requests_ready",
   // Commissions on money received (commissions C2, C5, C10, C11).
   "set_commission_plan", "end_commission_plan", "record_commissions", "create_commission_payout", "commission_partner_members",
 ] as const;
@@ -138,6 +142,8 @@ export const PLATFORM_RPCS = [
   "create_early_payment_offer", "withdraw_early_payment_offer", "early_payment_offer_preview", "decide_early_payment_offer", "set_agent_early_offers",
   // Suppliers' counters to the agent's offers (0127, offer counters N1, N2, N5).
   "early_payment_offer_by_agent", "counter_early_payment_offer", "answer_early_payment_counter",
+  // Requests for more time (0128, term requests X1, X4-X6): made and withdrawn by the agent, previewed and decided by token.
+  "create_term_request", "term_request_preview", "decide_term_request", "withdraw_term_request", "set_term_requests",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 

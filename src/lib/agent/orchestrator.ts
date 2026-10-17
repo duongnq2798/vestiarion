@@ -54,6 +54,7 @@ import { releaseDueDealLines } from "../deals/write";
 import { proposeLimitChanges } from "./proposals";
 import { sendReceivableReminders } from "./collections";
 import { makeEarlyPaymentOffers } from "./early-offers";
+import { makeTermRequests } from "./term-requests";
 import { buyPayeeHistories, type AddressHistoryFact } from "./services";
 import { cadenceLabel, type RecurringUnit } from "../recurring";
 import {
@@ -4457,6 +4458,13 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   // to offer the supplier payment today for a discount, and how much, and the link is emailed to the supplier
   // (agent early-payment offers AO1-AO5). Live workspaces only; an offer moves nothing until the supplier accepts.
   lines.push(...(await makeEarlyPaymentOffers(db, { operatingBalance, reserveApy: num(accounts.find((a) => a.kind === "reserve")?.apy) })));
+  });
+
+  await stage("term_requests", async () => {
+  // -------------------------------------------------- 6d. term requests
+  // Once a person turned it on, each bill held for want of cash where code allows it: the model decides whether to ask
+  // the supplier for more time, and how many days, and the link is emailed to the supplier (term requests X1-X6).
+  lines.push(...(await makeTermRequests(db, { operatingBalance })));
   });
 
   await stage("notices", async () => {

@@ -27,7 +27,7 @@ describe("the docs sidebar", () => {
     route.pathname = "/docs/guides/bank-payouts";
     const markup = renderToStaticMarkup(<DocsSidebar sections={DOCS_NAV} />);
     const open = [...markup.matchAll(/<details open=""[^>]*><summary[^>]*>([\s\S]*?)<\/summary>/g)].map((match) => text(match[1]));
-    expect(open).toEqual(["Pay bills 9 pages"]);
+    expect(open).toEqual(["Pay bills 10 pages"]);
     // Every other section with more than one page is a closed disclosure with its count.
     const closed = [...markup.matchAll(/<details class="[^"]*"><summary[^>]*>([\s\S]*?)<\/summary>/g)].map((match) => text(match[1]));
     expect(closed).toContain("Get started 5 pages");
