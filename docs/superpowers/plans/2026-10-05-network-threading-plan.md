@@ -145,7 +145,7 @@ const BASE = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.i
 describe("each network's payee chains (P3)", () => {
   it("lists Arc testnet's own chain, then the three Sepolia chains CCTP and Gateway pay, with today's facts", () => {
     expect(ARC_TESTNET.payeeChains).toEqual([
-      { id: "ARC-TESTNET", label: "Arc testnet", domain: 26, usdc: "0x3600000000000000000000000000000000000000", rpcUrl: "https://rpc.testnet.arc.network", explorerTx: "https://explorer.testnet.arc.io/tx/", nativeUsdc: "0xfffffffffffffffffffffffffffffffffffffffe" },
+      { id: "ARC-TESTNET", label: "Arc testnet", domain: 26, usdc: "0x3600000000000000000000000000000000000000", rpcUrl: "https://rpc.testnet.arc.io", explorerTx: "https://explorer.testnet.arc.io/tx/", nativeUsdc: "0xfffffffffffffffffffffffffffffffffffffffe" },
       { id: "BASE-SEPOLIA", label: "Base Sepolia", domain: 6, usdc: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", rpcUrl: "https://sepolia.base.org", explorerTx: "https://sepolia.basescan.org/tx/" },
       { id: "ARB-SEPOLIA", label: "Arbitrum Sepolia", domain: 3, usdc: "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d", rpcUrl: "https://sepolia-rollup.arbitrum.io/rpc", explorerTx: "https://sepolia.arbiscan.io/tx/" },
       { id: "ETH-SEPOLIA", label: "Ethereum Sepolia", domain: 0, usdc: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", rpcUrl: "https://ethereum-sepolia-rpc.publicnode.com", explorerTx: "https://sepolia.etherscan.io/tx/" },
@@ -226,7 +226,7 @@ describe("the workspace's network (P1)", () => {
 describe("a network's RPC (P2)", () => {
   it("lets ARC_RPC_URL replace Arc testnet's, and nothing replace another network's", () => {
     expect(rpcUrlFor(ARC_TESTNET, "https://keyed.example/rpc")).toBe("https://keyed.example/rpc");
-    expect(rpcUrlFor(ARC_TESTNET, undefined)).toBe("https://rpc.testnet.arc.network");
+    expect(rpcUrlFor(ARC_TESTNET, undefined)).toBe("https://rpc.testnet.arc.io");
     expect(rpcUrlFor(ARC_MAINNET, "https://keyed.example/rpc")).toBe("https://rpc.mainnet.arc.io");
     const keyed = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k", ARC_RPC_URL: "https://keyed.example/rpc" });
     expect(runWithConfig(keyed, () => networkRpcUrl(ARC_TESTNET))).toBe("https://keyed.example/rpc");

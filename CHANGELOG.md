@@ -72,6 +72,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Fixed
 
+- **Public receipts and evidence pages check Arc testnet again.** Arc's public testnet RPC is now
+  `https://rpc.testnet.arc.io`; the old `rpc.testnet.arc.network` name stopped resolving, so receipts said one check
+  could not be made and "Why it was paid" could not open the payment. Every Arc testnet read made without
+  `ARC_RPC_URL` set (receipts and evidence, USYC, escrow, EURC and bank payout balances, network fees, spending limits,
+  and the browser wallet's network switch) now uses the new address. No migration.
+
 - **The agent no longer reads a request it took back as the supplier's no.** Weighing a request for more time, the
   model was told how many earlier requests a supplier got, agreed to and declined, but not how many the agent itself
   withdrew; in a live test it read one withdrawn request as a second decline. It is now told those too, and a request

@@ -151,7 +151,7 @@ export const ARC_TESTNET = {
   circleBlockchain: "ARC-TESTNET",
   chainId: 5042002,
   caip2: "eip155:5042002",
-  rpcUrl: "https://rpc.testnet.arc.network",
+  rpcUrl: "https://rpc.testnet.arc.io",
   explorer: "https://explorer.testnet.arc.io",
   tokens: { USDC: "0x3600000000000000000000000000000000000000", EURC: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a" },
   payeeChains: [
@@ -160,7 +160,7 @@ export const ARC_TESTNET = {
       label: "Arc testnet",
       domain: 26,
       usdc: "0x3600000000000000000000000000000000000000",
-      rpcUrl: "https://rpc.testnet.arc.network",
+      rpcUrl: "https://rpc.testnet.arc.io",
       explorerTx: "https://explorer.testnet.arc.io/tx/",
       nativeUsdc: "0xfffffffffffffffffffffffffffffffffffffffe",
     },
