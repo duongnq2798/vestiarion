@@ -14,6 +14,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Early-payment offers in a sandbox.** A sandbox's suppliers are sample data, so the agent used to make no offers
+  there. Now it sends them, and its answers to counters, to the member who turned the offers on, who answers as the
+  supplier. The emails say "[Sandbox]", payments are simulated, and the sample data adds a bill due in three weeks for
+  the agent to offer. [Guide](https://www.vestiarion.xyz/docs/guides/early-payment-offers#try-it-in-a-sandbox).
+
 - **The early payment the agent negotiates, told as it happens.** The activity toasts, the Telegram chats and the
   Slack channel now tell each step: the offers the agent made and who decided them, a supplier's acceptance or counter,
   the agent's answer to a counter (with code's reason when code declined it), and an offer it withdrew. A person's own
@@ -38,7 +43,7 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   from its due date, never offered before, whose supplier has an email on file and declined no offer in 30 days, where
   the operating wallet can pay it today. The model decides whether to offer and what discount to ask, between the
   suggestion and the ceiling, and the agent emails the supplier the link in a fixed template; an offer whose email does
-  not go is withdrawn. At most 3 a cycle, never in a sandbox or while the agent is paused. Needs migration `0126`.
+  not go is withdrawn. At most 3 a cycle, never while the agent is paused. Needs migration `0126`.
   [Guide](https://www.vestiarion.xyz/docs/guides/early-payment-offers#let-the-agent-make-the-offers).
 - **Early-payment offers.** Bills & receivables lists the bills the agent will pay later under Pay early for a discount,
   each with the discount worth asking for paying today, twice what the cash would earn in the reserve by the due date.

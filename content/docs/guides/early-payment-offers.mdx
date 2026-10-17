@@ -57,7 +57,21 @@ When it offers, the agent emails the supplier the link, with who offers what for
 
 When it decides not to offer, the ledger records `early_payment_offer_skipped` with its reasoning, and the bill is weighed again a week later.
 
-The agent makes no offers in a sandbox, while it is paused, or when email is not set up. Choose **Stop the agent's offers** to turn it off: "The agent no longer makes offers. Offers already out still stand." The ledger records `early_offers_off`. Members who are not an owner or admin read whether it is on.
+The agent makes no offers while it is paused, or when email is not set up. Choose **Stop the agent's offers** to turn it off: "The agent no longer makes offers. Offers already out still stand." The ledger records `early_offers_off`. Members who are not an owner or admin read whether it is on.
+
+## Try it in a sandbox
+
+A sandbox's suppliers are sample data, with no address of their own. So in a sandbox, the agent sends its offers, and its answers to counters, to the email of the member who turned the offers on. That member answers as the supplier would.
+
+- The emails start "[Sandbox]" and say so.
+- Payments are simulated, as every sandbox's are.
+- The ledger entry carries `sandbox: true`.
+
+To try it:
+
+1. Load the sample data from the console. It includes a catalogue print run from Kestrel Print Co, due in three weeks with no discount, which the agent schedules for its due date.
+2. On **Bills & receivables**, under **Pay early for a discount**, choose **Let the agent make offers**.
+3. Within a minute, the offer reaches your inbox. Open it, and accept it, decline it, or propose a smaller discount. The agent answers a counter by email, and an accepted offer is paid at once, in simulation.
 
 ## When the supplier proposes a smaller discount
 

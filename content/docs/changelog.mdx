@@ -1,5 +1,9 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-17: The agent's early-payment offers in a sandbox
+
+- In a sandbox, the agent now makes early-payment offers, sent to the member who turned them on in place of the sample supplier. Its **`early_payment_offered`** entry there carries `sandbox: true`, and `to` is that member's address, masked. Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-17: The agent withdraws offers the cash no longer covers
 
 - **`early_payment_offer_withdrawn`** may now come from the agent with `via: "agent"` and `reason: "cash"`. It carries `offerId`, `invoiceId`, `offeredAmount`, and `covering`: the operating USDC left after the cycle's payments, less what falls due in 7 days. The agent sends it when that cash no longer covers every open offer, and withdraws its own offers, the largest first. Nothing else in `/api/v1` or the webhooks changes.
