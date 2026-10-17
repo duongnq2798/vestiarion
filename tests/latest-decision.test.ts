@@ -48,8 +48,9 @@ describe("latestDecisionView", () => {
     });
     expect(shown.facts).toEqual([
       { label: "Proposed by", value: "DeepSeek model", tone: "neutral" },
-      { label: "Written policy", value: "Agreed", tone: "proof" },
-      { label: "Code checks", value: "Passed", tone: "proof" },
+      // The rules in code, which decide, before the written policy, which only compares.
+      { label: "Rules in code", value: "Passed", tone: "proof" },
+      { label: "Written policy, to compare", value: "Agreed", tone: "proof" },
     ]);
   });
 
@@ -93,7 +94,7 @@ describe("latestDecisionView", () => {
     const refused = view({ action: "ap_hold", resultingStatus: "held", txRef: null, guardrailBlocked: true, guardrailRule: "counterparty.payment_limit" });
     expect(refused.headline).toBe("Held a 0.35 USDC bill.");
     expect(refused.why).toBe("Code refused it: it is above the payee's payment limit.");
-    expect(refused.facts).toContainEqual({ label: "Code checks", value: "Refused it", tone: "refused" });
+    expect(refused.facts).toContainEqual({ label: "Rules in code", value: "Refused it", tone: "refused" });
     expect(view({ action: "ap_hold", guardrailBlocked: true, guardrailRule: "some.new_rule" }).why).toBe("Code refused it: a hard limit in code.");
   });
 
@@ -116,9 +117,10 @@ describe("latestDecisionView", () => {
   it("says the written policy decided when no model did, and when the model departed from it", () => {
     expect(view({ decisionMode: "heuristic", agreedWithReference: null }).facts).toEqual([
       { label: "Proposed by", value: "Written policy", tone: "neutral" },
-      { label: "Code checks", value: "Passed", tone: "proof" },
+      { label: "Rules in code", value: "Passed", tone: "proof" },
     ]);
-    expect(fact({ agreedWithReference: false }, "Written policy")).toBe("Disagreed");
+    // A model that departed from the written policy broke no rule: the policy only compares, so it differed, quietly.
+    expect(view({ agreedWithReference: false }).facts).toContainEqual({ label: "Written policy, to compare", value: "Differed", tone: "neutral" });
     expect(fact({ decisionMode: "anthropic" }, "Proposed by")).toBe("Anthropic model");
   });
 });

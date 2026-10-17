@@ -73,8 +73,8 @@ export function RecentDecisionList({ recent }: { recent: { decisions: RecentDeci
         </Link>
       </div>
       <p className="mt-2 max-w-3xl text-pretty text-sm leading-relaxed text-ink-2">
-        {pastWeekSentence(recent.pastWeek)} Newest first, one row per bill. Customers&apos; decisions stay private: they are only counted, in the figures
-        below.
+        {pastWeekSentence(recent.pastWeek)} A few of the newest, one row per bill, with the latest refusal by code among them when there is one.
+        Customers&apos; decisions stay private: they are only counted, in the figures below.
       </p>
       <ol aria-labelledby="earlier-decisions-title" className="mt-4 divide-y divide-line border-y border-line">
         {recent.decisions.map((decision) => (
