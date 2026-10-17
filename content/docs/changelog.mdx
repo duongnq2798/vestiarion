@@ -1,5 +1,18 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-17: The agent tells you before the cash runs short
+
+- Two new entries, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`, both in domain `treasury`, actor `agent`:
+  - **`cash_short_ahead`**, when the wallet will run short within 30 days: `shortOn` (the first short day, `YYYY-MM-DD`) and `shortBy`, `lowestOn` and `need` (the shortest day and what it needs to pay everything due through it), `expectedBy` (receivables expected by then, not counted) and `coveredWithExpected`, `cash: { operating, reserve }`, and `doing: { heldForCash: { count, total }, termRequestsOpen, customerDiscountsOpen }`, each `null` when it could not be read. Signed again only when `shortOn` comes earlier, `need` grows by at least 1 USDC and a tenth, or 7 days pass.
+  - **`cash_short_cleared`**, once the wallet no longer runs short after an alert, with `previous`: the last alert's detail.
+- A cycle's journal has a new stage, `cash_alert`, after `term_requests`. It runs only when `reconcile` completed. Nothing else in `/api/v1` or the webhooks changes.
+
+## 2026-10-17: Scheduled payments checked against the cash ahead
+
+- An AP decision made before a scheduled bill's day, because the cash will no longer cover it then, carries **`cashAhead`**: `{ scheduledFor, cashCounted, dueBefore: { total, count }, needed }`. Such an entry is usually **`ap_hold`** with `execution.heldBecause: "cash_shortfall"`.
+- **`timingRule`** may be **`"pay.cash_ahead"`**: the model chose to pay such a bill now, and code held it, since paying it would take the cash the bills before it count on.
+- Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-17: Suppliers counter the agent's requests for more time
 
 - On a request for more time, a supplier may propose fewer days, and the agent answers it. New entries, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`, all in domain `ap`:

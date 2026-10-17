@@ -67,7 +67,7 @@ export function plainText(html: string): string {
 }
 
 /** A decision's mark: done, or stopped for a person. A payment Circle has not confirmed yet is neither, and has none (I17). */
-const MARK: Record<ActivityItem["tone"], string> = { done: "✅ ", stopped: "⏸ ", pending: "" };
+const MARK: Record<ActivityItem["tone"], string> = { done: "✅ ", stopped: "⏸ ", pending: "", notice: "⚠️ " };
 
 function decisionBlock(item: ActivityItem, slug: string, origin: string): string {
   const lines = [`${MARK[item.tone]}${escapeHtml(clip(item.text, ITEM_TEXT_MAX))}`];

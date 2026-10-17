@@ -80,7 +80,7 @@ export const ACTIVITY_ACTIONS = [
 /** The people's actions on an invoice that give the agent something to decide: how long after one it decided is told. */
 export const TRIGGER_ACTIONS = ["create_invoice", "invoice_details_added", "approval_returned"] as const;
 
-export type ActivityTone = "done" | "pending" | "stopped";
+export type ActivityTone = "done" | "pending" | "stopped" | "notice";
 
 export interface ActivityItem {
   seq: number;
@@ -90,8 +90,8 @@ export interface ActivityItem {
   detail: string | null;
   /**
    * Done (paid or released as Circle confirmed it, simulated, scheduled, received), pending (submitted and not confirmed
-   * by Circle yet, its outcome unknown, or a decision whose transfer the entry does not record), or stopped (held,
-   * asked, flagged, refused by code).
+   * by Circle yet, its outcome unknown, or a decision whose transfer the entry does not record), stopped (held,
+   * asked, flagged, refused by code), or notice (a warning that is no decision for a person: the cash will run short).
    */
   tone: ActivityTone;
   /** Where in the workspace a person sees it, or handles it: an org path such as `/approvals#payable-<id>`. */
@@ -345,9 +345,16 @@ function cashAlertItem(entry: ActivityEntry): Omit<ActivityItem, "txUrl" | "netw
       ? `Cash runs short on ${shortDay(shortOn)}: ${usdc(need)} more is needed by then to pay what is due.`
       : `Cash runs short on ${shortDay(shortOn)}: ${usdc(shortBy)} short that day, and ${usdc(need)} by ${shortDay(lowestOn)} to pay everything due.`;
   const expected = number(entry.detail.expectedBy) ?? 0;
+  // Enough on time, enough in all but some of it after the first short day, or not enough (review of #420).
+  const enough =
+    entry.detail.coveredWithExpected === true
+      ? "enough if each pays on time"
+      : expected >= need
+        ? `enough in all, but not all of it by ${shortDay(shortOn)}`
+        : "not enough even if each pays on time";
   const customers =
     expected > 0
-      ? `Customers owe ${usdc(expected)} by ${shortDay(lowestOn)}, ${entry.detail.coveredWithExpected === true ? "enough if each pays on time" : "not enough even if each pays on time"}; it is not counted until it arrives.`
+      ? `Customers owe ${usdc(expected)} by ${shortDay(lowestOn)}, ${enough}; it is not counted until it arrives.`
       : `No customer payment is expected by ${shortDay(lowestOn)}.`;
   const doing = record(entry.detail.doing);
   const held = record(doing?.heldForCash);
@@ -359,7 +366,8 @@ function cashAlertItem(entry: ActivityEntry): Omit<ActivityItem, "txUrl" | "netw
   const discounts = number(doing?.customerDiscountsOpen);
   if (discounts !== null && discounts > 0) parts.push(`has ${discounts === 1 ? "1 customer discount" : `${discounts} customer discounts`} open`);
   const agent = parts.length > 0 ? ` The agent ${parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`}.` : "";
-  return { seq: entry.seq, text: said, detail: `${customers}${agent}`, tone: "stopped", path: PAYMENT_PLAN_PATH, pathLabel: "See the payment plan", txHash: null };
+  // A warning, not a decision for a person: it neither counts among what waits for them nor takes the stopped mark.
+  return { seq: entry.seq, text: said, detail: `${customers}${agent}`, tone: "notice", path: PAYMENT_PLAN_PATH, pathLabel: "See the payment plan", txHash: null };
 }
 
 /** What Circle said of a payment that has not confirmed, or that it was not asked, or never answered the send. */

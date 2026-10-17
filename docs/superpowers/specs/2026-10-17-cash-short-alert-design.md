@@ -30,12 +30,14 @@ there yet counts as none.
 **S3. Told once, and again when it changes.** The stage signs `cash_short_ahead` with the figures when the wallet runs
 short and the last alert was none, or a `cash_short_cleared`; or the short day came earlier; or the need grew by 1 USDC
 and a tenth since the last alert; or 7 days passed with it still short. When the wallet no longer runs short after an
-alert, it signs `cash_short_cleared`. Nothing else is signed, so a cycle every few minutes says nothing new.
+alert, it signs `cash_short_cleared`. Nothing else is signed, so a cycle every few minutes says nothing new. Short by
+under a cent neither alerts nor clears (review of #420).
 
 **S4. Where it is told.** Both actions join the activity feed, so the console's toasts and the connected Telegram chats
 and Slack channel tell them in the same cycle: "Cash runs short on Oct 23: 139.97 USDC short that day, 229.97 USDC
 by Oct 25 to pay everything due." with a line on customers' money and what the agent did, and a link to the payment
-plan. A cleared alert says "The cash covers everything due in the next 30 days again."
+plan. A cleared alert says "The cash covers everything due in the next 30 days again." The alert is a warning, not a
+decision: it takes its own tone, `notice`, so it is not counted among what waits for a person (review of #420).
 
 **S5. Where it is not.** Not in shadow mode, where the business pays its bills in its own money and the wallet only
 mirrors agreed payments. Not while the agent is paused: the cycle does not run. Code only: no model decides it.

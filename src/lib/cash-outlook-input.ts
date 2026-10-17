@@ -1,12 +1,17 @@
 import type { OutlookInput } from "./cash-outlook";
-import type { AccountRow, InvoiceRow, MilestoneRow } from "./queries";
+import type { InvoiceRow, MilestoneRow } from "./queries";
+
+/** The invoice fields the outlook reads. */
+export type OutlookInvoice = Pick<InvoiceRow, "id" | "direction" | "counterparty_name" | "amount" | "currency" | "due_date" | "status" | "scheduled_for">;
+/** The milestone fields the outlook reads. */
+export type OutlookMilestone = Pick<MilestoneRow, "id" | "title" | "contractor_name" | "amount" | "status" | "escrow_state">;
 
 /**
  * The cash outlook's input from the workspace's rows as `listAccounts`, `listInvoices` and `listMilestones` read them:
  * one mapping, so `/today` and the cash alert (docs/superpowers/specs/2026-10-17-cash-short-alert-design.md S1) work
  * out the same figures. Deal lines are not read here.
  */
-export function outlookInputOf(input: { now: number; accounts: AccountRow[]; invoices: InvoiceRow[]; milestones: MilestoneRow[] }): OutlookInput {
+export function outlookInputOf(input: { now: number; accounts: Array<{ kind: string; balance: number }>; invoices: OutlookInvoice[]; milestones: OutlookMilestone[] }): OutlookInput {
   const { accounts, invoices, milestones } = input;
   return {
     now: input.now,

@@ -77,6 +77,11 @@ describe("when to tell the owner (S3)", () => {
     expect(alertDue(short(), { action: CASH_SHORT_CLEARED, ts: "2026-10-16T00:00:00Z", detail: {} }, at)).toBe("alert");
   });
 
+  it("says nothing about a shortfall under a cent, neither alert nor clear (review of #420)", () => {
+    expect(alertDue(short({ need: 0.004, shortBy: 0.004 }), null, at)).toBeNull();
+    expect(alertDue(short({ need: 0.004, shortBy: 0.004 }), told({ shortOn: "2026-10-23", need: 229.97 }), at)).toBeNull();
+  });
+
   it("says nothing new while it is the same, or a little worse", () => {
     expect(alertDue(short(), told({ shortOn: "2026-10-23", need: 229.97 }), at)).toBeNull();
     expect(alertDue(short({ need: 240 }), told({ shortOn: "2026-10-23", need: 229.97 }), at)).toBeNull();
@@ -139,6 +144,14 @@ describe("the cash alert stage (S1-S5)", () => {
       doing: { heldForCash: { count: 3, total: 240 }, termRequestsOpen: 1, customerDiscountsOpen: 0 },
     });
     expect(lines).toEqual([{ domain: "treasury", message: "cash runs short on Oct 23, 2026 by 139.97 USDC, and by 229.97 USDC on Oct 25, 2026" }]);
+  });
+
+  it("reads only open invoices and milestones, so a long history cannot crowd out what is due (review of #420)", async () => {
+    const client = world();
+    await run(client);
+    const invoices = client.requests.find((r) => r.path === "/rest/v1/invoices");
+    expect(invoices?.params.get("status")).toBe("in.(pending,matched,held,awaiting_info,scheduled)");
+    expect(client.requests.find((r) => r.path === "/rest/v1/milestones")?.params.get("status")).toBe("in.(pending,verified)");
   });
 
   it("signs nothing when it was told already and nothing changed", async () => {

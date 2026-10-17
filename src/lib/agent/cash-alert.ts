@@ -1,10 +1,10 @@
 import { cashOutlook, type CashOutlook } from "../cash-outlook";
-import { outlookInputOf } from "../cash-outlook-input";
+import { outlookInputOf, type OutlookInvoice, type OutlookMilestone } from "../cash-outlook-input";
+import { readAllocationRows, stillOwed } from "../allocations/book";
 import { utcDay } from "../copy";
 import { unwrap, type OrgDb } from "../dal";
 import { appendLedgerEntry } from "../ledger";
 import { heldForCash } from "../next-step";
-import { listAccounts, listInvoices, listMilestones } from "../queries";
 import { readShadowMode } from "../shadow-mode";
 import type { CycleLogLine } from "./orchestrator";
 
@@ -28,9 +28,32 @@ const REMIND_AFTER_MS = 7 * DAY_MS;
 /** Told again once the need grew by at least this much, and by a tenth (S3). */
 const GREW_BY_USDC = 1;
 const GREW_BY_SHARE = 0.1;
+/**
+ * Short by less than a cent is not worth a word (review of #420): it neither alerts nor clears, so a lowest balance a
+ * hair either side of zero does not flip the alert on and off.
+ */
+const MIN_NEED_USDC = 0.01;
 const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const round = (value: number) => Math.round(value * 1e6) / 1e6;
+
+/** The statuses of a payable still to pay, and of a receivable still owed (`OPEN_PAYABLE_STATUSES` with `pending`, `matched`). */
+const OPEN_STATUSES = ["pending", "matched", "held", "awaiting_info", "scheduled"] as const;
+const OPEN_INVOICE_COLUMNS = "id, direction, counterparty_id, amount, currency, status, due_date, scheduled_for, created_at, memo, po_reference, counterparties(name)";
+interface OpenInvoiceRow {
+  id: string;
+  direction: string;
+  counterparty_id: string;
+  amount: string | number;
+  currency: string | null;
+  status: string;
+  due_date: string;
+  scheduled_for: string | null;
+  created_at: string | null;
+  memo: string | null;
+  po_reference: string | null;
+  counterparties: { name: string } | null;
+}
 
 /** How short the wallet runs within the outlook, from its days (S1). */
 export interface CashShort {
@@ -82,11 +105,12 @@ export interface LastAlert {
 /**
  * Whether to tell the owner now (S3): "alert" when it runs short and was not told, or the short day came earlier, or
  * the need grew by a dollar and a tenth, or a week passed; "clear" when it no longer runs short after an alert; null
- * when nothing changed.
+ * when nothing changed, or it is short by less than a cent.
  */
 export function alertDue(now: CashShort | null, last: LastAlert | null, nowMs: number): "alert" | "clear" | null {
   const told = last?.action === CASH_SHORT_AHEAD ? last : null;
   if (now === null) return told ? "clear" : null;
+  if (now.need < MIN_NEED_USDC) return null;
   if (!told) return "alert";
   const shortOn = typeof told.detail.shortOn === "string" ? told.detail.shortOn : null;
   const need = Number(told.detail.need);
@@ -112,12 +136,37 @@ export async function alertCashShort(orgDb: OrgDb, options: { now?: number } = {
   const nowMs = options.now ?? Date.now();
   // Shadow mode (S5): the business pays in its own money, and the wallet only mirrors agreed payments.
   if (await readShadowMode(orgDb)) return [];
-  const [accounts, invoices, milestones, lastRead] = await Promise.all([
-    listAccounts(),
-    listInvoices(),
-    listMilestones(),
+  const [accountsRead, invoicesRead, milestonesRead, lastRead] = await Promise.all([
+    orgDb.from("accounts").select("kind, balance").in("kind", ["operating", "reserve"]),
+    // Only what is open: the whole invoice table is more than a read returns once a workspace has paid enough bills
+    // (review of #420), and a paid one moves no money ahead.
+    orgDb.from("invoices").select(OPEN_INVOICE_COLUMNS).in("status", [...OPEN_STATUSES]).order("due_date", { ascending: true }),
+    orgDb.from("milestones").select("id, title, amount, status, escrow_state, counterparties(name)").in("status", ["pending", "verified"]),
     orgDb.from("ledger_entries").select("action, ts, detail").in("action", [CASH_SHORT_AHEAD, CASH_SHORT_CLEARED]).order("seq", { ascending: false }).limit(1),
   ]);
+  const accounts = (unwrap(accountsRead) as Array<{ kind: string; balance: string | number }>).map((row) => ({ kind: row.kind, balance: Number(row.balance) }));
+  const openRows = unwrap(invoicesRead) as unknown as OpenInvoiceRow[];
+  // What customers still owe on each open receivable, as the console counts it: less what was applied to it already.
+  const receivableIds = openRows.filter((row) => row.direction === "receivable").map((row) => row.id);
+  const applied = receivableIds.length > 0 ? ((await readAllocationRows(orgDb, { invoiceIds: receivableIds }).catch(() => null)) ?? []) : [];
+  const invoices: OutlookInvoice[] = openRows.map((row) => ({
+    id: row.id,
+    direction: row.direction,
+    counterparty_name: row.counterparties?.name ?? "unknown",
+    amount: row.direction === "receivable" ? stillOwed(row, applied) : Number(row.amount),
+    currency: row.currency === "EURC" ? "EURC" : "USDC",
+    due_date: row.due_date,
+    status: row.status,
+    scheduled_for: row.scheduled_for,
+  }));
+  const milestones: OutlookMilestone[] = (unwrap(milestonesRead) as unknown as Array<{ id: string; title: string; amount: string | number; status: string; escrow_state: string | null; counterparties: { name: string } | null }>).map((row) => ({
+    id: row.id,
+    title: row.title,
+    contractor_name: row.counterparties?.name ?? "unknown",
+    amount: Number(row.amount),
+    status: row.status,
+    escrow_state: row.escrow_state as OutlookMilestone["escrow_state"],
+  }));
   const short = cashShortOf(cashOutlook(outlookInputOf({ now: nowMs, accounts, invoices, milestones })));
   const last = ((unwrap(lastRead) as LastAlert[])[0] ?? null) as LastAlert | null;
   const due = alertDue(short, last, nowMs);
