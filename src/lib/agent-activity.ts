@@ -31,10 +31,19 @@ export const CUSTOMER_DISCOUNT_ACTIONS = ["customer_discount_offered", "customer
  * The agent's requests for more time, told as they happen (docs/superpowers/specs/2026-10-17-term-requests-follow-up-design.md
  * F3): a request it sent, a supplier's answer, and a request it withdrew. A bill it chose not to ask about is not news.
  */
-export const TERM_REQUEST_ACTIONS = ["term_request_sent", "term_request_accepted", "term_request_declined", "term_request_withdrawn"] as const;
+export const TERM_REQUEST_ACTIONS = [
+  "term_request_sent",
+  "term_request_accepted",
+  "term_request_declined",
+  "term_request_withdrawn",
+  // A supplier's fewer days, and the agent's answer (term counters F5, F6).
+  "term_request_countered",
+  "term_counter_accepted",
+  "term_counter_declined",
+] as const;
 
 /** A supplier's answers to a request for more time: recorded by the system, told beside the agent's own entries (F3). */
-export const TERM_ANSWERS = ["term_request_accepted", "term_request_declined"] as const;
+export const TERM_ANSWERS = ["term_request_accepted", "term_request_declined", "term_request_countered"] as const;
 
 /** A supplier's answers to an early-payment offer: recorded by the system, told beside the agent's own entries (A2). */
 export const SUPPLIER_ANSWERS = ["early_payment_offer_accepted", "early_payment_offer_countered"] as const;
@@ -415,6 +424,12 @@ function termRequestItem(
       return { seq: entry.seq, text: `${invoice.name} agreed to ${dayWord(days)}${newDue ? `: the bill now falls due ${newDue}` : ""}.`, detail: null, tone: "done", ...how, txHash: null };
     case "term_request_declined":
       return { seq: entry.seq, text: `${invoice.name} declined the request for more time: the bill keeps its due date and waits for a person.`, detail: null, tone: "done", ...how, txHash: null };
+    case "term_request_countered":
+      return { seq: entry.seq, text: `${invoice.name} proposed ${dayWord(number(detail.counterDays))} instead of ${days ?? "the"}; the agent answers it now.`, detail: null, tone: "pending", ...how, txHash: null };
+    case "term_counter_accepted":
+      return { seq: entry.seq, text: `Accepted ${invoice.name}'s ${dayWord(number(detail.counterDays))}${newDue ? `: the bill now falls due ${newDue}` : ""}.`, detail: deciderLine(detail), tone: "done", ...how, txHash: null };
+    case "term_counter_declined":
+      return { seq: entry.seq, text: `Declined ${invoice.name}'s ${dayWord(number(detail.counterDays))}: the bill keeps its due date.`, detail: deciderLine(detail), tone: "done", ...how, txHash: null };
     case "term_request_withdrawn": {
       const reason = text(detail.reason);
       const why = reason === "paid" ? "the bill is being paid on time" : reason === "not_needed" ? "it is no longer needed" : "its email never went";

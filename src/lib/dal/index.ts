@@ -152,6 +152,8 @@ export const PLATFORM_RPCS = [
   "decide_customer_discount", "settle_customer_discount",
   // Requests for more time (0128, term requests X1, X4-X6): made and withdrawn by the agent, previewed and decided by token.
   "create_term_request", "term_request_preview", "decide_term_request", "withdraw_term_request", "set_term_requests",
+  // Suppliers' counters to the agent's requests for more time (0130, term counters F5, F6).
+  "counter_term_request", "answer_term_counter",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 

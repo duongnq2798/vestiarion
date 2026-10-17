@@ -19,12 +19,12 @@ vi.mock("@/lib/ledger", async (importOriginal) => ({ ...(await importOriginal<ty
 vi.mock("@/lib/ledger-best-effort", () => ({ appendLedgerEntryBestEffort: bestEffortMock }));
 vi.mock("@/lib/dal/scope", () => ({ withOrg: async (_orgId: string, fn: () => Promise<unknown>) => fn() }));
 vi.mock("@/lib/agent/decide", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/agent/decide")>()), decide: decideMock }));
-vi.mock("@/app/more-time/[token]/actions", () => ({ decideTermRequestAction: vi.fn() }));
+vi.mock("@/app/more-time/[token]/actions", () => ({ decideTermRequestAction: vi.fn(), counterTermRequestAction: vi.fn() }));
 vi.mock("@/app/actions/term-requests", () => ({ setTermRequestsAction: vi.fn() }));
 
 import { makeTermRequests } from "@/lib/agent/term-requests";
 import { termRequestEmail } from "@/lib/email/term-request";
-import { decideTermRequest, generateTermToken, termTokenHash } from "@/lib/terms/requests";
+import { counterTermRequest, decideTermRequest, generateTermToken, termTokenHash } from "@/lib/terms/requests";
 import { boundTermDays, referenceTermDays, termRequestAllowed, type TermFacts } from "@/lib/terms/rules";
 import { termRequestLine } from "@/lib/terms/words";
 import { TermDecision } from "@/components/terms/TermDecision";
@@ -67,6 +67,8 @@ interface World {
   started?: Array<Record<string, unknown>>;
   /** The requests the agent signed as sent (X6). */
   sent?: string[];
+  /** What answer_term_counter answers, when not the agent's own choice. */
+  answer?: string;
 }
 
 function world(w: World = {}) {
@@ -99,6 +101,11 @@ function world(w: World = {}) {
       return { body: { id: "request-1", invoice_id: INVOICE, counterparty_id: SUPPLIER, days, amount: "300.000000", due_date: "2026-10-20T12:00:00+00:00", new_due_date: newDue, currency: "USDC", expires_at: "2026-10-22T09:00:00+00:00" } };
     }
     if (request.path === "/rest/v1/rpc/withdraw_term_request") return { body: true };
+    if (request.path === "/rest/v1/rpc/answer_term_counter") {
+      const body = request.body as { p_accept: boolean };
+      const outcome = w.answer ?? (body.p_accept ? "accepted" : "declined");
+      return { body: [{ outcome, invoice_id: INVOICE, counter_days: 12, new_due_date: outcome === "accepted" ? "2026-11-01T12:00:00+00:00" : null }] };
+    }
     return { body: [] };
   });
 }
@@ -292,6 +299,86 @@ describe("a request no longer needed (follow-up F1, F2)", () => {
     const seen = world({ requests: [unsent], sent: ["request-0"] });
     await run(seen);
     expect(seen.requests.some((r) => r.path === "/rest/v1/rpc/create_term_request")).toBe(false);
+  });
+});
+
+describe("a supplier's fewer days (term counters F5-F7)", () => {
+  const countered = (counterDays: number) => ({ id: "request-0", invoice_id: INVOICE, counterparty_id: SUPPLIER, status: "countered", days: 14, counter_days: counterDays, due_date: "2026-10-20T12:00:00+00:00", decided_at: "2026-10-17T08:00:00Z", expires_at: "2026-10-22T09:00:00+00:00" });
+  const bill = (over: Record<string, unknown> = {}) => ({ id: INVOICE, status: "held", amount: "300", currency: "USDC", due_date: "2026-10-20T12:00:00+00:00", memo: "LP-130 brochures", counterparties: { name: "Lumen Print Co.", notice_email: "ap@lumen.example" }, ...over });
+  const answers = (client: ReturnType<typeof world>) => client.requests.filter((r) => r.path === "/rest/v1/rpc/answer_term_counter").map((r) => r.body as { p_accept: boolean; p_request_id: string });
+  const signed = (action: string) => ledgerMock.mock.calls.map((call) => call[0] as { action: string; detail: Record<string, unknown> }).find((entry) => entry.action === action);
+
+  it("accepts fewer days that still reach the day what customers owe covers the bill, emails it and signs it", async () => {
+    // 100 USDC now and 250 owed 10 days after the due date: covered from day 11.
+    const client = world({ requests: [countered(12)], bills: [bill()], held: [] });
+    const lines = await run(client);
+    expect(answers(client)).toEqual([expect.objectContaining({ p_request_id: "request-0", p_accept: true })]);
+    const message = sendMock.mock.calls[0][0];
+    expect(message.subject).toBe("Pinecrest Studio accepted your 12 more days on invoice LP-130 brochures");
+    expect(message.text).toContain("invoice LP-130 brochures now falls due on Nov 1, 2026, for the full 300.00 USDC.");
+    expect(signed("term_counter_accepted")?.detail).toMatchObject({ requestId: "request-0", counterDays: 12, days: 14, newDueDate: "2026-11-01T12:00:00+00:00", decisionMode: "deepseek", supplierTold: true });
+    expect(lines[0].message).toBe("Accepted Lumen Print Co.'s 12 more days, to Nov 1, 2026");
+  });
+
+  it("declines fewer days by which the bill would not be covered, rather than promise a date it cannot keep", async () => {
+    const client = world({ requests: [countered(7)], bills: [bill()], held: [] });
+    await run(client);
+    expect(answers(client)[0].p_accept).toBe(false);
+    expect(sendMock.mock.calls[0][0].subject).toBe("Pinecrest Studio keeps the original due date for invoice LP-130 brochures");
+    expect(signed("term_counter_declined")?.detail).toMatchObject({ counterDays: 7, decision: { action: "decline" } });
+  });
+
+  it("follows the model when it departs from the written policy, and says so", async () => {
+    model({ action: "accept", reasoning: "The supplier is a long-standing one; a customer promised to pay early." });
+    const client = world({ requests: [countered(7)], bills: [bill()], held: [] });
+    await run(client);
+    expect(answers(client)[0].p_accept).toBe(true);
+    expect(signed("term_counter_accepted")?.detail).toMatchObject({ agreedWithReference: false });
+  });
+
+  it("tells a supplier whose bill is being paid that no more time is needed, without asking the model", async () => {
+    const client = world({ requests: [countered(12)], bills: [bill({ status: "paid" })], held: [] });
+    await run(client);
+    expect(decideMock).not.toHaveBeenCalled();
+    expect(answers(client)[0].p_accept).toBe(false);
+    expect(sendMock.mock.calls[0][0].subject).toBe("Pinecrest Studio no longer needs more time on invoice LP-130 brochures");
+    expect(signed("term_counter_declined")?.detail).toMatchObject({ decisionMode: "code" });
+  });
+
+  it("is answered even after the requests are turned off, and once only", async () => {
+    const off = world({ on: false, requests: [countered(12)], bills: [bill()] });
+    await run(off);
+    expect(answers(off)).toHaveLength(1);
+    sendMock.mockClear();
+    ledgerMock.mockClear();
+    const again = world({ requests: [countered(12)], bills: [bill()], held: [], answer: "not_countered" });
+    await run(again);
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(signed("term_counter_accepted")).toBeUndefined();
+  });
+
+  it("records the supplier's counter and starts a cycle; refuses a count of days that is not one", async () => {
+    const { token } = generateTermToken();
+    const raise = vi.fn();
+    const client = fakeSupabase((request: RecordedRequest): FakeReply => {
+      if (request.path === "/rest/v1/rpc/counter_term_request") return { body: [{ outcome: "countered", request_id: "request-0", org_id: ORG, invoice_id: INVOICE, counter_days: 7, days: 14 }] };
+      if (request.path === "/rest/v1/orgs") return { body: { mode: "live" } };
+      return { body: [] };
+    });
+    const counterWith = (days: number) => runWith(orgTestContext({ config, client: client.client, orgId: ORG }), () => counterTermRequest(token, days, { raise }));
+    expect(await counterWith(7)).toBe("countered");
+    expect(client.requests.find((r) => r.path === "/rest/v1/rpc/counter_term_request")?.body).toEqual({ p_token_hash: termTokenHash(token), p_days: 7 });
+    expect(bestEffortMock.mock.calls[0][1]).toMatchObject({ action: "term_request_countered", detail: { counterDays: 7, days: 14, via: "terms_link" } });
+    expect(raise).toHaveBeenCalledWith({ orgId: ORG, sandbox: false, kind: "term_request_countered" });
+    expect(await counterWith(2.5)).toBe("bad_days");
+  });
+
+  it("offers the supplier fewer days on its page, starting at half the days asked", () => {
+    const html = renderToStaticMarkup(
+      <TermDecision token="vxt_x" request={{ orgName: "Pinecrest Studio", counterpartyName: "Lumen Print Co.", reference: "LP-130", amount: 300, currency: "USDC", dueDate: "2026-10-20T12:00:00Z", newDueDate: "2026-11-03T12:00:00Z", days: 14, expiresAt: "2026-10-22T09:00:00Z" }} />
+    );
+    expect(html).toContain("Propose fewer days");
+    expect(html).toContain('value="7"');
   });
 });
 

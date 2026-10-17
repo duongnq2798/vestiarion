@@ -457,7 +457,7 @@ describe("reading the agent's activity", () => {
     expect(triggers.params.get("action")).toBe("in.(create_invoice,invoice_details_added,approval_returned)");
     const asked = client.requests.find((r) => r.path === "/rest/v1/ledger_entries" && r.params.get("select") === "seq,ts,action,detail")!;
     // The agent's entries, and a supplier's answer to its early-payment offer, which the system records (offer activity A2).
-    expect(asked.params.get("or")).toBe("(actor.eq.agent,and(actor.eq.system,action.in.(early_payment_offer_accepted,early_payment_offer_countered,term_request_accepted,term_request_declined)))");
+    expect(asked.params.get("or")).toBe("(actor.eq.agent,and(actor.eq.system,action.in.(early_payment_offer_accepted,early_payment_offer_countered,term_request_accepted,term_request_declined,term_request_countered)))");
     expect(asked.params.get("seq")).toBe("gt.967");
     expect(asked.params.get("action")).toContain("ap_pay");
     expect(asked.params.get("action")).not.toContain("cycle_complete");
@@ -629,6 +629,15 @@ describe("the agent's requests for more time (term requests follow-up F3)", () =
     expect(activityItem(term("term_request_withdrawn", { via: "agent", reason: "paid", supplierTold: true }), refs())).toMatchObject({ text: "Withdrew the request for more time to Jiren: the bill is being paid on time, and told them." });
     expect(activityItem(term("term_request_withdrawn", { via: "agent", reason: "not_needed", supplierTold: false }), refs())).toMatchObject({ text: "Withdrew the request for more time to Jiren: it is no longer needed." });
     expect(activityItem(term("term_request_withdrawn", { via: "agent", reason: "not_emailed" }), refs())).toMatchObject({ text: "Withdrew the request for more time to Jiren: its email never went." });
+  });
+
+  it("says a supplier's fewer days and the agent's answer (term counters F5, F6)", () => {
+    expect(activityItem(term("term_request_countered", { counterDays: 7, days: 14 }), refs())).toMatchObject({ text: "Jiren proposed 7 more days instead of 14; the agent answers it now.", tone: "pending" });
+    expect(activityItem(term("term_counter_accepted", { counterDays: 7, newDueDate: "2026-10-27T12:00:00+00:00", decisionMode: "deepseek", agreedWithReference: true }), refs())).toMatchObject({
+      text: "Accepted Jiren's 7 more days: the bill now falls due 2026-10-27.",
+      detail: "DeepSeek decided, as the written policy would.",
+    });
+    expect(activityItem(term("term_counter_declined", { counterDays: 3, decisionMode: "deepseek", agreedWithReference: true }), refs())).toMatchObject({ text: "Declined Jiren's 3 more days: the bill keeps its due date." });
   });
 
   it("tells every step but a skip, and none is a card for a chat", () => {

@@ -134,6 +134,45 @@ export async function decideTermRequest(token: string, accept: boolean, deps: { 
   return row.outcome;
 }
 
+export type TermCounterOutcome = "countered" | "bad_days" | "not_valid";
+
+/**
+ * The supplier's counter (docs/superpowers/specs/2026-10-17-term-requests-follow-up-design.md F5), in one database step:
+ * fewer days than asked. Recorded in the workspace, and a cycle starts at once for the agent to answer it.
+ */
+export async function counterTermRequest(token: string, days: number, deps: { raise?: typeof runCycleSoon } = {}): Promise<TermCounterOutcome> {
+  const tokenHash = termTokenHash(token);
+  if (!tokenHash) return "not_valid";
+  if (!Number.isInteger(days)) return "bad_days";
+  const done = await platformDb().rpc("counter_term_request", { p_token_hash: tokenHash, p_days: days });
+  if (done.error) throw new Error(done.error.message);
+  const row = ((done.data ?? []) as Array<{ outcome: TermCounterOutcome; request_id: string | null; org_id: string | null; invoice_id: string | null; counter_days: number | null; days: number | null }>)[0];
+  if (!row || row.outcome !== "countered" || !row.org_id) return row?.outcome ?? "not_valid";
+  const orgId = row.org_id;
+  const org = unwrap(await platformDb().from("orgs").select("mode").eq("id", orgId).single()) as { mode: "sandbox" | "live" };
+  await withOrg(orgId, async () => {
+    await appendLedgerEntryBestEffort(orgId, {
+      actor: "system",
+      domain: "ap",
+      action: "term_request_countered",
+      summary: `The supplier proposed ${row.counter_days} more days instead of ${row.days}`,
+      detail: { requestId: row.request_id, invoiceId: row.invoice_id, counterDays: row.counter_days, days: row.days, via: "terms_link" },
+    });
+  });
+  (deps.raise ?? runCycleSoon)({ orgId, sandbox: org.mode === "sandbox", kind: "term_request_countered" });
+  return "countered";
+}
+
+export type TermCounterAnswer = "accepted" | "declined" | "bill_changed" | "not_countered";
+
+/** A countered request answered by the agent (F6), in one database step; accepted, the bill's due date moves by the counter's days. */
+export async function answerTermCounter(orgId: string, requestId: string, accept: boolean): Promise<{ outcome: TermCounterAnswer; newDueDate: string | null }> {
+  const done = await platformDb().rpc("answer_term_counter", { p_org_id: orgId, p_request_id: requestId, p_accept: accept });
+  if (done.error) throw new Error(done.error.message);
+  const row = ((done.data ?? []) as Array<{ outcome: TermCounterAnswer; new_due_date: string | null }>)[0];
+  return { outcome: row?.outcome ?? "not_countered", newDueDate: row?.new_due_date ?? null };
+}
+
 /** Whether the agent asks for more time in the workspace in scope, and its most days (X1); null before migration 0128. */
 export async function termRequestsSetting(): Promise<{ on: boolean; maxDays: number | null; sandbox: boolean } | null> {
   const org = await platformDb()
@@ -164,21 +203,25 @@ export async function setTermRequests(input: { orgId: string; actorId: string; o
 export interface TermRequestsView {
   setting: { on: boolean; maxDays: number | null; sandbox: boolean };
   /** The last requests, newest first. */
-  recent: Array<{ id: string; counterpartyName: string; days: number; newDueDate: string; status: string; decidedAt: string | null }>;
+  recent: Array<{ id: string; counterpartyName: string; days: number; newDueDate: string; status: string; decidedAt: string | null; counterDays?: number | null }>;
 }
 
 /** The setting and the last requests, for Bills; null before migration 0128. */
 export async function termRequestsView(): Promise<TermRequestsView | null> {
   const setting = await termRequestsSetting();
   if (!setting) return null;
-  const rows = await db().from("payment_term_requests").select("id, days, new_due_date, status, decided_at, counterparties(name)").order("created_at", { ascending: false }).limit(5);
-  const recent = ((rows.error ? [] : rows.data) as unknown as Array<{ id: string; days: number; new_due_date: string; status: string; decided_at: string | null; counterparties: { name: string } | null }>).map((row) => ({
+  const read = (columns: string) => db().from("payment_term_requests").select(columns).order("created_at", { ascending: false }).limit(5);
+  // With each counter (0130); before that migration runs, as before.
+  const withCounters = await read("id, days, new_due_date, status, decided_at, counter_days, counterparties(name)");
+  const rows = withCounters.error ? await read("id, days, new_due_date, status, decided_at, counterparties(name)") : withCounters;
+  const recent = ((rows.error ? [] : rows.data) as unknown as Array<{ id: string; days: number; new_due_date: string; status: string; decided_at: string | null; counter_days?: number | null; counterparties: { name: string } | null }>).map((row) => ({
     id: row.id,
     counterpartyName: row.counterparties?.name ?? "A supplier",
     days: Number(row.days),
     newDueDate: row.new_due_date,
     status: row.status,
     decidedAt: row.decided_at,
+    counterDays: row.counter_days ?? null,
   }));
   return { setting, recent };
 }

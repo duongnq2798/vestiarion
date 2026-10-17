@@ -77,6 +77,37 @@ export function referenceTermDays(input: {
   return input.maxDays;
 }
 
+/**
+ * Whether the bill is covered within these days of its due date (F6): the operating USDC now, less what falls due before,
+ * and then what customers owe, each counted the day after it is expected, as the written policy counts it.
+ */
+export function coveredWithin(days: number, input: { amount: number; cashNow: number; incoming: Array<{ daysAfterDue: number; amount: number }> }): boolean {
+  let cash = input.cashNow;
+  if (cash >= input.amount) return true;
+  for (const item of [...input.incoming].sort((a, b) => a.daysAfterDue - b.daysAfterDue)) {
+    if (item.daysAfterDue + 1 > days) break;
+    cash += item.amount;
+    if (cash >= input.amount) return true;
+  }
+  return false;
+}
+
+/** The agent's answer to a supplier's counter (F6). */
+export interface TermCounterDecision {
+  action: "accept" | "decline";
+  reasoning: string;
+}
+
+/**
+ * The written policy's answer to a counter (F6): accept the fewer days when the bill is covered by the new date they give;
+ * decline when it is not, rather than promise a date the business cannot keep.
+ */
+export function referenceCounterDecision(input: { counterDays: number; days: number; covered: boolean; newDueOn: string }): TermCounterDecision {
+  return input.covered
+    ? { action: "accept", reasoning: `${input.counterDays} more days instead of ${input.days} still reach a day when the money customers owe covers the bill, ${input.newDueOn}.` }
+    : { action: "decline", reasoning: `By ${input.newDueOn}, ${input.counterDays} more days, the money customers owe would not cover the bill yet: agreeing would promise a date the business cannot keep.` };
+}
+
 export interface TermDecision {
   action: "ask" | "skip";
   days?: number;

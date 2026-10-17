@@ -4,16 +4,19 @@ import { siteOrigin } from "../auth/env";
 import { currentOrgId } from "../context";
 import { utcDay } from "../copy";
 import { platformDb, unwrap, type OrgDb } from "../dal";
-import { termRequestEmail, termRequestWithdrawnEmail } from "../email/term-request";
+import { termCounterAnswerEmail, termRequestEmail, termRequestWithdrawnEmail } from "../email/term-request";
 import { emailSettingsFromEnv, sendEmail, type EmailMessage, type SendResult } from "../email/send";
 import { appendLedgerEntry } from "../ledger";
 import { heldForCash } from "../next-step";
 import { maskEmail } from "../payment-notices";
 import { listMembers } from "../platform/members";
 import { REASONING_RULE, REASONING_SHAPE } from "../reasoning-copy";
-import { createTermRequest, TermRequestError, withdrawTermRequest } from "../terms/requests";
+import { answerTermCounter, createTermRequest, TermRequestError, withdrawTermRequest } from "../terms/requests";
 import {
   boundTermDays,
+  coveredWithin,
+  referenceCounterDecision,
+  type TermCounterDecision,
   referenceTermDays,
   TERM_REQUESTS_PER_RUN,
   TERM_SKIP_RETRY_DAYS,
@@ -23,6 +26,7 @@ import {
 } from "../terms/rules";
 import { decide } from "./decide";
 import type { CycleLogLine } from "./orchestrator";
+import { runCycleSoon } from "./cycle-soon";
 import { agentPaused } from "./pause";
 
 /**
@@ -54,6 +58,23 @@ const SYSTEM_PROMPT = `You are the payment-terms step of a treasury agent for a 
 
 Respond with ONLY a single JSON object in the requested shape. No prose outside the JSON.`;
 
+const COUNTER_PROMPT = `You are the payment-terms step of a treasury agent for a small business. The agent asked a supplier for more time on a bill it cannot pay on time, and the supplier proposed fewer days instead. Decide whether to accept them.
+
+- Accept when the new date they give is one the business can keep: what it holds now, less what else falls due, and the money customers owe by then cover the bill.
+- Decline when it cannot keep that date: agreeing would promise a payment the business would miss. Declined, the bill keeps its original due date and waits for a person.
+- The written policy's answer is given as a reference. Follow it unless the facts say otherwise, and say why when you depart from it.
+- ${REASONING_RULE}
+
+Respond with ONLY a single JSON object in the requested shape. No prose outside the JSON.`;
+
+const counterSchema = z.object({
+  action: z.enum(["accept", "decline"]),
+  reasoning: z.string().min(1).max(2000),
+});
+
+/** The most counters one cycle answers (F6). */
+export const TERM_COUNTERS_PER_RUN = 10;
+
 const termSchema = z.object({
   action: z.enum(["ask", "skip"]),
   days: z.coerce.number().optional(),
@@ -76,6 +97,7 @@ interface RequestRow {
   counterparty_id: string;
   status: string;
   days: number;
+  counter_days?: number | null;
   due_date: string;
   decided_at: string | null;
   expires_at: string;
@@ -164,9 +186,114 @@ export async function makeTermRequests(
     reviewed.add(review.invoice_id);
   }
 
-  const requests = unwrap(
-    await orgDb.from("payment_term_requests").select("id, invoice_id, counterparty_id, status, days, due_date, decided_at, expires_at").order("created_at", { ascending: false }).limit(1000)
-  ) as RequestRow[];
+  const requestsRead = (columns: string) => orgDb.from("payment_term_requests").select(columns).order("created_at", { ascending: false }).limit(1000);
+  // With each counter (0130); before that migration runs, without, and so no counter to answer.
+  const withCounters = await requestsRead("id, invoice_id, counterparty_id, status, days, counter_days, due_date, decided_at, expires_at");
+  const requests = (withCounters.error ? unwrap(await requestsRead("id, invoice_id, counterparty_id, status, days, due_date, decided_at, expires_at")) : withCounters.data) as unknown as RequestRow[];
+
+  // Counters first (F6, F7): each fewer-days a supplier proposed, answered once, emailed, and signed.
+  const countered = requests.filter((row) => row.status === "countered" && row.counter_days != null).slice(0, TERM_COUNTERS_PER_RUN);
+  if (countered.length > 0) {
+    const ids = [...new Set(countered.map((row) => row.invoice_id))];
+    const horizon = new Date(startOfDay(now) + (HORIZON_DAYS + 60) * DAY_MS).toISOString();
+    const [billsRead, startedRead, dueRead, owedRead] = await Promise.all([
+      orgDb.from("invoices").select("id, status, amount, currency, due_date, memo, counterparties(name, notice_email)").in("id", ids),
+      orgDb.from("payment_intents").select("source_id").eq("source_type", "invoice").in("source_id", ids),
+      orgDb.from("invoices").select("id, amount, due_date").eq("direction", "payable").in("status", ["pending", "scheduled", "held"]).lte("due_date", horizon).limit(500),
+      orgDb.from("invoices").select("amount, due_date").eq("direction", "receivable").in("status", ["pending", "matched"]).lte("due_date", horizon).limit(500),
+    ]);
+    const bills = new Map((unwrap(billsRead) as unknown as BillRow[]).map((row) => [row.id, row] as const));
+    const started = new Set((unwrap(startedRead) as Array<{ source_id: string }>).map((row) => row.source_id));
+    const dueAll = unwrap(dueRead) as Array<{ id: string; amount: string; due_date: string }>;
+    const owedAll = unwrap(owedRead) as Array<{ amount: string; due_date: string }>;
+    for (const request of countered) {
+      const bill = bills.get(request.invoice_id);
+      if (!bill) continue;
+      const counterDays = Number(request.counter_days);
+      const supplierName = bill.counterparties?.name ?? "the supplier";
+      const email = sandbox ? sandboxTo : (bill.counterparties?.notice_email ?? null);
+      const amount = Number(bill.amount);
+      const token = bill.currency ?? "USDC";
+      const newDueOn = utcDay(new Date(Date.parse(request.due_date) + counterDays * DAY_MS).toISOString());
+      const paying = bill.status === "paid" || started.has(bill.id);
+      let decision: TermCounterDecision;
+      let mode = "code";
+      let agreed: boolean | null = true;
+      let reference: TermCounterDecision;
+      if (paying) {
+        reference = { action: "decline", reasoning: "The bill is being paid on time, so no more time is needed." };
+        decision = reference;
+      } else {
+        const dueBefore = dueAll.filter((other) => other.id !== bill.id && Date.parse(other.due_date) <= Date.parse(bill.due_date)).reduce((sum, other) => sum + Number(other.amount), 0);
+        const cashNow = Number((input.operatingBalance - dueBefore).toFixed(6));
+        const incoming = owedAll.map((item) => ({ daysAfterDue: daysFrom(Date.parse(bill.due_date), item.due_date), amount: Number(item.amount) }));
+        reference = referenceCounterDecision({ counterDays, days: request.days, covered: coveredWithin(counterDays, { amount, cashNow, incoming }), newDueOn });
+        const decided = await decide<TermCounterDecision>({
+          purpose: "term_counter",
+          systemPrompt: COUNTER_PROMPT,
+          userPrompt: JSON.stringify({
+            task: "Decide whether to accept the fewer days this supplier proposed.",
+            bill: { amount, currency: token, dueDate: utcDay(bill.due_date), reference: bill.memo },
+            asked: { days: request.days },
+            proposed: { days: counterDays, newDueDate: newDueOn },
+            cash: {
+              operatingAfterTodaysPayments: input.operatingBalance,
+              dueOnOrBeforeThisBill: Number(dueBefore.toFixed(6)),
+              customersOweByDaysAfterDue: incoming.filter((item) => item.daysAfterDue <= request.days).sort((a, b) => a.daysAfterDue - b.daysAfterDue),
+            },
+            writtenPolicy: reference,
+            responseShape: { action: "accept | decline", reasoning: REASONING_SHAPE },
+          }),
+          schema: counterSchema,
+          fallback: () => reference,
+        });
+        decision = decided.value;
+        mode = decided.mode;
+        agreed = decided.agreedWithReference;
+      }
+      const answered = await answerTermCounter(orgId, request.id, decision.action === "accept");
+      if (answered.outcome === "not_countered") continue;
+      const accepted = answered.outcome === "accepted";
+      request.status = accepted ? "accepted" : "declined";
+      let told = false;
+      if (email) {
+        // A bill being paid needs no more time: the supplier hears that, not a refusal (F1).
+        const message =
+          paying || answered.outcome === "bill_changed"
+            ? termRequestWithdrawnEmail({ orgName, supplierName, reference: bill.memo, amount: AMOUNT.format(amount), token, days: counterDays, dueOn: utcDay(bill.due_date), paying: true, origin, sandbox })
+            : termCounterAnswerEmail({ orgName, supplierName, reference: bill.memo, accepted, counterDays, amount: AMOUNT.format(amount), token, dueOn: utcDay(bill.due_date), newDueOn: accepted ? utcDay(answered.newDueDate as string) : null, origin, sandbox });
+        const idempotencyKey = crypto.createHash("sha256").update(`term_counter_answer\n${request.id}`, "utf8").digest("hex");
+        const result = await send({ to: email, ...message, idempotencyKey });
+        told = result.sent;
+        if (!result.sent) console.error("term counter answer email not sent", request.id, result.reason);
+      }
+      await appendLedgerEntry({
+        actor: "agent",
+        domain: "ap",
+        action: accepted ? "term_counter_accepted" : "term_counter_declined",
+        summary: accepted
+          ? `Accepted ${supplierName}'s ${counterDays} more days: the bill now falls due ${utcDay(answered.newDueDate as string)}`
+          : `Declined ${supplierName}'s ${counterDays} more days: the bill keeps its due date, ${utcDay(bill.due_date)}`,
+        detail: {
+          requestId: request.id,
+          invoiceId: bill.id,
+          counterpartyId: request.counterparty_id,
+          days: request.days,
+          counterDays,
+          ...(accepted ? { newDueDate: answered.newDueDate } : {}),
+          ...(answered.outcome === "bill_changed" ? { billChanged: true } : {}),
+          decision,
+          referenceDecision: reference,
+          decisionMode: mode,
+          agreedWithReference: agreed,
+          supplierTold: told,
+          ...(sandbox ? { sandbox: true } : {}),
+        },
+      });
+      lines.push({ domain: "ap", message: accepted ? `Accepted ${supplierName}'s ${counterDays} more days, to ${utcDay(answered.newDueDate as string)}` : `Declined ${supplierName}'s ${counterDays} more days` });
+      if (accepted) runCycleSoon({ orgId, sandbox, kind: "term_request_accepted" });
+    }
+  }
 
   // Requests no longer needed (F1): one out whose bill is being paid, or is no longer held for want of cash, is withdrawn
   // and its supplier told, so no one agrees to a later date the business does not need. One still being emailed is left.
