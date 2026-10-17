@@ -318,3 +318,27 @@ describe("a counter the agent answers (offer counters N3-N6)", () => {
     expect(person.requests.some((r) => r.path === "/rest/v1/rpc/answer_early_payment_counter")).toBe(false);
   });
 });
+
+describe("the offers out stay covered (offer results R2)", () => {
+  const open = (id: string, offered: string, invoice: string) => ({ id, invoice_id: invoice, counterparty_id: SUPPLIER, status: "open", discount_pct: "0.50", offered_amount: offered, counter_pct: null, decided_at: null, expires_at: "2026-10-23T09:00:00Z" });
+  const review = (offer: string, invoice: string) => ({ id: "review-" + offer, invoice_id: invoice, action: "offer", offer_id: offer, decided_at: "2026-10-16T08:00:00Z", emailed_at: "2026-10-16T08:00:05Z" });
+
+  it("withdraws the agent's largest offers until the cash covers what is left, and signs each", async () => {
+    const client = world({ offers: [open("offer-big", "300", "bill-a"), open("offer-small", "100", "bill-b")], reviews: [review("offer-big", "bill-a"), review("offer-small", "bill-b")] });
+    const lines = await run(client, 250);
+
+    const withdrawn = client.requests.filter((r) => r.path === "/rest/v1/rpc/withdraw_early_payment_offer").map((r) => (r.body as { p_offer_id: string }).p_offer_id);
+    expect(withdrawn).toEqual(["offer-big"]);
+    expect(ledgerMock.mock.calls[0][0]).toMatchObject({ actor: "agent", action: "early_payment_offer_withdrawn", detail: { offerId: "offer-big", via: "agent", reason: "cash", offeredAmount: 300, covering: 250 } });
+    expect(lines[0]).toEqual({ domain: "ap", message: "Withdrew the early-payment offer to the supplier: the cash no longer covers it" });
+  });
+
+  it("never withdraws a person's offer, and withdraws nothing while the cash covers them all", async () => {
+    const personal = world({ offers: [open("offer-person", "300", "bill-a")], reviews: [] });
+    await run(personal, 100);
+    expect(personal.requests.some((r) => r.path === "/rest/v1/rpc/withdraw_early_payment_offer")).toBe(false);
+    const covered = world({ offers: [open("offer-big", "300", "bill-a")], reviews: [review("offer-big", "bill-a")] });
+    await run(covered, 500);
+    expect(covered.requests.some((r) => r.path === "/rest/v1/rpc/withdraw_early_payment_offer")).toBe(false);
+  });
+});

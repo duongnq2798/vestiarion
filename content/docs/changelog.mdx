@@ -1,5 +1,9 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-17: The agent withdraws offers the cash no longer covers
+
+- **`early_payment_offer_withdrawn`** may now come from the agent with `via: "agent"` and `reason: "cash"`. It carries `offerId`, `invoiceId`, `offeredAmount`, and `covering`: the operating USDC left after the cycle's payments, less what falls due in 7 days. The agent sends it when that cash no longer covers every open offer, and withdraws its own offers, the largest first. Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-17: A payment now that gains nothing waits for its day
 
 - An `ap_schedule` entry may carry a new value of `timingRule`, **`pay.no_gain`**. The model answered pay for a payable that gains nothing by being paid today: no early-payment discount available, no shortfall, a due date ahead, and not already set for today. Code scheduled it for the policy's day, its due date, instead. The entry's `decision` is `{ action: "schedule", payOn }`, and its reasoning ends with a note that says so. Nothing else in `/api/v1` or the webhooks changes.

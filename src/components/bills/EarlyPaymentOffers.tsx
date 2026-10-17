@@ -12,7 +12,7 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { Money } from "@/components/vx/Primitives";
-import { offerWorth, type OfferCandidate, type OffersView } from "@/lib/early-pay/offers-words";
+import { offerResultsLine, offerWorth, type OfferCandidate, type OffersView } from "@/lib/early-pay/offers-words";
 
 const INITIAL: OfferActionResult = { ok: false, message: "" };
 
@@ -161,6 +161,7 @@ export function EarlyPaymentOffers({ orgSlug, view, canOffer }: { orgSlug: strin
           the agent pays the discounted amount at once.
         </p>
         {view.agent && <AgentOffers orgSlug={orgSlug} agent={view.agent} canOffer={canOffer} />}
+        {view.results && view.results.made > 0 && <p className="px-4 py-3 text-xs text-ink-2 sm:px-5">{offerResultsLine(view.results)}</p>}
         {view.candidates.map((candidate) => (
           <div key={candidate.invoiceId} className="grid gap-2 px-4 py-3 sm:px-5 md:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] md:items-start">
             <div className="min-w-0">

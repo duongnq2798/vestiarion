@@ -18,7 +18,7 @@ vi.mock("@/app/offer/[token]/actions", () => ({ decideOfferAction: vi.fn(), coun
 import { EarlyPaymentOffers } from "@/components/bills/EarlyPaymentOffers";
 import { OfferDecision } from "@/components/early-pay/OfferDecision";
 import { counterOffer, decideOffer, generateOfferToken, offerTokenHash } from "@/lib/early-pay/offers";
-import { annualPct, daysEarly, offeredAmount, offerLine, offerWorth, suggestOffer, type OffersView } from "@/lib/early-pay/offers-words";
+import { annualPct, daysEarly, offeredAmount, offerLine, offerResults, offerResultsLine, offerWorth, suggestOffer, type OffersView } from "@/lib/early-pay/offers-words";
 
 /**
  * Early-payment offers (docs/superpowers/specs/2026-10-16-early-payment-offers-design.md E2-E6, E8): the discount worth
@@ -204,5 +204,29 @@ describe("the supplier's page (E4)", () => {
     expect(markup).toContain("Would a smaller discount work for you? Propose one, and Pinecrest Studio answers you by email.");
     expect(markup).toContain("Propose a smaller discount");
     expect(markup).toContain('value="0.25"');
+  });
+});
+
+describe("what the offers came to (offer results R1)", () => {
+  // As on Oct 16-17: a person's offer withdrawn, then accepted; the agent's accepted, and one accepted after a counter.
+  const rows = [
+    { status: "withdrawn", amount: 2, offered: 1.98, byAgent: false, countered: false, decidedAt: "2026-10-16T15:44:00Z", dueDate: null, paid: false },
+    { status: "accepted", amount: 2, offered: 1.98, byAgent: false, countered: false, decidedAt: "2026-10-16T15:47:00Z", dueDate: "2026-11-05T12:00:00Z", paid: true },
+    { status: "accepted", amount: 0.5, offered: 0.4975, byAgent: true, countered: false, decidedAt: "2026-10-16T18:07:00Z", dueDate: "2026-11-12T12:00:00Z", paid: true },
+    { status: "accepted", amount: 0.02, offered: 0.01995, byAgent: true, countered: true, decidedAt: "2026-10-17T00:33:00Z", dueDate: "2026-11-16T12:00:00Z", paid: true },
+  ];
+
+  it("counts them, and what the bills paid early saved, as an amount and a yearly rate", () => {
+    const results = offerResults(rows);
+    expect(results).toEqual({ made: 4, byAgent: 2, accepted: 3, afterCounter: 1, declined: 0, saved: 0.02255, annualPct: 15.3 });
+    expect(offerResultsLine(results)).toBe("So far: 4 offers made, 2 by the agent; 3 accepted, 1 of them after a counter; none declined. Paying early saved 0.02255 USDC, like earning 15.3% a year.");
+  });
+
+  it("says nothing about savings before a bill is paid early, and shows the line on Bills", () => {
+    const pending = offerResults([{ ...rows[2], paid: false }]);
+    expect(offerResultsLine(pending)).toBe("So far: 1 offer made, 1 by the agent; 1 accepted; none declined.");
+    const view: OffersView = { reserveApy: 0, agent: { on: true, maxPct: 2 }, candidates: [], recent: [], results: offerResults(rows) };
+    const markup = decode(renderToStaticMarkup(<EarlyPaymentOffers orgSlug="pinecrest" view={view} canOffer />));
+    expect(markup).toContain("Paying early saved 0.02255 USDC, like earning 15.3% a year.");
   });
 });

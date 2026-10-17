@@ -2287,6 +2287,12 @@ A supplier paid today for a discount it accepts (docs/superpowers/specs/2026-10-
   offer once: accepted, the bill takes the counter as its discount, ending today, and returns to pending, and the offer
   is accepted at the counter. The supplier is emailed the answer in a fixed template (`counterAnswerEmail`) under the
   offer's idempotency key, and an accepted counter starts a cycle that pays it.
+- **Results and cover** (docs/superpowers/specs/2026-10-17-offer-results-design.md, no migration). `offersView` adds
+  `results` (`offerResults`): offers made, by the agent, accepted, after a counter, declined, and what the bills paid
+  early saved, with a yearly rate on the cash paid early weighted by days early. The section shows it as one line
+  (`offerResultsLine`). Before counters, the `early_offers` stage keeps the offers out covered: while the operating USDC
+  left after the cycle's payments, less what falls due within 7 days, is below every open offer, it withdraws the
+  agent's own, the largest first, and records `early_payment_offer_withdrawn` with `reason: "cash"`.
 
 ## Bank payouts (BlindPay)
 
