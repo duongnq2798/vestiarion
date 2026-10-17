@@ -54,6 +54,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Fixed
 
+- **Leaving Bills & receivables no longer asks about a bill already added.** After New ▾ added a bill or an invoice,
+  the form cleared itself, a select going back to its default counted as an edit, and the browser asked "Leave site?".
+  The form now stays clean after a save until something is typed into it again.
 - **The agent no longer adds up the cash for a request for more time itself.** In a live test, the model skipped asking
   a supplier for more time because it compared what customers owe with the bill alone, though that and the cash on
   hand covered it two days after the due date. Code now works out when the bill is covered and gives the model that,

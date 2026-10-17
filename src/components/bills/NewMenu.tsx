@@ -3,7 +3,7 @@
 import { AlertDialog as AlertDialogPrimitive } from "radix-ui";
 import { ChevronDown, FilePlus2, FileSpreadsheet, FileText, Handshake, Plus, ReceiptText, Repeat } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type SyntheticEvent } from "react";
 import { DealForm } from "@/components/deals/DealForm";
 import BillImport from "@/components/intake/BillImport";
 import InvoiceDocumentIntake from "@/components/intake/InvoiceDocumentIntake";
@@ -75,12 +75,22 @@ export function NewMenu({ orgSlug, counterparties, billCurrency, importWorkspace
   const [asking, setAsking] = useState(false);
   const [saved, setSaved] = useState(false);
   const direction = useRef<string | null>(null);
+  // After a save the form clears itself, and a select returning to its default reports a "change" (Radix's hidden
+  // native select element dispatches one): that is not the person editing. Until they type again (an "input"), a change
+  // alone leaves the form clean, so leaving the page does not ask about what was just added.
+  const settled = useRef(false);
+  const edited = useCallback((event: SyntheticEvent) => {
+    if (event.type === "input" || event.type === "drop") settled.current = false;
+    else if (settled.current) return;
+    setDirty(true);
+  }, []);
   const items = useMemo(() => newItemsFor(deal), [deal]);
   const item = items.find((candidate) => candidate.kind === kind) ?? null;
 
   const open = useCallback((next: NewKind) => {
     setDirty(false);
     setSaved(false);
+    settled.current = false;
     direction.current = null;
     setKind(next);
   }, []);
@@ -89,8 +99,10 @@ export function NewMenu({ orgSlug, counterparties, billCurrency, importWorkspace
     setDirty(false);
     setAsking(false);
     setSaved(false);
+    settled.current = false;
   };
   const onSaved = useCallback(() => {
+    settled.current = true;
     setDirty(false);
     setSaved(true);
   }, []);
@@ -171,9 +183,9 @@ export function NewMenu({ orgSlug, counterparties, billCurrency, importWorkspace
           >
             <div
               className="space-y-4 px-5 py-5"
-              onInputCapture={() => setDirty(true)}
-              onChangeCapture={() => setDirty(true)}
-              onDropCapture={() => setDirty(true)}
+              onInputCapture={edited}
+              onChangeCapture={edited}
+              onDropCapture={edited}
               onSubmitCapture={(event) => {
                 const value = new FormData(event.target as HTMLFormElement).get("direction");
                 direction.current = typeof value === "string" ? value : direction.current;
