@@ -29,6 +29,11 @@ export interface WeeklyBriefFacts {
     /** How short the wallet runs within 30 days; null when it never does. */
     short: { shortOn: string; shortBy: number; lowestOn: string; need: number } | null;
   };
+  /**
+   * In shadow mode (W6): the verdicts given in the last 7 days, and since shadow mode began (`since`, `YYYY-MM-DD`). Null
+   * outside it. The wallet then only mirrors agreed payments, so `cash.short` is null.
+   */
+  shadow?: { verdicts: { given: number; agreed: number }; sinceStart: { given: number; agreed: number; since: string } } | null;
 }
 
 export const BRIEF_LINES = 5;
@@ -58,19 +63,32 @@ export function briefSentences(facts: WeeklyBriefFacts): {
   more: number;
   cash: string;
 } {
-  const lastWeek = [
-    facts.paid.count > 0 ? `Paid ${plural(facts.paid.count, "payment", "payments")}, ${usdc(facts.paid.usdc)} in all.` : "Paid nothing.",
-    facts.received.count > 0 ? `Customers paid ${plural(facts.received.count, "invoice", "invoices")}, ${usdc(facts.received.usdc)}.` : "No customer payment came in.",
-    `Made ${plural(facts.decisions, "decision", "decisions")}, each signed with its reasoning.`,
-  ];
-  const waiting = facts.waiting > 0 ? `${plural(facts.waiting, "payment waits", "payments wait")} for a decision from you.` : "Nothing waits for you.";
+  const shadow = facts.shadow ?? null;
+  const lastWeek = shadow
+    ? [
+        `Made ${plural(facts.decisions, "decision", "decisions")} on your bills; in shadow mode each waits for your verdict.`,
+        shadow.verdicts.given > 0 ? `You gave ${plural(shadow.verdicts.given, "verdict", "verdicts")} and agreed with ${shadow.verdicts.agreed}.` : "You gave no verdict.",
+        facts.paid.count > 0 ? `Paid ${plural(facts.paid.count, "bill you agreed with", "bills you agreed with")} on Arc testnet, ${usdc(facts.paid.usdc)} in all.` : "Paid nothing on Arc testnet.",
+        ...(facts.received.count > 0 ? [`Customers paid ${plural(facts.received.count, "invoice", "invoices")}, ${usdc(facts.received.usdc)}.`] : []),
+      ]
+    : [
+        facts.paid.count > 0 ? `Paid ${plural(facts.paid.count, "payment", "payments")}, ${usdc(facts.paid.usdc)} in all.` : "Paid nothing.",
+        facts.received.count > 0 ? `Customers paid ${plural(facts.received.count, "invoice", "invoices")}, ${usdc(facts.received.usdc)}.` : "No customer payment came in.",
+        `Made ${plural(facts.decisions, "decision", "decisions")}, each signed with its reasoning.`,
+      ];
+  const waiting =
+    facts.waiting > 0
+      ? `${plural(facts.waiting, "payment waits", "payments wait")} for ${shadow ? "your verdict or a decision" : "a decision"} from you.`
+      : "Nothing waits for you.";
   const ahead =
     facts.next7.count > 0
       ? `${plural(facts.next7.count, "payment leaves", "payments leave")} in the next 7 days, ${usdc(facts.next7.usdc)} in all${facts.next7.expectedUsdc > 0 ? `, and customers owe ${usdc(facts.next7.expectedUsdc)} by then` : ""}.`
       : `Nothing is due in the next 7 days${facts.next7.expectedUsdc > 0 ? `, and customers owe ${usdc(facts.next7.expectedUsdc)}` : ""}.`;
   const lines = facts.next7.lines.slice(0, BRIEF_LINES).map((line) => `${day(line.day)}: ${line.label}, ${usdc(line.amount)}${NOTE[line.note] ? ` (${NOTE[line.note]})` : ""}`);
   const short = facts.cash.short;
-  const cash = short
+  const cash = shadow
+    ? `${shadow.sinceStart.given > 0 ? `Since shadow mode began on ${day(shadow.sinceStart.since)}, you agreed with the agent on ${shadow.sinceStart.agreed} of ${plural(shadow.sinceStart.given, "decision", "decisions")}.` : `Shadow mode began on ${day(shadow.sinceStart.since)}.`} Your own money did not move: you keep paying your bills as before.`
+    : short
     ? short.lowestOn === short.shortOn
       ? `The cash runs short on ${day(short.shortOn)}: ${shortUsdc(short.need)} more is needed by then.`
       : `The cash runs short on ${day(short.shortOn)}: ${shortUsdc(short.shortBy)} short that day, and ${shortUsdc(short.need)} by ${day(short.lowestOn)}.`
@@ -85,9 +103,13 @@ export function weeklyBriefEmail(input: { orgName: string; facts: WeeklyBriefFac
 } {
   const { orgName, facts, links, origin } = input;
   const said = briefSentences(facts);
-  const subject = facts.cash.short
-    ? `${orgName}: the cash runs short on ${day(facts.cash.short.shortOn)} · your week with the agent`
-    : `${orgName}: your week with the agent`;
+  const subject = facts.shadow
+    ? facts.shadow.sinceStart.given > 0
+      ? `${orgName}: you agreed with the agent on ${facts.shadow.sinceStart.agreed} of ${facts.shadow.sinceStart.given} · your week in shadow mode`
+      : `${orgName}: your week with the agent in shadow mode`
+    : facts.cash.short
+      ? `${orgName}: the cash runs short on ${day(facts.cash.short.shortOn)} · your week with the agent`
+      : `${orgName}: your week with the agent`;
   const footer = `You get this because you can approve payments in ${orgName} and keep its emails on. You can turn them off in Settings, under Notifications.`;
 
   const text = [
@@ -119,7 +141,7 @@ export function weeklyBriefEmail(input: { orgName: string; facts: WeeklyBriefFac
   const button = (href: string, label: string) =>
     `<td align="center" bgcolor="#3048c9" style="border-radius:10px;background-color:#3048c9;"><a href="${escapeHtml(href)}" target="_blank" style="display:inline-block;padding:12px 22px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:20px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px;">${escapeHtml(label)}</a></td>`;
   const orgNameSafe = escapeHtml(orgName);
-  const cashColor = facts.cash.short ? "#b3541e" : "#18211c";
+  const cashColor = facts.cash.short && !facts.shadow ? "#b3541e" : "#18211c";
 
   const html = `<!doctype html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
@@ -148,7 +170,7 @@ export function weeklyBriefEmail(input: { orgName: string; facts: WeeklyBriefFac
         </tr>
         <tr>
           <td style="background-color:#fffefa;border:1px solid #ddd8ca;border-radius:16px;padding:36px 36px 28px 36px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-            <p style="margin:0 0 12px 0;font-family:'SFMono-Regular',Menlo,Consolas,monospace;font-size:11px;line-height:16px;letter-spacing:2px;text-transform:uppercase;color:#646c67;">Your week with the agent</p>
+            <p style="margin:0 0 12px 0;font-family:'SFMono-Regular',Menlo,Consolas,monospace;font-size:11px;line-height:16px;letter-spacing:2px;text-transform:uppercase;color:#646c67;">Your week with the agent${facts.shadow ? " · shadow mode" : ""}</p>
             <h1 style="margin:0 0 16px 0;font-size:24px;line-height:30px;font-weight:700;color:#18211c;">${orgNameSafe}, ${escapeHtml(day(facts.from))} to ${escapeHtml(day(facts.to))}</h1>
             ${p(escapeHtml(said.cash), cashColor)}
             ${heading("Last 7 days")}

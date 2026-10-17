@@ -14,6 +14,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **The weekly brief in shadow mode.** A business in shadow mode now gets the Monday brief too, about its verdicts
+  instead of cash: the decisions the agent made on its bills, the verdicts given and how many agreed, the agreed bills
+  paid on Arc testnet, and the agreement since shadow mode began ("you agreed with the agent on 8 of 8"). It says the
+  business's own money did not move. **Send me this week's summary** works there too.
+  [Guide](https://www.vestiarion.xyz/docs/guides/shadow-mode#5-see-how-often-you-agreed).
+
 - **The agent's weekly brief.** On Mondays, after the first scheduled cycle, each owner, admin and approver who keeps
   payment emails on gets a summary of the week: what the agent paid, what customers paid and how many decisions it
   made in the last 7 days, what waits for them, what leaves in the next 7 days, and whether the cash covers the next 30
