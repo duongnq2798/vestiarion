@@ -1,0 +1,65 @@
+When the operating wallet cannot pay a bill, the agent holds it for want of cash. Money your customers owe you later could pay it now. With **Paid sooner when cash is short** turned on, the agent offers those customers a small discount to pay an open invoice within 5 days instead of on its due date. A customer who accepts pays the lower amount through the invoice's pay link, the agent matches it as it matches any payment, and the bills held for cash are decided again with the money in.
+
+For example: a 300.00 USDC invoice due in 30 days, offered at 1.00% off, brings in 297.00 USDC within the week. Three dollars buys the cash a held bill was waiting for.
+
+It is the receivables side of what the agent already does with suppliers: it [asks them for earlier payment at a discount](/docs/guides/early-payment-offers) when cash is plenty. Here it is paid early, at a discount, when cash is short.
+
+## Before you start
+
+- **A live workspace**, on Arc testnet or Arc mainnet: the customer pays in USDC on the workspace's network. A sandbox has no wallet to receive a payment in, so the agent offers its sample customers nothing.
+- **An owner or admin** turns it on. Anyone else reads whether it is on: "The agent offers customers no discounts. An owner or admin turns it on."
+- **Invoices with a pay link.** The agent only offers an invoice whose pay link is kept, so the offer can carry it, and whose customer has a billing email: the one reminders go to. See [Chase what customers owe](/docs/guides/collections) to send pay links and turn reminders on.
+
+## 1. Turn it on
+
+Open **Bills & receivables** and the **Receivables** tab. Under **Paid sooner when cash is short**, set the most the agent may give, from 0.5% to 5%, next to "Up to", then choose **Let the agent offer discounts**. The card says "While bills are held for cash, the agent now offers customers a discount to pay early." and starts a cycle, so bills already held are weighed against what customers owe now. The ledger records `customer_offers_on`, with the most it gives.
+
+Choose **Stop the agent's discounts** to turn it off: "The agent no longer offers customers discounts. Offers already out still stand." The ledger records `customer_offers_off`.
+
+## 2. When the agent offers
+
+The agent offers nothing while cash is not short. Each cycle, after it has decided its bills, it adds up the bills it held for want of cash. If they come to more than the operating USDC left after the cycle's payments and the discounts customers already accepted and have not paid yet, the difference is the shortfall, and the agent looks at your open invoices. It weighs an offer on one only where all of this holds:
+
+- it is in USDC, nothing has been applied to it, and it falls due at least 7 days from today;
+- it never had an offer, and the agent did not decide against one in the last 7 days;
+- its customer has a billing email, no other offer out, and declined no offer in the last 30 days;
+- its pay link is kept.
+
+The largest invoices go first, until what they would bring in covers the shortfall; at most 3 offers go out a cycle, one per customer.
+
+The model then decides whether to offer and what discount to give, between 0.25% and the most you set, from the invoice, the days early, the shortfall and the bills held for it, and what the customer did with earlier offers. The written policy offers 1% for each 30 days early, to the nearest 0.25%: without a model, the agent offers that. The ledger records `customer_discount_offered` with the agent's reasoning, the written policy's answer and the masked address, or `customer_discount_skipped` when it decides not to offer, and that invoice is weighed again a week later.
+
+## 3. What the customer sees
+
+The agent emails the customer a fixed template, which the model writes none of: who offers what discount on which invoice, what they pay and by when instead of the full amount on the due date, and a one-time link. The pay-by day is 5 days after the offer, and always before the due date.
+
+The link opens a page with no account to make. It says, for example, "Pinecrest Studio offers 1.00% off invoice INV-2041: pay 297.00 USDC by Oct 22, 2026 instead of 300.00 USDC on Nov 16, 2026." with **Accept: pay less by paying early** and **No thanks**.
+
+- **Accept** says "Accepted. Pay the discounted amount through the invoice's pay link by the day shown." with **Open the pay link**. The ledger records `customer_discount_accepted`, and a cycle starts.
+- **No thanks** says "No discount, then. The invoice stays as it was, due on its due date." and records `customer_discount_declined`.
+- If the invoice changed since the offer (its amount, or money applied to it), the page says "This invoice changed since the offer was made, so nothing changed. Ask the business for a new offer."
+- A link already answered, withdrawn or past its day says "This link is no longer valid. Ask the business that sent it for a new one."
+
+If the email does not go, the offer is withdrawn, so no link stands that the customer never got, and the invoice is weighed again at the next cycle.
+
+## 4. Paid at the discount
+
+An accepted offer puts the discount on the invoice, ending on its pay-by day. The invoice's amount does not change. Its pay link then asks for the discounted amount, says until when, and says what the invoice is after that day.
+
+A payment of exactly the discounted amount that arrives after the offer was made and by the end of the pay-by day (UTC) settles the invoice, as any payment matched to it does. Only an accepted offer lowers what pays an invoice: a discount typed on a receivable when it was added, imported or sent through the API does not. The ledger records `customer_discount_taken` with what the discount cost, and the bills held for cash are decided again at the next cycle with the money in. A payment of the full amount still settles it, with no discount taken.
+
+After the pay-by day the discount no longer applies: the invoice is owed in full again, and a payment of the discounted amount then matches nothing and waits for a person to [apply it](/docs/guides/apply-payments).
+
+An offer only ever lowers what a customer owes, until a set day. It never changes who pays, where the money goes or the invoice's due date.
+
+## What it looks like on Bills & receivables
+
+The agent's activity, its toasts and your Telegram chat and Slack channel when connected, tells each offer it emailed and each invoice paid at a discount, with what the discount cost.
+
+The card lists the latest offers, one line each, for example "Northwind Goods paid 297.00 USDC at 1.00% off 300.00, by Oct 22, 2026." or "Acme declined 0.75% off 120.00 USDC, to pay by Oct 22, 2026." An accepted offer the customer then paid in full says so, and one not paid by its day says "the full amount is owed again".
+
+## Related
+
+- [Pay early for a discount](/docs/guides/early-payment-offers): the same idea for your suppliers, when cash is plenty.
+- [Chase what customers owe](/docs/guides/collections): pay links and reminders.
+- [Apply money received to invoices](/docs/guides/apply-payments): what a person does with a payment that matches nothing.

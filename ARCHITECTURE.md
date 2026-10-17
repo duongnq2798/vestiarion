@@ -2300,6 +2300,38 @@ A supplier paid today for a discount it accepts (docs/superpowers/specs/2026-10-
   left after the cycle's payments, less what falls due within 7 days, is below every open offer, it withdraws the
   agent's own, the largest first, and records `early_payment_offer_withdrawn` with `reason: "cash"`.
 
+## Customer discounts for paying early
+
+While bills are held for want of cash, the agent offers customers a small discount to pay an open receivable within
+days (docs/superpowers/specs/2026-10-17-customer-early-pay-discounts-design.md). The receivables side of the
+early-payment offers above.
+
+- **Setting** (`src/lib/customer-offers/store.ts`, migration 0129). An owner or admin turns it on with a ceiling from
+  0.5% to 5% (`set_customer_offers`, `orgs.customer_offers_*`); `customer_offers_on` and `customer_offers_off` are signed.
+  Live workspaces only: a sandbox has no wallet to receive a payment in.
+- **The stage** (`src/lib/agent/customer-offers.ts`, stage `customer_offers`, after `early_offers`, needs reconcile,
+  receipts and AP). The shortfall is the payables `held` whose newest AP entry says `execution.heldBecause:
+  "cash_shortfall"` (`heldForCash`), less the operating USDC left after the cycle's payments and the discounts accepted
+  and not yet paid (`cashShortfall`). With a shortfall, the receivables code allows (`customerOfferAllowed`: open USDC,
+  nothing applied or matched, due 7 days or more out, never offered, a billing email and a kept pay link, no other open
+  offer for the customer, no decline in 30 days) are weighed largest first, one per customer, three per cycle, until
+  they would cover it (`pickCustomerOffers`). The model decides `{ action, pct, reasoning }`; code keeps `pct` between
+  0.25% and the ceiling (`boundCustomerPct`); the written policy gives 1% per 30 days early (`suggestedCustomerPct`).
+  Each review is claimed in `customer_discount_reviews` before `create_customer_discount_offer` makes the offer; the
+  fixed email (`src/lib/email/customer-discount.ts`) goes under the offer's idempotency key, and a failed or unsent one
+  is withdrawn. Signed: `customer_discount_offered`, `customer_discount_skipped`, `customer_discount_withdrawn`.
+- **The customer's answer** (`/discount/[token]`, `vxd_` token, SHA-256 kept; `decide_customer_discount`). Accepting,
+  while the receivable is still open with the same amount and nothing applied or matched, sets the receivable's
+  `early_pay_discount_pct` and `discount_due_date` to the offer's, ending on the pay-by day; the amount never changes,
+  so deal collection, CRM write-back and commissions read the receivable as before. Signed `customer_discount_accepted`
+  or `customer_discount_declined`; an acceptance starts a cycle (`customer_discount_accepted`).
+- **Paid at the discount** (`src/lib/agent/receipts.ts`). The stage reads each open receivable's `accepted` offer;
+  `matchTransfer` also takes that offer's `offered_amount` (`owedAt`) for money that arrived after the offer was made
+  and by the end of its pay-by UTC day, and says `atDiscount`; the full amount always matches too. A discount typed on a
+  receivable without an offer is never taken. Settled at the discount, `settle_customer_discount` marks the offer `paid` and
+  `customer_discount_taken` signs what it cost. The pay link page asks for the discounted amount while it applies
+  (`payLinkDiscount`) and, paid, says what arrived (`paidAtDiscount`).
+
 ## Bank payouts (BlindPay)
 
 A vendor's bills paid to its bank account in Mexico, in pesos over SPEI, from the workspace's USDC
