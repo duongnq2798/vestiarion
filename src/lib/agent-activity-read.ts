@@ -1,6 +1,6 @@
 import { db, unwrap } from "./dal";
 import { CYCLE_IN_PROGRESS_MS } from "./agent/balances";
-import { ACTIVITY_ACTIONS, activityItems, TRIGGER_ACTIONS, type ActivityEntry, type ActivityItem, type ActivityRefs } from "./agent-activity";
+import { ACTIVITY_ACTIONS, activityItems, SUPPLIER_ANSWERS, TRIGGER_ACTIONS, type ActivityEntry, type ActivityItem, type ActivityRefs } from "./agent-activity";
 import { workspaceNetwork } from "./workspace-network";
 
 /** What the agent is doing in the workspace in scope, and what it decided after `since` (agent activity). */
@@ -53,7 +53,8 @@ export async function readAgentActivity(since: number | null, now: number = Date
     await client
       .from("ledger_entries")
       .select("seq, ts, action, detail")
-      .eq("actor", "agent")
+      // The agent's own entries, and a supplier's answer to its early-payment offer, which the system records (offer activity A2).
+      .or(`actor.eq.agent,and(actor.eq.system,action.in.(${SUPPLIER_ANSWERS.join(",")}))`)
       .in("action", ACTIVITY_ACTIONS)
       .gt("seq", since)
       .order("seq", { ascending: true })

@@ -456,7 +456,8 @@ describe("reading the agent's activity", () => {
     expect(triggers.params.get("actor")).toBe("eq.human");
     expect(triggers.params.get("action")).toBe("in.(create_invoice,invoice_details_added,approval_returned)");
     const asked = client.requests.find((r) => r.path === "/rest/v1/ledger_entries" && r.params.get("select") === "seq,ts,action,detail")!;
-    expect(asked.params.get("actor")).toBe("eq.agent");
+    // The agent's entries, and a supplier's answer to its early-payment offer, which the system records (offer activity A2).
+    expect(asked.params.get("or")).toBe("(actor.eq.agent,and(actor.eq.system,action.in.(early_payment_offer_accepted,early_payment_offer_countered)))");
     expect(asked.params.get("seq")).toBe("gt.967");
     expect(asked.params.get("action")).toContain("ap_pay");
     expect(asked.params.get("action")).not.toContain("cycle_complete");
@@ -533,5 +534,51 @@ describe("a payment that has not confirmed (stuck-transfer alert D6, D7)", () =>
 
   it("says nothing of a payment whose invoice is gone", () => {
     expect(activityItem(stuck({ invoiceId: "00000000-0000-4000-8000-000000000000" }), refs())).toBeNull();
+  });
+});
+
+describe("early payment the agent negotiates, in words (offer activity A1-A3)", () => {
+  const offer = (action: string, detail: Record<string, unknown>) => entry(action, { offerId: "offer-1", currency: "USDC", ...detail });
+  const how = { path: `/invoices?open=${INVOICE}#trail-${INVOICE}`, pathLabel: "How it decided" };
+
+  it("says the agent's offer and who decided it, a supplier's answer or counter, and the agent's answer", () => {
+    expect(activityItem(offer("early_payment_offered", { via: "agent", discountPct: 0.5, offeredAmount: 0.4975, decisionMode: "deepseek", agreedWithReference: true }), refs({ currency: "USDC" }))).toMatchObject({
+      text: "Offered Jiren payment today for 0.50% off, by email: 0.4975 USDC today instead of 0.30 USDC.",
+      detail: "DeepSeek decided, as the written policy would.",
+      tone: "done",
+      ...how,
+    });
+    expect(activityItem(offer("early_payment_offer_countered", { via: "offer_link", counterPct: 0.25, discountPct: 0.5 }), refs())).toMatchObject({
+      text: "Jiren proposed 0.25% off instead of 0.50%; the agent answers it now.",
+      tone: "pending",
+    });
+    expect(activityItem(offer("early_payment_counter_accepted", { counterPct: 0.25, discountPct: 0.5, offeredAmount: 0.29925, decisionMode: "deepseek", agreedWithReference: true }), refs())).toMatchObject({
+      text: "Accepted Jiren's 0.25%: paying 0.29925 USDC today instead of 0.30 USDC.",
+      tone: "done",
+    });
+    expect(activityItem(offer("early_payment_offer_accepted", { via: "offer_link", discountPct: 1, offeredAmount: 0.297 }), refs())).toMatchObject({
+      text: "Jiren accepted 1.00% off for payment today: 0.297 USDC today instead of 0.30 USDC.",
+      tone: "done",
+    });
+  });
+
+  it("says code declined a counter without a model, and why an offer was withdrawn", () => {
+    const declined = offer("early_payment_counter_declined", { counterPct: 0.2, discountPct: 0.5, decisionMode: "code", decision: { action: "decline", reasoning: "A 0.20% discount is no more than the 0.23% the cash would earn in the reserve by the due date, so the original terms stand." } });
+    expect(activityItem(declined, refs())).toMatchObject({
+      text: "Kept the original terms with Jiren: its 0.20% declined, so it is paid on its due date.",
+      detail: "Code declined it, without asking a model: A 0.20% discount is no more than the 0.23% the cash would earn in the reserve by the due date, so the original terms stand.",
+    });
+    expect(activityItem(offer("early_payment_offer_withdrawn", { via: "agent", reason: "cash" }), refs())).toMatchObject({ text: "Withdrew the early-payment offer to Jiren: the cash no longer covers it.", tone: "done" });
+  });
+
+  it("tells nothing of a person's own offer or withdrawal, and none is a card for a chat", () => {
+    expect(activityItem(offer("early_payment_offered", { by: "user-1", discountPct: 1, offeredAmount: 0.297 }), refs())).toBeNull();
+    expect(activityItem(offer("early_payment_offer_withdrawn", { by: "user-1" }), refs())).toBeNull();
+    const told = activityItem(offer("early_payment_offer_countered", { counterPct: 0.25, discountPct: 0.5 }), refs());
+    expect(told).not.toHaveProperty("invoiceId");
+    for (const action of ["early_payment_offered", "early_payment_offer_countered", "early_payment_counter_accepted", "early_payment_counter_declined", "early_payment_offer_accepted", "early_payment_offer_withdrawn"]) {
+      expect(ACTIVITY_ACTIONS).toContain(action);
+    }
+    expect(ACTIVITY_ACTIONS).not.toContain("early_payment_offer_skipped");
   });
 });

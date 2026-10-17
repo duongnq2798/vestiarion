@@ -14,6 +14,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **The early payment the agent negotiates, told as it happens.** The activity toasts, the Telegram chats and the
+  Slack channel now tell each step: the offers the agent made and who decided them, a supplier's acceptance or counter,
+  the agent's answer to a counter (with code's reason when code declined it), and an offer it withdrew. A person's own
+  offers, and bills the agent chose not to offer, are not told.
+  [Guide](https://www.vestiarion.xyz/docs/guides/early-payment-offers#following-along).
+
 - **What the early-payment offers came to, and offers kept covered.** Pay early for a discount says how many offers
   were made (by the agent among them), accepted (after a counter among them) and declined, and what the bills paid early
   saved, as an amount and as a yearly rate on the cash paid early. And the agent withdraws its own open offers, the
