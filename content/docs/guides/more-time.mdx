@@ -52,7 +52,14 @@ When the supplier declines, nothing changes: the bill keeps its due date and wai
 
 A request only ever moves a due date later. It never changes the amount, who is paid, or where.
 
+## When the request is no longer needed
+
+If money comes in before the supplier answers and the agent pays the bill, or the bill is no longer held for want of
+cash, the agent withdraws the request at its next cycle and emails the supplier that it no longer needs more time: "*Business* is paying invoice *reference*, *amount*, on time, so it no longer needs the *days* more days it asked for." or that the invoice stays due on its date, as before. The earlier link stops working. The ledger records `term_request_withdrawn` with `reason: "paid"` or `"not_needed"`. This goes on even after you turn the requests off: only new requests stop.
+
 ## Following along
+
+The agent's activity, its toasts and your Telegram chat and Slack channel when connected, tells each request it sends and who decided it, each supplier's answer, and each request it withdraws, with why.
 
 On **Bills & receivables**, **More time when cash is short** lists the last five requests: the supplier, the days and the new due date, and whether the supplier agreed, declined, or has yet to answer, or the request was withdrawn. Every step is in the ledger, with the actions above.
 

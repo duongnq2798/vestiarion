@@ -14,6 +14,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Requests for more time, followed up.** When money comes in before a supplier answers, or the bill is no longer
+  held for want of cash, the agent withdraws its request for more time and emails the supplier that it no longer needs
+  it, so no one agrees to a later date the business does not need. It keeps doing so after the requests are turned off.
+  Each request, answer and withdrawal is now told in the activity toasts, Telegram and Slack. A request withdrawn
+  before its email went no longer stops its bill being asked about again.
+  [Guide](https://www.vestiarion.xyz/docs/guides/more-time#when-the-request-is-no-longer-needed).
+
 - **The agent asks suppliers for more time when cash is short.** An owner or admin turns it on in More time when cash
   is short on Bills & receivables, with the most days the agent may ask for (3 to 30). When the operating wallet cannot
   pay a bill falling due within two weeks, the agent emails the supplier a one-time link asking for the same amount on

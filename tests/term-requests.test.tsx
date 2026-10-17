@@ -62,6 +62,11 @@ interface World {
   reviews?: Array<Record<string, unknown>>;
   owed?: Array<Record<string, unknown>>;
   claim?: FakeReply;
+  /** The bills of requests out, by id (F1). */
+  bills?: Array<Record<string, unknown>>;
+  started?: Array<Record<string, unknown>>;
+  /** The requests the agent signed as sent (X6). */
+  sent?: string[];
 }
 
 function world(w: World = {}) {
@@ -79,7 +84,12 @@ function world(w: World = {}) {
     if (request.path === "/rest/v1/invoices") {
       if (request.params.get("status") === "eq.held") return { body: w.held ?? [held()] };
       if (request.params.get("direction") === "eq.receivable") return { body: w.owed ?? [{ amount: "250", due_date: "2026-10-30T12:00:00+00:00" }] };
+      if (request.params.has("id")) return { body: w.bills ?? [] };
       return { body: [] };
+    }
+    if (request.path === "/rest/v1/payment_intents") return { body: w.started ?? [] };
+    if (request.path === "/rest/v1/ledger_entries" && request.params.get("action") === "eq.term_request_sent") {
+      return { body: (w.sent ?? []).map((id) => ({ detail: { requestId: id } })) };
     }
     if (request.path === "/rest/v1/ledger_entries") return { body: w.decisions ?? [forCash] };
     if (request.path === "/rest/v1/payment_term_requests") return { body: w.requests ?? [] };
@@ -230,6 +240,58 @@ describe("a request the agent makes", () => {
     expect(email.subject).toMatch(/^\[Sandbox\] /);
     expect(email.text).toContain("This is a sandbox. You get this in place of Kestrel Print Co, a sample supplier");
     expect(ledgerMock.mock.calls[0][0].detail).toMatchObject({ sandbox: true, to: "ow***@pinecrest.example" });
+  });
+});
+
+describe("a request no longer needed (follow-up F1, F2)", () => {
+  const out = { id: "request-0", invoice_id: INVOICE, counterparty_id: SUPPLIER, status: "open", days: 14, due_date: "2026-10-20T12:00:00+00:00", decided_at: null, expires_at: "2026-10-22T09:00:00+00:00" };
+  const bill = (over: Record<string, unknown> = {}) => ({ id: INVOICE, status: "held", amount: "300", currency: "USDC", due_date: "2026-10-20T12:00:00+00:00", memo: "LP-130 brochures", counterparties: { name: "Lumen Print Co.", notice_email: "ap@lumen.example" }, ...over });
+  const withdrawals = (client: ReturnType<typeof world>) => client.requests.filter((r) => r.path === "/rest/v1/rpc/withdraw_term_request");
+  const signed = () => ledgerMock.mock.calls.map((call) => call[0] as { action: string; detail: Record<string, unknown> }).filter((e) => e.action === "term_request_withdrawn");
+
+  it("is withdrawn once the bill is paid, the supplier told, and the withdrawal signed", async () => {
+    const client = world({ requests: [out], bills: [bill({ status: "paid" })], held: [] });
+    const lines = await run(client);
+    expect(withdrawals(client)[0]?.body).toMatchObject({ p_request_id: "request-0" });
+    const message = sendMock.mock.calls[0][0];
+    expect(message.to).toBe("ap@lumen.example");
+    expect(message.subject).toBe("Pinecrest Studio no longer needs more time on invoice LP-130 brochures");
+    expect(message.text).toContain("Pinecrest Studio is paying invoice LP-130 brochures, 300.00 USDC, on time, so it no longer needs the 14 more days it asked for.");
+    expect(message.idempotencyKey).toMatch(/^[0-9a-f]{64}$/);
+    expect(signed()[0].detail).toMatchObject({ requestId: "request-0", reason: "paid", supplierTold: true, via: "agent" });
+    expect(lines[0].message).toBe("Withdrew the request for more time to Lumen Print Co.: the bill is being paid on time, and told them");
+  });
+
+  it("is withdrawn when the bill is no longer held for want of cash, saying it stays due on its date", async () => {
+    await run(world({ requests: [out], bills: [bill({ status: "scheduled" })], held: [] }));
+    expect(sendMock.mock.calls[0][0].text).toContain("it stays due on Oct 20, 2026, as before.");
+    expect(signed()[0].detail).toMatchObject({ reason: "not_needed" });
+  });
+
+  it("stays out while the bill is still held for want of cash, or its email is still going", async () => {
+    const still = world({ requests: [out], bills: [bill()], held: [] });
+    await run(still);
+    expect(withdrawals(still)).toEqual([]);
+    const going = world({ requests: [out], bills: [bill({ status: "paid" })], held: [], reviews: [{ id: "review-0", invoice_id: INVOICE, action: "ask", request_id: "request-0", decided_at: new Date(NOW - 60_000).toISOString(), emailed_at: null }] });
+    await run(going);
+    expect(withdrawals(going)).toEqual([]);
+  });
+
+  it("is followed up even after the requests are turned off", async () => {
+    const client = world({ on: false, requests: [out], bills: [bill({ status: "paid" })] });
+    await run(client);
+    expect(withdrawals(client)).toHaveLength(1);
+    expect(client.requests.some((r) => r.path === "/rest/v1/rpc/create_term_request")).toBe(false);
+  });
+
+  it("does not stop the bill being asked about again when the request was withdrawn before its email went (X6)", async () => {
+    const unsent = { ...out, status: "withdrawn", decided_at: "2026-10-16T09:00:00Z" };
+    const asked = world({ requests: [unsent] });
+    await run(asked);
+    expect(asked.requests.some((r) => r.path === "/rest/v1/rpc/create_term_request")).toBe(true);
+    const seen = world({ requests: [unsent], sent: ["request-0"] });
+    await run(seen);
+    expect(seen.requests.some((r) => r.path === "/rest/v1/rpc/create_term_request")).toBe(false);
   });
 });
 

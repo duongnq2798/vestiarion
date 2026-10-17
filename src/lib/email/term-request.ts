@@ -48,3 +48,46 @@ export function termRequestEmail(input: {
   const text = [`Hi ${supplierName},`, "", ...(play ? [play, ""] : []), lead, terms, nothing, "", `See the request: ${url}`, "", note].join("\n");
   return { subject, html, text };
 }
+
+/**
+ * The email a supplier gets when the agent withdraws its request for more time because it is no longer needed
+ * (docs/superpowers/specs/2026-10-17-term-requests-follow-up-design.md F1): the bill is being paid on time, or stays due on
+ * its date. The earlier link no longer works. A template; nothing a model wrote.
+ */
+export function termRequestWithdrawnEmail(input: {
+  orgName: string;
+  supplierName: string;
+  reference: string | null;
+  /** The amount, as "1,000.00", and its token. */
+  amount: string;
+  token: string;
+  days: number;
+  /** The due date, as "Oct 30, 2026". */
+  dueOn: string;
+  /** The bill is being paid now, not only kept to its date. */
+  paying: boolean;
+  origin: string;
+  sandbox?: boolean;
+}): { subject: string; html: string; text: string } {
+  const { orgName, supplierName, reference, amount, token, days, dueOn, paying, origin } = input;
+  const invoice = reference ? `invoice ${reference}` : "your invoice";
+  const subject = `${input.sandbox ? "[Sandbox] " : ""}${orgName} no longer needs more time on ${invoice}`;
+  const lead = paying
+    ? `${orgName} is paying ${invoice}, ${amount} ${token}, on time, so it no longer needs the ${days} more days it asked for.`
+    : `${orgName} no longer needs the ${days} more days it asked for on ${invoice}: it stays due on ${dueOn}, as before.`;
+  const after = `The earlier link no longer works, and there is nothing for you to do.${paying ? " You get a payment notice when the payment is confirmed." : ""}`;
+  const play = input.sandbox ? `This is a sandbox. You get this in place of ${supplierName}, a sample supplier. Its payments are simulated.` : null;
+  const note = `You get this because ${orgName} asked you for more time through Vestiarion. For anything about this invoice, contact ${orgName}.`;
+  const html = actionEmailHtml({
+    title: subject,
+    preheader: lead,
+    eyebrow: "Payment terms",
+    heading: `Hi ${supplierName}, no more time needed`,
+    paragraphsHtml: [...(play ? [escapeHtml(play)] : []), escapeHtml(lead), escapeHtml(after)],
+    button: { label: "How requests for more time work", link: `${origin}/docs/guides/more-time` },
+    note,
+    origin,
+  });
+  const text = [`Hi ${supplierName},`, "", ...(play ? [play, ""] : []), lead, after, "", `How requests for more time work: ${origin}/docs/guides/more-time`, "", note].join("\n");
+  return { subject, html, text };
+}

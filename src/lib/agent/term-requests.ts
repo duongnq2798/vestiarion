@@ -4,7 +4,7 @@ import { siteOrigin } from "../auth/env";
 import { currentOrgId } from "../context";
 import { utcDay } from "../copy";
 import { platformDb, unwrap, type OrgDb } from "../dal";
-import { termRequestEmail } from "../email/term-request";
+import { termRequestEmail, termRequestWithdrawnEmail } from "../email/term-request";
 import { emailSettingsFromEnv, sendEmail, type EmailMessage, type SendResult } from "../email/send";
 import { appendLedgerEntry } from "../ledger";
 import { heldForCash } from "../next-step";
@@ -31,6 +31,10 @@ import { agentPaused } from "./pause";
  * to ask the supplier for more time, and how many days, up to the workspace's most (X3). A request's review is claimed
  * before it is made, and its link is emailed once under its own idempotency key; one not emailed is withdrawn (X6). Every
  * decision is signed. A request only ever moves a due date later, for the same amount (X7).
+ *
+ * A request out that is no longer needed, because the bill is being paid or is no longer held for want of cash, is
+ * withdrawn and the supplier told so, even after the requests are turned off
+ * (docs/superpowers/specs/2026-10-17-term-requests-follow-up-design.md F1, F2).
  *
  * In a sandbox, the requests go to the member who turned them on, who answers as the supplier. Never while the agent is
  * paused, or without email; before migration 0128 runs, nothing.
@@ -72,8 +76,19 @@ interface RequestRow {
   counterparty_id: string;
   status: string;
   days: number;
+  due_date: string;
   decided_at: string | null;
   expires_at: string;
+}
+
+interface BillRow {
+  id: string;
+  status: string;
+  amount: string;
+  currency: string | null;
+  due_date: string;
+  memo: string | null;
+  counterparties: { name: string; notice_email: string | null } | null;
 }
 
 interface ReviewRow {
@@ -107,7 +122,9 @@ export async function makeTermRequests(
   if (org.error || !org.data) return [];
   const { name: orgName, mode, term_requests_on_at: onAt } = org.data;
   const maxDays = Number(org.data.term_requests_max_days);
-  if ((mode !== "live" && mode !== "sandbox") || !onAt || !Number.isFinite(maxDays) || maxDays <= 0) return [];
+  if (mode !== "live" && mode !== "sandbox") return [];
+  // Off, no new request is made; the ones already out are still followed up (F2).
+  const on = onAt !== null && Number.isFinite(maxDays) && maxDays > 0;
   if (await agentPaused()) return [];
   const ready = await orgDb.rpc("term_requests_ready");
   if (ready.error) return [];
@@ -147,6 +164,64 @@ export async function makeTermRequests(
     reviewed.add(review.invoice_id);
   }
 
+  const requests = unwrap(
+    await orgDb.from("payment_term_requests").select("id, invoice_id, counterparty_id, status, days, due_date, decided_at, expires_at").order("created_at", { ascending: false }).limit(1000)
+  ) as RequestRow[];
+
+  // Requests no longer needed (F1): one out whose bill is being paid, or is no longer held for want of cash, is withdrawn
+  // and its supplier told, so no one agrees to a later date the business does not need. One still being emailed is left.
+  const inFlight = new Set(reviews.filter((review) => review.action === "ask" && !review.emailed_at).map((review) => review.request_id));
+  const out = requests.filter((row) => row.status === "open" && Date.parse(row.expires_at) > now && !inFlight.has(row.id));
+  if (out.length > 0) {
+    const ids = [...new Set(out.map((row) => row.invoice_id))];
+    const [billsRead, startedRead, latestOut] = await Promise.all([
+      orgDb.from("invoices").select("id, status, amount, currency, due_date, memo, counterparties(name, notice_email)").in("id", ids),
+      orgDb.from("payment_intents").select("source_id").eq("source_type", "invoice").in("source_id", ids),
+      latestDecisions(orgDb, ids),
+    ]);
+    const bills = new Map((unwrap(billsRead) as unknown as BillRow[]).map((row) => [row.id, row] as const));
+    const started = new Set((unwrap(startedRead) as Array<{ source_id: string }>).map((row) => row.source_id));
+    for (const request of out) {
+      const bill = bills.get(request.invoice_id);
+      if (!bill) continue;
+      const paying = bill.status === "paid" || started.has(bill.id);
+      if (!paying && bill.status === "held" && heldForCash(latestOut.get(bill.id))) continue;
+      if (!(await withdrawTermRequest(orgId, request.id))) continue;
+      request.status = "withdrawn";
+      const reason = paying ? "paid" : "not_needed";
+      const supplierName = bill.counterparties?.name ?? "the supplier";
+      const email = sandbox ? sandboxTo : (bill.counterparties?.notice_email ?? null);
+      let told = false;
+      if (email) {
+        const message = termRequestWithdrawnEmail({
+          orgName,
+          supplierName,
+          reference: bill.memo,
+          amount: AMOUNT.format(Number(bill.amount)),
+          token: bill.currency ?? "USDC",
+          days: request.days,
+          dueOn: utcDay(bill.due_date),
+          paying,
+          origin,
+          sandbox,
+        });
+        const idempotencyKey = crypto.createHash("sha256").update(`term_request_withdrawn\n${request.id}`, "utf8").digest("hex");
+        const result = await send({ to: email, ...message, idempotencyKey });
+        told = result.sent;
+        if (!result.sent) console.error("term request withdrawal email not sent", request.id, result.reason);
+      }
+      await appendLedgerEntry({
+        actor: "agent",
+        domain: "ap",
+        action: "term_request_withdrawn",
+        summary: paying ? `Request for more time to ${supplierName} withdrawn: the bill is being paid on time` : `Request for more time to ${supplierName} withdrawn: the bill is no longer held for want of cash`,
+        detail: { requestId: request.id, invoiceId: bill.id, counterpartyId: request.counterparty_id, via: "agent", reason, days: request.days, supplierTold: told, ...(email ? { to: maskEmail(email) } : {}) },
+      });
+      lines.push({ domain: "ap", message: `Withdrew the request for more time to ${supplierName}: ${paying ? "the bill is being paid on time" : "it is no longer needed"}${told ? ", and told them" : ""}` });
+    }
+  }
+  if (!on) return lines;
+
   const held = unwrap(
     await orgDb
       .from("invoices")
@@ -159,23 +234,18 @@ export async function makeTermRequests(
   if (held.length === 0) return lines;
 
   // Each held bill's latest decision: only one held for want of cash may be asked about (X2).
-  const decisions = unwrap(
-    await orgDb
-      .from("ledger_entries")
-      .select("seq, detail")
-      .in("action", ["ap_pay", "ap_hold"])
-      .in("detail->>invoiceId", held.map((row) => row.id))
-      .order("seq", { ascending: false })
-      .limit(1000)
-  ) as Array<{ seq: number; detail: Record<string, unknown> }>;
-  const latest = new Map<string, Record<string, unknown>>();
-  for (const entry of decisions) {
-    const id = typeof entry.detail.invoiceId === "string" ? entry.detail.invoiceId : null;
-    if (id && !latest.has(id)) latest.set(id, entry.detail);
-  }
+  const latest = await latestDecisions(orgDb, held.map((row) => row.id));
 
-  const requests = unwrap(await orgDb.from("payment_term_requests").select("id, invoice_id, counterparty_id, status, days, decided_at, expires_at").order("created_at", { ascending: false }).limit(1000)) as RequestRow[];
-  const askedBills = new Set(requests.map((row) => row.invoice_id));
+  // A bill asked about before is not asked again, but a request withdrawn before its email went was never seen (X6): the
+  // ones the agent signed as sent are the ones the supplier got.
+  const withdrawnIds = requests.filter((row) => row.status === "withdrawn").map((row) => row.id);
+  const sentRead = withdrawnIds.length > 0 ? await orgDb.from("ledger_entries").select("detail").eq("action", "term_request_sent").in("detail->>requestId", withdrawnIds) : null;
+  const sent = new Set(
+    ((sentRead && !sentRead.error ? sentRead.data : []) as Array<{ detail: Record<string, unknown> | null }>)
+      .map((entry) => (typeof entry.detail?.requestId === "string" ? entry.detail.requestId : null))
+      .filter((id): id is string => id !== null)
+  );
+  const askedBills = new Set(requests.filter((row) => row.status !== "withdrawn" || sent.has(row.id)).map((row) => row.invoice_id));
   const supplier = (id: string) => {
     const mine = requests.filter((row) => row.counterparty_id === id);
     const declined = mine.filter((row) => row.status === "declined" && row.decided_at).map((row) => row.decided_at as string).sort();
@@ -338,6 +408,26 @@ export async function makeTermRequests(
     lines.push({ domain: "ap", message: `Asked ${supplierName} by email for ${bounded.days} more days, to ${utcDay(request.row.new_due_date)}` });
   }
   return lines;
+}
+
+/** Each bill's latest AP decision, by bill: what it was held for (X2, F1). */
+async function latestDecisions(orgDb: OrgDb, invoiceIds: string[]): Promise<Map<string, Record<string, unknown>>> {
+  const latest = new Map<string, Record<string, unknown>>();
+  if (invoiceIds.length === 0) return latest;
+  const decisions = unwrap(
+    await orgDb
+      .from("ledger_entries")
+      .select("seq, detail")
+      .in("action", ["ap_pay", "ap_hold"])
+      .in("detail->>invoiceId", invoiceIds)
+      .order("seq", { ascending: false })
+      .limit(1000)
+  ) as Array<{ seq: number; detail: Record<string, unknown> }>;
+  for (const entry of decisions) {
+    const id = typeof entry.detail.invoiceId === "string" ? entry.detail.invoiceId : null;
+    if (id && !latest.has(id)) latest.set(id, entry.detail);
+  }
+  return latest;
 }
 
 /** A sandbox's recipient: the member who turned the requests on; null once they left or the members cannot be read. */
