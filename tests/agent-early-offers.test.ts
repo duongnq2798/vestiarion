@@ -25,6 +25,7 @@ const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000e0e";
 const INVOICE = "0b6c1c9e-4a4f-4a7e-9b1e-0000000001e1";
 const SUPPLIER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000002e2";
+const OWNER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000003e3";
 const NOW = Date.parse("2026-10-16T09:00:00Z");
 const DAY = 86_400_000;
 
@@ -52,12 +53,16 @@ interface World {
   reviews?: Array<Record<string, unknown>>;
   claim?: FakeReply;
   answer?: string;
+  onBy?: string | null;
 }
 
 function world(w: World = {}) {
   return fakeSupabase((request: RecordedRequest): FakeReply => {
     if (request.path === "/rest/v1/orgs") {
-      return { body: { name: "Pinecrest Studio", mode: w.mode ?? "live", early_offers_on_at: w.on === false ? null : "2026-10-16T08:00:00Z", early_offers_max_pct: w.maxPct ?? "2.00" } };
+      return { body: { name: "Pinecrest Studio", mode: w.mode ?? "live", early_offers_on_at: w.on === false ? null : "2026-10-16T08:00:00Z", early_offers_on_by: w.onBy === undefined ? OWNER : w.onBy, early_offers_max_pct: w.maxPct ?? "2.00" } };
+    }
+    if (request.path === "/rest/v1/rpc/org_members") {
+      return { body: [{ user_id: OWNER, email: "owner@pinecrest.example", role: "owner", joined_at: "2026-09-01T00:00:00Z" }] };
     }
     if (request.path === "/rest/v1/rpc/agent_paused") return { body: w.paused === true };
     if (request.path === "/rest/v1/rpc/early_payment_offer_reviews_ready") return { body: true };
@@ -199,8 +204,8 @@ describe("an offer the agent makes", () => {
     expect(detail.decision.reasoning).toContain("code allows 0.5% to 2%, so the offer asks 2%");
   });
 
-  it("is never made where it is off, in a sandbox, while paused, or without cash or a reachable supplier (AO1, AO2)", async () => {
-    for (const w of [{ on: false }, { mode: "sandbox" }, { paused: true }] as World[]) {
+  it("is never made where it is off, while paused, in a sandbox whose member left, or without cash or a reachable supplier (AO1, AO2)", async () => {
+    for (const w of [{ on: false }, { paused: true }, { mode: "sandbox", onBy: "someone-gone" }] as World[]) {
       const client = world(w);
       await run(client);
       expect(client.requests.some((r) => r.path === "/rest/v1/rpc/create_early_payment_offer"), JSON.stringify(w)).toBe(false);
@@ -340,5 +345,18 @@ describe("the offers out stay covered (offer results R2)", () => {
     const covered = world({ offers: [open("offer-big", "300", "bill-a")], reviews: [review("offer-big", "bill-a")] });
     await run(covered, 500);
     expect(covered.requests.some((r) => r.path === "/rest/v1/rpc/withdraw_early_payment_offer")).toBe(false);
+  });
+});
+
+describe("an offer in a sandbox (sandbox offers S1)", () => {
+  it("goes to the member who turned the offers on, says it is a sandbox, and is signed as one", async () => {
+    const client = world({ mode: "sandbox", payables: [payable({ counterparties: { name: "Kestrel Print Co", notice_email: null } })] });
+    await run(client);
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    const email = sendMock.mock.calls[0][0];
+    expect(email.to).toBe("owner@pinecrest.example");
+    expect(email.subject).toBe("[Sandbox] Pinecrest Studio offers to pay invoice LP-117 print run today");
+    expect(email.text).toContain("This is a sandbox. You get this in place of Kestrel Print Co, a sample supplier, so you can answer as the supplier would. Its payments are simulated.");
+    expect(ledgerMock.mock.calls[0][0]).toMatchObject({ action: "early_payment_offered", detail: { via: "agent", sandbox: true, to: "ow***@pinecrest.example" } });
   });
 });

@@ -127,11 +127,15 @@ export async function offersView(now: Date = new Date()): Promise<OffersView | n
 }
 
 /** Whether the agent makes offers in the workspace in scope, and its ceiling (AO1); null before migration 0126. */
-export async function agentOffersSetting(): Promise<{ on: boolean; maxPct: number | null } | null> {
-  const org = await platformDb().from("orgs").select("early_offers_on_at, early_offers_max_pct").eq("id", currentOrgId()).maybeSingle<{ early_offers_on_at: string | null; early_offers_max_pct: string | null }>();
+export async function agentOffersSetting(): Promise<{ on: boolean; maxPct: number | null; sandbox: boolean } | null> {
+  const org = await platformDb()
+    .from("orgs")
+    .select("mode, early_offers_on_at, early_offers_max_pct")
+    .eq("id", currentOrgId())
+    .maybeSingle<{ mode: string; early_offers_on_at: string | null; early_offers_max_pct: string | null }>();
   if (org.error || !org.data) return null;
   const max = org.data.early_offers_max_pct === null ? null : Number(org.data.early_offers_max_pct);
-  return { on: org.data.early_offers_on_at !== null, maxPct: max !== null && Number.isFinite(max) ? max : null };
+  return { on: org.data.early_offers_on_at !== null, maxPct: max !== null && Number.isFinite(max) ? max : null, sandbox: org.data.mode === "sandbox" };
 }
 
 /** The agent's offers turned on, with the most it asks, or off (AO1); recorded in the ledger. */

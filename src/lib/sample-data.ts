@@ -140,6 +140,9 @@ export function sampleFixture(now: Date): SampleFixture {
       },
       // Flagged: the same purchase order and amount as the paid invoice above.
       { counterparty: "kestrel", direction: "payable", amount: 180, memo: "Brochure print run", po_reference: "PO-3307", goods_received: true, due_date: at(2) },
+      // Scheduled for its due date, three weeks out, with no discount: the bill the agent may offer to pay early, once its
+      // early-payment offers are on (sandbox offers S3).
+      { counterparty: "kestrel", direction: "payable", amount: 300, memo: "Catalogue print run", po_reference: "PO-3312", goods_received: true, due_date: at(21) },
       // Money coming in, for the forecast.
       { counterparty: "lumen", direction: "receivable", amount: 3000, memo: "Q4 platform retainer", po_reference: "SO-771", goods_received: true, due_date: at(10) },
     ],

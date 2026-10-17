@@ -2268,7 +2268,7 @@ A supplier paid today for a discount it accepts (docs/superpowers/specs/2026-10-
   discount ending today is paid today, after every check.
 - **The agent's own offers** (`src/lib/agent/early-offers.ts`, stage `early_offers`, migration 0126;
   docs/superpowers/specs/2026-10-16-agent-early-payment-offers-design.md). An owner or admin turns them on with a
-  ceiling (`set_agent_early_offers`, `orgs.early_offers_*`). After collections, in a live workspace not paused and with
+  ceiling (`set_agent_early_offers`, `orgs.early_offers_*`). After collections, in a workspace not paused and with
   email configured, each scheduled USDC bill due 7 days or more out is weighed once code allows it
   (`agentOfferAllowed`, `src/lib/early-pay/agent-rules.ts`): never offered before, its supplier with a notice email, no
   other open offer and no decline in 30 days, the suggestion within the ceiling, and the operating USDC left after this
@@ -2279,7 +2279,10 @@ A supplier paid today for a discount it accepts (docs/superpowers/specs/2026-10-
   idempotency key. A failed send withdraws the offer and releases the review; one left unsent for 15 minutes is a
   stopped run's and is withdrawn the same way. A skip is weighed again after 7 days. At most 3 offers a cycle; the
   ledger records `early_payment_offered` (`via: "agent"`, the decision, the written policy's answer) or
-  `early_payment_offer_skipped`.
+  `early_payment_offer_skipped`. In a sandbox (docs/superpowers/specs/2026-10-17-sandbox-offers-design.md), whose
+  suppliers are sample data, the offers and the answers to counters go to the member who turned the offers on
+  (`sandboxRecipient`, `orgs.early_offers_on_by`), with a "[Sandbox]" subject and `sandbox: true` on the entry; none
+  goes when that member has left. The sample data includes a no-discount bill due in 21 days for it to offer.
 - **Counters** (migration 0127; docs/superpowers/specs/2026-10-17-offer-counters-design.md). On an offer the agent made
   (`early_payment_offer_by_agent`, a review linked to the offer), the supplier's page takes a smaller discount
   (`counterOffer`, `counter_early_payment_offer`). The offer becomes `countered` with `counter_pct`, and

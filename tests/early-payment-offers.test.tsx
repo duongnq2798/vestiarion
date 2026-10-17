@@ -230,3 +230,11 @@ describe("what the offers came to (offer results R1)", () => {
     expect(markup).toContain("Paying early saved 0.02255 USDC, like earning 15.3% a year.");
   });
 });
+
+describe("the agent's offers in a sandbox (sandbox offers S1)", () => {
+  it("says they go to the email of whoever turns them on, who answers as the supplier", () => {
+    const view: OffersView = { reserveApy: 0, agent: { on: false, maxPct: null, sandbox: true }, candidates: [], recent: [] };
+    const off = decode(renderToStaticMarkup(<EarlyPaymentOffers orgSlug="demo" view={{ ...view, agent: { on: true, maxPct: 2, sandbox: true } }} canOffer />));
+    expect(off).toContain("In this sandbox, they go to the email of whoever turned them on, who answers as the supplier; payments are simulated.");
+  });
+});

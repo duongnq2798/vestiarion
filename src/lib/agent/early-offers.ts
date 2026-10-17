@@ -21,6 +21,7 @@ import { counterAnswerEmail, earlyPaymentOfferEmail } from "../email/early-payme
 import { emailSettingsFromEnv, sendEmail, type EmailMessage, type SendResult } from "../email/send";
 import { appendLedgerEntry } from "../ledger";
 import { maskEmail } from "../payment-notices";
+import { listMembers } from "../platform/members";
 import { REASONING_RULE, REASONING_SHAPE } from "../reasoning-copy";
 import { decide } from "./decide";
 import type { CycleLogLine } from "./orchestrator";
@@ -115,15 +116,24 @@ export async function makeEarlyPaymentOffers(
   options: { now?: number; send?: (message: EmailMessage) => Promise<SendResult>; origin?: string } = {}
 ): Promise<CycleLogLine[]> {
   const orgId = currentOrgId();
-  const org = await platformDb().from("orgs").select("name, mode, early_offers_on_at, early_offers_max_pct").eq("id", orgId).single<{ name: string; mode: string; early_offers_on_at: string | null; early_offers_max_pct: string | null }>();
+  const org = await platformDb()
+    .from("orgs")
+    .select("name, mode, early_offers_on_at, early_offers_on_by, early_offers_max_pct")
+    .eq("id", orgId)
+    .single<{ name: string; mode: string; early_offers_on_at: string | null; early_offers_on_by: string | null; early_offers_max_pct: string | null }>();
   // Before migration 0126 the columns are not there: nothing to do.
   if (org.error || !org.data) return [];
   const { name: orgName, mode, early_offers_on_at: onAt } = org.data;
   const ceiling = Number(org.data.early_offers_max_pct);
-  // A sandbox's suppliers are sample data: it never emails them (AO1).
-  if (mode !== "live") return [];
+  if (mode !== "live" && mode !== "sandbox") return [];
   const on = onAt !== null && Number.isFinite(ceiling) && ceiling > 0;
   if (await agentPaused()) return [];
+  // A sandbox's suppliers are sample data, so it never emails them: its offers and answers go to the member who turned
+  // the offers on, who answers as the supplier (sandbox offers S1). Its payments are simulated, as every sandbox's are.
+  const sandbox = mode === "sandbox";
+  const sandboxTo = sandbox ? await sandboxRecipient(orgId, org.data.early_offers_on_by) : null;
+  if (sandbox && !sandboxTo) return [];
+  const supplierEmail = (noticeEmail: string | null) => (sandbox ? sandboxTo : noticeEmail);
   const ready = await orgDb.rpc("early_payment_offer_reviews_ready");
   if (ready.error) return [];
   const settings = options.send ? null : emailSettingsFromEnv();
@@ -227,10 +237,10 @@ export async function makeEarlyPaymentOffers(
     const suppliers = new Map(
       (
         unwrap(await orgDb.from("counterparties").select("id, name, notice_email").in("id", [...new Set(countered.map((row) => row.counterparty_id))])) as Array<{ id: string; name: string; notice_email: string | null }>
-      ).map((row) => [row.id, row] as const)
+      ).map((row) => [row.id, { ...row, notice_email: supplierEmail(row.notice_email) }] as const)
     );
     for (const row of countered) {
-      const answered = await answerCounter({ orgId, orgName, row, bill: payables.find((bill) => bill.id === row.invoice_id) ?? null, supplier: suppliers.get(row.counterparty_id) ?? null, history: history.get(row.counterparty_id), on, available, input, now, origin, send });
+      const answered = await answerCounter({ orgId, orgName, row, bill: payables.find((bill) => bill.id === row.invoice_id) ?? null, supplier: suppliers.get(row.counterparty_id) ?? null, history: history.get(row.counterparty_id), on, available, input, now, origin, send, sandbox });
       if (answered.paid) available = Number((available - answered.paid).toFixed(6));
       if (answered.line) lines.push(answered.line);
     }
@@ -254,7 +264,7 @@ export async function makeEarlyPaymentOffers(
     if (made >= AGENT_OFFERS_PER_RUN) break;
     const supplier = history.get(row.counterparty_id) ?? { made: 0, accepted: 0, declined: 0, acceptedPcts: [], lastDeclinedAt: null, hasOpen: false };
     const amount = Number(row.amount);
-    const email = row.counterparties?.notice_email ?? null;
+    const email = supplierEmail(row.counterparties?.notice_email ?? null);
     const allowance = agentOfferAllowed({
       status: row.status,
       currency: row.currency,
@@ -339,6 +349,7 @@ export async function makeEarlyPaymentOffers(
       until: utcDay(offer.row.expires_at),
       url: offer.url,
       origin,
+      sandbox,
     });
     const idempotencyKey = crypto.createHash("sha256").update(`early_payment_offer\n${offer.row.id}`, "utf8").digest("hex");
     const result = await send({ to: email as string, ...message, idempotencyKey });
@@ -379,6 +390,8 @@ export async function makeEarlyPaymentOffers(
         decisionMode: decided.mode,
         agreedWithReference: decided.agreedWithReference,
         ...(bounded.limited ? { pctLimited: { chosen: value.pct, sent: bounded.pct } } : {}),
+        // Sent to the member who turned the offers on, in place of the sample supplier (sandbox offers S1).
+        ...(sandbox ? { sandbox: true } : {}),
       },
     });
     lines.push({ domain: "ap", message: `Offered ${supplierName} early payment by email: ${bounded.pct.toFixed(2)}% off, ${offer.row.offered_amount} USDC today` });
@@ -420,6 +433,7 @@ async function answerCounter(input: {
   now: number;
   origin: string;
   send: (message: EmailMessage) => Promise<SendResult>;
+  sandbox: boolean;
 }): Promise<{ paid: number; line: CycleLogLine | null }> {
   const { orgId, orgName, row, bill, supplier, now } = input;
   const counterPct = Number(row.counter_pct);
@@ -510,14 +524,28 @@ async function answerCounter(input: {
       token: "USDC",
       dueOn: utcDay(bill.due_date),
       origin: input.origin,
+      sandbox: input.sandbox,
     });
     const idempotencyKey = crypto.createHash("sha256").update(`early_payment_counter\n${row.id}`, "utf8").digest("hex");
     const sent = await input.send({ to: supplier.notice_email, ...message, idempotencyKey });
     if (!sent.sent) console.error("early-payment counter answer not emailed", row.id, sent.reason);
   }
-  if (accepted) runCycleSoon({ orgId, sandbox: false, kind: "early_payment_accepted" });
+  if (accepted) runCycleSoon({ orgId, sandbox: input.sandbox, kind: "early_payment_accepted" });
   return {
     paid: accepted ? Number(answer.offered_amount) : 0,
     line: { domain: "ap", message: accepted ? `Accepted ${supplierName}'s counter: ${counterPct.toFixed(2)}% off, paid today` : `Declined ${supplierName}'s counter of ${counterPct.toFixed(2)}%` },
   };
+}
+
+/**
+ * Where a sandbox's offers and answers go (sandbox offers S1): the member who turned the offers on, so they answer as the
+ * supplier; null when that member has left or the members cannot be read, and then the sandbox makes no offer.
+ */
+async function sandboxRecipient(orgId: string, onBy: string | null): Promise<string | null> {
+  if (!onBy) return null;
+  try {
+    return (await listMembers(orgId)).find((member) => member.userId === onBy)?.email ?? null;
+  } catch {
+    return null;
+  }
 }

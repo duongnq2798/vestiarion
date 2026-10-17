@@ -83,7 +83,7 @@ export interface OffersView {
    * Whether the agent makes these offers itself, and the most it asks (agent early-payment offers AO1); null before
    * migration 0126.
    */
-  agent: { on: boolean; maxPct: number | null } | null;
+  agent: { on: boolean; maxPct: number | null; /** A sandbox: its offers go to the member who turned them on (sandbox offers S1). */ sandbox?: boolean } | null;
   candidates: OfferCandidate[];
   /** The last decided offers, newest first. */
   recent: Array<{ id: string; counterpartyName: string; pct: number; status: "accepted" | "declined" | "withdrawn"; decidedAt: string; /** What the supplier proposed instead, when it countered (offer counters N7). */ counterPct?: number | null }>;

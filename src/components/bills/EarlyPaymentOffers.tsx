@@ -120,9 +120,16 @@ function AgentOffers({ orgSlug, agent, canOffer }: { orgSlug: string; agent: Non
   const [maxPct, setMaxPct] = useState((agent.maxPct ?? 2).toFixed(2));
   const on = agent.on;
   const ceiling = (agent.maxPct ?? 0).toFixed(2);
-  const words = on
-    ? `The agent makes these offers itself: it picks the bills and the discount, asking at most ${ceiling}%, only from cash it can pay today, and emails each supplier the link at the address payment notices go to.`
-    : "Let the agent make these offers itself: it picks the bills and the discount, up to the most you set, and emails each supplier the link.";
+  // A sandbox's suppliers are sample data: its offers go to whoever turned them on, who answers as the supplier (S1).
+  const sandbox = agent.sandbox
+    ? on
+      ? " In this sandbox, they go to the email of whoever turned them on, who answers as the supplier; payments are simulated."
+      : " In this sandbox, they go to your own email, so you answer as the supplier; payments are simulated."
+    : "";
+  const words =
+    (on
+      ? `The agent makes these offers itself: it picks the bills and the discount, asking at most ${ceiling}%, only from cash it can pay today, and emails each supplier the link at the address payment notices go to.`
+      : "Let the agent make these offers itself: it picks the bills and the discount, up to the most you set, and emails each supplier the link.") + sandbox;
   if (!canOffer) return <p className="px-4 py-3 text-xs text-ink-2 sm:px-5">{on ? words : "The agent does not make these offers itself. An owner or admin turns it on."}</p>;
   return (
     <form {...formProps} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:px-5">
