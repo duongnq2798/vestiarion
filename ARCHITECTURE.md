@@ -2114,7 +2114,10 @@ or admin taps **Add** in their own chat, through the same `createInvoice` the
 invoice form uses, with `via: "telegram"`. The bot never approves or pays.
 The cycle's `telegram` stage (`src/lib/telegram/notify.ts`) tells each
 linked chat the agent's decisions after its cursor (`telegram_links.notified_seq`),
-read by the same `readAgentActivity` as the console's toasts, and then moves
+read by the same `readAgentActivity` as the console's toasts (which tells, beside
+the agent's decisions, the early payment it negotiates: `EARLY_PAYMENT_ACTIONS`
+in `src/lib/agent-activity.ts`, with a supplier's answers the system records,
+`SUPPLIER_ANSWERS`, and never a person's own offer), and then moves
 the cursor past everything read: a failed send keeps it for the next cycle,
 a 403 disconnects the chat, and a message Telegram refuses to parse is sent
 once as plain text and then passed.

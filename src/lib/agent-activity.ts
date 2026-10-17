@@ -10,6 +10,19 @@ import { awaitsVerdict, heldForVerdict, ruleInBrief } from "./next-step";
 import { networkProfile, type Network } from "./network";
 import { txUrl } from "./payee-chains";
 
+/** The early-payment entries told as they happen (docs/superpowers/specs/2026-10-17-offer-activity-design.md A1). */
+export const EARLY_PAYMENT_ACTIONS = [
+  "early_payment_offered",
+  "early_payment_offer_accepted",
+  "early_payment_offer_countered",
+  "early_payment_counter_accepted",
+  "early_payment_counter_declined",
+  "early_payment_offer_withdrawn",
+] as const;
+
+/** A supplier's answers to an early-payment offer: recorded by the system, told beside the agent's own entries (A2). */
+export const SUPPLIER_ANSWERS = ["early_payment_offer_accepted", "early_payment_offer_countered"] as const;
+
 /** The agent's ledger actions a person is told about as they happen. A treasury hold, every cycle, is not news. */
 export const ACTIVITY_ACTIONS = [
   "ap_pay",
@@ -23,6 +36,9 @@ export const ACTIVITY_ACTIONS = [
   "ar_reminder_sent",
   // A payment that has not confirmed, told by the transfer watch (stuck-transfer alert D6).
   "payment_stuck",
+  // Early payment the agent negotiates (offer activity A1): its offers, a supplier's answer or counter, its answer to that,
+  // and an offer it withdrew. A person's own offer, and a bill the agent chose not to offer, are not news.
+  ...EARLY_PAYMENT_ACTIONS,
 ] as const;
 
 /** The people's actions on an invoice that give the agent something to decide: how long after one it decided is told. */
@@ -239,6 +255,7 @@ function itemOf(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem, "t
   const id = text(entry.detail.invoiceId);
   const invoice = id ? refs.invoices.get(id) : undefined;
   if (!id || !invoice) return null;
+  if ((EARLY_PAYMENT_ACTIONS as readonly string[]).includes(entry.action)) return earlyPaymentItem(entry, id, invoice);
   const item = invoiceItem(entry, refs, id, invoice);
   // A stopped payable is what a person decides: a chat's card names it (Slack design S8). One held for a person's
   // verdict is settled by giving one, in Vestiarion, so a chat draws no card for it (shadow mode S4).
@@ -273,6 +290,50 @@ function stuckCircleLine(detail: Record<string, unknown>): string {
   if (detail.circleAsked !== true) return "Circle could not be asked just now.";
   const state = text(detail.providerState);
   return state === "STUCK" ? "Circle shows it stuck." : `Circle shows it as ${state ?? "pending"}.`;
+}
+
+const pct = (value: unknown) => `${(number(value) ?? 0).toFixed(2)}%`;
+
+/**
+ * An early-payment step, in words (docs/superpowers/specs/2026-10-17-offer-activity-design.md A1-A3): the agent's offer
+ * and who decided it, a supplier's answer or counter, the agent's answer to a counter, and an offer the agent withdrew.
+ * A person's own offer or withdrawal is not told. None is a decision for a person, so none is stopped, and no chat draws
+ * a card for it.
+ */
+function earlyPaymentItem(
+  entry: ActivityEntry,
+  id: string,
+  invoice: ActivityRefs["invoices"] extends ReadonlyMap<string, infer V> ? V : never
+): Omit<ActivityItem, "txUrl" | "network"> | null {
+  const detail = entry.detail;
+  const currency = text(detail.currency) ?? invoice.currency;
+  const amount = activityAmount(invoice.amount, invoice.currency);
+  const offered = number(detail.offeredAmount);
+  const today = offered !== null ? `${activityAmount(offered, currency)} today instead of ${amount}` : null;
+  const how = { path: invoiceHref(id, "trail"), pathLabel: "How it decided" };
+  const byAgent = text(detail.via) === "agent";
+  // Code answered without a model (offer counters N3): say so, rather than name a model that was never asked.
+  const decided = text(detail.decisionMode) === "code" ? joined("Code declined it, without asking a model:", firstSentence(detail)) : deciderLine(detail);
+  switch (entry.action) {
+    case "early_payment_offered":
+      if (!byAgent) return null;
+      return { seq: entry.seq, text: `Offered ${invoice.name} payment today for ${pct(detail.discountPct)} off, by email: ${today ?? amount}.`, detail: deciderLine(detail), tone: "done", ...how, txHash: null };
+    case "early_payment_offer_accepted":
+      return { seq: entry.seq, text: `${invoice.name} accepted ${pct(detail.discountPct)} off for payment today: ${today ?? amount}.`, detail: null, tone: "done", ...how, txHash: null };
+    case "early_payment_offer_countered":
+      return { seq: entry.seq, text: `${invoice.name} proposed ${pct(detail.counterPct)} off instead of ${pct(detail.discountPct)}; the agent answers it now.`, detail: null, tone: "pending", ...how, txHash: null };
+    case "early_payment_counter_accepted":
+      return { seq: entry.seq, text: `Accepted ${invoice.name}'s ${pct(detail.counterPct)}: paying ${today ?? amount}.`, detail: decided, tone: "done", ...how, txHash: null };
+    case "early_payment_counter_declined":
+      return { seq: entry.seq, text: `Kept the original terms with ${invoice.name}: its ${pct(detail.counterPct)} declined, so it is paid on its due date.`, detail: decided, tone: "done", ...how, txHash: null };
+    case "early_payment_offer_withdrawn": {
+      if (!byAgent) return null;
+      const why = text(detail.reason) === "cash" ? "the cash no longer covers it" : "its email never went";
+      return { seq: entry.seq, text: `Withdrew the early-payment offer to ${invoice.name}: ${why}.`, detail: null, tone: "done", ...how, txHash: null };
+    }
+    default:
+      return null;
+  }
 }
 
 /** An invoice's decision, in words. */
