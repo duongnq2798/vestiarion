@@ -144,7 +144,7 @@ reads the whole book each time it runs:
 
 | Area | What the agent does |
 | --- | --- |
-| **Payables** | Three-way match (purchase order, goods received, invoice), duplicate and risk checks, then **pay**, **schedule**, **hold**, **request info** or **flag as fraud**, with its reasoning attached |
+| **Payables** | Three-way match (purchase order, goods received, invoice), duplicate and risk checks, then **pay**, **schedule**, **hold**, **request info** or **flag as fraud**, with its reasoning attached; checks scheduled bills against the cash ahead, chooses which bills get the cash first when it cannot cover them all, and, when turned on, asks a supplier for more time on a bill it cannot pay |
 | **Contractors** | Releases a milestone once its evidence is verified, such as a merged GitHub pull request; on Arc testnet the milestone's USDC can sit in an escrow contract until then |
 | **Compliance** | Re-screens every counterparty each cycle (OpenSanctions where configured) and tiers its payment limit down on a hit, reversibly |
 | **Receivables** | A signed deal becomes a schedule of receivables released on their days; a client pays through a link; the agent matches the transfer to what was owed, suggests how to apply a payment that covers several invoices, part of one or falls a fee short, and, when turned on, sends reminders for what is still owed within bounds code sets, after weighing what the customer said, paid and was promised, its own rules and the HubSpot deal it was sold through, asking a person first when the step is theirs; and, when turned on, while bills are held for want of cash, offers customers a small discount to pay an open invoice within 5 days |
@@ -300,7 +300,10 @@ Made by the agent in production:
   then the missing 0.88 USDC redeemed for a bill due today,
   [`0x4b5186db…c7f2`](https://explorer.testnet.arc.io/tx/0x4b5186db4820df87532869e0a9797df5a79a7e9e3a5feb1e3edb09500160c7f2),
   and the bill paid 34 seconds after it was added,
-  [`0x365da374…9d8b`](https://explorer.testnet.arc.io/tx/0x365da374f902fcb995643713962554b41e6114b62bb40695874aa519dd829d8b).
+  [`0x365da374…9d8b`](https://explorer.testnet.arc.io/tx/0x365da374f902fcb995643713962554b41e6114b62bb40695874aa519dd829d8b);
+- with the cash short of two bills due the same day, the 50 USDC of database backups the agent chose to pay first,
+  over a 30 USDC one-off migration the written policy put first,
+  [`0x1adfad84…3a7b`](https://explorer.testnet.arc.io/tx/0x1adfad848f00fdadf7021ba1f1ac30505146c40c220eac8cbca36cfc479e3a7b).
 
 Each feature's design under [`docs/superpowers/specs/`](docs/superpowers/specs) ends with its rollout record: what was
 run in production, with its ledger entries and transactions.
@@ -337,6 +340,15 @@ run in production, with its ledger entries and transactions.
   admin sends the supplier a one-time link, or turns on the agent's own offers: it picks the bills and the discount up to
   a ceiling, only from cash it can pay today, and emails the supplier the link. An accepted offer is paid at the
   discounted amount the same day.
+- **When the cash is short** — the agent checks each scheduled bill against the cash ahead and holds one it will not
+  cover days early. When the bills due within 14 days come to more than the cash, the model orders them by what costs
+  the business most to pay late, saying why for each, and code pays in that order only while the cash lasts. When
+  turned on, it asks a supplier for more time on a bill it cannot pay, answers a supplier who proposes fewer days, and
+  takes the request back once the cash is there; and it offers customers a small discount to pay sooner. It tells the
+  owner how much is needed and by when, in the console, Telegram and Slack.
+- **Weekly brief** — on Mondays, owners, admins and approvers get the week by email: what was paid and received, the
+  decisions, what waits for them, what leaves next, and whether the cash covers the next 30 days. In shadow mode it
+  reports the verdicts instead, and how often the business agreed with the agent.
 - **Bank payouts** — a vendor's bills paid to its bank account in Mexico, in pesos over SPEI through BlindPay, from the
   workspace's USDC; a person sees what the vendor receives and approves every one (BlindPay's development instance).
 - **Shadow mode** — try the agent on real bills, paid in the business's own way, before it pays anything itself.

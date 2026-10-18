@@ -2384,6 +2384,30 @@ amount on a later day (docs/superpowers/specs/2026-10-17-term-requests-design.md
   returns the bill to `pending`, and marks the request accepted. The ledger records `term_request_accepted` or
   `term_request_declined` (`via: "terms_link"`), and `runCycleSoon({ kind: "term_request_accepted" })` lets the agent
   decide the bill again against the new date. A request never changes the amount, the payee or where it is paid.
+- **Fewer days** (migration 0130; `counterTermRequest`, `counter_term_request`). Beside Agree and Decline, the supplier
+  may propose fewer days than asked: the request becomes `countered` with `counter_days`, the ledger records
+  `term_request_countered`, and `runCycleSoon({ kind: "term_request_countered" })` starts a cycle. The `term_requests`
+  stage answers up to `TERM_COUNTERS_PER_RUN` (10) counters first. Code declines one whose bill is being paid; otherwise
+  the model answers `accept | decline` from the bill, the cash after what falls due on or before it, what customers owe
+  and the coverage below, beside the written policy (`referenceCounterDecision`: accept only when the bill is covered by
+  the new date). `answer_term_counter` records the answer, an accepted counter moving `due_date` by those days; the
+  supplier is emailed (`termCounterAnswerEmail`) under the answer's idempotency key, and the ledger records
+  `term_counter_accepted` or `term_counter_declined`. Before 0130 runs, the stage reads the requests without
+  `counter_days` and has no counter to answer.
+- **Coverage, from code** (`coveredAfterDays`, `coveredWithin`, `src/lib/terms/rules.ts`). For a new request and for a
+  counter, the model is given whether the bill is covered on its due date and, if not, how many days after it the cash
+  and what customers owe first cover it, rather than adding them up itself.
+- **Withdrawn when no longer needed** (`withdrawTermRequest`). Each cycle, with the setting on or off, an open request
+  whose bill is being paid (paid, or a payment intent started) or is no longer held for want of cash is withdrawn, unless
+  its email is still going. The supplier is told (`termRequestWithdrawnEmail`), and the ledger records
+  `term_request_withdrawn` with `reason: "paid"` or `"not_needed"` and `supplierTold`.
+- **The supplier's history.** The requests a supplier got leave out one withdrawn before its email went (no
+  `term_request_sent`), which also no longer stops its bill being asked about again. Only a request the supplier itself
+  declined (`declined`, no `counter_days`) starts the 30-day pause (`TERM_DECLINE_COOL_DAYS`); a counter the agent
+  declined does not. The model is told how many requests were made, accepted, declined by the supplier, countered and
+  declined by the agent, and withdrawn by the agent.
+- **Told** in the activity toasts, Telegram and Slack: each request, answer, counter and withdrawal
+  (`TERM_REQUEST_ACTIONS`, `src/lib/agent-activity.ts`).
 
 ## Which bill first when the cash cannot cover them all
 
