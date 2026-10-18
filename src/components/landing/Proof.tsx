@@ -19,6 +19,7 @@ import { CountUp } from "./CountUp";
 import { FEATURED_PAYMENT, featuredContractUrl, featuredTxUrl } from "./featured-proof";
 import { LatestDecisionCard } from "./LatestDecision";
 import type { LandingNumbers } from "./LiveProof";
+import { landingPrefetch } from "./prefetch";
 import { latestOwnPaymentUrl } from "./provenance";
 import { RecentDecisionList } from "./RecentDecisions";
 import { SignatureCheck } from "./SignatureCheck";
@@ -117,6 +118,7 @@ export function Proof({ numbers, facts }: { numbers: Promise<LandingNumbers>; fa
                 ) : (
                   <Link
                     href={item.href}
+                    prefetch={landingPrefetch(item.href)}
                     className="inline-flex min-h-11 items-center text-sm font-medium text-ink-2 underline-offset-4 hover:text-agent hover:underline"
                   >
                     {item.label}

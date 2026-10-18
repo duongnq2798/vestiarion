@@ -9,6 +9,7 @@ import { BrandMark, isWordmark, type Brand } from "@/components/vx/BrandMarks";
 import { GitHubMark } from "@/components/vx/SiteChrome";
 import { videoFor } from "@/lib/docs/videos";
 import { ARC_URL, CIRCLE_URL } from "@/lib/site-links";
+import { landingPrefetch } from "./prefetch";
 
 const REPOSITORY = "https://github.com/duongnq2798/vestiarion";
 
@@ -267,13 +268,14 @@ function FeaturedCard({ tool }: { tool: Featured }) {
         </Badge>
       )}
       <p className="mt-auto flex flex-wrap items-center gap-x-6 pt-3 text-sm">
-        <Link href={tool.href} className="inline-flex min-h-11 items-center gap-1 font-semibold text-agent underline-offset-4 hover:underline">
+        <Link href={tool.href} prefetch={landingPrefetch(tool.href)} className="inline-flex min-h-11 items-center gap-1 font-semibold text-agent underline-offset-4 hover:underline">
           Setup guide<span className="sr-only">{` for ${tool.name}`}</span>
           <ArrowRight aria-hidden className="size-3.5" />
         </Link>
         {tool.watch && (
           <Link
             href={tool.watch.href}
+            prefetch={landingPrefetch(tool.watch.href)}
             className="inline-flex min-h-11 items-center gap-1.5 font-medium text-ink-2 underline-offset-4 hover:text-agent hover:underline"
           >
             <Play aria-hidden className="size-3.5" />
@@ -385,6 +387,7 @@ export function Integrations() {
               <li key={tool.name} className="min-w-0">
                 <Link
                   href={tool.href}
+                  prefetch={landingPrefetch(tool.href)}
                   className="group flex h-full flex-col px-4 py-3.5 transition-colors duration-150 ease-standard md:rounded-xl md:border md:border-line md:bg-surface md:p-4 md:hover:border-line-strong"
                 >
                   <span className="flex min-h-7 items-center justify-between gap-3">
@@ -455,6 +458,7 @@ export function Integrations() {
                       <Link
                         key={link.href}
                         href={link.href}
+                        prefetch={landingPrefetch(link.href)}
                         className="inline-flex min-h-6 items-center font-semibold text-agent underline-offset-4 hover:underline"
                         {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
                       >
@@ -472,6 +476,7 @@ export function Integrations() {
         <div className="mt-8 flex flex-col gap-x-10 gap-y-3 border-t border-line pt-5 lg:flex-row lg:items-center lg:justify-between">
           <Link
             href={ALL_INTEGRATIONS}
+            prefetch={false}
             className="inline-flex min-h-11 shrink-0 items-center gap-1 self-start whitespace-nowrap text-[0.9375rem] font-semibold text-agent underline-offset-4 hover:underline lg:self-auto"
           >
             Explore all integrations

@@ -38,6 +38,7 @@ export function InvoiceCapture() {
       </Button>
       <Link
         href={INVOICE_CAPTURE_GUIDE}
+        prefetch={false}
         className="inline-flex min-h-6 items-center gap-1 text-[0.8125rem] font-medium text-agent underline-offset-2 hover:underline pointer-fine:hidden"
       >
         Learn about Invoice Capture

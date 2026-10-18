@@ -298,3 +298,28 @@
     display: none;
   }
 }
+
+/*
+ * The landing's tab marker, "Who it's for" and the developer snippets (`useTabGlide`, landing motion M4): the chosen
+ * tab draws it, as the server does, and it starts from where the last tab's stood, its edges in `--glide-*`. It moves
+ * by its edges rather than by scale, so its border and corners stay true on the way, and under the other tabs' names
+ * rather than over them. Under reduced motion the global rule cuts it, and the marker moves at once.
+ */
+[data-tab-indicator][data-glide] {
+  animation: tab-glide 240ms var(--ease-standard);
+}
+
+/* Below the names, inside the list's own layer; a browser without `:has()` drops both and keeps the marker on top. */
+[role="tablist"]:has([data-tab-indicator][data-glide]) {
+  isolation: isolate;
+}
+
+[role="tablist"]:has([data-tab-indicator][data-glide]) [data-tab-indicator] {
+  z-index: -1;
+}
+
+@keyframes tab-glide {
+  from {
+    inset: var(--glide-top, 0) var(--glide-right, 0) var(--glide-bottom, 0) var(--glide-left, 0);
+  }
+}

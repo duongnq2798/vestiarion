@@ -99,6 +99,60 @@ receipt, which makes the motion mean something.
   claims section, and the four claims sit two by two, each card with its receipt, instead of one per screen.
 - **The footer's wordmark**: VESTIARION set very large across the footer, as the page's last image.
 
+## M4. Foundation and budget
+
+Added 2026-10-19, the first part of making the decision itself move on the landing (the bill checks itself, a rule
+holds it, the proof checks itself). Before any of that moves, the page gets one set of rules, a fix for content that
+stayed hidden, and the bytes to pay for it.
+
+**Rules every moving piece keeps.**
+- It plays once, when it is first seen, and is done within 2.5 s. Nothing on / repeats forever at rest; a loading
+  placeholder's shimmer, shown only until its figures arrive, is the one exception.
+- Nothing is hidden in the server's HTML: no inline `opacity: 0`, nothing drawn only by the script. The hidden state is
+  set by the script, on what starts below the fold, so a page whose script never runs shows everything.
+- The H1, the lede and the calls to action never move.
+- Under reduce, a sequence still shows, in the same order, by fade and colour only: a transition (which the M0 rule
+  keeps for opacity and colours), or a keyframe animation inside `data-calm-motion`.
+- An animation driven by scrolling (`animation-timeline`) sits only inside `@media (prefers-reduced-motion:
+  no-preference)`: the M0 rule shortens keyframe animations, which does not stop a scroll-driven one.
+
+**Content jumped past.** `Reveal` watched for its element inside the viewport only, so a block the reader jumped past
+(the header's link to Proof, the End key, a fast scroll) was never seen and stayed at opacity 0 until scrolled back to:
+measured at 1440 px, Safety's and Integrations' blocks after End. Its observer's margin now reaches 100,000 px above
+the viewport, so a block above it counts as seen, and one first seen there is shown at once, as the server drew it,
+with nothing left to fade out of sight. `CountUp` does the same, so a figure jumped past is never left at zero.
+
+**Sequences.** `<Reveal sequence>` leaves the element where it is and brings in its children marked `seq` one by one,
+in the order they are written: each from opacity 0 and 8 px lower, over 420 ms, `--stagger` after the one before
+(60 ms, `stagger` to change it; `MOTION.stagger` in `tokens.ts` mirrors it). Under reduce the items fade in where they
+stand, in the same order. Nothing on the landing uses it yet; the pieces that follow do, and /design shows it.
+
+**Still at rest.** The hero's two tints no longer drift. The drift moved them 1 to 2 % under a heavy blur, too little
+to see, and kept two blurred layers of about 30 rem painting for as long as the page was open. After it, no animation
+runs on / once the page has loaded (`document.getAnimations()`: 2 running, both infinite, before; none after).
+
+**The tab marker.** The shared `Tabs` glide their marker through Motion's layout animation, which needs
+`MotionProvider`; the landing never mounted it, so the marker under "Who it's for" and the developer snippets jumped.
+Mounting it costs Motion's layout features: bundled and minified, Motion as `Tabs` uses it today is 7.9 KB gzip, and
+with `LazyMotion`, `MotionConfig` and `domMax` 42.8 KB, 34.9 KB gzip (31.0 KB brotli) more, over the 30 KB this budget
+allows for one marker. So the landing keeps the shared `Tabs` as they are and glides the marker in CSS
+(`useTabGlide`, `[data-glide]` in landing-hero.css): the chosen tab draws the marker as the server does, the script
+tells it where the last one stood, and it moves there by its edges over 240 ms (`--ease-standard`), under the other
+tabs' names. Under reduce the animation is cut and the marker moves at once, the reduced state the developers spec
+names.
+
+**Prefetch.** Next prefetches each link as it scrolls into view. On production (2026-10-19, 1440 × 900, a steady scroll
+to the bottom, cold cache), a full scroll made 49 prefetches, 626 KB of 1.10 MB, and 570 KB of it was the docs and
+guides; at 390 px, 625 KB and 569 KB. The landing's links into /docs, in its sections, header and footer, now set
+`prefetch={false}` (`landingPrefetch`), so those pages load when opened; the call to action, sign-in, /how-it-decides
+and the other pages keep theirs (56 KB). The menu's links prefetch only once it is opened.
+
+**The open numbers.** A counted figure changed width as it counted, shifting what is beside it (a cumulative layout
+shift of 0.0001 at 1440 px and 0.0005 at 520 px). The final figure, unseen, now holds the width the count runs in, the
+digits are even-width, and the count starts where the figure starts: 0 at both widths. A figure under 10 fades in
+(300 ms) instead of counting, since counting to 4 is four jumps, and under reduce every figure fades in where it
+stands, as M3 says.
+
 ## Order
 
 M1 with M0 first (the reference's most visible technique, and the policy every later piece relies on), then M2, then
@@ -110,3 +164,10 @@ Server-rendered markup for each piece: every step's words present, the diagram h
 step dimmed in the server's HTML; a pure step-state helper (idle, active, done) tested directly. The motion policy is
 read from `globals.css`: the reduce block lists the allowed transition properties and does not zero the duration.
 Frames checked in a real browser with motion on and with reduce on.
+
+M4 adds (`tests/motion-policy.test.ts`): every section / renders, rendered as the server does, uses no class whose
+animation repeats forever, read from the stylesheets, except the loading placeholder's; and `animation-timeline`
+appears only inside `prefers-reduced-motion: no-preference`. `tests/ui-motion.test.tsx` and
+`tests/landing-count-up.test.tsx` run `Reveal` and `CountUp` in a DOM: hidden below the fold, shown when seen, shown at
+once when jumped past, a sequence numbered in order, and nothing hidden in the server's HTML.
+`tests/landing-prefetch.test.tsx` holds every docs link on the landing to `prefetch={false}`.

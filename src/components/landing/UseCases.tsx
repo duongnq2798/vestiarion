@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
+import { landingPrefetch } from "./prefetch";
+import { useTabGlide } from "./tab-glide";
 
 /**
  * Who it is for, one kind of team at a time (docs/superpowers/specs/2026-10-11-landing-clarity-design.md U1): a bill
@@ -214,6 +216,7 @@ function Decision({ decision }: { decision: UseCase["decision"] }) {
 }
 
 export function UseCases() {
+  const { root: glideRoot, onValueChange: glideFrom } = useTabGlide();
   return (
     <section id="who-its-for" aria-labelledby="who-its-for-title" className="scroll-mt-16 border-b border-line">
       <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
@@ -227,7 +230,7 @@ export function UseCases() {
           </p>
         </div>
 
-        <Tabs defaultValue={USE_CASES[0].id} className="mt-8 gap-6">
+        <Tabs ref={glideRoot} defaultValue={USE_CASES[0].id} onValueChange={glideFrom} className="mt-8 gap-6">
           <TabsList aria-label="Kinds of team" className="grid h-auto grid-cols-2 gap-1 sm:flex sm:h-10">
             {USE_CASES.map((useCase) => (
               <TabsTrigger key={useCase.id} value={useCase.id} className="h-9 px-2 sm:h-auto sm:px-3">
@@ -252,6 +255,7 @@ export function UseCases() {
                   </ol>
                   <Link
                     href={useCase.guide.href}
+                    prefetch={landingPrefetch(useCase.guide.href)}
                     className="mt-5 inline-flex min-h-6 items-center gap-1 text-[0.9375rem] font-medium text-agent underline-offset-4 hover:underline"
                   >
                     {useCase.guide.label}
@@ -267,7 +271,7 @@ export function UseCases() {
         <p className="mt-10 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line pt-5 text-sm text-ink-2">
           <span className="font-medium text-ink">It also handles</span>
           {ALSO.map((item) => (
-            <Link key={item.href} href={item.href} className="inline-flex min-h-6 items-center text-agent underline-offset-4 hover:underline">
+            <Link key={item.href} href={item.href} prefetch={landingPrefetch(item.href)} className="inline-flex min-h-6 items-center text-agent underline-offset-4 hover:underline">
               {item.label}
             </Link>
           ))}

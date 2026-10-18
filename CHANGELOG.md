@@ -74,7 +74,18 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   one list with thin dividers and a plus that turns to a minus, one open at a time; the heading stays in view beside them
   on a wide screen, with the docs and a way to reach the founder on GitHub.
 
+- **The landing page is lighter, and still once it has loaded.** Its links to the docs and guides now load their page
+  when you open one, not in the background as each scrolls past: those background loads were 570 KB of the 626 KB a
+  full scroll of the page fetched ahead. The call to action, sign-in and how the agent decides still load ahead. The
+  hero's two background tints no longer drift, so nothing on the page moves at rest, and the marker under "Who it's
+  for" and the developer tabs now glides to the tab you choose, or moves at once with reduced motion.
+
 ### Fixed
+
+- **Nothing on the landing page stays hidden after a jump.** A section you jumped past, with a link to Proof, the End
+  key or a fast scroll, stayed invisible until you scrolled back up to it; it now shows at once. The open numbers no
+  longer nudge the words beside them while they count, a figure under 10 fades in instead of counting, and with
+  reduced motion every figure fades in where it stands.
 
 - **Docs tables keep names and codes whole.** A table in the docs no longer squeezes a column until a name such as
   QuickBooks or a code such as `invalid_request` breaks in the middle: a cell breaks only between words, its code stays

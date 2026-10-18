@@ -668,6 +668,13 @@ mainnet plan).
   its first line started; `ArchLights` climbs the arch's stones on that clock and rings the keystone in the outcome.
   The open numbers count up once when first seen (`CountUp`). "For developers" no longer types its snippets: they are
   static, so nothing there moves but the tab marker.
+  - The landing's budget (M4): each piece plays once and is done within 2.5 s, hides nothing in the server's HTML, and
+    nothing on / repeats forever at rest (`tests/motion-policy.test.ts` renders every section to check). `Reveal`
+    counts content the reader jumped past as seen and shows it at once, and `<Reveal sequence>` brings in children
+    marked `seq` one by one. The landing's tab marker glides in CSS (`useTabGlide`,
+    `src/components/landing/tab-glide.ts`) rather than through `MotionProvider`, which would add about 31 KB for it.
+    Its links into the docs are not prefetched (`landingPrefetch`). A counted figure holds its final width, and one
+    under 10 fades in.
 
 **Every module on its workspace's network** (`docs/superpowers/specs/2026-10-05-network-threading-design.md`,
 phase 1b).

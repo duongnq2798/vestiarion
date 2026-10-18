@@ -267,7 +267,8 @@ spending-limit contract:
 2. The agent decided to pay a 0.10 USDC invoice. Code held it: a first payment to a new address
    (`counterparty.new_payee`).
 3. A second member, an admin, approved and paid it. The agent's wallet called the contract, which moved 0.10 USDC
-   from the passkey treasury to the vendor and emitted `Paid`; fee 0.0035 USDC, settled in 3 s:
+   from the passkey treasury to the vendor and emitted `Paid`; fee 0.0035 USDC, confirmed in under a second, in block
+   24,710,870 at 09:43:13 UTC:
    [`0xcecef38e…dee6`](https://explorer.arc.io/tx/0xcecef38e3f751bc118f8f00cee5bb5344679e84f89123d679b986b47d7f1dee6).
 
 Contract: [`0xd90cA89Fc318d0330Bb14eaeF78B72C3CA7E7fB6`](https://explorer.arc.io/address/0xd90cA89Fc318d0330Bb14eaeF78B72C3CA7E7fB6).
