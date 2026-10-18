@@ -12,13 +12,15 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+## [0.1.0-beta.10] - 2026-10-18
+
 ### Added
 
 - **Start the live slice from shadow mode.** Once a business trusts the agent in shadow mode, an owner ticks the vendors
   to pay in real USDC under the report's **Before a live slice** and opens a workspace on Arc mainnet with them: name,
-  payment limit, notice email and purchase orders carried, a vendor's own address waiting to be confirmed there, a
-  mirror address never carried. It carries no bill and moves no money; the new workspace goes live from its Settings,
-  and the report's last step links it and ticks once it is live. Signed as `live_slice_started`. No migration.
+  payment limit, notice email and purchase orders carried, a vendor's own confirmed Arc address waiting to be confirmed
+  again there, a mirror address or one on another chain never carried. It carries no bill and moves no money; the new
+  workspace goes live from its Settings, and the report's last step names it and ticks once it is live. Signed as `live_slice_started`. No migration.
   [Guide](https://www.vestiarion.xyz/docs/guides/report#start-the-live-slice).
 
 - **Change which bills the cash goes to first.** When the cash cannot cover every bill due soon, the **Payment plan** tab
@@ -893,7 +895,8 @@ public beta, on Arc testnet and Arc mainnet. Release notes:
   company.
 - HubSpot is read-only, polled every 15 minutes, and its app is not yet verified by HubSpot.
 
-[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.9...HEAD
+[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.10...HEAD
+[0.1.0-beta.10]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.10
 [0.1.0-beta.9]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.9
 [0.1.0-beta.8]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.8
 [0.1.0-beta.7]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.7
