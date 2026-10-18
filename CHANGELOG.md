@@ -12,6 +12,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+### Fixed
+
+- **Every live workspace gets its scheduled cycle again.** The cycles every six hours ran one workspace after another,
+  and with twelve live workspaces they outran the five minutes they are given: the last ones in name order got no
+  scheduled cycle at all. Four now run at once, and a cycle that could not finish in time is left to the next run
+  instead of being cut off. No migration.
+
 ## [0.1.0-beta.9] - 2026-10-18
 
 ### Added

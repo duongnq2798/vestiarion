@@ -61,8 +61,8 @@ describe("runLiveOrganizations", () => {
       { slug: "a-corp", ok: true, result: "ok" },
       { slug: "b-corp", ok: false, error: "boom" },
     ]);
-    // Both ran, each entered its own scope: `run` saw each organization's own id.
-    expect(seen).toEqual([A, B]);
+    // Both ran, each entered its own scope: `run` saw each organization's own id (in either order, as they overlap).
+    expect([...seen].sort()).toEqual([A, B]);
     const orgsQuery = fake.requests.find((request) => request.path === "/rest/v1/orgs" && request.params.has("mode"));
     expect(orgsQuery?.params.get("mode")).toBe("eq.live");
     expect(console.error).toHaveBeenCalledWith("cycle failed for", "b-corp", expect.any(Error));
@@ -157,6 +157,73 @@ describe("runLiveOrganizations", () => {
     ]);
     expect(error).not.toHaveBeenCalled();
   });
+
+  /** Three live organizations, plus the scope-entry read for each by id. */
+  function threeOrgsDatabase(request: RecordedRequest): FakeReply {
+    if (request.path !== "/rest/v1/orgs") return { body: [] };
+    if (request.params.get("mode") === "eq.live") {
+      return { body: [{ id: A, slug: "a-corp" }, { id: B, slug: "b-corp" }, { id: C, slug: "c-corp" }] };
+    }
+    const id = request.params.get("id")?.replace(/^eq\./, "");
+    if (id === A) return { body: orgRow(A, "a-corp") };
+    if (id === B) return { body: orgRow(B, "b-corp") };
+    if (id === C) return { body: orgRow(C, "c-corp") };
+    return { status: 406, body: { code: "PGRST116", message: "JSON object requested, multiple (or no) rows returned" } };
+  }
+
+  it("runs workspaces at once, no more than the concurrency, each in its own scope, and keeps the results in slug order", async () => {
+    // Twelve live workspaces one after another outran the tick's 300 seconds on Oct 17; now they overlap.
+    const fake = fakeSupabase(threeOrgsDatabase);
+    let running = 0;
+    let most = 0;
+    const seen: string[] = [];
+    const run = async () => {
+      running += 1;
+      most = Math.max(most, running);
+      const before = currentOrgId();
+      await new Promise((resolve) => setTimeout(resolve, before === A ? 30 : 5));
+      // Still its own scope after the other workspaces ran meanwhile.
+      expect(currentOrgId()).toBe(before);
+      seen.push(before);
+      running -= 1;
+      return before;
+    };
+
+    const results = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => runLiveOrganizations(run, { concurrency: 2 }));
+
+    expect(results).toEqual([
+      { slug: "a-corp", ok: true, result: A },
+      { slug: "b-corp", ok: true, result: B },
+      { slug: "c-corp", ok: true, result: C },
+    ]);
+    expect(most).toBe(2);
+    // a-corp is the slow one: b-corp and c-corp finished while it ran.
+    expect(seen).toEqual([B, C, A]);
+  });
+
+  it("starts no workspace after startBy: one not yet started is skipped as out of time and logged, not failed", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fake = fakeSupabase(threeOrgsDatabase);
+    let clock = 1_000;
+    const seen: string[] = [];
+    const run = async () => {
+      seen.push(currentOrgId());
+      clock += 100; // each cycle takes 100 ms of the budget
+      return "ok";
+    };
+
+    const results = await runWith({ config, db: fake.client, fetch: fake.fetch }, () =>
+      runLiveOrganizations(run, { concurrency: 1, startBy: 1_150, now: () => clock })
+    );
+
+    expect(results).toEqual([
+      { slug: "a-corp", ok: true, result: "ok" },
+      { slug: "b-corp", ok: true, result: "ok" },
+      { slug: "c-corp", ok: true, skipped: "out_of_time" },
+    ]);
+    expect(seen).toEqual([A, B]);
+    expect(warn).toHaveBeenCalledWith("scheduled cycle left to the next tick: out of time", "c-corp");
+  });
 });
 
 describe("runScheduledCycle", () => {
@@ -195,7 +262,10 @@ describe("runScheduledCycle", () => {
       { slug: "a-corp", ok: true, result: { lines: [] } },
       { slug: "b-corp", ok: true, result: { lines: [] } },
     ]);
-    expect(order).toEqual([`cycle ${A}`, `notify ${A}`, `escalate ${A}`, `brief ${A}`, `cycle ${B}`, `notify ${B}`, `escalate ${B}`, `brief ${B}`]);
+    // Each workspace's steps in order, in its own scope; the two workspaces overlap, so only their own order is fixed.
+    expect(order.filter((step) => step.endsWith(A))).toEqual([`cycle ${A}`, `notify ${A}`, `escalate ${A}`, `brief ${A}`]);
+    expect(order.filter((step) => step.endsWith(B))).toEqual([`cycle ${B}`, `notify ${B}`, `escalate ${B}`, `brief ${B}`]);
+    expect(order).toHaveLength(8);
     // Only the scheduled path starts a cycle this way: no person, no cap (N1), and the schedule as its trigger.
     expect(runAgentCycleMock).toHaveBeenCalledWith({ trigger: { kind: "schedule" } });
   });
