@@ -185,9 +185,13 @@ foreign keys remove memberships and sent invitations and null `created_by`.
 `runLiveOrganizations` (`src/lib/agent/cron.ts`) lists every organization in `mode = 'live'` and,
 for each, enters its scope with `withOrg` and runs a cycle; one organization's failure is caught,
 recorded as that organization's own result, and does not stop the rest (spec §4.4 — the stage
-isolation the cycle already had, lifted one level). The endpoint reports
-`{ organizations: [{ slug, ok, lines } | { slug, ok: false, error }] }`, `200` when every
-organization succeeded and `500` when any failed. Sandbox organizations are never in this list: a
+isolation the cycle already had, lifted one level). Up to `CRON_CONCURRENCY` (4) organizations run at
+once, each in its own scope: one after another, twelve live workspaces at 20 to 40 seconds each outran the
+route's 300 seconds, and the last ones in slug order got no scheduled cycle (Oct 17). No cycle starts later
+than 180 seconds into the tick (`startBy`); one not started by then is reported as skipped,
+`out_of_time`, and logged, and the next tick runs it. The endpoint reports
+`{ organizations: [{ slug, ok, lines } | { slug, ok, skipped } | { slug, ok: false, error }] }`, `200` when every
+organization succeeded or was skipped and `500` when any failed. Sandbox organizations are never in this list: a
 member runs their own cycles from the console instead, capped at `SANDBOX_DAILY_CYCLES` (20) per
 organization per UTC day. The cap is enforced inside `begin_cycle_run` (migration 0022), which
 opens the `cycle_runs` row under a per-organization lock and counts the day's runs in the same

@@ -19,8 +19,23 @@ interface LiveOrgRow {
 
 export type CronRunResult<T> =
   | { slug: string; ok: true; result: T }
-  | { slug: string; ok: true; skipped: "paused" | "running" | "payments_off" }
+  | { slug: string; ok: true; skipped: "paused" | "running" | "payments_off" | "out_of_time" }
   | { slug: string; ok: false; error: string };
+
+/**
+ * How many workspaces' cycles run at once. One after another, twelve live workspaces at 20 to 40 seconds each outran
+ * the tick's 300 seconds, and the last ones in slug order got no scheduled cycle at all (Oct 17, three ticks in a row).
+ * Each cycle runs in its own scope, as concurrent requests already do on one instance.
+ */
+export const CRON_CONCURRENCY = 4;
+
+export interface CronRunOptions {
+  /** How many workspaces run at once; `CRON_CONCURRENCY` when not given. */
+  concurrency?: number;
+  /** No workspace's cycle starts after this time (ms since the epoch): it is left to the next tick, so none is cut off. */
+  startBy?: number;
+  now?: () => number;
+}
 
 /**
  * Runs `run` once inside every `live` organization's scope, spec §4.4: one
@@ -40,43 +55,50 @@ export type CronRunResult<T> =
  * While the platform has payments switched off, every organization is skipped
  * the same way, its scope never entered; a cycle that refuses for that reason
  * anyway is a skip too (payment safety S3).
+ *
+ * Up to `concurrency` workspaces run at once, each in its own scope, taken in
+ * slug order; the results keep that order. Once `startBy` has passed, a
+ * workspace not yet started is skipped as `out_of_time` and logged, rather
+ * than started only to be cut off when the invocation ends.
  */
-export async function runLiveOrganizations<T>(run: () => Promise<T>): Promise<CronRunResult<T>[]> {
+export async function runLiveOrganizations<T>(run: () => Promise<T>, options: CronRunOptions = {}): Promise<CronRunResult<T>[]> {
   const orgs = unwrap(
     await platformDb().from("orgs").select("id, slug, agent_paused_at").eq("mode", "live").order("slug")
   ) as unknown as LiveOrgRow[];
 
-  const results: CronRunResult<T>[] = [];
   const off = await paymentsDisabled();
-  for (const org of orgs) {
-    if (off) {
-      results.push({ slug: org.slug, ok: true, skipped: "payments_off" });
-      continue;
-    }
-    if (org.agent_paused_at) {
-      results.push({ slug: org.slug, ok: true, skipped: "paused" });
-      continue;
+  const now = options.now ?? Date.now;
+
+  async function runOne(org: LiveOrgRow): Promise<CronRunResult<T>> {
+    if (off) return { slug: org.slug, ok: true, skipped: "payments_off" };
+    if (org.agent_paused_at) return { slug: org.slug, ok: true, skipped: "paused" };
+    if (options.startBy !== undefined && now() > options.startBy) {
+      console.warn("scheduled cycle left to the next tick: out of time", org.slug);
+      return { slug: org.slug, ok: true, skipped: "out_of_time" };
     }
     try {
       const result = await withOrg(org.id, run);
-      results.push({ slug: org.slug, ok: true, result });
+      return { slug: org.slug, ok: true, result };
     } catch (error) {
-      if (error instanceof AgentPausedError) {
-        results.push({ slug: org.slug, ok: true, skipped: "paused" });
-        continue;
-      }
-      if (error instanceof CycleRunningError) {
-        results.push({ slug: org.slug, ok: true, skipped: "running" });
-        continue;
-      }
-      if (error instanceof PaymentsDisabledError) {
-        results.push({ slug: org.slug, ok: true, skipped: "payments_off" });
-        continue;
-      }
+      if (error instanceof AgentPausedError) return { slug: org.slug, ok: true, skipped: "paused" };
+      if (error instanceof CycleRunningError) return { slug: org.slug, ok: true, skipped: "running" };
+      if (error instanceof PaymentsDisabledError) return { slug: org.slug, ok: true, skipped: "payments_off" };
       console.error("cycle failed for", org.slug, error);
-      results.push({ slug: org.slug, ok: false, error: error instanceof Error ? error.message : String(error) });
+      return { slug: org.slug, ok: false, error: error instanceof Error ? error.message : String(error) };
     }
   }
+
+  const results: CronRunResult<T>[] = new Array(orgs.length);
+  let next = 0;
+  const lanes = Math.max(1, Math.min(options.concurrency ?? CRON_CONCURRENCY, orgs.length));
+  await Promise.all(
+    Array.from({ length: lanes }, async () => {
+      while (next < orgs.length) {
+        const index = next++;
+        results[index] = await runOne(orgs[index]);
+      }
+    })
+  );
   return results;
 }
 

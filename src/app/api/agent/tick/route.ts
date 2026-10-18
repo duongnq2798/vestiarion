@@ -11,6 +11,8 @@ export const maxDuration = 300;
 const WEBHOOK_DISPATCH_MS = 30_000;
 /** Kept free at the end of `maxDuration` for the dispatch to hand back and the response to go out. */
 const WEBHOOK_DISPATCH_MARGIN_MS = 15_000;
+/** No workspace's cycle starts later than this into the tick: what is left of `maxDuration` is for it to finish. */
+const LAST_START_S = 180;
 
 function clientIp(request: Request): string {
   return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
@@ -38,23 +40,22 @@ export async function POST(request: Request) {
     // 5a). Passing none here is correct: this path only ever runs live
     // organizations, which begin_cycle_run never caps.
     //
-    // Live organizations run sequentially in this one invocation, so the
-    // tick's wall time is the sum of their cycles, not the slowest one.
-    // `maxDuration` is 300 seconds, while a fully hung payment can consume
-    // about 115 seconds across balance/token reads, submission and settlement.
-    // A payout to another chain through CCTP is two such transactions (an
-    // approve and a burn) plus a mint wait of at most 20 s, so a fully hung
-    // one can take about 235 seconds; two in one tick can outrun the budget.
-    // A killed tick pays nothing twice: the intent resends under the same
-    // Circle keys. Revisit sequential execution before a second organization
-    // goes live.
+    // Live organizations run up to `CRON_CONCURRENCY` at once in this one
+    // invocation, each in its own scope. One after another, twelve of them at
+    // 20 to 40 seconds each outran `maxDuration` (300 seconds), and the last
+    // ones in slug order got no scheduled cycle (Oct 17). A fully hung payment
+    // can consume about 115 seconds across balance/token reads, submission and
+    // settlement, and a payout to another chain through CCTP about 235; so no
+    // cycle starts after `LAST_START_S`, and one not started by then is left
+    // to the next tick instead of being cut off. A killed tick pays nothing
+    // twice all the same: the intent resends under the same Circle keys.
     //
     // Each scheduled cycle is followed by the digest of payables waiting for
     // a decision (notifications design N1, N2); it never changes the result.
     // Dispatch-soon is off for the cycles: the dispatch below sends what they
     // queued within the tick's own budget, and one scheduled after the
     // response could run into `maxDuration` when that budget is spent.
-    const results = await withoutDispatchSoon(() => runLiveOrganizations(runScheduledCycle));
+    const results = await withoutDispatchSoon(() => runLiveOrganizations(runScheduledCycle, { startBy: startedAt + LAST_START_S * 1000 }));
 
     // The cycles' ledger entries go out to webhook endpoints right away
     // (webhooks design W3), within what is left of this invocation: at most
