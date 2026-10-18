@@ -28,12 +28,6 @@ whether it may happen; a person decides what code sends to them; and on Arc main
 through a spending-limit contract the owner's own wallet deployed. Every outcome, refusals included, is signed into a
 hash-chained ledger anyone in the workspace can verify.
 
-<p align="center">
-  <img src="public/docs/guides/first-payment-decision.png" alt="A bill on Bills and receivables: Northstar Studio's 12.50 USDC October design retainer, settled on Arc. The card gives the agent's reasoning (the purchase order matches and the work was received, the supplier screened clear within its 50.00 USDC limit, the operating wallet holds 20.00 USDC), the checks behind it, its signed audit entry and the transaction." width="720">
-  <br>
-  <sub>A bill the agent paid on Arc: its reasoning, the checks behind it, the signed audit entry and the transaction.</sub>
-</p>
-
 **Watch it work:** [the demo](https://youtu.be/9Tgl1eMhlbw) (2:59) or [the full product tour](https://youtu.be/ds6cu4__1J4)
 (7:22), both recorded on the live product on October 15, 2026, with the Arc mainnet payment from October 12: a freelancer
 the agent pays on its own once a second member confirmed the address, a new supplier's first bill the model wanted to pay
