@@ -752,4 +752,9 @@ describe("which bills the cash goes to first (cash priority P6)", () => {
     const held = { seq: 1102, action: "ap_hold", detail: { invoiceId: INVOICE, cashPriority: { waits: true, reason: null, byPerson: true } } } as ActivityEntry;
     expect(activityItem(held, refs({ status: "held" }))?.text).toBe("Held Jiren 0.30 USDC: the cash goes first to the bills a member chose.");
   });
+
+  it("does not tell again a member's order carried on to the bills still due (order design O4)", () => {
+    const carried = { ...plan, detail: { ...plan.detail, decisionMode: "person", by: "member-1", carried: true } } as ActivityEntry;
+    expect(activityItem(carried, refs())).toBeNull();
+  });
 });
