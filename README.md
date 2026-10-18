@@ -12,7 +12,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-6b7280?style=flat-square)](LICENSE)
 
 <a href="https://www.vestiarion.xyz"><img src="docs/assets/readme/open-the-app.svg" alt="Open the app: vestiarion.xyz" height="48"></a>
-<a href="https://youtu.be/LIrG03dfWVM"><img src="docs/assets/readme/watch-the-demo.svg" alt="Watch the demo: 2:59 on YouTube" height="48"></a>
+<a href="https://youtu.be/9Tgl1eMhlbw"><img src="docs/assets/readme/watch-the-demo.svg" alt="Watch the demo: 2:59 on YouTube" height="48"></a>
 <a href="https://chromewebstore.google.com/detail/vestiarion-invoice-captur/jfhjgbdbolhnneomgifdnjamoldlioan"><img src="docs/assets/readme/add-to-chrome.svg" alt="Add to Chrome: Vestiarion Invoice Capture, on the Chrome Web Store" height="48"></a>
 <a href="https://www.npmjs.com/package/@vestiarion/sdk"><img src="docs/assets/readme/npm-sdk.svg" alt="Install from npm: @vestiarion/sdk" height="48"></a>
 
@@ -34,7 +34,7 @@ hash-chained ledger anyone in the workspace can verify.
   <sub>A bill the agent paid on Arc: its reasoning, the checks behind it, the signed audit entry and the transaction.</sub>
 </p>
 
-**Watch it work:** [the demo](https://youtu.be/LIrG03dfWVM) (2:59) or [the full product tour](https://youtu.be/2y1ntW6WAdM)
+**Watch it work:** [the demo](https://youtu.be/9Tgl1eMhlbw) (2:59) or [the full product tour](https://youtu.be/2y1ntW6WAdM)
 (7:22), both recorded on the live product on October 15, 2026, with the Arc mainnet payment from October 12: a freelancer
 the agent pays on its own once a second member confirmed the address, a new supplier's first bill the model wanted to pay
 and code refused until a second member approved, the day the agent picks to pay, shadow mode and the customers' figures,
@@ -90,7 +90,7 @@ nothing else: no wallet, no USDC, no API key, nothing to install.
    yourself". [Mainnet proof](#mainnet-proof) walks through the first payment on Arc mainnet: held by code as a first
    payment to a new address, approved by a second person, and paid through the owner's spending-limit contract.
 
-**Watch instead:** [the demo](https://youtu.be/LIrG03dfWVM) (2:59),
+**Watch instead:** [the demo](https://youtu.be/9Tgl1eMhlbw) (2:59),
 [the full product tour](https://youtu.be/2y1ntW6WAdM) (7:22), and [a short video for each main flow](#watch-each-flow),
 two minutes or less each.
 
