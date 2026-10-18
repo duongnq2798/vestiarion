@@ -60,6 +60,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   one list with thin dividers and a plus that turns to a minus, one open at a time; the heading stays in view beside them
   on a wide screen, with the docs and a way to reach the founder on GitHub.
 
+### Fixed
+
+- **Docs tables keep names and codes whole.** A table in the docs no longer squeezes a column until a name such as
+  QuickBooks or a code such as `invalid_request` breaks in the middle: a cell breaks only between words, its code stays
+  on one line, and a table wider than the screen scrolls inside its own frame. Across the 36 docs pages with tables,
+  words split over two lines went from 54 to 3 on a laptop and from 126 to 8 on a phone, each of those at a hyphen.
+
 ## [0.1.0-beta.10] - 2026-10-18
 
 ### Added

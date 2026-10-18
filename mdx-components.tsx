@@ -44,6 +44,16 @@ import { isPageHref } from "@/lib/docs/paths";
  * numbers repeated headings the way the table of contents does.
  */
 
+/**
+ * Inside a table cell, text, links and code break only where a line would overflow, not anywhere. Prose keeps
+ * `overflow-wrap: anywhere` so a long URL never widens the page, but in a cell, inherited or set on a link or code, it
+ * makes the cell's narrowest width a single character, and the table then squeezes a column of names or codes until
+ * "QuickBooks" or `invalid_request` breaks mid-word. With `break-word` a column is at least as wide as its longest
+ * word, and a table wider than the page scrolls inside its own frame. Code in a cell, a header name or an error code, never
+ * wraps, not even at a hyphen, as the reference's own tables already keep it.
+ */
+const CELL_WRAP = "[overflow-wrap:break-word] [&_*]:[overflow-wrap:break-word] [&_code]:whitespace-nowrap";
+
 /** A fenced block arrives as `<pre><code className="language-x">source</code></pre>`. */
 function Pre({ children }: { children?: ReactNode }) {
   const code = isValidElement<{ className?: string; children?: ReactNode }>(children) ? children : null;
@@ -160,7 +170,7 @@ const components: MDXComponents = {
   tbody: ({ children }) => <TableBody>{children}</TableBody>,
   tr: ({ children }) => <TableRow>{children}</TableRow>,
   th: ({ children }) => <TableHead>{children}</TableHead>,
-  td: ({ children }) => <TableCell className="align-top text-ink-2">{children}</TableCell>,
+  td: ({ children }) => <TableCell className={cn("align-top text-ink-2", CELL_WRAP)}>{children}</TableCell>,
   EndpointTable,
   McpToolTable,
   Cards,
