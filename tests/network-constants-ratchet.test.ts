@@ -21,6 +21,7 @@ const ALLOWED: Record<string, { count: number; why: string }> = {
   "src/components/landing/Proof.tsx": { count: 7, why: "the landing's proof counts each network apart in its three groups of figures, as /open does" },
   "src/components/landing/RecentDecisions.tsx": { count: 2, why: "the landing's earlier decisions count each network's past week apart, as /open does" },
   "src/components/landing/provenance.ts": { count: 2, why: "the landing names the USYC reserve's network, Arc testnet, the only one it runs on" },
+  "src/components/landing/safety-example.ts": { count: 2, why: "the landing's safety example is a past refusal in a demo workspace on Arc testnet, and names that network" },
   "src/components/wallet/PasskeyWallet.tsx": { count: 4, why: "the passkey wallet page, /wallet, is Arc testnet's: Modular Wallets run there only" },
   "src/lib/passkey-wallet-sdk.ts": { count: 2, why: "the payee passkey wallet's default network, Arc testnet; a passkey treasury passes Arc mainnet" },
   "src/lib/passkey-wallet-send.ts": { count: 3, why: "the passkey wallet's sends, on Arc testnet" },

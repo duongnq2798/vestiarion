@@ -595,6 +595,10 @@ mainnet plan).
     with shadow mode ticked; the sign-in page says what follows the link when that is where it leads.
   - Each call to action carries `data-cta`; Google Analytics, where it runs, sends `cta_click` with that name and the
     redacted path, nothing else. Activation itself is read from the database (`/admin/growth`).
+  - Safety and control (`src/components/landing/Safety.tsx`): three principles, each saying what holds it (the team,
+    rules in code and Arc mainnet's spending-limit contract, the signed ledger), then one past refusal step by step
+    (`safety-example.ts`: ledger entry #3710 in a demo workspace in shadow mode on Arc testnet, refused by
+    `workspace.outflow_budget`). A past decision's facts do not change, so they are written there rather than read.
   - The technical showcase is `/how-it-decides`: the decision receipt replayed in its arch beside the live ledger's
     head, the decision loop step by step, and the claims with the receipts behind them.
   - The questions' answer about Arc mainnet says it is open to anyone only while `MAINNET_ALLOWLIST` holds `*`
