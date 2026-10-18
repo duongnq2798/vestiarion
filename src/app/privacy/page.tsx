@@ -483,6 +483,12 @@ export default function PrivacyPage() {
             outreach or page brought it. Only the team sees them, and they are deleted with the workspace.
           </li>
           <li>When you ask for a guided setup, those tags are kept with your request too, as described below.</li>
+          <li>
+            The pages and emails a business sends its suppliers, payees and customers through Vestiarion (a payment status, an address link, a receipt,
+            an offer, a request for more time, a pay link, a statement, a shared report) end with a link to Vestiarion&apos;s site. That link&apos;s tags
+            name only the kind of page or email it is on, its medium and <code>counterparty_loop</code>: never the business, the person, the link or an
+            amount.
+          </li>
           <li>Deleting the cookie in your browser changes nothing else.</li>
         </ul>
       </LegalSection>

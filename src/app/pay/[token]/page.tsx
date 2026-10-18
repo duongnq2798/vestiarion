@@ -115,7 +115,7 @@ export default async function PayPage({ params }: PayPageProps) {
           )}
         </div>
       </main>
-      <SiteFooter compact networkLabel={preview ? homeChain(networkOfChain(preview.chain)).label : undefined} />
+      <SiteFooter compact loop="pay_link" networkLabel={preview ? homeChain(networkOfChain(preview.chain)).label : undefined} />
     </div>
   );
 }

@@ -51,7 +51,7 @@ export default async function SharedReportPage({ params }: SharedReportPageProps
           )}
         </div>
       </main>
-      <SiteFooter compact networkLabel={view ? networkProfile(view.network).label : undefined} />
+      <SiteFooter compact loop="shared_report" networkLabel={view ? networkProfile(view.network).label : undefined} />
     </div>
   );
 }

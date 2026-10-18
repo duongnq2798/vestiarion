@@ -56,7 +56,7 @@ export default async function PayeePage({ params }: PayeePageProps) {
           )}
         </div>
       </main>
-      <SiteFooter compact networkLabel={status ? homeChain(networkOfChain(status.chain)).label : undefined} />
+      <SiteFooter compact loop="payee_link" networkLabel={status ? homeChain(networkOfChain(status.chain)).label : undefined} />
     </div>
   );
 }

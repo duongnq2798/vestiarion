@@ -67,7 +67,7 @@ export default async function SupplierStatusPage({ params }: SupplierStatusPageP
           )}
         </div>
       </main>
-      <SiteFooter compact networkLabel={read.state === "live" ? networkProfile(read.network).label : undefined} />
+      <SiteFooter compact loop="supplier_status" networkLabel={read.state === "live" ? networkProfile(read.network).label : undefined} />
     </div>
   );
 }

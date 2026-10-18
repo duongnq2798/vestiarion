@@ -47,7 +47,7 @@ export default async function DiscountPage({ params }: DiscountPageProps) {
           )}
         </div>
       </main>
-      <SiteFooter compact />
+      <SiteFooter compact loop="customer_discount" />
     </div>
   );
 }

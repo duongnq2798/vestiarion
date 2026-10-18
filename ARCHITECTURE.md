@@ -3463,6 +3463,14 @@ the workspace exists and calls `record_org_attribution`, which keeps the first t
 replaces it. Recording never fails or holds up onboarding: no cookie, a database error, or an answer slower than 1.5
 seconds is logged at most (`src/lib/growth/record.ts`). The privacy page describes the cookie.
 
+**Counterparty pages say who sent them** (`docs/superpowers/specs/2026-10-19-counterparty-loop-design.md`).
+`src/lib/growth/loop.ts` names the nine public pages and seven emails a business sends its counterparties. `SiteFooter`'s
+`loop` prop puts "Sent with Vestiarion…" and a link to the landing page, opened in a new tab, at a token page's foot;
+`actionEmailHtml`'s `loop` adds the same link to an email's footer. Each link carries `utm_source` (the kind of page),
+`utm_medium` (`counterparty_page` or `counterparty_email`) and `utm_campaign=counterparty_loop`, nothing of the page
+itself; the landing page's first-touch cookie keeps them, and /admin/growth counts customer workspaces whose first touch
+came from the loop (`growthMetrics().fromLoop`). Member emails carry no link.
+
 **The founder dashboard** at `/admin/growth` is for people on `platform_team` only. `growthTeamUser()`
 (`src/lib/growth/gate.ts`) asks `growth_team_member(p_user)` on every call and fails closed; the page answers anyone
 else, signed in or not, with `notFound()`, so it never says it exists, and every action in

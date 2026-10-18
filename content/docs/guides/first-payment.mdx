@@ -146,6 +146,7 @@ You don't have to collect a payee's address yourself. In the counterparty's row,
 - The link is shown once, with **Copy link**. Send it to the payee however you usually reach them.
 - The payee opens it without an account. They see which business wants to pay them and enter their own Arc address.
 - The link works once and expires after 7 days. A new link replaces the payee's unused one, and **Revoke** in the row stops it.
+- At its foot, as on every page Vestiarion sends your counterparties, a line says it was sent with Vestiarion and links to Vestiarion's site, tagged with the kind of page only, never your business or theirs.
 - An address that comes in through a link counts as a change, like any other: the row says "not yet confirmed", and the agent holds payments to that payee until someone here confirms it, as below.
 - Whoever creates the link counts as having given the address that comes through it, as if they had typed it in. A link made with an API key counts as made by the member who issued the key. So the first payment to that payee at that address needs a second person: when someone else confirms the address, the agent pays it on its own; when the person who created the link confirms it themselves, the agent holds that first payment as `counterparty.new_payee`, and another owner, admin or approver pays it (see [Approve a held payment](#6-approve-a-held-payment)). Who created the link is read from its signed `payee_link_created` entry, so it holds even after that person's account is deleted; if no one can be named, a person approves the first payment. The ledger still records the address as the payee's own.
 - Send the link yourself; the person who confirms the address should not be the one who handled the link.
@@ -566,7 +567,7 @@ To check a signature yourself, see [Verifying signatures](/docs/webhooks/verify)
 
 A payee, an accountant or anyone else can check a payment without an account: share its receipt.
 
-- **Sharing it.** On **Bills & receivables**, under **Paid and closed**, open a paid bill: one with a transaction on chain shows **Share receipt** to an owner or admin. It makes a link to a public page. Copy the link then: it is shown only once.
+- **Sharing it.** On **Bills & receivables**, under **Paid and closed**, open a paid bill: one with a transaction on chain shows **Share receipt** to an owner or admin. It makes a link to a public page. Copy the link then: it is shown only once. At its foot, as on every page Vestiarion sends your counterparties, a line says it was sent with Vestiarion and links to Vestiarion's site, tagged with the kind of page only, never your business or theirs.
 - **What the page shows.** The amount, the payee's chain and address, and how it was paid, with the fee. It also shows the transaction, linked to its explorer; for a CCTP payout, the burn on Arc testnet as well.
 - **The three checks the page makes.**
   - **Signed by the paying workspace.** The receipt is a ledger entry the workspace signed when it was shared. Its signature, body hash and chain hash are checked, and checked again in the reader's browser.

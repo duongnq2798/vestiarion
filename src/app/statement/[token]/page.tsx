@@ -60,7 +60,7 @@ export default async function StatementPage({ params }: StatementPageProps) {
           )}
         </div>
       </main>
-      <SiteFooter compact networkLabel={read.state === "live" ? networkProfile(read.network).label : undefined} />
+      <SiteFooter compact loop="statement" networkLabel={read.state === "live" ? networkProfile(read.network).label : undefined} />
     </div>
   );
 }

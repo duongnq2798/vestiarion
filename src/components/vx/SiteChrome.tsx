@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { START_LABEL, TRY_HREF } from "@/components/landing/cta";
+import { LOOP_PAGE_LINE, LOOP_PAGE_LINK, loopPageHref, type LoopPage } from "@/lib/growth/loop";
 import { ARC_URL, CIRCLE_URL, GITHUB_URL, ISSUES_URL, LICENSE_URL, PRODUCT_HUNT_BADGE, PRODUCT_HUNT_URL, X_URL } from "@/lib/site-links";
 import { BrandMark } from "./Brand";
 import { SiteMenu } from "./SiteMenu";
@@ -239,11 +240,22 @@ const COPYRIGHT = "© 2026 Vestiarion contributors";
  * The full footer is the landing page's: the wordmark, then four columns of
  * links, two across on a phone, four from `sm` and beside the wordmark from
  * `lg`. `compact` is one line and its links, for every other public page.
+ *
+ * `loop` names a page a business sends its counterparties (counterparty loop C1, C2): above the line, it says what sent
+ * the page, and links to the landing page in a new tab, tagged with that kind of page only.
  */
-export function SiteFooter({ compact = false, networkLabel = "Arc" }: { compact?: boolean; networkLabel?: string }) {
+export function SiteFooter({ compact = false, networkLabel = "Arc", loop }: { compact?: boolean; networkLabel?: string; loop?: LoopPage }) {
   if (compact) {
     return (
       <footer className="border-t border-line/80 px-4 py-6 font-mono text-xs text-ink-3">
+        {loop && (
+          <p className="mx-auto mb-4 max-w-6xl text-center font-sans text-sm text-ink-2">
+            {LOOP_PAGE_LINE}{" "}
+            <a href={loopPageHref(loop)} target="_blank" rel="noopener" data-cta={`loop-${loop}`} className={INLINE_LINK}>
+              {LOOP_PAGE_LINK}
+            </a>
+          </p>
+        )}
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-2 text-center sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-6">
           {/* Each part keeps to one line, so a narrow screen wraps between them, after a separator. */}
           <p className="[&>span]:whitespace-nowrap">

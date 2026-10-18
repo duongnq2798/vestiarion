@@ -44,6 +44,7 @@ export function termRequestEmail(input: {
     button: { label: "See the request", link: url },
     note,
     origin,
+    loop: "term_request",
   });
   const text = [`Hi ${supplierName},`, "", ...(play ? [play, ""] : []), lead, terms, nothing, "", `See the request: ${url}`, "", note].join("\n");
   return { subject, html, text };
@@ -88,6 +89,7 @@ export function termCounterAnswerEmail(input: {
     button: { label: "How requests for more time work", link: guide },
     note,
     origin,
+    loop: "term_request",
   });
   const text = [`Hi ${supplierName},`, "", ...(play ? [play, ""] : []), lead, after, "", `How requests for more time work: ${guide}`, "", note].join("\n");
   return { subject, html, text };
@@ -131,6 +133,7 @@ export function termRequestWithdrawnEmail(input: {
     button: { label: "How requests for more time work", link: `${origin}/docs/guides/more-time` },
     note,
     origin,
+    loop: "term_request",
   });
   const text = [`Hi ${supplierName},`, "", ...(play ? [play, ""] : []), lead, after, "", `How requests for more time work: ${origin}/docs/guides/more-time`, "", note].join("\n");
   return { subject, html, text };
