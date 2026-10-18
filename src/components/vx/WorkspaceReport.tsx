@@ -55,6 +55,8 @@ export interface ReportSlice {
   /** "Oct 18, 2026". */
   opened: string;
   vendors: number;
+  /** The viewer opened it, so is a member there: only then is it linked (only its opener belongs to it at first). */
+  canOpen?: boolean;
 }
 
 function readinessWords(step: ReadinessStep, mainnetLabel: string, slice: ReportSlice | null): { title: string; note: string } {
@@ -359,7 +361,7 @@ export function ReportReadiness({ steps, slice = null, start }: { steps: Readine
                     {step.done && <span className="sr-only"> (done)</span>}
                   </p>
                   <p className="mt-0.5 text-[0.8125rem] text-ink-2">{words.note}</p>
-                  {step.key === "mainnet" && slice && (
+                  {step.key === "mainnet" && slice?.canOpen && (
                     <Link href={`/o/${slice.slug}/settings`} className="mt-1 inline-flex items-center gap-1 text-[0.8125rem] font-medium text-agent underline-offset-2 hover:underline">
                       Open {slice.name}
                       <ArrowRight aria-hidden className="size-3.5" />

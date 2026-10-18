@@ -35,14 +35,15 @@ export async function startLiveSliceAction(_previous: LiveSliceActionResult, for
     try {
       const started = await startLiveSlice({ userId: auth.user.id, vendorIds });
       revalidateOrgPages();
-      const skipped = started.skipped > 0 ? ` ${started.skipped} without a payment limit stayed here.` : "";
+      const skipped = started.skipped.length > 0 ? ` ${started.skipped.length} stayed here: ${started.skipped.map((vendor) => vendor.name).join(", ")}.` : "";
       return {
         ok: true,
         message: `Opened ${started.slug} on Arc mainnet with ${started.carried.length} ${started.carried.length === 1 ? "vendor" : "vendors"}.${skipped} Next: take it live from its Settings.`,
         url: orgHref(started.slug, "/settings"),
       };
     } catch (error) {
-      if (error instanceof SliceError) return { ok: false, message: error.message };
+      // Opened but not recorded here: its link, so no second one is opened.
+      if (error instanceof SliceError) return { ok: false, message: error.message, ...(error.slug ? { url: orgHref(error.slug, "/settings") } : {}) };
       if (error instanceof Error && error.message === MAINNET_OFF) return { ok: false, message: MAINNET_OFF };
       console.error("starting a live slice failed", auth.membership.orgId, error instanceof Error ? error.message : "unknown error");
       return { ok: false, message: TRY_AGAIN };

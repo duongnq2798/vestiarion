@@ -84,12 +84,22 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
           return null;
         })
       : null;
+    // Its opener is, at first, its only member: they get its link, and what went over until it is live. The same
+    // component before and after it opens, so the result replaces the form where it stood.
+    const opened = sliceRead?.[0] ?? null;
+    const mine = opened?.by === access.user.id;
     const slice = sliceRead
       ? {
-          opened: sliceRead[0]
-            ? { name: sliceRead[0].name, slug: sliceRead[0].slug, live: sliceRead[0].live, opened: utcDay(sliceRead[0].startedAt), vendors: sliceRead[0].vendors }
-            : null,
-          start: sliceRead[0] ? undefined : <LiveSliceStart orgSlug={slug} vendors={sliceRead[1]} canStart={canAnswer} />,
+          opened: opened ? { name: opened.name, slug: opened.slug, live: opened.live, opened: utcDay(opened.startedAt), vendors: opened.vendors, canOpen: mine } : null,
+          start:
+            opened && (opened.live || !mine) ? undefined : (
+              <LiveSliceStart
+                orgSlug={slug}
+                vendors={sliceRead[1]}
+                canStart={canAnswer}
+                opened={opened ? { name: opened.name, slug: opened.slug, vendors: opened.vendors, skipped: opened.skipped } : null}
+              />
+            ),
         }
       : undefined;
     // A bill the business recorded paying outside Vestiarion is not "not paid yet".

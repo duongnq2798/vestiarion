@@ -117,8 +117,10 @@ function provenanceOf(address: string, entries: ReadonlyArray<Entry>): Provenanc
     const set = entry.action === "create_counterparty" ? entry.detail.address : entry.detail.to;
     if (!same(set, address)) return { addressBy: null, confirmers: [], changed: false };
     // A change waits for a person's confirmation, and so does an address that came with a counterparty added through the
-    // API or GitHub (counterparty creation R3); one typed in as the counterparty was added never asks for it.
-    const changed = entry.action === "counterparty_address_changed" || entry.detail.via === "api" || entry.detail.via === "github";
+    // API or GitHub (counterparty creation R3), or carried into a live slice (live slice L3); one typed in as the
+    // counterparty was added never asks for it.
+    const changed =
+      entry.action === "counterparty_address_changed" || entry.detail.via === "api" || entry.detail.via === "github" || entry.detail.via === "live_slice";
     // The payee's own, sent through a payee link or GitHub; otherwise the member who typed it, or no one known.
     if (entry.detail.via === "mirror") return { addressBy: MIRROR, confirmers, changed };
     const fromPayee = entry.detail.via === "github" || entry.detail.via === "payee_link";

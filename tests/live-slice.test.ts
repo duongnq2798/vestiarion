@@ -9,8 +9,10 @@ import { APPENDED_LEDGER_ROW, signedOrgs } from "./support/signed-org";
 /**
  * Start the live slice (docs/superpowers/specs/2026-10-18-live-slice-design.md L2-L6): from a shadow workspace on Arc
  * testnet, a workspace on Arc mainnet is made by the usual `createWorkspace`, the chosen vendors are carried through
- * `createCounterparty` (an own address waiting for a person, a mirror address never), and the shadow workspace signs
- * `live_slice_started`. Refused outside shadow mode, on Arc mainnet, twice, with no vendor or too many, at the limit.
+ * `createCounterparty` (an own confirmed Arc address waiting for a person; a mirror address, one on another chain or one
+ * not confirmed here never), and the shadow workspace signs `live_slice_started`. A vendor the checks refuse or that fails
+ * to be added is left behind and named; a failure to sign says so with the workspace's slug. Refused outside shadow mode,
+ * on Arc mainnet, twice, with no vendor or too many, at the limit.
  */
 
 const { createWorkspaceMock, createCounterpartyMock, shadowMock } = vi.hoisted(() => ({
@@ -33,6 +35,8 @@ const OWN = "0b6c1c9e-4a4f-4a7e-9b1e-0000000005c1";
 const MIRRORED = "0b6c1c9e-4a4f-4a7e-9b1e-0000000005c2";
 const NONE = "0b6c1c9e-4a4f-4a7e-9b1e-0000000005c3";
 const NO_LIMIT = "0b6c1c9e-4a4f-4a7e-9b1e-0000000005c4";
+const ON_BASE = "0b6c1c9e-4a4f-4a7e-9b1e-0000000005c5";
+const UNCONFIRMED = "0b6c1c9e-4a4f-4a7e-9b1e-0000000005c6";
 const ADDRESS = "0x97f85033BBd83870A841cF7153f35B387746b6B6";
 const config = configFromEnv({
   NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
@@ -47,6 +51,9 @@ const vendor = (id: string, name: string, fields: Record<string, unknown> = {}) 
   name,
   role: "vendor",
   address: null,
+  chain: null,
+  address_changed_at: null,
+  address_confirmed_at: null,
   mirror_wallet_id: null,
   baseline_payment_limit: "200",
   notice_email: null,
@@ -61,8 +68,12 @@ const VENDORS = [
   vendor(NONE, "Northwind Referrals"),
   vendor(NO_LIMIT, "Taller Norte", { baseline_payment_limit: null }),
 ];
+const MORE = [
+  vendor(ON_BASE, "Harbor Freight Co.", { address: ADDRESS, chain: "BASE-SEPOLIA" }),
+  vendor(UNCONFIRMED, "Quill Studio", { address: ADDRESS, address_changed_at: "2026-10-17T10:00:00Z" }),
+];
 
-function workspace(start: { network?: string; slice?: boolean; vendors?: unknown[] } = {}) {
+function workspace(start: { network?: string; slice?: boolean; vendors?: unknown[]; signFails?: boolean } = {}) {
   const fake = fakeSupabase((sent: RecordedRequest): FakeReply => {
     if (sent.path === "/rest/v1/orgs") {
       const id = sent.params.get("id")?.replace(/^eq\./, "");
@@ -71,14 +82,23 @@ function workspace(start: { network?: string; slice?: boolean; vendors?: unknown
       return { body: orgs.orgRow(id ?? SHADOW, start.network ? { network: start.network } : {}) };
     }
     if (sent.path === "/rest/v1/ledger_entries") {
-      return { body: start.slice ? [{ ts: "2026-10-18T09:30:00Z", detail: { liveOrgId: LIVE, liveSlug: "pinecrest-studio-live", vendors: [{}, {}] } }] : [] };
+      return {
+        body: start.slice
+          ? [
+              {
+                ts: "2026-10-18T09:30:00Z",
+                detail: { by: USER, liveOrgId: LIVE, liveSlug: "pinecrest-studio-live", vendors: [{}, {}], skipped: [{ counterpartyId: NO_LIMIT, name: "Taller Norte", reason: "no_limit" }, { name: 7 }] },
+              },
+            ]
+          : [],
+      };
     }
     if (sent.path === "/rest/v1/counterparties") {
       const ids = sent.params.get("id")?.replace(/^in\.\(|\)$/g, "").split(",") ?? null;
       const rows = (start.vendors ?? VENDORS) as Array<{ id: string }>;
       return { body: ids ? rows.filter((row) => ids.includes(row.id)) : rows };
     }
-    if (sent.path === "/rest/v1/rpc/append_ledger_entry") return { body: APPENDED_LEDGER_ROW };
+    if (sent.path === "/rest/v1/rpc/append_ledger_entry") return start.signFails ? { status: 500, body: { message: "down" } } : { body: APPENDED_LEDGER_ROW };
     return { body: [] };
   });
   const run = <T,>(fn: () => Promise<T>) => runWith({ config, db: fake.client, fetch: fake.fetch }, () => withOrg(SHADOW, fn, { userId: USER }));
@@ -100,7 +120,7 @@ describe("startLiveSlice", () => {
     const started = await run(() => startLiveSlice({ userId: USER, vendorIds: [OWN, MIRRORED, NONE, NO_LIMIT] }));
 
     expect(createWorkspaceMock).toHaveBeenCalledWith({ userId: USER, name: "Pinecrest Studio live slice", network: "arc-mainnet" });
-    expect(started).toMatchObject({ slug: "pinecrest-studio-live", skipped: 1 });
+    expect(started).toMatchObject({ slug: "pinecrest-studio-live", skipped: [{ counterpartyId: NO_LIMIT, name: "Taller Norte", reason: "no_limit" }] });
     expect(started.carried.map((carried) => [carried.name, carried.address])).toEqual([
       ["Cobalt Cloud", "own"],
       ["Lumen Print Co.", "mirror"],
@@ -129,8 +149,38 @@ describe("startLiveSlice", () => {
         { counterpartyId: MIRRORED, name: "Lumen Print Co.", address: "mirror" },
         { counterpartyId: NONE, name: "Northwind Referrals", address: "none" },
       ],
-      skipped: 1,
+      skipped: [{ counterpartyId: NO_LIMIT, name: "Taller Norte", reason: "no_limit" }],
     });
+  });
+
+  it("never carries an address on another chain or one not confirmed here", async () => {
+    const { run } = workspace({ vendors: MORE });
+    const started = await run(() => startLiveSlice({ userId: USER, vendorIds: [ON_BASE, UNCONFIRMED] }));
+    expect(started.carried.map((carried) => [carried.name, carried.address])).toEqual([
+      ["Harbor Freight Co.", "other_chain"],
+      ["Quill Studio", "unconfirmed"],
+    ]);
+    const calls = createCounterpartyMock.mock.calls.map((call) => call[0] as { counterparty: Record<string, unknown> });
+    expect(calls.map((call) => call.counterparty.address)).toEqual([null, null]);
+  });
+
+  it("leaves behind, and names, a vendor the checks refuse or that fails to be added, and carries the rest", async () => {
+    const bad = vendor("0b6c1c9e-4a4f-4a7e-9b1e-0000000005c7", "Bad Mail Co", { notice_email: "not an email" });
+    const { fake, run } = workspace({ vendors: [...VENDORS, bad] });
+    createCounterpartyMock.mockResolvedValueOnce({ id: "new" }).mockRejectedValueOnce(new Error("insert failed"));
+    const started = await run(() => startLiveSlice({ userId: USER, vendorIds: [OWN, MIRRORED, NONE, bad.id] }));
+    expect(started.carried.map((carried) => carried.name)).toEqual(["Cobalt Cloud", "Northwind Referrals"]);
+    expect(started.skipped).toEqual([
+      { counterpartyId: bad.id, name: "Bad Mail Co", reason: "not_valid" },
+      { counterpartyId: MIRRORED, name: "Lumen Print Co.", reason: "not_added" },
+    ]);
+    expect(ledgerOf(fake.requests, "live_slice_started")?.p_detail.skipped).toEqual(started.skipped);
+  });
+
+  it("says the workspace was opened, with its slug, when the entry cannot be signed", async () => {
+    const { run } = workspace({ signFails: true });
+    await expect(run(() => startLiveSlice({ userId: USER, vendorIds: [OWN] }))).rejects.toMatchObject({ code: "unrecorded", slug: "pinecrest-studio-live" });
+    expect(createWorkspaceMock).toHaveBeenCalledTimes(1);
   });
 
   it("is refused outside shadow mode, on Arc mainnet, and when a slice was opened already, before anything is made", async () => {
@@ -154,13 +204,15 @@ describe("startLiveSlice", () => {
 
 describe("sliceVendors and readLiveSlice", () => {
   it("lists the vendors with how each address would go, never sample data", async () => {
-    const { run } = workspace({ vendors: [...VENDORS, vendor("0b6c1c9e-4a4f-4a7e-9b1e-0000000005c9", "Sample Co", { sample: true })] });
+    const { run } = workspace({ vendors: [...VENDORS, ...MORE, vendor("0b6c1c9e-4a4f-4a7e-9b1e-0000000005c9", "Sample Co", { sample: true })] });
     const listed = await run(() => sliceVendors(db()));
     expect(listed.map((row) => [row.name, row.address, row.paymentLimit])).toEqual([
       ["Cobalt Cloud", "own", 200],
       ["Lumen Print Co.", "mirror", 50],
       ["Northwind Referrals", "none", 200],
       ["Taller Norte", "none", null],
+      ["Harbor Freight Co.", "other_chain", 200],
+      ["Quill Studio", "unconfirmed", 200],
     ]);
   });
 
@@ -172,7 +224,10 @@ describe("sliceVendors and readLiveSlice", () => {
       name: "Pinecrest Studio live slice",
       live: false,
       startedAt: "2026-10-18T09:30:00Z",
+      by: USER,
       vendors: 2,
+      // A skipped vendor the entry does not name properly is not shown.
+      skipped: [{ name: "Taller Norte", reason: "no_limit" }],
     });
   });
 });
