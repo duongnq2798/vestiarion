@@ -16,6 +16,14 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Ask every payee for an address at once.** On **Counterparties**, owners and admins see how many vendors and
+  contractors have no address of their own, mirror addresses included, and choose **Ask N for an address**. Each gets
+  its own one-time payee link, emailed to its notice email where it has one, and the rest are shown once to copy.
+  Every address that comes in still waits for a person to confirm it. Signed as `payee_addresses_requested`. No
+  migration. [Guide](https://www.vestiarion.xyz/docs/guides/first-payment#ask-every-payee-at-once).
+
+### Added
+
 - **Start the live slice from shadow mode.** Once a business trusts the agent in shadow mode, an owner ticks the vendors
   to pay in real USDC under the report's **Before a live slice** and opens a workspace on Arc mainnet with them: name,
   payment limit, notice email and purchase orders carried, a vendor's own confirmed Arc address waiting to be confirmed

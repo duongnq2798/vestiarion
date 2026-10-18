@@ -74,7 +74,7 @@ function readinessWords(step: ReadinessStep, mainnetLabel: string, slice: Report
         note:
           step.mirrorPayees === 0
             ? "Every supplier here is paid at its own address."
-            : `${step.mirrorPayees} ${plural(step.mirrorPayees, "supplier is", "suppliers are")} paid at a mirror address. A live workspace pays a supplier's real address, so ask them for it.`,
+            : `${step.mirrorPayees} ${plural(step.mirrorPayees, "supplier is", "suppliers are")} paid at a mirror address. A live workspace pays a supplier's real address: Ask every payee for an address, on Counterparties, asks them all at once.`,
       };
     case "mainnet":
       if (slice?.live) return { title: `Live slice on ${mainnetLabel}: ${slice.name}`, note: "It is live: the bills you add there are paid in real USDC. This workspace keeps running alongside it." };

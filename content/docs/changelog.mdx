@@ -1,5 +1,10 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-18: Ask every payee for an address at once
+
+- A new entry, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`: **`payee_addresses_requested`** (domain `compliance`, actor `human`), when an owner or admin asks every payee with no address of its own at once. It carries `by` (their user id), `links` (each `{ counterpartyId, linkId, emailed }`, `emailed` saying whether the link went to the payee's notice email) and `notMade` (the counterparty ids whose link could not be made). Each link also has its own `payee_link_created` entry, as before.
+- Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-18: Start the live slice from shadow mode
 
 - A new entry, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`: **`live_slice_started`** (domain `system`, actor `human`), in a workspace in shadow mode, when an owner opens a workspace on Arc mainnet from it. It carries `by` (their user id), `liveOrgId` and `liveSlug` (the new workspace), `vendors` (each `{ counterpartyId, name, address }`, where `address` says how its address went over: `own`, carried; `mirror`, `other_chain`, `unconfirmed` or `none`, not carried) and `skipped` (each vendor left behind, `{ counterpartyId, name, reason }`, where `reason` is `no_limit`, `not_valid` or `not_added`).

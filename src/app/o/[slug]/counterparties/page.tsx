@@ -13,6 +13,7 @@ import CounterpartyPurchaseOrdersEdit from "@/components/intake/CounterpartyPurc
 import MirrorAddressControl from "@/components/MirrorAddressControl";
 import ScreeningMatch from "@/components/intake/ScreeningMatch";
 import PayeeLinkControl from "@/components/intake/PayeeLinkControl";
+import { AskEveryPayee } from "@/components/intake/AskEveryPayee";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -34,6 +35,7 @@ import { inOrg } from "@/lib/dal/scope";
 import { draftSupplierName } from "@/lib/invoice-drafts/store";
 import { listLedgerEntries } from "@/lib/ledger";
 import { listActivePayeeLinks } from "@/lib/platform/payee-links";
+import { askablePayees } from "@/lib/address-requests";
 import { plural } from "@/lib/copy";
 import { listCounterparties, stats } from "@/lib/queries";
 import { readShadowMode } from "@/lib/shadow-mode";
@@ -78,6 +80,8 @@ export default async function CounterpartiesPage({
     ]);
     // Only those who may send a payee link see which ones are out.
     const payeeLinks = canWrite ? await listActivePayeeLinks(access.membership.orgId) : new Map<string, { id: string; expiresAt: string }>();
+    // The payees with no address of their own to ask at once (ask every payee A1, A2).
+    const askable = canWrite ? askablePayees(counterparties, payeeLinks) : null;
     // Vendors paid to a bank account through BlindPay (bank payouts B4), on a deployment with it; best effort, none
     // before migration 0124.
     const bankPayoutsOn = blindpaySettingsFromEnv() !== null;
@@ -117,6 +121,8 @@ export default async function CounterpartiesPage({
         ) : (
           <Callout className="mb-8">Only an owner or admin of this workspace can add counterparties.</Callout>
         )}
+
+        {askable && askable.payees.length > 0 && <AskEveryPayee orgSlug={slug} payees={askable.payees} more={askable.more} linksOut={askable.linksOut} />}
 
         <section>
           <SectionHeader title="Counterparty book" meta={`${counterparties.length} ${plural(counterparties.length, "record", "records")} · what needs someone first · open one for the rest`} />

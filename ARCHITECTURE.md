@@ -457,6 +457,14 @@ payment to an address.
 - **Afterwards:** the follow-up (`newPayeeFollowUp`) reopens a payable held this way once that payee has been paid at
   its address, or two parties stand behind it.
 
+**Ask every payee at once** (`docs/superpowers/specs/2026-10-18-ask-every-payee-design.md`). `askablePayees`
+(`src/lib/address-requests.ts`) lists, for an owner or admin on Counterparties, the vendors and contractors with no
+address of their own (a mirror address counts as none), no unused link out and no sample flag, 25 at most by name.
+`askPayeesForAddresses` re-reads the ones the page listed, makes each link through `issuePayeeLink` (the same gate,
+client refusal and `payee_link_created`), emails it to the payee's notice email (`addressRequestEmail`, metered as
+`address_request`), returns the rest to show once, and signs `payee_addresses_requested { by, links: [{ counterpartyId,
+linkId, emailed }], notMade }` best effort.
+
 **No address, nothing sent.** Wherever payments are real, a pay or schedule decision for a counterparty with no
 payment address is held by `counterparty.no_address` (`enforceApGuardrails`) before any limit is read or transfer tried,
 as a milestone already is (`payeeNotReady`). The entry records `observed.addressMissing`, and the follow-up reopens the

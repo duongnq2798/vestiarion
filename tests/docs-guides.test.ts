@@ -1225,6 +1225,14 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["The agent pays it once a person agrees, in shadow mode", REPLAY_READ],
   ],
   "guides/first-payment": [
+    // Ask every payee at once (ask every payee A1-A5).
+    ["Ask every payee for an address", "src/components/intake/AskEveryPayee.tsx"],
+    ["Ask N for an address", "src/components/intake/AskEveryPayee.tsx", "Ask {count} for an address"],
+    ["By email to", "src/components/intake/AskEveryPayee.tsx"],
+    ["No email: copy its link", "src/components/intake/AskEveryPayee.tsx"],
+    ["Send the links", "src/components/intake/AskEveryPayee.tsx"],
+    ["Not made", "src/components/intake/AskEveryPayee.tsx"],
+    ["payee_addresses_requested", "src/lib/address-requests.ts"],
     // Who may not approve a first payment alone (new payee check N4; independent review, 2026-10-15).
     ["You gave this payee's address", APPROVAL_CARD],
     ["You asked for this address with a payee link", APPROVAL_CARD],
