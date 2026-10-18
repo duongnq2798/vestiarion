@@ -14,6 +14,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Bring in a second person.** While one person runs a workspace, Treasury asks an owner or admin, once the agent has
+  decided a real bill, to invite an approver (so a first payment to an address they gave goes to someone else) and
+  their accountant, each from one email field, through the usual invitation. **Not now** hides it for 30 days in that
+  browser. The weekly summary of a one-person workspace ends with a link to invite them, and `member_invited` says
+  where an invitation came from with `via`. No migration.
+  [Guide](https://www.vestiarion.xyz/docs/guides/workspace#bring-in-a-second-person).
+
 - **Ask every payee for an address at once.** On **Counterparties**, owners and admins see how many vendors and
   contractors have no address of their own, mirror addresses included, and choose **Ask N for an address**. Each gets
   its own one-time payee link, emailed to its notice email where it has one, and the rest are shown once to copy; a

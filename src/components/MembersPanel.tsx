@@ -34,6 +34,7 @@ import { orgHref } from "@/lib/auth/org-paths";
 import { canAssignRole, ROLE_SUMMARIES, type OrgRole } from "@/lib/auth/roles";
 import { leaveWorkspaceDescription, removeMemberDescription } from "@/lib/member-keys";
 import type { Member, OpenInvitation } from "@/lib/platform/members";
+import type { InviteVia } from "@/lib/invite-nudge";
 
 const INITIAL: MemberActionResult = { ok: false, message: "" };
 const EXIT = { duration: MOTION.duration.exit, ease: MOTION.ease.exit };
@@ -151,7 +152,7 @@ function LeaveWorkspace({ orgSlug, userId, form, keyNames }: { orgSlug: string; 
   );
 }
 
-function InviteForm({ orgSlug, assignable, initialRole }: { orgSlug: string; assignable: readonly OrgRole[]; initialRole?: OrgRole }) {
+function InviteForm({ orgSlug, assignable, initialRole, via }: { orgSlug: string; assignable: readonly OrgRole[]; initialRole?: OrgRole; via?: InviteVia }) {
   const [role, setRole] = useState<OrgRole>(initialRole && assignable.includes(initialRole) ? initialRole : assignable[assignable.length - 1]);
   const { state, formProps } = useActionForm(inviteMemberAction, INITIAL, {
     resetOnSuccess: true,
@@ -163,6 +164,7 @@ function InviteForm({ orgSlug, assignable, initialRole }: { orgSlug: string; ass
     <Card asChild className="space-y-3 p-4 sm:p-5">
       <form {...formProps}>
         <input type="hidden" name="orgSlug" value={orgSlug} />
+        {via && <input type="hidden" name="via" value={via} />}
         {/* The fields share one row; the result sits below it, so the email field keeps the row's free width. */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <Field id="invite-email" label="Email" className="min-w-0 flex-1">
@@ -278,6 +280,7 @@ export default function MembersPanel({
   assignable,
   keyNames = {},
   inviteRole,
+  inviteVia,
 }: {
   orgSlug: string;
   members: Member[];
@@ -289,6 +292,8 @@ export default function MembersPanel({
   keyNames?: Record<string, string[]>;
   /** The role the invitation form starts on; viewer when absent (the pictures of the accountant console start it on accountant). */
   inviteRole?: OrgRole;
+  /** Where the visit came from, when it was the weekly brief's link: the invitation says so (invite nudge I5). */
+  inviteVia?: InviteVia;
 }) {
   const isManager = assignable.length > 0;
   const router = useRouter();
@@ -361,7 +366,7 @@ export default function MembersPanel({
         <>
           <section aria-labelledby="invite-title">
             <SectionHeader id="invite-title" title="Invite someone" meta="the link is shown once, right after sending" />
-            <InviteForm orgSlug={orgSlug} assignable={assignable} initialRole={inviteRole} />
+            <InviteForm orgSlug={orgSlug} assignable={assignable} initialRole={inviteRole} via={inviteVia} />
           </section>
           <OpenInvitations orgSlug={orgSlug} invitations={invitations} />
         </>

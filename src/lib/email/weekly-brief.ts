@@ -96,7 +96,13 @@ export function briefSentences(facts: WeeklyBriefFacts): {
   return { lastWeek, waiting, ahead, lines, more: Math.max(0, facts.next7.count - lines.length), cash };
 }
 
-export function weeklyBriefEmail(input: { orgName: string; facts: WeeklyBriefFacts; links: { console: string; approvals: string; plan: string }; origin: string }): {
+export function weeklyBriefEmail(input: {
+  orgName: string;
+  facts: WeeklyBriefFacts;
+  /** `invite`, when the workspace has one member: Members, with the approver role chosen (invite nudge I4). */
+  links: { console: string; approvals: string; plan: string; invite?: string };
+  origin: string;
+}): {
   subject: string;
   html: string;
   text: string;
@@ -111,6 +117,7 @@ export function weeklyBriefEmail(input: { orgName: string; facts: WeeklyBriefFac
       ? `${orgName}: the cash runs short on ${day(facts.cash.short.shortOn)} · your week with the agent`
       : `${orgName}: your week with the agent`;
   const footer = `You get this because you can approve payments in ${orgName} and keep its emails on. You can turn them off in Settings, under Notifications.`;
+  const alone = `You run ${orgName} alone on Vestiarion. Invite your approver or your accountant:`;
 
   const text = [
     `${orgName}, ${day(facts.from)} to ${day(facts.to)}`,
@@ -130,6 +137,7 @@ export function weeklyBriefEmail(input: { orgName: string; facts: WeeklyBriefFac
     `Console: ${links.console}`,
     ...(facts.waiting > 0 ? [`Approvals: ${links.approvals}`] : []),
     `Payment plan: ${links.plan}`,
+    ...(links.invite ? ["", `${alone} ${links.invite}`] : []),
     "",
     footer,
   ].join("\n");
@@ -190,7 +198,12 @@ ${said.more > 0 ? row(`<span style="color:#646c67;">and ${said.more} more</span>
                 ${facts.waiting > 0 ? `${button(links.approvals, "Decide what waits")}<td style="width:10px;"></td>` : ""}${button(links.plan, "See the payment plan")}
               </tr>
             </table>
-            <p style="margin:16px 0 0 0;font-size:13px;line-height:20px;color:#4d5a53;">The console: <a href="${escapeHtml(links.console)}" target="_blank" style="color:#3048c9;text-decoration:none;">${escapeHtml(links.console)}</a></p>
+            <p style="margin:16px 0 0 0;font-size:13px;line-height:20px;color:#4d5a53;">The console: <a href="${escapeHtml(links.console)}" target="_blank" style="color:#3048c9;text-decoration:none;">${escapeHtml(links.console)}</a></p>${
+              links.invite
+                ? `
+            <p style="margin:12px 0 0 0;font-size:13px;line-height:20px;color:#4d5a53;">${escapeHtml(alone)} <a href="${escapeHtml(links.invite)}" target="_blank" style="color:#3048c9;text-decoration:none;">Invite them</a></p>`
+                : ""
+            }
           </td>
         </tr>
         <tr>

@@ -43,6 +43,10 @@ import { readServiceBudget } from "@/lib/service-budget";
 import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import { gettingStarted, ownBillCount, ownDecidedCount, ownPayableCount, type GettingStarted as Checklist } from "@/lib/getting-started";
+import { cookies } from "next/headers";
+import { InviteNudge } from "@/components/vx/InviteNudge";
+import { INVITE_LATER_COOKIE, inviteNudgeShown } from "@/lib/invite-nudge";
+import { listMembers, listOpenInvitations } from "@/lib/platform/members";
 import { readLimitsSet, readOnboardingMarks, readPersonActs } from "@/lib/onboarding/read";
 import { approverChecklist, checklistRoleOf } from "@/lib/onboarding/role-checklists";
 import { ledgerReadMayBeCut, listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
@@ -410,6 +414,26 @@ export default async function DashboardPage({
       network: access.membership.network,
     });
     const sampleLoaded = counterparties.some((counterparty) => counterparty.sample);
+    // Bring in a second person (invite nudge I1, I6): for whoever may invite, once the agent has decided a real bill, while
+    // the workspace is one person's with no invitation open and "Not now" was not chosen here. Best effort: a read that
+    // fails shows no card.
+    const canInvite = can(role, "members.manage");
+    const nudgeShown = canInvite
+      ? await Promise.all([listMembers(access.membership.orgId), listOpenInvitations(access.membership.orgId), cookies()])
+          .then(([members, invitations, jar]) =>
+            inviteNudgeShown({
+              canManage: true,
+              members: members.length,
+              openInvitations: invitations.length,
+              decidedCount: ownDecidedCount(invoices, counterparties),
+              putOff: jar.get(INVITE_LATER_COOKIE)?.value === "1",
+            })
+          )
+          .catch((error: unknown) => {
+            console.error("console: members not read for the invite card", access.membership.orgId, error instanceof Error ? error.message : error);
+            return false;
+          })
+      : false;
 
     return (
       <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={{ ...modes, held: paymentsHeld(), hold: paymentsHoldReason() }} status={await shellStatus()}>
@@ -451,6 +475,9 @@ export default async function DashboardPage({
             confirmLimits={marks?.available && can(role, "agent.budget") ? confirmLimitsAction : undefined}
           />
         )}
+
+        {/* Kept in place for whoever may invite, so an invitation just sent stays on screen once the page re-reads. */}
+        {canInvite && <InviteNudge orgSlug={slug} shown={nudgeShown} />}
 
         {sampleOffered && <SampleDataOffer orgSlug={slug} />}
         {sampleLoaded && <SampleDataLoaded orgSlug={slug} canRemove={can(role, "records.write")} />}

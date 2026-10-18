@@ -140,6 +140,17 @@ describe("inviteMemberAction", () => {
     expect(inviteMemberMock).toHaveBeenCalledWith({ actorId: USER, orgName: "Northstar", email: "new@example.com", role: "viewer" });
   });
 
+  it("passes on where an invitation came from only when it is the console's card or the weekly brief (invite nudge I5)", async () => {
+    inviteMemberMock.mockResolvedValue({ invitationId: "inv-1", link: "https://tests.vestiarion.xyz/invite/tok", emailed: true });
+    for (const [via, expected] of [["console_nudge", "console_nudge"], ["weekly_brief", "weekly_brief"], ["somewhere", undefined]] as const) {
+      authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: membership("owner") });
+      const form = inviteForm("approver");
+      form.set("via", via);
+      await run(() => inviteMemberAction(INITIAL, form));
+      expect(inviteMemberMock).toHaveBeenLastCalledWith({ actorId: USER, orgName: "Northstar", email: "new@example.com", role: "approver", ...(expected ? { via: expected } : {}) });
+    }
+  });
+
   it("returns a MemberError's message", async () => {
     authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: membership("owner") });
     inviteMemberMock.mockRejectedValueOnce(new MemberError("already_a_member"));

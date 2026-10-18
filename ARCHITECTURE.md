@@ -126,7 +126,12 @@ transaction — `src/lib/platform/members.ts` wraps them, adds the signed ledger
 passes an email address into it (`detail.by` and `detail.member` carry user ids only). `owner` may
 grant or change any role; `admin` may grant or change only `approver`, `accountant` and `viewer`; no one else may
 do either — enforced identically by `can_assign_role` in the database and `canAssignRole` in
-`roles.ts`. Inviting (`invite_member`) generates 32 random bytes, base64url-encoded, for the link,
+`roles.ts`. **Bring in a second person** (`docs/superpowers/specs/2026-10-19-invite-nudge-design.md`): Treasury shows
+`InviteNudge` to whoever holds `members.manage` when `inviteNudgeShown` (`src/lib/invite-nudge.ts`) says the workspace
+has one member, no open invitation, at least one real bill the agent decided, and no `vx_invite_later` cookie on the
+workspace's path (Not now, 30 days). Its two forms post to `inviteMemberAction` with `via: "console_nudge"`; the weekly
+brief of a one-person workspace links `/o/<slug>/members?invite=approver&via=weekly_brief`, and Members passes that
+`via` on. `inviteMember` records a valid `via` on `member_invited`. Inviting (`invite_member`) generates 32 random bytes, base64url-encoded, for the link,
 and stores only the `sha256` hex of that token (`invitations.token_hash`); the raw token never
 reaches the database. An invitation expires 7 days after creation, and an organization holds at most
 20 open invitations at a time. Inviting the same address again withdraws the older invitation, and

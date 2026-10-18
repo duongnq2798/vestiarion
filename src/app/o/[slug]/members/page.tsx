@@ -4,9 +4,10 @@ import MembersPanel from "@/components/MembersPanel";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import { requireMembership } from "@/lib/auth/membership";
-import { can, canAssignRole, ORG_ROLES } from "@/lib/auth/roles";
+import { can, canAssignRole, isOrgRole, ORG_ROLES } from "@/lib/auth/roles";
 import { shellModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
+import { isInviteVia } from "@/lib/invite-nudge";
 import { keyNamesForViewer } from "@/lib/member-keys";
 import { activeKeyNamesByCreator } from "@/lib/platform/api-keys";
 import { listMembers, listOpenInvitations } from "@/lib/platform/members";
@@ -17,8 +18,16 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: sectionTitle("members") };
 
-export default async function MembersPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function MembersPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ invite?: string | string[]; via?: string | string[] }>;
+}) {
   const { slug } = await params;
+  // From the weekly brief's link (invite nudge I4, I5): the role the invitation form starts on, and where it came from.
+  const { invite, via } = await searchParams;
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
     const { user, membership } = access;
@@ -49,6 +58,8 @@ export default async function MembersPage({ params }: { params: Promise<{ slug: 
           viewerRole={membership.role}
           assignable={assignable}
           keyNames={keyNamesForViewer({ members, viewerId: user.id, viewerRole: membership.role, byCreator: keysByCreator })}
+          inviteRole={isOrgRole(invite) ? invite : undefined}
+          inviteVia={isInviteVia(via) ? via : undefined}
         />
       </ProductShell>
     );

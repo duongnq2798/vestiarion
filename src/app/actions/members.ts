@@ -6,6 +6,7 @@ import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { can, isOrgRole } from "@/lib/auth/roles";
 import { inOrg } from "@/lib/dal/scope";
+import { isInviteVia } from "@/lib/invite-nudge";
 import {
   changeMemberRole,
   inviteMember,
@@ -40,8 +41,10 @@ export async function inviteMemberAction(_previous: MemberActionResult, formData
     const email = formString(formData, "email");
     const role = formString(formData, "role");
     if (!isOrgRole(role)) return { ok: false, message: "Choose a role." };
+    // The console's card, or Members opened from the weekly brief, says so (invite nudge I5); anything else, nothing.
+    const via = formString(formData, "via");
     try {
-      const result = await inviteMember({ actorId: auth.user.id, orgName: auth.membership.name, email, role });
+      const result = await inviteMember({ actorId: auth.user.id, orgName: auth.membership.name, email, role, ...(isInviteVia(via) ? { via } : {}) });
       revalidateOrgPages();
       return {
         ok: true,

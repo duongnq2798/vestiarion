@@ -175,6 +175,16 @@ describe("inviteMember", () => {
     expect(appendsJson).not.toContain("new@example.com");
   });
 
+  it("records where the invitation came from, when it says (invite nudge I5)", async () => {
+    sendEmailMock.mockResolvedValueOnce({ sent: true, id: "msg_2" });
+    const { fake, run } = membersFake();
+    await run(() => withOrg(ORG, () => inviteMember({ actorId: ACTOR, orgName: "Northstar", email: "acct@example.com", role: "accountant", token: "t2", via: "console_nudge" })));
+    expect(rpcBodies(fake.requests, "append_ledger_entry")[0]).toMatchObject({
+      p_action: "member_invited",
+      p_detail: { by: ACTOR, invitationId: "inv-1", role: "accountant", via: "console_nudge" },
+    });
+  });
+
   it("returns emailed: false, and still returns the link, when email is not configured", async () => {
     sendEmailMock.mockResolvedValueOnce({ sent: false, reason: "not_configured" });
     const { run } = membersFake();

@@ -8,6 +8,7 @@ import { sendEmail } from "../email/send";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { activeConnectionsOf, memberConnectionEnded } from "../extension/tokens";
 import { apiKeyRevokedEntry } from "./api-keys";
+import type { InviteVia } from "../invite-nudge";
 
 /**
  * Members and invitations (spec §7, §10 step 5b). Every change goes through a
@@ -103,6 +104,8 @@ export async function inviteMember(input: {
   email: string;
   role: OrgRole;
   token?: string;
+  /** Where it was sent from, when that was the console's card or the weekly brief's link (invite nudge I5). */
+  via?: InviteVia;
 }): Promise<{ invitationId: string; link: string; emailed: boolean }> {
   const orgId = currentOrgId();
   const token = input.token ?? crypto.randomBytes(32).toString("base64url");
@@ -125,7 +128,7 @@ export async function inviteMember(input: {
     domain: "system",
     action: "member_invited",
     summary: `Invitation sent for the ${input.role} role`,
-    detail: { by: input.actorId, invitationId: row.id, role: input.role },
+    detail: { by: input.actorId, invitationId: row.id, role: input.role, ...(input.via ? { via: input.via } : {}) },
   });
 
   const link = `${siteOrigin()}/invite/${token}`;
