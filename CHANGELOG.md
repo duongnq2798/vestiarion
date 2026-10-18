@@ -22,6 +22,14 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- **The landing page's safety section says who decides what, and shows one real refusal.** "The AI suggests. Your rules
+  decide." now sets out three principles, each saying what holds it: your team sets the limits, roles and
+  approvals; rules in code check every payment before it is sent, with Arc mainnet's spending-limit contract as the
+  one onchain bound; and every decision, approval and hold is signed into the ledger. Under them, "What happens when a
+  rule fails?" follows a real decision in a demo workspace in shadow mode on Arc testnet: the agent proposed a 50.00
+  USDC payment, the daily spending limit refused it, and nothing was sent. **Explore all safety controls** leads to the
+  controls guide.
+
 - **The landing page's proof leads with one real payment you can check.** "Don't take our word for it." now opens on
   the first payment a team workspace made on Arc mainnet: the agent decided to pay a 0.10 USDC bill, code held it as a
   first payment to a new address, a second member approved it, and it was paid through the owner's spending-limit
