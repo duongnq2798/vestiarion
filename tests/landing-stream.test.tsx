@@ -58,7 +58,8 @@ describe("the landing page, while every read is pending", () => {
       "The AI suggests. Your rules decide.",
       "Don't take our word for it.",
       "Loading the agent's latest decision",
-      "Loading the open numbers",
+      "Loading customer activity",
+      "A real payment, with a verifiable trail.",
       "Everything you need to know.",
       "See what the agent decides on your next bill.",
     ]) {

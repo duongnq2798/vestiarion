@@ -600,9 +600,8 @@ mainnet plan).
   - The questions' answer about Arc mainnet says it is open to anyone only while `MAINNET_ALLOWLIST` holds `*`
     (`mainnetOpenToEveryone`).
   - Nothing above the proof waits for a read (landing stream S1): `LandingPage` is not async. It starts the reads (both
-    networks' open numbers, the latest decision, the founding workspace's chain modes, the reserve count) and hands
-    them to `Proof` as promises; its latest decision, figures and live legs each stream in behind their own fallback,
-    so the hero arrives with the first bytes. A chain-mode read that fails shows the legs as not live, never as live.
+    networks' open numbers and the latest decision) and hands them to `Proof` as promises; each group of figures and
+    the latest decision stream in behind their own fallback, so the hero arrives with the first bytes.
 - **The landing's latest decision** (`docs/superpowers/specs/2026-10-08-landing-owner-hero-design.md`): the newest
   decision the agent made in one of the team's own live workspaces, in the landing's proof (a band of its own on
   /studios).
@@ -616,7 +615,8 @@ mainnet plan).
     the workspace's id stays there. `src/lib/latest-decision.ts` says it in words.
   - The reader's browser checks the signature and the link to the entry before it with `verifySignedLink`, the
     receipt verifier's half that needs no body. Until 0087 runs, or when the read fails, there is no band.
-  - Under it in the proof, the decisions before it (`docs/superpowers/specs/2026-10-11-landing-recent-decisions-design.md`):
+  - The landing shows it as a line under the agent's decisions (`LatestLine`, in the proof). `LatestPanel` sets it
+    with the decisions before it, for a page that shows them in full: (`docs/superpowers/specs/2026-10-11-landing-recent-decisions-design.md`):
     `recent_team_decisions()` (0100), the service role's alone, reads the same workspaces on the same terms (and never
     a simulated payment's decision), one decision per bill (its newest) out of the newest 500, and counts each
     network's decisions in the past 7 days apart.
@@ -625,17 +625,21 @@ mainnet plan).
     transaction only when one went out. The list shows rows strictly older than the latest decision. Until 0100 runs,
     or when the read fails, the latest decision stands alone.
 - **The landing's proof** (`docs/superpowers/specs/2026-10-08-landing-proof-design.md`, and landing clarity P1-P3):
-  what the proof section says runs live, and the measurements, come from every workspace, never from the founding one
+  one real payment told as a story, then the measurements, which come from every workspace, never from the founding one
   alone.
-  - The live legs (`src/components/landing/provenance.ts`): the USYC reserve is live once any live workspace runs a
-    real one (`reserveRunsLive()`, a count over `orgs.usyc_live_at`, never which workspace), and links to the research
-    note's section on it. Payments link to the team's latest Arc mainnet payment on the explorer, read from
-    `open_numbers`; "Live on Arc mainnet" links to /open's mainnet section.
-  - The measurements are the open numbers, all time (`readAllTimeOrNull`): Arc mainnet's panel, then Arc testnet's.
-    Under "Customers" every figure is customers' own (workspaces, payments, then their verdicts or their on-time
-    share); the team's payments sit on a line of their own under them, with its latest payment on the explorer. No
-    total is shown where it could be read as customers'. A network whose numbers cannot be read says so, and the other
-    still shows.
+  - The featured payment (`src/components/landing/featured-proof.ts`) is the first payment a team workspace made on Arc
+    mainnet, on Oct 7, 2026: the model's decision to pay, code holding it as a first payment to a new address
+    (`counterparty.new_payee`), a second member's approval, and the transfer through the owner's
+    `VestiarionSpendingLimit`. A past payment's facts do not change, so they are written there, each with where it was
+    read (the workspace's ledger entries and the Arc mainnet explorer); "Verify on Arc Explorer" opens its transaction.
+  - The measurements are the open numbers, all time (`readAllTimeOrNull`), in three groups. Customer activity is
+    customers' own figures alone, on Arc testnet, with where customers stand on Arc mainnet. Agent decisions gives
+    each network's model decisions and code refusals beside their sum, and customers' shadow-mode verdicts; a verdict
+    count that cannot be read says so, never "None yet". Payments settled gives each network on its own, real USDC
+    never added to test USDC, saying whose payments they are and linking the team's latest one on its explorer. A
+    network whose numbers cannot be read says so, and the others still show.
+  - The live legs (`src/components/landing/provenance.ts`, `ProvenanceBar` and `ProvenanceList`) are no longer on the
+    landing; the components stay, with their tests.
 - **Motion** (`docs/superpowers/specs/2026-10-08-landing-motion-design.md`): reduced motion removes movement, not every
   change. Under `prefers-reduced-motion: reduce`, `globals.css` keeps transitions for opacity and colours only and cuts
   keyframe animations, except on an element marked `data-calm-motion`; `Reveal` fades without lifting. Each moving
