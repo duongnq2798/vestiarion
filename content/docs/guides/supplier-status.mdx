@@ -1,0 +1,45 @@
+Suppliers ask when they will be paid, and someone looks it up and writes back. A payment status link gives one vendor a page of its own: each of its bills with you, where it stands, and what was paid, with each payment's transaction on Arc. It needs no account. It works the same in a workspace on Arc testnet and on Arc mainnet. In a sandbox the page says its payments are simulated, and in shadow mode it shows no bills.
+
+## 1. Make a link
+
+Open **Bills & receivables**, stay on the **Bills** tab and scroll to **Supplier payment status**.
+
+- **Choose the vendor** and how long the link works under **Link works for**: 7, 30 or 90 days. Then choose **Make a link**.
+- **Copy the link at once.** The page shows it with "Copy it now: it is shown only once." Vestiarion keeps only a fingerprint of it, so it cannot show it again. A link that is lost is replaced by making a new one.
+- **One link per supplier.** Making a new link for a supplier stops the one it had; the page says so. The list under the form shows each supplier with a link, until when it works, and who made it. **Stop the link** ends it at once.
+- **Who makes links.** Owners and admins. Every other member sees the list and reads "An owner or admin can share a supplier's payment status."
+- **Vendors only.** A link is for a counterparty with the role vendor. A client gets a [statement](/docs/guides/customer-portal) instead, and a contractor follows its payments through its [payee link](/docs/guides/get-paid).
+- **Not in shadow mode.** In shadow mode you pay your bills your own way, and Arc testnet only mirrors the ones you agree with, so no link is made: "Turn shadow mode off first." A link made before shows no bills while shadow mode is on.
+- **Memos are shown.** The supplier sees each bill's memo and purchase order, so keep internal notes out of memos.
+
+Send the link to the supplier the way you usually reach them. It starts with `https://www.vestiarion.xyz/supplier/`.
+
+## 2. What your supplier sees
+
+The link opens a page titled with your workspace's name and the supplier's, the day it was read, and until when the link works.
+
+- **Still to be paid,** in each currency apart: USDC and EURC are never added together. With nothing waiting, the page says "Nothing is waiting to be paid."
+- **Your open bills,** each with its reference and purchase order, the amount, the due date, and where it stands:
+
+| On the page | When |
+|---|---|
+| **Received** | The bill is in, and the agent has not decided it yet. |
+| **Being reviewed** | The bill is held for a person, flagged, waiting for details, or a person is deciding it in Approvals. |
+| **To be paid on** a day | The agent scheduled it for that day. |
+| **Payment on its way** | The payment has been sent and is not confirmed yet. |
+
+- **Paid recently:** bills paid in the last 90 days, up to 10, each with **See the payment's transaction** when the payment was made on Arc. The transaction opens on the public explorer, as every transaction on Arc does.
+
+The page never says why a bill is held: not that the cash is short, not that a control stopped it, not that it was flagged. It shows nothing else of your workspace: no other supplier, no balance, no ledger, no reasoning, and no name or email of anyone at your business. A rejected bill is not shown.
+
+Under the bills, one line says your workspace pays its bills through Vestiarion, with a link to what Vestiarion is.
+
+## 3. What it does not do
+
+- **Read only.** The supplier sends nothing from the page, and opening it changes nothing.
+- **Anyone with the link sees it.** The page says so, and asks the supplier to share it only with the people who handle its payments. Stop a link that went too far, and make a new one.
+- **Offers and requests keep their own links.** An [early-payment offer](/docs/guides/early-payment-offers) or a [request for more time](/docs/guides/more-time) still reaches the supplier by its own one-time link.
+
+## 4. In the ledger
+
+Each link made is signed as `supplier_status_shared`, with who made it, the supplier, how long it works, and the links it replaced. Stopping one is signed as `supplier_status_unshared`. A link whose entry cannot be written is stopped at once, so no link works without its record.

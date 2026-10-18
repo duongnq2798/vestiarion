@@ -125,6 +125,7 @@ export const TENANT_TABLES = [
   "early_payment_offers", "early_payment_offer_reviews",
   "customer_discount_offers", "customer_discount_reviews",
   "payment_term_requests", "payment_term_request_reviews",
+  "supplier_status_links",
 ] as const;
 
 export interface SeededRows {
@@ -329,6 +330,11 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     [orgId, portalLinkId, customerId, customerInvoiceId]
   );
   await db.query("insert into customer_request_messages (org_id, request_id, body) values ($1, $2, 'We are checking.')", [orgId, customerRequestId]);
+  // The vendor's payment status link (0131).
+  await db.query(
+    "insert into supplier_status_links (org_id, counterparty_id, token_hash, expires_at) values ($1, $2, encode(sha256(convert_to($3, 'utf8')), 'hex'), now() + interval '30 days')",
+    [orgId, counterpartyId, `supplier-status-${tag}`]
+  );
   // That customer's collection rules, a task about its invoice, and a reminder email recorded as sent (0110).
   await db.query(
     "insert into collection_policies (org_id, counterparty_id, version, approval, max_tone, min_days_between) values ($1, $2, 1, 'ask_first', 'firm', 7)",

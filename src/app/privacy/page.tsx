@@ -121,6 +121,14 @@ export default function PrivacyPage() {
           also write to the workspace as that customer. What the customer writes is kept with the workspace&apos;s invoices; its signed ledger entry
           keeps the days, the amount and a SHA-256 fingerprint of the words, never the words.
         </p>
+        <p>
+          An owner or admin can send a vendor a link to its own payment status. Anyone with the link sees, until it
+          expires or is stopped, that supplier&apos;s bills with the workspace (their memos, purchase order references, amounts, due dates and where
+          each one stands: received, being reviewed, the day it is set to be paid, on its way, or paid), and for each payment made on Arc, its
+          transaction on the public explorer. It never says why a bill is held, and never shows a rejected bill, another counterparty, the
+          workspace&apos;s records, reasoning or ledger, or the names and emails of its members. In shadow mode it shows no bills. The page is read
+          only: nothing is sent through it.
+        </p>
       </LegalSection>
 
       <LegalSection id="secrets" title="Secrets">
@@ -438,7 +446,7 @@ export default function PrivacyPage() {
           <li>
             an invitation address becomes <code>/invite/:token</code>, a payee link <code>/payee/:token</code>, a client&apos;s pay link{" "}
             <code>/pay/:token</code>, a receipt link <code>/receipt/:token</code>, a shared report <code>/report/:token</code>, a customer&apos;s statement{" "}
-            <code>/statement/:token</code>, an early-payment offer <code>/offer/:token</code> a customer&apos;s discount <code>/discount/:token</code> and a request for more time{" "}
+            <code>/statement/:token</code>, a supplier&apos;s payment status <code>/supplier/:token</code>, an early-payment offer <code>/offer/:token</code> a customer&apos;s discount <code>/discount/:token</code> and a request for more time{" "}
             <code>/more-time/:token</code>, and a
             workspace address has the workspace&apos;s slug
             replaced, as <code>/o/:org</code>;

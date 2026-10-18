@@ -79,6 +79,8 @@ const KEEP_UPDATE: Record<string, { column: string; expr: string }> = {
   // A customer's statement link is stopped, and what the customer said is closed, never deleted (0109).
   customer_portal_links: { column: "revoked_at", expr: "now()" },
   customer_requests: { column: "outcome", expr: "'resolved'" },
+  // A supplier's payment status link is stopped, never deleted (0131).
+  supplier_status_links: { column: "revoked_at", expr: "now()" },
   // A collection task is resolved, never deleted (0110).
   collection_tasks: { column: "notified_at", expr: "now()" },
   // A captured draft is confirmed or discarded, never deleted by a tenant (0121).

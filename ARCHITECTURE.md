@@ -1868,6 +1868,39 @@ the workspace, and a way to answer each open invoice, with no account and no wal
 - **Before 0109 runs** the lookups answer no link, the reads answer `available: false` (`PGRST205`, `42P01`), the
   commands refuse `not_ready`, the Receivables tab says statements are not set up, and reminders go as before.
 
+## Supplier payment status
+
+docs/superpowers/specs/2026-10-18-supplier-status-design.md, migration 0131. The payables mirror of customer statements,
+read only.
+
+- **The link** (`src/lib/supplier-status/links.ts`, `token.ts`). `vxv_` and 43 base64url characters, kept as the SHA-256
+  of its secret in `supplier_status_links`, for a vendor only (a trigger refuses a client or a contractor; refused too in
+  shadow mode, where Arc testnet only mirrors the bills paid outside), expiring after 7, 30
+  or 90 days (the database refuses more than 91), one live per supplier (a partial unique index), revoked once, never
+  deleted. `createSupplierLink` stops the supplier's live link, inserts the new one and signs `supplier_status_shared`
+  (domain `ap`); a link whose entry fails is stopped at once (`not_recorded`), and the links it replaced are signed as
+  stopped, as they are when the new one cannot be stored. `stopSupplierLink` revokes first, then
+  signs `supplier_status_unshared` best effort. The commands `supplier_status.share` and `supplier_status.unshare`
+  (`records.write`, console only) wrap them; the Bills tab's **Supplier payment status** (`SupplierStatusLinks`) calls
+  them through `src/app/actions/supplier-status.ts`.
+- **The page** (`/supplier/[token]`, `src/lib/supplier-status/public.ts`). No session: a malformed token is never looked
+  up; `supplier_status_by_token` (service role only) answers null for a stopped or unknown link and only the day for an
+  expired one. A live link's bills are read inside the workspace's scope (`withOrg`), filtered to the link's
+  counterparty and `direction = 'payable'`: none while the workspace is in shadow mode (`unavailable`), else the open
+  ones (`OPEN_PAYABLE_STATUSES`, never `rejected`) and those paid in the last 90 days (at most 10), with their
+  `payment_intents`, read 100 bills at a time (a confirmed one's `tx_hash`, linked on the home chain's explorer only when
+  it is an Arc transaction hash; one created, submitting or pending marks the bill on its way). A sandbox's page says its
+  payments are simulated. Nothing is written or signed.
+- **The words** (`src/lib/supplier-status/model.ts`, pure). `standingOf` maps a status to received (pending), being
+  reviewed (held, flagged, awaiting info, `processing`, which is a person's claim in Approvals, or anything new), to be
+  paid on its `scheduled_for`, on its way (`matched`, a payable's submitted payment, or a payment in flight), or paid on
+  its `settled_at`. The page never says why a bill is held. Open bills
+  are ordered by what happens next, and totalled per currency, never across currencies.
+- **Privacy.** `noindex`, a fixed title and preview card (`linkSocialMetadata("supplier")`), and analytics sees
+  `/supplier/:token`.
+- **Before 0131 runs** the lookup answers no link, the list answers `available: false`, the commands refuse
+  `not_ready`, and the Bills tab says supplier payment status is not set up.
+
 ## Collections that follow the customer's context
 
 Each open receivable gets one next step from what is known about its customer

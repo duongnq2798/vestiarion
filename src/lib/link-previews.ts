@@ -18,6 +18,12 @@ export const LINK_PREVIEWS = {
     line: "Open the link to see your invoices, pay one, or tell the business about a payment.",
     alt: "Vestiarion — a statement of what you owe",
   },
+  supplier: {
+    badge: "Your payments",
+    title: "When you will be paid",
+    line: "Open the link to see your bills with the business, where each one stands, and what was paid.",
+    alt: "Vestiarion — when you will be paid",
+  },
 } as const;
 
 export type LinkPage = keyof typeof LINK_PREVIEWS;

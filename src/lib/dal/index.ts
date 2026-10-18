@@ -81,6 +81,8 @@ export const TENANT_TABLES = [
   "customer_discount_offers", "customer_discount_reviews",
   // Requests for more time on bills held for cash, and the agent's one review of each bill (migration 0128).
   "payment_term_requests", "payment_term_request_reviews",
+  // Suppliers' payment status links (migration 0131, supplier status V1).
+  "supplier_status_links",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
@@ -154,6 +156,8 @@ export const PLATFORM_RPCS = [
   "create_term_request", "term_request_preview", "decide_term_request", "withdraw_term_request", "set_term_requests",
   // Suppliers' counters to the agent's requests for more time (0130, term counters F5, F6).
   "counter_term_request", "answer_term_counter",
+  // A supplier's payment status page, looked up by its link (0131, supplier status V4).
+  "supplier_status_by_token",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 

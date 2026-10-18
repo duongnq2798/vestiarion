@@ -70,6 +70,7 @@ export const DOCS_NAV: NavSection[] = [
       { slug: "guides/email-invoices", group: "Add bills", title: "Add invoices by email", description: "Turn on a workspace address, forward suppliers' invoices to it, and add each one from Bills & receivables with one press; nothing arrives as a payable by itself." },
       { slug: "guides/where-a-payment-is", group: "Follow a payment", title: "Know where a payment is", description: "Follow each payment from the agent's decision to the payee's wallet and your books: its stages and their sources, an outcome not known yet, payments in flight on Treasury, and a receipt's status." },
       { slug: "guides/payment-exceptions", group: "Follow a payment", title: "When a payment does not settle", description: "The runbook for a payment slow to confirm, of unknown outcome, failed, cancelled or not sent: who acts, what Vestiarion already did, what to do next and where the trail is, and why nothing is ever paid twice." },
+      { slug: "guides/supplier-status", group: "For the people you pay", title: "Show a supplier when it will be paid", description: "Send a vendor a link to its own bills: where each one stands, from received to paid, with each payment's transaction on Arc, and never why a bill is held." },
       { slug: "guides/get-paid", group: "For the people you pay", title: "Get paid as a freelancer", description: "For the person being paid: add your wallet address through the link a business sent, follow each step, and check the payment on Arc." },
     ],
   },

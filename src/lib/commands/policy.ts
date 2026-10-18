@@ -81,6 +81,10 @@ export const COMMAND_PERMISSIONS = {
   "customer_portal.unshare": "records.write",
   "customer_request.reply": "receivables.reconcile",
   "customer_request.close": "receivables.reconcile",
+  // A supplier's payment status link, and stopping one: records on the payables side, as a customer's statement link is
+  // on the receivables side (supplier status V6).
+  "supplier_status.share": "records.write",
+  "supplier_status.unshare": "records.write",
   // A customer's collection rules, and resolving what the collections stage asks a person (approve a reminder, hold
   // reminders until a day, no reminders, let them go again): they decide what the agent sends a customer, as turning
   // reminders on does, so owners and admins only, never the accountant's bookkeeping (collections context C4, C6).

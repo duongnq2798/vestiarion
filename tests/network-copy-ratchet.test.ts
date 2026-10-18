@@ -68,6 +68,8 @@ const ALLOWED: Record<string, number> = {
   // pays is said from the workspace's capability (src/lib/capability.ts), which names its network from its profile.
   "src/components/ShadowModePanel.tsx": 1,
   "src/lib/shadow-mode.ts": 1,
+  // A supplier's payment status link, refused in shadow mode, which runs only on Arc testnet (supplier status V8).
+  "src/lib/supplier-status/links.ts": 1,
   // Test USDC for shadow mode, only on Arc testnet (test USDC T2): where the console summary says to buy more, its
   // button's line, the action's word that Arc testnet still confirms it and where else testnet USDC comes from, and the
   // library's refusals and its ledger summaries, a recovered transfer's among them.
