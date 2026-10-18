@@ -604,6 +604,11 @@ mainnet plan).
     other tools in three rows of three, each linking to its guide; then Arc and Circle as what the payments run on. Each
     sentence is held to the tool's guide by `tests/brand-marks.test.tsx`. "Explore all integrations" leads to
     `/docs/guides/integrations`, one table of what each tool brings in, writes back and never does.
+  - For developers (`src/components/landing/BuildOnIt.tsx`): for builders, where the integrations are for business
+    teams. Three short benefits, the quickstart as the one primary action and the repository beside it, then
+    `CodeShowcase`: tabs for the API, the SDK and MCP, each the snippet its guide gives (`build/snippets.ts`),
+    highlighted by `build/highlight.ts` without changing a character, with a copy button for exactly that code.
+    `tests/landing-build-on-it.test.tsx` holds each snippet to the OpenAPI operations, the SDK guide and the MCP guide.
   - The technical showcase is `/how-it-decides`: the decision receipt replayed in its arch beside the live ledger's
     head, the decision loop step by step, and the claims with the receipts behind them.
   - The questions' answer about Arc mainnet says it is open to anyone only while `MAINNET_ALLOWLIST` holds `*`
@@ -656,8 +661,8 @@ mainnet plan).
   (`src/components/landing/pipeline/`) lights the step crossing the middle of the viewport and its part of a sticky
   diagram; the server's HTML lights every step. That page's receipt prints as calm motion under reduce, and publishes a beat (`hero/replay-beat.ts`) with the time
   its first line started; `ArchLights` climbs the arch's stones on that clock and rings the keystone in the outcome.
-  The open numbers count up once when first seen (`CountUp`); "For developers" types each guide's own snippet (API, SDK,
-  MCP, GitHub, `landing/build/snippets.ts`) over a complete copy a screen reader reads.
+  The open numbers count up once when first seen (`CountUp`). "For developers" no longer types its snippets: they are
+  static, so nothing there moves but the tab marker.
 
 **Every module on its workspace's network** (`docs/superpowers/specs/2026-10-05-network-threading-design.md`,
 phase 1b).
