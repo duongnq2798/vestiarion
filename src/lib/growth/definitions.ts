@@ -58,7 +58,7 @@ export const DEFINITIONS: readonly Definition[] = [
     calculation: "Customer workspaces whose first touch carries utm_campaign counterparty_loop: the link at the foot of a page, or in an email, that a business sent its supplier, payee or customer (counterparty loop C3). Of those, the ones with the agent's decision on a real bill.",
     window: WORKSPACES_WINDOW,
     dedupe: `${CUSTOMERS} Each workspace once.`,
-    limits: "Only a person who followed the link and opened a workspace in the same browser within 90 days, with no earlier campaign's first touch, is counted. Its utm_source says the kind of page or email.",
+    limits: "Only a person who followed the link and opened a workspace in the same browser within 90 days, with no earlier campaign's first touch, is counted. Its utm_source says the kind of page or email. A member who followed the link from their own workspace's page and then opened another workspace is counted too: the first touch cannot tell them apart.",
   },
   {
     metric: "Median minutes to first decision",

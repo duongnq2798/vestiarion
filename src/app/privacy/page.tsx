@@ -21,7 +21,7 @@ export default function PrivacyPage() {
     <LegalPage
       title="Privacy"
       updated="2026-10-16"
-      intro="Vestiarion is an autonomous treasury agent on Arc mainnet and Arc testnet. This page describes what the service stores and sends, as its code does it today. The code is public, so every statement here can be checked against it."
+      intro="Vestiarion is an AI agent for bills and payments on Arc mainnet and Arc testnet. This page describes what the service stores and sends, as its code does it today. The code is public, so every statement here can be checked against it."
     >
       <LegalSection id="signing-in" title="Signing in">
         <p>

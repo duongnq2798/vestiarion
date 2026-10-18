@@ -30,6 +30,11 @@ export const LOOP_PAGE_LINE = "Sent with Vestiarion, the AI agent for bills and 
 export const LOOP_PAGE_LINK = "Try it on your own bills";
 export const LOOP_EMAIL_LINE = "Run your own bills with it:";
 
+/** The page's link as the analytics click names it: `loop-` and the kind, hyphens only (`CTA_ID`). */
+export function loopCtaId(page: LoopPage): string {
+  return `loop-${page.replaceAll("_", "-")}`;
+}
+
 function tagged(base: string, source: string, medium: "counterparty_page" | "counterparty_email"): string {
   const query = new URLSearchParams({ utm_source: source, utm_medium: medium, utm_campaign: LOOP_CAMPAIGN });
   return `${base}/?${query.toString()}`;

@@ -227,7 +227,7 @@ describe("mdxToMarkdown", () => {
 describe("llms.txt and llms-full.txt", () => {
   it("llms.txt lists every page once, by its .md URL, in nav order", () => {
     const index = llmsIndex(ORIGIN);
-    expect(index.startsWith("# Vestiarion\n\n> Vestiarion is an autonomous treasury agent")).toBe(true);
+    expect(index.startsWith("# Vestiarion\n\n> Vestiarion is an AI agent for bills and payments")).toBe(true);
     let last = -1;
     for (const page of PAGES) {
       const link = `](${ORIGIN}/docs${page.slug ? `/${page.slug}` : ""}.md)`;

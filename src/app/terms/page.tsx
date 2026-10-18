@@ -20,7 +20,7 @@ export default function TermsPage() {
     <LegalPage
       title="Terms of use"
       updated="2026-10-16"
-      intro="These terms cover your use of Vestiarion, an autonomous treasury agent that pays invoices and contractors in USDC on Arc mainnet and Arc testnet. By using it, you accept them."
+      intro="These terms cover your use of Vestiarion, an AI agent for bills and payments that pays invoices and contractors in USDC on Arc mainnet and Arc testnet. By using it, you accept them."
     >
       <LegalSection id="networks" title="Arc mainnet and Arc testnet">
         <p>Each workspace runs on one network, chosen when it is created, and never moves to the other.</p>

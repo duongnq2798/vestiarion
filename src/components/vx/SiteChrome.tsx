@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { START_LABEL, TRY_HREF } from "@/components/landing/cta";
-import { LOOP_PAGE_LINE, LOOP_PAGE_LINK, loopPageHref, type LoopPage } from "@/lib/growth/loop";
+import { LOOP_PAGE_LINE, LOOP_PAGE_LINK, loopCtaId, loopPageHref, type LoopPage } from "@/lib/growth/loop";
 import { ARC_URL, CIRCLE_URL, GITHUB_URL, ISSUES_URL, LICENSE_URL, PRODUCT_HUNT_BADGE, PRODUCT_HUNT_URL, X_URL } from "@/lib/site-links";
 import { BrandMark } from "./Brand";
 import { SiteMenu } from "./SiteMenu";
@@ -242,7 +242,8 @@ const COPYRIGHT = "© 2026 Vestiarion contributors";
  * `lg`. `compact` is one line and its links, for every other public page.
  *
  * `loop` names a page a business sends its counterparties (counterparty loop C1, C2): above the line, it says what sent
- * the page, and links to the landing page in a new tab, tagged with that kind of page only.
+ * the page, and links to the landing page in a new tab, tagged with that kind of page only. The page's own address holds
+ * its token, so the link sends no referrer: the tags alone say where the visit came from.
  */
 export function SiteFooter({ compact = false, networkLabel = "Arc", loop }: { compact?: boolean; networkLabel?: string; loop?: LoopPage }) {
   if (compact) {
@@ -251,8 +252,9 @@ export function SiteFooter({ compact = false, networkLabel = "Arc", loop }: { co
         {loop && (
           <p className="mx-auto mb-4 max-w-6xl text-center font-sans text-sm text-ink-2">
             {LOOP_PAGE_LINE}{" "}
-            <a href={loopPageHref(loop)} target="_blank" rel="noopener" data-cta={`loop-${loop}`} className={INLINE_LINK}>
+            <a href={loopPageHref(loop)} target="_blank" rel="noopener noreferrer" data-cta={loopCtaId(loop)} className={INLINE_LINK}>
               {LOOP_PAGE_LINK}
+              <span className="sr-only"> (opens in a new tab)</span>
             </a>
           </p>
         )}

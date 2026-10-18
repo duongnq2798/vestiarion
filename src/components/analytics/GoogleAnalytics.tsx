@@ -23,7 +23,7 @@ type Gtag = {
 };
 
 /** A call to action's name, as `data-cta` gives it: lowercase words and hyphens only, so nothing else can ride along. */
-const CTA_ID = /^[a-z][a-z-]{0,39}$/;
+export const CTA_ID = /^[a-z][a-z-]{0,39}$/;
 
 export function GoogleAnalytics({ measurementId }: GoogleAnalyticsProps) {
   const pathname = usePathname();

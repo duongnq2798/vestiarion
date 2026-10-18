@@ -24,6 +24,7 @@ those pages says what sent them, and nothing would tell us if one of them came t
     customer paying keeps the page they were on.
   - In an email, the footer: "Vestiarion · The AI agent for bills and payments, settled in USDC on Arc." and, below it,
     "Run your own bills with it: vestiarion.xyz", linked.
+  - The link is in the HTML footer; an email's plain-text part is unchanged.
   - Member emails keep the footer's first line only. Its words follow the positioning of Oct 15: no longer "an
     autonomous treasury agent".
 - **C3. Tagged, and nothing more.**
@@ -35,6 +36,8 @@ those pages says what sent them, and nothing would tell us if one of them came t
   - Never a workspace, a token, a person, an amount or anything else of the page: the tags name the kind of page only.
   - The landing page's first-touch cookie keeps them as it keeps any campaign's (migration 0099), and a workspace opened
     from it shows that source in /admin/growth.
+  - The page's own address holds its token, so the link sends no referrer (`noopener noreferrer`): the tags alone say
+    where the visit came from. Its analytics click is `loop-` and the kind, in hyphens.
 - **C4. Counted.** /admin/growth counts the workspaces opened from the loop in its window, beside the other tiles.
 - **C5. Said.** The privacy page says these pages and emails link to Vestiarion with tags that name the kind of page
   only, and the guides for each page say what its counterparty sees at its foot.

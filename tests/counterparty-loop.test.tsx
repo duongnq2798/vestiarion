@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { actionEmailHtml } from "@/lib/email/layout";
 import { firstTouchFrom } from "@/lib/growth/attribution";
-import { LOOP_CAMPAIGN, LOOP_EMAILS, LOOP_PAGES, loopEmailUrl, loopPageHref } from "@/lib/growth/loop";
+import { LOOP_CAMPAIGN, LOOP_EMAILS, LOOP_PAGES, loopCtaId, loopEmailUrl, loopPageHref } from "@/lib/growth/loop";
 import { growthMetrics, type WorkspaceRow } from "@/lib/growth/metrics";
 
 /**
@@ -15,6 +15,7 @@ import { growthMetrics, type WorkspaceRow } from "@/lib/growth/metrics";
 
 vi.mock("server-only", () => ({}));
 const { SiteFooter } = await import("@/components/vx/SiteChrome");
+const { CTA_ID } = await import("@/components/analytics/GoogleAnalytics");
 
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
 
@@ -42,6 +43,14 @@ describe("a counterparty page's footer", () => {
     const link = html.match(/<a[^>]*data-cta="loop-receipt"[^>]*>/)?.[0] ?? "";
     expect(link).toContain('href="/?utm_source=receipt&amp;utm_medium=counterparty_page&amp;utm_campaign=counterparty_loop"');
     expect(link).toContain('target="_blank"');
+    // The page's address holds its token: the new tab is told nothing of it.
+    expect(link).toContain('rel="noopener noreferrer"');
+    expect(text(html)).toContain("Try it on your own bills (opens in a new tab)");
+  });
+
+  it("names each page's click in words the analytics accept", () => {
+    for (const page of LOOP_PAGES) expect(CTA_ID.test(loopCtaId(page)), page).toBe(true);
+    expect(renderToStaticMarkup(<SiteFooter compact loop="supplier_status" />)).toContain('data-cta="loop-supplier-status"');
   });
 
   it("says nothing of it on any other public page", () => {
