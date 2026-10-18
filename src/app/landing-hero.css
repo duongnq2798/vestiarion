@@ -125,7 +125,8 @@
 
 /*
  * The landing's sample bill prints itself once (`BillPreview`, landing motion M4), with the receipt's print: the bill,
- * the agent's proposal stamped, its reasoning, each check printed and then its tick drawn, the wait for a person, then
+ * its reasoning, each check printed and then its tick drawn, the agent's proposal stamped once the checks are done, the
+ * wait for a person, then
  * the next bill and the rule in code that held it, its shield turning amber last. Each part starts at its own `--d`
  * (`BILL_PRINT_AT` in hero/scenarios.ts) and all of it is done by 2.5 s; the card's frame and title never wait. Where
  * the card sits beside the headline, from 1024 px, it starts with the page's first paint, before the script runs and
@@ -158,7 +159,8 @@
   animation: bill-turn 300ms var(--ease-standard) var(--d, 0ms) backwards;
 }
 
-/* The bill waits for a person: its dot breathes twice, then rests, since nothing on the landing moves at rest. A breath
+/* The bill waits for a person: its dot breathes once, then rests, since nothing on the landing moves at rest, and it
+   is done before "Held for you" is stamped, so two parts of the card never move at once at its close. A breath
    is a ring that grows out from the dot to 3 px around it, by scale rather than by a shadow, so the compositor runs it. */
 .bill-print .bp-dot::after {
   content: "";
@@ -168,7 +170,7 @@
   border-radius: inherit;
   opacity: 0;
   scale: 0.5;
-  animation: dot-breathe 500ms var(--ease-standard) var(--d, 0ms) 2;
+  animation: dot-breathe 400ms var(--ease-standard) var(--d, 0ms) 1;
 }
 
 /* Below 1024 px a part prints only once `PrintOnView` has seen it come into view. */

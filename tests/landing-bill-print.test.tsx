@@ -99,10 +99,17 @@ describe("the sample bill's print", () => {
     expect(moments[0]).toBeGreaterThan(0);
   });
 
+  it("proposes paying only once every check is ticked, as the headline says", () => {
+    const lastTickDone = Math.max(...BILL_PRINT_AT.checks) + BILL_TICK_AFTER + (parts.get("bp-check")?.ms ?? 0);
+    expect(BILL_PRINT_AT.proposal).toBeGreaterThanOrEqual(lastTickDone);
+    // The dot's one breath is over before "Held for you" is stamped.
+    expect(BILL_PRINT_AT.breathe + (parts.get("bp-dot")?.ms ?? 0)).toBeLessThanOrEqual(BILL_PRINT_AT.held);
+  });
+
   it("knows every part it prints with, from the stylesheet", () => {
     expect([...parts.keys()].sort()).toEqual(["bp-check", "bp-dot", "bp-line", "bp-stamp", "bp-turn"]);
     expect(parts.get("bp-line")?.name).toBe("replay-print");
-    expect(parts.get("bp-dot")?.times).toBe(2);
+    expect(parts.get("bp-dot")?.times).toBe(1);
   });
 
   it("gives every moving part its moment from the table, and has finished them all by 2.5 s", () => {
@@ -130,7 +137,7 @@ describe("the sample bill's print", () => {
     expect(shield?.delay).toBe(Math.max(...tags.filter(({ delay }) => !Number.isNaN(delay)).map(({ delay }) => delay)));
   });
 
-  it("stamps without turning, and the breathing dot stops after two breaths", () => {
+  it("stamps without turning, and the breathing dot stops after one breath", () => {
     const stamp = keyframes("bill-stamp");
     expect(stamp).toContain("scale: 1.12");
     expect(stamp).not.toMatch(/rotate|transform/);

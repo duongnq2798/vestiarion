@@ -85,26 +85,27 @@ export const HOLD_MS = 3800;
 /**
  * When each part of the landing's sample bill prints (`BillPreview`, landing motion M4), in ms from the moment it starts:
  * the page's first paint, where the card sits beside the headline; for lines out of sight then, counted from the first
- * of them to come into view (`PrintOnView`). In the order the agent works through the bill: it reads the bill and
- * proposes paying it, sets out its reasoning, ticks its four checks one by one, then waits for a person's verdict; the
- * next bill is held by a rule in code, and the shield saying so turns amber last. The card's frame and title are there
+ * of them to come into view (`PrintOnView`). In the order the agent works through the bill: it reads the bill, sets
+ * out its reasoning and ticks its four checks one by one, and only then proposes paying it and waits for a person's
+ * verdict, as the headline says ("Every bill checked before it's paid"); the next bill is held by a rule in code, and
+ * the shield saying so turns amber last. The card's frame and title are there
  * from the start, so it is never an empty box, and every part has finished by 2.5 s (`tests/landing-bill-print.test.tsx`
  * adds each part's length, read from the stylesheet). It never repeats.
  */
 export const BILL_PRINT_AT = {
   payee: 120,
   amount: 200,
-  proposal: 380,
-  reasoning: 560,
-  reasoningText: 640,
-  checks: [820, 960, 1100, 1240],
-  waiting: 1400,
-  breathe: 1460,
-  verdict: 1500,
-  next: 1700,
-  held: 1950,
-  blocked: 2050,
-  shield: 2150,
+  reasoning: 380,
+  reasoningText: 460,
+  checks: [560, 680, 800, 920],
+  proposal: 1480,
+  waiting: 1540,
+  breathe: 1560,
+  verdict: 1620,
+  next: 1720,
+  held: 1960,
+  blocked: 2060,
+  shield: 2160,
 } as const;
 
 /** A check's tick starts to draw this long after its row starts to print, as the next row starts. */

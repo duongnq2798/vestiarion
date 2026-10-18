@@ -161,13 +161,15 @@ stands, as M3 says.
 bill beside it (`hero/BillPreview.tsx`, still a server component) now shows it happen, once, the way the agent works
 through a bill, with the receipt's print. Its frame and title are there from the first frame, so it is never an empty
 box. Then, in ms from its start (`BILL_PRINT_AT` in `hero/scenarios.ts`): the payee prints at 120 and the amount at
-200; "Agent proposes: pay it" is stamped at 380 (from 1.12 times its size and transparent, over 300 ms, with no turn,
-unlike the receipt's seal); the reasoning's tint opens at 560 and its words print at 640; the four checks print at 820,
-960, 1100 and 1240, each tick drawing 140 ms after its row, short stroke first, then turning from grey to green;
-"Waiting for your verdict" prints at 1400, and its dot breathes twice from 1460 (a 3 px ring, 500 ms a breath); the
-question and its drawn buttons print at 1500; the next bill, Kestrel Design, at 1700; "Held for you" is stamped at
-1950; "Blocked by code, not by the model" prints at 2050, and its shield turns amber at 2150. A line prints as the
-receipt's do (`replay-print`: opacity, a wipe down and 3 px of travel, over 420 ms). The last part ends at 2,470 ms,
+200; the reasoning's tint opens at 380 and its words print at 460; the four checks print at 560, 680, 800 and 920,
+each tick drawing 140 ms after its row, short stroke first, then turning from grey to green; only once the last tick
+has landed is "Agent proposes: pay it" stamped, at 1480 (from 1.12 times its size and transparent, over 300 ms, with no
+turn, unlike the receipt's seal), so the card says what the headline does: checked first, then proposed. "Waiting for
+your verdict" prints at 1540, and its dot breathes once from 1560 (a 3 px ring, 400 ms), over before the held bill is
+stamped; the question and its drawn buttons print at 1620; the next bill, Kestrel Design, at 1720; "Held for you" is
+stamped at
+1960; "Blocked by code, not by the model" prints at 2060, and its shield turns amber at 2160. A line prints as the
+receipt's do (`replay-print`: opacity, a wipe down and 3 px of travel, over 420 ms). The last part ends at 2,480 ms,
 and nothing repeats. That is 20 animations, of opacity, clip, scale, a grey filter lifting, the tick's stroke and the
 dot's ring only, so nothing in the layout moves. The colour turns are a `grayscale` filter and the dot's breath a ring
 scaled out from under it, so the compositor runs them; only the tick's stroke is drawn on the main thread, as a tick
@@ -205,7 +207,7 @@ and stays; nothing flashes.
 Measured on the dev server in headless Edge (2026-10-19), with each animation of the card seeked to 0, 400, 1200 and
 2500 ms of the print, at 1440 × 900, 520 × 900 and 390 × 844, with motion and with reduce, and with JavaScript off: the
 card and the hero's text keep their boxes from the first frame to the last, layout shift is 0 at every size, the last
-animation ends at 2,470 ms, and none is running 3 s later. At 1440 px, the first look at the page found the print
+animation ends at 2,480 ms, and none is running 3 s later. At 1440 px, the first look at the page found the print
 160 ms in, before the page had hydrated. In a running browser the print starts 30 to 50 ms before the first contentful
 paint, as the receipt on /how-it-decides does in production; only the first page a freshly started browser draws, or
 one traced with screenshots, showed a gap of about 400 ms. Scrolling by wheel, 100 px every 250 ms, at 390 × 844,

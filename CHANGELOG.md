@@ -80,8 +80,8 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   load ahead. The hero's two background tints no longer drift, so nothing on the page moves at rest, and the marker
   under "Who it's for" and the developer tabs now glides to the tab you choose, or moves at once with reduced motion.
   The sample bill beside the headline now plays out once, the way the agent works through a bill: it reads the bill,
-  proposes paying it, ticks its four checks one by one and waits for your verdict, then the next bill is held by a rule
-  in code. It is done in 2.5 seconds and does not repeat. Where the card sits below the text, on a phone or in a narrow
+  ticks its four checks one by one, only then proposes paying it and waits for your verdict, and the next bill is held
+  by a rule in code. It is done in 2.5 seconds and does not repeat. Where the card sits below the text, on a phone or in a narrow
   window, each line prints as you scroll to it, so its checks tick where you are looking, and with reduced motion each
   line fades in where it stands, in the same order. Under it, **See a real decision and its transaction** leads to the
   real payment in the proof.
