@@ -181,6 +181,17 @@ describe("POST /api/agent/tick", () => {
 
     await post();
 
-    expect(runLiveOrganizations).toHaveBeenLastCalledWith(runScheduledCycle);
+    expect(runLiveOrganizations).toHaveBeenLastCalledWith(runScheduledCycle, { startBy: expect.any(Number) });
+  });
+
+  it("starts no workspace's cycle later than 180 seconds into the tick, so none is cut off at 300", async () => {
+    runLiveOrganizations.mockResolvedValueOnce([]);
+    const before = Date.now();
+
+    await post();
+
+    const { startBy } = runLiveOrganizations.mock.lastCall?.[1] as { startBy: number };
+    expect(startBy).toBeGreaterThanOrEqual(before + 180_000);
+    expect(startBy).toBeLessThanOrEqual(Date.now() + 180_000);
   });
 });
