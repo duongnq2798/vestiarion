@@ -179,6 +179,18 @@ export function carriedOrder(plan: PriorityPlan, competing: readonly Competing[]
 }
 
 /**
+ * A reason, or the reasoning, as a person reads it on the payment plan and a waiting bill's card (live test, Oct 18):
+ * each ref the model was given ("pairs with B3") becomes the bill it stands for ("Cobalt Cloud 45.00 USDC"), and an
+ * amount written with a dollar sign ("$45") is written in USDC, the only currency competing bills are in. A ref it was
+ * not given stays as it is.
+ */
+export function namedRefs(text: string, names: ReadonlyMap<string, string>): string {
+  return text
+    .replace(/\$\s?(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?(?:\s?USDC\b)?/g, (_match, whole: string, fraction: string | undefined) => `${whole}${fraction ?? ""} USDC`)
+    .replace(/\bB\d+\b/g, (ref) => names.get(ref) ?? ref);
+}
+
+/**
  * A person's order (order design O3): every competing bill once, in the order given; null when it names a bill that is
  * not competing, leaves one out, or names one twice.
  */

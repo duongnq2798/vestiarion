@@ -4,7 +4,7 @@ import { unwrap, type OrgDb } from "../dal";
 import { appendLedgerEntry } from "../ledger";
 import { heldForCash } from "../next-step";
 import { REASONING_RULE, REASONING_SHAPE } from "../reasoning-copy";
-import { boundOrder, carriedOrder, competingBills, needsPlan, personOrder, planFingerprint, planFrom, planOf, referenceOrder, sameSplit, PRIORITY_HORIZON_DAYS, type Competing, type PriorityPlan, type PriorityRow } from "./cash-priority";
+import { boundOrder, carriedOrder, competingBills, namedRefs, needsPlan, personOrder, planFingerprint, planFrom, planOf, referenceOrder, sameSplit, PRIORITY_HORIZON_DAYS, type Competing, type PriorityPlan, type PriorityRow } from "./cash-priority";
 import { decide } from "./decide";
 import type { CycleLogLine } from "./orchestrator";
 
@@ -26,11 +26,13 @@ const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximu
 export const PRIORITY_SYSTEM_PROMPT = `You are the cash step of a treasury agent for a small business. The cash it can pay with cannot cover every bill below, all due within ${PRIORITY_HORIZON_DAYS} days or overdue. Decide the order they are paid in: code pays them in your order while the cash lasts, and the rest wait. A bill that waits is held for a person, the agent asks its supplier for more time and customers to pay sooner, and it is decided again once cash comes in.
 
 - Put first what costs the business most to pay late: a recurring service it runs on (hosting, storage, software, rent) can be stopped; an early-payment discount is lost after its day; a supplier who itself declined more time before (supplierRequestsForMoreTime.declinedBySupplier) will not wait again; a bill already overdue hurts more each day. A request the agent withdrew, or whose fewer days the agent declined, says nothing about the supplier's patience: say only what the counts show.
+- supplierRequestsForMoreTime counts the requests for more time the agent sent that supplier (requestsTheAgentSent) and what became of each. A supplier never offered more time on its own: do not say it did.
 - Put later what can wait: a one-off purchase, a supplier who agreed to more time before, a bill due later.
 - Paying two small bills can keep two suppliers whole where one large bill keeps one.
 - The written policy's order, given as a reference, pays the bill due first, the smaller first on the same day. Follow it unless the facts say otherwise, and say why when you depart from it.
 - When aPersonsEarlierOrder is given, a person at the business chose that order for those bills before a bill was added or changed: keep it for them unless a bill's facts changed, place the other bills among them by the rules above, and say so.
-- Name every bill once, by its ref. Give each a reason of one sentence.
+- In the order, name every bill once, by its ref. Give each a reason of one sentence.
+- People read the reasons and the reasoning, and never see a ref: never name a bill by its ref there. Name it by its payee and what it is ("Cobalt Cloud's GPU hosting"). Write an amount in USDC ("45 USDC"), never with a currency sign.
 - ${REASONING_RULE}
 
 Respond with ONLY a single JSON object in the requested shape. No prose outside the JSON.`;
@@ -266,11 +268,15 @@ export async function cashPriority(input: { db: OrgDb; now: Date; operatingBalan
   const bounded = boundOrder(modelOrder, reference);
   const { keep, wait } = planFrom(bounded.order, competing, Math.max(0, available));
   const orderIds = bounded.order;
+  const nameOf = (id: string) => `${byId.get(id)?.counterparties?.name ?? "a supplier"} ${AMOUNT.format(competingById.get(id)?.amount ?? 0)} USDC`;
+  // People never see a ref: one the model wrote in a reason or the reasoning is the bill's payee and amount (Oct 18).
+  const names = new Map(reference.map((id) => [refOf.get(id) as string, nameOf(id)] as const));
   const reasons: Record<string, string> = {};
   for (const id of bounded.order) {
     const said = decided.value.reasons?.[refOf.get(id) as string];
-    reasons[id] = typeof said === "string" && said.trim() ? said.trim() : (policy.reasons?.[refOf.get(id) as string] ?? "");
+    reasons[id] = typeof said === "string" && said.trim() ? namedRefs(said.trim(), names) : (policy.reasons?.[refOf.get(id) as string] ?? "");
   }
+  const reasoning = namedRefs(decided.value.reasoning, names);
   const plan: PriorityPlan = {
     fingerprint,
     order: orderIds,
@@ -294,14 +300,14 @@ export async function cashPriority(input: { db: OrgDb; now: Date; operatingBalan
         const row = byId.get(id) as OpenRow;
         return { invoiceId: id, payee: row.counterparties?.name ?? null, amount: competingById.get(id)?.amount ?? num(row.amount), dueOn: competingById.get(id)?.dueOn ?? null, keep: keptSet.has(id), reason: reasons[id] };
       }),
-      reasoning: decided.value.reasoning,
+      reasoning,
       decisionMode: decided.mode,
       referenceOrder: reference,
       agreedWithReference: decided.mode === "heuristic" ? null : sameAsPolicy,
       ...(bounded.corrected ? { orderCorrected: true } : {}),
     },
   });
-  const named = (ids: string[]) => ids.map((id) => `${byId.get(id)?.counterparties?.name ?? "a supplier"} ${AMOUNT.format(competingById.get(id)?.amount ?? 0)} USDC`).join(", ");
+  const named = (ids: string[]) => ids.map(nameOf).join(", ");
   return {
     plan,
     keptTotal: keptTotalOf(plan),
@@ -348,10 +354,11 @@ async function reopenKept(db: OrgDb, plan: PriorityPlan, byId: ReadonlyMap<strin
 /**
  * What happened to each earlier request for more time a supplier was sent (P2), every outcome named: told only how
  * many were made and how many agreed or declined, the model read the others as a supplier's yes, then as its no, in
- * the live test (Oct 17). Best effort, none before migration 0128.
+ * the live test (Oct 17). They are the requests the agent sent: named `made`, the count was read as the supplier
+ * offering more time (Oct 18). Best effort, none before migration 0128.
  */
 export interface SupplierRequests {
-  made: number;
+  requestsTheAgentSent: number;
   agreed: number;
   declinedBySupplier: number;
   supplierProposedFewerDaysWhichTheAgentDeclined: number;
@@ -359,12 +366,12 @@ export interface SupplierRequests {
   stillOpen: number;
 }
 
-const NO_REQUESTS: SupplierRequests = { made: 0, agreed: 0, declinedBySupplier: 0, supplierProposedFewerDaysWhichTheAgentDeclined: 0, withdrawnByTheAgentBeforeAnAnswer: 0, stillOpen: 0 };
+const NO_REQUESTS: SupplierRequests = { requestsTheAgentSent: 0, agreed: 0, declinedBySupplier: 0, supplierProposedFewerDaysWhichTheAgentDeclined: 0, withdrawnByTheAgentBeforeAnAnswer: 0, stillOpen: 0 };
 
 export function supplierRequestsOf(rows: ReadonlyArray<{ status: string; counter_days: number | null }>): SupplierRequests {
   const counted = { ...NO_REQUESTS };
   for (const row of rows) {
-    counted.made += 1;
+    counted.requestsTheAgentSent += 1;
     if (row.status === "accepted") counted.agreed += 1;
     else if (row.status === "declined" && row.counter_days == null) counted.declinedBySupplier += 1;
     else if (row.status === "declined") counted.supplierProposedFewerDaysWhichTheAgentDeclined += 1;
@@ -422,7 +429,7 @@ export async function setPersonOrder(input: {
   order: string[];
   operatingBalance: number;
   reserveBalance: number;
-  /** Whether the actor is the workspace's only approver, asked only when the order moves a bill they entered ahead. */
+  /** Whether the actor is the workspace's only approver, asked only when the order moves a bill they entered ahead of one it was behind. */
   soleApprover: () => Promise<boolean>;
 }): Promise<{ keep: string[]; wait: string[]; named: (ids: string[]) => string }> {
   const facts = await readPriorityFacts(input);
@@ -439,10 +446,13 @@ export async function setPersonOrder(input: {
   const { keep, wait } = planFrom(order, competing, Math.max(0, available));
   const competingById = new Map(competing.map((bill) => [bill.id, bill] as const));
   const named = (ids: string[]) => ids.map((id) => `${byId.get(id)?.counterparties?.name ?? "a supplier"} ${AMOUNT.format(competingById.get(id)?.amount ?? 0)} USDC`).join(", ");
-  // Whoever entered a bill does not move it ahead of the others on their own, as for a plan's day (payment plan P10):
-  // unless they are the only approver (order design O2).
-  const keptBefore = new Set(sameBills ? planFrom(last.order, competing, Math.max(0, available)).keep : []);
-  const theirs = keep.filter((id) => !keptBefore.has(id) && byId.get(id)?.created_by === input.actorId);
+  // Whoever entered a bill does not move it ahead of a bill it was behind in the order shown on their own, as for a
+  // plan's day (payment plan P10): unless they are the only approver (order design O2). By place, not by what the cash
+  // covers today: with too little cash for any bill, one put first is still paid first once cash comes in (Oct 18).
+  const shown = [...last.order.filter((id) => competingById.has(id)), ...reference.filter((id) => !last.order.includes(id))];
+  const shownPlace = new Map(shown.map((id, index) => [id, index] as const));
+  const placeOf = (id: string) => shownPlace.get(id) ?? shown.length;
+  const theirs = order.filter((id, index) => byId.get(id)?.created_by === input.actorId && order.slice(index + 1).some((behind) => placeOf(behind) < placeOf(id)));
   if (theirs.length > 0 && !(await input.soleApprover())) {
     throw new PriorityOrderRefusal("self_created", `You entered ${named(theirs)}, so someone else must move it ahead of the others.`);
   }

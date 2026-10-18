@@ -19,7 +19,9 @@ again. The order should be visible where the plan is, and a person should be abl
     order would pay first.
 - **O2. Who.** Owners, admins and approvers (`approval.decide`), as for approving the plan's days. Every other member
   reads it. Not in shadow mode, where there is no order. As for a plan's day (payment plan P10), whoever entered a bill
-  does not move it into the part the cash covers on their own, unless they are the only approver.
+  does not move it ahead of any bill it was behind in the order shown on their own, unless they are the only approver.
+  The places are compared, not the part the cash covers today: with cash for none of the bills, a bill put first would
+  still be paid first once cash comes in (live test, Oct 18).
 - **O3. Setting it.** A person moves bills up or down and saves. Before signing, the server reads the competing bills
   again, with the same code the cycle uses.
   - It refuses when they changed (a different fingerprint), when a newer order was signed since the one shown (its

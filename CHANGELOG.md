@@ -31,6 +31,19 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Fixed
 
+- **The reasons for which bill first name each bill.** The agent's reasons on the **Payment plan** tab, and on a waiting
+  bill's card, sometimes named bills by an internal ref ("pairs with B3") and wrote amounts with a dollar sign ("$45").
+  They now name the payee and amount in USDC ("Cobalt Cloud 45.00 USDC"). No migration.
+
+- **The agent no longer says a supplier offered more time.** When ordering the bills, it read the count of requests for
+  more time it had sent a supplier as the supplier offering it. The count is now given as the requests the agent sent.
+
+- **Whoever entered a bill cannot put it first while the cash covers none.** The order's maker-checker only refused when
+  a bill the person entered moved into the part the cash covers today, so with little cash they could put their own bill
+  first and it was paid first once cash came in. It now refuses any move of that bill ahead of one it was behind, unless
+  they are the workspace's only approver.
+  [Guide](https://www.vestiarion.xyz/docs/guides/payment-plan#change-the-order).
+
 - **A bill that waited for cash is paid once the agent chooses it under the same bills.** When more cash let the agent
   keep a bill it had made wait, without any bill changing, that bill stayed held until cash covered every bill; it is now
   decided again at once.
