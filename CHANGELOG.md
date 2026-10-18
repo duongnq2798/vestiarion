@@ -22,6 +22,15 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- **The landing page's integrations show what a connection does, not only that it exists.** "Keep your tools.
+  Vestiarion connects to them." now leads with Xero and QuickBooks Online, each saying what comes in and what goes
+  back: Xero books each payment against its bill once a person approves the entry, and QuickBooks Online is read-only,
+  with sandbox companies for now. Under them, "From your existing tools to a controlled payment." follows a Xero bill
+  through review, the rules, payment on Arc and the booking back. The other tools sit in three compact rows, GitHub and
+  Invoice Capture for Chrome among them, then Arc and Circle as what every payment runs on. **Explore all integrations**
+  leads to a new docs page, [Every integration at a glance](https://www.vestiarion.xyz/docs/guides/integrations): one
+  table of what each tool brings in, what it writes back and who allows that, and what none of them does.
+
 - **The landing page's safety section says who decides what, and shows one real refusal.** "The AI suggests. Your rules
   decide." now sets out three principles, each saying what holds it: your team sets the limits, roles and
   approvals; rules in code check every payment before it is sent, with Arc mainnet's spending-limit contract as the

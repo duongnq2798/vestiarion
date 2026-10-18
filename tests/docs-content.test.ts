@@ -221,6 +221,7 @@ describe("the docs navigation", () => {
       ["contracts", "Contracts on Arc"],
     ]);
     expect(pagesOf("Connect your tools")).toEqual([
+      ["guides/integrations", "Every integration at a glance"],
       ["guides/xero", "Bring bills in from Xero"],
       ["guides/quickbooks", "Bring bills in from QuickBooks Online"],
       ["guides/zohobooks", "Bring bills in from Zoho Books"],
@@ -233,7 +234,7 @@ describe("the docs navigation", () => {
       ["guides/telegram", "Get the agent's decisions in Telegram"],
       ["guides/invoice-capture", "Capture invoices from Chrome"],
     ]);
-    expect([...new Set(groupsOf("Connect your tools"))]).toEqual(["Accounting", "Sales and CRM", "Delivered work", "Team chat", "Your browser"]);
+    expect([...new Set(groupsOf("Connect your tools"))]).toEqual(["All tools", "Accounting", "Sales and CRM", "Delivered work", "Team chat", "Your browser"]);
     expect(pagesOf("Developers").slice(0, 4)).toEqual([
       ["get-started/quickstart", "Developer quickstart"],
       ["get-started/sdk", "TypeScript SDK"],
@@ -291,7 +292,8 @@ describe("the docs navigation", () => {
     expect(neighbours("guides/controls").next?.slug).toBe("guides/try-a-rule");
     expect(neighbours("guides/try-a-rule").next?.slug).toBe("guides/evidence");
     expect(neighbours("guides/evidence").next?.slug).toBe("guides/audit-export");
-    expect(neighbours("contracts").next?.slug).toBe("guides/xero");
+    expect(neighbours("contracts").next?.slug).toBe("guides/integrations");
+    expect(neighbours("guides/integrations").next?.slug).toBe("guides/xero");
     expect(neighbours("guides/invoice-capture").next?.slug).toBe("get-started/quickstart");
     expect(neighbours("ai-integration/mcp").next?.slug).toBe("api");
     expect(neighbours(pages[pages.length - 1].slug).next).toBeUndefined();

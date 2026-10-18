@@ -110,6 +110,7 @@ export const DOCS_NAV: NavSection[] = [
   {
     title: "Connect your tools",
     pages: [
+      { slug: "guides/integrations", group: "All tools", title: "Every integration at a glance", description: "What each connected tool brings in, what Vestiarion writes back to it and who allows that, how it stays current, and what none of them does: approve or pay." },
       { slug: "guides/xero", group: "Accounting", title: "Bring bills in from Xero", description: "Connect a Xero organisation: its approved bills come in for review on Bills & receivables, go through the same check as a bill list, and become payables only when you add them. Choose the account payments made on Arc will be booked to." },
       { slug: "guides/quickbooks", group: "Accounting", title: "Bring bills in from QuickBooks Online", description: "Connect a QuickBooks Online company: its open bills come in for review on Bills & receivables, go through the same check as a bill list, and become payables only when you add them. Choose the bank account payments made on Arc will be booked to." },
       { slug: "guides/zohobooks", group: "Accounting", title: "Bring bills in from Zoho Books", description: "Connect a Zoho Books organization, in whichever Zoho data center it lives: its open bills come in for review on Bills & receivables, go through the same check as a bill list, and become payables only when you add them. Nothing is written to Zoho Books." },
