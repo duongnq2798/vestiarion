@@ -25,10 +25,11 @@ import { at, BILL_PRINT_AT, BILL_TICK_AFTER } from "./scenarios";
  * It prints itself once, the way the agent works through the bill (landing
  * motion M4): each part at its moment in `BILL_PRINT_AT`, the checks ticked one
  * by one, done by 2.5 s. The printing is CSS (`.bill-print` in landing-hero.css)
- * and every line is in the server's HTML, so a page whose script never runs
- * ends with the whole card; `PrintOnView` only holds it for a reader who cannot
- * see it yet. Under reduced motion each line fades in where it stands, in the
- * same order.
+ * and every line is in the server's HTML: beside the headline it prints from the
+ * first paint, and a page whose script never runs ends with the whole card.
+ * `PrintOnView` holds each line the reader cannot see yet and prints it once it
+ * is in view, which is how the card prints under the text on a narrower screen.
+ * Under reduced motion each line fades in where it stands, in the same order.
  */
 
 /** What the agent checked before deciding the first bill, said as a person would. */
@@ -93,7 +94,7 @@ export function BillPreview() {
                 <Badge
                   tone="agent"
                   size="sm"
-                  icon={<span aria-hidden className="bp-dot size-1.5 shrink-0 rounded-full bg-agent" style={at(BILL_PRINT_AT.breathe)} />}
+                  icon={<span aria-hidden className="bp-dot relative size-1.5 shrink-0 rounded-full bg-agent" style={at(BILL_PRINT_AT.breathe)} />}
                 >
                   Waiting for your verdict
                 </Badge>

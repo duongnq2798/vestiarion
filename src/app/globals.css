@@ -216,8 +216,10 @@
 
 @layer components {
   /* `Reveal` (src/components/ui/Reveal.tsx) marks an element that started
-     below the fold. Nothing is hidden in the server's HTML. */
-  [data-reveal] {
+     below the fold. Nothing is hidden in the server's HTML. Only the arrival
+     is animated: the hiding, when the page hydrates, is at once, so a block
+     reached soon after does not first fade out on its own delay. */
+  [data-reveal="shown"] {
     transition:
       opacity 450ms var(--ease-emphasized) var(--reveal-delay, 0ms),
       translate 450ms var(--ease-emphasized) var(--reveal-delay, 0ms);
@@ -229,8 +231,9 @@
   }
 
   /* `Reveal sequence` leaves the element in place and brings its children
-     marked `seq` in one by one, each `--stagger` after the one before. */
-  [data-seq] .seq {
+     marked `seq` in one by one, each `--stagger` after the one before. They
+     hide all at once, so they still arrive in order when reached early. */
+  [data-seq="shown"] .seq {
     transition:
       opacity 420ms var(--ease-emphasized) calc(var(--reveal-delay, 0ms) + var(--i, 0) * var(--stagger)),
       translate 420ms var(--ease-emphasized) calc(var(--reveal-delay, 0ms) + var(--i, 0) * var(--stagger));
@@ -241,8 +244,8 @@
     translate: 0 8px;
   }
 
-  /* A figure that fades in where it stands rather than counting (`CountUp`). */
-  [data-fade] {
+  /* A figure that fades in where it stands rather than counting (`CountUp`), hidden at once as a revealed block is. */
+  [data-fade="shown"] {
     transition: opacity 300ms var(--ease-standard);
   }
 

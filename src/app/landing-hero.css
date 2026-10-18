@@ -127,41 +127,65 @@
  * The landing's sample bill prints itself once (`BillPreview`, landing motion M4), with the receipt's print: the bill,
  * the agent's proposal stamped, its reasoning, each check printed and then its tick drawn, the wait for a person, then
  * the next bill and the rule in code that held it, its shield turning amber last. Each part starts at its own `--d`
- * (`BILL_PRINT_AT` in hero/scenarios.ts) and all of it is done by 2.5 s; the card's frame and title never wait. It
- * starts with the page's first paint, before the script runs and without it. `PrintOnView` arms a card the reader
- * cannot see yet (`data-print="armed"`: every part waits unseen) and plays it once it is in view (`go`), or shows it
- * whole if the reader jumped past it (`done`). Under reduced motion the card is calm motion (`data-calm-motion`): each
- * part fades in where it stands, in the same order, the ticks and the shield only turn colour, and the dot is still.
+ * (`BILL_PRINT_AT` in hero/scenarios.ts) and all of it is done by 2.5 s; the card's frame and title never wait. Where
+ * the card sits beside the headline, from 1024 px, it starts with the page's first paint, before the script runs and
+ * without it. Below that the card sits under the text, often below the fold, so nothing prints from the first paint (a
+ * page whose script never runs shows it whole) and `PrintOnView` prints each line as it comes into view. A part the
+ * reader cannot see when the page hydrates waits unseen (`data-print="wait"`), then prints once in view (`go`, its
+ * `--d` counted from then), or is shown whole if the reader jumped past it (`done`). One already on screen is marked
+ * as printing (`go`) or whole (`done`), so a window that later crosses 1024 px never prints it again. Each animation
+ * fills backwards only: its last frame is the part's own style, so once played it lets go, and nothing is left running
+ * or held. Under reduced motion the card is calm motion (`data-calm-motion`): each part fades in where it stands, in
+ * the same order, the ticks and the shield only turn colour, and the dot is still.
  */
 .bill-print .bp-line {
-  animation: replay-print 420ms var(--ease-emphasized) var(--d, 0ms) both;
+  animation: replay-print 420ms var(--ease-emphasized) var(--d, 0ms) backwards;
 }
 
 /* A decision lands: it settles from a little larger, with no turn, unlike the receipt's seal. */
 .bill-print .bp-stamp {
-  animation: bill-stamp 300ms var(--ease-emphasized) var(--d, 0ms) both;
+  animation: bill-stamp 300ms var(--ease-emphasized) var(--d, 0ms) backwards;
 }
 
 /* A tick draws as a hand would, short stroke first (its path runs the other way, so the offset counts up from minus a
    little over its length), then turns from grey to its own colour. */
 .bill-print .bp-check {
-  animation: check-draw 420ms var(--ease-standard) var(--d, 0ms) both;
+  animation: check-draw 420ms var(--ease-standard) var(--d, 0ms) backwards;
 }
 
+/* The colour turns by a filter, which the compositor runs, rather than by `color`, which repaints every frame. */
 .bill-print .bp-turn {
-  animation: bill-turn 300ms var(--ease-standard) var(--d, 0ms) both;
+  animation: bill-turn 300ms var(--ease-standard) var(--d, 0ms) backwards;
 }
 
-/* The bill waits for a person: its dot breathes twice, then rests, since nothing on the landing moves at rest. */
-.bill-print .bp-dot {
+/* The bill waits for a person: its dot breathes twice, then rests, since nothing on the landing moves at rest. A breath
+   is a ring that grows out from the dot to 3 px around it, by scale rather than by a shadow, so the compositor runs it. */
+.bill-print .bp-dot::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border: 3px solid color-mix(in srgb, var(--color-agent) 28%, transparent);
+  border-radius: inherit;
+  opacity: 0;
+  scale: 0.5;
   animation: dot-breathe 500ms var(--ease-standard) var(--d, 0ms) 2;
 }
 
-.bill-print:is([data-print="armed"], [data-print="done"]) :is(.bp-line, .bp-stamp, .bp-check, .bp-turn, .bp-dot) {
+/* Below 1024 px a part prints only once `PrintOnView` has seen it come into view. */
+@media (width < 64rem) {
+  .bill-print :is(.bp-line, .bp-stamp, .bp-check, .bp-turn):not([data-print="go"]),
+  .bill-print .bp-dot:not([data-print="go"])::after {
+    animation: none;
+  }
+}
+
+/* A part that waits keeps still and is not there yet; one that is done (jumped past, or whole on screen) keeps still. */
+.bill-print :is(.bp-line, .bp-stamp, .bp-check, .bp-turn):is([data-print="wait"], [data-print="done"]),
+.bill-print .bp-dot:is([data-print="wait"], [data-print="done"])::after {
   animation: none;
 }
 
-.bill-print[data-print="armed"] :is(.bp-line, .bp-stamp) {
+.bill-print :is(.bp-line, .bp-stamp)[data-print="wait"] {
   opacity: 0;
 }
 
@@ -171,17 +195,18 @@
 }
 
 @keyframes check-draw {
-  0% { stroke-dasharray: 24; stroke-dashoffset: -24; color: var(--color-ink-3); }
-  60% { stroke-dasharray: 24; stroke-dashoffset: 0; color: var(--color-ink-3); }
+  0% { stroke-dasharray: 24; stroke-dashoffset: -24; filter: grayscale(1); }
+  60% { stroke-dasharray: 24; stroke-dashoffset: 0; filter: grayscale(1); }
   100% { stroke-dasharray: 24; stroke-dashoffset: 0; }
 }
 
 @keyframes bill-turn {
-  from { color: var(--color-ink-3); }
+  from { filter: grayscale(1); }
 }
 
 @keyframes dot-breathe {
-  50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-agent) 28%, transparent); }
+  0%, 100% { opacity: 1; scale: 0.5; }
+  50% { opacity: 1; scale: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -204,7 +229,7 @@
     animation-name: bill-turn;
   }
 
-  .bill-print .bp-dot {
+  .bill-print .bp-dot::after {
     animation: none;
   }
 }

@@ -81,16 +81,18 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   under "Who it's for" and the developer tabs now glides to the tab you choose, or moves at once with reduced motion.
   The sample bill beside the headline now plays out once, the way the agent works through a bill: it reads the bill,
   proposes paying it, ticks its four checks one by one and waits for your verdict, then the next bill is held by a rule
-  in code. It is done in 2.5 seconds and does not repeat; on a phone it plays when you scroll to it, and with reduced
-  motion each line fades in where it stands, in the same order. Under it, **See a real decision and its transaction**
-  leads to the real payment in the proof.
+  in code. It is done in 2.5 seconds and does not repeat. Where the card sits below the text, on a phone or in a narrow
+  window, each line prints as you scroll to it, so its checks tick where you are looking, and with reduced motion each
+  line fades in where it stands, in the same order. Under it, **See a real decision and its transaction** leads to the
+  real payment in the proof.
 
 ### Fixed
 
 - **Nothing on the landing page stays hidden after a jump.** A section you jumped past, with a link to Proof, the End
-  key or a fast scroll, stayed invisible until you scrolled back up to it; it now shows at once. The open numbers no
-  longer nudge the words beside them while they count, a figure under 10 fades in instead of counting, and with
-  reduced motion every figure fades in where it stands.
+  key or a fast scroll, stayed invisible until you scrolled back up to it; it now shows at once, and one you reach just
+  after the page loads no longer fades out before it fades in. The open numbers no longer nudge the words beside them
+  while they count, a figure under 10 fades in instead of counting, and with reduced motion every figure fades in where
+  it stands.
 
 - **Docs tables keep names and codes whole.** A table in the docs no longer squeezes a column until a name such as
   QuickBooks or a code such as `invalid_request` breaks in the middle: a cell breaks only between words, its code stays

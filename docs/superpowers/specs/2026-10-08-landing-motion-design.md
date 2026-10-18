@@ -125,7 +125,11 @@ with nothing left to fade out of sight. `CountUp` does the same, so a figure jum
 **Sequences.** `<Reveal sequence>` leaves the element where it is and brings in its children marked `seq` one by one,
 in the order they are written: each from opacity 0 and 8 px lower, over 420 ms, `--stagger` after the one before
 (60 ms, `stagger` to change it; `MOTION.stagger` in `tokens.ts` mirrors it). Under reduce the items fade in where they
-stand, in the same order. Nothing on the landing uses it yet; the pieces that follow do, and /design shows it.
+stand, in the same order. Nothing on the landing uses it yet; the pieces that follow do, and /design shows it. What
+`Reveal` and `CountUp` hide when the page hydrates is hidden at once, and only the arrival is animated: the hiding used
+to run on each item's own delay, so a sequence reached within half a second of load came in backwards, its last items
+still fading out while the first came back (measured on /design at 1280 × 900 under reduce: items at 0.01, 0.18, 1 and
+1 just after hydration; now all at 0, then in order).
 
 **Still at rest.** The hero's two tints no longer drift. The drift moved them 1 to 2 % under a heavy blur, too little
 to see, and kept two blurred layers of about 30 rem painting for as long as the page was open. After it, no animation
@@ -164,19 +168,31 @@ unlike the receipt's seal); the reasoning's tint opens at 560 and its words prin
 question and its drawn buttons print at 1500; the next bill, Kestrel Design, at 1700; "Held for you" is stamped at
 1950; "Blocked by code, not by the model" prints at 2050, and its shield turns amber at 2150. A line prints as the
 receipt's do (`replay-print`: opacity, a wipe down and 3 px of travel, over 420 ms). The last part ends at 2,470 ms,
-and nothing repeats. That is 20 animations, of opacity, clip, scale, colour, the tick's stroke and the dot's ring only,
-so nothing in the layout moves. The H1, the lede, the calls to action and Invoice Capture do not move at all.
+and nothing repeats. That is 20 animations, of opacity, clip, scale, a grey filter lifting, the tick's stroke and the
+dot's ring only, so nothing in the layout moves. The colour turns are a `grayscale` filter and the dot's breath a ring
+scaled out from under it, so the compositor runs them; only the tick's stroke is drawn on the main thread, as a tick
+drawn by hand needs it. Each fills backwards only: its last frame is the part's own style, so once played it lets go,
+and nothing is left held or on a layer of its own. The H1, the lede, the calls to action and Invoice Capture do not
+move at all.
 
-**When it plays.** The print is CSS from the page's first paint, at every width, so it runs before the script and
-without it, and ends with the whole card. The card sits beside the headline from 1024 px; below that it is under the
-text, but in a narrow window on a laptop (520 px wide, about 900 px tall) its top is still in the first screen (from
-752 px down), so its first paint is the moment to play it there too, and a print only from 1024 px would have left it
-still. `PrintOnView` (`hero/PrintOnView.tsx`, a client wrapper of about 40 lines) holds the print for a reader who
-cannot see it: if the card's first printed line is below the viewport when the page hydrates (at 390 × 844 the card
-starts at 867 px), or the tab is not shown yet, it sets `data-print="armed"`, and every part waits unseen with its
-animation removed; once a quarter of the card is in view, with the tab shown, `go` starts the print from the
-beginning. A card the reader jumped past is set to `done` and shown whole, with nothing left to play out of sight. A
-card already on screen when the page hydrates is left alone, so nothing the reader has seen vanishes.
+**When it plays.** From 1024 px the card sits beside the headline, and the print is CSS from the page's first paint,
+so it runs before the script and without it, and ends with the whole card. Below that the card sits under the text,
+and its top is often at the bottom of the first screen or below it (at 520 × 900 from 752 px, at 412 × 915 from 846,
+at 390 × 844 from 867), so nothing prints from the first paint there: a page whose script never runs shows the card
+whole, and none of it plays unseen while the page loads. A first version printed from the first paint at every width
+and held a card only when its first line was below the viewport: at 520 × 900, 412 × 915, 430 × 932 and 768 × 1024 the
+checks, the verdict and the held bill then printed below the fold and were done before the reader got there, and at
+390 × 844 the whole print ran unseen until hydration, slowing it. `PrintOnView` (`hero/PrintOnView.tsx`) decides by
+line instead. When the page hydrates, each line still below the viewport (every line, in a tab not shown yet) waits
+unseen (`data-print="wait"`: no animation, opacity 0), and each prints once it comes into view (`go`, from its first
+pixel in the viewport: held in the bottom 8 %, where `Reveal` holds a block, it would leave a gap in the card the
+reader can see). The lines print in the order of the work: one never goes before a line the agent reaches first, so
+"Waiting for your verdict", in the proposal's row, waits until the checks below it are in view. Their moments count
+from the first of them to print, so the card goes on where the reader is looking; a line reached after its moment
+prints at once, and the ones after it keep their spacing. A line the reader jumped past is set to `done` and shown
+whole. Lines already on screen when the page hydrates are left as they are, printing beside the headline (`go`) or
+whole below it (`done`), so nothing the reader has seen vanishes, and a window that later crosses 1024 px does not
+print them again.
 
 **Under reduce** the card asks for calm motion (`data-calm-motion`): each part fades in where it stands
 (`replay-fade`), in the same order and at the same moments, the stamps without growing; the ticks appear with their
@@ -190,10 +206,20 @@ Measured on the dev server in headless Edge (2026-10-19), with each animation of
 2500 ms of the print, at 1440 × 900, 520 × 900 and 390 × 844, with motion and with reduce, and with JavaScript off: the
 card and the hero's text keep their boxes from the first frame to the last, layout shift is 0 at every size, the last
 animation ends at 2,470 ms, and none is running 3 s later. At 1440 px, the first look at the page found the print
-160 ms in, before the page had hydrated. At 390 px, scrolling by wheel, the card armed at load and played once a
-quarter of it was in view. With JavaScript off it prints from the first paint and is whole 3 s after load at all three
-sizes. No capture script in the repository photographs the hero: `docs:screenshots` and the marketplace images shoot
-`/docs-shots`, and the social image is drawn by `next/og`.
+160 ms in, before the page had hydrated. In a running browser the print starts 30 to 50 ms before the first contentful
+paint, as the receipt on /how-it-decides does in production; only the first page a freshly started browser draws, or
+one traced with screenshots, showed a gap of about 400 ms. Scrolling by wheel, 100 px every 250 ms, at 390 × 844,
+412 × 915, 430 × 932, 520 × 800, 520 × 900, 768 × 1024, 1024 × 700 and 1440 × 900, with motion and with reduce: no line
+started printing below the viewport; a line waited in view only behind one the agent reaches first (the wait for a
+verdict, until the checks below it were seen) or inside a line still printing in; and `document.getAnimations()` was
+empty 3.5 s after the last line. Before the parts filled backwards only, 19 finished animations stayed there, and at
+rest the page had 30 compositor layers, 21 of them the card's; now 9, none of them the card's. In the 2.6 s after the
+first contentful paint at 1440 × 900, the page's main-thread render work fell from 630 to 700 ms to 480 to 560 (60 to
+90 without the print), and its paints from about 710 to about 300, once the colour turns and the dot ran on the
+compositor; the ticks' stroke is most of what is left (about 200 ms), and no long task comes with it. At 520 × 900 under reduce, and at 390 × 844 with
+the CPU slowed 4 times, nothing prints while the page loads (5 to 11 main-thread frames). With JavaScript off the card
+is whole 3 s after load at all three sizes. No capture script in the repository photographs the hero:
+`docs:screenshots` and the marketplace images shoot `/docs-shots`, and the social image is drawn by `next/og`.
 
 ## Order
 
@@ -211,11 +237,16 @@ M4 adds (`tests/motion-policy.test.ts`): every section / renders, rendered as th
 animation repeats forever, read from the stylesheets, except the loading placeholder's; and `animation-timeline`
 appears only inside `prefers-reduced-motion: no-preference`. `tests/ui-motion.test.tsx` and
 `tests/landing-count-up.test.tsx` run `Reveal` and `CountUp` in a DOM: hidden below the fold, shown when seen, shown at
-once when jumped past, a sequence numbered in order, and nothing hidden in the server's HTML.
+once when jumped past, a sequence numbered in order, and nothing hidden in the server's HTML; motion-policy also holds
+their CSS to animating only an arrival, and checks its own reading of a component's scroll-driven class wherever the
+class sits in its list.
 `tests/landing-prefetch.test.tsx` holds every docs link on the landing to `prefetch={false}`.
 `tests/landing-bill-print.test.tsx` holds the sample bill: every line in the server's HTML, with no inline opacity, no
 hidden attribute and no print state; `BILL_PRINT_AT` in the order of the work; each moving part's moment taken from it
 and its length read from landing-hero.css, all of them done by 2.5 s; the stamp with no turn and the dot breathing
-twice; the reduce rules fading and turning colour only; and `PrintOnView` in a DOM: a card on screen left alone, one
-below the fold armed and played at a quarter in view, one jumped past shown whole, one in a hidden tab played once the
-tab is shown.
+twice, by scale and opacity, and the colour turns by a filter; every part filling backwards only; nothing printing
+from the first paint below 1024 px; the reduce rules fading and turning colour only; and `PrintOnView` in a DOM: a
+card on screen left as it is, marked whole, or printing on at its own moment; only the lines below the viewport held,
+each printed once in view with its moment counted from the first to print, none before a line the agent reaches
+first, one reached late printed at once with the spacing after it kept, lines jumped past shown whole, and every line
+in a hidden tab printed once the tab is shown.

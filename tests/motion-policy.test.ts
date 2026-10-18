@@ -106,6 +106,13 @@ function blocks(source: string): Block[] {
   return found;
 }
 
+describe("what Reveal and CountUp hide when the page hydrates", () => {
+  it("is hidden at once, and only its arrival is animated, so a sequence reached early still arrives in order", () => {
+    const moving = blocks(css).filter((block) => /data-(reveal|seq|fade)/.test(block.path.at(-1)!) && /\btransition\s*:/.test(block.body));
+    expect(moving.map((block) => block.path.at(-1))).toEqual(['[data-reveal="shown"]', '[data-seq="shown"] .seq', '[data-fade="shown"]']);
+  });
+});
+
 /** The classes whose animation repeats forever: theme `--animate-*` and repeat values, utilities and plain rules. */
 function infiniteClasses(source: string): string[] {
   const all = blocks(source);
@@ -184,6 +191,12 @@ describe("the landing's motion budget", () => {
   });
 });
 
+/** Each class in `code` that sets a scroll-driven animation, taken whole, without the quotes or call around it. */
+const timelineClasses = (code: string) => [...code.matchAll(/[^\s"'`{}()]*animation-timeline[^\s"'`{}()]*/g)].map(([token]) => token);
+
+/** A class is gated when one of its variants is motion-safe (`motion-safe:[animation-timeline:view()]`). */
+const gated = (token: string) => /^(?:[\w-]+:)*motion-safe:/.test(token);
+
 describe("animations driven by scrolling", () => {
   const sheets = readdirSync(path.join(process.cwd(), "src/app")).filter((file) => file.endsWith(".css"));
 
@@ -209,12 +222,24 @@ describe("animations driven by scrolling", () => {
     for (const file of files) {
       const code = read(file);
       expect(code, file).not.toMatch(/animationTimeline/);
-      for (const match of code.matchAll(/\S*animation-timeline\S*/g)) expect(match[0], file).toMatch(/^["'`]?motion-safe:/);
+      for (const token of timelineClasses(code)) expect(gated(token), `${file}: ${token}`).toBe(true);
     }
   });
 });
 
 describe("the stylesheet reader itself", () => {
+  it("takes a component's scroll-driven class whole, first, last or alone in its list, and knows one left ungated", () => {
+    const samples = [
+      'className="motion-safe:[animation-timeline:view()] mt-2"',
+      'className={cn("motion-safe:[animation-timeline:view()]")}',
+      'className="mt-2 md:motion-safe:[animation-timeline:view()]"',
+      "className={`motion-safe:[animation-timeline:view()] ${tone}`}",
+    ];
+    for (const sample of samples) expect(timelineClasses(sample).map(gated), sample).toEqual([true]);
+    expect(timelineClasses('className="mt-2 [animation-timeline:view()]"').map(gated)).toEqual([false]);
+    expect(timelineClasses('style="animation-timeline: view()"').map(gated)).toEqual([false]);
+  });
+
   it("finds a scroll-driven animation outside the no-preference block, and the one inside it", () => {
     const sample = "@media (prefers-reduced-motion: no-preference) { .a { animation-timeline: view(); } } .b { animation-timeline: view() }";
     const found = blocks(sample).filter((block) => /animation-timeline/.test(block.body));

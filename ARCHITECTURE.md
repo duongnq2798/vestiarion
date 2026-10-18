@@ -674,10 +674,11 @@ mainnet plan).
     marked `seq` one by one. The landing's tab marker glides in CSS (`useTabGlide`,
     `src/components/landing/tab-glide.ts`) rather than through `MotionProvider`, which would add about 31 KB for it.
     Its links into the docs are not prefetched (`landingPrefetch`). A counted figure holds its final width, and one
-    under 10 fades in. The hero's sample bill (`hero/BillPreview.tsx`, a server component) prints itself once, in CSS
-    from the page's first paint, each part at its moment in `BILL_PRINT_AT` (`hero/scenarios.ts`), done by 2.5 s and
-    calm motion under reduce; `hero/PrintOnView.tsx` holds a card that is out of sight when the page hydrates and plays
-    it once a quarter of it is in view.
+    under 10 fades in. The hero's sample bill (`hero/BillPreview.tsx`, a server component) prints itself once, each part
+    at its moment in `BILL_PRINT_AT` (`hero/scenarios.ts`), done by 2.5 s and calm motion under reduce: in CSS from the
+    page's first paint where it sits beside the headline (from 1024 px), and below that only through
+    `hero/PrintOnView.tsx`, which holds each line still out of sight when the page hydrates and prints it once it is in
+    view, in the order of the work.
 
 **Every module on its workspace's network** (`docs/superpowers/specs/2026-10-05-network-threading-design.md`,
 phase 1b).
