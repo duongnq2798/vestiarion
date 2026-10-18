@@ -14,6 +14,14 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Change which bills the cash goes to first.** When the cash cannot cover every bill due soon, the **Payment plan** tab
+  now shows the agent's order under **Which bill first**: each bill paid first or waiting, its reason, who set the order,
+  and what the written policy would pay first. An owner, admin or approver moves bills up or down and saves; the agent
+  keeps that order while the bills stay the same and for those still due once some are paid, decides at once the bills
+  it moves, and never pays more than the cash holds. Whoever entered a bill cannot move it ahead on their own. The order
+  is signed as theirs, as `cash_priority_set`. No migration.
+  [Guide](https://www.vestiarion.xyz/docs/guides/payment-plan#change-the-order).
+
 - **Show a supplier when it will be paid.** An owner or admin can send a vendor a link to its own bills: where each one
   stands (received, being reviewed, the day it is set to be paid, on its way, or paid),
   what is still to be paid in each currency, and each payment's transaction on Arc. It needs no account, never says why
@@ -22,6 +30,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   [Guide](https://www.vestiarion.xyz/docs/guides/supplier-status).
 
 ### Fixed
+
+- **A bill that waited for cash is paid once the agent chooses it under the same bills.** When more cash let the agent
+  keep a bill it had made wait, without any bill changing, that bill stayed held until cash covered every bill; it is now
+  decided again at once.
 
 - **Every live workspace gets its scheduled cycle again.** The cycles every six hours ran one workspace after another,
   and with twelve live workspaces they outran the five minutes they are given: the last ones in name order got no

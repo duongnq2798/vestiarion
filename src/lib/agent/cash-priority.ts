@@ -136,6 +136,10 @@ export interface PriorityPlan {
   wait: string[];
   /** Each bill's reason, by id, as the model gave it; the written policy's when it decided. */
   reasons: Record<string, string>;
+  /** The member who set this order from the payment plan (order design O3), or null when the agent did. */
+  byPerson: string | null;
+  /** Each bill's amount and due day as the order was signed, by id: what a person's order was set for (O4). */
+  bills: Record<string, { amount: number | null; dueOn: string | null }>;
 }
 
 /** The last signed plan, when its detail can be read. */
@@ -145,6 +149,7 @@ export function planOf(detail: Record<string, unknown> | null | undefined): Prio
   const keep: string[] = [];
   const wait: string[] = [];
   const reasons: Record<string, string> = {};
+  const bills: PriorityPlan["bills"] = {};
   for (const item of detail.order as unknown[]) {
     if (typeof item !== "object" || item === null) return null;
     const entry = item as Record<string, unknown>;
@@ -152,6 +157,33 @@ export function planOf(detail: Record<string, unknown> | null | undefined): Prio
     order.push(entry.invoiceId);
     (entry.keep === true ? keep : wait).push(entry.invoiceId);
     if (typeof entry.reason === "string") reasons[entry.invoiceId] = entry.reason;
+    bills[entry.invoiceId] = { amount: typeof entry.amount === "number" ? entry.amount : null, dueOn: typeof entry.dueOn === "string" ? entry.dueOn : null };
   }
-  return { fingerprint: detail.fingerprint, order, keep, wait, reasons };
+  const byPerson = detail.decisionMode === "person" && typeof detail.by === "string" ? detail.by : null;
+  return { fingerprint: detail.fingerprint, order, keep, wait, reasons, byPerson, bills };
+}
+
+/**
+ * A person's order still standing for the bills competing now (order design O4): every one of them was in it, at the same
+ * amount and due day, so the order goes on with the bills that left it (paid, or past the window) taken out. Null for an
+ * agent's order, or when a bill is new or changed: the agent then orders the bills again.
+ */
+export function carriedOrder(plan: PriorityPlan, competing: readonly Competing[]): string[] | null {
+  if (!plan.byPerson) return null;
+  for (const bill of competing) {
+    const was = plan.bills[bill.id];
+    if (!was || was.amount === null || Math.abs(was.amount - bill.amount) > CENT_MILLIONTH || was.dueOn !== bill.dueOn) return null;
+  }
+  const now = new Set(competing.map((bill) => bill.id));
+  return plan.order.filter((id) => now.has(id));
+}
+
+/**
+ * A person's order (order design O3): every competing bill once, in the order given; null when it names a bill that is
+ * not competing, leaves one out, or names one twice.
+ */
+export function personOrder(order: readonly string[], competing: readonly Competing[]): string[] | null {
+  const ids = new Set(competing.map((bill) => bill.id));
+  if (order.length !== ids.size || new Set(order).size !== order.length || order.some((id) => !ids.has(id))) return null;
+  return [...order];
 }

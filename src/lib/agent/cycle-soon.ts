@@ -45,6 +45,8 @@ export type CycleEventKind =
   | "two_approvals_raised"
   /** A person moved a scheduled bill to today from the payment plan: decided now, not at the next schedule (payment plan P9). */
   | "plan_approved"
+  /** A person set which bills the cash goes to first: the kept bills held for cash are decided now (order design O3). */
+  | "priority_order_set"
   | "cash_returned"
   /** A supplier accepted an early-payment offer: the bill now carries a discount ending today (early-payment offers E5). */
   | "early_payment_accepted"

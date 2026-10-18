@@ -465,7 +465,8 @@ describe("reading the agent's activity", () => {
     expect(triggers.params.get("action")).toBe("in.(create_invoice,invoice_details_added,approval_returned)");
     const asked = client.requests.find((r) => r.path === "/rest/v1/ledger_entries" && r.params.get("select") === "seq,ts,action,detail")!;
     // The agent's entries, and a supplier's answer to its early-payment offer, which the system records (offer activity A2).
-    expect(asked.params.get("or")).toBe("(actor.eq.agent,and(actor.eq.system,action.in.(early_payment_offer_accepted,early_payment_offer_countered,term_request_accepted,term_request_declined,term_request_countered)))");
+    // A member's order for which bills the cash goes to first is read too (order design O6).
+    expect(asked.params.get("or")).toBe("(actor.eq.agent,and(actor.eq.system,action.in.(early_payment_offer_accepted,early_payment_offer_countered,term_request_accepted,term_request_declined,term_request_countered)),and(actor.eq.human,action.eq.cash_priority_set))");
     expect(asked.params.get("seq")).toBe("gt.967");
     expect(asked.params.get("action")).toContain("ap_pay");
     expect(asked.params.get("action")).not.toContain("cycle_complete");
@@ -739,5 +740,21 @@ describe("which bills the cash goes to first (cash priority P6)", () => {
   it("says a bill held for it waits for the bills the agent chose", () => {
     const held = { seq: 1101, action: "ap_hold", detail: { invoiceId: INVOICE, cashPriority: { waits: true, reason: "A one-off render can wait." } } } as ActivityEntry;
     expect(activityItem(held, refs({ status: "held" }))?.text).toBe("Held Jiren 0.30 USDC: the cash goes first to the bills the agent chose.");
+  });
+
+  it("says a member's order as theirs, with no reason of the agent's (order design O6)", () => {
+    const personal = { ...plan, detail: { ...plan.detail, decisionMode: "person", by: "member-1", reasoning: "A person set this order from the payment plan." } } as ActivityEntry;
+    expect(activityItem(personal, refs())).toMatchObject({
+      text: "A member set which bills the cash goes to first: pays Cobalt Cloud 45.00 USDC, Cobalt Cloud 45.00 USDC first; Cobalt Cloud 140.00 USDC waits.",
+      detail: null,
+      tone: "notice",
+    });
+    const held = { seq: 1102, action: "ap_hold", detail: { invoiceId: INVOICE, cashPriority: { waits: true, reason: null, byPerson: true } } } as ActivityEntry;
+    expect(activityItem(held, refs({ status: "held" }))?.text).toBe("Held Jiren 0.30 USDC: the cash goes first to the bills a member chose.");
+  });
+
+  it("does not tell again a member's order carried on to the bills still due (order design O4)", () => {
+    const carried = { ...plan, detail: { ...plan.detail, decisionMode: "person", by: "member-1", carried: true } } as ActivityEntry;
+    expect(activityItem(carried, refs())).toBeNull();
   });
 });

@@ -1353,14 +1353,19 @@ type TimingRule = ReturnType<typeof boundPayOn>["timingRule"] | "pay.no_gain" | 
  * A payment or a schedule on a bill the cash priority plan made wait (cash priority P4): the cash there is goes to the
  * bills the agent chose to pay first, so code holds it, for want of cash, with the agent's reason; null otherwise.
  */
-function heldForPriority(bounded: ReturnType<typeof boundApDecision>, waits: { reason: string | null } | null): ReturnType<typeof boundApDecision> | null {
+function heldForPriority(
+  bounded: ReturnType<typeof boundApDecision>,
+  waits: { reason: string | null; byPerson?: boolean } | null
+): ReturnType<typeof boundApDecision> | null {
   if (!waits || (bounded.decision.action !== "pay" && bounded.decision.action !== "schedule")) return null;
+  // A person's order (order design O4) is said as theirs, with no reason of the agent's that it may contradict.
+  const chose = waits.byPerson ? "a person chose to pay others first" : `the agent chose to pay others first${waits.reason ? `: ${waits.reason.replace(/\.$/, "")}` : ""}`;
   return {
     decision: { action: "hold", reasoning: bounded.decision.reasoning, confidence: bounded.decision.confidence },
     payOn: null,
     timingRule: "cash.priority",
     requestedPayOn: null,
-    note: ` [The cash cannot cover every bill due soon, and the agent chose to pay others first${waits.reason ? `: ${waits.reason.replace(/\.$/, "")}` : ""}. It waits for cash, and is decided again once cash comes in.]`,
+    note: ` [The cash cannot cover every bill due soon, and ${chose}. It waits for cash, and is decided again once cash comes in.]`,
   };
 }
 
@@ -1500,7 +1505,7 @@ async function decideApPayable(
     /** What the cash ahead check measured, when this scheduled payable is decided before its day because of it (cash ahead A2). */
     cashAhead?: (invoiceId: string) => CashAhead | null;
     /** This payable's place in the cash priority plan: kept, or made to wait, with the agent's reason (cash priority P4). */
-    cashPriority?: (invoiceId: string) => { waits: boolean; reason: string | null; fingerprint: string; keptTotal: number } | null;
+    cashPriority?: (invoiceId: string) => { waits: boolean; reason: string | null; fingerprint: string; keptTotal: number; byPerson?: boolean } | null;
     /** In a live workspace, whether this is the first payment to the address and who stands behind it (new payee check N1–N3). */
     newPayee?: NewPayeeCheckOf;
     /** The figure above which a payment needs two people's approval, null when none is set (two approvals T3). */
@@ -2143,7 +2148,7 @@ async function decideApPayable(
       ...(cashAhead ? { cashAhead } : {}),
       // Its place in the cash priority plan, kept or made to wait, with the agent's reason and the plan it came from: a
       // kept bill held again under the same plan is not reopened again (cash priority P4).
-      ...(placed ? { cashPriority: { waits: placed.waits, reason: placed.reason, fingerprint: placed.fingerprint } } : {}),
+      ...(placed ? { cashPriority: { waits: placed.waits, reason: placed.reason, fingerprint: placed.fingerprint, ...(placed.byPerson ? { byPerson: true } : {}) } } : {}),
       // Decided again because a fresh quote cleared what held it: the reopen, its trigger and the decision it follows (F6).
       ...(ctx.reevaluation?.(invoice.id) ? { reevaluation: ctx.reevaluation(invoice.id) } : {}),
       // What the transfer carried and what the discount took off it; null
@@ -2624,7 +2629,14 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       cashAhead: (invoiceId) => ahead.get(invoiceId) ?? null,
       cashPriority: (invoiceId) =>
         priority && (waiting.has(invoiceId) || kept.has(invoiceId))
-          ? { waits: waiting.has(invoiceId), reason: priority.plan.reasons[invoiceId] ?? null, fingerprint: priority.plan.fingerprint, keptTotal: priority.keptTotal }
+          ? {
+              waits: waiting.has(invoiceId),
+              // A person's order carries no reason of its own (order design O4).
+              reason: priority.plan.byPerson ? null : (priority.plan.reasons[invoiceId] ?? null),
+              fingerprint: priority.plan.fingerprint,
+              keptTotal: priority.keptTotal,
+              ...(priority.plan.byPerson ? { byPerson: true } : {}),
+            }
           : null,
       newPayee: newPayeeOf,
       twoApprovalsAbove,

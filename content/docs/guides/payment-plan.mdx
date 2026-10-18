@@ -99,6 +99,18 @@ Code then pays the bills in that order while the cash lasts and never more than 
 
 The choice is told in the console, Telegram and Slack, for instance "The cash cannot cover every bill due soon: the agent pays Cobalt Cloud 45.00 USDC, Cobalt Cloud 45.00 USDC first; Cobalt Cloud 140.00 USDC waits." It is signed once, as `cash_priority_set`, with each bill's place and reason, and kept until something changes: a bill added, paid or changed, or cash coming in or going out. Then the agent chooses again. Nothing changes in shadow mode, for bills in EURC, or for bills paid to a bank account.
 
+### Change the order
+
+The **Payment plan** tab shows the order under **Which bill first**: each bill in its place, **Paid first** or **Waits** against the cash there is now, its reason, who set the order and when, and which bills the written policy would pay first.
+
+- **Move a bill** with **Up** and **Down**. The badges change as you go, so you see which bills the cash would cover.
+- **Use this order** saves it. Vestiarion first reads the bills again: if one was added, paid or changed, or someone set a newer order since the page was shown, a message says "The bills or their order changed since the order was shown" and the page shows the plan as it is now. While a cycle is running, try again a minute later.
+- **What happens next.** Your order is signed as yours and a cycle starts at once. The message says which bills the cash covers, with the cash as last read; the agent works it out again from the wallet's balance. A bill you moved into the part the cash covers, held for want of cash, is decided again now; one you moved out of it is held, and its card says a person chose to pay others first.
+- **How long it holds.** The agent keeps your order while these bills stay the same, even when cash comes in or goes out: it only works out again how far the cash reaches. When a bill in it is paid, your order goes on for the bills still due. When a bill is added, or one changes amount or day, the agent orders the bills again, keeping your order for the bills it had unless their facts changed, and you can change that order too.
+- **Who.** Owners, admins and approvers, as for approving the plan's days. Everyone else sees the order. Whoever entered a bill cannot move it ahead of the others on their own, unless they are the workspace's only approver: "You entered … so someone else must move it ahead of the others."
+
+Your order never pays more than the cash holds, and every payment still passes every check: limits, screening, approvals and the rest. The console, Telegram and Slack say "A member set which bills the cash goes to first", with the bills paid first and those that wait.
+
 ## When the cash will run short
 
 You do not have to open the plan to find out. Each cycle, the agent works out the same 30 days the console's cash outlook shows: the operating USDC and the reserve, less every open bill on its day (a scheduled one on the day it is set for, a held one on its due day) and every open milestone today, with no customer payment counted until it arrives. When the wallet will run short, it tells you once, in the console and in your connected Telegram chat and Slack channel, for instance:

@@ -1,5 +1,13 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-18: A person's order for which bill first
+
+- **`cash_priority_set`** may now be signed by a member (actor `human`), when an owner, admin or approver sets the order from the payment plan. It then carries `decisionMode: "person"`, `by` (their user id), `previousOrder` (the invoice ids in the order it replaced, or `null`), and `reasoning` saying a person set it; `order`, `cash`, `fingerprint`, `referenceOrder` and `agreedWithReference` are as before. While the same bills compete, the agent applies that order and signs no new one.
+- When bills leave a person's order (paid, or past the window) and the rest are unchanged, the agent signs **`cash_priority_set`** again for the bills still due, actor `agent`, with `decisionMode: "person"`, the same `by`, and `carried: true`.
+- An AP decision on a bill in a person's order carries **`cashPriority: { waits, reason: null, fingerprint, byPerson: true }`**, whether it is kept or waits.
+- **`invoice_reopened`** for a bill a person's order keeps says so in its summary and `followUp.changes`: "a person chose to pay it first".
+- Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-18: A supplier's payment status link
 
 - Two new entries, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`, both in domain `ap`, actor `human`:

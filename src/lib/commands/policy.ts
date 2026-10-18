@@ -24,6 +24,9 @@ export const COMMAND_PERMISSIONS = {
   "receivable.reverse_allocation": "receivables.reconcile",
   // Moving a scheduled bill to the payment plan's day: a decision on when the agent pays, never a payment (payment plan P10).
   "payment_plan.approve": "approval.decide",
+  // Which bills the cash goes to first when it cannot cover them all: a decision on what is paid, as a plan's day is,
+  // so owners, admins and approvers (order design O2). Code still pays only while the cash lasts, after every check.
+  "cash_priority.set_order": "approval.decide",
   "milestone.pay": "approval.decide",
   "milestone.close": "approval.decide",
   "agent.pause": "agent.pause",
