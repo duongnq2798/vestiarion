@@ -68,7 +68,8 @@ export async function askEveryPayeeAction(_previous: AskEveryPayeeResult, formDa
       revalidateOrgPages();
       const made = result.asked.emailed.length + result.asked.links.length;
       if (made === 0 && result.asked.notMade.length === 0) return { ok: false, message: "Every payee listed has an address or a link out now. Reload the page." };
-      return { ok: true, message: `Asked ${made} ${made === 1 ? "payee" : "payees"} for an address.`, asked: result.asked };
+      const message = made === 0 ? "No link was made. Ask each payee from its row." : `Asked ${made} ${made === 1 ? "payee" : "payees"} for an address.`;
+      return { ok: true, message, asked: result.asked };
     } catch (error) {
       console.error("ask every payee failed", error instanceof Error ? error.message : "unknown error");
       return { ok: false, message: "That did not work. Try again in a moment." };

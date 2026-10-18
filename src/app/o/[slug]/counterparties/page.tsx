@@ -36,6 +36,7 @@ import { draftSupplierName } from "@/lib/invoice-drafts/store";
 import { listLedgerEntries } from "@/lib/ledger";
 import { listActivePayeeLinks } from "@/lib/platform/payee-links";
 import { askablePayees } from "@/lib/address-requests";
+import { simulatesPayments } from "@/lib/capability-read";
 import { plural } from "@/lib/copy";
 import { listCounterparties, stats } from "@/lib/queries";
 import { readShadowMode } from "@/lib/shadow-mode";
@@ -43,6 +44,8 @@ import { workspaceNetwork } from "@/lib/workspace-network";
 import { shellStatus } from "@/lib/shell-status";
 
 export const dynamic = "force-dynamic";
+// Ask every payee for an address makes up to 25 links and sends their emails in one action (ask every payee A4).
+export const maxDuration = 300;
 
 export const metadata: Metadata = { title: sectionTitle("counterparties") };
 
@@ -122,7 +125,16 @@ export default async function CounterpartiesPage({
           <Callout className="mb-8">Only an owner or admin of this workspace can add counterparties.</Callout>
         )}
 
-        {askable && askable.payees.length > 0 && <AskEveryPayee orgSlug={slug} payees={askable.payees} more={askable.more} linksOut={askable.linksOut} />}
+        {/* Kept in place for a writer even with no payee left to ask, so the links it just made stay on screen this once. */}
+        {askable && (
+          <AskEveryPayee
+            orgSlug={slug}
+            payees={askable.payees}
+            more={askable.more}
+            linksOut={askable.linksOut}
+            emails={!simulatesPayments(access.membership.mode)}
+          />
+        )}
 
         <section>
           <SectionHeader title="Counterparty book" meta={`${counterparties.length} ${plural(counterparties.length, "record", "records")} · what needs someone first · open one for the rest`} />

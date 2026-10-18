@@ -9,19 +9,25 @@ import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fa
  * Ask every payee for an address at once (docs/superpowers/specs/2026-10-18-ask-every-payee-design.md A2-A6): who is
  * asked (a vendor or contractor with no address of its own, a mirror one included, never a client, sample data or a
  * payee with a link out; 25 at most, by name), each link made through the single link's command and emailed to the
- * payee's notice email, the rest shown once to copy, and one `payee_addresses_requested` entry beside the links' own.
+ * payee's notice email, the rest shown once to copy, and one `payee_addresses_requested` entry beside the links' own. A
+ * workspace that simulates its payments emails no one, and past 100 address emails in 24 hours the links are shown to
+ * copy; in shadow mode the email says the business is getting ready to pay in USDC.
  */
 
-const { issueMock, sendMock, linksOutMock, ledgerMock } = vi.hoisted(() => ({
+const { issueMock, sendMock, linksOutMock, ledgerMock, shadowMock, simulatesMock } = vi.hoisted(() => ({
   issueMock: vi.fn(),
   sendMock: vi.fn(),
   linksOutMock: vi.fn(),
   ledgerMock: vi.fn(),
+  shadowMock: vi.fn(),
+  simulatesMock: vi.fn(),
 }));
 vi.mock("@/lib/commands/payee-links", () => ({ issuePayeeLink: issueMock }));
 vi.mock("@/lib/email/send", () => ({ sendEmail: sendMock }));
 vi.mock("@/lib/platform/payee-links", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/platform/payee-links")>()), listActivePayeeLinks: linksOutMock }));
 vi.mock("@/lib/ledger-best-effort", () => ({ appendLedgerEntryBestEffort: ledgerMock }));
+vi.mock("@/lib/capability-read", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/capability-read")>()), simulatesPayments: simulatesMock }));
+vi.mock("@/lib/shadow-mode", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/shadow-mode")>()), readShadowMode: shadowMock }));
 
 const { askablePayees, askPayeesForAddresses, ASK_MAX } = await import("@/lib/address-requests");
 
@@ -51,8 +57,9 @@ const ROWS = [
   payee(7, "Atlas Compute"),
 ];
 
-function workspace(rows = ROWS) {
+function workspace(rows = ROWS, emailsToday = 0) {
   const fake = fakeSupabase((sent: RecordedRequest) => {
+    if (sent.path === "/rest/v1/usage_events") return { body: Array.from({ length: emailsToday }, () => ({ quantity: 1 })) };
     if (sent.path === "/rest/v1/counterparties") {
       const ids = sent.params.get("id")?.replace(/^in\.\(|\)$/g, "").split(",") ?? [];
       return { body: rows.filter((row) => ids.includes(row.id)) };
@@ -75,6 +82,8 @@ beforeEach(() => {
   sendMock.mockReset().mockResolvedValue({ sent: true, id: "email-1" });
   linksOutMock.mockReset().mockResolvedValue(new Map());
   ledgerMock.mockReset().mockResolvedValue(undefined);
+  shadowMock.mockReset().mockResolvedValue(null);
+  simulatesMock.mockReset().mockReturnValue(false);
 });
 
 describe("askablePayees", () => {
@@ -115,6 +124,7 @@ describe("askPayeesForAddresses", () => {
         notMade: [],
         // Cobalt Cloud has an address and Acme Retail is a client.
         skipped: 2,
+        emailsOff: null,
       },
     });
     expect(issueMock.mock.calls.map((call) => (call[1] as { counterpartyId: string }).counterpartyId)).toEqual([id(2), id(1), id(3)]);
@@ -153,9 +163,35 @@ describe("askPayeesForAddresses", () => {
     const { run } = workspace();
     linksOutMock.mockResolvedValue(new Map([[id(1), { id: "l", expiresAt: "x" }]]));
     const result = await run(() => askPayeesForAddresses({ actor: admin(), orgName: "Pinecrest Studio", counterpartyIds: [id(1)] }));
-    expect(result).toEqual({ ok: true, asked: { emailed: [], links: [], notMade: [], skipped: 1 } });
+    expect(result).toEqual({ ok: true, asked: { emailed: [], links: [], notMade: [], skipped: 1, emailsOff: null } });
     expect(issueMock).not.toHaveBeenCalled();
     expect(ledgerMock).not.toHaveBeenCalled();
+  });
+
+  it("emails no one from a workspace that simulates its payments, and shows every link to copy", async () => {
+    const { run } = workspace();
+    simulatesMock.mockReturnValue(true);
+    const result = await run(() => askPayeesForAddresses({ actor: admin({ mode: "sandbox" }), orgName: "P", counterpartyIds: [id(1), id(3)] }));
+    expect(result).toMatchObject({ ok: true, asked: { emailed: [], emailsOff: "simulated" } });
+    if (result.ok) expect(result.asked.links.map((link) => link.name)).toEqual(["Northwind Hosting", "Quill Studio"]);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("past 100 address emails in 24 hours, shows the link to copy instead", async () => {
+    const { fake, run } = workspace(ROWS, 100);
+    const result = await run(() => askPayeesForAddresses({ actor: admin(), orgName: "P", counterpartyIds: [id(1)], now: Date.parse("2026-10-18T12:00:00Z") }));
+    expect(result).toMatchObject({ ok: true, asked: { emailed: [], emailsOff: "limit", links: [{ name: "Northwind Hosting" }] } });
+    expect(sendMock).not.toHaveBeenCalled();
+    const read = fake.requests.find((sent) => sent.path === "/rest/v1/usage_events")!;
+    expect(read.params.get("action")).toBe("eq.address_request");
+    expect(read.params.get("occurred_at")).toBe("gte.2026-10-17T12:00:00.000Z");
+  });
+
+  it("in shadow mode, says the business is getting ready to pay in USDC", async () => {
+    shadowMock.mockResolvedValue({ currency: "USDC", startedAt: "2026-10-08T00:00:00Z", startedBy: USER });
+    const { run } = workspace();
+    await run(() => askPayeesForAddresses({ actor: admin(), orgName: "Boba Labs", counterpartyIds: [id(1)] }));
+    expect(String(sendMock.mock.calls[0][0].text)).toContain("Boba Labs is getting ready to pay you in USDC and asks for the address to send it to.");
   });
 
   it("is refused for a role that cannot make a payee link, and for none or too many payees", async () => {
@@ -181,9 +217,9 @@ describe("addressRequestEmail", () => {
     expect(email.html).not.toContain("<Hosting>");
   });
 
-  it("names no network from a workspace that simulates its payments", () => {
-    const email = addressRequestEmail({ ...base, network: "arc-testnet", simulated: true });
-    expect(email.text).toContain("Its payments here are simulated: no USDC is sent.");
+  it("names no network from a workspace in shadow mode, which still pays its own way", () => {
+    const email = addressRequestEmail({ ...base, network: "arc-testnet", shadow: true });
+    expect(email.text).toContain("Pinecrest Studio is getting ready to pay you in USDC");
     expect(email.text).not.toContain("Arc testnet");
   });
 });

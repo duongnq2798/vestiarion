@@ -25,49 +25,78 @@ const INITIAL: AskEveryPayeeResult = { ok: false, message: "" };
 
 const payeesWord = (count: number) => (count === 1 ? "payee" : "payees");
 
-export function AskEveryPayee({ orgSlug, payees, more, linksOut }: { orgSlug: string; payees: PayeeToAsk[]; more: number; linksOut: number }) {
+export function AskEveryPayee({
+  orgSlug,
+  payees,
+  more,
+  linksOut,
+  emails = true,
+}: {
+  orgSlug: string;
+  payees: PayeeToAsk[];
+  more: number;
+  linksOut: number;
+  /** False in a workspace that simulates its payments: it emails no payee, and every link is shown to copy. */
+  emails?: boolean;
+}) {
   const [open, setOpen] = useState(false);
+  // How many the dialog was opened for: once the links are made the page re-reads, every payee asked has a link out and
+  // none is left to count, while the dialog still shows the links this once.
+  const [asking, setAsking] = useState(payees.length);
   const count = payees.length;
+  const onOpenChange = (next: boolean) => {
+    if (next) setAsking(count);
+    setOpen(next);
+  };
+  if (count === 0 && !open) return null;
+  // The dialog stays where it is while the panel goes: once no payee is left to ask, only the links just made show.
   return (
-    <Card className="mb-8 flex flex-wrap items-center justify-between gap-3 p-4">
-      <div className="min-w-0 flex-1 space-y-1">
-        <h2 className="text-sm font-semibold text-ink">Ask every payee for an address</h2>
-        <p className="text-sm text-ink-2">
-          {count} {payeesWord(count)} {count === 1 ? "has" : "have"} no address of {count === 1 ? "its" : "their"} own, so payments to{" "}
-          {count === 1 ? "it wait" : "them wait"}. Each gets its own one-time link, by email where it has one.
-          {linksOut > 0 ? ` ${linksOut} more already ${linksOut === 1 ? "has" : "have"} a link out.` : ""}
-          {more > 0 ? ` ${more} more after these, for the next time.` : ""}
-        </p>
-      </div>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
-          <Button size="sm" icon={<Send />} className="shrink-0">
-            Ask {count} for an address
-          </Button>
-        </DialogTrigger>
-        <DialogContent
-          title={`Ask ${count} ${payeesWord(count)} for an address`}
-          description="Each gets a one-time link to enter its own address, with no account. You confirm each address before the agent pays there."
-        >
-          <AskForm orgSlug={orgSlug} payees={payees} />
-        </DialogContent>
-      </Dialog>
-    </Card>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {count > 0 && (
+        <Card className="mb-8 flex flex-wrap items-center justify-between gap-3 p-4">
+          <div className="min-w-0 flex-1 space-y-1">
+            <h2 className="text-sm font-semibold text-ink">Ask every payee for an address</h2>
+            <p className="text-sm text-ink-2">
+              {count} {payeesWord(count)} {count === 1 ? "has" : "have"} no address of {count === 1 ? "its" : "their"} own.{" "}
+              {emails
+                ? "Each gets its own one-time link, by email where it has one."
+                : "Each gets its own one-time link to send yourself: a workspace that simulates its payments emails no one."}
+              {linksOut > 0 ? ` ${linksOut} more already ${linksOut === 1 ? "has" : "have"} a link out.` : ""}
+              {more > 0 ? ` ${more} more after these, for the next time.` : ""}
+            </p>
+          </div>
+          <DialogTrigger asChild>
+            <Button size="sm" icon={<Send />} className="shrink-0">
+              Ask {count} for an address
+            </Button>
+          </DialogTrigger>
+        </Card>
+      )}
+      <DialogContent
+        title={`Ask ${asking} ${payeesWord(asking)} for an address`}
+        description="Each gets a one-time link to enter its own address, with no account. You confirm each address before the agent pays there."
+      >
+        <AskForm orgSlug={orgSlug} payees={payees} emails={emails} />
+      </DialogContent>
+    </Dialog>
   );
 }
 
 /** The list and its Send, then what went: its state lives in the dialog's content, so reopening starts at the list. */
-function AskForm({ orgSlug, payees }: { orgSlug: string; payees: PayeeToAsk[] }) {
+function AskForm({ orgSlug, payees, emails }: { orgSlug: string; payees: PayeeToAsk[]; emails: boolean }) {
   const { state, formProps } = useActionForm(askEveryPayeeAction, INITIAL);
 
   if (state.ok && state.asked) {
-    const { emailed, links, notMade } = state.asked;
+    const { emailed, links, notMade, emailsOff } = state.asked;
     return (
       <div className="grid gap-4">
         <p className="text-sm text-ink" role="status">
           {state.message}
         </p>
         {emailed.length > 0 && <p className="text-sm text-ink-2">Emailed: {emailed.join(", ")}.</p>}
+        {emailsOff === "limit" && (
+          <p className="text-sm text-ink-2">No more emails for now: this workspace sent 100 address emails in the last 24 hours, or that count could not be read. Send the rest below yourself.</p>
+        )}
         {links.length > 0 && (
           <div className="grid gap-2">
             <p className="text-sm text-ink-2">Send these yourself. Each is shown only now, works once and expires on the day shown:</p>
@@ -110,13 +139,13 @@ function AskForm({ orgSlug, payees }: { orgSlug: string; payees: PayeeToAsk[] })
               {payee.name}
               {payee.mirror && <span className="ml-1 text-xs font-normal text-ink-3">(paid at a mirror address)</span>}
             </span>
-            {payee.email ? (
+            {payee.email && emails ? (
               <Badge size="sm" tone="proof" icon={<Mail />}>
                 By email to {payee.email}
               </Badge>
             ) : (
               <Badge size="sm" tone="neutral">
-                No email: copy its link
+                {emails ? "No email: copy its link" : "Copy its link"}
               </Badge>
             )}
           </li>

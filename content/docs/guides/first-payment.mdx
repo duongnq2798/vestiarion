@@ -156,9 +156,10 @@ You don't have to collect a payee's address yourself. In the counterparty's row,
 When several payees have no address of their own, **Ask every payee for an address**, above the Counterparty book, asks them all at once. It counts vendors and contractors with no address, and those paid at a mirror address in shadow mode. It leaves out a payee that already has a link out, and says how many do. Owners and admins choose **Ask N for an address**:
 
 - The dialog lists each payee and how its link goes: **By email to** its notice email, or **No email: copy its link**. Nothing is sent until **Send the links**.
-- Each payee gets its own link, made exactly as **Create link** makes one, and the email says which business asks, the network it pays on, and that nothing is paid to the address until someone here confirms it.
+- Each payee gets its own link, made exactly as **Create link** makes one, and the email says which business asks, the network it pays on, and that nothing is paid to the address until someone here confirms it. In shadow mode, where your business still pays its suppliers its own way, it says you are getting ready to pay in USDC.
 - The links that were not emailed are shown once, each with **Copy link**, to send yourself. A link that could not be made is named under **Not made**: ask that payee from its row.
 - At most 25 payees are asked at a press, by name; the panel says how many remain.
+- A workspace sends at most 100 of these emails in 24 hours; past that, the links are shown to copy. A sandbox, whose payments are simulated, emails no payee: every link is shown to copy.
 - Every rule above holds for each link: the address waits for a person to confirm it, and whoever pressed counts as having given it. The ledger records each link as `payee_link_created`, and the press as `payee_addresses_requested`: who pressed, each link with whether it was emailed, and each payee whose link could not be made.
 
 ### Changing an address

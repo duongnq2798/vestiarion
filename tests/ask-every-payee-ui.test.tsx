@@ -23,7 +23,7 @@ describe("AskEveryPayee", () => {
   it("says how many payees have no address, with those already asked and those left for later", () => {
     const words = text(renderToStaticMarkup(<AskEveryPayee orgSlug="pinecrest" payees={payees} more={3} linksOut={1} />));
     expect(words).toContain("Ask every payee for an address");
-    expect(words).toContain("2 payees have no address of their own, so payments to them wait.");
+    expect(words).toContain("2 payees have no address of their own. Each gets its own one-time link, by email where it has one.");
     expect(words).toContain("1 more already has a link out.");
     expect(words).toContain("3 more after these, for the next time.");
     expect(words).toContain("Ask 2 for an address");
@@ -31,7 +31,16 @@ describe("AskEveryPayee", () => {
 
   it("speaks of one payee in the singular", () => {
     const words = text(renderToStaticMarkup(<AskEveryPayee orgSlug="pinecrest" payees={payees.slice(0, 1)} more={0} linksOut={0} />));
-    expect(words).toContain("1 payee has no address of its own, so payments to it wait.");
+    expect(words).toContain("1 payee has no address of its own.");
     expect(words).not.toContain("link out");
+  });
+
+  it("in a workspace that simulates its payments, says every link is to send yourself", () => {
+    const words = text(renderToStaticMarkup(<AskEveryPayee orgSlug="pinecrest" payees={payees} more={0} linksOut={0} emails={false} />));
+    expect(words).toContain("Each gets its own one-time link to send yourself: a workspace that simulates its payments emails no one.");
+  });
+
+  it("shows nothing once no payee is left to ask, while staying in place for the links it just made", () => {
+    expect(renderToStaticMarkup(<AskEveryPayee orgSlug="pinecrest" payees={[]} more={0} linksOut={2} />)).toBe("");
   });
 });

@@ -26,8 +26,12 @@ real payment should be one press.
   - It makes a link through the command a single link uses (`issuePayeeLink`). So the same permission, the same refusal
     for a client, the same `payee_link_created` entry, and the person who pressed counts as having given the address
     that comes through it.
-  - It emails the link to the payee's notice email when it has one: which business asks, the network it pays on (or
-    that payments are simulated), and that nothing is paid to the address until someone there confirms it.
+  - It emails the link to the payee's notice email when it has one: which business asks, the network it pays on, and
+    that nothing is paid to the address until someone there confirms it. A business in shadow mode still pays its
+    suppliers its own way, so its email says it is getting ready to pay in USDC and names no network.
+  - The links are made one after another, then emailed five at a time, so a press of 25 ends well within the page's
+    300 seconds.
+  - A workspace that simulates its payments emails no payee: every link is shown to copy.
   - A link with no email to go to, or whose email did not go, is shown once to copy, as a single link is.
   - A link that could not be made is named, and the rest still go.
 - **A5. Recorded.** Beyond each link's own `payee_link_created`, the workspace signs `payee_addresses_requested` with
@@ -36,6 +40,13 @@ real payment should be one press.
 - **A6. The same rules after.** An address that comes in through any of these links waits for a person's confirmation,
   and its first payment needs a second person, exactly as for a single link (first payment guide, Ask a payee for their
   address). Emails are metered as `address_request`.
+- **A7. A daily most.** A workspace sends at most 100 address emails in 24 hours, counted from its metered emails. Past
+  it, or when that count cannot be read, the links are shown to copy, and the dialog says why.
+
+## Known limits
+
+- Two people pressing at the same moment can both ask the same payee: the second link replaces the first, and the
+  payee gets two emails, the first link no longer working.
 
 ## Where it helps
 

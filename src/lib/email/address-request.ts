@@ -5,8 +5,9 @@ import { actionEmailHtml } from "./layout";
 /**
  * The email a payee gets when a business asks it for the address to pay it at (docs/superpowers/specs/
  * 2026-10-18-ask-every-payee-design.md A4): which business asks, the network it pays on, and the one-time link where the
- * payee adds its address, which is paid only once someone at the business confirms it. From a workspace that simulates
- * its payments, it names no network and says so, as the workspace's own pages do (capability and reasons R5).
+ * payee adds its address, which is paid only once someone at the business confirms it. A business in shadow mode still
+ * pays its suppliers its own way, so the email says it is getting ready to pay in USDC and names no network. A workspace
+ * that simulates its payments sends none of these.
  */
 export function addressRequestEmail(input: {
   orgName: string;
@@ -16,14 +17,14 @@ export function addressRequestEmail(input: {
   origin: string;
   /** The asking workspace's network, named in the email (mainnet copy C1). */
   network: Network;
-  /** Whether the asking workspace simulates its payments (`simulatesPayments`). */
-  simulated?: boolean;
+  /** The asking workspace is in shadow mode: it still pays its suppliers its own way. */
+  shadow?: boolean;
 }): { subject: string; html: string; text: string } {
   const { orgName, payeeName, link, expiresAt, origin } = input;
   const { label } = networkProfile(input.network);
   const subject = `${orgName} asks where to pay you`;
-  const lead = input.simulated
-    ? `${orgName} asks for the address to pay you at. Its payments here are simulated: no USDC is sent.`
+  const lead = input.shadow
+    ? `${orgName} is getting ready to pay you in USDC and asks for the address to send it to.`
     : `${orgName} pays you in USDC on ${label} and asks for the address to send it to.`;
   const how = "Add the address you want to be paid at. Any EVM wallet address works, such as one from MetaMask.";
   const safe = `Nothing is paid to it until someone at ${orgName} confirms it.`;
@@ -35,8 +36,8 @@ export function addressRequestEmail(input: {
     eyebrow: "Your payment address",
     heading: `Hi ${payeeName}, where should ${orgName} pay you?`,
     paragraphsHtml: [
-      input.simulated
-        ? `<strong style="color:#18211c;">${escapeHtml(orgName)}</strong> asks for the address to pay you at. Its payments here are simulated: no USDC is sent.`
+      input.shadow
+        ? `<strong style="color:#18211c;">${escapeHtml(orgName)}</strong> is getting ready to pay you in USDC and asks for the address to send it to.`
         : `<strong style="color:#18211c;">${escapeHtml(orgName)}</strong> pays you in USDC on ${escapeHtml(label)} and asks for the address to send it to.`,
       escapeHtml(how),
       escapeHtml(safe),
