@@ -34,7 +34,7 @@ hash-chained ledger anyone in the workspace can verify.
   <sub>A bill the agent paid on Arc: its reasoning, the checks behind it, the signed audit entry and the transaction.</sub>
 </p>
 
-**Watch it work:** [the demo](https://youtu.be/9Tgl1eMhlbw) (2:59) or [the full product tour](https://youtu.be/2y1ntW6WAdM)
+**Watch it work:** [the demo](https://youtu.be/9Tgl1eMhlbw) (2:59) or [the full product tour](https://youtu.be/ds6cu4__1J4)
 (7:22), both recorded on the live product on October 15, 2026, with the Arc mainnet payment from October 12: a freelancer
 the agent pays on its own once a second member confirmed the address, a new supplier's first bill the model wanted to pay
 and code refused until a second member approved, the day the agent picks to pay, shadow mode and the customers' figures,
@@ -91,7 +91,7 @@ nothing else: no wallet, no USDC, no API key, nothing to install.
    payment to a new address, approved by a second person, and paid through the owner's spending-limit contract.
 
 **Watch instead:** [the demo](https://youtu.be/9Tgl1eMhlbw) (2:59),
-[the full product tour](https://youtu.be/2y1ntW6WAdM) (7:22), and [a short video for each main flow](#watch-each-flow),
+[the full product tour](https://youtu.be/ds6cu4__1J4) (7:22), and [a short video for each main flow](#watch-each-flow),
 two minutes or less each.
 
 **Reviewing security:** [www.vestiarion.xyz/security](https://www.vestiarion.xyz/security) covers the architecture,
