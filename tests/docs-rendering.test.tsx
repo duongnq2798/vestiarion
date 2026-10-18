@@ -118,6 +118,18 @@ describe("GitHub-flavoured Markdown", () => {
     expect(markup).toContain('<th scope="col"');
     expect(markup).toContain("401</td>");
   });
+
+  it("breaks a cell's words only where a line would overflow, and never a cell's code", async () => {
+    // `anywhere` from prose let a table squeeze a column of names until "QuickBooks" broke mid-word.
+    const markup = await renderPage("| Tool | Code |\n| --- | --- |\n| [QuickBooks Online](/docs/guides/quickbooks) | `invalid_request` |\n");
+    const cells = [...markup.matchAll(/<td class="([^"]+)"/g)].map((match) => match[1]);
+    expect(cells).toHaveLength(2);
+    for (const cell of cells) {
+      expect(cell).toContain("[overflow-wrap:break-word]");
+      expect(cell).toContain("[&amp;_*]:[overflow-wrap:break-word]");
+      expect(cell).toContain("[&amp;_code]:whitespace-nowrap");
+    }
+  });
 });
 
 describe("headingComponents", () => {
